@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "vite dev --host 127.0.0.1",
     "build": "vite build",
     "preview": "vite preview",
     "format": "prettier . --write",
