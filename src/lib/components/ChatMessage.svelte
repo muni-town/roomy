@@ -20,7 +20,7 @@
   <div class="flex flex-col gap-2 text-white">
     <section class="flex gap-2">
       <h5 class="font-bold">{event.user.handle}</h5>
-      <Tooltip.Root openDelay={1000}>
+      <Tooltip.Root openDelay={300}>
         <Tooltip.Trigger>
           <time class="text-zinc-400 cursor-context-menu">
             {formatDistanceToNowStrict(new Date(event.timestamp))}
