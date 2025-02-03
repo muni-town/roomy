@@ -11,6 +11,9 @@ export type Catalog = {
 
       /** The avatar URL string, optional */
       avatar?: string;
+
+      /** The number of new messages in the DM. */
+      newMessages?: number;
     };
   };
 };
