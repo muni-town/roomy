@@ -9,22 +9,15 @@
   import { user } from "$lib/user.svelte";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { onMount } from "svelte";
+  import { unreadCount } from "$lib/utils";
 
   let { children } = $props();
 
   let dms = $derived(
     Object.entries(g.catalog?.view.dms || {}).map(([did, dm]) => ({
-      id: did,
-      name: dm.name,
-      avatar: dm.avatar,
-      newMessages: dm.newMessages || 0, // Add newMessages state
-    })),
-  );
-
-  let messages = $derived(
-    Object.entries(g.dms).map(([did, doc]) => ({
       did,
-      count: Object.keys(doc.view.messages).length,
+      ...dm,
+      unreadCount: unreadCount(g.dms[did].view, dm.viewedHeads || []),
     })),
   );
 
@@ -35,52 +28,11 @@
   let newDmLoading = $state(false);
   let newDmError = $state(undefined) as undefined | string;
 
-  let initMessages: {
-    did: string;
-    count: number;
-  }[];
-  let count = 0;
   onMount(() => {
     if (page.params.did) {
       currentDm = page.params.did;
     }
   });
-
-  $effect(() => {
-    if (count < 4) {
-      initMessages = messages;
-      count++;
-    } else {
-      const tabDid = globalThis.location.href.split("/")[4];
-
-      for (const [i, message] of messages.entries()) {
-        const init = initMessages[i];
-        if (message.count > init.count) {
-          console.log(`new value from ${message.did}`);
-          if (tabDid != message.did) {
-            updateNewMessages(message.did, 1);
-          }
-          init.count = message.count;
-        }
-      }
-    }
-
-  });
-
-  function updateNewMessages(dmId: string, newMessages: number) {
-    g.catalog?.change((doc) => {
-      if (doc.dms[dmId]) {
-        if (doc.dms[dmId]) {
-          if (newMessages == 0) {
-            doc.dms[dmId].newMessages = 0;
-          } else {
-            doc.dms[dmId].newMessages =
-              (doc.dms[dmId].newMessages || 0) + newMessages;
-          }
-        }
-      }
-    });
-  }
 
   async function createDm() {
     if (newDmLoading) return;
@@ -98,7 +50,7 @@
         doc.dms[resp.data.did] = {
           name: newDmInput,
           avatar: profile.data.avatar,
-          newMessages: 0, // Initialize newMessages to 0
+          viewedHeads: [],
         };
       });
 
@@ -183,11 +135,10 @@
     {#each dms as dm}
       <ToggleGroup.Item
         onclick={() => {
-          updateNewMessages(dm.id, 0);
-          goto(`/dm/${dm.id || ""}`);
+          goto(`/dm/${dm.did || ""}`);
         }}
-        value={dm.id}
-        class={`${(g.routerConnections[dm.id] || []).length > 0 ? "online" : ""} flex gap-4 items-center w-full text-start hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white px-4 py-2 rounded-md`}
+        value={dm.did}
+        class={`${(g.routerConnections[dm.did] || []).length > 0 ? "online" : ""} flex gap-4 items-center w-full text-start hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white px-4 py-2 rounded-md`}
       >
         <Avatar.Root class="w-8">
           <Avatar.Image src={dm.avatar} class="rounded-full" />
@@ -196,10 +147,10 @@
           </Avatar.Fallback>
         </Avatar.Root>
         <h3>{dm.name}</h3>
-        {#if dm.newMessages > 0}
-          <span class="bg-red-500 text-white px-2 py-1 rounded-full"
-            >{dm.newMessages}</span
-          >
+        {#if dm.unreadCount > 0}
+          <span class="bg-red-500 text-white px-2 py-1 rounded-full">
+            {dm.unreadCount}
+          </span>
         {/if}
       </ToggleGroup.Item>
     {/each}

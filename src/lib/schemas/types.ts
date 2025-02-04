@@ -1,3 +1,5 @@
+import type * as Automerge from "npm:@automerge/automerge";
+
 /** The user's index of all of the chats that they have joined. */
 export type Catalog = {
   /** Direct messages to other users. */
@@ -12,8 +14,11 @@ export type Catalog = {
       /** The avatar URL string, optional */
       avatar?: string;
 
-      /** The number of new messages in the DM. */
-      newMessages?: number;
+      /**
+       * The latest version of the DM that the user has viewed.
+       * Used to calculate the unread messages count.
+       */
+      viewedHeads?: Automerge.Heads;
     };
   };
 };

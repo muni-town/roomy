@@ -2,15 +2,15 @@
   import type { Autodoc } from "$lib/autodoc.svelte";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import { g } from "$lib/global.svelte";
-  import type { Channel, Message, Ulid } from "$lib/schemas/types";
+  import type { Channel, Ulid } from "$lib/schemas/types";
   import { page } from "$app/state";
   import { user } from "$lib/user.svelte";
-  import { setContext } from "svelte";
+  import { setContext, untrack } from "svelte";
   import { Avatar, Button, Popover, Tabs, Toggle } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import Icon from "@iconify/svelte";
   import { fly } from "svelte/transition";
-  import { decodeTime, ulid } from "ulidx";
+  import { ulid } from "ulidx";
   import ChatMessage from "$lib/components/ChatMessage.svelte";
 
   let tab = $state("chat");
@@ -36,6 +36,19 @@
     if (!isThreading.value && selectedMessages.length > 0) {
       selectedMessages = [];
     }
+  });
+
+  // Mark the current DM as read.
+  $effect(() => {
+    const did = page.params.did!;
+    const latestHeads = channel?.heads();
+    untrack(() => {
+      if (g.catalog?.view.dms[did].viewedHeads !== latestHeads) {
+        g.catalog?.change((doc) => {
+          doc.dms[did].viewedHeads = latestHeads;
+        });
+      }
+    });
   });
 
   function createThread(e: SubmitEvent) {
