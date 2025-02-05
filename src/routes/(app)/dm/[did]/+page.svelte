@@ -2,7 +2,7 @@
   import type { Autodoc } from "$lib/autodoc.svelte";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import { g } from "$lib/global.svelte";
-  import type { Channel, Ulid } from "$lib/schemas/types";
+  import type { Channel, Thread, Ulid } from "$lib/schemas/types";
   import { page } from "$app/state";
   import { user } from "$lib/user.svelte";
   import { setContext, untrack } from "svelte";
@@ -11,12 +11,26 @@
   import Icon from "@iconify/svelte";
   import { fly } from "svelte/transition";
   import { ulid } from "ulidx";
+  import ThreadRow from "$lib/components/ThreadRow.svelte";
+  import { goto } from "$app/navigation";
   import ChatMessage from "$lib/components/ChatMessage.svelte";
 
   let tab = $state("chat");
   let channel: Autodoc<Channel> | undefined = $derived(g.dms[page.params.did]);
   let messageInput = $state("");
   let info = $derived(g.catalog?.view.dms[page.params.did]);
+  let currentThread = $derived.by(() => {
+    if (page.url.searchParams.has("thread")) {
+      return channel.view.threads[page.url.searchParams.get("thread")!] as Thread;
+    }
+    else {
+      return null;
+    }
+  });
+
+  $effect(() => {
+    if (currentThread) { tab = "threads" }
+  });
 
   // thread maker
   let isThreading = $state({ value: false });
@@ -29,8 +43,6 @@
   setContext("removeSelectedMessage", (message: Ulid) => {
     selectedMessages = selectedMessages.filter((m) => m != message);
   });
-
-  $inspect({ selectedMessages });
 
   $effect(() => {
     if (!isThreading.value && selectedMessages.length > 0) {
@@ -123,6 +135,7 @@
     <Tabs.List class="grid grid-cols-2 gap-4 border text-white p-1 rounded">
       <Tabs.Trigger
         value="chat"
+        onclick={() => goto(page.url.pathname)}
         class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
       >
         <Icon icon="tabler:message" color="white" class="text-2xl" />
@@ -212,15 +225,22 @@
 
   <!-- TODO: Render Threads -->
   {#if tab === "threads"}
-    <div class="overflow-y-auto px-2 gap-3 flex flex-col">
-      {#each Object.entries(channel.view.threads) as [id, thread] (id)}
-        <div class="p-3 border-white border-solid border-2 rounded-md">
-          <h2 class="text-white text-2xl mb-1">{thread.title}</h2>
-          {#each thread.timeline as id}
-            <ChatMessage {id} message={channel.view.messages[id]} />
-          {/each}
-        </div>
-      {/each}
-    </div>
+    {#if currentThread} 
+      <section class="flex flex-col gap-4">
+        <button class="text-white" onclick={() => goto(page.url.pathname)}> 
+          Back
+        </button>
+        {#each currentThread.timeline as id}
+          <ChatMessage {id} message={channel.view.messages[id]} />
+        {/each}
+      </section>
+    {:else}
+      <ul class="overflow-y-auto px-2 gap-3 flex flex-col">
+        {#each Object.entries(channel.view.threads) as [id, thread] (id)}
+          <ThreadRow {id} {thread} onclick={() => goto(`?thread=${id}`)} />
+        {/each}
+      </ul>
+    {/if}
   {/if}
+
 {/if}
