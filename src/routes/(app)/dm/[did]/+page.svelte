@@ -161,12 +161,12 @@
     </Tabs.List>
   </Tabs.Root>
 
-  <menu class="flex items-center">
+  <menu class="flex items-center gap-2">
     {#if isThreading.value}
       <div in:fly>
         <Popover.Root>
           <Popover.Trigger
-            class="mx-2 px-4 py-2 rounded bg-violet-800 text-white"
+            class="cursor-pointer mx-2 px-4 py-2 rounded bg-violet-800 text-white"
           >
             Create Thread
           </Popover.Trigger>
@@ -205,13 +205,13 @@
     <Toggle.Root
       bind:pressed={isThreading.value}
       disabled={tab !== "chat"}
-      class={`p-2 ${isThreading.value && "bg-white/10"} hover:scale-105 active:scale-95 transition-all duration-150 rounded`}
+      class={`p-2 ${isThreading.value && "bg-white/10"} cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150 rounded`}
     >
       <Icon icon="tabler:needle-thread" color={tab !== "chat" ? "gray" : "white"} class="text-2xl" />
     </Toggle.Root>
     <Button.Root
       title="Copy invite link"
-      class="hover:scale-105 active:scale-95 transition-all duration-150"
+      class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
       onclick={() => {
         navigator.clipboard.writeText(
           `${page.url.protocol}//${page.url.host}/invite/dm/${user.agent?.assertDid}`,
@@ -225,7 +225,7 @@
       />
     </Button.Root>
     <Button.Root
-      class="p-2 hover:scale-105 active:scale-95 transition-all duration-150"
+      class="p-2 cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
     >
       <Icon icon="basil:settings-alt-solid" color="white" class="text-2xl" />
     </Button.Root>
