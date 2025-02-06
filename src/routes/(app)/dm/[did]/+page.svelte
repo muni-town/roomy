@@ -101,6 +101,14 @@
 
     messageInput = "";
   }
+
+  function deleteThread(id: Ulid) {
+    if (!channel) return;
+
+    channel.change((doc) => {
+      delete doc.threads[id]
+    });
+  }
 </script>
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
@@ -252,7 +260,12 @@
     {:else}
       <ul class="overflow-y-auto px-2 gap-3 flex flex-col">
         {#each Object.entries(channel.view.threads) as [id, thread] (id)}
-          <ThreadRow {id} {thread} onclick={() => goto(`?thread=${id}`)} />
+          <ThreadRow 
+            {id} 
+            {thread} 
+            onclick={() => goto(`?thread=${id}`)} 
+            onclickDelete={() => deleteThread(id)} 
+          />
         {/each}
       </ul>
     {/if}
