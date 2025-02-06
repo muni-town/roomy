@@ -111,24 +111,20 @@
         <AvatarBeam name={info?.name} />
       </Avatar.Fallback>
     </Avatar.Root>
-    <h4 class="text-white text-lg font-bold">
-      {info?.name}
-    </h4>
-    <Button.Root
-      title="Copy invite link"
-      class="p-2 hover:scale-105 active:scale-95 transition-all duration-150"
-      onclick={() => {
-        navigator.clipboard.writeText(
-          `${page.url.protocol}//${page.url.host}/invite/dm/${user.agent?.assertDid}`,
-        );
-      }}
-    >
-      <Icon
-        icon="icon-park-outline:copy-link"
-        color="white"
-        font-size="1.75em"
-      />
-    </Button.Root>
+
+    <span class="flex gap-2 items-center">
+      <h4 class="text-white text-lg font-bold">
+        {info?.name}
+      </h4>
+      {#if currentThread}
+        <Icon icon="mingcute:right-line" color="white" />
+        <Icon icon="lucide-lab:reel-thread" color="white" />
+        <h5 class="text-white text-lg font-bold">
+          {currentThread.title}
+        </h5>
+      {/if}
+    </span>
+
   </div>
 
   <Tabs.Root bind:value={tab}>
@@ -203,6 +199,21 @@
       <Icon icon="tabler:needle-thread" color="white" class="text-2xl" />
     </Toggle.Root>
     <Button.Root
+      title="Copy invite link"
+      class="hover:scale-105 active:scale-95 transition-all duration-150"
+      onclick={() => {
+        navigator.clipboard.writeText(
+          `${page.url.protocol}//${page.url.host}/invite/dm/${user.agent?.assertDid}`,
+        );
+      }}
+    >
+      <Icon
+        icon="icon-park-outline:copy-link"
+        color="white"
+        class="text-2xl"
+      />
+    </Button.Root>
+    <Button.Root
       class="p-2 hover:scale-105 active:scale-95 transition-all duration-150"
     >
       <Icon icon="basil:settings-alt-solid" color="white" class="text-2xl" />
@@ -226,8 +237,12 @@
   <!-- TODO: Render Threads -->
   {#if tab === "threads"}
     {#if currentThread} 
-      <section class="flex flex-col gap-4">
-        <button class="text-white" onclick={() => goto(page.url.pathname)}> 
+      <section class="flex flex-col gap-4 items-start">
+        <button 
+          onclick={() => goto(page.url.pathname)}
+          class="flex gap-2 items-center text-white cursor-pointer hover:scale-105 transitiona-all duration-150" 
+        > 
+          <Icon icon="uil:left" />
           Back
         </button>
         {#each currentThread.timeline as id}
