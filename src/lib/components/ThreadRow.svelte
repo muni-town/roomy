@@ -32,11 +32,11 @@
   <div class="flex gap-4 items-center">
     <p class="flex gap-2 items-center">
       {thread.timeline.length}
-      <Icon icon="tabler:message" />
+      <Icon icon="tabler:message" class="text-2xl" />
     </p>
     <Dialog.Root> 
       <Dialog.Trigger class="hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer">
-        <Icon icon="tabler:trash" color="red" />
+        <Icon icon="tabler:trash" color="red" class="text-2xl" />
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay

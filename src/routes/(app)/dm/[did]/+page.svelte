@@ -202,9 +202,10 @@
     {/if}
     <Toggle.Root
       bind:pressed={isThreading.value}
+      disabled={tab !== "chat"}
       class={`p-2 ${isThreading.value && "bg-white/10"} hover:scale-105 active:scale-95 transition-all duration-150 rounded`}
     >
-      <Icon icon="tabler:needle-thread" color="white" class="text-2xl" />
+      <Icon icon="tabler:needle-thread" color={tab !== "chat" ? "gray" : "white"} class="text-2xl" />
     </Toggle.Root>
     <Button.Root
       title="Copy invite link"
