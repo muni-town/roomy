@@ -6,10 +6,10 @@
   import { page } from "$app/state";
   import { user } from "$lib/user.svelte";
   import { setContext, untrack } from "svelte";
-  import { Avatar, Button, Popover, Tabs, Toggle } from "bits-ui";
+  import { Avatar, Button, Dialog, Popover, Separator, Tabs, Toggle } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import Icon from "@iconify/svelte";
-  import { fly } from "svelte/transition";
+  import { fade, fly } from "svelte/transition";
   import { ulid } from "ulidx";
   import ThreadRow from "$lib/components/ThreadRow.svelte";
   import { goto } from "$app/navigation";
@@ -108,6 +108,8 @@
     channel.change((doc) => {
       delete doc.threads[id]
     });
+
+    goto(page.url.pathname);
   }
 </script>
 
@@ -247,13 +249,50 @@
   {#if tab === "threads"}
     {#if currentThread} 
       <section class="flex flex-col gap-4 items-start">
-        <button 
-          onclick={() => goto(page.url.pathname)}
-          class="flex gap-2 items-center text-white cursor-pointer hover:scale-105 transitiona-all duration-150" 
-        > 
-          <Icon icon="uil:left" />
-          Back
-        </button>
+        <menu class="px-4 py-2 flex w-full justify-between">
+          <Button.Root
+            onclick={() => goto(page.url.pathname)}
+            class="flex gap-2 items-center text-white cursor-pointer hover:scale-105 transitiona-all duration-150" 
+          > 
+            <Icon icon="uil:left" />
+            Back
+          </Button.Root>
+          <Dialog.Root> 
+            <Dialog.Trigger class="hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer">
+              <Icon icon="tabler:trash" color="red" class="text-2xl" />
+            </Dialog.Trigger>
+            <Dialog.Portal>
+              <Dialog.Overlay
+                transition={fade}
+                transitionConfig={{ duration: 150 }}
+                class="fixed inset-0 z-50 bg-black/80"
+              />
+              <Dialog.Content
+                class="fixed p-5 flex flex-col text-white gap-4 w-dvw max-w-(--breakpoint-sm) left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] rounded-lg border bg-purple-950"
+              >
+                <Dialog.Title
+                  class="text-bold font-bold text-xl flex items-center justify-center gap-4"
+                >
+                  <Icon icon="ri:alarm-warning-fill" color="red" class="text-2xl" />
+                  <span> Delete Thread </span>
+                  <Icon icon="ri:alarm-warning-fill" color="red" class="text-2xl" />
+                </Dialog.Title>
+                <Separator.Root class="border border-white" />
+                <div class="flex flex-col items-center gap-4">
+                  <p>
+                    The thread will be unrecoverable once deleted.
+                  </p>
+                  <Button.Root
+                    onclick={() => deleteThread(page.url.searchParams.get("thread")!)}
+                    class="flex items-center gap-3 px-4 py-2 max-w-[20em] bg-red-600 text-white rounded-lg hover:scale-[102%] active:scale-95 transition-all duration-150"
+                  >
+                    Confirm Delete
+                  </Button.Root>
+                </div>
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+        </menu>
         {#each currentThread.timeline as id}
           <ChatMessage {id} message={channel.view.messages[id]} />
         {/each}
