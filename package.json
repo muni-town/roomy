@@ -20,6 +20,7 @@
     "@tailwindcss/vite": "^4.0.0",
     "bits-ui": "^0.22.0",
     "svelte-boring-avatars": "^1.2.6",
+    "svelte-french-toast": "^1.2.0",
     "ulidx": "^2.4.1"
   },
   "devDependencies": {

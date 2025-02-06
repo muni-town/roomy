@@ -14,6 +14,7 @@
   import ThreadRow from "$lib/components/ThreadRow.svelte";
   import { goto } from "$app/navigation";
   import ChatMessage from "$lib/components/ChatMessage.svelte";
+  import toast from "svelte-french-toast";
 
   let tab = $state("chat");
   let channel: Autodoc<Channel> | undefined = $derived(g.dms[page.params.did]);
@@ -81,6 +82,7 @@
 
     threadTitleInput = "";
     isThreading.value = false;
+    toast.success("Thread created", { position: "bottom-end" })
   }
 
   function sendMessage(e: SubmitEvent) {
@@ -109,6 +111,7 @@
       delete doc.threads[id]
     });
 
+    toast.success("Thread deleted", { position: "bottom-end" });
     goto(page.url.pathname);
   }
 </script>

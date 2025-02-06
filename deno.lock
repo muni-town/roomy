@@ -32,6 +32,7 @@
     "npm:sanitize-html@^2.14.0": "2.14.0",
     "npm:svelte-boring-avatars@^1.2.6": "1.2.6",
     "npm:svelte-check@4": "4.1.4_svelte@5.19.3__acorn@8.14.0_typescript@5.7.3",
+    "npm:svelte-french-toast@^1.2.0": "1.2.0_svelte@4.2.19",
     "npm:svelte@^5.19.3": "5.19.3_acorn@8.14.0",
     "npm:tailwindcss@4": "4.0.0",
     "npm:tweetnacl@^1.0.3": "1.0.3",
@@ -1843,6 +1844,19 @@
         "typescript"
       ]
     },
+    "svelte-french-toast@1.2.0_svelte@4.2.19": {
+      "integrity": "sha512-5PW+6RFX3xQPbR44CngYAP1Sd9oCq9P2FOox4FZffzJuZI2mHOB7q5gJBVnOiLF5y3moVGZ7u2bYt7+yPAgcEQ==",
+      "dependencies": [
+        "svelte@4.2.19",
+        "svelte-writable-derived"
+      ]
+    },
+    "svelte-writable-derived@3.1.1_svelte@4.2.19": {
+      "integrity": "sha512-w4LR6/bYZEuCs7SGr+M54oipk/UQKtiMadyOhW0PTwAtJ/Ai12QS77sLngEcfBx2q4H8ZBQucc9ktSA5sUGZWw==",
+      "dependencies": [
+        "svelte@4.2.19"
+      ]
+    },
     "svelte@4.2.19": {
       "integrity": "sha512-IY1rnGr6izd10B0A8LqsBfmlT5OILVuZ7XsI0vdGPEvuonFV7NYEUK4dAkm9Zg2q0Um92kYjTpS1CAP3Nh/KWw==",
       "dependencies": [
@@ -2128,6 +2142,7 @@
         "npm:sanitize-html@^2.14.0",
         "npm:svelte-boring-avatars@^1.2.6",
         "npm:svelte-check@4",
+        "npm:svelte-french-toast@^1.2.0",
         "npm:svelte@^5.19.3",
         "npm:tailwindcss@4",
         "npm:tweetnacl@^1.0.3",

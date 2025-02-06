@@ -10,6 +10,7 @@
   import { goto } from "$app/navigation";
   import { RoomyPdsStorageAdapter } from "$lib/autodoc-storage";
   import { page } from "$app/state";
+  import { Toaster } from "svelte-french-toast";
 
   let { children } = $props();
 
@@ -58,6 +59,7 @@
 
 <!-- Container -->
 <div class="flex gap-4 p-4 bg-violet-900 w-screen h-screen">
+  <Toaster />
   <!-- Server Bar -->
   <aside
     class="flex flex-col justify-between w-20 h-full bg-violet-950 rounded-lg px-4 py-8 items-center"
