@@ -14,7 +14,7 @@
   let profile = getProfile(message.author);
   let messages = getContext("messages") as { [id: Ulid]: Message };
   let messageRepliedTo = $derived(message.replyTo && messages[message.replyTo]);
-  let replyingToProfile = $derived(messageRepliedTo && getProfile(messageRepliedTo.author))
+  let profileRepliedTo = $derived(messageRepliedTo && getProfile(messageRepliedTo.author))
   
   let isSelected = $state(false);
   let isThreading: { value: boolean } = getContext("isThreading");
@@ -45,16 +45,16 @@
 </script>
 
 <li class="flex flex-col">
-  {#if messageRepliedTo && replyingToProfile}
+  {#if messageRepliedTo && profileRepliedTo}
     <Button.Root class="flex gap-2 text-start w-full items-center text-gray-300 px-4 py-1 bg-violet-900 rounded-t">
       <Icon icon="prime:reply" />
       <Avatar.Root class="w-4">
-        <Avatar.Image src={replyingToProfile.avatarUrl} class="rounded-full" />
+        <Avatar.Image src={profileRepliedTo.avatarUrl} class="rounded-full" />
         <Avatar.Fallback>
-          <AvatarBeam name={replyingToProfile.handle} />
+          <AvatarBeam name={profileRepliedTo.handle} />
         </Avatar.Fallback>
       </Avatar.Root>
-      <h5 class="text-white font-medium">{replyingToProfile.handle}</h5>
+      <h5 class="text-white font-medium">{profileRepliedTo.handle}</h5>
       <p class="text-ellipsis italic">
         {@html renderMarkdownSanitized(messageRepliedTo.content)}
       </p>
@@ -99,7 +99,7 @@
     <Toolbar.Root class="hidden group-hover:block absolute -top-2 right-0 bg-violet-800 p-2 rounded">
       <Toolbar.Button 
         onclick={() => setReplyTo({ id, profile, content: message.content })} 
-        class="p-2 hover:bg-white/10 rounded cursor-pointer"
+        class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
       >
         <Icon icon="fa6-solid:reply" color="white" />
       </Toolbar.Button>
