@@ -2,7 +2,7 @@
   import { ScrollArea } from "bits-ui";
   import ChatMessage from "./ChatMessage.svelte";
   import type { Autodoc } from "$lib/autodoc/peer";
-  import type { Channel } from "$lib/schemas/types";
+  import type { Channel, Ulid } from "$lib/schemas/types";
   import { setContext } from "svelte";
 
   let { channel }: { channel: Autodoc<Channel> } = $props();

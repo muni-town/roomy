@@ -22,6 +22,7 @@
   const removeSelectedMessage: (message: Ulid) => void = getContext(
     "removeSelectedMessage",
   );
+
   function updateSelect() {
     if (isSelected) {
       selectMessage(id);
@@ -36,6 +37,11 @@
     content: string
   }) => void;
 
+  function scrollToReply() {
+    if (!message.replyTo) { return; }
+    let element = document.getElementById(message.replyTo);
+    element?.scrollIntoView();
+  }
 
   $effect(() => {
     if (!isThreading.value) {
@@ -44,9 +50,9 @@
   });
 </script>
 
-<li class="flex flex-col">
+<li {id} class="flex flex-col">
   {#if messageRepliedTo && profileRepliedTo}
-    <Button.Root class="flex gap-2 text-start w-full items-center text-gray-300 px-4 py-1 bg-violet-900 rounded-t">
+    <Button.Root onclick={scrollToReply} class="cursor-pointer flex gap-2 text-start w-full items-center text-gray-300 px-4 py-1 bg-violet-900 rounded-t">
       <Icon icon="prime:reply" />
       <Avatar.Root class="w-4">
         <Avatar.Image src={profileRepliedTo.avatarUrl} class="rounded-full" />
