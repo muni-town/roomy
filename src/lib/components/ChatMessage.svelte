@@ -11,8 +11,10 @@
   import Icon from "@iconify/svelte";
 
   let { id, message }: { id: Ulid; message: Message } = $props();
+  let profile = getProfile(message.author);
   let messages = getContext("messages") as { [id: Ulid]: Message };
   let messageRepliedTo = $derived(message.replyTo && messages[message.replyTo]);
+  let replyingToProfile = $derived(messageRepliedTo && getProfile(messageRepliedTo.author))
   
   let isSelected = $state(false);
   let isThreading: { value: boolean } = getContext("isThreading");
@@ -20,13 +22,6 @@
   const removeSelectedMessage: (message: Ulid) => void = getContext(
     "removeSelectedMessage",
   );
-
-  const setReplyTo = getContext("setReplyTo") as (value: { 
-    id: Ulid,
-    profile: { handle: string, avatarUrl: string },
-    content: string
-  }) => void;
-
   function updateSelect() {
     if (isSelected) {
       selectMessage(id);
@@ -35,7 +30,12 @@
     }
   }
 
-  let profile = getProfile(message.author);
+  const setReplyTo = getContext("setReplyTo") as (value: { 
+    id: Ulid,
+    profile: { handle: string, avatarUrl: string },
+    content: string
+  }) => void;
+
 
   $effect(() => {
     if (!isThreading.value) {
@@ -44,64 +44,75 @@
   });
 </script>
 
-<li class="relative group w-full h-fit flex gap-4 hover:bg-white/5 px-2 py-2.5 transition-all duration-75">
-  <Avatar.Root class="w-12">
-    <Avatar.Image src={profile.avatarUrl} class="rounded-full" />
-    <Avatar.Fallback>
-      <AvatarBeam name={profile.handle} />
-    </Avatar.Fallback>
-  </Avatar.Root>
-
-  <div class="flex flex-col gap-2 text-white">
-    {#if messageRepliedTo}
-      <Button.Root>
-        <p class="text-ellipsis max-w-[50%]">
-          {@html renderMarkdownSanitized(messageRepliedTo.content)}
-        </p>
-      </Button.Root>
-    {/if}
-    <section class="flex gap-2">
-      <h5 class="font-bold">{profile.handle}</h5>
-      <!-- TODO: Change to exact time (eg "Today at 14:20") -->
-      <Tooltip.Root openDelay={300}>
-        <Tooltip.Trigger>
-          <time class="text-zinc-400 cursor-context-menu">
-            {formatDistanceToNowStrict(new Date(decodeTime(id)))}
-          </time>
-        </Tooltip.Trigger>
-        <Tooltip.Content
-          transition={fly}
-          transitionConfig={{ y: 8, duration: 150 }}
-          sideOffset={8}
-        >
-          <time
-            class="flex items-center justify-center rounded-input border border-dark-10 bg-white p-3 text-sm font-medium shadow-popover outline-none"
-          >
-            {format(new Date(decodeTime(id)), "MM/dd/yyyy K:mm:ss aaa")}
-          </time>
-        </Tooltip.Content>
-      </Tooltip.Root>
-    </section>
-
-    <p class="text-lg">{@html renderMarkdownSanitized(message.content)}</p>
-  </div>
-
-  <Toolbar.Root class="hidden group-hover:block absolute -top-2 right-0 bg-violet-800 p-2 rounded">
-    <Toolbar.Button 
-      onclick={() => setReplyTo({ id, profile, content: message.content })} 
-      class="p-2 hover:bg-white/10 rounded cursor-pointer"
-    >
-      <Icon icon="fa6-solid:reply" color="white" />
-    </Toolbar.Button>
-  </Toolbar.Root>
-
-  {#if isThreading.value}
-    <!-- TODO: Use bits-ui Checkbox -->
-    <input
-      type="checkbox"
-      onchange={updateSelect}
-      bind:checked={isSelected}
-      class="absolute right-4 inset-y-0"
-    />
+<li class="flex flex-col">
+  {#if messageRepliedTo && replyingToProfile}
+    <Button.Root class="flex gap-2 text-start w-full items-center text-gray-300 px-4 py-1 bg-violet-900 rounded-t">
+      <Icon icon="prime:reply" />
+      <Avatar.Root class="w-4">
+        <Avatar.Image src={replyingToProfile.avatarUrl} class="rounded-full" />
+        <Avatar.Fallback>
+          <AvatarBeam name={replyingToProfile.handle} />
+        </Avatar.Fallback>
+      </Avatar.Root>
+      <h5 class="text-white font-medium">{replyingToProfile.handle}</h5>
+      <p class="text-ellipsis italic">
+        {@html renderMarkdownSanitized(messageRepliedTo.content)}
+      </p>
+    </Button.Root>
   {/if}
+
+  <div class="relative group w-full h-fit flex gap-4 px-2 py-2.5 hover:bg-white/5 transition-all duration-75">
+    <Avatar.Root class="w-12 aspect-square">
+      <Avatar.Image src={profile.avatarUrl} class="rounded-full" />
+      <Avatar.Fallback>
+        <AvatarBeam name={profile.handle} />
+      </Avatar.Fallback>
+    </Avatar.Root>
+
+    <div class="flex flex-col gap-2 text-white w-full">
+      <section class="flex gap-2">
+        <h5 class="font-bold">{profile.handle}</h5>
+        <!-- TODO: Change to exact time (eg "Today at 14:20") -->
+        <Tooltip.Root openDelay={300}>
+          <Tooltip.Trigger>
+            <time class="text-zinc-400 cursor-context-menu">
+              {formatDistanceToNowStrict(new Date(decodeTime(id)))}
+            </time>
+          </Tooltip.Trigger>
+          <Tooltip.Content
+            transition={fly}
+            transitionConfig={{ y: 8, duration: 150 }}
+            sideOffset={8}
+          >
+            <time
+              class="flex items-center justify-center rounded-input border border-dark-10 bg-white p-3 text-sm font-medium shadow-popover outline-none"
+            >
+              {format(new Date(decodeTime(id)), "MM/dd/yyyy K:mm:ss aaa")}
+            </time>
+          </Tooltip.Content>
+        </Tooltip.Root>
+      </section>
+
+      <p class="text-lg">{@html renderMarkdownSanitized(message.content)}</p>
+    </div>
+
+    <Toolbar.Root class="hidden group-hover:block absolute -top-2 right-0 bg-violet-800 p-2 rounded">
+      <Toolbar.Button 
+        onclick={() => setReplyTo({ id, profile, content: message.content })} 
+        class="p-2 hover:bg-white/10 rounded cursor-pointer"
+      >
+        <Icon icon="fa6-solid:reply" color="white" />
+      </Toolbar.Button>
+    </Toolbar.Root>
+
+    {#if isThreading.value}
+      <!-- TODO: Use bits-ui Checkbox -->
+      <input
+        type="checkbox"
+        onchange={updateSelect}
+        bind:checked={isSelected}
+        class="absolute right-4 inset-y-0"
+      />
+    {/if}
+  </div>
 </li>
