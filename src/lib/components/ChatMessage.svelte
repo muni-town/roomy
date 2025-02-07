@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Avatar, Tooltip } from "bits-ui";
+  import { Avatar, Button, Toolbar, Tooltip } from "bits-ui";
   import type { Message, Ulid } from "$lib/schemas/types";
   import { renderMarkdownSanitized } from "$lib/markdown";
   import { AvatarBeam } from "svelte-boring-avatars";
@@ -8,14 +8,24 @@
   import { getContext } from "svelte";
   import { decodeTime } from "ulidx";
   import { getProfile } from "$lib/profile.svelte";
+  import Icon from "@iconify/svelte";
 
   let { id, message }: { id: Ulid; message: Message } = $props();
+  let messages = getContext("messages") as { [id: Ulid]: Message };
+  let messageRepliedTo = $derived(message.replyTo && messages[message.replyTo]);
+  
   let isSelected = $state(false);
   let isThreading: { value: boolean } = getContext("isThreading");
   const selectMessage: (message: Ulid) => void = getContext("selectMessage");
   const removeSelectedMessage: (message: Ulid) => void = getContext(
     "removeSelectedMessage",
   );
+
+  const setReplyTo = getContext("setReplyTo") as (value: { 
+    id: Ulid,
+    profile: { handle: string, avatarUrl: string },
+    content: string
+  }) => void;
 
   function updateSelect() {
     if (isSelected) {
@@ -34,9 +44,7 @@
   });
 </script>
 
-<li
-  class="relative w-full h-fit flex gap-4 hover:bg-white/5 px-2 py-2.5 transition-all duration-75"
->
+<li class="relative group w-full h-fit flex gap-4 hover:bg-white/5 px-2 py-2.5 transition-all duration-75">
   <Avatar.Root class="w-12">
     <Avatar.Image src={profile.avatarUrl} class="rounded-full" />
     <Avatar.Fallback>
@@ -45,8 +53,16 @@
   </Avatar.Root>
 
   <div class="flex flex-col gap-2 text-white">
+    {#if messageRepliedTo}
+      <Button.Root>
+        <p class="text-ellipsis max-w-[50%]">
+          {@html renderMarkdownSanitized(messageRepliedTo.content)}
+        </p>
+      </Button.Root>
+    {/if}
     <section class="flex gap-2">
       <h5 class="font-bold">{profile.handle}</h5>
+      <!-- TODO: Change to exact time (eg "Today at 14:20") -->
       <Tooltip.Root openDelay={300}>
         <Tooltip.Trigger>
           <time class="text-zinc-400 cursor-context-menu">
@@ -66,10 +82,21 @@
         </Tooltip.Content>
       </Tooltip.Root>
     </section>
+
     <p class="text-lg">{@html renderMarkdownSanitized(message.content)}</p>
   </div>
 
+  <Toolbar.Root class="hidden group-hover:block absolute -top-2 right-0 bg-violet-800 p-2 rounded">
+    <Toolbar.Button 
+      onclick={() => setReplyTo({ id, profile, content: message.content })} 
+      class="p-2 hover:bg-white/10 rounded cursor-pointer"
+    >
+      <Icon icon="fa6-solid:reply" color="white" />
+    </Toolbar.Button>
+  </Toolbar.Root>
+
   {#if isThreading.value}
+    <!-- TODO: Use bits-ui Checkbox -->
     <input
       type="checkbox"
       onchange={updateSelect}
