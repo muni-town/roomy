@@ -2,7 +2,7 @@
   import type { Autodoc } from "$lib/autodoc/peer";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import { g } from "$lib/global.svelte";
-  import type { Channel, Thread, Ulid } from "$lib/schemas/types";
+  import type { Channel, Did, Thread, Ulid } from "$lib/schemas/types";
   import { page } from "$app/state";
   import { user } from "$lib/user.svelte";
   import { setContext, untrack } from "svelte";
@@ -94,6 +94,27 @@
     }) => {
       replyingTo = value;
     },
+  );
+
+  setContext(
+    "toggleReaction",
+    (id: Ulid, reaction: string) => {
+      if (!channel) return; 
+      
+      channel.change((doc) => {
+        const did = user.profile.data?.did;
+        if (!did) return;
+
+        let reactions = doc.messages[id].reactions[reaction] as Did[];
+
+        if (reactions.includes(did)) {
+          doc.messages[id].reactions[reaction] = reactions.filter((actor: Did) => actor !== did);
+        }
+        else {
+          doc.messages[id].reactions[reaction].push(did);
+        }
+      });
+    }
   );
 
   // Mark the current DM as read.

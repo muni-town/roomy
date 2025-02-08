@@ -30,7 +30,7 @@ export type Message = {
   author: Did;
   content: string;
   replyTo?: Ulid;
-  reactions: { [did: Did]: string };
+  reactions: { [reaction: string]: Did[] };
 };
 
 export type Thread = {
