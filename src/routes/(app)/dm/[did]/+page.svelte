@@ -29,6 +29,7 @@
   import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
   import type { Channel, Thread, Ulid } from "$lib/schemas/types";
   import type { Autodoc } from "$lib/autodoc/peer";
+  import AvatarImage from "$lib/components/AvatarImage.svelte";
 
   let tab = $state("chat");
   let channel: Autodoc<Channel> | undefined = $derived(g.dms[page.params.did]);
@@ -184,12 +185,7 @@
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
   <div class="flex gap-4 items-center">
-    <Avatar.Root class="w-8">
-      <Avatar.Image src={info?.avatar} class="rounded-full" />
-      <Avatar.Fallback>
-        <AvatarBeam name={info?.name} />
-      </Avatar.Fallback>
-    </Avatar.Root>
+    <AvatarImage avatarUrl={info?.avatar} handle={info?.name ?? ""} />
 
     <span class="flex gap-2 items-center">
       <h4 class="text-white text-lg font-bold">
@@ -311,9 +307,10 @@
           </Avatar.Fallback>
         </Avatar.Root>
 
-        <h2 class="text-white font-bold text-2xl">
-          {profile.displayName} | @{profile.handle}
-        </h2>
+        <span class="flex flex-col gap-2 text-white text-center font-bold text-2xl">
+          <h2>{`${profile.displayName ?? ""}`}</h2>
+          <h3 class="text-gray-300">@{profile.handle}</h3>
+        </span>
       {/if}
 
       <Button.Root
@@ -327,8 +324,11 @@
   </div>
 {/if}
 
-{#if channel}
-  {#if tab === "chat"}
+{@render chatTab()}
+{@render threadsTab()}
+
+{#snippet chatTab()}
+  {#if channel && tab === "chat"}
     <ChatArea {channel} />
     <form onsubmit={sendMessage} class="flex flex-col">
       {#if replyingTo}
@@ -370,9 +370,10 @@
       />
     </form>
   {/if}
+{/snippet}
 
-  <!-- TODO: Render Threads -->
-  {#if tab === "threads"}
+{#snippet threadsTab()}
+  {#if channel && tab === "threads"}
     {#if currentThread}
       <section class="flex flex-col gap-4 items-start">
         <menu class="px-4 py-2 flex w-full justify-between">
@@ -446,4 +447,4 @@
       </ul>
     {/if}
   {/if}
-{/if}
+{/snippet}
