@@ -2,11 +2,9 @@
   import { ScrollArea } from "bits-ui";
   import ChatMessage from "./ChatMessage.svelte";
   import type { Autodoc } from "$lib/autodoc/peer";
-  import type { Channel, Ulid } from "$lib/schemas/types";
-  import { setContext } from "svelte";
+  import type { Channel } from "$lib/schemas/types";
 
   let { channel }: { channel: Autodoc<Channel> } = $props();
-  setContext("messages", channel.view.messages);
 
   // ScrollArea
   let viewport: HTMLDivElement | undefined = $state();
@@ -24,7 +22,7 @@
     <ScrollArea.Content>
       <ol class="flex flex-col gap-4">
         {#each channel.view.timeline as id (id)}
-          <ChatMessage {id} message={channel.view.messages[id]} />
+          <ChatMessage {id} {channel} />
         {/each}
       </ol>
     </ScrollArea.Content>
