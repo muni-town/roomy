@@ -1,11 +1,16 @@
 <script lang="ts">
-  import type { Autodoc } from "$lib/autodoc/peer";
-  import ChatArea from "$lib/components/ChatArea.svelte";
-  import { g } from "$lib/global.svelte";
-  import type { Channel, Thread, Ulid } from "$lib/schemas/types";
+  import _ from "underscore";
+  import { ulid } from "ulidx";
   import { page } from "$app/state";
+  import { g } from "$lib/global.svelte";
+  import { goto } from "$app/navigation";
+  import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
+  import { unreadCount } from "$lib/utils";
   import { setContext, untrack } from "svelte";
+  import { fade, fly } from "svelte/transition";
+  import { renderMarkdownSanitized } from "$lib/markdown";
+
   import {
     Avatar,
     Button,
@@ -15,18 +20,15 @@
     Tabs,
     Toggle,
   } from "bits-ui";
-  import { AvatarBeam } from "svelte-boring-avatars";
   import Icon from "@iconify/svelte";
-  import { fade, fly } from "svelte/transition";
-  import { ulid } from "ulidx";
+  import { AvatarBeam } from "svelte-boring-avatars";
+  import ChatArea from "$lib/components/ChatArea.svelte";
   import ThreadRow from "$lib/components/ThreadRow.svelte";
-  import { goto } from "$app/navigation";
   import ChatMessage from "$lib/components/ChatMessage.svelte";
-  import toast from "svelte-french-toast";
-  import _ from "underscore";
-  import { unreadCount } from "$lib/utils";
-  import { renderMarkdownSanitized } from "$lib/markdown";
+
   import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+  import type { Channel, Thread, Ulid } from "$lib/schemas/types";
+  import type { Autodoc } from "$lib/autodoc/peer";
 
   let tab = $state("chat");
   let channel: Autodoc<Channel> | undefined = $derived(g.dms[page.params.did]);
