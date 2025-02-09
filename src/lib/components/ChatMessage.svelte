@@ -71,6 +71,7 @@
       emojiPickerElement.addEventListener("emoji-click", event => {
         // @ts-ignore
         toggleReaction(id, event.detail.unicode);
+        isEmojiPickerOpen = false;
       });
     }
   });
@@ -149,9 +150,8 @@
       >
         👍
       </Toolbar.Button>
-      <Popover.Root>
+      <Popover.Root bind:open={isEmojiPickerOpen}>
         <Popover.Trigger
-          onclick={() => isEmojiPickerOpen = true}
           class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
         >
           <Icon icon="lucide:smile-plus" color="white" />
