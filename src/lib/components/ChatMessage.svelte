@@ -141,8 +141,9 @@
       </section>
 
       <p class="text-lg prose-invert chat">{@html renderMarkdownSanitized(message.content)}</p>
+
       {#if Object.keys(message.reactions).length > 0}
-        <div class="flex gap-2">
+        <div class="flex gap-2 flex-wrap">
           {#each Object.keys(message.reactions) as reaction}
             {@render reactionToggle(reaction)}
           {/each}
