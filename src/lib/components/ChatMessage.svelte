@@ -5,7 +5,7 @@
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, formatDistanceToNowStrict } from "date-fns";
   import { fly } from "svelte/transition";
-  import { getContext, onMount } from "svelte";
+  import { getContext } from "svelte";
   import { decodeTime } from "ulidx";
   import { getProfile } from "$lib/profile.svelte";
   import Icon from "@iconify/svelte";
@@ -28,8 +28,10 @@
   let isSelected = $state(false);
   let isThreading: { value: boolean } = getContext("isThreading");
 
-  let emojiPickerElement: HTMLElement | undefined = $state();
-  let isEmojiPickerOpen = $state(false);
+  let emojiToolbarPicker: HTMLElement | undefined = $state();
+  let emojiRowPicker: HTMLElement | undefined = $state();
+  let isEmojiToolbarPickerOpen = $state(false);
+  let isEmojiRowPickerOpen = $state(false);
 
   const selectMessage: (message: Ulid) => void = getContext("selectMessage");
   const removeSelectedMessage: (message: Ulid) => void = getContext(
@@ -43,6 +45,14 @@
   }) => void;
 
   const toggleReaction = getContext("toggleReaction") as (id: Ulid, reaction: string) => void;
+
+  function onEmojiPick(event: Event) {
+    // @ts-ignore
+    toggleReaction(id, event.detail.unicode);
+    isEmojiToolbarPickerOpen = false;
+    isEmojiRowPickerOpen = false;
+  }
+
 
   function updateSelect() {
     if (isSelected) {
@@ -67,12 +77,11 @@
   });
 
   $effect(() => {
-    if (emojiPickerElement) { 
-      emojiPickerElement.addEventListener("emoji-click", event => {
-        // @ts-ignore
-        toggleReaction(id, event.detail.unicode);
-        isEmojiPickerOpen = false;
-      });
+    if (emojiToolbarPicker) { 
+      emojiToolbarPicker.addEventListener("emoji-click", onEmojiPick);
+    }
+    if (emojiRowPicker) {
+      emojiRowPicker.addEventListener("emoji-click", onEmojiPick);
     }
   });
 </script>
@@ -137,12 +146,22 @@
           {#each Object.keys(message.reactions) as reaction}
             {@render reactionToggle(reaction)}
           {/each}
+          <Popover.Root bind:open={isEmojiRowPickerOpen}>
+            <Popover.Trigger
+              class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+            >
+              <Icon icon="lucide:smile-plus" color="white" />
+            </Popover.Trigger>
+            <Popover.Content>
+              <emoji-picker bind:this={emojiRowPicker}></emoji-picker>
+            </Popover.Content>
+          </Popover.Root>
         </div>
       {/if}
     </div>
 
     <Toolbar.Root
-      class={`${!isEmojiPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-violet-800 p-2 rounded items-center`}
+      class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-violet-800 p-2 rounded items-center`}
     >
       <Toolbar.Button
         onclick={() => toggleReaction(id, "👍")}
@@ -150,14 +169,14 @@
       >
         👍
       </Toolbar.Button>
-      <Popover.Root bind:open={isEmojiPickerOpen}>
+      <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
         <Popover.Trigger
           class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
         >
           <Icon icon="lucide:smile-plus" color="white" />
         </Popover.Trigger>
         <Popover.Content>
-          <emoji-picker bind:this={emojiPickerElement}></emoji-picker>
+          <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
         </Popover.Content>
       </Popover.Root>
       <Toolbar.Button
