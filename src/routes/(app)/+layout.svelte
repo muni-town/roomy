@@ -11,6 +11,7 @@
   import { RoomyPdsStorageAdapter } from "$lib/autodoc-storage";
   import { page } from "$app/state";
   import { Toaster } from "svelte-french-toast";
+  import { cleanHandle } from "$lib/utils";
 
   let { children } = $props();
 
@@ -232,7 +233,7 @@
                 class="flex flex-col gap-4"
                 onsubmit={async () => {
                   loginLoading = true;
-                  if (handleInput.startsWith('@')) handleInput = handleInput.slice(1);
+                  handleInput = cleanHandle(handleInput);
                   await user.loginWithHandle(handleInput);
                 }}
               >

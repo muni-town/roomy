@@ -1,7 +1,7 @@
 // deno-lint-ignore-file no-unused-vars
 
 import * as Automerge from "npm:@automerge/automerge";
-import type { Catalog, Channel } from "./types.ts";
+import { type Space, type Catalog, type Channel } from "./types.ts";
 
 async function exportSchema<T>(name: string, init: (doc: T) => void) {
   const doc = Automerge.init<T>({
@@ -38,4 +38,14 @@ async function exportSchema<T>(name: string, init: (doc: T) => void) {
 //   doc.messages = {};
 //   doc.threads = {};
 //   doc.timeline = [];
+// });
+
+// exportSchema<Space>("space", (space) => {
+//   space.threads = {};
+//   space.messages = {};
+//   space.channels = {};
+//   space.categories = {};
+//   space.sidebarItems = [];
+//   space.name = "";
+//   space.description = "";
 // });

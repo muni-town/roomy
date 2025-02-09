@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Avatar, Button, Toolbar, Tooltip } from "bits-ui";
+  import { Avatar, Button, Popover, Toolbar, Tooltip } from "bits-ui";
   import type { Channel, Ulid } from "$lib/schemas/types";
   import { renderMarkdownSanitized } from "$lib/markdown";
   import { AvatarBeam } from "svelte-boring-avatars";
@@ -10,6 +10,8 @@
   import { getProfile } from "$lib/profile.svelte";
   import Icon from "@iconify/svelte";
   import type { Autodoc } from "$lib/autodoc/peer";
+  import { user } from "$lib/user.svelte";
+  import "emoji-picker-element";
 
   let { id, channel }: { id: Ulid; channel: Autodoc<Channel> } = $props();
   let message = $derived(channel.view.messages[id]);
@@ -26,10 +28,31 @@
   let isSelected = $state(false);
   let isThreading: { value: boolean } = getContext("isThreading");
 
+  let emojiToolbarPicker: HTMLElement | undefined = $state();
+  let emojiRowPicker: HTMLElement | undefined = $state();
+  let isEmojiToolbarPickerOpen = $state(false);
+  let isEmojiRowPickerOpen = $state(false);
+
   const selectMessage: (message: Ulid) => void = getContext("selectMessage");
   const removeSelectedMessage: (message: Ulid) => void = getContext(
     "removeSelectedMessage",
   );
+
+  const setReplyTo = getContext("setReplyTo") as (value: {
+    id: Ulid;
+    profile: { handle: string; avatarUrl: string };
+    content: string;
+  }) => void;
+
+  const toggleReaction = getContext("toggleReaction") as (id: Ulid, reaction: string) => void;
+
+  function onEmojiPick(event: Event) {
+    // @ts-ignore
+    toggleReaction(id, event.detail.unicode);
+    isEmojiToolbarPickerOpen = false;
+    isEmojiRowPickerOpen = false;
+  }
+
 
   function updateSelect() {
     if (isSelected) {
@@ -38,12 +61,6 @@
       removeSelectedMessage(id);
     }
   }
-
-  const setReplyTo = getContext("setReplyTo") as (value: {
-    id: Ulid;
-    profile: { handle: string; avatarUrl: string };
-    content: string;
-  }) => void;
 
   function scrollToReply() {
     if (!message.replyTo) {
@@ -56,6 +73,15 @@
   $effect(() => {
     if (!isThreading.value) {
       isSelected = false;
+    }
+  });
+
+  $effect(() => {
+    if (emojiToolbarPicker) { 
+      emojiToolbarPicker.addEventListener("emoji-click", onEmojiPick);
+    }
+    if (emojiRowPicker) {
+      emojiRowPicker.addEventListener("emoji-click", onEmojiPick);
     }
   });
 </script>
@@ -114,12 +140,46 @@
         </Tooltip.Root>
       </section>
 
-      <p class="text-lg">{@html renderMarkdownSanitized(message.content)}</p>
+      <p class="text-lg prose-invert chat">{@html renderMarkdownSanitized(message.content)}</p>
+
+      {#if Object.keys(message.reactions).length > 0}
+        <div class="flex gap-2 flex-wrap">
+          {#each Object.keys(message.reactions) as reaction}
+            {@render reactionToggle(reaction)}
+          {/each}
+          <Popover.Root bind:open={isEmojiRowPickerOpen}>
+            <Popover.Trigger
+              class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+            >
+              <Icon icon="lucide:smile-plus" color="white" />
+            </Popover.Trigger>
+            <Popover.Content>
+              <emoji-picker bind:this={emojiRowPicker}></emoji-picker>
+            </Popover.Content>
+          </Popover.Root>
+        </div>
+      {/if}
     </div>
 
     <Toolbar.Root
-      class="hidden group-hover:block absolute -top-2 right-0 bg-violet-800 p-2 rounded"
+      class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-violet-800 p-2 rounded items-center`}
     >
+      <Toolbar.Button
+        onclick={() => toggleReaction(id, "👍")}
+        class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+      >
+        👍
+      </Toolbar.Button>
+      <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
+        <Popover.Trigger
+          class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+        >
+          <Icon icon="lucide:smile-plus" color="white" />
+        </Popover.Trigger>
+        <Popover.Content>
+          <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
+        </Popover.Content>
+      </Popover.Root>
       <Toolbar.Button
         onclick={() => setReplyTo({ id, profile, content: message.content })}
         class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
@@ -139,3 +199,21 @@
     {/if}
   </div>
 </li>
+
+{#snippet reactionToggle(reaction: string)}
+  <Button.Root
+    onclick={() => toggleReaction(id, reaction)}
+    class={`
+      ${user.profile.data && message.reactions[reaction].includes(user.profile.data.did) ? "bg-violet-600" : "bg-violet-800"}
+      cursor-pointer border border-violet-500 px-2 py-1 rounded tabular-nums hover:scale-105 active:scale-95 transition-all duration-150
+    `}
+  >
+    {reaction} {message.reactions[reaction].length}
+  </Button.Root>
+{/snippet}
+
+<style>
+  .chat :global(a) {
+    text-decoration: underline;
+  }
+</style>
