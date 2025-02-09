@@ -128,7 +128,7 @@
     </div>
 
     <Toolbar.Root
-      class="hidden group-hover:block absolute -top-2 right-0 bg-violet-800 p-2 rounded"
+      class="hidden group-hover:flex absolute -top-2 right-0 bg-violet-800 p-2 rounded items-center"
     >
       <Toolbar.Button
         onclick={() => toggleReaction(id, "👍")}
