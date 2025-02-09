@@ -114,7 +114,7 @@
         </Tooltip.Root>
       </section>
 
-      <p class="text-lg">{@html renderMarkdownSanitized(message.content)}</p>
+      <p class="text-lg prose-invert chat">{@html renderMarkdownSanitized(message.content)}</p>
     </div>
 
     <Toolbar.Root
@@ -139,3 +139,9 @@
     {/if}
   </div>
 </li>
+
+<style>
+  .chat :global(a) {
+    text-decoration: underline;
+  }
+</style>

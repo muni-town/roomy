@@ -45,3 +45,26 @@ export type Channel = {
   threads: { [ulid: Ulid]: Thread };
   timeline: Ulid[];
 };
+
+export type SpaceChannel = {
+  name: string;
+  description?: string;
+  avatar?: string;
+  threads: Ulid[];
+  timeline: Ulid[];
+};
+export type SpaceCategory = {
+  name: string;
+  channels: Ulid[];
+};
+export type SidebarItem = { type: "category" | "channel"; id: Ulid };
+
+export type Space = {
+  threads: { [ulid: Ulid]: Thread };
+  messages: { [ulid: Ulid]: Message };
+  channels: { [ulid: Ulid]: SpaceChannel };
+  categories: { [ulid: Ulid]: SpaceCategory };
+  sidebarItems: SidebarItem[];
+  name: string;
+  description: string;
+};

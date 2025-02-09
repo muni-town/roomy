@@ -9,7 +9,7 @@
   import { user } from "$lib/user.svelte";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { onMount } from "svelte";
-  import { unreadCount } from "$lib/utils";
+  import { cleanHandle, unreadCount } from "$lib/utils";
   import { RichText } from "@atproto/api";
 
   let { children } = $props();
@@ -43,8 +43,7 @@
     newDmError = undefined;
     newDmLoading = true;
 
-    newDmInput = newDmInput.trim();
-    if (newDmInput.startsWith("@")) newDmInput = newDmInput.slice(1);
+    newDmInput = cleanHandle(newDmInput);
 
     try {
       const resp = await user.agent!.resolveHandle({ handle: newDmInput });
