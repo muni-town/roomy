@@ -10,6 +10,7 @@
   import { getProfile } from "$lib/profile.svelte";
   import Icon from "@iconify/svelte";
   import type { Autodoc } from "$lib/autodoc/peer";
+  import { user } from "$lib/user.svelte";
 
   let { id, channel }: { id: Ulid; channel: Autodoc<Channel> } = $props();
   let message = $derived(channel.view.messages[id]);
@@ -31,6 +32,14 @@
     "removeSelectedMessage",
   );
 
+  const setReplyTo = getContext("setReplyTo") as (value: {
+    id: Ulid;
+    profile: { handle: string; avatarUrl: string };
+    content: string;
+  }) => void;
+
+  const toggleReaction = getContext("toggleReaction") as (id: Ulid, reaction: string) => void;
+
   function updateSelect() {
     if (isSelected) {
       selectMessage(id);
@@ -38,12 +47,6 @@
       removeSelectedMessage(id);
     }
   }
-
-  const setReplyTo = getContext("setReplyTo") as (value: {
-    id: Ulid;
-    profile: { handle: string; avatarUrl: string };
-    content: string;
-  }) => void;
 
   function scrollToReply() {
     if (!message.replyTo) {
@@ -115,11 +118,24 @@
       </section>
 
       <p class="text-lg prose-invert chat">{@html renderMarkdownSanitized(message.content)}</p>
+      {#if Object.keys(message.reactions).length > 0}
+        <div class="flex gap-2">
+          {#each Object.keys(message.reactions) as reaction}
+            {@render reactionToggle(reaction)}
+          {/each}
+        </div>
+      {/if}
     </div>
 
     <Toolbar.Root
       class="hidden group-hover:block absolute -top-2 right-0 bg-violet-800 p-2 rounded"
     >
+      <Toolbar.Button
+        onclick={() => toggleReaction(id, "👍")}
+        class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+      >
+        👍
+      </Toolbar.Button>
       <Toolbar.Button
         onclick={() => setReplyTo({ id, profile, content: message.content })}
         class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
@@ -139,6 +155,18 @@
     {/if}
   </div>
 </li>
+
+{#snippet reactionToggle(reaction: string)}
+  <Button.Root
+    onclick={() => toggleReaction(id, reaction)}
+    class={`
+      ${user.profile.data && message.reactions[reaction].includes(user.profile.data.did) ? "bg-violet-600" : "bg-violet-800"}
+      cursor-pointer border border-violet-500 px-2 py-1 rounded tabular-nums hover:scale-105 active:scale-95 transition-all duration-150
+    `}
+  >
+    {reaction} {message.reactions[reaction].length}
+  </Button.Root>
+{/snippet}
 
 <style>
   .chat :global(a) {
