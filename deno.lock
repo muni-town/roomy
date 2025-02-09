@@ -23,6 +23,7 @@
     "npm:base32-encode@2": "2.0.0",
     "npm:bits-ui@0.22": "0.22.0_svelte@5.19.3__acorn@8.14.0",
     "npm:date-fns@^4.1.0": "4.1.0",
+    "npm:emoji-picker-element@^1.26.1": "1.26.1",
     "npm:js-base64@^3.7.7": "3.7.7",
     "npm:marked@^15.0.6": "15.0.6",
     "npm:prettier-plugin-svelte@3.3.3": "3.3.3_prettier@3.4.2_svelte@5.19.3__acorn@8.14.0",
@@ -1153,6 +1154,9 @@
     "ee-first@1.1.1": {
       "integrity": "sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow=="
     },
+    "emoji-picker-element@1.26.1": {
+      "integrity": "sha512-XgQ9s2JdmworiqLfJC7eGbzQHGv8yb8U9XofjeRAnOMYaeLh0MfwVAz9oG1YE2U2WnzU0Pys1axMjYtPKJ7YSg=="
+    },
     "encodeurl@1.0.2": {
       "integrity": "sha512-TPJXq8JqFaVYm2CWmPvnP2Iyo4ZSM7/QKcSmuMLDObfpH5fi7RUGmd/rTDf+rut/saiDiQEeVTNgAmJEdAOx0w=="
     },
@@ -2179,6 +2183,7 @@
         "npm:base32-encode@2",
         "npm:bits-ui@0.22",
         "npm:date-fns@^4.1.0",
+        "npm:emoji-picker-element@^1.26.1",
         "npm:js-base64@^3.7.7",
         "npm:marked@^15.0.6",
         "npm:prettier-plugin-svelte@3.3.3",

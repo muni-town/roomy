@@ -1,16 +1,17 @@
 <script lang="ts">
-  import { Avatar, Button, Toolbar, Tooltip } from "bits-ui";
+  import { Avatar, Button, Popover, Toolbar, Tooltip } from "bits-ui";
   import type { Channel, Ulid } from "$lib/schemas/types";
   import { renderMarkdownSanitized } from "$lib/markdown";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, formatDistanceToNowStrict } from "date-fns";
   import { fly } from "svelte/transition";
-  import { getContext } from "svelte";
+  import { getContext, onMount } from "svelte";
   import { decodeTime } from "ulidx";
   import { getProfile } from "$lib/profile.svelte";
   import Icon from "@iconify/svelte";
   import type { Autodoc } from "$lib/autodoc/peer";
   import { user } from "$lib/user.svelte";
+  import "emoji-picker-element";
 
   let { id, channel }: { id: Ulid; channel: Autodoc<Channel> } = $props();
   let message = $derived(channel.view.messages[id]);
@@ -26,6 +27,9 @@
 
   let isSelected = $state(false);
   let isThreading: { value: boolean } = getContext("isThreading");
+
+  let emojiPickerElement: HTMLElement | undefined = $state();
+  let isEmojiPickerOpen = $state(false);
 
   const selectMessage: (message: Ulid) => void = getContext("selectMessage");
   const removeSelectedMessage: (message: Ulid) => void = getContext(
@@ -59,6 +63,15 @@
   $effect(() => {
     if (!isThreading.value) {
       isSelected = false;
+    }
+  });
+
+  $effect(() => {
+    if (emojiPickerElement) { 
+      emojiPickerElement.addEventListener("emoji-click", event => {
+        // @ts-ignore
+        toggleReaction(id, event.detail.unicode);
+      });
     }
   });
 </script>
@@ -128,7 +141,7 @@
     </div>
 
     <Toolbar.Root
-      class="hidden group-hover:flex absolute -top-2 right-0 bg-violet-800 p-2 rounded items-center"
+      class={`${!isEmojiPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-violet-800 p-2 rounded items-center`}
     >
       <Toolbar.Button
         onclick={() => toggleReaction(id, "👍")}
@@ -136,6 +149,17 @@
       >
         👍
       </Toolbar.Button>
+      <Popover.Root>
+        <Popover.Trigger
+          onclick={() => isEmojiPickerOpen = true}
+          class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+        >
+          <Icon icon="lucide:smile-plus" color="white" />
+        </Popover.Trigger>
+        <Popover.Content>
+          <emoji-picker bind:this={emojiPickerElement}></emoji-picker>
+        </Popover.Content>
+      </Popover.Root>
       <Toolbar.Button
         onclick={() => setReplyTo({ id, profile, content: message.content })}
         class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
