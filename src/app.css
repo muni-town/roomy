@@ -24,3 +24,9 @@
   scrollbar-width: thin;
   scrollbar-color: #5B009C #300051;
 }
+
+emoji-picker {
+  --background: var(--color-violet-900);
+  --border-radius: 8px;
+  --button-hover-background: --alpha(var(--color-white) / 10%);
+}
