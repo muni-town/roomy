@@ -8,7 +8,7 @@
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import { onMount } from "svelte";
+  import { getContext, onMount } from "svelte";
   import { cleanHandle, unreadCount } from "$lib/utils";
   import { RichText } from "@atproto/api";
 
@@ -31,6 +31,8 @@
   let newDmInput = $state("");
   let newDmLoading = $state(false);
   let newDmError = $state(undefined) as undefined | string;
+
+  let isMobile = (getContext("isMobile") as () => boolean)();
 
   onMount(() => {
     if (page.params.did) {
@@ -105,7 +107,7 @@
 </script>
 
 <!-- Room Selector; TODO: Sub Menu (eg Settings) -->
-<nav class="flex flex-col gap-4 p-4 h-full w-72 bg-violet-950 rounded-lg">
+<nav class={`flex flex-col gap-4 p-4 h-full ${isMobile ? "w-full" : "w-72"} bg-violet-950 rounded-lg`}>
   <h1
     class="text-2xl font-extrabold text-white px-2 py-1 text-ellipsis flex items-center justify-between"
   >
@@ -189,9 +191,15 @@
 </nav>
 
 <!-- Events/Room Content -->
-<main class="grow flex flex-col gap-4 bg-violet-950 rounded-lg p-4">
-  {@render children()}
-</main>
+{#if isMobile}
+  <main class="absolute inset-0 bg-violet-950 p-4 grow flex flex-col gap-4">
+    {@render children()}
+  </main>
+{:else}
+  <main class="grow flex flex-col gap-4 bg-violet-950 rounded-lg p-4">
+    {@render children()}
+  </main>
+{/if}
 
 <style>
   :global(.online img) {

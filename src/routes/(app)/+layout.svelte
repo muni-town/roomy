@@ -4,7 +4,7 @@
   import { AvatarBeam, AvatarPixel } from "svelte-boring-avatars";
   import Dialog from "$lib/components/Dialog.svelte";
   import { Avatar, Button, ToggleGroup } from "bits-ui";
-  import { onMount } from "svelte";
+  import { onMount, setContext } from "svelte";
   import { user } from "$lib/user.svelte";
   import { encodeBase32 } from "$lib/base32";
   import { goto } from "$app/navigation";
@@ -24,6 +24,11 @@
   let newSpaceName = $state("");
   let isLoginDialogOpen = $state(!user.session);
   let deleteLoading = $state(false);
+
+  let width: number = $state(0);
+  let isMobile = $derived(width < 640);
+
+  setContext("isMobile", () => isMobile);
 
   // TODO: set servers/rooms based on user
   let servers: string[] = $derived(
@@ -82,8 +87,10 @@
   <title>Roomy</title>
 </svelte:head>
 
+<svelte:window bind:outerWidth={width} />
+
 <!-- Container -->
-<div class="flex gap-4 p-4 bg-violet-900 w-screen h-screen">
+<div class="relative flex gap-4 p-4 bg-violet-900 w-screen h-screen">
   <Toaster />
   <!-- Server Bar -->
   <aside
