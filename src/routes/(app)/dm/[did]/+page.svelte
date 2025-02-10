@@ -27,7 +27,7 @@
   import ChatMessage from "$lib/components/ChatMessage.svelte";
 
   import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
-  import type { Channel, Thread, Ulid } from "$lib/schemas/types";
+  import type { Channel, Did, Thread, Ulid } from "$lib/schemas/types";
   import type { Autodoc } from "$lib/autodoc/peer";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
 
@@ -356,7 +356,7 @@
 
 {#snippet chatTab()}
   {#if channel && tab === "chat"}
-    <ChatArea {channel} />
+    <ChatArea source={{ type: "channel", channel }} />
     <form onsubmit={sendMessage} class="flex flex-col">
       {#if replyingTo}
         <div

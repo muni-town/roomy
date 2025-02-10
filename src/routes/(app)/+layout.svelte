@@ -1,9 +1,9 @@
 <script lang="ts">
   import "../../app.css";
   import Icon from "@iconify/svelte";
-  import { fade } from "svelte/transition";
   import { AvatarBeam, AvatarPixel } from "svelte-boring-avatars";
-  import { Avatar, Button, Dialog, Separator, ToggleGroup } from "bits-ui";
+  import Dialog from "$lib/components/Dialog.svelte";
+  import { Avatar, Button, ToggleGroup } from "bits-ui";
   import { onMount } from "svelte";
   import { user } from "$lib/user.svelte";
   import { encodeBase32 } from "$lib/base32";
@@ -22,7 +22,7 @@
   let handleInput = $state("");
   let isNewSpaceDialogOpen = $state(false);
   let newSpaceName = $state("");
-  let isLoginDialogOpen = $derived(!user.session);
+  let isLoginDialogOpen = $state(!user.session);
   let deleteLoading = $state(false);
 
   // TODO: set servers/rooms based on user
@@ -129,50 +129,34 @@
     </ToggleGroup.Root>
 
     <section class="flex flex-col gap-8 items-center">
-      <Dialog.Root bind:open={isNewSpaceDialogOpen}>
-        <Dialog.Trigger>
+      <Dialog
+        title="Create Space"
+        description="Create a new public chat space"
+        bind:isDialogOpen={isNewSpaceDialogOpen}
+      >
+        {#snippet dialogTrigger()}
           <Button.Root
             class="hover:scale-105 active:scale-95 transition-all duration-150"
             title="Create Space"
           >
             <Icon icon="basil:add-solid" color="white" font-size="2em" />
           </Button.Root>
-        </Dialog.Trigger>
-        <Dialog.Portal>
-          <Dialog.Overlay
-            transition={fade}
-            transitionConfig={{ duration: 150 }}
-            class="fixed inset-0 z-50 bg-black/80"
-          />
+        {/snippet}
 
-          <Dialog.Content
-            class="fixed p-5 flex flex-col text-white gap-4 w-dvw max-w-(--breakpoint-sm) left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] rounded-lg border bg-purple-950"
+        <form class="flex flex-col gap-4" onsubmit={createSpace}>
+          <input
+            bind:value={newSpaceName}
+            placeholder="Name"
+            class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
+          />
+          <Button.Root
+            class={`px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 ${loginLoading ? "contrast-50" : "hover:scale-[102%]"}`}
           >
-            <Dialog.Title
-              class="text-bold font-bold text-xl flex items-center justify-center gap-4"
-            >
-              Create Space
-            </Dialog.Title>
-            <Separator.Root class="border border-white" />
-            <div class="flex flex-col items-center gap-4">
-              Create a new public chat space
-            </div>
-            <form class="flex flex-col gap-4" onsubmit={createSpace}>
-              <input
-                bind:value={newSpaceName}
-                placeholder="Name"
-                class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
-              />
-              <Button.Root
-                class={`px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 ${loginLoading ? "contrast-50" : "hover:scale-[102%]"}`}
-              >
-                <Icon icon="basil:add-outline" font-size="1.8em" />
-                Create Space
-              </Button.Root>
-            </form>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+            <Icon icon="basil:add-outline" font-size="1.8em" />
+            Create Space
+          </Button.Root>
+        </form>
+      </Dialog>
 
       <!-- <Button.Root
         class="hover:scale-105 active:scale-95 transition-all duration-150"
@@ -180,69 +164,53 @@
         <Icon icon="basil:settings-alt-solid" color="white" class="text-2xl" />
       </Button.Root> -->
 
-      <Dialog.Root>
-        <Dialog.Trigger>
+      <Dialog
+        title="Delete Data"
+      >
+        {#snippet dialogTrigger()}
           <Button.Root
             class="hover:scale-105 active:scale-95 transition-all duration-150"
           >
             <Icon icon="ri:alarm-warning-fill" color="white" class="text-2xl" />
           </Button.Root>
-        </Dialog.Trigger>
-        <Dialog.Portal>
-          <Dialog.Overlay
-            transition={fade}
-            transitionConfig={{ duration: 150 }}
-            class="fixed inset-0 z-50 bg-black/80"
-          />
-          <Dialog.Content
-            class="fixed p-5 flex flex-col text-white gap-4 w-dvw max-w-(--breakpoint-sm) left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] rounded-lg border bg-purple-950"
+        {/snippet}
+
+        <div class="flex flex-col items-center gap-4">
+          <p>
+            <strong>Warning:</strong> This will delete the Roomy data from this
+            device and from your AtProto PDS if you chose.
+          </p>
+          <p>
+            Roomy is currently <em>extremely</em> experimental, so until it gets
+            a little more stable it may be necessary to reset all of your data
+            in order to fix a problem after an update of Roomy is published.
+          </p>
+          <Button.Root
+            onclick={() => deleteData("local")}
+            class={`flex items-center gap-3  px-4 py-2 max-w-[20em] bg-red-600 text-white rounded-lg hover:scale-[102%] active:scale-95 transition-all duration-150 ${
+              deleteLoading ? "contrast-50" : "hover:scale-[102%]"
+            }`}
+            disabled={deleteLoading}
           >
-            <Dialog.Title
-              class="text-bold font-bold text-xl flex items-center justify-center gap-4"
-            >
-              <Icon icon="ri:alarm-warning-fill" color="red" class="text-2xl" />
-              <span> Delete Data </span>
-              <Icon icon="ri:alarm-warning-fill" color="red" class="text-2xl" />
-            </Dialog.Title>
-            <Separator.Root class="border border-white" />
-            <div class="flex flex-col items-center gap-4">
-              <p>
-                <strong>Warning:</strong> This will delete the Roomy data from this
-                device and from your AtProto PDS if you chose.
-              </p>
-              <p>
-                Roomy is currently <em>extremely</em> experimental, so until it gets
-                a little more stable it may be necessary to reset all of your data
-                in order to fix a problem after an update of Roomy is published.
-              </p>
-              <Button.Root
-                onclick={() => deleteData("local")}
-                class={`flex items-center gap-3  px-4 py-2 max-w-[20em] bg-red-600 text-white rounded-lg hover:scale-[102%] active:scale-95 transition-all duration-150 ${
-                  deleteLoading ? "contrast-50" : "hover:scale-[102%]"
-                }`}
-                disabled={deleteLoading}
-              >
-                Delete Local Data {#if deleteLoading}<Icon
-                    icon="ri:loader-4-fill"
-                    class="animate-spin"
-                  />{/if}
-              </Button.Root>
-              <Button.Root
-                onclick={() => deleteData("all")}
-                class={`flex items-center gap-3 px-4 py-2 max-w-[20em] bg-red-600 text-white rounded-lg hover:scale-[102%] active:scale-95 transition-all duration-150 ${
-                  deleteLoading ? "contrast-50" : "hover:scale-[102%]"
-                }`}
-                disabled={deleteLoading}
-              >
-                Delete Local and PDS Data {#if deleteLoading}<Icon
-                    icon="ri:loader-4-fill"
-                    class="animate-spin"
-                  />{/if}
-              </Button.Root>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+            Delete Local Data {#if deleteLoading}<Icon
+                icon="ri:loader-4-fill"
+                class="animate-spin"
+              />{/if}
+          </Button.Root>
+          <Button.Root
+            onclick={() => deleteData("all")}
+            class={`flex items-center gap-3 px-4 py-2 max-w-[20em] bg-red-600 text-white rounded-lg hover:scale-[102%] active:scale-95 transition-all duration-150 ${
+              deleteLoading ? "contrast-50" : "hover:scale-[102%]"
+            }`}
+            disabled={deleteLoading}
+          >
+            Delete Local and PDS Data {#if deleteLoading}<Icon
+                icon="ri:loader-4-fill"
+                class="animate-spin"
+              />{/if}
+          </Button.Root>
+        </div>
+      </Dialog>
 
       {#if dev}
         <Button.Root
@@ -257,78 +225,70 @@
         </Button.Root>
       {/if}
 
-      <Dialog.Root open={isLoginDialogOpen}>
-        <Dialog.Trigger
-          class="hover:scale-105 active:scale-95 transition-all duration-150"
-        >
-          <Avatar.Root>
-            <Avatar.Image
-              src={user.profile.data?.avatar}
-              class="rounded-full"
-            />
-            <Avatar.Fallback>
-              <AvatarBeam name="pigeon" />
-            </Avatar.Fallback>
-          </Avatar.Root>
-        </Dialog.Trigger>
-        <Dialog.Portal>
-          <Dialog.Overlay
-            transition={fade}
-            transitionConfig={{ duration: 150 }}
-            class="fixed inset-0 z-50 bg-black/80"
-          />
-          <Dialog.Content
-            class="fixed p-5 flex flex-col text-white gap-4 w-dvw max-w-(--breakpoint-sm) left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] rounded-lg border bg-purple-950"
+      <Dialog 
+        title="Login with AT Protocol"
+        bind:isDialogOpen={isLoginDialogOpen}
+      >
+        {#snippet dialogTrigger()}
+          <Button.Root
+            class="hover:scale-105 active:scale-95 transition-all duration-150"
           >
-            <Dialog.Title class="text-bold font-bold text-xl">User</Dialog.Title
-            >
-            <Separator.Root class="border border-white" />
-            {#if user.session}
-              <section class="flex flex-col gap-4">
-                <p>Logged in as {user.profile.data?.handle}</p>
-                {#if user.keypair.value}
-                  <p>
-                    <strong>PublicKey: </strong>
-                    {encodeBase32(
-                      user.keypair.value?.publicKey || new Uint8Array(),
-                    )}
-                  </p>
-                {/if}
-                <Button.Root
-                  onclick={user.logout}
-                  class="px-4 py-2 bg-white text-black rounded-lg hover:scale-[102%] active:scale-95 transition-all duration-150"
-                >
-                  Logout
-                </Button.Root>
-              </section>
-            {:else}
-              <form
-                class="flex flex-col gap-4"
-                onsubmit={async () => {
-                  loginLoading = true;
-                  handleInput = cleanHandle(handleInput);
-                  await user.loginWithHandle(handleInput);
-                }}
-              >
-                <input
-                  bind:value={handleInput}
-                  placeholder="Handle (eg alice.bsky.social)"
-                  class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
-                />
-                <Button.Root
-                  class={`px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 ${loginLoading ? "contrast-50" : "hover:scale-[102%]"}`}
-                >
-                  Login with Bluesky
-                  {#if loginLoading}<Icon
-                      icon="ri:loader-4-fill"
-                      class="animate-spin"
-                    />{/if}
-                </Button.Root>
-              </form>
+            <Avatar.Root>
+              <Avatar.Image
+                src={user.profile.data?.avatar}
+                class="rounded-full"
+              />
+              <Avatar.Fallback>
+                <AvatarBeam name="pigeon" />
+              </Avatar.Fallback>
+            </Avatar.Root>
+          </Button.Root>
+        {/snippet}
+
+        {#if user.session}
+          <section class="flex flex-col gap-4">
+            <p>Logged in as {user.profile.data?.handle}</p>
+            {#if user.keypair.value}
+              <p>
+                <strong>PublicKey: </strong>
+                {encodeBase32(
+                  user.keypair.value?.publicKey || new Uint8Array(),
+                )}
+              </p>
             {/if}
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+            <Button.Root
+              onclick={user.logout}
+              class="px-4 py-2 bg-white text-black rounded-lg hover:scale-[102%] active:scale-95 transition-all duration-150"
+            >
+              Logout
+            </Button.Root>
+          </section>
+        {:else}
+          <form
+            class="flex flex-col gap-4"
+            onsubmit={async () => {
+              loginLoading = true;
+              handleInput = cleanHandle(handleInput);
+              await user.loginWithHandle(handleInput);
+            }}
+          >
+            <input
+              bind:value={handleInput}
+              placeholder="Handle (eg alice.bsky.social)"
+              class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
+            />
+            <Button.Root
+              class={`px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 ${loginLoading ? "contrast-50" : "hover:scale-[102%]"}`}
+            >
+              Login with Bluesky
+              {#if loginLoading}<Icon
+                  icon="ri:loader-4-fill"
+                  class="animate-spin"
+                />{/if}
+            </Button.Root>
+          </form>
+        {/if}
+      </Dialog>
     </section>
   </aside>
 
