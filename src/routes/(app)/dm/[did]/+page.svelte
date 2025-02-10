@@ -210,7 +210,7 @@
   }
 </script>
 
-<header class={`${isMobile ? "" : ""} flex flex-none items-center justify-between border-b-1 pb-4`}>
+<header class="flex flex-none items-center justify-between border-b-1 pb-4">
   <div class="flex gap-4 items-center">
     {#if isMobile}
       <Button.Root onclick={() => goto("/dm")}>
