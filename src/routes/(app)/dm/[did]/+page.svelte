@@ -1,32 +1,34 @@
 <script lang="ts">
-  import type { Autodoc } from "$lib/autodoc/peer";
-  import ChatArea from "$lib/components/ChatArea.svelte";
-  import { g } from "$lib/global.svelte";
-  import type { Channel, Did, Thread, Ulid } from "$lib/schemas/types";
+  import _ from "underscore";
+  import { ulid } from "ulidx";
   import { page } from "$app/state";
+  import { g } from "$lib/global.svelte";
+  import { goto } from "$app/navigation";
+  import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
-  import { setContext, untrack } from "svelte";
+  import { unreadCount } from "$lib/utils";
+  import { getContext, setContext, untrack } from "svelte";
+  import { fly } from "svelte/transition";
+  import { renderMarkdownSanitized } from "$lib/markdown";
+
   import {
     Avatar,
     Button,
-    Dialog,
     Popover,
-    Separator,
     Tabs,
     Toggle,
   } from "bits-ui";
-  import { AvatarBeam } from "svelte-boring-avatars";
   import Icon from "@iconify/svelte";
-  import { fade, fly } from "svelte/transition";
-  import { ulid } from "ulidx";
+  import { AvatarBeam } from "svelte-boring-avatars";
+  import Dialog from "$lib/components/Dialog.svelte";
+  import ChatArea from "$lib/components/ChatArea.svelte";
   import ThreadRow from "$lib/components/ThreadRow.svelte";
-  import { goto } from "$app/navigation";
   import ChatMessage from "$lib/components/ChatMessage.svelte";
-  import toast from "svelte-french-toast";
-  import _ from "underscore";
-  import { unreadCount } from "$lib/utils";
-  import { renderMarkdownSanitized } from "$lib/markdown";
+
   import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+  import type { Channel, Did, Thread, Ulid } from "$lib/schemas/types";
+  import type { Autodoc } from "$lib/autodoc/peer";
+  import AvatarImage from "$lib/components/AvatarImage.svelte";
 
   let tab = $state("chat");
   let channel: Autodoc<Channel> | undefined = $derived(g.dms[page.params.did]);
@@ -41,6 +43,7 @@
       return null;
     }
   });
+  let isMobile = (getContext("isMobile") as () => boolean)();
 
   // Load bluesky profile
   let profile = $state(undefined) as ProfileViewDetailed | undefined;
@@ -209,50 +212,62 @@
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
   <div class="flex gap-4 items-center">
-    <Avatar.Root class="w-8">
-      <Avatar.Image src={info?.avatar} class="rounded-full" />
-      <Avatar.Fallback>
-        <AvatarBeam name={info?.name} />
-      </Avatar.Fallback>
-    </Avatar.Root>
+    {#if isMobile}
+      <Button.Root onclick={() => goto("/dm")}>
+        <Icon icon="uil:left" color="white" />
+      </Button.Root>
+    {:else}
+      <AvatarImage avatarUrl={info?.avatar} handle={info?.name ?? ""} />
+    {/if}
 
     <span class="flex gap-2 items-center">
-      <h4 class="text-white text-lg font-bold">
-        {info?.name}
-      </h4>
+      {#if !isMobile || (isMobile && !currentThread)}
+        <h4 class={`${isMobile && "w-16 overflow-hidden text-ellipsis"} text-white text-lg font-bold`}>
+          {info?.name}
+        </h4>
+      {/if}
+
       {#if currentThread}
-        <Icon icon="mingcute:right-line" color="white" />
+        {#if !isMobile}
+          <Icon icon="mingcute:right-line" color="white" />
+        {/if}
         <Icon icon="lucide-lab:reel-thread" color="white" />
-        <h5 class="text-white text-lg font-bold">
+        <h5 class="text-white text-lg font-bold overflow-ellipsis">
           {currentThread.title}
         </h5>
       {/if}
     </span>
   </div>
 
-  <Tabs.Root bind:value={tab}>
-    <Tabs.List class="grid grid-cols-2 gap-4 border text-white p-1 rounded">
-      <Tabs.Trigger
-        value="chat"
-        onclick={() => goto(page.url.pathname)}
-        class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
-      >
-        <Icon icon="tabler:message" color="white" class="text-2xl" />
-        <p>Chat</p>
-      </Tabs.Trigger>
-      <Tabs.Trigger
-        value="threads"
-        class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
-      >
-        <Icon
-          icon="material-symbols:thread-unread-rounded"
-          color="white"
-          class="text-2xl"
-        />
-        <p>Threads</p>
-      </Tabs.Trigger>
-    </Tabs.List>
-  </Tabs.Root>
+  {#if !isThreading.value && !(isMobile && currentThread)}
+    <Tabs.Root bind:value={tab}>
+      <Tabs.List class="grid grid-cols-2 gap-4 border text-white p-1 rounded">
+        <Tabs.Trigger
+          value="chat"
+          onclick={() => goto(page.url.pathname)}
+          class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
+        >
+          <Icon icon="tabler:message" color="white" class="text-2xl" />
+          {#if !isMobile}
+            <p>Chat</p>
+          {/if}
+        </Tabs.Trigger>
+        <Tabs.Trigger
+          value="threads"
+          class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
+        >
+          <Icon
+            icon="material-symbols:thread-unread-rounded"
+            color="white"
+            class="text-2xl"
+          />
+          {#if !isMobile}
+            <p>Threads</p>
+          {/if}
+        </Tabs.Trigger>
+      </Tabs.List>
+    </Tabs.Root>
+  {/if}
 
   <menu class="flex items-center gap-2">
     {#if isThreading.value}
@@ -336,9 +351,10 @@
           </Avatar.Fallback>
         </Avatar.Root>
 
-        <h2 class="text-white font-bold text-2xl">
-          {profile.displayName} | @{profile.handle}
-        </h2>
+        <span class="flex flex-col gap-2 text-white text-center font-bold text-2xl">
+          <h2>{`${profile.displayName ?? ""}`}</h2>
+          <h3 class="text-gray-300">@{profile.handle}</h3>
+        </span>
       {/if}
 
       <Button.Root
@@ -352,8 +368,11 @@
   </div>
 {/if}
 
-{#if channel}
-  {#if tab === "chat"}
+{@render chatTab()}
+{@render threadsTab()}
+
+{#snippet chatTab()}
+  {#if channel && tab === "chat"}
     <ChatArea source={{ type: "channel", channel }} />
     <form onsubmit={sendMessage} class="flex flex-col">
       {#if replyingTo}
@@ -395,9 +414,10 @@
       />
     </form>
   {/if}
+{/snippet}
 
-  <!-- TODO: Render Threads -->
-  {#if tab === "threads"}
+{#snippet threadsTab()}
+  {#if channel && tab === "threads"}
     {#if currentThread}
       <section class="flex flex-col gap-4 items-start">
         <menu class="px-4 py-2 flex w-full justify-between">
@@ -408,50 +428,17 @@
             <Icon icon="uil:left" />
             Back
           </Button.Root>
-          <Dialog.Root>
-            <Dialog.Trigger
-              class="hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer"
-            >
+          <Dialog title="Delete Thread" description="The thread will be unrecoverable once deleted">
+            {#snippet dialogTrigger()}
               <Icon icon="tabler:trash" color="red" class="text-2xl" />
-            </Dialog.Trigger>
-            <Dialog.Portal>
-              <Dialog.Overlay
-                transition={fade}
-                transitionConfig={{ duration: 150 }}
-                class="fixed inset-0 z-50 bg-black/80"
-              />
-              <Dialog.Content
-                class="fixed p-5 flex flex-col text-white gap-4 w-dvw max-w-(--breakpoint-sm) left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] rounded-lg border bg-purple-950"
-              >
-                <Dialog.Title
-                  class="text-bold font-bold text-xl flex items-center justify-center gap-4"
-                >
-                  <Icon
-                    icon="ri:alarm-warning-fill"
-                    color="red"
-                    class="text-2xl"
-                  />
-                  <span> Delete Thread </span>
-                  <Icon
-                    icon="ri:alarm-warning-fill"
-                    color="red"
-                    class="text-2xl"
-                  />
-                </Dialog.Title>
-                <Separator.Root class="border border-white" />
-                <div class="flex flex-col items-center gap-4">
-                  <p>The thread will be unrecoverable once deleted.</p>
-                  <Button.Root
-                    onclick={() =>
-                      deleteThread(page.url.searchParams.get("thread")!)}
-                    class="flex items-center gap-3 px-4 py-2 max-w-[20em] bg-red-600 text-white rounded-lg hover:scale-[102%] active:scale-95 transition-all duration-150"
-                  >
-                    Confirm Delete
-                  </Button.Root>
-                </div>
-              </Dialog.Content>
-            </Dialog.Portal>
-          </Dialog.Root>
+            {/snippet}
+            <Button.Root
+              onclick={() => deleteThread(page.url.searchParams.get("thread")!)}
+              class="flex items-center gap-3 px-4 py-2 max-w-[20em] bg-red-600 text-white rounded-lg hover:scale-[102%] active:scale-95 transition-all duration-150"
+            >
+              Confirm Delete
+            </Button.Root>
+          </Dialog>
         </menu>
 
         {#each currentThread.timeline as id}
@@ -471,4 +458,4 @@
       </ul>
     {/if}
   {/if}
-{/if}
+{/snippet}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Avatar, Button, Popover, Toolbar, Tooltip } from "bits-ui";
-  import type { Channel, Message, Ulid } from "$lib/schemas/types";
+  import type { Message, Ulid } from "$lib/schemas/types";
   import { renderMarkdownSanitized } from "$lib/markdown";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, formatDistanceToNowStrict } from "date-fns";
@@ -9,7 +9,6 @@
   import { decodeTime } from "ulidx";
   import { getProfile } from "$lib/profile.svelte";
   import Icon from "@iconify/svelte";
-  import type { Autodoc } from "$lib/autodoc/peer";
   import { user } from "$lib/user.svelte";
   import "emoji-picker-element";
 

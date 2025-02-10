@@ -1,14 +1,14 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
-  import { Avatar, Button, Dialog, Separator, ToggleGroup } from "bits-ui";
+  import Dialog from "$lib/components/Dialog.svelte";
+  import { Avatar, Button, ToggleGroup } from "bits-ui";
 
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
-  import { fade } from "svelte/transition";
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import { onMount } from "svelte";
+  import { getContext, onMount } from "svelte";
   import { cleanHandle, unreadCount } from "$lib/utils";
   import { RichText } from "@atproto/api";
 
@@ -31,6 +31,8 @@
   let newDmInput = $state("");
   let newDmLoading = $state(false);
   let newDmError = $state(undefined) as undefined | string;
+
+  let isMobile = (getContext("isMobile") as () => boolean)();
 
   onMount(() => {
     if (page.params.did) {
@@ -105,7 +107,7 @@
 </script>
 
 <!-- Room Selector; TODO: Sub Menu (eg Settings) -->
-<nav class="flex flex-col gap-4 p-4 h-full w-72 bg-violet-950 rounded-lg">
+<nav class={`flex flex-col gap-4 p-4 h-full ${isMobile ? "w-full" : "w-72"} bg-violet-950 rounded-lg`}>
   <h1
     class="text-2xl font-extrabold text-white px-2 py-1 text-ellipsis flex items-center justify-between"
   >
@@ -114,67 +116,48 @@
 
   <hr />
 
-  <Dialog.Root bind:open={newDmDialogOpen}>
-    <Dialog.Trigger>
+  <Dialog title="New Direct Message" bind:isDialogOpen={newDmDialogOpen}>
+    {#snippet dialogTrigger()}
       <Button.Root
         class="bg-white w-full h-fit font-medium px-4 py-2 flex gap-2 items-center justify-center rounded-lg hover:scale-105 active:scale-95 transition-all duration-150"
       >
         <Icon icon="ri:add-fill" class="text-lg" />
         Create DM
       </Button.Root>
-    </Dialog.Trigger>
-    <Dialog.Portal>
-      <Dialog.Overlay
-        transition={fade}
-        transitionConfig={{ duration: 150 }}
-        class="fixed inset-0 z-50 bg-black/80"
+    {/snippet}
+
+    {#if newDmError}
+      <p class="text-red-500">{newDmError}</p>
+    {/if}
+
+    <form class="flex flex-col gap-4 w-full" onsubmit={createDm}>
+      <input
+        bind:value={newDmInput}
+        placeholder="Handle (eg alice.bsky.social)"
+        class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
       />
-      <Dialog.Content
-        class="fixed p-5 flex flex-col text-white gap-4 w-dvw max-w-(--breakpoint-sm) left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] rounded-lg border bg-purple-950"
+      <label class="flex gap-4 items-center justify-start w-full">
+        <input
+          type="checkbox"
+          bind:checked={sendBlueSkyDMInvite}
+          placeholder="Handle (eg alice.bsky.social)"
+          class=""
+        />
+
+        Send BlueSky DM With Invite Link
+      </label>
+      <Button.Root
+        disabled={!newDmInput}
+        class={`px-4 py-2 bg-white text-black rounded-lg disabled:bg-white/50 active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 ${newDmLoading ? "contrast-50" : "hover:scale-[102%]"}`}
       >
-        <Dialog.Title class="text-bold font-bold text-xl">
-          New Direct Message
-        </Dialog.Title>
-        <Separator.Root class="border border-white" />
-
-        {#if newDmError}
-          <Dialog.Description>
-            <div class="text-red-500">
-              {newDmError}
-            </div>
-          </Dialog.Description>
+        Open Direct Message
+        {#if newDmLoading}
+          {" "}
+          <Icon icon="ri:loader-4-fill" class="animate-spin" />
         {/if}
-
-        <form class="flex flex-col gap-4 w-full" onsubmit={createDm}>
-          <input
-            bind:value={newDmInput}
-            placeholder="Handle (eg alice.bsky.social)"
-            class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
-          />
-          <label class="flex gap-4 items-center justify-start w-full">
-            <input
-              type="checkbox"
-              bind:checked={sendBlueSkyDMInvite}
-              placeholder="Handle (eg alice.bsky.social)"
-              class=""
-            />
-
-            Send BlueSky DM With Invite Link
-          </label>
-          <Button.Root
-            disabled={!newDmInput}
-            class={`px-4 py-2 bg-white text-black rounded-lg disabled:bg-white/50 active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 ${newDmLoading ? "contrast-50" : "hover:scale-[102%]"}`}
-          >
-            Open Direct Message
-            {#if newDmLoading}
-              {" "}
-              <Icon icon="ri:loader-4-fill" class="animate-spin" />
-            {/if}
-          </Button.Root>
-        </form>
-      </Dialog.Content>
-    </Dialog.Portal>
-  </Dialog.Root>
+      </Button.Root>
+    </form>
+  </Dialog>
 
   <!-- Channels -->
   <ToggleGroup.Root
@@ -208,9 +191,15 @@
 </nav>
 
 <!-- Events/Room Content -->
-<main class="grow flex flex-col gap-4 bg-violet-950 rounded-lg p-4">
-  {@render children()}
-</main>
+{#if !isMobile}
+  <main class="flex flex-col gap-4 bg-violet-950 rounded-lg p-4 grow">
+    {@render children()}
+  </main>
+{:else if page.params.did}
+  <main class="absolute inset-0 flex flex-col gap-4 bg-violet-950 rounded-lg p-4">
+    {@render children()}
+  </main>
+{/if}
 
 <style>
   :global(.online img) {
