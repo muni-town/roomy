@@ -7,7 +7,7 @@
   import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
   import { unreadCount } from "$lib/utils";
-  import { setContext, untrack } from "svelte";
+  import { getContext, setContext, untrack } from "svelte";
   import { fade, fly } from "svelte/transition";
   import { renderMarkdownSanitized } from "$lib/markdown";
 
@@ -44,6 +44,7 @@
       return null;
     }
   });
+  let isMobile = (getContext("isMobile") as () => boolean)();
 
   // Load bluesky profile
   let profile = $state(undefined) as ProfileViewDetailed | undefined;
@@ -210,9 +211,15 @@
   }
 </script>
 
-<header class="flex flex-none items-center justify-between border-b-1 pb-4">
+<header class={`${isMobile ? "" : ""} flex flex-none items-center justify-between border-b-1 pb-4`}>
   <div class="flex gap-4 items-center">
-    <AvatarImage avatarUrl={info?.avatar} handle={info?.name ?? ""} />
+    {#if isMobile}
+      <Button.Root onclick={() => goto("/dm")}>
+        <Icon icon="uil:left" color="white" />
+      </Button.Root>
+    {:else}
+      <AvatarImage avatarUrl={info?.avatar} handle={info?.name ?? ""} />
+    {/if}
 
     <span class="flex gap-2 items-center">
       <h4 class="text-white text-lg font-bold">

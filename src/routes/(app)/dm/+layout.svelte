@@ -191,14 +191,16 @@
 </nav>
 
 <!-- Events/Room Content -->
-{#if isMobile}
-  <main class="absolute inset-0 bg-violet-950 p-4 grow flex flex-col gap-4">
-    {@render children()}
-  </main>
-{:else}
-  <main class="grow flex flex-col gap-4 bg-violet-950 rounded-lg p-4">
-    {@render children()}
-  </main>
+{#if page.params.did} 
+  {#if isMobile}
+    <main class="absolute inset-0 flex flex-col gap-4 bg-violet-950 rounded-lg p-4">
+      {@render children()}
+    </main>
+  {:else}
+    <main class="flex flex-col gap-4 bg-violet-950 rounded-lg p-4">
+      {@render children()}
+    </main>
+  {/if}
 {/if}
 
 <style>
