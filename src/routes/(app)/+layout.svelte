@@ -164,9 +164,7 @@
         <Icon icon="basil:settings-alt-solid" color="white" class="text-2xl" />
       </Button.Root> -->
 
-      <Dialog
-        title="Delete Data"
-      >
+      <Dialog title="Delete Data">
         {#snippet dialogTrigger()}
           <Button.Root
             class="hover:scale-105 active:scale-95 transition-all duration-150"
@@ -176,11 +174,11 @@
         {/snippet}
 
         <div class="flex flex-col items-center gap-4">
-          <p>
+          <p class="text-sm">
             <strong>Warning:</strong> This will delete the Roomy data from this
             device and from your AtProto PDS if you chose.
           </p>
-          <p>
+          <p class="text-sm">
             Roomy is currently <em>extremely</em> experimental, so until it gets
             a little more stable it may be necessary to reset all of your data
             in order to fix a problem after an update of Roomy is published.
