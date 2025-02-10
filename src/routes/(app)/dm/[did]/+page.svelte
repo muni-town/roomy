@@ -221,8 +221,8 @@
     {/if}
 
     <span class="flex gap-2 items-center">
-      {#if isMobile && !currentThread}
-        <h4 class="text-white text-lg font-bold text-ellipsis">
+      {#if !isMobile || (isMobile && !currentThread)}
+        <h4 class={`${isMobile && "w-16 overflow-hidden text-ellipsis"} text-white text-lg font-bold`}>
           {info?.name}
         </h4>
       {/if}
