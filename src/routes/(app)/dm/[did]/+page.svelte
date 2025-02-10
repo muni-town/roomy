@@ -239,7 +239,7 @@
     </span>
   </div>
 
-  {#if !isThreading || !(isMobile && currentThread)}
+  {#if !isThreading.value && !(isMobile && currentThread)}
     <Tabs.Root bind:value={tab}>
       <Tabs.List class="grid grid-cols-2 gap-4 border text-white p-1 rounded">
         <Tabs.Trigger
