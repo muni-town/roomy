@@ -12,16 +12,23 @@
   import { page } from "$app/state";
   import { Toaster } from "svelte-french-toast";
   import { cleanHandle } from "$lib/utils";
+  import { dev } from "$app/environment";
+  import { g } from "$lib/global.svelte";
+  import { ulid } from "ulidx";
 
   let { children } = $props();
 
   let loginLoading = $state(false);
   let handleInput = $state("");
+  let isNewSpaceDialogOpen = $state(false);
+  let newSpaceName = $state("");
   let isLoginDialogOpen = $derived(!user.session);
   let deleteLoading = $state(false);
 
   // TODO: set servers/rooms based on user
-  let servers: string[] = [];
+  let servers: string[] = $derived(
+    g.catalog?.view.spaces.map((x) => x.id) || [],
+  );
   let currentCatalog = $state("");
 
   onMount(async () => {
@@ -35,6 +42,23 @@
       currentCatalog = page.params.space;
     }
   });
+
+  async function createSpace() {
+    if (!newSpaceName) return;
+    let id = ulid();
+    if (!g.catalog) return;
+    g.catalog.change((doc) => {
+      doc.spaces.push({
+        id,
+        knownMembers: [],
+      });
+    });
+    setTimeout(() => {
+      g.spaces[id].change((doc) => (doc.name = newSpaceName));
+      newSpaceName = "";
+    }, 0);
+    isNewSpaceDialogOpen = false;
+  }
 
   async function deleteData(kind: "all" | "local") {
     deleteLoading = true;
@@ -90,6 +114,7 @@
         <ToggleGroup.Item
           onclick={() => goto(`/space/${server}`)}
           value={server}
+          title={g.spaces[server].view.name}
           class="capitalize hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white p-4 rounded-md"
         >
           <Avatar.Root>
@@ -104,22 +129,57 @@
     </ToggleGroup.Root>
 
     <section class="flex flex-col gap-8 items-center">
-      <Button.Root
-        onclick={() => goto("/dev")}
-        class="hover:scale-105 active:scale-95 transition-all duration-150"
-      >
-        <Icon
-          icon="fluent:window-dev-tools-16-regular"
-          color="white"
-          class="text-2xl"
-        />
-      </Button.Root>
+      <Dialog.Root bind:open={isNewSpaceDialogOpen}>
+        <Dialog.Trigger>
+          <Button.Root
+            class="hover:scale-105 active:scale-95 transition-all duration-150"
+            title="Create Space"
+          >
+            <Icon icon="basil:add-solid" color="white" font-size="2em" />
+          </Button.Root>
+        </Dialog.Trigger>
+        <Dialog.Portal>
+          <Dialog.Overlay
+            transition={fade}
+            transitionConfig={{ duration: 150 }}
+            class="fixed inset-0 z-50 bg-black/80"
+          />
 
-      <Button.Root
+          <Dialog.Content
+            class="fixed p-5 flex flex-col text-white gap-4 w-dvw max-w-(--breakpoint-sm) left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] rounded-lg border bg-purple-950"
+          >
+            <Dialog.Title
+              class="text-bold font-bold text-xl flex items-center justify-center gap-4"
+            >
+              Create Space
+            </Dialog.Title>
+            <Separator.Root class="border border-white" />
+            <div class="flex flex-col items-center gap-4">
+              Create a new public chat space
+            </div>
+            <form class="flex flex-col gap-4" onsubmit={createSpace}>
+              <input
+                bind:value={newSpaceName}
+                placeholder="Name"
+                class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
+              />
+              <Button.Root
+                class={`px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 ${loginLoading ? "contrast-50" : "hover:scale-[102%]"}`}
+              >
+                <Icon icon="basil:add-outline" font-size="1.8em" />
+                Create Space
+              </Button.Root>
+            </form>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <!-- <Button.Root
         class="hover:scale-105 active:scale-95 transition-all duration-150"
       >
         <Icon icon="basil:settings-alt-solid" color="white" class="text-2xl" />
-      </Button.Root>
+      </Button.Root> -->
+
       <Dialog.Root>
         <Dialog.Trigger>
           <Button.Root
@@ -183,6 +243,19 @@
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      {#if dev}
+        <Button.Root
+          onclick={() => goto("/dev")}
+          class="hover:scale-105 active:scale-95 transition-all duration-150"
+        >
+          <Icon
+            icon="fluent:window-dev-tools-16-regular"
+            color="white"
+            class="text-2xl"
+          />
+        </Button.Root>
+      {/if}
 
       <Dialog.Root open={isLoginDialogOpen}>
         <Dialog.Trigger

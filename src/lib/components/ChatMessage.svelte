@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Avatar, Button, Popover, Toolbar, Tooltip } from "bits-ui";
-  import type { Channel, Ulid } from "$lib/schemas/types";
+  import type { Channel, Message, Ulid } from "$lib/schemas/types";
   import { renderMarkdownSanitized } from "$lib/markdown";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, formatDistanceToNowStrict } from "date-fns";
@@ -13,14 +13,13 @@
   import { user } from "$lib/user.svelte";
   import "emoji-picker-element";
 
-  let { id, channel }: { id: Ulid; channel: Autodoc<Channel> } = $props();
-  let message = $derived(channel.view.messages[id]);
+  let { id, messages }: { id: Ulid; messages: { [ulid: string]: Message } } =
+    $props();
+  let message = $derived(messages[id]);
   let profile: { handle: string; avatarUrl: string } | undefined = getProfile(
     message.author,
   );
-  let messageRepliedTo = $derived(
-    message.replyTo && channel.view.messages[message.replyTo],
-  );
+  let messageRepliedTo = $derived(message.replyTo && messages[message.replyTo]);
   let profileRepliedTo = $derived(
     messageRepliedTo && getProfile(messageRepliedTo.author),
   );
@@ -44,7 +43,10 @@
     content: string;
   }) => void;
 
-  const toggleReaction = getContext("toggleReaction") as (id: Ulid, reaction: string) => void;
+  const toggleReaction = getContext("toggleReaction") as (
+    id: Ulid,
+    reaction: string,
+  ) => void;
 
   function onEmojiPick(event: Event) {
     // @ts-ignore
@@ -52,7 +54,6 @@
     isEmojiToolbarPickerOpen = false;
     isEmojiRowPickerOpen = false;
   }
-
 
   function updateSelect() {
     if (isSelected) {
@@ -77,7 +78,7 @@
   });
 
   $effect(() => {
-    if (emojiToolbarPicker) { 
+    if (emojiToolbarPicker) {
       emojiToolbarPicker.addEventListener("emoji-click", onEmojiPick);
     }
     if (emojiRowPicker) {
@@ -140,7 +141,9 @@
         </Tooltip.Root>
       </section>
 
-      <p class="text-lg prose-invert chat">{@html renderMarkdownSanitized(message.content)}</p>
+      <p class="text-lg prose-invert chat">
+        {@html renderMarkdownSanitized(message.content)}
+      </p>
 
       {#if Object.keys(message.reactions).length > 0}
         <div class="flex gap-2 flex-wrap">
@@ -208,7 +211,8 @@
       cursor-pointer border border-violet-500 px-2 py-1 rounded tabular-nums hover:scale-105 active:scale-95 transition-all duration-150
     `}
   >
-    {reaction} {message.reactions[reaction].length}
+    {reaction}
+    {message.reactions[reaction].length}
   </Button.Root>
 {/snippet}
 

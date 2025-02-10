@@ -99,36 +99,32 @@
     },
   );
 
-  setContext(
-    "toggleReaction",
-    (id: Ulid, reaction: string) => {
-      if (!channel) return; 
-      
-      channel.change((doc) => {
-        const did = user.profile.data?.did;
-        if (!did) return;
+  setContext("toggleReaction", (id: Ulid, reaction: string) => {
+    if (!channel) return;
 
-        let reactions = doc.messages[id].reactions[reaction] ?? [];
+    channel.change((doc) => {
+      const did = user.profile.data?.did;
+      if (!did) return;
 
-        if (reactions.includes(did)) {
-          if (doc.messages[id].reactions[reaction].length - 1 === 0) {
-            delete doc.messages[id].reactions[reaction]
-          }
-          else {
-            doc.messages[id].reactions[reaction] = reactions.filter((actor: Did) => actor !== did);
-          }
+      let reactions = doc.messages[id].reactions[reaction] ?? [];
+
+      if (reactions.includes(did)) {
+        if (doc.messages[id].reactions[reaction].length - 1 === 0) {
+          delete doc.messages[id].reactions[reaction];
+        } else {
+          doc.messages[id].reactions[reaction] = reactions.filter(
+            (actor: Did) => actor !== did,
+          );
         }
-        else {
-          if (!doc.messages[id].reactions) { 
-            // init reactions object  
-            doc.messages[id].reactions = {}; 
-          }
-          doc.messages[id].reactions[reaction] = [...reactions, did]
+      } else {
+        if (!doc.messages[id].reactions) {
+          // init reactions object
+          doc.messages[id].reactions = {};
         }
-      });
-
-    }
-  );
+        doc.messages[id].reactions[reaction] = [...reactions, did];
+      }
+    });
+  });
 
   // Mark the current DM as read.
   $effect(() => {
@@ -462,7 +458,7 @@
         </menu>
 
         {#each currentThread.timeline as id}
-          <ChatMessage {id} {channel} />
+          <ChatMessage {id} messages={channel.view.messages} />
         {/each}
       </section>
     {:else}

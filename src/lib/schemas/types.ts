@@ -21,6 +21,13 @@ export type Catalog = {
       viewedHeads?: Automerge.Heads;
     };
   };
+  /** The list of space IDs that the user has joined. */
+  spaces: {
+    /** The space's unique ID. */
+    id: Ulid;
+    /** The list of members known to have the space so that we can sync with them. */
+    knownMembers: Did[];
+  }[];
 };
 
 export type Ulid = string;
@@ -67,4 +74,5 @@ export type Space = {
   sidebarItems: SidebarItem[];
   name: string;
   description: string;
+  avatarUrl: string;
 };

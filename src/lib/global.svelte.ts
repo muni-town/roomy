@@ -1,5 +1,5 @@
 import { IndexedDBStorageAdapter } from "@automerge/automerge-repo-storage-indexeddb";
-import type { Catalog, Channel } from "./schemas/types";
+import type { Catalog, Channel, Space } from "./schemas/types";
 import {
   namespacedSubstorage,
   RoomyPdsStorageAdapter,
@@ -7,6 +7,7 @@ import {
 import { user } from "./user.svelte";
 import catalogInit from "$lib/schemas/catalog.bin?uint8array&base64";
 import channelInit from "$lib/schemas/channel.bin?uint8array&base64";
+import spaceInit from "$lib/schemas/space.bin?uint8array&base64";
 import { RouterClient } from "@jsr/roomy-chat__router/client";
 import { Peer, Autodoc } from "./autodoc/peer";
 import type { Agent } from "@atproto/api";
@@ -17,6 +18,7 @@ import { encryptedStorage } from "./autodoc/storage";
 export let g = $state({
   catalog: undefined as Autodoc<Catalog> | undefined,
   dms: {} as { [did: string]: Autodoc<Channel> },
+  spaces: {} as { [ulid: string]: Autodoc<Space> },
   router: undefined as RouterClient | undefined,
   routerConnections: {} as { [did: string]: string[] },
   peer: undefined as Peer | undefined,
@@ -113,11 +115,11 @@ $effect.root(() => {
     }
   });
 
-  // Open DM documents when they are added to the catalog
+  // Open Automerge documents when they are added to the catalog
   $effect(() => {
     if (user.agent && user.keypair.value && g.peer) {
       // Create an Autodoc for every direct message in the catalog.
-      for (const [did] of Object.entries(g.catalog?.view.dms || {})) {
+      for (const did of Object.keys(g.catalog?.view.dms || {})) {
         if (!Object.hasOwn(g.dms, did)) {
           (async () => {
             if (!(user.agent && user.keypair.value && g.peer)) return;
@@ -130,6 +132,21 @@ $effect.root(() => {
             // Open the doc
             const doc = g.peer.open<Channel>(docId, channelInit);
             g.dms[did] = doc;
+          })();
+        }
+      }
+
+      // Create an Autodoc for every space.
+      for (const { id } of g.catalog?.view.spaces || []) {
+        if (!Object.hasOwn(g.spaces, id)) {
+          (async () => {
+            if (!(user.agent && user.keypair.value && g.peer)) return;
+
+            const docId = `space/${id}`;
+
+            // Open the doc
+            const doc = g.peer.open<Space>(docId, spaceInit);
+            g.spaces[id] = doc;
           })();
         }
       }

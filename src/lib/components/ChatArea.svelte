@@ -2,16 +2,33 @@
   import { ScrollArea } from "bits-ui";
   import ChatMessage from "./ChatMessage.svelte";
   import type { Autodoc } from "$lib/autodoc/peer";
-  import type { Channel } from "$lib/schemas/types";
+  import type { Channel, Space } from "$lib/schemas/types";
 
-  let { channel }: { channel: Autodoc<Channel> } = $props();
+  let {
+    source,
+  }: {
+    source:
+      | { type: "channel"; channel: Autodoc<Channel> }
+      | { type: "space"; space: Autodoc<Space>; channelId: string };
+  } = $props();
+
+  let messages = $derived(
+    source.type == "channel"
+      ? source.channel.view.messages
+      : source.space.view.messages,
+  );
+  let timeline = $derived(
+    source.type == "channel"
+      ? source.channel.view.timeline
+      : source.space.view.channels[source.channelId]?.timeline,
+  );
 
   // ScrollArea
   let viewport: HTMLDivElement | undefined = $state();
 
   // Go to the end of the ScrollArea
   $effect(() => {
-    if (viewport && channel.view.messages) {
+    if (viewport && messages) {
       viewport.scrollTop = viewport.scrollHeight;
     }
   });
@@ -21,8 +38,8 @@
   <ScrollArea.Viewport bind:el={viewport} class="w-full h-full">
     <ScrollArea.Content>
       <ol class="flex flex-col gap-4">
-        {#each channel.view.timeline as id (id)}
-          <ChatMessage {id} {channel} />
+        {#each timeline as id (id)}
+          <ChatMessage {id} {messages} />
         {/each}
       </ol>
     </ScrollArea.Content>

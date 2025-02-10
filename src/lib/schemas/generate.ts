@@ -15,6 +15,14 @@ async function exportSchema<T>(name: string, init: (doc: T) => void) {
   await Deno.writeFile(`./src/lib/schemas/${name}.bin`, initDocData);
 }
 
+async function updateSchema<T>(name: string, change: Automerge.ChangeFn<T>) {
+  const doc = Automerge.load<T>(
+    await Deno.readFile(`./src/lib/schemas/${name}.bin`),
+  );
+  const newDoc = Automerge.change(doc, change);
+  await Deno.writeFile(`./src/lib/schemas/${name}.bin`, Automerge.save(newDoc));
+}
+
 // NOTE: we use this file to schema initializers for automerge documents. You can run `deno run
 // generate-schemas` to run this generator and create a schema file.
 //
@@ -40,12 +48,17 @@ async function exportSchema<T>(name: string, init: (doc: T) => void) {
 //   doc.timeline = [];
 // });
 
-// exportSchema<Space>("space", (space) => {
-//   space.threads = {};
-//   space.messages = {};
-//   space.channels = {};
-//   space.categories = {};
-//   space.sidebarItems = [];
-//   space.name = "";
-//   space.description = "";
+exportSchema<Space>("space", (space) => {
+  space.threads = {};
+  space.messages = {};
+  space.channels = {};
+  space.categories = {};
+  space.sidebarItems = [];
+  space.name = "";
+  space.avatarUrl = "";
+  space.description = "";
+});
+
+// updateSchema<Catalog>("catalog", (doc) => {
+//   doc.spaces = [];
 // });
