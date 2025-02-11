@@ -25,11 +25,6 @@
   let isLoginDialogOpen = $state(!user.session);
   let deleteLoading = $state(false);
 
-  let width: number = $state(0);
-  let isMobile = $derived(width < 640);
-
-  setContext("isMobile", () => isMobile);
-
   // TODO: set servers/rooms based on user
   let servers: string[] = $derived(
     g.catalog?.view.spaces.map((x) => x.id) || [],
@@ -86,8 +81,6 @@
 <svelte:head>
   <title>Roomy</title>
 </svelte:head>
-
-<svelte:window bind:outerWidth={width} />
 
 <!-- Container -->
 <div class="relative flex gap-4 p-4 bg-violet-900 w-screen h-screen">

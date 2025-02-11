@@ -7,7 +7,7 @@
   import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
   import { unreadCount } from "$lib/utils";
-  import { getContext, setContext, untrack } from "svelte";
+  import { setContext, untrack } from "svelte";
   import { fly } from "svelte/transition";
   import { renderMarkdownSanitized } from "$lib/markdown";
 
@@ -43,7 +43,8 @@
       return null;
     }
   });
-  let isMobile = (getContext("isMobile") as () => boolean)();
+  let width: number = $state(0);
+  let isMobile = $derived(width < 640);
 
   // Load bluesky profile
   let profile = $state(undefined) as ProfileViewDetailed | undefined;
@@ -209,6 +210,8 @@
     goto(page.url.pathname);
   }
 </script>
+
+<svelte:window bind:outerWidth={width} />
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
   <div class="flex gap-4 items-center">

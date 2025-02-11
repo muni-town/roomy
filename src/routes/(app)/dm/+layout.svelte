@@ -32,7 +32,9 @@
   let newDmLoading = $state(false);
   let newDmError = $state(undefined) as undefined | string;
 
-  let isMobile = (getContext("isMobile") as () => boolean)();
+  let width: number = $state(0);
+  let isMobile = $derived(width < 640);
+
 
   onMount(() => {
     if (page.params.did) {
@@ -105,6 +107,8 @@
     }
   }
 </script>
+
+<svelte:window bind:outerWidth={width} />
 
 <!-- Room Selector; TODO: Sub Menu (eg Settings) -->
 <nav class={`flex flex-col gap-4 p-4 h-full ${isMobile ? "w-full" : "w-72"} bg-violet-950 rounded-lg`}>
