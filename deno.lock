@@ -39,6 +39,7 @@
     "npm:typescript@5": "5.7.3",
     "npm:ulidx@^2.4.1": "2.4.1",
     "npm:underscore@^1.13.7": "1.13.7",
+    "npm:vaul-svelte@~0.3.2": "0.3.2_svelte@5.19.3__acorn@8.14.0",
     "npm:vite-plugin-arraybuffer@^0.0.8": "0.0.8",
     "npm:vite-plugin-top-level-await@^1.4.4": "1.4.4_vite@6.0.11",
     "npm:vite-plugin-wasm@^3.4.1": "3.4.1_vite@6.0.11",
@@ -925,6 +926,15 @@
     },
     "base64-js@1.5.1": {
       "integrity": "sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA=="
+    },
+    "bits-ui@0.21.16_svelte@5.19.3__acorn@8.14.0": {
+      "integrity": "sha512-XFZ7/bK7j/K+5iktxX/ZpmoFHjYjpPzP5EOO/4bWiaFg5TG1iMcfjDhlBTQnJxD6BoVoHuqeZPHZvaTgF4Iv3Q==",
+      "dependencies": [
+        "@internationalized/date",
+        "@melt-ui/svelte",
+        "nanoid@5.0.9",
+        "svelte@5.19.3_acorn@8.14.0"
+      ]
     },
     "bits-ui@0.22.0_svelte@5.19.3__acorn@8.14.0": {
       "integrity": "sha512-r7Fw1HNgA4YxZBRcozl7oP0bheQ8EHh+kfMBZJgyFISix8t4p/nqDcHLmBgIiJ3T5XjYnJRorYDjIWaCfhb5fw==",
@@ -2059,6 +2069,13 @@
     "vary@1.1.2": {
       "integrity": "sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg=="
     },
+    "vaul-svelte@0.3.2_svelte@5.19.3__acorn@8.14.0": {
+      "integrity": "sha512-X4OGWttSTVUl417qGDsSFgOvIx24DoiMRY/jaP9z0v9FL8LQQJ0RQ1ZM0QpdyQPRlNd24ewjNQHh5EgYDtfNpw==",
+      "dependencies": [
+        "bits-ui@0.21.16_svelte@5.19.3__acorn@8.14.0",
+        "svelte@5.19.3_acorn@8.14.0"
+      ]
+    },
     "vite-node@3.0.5": {
       "integrity": "sha512-02JEJl7SbtwSDJdYS537nU6l+ktdvcREfLksk/NDAqtdKWGqHl+joXzEubHROmS3E6pip+Xgu2tFezMu75jH7A==",
       "dependencies": [
@@ -2199,6 +2216,7 @@
         "npm:typescript@5",
         "npm:ulidx@^2.4.1",
         "npm:underscore@^1.13.7",
+        "npm:vaul-svelte@~0.3.2",
         "npm:vite-plugin-arraybuffer@^0.0.8",
         "npm:vite-plugin-top-level-await@^1.4.4",
         "npm:vite-plugin-wasm@^3.4.1",

@@ -11,6 +11,8 @@
   import Icon from "@iconify/svelte";
   import { user } from "$lib/user.svelte";
   import "emoji-picker-element";
+  import { outerWidth } from "svelte/reactivity/window";
+  import Drawer from "./Drawer.svelte";
 
   let { id, messages }: { id: Ulid; messages: { [ulid: string]: Message } } =
     $props();
@@ -23,11 +25,16 @@
     messageRepliedTo && getProfile(messageRepliedTo.author),
   );
 
+  let isMobile = $derived(outerWidth.current ?? 0 < 640);
+  let isDrawerOpen = $state(false);
+
   let isSelected = $state(false);
   let isThreading: { value: boolean } = getContext("isThreading");
 
+  let emojiDrawerPicker: HTMLElement | undefined = $state();
   let emojiToolbarPicker: HTMLElement | undefined = $state();
   let emojiRowPicker: HTMLElement | undefined = $state();
+  let isEmojiDrawerPickerOpen = $state(false);
   let isEmojiToolbarPickerOpen = $state(false);
   let isEmojiRowPickerOpen = $state(false);
 
@@ -80,6 +87,13 @@
     if (emojiToolbarPicker) {
       emojiToolbarPicker.addEventListener("emoji-click", onEmojiPick);
     }
+    if (emojiDrawerPicker) {
+      emojiDrawerPicker.addEventListener("emoji-click", (e) => {
+        onEmojiPick(e);
+        isEmojiDrawerPickerOpen = false;
+        isDrawerOpen = false;
+      });
+    }
     if (emojiRowPicker) {
       emojiRowPicker.addEventListener("emoji-click", onEmojiPick);
     }
@@ -106,8 +120,13 @@
     </Button.Root>
   {/if}
 
-  <div
-    class="relative group w-full h-fit flex gap-4 px-2 py-2.5 hover:bg-white/5 transition-all duration-75"
+  <Button.Root
+    onclick={() => {
+      if (isMobile) {
+        isDrawerOpen = true;
+      }
+    }}
+    class="relative group w-full text-start h-fit flex gap-4 px-2 py-2.5 hover:bg-white/5 transition-all duration-75"
   >
     <Avatar.Root class="w-12 aspect-square">
       <Avatar.Image src={profile.avatarUrl} class="rounded-full" />
@@ -163,32 +182,48 @@
       {/if}
     </div>
 
-    <Toolbar.Root
-      class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-violet-800 p-2 rounded items-center`}
-    >
-      <Toolbar.Button
-        onclick={() => toggleReaction(id, "👍")}
-        class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+    {#if isMobile}
+      <Drawer bind:isDrawerOpen={isDrawerOpen}>
+        <Popover.Root bind:open={isEmojiDrawerPickerOpen}>
+          <Popover.Trigger
+            class="p-4 flex gap-4 items-center hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+          >
+            <Icon icon="lucide:smile-plus" color="white" />
+            <p class="text-white">Add Reaction</p>
+          </Popover.Trigger>
+          <Popover.Content>
+            <emoji-picker bind:this={emojiDrawerPicker}></emoji-picker>
+          </Popover.Content>
+        </Popover.Root>
+      </Drawer>
+    {:else}
+      <Toolbar.Root
+        class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-violet-800 p-2 rounded items-center`}
       >
-        👍
-      </Toolbar.Button>
-      <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
-        <Popover.Trigger
+        <Toolbar.Button
+          onclick={() => toggleReaction(id, "👍")}
           class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
         >
-          <Icon icon="lucide:smile-plus" color="white" />
-        </Popover.Trigger>
-        <Popover.Content>
-          <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
-        </Popover.Content>
-      </Popover.Root>
-      <Toolbar.Button
-        onclick={() => setReplyTo({ id, profile, content: message.content })}
-        class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
-      >
-        <Icon icon="fa6-solid:reply" color="white" />
-      </Toolbar.Button>
-    </Toolbar.Root>
+          👍
+        </Toolbar.Button>
+        <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
+          <Popover.Trigger
+            class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+          >
+            <Icon icon="lucide:smile-plus" color="white" />
+          </Popover.Trigger>
+          <Popover.Content>
+            <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
+          </Popover.Content>
+        </Popover.Root>
+        <Toolbar.Button
+          onclick={() => setReplyTo({ id, profile, content: message.content })}
+          class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+        >
+          <Icon icon="fa6-solid:reply" color="white" />
+        </Toolbar.Button>
+      </Toolbar.Root>
+    {/if}
 
     {#if isThreading.value}
       <!-- TODO: Use bits-ui Checkbox -->
@@ -199,7 +234,7 @@
         class="absolute right-4 inset-y-0"
       />
     {/if}
-  </div>
+  </Button.Root>
 </li>
 
 {#snippet reactionToggle(reaction: string)}
