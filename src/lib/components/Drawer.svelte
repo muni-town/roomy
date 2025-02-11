@@ -32,7 +32,7 @@
     <Drawer.Content
       class="flex flex-col mt-24 fixed bottom-0 left-0 right-0"
     >
-      <div class="bg-violet-900 min-h-32 rounded-t-xl py-8">
+      <div class="bg-violet-900 h-fit min-h-32 rounded-t-xl px-4 py-8">
         {#if title}
           <Drawer.Title>{title}</Drawer.Title>
         {/if}

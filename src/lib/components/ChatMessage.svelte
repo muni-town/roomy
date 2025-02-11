@@ -25,7 +25,7 @@
     messageRepliedTo && getProfile(messageRepliedTo.author),
   );
 
-  let isMobile = $derived(outerWidth.current ?? 0 < 640);
+  let isMobile = $derived((outerWidth.current ?? 0) < 640);
   let isDrawerOpen = $state(false);
 
   let isSelected = $state(false);
@@ -184,17 +184,37 @@
 
     {#if isMobile}
       <Drawer bind:isDrawerOpen={isDrawerOpen}>
-        <Popover.Root bind:open={isEmojiDrawerPickerOpen}>
-          <Popover.Trigger
-            class="p-4 flex gap-4 items-center hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+        <div class="flex gap-4 justify-center mb-4">
+          <Button.Root 
+            onclick={() => toggleReaction(id, "👍")}
+            class="px-4 rounded-full bg-violet-800"
           >
-            <Icon icon="lucide:smile-plus" color="white" />
-            <p class="text-white">Add Reaction</p>
-          </Popover.Trigger>
-          <Popover.Content>
-            <emoji-picker bind:this={emojiDrawerPicker}></emoji-picker>
-          </Popover.Content>
-        </Popover.Root>
+            👍 
+          </Button.Root>
+          <Button.Root 
+            onclick={() => toggleReaction(id, "😂")}
+            class="px-4 rounded-full bg-violet-800"
+          >
+            😂
+          </Button.Root>
+          <Popover.Root bind:open={isEmojiDrawerPickerOpen}>
+            <Popover.Trigger
+              class="p-4 rounded-full bg-violet-800"
+            >
+              <Icon icon="lucide:smile-plus" color="white" />
+            </Popover.Trigger>
+            <Popover.Content>
+              <emoji-picker bind:this={emojiDrawerPicker}></emoji-picker>
+            </Popover.Content>
+          </Popover.Root>
+        </div>
+        <Button.Root 
+          onclick={() => setReplyTo({ id, profile, content: message.content })}
+          class="text-white p-4 flex gap-4 items-center bg-violet-800 w-full rounded-lg" 
+        >
+          <Icon icon="fa6-solid:reply" color="white" />
+          Reply
+        </Button.Root>
       </Drawer>
     {:else}
       <Toolbar.Root
@@ -205,6 +225,12 @@
           class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
         >
           👍
+        </Toolbar.Button>
+        <Toolbar.Button
+          onclick={() => toggleReaction(id, "😂")}
+          class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+        >
+          😂
         </Toolbar.Button>
         <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
           <Popover.Trigger
