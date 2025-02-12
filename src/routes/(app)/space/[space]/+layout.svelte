@@ -1,16 +1,17 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { Accordion, Button, Separator, ToggleGroup } from "bits-ui";
+  import { Accordion, Button, ToggleGroup } from "bits-ui";
 
   import { ulid } from "ulidx";
   import { page } from "$app/state";
-  import { goto } from "$app/navigation";
   import { g } from "$lib/global.svelte";
-  import { fade, slide } from "svelte/transition";
+  import { goto } from "$app/navigation";
+  import { slide } from "svelte/transition";
   import { outerWidth } from "svelte/reactivity/window";
-  import type { Autodoc } from "$lib/autodoc/peer";
+
   import type { Space } from "$lib/schemas/types";
+  import type { Autodoc } from "$lib/autodoc/peer";
 
   let { children } = $props();
   let isMobile = $derived((outerWidth.current || 0) < 640);
