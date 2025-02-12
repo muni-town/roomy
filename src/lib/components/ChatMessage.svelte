@@ -3,8 +3,7 @@
   import type { Message, Ulid } from "$lib/schemas/types";
   import { renderMarkdownSanitized } from "$lib/markdown";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import { format, formatDistanceToNowStrict } from "date-fns";
-  import { fly } from "svelte/transition";
+  import { format, isToday } from "date-fns";
   import { getContext } from "svelte";
   import { decodeTime } from "ulidx";
   import { getProfile } from "$lib/profile.svelte";
@@ -139,27 +138,9 @@
         }}
         class="flex flex-col text-start gap-2 text-white w-full"
       >
-        <section class="flex gap-2">
+        <section class="flex items-center gap-2">
           <h5 class="font-bold">{profile.handle}</h5>
-          <!-- TODO: Change to exact time (eg "Today at 14:20") -->
-          <Tooltip.Root openDelay={300}>
-            <Tooltip.Trigger>
-              <time class="text-zinc-400 cursor-context-menu">
-                {formatDistanceToNowStrict(new Date(decodeTime(id)))}
-              </time>
-            </Tooltip.Trigger>
-            <Tooltip.Content
-              transition={fly}
-              transitionConfig={{ y: 8, duration: 150 }}
-              sideOffset={8}
-            >
-              <time
-                class="flex items-center justify-center rounded-input border border-dark-10 bg-white p-3 text-sm font-medium shadow-popover outline-none"
-              >
-                {format(new Date(decodeTime(id)), "MM/dd/yyyy K:mm:ss aaa")}
-              </time>
-            </Tooltip.Content>
-          </Tooltip.Root>
+          {@render timestamp()}
         </section>
 
         <p class="text-lg prose-invert chat">
@@ -273,6 +254,14 @@
     {/if}
   </div>
 </li>
+
+{#snippet timestamp()}
+  {@const decodedTime = decodeTime(id)}
+  {@const formattedDate = isToday(decodedTime) ? "Today" : format(decodedTime, "P")}
+  <time class="text-sm text-gray-300">
+    {formattedDate}, {format(decodedTime, "pp")}
+  </time>
+{/snippet}
 
 {#snippet reactionToggle(reaction: string)}
   <Button.Root
