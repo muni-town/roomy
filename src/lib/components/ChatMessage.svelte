@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Avatar, Button, Popover, Toolbar, Tooltip } from "bits-ui";
+  import { Avatar, Button, Popover, Toolbar } from "bits-ui";
   import type { Message, Ulid } from "$lib/schemas/types";
   import { renderMarkdownSanitized } from "$lib/markdown";
   import { AvatarBeam } from "svelte-boring-avatars";

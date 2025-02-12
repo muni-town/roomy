@@ -1,10 +1,9 @@
 <script lang="ts">
   import { ScrollArea } from "bits-ui";
+  import { onNavigate } from "$app/navigation";
   import ChatMessage from "./ChatMessage.svelte";
   import type { Autodoc } from "$lib/autodoc/peer";
   import type { Channel, Space } from "$lib/schemas/types";
-  import { page } from "$app/state";
-  import { onNavigate } from "$app/navigation";
 
   let {
     source,

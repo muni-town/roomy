@@ -8,9 +8,10 @@
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import { getContext, onMount } from "svelte";
+  import { onMount } from "svelte";
   import { cleanHandle, unreadCount } from "$lib/utils";
   import { RichText } from "@atproto/api";
+  import AvatarImage from "$lib/components/AvatarImage.svelte";
 
   let { children } = $props();
 
@@ -111,10 +112,8 @@
 <svelte:window bind:outerWidth={width} />
 
 <!-- Room Selector; TODO: Sub Menu (eg Settings) -->
-<nav class={`flex flex-col gap-4 p-4 h-full ${isMobile ? "w-full" : "w-72"} bg-violet-950 rounded-lg`}>
-  <h1
-    class="text-2xl font-extrabold text-white px-2 py-1 text-ellipsis flex items-center justify-between"
-  >
+<nav class={`flex flex-col gap-4 h-full ${isMobile ? "w-full px-2 py-4" : "w-72 p-4"} bg-violet-950 rounded-lg`}>
+  <h1 class="text-2xl font-extrabold text-white px-2 py-1 flex items-center justify-between">
     Direct Messages
   </h1>
 
@@ -171,18 +170,13 @@
   >
     {#each dms as dm}
       <ToggleGroup.Item
+        value={dm.did}
         onclick={() => {
           goto(`/dm/${dm.did || ""}`);
         }}
-        value={dm.did}
         class={`${(g.routerConnections[dm.did] || []).length > 0 ? "online" : ""} flex gap-4 items-center w-full text-start hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white px-4 py-2 rounded-md`}
       >
-        <Avatar.Root class="w-8">
-          <Avatar.Image src={dm.avatar} class="rounded-full" />
-          <Avatar.Fallback>
-            <AvatarBeam name={dm.name} />
-          </Avatar.Fallback>
-        </Avatar.Root>
+        <AvatarImage avatarUrl={dm.avatar} handle={dm.name} />
         <h3>{dm.name}</h3>
         {#if dm.unreadCount > 0}
           <span class="bg-red-500 text-white px-2 py-1 rounded-full">

@@ -1,20 +1,23 @@
 <script lang="ts">
   import "../../app.css";
-  import Icon from "@iconify/svelte";
-  import { AvatarBeam, AvatarPixel } from "svelte-boring-avatars";
-  import Dialog from "$lib/components/Dialog.svelte";
-  import { Avatar, Button, ToggleGroup } from "bits-ui";
-  import { onMount, setContext } from "svelte";
-  import { user } from "$lib/user.svelte";
-  import { encodeBase32 } from "$lib/base32";
-  import { goto } from "$app/navigation";
-  import { RoomyPdsStorageAdapter } from "$lib/autodoc-storage";
-  import { page } from "$app/state";
-  import { Toaster } from "svelte-french-toast";
-  import { cleanHandle } from "$lib/utils";
-  import { dev } from "$app/environment";
-  import { g } from "$lib/global.svelte";
   import { ulid } from "ulidx";
+  import { onMount } from "svelte";
+  import { page } from "$app/state";
+  import { dev } from "$app/environment";
+  import { goto } from "$app/navigation";
+  import { g } from "$lib/global.svelte";
+  import { user } from "$lib/user.svelte";
+  import { cleanHandle } from "$lib/utils";
+  import { outerWidth } from "svelte/reactivity/window";
+
+  import Icon from "@iconify/svelte";
+  import Dialog from "$lib/components/Dialog.svelte";
+  import AvatarImage from "$lib/components/AvatarImage.svelte";
+
+  import { Toaster } from "svelte-french-toast";
+  import { AvatarPixel } from "svelte-boring-avatars";
+  import { Avatar, Button, ToggleGroup } from "bits-ui";
+  import { RoomyPdsStorageAdapter } from "$lib/autodoc-storage";
 
   let { children } = $props();
 
@@ -25,11 +28,12 @@
   let isLoginDialogOpen = $state(!user.session);
   let deleteLoading = $state(false);
 
-  // TODO: set servers/rooms based on user
   let servers: string[] = $derived(
     g.catalog?.view.spaces.map((x) => x.id) || [],
   );
   let currentCatalog = $state("");
+
+  let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   onMount(async () => {
     await user.init();
@@ -87,7 +91,7 @@
 </svelte:head>
 
 <!-- Container -->
-<div class="relative flex gap-4 p-4 bg-violet-900 w-screen h-screen">
+<div class={`relative flex ${isMobile ? "p-2 gap-1" : "gap-2 p-4"} bg-violet-900 w-screen h-screen`}>
   <Toaster />
   <!-- Server Bar -->
   <aside
@@ -104,11 +108,7 @@
         class="capitalize hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white p-4 rounded-md"
       >
         <Avatar.Root>
-          <!-- TODO: set images based on server -->
-          <Avatar.Image />
-          <Avatar.Fallback>
-            <Icon icon="ri:user-fill" font-size="2em" />
-          </Avatar.Fallback>
+          <Icon icon="ri:user-fill" font-size="2em" />
         </Avatar.Root>
       </ToggleGroup.Item>
 
@@ -123,8 +123,8 @@
             title={space.view.name}
             class="capitalize hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white p-4 rounded-md"
           >
+            <!-- TODO: Use server avatar -->
             <Avatar.Root>
-              <!-- TODO: set images based on server -->
               <Avatar.Image />
               <Avatar.Fallback>
                 <AvatarPixel name={server} />
@@ -240,15 +240,7 @@
           <Button.Root
             class="hover:scale-105 active:scale-95 transition-all duration-150"
           >
-            <Avatar.Root>
-              <Avatar.Image
-                src={user.profile.data?.avatar}
-                class="rounded-full"
-              />
-              <Avatar.Fallback>
-                <AvatarBeam name="pigeon" />
-              </Avatar.Fallback>
-            </Avatar.Root>
+            <AvatarImage handle={user.profile.data?.handle || ""} avatarUrl={user.profile.data?.avatar} />
           </Button.Root>
         {/snippet}
 
