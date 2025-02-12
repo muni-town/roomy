@@ -33,6 +33,7 @@
     showNewCategoryDialog = false;
   }
 
+  let currentChannelId = $state("");
   let showNewChannelDialog = $state(false);
   let newChannelName = $state("");
   let newChannelCategory = $state(undefined) as undefined | string;
@@ -204,13 +205,13 @@
               <hr class="mb-4" />
               <ToggleGroup.Root
                 type="single"
+                bind:value={currentChannelId}
                 class="flex flex-col gap-4 items-center"
               >
                 {#each category.channels as channelId}
                   {@const channel = space.view.channels[channelId]}
                   <ToggleGroup.Item
-                    onclick={() =>
-                      goto(`/space/${page.params.space}/${channelId}`)}
+                    onclick={() => goto(`/space/${page.params.space}/${channelId}`)}
                     value={channelId}
                     class="w-full text-start hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white px-4 py-2 rounded-md"
                   >
@@ -224,6 +225,7 @@
           {@const channel = space.view.channels[item.id]}
           <ToggleGroup.Root
             type="single"
+            bind:value={currentChannelId}
             class="flex flex-col gap-4 items-center"
           >
             <ToggleGroup.Item
