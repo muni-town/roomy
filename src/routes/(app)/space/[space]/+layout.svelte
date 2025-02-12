@@ -7,10 +7,12 @@
   import { goto } from "$app/navigation";
   import { g } from "$lib/global.svelte";
   import { ulid } from "ulidx";
+  import { outerWidth } from "svelte/reactivity/window";
   import type { Autodoc } from "$lib/autodoc/peer";
   import type { Space } from "$lib/schemas/types";
 
   let { children } = $props();
+  let isMobile = $derived((outerWidth.current || 0) < 640);
 
   let space = $derived(g.spaces[page.params.space]) as
     | Autodoc<Space>
@@ -242,9 +244,15 @@
   </nav>
 
   <!-- Events/Room Content -->
-  <main class="grow flex flex-col gap-4 bg-violet-950 rounded-lg p-4">
-    {@render children()}
-  </main>
+  {#if !isMobile}
+    <main class="flex flex-col gap-4 bg-violet-950 rounded-lg p-4 grow">
+      {@render children()}
+    </main>
+  {:else if page.params.channel}
+    <main class="absolute inset-0 flex flex-col gap-4 bg-violet-950 rounded-lg p-4">
+      {@render children()}
+    </main>
+  {/if}
 
   <!-- If there is no space. -->
 {:else}
