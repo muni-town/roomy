@@ -29,6 +29,7 @@
   import type { Channel, Did, Thread, Ulid } from "$lib/schemas/types";
   import type { Autodoc } from "$lib/autodoc/peer";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
+  import { outerWidth } from "svelte/reactivity/window";
 
   let tab = $state("chat");
   let channel: Autodoc<Channel> | undefined = $derived(g.dms[page.params.did]);
@@ -43,8 +44,8 @@
       return null;
     }
   });
-  let width: number = $state(0);
-  let isMobile = $derived(width < 640);
+
+  let isMobile = $derived((outerWidth.current || 0) < 640);
 
   // Load bluesky profile
   let profile = $state(undefined) as ProfileViewDetailed | undefined;
@@ -211,8 +212,6 @@
   }
 </script>
 
-<svelte:window bind:outerWidth={width} />
-
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
   <div class="flex gap-4 items-center">
     {#if isMobile}
@@ -371,11 +370,14 @@
   </div>
 {/if}
 
-{@render chatTab()}
-{@render threadsTab()}
+{#if tab === "chat"}
+  {@render chatTab()}
+{:else if tab === "threads"}
+  {@render threadsTab()}
+{/if}
 
 {#snippet chatTab()}
-  {#if channel && tab === "chat"}
+  {#if channel} 
     <ChatArea source={{ type: "channel", channel }} />
     <form onsubmit={sendMessage} class="flex flex-col">
       {#if replyingTo}
@@ -420,7 +422,7 @@
 {/snippet}
 
 {#snippet threadsTab()}
-  {#if channel && tab === "threads"}
+  {#if channel}
     {#if currentThread}
       <section class="flex flex-col gap-4 items-start">
         <menu class="px-4 py-2 flex w-full justify-between">

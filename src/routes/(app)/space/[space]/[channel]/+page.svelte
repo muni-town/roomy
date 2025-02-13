@@ -31,6 +31,10 @@
   import toast from "svelte-french-toast";
   import _ from "underscore";
   import { renderMarkdownSanitized } from "$lib/markdown";
+  import { outerWidth } from "svelte/reactivity/window";
+  import AvatarImage from "$lib/components/AvatarImage.svelte";
+
+  let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let tab = $state("chat");
   let space: Autodoc<Space> | undefined = $derived(g.spaces[page.params.space]);
@@ -213,43 +217,62 @@
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
   <div class="flex gap-4 items-center">
+    {#if isMobile}
+      <Button.Root onclick={() => goto("/dm")}>
+        <Icon icon="uil:left" color="white" />
+      </Button.Root>
+    {:else}
+      <AvatarImage avatarUrl={channel?.avatar} handle={channel?.name ?? ""} />
+    {/if}
+
     <span class="flex gap-2 items-center">
-      <h4 class="text-white text-lg font-bold">
-        {channel?.name}
-      </h4>
+      {#if !isMobile || (isMobile && !currentThread)}
+        <h4 class={`${isMobile && "w-16 overflow-hidden text-ellipsis"} text-white text-lg font-bold`}>
+          {channel?.name}
+        </h4>
+      {/if}
+
       {#if currentThread}
-        <Icon icon="mingcute:right-line" color="white" />
+        {#if !isMobile}
+          <Icon icon="mingcute:right-line" color="white" />
+        {/if}
         <Icon icon="lucide-lab:reel-thread" color="white" />
-        <h5 class="text-white text-lg font-bold">
+        <h5 class="text-white text-lg font-bold overflow-ellipsis">
           {currentThread.title}
         </h5>
       {/if}
     </span>
   </div>
 
-  <Tabs.Root bind:value={tab}>
-    <Tabs.List class="grid grid-cols-2 gap-4 border text-white p-1 rounded">
-      <Tabs.Trigger
-        value="chat"
-        onclick={() => goto(page.url.pathname)}
-        class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
-      >
-        <Icon icon="tabler:message" color="white" class="text-2xl" />
-        <p>Chat</p>
-      </Tabs.Trigger>
-      <Tabs.Trigger
-        value="threads"
-        class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
-      >
-        <Icon
-          icon="material-symbols:thread-unread-rounded"
-          color="white"
-          class="text-2xl"
-        />
-        <p>Threads</p>
-      </Tabs.Trigger>
-    </Tabs.List>
-  </Tabs.Root>
+  {#if !isThreading.value && !(isMobile && currentThread)}
+    <Tabs.Root bind:value={tab}>
+      <Tabs.List class="grid grid-cols-2 gap-4 border text-white p-1 rounded">
+        <Tabs.Trigger
+          value="chat"
+          onclick={() => goto(page.url.pathname)}
+          class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
+        >
+          <Icon icon="tabler:message" color="white" class="text-2xl" />
+          {#if !isMobile}
+            <p>Chat</p>
+          {/if}
+        </Tabs.Trigger>
+        <Tabs.Trigger
+          value="threads"
+          class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
+        >
+          <Icon
+            icon="material-symbols:thread-unread-rounded"
+            color="white"
+            class="text-2xl"
+          />
+          {#if !isMobile}
+            <p>Threads</p>
+          {/if}
+        </Tabs.Trigger>
+      </Tabs.List>
+    </Tabs.Root>
+  {/if}
 
   <menu class="flex items-center gap-2">
     {#if isThreading.value}
@@ -320,35 +343,11 @@
   </menu>
 </header>
 
-<!-- {#if !space}
-  <div class="flex w-full h-full justify-center items-center">
-    <div class="flex flex-col items-center gap-8">
-      {#if profile}
-        <Avatar.Root class="w-40">
-          <Avatar.Image src={profile.avatar} class="rounded-full" />
-          <Avatar.Fallback>
-            <AvatarBeam name={profile.handle} />
-          </Avatar.Fallback>
-        </Avatar.Root>
+{@render chatTab()}
+{@render threadsTab()}
 
-        <h2 class="text-white font-bold text-2xl">
-          {profile.displayName} | @{profile.handle}
-        </h2>
-      {/if}
-
-      <Button.Root
-        class="bg-white h-fit font-medium px-4 py-2 flex gap-2 items-center justify-center rounded-lg hover:scale-105 active:scale-95 transition-all duration-150 m-auto"
-        onclick={openDirectMessage}
-      >
-        <Icon icon="ri:add-fill" class="text-lg" />
-        Open Direct Message
-      </Button.Root>
-    </div>
-  </div>
-{/if} -->
-
-{#if space}
-  {#if tab === "chat"}
+{#snippet chatTab()}
+  {#if space && tab === "chat"}
     <ChatArea
       source={{ type: "space", space, channelId: page.params.channel }}
     />
@@ -392,8 +391,9 @@
       />
     </form>
   {/if}
+{/snippet}
 
-  <!-- TODO: Render Threads -->
+{#snippet threadsTab()}
   {#if tab === "threads"}
     {#if currentThread}
       <section class="flex flex-col gap-4 items-start">
@@ -468,4 +468,4 @@
       </ul>
     {/if}
   {/if}
-{/if}
+{/snippet}

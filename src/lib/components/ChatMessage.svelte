@@ -12,6 +12,7 @@
   import "emoji-picker-element";
   import { outerWidth } from "svelte/reactivity/window";
   import Drawer from "./Drawer.svelte";
+  import AvatarImage from "./AvatarImage.svelte";
 
   let { id, messages }: { id: Ulid; messages: { [ulid: string]: Message } } =
     $props();
@@ -108,37 +109,15 @@
   });
 </script>
 
-<li {id} class="flex flex-col">
-  {#if messageRepliedTo && profileRepliedTo}
-    <Button.Root
-      onclick={scrollToReply}
-      class="cursor-pointer flex gap-2 text-start w-full items-center text-gray-300 px-4 py-1 bg-violet-900 rounded-t"
-    >
-      <Icon icon="prime:reply" />
-      <Avatar.Root class="w-4">
-        <Avatar.Image src={profileRepliedTo.avatarUrl} class="rounded-full" />
-        <Avatar.Fallback>
-          <AvatarBeam name={profileRepliedTo.handle} />
-        </Avatar.Fallback>
-      </Avatar.Root>
-      <h5 class="text-white font-medium">{profileRepliedTo.handle}</h5>
-      <p class="text-ellipsis italic">
-        {@html renderMarkdownSanitized(messageRepliedTo.content)}
-      </p>
-    </Button.Root>
-  {/if}
+<li {id} class="flex flex-col w-[80%]">
+  {@render replyBanner()}
 
   <div
     class="relative group w-full h-fit flex flex-col gap-4 px-2 py-2.5 hover:bg-white/5 transition-all duration-75"
   >
     <div class="flex gap-4">
       <a href={`https://bsky.app/profile/${profile.handle}`} target="_blank">
-        <Avatar.Root class="w-12 aspect-square">
-          <Avatar.Image src={profile.avatarUrl} class="rounded-full" />
-          <Avatar.Fallback>
-            <AvatarBeam name={profile.handle} />
-          </Avatar.Fallback>
-        </Avatar.Root>
+        <AvatarImage handle={profile.handle} avatarUrl={profile.avatarUrl} />
       </a>
 
       <Button.Root
@@ -149,7 +128,7 @@
         }}
         class="flex flex-col text-start gap-2 text-white w-full"
       >
-        <section class="flex items-center gap-2">
+        <section class="flex items-center gap-2 flex-wrap w-fit">
           <a
             href={`https://bsky.app/profile/${profile.handle}`}
             target="_blank"
@@ -276,7 +255,7 @@
   {@const formattedDate = isToday(decodedTime)
     ? "Today"
     : format(decodedTime, "P")}
-  <time class="text-sm text-gray-300">
+  <time class="text-xs text-gray-300">
     {formattedDate}, {format(decodedTime, "pp")}
   </time>
 {/snippet}
@@ -293,6 +272,29 @@
     {reaction}
     {message.reactions[reaction].length}
   </Button.Root>
+{/snippet}
+
+{#snippet replyBanner()}
+  {#if messageRepliedTo && profileRepliedTo}
+    <Button.Root
+      onclick={scrollToReply}
+      class="cursor-pointer flex gap-2 text-start w-full items-center text-gray-300 px-4 py-1 bg-violet-900 rounded-t"
+    >
+      <div class="flex basis-1/2 md:basis-auto gap-2 items-center">
+        <Icon icon="prime:reply" width="12px" height="12px" />
+        <Avatar.Root class="w-4">
+          <Avatar.Image src={profileRepliedTo.avatarUrl} class="rounded-full" />
+          <Avatar.Fallback>
+            <AvatarBeam name={profileRepliedTo.handle} />
+          </Avatar.Fallback>
+        </Avatar.Root>
+        <h5 class="text-white font-medium text-ellipsis">{profileRepliedTo.handle}</h5>
+      </div>
+      <p class="line-clamp-1 basis-1/2 md:basis-auto overflow-hidden italic">
+        {@html renderMarkdownSanitized(messageRepliedTo.content)}
+      </p>
+    </Button.Root>
+  {/if}
 {/snippet}
 
 <style>
