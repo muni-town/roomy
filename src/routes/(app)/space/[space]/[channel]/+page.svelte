@@ -218,7 +218,7 @@
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
   <div class="flex gap-4 items-center">
     {#if isMobile}
-      <Button.Root onclick={() => goto("/dm")}>
+      <Button.Root onclick={() => goto(`/space/${page.params.space}`)}>
         <Icon icon="uil:left" color="white" />
       </Button.Root>
     {:else}
@@ -227,7 +227,7 @@
 
     <span class="flex gap-2 items-center">
       {#if !isMobile || (isMobile && !currentThread)}
-        <h4 class={`${isMobile && "w-16 overflow-hidden text-ellipsis"} text-white text-lg font-bold`}>
+        <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-white text-lg font-bold`}>
           {channel?.name}
         </h4>
       {/if}
@@ -244,7 +244,6 @@
     </span>
   </div>
 
-  {#if !isThreading.value && !(isMobile && currentThread)}
     <Tabs.Root bind:value={tab}>
       <Tabs.List class="grid grid-cols-2 gap-4 border text-white p-1 rounded">
         <Tabs.Trigger
@@ -272,129 +271,77 @@
         </Tabs.Trigger>
       </Tabs.List>
     </Tabs.Root>
+
+  {#if !isMobile}
+    <div class="flex">
+      {@render toolbar({ growButton: false })}
+    </div>
   {/if}
-
-  <menu class="flex items-center gap-2">
-    {#if isThreading.value}
-      <div in:fly>
-        <Popover.Root>
-          <Popover.Trigger
-            class="cursor-pointer mx-2 px-4 py-2 rounded bg-violet-800 text-white"
-          >
-            Create Thread
-          </Popover.Trigger>
-
-          <Popover.Content
-            transition={fly}
-            sideOffset={8}
-            class="bg-violet-800 p-4 rounded"
-          >
-            <form
-              onsubmit={createThread}
-              class="text-white flex flex-col gap-4"
-            >
-              <label class="flex flex-col gap-1">
-                Thread Title
-                <input
-                  bind:value={threadTitleInput}
-                  type="text"
-                  placeholder="Notes"
-                  class="border px-4 py-2 rounded"
-                />
-              </label>
-              <Popover.Close>
-                <button
-                  type="submit"
-                  class="text-black px-4 py-2 bg-white rounded w-full text-center"
-                >
-                  Confirm
-                </button>
-              </Popover.Close>
-            </form>
-          </Popover.Content>
-        </Popover.Root>
-      </div>
-    {/if}
-    <Toggle.Root
-      bind:pressed={isThreading.value}
-      disabled={tab !== "chat"}
-      class={`p-2 ${isThreading.value && "bg-white/10"} cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150 rounded`}
-    >
-      <Icon
-        icon="tabler:needle-thread"
-        color={tab !== "chat" ? "gray" : "white"}
-        class="text-2xl"
-      />
-    </Toggle.Root>
-    <Button.Root
-      title="Copy invite link"
-      class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
-      onclick={() => {
-        navigator.clipboard.writeText(`${page.url.href}`);
-      }}
-    >
-      <Icon icon="icon-park-outline:copy-link" color="white" class="text-2xl" />
-    </Button.Root>
-    <Button.Root
-      class="p-2 cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
-    >
-      <Icon icon="basil:settings-alt-solid" color="white" class="text-2xl" />
-    </Button.Root>
-  </menu>
 </header>
 
-{@render chatTab()}
-{@render threadsTab()}
+{#if tab === "chat"}
+  {@render chatTab()}
+{:else if tab === "threads"}
+  {@render threadsTab()}
+{/if}
 
 {#snippet chatTab()}
-  {#if space && tab === "chat"}
+  {#if space} 
     <ChatArea
       source={{ type: "space", space, channelId: page.params.channel }}
     />
-    <form onsubmit={sendMessage} class="flex flex-col">
-      {#if replyingTo}
-        <div
-          class="flex justify-between bg-violet-800 text-white rounded-t-lg px-4 py-2"
-        >
-          <div class="flex flex-col gap-1">
-            <h5 class="flex gap-2 items-center">
-              Replying to
-              <Avatar.Root class="w-4">
-                <Avatar.Image
-                  src={replyingTo.profile.avatarUrl}
-                  class="rounded-full"
-                />
-                <Avatar.Fallback>
-                  <AvatarBeam name={replyingTo.profile.handle} />
-                </Avatar.Fallback>
-              </Avatar.Root>
-              <strong>{replyingTo.profile.handle}</strong>
-            </h5>
-            <p class="text-gray-300 text-ellipsis italic">
-              {@html renderMarkdownSanitized(replyingTo.content)}
-            </p>
-          </div>
-          <Button.Root
-            type="button"
-            onclick={() => (replyingTo = null)}
-            class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
-          >
-            <Icon icon="zondicons:close-solid" />
-          </Button.Root>
-        </div>
+    <div class="flex">
+      {#if !isMobile || !isThreading.value}
+        <form onsubmit={sendMessage} class="grow flex flex-col">
+          {#if replyingTo}
+            <div
+              class="flex justify-between bg-violet-800 text-white rounded-t-lg px-4 py-2"
+            >
+              <div class="flex flex-col gap-1">
+                <h5 class="flex gap-2 items-center">
+                  Replying to
+                  <Avatar.Root class="w-4">
+                    <Avatar.Image
+                      src={replyingTo.profile.avatarUrl}
+                      class="rounded-full"
+                    />
+                    <Avatar.Fallback>
+                      <AvatarBeam name={replyingTo.profile.handle} />
+                    </Avatar.Fallback>
+                  </Avatar.Root>
+                  <strong>{replyingTo.profile.handle}</strong>
+                </h5>
+                <p class="text-gray-300 text-ellipsis italic">
+                  {@html renderMarkdownSanitized(replyingTo.content)}
+                </p>
+              </div>
+              <Button.Root
+                type="button"
+                onclick={() => (replyingTo = null)}
+                class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
+              >
+                <Icon icon="zondicons:close-solid" />
+              </Button.Root>
+            </div>
+          {/if}
+          <input
+            type="text"
+            class={`w-full px-4 py-2 flex-none text-white bg-violet-900 ${replyingTo ? "rounded-b-lg" : "rounded-lg"}`}
+            placeholder="Say something..."
+            bind:value={messageInput}
+          />
+        </form>
       {/if}
-      <input
-        type="text"
-        class={`w-full px-4 py-2 flex-none text-white bg-violet-900 ${replyingTo ? "rounded-b-lg" : "rounded-lg"}`}
-        placeholder="Say something..."
-        bind:value={messageInput}
-      />
-    </form>
+
+      {#if isMobile}
+        {@render toolbar({ growButton: true })}
+      {/if}
+    </div>
   {/if}
 {/snippet}
 
 {#snippet threadsTab()}
-  {#if tab === "threads"}
+  {#if space}
     {#if currentThread}
       <section class="flex flex-col gap-4 items-start">
         <menu class="px-4 py-2 flex w-full justify-between">
@@ -468,4 +415,69 @@
       </ul>
     {/if}
   {/if}
+{/snippet}
+
+{#snippet toolbar({ growButton = false }: { growButton: boolean })}
+  {#if isThreading.value}
+    <div in:fly class={`${growButton && "grow w-full pr-2"}`}>
+      <Popover.Root>
+        <Popover.Trigger
+          class={`cursor-pointer ${growButton ? "w-full" : "w-fit"} px-4 py-2 rounded bg-violet-800 text-white`}
+        >
+          Create Thread
+        </Popover.Trigger>
+
+        <Popover.Content
+          transition={fly}
+          sideOffset={8}
+          class="bg-violet-800 p-4 rounded"
+        >
+          <form
+            onsubmit={createThread}
+            class="text-white flex flex-col gap-4"
+          >
+            <label class="flex flex-col gap-1">
+              Thread Title
+              <input
+                bind:value={threadTitleInput}
+                type="text"
+                placeholder="Notes"
+                class="border px-4 py-2 rounded"
+              />
+            </label>
+            <Popover.Close>
+              <button
+                type="submit"
+                class="text-black px-4 py-2 bg-white rounded w-full text-center"
+              >
+                Confirm
+              </button>
+            </Popover.Close>
+          </form>
+        </Popover.Content>
+      </Popover.Root>
+    </div>
+  {/if}
+  <menu class="relative flex items-center gap-2 px-2 w-fit self-end">
+    <Toggle.Root
+      bind:pressed={isThreading.value}
+      disabled={tab !== "chat"}
+      class={`p-2 ${isThreading.value && "bg-white/10"} cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150 rounded`}
+    >
+      <Icon
+        icon="tabler:needle-thread"
+        color={tab !== "chat" ? "gray" : "white"}
+        class="text-2xl"
+      />
+    </Toggle.Root>
+    <Button.Root
+      title="Copy invite link"
+      class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
+      onclick={() => {
+        navigator.clipboard.writeText(`${page.url.href}`);
+      }}
+    >
+      <Icon icon="icon-park-outline:copy-link" color="white" class="text-2xl" />
+    </Button.Root>
+  </menu>
 {/snippet}

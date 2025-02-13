@@ -109,7 +109,7 @@
   });
 </script>
 
-<li {id} class="flex flex-col w-[80%]">
+<li {id} class={`flex flex-col ${isMobile && "w-[80%]"}`}>
   {@render replyBanner()}
 
   <div
