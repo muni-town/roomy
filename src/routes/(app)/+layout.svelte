@@ -17,6 +17,7 @@
   import { Toaster } from "svelte-french-toast";
   import { AvatarPixel } from "svelte-boring-avatars";
   import { Avatar, Button, ToggleGroup } from "bits-ui";
+
   import { RoomyPdsStorageAdapter } from "$lib/autodoc-storage";
 
   let { children } = $props();
@@ -71,7 +72,7 @@
   async function deleteData(kind: "all" | "local") {
     deleteLoading = true;
 
-    if (kind == "all") {
+    if (kind == "all" && user.agent?.did) {
       await new RoomyPdsStorageAdapter(user.agent!).removeRange([]);
     }
 

@@ -23,6 +23,15 @@
   let profileRepliedTo = $derived(
     messageRepliedTo && getProfile(messageRepliedTo.author),
   );
+  let reactionHandles = $state({}) as { [reaction: string]: string[] };
+  $effect(() => {
+    reactionHandles = Object.fromEntries(
+      Object.entries(message.reactions).map(([reaction, dids]) => [
+        reaction,
+        dids.map((did) => getProfile(did).handle),
+      ]),
+    );
+  });
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
   let isDrawerOpen = $state(false);
@@ -123,12 +132,14 @@
     class="relative group w-full h-fit flex flex-col gap-4 px-2 py-2.5 hover:bg-white/5 transition-all duration-75"
   >
     <div class="flex gap-4">
-      <Avatar.Root class="w-12 aspect-square">
-        <Avatar.Image src={profile.avatarUrl} class="rounded-full" />
-        <Avatar.Fallback>
-          <AvatarBeam name={profile.handle} />
-        </Avatar.Fallback>
-      </Avatar.Root>
+      <a href={`https://bsky.app/profile/${profile.handle}`} target="_blank">
+        <Avatar.Root class="w-12 aspect-square">
+          <Avatar.Image src={profile.avatarUrl} class="rounded-full" />
+          <Avatar.Fallback>
+            <AvatarBeam name={profile.handle} />
+          </Avatar.Fallback>
+        </Avatar.Root>
+      </a>
 
       <Button.Root
         onclick={() => {
@@ -139,7 +150,12 @@
         class="flex flex-col text-start gap-2 text-white w-full"
       >
         <section class="flex items-center gap-2">
-          <h5 class="font-bold">{profile.handle}</h5>
+          <a
+            href={`https://bsky.app/profile/${profile.handle}`}
+            target="_blank"
+          >
+            <h5 class="font-bold">{profile.handle}</h5>
+          </a>
           {@render timestamp()}
         </section>
 
@@ -257,7 +273,9 @@
 
 {#snippet timestamp()}
   {@const decodedTime = decodeTime(id)}
-  {@const formattedDate = isToday(decodedTime) ? "Today" : format(decodedTime, "P")}
+  {@const formattedDate = isToday(decodedTime)
+    ? "Today"
+    : format(decodedTime, "P")}
   <time class="text-sm text-gray-300">
     {formattedDate}, {format(decodedTime, "pp")}
   </time>
@@ -270,6 +288,7 @@
       ${user.profile.data && message.reactions[reaction].includes(user.profile.data.did) ? "bg-violet-600" : "bg-violet-800"}
       cursor-pointer text-white border border-violet-500 px-2 py-1 rounded tabular-nums hover:scale-105 active:scale-95 transition-all duration-150
     `}
+    title={(reactionHandles[reaction] || []).join(", ")}
   >
     {reaction}
     {message.reactions[reaction].length}
@@ -277,7 +296,24 @@
 {/snippet}
 
 <style>
+  @reference "../../app.css";
+
   .chat :global(a) {
-    text-decoration: underline;
+    @apply underline;
+  }
+
+  .chat :global(blockquote) {
+    @apply ml-3 px-2  border-l-2 border-solid border-l-violet-200;
+  }
+  .chat :global(h1) {
+    @apply text-3xl font-bold;
+  }
+  .chat :global(h2) {
+    @apply text-2xl font-bold;
+  }
+  .chat :global(h3),
+  .chat :global(h4),
+  .chat :global(h5) {
+    @apply text-xl font-bold;
   }
 </style>
