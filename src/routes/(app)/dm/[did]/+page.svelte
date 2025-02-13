@@ -215,7 +215,7 @@
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
   <div class="flex gap-4 items-center">
     {#if isMobile}
-      <Button.Root onclick={() => goto(`/dm${currentThread && "/" + page.params.did}`)}>
+      <Button.Root onclick={() => goto(`/dm`)}>
         <Icon icon="uil:left" color="white" />
       </Button.Root>
     {:else}
@@ -340,8 +340,11 @@
 {#snippet threadsTab()}
   {#if channel}
     {#if currentThread}
-      <section class="flex flex-col gap-4 items-start">
-        <menu class="px-4 py-2 w-fit h-fit self-end">
+      <section class="flex flex-col gap-4"> 
+        <menu class="px-4 py-2 w-full flex justify-between items-center h-fit">
+          <Button.Root onclick={() => goto(`/dm/${page.params.did}`)}>
+            <Icon icon="uil:left" color="white" />
+          </Button.Root>
           <Dialog title="Delete Thread">
             {#snippet dialogTrigger()}
               <Icon icon="tabler:trash" color="red" class="text-2xl" />
