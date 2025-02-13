@@ -25,7 +25,7 @@
 </script>
 
 <div {id} class="border border-white rounded text-white flex w-full justify-between p-4 hover:bg-white/5 transition-all duration-75">
-  <Button.Root {onclick} class="flex flex-col gap-2 grow cursor-pointer">
+  <Button.Root {onclick} class="flex flex-col gap-2 grow cursor-pointer text-start md:text-center">
     <h1 class="text-xl font-semibold">{thread.title}</h1>
     <time class="text-sm text-gray-300">Latest: {formatDistanceToNowStrict(latest)} ago</time>
   </Button.Root>
