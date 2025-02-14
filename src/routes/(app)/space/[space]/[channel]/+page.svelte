@@ -50,6 +50,7 @@
       return null;
     }
   });
+  let imageFiles: FileList | null = $state(null);
 
   // // Load bluesky profile
   // let profile = $state(undefined) as ProfileViewDetailed | undefined;
@@ -183,10 +184,31 @@
     toast.success("Thread created", { position: "bottom-end" });
   }
 
-  function sendMessage(e: SubmitEvent) {
+  async function sendMessage(e: SubmitEvent) {
     e.preventDefault();
     if (!space) return;
 
+    const images = imageFiles
+      ? await Promise.all(
+          Array.from(imageFiles).map(async (file) => {
+            try {
+              const resp = await user.uploadBlob(file);
+              return {
+                source: resp.url, // Use the blob reference from ATP
+                alt: file.name,
+              };
+            } catch (error) {
+              console.error("Failed to upload image:", error);
+              toast.error("Failed to upload image", { position: "bottom-end" });
+              return null;
+            }
+          }),
+        ).then((results) =>
+          results.filter(
+            (result): result is NonNullable<typeof result> => result !== null,
+          ),
+        )
+      : undefined;
     space.change((doc) => {
       if (!user.agent) return;
 
@@ -196,12 +218,14 @@
         reactions: {},
         content: messageInput,
         ...(replyingTo && { replyTo: replyingTo.id }),
+        ...(images && { images }),
       };
       doc.channels[page.params.channel].timeline.push(id);
     });
 
     messageInput = "";
     replyingTo = null;
+    imageFiles = null;
   }
 
   function deleteThread(id: Ulid) {
@@ -264,6 +288,11 @@
       });
     });
     showSettingsDialog = false;
+  }
+
+  async function handleImageSelect(event: Event) {
+    const input = event.target as HTMLInputElement;
+    imageFiles = input.files;
   }
 </script>
 
@@ -378,12 +407,50 @@
               </Button.Root>
             </div>
           {/if}
-          <input
-            type="text"
-            class={`w-full px-4 py-2 flex-none text-white bg-violet-900 ${replyingTo ? "rounded-b-lg" : "rounded-lg"}`}
-            placeholder="Say something..."
-            bind:value={messageInput}
-          />
+          <div class="relative">
+            <input
+              type="text"
+              class={`w-full px-4 py-2 flex-none text-white bg-violet-900 ${replyingTo ? "rounded-b-lg" : "rounded-lg"}`}
+              placeholder="Say something..."
+              bind:value={messageInput}
+            />
+            <label
+              class="cursor-pointer text-white hover:text-gray-300 absolute right-3 top-1/2 -translate-y-1/2"
+            >
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                class="hidden"
+                onchange={handleImageSelect}
+              />
+              <Icon
+                icon="material-symbols:add-photo-alternate"
+                class="text-2xl"
+              />
+            </label>
+          </div>
+          <!-- Image preview -->
+          {#if imageFiles?.length}
+            <div class="flex gap-2 flex-wrap">
+              {#each Array.from(imageFiles) as file}
+                <div class="relative mt-5">
+                  <img
+                    src={URL.createObjectURL(file)}
+                    alt={file.name}
+                    class="w-20 h-20 object-cover rounded"
+                  />
+                  <button
+                    type="button"
+                    class="absolute -top-2 -right-2 bg-red-500 rounded-full p-1"
+                    onclick={() => (imageFiles = null)}
+                  >
+                    <Icon icon="zondicons:close-solid" color="white" />
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
         </form>
       {/if}
 
