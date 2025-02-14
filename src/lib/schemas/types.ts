@@ -38,6 +38,10 @@ export type Message = {
   content: string;
   replyTo?: Ulid;
   reactions: { [reaction: string]: Did[] };
+  images?: {
+    source: string;
+    alt?: string;
+  }[];
 };
 
 export type Thread = {

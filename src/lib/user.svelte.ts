@@ -1,7 +1,7 @@
 import { atproto } from "./atproto.svelte";
 import type { OAuthSession } from "@atproto/oauth-client-browser";
 import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
-import { Agent } from "@atproto/api";
+import { Agent, ComAtprotoRepoUploadBlob } from "@atproto/api";
 import { IndexedDBStorageAdapter } from "@automerge/automerge-repo-storage-indexeddb";
 import { lexicons } from "./lexicons";
 import { decodeBase32 } from "./base32";
@@ -149,6 +149,33 @@ export const user = {
         new Error("User navigated back from the authorization page"),
       );
     });
+  },
+
+  async uploadBlob(blob: Blob) {
+    if (!agent) return Promise.reject("No agent available");
+    const resp = await agent.com.atproto.repo.uploadBlob(blob);
+    const blobRef = resp.data.blob;
+    console.log(resp.data.blob.toJSON());
+    // Create a record that links to the blob
+    const record = {
+      $type: "chat.roomy.v0.images",
+      image: blobRef,
+      alt: "User uploaded image", // You might want to make this parameter configurable
+    };
+    // Put the record in the repository
+    const putResponse = await agent.com.atproto.repo.putRecord({
+      repo: agent.did!,
+      collection: "chat.roomy.v0.images",
+      rkey: `${Date.now()}`, // Using timestamp as a unique key
+      record: record,
+    });
+    const url = `https://cdn.bsky.app/img/feed_thumbnail/plain/${agent.did}/${blobRef.ipld().ref}`;
+    return {
+      blob: blobRef,
+      uri: putResponse.data.uri,
+      cid: putResponse.data.cid,
+      url,
+    };
   },
 
   /** Logout the user. */
