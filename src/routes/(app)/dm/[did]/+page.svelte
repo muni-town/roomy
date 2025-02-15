@@ -364,7 +364,7 @@
         </menu>
 
         <ScrollArea.Root>
-          <ScrollArea.Viewport class="min-w-dvw h-full">
+          <ScrollArea.Viewport class="min-w-screen h-full max-h-[80%]">
             <ScrollArea.Content>
               <ol class="flex flex-col gap-4">
                 {#each currentThread.timeline as id}
