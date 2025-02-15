@@ -177,7 +177,7 @@
         class={`${(g.routerConnections[dm.did] || []).length > 0 ? "online" : ""} flex gap-4 items-center w-full text-start hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white px-4 py-2 rounded-md`}
       >
         <AvatarImage avatarUrl={dm.avatar} handle={dm.name} />
-        <h3>{dm.name}</h3>
+        <h3 class="overflow-ellipsis">{dm.name}</h3>
         {#if dm.unreadCount > 0}
           <span class="bg-red-500 text-white px-2 py-1 rounded-full">
             {dm.unreadCount}
