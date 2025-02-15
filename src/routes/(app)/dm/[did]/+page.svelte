@@ -15,6 +15,7 @@
     Avatar,
     Button,
     Popover,
+    ScrollArea,
     Tabs,
     Toggle,
   } from "bits-ui";
@@ -362,9 +363,26 @@
           </Dialog>
         </menu>
 
-        {#each currentThread.timeline as id}
-          <ChatMessage {id} messages={channel.view.messages} />
-        {/each}
+        <ScrollArea.Root>
+          <ScrollArea.Viewport class="min-w-dvw h-full">
+            <ScrollArea.Content>
+              <ol class="flex flex-col gap-4">
+                {#each currentThread.timeline as id}
+                  <ChatMessage {id} messages={channel.view.messages} />
+                {/each}
+              </ol>
+            </ScrollArea.Content>
+          </ScrollArea.Viewport>
+          <ScrollArea.Scrollbar
+            orientation="vertical"
+            class="flex h-full w-2.5 touch-none select-none rounded-full border-l border-l-transparent p-px transition-all hover:w-3 hover:bg-dark-10"
+          >
+            <ScrollArea.Thumb
+              class="relative flex-1 rounded-full bg-muted-foreground opacity-40 transition-opacity hover:opacity-100"
+            />
+          </ScrollArea.Scrollbar>
+          <ScrollArea.Corner />
+        </ScrollArea.Root>
       </section>
     {:else}
       <ul class="overflow-y-auto px-2 gap-3 flex flex-col">

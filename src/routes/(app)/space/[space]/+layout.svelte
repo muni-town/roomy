@@ -229,7 +229,7 @@
       {@render children()}
     </main>
   {:else if page.params.channel}
-    <main class="absolute inset-0 flex flex-col gap-4 bg-violet-950 rounded-lg p-4">
+    <main class="absolute inset-0 flex flex-col gap-4 bg-violet-950 rounded-lg p-4 h-full max-h-screen">
       {@render children()}
     </main>
   {/if}

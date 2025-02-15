@@ -17,6 +17,7 @@
     Button,
     Dialog,
     Popover,
+    ScrollArea,
     Separator,
     Tabs,
     Toggle,
@@ -237,7 +238,7 @@
           <Icon icon="mingcute:right-line" color="white" />
         {/if}
         <Icon icon="lucide-lab:reel-thread" color="white" />
-        <h5 class="text-white text-lg font-bold overflow-ellipsis">
+        <h5 class="text-white text-lg font-bold line-clamp-1 text-ellipsis">
           {currentThread.title}
         </h5>
       {/if}
@@ -343,7 +344,7 @@
 {#snippet threadsTab()}
   {#if space}
     {#if currentThread}
-      <section class="flex flex-col gap-4 items-start">
+      <section class="flex flex-col gap-4 items-start h-full">
         <menu class="px-4 py-2 flex w-full justify-between">
           <Button.Root
             onclick={() => goto(page.url.pathname)}
@@ -398,9 +399,26 @@
           </Dialog.Root>
         </menu>
 
-        {#each currentThread.timeline as id}
-          <ChatMessage {id} messages={space.view.messages} />
-        {/each}
+        <ScrollArea.Root>
+          <ScrollArea.Viewport class="min-w-screen h-full max-h-[80%]">
+            <ScrollArea.Content>
+              <ol class="flex flex-col gap-4">
+                {#each currentThread.timeline as id}
+                  <ChatMessage {id} messages={space.view.messages} />
+                {/each}
+              </ol>
+            </ScrollArea.Content>
+          </ScrollArea.Viewport>
+          <ScrollArea.Scrollbar
+            orientation="vertical"
+            class="flex h-full w-2.5 touch-none select-none rounded-full border-l border-l-transparent p-px transition-all hover:w-3 hover:bg-dark-10"
+          >
+            <ScrollArea.Thumb
+              class="relative flex-1 rounded-full bg-muted-foreground opacity-40 transition-opacity hover:opacity-100"
+            />
+          </ScrollArea.Scrollbar>
+          <ScrollArea.Corner />
+        </ScrollArea.Root>
       </section>
     {:else}
       <ul class="overflow-y-auto px-2 gap-3 flex flex-col">

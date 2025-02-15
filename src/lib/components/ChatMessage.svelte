@@ -21,9 +21,9 @@
     message.author,
   );
   let messageRepliedTo = $derived(message.replyTo && messages[message.replyTo]);
-  let profileRepliedTo = $derived(
-    messageRepliedTo && getProfile(messageRepliedTo.author),
-  );
+  let profileRepliedTo = messageRepliedTo && getProfile(messageRepliedTo.author);
+
+  // TODO: refactor to $derived
   let reactionHandles = $state({}) as { [reaction: string]: string[] };
   $effect(() => {
     reactionHandles = Object.fromEntries(
@@ -109,7 +109,7 @@
   });
 </script>
 
-<li {id} class={`flex flex-col ${isMobile && "w-[80%]"}`}>
+<li {id} class={`flex flex-col ${isMobile && "w-[90%] max-w-screen"}`}>
   {@render replyBanner()}
 
   <div

@@ -46,7 +46,7 @@
 </script>
 
 <ScrollArea.Root>
-  <ScrollArea.Viewport bind:el={viewport} class="w-full max-w-dvw h-full">
+  <ScrollArea.Viewport bind:el={viewport} class="w-full max-w-screen h-full">
     <ScrollArea.Content>
       <ol class="flex flex-col gap-4">
         {#each timeline as id (id)}
