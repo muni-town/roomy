@@ -1,0 +1,48 @@
+{
+  "lockfile_version": "1",
+  "packages": {
+    "deno@latest": {
+      "last_modified": "2025-02-07T11:26:36Z",
+      "resolved": "github:NixOS/nixpkgs/d98abf5cf5914e5e4e9d57205e3af55ca90ffc1d#deno",
+      "source": "devbox-search",
+      "version": "2.1.9",
+      "systems": {
+        "aarch64-darwin": {
+          "store_path": "/nix/store/igx1ychc4gfmfr9js2rh8hh61vghy7v1-deno-2.1.9"
+        },
+        "aarch64-linux": {
+          "store_path": "/nix/store/6g7rhrq8kp2xg4bbnqyccvfpycz1a126-deno-2.1.9"
+        },
+        "x86_64-darwin": {
+          "store_path": "/nix/store/5waki40jfc72samclf0fvw3cpzq3vf52-deno-2.1.9"
+        },
+        "x86_64-linux": {
+          "store_path": "/nix/store/1jfw2fd9c90f8sppb2bgslr6184bdlcq-deno-2.1.9"
+        }
+      }
+    },
+    "github:NixOS/nixpkgs/nixpkgs-unstable": {
+      "resolved": "github:NixOS/nixpkgs/ba0939c506a03c60a765cd7f7c43794816540eec?lastModified=1739482815&narHash=sha256-%2F5Lwtmp%2F8j%2Bro32gXzitucSdyjJ6QehfJCL58WNA7N0%3D"
+    },
+    "jujutsu@latest": {
+      "last_modified": "2025-02-07T11:26:36Z",
+      "resolved": "github:NixOS/nixpkgs/d98abf5cf5914e5e4e9d57205e3af55ca90ffc1d#jujutsu",
+      "source": "devbox-search",
+      "version": "0.26.0",
+      "systems": {
+        "aarch64-darwin": {
+          "store_path": "/nix/store/3ck8kaxh8219jiiwa4rg5p5hs9i7n5xk-jujutsu-0.26.0"
+        },
+        "aarch64-linux": {
+          "store_path": "/nix/store/9x4rv8wwj1a8rj8bjryyhzaq15sali6w-jujutsu-0.26.0"
+        },
+        "x86_64-darwin": {
+          "store_path": "/nix/store/069a67yvzrsfkx0rawv381g18pgzlli0-jujutsu-0.26.0"
+        },
+        "x86_64-linux": {
+          "store_path": "/nix/store/ppw9fcqm64a67pani97kd2583xi9hhnf-jujutsu-0.26.0"
+        }
+      }
+    }
+  }
+}
