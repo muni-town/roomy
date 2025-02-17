@@ -22,12 +22,13 @@
 
   let { children } = $props();
 
-  let loginLoading = $state(false);
   let handleInput = $state("");
-  let isNewSpaceDialogOpen = $state(false);
-  let newSpaceName = $state("");
+  let loginLoading = $state(false);
   let isLoginDialogOpen = $state(!user.session);
+
+  let newSpaceName = $state("");
   let deleteLoading = $state(false);
+  let isNewSpaceDialogOpen = $state(false);
 
   let servers: string[] = $derived(
     g.catalog?.view.spaces.map((x) => x.id) || [],
@@ -110,13 +111,12 @@
 </svelte:head>
 
 <!-- Container -->
-<div
-  class={`relative flex max-w-full ${isMobile ? "p-2 gap-1" : "gap-2 p-4"} bg-violet-900 w-screen h-screen`}
->
+<div class="flex w-screen h-screen bg-violet-950">
   <Toaster />
   <!-- Server Bar -->
+
   <aside
-    class="flex flex-col justify-between w-20 h-full bg-violet-950 rounded-lg px-4 py-8 items-center"
+    class="w-fit col-span-2 flex flex-col justify-between bg-violet-950 px-4 py-8 items-center border-r-2 border-violet-900"
   >
     <ToggleGroup.Root
       type="single"
@@ -254,7 +254,8 @@
       <Dialog
         title={user.session
           ? `Logged In As ${user.profile.data?.handle}`
-          : "Login with AT Protocol"}
+          : "Login with AT Protocol"
+        }
         bind:isDialogOpen={isLoginDialogOpen}
       >
         {#snippet dialogTrigger()}

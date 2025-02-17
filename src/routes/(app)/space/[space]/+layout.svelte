@@ -97,7 +97,7 @@
 
 {#if space}
   <nav
-    class={`flex flex-col ${isMobile ? "w-full px-2 py-4 gap-4" : "w-72 gap-4 p-4"} h-full bg-violet-950 rounded-lg`}
+    class={[!isMobile && "max-w-[16rem] border-r-2 border-violet-900", "p-4 flex flex-col gap-4 w-full"]}
   >
     <div class="flex items-center justify-between px-2">
       <h1 class="text-2xl font-extrabold text-white text-ellipsis">

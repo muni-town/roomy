@@ -132,7 +132,7 @@
   // Mark the current DM as read.
   $effect(() => {
     const did = page.params.did!;
-    const doc = info?.view;
+    const doc = channel.view;
     untrack(() => {
       const unread = unreadCount(
         doc,
@@ -147,17 +147,6 @@
       }
     });
   });
-
-  function openDirectMessage() {
-    if (g.catalog && profile) {
-      g.catalog.change((doc) => {
-        doc.dms[page.params.did] = {
-          name: profile!.handle,
-          avatar: profile!.avatar,
-        };
-      });
-    }
-  }
 
   function createThread(e: SubmitEvent) {
     e.preventDefault();
@@ -225,7 +214,7 @@
 
     <span class="flex gap-2 items-center">
       {#if !isMobile || (isMobile && !currentThread)}
-        <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-white text-lg font-bold`}>
+        <h4 class={[isMobile && "overflow-hidden text-ellipsis", "text-white text-lg font-bold"]}>
           {info?.name}
         </h4>
       {/if}
@@ -235,7 +224,7 @@
           <Icon icon="mingcute:right-line" color="white" />
         {/if}
         <Icon icon="lucide-lab:reel-thread" color="white" />
-        <h5 class="text-white text-lg font-bold overflow-ellipsis">
+        <h5 class="text-white text-lg font-bold overflow-hidden text-ellipsis">
           {currentThread.title}
         </h5>
       {/if}

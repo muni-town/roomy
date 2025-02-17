@@ -1,16 +1,15 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { Avatar, Button, ToggleGroup } from "bits-ui";
+  import { Button, ToggleGroup } from "bits-ui";
 
+  import { onMount } from "svelte";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
-  import { AvatarBeam } from "svelte-boring-avatars";
-  import { onMount } from "svelte";
-  import { cleanHandle, unreadCount } from "$lib/utils";
   import { RichText } from "@atproto/api";
+  import { cleanHandle, unreadCount } from "$lib/utils";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
 
   let { children } = $props();
@@ -112,7 +111,7 @@
 <svelte:window bind:outerWidth={width} />
 
 <!-- Room Selector; TODO: Sub Menu (eg Settings) -->
-<nav class={`flex flex-col gap-4 h-full ${isMobile ? "w-full px-2 py-4" : "w-72 p-4"} bg-violet-950 rounded-lg`}>
+<nav class={[!isMobile && "max-w-[16rem] border-r-2 border-violet-900", "p-4 flex flex-col gap-4 w-full"]}>
   <h1 class="text-2xl font-extrabold text-white px-2 py-1 flex items-center justify-between">
     Direct Messages
   </h1>
@@ -174,10 +173,13 @@
         onclick={() => {
           goto(`/dm/${dm.did || ""}`);
         }}
-        class={`${(g.routerConnections[dm.did] || []).length > 0 ? "online" : ""} flex gap-4 items-center w-full text-start hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white px-4 py-2 rounded-md`}
+        class={[
+          (g.routerConnections[dm.did] || []).length > 0 && "online", 
+          "flex gap-4 items-center w-full text-start hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white px-3 py-2 rounded-md"
+        ]}
       >
-        <AvatarImage avatarUrl={dm.avatar} handle={dm.name} />
-        <h3 class="overflow-ellipsis">{dm.name}</h3>
+        <AvatarImage avatarUrl={dm.avatar} handle={dm.name} className="shrink-0" />
+        <h3 class="overflow-hidden text-ellipsis">{dm.name}</h3>
         {#if dm.unreadCount > 0}
           <span class="bg-red-500 text-white px-2 py-1 rounded-full">
             {dm.unreadCount}

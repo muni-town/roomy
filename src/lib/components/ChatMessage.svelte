@@ -14,6 +14,7 @@
   import Drawer from "./Drawer.svelte";
   import AvatarImage from "./AvatarImage.svelte";
 
+  // TODO: refactor $derived values into props
   let { id, messages }: { id: Ulid; messages: { [ulid: string]: Message } } =
     $props();
   let message = $derived(messages[id]);

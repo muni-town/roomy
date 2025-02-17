@@ -12,19 +12,18 @@
   } from "$lib/schemas/types";
   import { page } from "$app/state";
   import { user } from "$lib/user.svelte";
-  import { setContext, untrack } from "svelte";
+  import { setContext } from "svelte";
   import {
     Avatar,
     Button,
     Popover,
     ScrollArea,
-    Separator,
     Tabs,
     Toggle,
   } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import Icon from "@iconify/svelte";
-  import { fade, fly } from "svelte/transition";
+  import { fly } from "svelte/transition";
   import { ulid } from "ulidx";
   import ThreadRow from "$lib/components/ThreadRow.svelte";
   import { goto } from "$app/navigation";
@@ -50,18 +49,6 @@
       return null;
     }
   });
-
-  // // Load bluesky profile
-  // let profile = $state(undefined) as ProfileViewDetailed | undefined;
-  // $effect(() => {
-  //   if (user.agent && !profile) {
-  //     user.agent.getProfile({ actor: page.params.did }).then((resp) => {
-  //       if (resp.success) {
-  //         profile = resp.data;
-  //       }
-  //     });
-  //   }
-  // });
 
   $effect(() => {
     if (currentThread) {
@@ -132,36 +119,6 @@
     });
   });
 
-  // // Mark the current DM as read.
-  // $effect(() => {
-  //   const did = page.params.did!;
-  //   const doc = space?.view;
-  //   untrack(() => {
-  //     const unread = unreadCount(
-  //       doc,
-  //       g.catalog?.view.dms[did]?.viewedHeads || [],
-  //     );
-  //     if (g.catalog?.view.dms[did]?.viewedHeads && doc && unread > 0) {
-  //       // TODO: Find ways to reduce how frequently we write to this, because the size of the
-  //       // catalog grows every time we send / receive a message and update the latest heads.
-  //       g.catalog?.change((doc) => {
-  //         doc.dms[did].viewedHeads = channel.heads();
-  //       });
-  //     }
-  //   });
-  // });
-
-  // function openDirectMessage() {
-  //   if (g.catalog && profile) {
-  //     g.catalog.change((doc) => {
-  //       doc.dms[page.params.did] = {
-  //         name: profile!.handle,
-  //         avatar: profile!.avatar,
-  //       };
-  //     });
-  //   }
-  // }
-
   function createThread(e: SubmitEvent) {
     e.preventDefault();
     if (!space) return;
@@ -231,6 +188,7 @@
       ([_id, category]) => category.channels.includes(page.params.channel),
     )?.[0];
   });
+
   function saveSettings() {
     space?.change((space) => {
       if (channelNameInput) {
@@ -344,7 +302,7 @@
     <ChatArea
       source={{ type: "space", space, channelId: page.params.channel }}
     />
-    <div class="flex">
+    <div class="flex float-end">
       {#if !isMobile || !isThreading.value}
         <form onsubmit={sendMessage} class="grow flex flex-col">
           {#if replyingTo}
@@ -380,7 +338,7 @@
           {/if}
           <input
             type="text"
-            class={`w-full px-4 py-2 flex-none text-white bg-violet-900 ${replyingTo ? "rounded-b-lg" : "rounded-lg"}`}
+            class={[replyingTo ? "rounded-b-lg" : "rounded-lg", "w-full px-4 py-2 flex-none text-white bg-violet-900"]}
             placeholder="Say something..."
             bind:value={messageInput}
           />
