@@ -1,7 +1,7 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { Accordion, Button, ToggleGroup } from "bits-ui";
+  import { Button, ToggleGroup } from "bits-ui";
 
   import { ulid } from "ulidx";
   import { page } from "$app/state";

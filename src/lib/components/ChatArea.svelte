@@ -3,7 +3,7 @@
   import { onNavigate } from "$app/navigation";
   import ChatMessage from "./ChatMessage.svelte";
   import type { Autodoc } from "$lib/autodoc/peer";
-  import type { Channel, Space } from "$lib/schemas/types";
+  import type { Channel, Message, Space } from "$lib/schemas/types";
   import { Virtualizer } from "virtua/svelte";
 
   let {
@@ -19,6 +19,7 @@
       ? source.channel.view.messages
       : source.space.view.messages,
   );
+
   let timeline = $derived(
     source.type == "channel"
       ? source.channel.view.timeline
@@ -71,7 +72,16 @@
             scrollRef={viewport}
           >
             {#snippet children(id, _index)}
-              <ChatMessage {id} {messages} />
+              {@const message = messages[id]}
+              <ChatMessage 
+                {id} 
+                {message}
+                messageRepliedTo={
+                  message.replyTo 
+                  ? messages[message.replyTo] as Message 
+                  : undefined
+                }
+              />
             {/snippet}
           </Virtualizer>
         {/key}

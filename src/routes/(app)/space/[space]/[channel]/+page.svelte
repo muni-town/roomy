@@ -382,11 +382,20 @@
         </menu>
 
         <ScrollArea.Root>
-          <ScrollArea.Viewport class="min-w-screen h-full max-h-[80%]">
+          <ScrollArea.Viewport class="max-w-screen h-full max-h-[90%]">
             <ScrollArea.Content>
               <ol class="flex flex-col gap-4">
                 {#each currentThread.timeline as id}
-                  <ChatMessage {id} messages={space.view.messages} />
+                  {@const message = space.view.messages[id]}
+                  <ChatMessage 
+                    {id} 
+                    {message}
+                    messageRepliedTo={
+                      message.replyTo
+                      ? space.view.messages[message.replyTo]
+                      : undefined
+                    }
+                  />
                 {/each}
               </ol>
             </ScrollArea.Content>

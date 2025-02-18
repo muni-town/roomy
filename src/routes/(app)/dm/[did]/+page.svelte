@@ -32,6 +32,8 @@
   import AvatarImage from "$lib/components/AvatarImage.svelte";
   import { outerWidth } from "svelte/reactivity/window";
 
+
+  // TODO: move load to +page.js
   let tab = $state("chat");
   let channel: Autodoc<Channel> | undefined = $derived(g.dms[page.params.did]);
   let messageInput = $state("");
@@ -71,11 +73,11 @@
   let threadTitleInput = $state("");
   let selectedMessages: Ulid[] = $state([]);
   setContext("isThreading", isThreading);
-  setContext("selectMessage", (message: Ulid) => {
-    selectedMessages.push(message);
+  setContext("selectMessage", (messageId: Ulid) => {
+    selectedMessages.push(messageId);
   });
-  setContext("removeSelectedMessage", (message: Ulid) => {
-    selectedMessages = selectedMessages.filter((m) => m != message);
+  setContext("removeSelectedMessage", (messageId: Ulid) => {
+    selectedMessages = selectedMessages.filter((m) => m != messageId);
   });
 
   $effect(() => {
@@ -87,15 +89,17 @@
   // Reply Utils
   let replyingTo = $state<{
     id: Ulid;
-    profile: { handle: string; avatarUrl: string };
+    authorProfile: { handle: string; avatarUrl: string };
     content: string;
-  } | null>();
+  } | undefined>();
+
+
 
   setContext(
     "setReplyTo",
     (value: {
       id: Ulid;
-      profile: { handle: string; avatarUrl: string };
+      authorProfile: { handle: string; avatarUrl: string };
       content: string;
     }) => {
       replyingTo = value;
@@ -131,6 +135,8 @@
 
   // Mark the current DM as read.
   $effect(() => {
+    if (!channel) { return; }
+
     const did = page.params.did!;
     const doc = channel.view;
     untrack(() => {
@@ -187,7 +193,7 @@
     });
 
     messageInput = "";
-    replyingTo = null;
+    replyingTo = undefined;
   }
 
   function deleteThread(id: Ulid) {
@@ -280,23 +286,15 @@
     <div class="flex">
       {#if !isMobile || !isThreading.value}
         <form onsubmit={sendMessage} class="grow flex flex-col">
-          {#if replyingTo}
+          {#if replyingTo && replyingTo.authorProfile}
             <div
               class="flex justify-between bg-violet-800 text-white rounded-t-lg px-4 py-2"
             >
               <div class="flex flex-col gap-1">
                 <h5 class="flex gap-2 items-center">
                   Replying to
-                  <Avatar.Root class="w-4">
-                    <Avatar.Image
-                      src={replyingTo.profile.avatarUrl}
-                      class="rounded-full"
-                    />
-                    <Avatar.Fallback>
-                      <AvatarBeam name={replyingTo.profile.handle} />
-                    </Avatar.Fallback>
-                  </Avatar.Root>
-                  <strong>{replyingTo.profile.handle}</strong>
+                  <AvatarImage handle={replyingTo.authorProfile.handle} avatarUrl={replyingTo.authorProfile.avatarUrl} />
+                  <strong>{replyingTo.authorProfile.handle}</strong>
                 </h5>
                 <p class="text-gray-300 text-ellipsis italic">
                   {@html renderMarkdownSanitized(replyingTo.content)}
@@ -304,7 +302,7 @@
               </div>
               <Button.Root
                 type="button"
-                onclick={() => (replyingTo = null)}
+                onclick={() => (replyingTo = undefined)}
                 class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
               >
                 <Icon icon="zondicons:close-solid" />

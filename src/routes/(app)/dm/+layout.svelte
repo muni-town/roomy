@@ -35,7 +35,6 @@
   let width: number = $state(0);
   let isMobile = $derived(width < 640);
 
-
   onMount(() => {
     if (page.params.did) {
       currentDm = page.params.did;

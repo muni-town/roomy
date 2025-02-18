@@ -14,27 +14,29 @@
   import Drawer from "./Drawer.svelte";
   import AvatarImage from "./AvatarImage.svelte";
 
-  // TODO: refactor $derived values into props
-  let { id, messages }: { id: Ulid; messages: { [ulid: string]: Message } } =
-    $props();
-  let message = $derived(messages[id]);
-  let profile: { handle: string; avatarUrl: string } | undefined = getProfile(
-    message.author,
-  );
-  let messageRepliedTo = $derived(message.replyTo && messages[message.replyTo]);
-  let profileRepliedTo =
-    messageRepliedTo && getProfile(messageRepliedTo.author);
+  type Props = {
+    id: Ulid;
+    message: Message;
+    messageRepliedTo?: Message;
+  };
 
-  // TODO: refactor to $derived
-  let reactionHandles = $state({}) as { [reaction: string]: string[] };
-  $effect(() => {
-    reactionHandles = Object.fromEntries(
-      Object.entries(message.reactions).map(([reaction, dids]) => [
-        reaction,
-        dids.map((did) => getProfile(did).handle),
-      ]),
-    );
-  });
+  let { 
+    id, 
+    message,
+    messageRepliedTo,
+  }: Props = $props();
+
+  // doesn't change after render, so $derived is not necessary
+  const authorProfile = getProfile(message.author);
+  const profileRepliedTo = messageRepliedTo && getProfile(messageRepliedTo.author);
+
+  // set initial set with entries, no need for $effect
+  let reactionHandles = $state(Object.fromEntries(
+    Object.entries(message.reactions).map(([reaction, dids]) => [
+      reaction,
+      dids.map((did) => getProfile(did).handle),
+    ])
+  ));
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
   let isDrawerOpen = $state(false);
@@ -49,14 +51,12 @@
   let isEmojiToolbarPickerOpen = $state(false);
   let isEmojiRowPickerOpen = $state(false);
 
-  const selectMessage: (message: Ulid) => void = getContext("selectMessage");
-  const removeSelectedMessage: (message: Ulid) => void = getContext(
-    "removeSelectedMessage",
-  );
+  const selectMessage = getContext("selectMessage") as (messageId: Ulid) => void;
+  const removeSelectedMessage = getContext("removeSelectedMessage") as (messageId: Ulid) => void;
 
   const setReplyTo = getContext("setReplyTo") as (value: {
     id: Ulid;
-    profile: { handle: string; avatarUrl: string };
+    authorProfile: { handle: string; avatarUrl: string };
     content: string;
   }) => void;
 
@@ -111,15 +111,15 @@
   });
 </script>
 
-<li {id} class={`flex flex-col ${isMobile && "w-[90%] max-w-screen"}`}>
+<li {id} class={`flex flex-col ${isMobile && "max-w-screen"}`}>
   {@render replyBanner()}
 
   <div
     class="relative group w-full h-fit flex flex-col gap-4 px-2 py-2.5 hover:bg-white/5 transition-all duration-75"
   >
     <div class="flex gap-4">
-      <a href={`https://bsky.app/profile/${profile.handle}`} target="_blank">
-        <AvatarImage handle={profile.handle} avatarUrl={profile.avatarUrl} />
+      <a href={`https://bsky.app/profile/${authorProfile.handle}`} target="_blank">
+        <AvatarImage handle={authorProfile.handle} avatarUrl={authorProfile.avatarUrl} />
       </a>
 
       <Button.Root
@@ -132,10 +132,10 @@
       >
         <section class="flex items-center gap-2 flex-wrap w-fit">
           <a
-            href={`https://bsky.app/profile/${profile.handle}`}
+            href={`https://bsky.app/profile/${authorProfile.handle}`}
             target="_blank"
           >
-            <h5 class="font-bold">{profile.handle}</h5>
+            <h5 class="font-bold">{authorProfile.handle}</h5>
           </a>
           {@render timestamp()}
         </section>
@@ -196,7 +196,7 @@
         </div>
         <Button.Root
           onclick={() => {
-            setReplyTo({ id, profile, content: message.content });
+            setReplyTo({ id, authorProfile, content: message.content });
             isDrawerOpen = false;
           }}
           class="text-white p-4 flex gap-4 items-center bg-violet-800 w-full rounded-lg"
@@ -232,7 +232,7 @@
           </Popover.Content>
         </Popover.Root>
         <Toolbar.Button
-          onclick={() => setReplyTo({ id, profile, content: message.content })}
+          onclick={() => setReplyTo({ id, authorProfile, content: message.content })}
           class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
         >
           <Icon icon="fa6-solid:reply" color="white" />
