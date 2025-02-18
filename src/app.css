@@ -35,3 +35,37 @@ emoji-picker {
   --border-radius: 8px;
   --button-hover-background: --alpha(var(--color-white) / 10%);
 }
+
+.chat a {
+  text-decoration-line: underline;
+}
+
+.chat * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat blockquote {
+  margin-left: -0.75rem;
+  padding-left: 0.5rem; padding-right: 0.5rem;
+  border-left-width: 2px;
+  border-left-color: var(--color-violet-200);
+}
+
+.chat h1 {
+  font-size: 1.875rem;
+  line-height: 2.25rem;
+  font-weight: 700;
+}
+
+.chat h2 {
+  font-size: 1.5rem; 
+  line-height: 2rem;
+  font-weight: 700;
+}
+
+.chat:is(h3,h4,h5) {
+  font-size: 1.25rem; 
+  line-height: 1.75rem;
+  font-weight: 700;
+}

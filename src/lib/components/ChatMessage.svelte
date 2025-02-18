@@ -300,31 +300,3 @@
     </Button.Root>
   {/if}
 {/snippet}
-
-<style>
-  @reference "../../app.css";
-
-  .chat :global(a) {
-    @apply underline;
-  }
-
-  .chat :global(*) {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .chat :global(blockquote) {
-    @apply ml-3 px-2  border-l-2 border-solid border-l-violet-200;
-  }
-  .chat :global(h1) {
-    @apply text-3xl font-bold;
-  }
-  .chat :global(h2) {
-    @apply text-2xl font-bold;
-  }
-  .chat :global(h3),
-  .chat :global(h4),
-  .chat :global(h5) {
-    @apply text-xl font-bold;
-  }
-</style>
