@@ -77,7 +77,7 @@
   // Reply Utils
   let replyingTo = $state<{
     id: Ulid;
-    profile: { handle: string; avatarUrl: string };
+    authorProfile: { handle: string; avatarUrl: string };
     content: string;
   } | null>();
 
@@ -314,14 +314,14 @@
                   Replying to
                   <Avatar.Root class="w-4">
                     <Avatar.Image
-                      src={replyingTo.profile.avatarUrl}
+                      src={replyingTo.authorProfile.avatarUrl}
                       class="rounded-full"
                     />
                     <Avatar.Fallback>
-                      <AvatarBeam name={replyingTo.profile.handle} />
+                      <AvatarBeam name={replyingTo.authorProfile.handle} />
                     </Avatar.Fallback>
                   </Avatar.Root>
-                  <strong>{replyingTo.profile.handle}</strong>
+                  <strong>{replyingTo.authorProfile.handle}</strong>
                 </h5>
                 <p class="text-gray-300 text-ellipsis italic">
                   {@html renderMarkdownSanitized(replyingTo.content)}

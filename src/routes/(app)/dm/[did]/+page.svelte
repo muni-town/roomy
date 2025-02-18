@@ -285,7 +285,7 @@
     <div class="flex">
       {#if !isMobile || !isThreading.value}
         <form onsubmit={sendMessage} class="grow flex flex-col">
-          {#if replyingTo && replyingTo.authorProfile}
+          {#if replyingTo} 
             <div
               class="flex justify-between bg-violet-800 text-white rounded-t-lg px-4 py-2"
             >
