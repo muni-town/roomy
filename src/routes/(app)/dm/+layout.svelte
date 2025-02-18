@@ -191,11 +191,11 @@
 
 <!-- Events/Room Content -->
 {#if !isMobile}
-  <main class="flex flex-col gap-4 bg-violet-950 rounded-lg p-4 grow">
+  <main class="flex flex-col gap-4 bg-violet-950 rounded-lg p-4 min-w-0 grow h-full overflow-clip">
     {@render children()}
   </main>
 {:else if page.params.did}
-  <main class="absolute inset-0 flex flex-col gap-4 bg-violet-950 rounded-lg p-4">
+  <main class="absolute inset-0 flex flex-col gap-4 bg-violet-950 rounded-lg p-4 h-screen overflow-clip">
     {@render children()}
   </main>
 {/if}

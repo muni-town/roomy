@@ -5,14 +5,14 @@
   import { g } from "$lib/global.svelte";
   import { goto } from "$app/navigation";
   import toast from "svelte-french-toast";
+  import { fly } from "svelte/transition";
   import { user } from "$lib/user.svelte";
   import { unreadCount } from "$lib/utils";
   import { setContext, untrack } from "svelte";
-  import { fly } from "svelte/transition";
+  import { outerWidth } from "svelte/reactivity/window";
   import { renderMarkdownSanitized } from "$lib/markdown";
 
   import {
-    Avatar,
     Button,
     Popover,
     ScrollArea,
@@ -20,35 +20,18 @@
     Toggle,
   } from "bits-ui";
   import Icon from "@iconify/svelte";
-  import { AvatarBeam } from "svelte-boring-avatars";
   import Dialog from "$lib/components/Dialog.svelte";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ThreadRow from "$lib/components/ThreadRow.svelte";
+  import AvatarImage from "$lib/components/AvatarImage.svelte";
   import ChatMessage from "$lib/components/ChatMessage.svelte";
 
-  import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
-  import type { Channel, Did, Thread, Ulid } from "$lib/schemas/types";
   import type { Autodoc } from "$lib/autodoc/peer";
-  import AvatarImage from "$lib/components/AvatarImage.svelte";
-  import { outerWidth } from "svelte/reactivity/window";
+  import type { Channel, Did, Thread, Ulid } from "$lib/schemas/types";
+  import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 
-
-  // TODO: move load to +page.js
-  let tab = $state("chat");
   let channel: Autodoc<Channel> | undefined = $derived(g.dms[page.params.did]);
-  let messageInput = $state("");
   let info = $derived(g.catalog?.view.dms[page.params.did]);
-  let currentThread = $derived.by(() => {
-    if (page.url.searchParams.has("thread")) {
-      return channel.view.threads[
-        page.url.searchParams.get("thread")!
-      ] as Thread;
-    } else {
-      return null;
-    }
-  });
-
-  let isMobile = $derived((outerWidth.current || 0) < 640);
 
   // Load bluesky profile
   let profile = $state(undefined) as ProfileViewDetailed | undefined;
@@ -62,11 +45,21 @@
     }
   });
 
-  $effect(() => {
-    if (currentThread) {
-      tab = "threads";
+
+  let tab = $state("chat");
+  let messageInput = $state("");
+
+  let currentThread = $derived.by(() => {
+    if (page.url.searchParams.has("thread")) {
+      return channel.view.threads[
+        page.url.searchParams.get("thread")!
+      ] as Thread;
+    } else {
+      return null;
     }
   });
+
+  let isMobile = $derived((outerWidth.current || 0) < 640);
 
   // thread maker
   let isThreading = $state({ value: false });
@@ -80,19 +73,12 @@
     selectedMessages = selectedMessages.filter((m) => m != messageId);
   });
 
-  $effect(() => {
-    if (!isThreading.value && selectedMessages.length > 0) {
-      selectedMessages = [];
-    }
-  });
-
   // Reply Utils
   let replyingTo = $state<{
     id: Ulid;
     authorProfile: { handle: string; avatarUrl: string };
     content: string;
   } | undefined>();
-
 
 
   setContext(
@@ -133,26 +119,26 @@
     });
   });
 
-  // Mark the current DM as read.
-  $effect(() => {
-    if (!channel) { return; }
+  function sendMessage(e: SubmitEvent) {
+    e.preventDefault();
+    if (!channel) return;
 
-    const did = page.params.did!;
-    const doc = channel.view;
-    untrack(() => {
-      const unread = unreadCount(
-        doc,
-        g.catalog?.view.dms[did]?.viewedHeads || [],
-      );
-      if (g.catalog?.view.dms[did]?.viewedHeads && doc && unread > 0) {
-        // TODO: Find ways to reduce how frequently we write to this, because the size of the
-        // catalog grows every time we send / receive a message and update the latest heads.
-        g.catalog?.change((doc) => {
-          doc.dms[did].viewedHeads = channel.heads();
-        });
-      }
+    channel.change((doc) => {
+      if (!user.agent) return;
+
+      const id = ulid();
+      doc.messages[id] = {
+        author: user.agent.assertDid,
+        reactions: {},
+        content: messageInput,
+        ...(replyingTo && { replyTo: replyingTo.id }),
+      };
+      doc.timeline.push(id);
     });
-  });
+
+    messageInput = "";
+    replyingTo = undefined;
+  }
 
   function createThread(e: SubmitEvent) {
     e.preventDefault();
@@ -175,27 +161,6 @@
     toast.success("Thread created", { position: "bottom-end" });
   }
 
-  function sendMessage(e: SubmitEvent) {
-    e.preventDefault();
-    if (!channel) return;
-
-    channel.change((doc) => {
-      if (!user.agent) return;
-
-      const id = ulid();
-      doc.messages[id] = {
-        author: user.agent.assertDid,
-        reactions: {},
-        content: messageInput,
-        ...(replyingTo && { replyTo: replyingTo.id }),
-      };
-      doc.timeline.push(id);
-    });
-
-    messageInput = "";
-    replyingTo = undefined;
-  }
-
   function deleteThread(id: Ulid) {
     if (!channel) return;
 
@@ -206,6 +171,40 @@
     toast.success("Thread deleted", { position: "bottom-end" });
     goto(page.url.pathname);
   }
+
+  $effect(() => {
+    if (currentThread) {
+      tab = "threads";
+    }
+  });
+
+  $effect(() => {
+    if (!isThreading.value && selectedMessages.length > 0) {
+      selectedMessages = [];
+    }
+  });
+
+  // Mark the current DM as read.
+  $effect(() => {
+    if (!channel) { return; }
+
+    const did = page.params.did!;
+    const doc = channel.view;
+    untrack(() => {
+      const unread = unreadCount(
+        doc,
+        g.catalog?.view.dms[did]?.viewedHeads || [],
+      );
+      if (g.catalog?.view.dms[did]?.viewedHeads && doc && unread > 0) {
+        // TODO: Find ways to reduce how frequently we write to this, because the size of the
+        // catalog grows every time we send / receive a message and update the latest heads.
+        g.catalog?.change((doc) => {
+          doc.dms[did].viewedHeads = channel.heads();
+        });
+      }
+    });
+  });
+
 </script>
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
@@ -351,11 +350,20 @@
         </menu>
 
         <ScrollArea.Root>
-          <ScrollArea.Viewport class="min-w-screen h-full max-h-[80%]">
+          <ScrollArea.Viewport class="max-w-screen h-full max-h-[90%]">
             <ScrollArea.Content>
               <ol class="flex flex-col gap-4">
                 {#each currentThread.timeline as id}
-                  <ChatMessage {id} messages={channel.view.messages} />
+                  {@const message = channel.view.messages[id]}
+                  <ChatMessage 
+                    {id} 
+                    {message}
+                    messageRepliedTo={
+                      message.replyTo
+                      ? channel.view.messages[message.replyTo]
+                      : undefined
+                    }
+                  />
                 {/each}
               </ol>
             </ScrollArea.Content>
