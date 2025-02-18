@@ -312,15 +312,11 @@
               <div class="flex flex-col gap-1">
                 <h5 class="flex gap-2 items-center">
                   Replying to
-                  <Avatar.Root class="w-4">
-                    <Avatar.Image
-                      src={replyingTo.authorProfile.avatarUrl}
-                      class="rounded-full"
-                    />
-                    <Avatar.Fallback>
-                      <AvatarBeam name={replyingTo.authorProfile.handle} />
-                    </Avatar.Fallback>
-                  </Avatar.Root>
+                  <AvatarImage 
+                    handle={replyingTo.authorProfile.handle} 
+                    avatarUrl={replyingTo.authorProfile.avatarUrl} 
+                    className="!w-4"
+                  />
                   <strong>{replyingTo.authorProfile.handle}</strong>
                 </h5>
                 <p class="text-gray-300 text-ellipsis italic">

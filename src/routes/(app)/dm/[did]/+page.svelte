@@ -292,7 +292,11 @@
               <div class="flex flex-col gap-1">
                 <h5 class="flex gap-2 items-center">
                   Replying to
-                  <AvatarImage handle={replyingTo.authorProfile.handle} avatarUrl={replyingTo.authorProfile.avatarUrl} />
+                  <AvatarImage 
+                    handle={replyingTo.authorProfile.handle} 
+                    avatarUrl={replyingTo.authorProfile.avatarUrl} 
+                    className="!w-4"
+                  />
                   <strong>{replyingTo.authorProfile.handle}</strong>
                 </h5>
                 <p class="text-gray-300 text-ellipsis italic">
