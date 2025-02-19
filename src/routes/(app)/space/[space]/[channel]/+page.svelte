@@ -1,8 +1,24 @@
 <script lang="ts">
-  import type { Autodoc } from "$lib/autodoc/peer";
-  import ChatArea from "$lib/components/ChatArea.svelte";
+  import _ from "underscore";
+  import { ulid } from "ulidx";
+  import { page } from "$app/state";
+  import { setContext } from "svelte";
   import { g } from "$lib/global.svelte";
+  import { goto } from "$app/navigation";
+  import toast from "svelte-french-toast";
+  import { fly } from "svelte/transition";
+  import { user } from "$lib/user.svelte";
+  import { outerWidth } from "svelte/reactivity/window";
+  import { renderMarkdownSanitized } from "$lib/markdown";
+
+  import Icon from "@iconify/svelte";
+  import ChatArea from "$lib/components/ChatArea.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
+  import { Button, Popover, ScrollArea, Tabs, Toggle } from "bits-ui";
+  import ThreadRow from "$lib/components/ThreadRow.svelte";
+  import ChatMessage from "$lib/components/ChatMessage.svelte";
+  import AvatarImage from "$lib/components/AvatarImage.svelte";
+
   import type {
     Did,
     Space,
@@ -10,22 +26,7 @@
     Thread,
     Ulid,
   } from "$lib/schemas/types";
-  import { page } from "$app/state";
-  import { user } from "$lib/user.svelte";
-  import { setContext } from "svelte";
-  import { Avatar, Button, Popover, ScrollArea, Tabs, Toggle } from "bits-ui";
-  import { AvatarBeam } from "svelte-boring-avatars";
-  import Icon from "@iconify/svelte";
-  import { fly } from "svelte/transition";
-  import { ulid } from "ulidx";
-  import ThreadRow from "$lib/components/ThreadRow.svelte";
-  import { goto } from "$app/navigation";
-  import ChatMessage from "$lib/components/ChatMessage.svelte";
-  import toast from "svelte-french-toast";
-  import _ from "underscore";
-  import { renderMarkdownSanitized } from "$lib/markdown";
-  import { outerWidth } from "svelte/reactivity/window";
-  import AvatarImage from "$lib/components/AvatarImage.svelte";
+  import type { Autodoc } from "$lib/autodoc/peer";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
