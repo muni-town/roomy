@@ -276,6 +276,25 @@
     const input = event.target as HTMLInputElement;
     imageFiles = input.files;
   }
+
+  async function handlePaste(event: ClipboardEvent) {
+    if (!mayUploadImages) return;
+
+    const items = event.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          imageFiles = new DataTransfer().files;
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(file);
+          imageFiles = dataTransfer.files;
+        }
+      }
+    }
+  }
 </script>
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
@@ -394,6 +413,7 @@
               ]}
               placeholder="Say something..."
               bind:value={messageInput}
+              onpaste={handlePaste}
             />
             {#if mayUploadImages}
               <label
