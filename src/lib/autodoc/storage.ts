@@ -1,5 +1,5 @@
 import type { Doc } from "@automerge/automerge";
-import * as Automerge from "@automerge/automerge";
+import { next as Automerge } from "@automerge/automerge";
 import { encodeBase32 } from "../base32";
 import { decrypt, encrypt } from "./encryption";
 
@@ -54,7 +54,7 @@ export class StorageManager {
   /** The chunks that we most-recently loaded from storage. */
   loadedChunks: ChunkInfo[] = [];
   /** The heads that we most-recently loaded from storage. */
-  loadedHeads: Automerge.next.Heads = [];
+  loadedHeads: Automerge.Heads = [];
 
   async loadFromStorage<T>(): Promise<Doc<T> | undefined> {
     // Load chunks from storage

@@ -50,7 +50,7 @@ export class RoomyPdsStorageAdapter implements StorageInterface {
 
     do {
       const resp = await agent.com.atproto.repo.listRecords({
-        collection: "chat.roomy.v0.store",
+        collection: "chat.roomy.v1.store",
         repo: did,
         cursor,
         limit: 100,
@@ -84,7 +84,7 @@ export class RoomyPdsStorageAdapter implements StorageInterface {
 
   async load(key: string[]): Promise<Uint8Array | undefined> {
     const resp = await this.agent.com.atproto.repo.getRecord({
-      collection: "chat.roomy.v0.store",
+      collection: "chat.roomy.v1.store",
       repo: this.agent.assertDid,
       rkey: await RoomyPdsStorageAdapter.buildKey(key),
     });
@@ -101,7 +101,7 @@ export class RoomyPdsStorageAdapter implements StorageInterface {
     if (!resp.success)
       throw `Error uploading blob to PDS ( \`${key}\` ): ${resp}`;
     const putResp = await this.agent.com.atproto.repo.putRecord({
-      collection: "chat.roomy.v0.store",
+      collection: "chat.roomy.v1.store",
       repo: this.agent.assertDid,
       rkey: await RoomyPdsStorageAdapter.buildKey(key),
       record: {
@@ -113,7 +113,7 @@ export class RoomyPdsStorageAdapter implements StorageInterface {
   }
   async remove(key: string[]): Promise<void> {
     const resp = await this.agent.com.atproto.repo.deleteRecord({
-      collection: "chat.roomy.v0.store",
+      collection: "chat.roomy.v1.store",
       repo: this.agent.assertDid,
       rkey: await RoomyPdsStorageAdapter.buildKey(key),
     });
@@ -159,7 +159,7 @@ export class RoomyPdsStorageAdapter implements StorageInterface {
       if (record.did == this.agent.assertDid) {
         const resp = await this.agent.com.atproto.repo.deleteRecord({
           repo: this.agent.assertDid,
-          collection: "chat.roomy.v0.store",
+          collection: "chat.roomy.v1.store",
           rkey: await RoomyPdsStorageAdapter.buildKey(record.key),
         });
         if (!resp.success) console.warn("Error deleting record", resp.data);

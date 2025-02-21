@@ -56,7 +56,7 @@ export const lexicons: LexiconDoc[] = [
 
   {
     lexicon: 1,
-    id: "chat.roomy.v0.store",
+    id: "chat.roomy.v1.store",
     defs: {
       main: {
         type: "record",
