@@ -48,7 +48,7 @@
 
 
   let tab = $state("chat");
-  let messageInput = $state("");
+  let messageInput = $state({});
 
   let currentThread = $derived.by(() => {
     if (page.url.searchParams.has("thread")) {
@@ -131,13 +131,14 @@
       doc.messages[id] = {
         author: user.agent.assertDid,
         reactions: {},
-        content: messageInput,
+        // TODO: replace messageInput to automerge rich text
+        content: JSON.stringify(messageInput),
         ...(replyingTo && { replyTo: replyingTo.id }),
       };
       doc.timeline.push(id);
     });
 
-    messageInput = "";
+    messageInput = {}; 
     replyingTo = undefined;
   }
 

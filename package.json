@@ -16,9 +16,11 @@
   "dependencies": {
     "@atproto/api": "^0.13.31",
     "@atproto/oauth-client-browser": "^0.3.7",
-    "@milkdown/kit": "^7.6.3",
     "@tailwindcss/postcss": "^4.0.0",
     "@tailwindcss/vite": "^4.0.0",
+    "@tiptap/core": "^2.11.5",
+    "@tiptap/pm": "^2.11.5",
+    "@tiptap/starter-kit": "^2.11.5",
     "bits-ui": "^0.22.0",
     "emoji-picker-element": "^1.26.1",
     "svelte-boring-avatars": "^1.2.6",
