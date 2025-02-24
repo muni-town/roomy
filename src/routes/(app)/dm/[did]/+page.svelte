@@ -29,6 +29,7 @@
   import type { Autodoc } from "$lib/autodoc/peer";
   import type { Channel, Did, Thread, Ulid } from "$lib/schemas/types";
   import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+  import ChatInput from "$lib/components/ChatInput.svelte";
 
   let channel: Autodoc<Channel> | undefined = $derived(g.dms[page.params.did]);
   let info = $derived(g.catalog?.view.dms[page.params.did]);
@@ -205,6 +206,7 @@
     });
   });
 
+  $inspect({ messageInput });
 </script>
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
@@ -312,12 +314,9 @@
               </Button.Root>
             </div>
           {/if}
-          <input
-            type="text"
-            class={`w-full px-4 py-2 flex-none text-white bg-violet-900 ${replyingTo ? "rounded-b-lg" : "rounded-lg"}`}
-            placeholder="Say something..."
-            bind:value={messageInput}
-          />
+
+          <!-- TODO: replace with ChatInput -->
+          <ChatInput bind:content={messageInput} />
         </form>
       {/if}
 
