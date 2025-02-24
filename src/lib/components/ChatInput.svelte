@@ -8,11 +8,21 @@
   let element: HTMLDivElement | undefined = $state();
   let tiptap: Editor | undefined = $state();
 
+  const onSubmit = () => {
+    console.log("ENTER", content);
+  };
+
   const KeyboardShortcutHandler = Extension.create({ 
     name: "keyboardShortcutHandler", 
     addProseMirrorPlugins() { 
       return [
-        keymap({ "Enter": () => this.editor.commands.clearContent() }),
+        keymap({ 
+          "Enter": () => {
+            onSubmit();
+            this.editor.commands.clearContent();
+            return true;
+          }
+        }),
       ]
     }
   });
