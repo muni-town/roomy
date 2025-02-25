@@ -1,12 +1,21 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { Editor, Extension } from "@tiptap/core";
-  import StarterKit from "@tiptap/starter-kit";
+  import { onMount, mount, unmount } from "svelte";
+  import { Extension } from "@tiptap/core";
   import { keymap } from "@tiptap/pm/keymap";
+  import StarterKit from "@tiptap/starter-kit";
+  import Mention from "@tiptap/extension-mention";
+  import { createEditor, Editor, EditorContent, SvelteRenderer } from "svelte-tiptap";
+  import type { Readable } from "svelte/store";
+  import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion";
+  import SuggestionSelect from "./SuggestionSelect.svelte";
 
   let { content = $bindable({}) } = $props();
-  let element: HTMLDivElement | undefined = $state();
-  let tiptap: Editor | undefined = $state();
+  let tiptap: Readable<Editor>;
+
+  const users = [
+    { handle: "zeu.dev" },
+    { handle: "test.zeu.dev" }
+  ];
 
   const onSubmit = () => {
     console.log("ENTER", content);
@@ -28,11 +37,14 @@
   });
 
   onMount(() => {
-    tiptap = new Editor({
-      element,
+    tiptap = createEditor({
       extensions: [
         StarterKit.configure({ heading: false }),
         KeyboardShortcutHandler,
+        Mention.configure({
+          HTMLAttributes: { class: "mention" },
+          suggestion: suggestion()
+        })
       ],
       content,
       editorProps: {
@@ -50,9 +62,36 @@
     });
   });
 
-  onDestroy(() => {
-    if (tiptap) tiptap.destroy();
-  });
+  function suggestion() {
+    return {
+      items: ({ query }: { query: string }) => {
+        return users.filter((user) => user.handle.toLowerCase().startsWith(query.toLowerCase())).slice(0,5);
+      },
+      render: () => {
+        let wrapper;
+        let component: ReturnType<typeof SuggestionSelect>;
+
+        return {
+          onStart: (props: SuggestionProps) => {
+            wrapper = document.createElement("div");
+            props.editor.view.dom.parentNode?.appendChild(wrapper);
+
+            component = mount(SuggestionSelect, {
+              target: wrapper,
+              props: { items: props.items, callback: (item) => props.command({ id: item }) }
+            }) as ReturnType<typeof SuggestionSelect>;
+          },
+          onUpdate: (props: SuggestionProps) => {
+            component.setItems(props.items);
+          },
+          onkeydown: (props: SuggestionKeyDownProps) => { return component.onKeyDown(props.event); },
+          onExit: () => {
+            unmount(component);
+          }
+        }
+      }
+    }
+  }
 </script>
 
-<div bind:this={element}></div>
+<EditorContent editor={$tiptap} />
