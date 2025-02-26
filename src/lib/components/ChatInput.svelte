@@ -11,11 +11,16 @@
   let element: HTMLDivElement | undefined = $state();
   let tiptap: Editor | undefined = $state();
 
+  // TODO: get users from context
   const users = [
     { value: "zeu.dev", label: "zeu.dev" },
     { value: "test.zeu.dev", label: "test.zeu.dev" }
   ];
 
+  // TODO: get threads from context
+
+
+  // TODO: replace with automerge doc change submit function
   const onSubmit = () => {
     console.log("ENTER", content);
   };
@@ -35,16 +40,68 @@
     }
   });
 
+  interface Item {
+    value: string;
+    label: string;
+    disabled?: boolean;
+    [x: string]: unknown;
+  }
+
+  // Generic suggestion utility object for the Mention extension
+  function suggestion({ items, char }: { items: Item[], char: string }) {
+    return {
+      char,
+      items: ({ query }: { query: string }) => {
+        return items.filter((item) => 
+          item.value.toLowerCase().startsWith(query.toLowerCase())
+        ).slice(0,5);
+      },
+      render: () => {
+        let wrapper;
+        let component: ReturnType<typeof SuggestionSelect>;
+
+        return {
+          onStart: (props: SuggestionProps) => {
+            wrapper = document.createElement("div");
+            props.editor.view.dom.parentNode?.appendChild(wrapper);
+
+            component = mount(SuggestionSelect, {
+              target: wrapper,
+              props: { 
+                items: props.items, 
+                callback: (item) => props.command({ id: item }) 
+              }
+            }) as ReturnType<typeof SuggestionSelect>;
+          },
+          onUpdate: (props: SuggestionProps) => {
+            component.setItems(props.items);
+          },
+          onKeyDown: (props: SuggestionKeyDownProps) => {
+            return component.onKeyDown(props.event);
+          },
+          onExit: () => {
+            unmount(component);
+          }
+        }
+      }
+    }
+  }
+
+  // User Mentions
+  const UserMention = Mention
+    .extend({ name: "userMention" })
+    .configure({
+      HTMLAttributes: { class: "mention" },
+      suggestion: suggestion({ items: users, char: "@" })
+    });
+
   onMount(() => {
     tiptap = new Editor({
       element,
       extensions: [
         StarterKit.configure({ heading: false }),
         KeyboardShortcutHandler,
-        Mention.configure({
-          HTMLAttributes: { class: "mention" },
-          suggestion
-        })
+        UserMention
       ],
       content,
       editorProps: {
@@ -66,41 +123,6 @@
     tiptap?.destroy(); 
   });
 
-  const suggestion = {
-    items: ({ query }: { query: string }) => {
-      return users.filter((user) => 
-        user.value.toLowerCase().startsWith(query.toLowerCase())
-      ).slice(0,5);
-    },
-    render: () => {
-      let wrapper;
-      let component: ReturnType<typeof SuggestionSelect>;
-
-      return {
-        onStart: (props: SuggestionProps) => {
-          wrapper = document.createElement("div");
-          props.editor.view.dom.parentNode?.appendChild(wrapper);
-
-          component = mount(SuggestionSelect, {
-            target: wrapper,
-            props: { 
-              items: props.items, 
-              callback: (item) => props.command({ id: item }) 
-            }
-          }) as ReturnType<typeof SuggestionSelect>;
-        },
-        onUpdate: (props: SuggestionProps) => {
-          component.setItems(props.items);
-        },
-        onKeyDown: (props: SuggestionKeyDownProps) => {
-          return component.onKeyDown(props.event);
-        },
-        onExit: () => {
-          unmount(component);
-        }
-      }
-    }
-  }
 </script>
 
 <div bind:this={element}></div>
