@@ -1,50 +1,34 @@
 <script lang="ts">
-  let { items, callback }: { items: any[], callback: (item: any) => void } = $props();
-  let activeIdx = $state(0);
-  let isOpen = $state(false);
+  import { Select } from "bits-ui";
 
-  export function setItems(value: any[]) { items = value; }
-
-  export function getIsOpen() { return isOpen; }
-  export function setIsOpen(value: boolean) { isOpen = value; }
-
-  export function onKeyDown(event: KeyboardEvent) {
-    if (event.repeat) {
-      return
-    }
-
-    switch (event.key) {
-      case "ArrowUp":
-        activeIdx = (activeIdx + items.length - 1) % items.length;
-        break;
-      case "ArrowDown":
-        activeIdx = (activeIdx + 1) % items.length;
-        break;
-      case "Enter":
-        callback(items[activeIdx]);
-        break;
-    }
-
-    return false
+  interface Item {
+    value: string;
+    label: string;
+    disabled?: boolean;
+    [x: string]: unknown;
   }
+
+  type Props = { 
+    items: Item[];
+    anchor: HTMLElement;
+    callback: (value: string) => void;
+  }
+
+  let { items, anchor, callback }: Props = $props();
+  export function setItems(value: any[]) { items = value; }
 </script>
 
-<ul>
-  {#each items as item, i}
-    <li>
-      <button class:active={i === activeIdx} onclick={() => callback(items[i].handle)}>
-        {item.handle}
-      </button>
-    </li>
-  {/each}
-</ul>
-
-<style>
-  .active {
-    color: red;
-  }
-
-  li {
-    cursor: pointer;
-  }
-</style>
+<Select.Root type="single" open loop onValueChange={(value) => callback(value)}>
+  <Select.Trigger ref={anchor}></Select.Trigger>
+  <Select.Portal>
+    <Select.Content customAnchor={anchor}>
+      <Select.Viewport>
+        {#each items as { value, label }, i}
+          <Select.Item value={value} class="text-white data-[highlighted]:text-red-500">
+            <p>{label}</p>
+          </Select.Item>
+        {/each}
+      </Select.Viewport>
+    </Select.Content>
+  </Select.Portal>
+</Select.Root>
