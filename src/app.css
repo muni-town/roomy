@@ -38,7 +38,7 @@ emoji-picker {
 
 /* TipTap Nodes */
 
-.mention {
+.user-mention {
   background-color: var(--color-violet-300);
   color: var(--color-violet-900);
   padding-top: 0.125rem; 

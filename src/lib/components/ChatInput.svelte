@@ -6,6 +6,7 @@
   import Mention from "@tiptap/extension-mention";
   import SuggestionSelect from "./SuggestionSelect.svelte";
   import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion";
+  import { PluginKey } from "@tiptap/pm/state";
 
   let { content = $bindable({}) } = $props();
   let element: HTMLDivElement | undefined = $state();
@@ -18,7 +19,10 @@
   ];
 
   // TODO: get threads from context
-
+  const threads = [
+    { value: "id1", label: "bug fix" },
+    { value: "id2", label: "feature idea" }
+  ]
 
   // TODO: replace with automerge doc change submit function
   const onSubmit = () => {
@@ -48,9 +52,10 @@
   }
 
   // Generic suggestion utility object for the Mention extension
-  function suggestion({ items, char }: { items: Item[], char: string }) {
+  function suggestion({ items, char, pluginKey }: { items: Item[], char: string, pluginKey: string }) {
     return {
       char,
+      pluginKey: new PluginKey(pluginKey),
       items: ({ query }: { query: string }) => {
         return items.filter((item) => 
           item.value.toLowerCase().startsWith(query.toLowerCase())
@@ -91,8 +96,18 @@
   const UserMention = Mention
     .extend({ name: "userMention" })
     .configure({
-      HTMLAttributes: { class: "mention" },
-      suggestion: suggestion({ items: users, char: "@" })
+      HTMLAttributes: { class: "user-mention" },
+      suggestion: suggestion({ items: users, char: "@", pluginKey: "userMention" })
+    });
+
+  // Thread Mentions
+  // TODO: might need to combine with channel mentions since
+  // we want to trigger both with "#"
+  const ThreadMention = Mention
+    .extend({ name: "threadMention" })
+    .configure({
+      HTMLAttributes: { class: "thread-mention" },
+      suggestion: suggestion({ items: threads, char: "~", pluginKey: "threadMention" })
     });
 
   onMount(() => {
@@ -101,7 +116,8 @@
       extensions: [
         StarterKit.configure({ heading: false }),
         KeyboardShortcutHandler,
-        UserMention
+        UserMention,
+        ThreadMention
       ],
       content,
       editorProps: {
