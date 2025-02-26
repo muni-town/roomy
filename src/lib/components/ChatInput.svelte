@@ -43,7 +43,7 @@
         KeyboardShortcutHandler,
         Mention.configure({
           HTMLAttributes: { class: "mention" },
-          suggestion: suggestion()
+          suggestion
         })
       ],
       content,
@@ -66,35 +66,37 @@
     tiptap?.destroy(); 
   });
 
-  function suggestion() {
-    return {
-      items: ({ query }: { query: string }) => {
-        return users.filter((user) => user.value.toLowerCase().startsWith(query.toLowerCase())).slice(0,5);
-      },
-      render: () => {
-        let wrapper;
-        let component: ReturnType<typeof SuggestionSelect>;
+  const suggestion = {
+    items: ({ query }: { query: string }) => {
+      return users.filter((user) => 
+        user.value.toLowerCase().startsWith(query.toLowerCase())
+      ).slice(0,5);
+    },
+    render: () => {
+      let wrapper;
+      let component: ReturnType<typeof SuggestionSelect>;
 
-        return {
-          onStart: (props: SuggestionProps) => {
-            wrapper = document.createElement("div");
-            props.editor.view.dom.parentNode?.appendChild(wrapper);
+      return {
+        onStart: (props: SuggestionProps) => {
+          wrapper = document.createElement("div");
+          props.editor.view.dom.parentNode?.appendChild(wrapper);
 
-            component = mount(SuggestionSelect, {
-              target: wrapper,
-              props: { 
-                items: props.items, 
-                anchor: element!,
-                callback: (item) => props.command({ id: item }) 
-              }
-            }) as ReturnType<typeof SuggestionSelect>;
-          },
-          onUpdate: (props: SuggestionProps) => {
-            component.setItems(props.items);
-          },
-          onExit: () => {
-            unmount(component);
-          }
+          component = mount(SuggestionSelect, {
+            target: wrapper,
+            props: { 
+              items: props.items, 
+              callback: (item) => props.command({ id: item }) 
+            }
+          }) as ReturnType<typeof SuggestionSelect>;
+        },
+        onUpdate: (props: SuggestionProps) => {
+          component.setItems(props.items);
+        },
+        onKeyDown: (props: SuggestionKeyDownProps) => {
+          return component.onKeyDown(props.event);
+        },
+        onExit: () => {
+          unmount(component);
         }
       }
     }
