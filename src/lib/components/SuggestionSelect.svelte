@@ -10,7 +10,7 @@
 
   type Props = { 
     items: Item[];
-    callback: (value: string) => void;
+    callback: ({ id, label }: { id: string, label: string }) => void;
   }
 
   let activeIndex = $state(0);
@@ -39,7 +39,8 @@
         return true;
       }
       case "Enter": {
-        callback(items[activeIndex].value);
+        const selected = items[activeIndex];
+        callback({ id: selected.value, label: selected.label });
         return true;
       }
     }
@@ -57,7 +58,7 @@
         "border border-violet-800 px-3 py-2 flex gap-4 bg-violet-800 text-white rounded cursor-pointer"
       ]}
       onmouseover={() => activeIndex = i}
-      onclick={() => callback(value)}
+      onclick={() => callback({ id: value, label })}
     >
       {label}
     </Button.Root>

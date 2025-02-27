@@ -22,7 +22,7 @@
   const threads = [
     { value: "id1", label: "bug fix" },
     { value: "id2", label: "feature idea" }
-  ]
+  ];
 
   // TODO: replace with automerge doc change submit function
   const onSubmit = () => {
@@ -74,7 +74,7 @@
               target: wrapper,
               props: { 
                 items: props.items, 
-                callback: (item) => props.command({ id: item }) 
+                callback: ({ id, label }: { id: string, label: string }) => props.command({ id, label }) 
               }
             }) as ReturnType<typeof SuggestionSelect>;
           },

@@ -48,6 +48,20 @@ emoji-picker {
   border-radius: 0.25rem;
 }
 
+.thread-mention {
+  background-color: var(--color-violet-300);
+  color: var(--color-violet-900);
+  padding-top: 0.125rem; 
+  padding-bottom: 0.125rem;
+  padding-left: 0.5rem; 
+  padding-right: 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.thread-mention::before {
+  content: "🧵";
+}
+
 /* ChatMessage */
 
 .chat a {
