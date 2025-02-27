@@ -316,7 +316,6 @@
             </div>
           {/if}
 
-          <!-- TODO: replace with ChatInput -->
           <ChatInput bind:content={messageInput} />
         </form>
       {/if}
@@ -355,22 +354,20 @@
 
         <ScrollArea.Root>
           <ScrollArea.Viewport class="max-w-screen h-full max-h-[90%]">
-            <ScrollArea.Content>
-              <ol class="flex flex-col gap-4">
-                {#each currentThread.timeline as id}
-                  {@const message = channel.view.messages[id]}
-                  <ChatMessage 
-                    {id} 
-                    {message}
-                    messageRepliedTo={
-                      message.replyTo
-                      ? channel.view.messages[message.replyTo]
-                      : undefined
-                    }
-                  />
-                {/each}
-              </ol>
-            </ScrollArea.Content>
+            <ol class="flex flex-col gap-4">
+              {#each currentThread.timeline as id}
+                {@const message = channel.view.messages[id]}
+                <ChatMessage 
+                  {id} 
+                  {message}
+                  messageRepliedTo={
+                    message.replyTo
+                    ? channel.view.messages[message.replyTo]
+                    : undefined
+                  }
+                />
+              {/each}
+            </ol>
           </ScrollArea.Viewport>
           <ScrollArea.Scrollbar
             orientation="vertical"
@@ -409,7 +406,6 @@
         </Popover.Trigger>
 
         <Popover.Content
-          transition={fly}
           sideOffset={8}
           class="bg-violet-800 p-4 rounded"
         >

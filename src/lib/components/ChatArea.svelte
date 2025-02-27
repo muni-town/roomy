@@ -56,46 +56,44 @@
 </script>
 
 <ScrollArea.Root type="always">
-  <ScrollArea.Viewport bind:el={viewport} class="w-full max-w-full h-full">
-    <ScrollArea.Content style="display: block;">
-      <ol class="flex flex-col gap-4 max-w-full">
-        <!--
-          This use of `key` needs explaining. `key` causes the components below
-          it to be deleted and re-created when the expression passed to it is changed.
-          This means that every time the `viewport` binding si updated, the virtualizer
-          will be re-created. This is important because the virtualizer only actually sets
-          up the scrollRef when is mounted. And `viewport` is technically only assigned after
-          _this_ parent component is mounted. Leading to a chicken-egg problem.
+  <ScrollArea.Viewport bind:ref={viewport} class="w-full max-w-full h-full">
+    <ol class="flex flex-col gap-4 max-w-full">
+      <!--
+        This use of `key` needs explaining. `key` causes the components below
+        it to be deleted and re-created when the expression passed to it is changed.
+        This means that every time the `viewport` binding si updated, the virtualizer
+        will be re-created. This is important because the virtualizer only actually sets
+        up the scrollRef when is mounted. And `viewport` is technically only assigned after
+        _this_ parent component is mounted. Leading to a chicken-egg problem.
 
-          Once the `viewport` is assigned, the virtualizer has already been mounted with scrollRef
-          set to `undefined`, and it won't be re-calculated.
+        Once the `viewport` is assigned, the virtualizer has already been mounted with scrollRef
+        set to `undefined`, and it won't be re-calculated.
 
-          By using `key` we make sure that the virtualizer is re-mounted after the `viewport` is
-          assigned, so that it's scroll integration works properly.
-        -->
-        {#key viewport}
-          <Virtualizer
-            bind:this={virtualizer}
-            data={timeline || []}
-            getKey={(k, _) => k}
-            scrollRef={viewport}
-          >
-            {#snippet children(id, _index)}
-              {@const message = messages[id]}
-              <ChatMessage 
-                {id} 
-                {message}
-                messageRepliedTo={
-                  message.replyTo 
-                  ? messages[message.replyTo] as Message 
-                  : undefined
-                }
-              />
-            {/snippet}
-          </Virtualizer>
-        {/key}
-      </ol>
-    </ScrollArea.Content>
+        By using `key` we make sure that the virtualizer is re-mounted after the `viewport` is
+        assigned, so that it's scroll integration works properly.
+      -->
+      {#key viewport}
+        <Virtualizer
+          bind:this={virtualizer}
+          data={timeline || []}
+          getKey={(k, _) => k}
+          scrollRef={viewport}
+        >
+          {#snippet children(id, _index)}
+            {@const message = messages[id]}
+            <ChatMessage 
+              {id} 
+              {message}
+              messageRepliedTo={
+                message.replyTo 
+                ? messages[message.replyTo] as Message 
+                : undefined
+              }
+            />
+          {/snippet}
+        </Virtualizer>
+      {/key}
+    </ol>
   </ScrollArea.Viewport>
   <ScrollArea.Scrollbar
     orientation="vertical"
