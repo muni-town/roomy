@@ -53,6 +53,8 @@
       scrollToEnd = false;
     }
   });
+
+  $inspect({ messages });
 </script>
 
 <ScrollArea.Root type="always">

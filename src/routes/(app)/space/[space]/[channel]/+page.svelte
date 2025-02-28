@@ -9,13 +9,14 @@
   import { fly } from "svelte/transition";
   import { user } from "$lib/user.svelte";
   import { outerWidth } from "svelte/reactivity/window";
-  import { renderMarkdownSanitized } from "$lib/markdown";
+  import { getContentHtml } from "$lib/tiptap/editor";
 
   import Icon from "@iconify/svelte";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import { Button, Popover, ScrollArea, Tabs, Toggle } from "bits-ui";
   import ThreadRow from "$lib/components/ThreadRow.svelte";
+  import ChatInput from "$lib/components/ChatInput.svelte";
   import ChatMessage from "$lib/components/ChatMessage.svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
 
@@ -27,7 +28,6 @@
     Ulid,
   } from "$lib/schemas/types";
   import type { Autodoc } from "$lib/autodoc/peer";
-  import ChatInput from "$lib/components/ChatInput.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
@@ -44,6 +44,7 @@
       return null;
     }
   });
+  $inspect({ messageInput });
 
   let imageFiles: FileList | null = $state(null);
 
@@ -152,11 +153,9 @@
     toast.success("Thread created", { position: "bottom-end" });
   }
 
-  async function sendMessage(e: SubmitEvent) {
-    e.preventDefault();
+  async function sendMessage() {
     if (!space) return;
 
-    
     /* TODO: rework with tiptap?
     const images = imageFiles
       ? await Promise.all(
@@ -197,7 +196,7 @@
       doc.channels[page.params.channel].timeline.push(id);
     });
 
-    messageInput = "";
+    messageInput = {};
     replyingTo = null;
     imageFiles = null;
   }
@@ -212,6 +211,7 @@
     toast.success("Thread deleted", { position: "bottom-end" });
     goto(page.url.pathname);
   }
+
 
   //
   // Settings Dialog
@@ -385,7 +385,7 @@
     />
     <div class="flex float-end">
       {#if !isMobile || !isThreading.value}
-        <form onsubmit={sendMessage} class="grow flex flex-col">
+        <section class="grow flex flex-col">
           {#if replyingTo}
             <div
               class="flex justify-between bg-violet-800 text-white rounded-t-lg px-4 py-2"
@@ -401,7 +401,7 @@
                   <strong>{replyingTo.authorProfile.handle}</strong>
                 </h5>
                 <p class="text-gray-300 text-ellipsis italic">
-                  {@html renderMarkdownSanitized(replyingTo.content)}
+                  {@html getContentHtml(replyingTo.content)}
                 </p>
               </div>
               <Button.Root
@@ -420,6 +420,7 @@
               bind:content={messageInput} 
               users={[]} 
               threads={Object.entries(space.view.threads).map(([ulid, thread]) => { return { value: ulid, label: thread.title } })}
+              onEnter={sendMessage}
             />
 
             <!--
@@ -465,7 +466,7 @@
             </div>
           {/if}
           -->
-        </form>
+        </section>
       {/if}
 
       {#if isMobile}

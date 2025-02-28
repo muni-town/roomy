@@ -1,33 +1,48 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { Editor } from "@tiptap/core";
-  import { createTiptapInstance, type Item } from "$lib/tiptap/editor";
+  import StarterKit from "@tiptap/starter-kit";
+  import { 
+    type Item,
+    initKeyboardShortcutHandler, 
+    initUserMention, 
+    initThreadMention 
+  } from "$lib/tiptap/editor";
 
   type Props = {
     content: Record<any, any>;
     users: Item[];
     threads: Item[];
+    onEnter: () => void;
   };
 
-  let { content = $bindable({}), users, threads }: Props = $props();
+  let { content = $bindable({}), users, threads, onEnter }: Props = $props();
   let element: HTMLDivElement | undefined = $state();
   let tiptap: Editor | undefined = $state();
 
-  // TODO: replace with automerge doc change submit function
-  const onEnter= () => {
-    console.log("ENTER", content);
-  };
+  $inspect({ content });
 
-  $effect(() => {
-    if (element && !tiptap) {
-      tiptap = createTiptapInstance({
-        element,
-        content,
-        onEnter,
-        users,
-        threads
-      });
-    }
+  onMount(() => {
+    const extensions = [
+      StarterKit.configure({ heading: false }),
+      initKeyboardShortcutHandler({ onEnter }),
+      initUserMention({ users }),
+      initThreadMention({ threads })
+    ];
+
+    tiptap = new Editor({
+      element,
+      extensions,
+      content: () => content,
+      editorProps: {
+        attributes: {
+          class: "w-full px-3 py-2 rounded bg-violet-900 text-white"
+        },
+      },
+      onUpdate: (context) => {
+        content = context.editor.getJSON();
+      }
+    });
   });
 
   onDestroy(() => { 

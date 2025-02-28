@@ -3,16 +3,17 @@ import { keymap } from "@tiptap/pm/keymap";
 import StarterKit from "@tiptap/starter-kit";
 import { PluginKey } from "@tiptap/pm/state";
 import Mention from "@tiptap/extension-mention";
-import { Editor, Extension, getSchema } from "@tiptap/core";
+import { Extension, generateHTML, getSchema } from "@tiptap/core";
 import SuggestionSelect from "$lib/components/SuggestionSelect.svelte";
 import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion";
+import { renderMarkdownSanitized } from "$lib/markdown";
 
 /* Keyboard Shortcuts: used to add and override existing shortcuts */
 type KeyboardShortcutHandlerProps = {
   onEnter: () => void;
 };
 
-const initKeyboardShortcutHandler = ({ onEnter }: KeyboardShortcutHandlerProps) => Extension.create({ 
+export const initKeyboardShortcutHandler = ({ onEnter }: KeyboardShortcutHandlerProps) => Extension.create({ 
   name: "keyboardShortcutHandler", 
   addProseMirrorPlugins() { 
     return [
@@ -78,7 +79,7 @@ function suggestion({ items, char, pluginKey }: { items: Item[], char: string, p
 
 type UserMentionProps = { users: Item[] };
 const UserMentionExtension = Mention.extend({ name: "userMention" });
-const initUserMention = ({ users }: UserMentionProps) => 
+export const initUserMention = ({ users }: UserMentionProps) => 
   UserMentionExtension.configure({
     HTMLAttributes: { class: "user-mention" },
     suggestion: suggestion({ items: users, char: "@", pluginKey: "userMention" })
@@ -88,56 +89,28 @@ const initUserMention = ({ users }: UserMentionProps) =>
 // we want to trigger both with "#"
 type ThreadMentionProps = { threads: Item[] };
 const ThreadMentionExtension = Mention.extend({ name: "threadMention" });
-const initThreadMention = ({ threads }: ThreadMentionProps) => 
+export const initThreadMention = ({ threads }: ThreadMentionProps) => 
   ThreadMentionExtension.configure({
     HTMLAttributes: { class: "thread-mention" },
     suggestion: suggestion({ items: threads, char: "~", pluginKey: "threadMention" })
   });
 
 
-/* Tiptap Editor Instance */
-
-export const editorSchema = getSchema([
+/* Utilities */
+export const extensions = [
   StarterKit.configure({ heading: false }),
   UserMentionExtension,
   ThreadMentionExtension
-]);
+]
 
-type CreateTiptapInstanceProps = {
-  element: HTMLElement;
-  content: Record<any, any>;
-}
-& KeyboardShortcutHandlerProps
-& UserMentionProps
-& ThreadMentionProps;
+export const editorSchema = getSchema(extensions);
 
-export function createTiptapInstance({
-  element,
-  content,
-  onEnter,
-  users,
-  threads
-}: CreateTiptapInstanceProps) {
-  const extensions = [
-    StarterKit.configure({ heading: false }),
-    initKeyboardShortcutHandler({ onEnter }),
-    initUserMention({ users }),
-    initThreadMention({ threads })
-  ];
-
-  const instance = new Editor({
-    element,
-    extensions,
-    content,
-    editorProps: {
-      attributes: {
-        class: "w-full px-3 py-2 rounded bg-violet-900 text-white"
-      },
-    },
-    onUpdate: (context) => {
-      content = context.editor.getJSON();
-    }
-  });
-
-  return instance;
+export function getContentHtml(content: string) {
+  try {
+    const data = JSON.parse(content);
+    return generateHTML(data, extensions);
+  }
+  catch {
+    return renderMarkdownSanitized(content);
+  }
 }
