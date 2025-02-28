@@ -34,7 +34,7 @@
   });
 
   // ScrollArea
-  let viewport: HTMLDivElement | undefined = $state();
+  let viewport: HTMLDivElement = $state(null!);
   let virtualizer: Virtualizer<string> | undefined = $state();
 
   // Go to the end of the ScrollArea
