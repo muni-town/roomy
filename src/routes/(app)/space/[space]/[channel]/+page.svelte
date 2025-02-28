@@ -1,8 +1,25 @@
 <script lang="ts">
-  import type { Autodoc } from "$lib/autodoc/peer";
-  import ChatArea from "$lib/components/ChatArea.svelte";
+  import _ from "underscore";
+  import { ulid } from "ulidx";
+  import { page } from "$app/state";
+  import { setContext } from "svelte";
   import { g } from "$lib/global.svelte";
+  import { goto } from "$app/navigation";
+  import toast from "svelte-french-toast";
+  import { fly } from "svelte/transition";
+  import { user } from "$lib/user.svelte";
+  import { outerWidth } from "svelte/reactivity/window";
+  import { getContentHtml } from "$lib/tiptap/editor";
+
+  import Icon from "@iconify/svelte";
+  import ChatArea from "$lib/components/ChatArea.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
+  import { Button, Popover, ScrollArea, Tabs, Toggle } from "bits-ui";
+  import ThreadRow from "$lib/components/ThreadRow.svelte";
+  import ChatInput from "$lib/components/ChatInput.svelte";
+  import ChatMessage from "$lib/components/ChatMessage.svelte";
+  import AvatarImage from "$lib/components/AvatarImage.svelte";
+
   import type {
     Did,
     Space,
@@ -10,22 +27,7 @@
     Thread,
     Ulid,
   } from "$lib/schemas/types";
-  import { page } from "$app/state";
-  import { user } from "$lib/user.svelte";
-  import { setContext } from "svelte";
-  import { Avatar, Button, Popover, ScrollArea, Tabs, Toggle } from "bits-ui";
-  import { AvatarBeam } from "svelte-boring-avatars";
-  import Icon from "@iconify/svelte";
-  import { fly } from "svelte/transition";
-  import { ulid } from "ulidx";
-  import ThreadRow from "$lib/components/ThreadRow.svelte";
-  import { goto } from "$app/navigation";
-  import ChatMessage from "$lib/components/ChatMessage.svelte";
-  import toast from "svelte-french-toast";
-  import _ from "underscore";
-  import { renderMarkdownSanitized } from "$lib/markdown";
-  import { outerWidth } from "svelte/reactivity/window";
-  import AvatarImage from "$lib/components/AvatarImage.svelte";
+  import type { Autodoc } from "$lib/autodoc/peer";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
@@ -34,7 +36,7 @@
   let channel = $derived(space.view.channels[page.params.channel]) as
     | SpaceChannel
     | undefined;
-  let messageInput = $state("");
+  let messageInput = $state({});
   let currentThread = $derived.by(() => {
     if (page.url.searchParams.has("thread")) {
       return space.view.threads[page.url.searchParams.get("thread")!] as Thread;
@@ -42,6 +44,8 @@
       return null;
     }
   });
+  $inspect({ messageInput });
+
   let imageFiles: FileList | null = $state(null);
 
   $effect(() => {
@@ -94,7 +98,7 @@
     "setReplyTo",
     (value: {
       id: Ulid;
-      profile: { handle: string; avatarUrl: string };
+      authorProfile: { handle: string; avatarUrl: string };
       content: string;
     }) => {
       replyingTo = value;
@@ -149,10 +153,10 @@
     toast.success("Thread created", { position: "bottom-end" });
   }
 
-  async function sendMessage(e: SubmitEvent) {
-    e.preventDefault();
+  async function sendMessage() {
     if (!space) return;
 
+    /* TODO: rework with tiptap?
     const images = imageFiles
       ? await Promise.all(
           Array.from(imageFiles).map(async (file) => {
@@ -174,6 +178,8 @@
           ),
         )
       : undefined;
+    */
+
     space.change((doc) => {
       if (!user.agent) return;
 
@@ -181,14 +187,16 @@
       doc.messages[id] = {
         author: user.agent.assertDid,
         reactions: {},
-        content: messageInput,
+        content: JSON.stringify(messageInput),
         ...(replyingTo && { replyTo: replyingTo.id }),
-        ...(images && { images }),
+        
+        // TODO: rework images with tiptap
+        // ...(images && { images }),
       };
       doc.channels[page.params.channel].timeline.push(id);
     });
 
-    messageInput = "";
+    messageInput = {};
     replyingTo = null;
     imageFiles = null;
   }
@@ -203,6 +211,7 @@
     toast.success("Thread deleted", { position: "bottom-end" });
     goto(page.url.pathname);
   }
+
 
   //
   // Settings Dialog
@@ -271,6 +280,7 @@
     showSettingsDialog = false;
   }
 
+  // TODO: rework with tiptap
   async function handleImageSelect(event: Event) {
     const input = event.target as HTMLInputElement;
     imageFiles = input.files;
@@ -375,7 +385,7 @@
     />
     <div class="flex float-end">
       {#if !isMobile || !isThreading.value}
-        <form onsubmit={sendMessage} class="grow flex flex-col">
+        <section class="grow flex flex-col">
           {#if replyingTo}
             <div
               class="flex justify-between bg-violet-800 text-white rounded-t-lg px-4 py-2"
@@ -391,7 +401,7 @@
                   <strong>{replyingTo.authorProfile.handle}</strong>
                 </h5>
                 <p class="text-gray-300 text-ellipsis italic">
-                  {@html renderMarkdownSanitized(replyingTo.content)}
+                  {@html getContentHtml(replyingTo.content)}
                 </p>
               </div>
               <Button.Root
@@ -404,16 +414,16 @@
             </div>
           {/if}
           <div class="relative">
-            <input
-              type="text"
-              class={[
-                replyingTo ? "rounded-b-lg" : "rounded-lg",
-                "w-full px-4 py-2 flex-none text-white bg-violet-900",
-              ]}
-              placeholder="Say something..."
-              bind:value={messageInput}
-              onpaste={handlePaste}
+
+            <!-- TODO: get all users that has joined the server -->
+            <ChatInput 
+              bind:content={messageInput} 
+              users={[]} 
+              threads={Object.entries(space.view.threads).map(([ulid, thread]) => { return { value: ulid, label: thread.title } })}
+              onEnter={sendMessage}
             />
+
+            <!--
             {#if mayUploadImages}
               <label
                 class="cursor-pointer text-white hover:text-gray-300 absolute right-3 top-1/2 -translate-y-1/2"
@@ -431,8 +441,10 @@
                 />
               </label>
             {/if}
+            -->
           </div>
-          <!-- Image preview -->
+
+          <!-- Image preview 
           {#if imageFiles?.length}
             <div class="flex gap-2 flex-wrap">
               {#each Array.from(imageFiles) as file}
@@ -453,7 +465,8 @@
               {/each}
             </div>
           {/if}
-        </form>
+          -->
+        </section>
       {/if}
 
       {#if isMobile}
@@ -494,20 +507,18 @@
 
         <ScrollArea.Root>
           <ScrollArea.Viewport class="max-w-screen h-full max-h-[90%]">
-            <ScrollArea.Content>
-              <ol class="flex flex-col gap-4">
-                {#each currentThread.timeline as id}
-                  {@const message = space.view.messages[id]}
-                  <ChatMessage
-                    {id}
-                    {message}
-                    messageRepliedTo={message.replyTo
-                      ? space.view.messages[message.replyTo]
-                      : undefined}
-                  />
-                {/each}
-              </ol>
-            </ScrollArea.Content>
+            <ol class="flex flex-col gap-4">
+              {#each currentThread.timeline as id}
+                {@const message = space.view.messages[id]}
+                <ChatMessage
+                  {id}
+                  {message}
+                  messageRepliedTo={message.replyTo
+                    ? space.view.messages[message.replyTo]
+                    : undefined}
+                />
+              {/each}
+            </ol>
           </ScrollArea.Viewport>
           <ScrollArea.Scrollbar
             orientation="vertical"
@@ -546,8 +557,8 @@
         </Popover.Trigger>
 
         <Popover.Content
-          transition={fly}
           sideOffset={8}
+          forceMount
           class="bg-violet-800 p-4 rounded"
         >
           <form onsubmit={createThread} class="text-white flex flex-col gap-4">

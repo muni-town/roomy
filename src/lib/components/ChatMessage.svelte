@@ -13,6 +13,7 @@
   import { outerWidth } from "svelte/reactivity/window";
   import Drawer from "./Drawer.svelte";
   import AvatarImage from "./AvatarImage.svelte";
+  import { getContentHtml } from "$lib/tiptap/editor";
 
   type Props = {
     id: Ulid;
@@ -168,7 +169,7 @@
         <p
           class="text-lg prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
         >
-          {@html renderMarkdownSanitized(message.content)}
+          {@html getContentHtml(message.content)}
         </p>
         {#if message.images?.length}
           <div class="flex flex-wrap gap-2 mt-2">

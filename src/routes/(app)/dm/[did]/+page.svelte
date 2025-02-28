@@ -29,6 +29,7 @@
   import type { Autodoc } from "$lib/autodoc/peer";
   import type { Channel, Did, Thread, Ulid } from "$lib/schemas/types";
   import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
+  import ChatInput from "$lib/components/ChatInput.svelte";
 
   let channel: Autodoc<Channel> | undefined = $derived(g.dms[page.params.did]);
   let info = $derived(g.catalog?.view.dms[page.params.did]);
@@ -47,7 +48,7 @@
 
 
   let tab = $state("chat");
-  let messageInput = $state("");
+  let messageInput = $state({});
 
   let currentThread = $derived.by(() => {
     if (page.url.searchParams.has("thread")) {
@@ -130,13 +131,14 @@
       doc.messages[id] = {
         author: user.agent.assertDid,
         reactions: {},
-        content: messageInput,
+        // TODO: replace messageInput to automerge rich text
+        content: JSON.stringify(messageInput),
         ...(replyingTo && { replyTo: replyingTo.id }),
       };
       doc.timeline.push(id);
     });
 
-    messageInput = "";
+    messageInput = {}; 
     replyingTo = undefined;
   }
 
@@ -205,6 +207,7 @@
     });
   });
 
+  $inspect({ messageInput });
 </script>
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
@@ -312,12 +315,8 @@
               </Button.Root>
             </div>
           {/if}
-          <input
-            type="text"
-            class={`w-full px-4 py-2 flex-none text-white bg-violet-900 ${replyingTo ? "rounded-b-lg" : "rounded-lg"}`}
-            placeholder="Say something..."
-            bind:value={messageInput}
-          />
+
+          <ChatInput bind:content={messageInput} />
         </form>
       {/if}
 
@@ -355,22 +354,20 @@
 
         <ScrollArea.Root>
           <ScrollArea.Viewport class="max-w-screen h-full max-h-[90%]">
-            <ScrollArea.Content>
-              <ol class="flex flex-col gap-4">
-                {#each currentThread.timeline as id}
-                  {@const message = channel.view.messages[id]}
-                  <ChatMessage 
-                    {id} 
-                    {message}
-                    messageRepliedTo={
-                      message.replyTo
-                      ? channel.view.messages[message.replyTo]
-                      : undefined
-                    }
-                  />
-                {/each}
-              </ol>
-            </ScrollArea.Content>
+            <ol class="flex flex-col gap-4">
+              {#each currentThread.timeline as id}
+                {@const message = channel.view.messages[id]}
+                <ChatMessage 
+                  {id} 
+                  {message}
+                  messageRepliedTo={
+                    message.replyTo
+                    ? channel.view.messages[message.replyTo]
+                    : undefined
+                  }
+                />
+              {/each}
+            </ol>
           </ScrollArea.Viewport>
           <ScrollArea.Scrollbar
             orientation="vertical"
@@ -409,7 +406,6 @@
         </Popover.Trigger>
 
         <Popover.Content
-          transition={fly}
           sideOffset={8}
           class="bg-violet-800 p-4 rounded"
         >
