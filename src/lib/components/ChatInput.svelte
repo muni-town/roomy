@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onDestroy } from "svelte";
   import { Editor } from "@tiptap/core";
-  import { createTiptapInstance } from "$lib/tiptap/editor.svelte";
+  import { createTiptapInstance } from "$lib/tiptap/editor";
 
   let { content = $bindable({}) } = $props();
   let element: HTMLDivElement | undefined = $state();
@@ -24,7 +24,6 @@
     console.log("ENTER", content);
   };
 
-
   $effect(() => {
     if (element) {
       tiptap = createTiptapInstance({
@@ -40,7 +39,6 @@
   onDestroy(() => { 
     tiptap?.destroy(); 
   });
-
 </script>
 
 <div bind:this={element}></div>

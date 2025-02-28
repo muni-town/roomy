@@ -3,7 +3,7 @@ import { keymap } from "@tiptap/pm/keymap";
 import StarterKit from "@tiptap/starter-kit";
 import { PluginKey } from "@tiptap/pm/state";
 import Mention from "@tiptap/extension-mention";
-import { Editor, Extension } from "@tiptap/core";
+import { Editor, Extension, getSchema } from "@tiptap/core";
 import SuggestionSelect from "$lib/components/SuggestionSelect.svelte";
 import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion";
 
@@ -77,9 +77,9 @@ function suggestion({ items, char, pluginKey }: { items: Item[], char: string, p
 }
 
 type UserMentionProps = { users: Item[] };
-const initUserMention = ({ users }: UserMentionProps) => Mention
-  .extend({ name: "userMention" })
-  .configure({
+const UserMentionExtension = Mention.extend({ name: "userMention" });
+const initUserMention = ({ users }: UserMentionProps) => 
+  UserMentionExtension.configure({
     HTMLAttributes: { class: "user-mention" },
     suggestion: suggestion({ items: users, char: "@", pluginKey: "userMention" })
   });
@@ -87,9 +87,9 @@ const initUserMention = ({ users }: UserMentionProps) => Mention
 // TODO: might need to combine with channel mentions since
 // we want to trigger both with "#"
 type ThreadMentionProps = { threads: Item[] };
-const initThreadMention = ({ threads }: ThreadMentionProps) => Mention
-  .extend({ name: "threadMention" })
-  .configure({
+const ThreadMentionExtension = Mention.extend({ name: "threadMention" });
+const initThreadMention = ({ threads }: ThreadMentionProps) => 
+  ThreadMentionExtension.configure({
     HTMLAttributes: { class: "thread-mention" },
     suggestion: suggestion({ items: threads, char: "~", pluginKey: "threadMention" })
   });
@@ -97,13 +97,19 @@ const initThreadMention = ({ threads }: ThreadMentionProps) => Mention
 
 /* Tiptap Editor Instance */
 
+export const editorSchema = getSchema([
+  StarterKit.configure({ heading: false }),
+  UserMentionExtension,
+  ThreadMentionExtension
+]);
+
 type CreateTiptapInstanceProps = {
   element: HTMLElement;
   content: Record<any, any>;
 }
-& Partial<KeyboardShortcutHandlerProps>
-& Partial<UserMentionProps>
-& Partial<ThreadMentionProps>;
+& KeyboardShortcutHandlerProps
+& UserMentionProps
+& ThreadMentionProps;
 
 export function createTiptapInstance({
   element,
@@ -112,14 +118,16 @@ export function createTiptapInstance({
   users,
   threads
 }: CreateTiptapInstanceProps) {
-  return new Editor({
+  const extensions = [
+    StarterKit.configure({ heading: false }),
+    initKeyboardShortcutHandler({ onEnter }),
+    initUserMention({ users }),
+    initThreadMention({ threads })
+  ];
+
+  const instance = new Editor({
     element,
-    extensions: [
-      StarterKit.configure({ heading: false }),
-      ...(onEnter ? [initKeyboardShortcutHandler({ onEnter })] : []),
-      ...(users ? [initUserMention({ users })] : []),
-      ...(threads ? [initThreadMention({ threads })] : []),
-    ],
+    extensions,
     content,
     editorProps: {
       attributes: {
@@ -130,4 +138,6 @@ export function createTiptapInstance({
       content = context.editor.getJSON();
     }
   });
+
+  return instance;
 }
