@@ -8,17 +8,17 @@
   import toast from "svelte-french-toast";
   import { fly } from "svelte/transition";
   import { user } from "$lib/user.svelte";
+  import { getContentHtml, type Item } from "$lib/tiptap/editor";
   import { outerWidth } from "svelte/reactivity/window";
-  import { getContentHtml } from "$lib/tiptap/editor";
 
   import Icon from "@iconify/svelte";
-  import ChatArea from "$lib/components/ChatArea.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { Button, Popover, ScrollArea, Tabs, Toggle } from "bits-ui";
+  import ChatArea from "$lib/components/ChatArea.svelte";
   import ThreadRow from "$lib/components/ThreadRow.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import ChatMessage from "$lib/components/ChatMessage.svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
+  import { Button, Popover, ScrollArea, Tabs, Toggle } from "bits-ui";
 
   import type {
     Did,
@@ -28,6 +28,7 @@
     Ulid,
   } from "$lib/schemas/types";
   import type { Autodoc } from "$lib/autodoc/peer";
+  import { getProfile } from "$lib/profile.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
@@ -36,6 +37,20 @@
   let channel = $derived(space.view.channels[page.params.channel]) as
     | SpaceChannel
     | undefined;
+  
+  // TODO: track users via the space data
+  let users = $state(() => {
+    if (!space) { return [] };
+    const result = new Set();
+    for (const message of Object.entries(space.view.messages)) {
+      result.add(message[1].author);
+    }
+    return result.values().toArray().map((author) => { 
+      const profile = getProfile(author as string);
+      return { value: author, label: profile.handle }
+    }) as Item[];
+  });
+
   let messageInput = $state({});
   let currentThread = $derived.by(() => {
     if (page.url.searchParams.has("thread")) {
@@ -44,7 +59,6 @@
       return null;
     }
   });
-  $inspect({ messageInput });
 
   let imageFiles: FileList | null = $state(null);
 
@@ -418,8 +432,12 @@
             <!-- TODO: get all users that has joined the server -->
             <ChatInput 
               bind:content={messageInput} 
-              users={[]} 
-              threads={Object.entries(space.view.threads).map(([ulid, thread]) => { return { value: ulid, label: thread.title } })}
+              users={users()}
+              threads={
+                Object.entries(space.view.threads).map(([ulid, thread]) => { 
+                  return { value: ulid, label: thread.title } 
+                })
+              }
               onEnter={sendMessage}
             />
 

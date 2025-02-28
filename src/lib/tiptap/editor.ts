@@ -3,30 +3,31 @@ import { keymap } from "@tiptap/pm/keymap";
 import StarterKit from "@tiptap/starter-kit";
 import { PluginKey } from "@tiptap/pm/state";
 import Mention from "@tiptap/extension-mention";
-import { Extension, generateHTML, getSchema } from "@tiptap/core";
+import { renderMarkdownSanitized } from "$lib/markdown";
+import { Extension, generateHTML, getSchema, mergeAttributes } from "@tiptap/core";
 import SuggestionSelect from "$lib/components/SuggestionSelect.svelte";
 import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion";
-import { renderMarkdownSanitized } from "$lib/markdown";
 
 /* Keyboard Shortcuts: used to add and override existing shortcuts */
 type KeyboardShortcutHandlerProps = {
   onEnter: () => void;
 };
 
-export const initKeyboardShortcutHandler = ({ onEnter }: KeyboardShortcutHandlerProps) => Extension.create({ 
-  name: "keyboardShortcutHandler", 
-  addProseMirrorPlugins() { 
-    return [
-      keymap({ 
-        "Enter": () => {
-          onEnter();
-          this.editor.commands.clearContent();
-          return true;
-        }
-      }),
-    ]
-  }
-});
+export const initKeyboardShortcutHandler = ({ onEnter }: KeyboardShortcutHandlerProps) => 
+  Extension.create({ 
+    name: "keyboardShortcutHandler", 
+    addProseMirrorPlugins() { 
+      return [
+        keymap({ 
+          "Enter": () => {
+            onEnter();
+            this.editor.commands.clearContent();
+            return true;
+          }
+        }),
+      ]
+    }
+  });
 
 /* Mention Extensions */
 export interface Item {
@@ -82,7 +83,7 @@ const UserMentionExtension = Mention.extend({ name: "userMention" });
 export const initUserMention = ({ users }: UserMentionProps) => 
   UserMentionExtension.configure({
     HTMLAttributes: { class: "user-mention" },
-    suggestion: suggestion({ items: users, char: "@", pluginKey: "userMention" })
+    suggestion: suggestion({ items: users, char: "@", pluginKey: "userMention" }),
   });
 
 // TODO: might need to combine with channel mentions since
@@ -101,7 +102,7 @@ export const extensions = [
   StarterKit.configure({ heading: false }),
   UserMentionExtension,
   ThreadMentionExtension
-]
+];
 
 export const editorSchema = getSchema(extensions);
 

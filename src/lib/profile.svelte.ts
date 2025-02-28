@@ -1,3 +1,4 @@
+import { untrack } from "svelte";
 import { user } from "./user.svelte";
 
 let cache: {
@@ -9,6 +10,7 @@ let cache: {
 } = $state({});
 
 export function getProfile(did: string): { handle: string; avatarUrl: string } {
+  untrack(() => cache);
   if (!cache[did]) {
     cache[did] = { handle: "", avatarUrl: "", new: true };
   }

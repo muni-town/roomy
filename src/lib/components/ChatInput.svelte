@@ -20,8 +20,6 @@
   let element: HTMLDivElement | undefined = $state();
   let tiptap: Editor | undefined = $state();
 
-  $inspect({ content });
-
   onMount(() => {
     const extensions = [
       StarterKit.configure({ heading: false }),
