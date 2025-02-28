@@ -1,23 +1,17 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import { Editor } from "@tiptap/core";
-  import { createTiptapInstance } from "$lib/tiptap/editor";
+  import { createTiptapInstance, type Item } from "$lib/tiptap/editor";
 
-  let { content = $bindable({}) } = $props();
+  type Props = {
+    content: Record<any, any>;
+    users: Item[];
+    threads: Item[];
+  };
+
+  let { content = $bindable({}), users, threads }: Props = $props();
   let element: HTMLDivElement | undefined = $state();
   let tiptap: Editor | undefined = $state();
-
-  // TODO: get users from context
-  const users = [
-    { value: "zeu.dev", label: "zeu.dev" },
-    { value: "test.zeu.dev", label: "test.zeu.dev" }
-  ];
-
-  // TODO: get threads from context
-  const threads = [
-    { value: "id1", label: "bug fix" },
-    { value: "id2", label: "feature idea" }
-  ];
 
   // TODO: replace with automerge doc change submit function
   const onEnter= () => {
@@ -25,7 +19,7 @@
   };
 
   $effect(() => {
-    if (element) {
+    if (element && !tiptap) {
       tiptap = createTiptapInstance({
         element,
         content,

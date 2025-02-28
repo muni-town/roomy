@@ -44,6 +44,7 @@
       return null;
     }
   });
+
   let imageFiles: FileList | null = $state(null);
 
   $effect(() => {
@@ -187,9 +188,7 @@
       doc.messages[id] = {
         author: user.agent.assertDid,
         reactions: {},
-        // TODO: replace messageInput to automerge rich text
         content: JSON.stringify(messageInput),
-
         ...(replyingTo && { replyTo: replyingTo.id }),
         
         // TODO: rework images with tiptap
@@ -415,7 +414,13 @@
             </div>
           {/if}
           <div class="relative">
-            <ChatInput bind:content={messageInput} />
+
+            <!-- TODO: get all users that has joined the server -->
+            <ChatInput 
+              bind:content={messageInput} 
+              users={[]} 
+              threads={Object.entries(space.view.threads).map(([ulid, thread]) => { return { value: ulid, label: thread.title } })}
+            />
 
             <!--
             {#if mayUploadImages}
