@@ -105,7 +105,24 @@ export const initUserMention = ({ users }: UserMentionProps) =>
 // TODO: might need to combine with channel mentions since
 // we want to trigger both with "#"
 type ThreadMentionProps = { threads: Item[] };
-const ThreadMentionExtension = Mention.extend({ name: "threadMention" });
+const ThreadMentionExtension = Mention.extend({ 
+  name: "threadMention",
+  // Used by `generateHTML`
+  renderHTML({ HTMLAttributes, node }) {
+    const { ulid, space } = JSON.parse(node.attrs.id);
+    return [
+      "a",
+      mergeAttributes(
+        { 
+          href: `/space/${space}/thread/${ulid}`,
+          class: "thread-mention !no-underline" 
+        }, 
+        HTMLAttributes
+      ),
+      `@${node.attrs.label}`
+    ]
+  }
+});
 export const initThreadMention = ({ threads }: ThreadMentionProps) => 
   ThreadMentionExtension.configure({
     HTMLAttributes: { class: "thread-mention" },

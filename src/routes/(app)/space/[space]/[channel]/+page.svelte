@@ -435,7 +435,13 @@
               users={users()}
               threads={
                 Object.entries(space.view.threads).map(([ulid, thread]) => { 
-                  return { value: ulid, label: thread.title } 
+                  return { 
+                    value: JSON.stringify({
+                      ulid,
+                      space: page.params.space
+                    }), 
+                    label: thread.title 
+                  } 
                 })
               }
               onEnter={sendMessage}
