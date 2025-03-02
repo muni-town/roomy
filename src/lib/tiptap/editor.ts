@@ -119,7 +119,7 @@ const ThreadMentionExtension = Mention.extend({
         }, 
         HTMLAttributes
       ),
-      `@${node.attrs.label}`
+      node.attrs.label
     ]
   }
 });
