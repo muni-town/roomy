@@ -83,15 +83,19 @@
         >
           {#snippet children(id, _index)}
             {@const message = messages[id]}
-            <ChatMessage 
-              {id} 
-              {message}
-              messageRepliedTo={
-                message.replyTo 
-                ? messages[message.replyTo] as Message 
-                : undefined
-              }
-            />
+            {#if message}
+              <ChatMessage 
+                {id} 
+                {message}
+                messageRepliedTo={
+                  message.replyTo 
+                  ? messages[message.replyTo] as Message 
+                  : undefined
+                }
+              />
+            {:else}
+              <p class="italic text-white text-sm">This message has been deleted</p>
+            {/if}
           {/snippet}
         </Virtualizer>
       {/key}

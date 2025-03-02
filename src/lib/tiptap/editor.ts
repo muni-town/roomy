@@ -4,8 +4,8 @@ import StarterKit from "@tiptap/starter-kit";
 import { PluginKey } from "@tiptap/pm/state";
 import Mention from "@tiptap/extension-mention";
 import { renderMarkdownSanitized } from "$lib/markdown";
-import { Extension, generateHTML, getSchema, mergeAttributes } from "@tiptap/core";
 import SuggestionSelect from "$lib/components/SuggestionSelect.svelte";
+import { Extension, generateHTML, getSchema, mergeAttributes } from "@tiptap/core";
 import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion";
 
 /* Keyboard Shortcuts: used to add and override existing shortcuts */
@@ -74,12 +74,28 @@ function suggestion({ items, char, pluginKey }: { items: Item[], char: string, p
           unmount(component);
         }
       }
-    }
+    },
   }
 }
 
 type UserMentionProps = { users: Item[] };
-const UserMentionExtension = Mention.extend({ name: "userMention" });
+const UserMentionExtension = Mention.extend({ 
+  name: "userMention",
+  // Used by `generateHTML`
+  renderHTML({ HTMLAttributes, node }) {
+    return [
+      "a",
+      mergeAttributes(
+        { 
+          href: `https://bsky.app/profile/${node.attrs.id}`,
+          class: "user-mention !no-underline" 
+        }, 
+        HTMLAttributes
+      ),
+      `@${node.attrs.label}`
+    ]
+  }
+});
 export const initUserMention = ({ users }: UserMentionProps) => 
   UserMentionExtension.configure({
     HTMLAttributes: { class: "user-mention" },
