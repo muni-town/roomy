@@ -15,6 +15,7 @@
   import AvatarImage from "$lib/components/AvatarImage.svelte";
 
   import { Toaster } from "svelte-french-toast";
+  import { RenderScan } from "svelte-render-scan";
   import { AvatarPixel } from "svelte-boring-avatars";
   import { Avatar, Button, ToggleGroup } from "bits-ui";
 
@@ -109,6 +110,10 @@
 <svelte:head>
   <title>Roomy</title>
 </svelte:head>
+
+{#if dev}
+  <RenderScan />
+{/if}
 
 <!-- Container -->
 <div class="flex w-screen h-screen bg-violet-950">

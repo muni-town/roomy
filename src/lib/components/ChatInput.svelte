@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, untrack } from "svelte";
   import { Editor } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
   import { 
@@ -18,27 +18,44 @@
 
   let { content = $bindable({}), users, context, onEnter }: Props = $props();
   let element: HTMLDivElement | undefined = $state();
+  let extensions = $derived([
+    StarterKit.configure({ heading: false }),
+    initKeyboardShortcutHandler({ onEnter }),
+    initUserMention({ users }),
+    initSpaceContextMention({ context })
+  ]);
+
   let tiptap: Editor | undefined = $state();
 
   onMount(() => {
-    const extensions = [
-      StarterKit.configure({ heading: false }),
-      initKeyboardShortcutHandler({ onEnter }),
-      initUserMention({ users }),
-      initSpaceContextMention({ context })
-    ];
-
     tiptap = new Editor({
       element,
       extensions,
-      content: () => content,
+      content, 
       editorProps: {
         attributes: {
           class: "w-full px-3 py-2 rounded bg-violet-900 text-white"
         },
       },
-      onUpdate: (context) => {
-        content = context.editor.getJSON();
+      onUpdate: (ctx) => {
+        content = ctx.editor.getJSON();
+      }
+    });
+  });
+
+  $effect(() => {
+    untrack(() => tiptap?.destroy());
+    tiptap = new Editor({
+      element,
+      extensions,
+      content: untrack(() => content),
+      editorProps: {
+        attributes: {
+          class: "w-full px-3 py-2 rounded bg-violet-900 text-white"
+        },
+      },
+      onUpdate: (ctx) => {
+        content = ctx.editor.getJSON();
       }
     });
   });

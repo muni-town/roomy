@@ -38,6 +38,7 @@
     "npm:svelte-boring-avatars@^1.2.6": "1.2.6",
     "npm:svelte-check@4": "4.1.4_svelte@5.19.3__acorn@8.14.0_typescript@5.7.3",
     "npm:svelte-french-toast@^1.2.0": "1.2.0_svelte@4.2.19",
+    "npm:svelte-render-scan@^1.0.4": "1.0.4_svelte@5.19.3__acorn@8.14.0",
     "npm:svelte-tiptap@^2.1.0": "2.1.0_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0_@tiptap+extension-bubble-menu@2.11.5__@tiptap+core@2.11.5___@tiptap+pm@2.11.5____prosemirror-model@1.24.1____prosemirror-state@1.4.3____prosemirror-view@1.38.0__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0_@tiptap+extension-floating-menu@2.11.5__@tiptap+core@2.11.5___@tiptap+pm@2.11.5____prosemirror-model@1.24.1____prosemirror-state@1.4.3____prosemirror-view@1.38.0__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0_@tiptap+pm@2.11.5__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.0_svelte@5.19.3__acorn@8.14.0",
     "npm:svelte@^5.19.3": "5.19.3_acorn@8.14.0",
     "npm:tailwindcss@4": "4.0.0",
@@ -2328,6 +2329,12 @@
         "svelte-writable-derived"
       ]
     },
+    "svelte-render-scan@1.0.4_svelte@5.19.3__acorn@8.14.0": {
+      "integrity": "sha512-JCZ5kqBc+67CJqBVF4Bs48UslbGKbcxTrqwicBNUwYDtz17my1gXWvJkvPRE1//q92jNNWrHPovLAlSp8dnvQA==",
+      "dependencies": [
+        "svelte@5.19.3_acorn@8.14.0"
+      ]
+    },
     "svelte-tiptap@2.1.0_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0_@tiptap+extension-bubble-menu@2.11.5__@tiptap+core@2.11.5___@tiptap+pm@2.11.5____prosemirror-model@1.24.1____prosemirror-state@1.4.3____prosemirror-view@1.38.0__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0_@tiptap+extension-floating-menu@2.11.5__@tiptap+core@2.11.5___@tiptap+pm@2.11.5____prosemirror-model@1.24.1____prosemirror-state@1.4.3____prosemirror-view@1.38.0__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0_@tiptap+pm@2.11.5__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.0_svelte@5.19.3__acorn@8.14.0": {
       "integrity": "sha512-CtmBM4RzJ7dibuglG6g8YsiyEiaFWAu6qFuX73STuxKFJqoBuqXQWpJqQRttrUWVp/rrrDFjd08zyC1Zzrl/Qg==",
       "dependencies": [
@@ -2677,6 +2684,7 @@
         "npm:svelte-boring-avatars@^1.2.6",
         "npm:svelte-check@4",
         "npm:svelte-french-toast@^1.2.0",
+        "npm:svelte-render-scan@^1.0.4",
         "npm:svelte-tiptap@^2.1.0",
         "npm:svelte@^5.19.3",
         "npm:tailwindcss@4",

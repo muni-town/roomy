@@ -55,6 +55,7 @@
     "sanitize-html": "^2.14.0",
     "svelte": "^5.19.3",
     "svelte-check": "^4.0.0",
+    "svelte-render-scan": "^1.0.4",
     "tailwindcss": "^4.0.0",
     "tweetnacl": "^1.0.3",
     "typescript": "^5.0.0",
