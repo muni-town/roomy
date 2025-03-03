@@ -2,8 +2,7 @@
   import _ from "underscore";
   import { ulid } from "ulidx";
   import { page } from "$app/state";
-  import { setContext } from "svelte";
-  import { g } from "$lib/global.svelte";
+  import { getContext, setContext } from "svelte";
   import { goto } from "$app/navigation";
   import toast from "svelte-french-toast";
   import { fly } from "svelte/transition";
@@ -25,62 +24,17 @@
     Ulid,
   } from "$lib/schemas/types";
   import type { Autodoc } from "$lib/autodoc/peer";
-  import { getProfile } from "$lib/profile.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  let space: Autodoc<Space> | undefined = $derived(g.spaces[page.params.space]);
-  let channel = $derived(space.view.channels[page.params.channel]) as
+  let { space }: { space: Autodoc<Space> | undefined } = getContext("space") 
+  let channel = $derived(space?.view.channels[page.params.channel]) as
     | Channel
     | undefined;
-  
-  // TODO: track users via the space data
-  let users = $state(() => {
-    if (!space) { return [] };
-    const result = new Set();
-    for (const message of Object.entries(space.view.messages)) {
-      result.add(message[1].author);
-    }
-    return result.values().toArray().map((author) => { 
-      const profile = getProfile(author as string);
-      return { value: author, label: profile.handle, category: "user" }
-    }) as Item[];
-  });
+  let { users }: { users: Item[] } = getContext("users");
+  let { contextItems }: { contextItems: Item[] } = getContext("contextItems");
 
-  let contextItems: Item[] = $derived.by(() => {
-    if (!space) { return [] };
-    const items = [];
-
-    // add threads to list
-    items.push(...Object.entries(space.view.threads).map(([ulid, thread]) => { 
-      return { 
-        value: JSON.stringify({
-          ulid,
-          space: page.params.space,
-          type: "thread"
-        }), 
-        label: thread.title,
-        category: "thread"
-      } 
-    }));
-
-    // add channels to list
-    items.push(...Object.entries(space.view.channels).map(([ulid, channel]) => {
-      return {
-        value: JSON.stringify({
-          ulid,
-          space: page.params.space,
-          type: "channel"
-        }),
-        label: channel.name,
-        category: "channel"
-      }
-    }));
-
-    return items as Item[];
-  });
-
-  $inspect({ users: users(), contextItems });
+  $inspect({ space, channel, users, contextItems });
 
   let messageInput = $state({});
   let imageFiles: FileList | null = $state(null);
@@ -97,6 +51,7 @@
     selectedMessages = selectedMessages.filter((m) => m != message);
   });
   setContext("deleteMessage", (message: Ulid) => {
+    if (!space) { return; }
     space.change((doc) => {
       // TODO: don't remove from timeline, just delete ID? We need to eventually add a marker
       // showing the messages is deleted in the timeline.
@@ -236,11 +191,11 @@
   // Settings Dialog
   //
 
-  let isAdmin = $derived(
-    user.agent && space && space.view.admins.includes(user.agent.assertDid),
-  );
+  let { isAdmin }: { isAdmin: boolean } = getContext("isAdmin");
+
   let mayUploadImages = $derived.by(() => {
     if (isAdmin) return true;
+    if (!space) { return }
 
     let messagesByUser = Object.values(space.view.messages).filter(
       (x) => user.agent && x.author == user.agent.assertDid,
@@ -250,7 +205,7 @@
       (message) =>
         !!Object.values(message.reactions).find(
           (reactedUsers) =>
-            !!reactedUsers.find((user) => !!space.view.admins.includes(user)),
+            !!reactedUsers.find((user) => !!space?.view.admins.includes(user)),
         ),
     );
   });
@@ -258,6 +213,7 @@
   let channelNameInput = $state("");
   let channelCategoryInput = $state(undefined) as undefined | string;
   $effect(() => {
+    if (!space) { return }
     channelNameInput = channel?.name || "";
     channelCategoryInput = Object.entries(space.view.categories).find(
       ([_id, category]) => category.channels.includes(page.params.channel),
@@ -350,7 +306,7 @@
 
 {#if space}
   <ChatArea
-    source={{ type: "space", space, channelId: page.params.channel }}
+    source={{ type: "space", space: space, channelId: page.params.channel }}
   />
   <div class="flex float-end">
     {#if !isMobile || !isThreading.value}
@@ -387,7 +343,7 @@
           <!-- TODO: get all users that has joined the server -->
           <ChatInput 
             bind:content={messageInput} 
-            users={users()}
+            {users}
             context={contextItems}
             onEnter={sendMessage}
           />

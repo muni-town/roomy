@@ -14,25 +14,74 @@
   import { user } from "$lib/user.svelte";
   import { setContext } from "svelte";
   import { slide } from "svelte/transition";
+  import type { Item } from "$lib/tiptap/editor";
+  import { getProfile } from "$lib/profile.svelte";
 
   let { children } = $props();
   let isMobile = $derived((outerWidth.current || 0) < 640);
 
-  let space = $derived(g.spaces[page.params.space]) as
-    | Autodoc<Space>
-    | undefined;
+  let space = $derived({ space: g.spaces[page.params.space] as Autodoc<Space> | undefined }) 
 
-  let isAdmin = $derived(
-    space && user.agent && space.view.admins.includes(user.agent.assertDid),
-  );
-  setContext("isAdmin", () => isAdmin);
+  // TODO: track users via the space data
+  let users = $state(() => {
+    if (!space.space) { return { items: [] } };
+    const result = new Set();
+    for (const message of Object.entries(space.space.view.messages)) {
+      result.add(message[1].author);
+    }
+    const items = result.values().toArray().map((author) => { 
+      const profile = getProfile(author as string);
+      return { value: author, label: profile.handle, category: "user" }
+    }) as Item[];
 
-  let sidebarCategory: "channels" | "threads" = $state("channels");
+    return { users: items };
+  });
+
+  let contextItems: { contextItems: Item[] } = $derived.by(() => {
+    if (!space.space) { return { contextItems: [] } };
+    const items = [];
+
+    // add threads to list
+    items.push(...Object.entries(space.space.view.threads).map(([ulid, thread]) => { 
+      return { 
+        value: JSON.stringify({
+          ulid,
+          space: page.params.space,
+          type: "thread"
+        }), 
+        label: thread.title,
+        category: "thread"
+      } 
+    }));
+
+    // add channels to list
+    items.push(...Object.entries(space.space.view.channels).map(([ulid, channel]) => {
+      return {
+        value: JSON.stringify({
+          ulid,
+          space: page.params.space,
+          type: "channel"
+        }),
+        label: channel.name,
+        category: "channel"
+      }
+    }));
+
+    return { contextItems: items };
+  });
+  let isAdmin = $derived({ isAdmin:
+    space.space && user.agent && space.space.view.admins.includes(user.agent.assertDid)
+  });
+
+  setContext("isAdmin", isAdmin);
+  setContext("space", space);
+  setContext("users", users());
+  setContext("contextItems", contextItems);
 
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
   function createCategory() {
-    space?.change((doc) => {
+    space.space?.change((doc) => {
       const id = ulid();
       doc.categories[id] = {
         channels: [],
@@ -46,13 +95,13 @@
     showNewCategoryDialog = false;
   }
 
-  let currentChannelId = $state("");
+  let currentItemId = $state("");
   let showNewChannelDialog = $state(false);
   let newChannelName = $state("");
   let newChannelCategory = $state(undefined) as undefined | string;
   function createChannel() {
     const id = ulid();
-    space?.change((doc) => {
+    space.space?.change((doc) => {
       doc.channels[id] = {
         name: newChannelName,
         threads: [],
@@ -93,20 +142,14 @@
   let editingCategory = $state("");
   let categoryNameInput = $state("");
   function saveCategory() {
-    space?.change((space) => {
+    space.space?.change((space) => {
       space.categories[editingCategory].name = categoryNameInput;
     });
     showCategoryDialog = false;
   }
-
-
-  //
-  // Threads 
-  //
-  let currentThreadId = $state("");
 </script>
 
-{#if space}
+{#if space.space}
   <nav
     class={[
       !isMobile && "max-w-[16rem] border-r-2 border-violet-900",
@@ -115,10 +158,10 @@
   >
     <div class="flex items-center justify-between px-2">
       <h1 class="text-2xl font-extrabold text-white text-ellipsis">
-        {space.view.name}
+        {space.space.view.name}
       </h1>
 
-      {#if isAdmin}
+      {#if isAdmin.isAdmin}
         <menu class="flex gap-2">
           <Dialog
             title="Create Category"
@@ -179,8 +222,8 @@
                 <option class="bg-violet-900 text-white" value={undefined}
                   >Category: None</option
                 >
-                {#each Object.keys(space.view.categories) as categoryId}
-                  {@const category = space.view.categories[categoryId]}
+                {#each Object.keys(space.space.view.categories) as categoryId}
+                  {@const category = space.space.view.categories[categoryId]}
                   <option class="bg-violet-900 text-white" value={categoryId}
                     >Category: {category.name}</option
                   >
@@ -199,7 +242,7 @@
     </div>
 
     <hr />
-
+    
     <Accordion.Root 
       type="multiple" 
       value={["channels", "threads"]} 
@@ -212,9 +255,9 @@
           </Accordion.Trigger>
         </Accordion.Header>
         <Accordion.Content forceMount>
-          {#snippet child({ props, open })}
+          {#snippet child({ open })}
             {#if open}
-              {@render channelsSidebar(space)}
+              {@render channelsSidebar(space.space as Autodoc<Space>)}
             {/if}
           {/snippet}
         </Accordion.Content>
@@ -226,9 +269,9 @@
           </Accordion.Trigger>
         </Accordion.Header>
         <Accordion.Content>
-          {#snippet child({ props, open })}
+          {#snippet child({ open })}
             {#if open}
-              {@render threadsSidebar(space)}
+              {@render threadsSidebar(space.space as Autodoc<Space>)}
             {/if}
           {/snippet}
         </Accordion.Content>
@@ -275,7 +318,7 @@
 
           <span class="flex-grow"></span>
 
-          {#if isAdmin}
+          {#if isAdmin.isAdmin}
             <Dialog
               title="Channel Settings"
               bind:isDialogOpen={showCategoryDialog}
@@ -314,7 +357,7 @@
         <hr />
         <ToggleGroup.Root
           type="single"
-          bind:value={currentChannelId}
+          bind:value={currentItemId}
           class="flex flex-col gap-2 items-center"
         >
           {#each category.channels as channelId}
@@ -333,7 +376,7 @@
         </ToggleGroup.Root>
       {:else}
         {@const channel = space.view.channels[item.id]}
-        <ToggleGroup.Root type="single" bind:value={currentChannelId}>
+        <ToggleGroup.Root type="single" bind:value={currentItemId}>
           <ToggleGroup.Item
             onclick={() => goto(`/space/${page.params.space}/${item.id}`)}
             value={item.id}
@@ -354,7 +397,7 @@
   <div transition:slide class="flex flex-col gap-4">
     {#each Object.keys(space.view.threads) as ulid} 
       {@const thread = space.view.threads[ulid]}
-      <ToggleGroup.Root type="single" bind:value={currentThreadId}>
+      <ToggleGroup.Root type="single" bind:value={currentItemId}>
         <ToggleGroup.Item
           onclick={() => goto(`/space/${page.params.space}/thread/${ulid}`)}
           value={ulid}
