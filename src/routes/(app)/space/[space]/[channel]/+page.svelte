@@ -51,6 +51,39 @@
     }) as Item[];
   });
 
+  let contextItems: Item[] = $derived.by(() => {
+    if (!space) { return [] };
+    const items = [];
+
+    // add threads to list
+    items.push(...Object.entries(space.view.threads).map(([ulid, thread]) => { 
+      return { 
+        value: JSON.stringify({
+          ulid,
+          space: page.params.space,
+          type: "thread"
+        }), 
+        label: thread.title 
+      } 
+    }));
+
+    // add channels to list
+    items.push(...Object.entries(space.view.channels).map(([ulid, channel]) => {
+      return {
+        value: JSON.stringify({
+          ulid,
+          space: page.params.space,
+          type: "channel"
+        }),
+        label: channel.name
+      }
+    }));
+
+    return items as Item[];
+  });
+
+  $inspect({ users: users(), contextItems });
+
   let messageInput = $state({});
   let currentThread = $derived.by(() => {
     if (page.url.searchParams.has("thread")) {
@@ -433,17 +466,7 @@
             <ChatInput 
               bind:content={messageInput} 
               users={users()}
-              threads={
-                Object.entries(space.view.threads).map(([ulid, thread]) => { 
-                  return { 
-                    value: JSON.stringify({
-                      ulid,
-                      space: page.params.space
-                    }), 
-                    label: thread.title 
-                  } 
-                })
-              }
+              context={contextItems}
               onEnter={sendMessage}
             />
 

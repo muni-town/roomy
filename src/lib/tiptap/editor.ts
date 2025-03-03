@@ -43,8 +43,8 @@ function suggestion({ items, char, pluginKey }: { items: Item[], char: string, p
     char,
     pluginKey: new PluginKey(pluginKey),
     items: ({ query }: { query: string }) => {
-      return items.filter((item) => 
-        item.value.toLowerCase().startsWith(query.toLowerCase())
+      return items.filter((item) =>
+        item.label.toLowerCase().startsWith(query.toLowerCase())
       ).slice(0,5);
     },
     render: () => {
@@ -87,8 +87,8 @@ const UserMentionExtension = Mention.extend({
       "a",
       mergeAttributes(
         { 
-          href: `https://bsky.app/profile/${node.attrs.id}`,
-          class: "user-mention !no-underline" 
+          href: `https://${node.attrs.label}`,
+          class: "mention !no-underline" 
         }, 
         HTMLAttributes
       ),
@@ -98,24 +98,23 @@ const UserMentionExtension = Mention.extend({
 });
 export const initUserMention = ({ users }: UserMentionProps) => 
   UserMentionExtension.configure({
-    HTMLAttributes: { class: "user-mention" },
+    HTMLAttributes: { class: "mention" },
     suggestion: suggestion({ items: users, char: "@", pluginKey: "userMention" }),
   });
 
-// TODO: might need to combine with channel mentions since
-// we want to trigger both with "#"
-type ThreadMentionProps = { threads: Item[] };
-const ThreadMentionExtension = Mention.extend({ 
-  name: "threadMention",
+// 'Space Context': channels, threads
+type SpaceContextMentionProps = { context: Item[] };
+const SpaceContextMentionExtension = Mention.extend({ 
+  name: "channelThreadMention",
   // Used by `generateHTML`
   renderHTML({ HTMLAttributes, node }) {
-    const { ulid, space } = JSON.parse(node.attrs.id);
+    const { ulid, space, type } = JSON.parse(node.attrs.id);
     return [
       "a",
       mergeAttributes(
         { 
-          href: `/space/${space}/thread/${ulid}`,
-          class: "thread-mention !no-underline" 
+          href: type === "thread" ? `/space/${space}/thread/${ulid}` : `/space/${space}/${ulid}`,
+          class: `mention ${type === "thread" ? "thread-mention" : "channel-mention"} !no-underline`
         }, 
         HTMLAttributes
       ),
@@ -123,10 +122,23 @@ const ThreadMentionExtension = Mention.extend({
     ]
   }
 });
-export const initThreadMention = ({ threads }: ThreadMentionProps) => 
-  ThreadMentionExtension.configure({
-    HTMLAttributes: { class: "thread-mention" },
-    suggestion: suggestion({ items: threads, char: "~", pluginKey: "threadMention" })
+export const initSpaceContextMention = ({ context }: SpaceContextMentionProps) => 
+  SpaceContextMentionExtension.configure({
+    HTMLAttributes: { class: "mention" },
+    suggestion: suggestion({ items: context, char: "#", pluginKey: "spaceContextMention" }),
+    renderHTML({ options, node }) {
+      const { type } = JSON.parse(node.attrs.id);
+      return [
+        "span",
+        mergeAttributes(
+          { 
+            class: `mention ${type === "thread" ? "thread-mention" : "channel-mention"} !no-underline`
+          }, 
+          options.HTMLAttributes
+        ),
+        node.attrs.label
+      ]
+    }
   });
 
 
@@ -134,7 +146,7 @@ export const initThreadMention = ({ threads }: ThreadMentionProps) =>
 export const extensions = [
   StarterKit.configure({ heading: false }),
   UserMentionExtension,
-  ThreadMentionExtension
+  SpaceContextMentionExtension
 ];
 
 export const editorSchema = getSchema(extensions);

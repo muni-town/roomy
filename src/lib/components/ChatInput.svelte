@@ -6,17 +6,17 @@
     type Item,
     initKeyboardShortcutHandler, 
     initUserMention, 
-    initThreadMention 
+    initSpaceContextMention
   } from "$lib/tiptap/editor";
 
   type Props = {
     content: Record<any, any>;
     users: Item[];
-    threads: Item[];
+    context: Item[];
     onEnter: () => void;
   };
 
-  let { content = $bindable({}), users, threads, onEnter }: Props = $props();
+  let { content = $bindable({}), users, context, onEnter }: Props = $props();
   let element: HTMLDivElement | undefined = $state();
   let tiptap: Editor | undefined = $state();
 
@@ -25,7 +25,7 @@
       StarterKit.configure({ heading: false }),
       initKeyboardShortcutHandler({ onEnter }),
       initUserMention({ users }),
-      initThreadMention({ threads })
+      initSpaceContextMention({ context })
     ];
 
     tiptap = new Editor({
