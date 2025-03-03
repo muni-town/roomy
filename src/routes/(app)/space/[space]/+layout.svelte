@@ -1,7 +1,7 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { Button, ToggleGroup } from "bits-ui";
+  import { Accordion, Button, ToggleGroup } from "bits-ui";
 
   import { ulid } from "ulidx";
   import { page } from "$app/state";
@@ -13,6 +13,7 @@
   import type { Autodoc } from "$lib/autodoc/peer";
   import { user } from "$lib/user.svelte";
   import { setContext } from "svelte";
+  import { slide } from "svelte/transition";
 
   let { children } = $props();
   let isMobile = $derived((outerWidth.current || 0) < 640);
@@ -25,6 +26,8 @@
     space && user.agent && space.view.admins.includes(user.agent.assertDid),
   );
   setContext("isAdmin", () => isAdmin);
+
+  let sidebarCategory: "channels" | "threads" = $state("channels");
 
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
@@ -95,6 +98,12 @@
     });
     showCategoryDialog = false;
   }
+
+
+  //
+  // Threads 
+  //
+  let currentThreadId = $state("");
 </script>
 
 {#if space}
@@ -191,6 +200,71 @@
 
     <hr />
 
+    <Accordion.Root 
+      type="multiple" 
+      value={["channels", "threads"]} 
+      class="flex flex-col gap-4"
+    > 
+      <Accordion.Item value="channels">
+        <Accordion.Header>
+          <Accordion.Trigger class="cursor-pointer uppercase text-xs font-medium text-gray-300">
+            Channels
+          </Accordion.Trigger>
+        </Accordion.Header>
+        <Accordion.Content forceMount>
+          {#snippet child({ props, open })}
+            {#if open}
+              {@render channelsSidebar(space)}
+            {/if}
+          {/snippet}
+        </Accordion.Content>
+      </Accordion.Item>
+      <Accordion.Item value="threads">
+        <Accordion.Header>
+          <Accordion.Trigger class="cursor-pointer uppercase text-xs font-medium text-gray-300">
+            Threads
+          </Accordion.Trigger>
+        </Accordion.Header>
+        <Accordion.Content>
+          {#snippet child({ props, open })}
+            {#if open}
+              {@render threadsSidebar(space)}
+            {/if}
+          {/snippet}
+        </Accordion.Content>
+      </Accordion.Item>
+    </Accordion.Root>
+  </nav>
+
+  <!-- Events/Room Content -->
+  {#if !isMobile}
+    <main
+      class="flex flex-col gap-4 bg-violet-950 rounded-lg p-4 grow min-w-0 h-full overflow-clip"
+    >
+      {@render children()}
+    </main>
+  {:else if page.params.channel}
+    <main
+      class="absolute inset-0 flex flex-col gap-4 bg-violet-950 rounded-lg p-4 h-screen overflow-clip"
+    >
+      {@render children()}
+    </main>
+  {/if}
+
+  <!-- If there is no space. -->
+{:else}
+  <div class="flex flex-col justify-center items-center w-full">
+    <Button.Root
+      onclick={openSpace}
+      class="px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer"
+    >
+      Join Space
+    </Button.Root>
+  </div>
+{/if}
+
+{#snippet channelsSidebar(space: Autodoc<Space>)}
+  <div transition:slide class="flex flex-col gap-4">
     <!-- Category and Channels -->
     {#each space.view.sidebarItems as item}
       {#if item.type == "category"}
@@ -273,31 +347,25 @@
         </ToggleGroup.Root>
       {/if}
     {/each}
-  </nav>
-
-  <!-- Events/Room Content -->
-  {#if !isMobile}
-    <main
-      class="flex flex-col gap-4 bg-violet-950 rounded-lg p-4 grow min-w-0 h-full overflow-clip"
-    >
-      {@render children()}
-    </main>
-  {:else if page.params.channel}
-    <main
-      class="absolute inset-0 flex flex-col gap-4 bg-violet-950 rounded-lg p-4 h-screen overflow-clip"
-    >
-      {@render children()}
-    </main>
-  {/if}
-
-  <!-- If there is no space. -->
-{:else}
-  <div class="flex flex-col justify-center items-center w-full">
-    <Button.Root
-      onclick={openSpace}
-      class="px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer"
-    >
-      Join Space
-    </Button.Root>
   </div>
-{/if}
+{/snippet}
+
+{#snippet threadsSidebar(space: Autodoc<Space>)}
+  <div transition:slide class="flex flex-col gap-4">
+    {#each Object.keys(space.view.threads) as ulid} 
+      {@const thread = space.view.threads[ulid]}
+      <ToggleGroup.Root type="single" bind:value={currentThreadId}>
+        <ToggleGroup.Item
+          onclick={() => goto(`/space/${page.params.space}/thread/${ulid}`)}
+          value={ulid}
+          class="w-full text-start hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white py-2 rounded-md"
+        >
+          <h3 class="flex justify-start items-center gap-2 px-2">
+            <Icon icon="material-symbols:thread-unread-rounded" />
+            {thread.title}
+          </h3>
+        </ToggleGroup.Item>
+      </ToggleGroup.Root>
+    {/each}
+  </div>
+{/snippet}
