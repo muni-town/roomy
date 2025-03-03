@@ -49,7 +49,8 @@ export type Thread = {
   timeline: Ulid[];
 };
 
-export type Channel = {
+// Used in DMs
+export type DM = {
   name: string;
   description: string;
   messages: { [ulid: Ulid]: Message };
@@ -57,7 +58,7 @@ export type Channel = {
   timeline: Ulid[];
 };
 
-export type SpaceChannel = {
+export type Channel = {
   name: string;
   description?: string;
   avatar?: string;
@@ -75,7 +76,7 @@ export type Space = {
   moderators: Ulid[];
   threads: { [ulid: Ulid]: Thread };
   messages: { [ulid: Ulid]: Message };
-  channels: { [ulid: Ulid]: SpaceChannel };
+  channels: { [ulid: Ulid]: Channel };
   categories: { [ulid: Ulid]: SpaceCategory };
   sidebarItems: SidebarItem[];
   name: string;

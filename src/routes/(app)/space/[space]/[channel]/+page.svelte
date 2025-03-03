@@ -23,7 +23,7 @@
   import type {
     Did,
     Space,
-    SpaceChannel,
+    Channel,
     Thread,
     Ulid,
   } from "$lib/schemas/types";
@@ -35,7 +35,7 @@
   let tab = $state("chat");
   let space: Autodoc<Space> | undefined = $derived(g.spaces[page.params.space]);
   let channel = $derived(space.view.channels[page.params.channel]) as
-    | SpaceChannel
+    | Channel
     | undefined;
   
   // TODO: track users via the space data
