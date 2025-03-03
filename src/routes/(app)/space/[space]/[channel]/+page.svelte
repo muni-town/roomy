@@ -47,7 +47,7 @@
     }
     return result.values().toArray().map((author) => { 
       const profile = getProfile(author as string);
-      return { value: author, label: profile.handle }
+      return { value: author, label: profile.handle, category: "user" }
     }) as Item[];
   });
 
@@ -63,7 +63,8 @@
           space: page.params.space,
           type: "thread"
         }), 
-        label: thread.title 
+        label: thread.title,
+        category: "thread"
       } 
     }));
 
@@ -75,7 +76,8 @@
           space: page.params.space,
           type: "channel"
         }),
-        label: channel.name
+        label: channel.name,
+        category: "channel"
       }
     }));
 
