@@ -35,8 +35,6 @@
   let users: { value: Item[] } = getContext("users");
   let contextItems: { value: Item[] } = getContext("contextItems");
 
-  $inspect({ space, users: users.value, contextItems: contextItems.value });
-
   let messageInput = $state({});
   let imageFiles: FileList | null = $state(null);
 
