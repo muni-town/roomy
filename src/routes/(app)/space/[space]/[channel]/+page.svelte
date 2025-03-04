@@ -27,14 +27,15 @@
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  let { space }: { space: Autodoc<Space> | undefined } = getContext("space") 
+  let spaceContext = getContext("space") as { get value(): Autodoc<Space> | undefined };
+  let space = $derived(spaceContext.value);
   let channel = $derived(space?.view.channels[page.params.channel]) as
     | Channel
     | undefined;
-  let { users }: { users: Item[] } = getContext("users");
-  let { contextItems }: { contextItems: Item[] } = getContext("contextItems");
+  let users: { value: Item[] } = getContext("users");
+  let contextItems: { value: Item[] } = getContext("contextItems");
 
-  $inspect({ space, channel, users, contextItems });
+  $inspect({ space, users: users.value, contextItems: contextItems.value });
 
   let messageInput = $state({});
   let imageFiles: FileList | null = $state(null);
@@ -191,7 +192,7 @@
   // Settings Dialog
   //
 
-  let { isAdmin }: { isAdmin: boolean } = getContext("isAdmin");
+  let { value: isAdmin }: { value: boolean } = getContext("isAdmin");
 
   let mayUploadImages = $derived.by(() => {
     if (isAdmin) return true;
@@ -343,8 +344,8 @@
           <!-- TODO: get all users that has joined the server -->
           <ChatInput 
             bind:content={messageInput} 
-            {users}
-            context={contextItems}
+            users={users.value}
+            context={contextItems.value}
             onEnter={sendMessage}
           />
 

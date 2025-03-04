@@ -20,13 +20,13 @@
   let { children } = $props();
   let isMobile = $derived((outerWidth.current || 0) < 640);
 
-  let space = $derived({ space: g.spaces[page.params.space] as Autodoc<Space> | undefined }) 
+  let space = $derived(g.spaces[page.params.space] as Autodoc<Space> | undefined) 
 
   // TODO: track users via the space data
   let users = $state(() => {
-    if (!space.space) { return { items: [] } };
+    if (!space) { return [] };
     const result = new Set();
-    for (const message of Object.entries(space.space.view.messages)) {
+    for (const message of Object.entries(space.view.messages)) {
       result.add(message[1].author);
     }
     const items = result.values().toArray().map((author) => { 
@@ -34,15 +34,15 @@
       return { value: author, label: profile.handle, category: "user" }
     }) as Item[];
 
-    return { users: items };
+    return items;
   });
 
-  let contextItems: { contextItems: Item[] } = $derived.by(() => {
-    if (!space.space) { return { contextItems: [] } };
+  let contextItems: Item[] = $derived.by(() => {
+    if (!space) { return [] };
     const items = [];
 
     // add threads to list
-    items.push(...Object.entries(space.space.view.threads).map(([ulid, thread]) => { 
+    items.push(...Object.entries(space.view.threads).map(([ulid, thread]) => { 
       return { 
         value: JSON.stringify({
           ulid,
@@ -55,7 +55,7 @@
     }));
 
     // add channels to list
-    items.push(...Object.entries(space.space.view.channels).map(([ulid, channel]) => {
+    items.push(...Object.entries(space.view.channels).map(([ulid, channel]) => {
       return {
         value: JSON.stringify({
           ulid,
@@ -66,22 +66,22 @@
         category: "channel"
       }
     }));
-
-    return { contextItems: items };
+  
+    return items;
   });
-  let isAdmin = $derived({ isAdmin:
-    space.space && user.agent && space.space.view.admins.includes(user.agent.assertDid)
-  });
+  let isAdmin = $derived( 
+    space && user.agent && space.view.admins.includes(user.agent.assertDid)
+  );
 
-  setContext("isAdmin", isAdmin);
-  setContext("space", space);
-  setContext("users", users());
-  setContext("contextItems", contextItems);
+  setContext("isAdmin", { get value() { return isAdmin }});
+  setContext("space", { get value() { return space }});
+  setContext("users", { get value() { return users() }});
+  setContext("contextItems", { get value() { return contextItems }});
 
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
   function createCategory() {
-    space.space?.change((doc) => {
+    space?.change((doc) => {
       const id = ulid();
       doc.categories[id] = {
         channels: [],
@@ -101,7 +101,7 @@
   let newChannelCategory = $state(undefined) as undefined | string;
   function createChannel() {
     const id = ulid();
-    space.space?.change((doc) => {
+    space?.change((doc) => {
       doc.channels[id] = {
         name: newChannelName,
         threads: [],
@@ -142,14 +142,14 @@
   let editingCategory = $state("");
   let categoryNameInput = $state("");
   function saveCategory() {
-    space.space?.change((space) => {
+    space?.change((space) => {
       space.categories[editingCategory].name = categoryNameInput;
     });
     showCategoryDialog = false;
   }
 </script>
 
-{#if space.space}
+{#if space}
   <nav
     class={[
       !isMobile && "max-w-[16rem] border-r-2 border-violet-900",
@@ -158,7 +158,7 @@
   >
     <div class="flex items-center justify-between px-2">
       <h1 class="text-2xl font-extrabold text-white text-ellipsis">
-        {space.space.view.name}
+        {space.view.name}
       </h1>
 
       {#if isAdmin.isAdmin}
@@ -222,8 +222,8 @@
                 <option class="bg-violet-900 text-white" value={undefined}
                   >Category: None</option
                 >
-                {#each Object.keys(space.space.view.categories) as categoryId}
-                  {@const category = space.space.view.categories[categoryId]}
+                {#each Object.keys(space.view.categories) as categoryId}
+                  {@const category = space.view.categories[categoryId]}
                   <option class="bg-violet-900 text-white" value={categoryId}
                     >Category: {category.name}</option
                   >
@@ -257,7 +257,7 @@
         <Accordion.Content forceMount>
           {#snippet child({ open })}
             {#if open}
-              {@render channelsSidebar(space.space as Autodoc<Space>)}
+              {@render channelsSidebar(space as Autodoc<Space>)}
             {/if}
           {/snippet}
         </Accordion.Content>
@@ -271,7 +271,7 @@
         <Accordion.Content>
           {#snippet child({ open })}
             {#if open}
-              {@render threadsSidebar(space.space as Autodoc<Space>)}
+              {@render threadsSidebar(space as Autodoc<Space>)}
             {/if}
           {/snippet}
         </Accordion.Content>
