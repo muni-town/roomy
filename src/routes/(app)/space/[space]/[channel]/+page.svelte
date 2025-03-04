@@ -307,7 +307,8 @@
 
 {#if space}
   <ChatArea
-    source={{ type: "space", space: space, channelId: page.params.channel }}
+    source={{ type: "space", space: space }}
+    timeline={channel?.timeline ?? []}
   />
   <div class="flex float-end">
     {#if !isMobile || !isThreading.value}

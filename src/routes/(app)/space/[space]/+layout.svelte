@@ -161,7 +161,7 @@
         {space.view.name}
       </h1>
 
-      {#if isAdmin.isAdmin}
+      {#if isAdmin}
         <menu class="flex gap-2">
           <Dialog
             title="Create Category"
@@ -318,7 +318,7 @@
 
           <span class="flex-grow"></span>
 
-          {#if isAdmin.isAdmin}
+          {#if isAdmin}
             <Dialog
               title="Channel Settings"
               bind:isDialogOpen={showCategoryDialog}
