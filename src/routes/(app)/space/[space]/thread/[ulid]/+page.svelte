@@ -257,8 +257,8 @@
 
 {#snippet toolbar()}
   <menu class="relative flex items-center gap-3 px-2 w-fit self-end">
-    <Popover.Root>
-      <Popover.Trigger onclick={() => isThreading.value = !isThreading.value}>
+    <Popover.Root bind:open={isThreading.value}> 
+      <Popover.Trigger>
         <Icon
           icon="tabler:needle-thread"
           color="white"
@@ -270,11 +270,16 @@
           side="left" 
           sideOffset={8} 
           interactOutsideBehavior="ignore" 
-          class="text-white bg-violet-900 rounded p-4"
+          class="my-4 text-white bg-violet-900 rounded py-4 px-5"
         >
           <form onsubmit={createThread} class="flex flex-col gap-4">
-            <input type="text" bind:value={threadTitleInput} class="bg-violet-800" placeholder="Thread Title" />
-            <button type="submit" class="bg-violet-800 w-full rounded py-2">Create Thread</button>
+            <input type="text" bind:value={threadTitleInput} class="bg-violet-800 px-2 py-1" placeholder="Thread Title" />
+            <button 
+              type="submit" 
+              class="btn text-violet-900 bg-white"
+            >
+              Create Thread
+            </button>
           </form>
         </Popover.Content>
       </Popover.Portal>
@@ -282,7 +287,7 @@
 
     <Button.Root
       title="Copy invite link"
-      class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
+      class="btn"
       onclick={() => {
         navigator.clipboard.writeText(`${page.url.href}`);
       }}
