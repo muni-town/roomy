@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Avatar, Button, Popover, Toolbar } from "bits-ui";
-  import type { Message, Ulid } from "$lib/schemas/types";
+  import type { Announcement, Message, Space, Ulid } from "$lib/schemas/types";
   import { renderMarkdownSanitized } from "$lib/markdown";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
@@ -14,17 +14,24 @@
   import Drawer from "./Drawer.svelte";
   import AvatarImage from "./AvatarImage.svelte";
   import { getContentHtml } from "$lib/tiptap/editor";
+  import type { Autodoc } from "$lib/autodoc/peer";
+  import { page } from "$app/state";
 
   type Props = {
     id: Ulid;
-    message: Message;
+    message: Message | Announcement;
     messageRepliedTo?: Message;
   };
 
   let { id, message, messageRepliedTo }: Props = $props();
+  let space: { value: Autodoc<Space> } = getContext("space");
+
+  function isAnnouncement(message: Message | Announcement): message is Announcement {
+    return (message as Announcement).kind !== undefined;    
+  }
 
   // doesn't change after render, so $derived is not necessary
-  const authorProfile = getProfile(message.author);
+  const authorProfile = !isAnnouncement(message) && getProfile(message.author);
   const profileRepliedTo =
     messageRepliedTo && getProfile(messageRepliedTo.author);
 
@@ -51,8 +58,11 @@
   let isEmojiToolbarPickerOpen = $state(false);
   let isEmojiRowPickerOpen = $state(false);
 
-  const isAdmin = getContext("isAdmin") as () => boolean;
-  let mayDelete = $derived(isAdmin() || user.agent?.did == message.author);
+  const isAdmin: { value: boolean } = getContext("isAdmin"); 
+  let mayDelete = $derived(
+    !isAnnouncement(message) &&  
+    (isAdmin.value || user.agent?.did == message.author)
+  );
 
   const selectMessage = getContext("selectMessage") as (
     messageId: Ulid,
@@ -92,7 +102,7 @@
   }
 
   function scrollToReply() {
-    if (!message.replyTo) {
+    if (isAnnouncement(message) || !message.replyTo) {
       return;
     }
     scrollToMessage(message.replyTo);
@@ -127,6 +137,69 @@
   function onKeyup({ shiftKey }: KeyboardEvent) {
     shiftDown = shiftKey;
   }
+
+  function getAnnouncementHtml(announcement: Announcement) {
+    const schema = {
+      "type": "doc",
+      "content": [] as Record<string, any>[]
+    };
+
+    switch (announcement.kind) {
+      case "threadCreated": {
+        const relatedThread = space.value.view.threads[announcement.relatedThreads![0]];
+        schema.content.push({
+          "type": "paragraph",
+          "content": [
+            { "type": "text", "text": "A new thread has been created: " },
+            { 
+              "type": "channelThreadMention",
+              "attrs": {
+                "id": JSON.stringify({
+                  "ulid": announcement.relatedThreads![0],
+                  "space": page.params.space,
+                  "type": "thread"
+                }),
+                "label": relatedThread.title
+              }
+            }
+          ]
+        });
+        break;
+      }
+      case "messageMoved": {
+        const relatedThread = space.value.view.threads[announcement.relatedThreads![0]];
+        schema.content.push({
+          "type": "paragraph",
+          "content": [
+            { "type": "text", "text": "This message has been moved: " },
+            { 
+              "type": "channelThreadMention",
+              "attrs": {
+                "id": JSON.stringify({
+                  "ulid": announcement.relatedThreads![0],
+                  "space": page.params.space,
+                  "type": "thread"
+                }),
+                "label": relatedThread.title
+              }
+            }
+          ]
+        });
+        break;
+      }
+      case "messageDeleted": {
+        schema.content.push({
+          "type": "paragraph",
+          "content": [
+            { "type": "text", "text": "This message has been deleted" }
+          ]
+        });
+        break;
+      }
+    };
+
+    return getContentHtml(JSON.stringify(schema));
+  }
 </script>
 
 <svelte:window onkeydown={onKeydown} onkeyup={onKeyup} />
@@ -137,54 +210,11 @@
   <div
     class="relative group w-full h-fit flex flex-col gap-4 px-2 py-2.5 hover:bg-white/5 transition-all duration-75"
   >
-    <div class="flex gap-4">
-      <a
-        href={`https://bsky.app/profile/${authorProfile.handle}`}
-        target="_blank"
-      >
-        <AvatarImage
-          handle={authorProfile.handle}
-          avatarUrl={authorProfile.avatarUrl}
-        />
-      </a>
-
-      <Button.Root
-        onclick={() => {
-          if (isMobile) {
-            isDrawerOpen = true;
-          }
-        }}
-        class="flex flex-col text-start gap-2 text-white w-full min-w-0"
-      >
-        <section class="flex items-center gap-2 flex-wrap w-fit">
-          <a
-            href={`https://bsky.app/profile/${authorProfile.handle}`}
-            target="_blank"
-          >
-            <h5 class="font-bold">{authorProfile.handle}</h5>
-          </a>
-          {@render timestamp()}
-        </section>
-
-        <p
-          class="text-lg prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
-        >
-          {@html getContentHtml(message.content)}
-        </p>
-        {#if message.images?.length}
-          <div class="flex flex-wrap gap-2 mt-2">
-            {#each message.images as image}
-              <img
-                src={image.source}
-                alt={image.alt || ""}
-                class="max-w-md max-h-64 rounded-lg object-cover"
-                loading="lazy"
-              />
-            {/each}
-          </div>
-        {/if}
-      </Button.Root>
-    </div>
+    {#if isAnnouncement(message)}
+      {@render announcementView(message)}
+    {:else}
+      {@render messageView(message)}
+    {/if}
 
     {#if Object.keys(message.reactions).length > 0}
       <div class="flex gap-2 flex-wrap">
@@ -234,27 +264,30 @@
             </Popover.Content>
           </Popover.Root>
         </div>
-        <div class="flex flex-col gap-2">
-          <Button.Root
-            onclick={() => {
-              setReplyTo({ id, authorProfile, content: message.content });
-              isDrawerOpen = false;
-            }}
-            class="text-white p-4 flex gap-4 items-center bg-violet-800 w-full rounded-lg"
-          >
-            <Icon icon="fa6-solid:reply" color="white" />
-            Reply
-          </Button.Root>
-          {#if mayDelete}
+
+        {#if authorProfile}
+          <div class="flex flex-col gap-2">
             <Button.Root
-              onclick={() => deleteMessage(id)}
+              onclick={() => {
+                setReplyTo({ id, authorProfile, content: message.content });
+                isDrawerOpen = false;
+              }}
               class="text-white p-4 flex gap-4 items-center bg-violet-800 w-full rounded-lg"
             >
-              <Icon icon="tabler:trash" color="red" />
-              Delete
+              <Icon icon="fa6-solid:reply" color="white" />
+              Reply
             </Button.Root>
-          {/if}
-        </div>
+            {#if mayDelete}
+              <Button.Root
+                onclick={() => deleteMessage(id)}
+                class="text-white p-4 flex gap-4 items-center bg-violet-800 w-full rounded-lg"
+              >
+                <Icon icon="tabler:trash" color="red" />
+                Delete
+              </Button.Root>
+            {/if}
+          </div>
+        {/if}
       </Drawer>
     {:else}
       <Toolbar.Root
@@ -290,13 +323,16 @@
             <Icon icon="tabler:trash" color="red" />
           </Toolbar.Button>
         {/if}
-        <Toolbar.Button
-          onclick={() =>
-            setReplyTo({ id, authorProfile, content: message.content })}
-          class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
-        >
-          <Icon icon="fa6-solid:reply" color="white" />
-        </Toolbar.Button>
+
+        {#if authorProfile}
+          <Toolbar.Button
+            onclick={() =>
+              setReplyTo({ id, authorProfile, content: message.content })}
+            class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+          >
+            <Icon icon="fa6-solid:reply" color="white" />
+          </Toolbar.Button>
+        {/if}
       </Toolbar.Root>
     {/if}
 
@@ -311,6 +347,82 @@
     {/if}
   </div>
 </li>
+
+{#snippet announcementView(message: Announcement)}
+  <div class="flex gap-4">
+      <Button.Root
+        onclick={() => {
+          if (isMobile) {
+            isDrawerOpen = true;
+          }
+        }}
+        class="flex flex-col text-start gap-2 text-white w-full min-w-0"
+      >
+        <section class="flex items-center gap-2 flex-wrap w-fit">
+          {@render timestamp()}
+        </section>
+
+        <p
+          class="text-lg prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+        >
+          {@html getAnnouncementHtml(message)}
+        </p>
+      </Button.Root>
+    </div>
+{/snippet}
+
+{#snippet messageView(message: Message)}
+  {#if authorProfile}
+    <div class="flex gap-4">
+      <a
+        href={`https://bsky.app/profile/${authorProfile.handle}`}
+        target="_blank"
+      >
+        <AvatarImage
+          handle={authorProfile.handle}
+          avatarUrl={authorProfile.avatarUrl}
+        />
+      </a>
+
+      <Button.Root
+        onclick={() => {
+          if (isMobile) {
+            isDrawerOpen = true;
+          }
+        }}
+        class="flex flex-col text-start gap-2 text-white w-full min-w-0"
+      >
+        <section class="flex items-center gap-2 flex-wrap w-fit">
+          <a
+            href={`https://bsky.app/profile/${authorProfile.handle}`}
+            target="_blank"
+          >
+            <h5 class="font-bold">{authorProfile.handle}</h5>
+          </a>
+          {@render timestamp()}
+        </section>
+
+        <p
+          class="text-lg prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+        >
+          {@html getContentHtml(message.content)}
+        </p>
+        {#if message.images?.length}
+          <div class="flex flex-wrap gap-2 mt-2">
+            {#each message.images as image}
+              <img
+                src={image.source}
+                alt={image.alt || ""}
+                class="max-w-md max-h-64 rounded-lg object-cover"
+                loading="lazy"
+              />
+            {/each}
+          </div>
+        {/if}
+      </Button.Root>
+    </div>
+  {/if}
+{/snippet}
 
 {#snippet timestamp()}
   {@const decodedTime = decodeTime(id)}

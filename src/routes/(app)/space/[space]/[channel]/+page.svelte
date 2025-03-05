@@ -1,6 +1,6 @@
 <script lang="ts">
   import _ from "underscore";
-  import { ulid } from "ulidx";
+  import { decodeTime, ulid } from "ulidx";
   import { page } from "$app/state";
   import { getContext, setContext } from "svelte";
   import { goto } from "$app/navigation";
@@ -21,6 +21,8 @@
     Space,
     Channel,
     Ulid,
+    Announcement,
+    Message,
   } from "$lib/schemas/types";
   import type { Autodoc } from "$lib/autodoc/peer";
 
@@ -119,18 +121,50 @@
 
   function createThread(e: SubmitEvent) {
     e.preventDefault();
-    if (!space) return;
+    if (!space || !channel) return;
 
     space.change((doc) => {
-      const id = ulid();
-      const timeline = [];
+      const threadId = ulid();
+      const timeline: string[] = [];
       for (const id of selectedMessages) {
-        timeline.push(`${id}`);
+        // move selected message ID from channel to thread timeline
+        timeline.push(id);
+        const index = channel?.timeline.indexOf(id);
+        doc.channels[page.params.channel].timeline.splice(index, 1);
+
+        // create an Announcement about the move for each message
+        const timestamp = decodeTime(id);
+        const announcementId = ulid(timestamp);
+        const announcement: Announcement = {
+          kind: "messageMoved",
+          relatedMessages: [id],
+          relatedThreads: [threadId],
+          reactions: {}
+        };
+
+        doc.messages[announcementId] = announcement; 
+        doc.channels[page.params.channel].timeline.push(announcementId);
       }
-      doc.threads[id] = {
+
+      // create thread
+      doc.threads[threadId] = {
         title: threadTitleInput,
         timeline,
       };
+      
+      // create an Announcement about the new Thread in current channel
+      const announcementId = ulid();
+      const announcement: Announcement = {
+        kind: "threadCreated",
+        relatedThreads: [threadId],
+        reactions: {}
+      };
+
+      doc.messages[announcementId] = announcement; 
+      doc.channels[page.params.channel].timeline.push(announcementId);
+
+
+      // TODO: reorder messages
     });
 
     threadTitleInput = "";
@@ -141,7 +175,7 @@
   async function sendMessage() {
     if (!space) return;
 
-    /* TODO: rework with tiptap?
+    /* TODO: image upload refactor with tiptap
     const images = imageFiles
       ? await Promise.all(
           Array.from(imageFiles).map(async (file) => {
@@ -175,7 +209,7 @@
         content: JSON.stringify(messageInput),
         ...(replyingTo && { replyTo: replyingTo.id }),
         
-        // TODO: rework images with tiptap
+        // TODO: image upload refactor with tiptap
         // ...(images && { images }),
       };
       doc.channels[page.params.channel].timeline.push(id);
@@ -192,6 +226,7 @@
 
   let { value: isAdmin }: { value: boolean } = getContext("isAdmin");
 
+  /* TODO: image upload refactor with tiptap
   let mayUploadImages = $derived.by(() => {
     if (isAdmin) return true;
     if (!space) { return }
@@ -208,6 +243,7 @@
         ),
     );
   });
+  */
   let showSettingsDialog = $state(false);
   let channelNameInput = $state("");
   let channelCategoryInput = $state(undefined) as undefined | string;
@@ -254,7 +290,7 @@
     showSettingsDialog = false;
   }
 
-  // TODO: rework with tiptap
+  /* TODO: image upload refactor with tiptap
   async function handleImageSelect(event: Event) {
     const input = event.target as HTMLInputElement;
     imageFiles = input.files;
@@ -278,6 +314,7 @@
       }
     }
   }
+  */
 </script>
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">

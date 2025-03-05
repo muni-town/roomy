@@ -36,20 +36,31 @@ export type Did = string;
 export type Message = {
   author: Did;
   content: string;
-  replyTo?: Ulid;
   reactions: { [reaction: string]: Did[] };
+  replyTo?: Ulid;
   images?: {
     source: string;
     alt?: string;
   }[];
+  softDeleted?: boolean;
 };
+
+export type Announcement = {
+  kind: "messageMoved" | "messageDeleted" | "threadCreated";
+  reactions: { [reaction: string]: Did[] };
+  relatedMessages?: Ulid[];
+  relatedThreads?: Ulid[];
+  softDeleted?: boolean;
+}
 
 export type Thread = {
   title: string;
   timeline: Ulid[];
+  softDeleted?: boolean;
 };
 
 // Used in DMs
+// TODO: Delete since DMs are not in priority
 export type DM = {
   name: string;
   description: string;
@@ -64,7 +75,9 @@ export type Channel = {
   avatar?: string;
   threads: Ulid[];
   timeline: Ulid[];
+  softDeleted?: boolean;
 };
+
 export type SpaceCategory = {
   name: string;
   channels: Ulid[];
@@ -75,7 +88,7 @@ export type Space = {
   admins: Ulid[];
   moderators: Ulid[];
   threads: { [ulid: Ulid]: Thread };
-  messages: { [ulid: Ulid]: Message };
+  messages: { [ulid: Ulid]: Message | Announcement };
   channels: { [ulid: Ulid]: Channel };
   categories: { [ulid: Ulid]: SpaceCategory };
   sidebarItems: SidebarItem[];
