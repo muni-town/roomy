@@ -230,7 +230,7 @@
                 {/each}
               </select>
               <Button.Root
-                class={`px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2`}
+                class="px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2"
               >
                 <Icon icon="basil:add-outline" font-size="1.8em" />
                 Create Channel
@@ -250,7 +250,7 @@
     > 
       <Accordion.Item value="channels">
         <Accordion.Header>
-          <Accordion.Trigger class="cursor-pointer uppercase text-xs font-medium text-gray-300">
+          <Accordion.Trigger class="cursor-pointer mb-2 uppercase text-xs font-medium text-gray-300">
             Channels
           </Accordion.Trigger>
         </Accordion.Header>
@@ -264,8 +264,9 @@
       </Accordion.Item>
       <Accordion.Item value="threads">
         <Accordion.Header>
-          <Accordion.Trigger class="cursor-pointer uppercase text-xs font-medium text-gray-300">
-            Threads
+          <Accordion.Trigger class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-gray-300">
+            <h3>Threads</h3>
+            <Icon icon="basil:caret-up-solid" class="size-6" /> 
           </Accordion.Trigger>
         </Accordion.Header>
         <Accordion.Content>

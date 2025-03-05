@@ -198,7 +198,7 @@
 
   {#if !isMobile}
     <div class="flex">
-      {@render toolbar({ growButton: false })}
+      {@render toolbar()}
     </div>
   {/if}
 </header>
@@ -239,117 +239,47 @@
           </div>
         {/if}
         <div class="relative">
-
-          <!-- TODO: get all users that has joined the server -->
           <ChatInput 
             bind:content={messageInput} 
             users={users.value}
             context={contextItems.value}
             onEnter={sendMessage}
           />
-
-          <!--
-          {#if mayUploadImages}
-            <label
-              class="cursor-pointer text-white hover:text-gray-300 absolute right-3 top-1/2 -translate-y-1/2"
-            >
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                class="hidden"
-                onchange={handleImageSelect}
-              />
-              <Icon
-                icon="material-symbols:add-photo-alternate"
-                class="text-2xl"
-              />
-            </label>
-          {/if}
-          -->
         </div>
-
-        <!-- Image preview 
-        {#if imageFiles?.length}
-          <div class="flex gap-2 flex-wrap">
-            {#each Array.from(imageFiles) as file}
-              <div class="relative mt-5">
-                <img
-                  src={URL.createObjectURL(file)}
-                  alt={file.name}
-                  class="w-20 h-20 object-cover rounded"
-                />
-                <button
-                  type="button"
-                  class="absolute -top-2 -right-2 bg-red-500 rounded-full p-1"
-                  onclick={() => (imageFiles = null)}
-                >
-                  <Icon icon="zondicons:close-solid" color="white" />
-                </button>
-              </div>
-            {/each}
-          </div>
-        {/if}
-        -->
       </section>
     {/if}
 
     {#if isMobile}
-      {@render toolbar({ growButton: true })}
+      {@render toolbar()}
     {/if}
   </div>
 {/if}
 
-{#snippet toolbar({ growButton = false }: { growButton: boolean })}
-  {#if isThreading.value}
-    <div in:fly class={`${growButton && "grow w-full pr-2"}`}>
-      <Popover.Root>
-        <Popover.Trigger
-          class={`cursor-pointer ${growButton ? "w-full" : "w-fit"} px-4 py-2 rounded bg-violet-800 text-white`}
+{#snippet toolbar()}
+  <menu class="relative flex items-center gap-3 px-2 w-fit self-end">
+    <Popover.Root>
+      <Popover.Trigger onclick={() => isThreading.value = !isThreading.value}>
+        <Icon
+          icon="tabler:needle-thread"
+          color="white"
+          class="text-2xl"
+        />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content 
+          side="left" 
+          sideOffset={8} 
+          interactOutsideBehavior="ignore" 
+          class="text-white bg-violet-900 rounded p-4"
         >
-          Create Thread
-        </Popover.Trigger>
-
-        <Popover.Content
-          sideOffset={8}
-          forceMount
-          class="bg-violet-800 p-4 rounded"
-        >
-          <form onsubmit={createThread} class="text-white flex flex-col gap-4">
-            <label class="flex flex-col gap-1">
-              Thread Title
-              <input
-                bind:value={threadTitleInput}
-                type="text"
-                placeholder="Notes"
-                class="border px-4 py-2 rounded"
-              />
-            </label>
-            <Popover.Close>
-              <button
-                type="submit"
-                class="text-black px-4 py-2 bg-white rounded w-full text-center"
-              >
-                Confirm
-              </button>
-            </Popover.Close>
+          <form onsubmit={createThread} class="flex flex-col gap-4">
+            <input type="text" bind:value={threadTitleInput} class="bg-violet-800" placeholder="Thread Title" />
+            <button type="submit" class="bg-violet-800 w-full rounded py-2">Create Thread</button>
           </form>
         </Popover.Content>
-      </Popover.Root>
-    </div>
-  {/if}
+      </Popover.Portal>
+    </Popover.Root>
 
-  <menu class="relative flex items-center gap-3 px-2 w-fit self-end">
-    <Toggle.Root
-      bind:pressed={isThreading.value}
-      class={`p-2 ${isThreading.value && "bg-white/10"} cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150 rounded`}
-    >
-      <Icon
-        icon="tabler:needle-thread"
-        color="white"
-        class="text-2xl"
-      />
-    </Toggle.Root>
     <Button.Root
       title="Copy invite link"
       class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
