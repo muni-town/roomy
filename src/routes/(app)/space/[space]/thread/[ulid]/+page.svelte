@@ -5,7 +5,6 @@
   import { getContext, setContext } from "svelte";
   import { goto } from "$app/navigation";
   import toast from "svelte-french-toast";
-  import { fly } from "svelte/transition";
   import { user } from "$lib/user.svelte";
   import { getContentHtml, type Item } from "$lib/tiptap/editor";
   import { outerWidth } from "svelte/reactivity/window";
@@ -14,7 +13,7 @@
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
-  import { Button, Popover, Toggle } from "bits-ui";
+  import { Button, Popover } from "bits-ui";
 
   import type {
     Did,
@@ -22,6 +21,8 @@
     Ulid,
   } from "$lib/schemas/types";
   import type { Autodoc } from "$lib/autodoc/peer";
+  import Dialog from "$lib/components/Dialog.svelte";
+  import { isDelete } from "@atproto/api/dist/client/types/com/atproto/repo/applyWrites";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
@@ -30,6 +31,7 @@
   let thread = $derived(space?.view.threads[page.params.ulid]);
   let users: { value: Item[] } = getContext("users");
   let contextItems: { value: Item[] } = getContext("contextItems");
+  let isAdmin: { value: boolean } = getContext("isAdmin");
 
   let messageInput = $state({});
   let imageFiles: FileList | null = $state(null);
@@ -178,6 +180,19 @@
     replyingTo = null;
     imageFiles = null;
   }
+
+  let isDeleteThreadDialogOpen = $state(false);
+  function deleteThread() {
+    if (!space) { return }
+    isDeleteThreadDialogOpen = false;
+
+    space.change((doc) => {
+      delete doc.threads[page.params.ulid];
+    });
+
+    toast.success("Thread deleted", { position: "bottom-end" });
+    goto(`/space/${page.params.space}`);
+  }
 </script>
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
@@ -294,5 +309,21 @@
     >
       <Icon icon="icon-park-outline:copy-link" color="white" class="text-2xl" />
     </Button.Root>
+
+    {#if isAdmin.value}
+      <Dialog 
+        title="Delete thread?" 
+        description={`You are deleting ${thread?.title}. This is NOT reversible.`}
+        bind:isDialogOpen={isDeleteThreadDialogOpen}
+      >
+        {#snippet dialogTrigger()}
+          <Icon icon="tabler:trash" color="red" class="text-2xl" />
+        {/snippet}
+
+        <Button.Root onclick={deleteThread} class="btn bg-red-500 text-white">
+          Delete
+        </Button.Root>
+      </Dialog>
+    {/if}
   </menu>
 {/snippet}
