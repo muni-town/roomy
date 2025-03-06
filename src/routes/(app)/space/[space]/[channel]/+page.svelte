@@ -30,6 +30,10 @@
   import type { Autodoc } from "$lib/autodoc/peer";
   import { getProfile } from "$lib/profile.svelte";
 
+  import { onMount, onDestroy } from 'svelte';
+  import { BlockNoteEditor } from '@blocknote/core';
+  import '@blocknote/core/style.css';
+
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let tab = $state("chat");
@@ -353,6 +357,159 @@
       }
     }
   }
+
+  let wikiContent = $state(channel?.wiki?.content || null);
+  let wikiRenderedHtml = $state(channel?.wiki?.html || '');
+  let isEditingWiki = $state(false);
+  let editorElement: HTMLElement;
+  let editor: any;
+  
+  let wikiRelatedThreads = $derived(() => {
+    if (!space || !channel?.wiki?.relatedThreads) return {};
+    
+    const threads = {};
+    for (const threadId of channel.wiki.relatedThreads) {
+      if (space.view.threads[threadId]) {
+        threads[threadId] = space.view.threads[threadId];
+      }
+    }
+    return threads;
+  });
+  
+  function setEditingWiki(value: boolean) {
+  // Only allow admins to edit the wiki
+  if (value && !isAdmin) {
+    toast.error("Only admins can edit the wiki", { position: "bottom-end" });
+    return;
+  }
+  
+  isEditingWiki = value;
+  
+  if (value) {
+    if (editor) {
+      editor = null;
+    }
+    
+    // Use a longer timeout to ensure DOM is ready
+    setTimeout(initBlockNoteEditor, 100);
+  } else if (editor) {
+    editor = null;
+  }
+}
+  
+  async function initBlockNoteEditor() {
+    if (!editorElement) return;
+    
+    try {
+      
+      editorElement.innerHTML = '';
+
+      editor = BlockNoteEditor.create();
+      editor.mount(editorElement);
+      
+    } catch (e) {
+      console.error("Failed to initialize BlockNote editor", e);
+    }
+  }
+  
+  async function saveWikiContent() {
+  if (!editor || !space) return;
+  
+  try {
+    const content = JSON.stringify(editor.document);
+    
+    const html = await editor.blocksToHTMLLossy(editor.document);
+    console.log(html)
+    
+    space.change((doc) => {
+      if (!doc.channels[page.params.channel].wiki) {
+        doc.channels[page.params.channel].wiki = {
+          content,
+          html,
+          relatedThreads: [],
+          lastUpdated: Date.now()
+        };
+      } else {
+        if(!doc.channels[page.params.channel].wiki) {
+          doc.channels[page.params.channel].wiki = {
+            content: '',
+            html: '',
+            relatedThreads: [],
+            lastUpdated: Date.now()
+          };
+        }
+        doc.channels[page.params.channel].wiki.content = content;
+        doc.channels[page.params.channel].wiki.html = html;
+        doc.channels[page.params.channel].wiki.lastUpdated = Date.now();
+      }
+    });
+    
+    wikiContent = content;
+    wikiRenderedHtml = html;
+    setEditingWiki(false);
+    toast.success("Wiki saved successfully", { position: "bottom-end" });
+  } catch (e) {
+    console.error("Failed to save wiki content", e);
+    toast.error("Failed to save wiki content", { position: "bottom-end" });
+  }
+}
+  
+  function relateThreadToWiki(threadId: string) {
+    if (!space) return;
+    
+    space.change((doc) => {
+      if (!doc.channels[page.params.channel].wiki) {
+        doc.channels[page.params.channel].wiki = {
+          content: wikiContent || '',
+          html: wikiRenderedHtml || '',
+          relatedThreads: [threadId],
+          lastUpdated: Date.now()
+        };
+      } else if (!doc.channels[page.params.channel].wiki.relatedThreads) {
+        doc.channels[page.params.channel].wiki.relatedThreads = [threadId];
+      } else if (!doc.channels[page.params.channel].wiki.relatedThreads.includes(threadId)) {
+        doc.channels[page.params.channel].wiki.relatedThreads.push(threadId);
+      }
+    });
+    
+    toast.success("Thread related to wiki", { position: "bottom-end" });
+  }
+  
+  function removeRelatedThread(threadId: string) {
+    if (!space) return;
+    
+    space.change((doc) => {
+      if (doc.channels[page.params.channel].wiki?.relatedThreads) {
+        doc.channels[page.params.channel].wiki.relatedThreads = 
+          doc.channels[page.params.channel].wiki.relatedThreads.filter(id => id !== threadId);
+      }
+    });
+  }
+  
+  $effect(() => {
+    if (channel?.wiki) {
+      wikiContent = channel.wiki.content;
+      wikiRenderedHtml = channel.wiki.html || '';
+    }
+  });
+  
+  // Clean up the editor when component unmounts or tab changes
+  $effect(() => {
+    if (tab !== "wiki" && editor) {
+      editor = null;
+    }
+  });
+
+  onMount(() => {
+    // Force reload CSS to ensure styles are applied
+    const existingLink = document.querySelector('link[href*="@blocknote/core/style.css"]');
+    if (!existingLink) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/@blocknote/core@latest/style.css';
+      document.head.appendChild(link);
+    }
+  });
 </script>
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
@@ -387,7 +544,7 @@
   </div>
 
   <Tabs.Root bind:value={tab}>
-    <Tabs.List class="grid grid-cols-2 gap-4 border text-white p-1 rounded">
+    <Tabs.List class="grid grid-cols-3 gap-4 border text-white p-1 rounded">
       <Tabs.Trigger
         value="chat"
         onclick={() => goto(page.url.pathname)}
@@ -411,6 +568,19 @@
           <p>Threads</p>
         {/if}
       </Tabs.Trigger>
+      <Tabs.Trigger
+        value="wiki"
+        class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
+      >
+        <Icon
+          icon="tabler:notebook"
+          color="white"
+          class="text-2xl"
+        />
+        {#if !isMobile}
+          <p>Wiki</p>
+        {/if}
+      </Tabs.Trigger>
     </Tabs.List>
   </Tabs.Root>
 
@@ -425,6 +595,8 @@
   {@render chatTab()}
 {:else if tab === "threads"}
   {@render threadsTab()}
+{:else if tab === "wiki"}
+  {@render wikiTab()}
 {/if}
 
 {#snippet chatTab()}
@@ -698,3 +870,199 @@
     {/if}
   </menu>
 {/snippet}
+
+{#snippet wikiTab()}
+  {#if space}
+    <div class="flex flex-col gap-4 h-full overflow-y-auto p-2">
+      {#if !wikiContent || isEditingWiki}
+        <section class="wiki-editor-container">
+          {#if isEditingWiki}
+            <div class="mb-4 flex justify-between items-center">
+              <h3 class="text-xl font-bold text-white">{channel?.name} Wiki</h3>
+              <div class="flex gap-2">
+                <Button.Root 
+                  onclick={() => setEditingWiki(false)}
+                  class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors"
+                >
+                  Cancel
+                </Button.Root>
+                <Button.Root 
+                  onclick={saveWikiContent}
+                  class="px-4 py-2 bg-violet-700 text-white rounded hover:bg-violet-600 transition-colors"
+                >
+                  Save
+                </Button.Root>
+              </div>
+            </div>
+            <div class="wiki-editor bg-violet-900/20 rounded-lg border border-violet-500/30 p-4">
+              <div bind:this={editorElement} class="min-h-[400px]"></div>
+            </div>
+          {:else}
+            <div class="flex justify-center items-center p-8 border border-dashed border-violet-500 rounded-lg">
+              <!-- Only show Create Wiki button to admins -->
+              {#if isAdmin}
+                <Button.Root 
+                  onclick={() => setEditingWiki(true)}
+                  class="flex items-center gap-2 px-4 py-2 bg-violet-700 text-white rounded-lg hover:bg-violet-600 transition-colors"
+                >
+                  <Icon icon="tabler:edit" />
+                  Create Wiki Page
+                </Button.Root>
+              {:else}
+                <p class="text-gray-300">No wiki page exists yet. Only channel admins can create one.</p>
+              {/if}
+            </div>
+          {/if}
+        </section>
+      {:else}
+        <section class="wiki-content">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-bold text-white">{channel?.name} Wiki</h3>
+            <!-- Only show Edit Wiki button to admins -->
+            {#if isAdmin}
+              <Button.Root 
+                onclick={() => setEditingWiki(true)}
+                class="px-4 py-2 bg-violet-700 text-white rounded hover:bg-violet-600 transition-colors"
+              >
+                <Icon icon="tabler:edit" />
+                Edit Wiki
+              </Button.Root>
+            {/if}
+          </div>
+          
+          <div class="wiki-rendered p-4 bg-violet-900/30 rounded-lg">
+            <div class="wiki-html text-white">
+              {@html wikiRenderedHtml}
+            </div>
+          </div>
+          
+          <div class="mt-6">
+            <div class="flex justify-between items-center mb-2">
+              <h4 class="text-lg font-semibold text-white">Related Threads</h4>
+              <!-- Only show Add Thread button to admins -->
+              {#if isAdmin}
+                <Popover.Root>
+                  <Popover.Trigger class="px-3 py-1 bg-violet-700 text-white rounded text-sm hover:bg-violet-600">
+                    Add Thread
+                  </Popover.Trigger>
+                  <Popover.Content
+                    transition={fly}
+                    sideOffset={8}
+                    class="bg-violet-800 p-4 rounded max-h-[300px] overflow-y-auto"
+                  >
+                    <h5 class="text-white mb-2">Select Thread</h5>
+                    <ul class="flex flex-col gap-2">
+                      {#each Object.entries(space.view.threads) as [id, thread] (id)}
+                        {#if !channel?.wiki?.relatedThreads?.includes(id)}
+                          <li>
+                            <button 
+                              class="w-full text-left p-2 bg-violet-700/50 hover:bg-violet-600 text-white rounded"
+                              onclick={() => relateThreadToWiki(id)}
+                            >
+                              {thread.title}
+                            </button>
+                          </li>
+                        {/if}
+                      {/each}
+                    </ul>
+                  </Popover.Content>
+                </Popover.Root>
+              {/if}
+            </div>
+            
+            <ul class="overflow-y-auto px-2 gap-3 flex flex-col">
+              {#each Object.entries(wikiRelatedThreads) as [id, thread] (id)}
+                <li class="flex justify-between items-center bg-violet-900/20 p-2 rounded">
+                  <ThreadRow
+                    {id}
+                    {thread}
+                    onclick={() => goto(`?thread=${id}`)}
+                  />
+                  <!-- Only show delete button to admins -->
+                  {#if isAdmin}
+                    <Button.Root 
+                      onclick={() => removeRelatedThread(id)}
+                      class="p-1 hover:bg-violet-700 rounded"
+                    >
+                      <Icon icon="tabler:trash" color="white" />
+                    </Button.Root>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+          </div>
+        </section>
+      {/if}
+    </div>
+  {/if}
+{/snippet}
+
+<style>
+  /* Add these styles at the end of the file */
+  .wiki-editor-container {
+    height: calc(100vh - 220px);
+  }
+  
+  .wiki-content {
+    height: calc(100vh - 220px);
+    overflow-y: auto;
+  }
+  
+  :global(.bn-container) {
+    border: none !important;
+    background-color: transparent !important;
+  }
+  
+  :global(.bn-editor) {
+    background-color: transparent !important;
+  }
+  
+  /* Styles for rendered wiki content */
+  .wiki-html :global(h1) {
+    font-size: 1.8rem;
+    font-weight: bold;
+    margin-bottom: 1rem;
+  }
+  
+  .wiki-html :global(h2) {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-bottom: 0.75rem;
+  }
+  
+  .wiki-html :global(p) {
+    margin-bottom: 1rem;
+  }
+  
+  .wiki-html :global(ul), .wiki-html :global(ol) {
+    margin-left: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  
+  .wiki-html :global(a) {
+    color: #a78bfa;
+    text-decoration: underline;
+  }
+  
+  .wiki-html :global(blockquote) {
+    border-left: 4px solid #a78bfa;
+    padding-left: 1rem;
+    margin-left: 0;
+    margin-right: 0;
+    font-style: italic;
+  }
+  
+  .wiki-html :global(code) {
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-family: monospace;
+  }
+  
+  .wiki-html :global(pre) {
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+  }
+</style>

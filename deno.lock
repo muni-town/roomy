@@ -2655,6 +2655,8 @@
         "npm:@atproto/oauth-client-browser@~0.3.7",
         "npm:@automerge/automerge-repo-storage-indexeddb@2.0.0-alpha.20",
         "npm:@automerge/automerge@2.2.8",
+        "npm:@blocknote/core@0.25",
+        "npm:@blocknote/react@0.25",
         "npm:@iconify/svelte@^4.2.0",
         "npm:@jsr/roomy-chat__router@0.1.0-alpha.12",
         "npm:@noble/curves@^1.8.1",
