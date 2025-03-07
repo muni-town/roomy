@@ -3,10 +3,9 @@
   import { onNavigate } from "$app/navigation";
   import ChatMessage from "./ChatMessage.svelte";
   import type { Autodoc } from "$lib/autodoc/peer";
-  import type { Announcement, DM, Message, Space, Ulid } from "$lib/schemas/types";
+  import type { DM, Message, Space, Ulid } from "$lib/schemas/types";
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
-  import { decodeTime } from "ulidx";
   import { isAnnouncement } from "$lib/utils";
 
   let {
@@ -19,24 +18,10 @@
     timeline: Ulid[]
   } = $props();
 
-  let messages = $derived.by(() => {
-    const list = source.type == "dm"
-      ? source.channel.view.messages
-      : source.space.view.messages;
-
-    const orderedUlids = Object.keys(list).sort((a,b) => decodeTime(a) - decodeTime(b));
-    const newList = {} as Record<Ulid, Message | Announcement>;
-    for (const ulid of orderedUlids) {
-      newList[ulid] = list[ulid]; 
-    }
-
-    console.log({ 
-      list: Object.keys(list).map((t) => decodeTime(t)), 
-      newList: Object.keys(newList).map((t) => decodeTime(t)) 
-    });
-
-    return newList;
-  });
+  let messages = $derived(source.type == "dm"
+    ? source.channel.view.messages
+    : source.space.view.messages
+  );
 
   $inspect({ messages });
 
