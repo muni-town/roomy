@@ -1,6 +1,6 @@
 <script lang="ts">
   import _ from "underscore";
-  import { decodeTime, ulid } from "ulidx";
+  import { ulid } from "ulidx";
   import { page } from "$app/state";
   import { getContext, setContext } from "svelte";
   import { goto } from "$app/navigation";
@@ -10,7 +10,6 @@
   import { outerWidth } from "svelte/reactivity/window";
 
   import Icon from "@iconify/svelte";
-  import Dialog from "$lib/components/Dialog.svelte";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
@@ -19,29 +18,25 @@
   import type {
     Did,
     Space,
-    Channel,
     Ulid,
-    Announcement,
-    Message,
   } from "$lib/schemas/types";
   import type { Autodoc } from "$lib/autodoc/peer";
+  import Dialog from "$lib/components/Dialog.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let spaceContext = getContext("space") as { get value(): Autodoc<Space> | undefined };
   let space = $derived(spaceContext.value);
-  let channel = $derived(space?.view.channels[page.params.channel]) as
-    | Channel
-    | undefined;
+  let thread = $derived(space?.view.threads[page.params.ulid]);
   let users: { value: Item[] } = getContext("users");
   let contextItems: { value: Item[] } = getContext("contextItems");
+  let isAdmin: { value: boolean } = getContext("isAdmin");
 
   let messageInput = $state({});
   let imageFiles: FileList | null = $state(null);
 
   // thread maker
   let isThreading = $state({ value: false });
-  $inspect({ isThreading })
   let threadTitleInput = $state("");
   let selectedMessages: Ulid[] = $state([]);
   setContext("isThreading", isThreading);
@@ -121,50 +116,18 @@
 
   function createThread(e: SubmitEvent) {
     e.preventDefault();
-    if (!space || !channel) return;
+    if (!space) return;
 
     space.change((doc) => {
-      const threadId = ulid();
-      const threadTimeline: string[] = [];
-
+      const id = ulid();
+      const timeline = [];
       for (const id of selectedMessages) {
-        // move selected message ID from channel to thread timeline
-        threadTimeline.push(id);
-        const index = channel?.timeline.indexOf(id);
-        doc.channels[page.params.channel].timeline.splice(index, 1);
-
-        // create an Announcement about the move for each message
-        const timestamp = decodeTime(id);
-        const announcementId = ulid(timestamp);
-        const announcement: Announcement = {
-          kind: "messageMoved",
-          relatedMessages: [id],
-          relatedThreads: [threadId],
-          reactions: {}
-        };
-
-        doc.messages[announcementId] = announcement; 
-
-        // push announcement at moved message's index
-        doc.channels[page.params.channel].timeline.splice(index, 0, announcementId);
+        timeline.push(`${id}`);
       }
-
-      // create thread
-      doc.threads[threadId] = {
+      doc.threads[id] = {
         title: threadTitleInput,
-        timeline: threadTimeline,
+        timeline,
       };
-      
-      // create an Announcement about the new Thread in current channel
-      const announcementId = ulid();
-      const announcement: Announcement = {
-        kind: "threadCreated",
-        relatedThreads: [threadId],
-        reactions: {}
-      };
-
-      doc.messages[announcementId] = announcement; 
-      doc.channels[page.params.channel].timeline.push(announcementId);
     });
 
     threadTitleInput = "";
@@ -175,7 +138,7 @@
   async function sendMessage() {
     if (!space) return;
 
-    /* TODO: image upload refactor with tiptap
+    /* TODO: rework with tiptap?
     const images = imageFiles
       ? await Promise.all(
           Array.from(imageFiles).map(async (file) => {
@@ -208,11 +171,8 @@
         reactions: {},
         content: JSON.stringify(messageInput),
         ...(replyingTo && { replyTo: replyingTo.id }),
-        
-        // TODO: image upload refactor with tiptap
-        // ...(images && { images }),
       };
-      doc.channels[page.params.channel].timeline.push(id);
+      doc.threads[page.params.ulid].timeline.push(id);
     });
 
     messageInput = {};
@@ -220,101 +180,18 @@
     imageFiles = null;
   }
 
-  //
-  // Settings Dialog
-  //
-
-  let { value: isAdmin }: { value: boolean } = getContext("isAdmin");
-
-  /* TODO: image upload refactor with tiptap
-  let mayUploadImages = $derived.by(() => {
-    if (isAdmin) return true;
+  let isDeleteThreadDialogOpen = $state(false);
+  function deleteThread() {
     if (!space) { return }
+    isDeleteThreadDialogOpen = false;
 
-    let messagesByUser = Object.values(space.view.messages).filter(
-      (x) => user.agent && x.author == user.agent.assertDid,
-    );
-    if (messagesByUser.length > 5) return true;
-    return !!messagesByUser.find(
-      (message) =>
-        !!Object.values(message.reactions).find(
-          (reactedUsers) =>
-            !!reactedUsers.find((user) => !!space?.view.admins.includes(user)),
-        ),
-    );
-  });
-  */
-  let showSettingsDialog = $state(false);
-  let channelNameInput = $state("");
-  let channelCategoryInput = $state(undefined) as undefined | string;
-  $effect(() => {
-    if (!space) { return }
-    channelNameInput = channel?.name || "";
-    channelCategoryInput = Object.entries(space.view.categories).find(
-      ([_id, category]) => category.channels.includes(page.params.channel),
-    )?.[0];
-  });
-
-  function saveSettings() {
-    space?.change((space) => {
-      if (channelNameInput) {
-        space.channels[page.params.channel].name = channelNameInput;
-      }
-      Object.entries(space.categories).forEach(([catId, category]) => {
-        if (channelCategoryInput !== catId) {
-          const idx = category.channels.indexOf(page.params.channel);
-          if (idx !== -1) {
-            category.channels.splice(idx, 1);
-          }
-        }
-        if (channelCategoryInput) {
-          const category = space.categories[channelCategoryInput];
-          if (!category.channels.includes(page.params.channel)) {
-            category.channels.push(page.params.channel);
-          }
-          const idx = space.sidebarItems.findIndex(
-            (x) => x.type == "channel" && x.id == page.params.channel,
-          );
-          if (idx !== -1) {
-            space.sidebarItems.splice(idx, 1);
-          }
-        } else if (
-          !space.sidebarItems.find(
-            (x) => x.type == "channel" && x.id == page.params.channel,
-          )
-        ) {
-          space.sidebarItems.push({ type: "channel", id: page.params.channel });
-        }
-      });
+    space.change((doc) => {
+      delete doc.threads[page.params.ulid];
     });
-    showSettingsDialog = false;
+
+    toast.success("Thread deleted", { position: "bottom-end" });
+    goto(`/space/${page.params.space}`);
   }
-
-  /* TODO: image upload refactor with tiptap
-  async function handleImageSelect(event: Event) {
-    const input = event.target as HTMLInputElement;
-    imageFiles = input.files;
-  }
-
-  async function handlePaste(event: ClipboardEvent) {
-    if (!mayUploadImages) return;
-
-    const items = event.clipboardData?.items;
-    if (!items) return;
-
-    for (const item of items) {
-      if (item.type.startsWith("image/")) {
-        const file = item.getAsFile();
-        if (file) {
-          imageFiles = new DataTransfer().files;
-          const dataTransfer = new DataTransfer();
-          dataTransfer.items.add(file);
-          imageFiles = dataTransfer.files;
-        }
-      }
-    }
-  }
-  */
 </script>
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
@@ -324,11 +201,11 @@
         <Icon icon="uil:left" color="white" />
       </Button.Root>
     {:else}
-      <AvatarImage avatarUrl={channel?.avatar} handle={channel?.name ?? ""} />
+      <AvatarImage handle={thread?.title ?? ""} />
     {/if}
 
     <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-white text-lg font-bold`}>
-      {channel?.name}
+      {thread?.title}
     </h4>
   </div>
 
@@ -343,7 +220,7 @@
 {#if space}
   <ChatArea
     source={{ type: "space", space: space }}
-    timeline={channel?.timeline ?? []}
+    timeline={thread?.timeline ?? []}
   />
   <div class="flex float-end">
     {#if !isMobile || !isThreading.value}
@@ -376,58 +253,13 @@
           </div>
         {/if}
         <div class="relative">
-
-          <!-- TODO: get all users that has joined the server -->
           <ChatInput 
             bind:content={messageInput} 
             users={users.value}
             context={contextItems.value}
             onEnter={sendMessage}
           />
-
-          <!--
-          {#if mayUploadImages}
-            <label
-              class="cursor-pointer text-white hover:text-gray-300 absolute right-3 top-1/2 -translate-y-1/2"
-            >
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                class="hidden"
-                onchange={handleImageSelect}
-              />
-              <Icon
-                icon="material-symbols:add-photo-alternate"
-                class="text-2xl"
-              />
-            </label>
-          {/if}
-          -->
         </div>
-
-        <!-- Image preview 
-        {#if imageFiles?.length}
-          <div class="flex gap-2 flex-wrap">
-            {#each Array.from(imageFiles) as file}
-              <div class="relative mt-5">
-                <img
-                  src={URL.createObjectURL(file)}
-                  alt={file.name}
-                  class="w-20 h-20 object-cover rounded"
-                />
-                <button
-                  type="button"
-                  class="absolute -top-2 -right-2 bg-red-500 rounded-full p-1"
-                  onclick={() => (imageFiles = null)}
-                >
-                  <Icon icon="zondicons:close-solid" color="white" />
-                </button>
-              </div>
-            {/each}
-          </div>
-        {/if}
-        -->
       </section>
     {/if}
 
@@ -466,9 +298,10 @@
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
+
     <Button.Root
       title="Copy invite link"
-      class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
+      class="btn"
       onclick={() => {
         navigator.clipboard.writeText(`${page.url.href}`);
       }}
@@ -476,45 +309,19 @@
       <Icon icon="icon-park-outline:copy-link" color="white" class="text-2xl" />
     </Button.Root>
 
-    {#if isAdmin}
-      <Dialog title="Channel Settings" bind:isDialogOpen={showSettingsDialog}>
+    {#if isAdmin.value}
+      <Dialog 
+        title="Delete thread?" 
+        description={`You are deleting ${thread?.title}. This is NOT reversible.`}
+        bind:isDialogOpen={isDeleteThreadDialogOpen}
+      >
         {#snippet dialogTrigger()}
-          <Button.Root
-            title="Channel Settings"
-            class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150 m-auto flex"
-          >
-            <Icon icon="lucide:settings" color="white" class="text-2xl" />
-          </Button.Root>
+          <Icon icon="tabler:trash" color="red" class="text-2xl" />
         {/snippet}
 
-        <form class="flex flex-col gap-4 w-full" onsubmit={saveSettings}>
-          <label>
-            Name
-            <input
-              bind:value={channelNameInput}
-              placeholder="channel-name"
-              class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
-            />
-          </label>
-          {#if space}
-            <select bind:value={channelCategoryInput}>
-              <option class="bg-violet-900 text-white" value={undefined}
-                >Category: None</option
-              >
-              {#each Object.keys(space.view.categories) as categoryId}
-                {@const category = space.view.categories[categoryId]}
-                <option class="bg-violet-900 text-white" value={categoryId}
-                  >Category: {category.name}</option
-                >
-              {/each}
-            </select>
-          {/if}
-          <Button.Root
-            class={`px-4 py-2 bg-white text-black rounded-lg disabled:bg-white/50 active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 hover:scale-[102%]`}
-          >
-            Save Settings
-          </Button.Root>
-        </form>
+        <Button.Root onclick={deleteThread} class="btn bg-red-500 text-white">
+          Delete
+        </Button.Root>
       </Dialog>
     {/if}
   </menu>

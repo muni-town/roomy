@@ -36,20 +36,32 @@ export type Did = string;
 export type Message = {
   author: Did;
   content: string;
-  replyTo?: Ulid;
   reactions: { [reaction: string]: Did[] };
+  replyTo?: Ulid;
   images?: {
     source: string;
     alt?: string;
   }[];
+  softDeleted?: boolean;
 };
+
+export type Announcement = {
+  kind: "messageMoved" | "messageDeleted" | "threadCreated";
+  reactions: { [reaction: string]: Did[] };
+  relatedMessages?: Ulid[];
+  relatedThreads?: Ulid[];
+  softDeleted?: boolean;
+}
 
 export type Thread = {
   title: string;
   timeline: Ulid[];
+  softDeleted?: boolean;
 };
 
-export type Channel = {
+// Used in DMs
+// TODO: Delete since DMs are not in priority
+export type DM = {
   name: string;
   description: string;
   messages: { [ulid: Ulid]: Message };
@@ -57,13 +69,15 @@ export type Channel = {
   timeline: Ulid[];
 };
 
-export type SpaceChannel = {
+export type Channel = {
   name: string;
   description?: string;
   avatar?: string;
   threads: Ulid[];
   timeline: Ulid[];
+  softDeleted?: boolean;
 };
+
 export type SpaceCategory = {
   name: string;
   channels: Ulid[];
@@ -74,8 +88,8 @@ export type Space = {
   admins: Ulid[];
   moderators: Ulid[];
   threads: { [ulid: Ulid]: Thread };
-  messages: { [ulid: Ulid]: Message };
-  channels: { [ulid: Ulid]: SpaceChannel };
+  messages: { [ulid: Ulid]: Message | Announcement };
+  channels: { [ulid: Ulid]: Channel };
   categories: { [ulid: Ulid]: SpaceCategory };
   sidebarItems: SidebarItem[];
   name: string;

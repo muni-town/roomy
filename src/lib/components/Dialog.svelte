@@ -1,6 +1,5 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
-  import { fade } from "svelte/transition";
   import { Dialog, Separator } from "bits-ui";
   import type { Snippet } from "svelte";
 

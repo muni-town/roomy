@@ -2,6 +2,7 @@ import type { DidDocument } from "@atproto/oauth-client-browser";
 import type { Doc } from "@automerge/automerge";
 import { next as Automerge } from "@automerge/automerge";
 import { decodeBase32 } from "./base32";
+import type { Announcement, Message } from "./schemas/types";
 
 /** Cleans a handle string by removing any characters not valid for a domain. */
 export function cleanHandle(handle: string): string {
@@ -54,3 +55,8 @@ export function unreadCount<Channel>(
   }
   return count;
 }
+
+export function isAnnouncement(message: Message | Announcement): message is Announcement {
+  return (message as Announcement).kind !== undefined;    
+}
+
