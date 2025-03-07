@@ -125,10 +125,11 @@
 
     space.change((doc) => {
       const threadId = ulid();
-      const timeline: string[] = [];
+      const threadTimeline: string[] = [];
+
       for (const id of selectedMessages) {
         // move selected message ID from channel to thread timeline
-        timeline.push(id);
+        threadTimeline.push(id);
         const index = channel?.timeline.indexOf(id);
         doc.channels[page.params.channel].timeline.splice(index, 1);
 
@@ -143,13 +144,15 @@
         };
 
         doc.messages[announcementId] = announcement; 
-        doc.channels[page.params.channel].timeline.push(announcementId);
+
+        // push announcement at moved message's index
+        doc.channels[page.params.channel].timeline.splice(index, 0, announcementId);
       }
 
       // create thread
       doc.threads[threadId] = {
         title: threadTitleInput,
-        timeline,
+        timeline: threadTimeline,
       };
       
       // create an Announcement about the new Thread in current channel
@@ -162,9 +165,6 @@
 
       doc.messages[announcementId] = announcement; 
       doc.channels[page.params.channel].timeline.push(announcementId);
-
-
-      // TODO: reorder messages
     });
 
     threadTitleInput = "";

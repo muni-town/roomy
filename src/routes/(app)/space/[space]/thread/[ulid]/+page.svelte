@@ -22,7 +22,6 @@
   } from "$lib/schemas/types";
   import type { Autodoc } from "$lib/autodoc/peer";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { isDelete } from "@atproto/api/dist/client/types/com/atproto/repo/applyWrites";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 

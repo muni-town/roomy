@@ -16,6 +16,7 @@
   import { getContentHtml } from "$lib/tiptap/editor";
   import type { Autodoc } from "$lib/autodoc/peer";
   import { page } from "$app/state";
+  import { isAnnouncement } from "$lib/utils";
 
   type Props = {
     id: Ulid;
@@ -25,10 +26,6 @@
 
   let { id, message, messageRepliedTo }: Props = $props();
   let space: { value: Autodoc<Space> } = getContext("space");
-
-  function isAnnouncement(message: Message | Announcement): message is Announcement {
-    return (message as Announcement).kind !== undefined;    
-  }
 
   // doesn't change after render, so $derived is not necessary
   const authorProfile = !isAnnouncement(message) && getProfile(message.author);
