@@ -30,9 +30,12 @@
   import type { Autodoc } from "$lib/autodoc/peer";
   import { getProfile } from "$lib/profile.svelte";
 
-  import { onMount, onDestroy } from 'svelte';
-  import { BlockNoteEditor } from '@blocknote/core';
-  import '@blocknote/core/style.css';
+  import { onMount, onDestroy } from "svelte";
+  import {
+    BlockNoteEditor,
+    type BlockNoteEditorOptions,
+  } from "@blocknote/core";
+  import "@blocknote/core/style.css";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
@@ -41,49 +44,60 @@
   let channel = $derived(space.view.channels[page.params.channel]) as
     | SpaceChannel
     | undefined;
-  
+
   // TODO: track users via the space data
   let users = $state(() => {
-    if (!space) { return [] };
+    if (!space) {
+      return [];
+    }
     const result = new Set();
     for (const message of Object.entries(space.view.messages)) {
       result.add(message[1].author);
     }
-    return result.values().toArray().map((author) => { 
-      const profile = getProfile(author as string);
-      return { value: author, label: profile.handle, category: "user" }
-    }) as Item[];
+    return result
+      .values()
+      .toArray()
+      .map((author) => {
+        const profile = getProfile(author as string);
+        return { value: author, label: profile.handle, category: "user" };
+      }) as Item[];
   });
 
   let contextItems: Item[] = $derived.by(() => {
-    if (!space) { return [] };
+    if (!space) {
+      return [];
+    }
     const items = [];
 
     // add threads to list
-    items.push(...Object.entries(space.view.threads).map(([ulid, thread]) => { 
-      return { 
-        value: JSON.stringify({
-          ulid,
-          space: page.params.space,
-          type: "thread"
-        }), 
-        label: thread.title,
-        category: "thread"
-      } 
-    }));
+    items.push(
+      ...Object.entries(space.view.threads).map(([ulid, thread]) => {
+        return {
+          value: JSON.stringify({
+            ulid,
+            space: page.params.space,
+            type: "thread",
+          }),
+          label: thread.title,
+          category: "thread",
+        };
+      }),
+    );
 
     // add channels to list
-    items.push(...Object.entries(space.view.channels).map(([ulid, channel]) => {
-      return {
-        value: JSON.stringify({
-          ulid,
-          space: page.params.space,
-          type: "channel"
-        }),
-        label: channel.name,
-        category: "channel"
-      }
-    }));
+    items.push(
+      ...Object.entries(space.view.channels).map(([ulid, channel]) => {
+        return {
+          value: JSON.stringify({
+            ulid,
+            space: page.params.space,
+            type: "channel",
+          }),
+          label: channel.name,
+          category: "channel",
+        };
+      }),
+    );
 
     return items as Item[];
   });
@@ -242,7 +256,7 @@
         reactions: {},
         content: JSON.stringify(messageInput),
         ...(replyingTo && { replyTo: replyingTo.id }),
-        
+
         // TODO: rework images with tiptap
         // ...(images && { images }),
       };
@@ -264,7 +278,6 @@
     toast.success("Thread deleted", { position: "bottom-end" });
     goto(page.url.pathname);
   }
-
 
   //
   // Settings Dialog
@@ -359,14 +372,14 @@
   }
 
   let wikiContent = $state(channel?.wiki?.content || null);
-  let wikiRenderedHtml = $state(channel?.wiki?.html || '');
+  let wikiRenderedHtml = $state(channel?.wiki?.html || "");
   let isEditingWiki = $state(false);
   let editorElement: HTMLElement;
-  let editor: any;
-  
+  let editor: BlockNoteEditor | null;
+
   let wikiRelatedThreads = $derived(() => {
     if (!space || !channel?.wiki?.relatedThreads) return {};
-    
+
     const threads = {};
     for (const threadId of channel.wiki.relatedThreads) {
       if (space.view.threads[threadId]) {
@@ -375,124 +388,206 @@
     }
     return threads;
   });
-  
+
   function setEditingWiki(value: boolean) {
-  // Only allow admins to edit the wiki
-  if (value && !isAdmin) {
-    toast.error("Only admins can edit the wiki", { position: "bottom-end" });
-    return;
-  }
-  
-  isEditingWiki = value;
-  
-  if (value) {
-    if (editor) {
+    // Only allow admins to edit the wiki
+    if (value && !isAdmin) {
+      toast.error("Only admins can edit the wiki", { position: "bottom-end" });
+      return;
+    }
+
+    isEditingWiki = value;
+
+    if (value) {
+      if (editor) {
+        editor = null;
+      }
+
+      // Use a longer timeout to ensure DOM is ready
+      setTimeout(initBlockNoteEditor, 100);
+    } else if (editor) {
       editor = null;
     }
-    
-    // Use a longer timeout to ensure DOM is ready
-    setTimeout(initBlockNoteEditor, 100);
-  } else if (editor) {
-    editor = null;
   }
-}
-  
+
+  const EditorHandler = (editor: BlockNoteEditor) => {
+    try {
+      const cursorPosition = editor.getTextCursorPosition();
+      if (!cursorPosition) return;
+
+      const block = cursorPosition.block;
+      const content = block.content?.[0];
+
+      if (content && content.type === "text" && content.text === "/") {
+        // Show the slash command menu
+        slashMenuVisible = true;
+
+        const { top, left } = editor.getSelectionBoundingBox()?.toJSON();
+
+        // TODO: Calculate the menu height and position it correctly
+        const menuHeight = 300; // Approximate max height of the menu
+        const viewportHeight = window.innerHeight;
+        const scrollY = window.scrollY;
+
+        const wouldOverflow = top + 20 + menuHeight > viewportHeight + scrollY;
+
+        // Position menu above cursor if it would overflow, otherwise below
+        const yPosition = wouldOverflow
+          ? Math.max(scrollY, top - menuHeight - 10) // Above cursor, but not above viewport
+          : top + 20; // Below cursor with padding
+
+        slashMenuPosition = {
+          x: left,
+          y: yPosition,
+        };
+      } else {
+        slashMenuVisible = false;
+      }
+    } catch (e) {
+      console.error("Error in EditorHandler:", e);
+      slashMenuVisible = false;
+    }
+  };
+
+  // Function to execute a slash command
+  function executeSlashCommand(command) {
+    if (!editor) return;
+
+    // Remove the slash character
+    const pos = editor.getTextCursorPosition();
+    
+
+    // Execute the command
+    command.action();
+    editor.updateBlock(pos.block.id, {
+      content: [],
+    });
+    editor.setTextCursorPosition(pos.block.id, "start");
+    // Hide the menu
+    slashMenuVisible = false;
+  }
+
   async function initBlockNoteEditor() {
     if (!editorElement) return;
-    
-    try {
-      
-      editorElement.innerHTML = '';
 
+    try {
+      editorElement.innerHTML = "";
+
+      // Create the editor
       editor = BlockNoteEditor.create();
       editor.mount(editorElement);
-      
+      editor.onChange(EditorHandler);
+
+      // Load existing content if available
+      if (wikiContent) {
+        try {
+          // Parse the content and set it to the editor
+          const parsedContent = JSON.parse(wikiContent);
+          console.log("Parsed content:", parsedContent);
+
+          // Wait a bit for the editor to fully initialize
+          setTimeout(() => {
+            if (editor && editor.document) {
+              // Replace the editor's document with the saved content
+              editor.replaceBlocks(editor.document, parsedContent);
+              console.log("Content loaded into editor");
+            }
+          }, 200);
+        } catch (e) {
+          console.error("Failed to parse wiki content", e);
+        }
+      }
     } catch (e) {
       console.error("Failed to initialize BlockNote editor", e);
     }
   }
-  
+
   async function saveWikiContent() {
-  if (!editor || !space) return;
-  
-  try {
-    const content = JSON.stringify(editor.document);
-    
-    const html = await editor.blocksToHTMLLossy(editor.document);
-    console.log(html)
-    
-    space.change((doc) => {
-      if (!doc.channels[page.params.channel].wiki) {
-        doc.channels[page.params.channel].wiki = {
-          content,
-          html,
-          relatedThreads: [],
-          lastUpdated: Date.now()
-        };
-      } else {
-        if(!doc.channels[page.params.channel].wiki) {
+    if (!editor || !space) return;
+
+    try {
+      const content = JSON.stringify(editor.document);
+
+      const html = await editor.blocksToHTMLLossy(editor.document);
+      console.log(html);
+
+      space.change((doc) => {
+        if (!doc.channels[page.params.channel].wiki) {
           doc.channels[page.params.channel].wiki = {
-            content: '',
-            html: '',
+            content,
+            html,
             relatedThreads: [],
-            lastUpdated: Date.now()
+            lastUpdated: Date.now(),
           };
+        } else {
+          if (!doc.channels[page.params.channel].wiki) {
+            doc.channels[page.params.channel].wiki = {
+              content: "",
+              html: "",
+              relatedThreads: [],
+              lastUpdated: Date.now(),
+            };
+          }
+          doc.channels[page.params.channel].wiki.content = content;
+          doc.channels[page.params.channel].wiki.html = html;
+          doc.channels[page.params.channel].wiki.lastUpdated = Date.now();
         }
-        doc.channels[page.params.channel].wiki.content = content;
-        doc.channels[page.params.channel].wiki.html = html;
-        doc.channels[page.params.channel].wiki.lastUpdated = Date.now();
-      }
-    });
-    
-    wikiContent = content;
-    wikiRenderedHtml = html;
-    setEditingWiki(false);
-    toast.success("Wiki saved successfully", { position: "bottom-end" });
-  } catch (e) {
-    console.error("Failed to save wiki content", e);
-    toast.error("Failed to save wiki content", { position: "bottom-end" });
+      });
+
+      wikiContent = content;
+      wikiRenderedHtml = html;
+      setEditingWiki(false);
+      toast.success("Wiki saved successfully", { position: "bottom-end" });
+    } catch (e) {
+      console.error("Failed to save wiki content", e);
+      toast.error("Failed to save wiki content", { position: "bottom-end" });
+    }
   }
-}
-  
+
   function relateThreadToWiki(threadId: string) {
     if (!space) return;
-    
+
     space.change((doc) => {
       if (!doc.channels[page.params.channel].wiki) {
         doc.channels[page.params.channel].wiki = {
-          content: wikiContent || '',
-          html: wikiRenderedHtml || '',
+          content: wikiContent || "",
+          html: wikiRenderedHtml || "",
           relatedThreads: [threadId],
-          lastUpdated: Date.now()
+          lastUpdated: Date.now(),
         };
       } else if (!doc.channels[page.params.channel].wiki.relatedThreads) {
         doc.channels[page.params.channel].wiki.relatedThreads = [threadId];
-      } else if (!doc.channels[page.params.channel].wiki.relatedThreads.includes(threadId)) {
+      } else if (
+        !doc.channels[page.params.channel].wiki.relatedThreads.includes(
+          threadId,
+        )
+      ) {
         doc.channels[page.params.channel].wiki.relatedThreads.push(threadId);
       }
     });
-    
+
     toast.success("Thread related to wiki", { position: "bottom-end" });
   }
-  
+
   function removeRelatedThread(threadId: string) {
     if (!space) return;
-    
+
     space.change((doc) => {
       if (doc.channels[page.params.channel].wiki?.relatedThreads) {
-        doc.channels[page.params.channel].wiki.relatedThreads = 
-          doc.channels[page.params.channel].wiki.relatedThreads.filter(id => id !== threadId);
+        doc.channels[page.params.channel].wiki.relatedThreads = doc.channels[
+          page.params.channel
+        ].wiki.relatedThreads.filter((id) => id !== threadId);
       }
     });
   }
-  
+
   $effect(() => {
     if (channel?.wiki) {
       wikiContent = channel.wiki.content;
-      wikiRenderedHtml = channel.wiki.html || '';
+      wikiRenderedHtml = channel.wiki.html || "";
     }
   });
-  
+
   // Clean up the editor when component unmounts or tab changes
   $effect(() => {
     if (tab !== "wiki" && editor) {
@@ -502,14 +597,57 @@
 
   onMount(() => {
     // Force reload CSS to ensure styles are applied
-    const existingLink = document.querySelector('link[href*="@blocknote/core/style.css"]');
+    const existingLink = document.querySelector(
+      'link[href*="@blocknote/core/style.css"]',
+    );
     if (!existingLink) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/@blocknote/core@latest/style.css';
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "https://unpkg.com/@blocknote/core@latest/style.css";
       document.head.appendChild(link);
     }
   });
+
+  // Add these state variables for slash commands
+  let slashMenuVisible = $state(false);
+  let slashMenuPosition = $state({ x: 0, y: 0 });
+  let slashCommands = $state([
+    {
+      name: "Heading 1",
+      icon: "tabler:h-1",
+      action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "heading", props: {level: 1} }),
+    },
+    {
+      name: "Heading 2",
+      icon: "tabler:h-2",
+      action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "heading", props: {level: 2} }),
+    },
+    {
+      name: "Heading 3",
+      icon: "tabler:h-3",
+      action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "heading", props: {level: 3} }),
+    },
+    {
+      name: "Bulleted List",
+      icon: "tabler:list",
+      action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "bulletListItem" }),
+    },
+    {
+      name: "Numbered List",
+      icon: "tabler:list-numbers",
+      action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "numberedListItem" }),
+    },
+    {
+      name: "Checklist",
+      icon: "tabler:checkbox",
+      action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "checkListItem" }),
+    },
+    {
+      name: "Code Block",
+      icon: "tabler:code",
+      action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "codeBlock" }),
+    }
+  ]);
 </script>
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
@@ -572,11 +710,7 @@
         value="wiki"
         class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
       >
-        <Icon
-          icon="tabler:notebook"
-          color="white"
-          class="text-2xl"
-        />
+        <Icon icon="tabler:notebook" color="white" class="text-2xl" />
         {#if !isMobile}
           <p>Wiki</p>
         {/if}
@@ -635,10 +769,9 @@
             </div>
           {/if}
           <div class="relative">
-
             <!-- TODO: get all users that has joined the server -->
-            <ChatInput 
-              bind:content={messageInput} 
+            <ChatInput
+              bind:content={messageInput}
               users={users()}
               context={contextItems}
               onEnter={sendMessage}
@@ -880,13 +1013,13 @@
             <div class="mb-4 flex justify-between items-center">
               <h3 class="text-xl font-bold text-white">{channel?.name} Wiki</h3>
               <div class="flex gap-2">
-                <Button.Root 
+                <Button.Root
                   onclick={() => setEditingWiki(false)}
                   class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors"
                 >
                   Cancel
                 </Button.Root>
-                <Button.Root 
+                <Button.Root
                   onclick={saveWikiContent}
                   class="px-4 py-2 bg-violet-700 text-white rounded hover:bg-violet-600 transition-colors"
                 >
@@ -894,14 +1027,40 @@
                 </Button.Root>
               </div>
             </div>
-            <div class="wiki-editor bg-violet-900/20 rounded-lg border border-violet-500/30 p-4">
+            <div
+              class="wiki-editor bg-violet-900/20 rounded-lg border border-violet-500/30 p-4 h-auto"
+            >
               <div bind:this={editorElement} class="min-h-[400px]"></div>
+
+              <!-- Slash Command Menu -->
+              {#if slashMenuVisible}
+                <div
+                  class="slash-menu bg-violet-900 border border-violet-700 rounded shadow-lg absolute z-50"
+                  style="left: {slashMenuPosition.x}px; top: {slashMenuPosition.y}px;"
+                >
+                  <ul class="py-1">
+                    {#each slashCommands as command}
+                      <li>
+                        <button
+                          class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-violet-800 text-white"
+                          onclick={() => executeSlashCommand(command)}
+                        >
+                          <Icon icon={command.icon} class="text-xl" />
+                          <span>{command.name}</span>
+                        </button>
+                      </li>
+                    {/each}
+                  </ul>
+                </div>
+              {/if}
             </div>
           {:else}
-            <div class="flex justify-center items-center p-8 border border-dashed border-violet-500 rounded-lg">
+            <div
+              class="flex justify-center items-center p-8 border border-dashed border-violet-500 rounded-lg"
+            >
               <!-- Only show Create Wiki button to admins -->
               {#if isAdmin}
-                <Button.Root 
+                <Button.Root
                   onclick={() => setEditingWiki(true)}
                   class="flex items-center gap-2 px-4 py-2 bg-violet-700 text-white rounded-lg hover:bg-violet-600 transition-colors"
                 >
@@ -909,7 +1068,9 @@
                   Create Wiki Page
                 </Button.Root>
               {:else}
-                <p class="text-gray-300">No wiki page exists yet. Only channel admins can create one.</p>
+                <p class="text-gray-300">
+                  No wiki page exists yet. Only channel admins can create one.
+                </p>
               {/if}
             </div>
           {/if}
@@ -920,7 +1081,7 @@
             <h3 class="text-xl font-bold text-white">{channel?.name} Wiki</h3>
             <!-- Only show Edit Wiki button to admins -->
             {#if isAdmin}
-              <Button.Root 
+              <Button.Root
                 onclick={() => setEditingWiki(true)}
                 class="px-4 py-2 bg-violet-700 text-white rounded hover:bg-violet-600 transition-colors"
               >
@@ -929,20 +1090,22 @@
               </Button.Root>
             {/if}
           </div>
-          
+
           <div class="wiki-rendered p-4 bg-violet-900/30 rounded-lg">
             <div class="wiki-html text-white">
               {@html wikiRenderedHtml}
             </div>
           </div>
-          
+
           <div class="mt-6">
             <div class="flex justify-between items-center mb-2">
               <h4 class="text-lg font-semibold text-white">Related Threads</h4>
               <!-- Only show Add Thread button to admins -->
               {#if isAdmin}
                 <Popover.Root>
-                  <Popover.Trigger class="px-3 py-1 bg-violet-700 text-white rounded text-sm hover:bg-violet-600">
+                  <Popover.Trigger
+                    class="px-3 py-1 bg-violet-700 text-white rounded text-sm hover:bg-violet-600"
+                  >
                     Add Thread
                   </Popover.Trigger>
                   <Popover.Content
@@ -955,7 +1118,7 @@
                       {#each Object.entries(space.view.threads) as [id, thread] (id)}
                         {#if !channel?.wiki?.relatedThreads?.includes(id)}
                           <li>
-                            <button 
+                            <button
                               class="w-full text-left p-2 bg-violet-700/50 hover:bg-violet-600 text-white rounded"
                               onclick={() => relateThreadToWiki(id)}
                             >
@@ -969,10 +1132,12 @@
                 </Popover.Root>
               {/if}
             </div>
-            
+
             <ul class="overflow-y-auto px-2 gap-3 flex flex-col">
               {#each Object.entries(wikiRelatedThreads) as [id, thread] (id)}
-                <li class="flex justify-between items-center bg-violet-900/20 p-2 rounded">
+                <li
+                  class="flex justify-between items-center bg-violet-900/20 p-2 rounded"
+                >
                   <ThreadRow
                     {id}
                     {thread}
@@ -980,7 +1145,7 @@
                   />
                   <!-- Only show delete button to admins -->
                   {#if isAdmin}
-                    <Button.Root 
+                    <Button.Root
                       onclick={() => removeRelatedThread(id)}
                       class="p-1 hover:bg-violet-700 rounded"
                     >
@@ -998,71 +1163,87 @@
 {/snippet}
 
 <style>
-  /* Add these styles at the end of the file */
-  .wiki-editor-container {
-    height: calc(100vh - 220px);
+  .bn-default-styles {
+    color: #fff;
+    padding-inline: 20px;
   }
-  
-  .wiki-content {
-    height: calc(100vh - 220px);
+  .wiki-html :global(h1) {
+    font-size: 1.5em;
+    font-weight: bold;
+    padding: 0.5em 0;
+  }
+  .wiki-html :global(h2) {
+    font-size: 1.25em;
+    font-weight: bold;
+    padding: 0.5em 0;
+  }
+  .wiki-html :global(h3) {
+    font-size: 1.1em;
+    font-weight: bold;
+    padding: 0.5em 0;
+  }
+
+  .wiki-html :global(ol) {
+    list-style-type: decimal;
+    padding-inline-start: 1.2rem;
+  }
+  .wiki-html :global(ul) {
+    list-style-type: disc;
+    padding-inline-start: 1.2rem;
+  }
+  .slash-menu {
+    min-width: 200px;
+    max-width: 300px;
+    max-height: 300px;
     overflow-y: auto;
   }
-  
-  :global(.bn-container) {
-    border: none !important;
-    background-color: transparent !important;
+
+  .slash-menu ul {
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  /* Make sure the menu stays within the screen boundaries */
+  .wiki-editor {
+    overflow: visible;
+  }
+
+  /* Side menu button styling */
+  :global(.bn-container .bn-block) {
+    position: relative;
   }
   
-  :global(.bn-editor) {
-    background-color: transparent !important;
+  :global(.block-side-button) {
+    position: absolute;
+    left: -25px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: rgba(139, 92, 246, 0.8);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 10;
   }
   
-  /* Styles for rendered wiki content */
-  .wiki-html :global(h1) {
-    font-size: 1.8rem;
-    font-weight: bold;
-    margin-bottom: 1rem;
+  :global(.bn-block:hover .block-side-button) {
+    opacity: 1;
   }
   
-  .wiki-html :global(h2) {
-    font-size: 1.5rem;
-    font-weight: bold;
-    margin-bottom: 0.75rem;
-  }
-  
-  .wiki-html :global(p) {
-    margin-bottom: 1rem;
-  }
-  
-  .wiki-html :global(ul), .wiki-html :global(ol) {
-    margin-left: 1.5rem;
-    margin-bottom: 1rem;
-  }
-  
-  .wiki-html :global(a) {
-    color: #a78bfa;
-    text-decoration: underline;
-  }
-  
-  .wiki-html :global(blockquote) {
-    border-left: 4px solid #a78bfa;
-    padding-left: 1rem;
-    margin-left: 0;
-    margin-right: 0;
-    font-style: italic;
-  }
-  
-  .wiki-html :global(code) {
-    background-color: rgba(255, 255, 255, 0.1);
-    padding: 0.2rem 0.4rem;
-    border-radius: 4px;
-    font-family: monospace;
-  }
-  
-  .wiki-html :global(pre) {
-    background-color: rgba(255, 255, 255, 0.1);
-    padding: 1rem;
-    border-radius: 4px;
-    overflow-x: auto;
+  /* Side menu styling */
+  .side-menu {
+    position: absolute;
+    background-color: #1e1e2e;
+    border: 1px solid rgba(139, 92, 246, 0.5);
+    border-radius: 6px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+    z-index: 100;
+    min-width: 180px;
   }
 </style>
