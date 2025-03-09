@@ -49,6 +49,13 @@ export type Thread = {
   timeline: Ulid[];
 };
 
+export type Wiki = {
+  content: string;     
+  html: string;        
+  relatedThreads: Ulid[]; 
+  lastUpdated?: number;   
+};
+
 export type Channel = {
   name: string;
   description: string;
@@ -63,6 +70,7 @@ export type SpaceChannel = {
   avatar?: string;
   threads: Ulid[];
   timeline: Ulid[];
+  wiki?: Wiki; 
 };
 export type SpaceCategory = {
   name: string;
