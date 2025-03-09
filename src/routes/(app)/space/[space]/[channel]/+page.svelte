@@ -477,6 +477,34 @@
       editor = BlockNoteEditor.create();
       editor.mount(editorElement);
       editor.onChange(EditorHandler);
+      let targetBlockId = null;
+      
+      // Add click event listener for the "+" button pseudo-elements
+      editorElement.addEventListener('click', (e) => {
+        // Calculate if click was in the "+" button area
+        const blockElement = e.target.closest('.bn-block');
+        if (blockElement) {
+          const blockRect = blockElement.getBoundingClientRect();
+          
+          if (e.clientX < blockRect.left + 24) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const blockId = blockElement.getAttribute('data-id');
+            if (!blockId) return;
+            
+            slashMenuPosition = {
+              x: blockRect.left + 30, 
+              y: e.clientY
+            };
+            
+            slashMenuVisible = true;
+            
+            targetBlockId = blockId;
+          }
+        }
+      });
+      
 
       // Load existing content if available
       if (wikiContent) {
@@ -508,7 +536,7 @@
     try {
       const content = JSON.stringify(editor.document);
 
-      const html = await editor.blocksToHTMLLossy(editor.document);
+      const html = await editor.blocksToFullHTML(editor.document);
       console.log(html);
 
       space.change((doc) => {
@@ -1028,12 +1056,12 @@
               </div>
             </div>
             <div
-              class="wiki-editor bg-violet-900/20 rounded-lg border border-violet-500/30 p-4 h-auto"
+              class="wiki-editor bg-violet-900/20 rounded-lg border border-violet-500/30 p-4 h-auto {isAdmin ? 'admin-mode' : ''}"
             >
               <div bind:this={editorElement} class="min-h-[400px]"></div>
 
               <!-- Slash Command Menu -->
-              {#if slashMenuVisible}
+              {#if slashMenuVisible && isAdmin}
                 <div
                   class="slash-menu bg-violet-900 border border-violet-700 rounded shadow-lg absolute z-50"
                   style="left: {slashMenuPosition.x}px; top: {slashMenuPosition.y}px;"
@@ -1163,34 +1191,50 @@
 {/snippet}
 
 <style>
+  /* Make block styling consistent for all users */
+  :global(.bn-block) {
+    position: relative;
+    transition: padding-left 0.15s ease;
+    padding-left: 24px; /* Maintain consistent spacing */
+  }
+  
+  /* Only show the "+" button in the editor for admins */
+  :global(.wiki-editor-container .admin-mode .bn-block::before) {
+    content: '+';
+    position: absolute;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #a78bfa;
+    font-size: 16px;
+    font-weight: bold;
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s ease, background-color 0.15s ease;
+    cursor: pointer;
+    z-index: 10;
+    background-color: transparent;
+  }
+  
+  :global(.wiki-editor-container .admin-mode .bn-block:hover::before) {
+    opacity: 1;
+  }
+  
+  :global(.wiki-editor-container .admin-mode .bn-block::before:hover) {
+    background-color: rgba(139, 92, 246, 0.2);
+  }
+  
+  
   .bn-default-styles {
     color: #fff;
     padding-inline: 20px;
   }
-  .wiki-html :global(h1) {
-    font-size: 1.5em;
-    font-weight: bold;
-    padding: 0.5em 0;
-  }
-  .wiki-html :global(h2) {
-    font-size: 1.25em;
-    font-weight: bold;
-    padding: 0.5em 0;
-  }
-  .wiki-html :global(h3) {
-    font-size: 1.1em;
-    font-weight: bold;
-    padding: 0.5em 0;
-  }
 
-  .wiki-html :global(ol) {
-    list-style-type: decimal;
-    padding-inline-start: 1.2rem;
-  }
-  .wiki-html :global(ul) {
-    list-style-type: disc;
-    padding-inline-start: 1.2rem;
-  }
   .slash-menu {
     min-width: 200px;
     max-width: 300px;
@@ -1203,47 +1247,24 @@
     overflow-y: auto;
   }
 
-  /* Make sure the menu stays within the screen boundaries */
   .wiki-editor {
     overflow: visible;
   }
 
-  /* Side menu button styling */
-  :global(.bn-container .bn-block) {
-    position: relative;
+  :global(.wiki-rendered input[type="checkbox"]){
+    pointer-events: none;
   }
-  
-  :global(.block-side-button) {
-    position: absolute;
-    left: -25px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background-color: rgba(139, 92, 246, 0.8);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+
+  :global(input[type="checkbox"]) {
+    pointer-events: auto; 
     cursor: pointer;
-    opacity: 0;
-    transition: opacity 0.2s;
-    z-index: 10;
   }
   
-  :global(.bn-block:hover .block-side-button) {
-    opacity: 1;
-  }
   
-  /* Side menu styling */
-  .side-menu {
-    position: absolute;
-    background-color: #1e1e2e;
-    border: 1px solid rgba(139, 92, 246, 0.5);
-    border-radius: 6px;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-    z-index: 100;
-    min-width: 180px;
+  :global(input[type="checkbox"]) {
+    accent-color: #8b5cf6;
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
   }
 </style>
