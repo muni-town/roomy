@@ -449,6 +449,29 @@
     }
   };
 
+  const SelectionHandler = (editor: BlockNoteEditor) => {
+    try {
+      const selection = editor.getSelection();
+      
+      if (selection) {
+        const rect = editor.getSelectionBoundingBox()?.toJSON();
+        if (rect) {
+          selectionTooltipPosition = {
+            x: rect.left + (rect.width / 2) , 
+            y: rect.top - 50 
+          };
+          
+          selectionTooltipVisible = true;
+        }
+      } else {
+        selectionTooltipVisible = false;
+      }
+    } catch (e) {
+      console.error("Error in SelectionHandler:", e);
+      selectionTooltipVisible = false;
+    }
+  };
+
   // Function to execute a slash command
   function executeSlashCommand(command) {
     if (!editor) return;
@@ -477,6 +500,7 @@
       editor = BlockNoteEditor.create();
       editor.mount(editorElement);
       editor.onChange(EditorHandler);
+      editor.onSelectionChange(SelectionHandler);
       let targetBlockId = null;
       
       // Add click event listener for the "+" button pseudo-elements
@@ -675,6 +699,15 @@
       icon: "tabler:code",
       action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "codeBlock" }),
     }
+  ]);
+
+  let selectionTooltipVisible = $state(false);
+  let selectionTooltipPosition = $state({ x: 0, y: 0 });
+  let formatCommands = $state([
+    { name: "Bold", icon: "tabler:bold", action: () => editor?.toggleStyles({bold: true}) },
+    { name: "Italic", icon: "tabler:italic", action: () => editor?.toggleStyles({italic: true}) },
+    { name: "Underline", icon: "tabler:underline", action: () => editor?.toggleStyles({underline: true}) },
+    { name: "Strike", icon: "tabler:strikethrough", action: () => editor?.toggleStyles({strike: true}) },
   ]);
 </script>
 
@@ -1081,6 +1114,27 @@
                   </ul>
                 </div>
               {/if}
+
+              <!-- Selection Formatting Tooltip -->
+              {#if selectionTooltipVisible && isAdmin}
+                <div
+                  class="selection-tooltip bg-violet-900 border border-violet-700 rounded shadow-lg absolute z-50 flex"
+                  style="left: {selectionTooltipPosition.x}px; top: {selectionTooltipPosition.y}px;"
+                >
+                  {#each formatCommands as command}
+                    <button
+                      class="p-2 hover:bg-violet-800 text-white"
+                      title={command.name}
+                      onclick={() => {
+                        command.action();
+                        selectionTooltipVisible = false;
+                      }}
+                    >
+                      <Icon icon={command.icon} class="text-xl" />
+                    </button>
+                  {/each}
+                </div>
+              {/if}
             </div>
           {:else}
             <div
@@ -1125,65 +1179,7 @@
             </div>
           </div>
 
-          <div class="mt-6">
-            <div class="flex justify-between items-center mb-2">
-              <h4 class="text-lg font-semibold text-white">Related Threads</h4>
-              <!-- Only show Add Thread button to admins -->
-              {#if isAdmin}
-                <Popover.Root>
-                  <Popover.Trigger
-                    class="px-3 py-1 bg-violet-700 text-white rounded text-sm hover:bg-violet-600"
-                  >
-                    Add Thread
-                  </Popover.Trigger>
-                  <Popover.Content
-                    transition={fly}
-                    sideOffset={8}
-                    class="bg-violet-800 p-4 rounded max-h-[300px] overflow-y-auto"
-                  >
-                    <h5 class="text-white mb-2">Select Thread</h5>
-                    <ul class="flex flex-col gap-2">
-                      {#each Object.entries(space.view.threads) as [id, thread] (id)}
-                        {#if !channel?.wiki?.relatedThreads?.includes(id)}
-                          <li>
-                            <button
-                              class="w-full text-left p-2 bg-violet-700/50 hover:bg-violet-600 text-white rounded"
-                              onclick={() => relateThreadToWiki(id)}
-                            >
-                              {thread.title}
-                            </button>
-                          </li>
-                        {/if}
-                      {/each}
-                    </ul>
-                  </Popover.Content>
-                </Popover.Root>
-              {/if}
-            </div>
-
-            <ul class="overflow-y-auto px-2 gap-3 flex flex-col">
-              {#each Object.entries(wikiRelatedThreads) as [id, thread] (id)}
-                <li
-                  class="flex justify-between items-center bg-violet-900/20 p-2 rounded"
-                >
-                  <ThreadRow
-                    {id}
-                    {thread}
-                    onclick={() => goto(`?thread=${id}`)}
-                  />
-                  <!-- Only show delete button to admins -->
-                  {#if isAdmin}
-                    <Button.Root
-                      onclick={() => removeRelatedThread(id)}
-                      class="p-1 hover:bg-violet-700 rounded"
-                    >
-                      <Icon icon="tabler:trash" color="white" />
-                    </Button.Root>
-                  {/if}
-                </li>
-              {/each}
-            </ul>
-          </div>
+          
         </section>
       {/if}
     </div>
@@ -1266,5 +1262,35 @@
     width: 16px;
     height: 16px;
     margin-right: 8px;
+  }
+
+  .selection-tooltip {
+    padding: 4px;
+    border-radius: 6px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: translateX(-50%);
+  }
+  
+  .selection-tooltip button {
+    border-radius: 4px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease;
+  }
+  
+  /* Add a subtle animation for the tooltip */
+  .selection-tooltip {
+    animation: tooltipFadeIn 0.2s ease;
+  }
+  
+  @keyframes tooltipFadeIn {
+    from { opacity: 0; transform: translateY(5px) translateX(-50%); }
+    to { opacity: 1; transform: translateY(0) translateX(-50%); }
   }
 </style>
