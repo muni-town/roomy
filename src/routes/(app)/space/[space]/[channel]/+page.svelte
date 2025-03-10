@@ -700,6 +700,46 @@
       action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "codeBlock" }),
     }
   ]);
+  function addLinkToSelection() {
+    if (!editor) return;
+    
+    const selection = editor.getSelection();
+    if (!selection) {
+      toast.error("Please select text to create a link", { position: "bottom-end" });
+      return;
+    }
+    
+    urlInputValue = "https://";
+    urlPromptVisible = true;
+    urlPromptCallback = (url) => {
+      if (url) {
+        try {
+          if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            url = "https://" + url;
+          }
+          
+          editor?.createLink(url);
+          
+          selectionTooltipVisible = false;
+        } catch (e) {
+          toast.error("Failed to add link", { position: "bottom-end" });
+        }
+      }
+    };
+  }
+  
+  function submitUrlPrompt() {
+    if (urlPromptCallback) {
+      urlPromptCallback(urlInputValue);
+      urlPromptCallback = null;
+    }
+    urlPromptVisible = false;
+  }
+  
+  function cancelUrlPrompt() {
+    urlPromptCallback = null;
+    urlPromptVisible = false;
+  }
 
   let selectionTooltipVisible = $state(false);
   let selectionTooltipPosition = $state({ x: 0, y: 0 });
@@ -708,7 +748,12 @@
     { name: "Italic", icon: "tabler:italic", action: () => editor?.toggleStyles({italic: true}) },
     { name: "Underline", icon: "tabler:underline", action: () => editor?.toggleStyles({underline: true}) },
     { name: "Strike", icon: "tabler:strikethrough", action: () => editor?.toggleStyles({strike: true}) },
+    {name: "Link", icon: "tabler:link", action: () => addLinkToSelection() }
+    
   ]);
+  let urlPromptVisible = $state(false);
+  let urlInputValue = $state("https://");
+  let urlPromptCallback = $state(null);
 </script>
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
@@ -1186,12 +1231,48 @@
   {/if}
 {/snippet}
 
+{#if urlPromptVisible}
+  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
+    <div class="bg-violet-900 border border-violet-700 rounded-lg shadow-lg p-6 max-w-md w-full">
+      <h3 class="text-lg font-bold text-white mb-4">Add Link</h3>
+      
+      <form 
+        onsubmit={submitUrlPrompt}
+        class="flex flex-col gap-4"
+      >
+        <input
+          type="text"
+          bind:value={urlInputValue}
+          placeholder="https://example.com"
+          class="w-full px-4 py-2 bg-violet-800 border border-violet-600 rounded text-white focus:outline-none focus:border-violet-500"
+          autofocus
+        />
+        
+        <div class="flex justify-end gap-3 mt-2">
+          <button
+            type="button"
+            class="px-4 py-2 bg-transparent border border-violet-500 text-white rounded hover:bg-violet-800 transition-colors"
+            onclick={cancelUrlPrompt}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="px-4 py-2 bg-violet-700 text-white rounded hover:bg-violet-600 transition-colors"
+          >
+            Add Link
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+{/if}
+
 <style>
-  /* Make block styling consistent for all users */
   :global(.bn-block) {
     position: relative;
     transition: padding-left 0.15s ease;
-    padding-left: 24px; /* Maintain consistent spacing */
+    padding-left: 24px; 
   }
   
   /* Only show the "+" button in the editor for admins */
@@ -1253,6 +1334,12 @@
 
   :global(input[type="checkbox"]) {
     pointer-events: auto; 
+    cursor: pointer;
+  }
+
+  :global(.bn-inline-content a){
+    color: #8b5cf6;
+    text-decoration: underline;
     cursor: pointer;
   }
   
