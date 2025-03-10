@@ -596,43 +596,6 @@
     }
   }
 
-  function relateThreadToWiki(threadId: string) {
-    if (!space) return;
-
-    space.change((doc) => {
-      if (!doc.channels[page.params.channel].wiki) {
-        doc.channels[page.params.channel].wiki = {
-          content: wikiContent || "",
-          html: wikiRenderedHtml || "",
-          relatedThreads: [threadId],
-          lastUpdated: Date.now(),
-        };
-      } else if (!doc.channels[page.params.channel].wiki.relatedThreads) {
-        doc.channels[page.params.channel].wiki.relatedThreads = [threadId];
-      } else if (
-        !doc.channels[page.params.channel].wiki.relatedThreads.includes(
-          threadId,
-        )
-      ) {
-        doc.channels[page.params.channel].wiki.relatedThreads.push(threadId);
-      }
-    });
-
-    toast.success("Thread related to wiki", { position: "bottom-end" });
-  }
-
-  function removeRelatedThread(threadId: string) {
-    if (!space) return;
-
-    space.change((doc) => {
-      if (doc.channels[page.params.channel].wiki?.relatedThreads) {
-        doc.channels[page.params.channel].wiki.relatedThreads = doc.channels[
-          page.params.channel
-        ].wiki.relatedThreads.filter((id) => id !== threadId);
-      }
-    });
-  }
-
   $effect(() => {
     if (channel?.wiki) {
       wikiContent = channel.wiki.content;
