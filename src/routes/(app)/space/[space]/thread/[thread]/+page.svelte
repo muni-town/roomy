@@ -1,6 +1,6 @@
 <script lang="ts">
   import _ from "underscore";
-  import { ulid } from "ulidx";
+  import { decodeTime, ulid } from "ulidx";
   import { page } from "$app/state";
   import { getContext, setContext } from "svelte";
   import { goto } from "$app/navigation";
@@ -16,18 +16,20 @@
   import { Button, Popover } from "bits-ui";
 
   import type {
+  Announcement,
     Did,
     Space,
     Ulid,
   } from "$lib/schemas/types";
   import type { Autodoc } from "$lib/autodoc/peer";
   import Dialog from "$lib/components/Dialog.svelte";
+  import { isAnnouncement } from "$lib/utils";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let spaceContext = getContext("space") as { get value(): Autodoc<Space> | undefined };
   let space = $derived(spaceContext.value);
-  let thread = $derived(space?.view.threads[page.params.ulid]);
+  let thread = $derived(space?.view.threads[page.params.thread]);
   let users: { value: Item[] } = getContext("users");
   let contextItems: { value: Item[] } = getContext("contextItems");
   let isAdmin: { value: boolean } = getContext("isAdmin");
@@ -116,18 +118,56 @@
 
   function createThread(e: SubmitEvent) {
     e.preventDefault();
-    if (!space) return;
+    if (!space || !thread) return;
 
     space.change((doc) => {
-      const id = ulid();
-      const timeline = [];
+      const threadId = ulid();
+      const threadTimeline: string[] = [];
+
+      // messages can be selected in any order
+      // sort them on create based on their position from the thread
+      selectedMessages.sort((a,b) => {
+        return thread.timeline.indexOf(a) - thread.timeline.indexOf(b)
+      });
+
       for (const id of selectedMessages) {
-        timeline.push(`${id}`);
+        // move selected message ID from old thread to new thread timeline
+        threadTimeline.push(id);
+        const index = thread?.timeline.indexOf(id);
+        doc.threads[page.params.thread].timeline.splice(index, 1);
+
+        // create an Announcement about the move for each message
+        const timestamp = decodeTime(id);
+        const announcementId = ulid(timestamp);
+        const announcement: Announcement = {
+          kind: "messageMoved",
+          relatedMessages: [id],
+          relatedThreads: [threadId],
+          reactions: {}
+        };
+
+        doc.messages[announcementId] = announcement; 
+
+        // push announcement at moved message's index
+        doc.threads[page.params.thread].timeline.splice(index, 0, announcementId);
       }
-      doc.threads[id] = {
+
+      // create thread
+      doc.threads[threadId] = {
         title: threadTitleInput,
-        timeline,
+        timeline: threadTimeline,
       };
+      
+      // create an Announcement about the new Thread in current channel
+      const announcementId = ulid();
+      const announcement: Announcement = {
+        kind: "threadCreated",
+        relatedThreads: [threadId],
+        reactions: {}
+      };
+
+      doc.messages[announcementId] = announcement; 
+      doc.threads[page.params.thread].timeline.push(announcementId);
     });
 
     threadTitleInput = "";
@@ -172,7 +212,7 @@
         content: JSON.stringify(messageInput),
         ...(replyingTo && { replyTo: replyingTo.id }),
       };
-      doc.threads[page.params.ulid].timeline.push(id);
+      doc.threads[page.params.thread].timeline.push(id);
     });
 
     messageInput = {};
@@ -181,12 +221,36 @@
   }
 
   let isDeleteThreadDialogOpen = $state(false);
-  function deleteThread() {
-    if (!space) { return }
+  function softDeleteThread() {
+    if (!space || !thread) { return }
     isDeleteThreadDialogOpen = false;
 
     space.change((doc) => {
-      delete doc.threads[page.params.ulid];
+      // soft delete messages and announcements related to thread
+      for (const ulid of Object.keys(doc.messages)) {
+        if (
+          isAnnouncement(doc.messages[ulid])
+        ) {
+          const announcement = doc.messages[ulid];
+          if ((
+              announcement.kind === "threadCreated" 
+              && announcement.relatedThreads?.includes(page.params.thread)
+            ) || (
+              announcement.kind === "messageMoved" 
+              && new Set(announcement.relatedMessages).union(new Set(thread.timeline)).size > 0
+            )
+          ) {
+            doc.messages[ulid].softDeleted = true;
+          }
+        }
+      }
+
+      for (const ulid of thread.timeline) {
+        doc.messages[ulid].softDeleted = true;
+      }
+
+      // soft delete thread
+      doc.threads[page.params.thread].softDeleted = true;
     });
 
     toast.success("Thread deleted", { position: "bottom-end" });
@@ -312,14 +376,14 @@
     {#if isAdmin.value}
       <Dialog 
         title="Delete thread?" 
-        description={`You are deleting ${thread?.title}. This is NOT reversible.`}
+        description={`You are deleting ${thread?.title}. This is only reversible by the Space's admins.`}
         bind:isDialogOpen={isDeleteThreadDialogOpen}
       >
         {#snippet dialogTrigger()}
           <Icon icon="tabler:trash" color="red" class="text-2xl" />
         {/snippet}
 
-        <Button.Root onclick={deleteThread} class="btn bg-red-500 text-white">
+        <Button.Root onclick={softDeleteThread} class="btn bg-red-500 text-white">
           Delete
         </Button.Root>
       </Dialog>

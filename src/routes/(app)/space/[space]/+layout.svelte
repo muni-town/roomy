@@ -16,6 +16,7 @@
   import { slide } from "svelte/transition";
   import type { Item } from "$lib/tiptap/editor";
   import { getProfile } from "$lib/profile.svelte";
+  import { isAnnouncement } from "$lib/utils";
 
   let { children } = $props();
   let isMobile = $derived((outerWidth.current || 0) < 640);
@@ -26,8 +27,10 @@
   let users = $state(() => {
     if (!space) { return [] };
     const result = new Set();
-    for (const message of Object.entries(space.view.messages)) {
-      result.add(message[1].author);
+    for (const message of Object.values(space.view.messages)) {
+      if (!isAnnouncement(message)) {
+        result.add(message.author);
+      }
     }
     const items = result.values().toArray().map((author) => { 
       const profile = getProfile(author as string);
@@ -37,25 +40,34 @@
     return items;
   });
 
+  let availableThreads = $derived(
+    space ? Object.fromEntries(
+      Object.entries(space.view.threads).filter(([ulid, thread]) => 
+      !thread.softDeleted
+    )) : {}
+  );
+
   let contextItems: Item[] = $derived.by(() => {
     if (!space) { return [] };
     const items = [];
 
     // add threads to list
-    items.push(...Object.entries(space.view.threads).map(([ulid, thread]) => { 
-      return { 
-        value: JSON.stringify({
-          ulid,
-          space: page.params.space,
-          type: "thread"
-        }), 
-        label: thread.title,
-        category: "thread"
-      } 
-    }));
+    for (const thread of Object.values(space.view.threads)) {
+      if (!thread.softDeleted) {
+        items.push({ 
+          value: JSON.stringify({
+            ulid,
+            space: page.params.space,
+            type: "thread"
+          }), 
+          label: thread.title,
+          category: "thread"
+        }) 
+      }
+    }
 
     // add channels to list
-    items.push(...Object.entries(space.view.channels).map(([ulid, channel]) => {
+    items.push(...Object.values(space.view.channels).map((channel) => {
       return {
         value: JSON.stringify({
           ulid,
@@ -262,21 +274,23 @@
           {/snippet}
         </Accordion.Content>
       </Accordion.Item>
-      <Accordion.Item value="threads">
-        <Accordion.Header>
-          <Accordion.Trigger class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-gray-300">
-            <h3>Threads</h3>
-            <Icon icon="basil:caret-up-solid" class="size-6" /> 
-          </Accordion.Trigger>
-        </Accordion.Header>
-        <Accordion.Content>
-          {#snippet child({ open })}
-            {#if open}
-              {@render threadsSidebar(space as Autodoc<Space>)}
-            {/if}
-          {/snippet}
-        </Accordion.Content>
-      </Accordion.Item>
+      {#if Object.keys(availableThreads).length > 0}
+        <Accordion.Item value="threads">
+          <Accordion.Header>
+            <Accordion.Trigger class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-gray-300">
+              <h3>Threads</h3>
+              <Icon icon="basil:caret-up-solid" class="size-6" /> 
+            </Accordion.Trigger>
+          </Accordion.Header>
+          <Accordion.Content>
+            {#snippet child({ open })}
+              {#if open}
+                {@render threadsSidebar()}
+              {/if}
+            {/snippet}
+          </Accordion.Content>
+        </Accordion.Item>
+      {/if}
     </Accordion.Root>
   </nav>
 
@@ -394,10 +408,9 @@
   </div>
 {/snippet}
 
-{#snippet threadsSidebar(space: Autodoc<Space>)}
+{#snippet threadsSidebar()}
   <div transition:slide class="flex flex-col gap-4">
-    {#each Object.keys(space.view.threads) as ulid} 
-      {@const thread = space.view.threads[ulid]}
+    {#each Object.entries(availableThreads) as [ulid, thread]} 
       <ToggleGroup.Root type="single" bind:value={currentItemId}>
         <ToggleGroup.Item
           onclick={() => goto(`/space/${page.params.space}/thread/${ulid}`)}

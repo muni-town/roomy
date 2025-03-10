@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Avatar, Button, Popover, Toolbar } from "bits-ui";
+  import { Avatar, Button, Checkbox, Popover, Toolbar } from "bits-ui";
   import type { Announcement, Message, Space, Ulid } from "$lib/schemas/types";
   import { renderMarkdownSanitized } from "$lib/markdown";
   import { AvatarBeam } from "svelte-boring-avatars";
@@ -333,39 +333,49 @@
       </Toolbar.Root>
     {/if}
 
-    {#if isThreading.value}
-      <!-- TODO: Use bits-ui Checkbox -->
-      <input
-        type="checkbox"
-        onchange={updateSelect}
+    {#if isThreading.value && !isAnnouncement(message)}
+      <Checkbox.Root
+        onCheckedChange={updateSelect} 
         bind:checked={isSelected}
         class="absolute right-4 inset-y-0"
-      />
+      >
+        {#snippet children({ checked })}
+          <div class="border bg-violet-800 size-4 rounded items-center cursor-pointer">
+            {#if checked}
+              <Icon 
+                icon="material-symbols:check-rounded" 
+                color="#5b21b6" 
+                class="bg-white size-3.5"
+              />
+            {/if}
+          </div>
+        {/snippet}
+      </Checkbox.Root>
     {/if}
   </div>
 </li>
 
 {#snippet announcementView(message: Announcement)}
   <div class="flex gap-4">
-      <Button.Root
-        onclick={() => {
-          if (isMobile) {
-            isDrawerOpen = true;
-          }
-        }}
-        class="flex flex-col text-start gap-2 text-white w-full min-w-0"
-      >
-        <section class="flex items-center gap-2 flex-wrap w-fit">
-          {@render timestamp()}
-        </section>
+    <Button.Root
+      onclick={() => {
+        if (isMobile) {
+          isDrawerOpen = true;
+        }
+      }}
+      class="flex flex-col text-start gap-2 text-white w-full min-w-0"
+    >
+      <section class="flex items-center gap-2 flex-wrap w-fit">
+        {@render timestamp()}
+      </section>
 
-        <p
-          class="text-lg prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
-        >
-          {@html getAnnouncementHtml(message)}
-        </p>
-      </Button.Root>
-    </div>
+      <p
+        class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+      >
+        {@html getAnnouncementHtml(message)}
+      </p>
+    </Button.Root>
+  </div>
 {/snippet}
 
 {#snippet messageView(message: Message)}

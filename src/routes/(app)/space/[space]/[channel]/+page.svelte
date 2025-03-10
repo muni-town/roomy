@@ -22,7 +22,6 @@
     Channel,
     Ulid,
     Announcement,
-    Message,
   } from "$lib/schemas/types";
   import type { Autodoc } from "$lib/autodoc/peer";
 
@@ -126,6 +125,12 @@
     space.change((doc) => {
       const threadId = ulid();
       const threadTimeline: string[] = [];
+
+      // messages can be selected in any order
+      // sort them on create based on their position from the channel
+      selectedMessages.sort((a,b) => {
+        return channel.timeline.indexOf(a) - channel.timeline.indexOf(b)
+      });
 
       for (const id of selectedMessages) {
         // move selected message ID from channel to thread timeline

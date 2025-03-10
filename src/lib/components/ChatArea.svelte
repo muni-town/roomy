@@ -79,7 +79,7 @@
         >
           {#snippet children(id, _index)}
             {@const message = messages[id]}
-            {#if message}
+            {#if message && !message.softDeleted}
               <ChatMessage 
                 {id} 
                 {message}
@@ -90,7 +90,9 @@
                 }
               />
             {:else}
-              <p class="italic text-white text-sm">This message has been deleted</p>
+              <p class="italic text-white text-sm">
+                This message has been deleted
+              </p>
             {/if}
           {/snippet}
         </Virtualizer>
