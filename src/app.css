@@ -66,10 +66,12 @@ emoji-picker {
 
 .thread-mention::before {
   content: "🧵";
+  padding-right: 0.25rem;
 }
 
 .channel-mention::before {
   content: "💬";
+  padding-right: 0.25rem;
 }
 
 /* ChatMessage */

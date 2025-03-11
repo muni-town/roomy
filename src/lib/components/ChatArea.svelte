@@ -23,8 +23,6 @@
     : source.space.view.messages
   );
 
-  $inspect({ messages });
-
   setContext("scrollToMessage", (id: string) => {
     const idx = timeline.indexOf(id);
     if (idx !== -1 && virtualizer)

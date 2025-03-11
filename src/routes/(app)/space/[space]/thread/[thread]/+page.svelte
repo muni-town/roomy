@@ -156,6 +156,7 @@
       doc.threads[threadId] = {
         title: threadTitleInput,
         timeline: threadTimeline,
+        relatedChannel: thread.relatedChannel
       };
       
       // create an Announcement about the new Thread in current channel
@@ -268,9 +269,15 @@
       <AvatarImage handle={thread?.title ?? ""} />
     {/if}
 
-    <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-white text-lg font-bold`}>
-      {thread?.title}
-    </h4>
+    {#if space && thread}
+      <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-white text-lg font-bold`}>
+        {thread.title}
+      </h4>
+      <p class="text-gray-400 text-xs">{">"}</p>
+      <a href={`/space/${page.params.space}/${thread.relatedChannel}`} class="text-xs mention channel-mention">
+        {space.view.channels[thread.relatedChannel].name}
+      </a>
+    {/if}
   </div>
 
 

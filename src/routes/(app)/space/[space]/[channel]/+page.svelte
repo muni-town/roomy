@@ -158,6 +158,7 @@
       doc.threads[threadId] = {
         title: threadTitleInput,
         timeline: threadTimeline,
+        relatedChannel: page.params.channel
       };
       
       // create an Announcement about the new Thread in current channel

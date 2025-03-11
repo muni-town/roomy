@@ -56,6 +56,7 @@ export type Announcement = {
 export type Thread = {
   title: string;
   timeline: Ulid[];
+  relatedChannel: Ulid;
   softDeleted?: boolean;
 };
 
@@ -88,8 +89,8 @@ export type Space = {
   admins: Ulid[];
   moderators: Ulid[];
   threads: { [ulid: Ulid]: Thread };
-  messages: { [ulid: Ulid]: Message | Announcement };
   channels: { [ulid: Ulid]: Channel };
+  messages: { [ulid: Ulid]: Message | Announcement };
   categories: { [ulid: Ulid]: SpaceCategory };
   sidebarItems: SidebarItem[];
   name: string;
