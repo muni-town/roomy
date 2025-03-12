@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
-@plugin '@tailwindcss/typography';
+@plugin "@tailwindcss/typography";
+@plugin "daisyui" {
+  themes: synthwave --default, dark, all;
+}
 
 /*
   The default border color has changed to `currentColor` in Tailwind CSS v4,
@@ -39,12 +42,6 @@ emoji-picker {
 /* Universal */
 
 .btn {
-  padding-left: 1rem; 
-  padding-right: 1rem;
-  padding-top: 0.5rem; 
-  padding-bottom: 0.5rem;
-  border-radius: 0.25rem;
-  cursor: pointer;
   transition-property: all;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;

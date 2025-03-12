@@ -8,6 +8,7 @@
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { cleanHandle } from "$lib/utils";
+  import { themeChange } from "theme-change";
   import { outerWidth } from "svelte/reactivity/window";
 
   import Icon from "@iconify/svelte";
@@ -41,6 +42,8 @@
   onMount(async () => {
     await user.init();
   });
+
+  onMount(() => { themeChange(false); });
 
   onMount(() => {
     if (page.params.did) {
@@ -116,29 +119,27 @@
 {/if}
 
 <!-- Container -->
-<div class="flex w-screen h-screen bg-violet-950">
+<div class="flex w-screen h-screen bg-base-100">
   <Toaster />
   <!-- Server Bar -->
 
   <aside
-    class="w-fit col-span-2 flex flex-col justify-between bg-violet-950 px-4 py-8 items-center border-r-2 border-violet-900"
+    class="w-fit col-span-2 flex flex-col justify-between px-4 py-8 items-center border-r-2 border-base-200"
   >
     <ToggleGroup.Root
       type="single"
       value={currentCatalog}
-      class="flex flex-col gap-4 items-center"
+      class="flex flex-col gap-2 items-center"
     >
       <ToggleGroup.Item
         value="dm"
         onclick={() => goto("/dm")}
-        class="capitalize hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white p-4 rounded-md"
+        class="btn btn-ghost size-16 data-[state=on]:border-accent"
       >
-        <Avatar.Root>
-          <Icon icon="ri:user-fill" font-size="2em" />
-        </Avatar.Root>
+        <Icon icon="ri:user-fill" font-size="2em" />
       </ToggleGroup.Item>
 
-      <div class="border-white border-t-1 w-[80%]"></div>
+      <div class="divider mt-0 mb-1"></div>
 
       {#each servers as server}
         {@const space = g.spaces[server]}
@@ -147,7 +148,7 @@
             onclick={() => goto(`/space/${server}`)}
             value={server}
             title={space.view.name}
-            class="capitalize hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white p-4 rounded-md"
+            class="btn btn-ghost size-16 data-[state=on]:border-accent"
           >
             <!-- TODO: Use server avatar -->
             <Avatar.Root>
@@ -161,7 +162,7 @@
       {/each}
     </ToggleGroup.Root>
 
-    <section class="flex flex-col gap-8 items-center">
+    <section class="menu gap-3">
       <Dialog
         title="Create Space"
         description="Create a new public chat space"
@@ -169,10 +170,10 @@
       >
         {#snippet dialogTrigger()}
           <Button.Root
-            class="hover:scale-105 active:scale-95 transition-all duration-150"
             title="Create Space"
+            class="btn btn-ghost w-fit"
           >
-            <Icon icon="basil:add-solid" color="white" font-size="2em" />
+            <Icon icon="basil:add-solid" font-size="2em" />
           </Button.Root>
         {/snippet}
 
@@ -180,29 +181,19 @@
           <input
             bind:value={newSpaceName}
             placeholder="Name"
-            class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
+            class="input w-full"
           />
-          <Button.Root
-            class={`px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 ${loginLoading ? "contrast-50" : "hover:scale-[102%]"}`}
-          >
+          <Button.Root disabled={!newSpaceName} class="btn btn-primary">
             <Icon icon="basil:add-outline" font-size="1.8em" />
             Create Space
           </Button.Root>
         </form>
       </Dialog>
 
-      <!-- <Button.Root
-        class="hover:scale-105 active:scale-95 transition-all duration-150"
-      >
-        <Icon icon="basil:settings-alt-solid" color="white" class="text-2xl" />
-      </Button.Root> -->
-
       <Dialog title="Delete Data">
         {#snippet dialogTrigger()}
-          <Button.Root
-            class="hover:scale-105 active:scale-95 transition-all duration-150"
-          >
-            <Icon icon="ri:alarm-warning-fill" color="white" class="text-2xl" />
+          <Button.Root class="btn btn-ghost w-fit">
+            <Icon icon="ri:alarm-warning-fill" class="text-2xl" />
           </Button.Root>
         {/snippet}
 
@@ -218,27 +209,23 @@
           </p>
           <Button.Root
             onclick={() => deleteData("local")}
-            class={`flex items-center gap-3  px-4 py-2 max-w-[20em] bg-red-600 text-white rounded-lg hover:scale-[102%] active:scale-95 transition-all duration-150 ${
-              deleteLoading ? "contrast-50" : "hover:scale-[102%]"
-            }`}
+            class="btn btn-error"
             disabled={deleteLoading}
           >
-            Delete Local Data {#if deleteLoading}<Icon
-                icon="ri:loader-4-fill"
-                class="animate-spin"
-              />{/if}
+            {#if deleteLoading}
+              <span class="loading loading-spinner"></span>
+            {/if}
+            Delete Local Data 
           </Button.Root>
           <Button.Root
             onclick={() => deleteData("all")}
-            class={`flex items-center gap-3 px-4 py-2 max-w-[20em] bg-red-600 text-white rounded-lg hover:scale-[102%] active:scale-95 transition-all duration-150 ${
-              deleteLoading ? "contrast-50" : "hover:scale-[102%]"
-            }`}
+            class="btn btn-error"
             disabled={deleteLoading}
           >
-            Delete Local and PDS Data {#if deleteLoading}<Icon
-                icon="ri:loader-4-fill"
-                class="animate-spin"
-              />{/if}
+            {#if deleteLoading}
+              <span class="loading loading-spinner"></span>
+            {/if}
+            Delete Local and PDS Data
           </Button.Root>
         </div>
       </Dialog>
@@ -246,11 +233,10 @@
       {#if dev}
         <Button.Root
           onclick={() => goto("/dev")}
-          class="hover:scale-105 active:scale-95 transition-all duration-150"
+          class="btn btn-ghost"
         >
           <Icon
             icon="fluent:window-dev-tools-16-regular"
-            color="white"
             class="text-2xl"
           />
         </Button.Root>
@@ -265,7 +251,7 @@
       >
         {#snippet dialogTrigger()}
           <Button.Root
-            class="hover:scale-105 active:scale-95 transition-all duration-150"
+            class="btn btn-ghost w-fit" 
           >
             <AvatarImage
               handle={user.profile.data?.handle || ""}
@@ -278,7 +264,7 @@
           <section class="flex flex-col gap-4">
             <Button.Root
               onclick={user.logout}
-              class="px-4 py-2 bg-white text-black rounded-lg hover:scale-[102%] active:scale-95 transition-all duration-150"
+              class="btn btn-error"
             >
               Logout
             </Button.Root>
@@ -286,21 +272,18 @@
         {:else}
           <form class="flex flex-col gap-4" onsubmit={login}>
             {#if loginError}
-              <p class="text-red-500">{loginError}</p>
+              <p class="text-error">{loginError}</p>
             {/if}
             <input
               bind:value={handleInput}
               placeholder="Handle (eg alice.bsky.social)"
-              class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
+              class="input w-full"
             />
-            <Button.Root
-              class={`px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 ${loginLoading ? "contrast-50" : "hover:scale-[102%]"}`}
-            >
+            <Button.Root disabled={loginLoading || !handleInput} class="btn btn-primary">
+              {#if loginLoading}
+                <span class="loading loading-spinner"></span>
+              {/if}
               Login with Bluesky
-              {#if loginLoading}<Icon
-                  icon="ri:loader-4-fill"
-                  class="animate-spin"
-                />{/if}
             </Button.Root>
           </form>
         {/if}

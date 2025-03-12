@@ -173,7 +173,7 @@
 {#if space}
   <nav
     class={[
-      !isMobile && "max-w-[16rem] border-r-2 border-violet-900",
+      !isMobile && "max-w-[16rem] border-r-2 border-base-200",
       "p-4 flex flex-col gap-4 w-full",
     ]}
   >
