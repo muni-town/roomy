@@ -14,7 +14,7 @@
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
-  import { Button, Popover } from "bits-ui";
+  import { Button, Popover, Tabs } from "bits-ui";
 
   import type {
     Did,
@@ -22,8 +22,10 @@
     Channel,
     Ulid,
     Announcement,
+    Thread,
   } from "$lib/schemas/types";
   import type { Autodoc } from "$lib/autodoc/peer";
+  import { format, isToday } from "date-fns";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
@@ -34,6 +36,19 @@
     | undefined;
   let users: { value: Item[] } = getContext("users");
   let contextItems: { value: Item[] } = getContext("contextItems");
+  let relatedThreads = $derived.by(() => {
+    let related: { [ulid: string]: Thread } = {};
+    if (space && channel) {
+      Object.entries(space.view.threads).map(([ulid, thread]) => {
+        if (!thread.softDeleted && thread.relatedChannel === page.params.channel) {
+          related[ulid] = thread;
+        }
+      });
+    }
+    return related;
+  });
+
+  let tab = $state<"chat" | "threads">("chat");
 
   let messageInput = $state({});
   let imageFiles: FileList | null = $state(null);
@@ -337,6 +352,33 @@
     </h4>
   </div>
 
+  <Tabs.Root bind:value={tab}>
+    <Tabs.List class="grid grid-cols-2 gap-4 border text-white p-1 rounded">
+      <Tabs.Trigger
+        value="chat"
+        onclick={() => goto(page.url.pathname)}
+        class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
+      >
+        <Icon icon="tabler:message" color="white" class="text-2xl" />
+        {#if !isMobile}
+          <p>Chat</p>
+        {/if}
+      </Tabs.Trigger>
+      <Tabs.Trigger
+        value="threads"
+        class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
+      >
+        <Icon
+          icon="material-symbols:thread-unread-rounded"
+          color="white"
+          class="text-2xl"
+        />
+        {#if !isMobile}
+          <p>Threads</p>
+        {/if}
+      </Tabs.Trigger>
+    </Tabs.List>
+  </Tabs.Root>
 
   {#if !isMobile}
     <div class="flex">
@@ -345,102 +387,130 @@
   {/if}
 </header>
 
-{#if space}
-  <ChatArea
-    source={{ type: "space", space: space }}
-    timeline={channel?.timeline ?? []}
-  />
-  <div class="flex float-end">
-    {#if !isMobile || !isThreading.value}
-      <section class="grow flex flex-col">
-        {#if replyingTo}
-          <div
-            class="flex justify-between bg-violet-800 text-white rounded-t-lg px-4 py-2"
-          >
-            <div class="flex flex-col gap-1">
-              <h5 class="flex gap-2 items-center">
-                Replying to
-                <AvatarImage
-                  handle={replyingTo.authorProfile.handle}
-                  avatarUrl={replyingTo.authorProfile.avatarUrl}
-                  className="!w-4"
-                />
-                <strong>{replyingTo.authorProfile.handle}</strong>
-              </h5>
-              <p class="text-gray-300 text-ellipsis italic">
-                {@html getContentHtml(replyingTo.content)}
-              </p>
+{#if tab === "chat"}
+  {@render chatTab()}
+{:else}
+  {@render threadsTab()}
+{/if}
+
+{#snippet threadsTab()}
+  {#each Object.entries(relatedThreads) as [ulid, thread]}
+    <a href={`/space/${page.params.space}/thread/${ulid}`} class="w-full px-3 py-2 bg-violet-900 rounded btn">
+      <h3 class="text-lg font-medium text-white">{thread.title}</h3>
+      {@render timestamp(ulid)}
+    </a>
+  {/each}
+{/snippet}
+
+{#snippet timestamp(ulid: Ulid)}
+  {@const decodedTime = decodeTime(ulid)}
+  {@const formattedDate = isToday(decodedTime)
+    ? "Today"
+    : format(decodedTime, "P")}
+  <time class="text-xs text-gray-300">
+    {formattedDate}, {format(decodedTime, "pp")}
+  </time>
+{/snippet}
+
+{#snippet chatTab()}
+  {#if space}
+    <ChatArea
+      source={{ type: "space", space: space }}
+      timeline={channel?.timeline ?? []}
+    />
+    <div class="flex float-end">
+      {#if !isMobile || !isThreading.value}
+        <section class="grow flex flex-col">
+          {#if replyingTo}
+            <div
+              class="flex justify-between bg-violet-800 text-white rounded-t-lg px-4 py-2"
+            >
+              <div class="flex flex-col gap-1">
+                <h5 class="flex gap-2 items-center">
+                  Replying to
+                  <AvatarImage
+                    handle={replyingTo.authorProfile.handle}
+                    avatarUrl={replyingTo.authorProfile.avatarUrl}
+                    className="!w-4"
+                  />
+                  <strong>{replyingTo.authorProfile.handle}</strong>
+                </h5>
+                <p class="text-gray-300 text-ellipsis italic">
+                  {@html getContentHtml(replyingTo.content)}
+                </p>
+              </div>
+              <Button.Root
+                type="button"
+                onclick={() => (replyingTo = null)}
+                class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
+              >
+                <Icon icon="zondicons:close-solid" />
+              </Button.Root>
             </div>
-            <Button.Root
-              type="button"
-              onclick={() => (replyingTo = null)}
-              class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
-            >
-              <Icon icon="zondicons:close-solid" />
-            </Button.Root>
+          {/if}
+          <div class="relative">
+
+            <!-- TODO: get all users that has joined the server -->
+            <ChatInput 
+              bind:content={messageInput} 
+              users={users.value}
+              context={contextItems.value}
+              onEnter={sendMessage}
+            />
+
+            <!--
+            {#if mayUploadImages}
+              <label
+                class="cursor-pointer text-white hover:text-gray-300 absolute right-3 top-1/2 -translate-y-1/2"
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  class="hidden"
+                  onchange={handleImageSelect}
+                />
+                <Icon
+                  icon="material-symbols:add-photo-alternate"
+                  class="text-2xl"
+                />
+              </label>
+            {/if}
+            -->
           </div>
-        {/if}
-        <div class="relative">
 
-          <!-- TODO: get all users that has joined the server -->
-          <ChatInput 
-            bind:content={messageInput} 
-            users={users.value}
-            context={contextItems.value}
-            onEnter={sendMessage}
-          />
-
-          <!--
-          {#if mayUploadImages}
-            <label
-              class="cursor-pointer text-white hover:text-gray-300 absolute right-3 top-1/2 -translate-y-1/2"
-            >
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                class="hidden"
-                onchange={handleImageSelect}
-              />
-              <Icon
-                icon="material-symbols:add-photo-alternate"
-                class="text-2xl"
-              />
-            </label>
+          <!-- Image preview 
+          {#if imageFiles?.length}
+            <div class="flex gap-2 flex-wrap">
+              {#each Array.from(imageFiles) as file}
+                <div class="relative mt-5">
+                  <img
+                    src={URL.createObjectURL(file)}
+                    alt={file.name}
+                    class="w-20 h-20 object-cover rounded"
+                  />
+                  <button
+                    type="button"
+                    class="absolute -top-2 -right-2 bg-red-500 rounded-full p-1"
+                    onclick={() => (imageFiles = null)}
+                  >
+                    <Icon icon="zondicons:close-solid" color="white" />
+                  </button>
+                </div>
+              {/each}
+            </div>
           {/if}
           -->
-        </div>
+        </section>
+      {/if}
 
-        <!-- Image preview 
-        {#if imageFiles?.length}
-          <div class="flex gap-2 flex-wrap">
-            {#each Array.from(imageFiles) as file}
-              <div class="relative mt-5">
-                <img
-                  src={URL.createObjectURL(file)}
-                  alt={file.name}
-                  class="w-20 h-20 object-cover rounded"
-                />
-                <button
-                  type="button"
-                  class="absolute -top-2 -right-2 bg-red-500 rounded-full p-1"
-                  onclick={() => (imageFiles = null)}
-                >
-                  <Icon icon="zondicons:close-solid" color="white" />
-                </button>
-              </div>
-            {/each}
-          </div>
-        {/if}
-        -->
-      </section>
-    {/if}
+      {#if isMobile}
+        {@render toolbar()}
+      {/if}
+    </div>
+  {/if}
+{/snippet}
 
-    {#if isMobile}
-      {@render toolbar()}
-    {/if}
-  </div>
-{/if}
 
 {#snippet toolbar()}
   <menu class="relative flex items-center gap-3 px-2 w-fit self-end">

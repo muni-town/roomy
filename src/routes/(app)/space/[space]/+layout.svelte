@@ -108,6 +108,15 @@
   }
 
   let currentItemId = $state("");
+  $effect(() => {
+    if (page.params.channel) {
+      currentItemId = page.params.channel;
+    }
+    else {
+      currentItemId = page.params.thread;
+    }
+  });
+  
   let showNewChannelDialog = $state(false);
   let newChannelName = $state("");
   let newChannelCategory = $state(undefined) as undefined | string;
