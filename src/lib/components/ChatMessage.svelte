@@ -203,7 +203,7 @@
       {@render announcementView()}
     {:else}
       {@render replyBanner()}
-      {@render messageView(message)}
+      {@render messageView(id, message)}
     {/if}
 
     {#if Object.keys(message.reactions).length > 0}
@@ -241,7 +241,7 @@
         class="flex flex-col text-start gap-2 text-white w-full min-w-0"
       >
         <section class="flex items-center gap-2 flex-wrap w-fit">
-          {@render timestamp()}
+          {@render timestamp(id)}
         </section>
 
         <p
@@ -260,21 +260,22 @@
         }}
         class="cursor-pointer flex gap-2 text-start w-full items-center text-gray-300 px-4 py-1 bg-violet-900 rounded-t"
       >
+        <Icon icon="prime:reply" width="12px" height="12px" />
         <p
           class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
         >
           {@html getAnnouncementHtml(announcement)}
         </p>
+        {@render timestamp(id)}
       </Button.Root>
       <div class="flex items-start gap-4">
-        <Icon icon="mingcute:corner-down-right-line" color="white" />
-        {@render messageView(related)}
+        {@render messageView(announcement.relatedMessages![0], related)}
       </div>
     {/if}
   </div>
 {/snippet}
 
-{#snippet messageView(msg: Message)}
+{#snippet messageView(ulid: Ulid, msg: Message)}
   <!-- doesn't change after render, so $derived is not necessary -->
   {@const authorProfile = getProfile(msg.author)}
 
@@ -306,7 +307,7 @@
         >
           <h5 class="font-bold">{authorProfile.handle}</h5>
         </a>
-        {@render timestamp()}
+        {@render timestamp(ulid)}
       </section>
 
       <p
@@ -454,8 +455,8 @@
   {/if}
 {/snippet}
 
-{#snippet timestamp()}
-  {@const decodedTime = decodeTime(id)}
+{#snippet timestamp(ulid: Ulid)}
+  {@const decodedTime = decodeTime(ulid)}
   {@const formattedDate = isToday(decodedTime)
     ? "Today"
     : format(decodedTime, "P")}

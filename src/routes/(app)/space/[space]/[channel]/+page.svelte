@@ -139,8 +139,7 @@
         doc.channels[page.params.channel].timeline.splice(index, 1);
 
         // create an Announcement about the move for each message
-        const timestamp = decodeTime(id);
-        const announcementId = ulid(timestamp);
+        const announcementId = ulid();
         const announcement: Announcement = {
           kind: "messageMoved",
           relatedMessages: [id],
