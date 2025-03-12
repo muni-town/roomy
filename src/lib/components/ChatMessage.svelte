@@ -21,16 +21,10 @@
   type Props = {
     id: Ulid;
     message: Message | Announcement;
-    messageRepliedTo?: Message;
   };
 
-  let { id, message, messageRepliedTo }: Props = $props();
+  let { id, message }: Props = $props();
   let space: { value: Autodoc<Space> } = getContext("space");
-
-  // doesn't change after render, so $derived is not necessary
-  const authorProfile = !isAnnouncement(message) && getProfile(message.author);
-  const profileRepliedTo =
-    messageRepliedTo && getProfile(messageRepliedTo.author);
 
   // set initial set with entries, no need for $effect
   let reactionHandles = $state(
@@ -168,7 +162,7 @@
         schema.content.push({
           "type": "paragraph",
           "content": [
-            { "type": "text", "text": "This message has been moved: " },
+            { "type": "text", "text": "Moved to: " },
             { 
               "type": "channelThreadMention",
               "attrs": {
@@ -202,14 +196,13 @@
 <svelte:window onkeydown={onKeydown} onkeyup={onKeyup} />
 
 <li {id} class={`flex flex-col ${isMobile && "max-w-screen"}`}>
-  {@render replyBanner()}
-
   <div
     class="relative group w-full h-fit flex flex-col gap-4 px-2 py-2.5 hover:bg-white/5 transition-all duration-75"
   >
     {#if isAnnouncement(message)}
-      {@render announcementView(message)}
+      {@render announcementView()}
     {:else}
+      {@render replyBanner()}
       {@render messageView(message)}
     {/if}
 
@@ -231,166 +224,14 @@
       </div>
     {/if}
 
-    {#if isMobile}
-      <Drawer bind:isDrawerOpen>
-        <div class="flex gap-4 justify-center mb-4">
-          <Button.Root
-            onclick={() => {
-              toggleReaction(id, "👍");
-              isDrawerOpen = false;
-            }}
-            class="px-4 rounded-full bg-violet-800"
-          >
-            👍
-          </Button.Root>
-          <Button.Root
-            onclick={() => {
-              toggleReaction(id, "😂");
-              isDrawerOpen = false;
-            }}
-            class="px-4 rounded-full bg-violet-800"
-          >
-            😂
-          </Button.Root>
-          <Popover.Root bind:open={isEmojiDrawerPickerOpen}>
-            <Popover.Trigger class="p-4 rounded-full bg-violet-800">
-              <Icon icon="lucide:smile-plus" color="white" />
-            </Popover.Trigger>
-            <Popover.Content>
-              <emoji-picker bind:this={emojiDrawerPicker}></emoji-picker>
-            </Popover.Content>
-          </Popover.Root>
-        </div>
-
-        {#if authorProfile}
-          <div class="flex flex-col gap-2">
-            <Button.Root
-              onclick={() => {
-                setReplyTo({ id, authorProfile, content: message.content });
-                isDrawerOpen = false;
-              }}
-              class="text-white p-4 flex gap-4 items-center bg-violet-800 w-full rounded-lg"
-            >
-              <Icon icon="fa6-solid:reply" color="white" />
-              Reply
-            </Button.Root>
-            {#if mayDelete}
-              <Button.Root
-                onclick={() => deleteMessage(id)}
-                class="text-white p-4 flex gap-4 items-center bg-violet-800 w-full rounded-lg"
-              >
-                <Icon icon="tabler:trash" color="red" />
-                Delete
-              </Button.Root>
-            {/if}
-          </div>
-        {/if}
-      </Drawer>
-    {:else}
-      <Toolbar.Root
-        class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-violet-800 p-2 rounded items-center`}
-      >
-        <Toolbar.Button
-          onclick={() => toggleReaction(id, "👍")}
-          class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
-        >
-          👍
-        </Toolbar.Button>
-        <Toolbar.Button
-          onclick={() => toggleReaction(id, "😂")}
-          class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
-        >
-          😂
-        </Toolbar.Button>
-        <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
-          <Popover.Trigger
-            class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
-          >
-            <Icon icon="lucide:smile-plus" color="white" />
-          </Popover.Trigger>
-          <Popover.Content>
-            <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
-          </Popover.Content>
-        </Popover.Root>
-        {#if shiftDown && mayDelete}
-          <Toolbar.Button
-            onclick={() => deleteMessage(id)}
-            class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
-          >
-            <Icon icon="tabler:trash" color="red" />
-          </Toolbar.Button>
-        {/if}
-
-        {#if authorProfile}
-          <Toolbar.Button
-            onclick={() =>
-              setReplyTo({ id, authorProfile, content: message.content })}
-            class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
-          >
-            <Icon icon="fa6-solid:reply" color="white" />
-          </Toolbar.Button>
-        {/if}
-      </Toolbar.Root>
-    {/if}
-
-    {#if isThreading.value && !isAnnouncement(message)}
-      <Checkbox.Root
-        onCheckedChange={updateSelect} 
-        bind:checked={isSelected}
-        class="absolute right-4 inset-y-0"
-      >
-        {#snippet children({ checked })}
-          <div class="border bg-violet-800 size-4 rounded items-center cursor-pointer">
-            {#if checked}
-              <Icon 
-                icon="material-symbols:check-rounded" 
-                color="#5b21b6" 
-                class="bg-white size-3.5"
-              />
-            {/if}
-          </div>
-        {/snippet}
-      </Checkbox.Root>
-    {/if}
   </div>
 </li>
 
-{#snippet announcementView(message: Announcement)}
-  <div class="flex gap-4">
-    <Button.Root
-      onclick={() => {
-        if (isMobile) {
-          isDrawerOpen = true;
-        }
-      }}
-      class="flex flex-col text-start gap-2 text-white w-full min-w-0"
-    >
-      <section class="flex items-center gap-2 flex-wrap w-fit">
-        {@render timestamp()}
-      </section>
-
-      <p
-        class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
-      >
-        {@html getAnnouncementHtml(message)}
-      </p>
-    </Button.Root>
-  </div>
-{/snippet}
-
-{#snippet messageView(message: Message)}
-  {#if authorProfile}
-    <div class="flex gap-4">
-      <a
-        href={`https://bsky.app/profile/${authorProfile.handle}`}
-        target="_blank"
-      >
-        <AvatarImage
-          handle={authorProfile.handle}
-          avatarUrl={authorProfile.avatarUrl}
-        />
-      </a>
-
+{#snippet announcementView()}
+  {@const announcement = message as Announcement}
+  {@render toolbar()}
+  <div class="flex flex-col gap-4">
+    {#if announcement.kind === "threadCreated"}
       <Button.Root
         onclick={() => {
           if (isMobile) {
@@ -400,34 +241,216 @@
         class="flex flex-col text-start gap-2 text-white w-full min-w-0"
       >
         <section class="flex items-center gap-2 flex-wrap w-fit">
-          <a
-            href={`https://bsky.app/profile/${authorProfile.handle}`}
-            target="_blank"
-          >
-            <h5 class="font-bold">{authorProfile.handle}</h5>
-          </a>
           {@render timestamp()}
         </section>
 
         <p
-          class="text-lg prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+          class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
         >
-          {@html getContentHtml(message.content)}
+          {@html getAnnouncementHtml(announcement)}
         </p>
-        {#if message.images?.length}
-          <div class="flex flex-wrap gap-2 mt-2">
-            {#each message.images as image}
-              <img
-                src={image.source}
-                alt={image.alt || ""}
-                class="max-w-md max-h-64 rounded-lg object-cover"
-                loading="lazy"
-              />
-            {/each}
-          </div>
-        {/if}
       </Button.Root>
-    </div>
+    {:else if announcement.kind === "messageMoved"}
+      {@const related = space.value.view.messages[announcement.relatedMessages![0]] as Message} 
+      <Button.Root
+        onclick={() => {
+          if (isMobile) {
+            isDrawerOpen = true;
+          }
+        }}
+        class="cursor-pointer flex gap-2 text-start w-full items-center text-gray-300 px-4 py-1 bg-violet-900 rounded-t"
+      >
+        <p
+          class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+        >
+          {@html getAnnouncementHtml(announcement)}
+        </p>
+      </Button.Root>
+      <div class="flex items-start gap-4">
+        <Icon icon="mingcute:corner-down-right-line" color="white" />
+        {@render messageView(related)}
+      </div>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet messageView(msg: Message)}
+  <!-- doesn't change after render, so $derived is not necessary -->
+  {@const authorProfile = getProfile(msg.author)}
+
+  {@render toolbar(authorProfile)}
+
+  <div class="flex gap-4">
+    <a
+      href={`https://bsky.app/profile/${authorProfile.handle}`}
+      target="_blank"
+    >
+      <AvatarImage
+        handle={authorProfile.handle}
+        avatarUrl={authorProfile.avatarUrl}
+      />
+    </a>
+
+    <Button.Root
+      onclick={() => {
+        if (isMobile) {
+          isDrawerOpen = true;
+        }
+      }}
+      class="flex flex-col text-start gap-2 text-white w-full min-w-0"
+    >
+      <section class="flex items-center gap-2 flex-wrap w-fit">
+        <a
+          href={`https://bsky.app/profile/${authorProfile.handle}`}
+          target="_blank"
+        >
+          <h5 class="font-bold">{authorProfile.handle}</h5>
+        </a>
+        {@render timestamp()}
+      </section>
+
+      <p
+        class="text-lg prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+      >
+        {@html getContentHtml(msg.content)}
+      </p>
+      {#if msg.images?.length}
+        <div class="flex flex-wrap gap-2 mt-2">
+          {#each msg.images as image}
+            <img
+              src={image.source}
+              alt={image.alt || ""}
+              class="max-w-md max-h-64 rounded-lg object-cover"
+              loading="lazy"
+            />
+          {/each}
+        </div>
+      {/if}
+    </Button.Root>
+  </div>
+{/snippet}
+
+{#snippet toolbar(authorProfile?: { handle: string, avatarUrl: string })}
+  {#if isMobile}
+    <Drawer bind:isDrawerOpen>
+      <div class="flex gap-4 justify-center mb-4">
+        <Button.Root
+          onclick={() => {
+            toggleReaction(id, "👍");
+            isDrawerOpen = false;
+          }}
+          class="px-4 rounded-full bg-violet-800"
+        >
+          👍
+        </Button.Root>
+        <Button.Root
+          onclick={() => {
+            toggleReaction(id, "😂");
+            isDrawerOpen = false;
+          }}
+          class="px-4 rounded-full bg-violet-800"
+        >
+          😂
+        </Button.Root>
+        <Popover.Root bind:open={isEmojiDrawerPickerOpen}>
+          <Popover.Trigger class="p-4 rounded-full bg-violet-800">
+            <Icon icon="lucide:smile-plus" color="white" />
+          </Popover.Trigger>
+          <Popover.Content>
+            <emoji-picker bind:this={emojiDrawerPicker}></emoji-picker>
+          </Popover.Content>
+        </Popover.Root>
+      </div>
+
+      {#if authorProfile}
+        <div class="flex flex-col gap-2">
+          <Button.Root
+            onclick={() => {
+              setReplyTo({ id, authorProfile, content: (message as Message).content });
+              isDrawerOpen = false;
+            }}
+            class="text-white p-4 flex gap-4 items-center bg-violet-800 w-full rounded-lg"
+          >
+            <Icon icon="fa6-solid:reply" color="white" />
+            Reply
+          </Button.Root>
+          {#if mayDelete}
+            <Button.Root
+              onclick={() => deleteMessage(id)}
+              class="text-white p-4 flex gap-4 items-center bg-violet-800 w-full rounded-lg"
+            >
+              <Icon icon="tabler:trash" color="red" />
+              Delete
+            </Button.Root>
+          {/if}
+        </div>
+      {/if}
+    </Drawer>
+  {:else}
+    <Toolbar.Root
+      class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-violet-800 p-2 rounded items-center`}
+    >
+      <Toolbar.Button
+        onclick={() => toggleReaction(id, "👍")}
+        class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+      >
+        👍
+      </Toolbar.Button>
+      <Toolbar.Button
+        onclick={() => toggleReaction(id, "😂")}
+        class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+      >
+        😂
+      </Toolbar.Button>
+      <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
+        <Popover.Trigger
+          class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+        >
+          <Icon icon="lucide:smile-plus" color="white" />
+        </Popover.Trigger>
+        <Popover.Content>
+          <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
+        </Popover.Content>
+      </Popover.Root>
+      {#if shiftDown && mayDelete}
+        <Toolbar.Button
+          onclick={() => deleteMessage(id)}
+          class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+        >
+          <Icon icon="tabler:trash" color="red" />
+        </Toolbar.Button>
+      {/if}
+
+      {#if authorProfile}
+        <Toolbar.Button
+          onclick={() =>
+            setReplyTo({ id, authorProfile, content: (message as Message).content })}
+          class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+        >
+          <Icon icon="fa6-solid:reply" color="white" />
+        </Toolbar.Button>
+      {/if}
+    </Toolbar.Root>
+  {/if}
+
+  {#if isThreading.value && !isAnnouncement(message)}
+    <Checkbox.Root
+      onCheckedChange={updateSelect} 
+      bind:checked={isSelected}
+      class="absolute right-4 inset-y-0"
+    >
+      {#snippet children({ checked })}
+        <div class="border bg-violet-800 size-4 rounded items-center cursor-pointer">
+          {#if checked}
+            <Icon 
+              icon="material-symbols:check-rounded" 
+              color="#5b21b6" 
+              class="bg-white size-3.5"
+            />
+          {/if}
+        </div>
+      {/snippet}
+    </Checkbox.Root>
   {/if}
 {/snippet}
 
@@ -456,6 +479,8 @@
 {/snippet}
 
 {#snippet replyBanner()}
+  {@const messageRepliedTo = !isAnnouncement(message) && message.replyTo && space.value.view.messages[message.replyTo] as Message}
+  {@const profileRepliedTo = messageRepliedTo && getProfile(messageRepliedTo.author)}
   {#if messageRepliedTo && profileRepliedTo}
     <Button.Root
       onclick={scrollToReply}
