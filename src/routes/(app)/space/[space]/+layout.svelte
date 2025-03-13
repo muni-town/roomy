@@ -178,7 +178,7 @@
       "px-4 py-5 flex flex-col gap-4 w-full",
     ]}
   >
-    <h1 class="text-2xl font-extrabold text-neutral-content text-ellipsis">
+    <h1 class="text-2xl font-extrabold text-base-content text-ellipsis">
       {space.view.name}
     </h1>
 
@@ -193,7 +193,7 @@
           {#snippet dialogTrigger()}
             <Button.Root
               title="Create Channel"
-              class="btn w-full justify-start join-item text-neutral-content"
+              class="btn w-full justify-start join-item text-base-content"
             >
               <Icon icon="basil:comment-plus-solid" class="size-6" />
               Create Channel
@@ -232,7 +232,7 @@
         >
           {#snippet dialogTrigger()}
             <Button.Root
-              class="btn w-full justify-start join-item text-neutral-content"
+              class="btn w-full justify-start join-item text-base-content"
               title="Create Category"
             >
               <Icon icon="basil:folder-plus-solid" class="size-6" />
@@ -265,7 +265,7 @@
       > 
         <Accordion.Item value="channels">
           <Accordion.Header>
-            <Accordion.Trigger class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-gray-300">
+            <Accordion.Trigger class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content">
               <h3>Channels</h3>
               <Icon icon="basil:caret-up-solid" class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("channels") && "rotate-180"}`} /> 
             </Accordion.Trigger>
@@ -282,7 +282,7 @@
           <div class="divider my-0"></div>
           <Accordion.Item value="threads">
             <Accordion.Header>
-              <Accordion.Trigger class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-gray-300">
+              <Accordion.Trigger class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content">
                 <h3>Threads</h3>
                 <Icon icon="basil:caret-up-solid" class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("threads") && "rotate-180"}`} /> 
               </Accordion.Trigger>

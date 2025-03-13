@@ -23,11 +23,6 @@
   }
 }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #5B009C #300051;
-}
-
 emoji-picker {
   --background: var(--color-violet-900);
   --border-radius: 8px;
@@ -46,8 +41,8 @@ emoji-picker {
 /* TipTap Nodes */
 
 .mention {
-  background-color: var(--color-violet-300);
-  color: var(--color-violet-900);
+  background-color: var(--color-accent);
+  color: var(--color-accent-content);
   padding-top: 0.125rem; 
   padding-bottom: 0.125rem;
   padding-left: 0.5rem; 
@@ -64,40 +59,4 @@ emoji-picker {
 .channel-mention::before {
   content: "💬";
   padding-right: 0.25rem;
-}
-
-/* ChatMessage */
-
-.chat a {
-  text-decoration-line: underline;
-}
-
-.chat * {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.chat blockquote {
-  margin-left: -0.75rem;
-  padding-left: 0.5rem; padding-right: 0.5rem;
-  border-left-width: 2px;
-  border-left-color: var(--color-violet-200);
-}
-
-.chat h1 {
-  font-size: 1.875rem;
-  line-height: 2.25rem;
-  font-weight: 700;
-}
-
-.chat h2 {
-  font-size: 1.5rem; 
-  line-height: 2rem;
-  font-weight: 700;
-}
-
-.chat:is(h3,h4,h5) {
-  font-size: 1.25rem; 
-  line-height: 1.75rem;
-  font-weight: 700;
 }

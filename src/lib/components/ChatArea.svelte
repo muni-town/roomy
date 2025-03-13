@@ -81,14 +81,9 @@
               <ChatMessage 
                 {id} 
                 {message}
-                messageRepliedTo={
-                  (!isAnnouncement(message) && message.replyTo)
-                  ? messages[message.replyTo] as Message 
-                  : undefined
-                }
               />
             {:else}
-              <p class="italic text-white text-sm">
+              <p class="italic text-error text-sm">
                 This message has been deleted
               </p>
             {/if}
