@@ -36,17 +36,28 @@ export type Did = string;
 export type Message = {
   author: Did;
   content: string;
-  replyTo?: Ulid;
   reactions: { [reaction: string]: Did[] };
+  replyTo?: Ulid;
   images?: {
     source: string;
     alt?: string;
   }[];
+  softDeleted?: boolean;
 };
+
+export type Announcement = {
+  kind: "messageMoved" | "messageDeleted" | "threadCreated";
+  reactions: { [reaction: string]: Did[] };
+  relatedMessages?: Ulid[];
+  relatedThreads?: Ulid[];
+  softDeleted?: boolean;
+}
 
 export type Thread = {
   title: string;
   timeline: Ulid[];
+  relatedChannel: Ulid;
+  softDeleted?: boolean;
 };
 
 export type Wiki = {
@@ -55,8 +66,8 @@ export type Wiki = {
   relatedThreads: Ulid[]; 
   lastUpdated?: number;   
 };
+export type DM = {
 
-export type Channel = {
   name: string;
   description: string;
   messages: { [ulid: Ulid]: Message };
@@ -64,14 +75,16 @@ export type Channel = {
   timeline: Ulid[];
 };
 
-export type SpaceChannel = {
+export type Channel = {
   name: string;
   description?: string;
   avatar?: string;
   threads: Ulid[];
   timeline: Ulid[];
   wiki?: Wiki; 
+  softDeleted?: boolean;
 };
+
 export type SpaceCategory = {
   name: string;
   channels: Ulid[];
@@ -82,8 +95,8 @@ export type Space = {
   admins: Ulid[];
   moderators: Ulid[];
   threads: { [ulid: Ulid]: Thread };
-  messages: { [ulid: Ulid]: Message };
-  channels: { [ulid: Ulid]: SpaceChannel };
+  channels: { [ulid: Ulid]: Channel };
+  messages: { [ulid: Ulid]: Message | Announcement };
   categories: { [ulid: Ulid]: SpaceCategory };
   sidebarItems: SidebarItem[];
   name: string;

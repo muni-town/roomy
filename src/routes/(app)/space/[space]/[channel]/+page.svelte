@@ -1,12 +1,10 @@
 <script lang="ts">
   import _ from "underscore";
-  import { ulid } from "ulidx";
+  import { decodeTime, ulid } from "ulidx";
   import { page } from "$app/state";
-  import { setContext } from "svelte";
-  import { g } from "$lib/global.svelte";
+  import { getContext, setContext } from "svelte";
   import { goto } from "$app/navigation";
   import toast from "svelte-french-toast";
-  import { fly } from "svelte/transition";
   import { user } from "$lib/user.svelte";
   import { getContentHtml, type Item } from "$lib/tiptap/editor";
   import { outerWidth } from "svelte/reactivity/window";
@@ -14,111 +12,54 @@
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import ChatArea from "$lib/components/ChatArea.svelte";
-  import ThreadRow from "$lib/components/ThreadRow.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
-  import ChatMessage from "$lib/components/ChatMessage.svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
-  import { Button, Popover, ScrollArea, Tabs, Toggle } from "bits-ui";
+  import { Button, Popover, Tabs } from "bits-ui";
 
   import type {
     Did,
     Space,
-    SpaceChannel,
-    Thread,
+    Channel,
     Ulid,
+    Announcement,
+    Thread,
   } from "$lib/schemas/types";
   import type { Autodoc } from "$lib/autodoc/peer";
-  import { getProfile } from "$lib/profile.svelte";
+  import { format, isToday } from "date-fns";
 
   import { onMount, onDestroy } from "svelte";
   import WikiEditor from "$lib/components/WikiEditor.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  let tab = $state("chat");
-  let space: Autodoc<Space> | undefined = $derived(g.spaces[page.params.space]);
-  let channel = $derived(space.view.channels[page.params.channel]) as
-    | SpaceChannel
+  let spaceContext = getContext("space") as { get value(): Autodoc<Space> | undefined };
+  let space = $derived(spaceContext.value);
+  let channel = $derived(space?.view.channels[page.params.channel]) as
+    | Channel
     | undefined;
 
-  // TODO: track users via the space data
-  let users = $state(() => {
-    if (!space) {
-      return [];
+  let users: { value: Item[] } = getContext("users");
+  let contextItems: { value: Item[] } = getContext("contextItems");
+  let relatedThreads = $derived.by(() => {
+    let related: { [ulid: string]: Thread } = {};
+    if (space && channel) {
+      Object.entries(space.view.threads).map(([ulid, thread]) => {
+        if (!thread.softDeleted && thread.relatedChannel === page.params.channel) {
+          related[ulid] = thread;
+        }
+      });
     }
-    const result = new Set();
-    for (const message of Object.entries(space.view.messages)) {
-      result.add(message[1].author);
-    }
-    return result
-      .values()
-      .toArray()
-      .map((author) => {
-        const profile = getProfile(author as string);
-        return { value: author, label: profile.handle, category: "user" };
-      }) as Item[];
+    return related;
   });
 
-  let contextItems: Item[] = $derived.by(() => {
-    if (!space) {
-      return [];
-    }
-    const items = [];
-
-    // add threads to list
-    items.push(
-      ...Object.entries(space.view.threads).map(([ulid, thread]) => {
-        return {
-          value: JSON.stringify({
-            ulid,
-            space: page.params.space,
-            type: "thread",
-          }),
-          label: thread.title,
-          category: "thread",
-        };
-      }),
-    );
-
-    // add channels to list
-    items.push(
-      ...Object.entries(space.view.channels).map(([ulid, channel]) => {
-        return {
-          value: JSON.stringify({
-            ulid,
-            space: page.params.space,
-            type: "channel",
-          }),
-          label: channel.name,
-          category: "channel",
-        };
-      }),
-    );
-
-    return items as Item[];
-  });
-
-  $inspect({ users: users(), contextItems });
+  let tab = $state<"chat" | "threads">("chat");
 
   let messageInput = $state({});
-  let currentThread = $derived.by(() => {
-    if (page.url.searchParams.has("thread")) {
-      return space.view.threads[page.url.searchParams.get("thread")!] as Thread;
-    } else {
-      return null;
-    }
-  });
-
   let imageFiles: FileList | null = $state(null);
-
-  $effect(() => {
-    if (currentThread) {
-      tab = "threads";
-    }
-  });
 
   // thread maker
   let isThreading = $state({ value: false });
+  $inspect({ isThreading })
   let threadTitleInput = $state("");
   let selectedMessages: Ulid[] = $state([]);
   setContext("isThreading", isThreading);
@@ -129,6 +70,7 @@
     selectedMessages = selectedMessages.filter((m) => m != message);
   });
   setContext("deleteMessage", (message: Ulid) => {
+    if (!space) { return; }
     space.change((doc) => {
       // TODO: don't remove from timeline, just delete ID? We need to eventually add a marker
       // showing the messages is deleted in the timeline.
@@ -197,18 +139,56 @@
 
   function createThread(e: SubmitEvent) {
     e.preventDefault();
-    if (!space) return;
+    if (!space || !channel) return;
 
     space.change((doc) => {
-      const id = ulid();
-      const timeline = [];
+      const threadId = ulid();
+      const threadTimeline: string[] = [];
+
+      // messages can be selected in any order
+      // sort them on create based on their position from the channel
+      selectedMessages.sort((a,b) => {
+        return channel.timeline.indexOf(a) - channel.timeline.indexOf(b)
+      });
+
       for (const id of selectedMessages) {
-        timeline.push(`${id}`);
+        // move selected message ID from channel to thread timeline
+        threadTimeline.push(id);
+        const index = channel?.timeline.indexOf(id);
+        doc.channels[page.params.channel].timeline.splice(index, 1);
+
+        // create an Announcement about the move for each message
+        const announcementId = ulid();
+        const announcement: Announcement = {
+          kind: "messageMoved",
+          relatedMessages: [id],
+          relatedThreads: [threadId],
+          reactions: {}
+        };
+
+        doc.messages[announcementId] = announcement; 
+
+        // push announcement at moved message's index
+        doc.channels[page.params.channel].timeline.splice(index, 0, announcementId);
       }
-      doc.threads[id] = {
+
+      // create thread
+      doc.threads[threadId] = {
         title: threadTitleInput,
-        timeline,
+        timeline: threadTimeline,
+        relatedChannel: page.params.channel
       };
+      
+      // create an Announcement about the new Thread in current channel
+      const announcementId = ulid();
+      const announcement: Announcement = {
+        kind: "threadCreated",
+        relatedThreads: [threadId],
+        reactions: {}
+      };
+
+      doc.messages[announcementId] = announcement; 
+      doc.channels[page.params.channel].timeline.push(announcementId);
     });
 
     threadTitleInput = "";
@@ -219,6 +199,29 @@
   async function sendMessage() {
     if (!space) return;
 
+    /* TODO: image upload refactor with tiptap
+    const images = imageFiles
+      ? await Promise.all(
+          Array.from(imageFiles).map(async (file) => {
+            try {
+              const resp = await user.uploadBlob(file);
+              return {
+                source: resp.url, // Use the blob reference from ATP
+                alt: file.name,
+              };
+            } catch (error) {
+              console.error("Failed to upload image:", error);
+              toast.error("Failed to upload image", { position: "bottom-end" });
+              return null;
+            }
+          }),
+        ).then((results) =>
+          results.filter(
+            (result): result is NonNullable<typeof result> => result !== null,
+          ),
+        )
+      : undefined;
+    */
     space.change((doc) => {
       if (!user.agent) return;
 
@@ -228,6 +231,8 @@
         reactions: {},
         content: JSON.stringify(messageInput),
         ...(replyingTo && { replyTo: replyingTo.id }),
+        // TODO: image upload refactor with tiptap
+        // ...(images && { images }),
       };
       doc.channels[page.params.channel].timeline.push(id);
     });
@@ -237,26 +242,16 @@
     imageFiles = null;
   }
 
-  function deleteThread(id: Ulid) {
-    if (!space) return;
-
-    space.change((doc) => {
-      delete doc.threads[id];
-    });
-
-    toast.success("Thread deleted", { position: "bottom-end" });
-    goto(page.url.pathname);
-  }
-
   //
   // Settings Dialog
   //
 
-  let isAdmin = $derived(
-    user.agent && space && space.view.admins.includes(user.agent.assertDid),
-  );
+  let { value: isAdmin }: { value: boolean } = getContext("isAdmin");
+
+  /* TODO: image upload refactor with tiptap
   let mayUploadImages = $derived.by(() => {
     if (isAdmin) return true;
+    if (!space) { return }
 
     let messagesByUser = Object.values(space.view.messages).filter(
       (x) => user.agent && x.author == user.agent.assertDid,
@@ -266,14 +261,16 @@
       (message) =>
         !!Object.values(message.reactions).find(
           (reactedUsers) =>
-            !!reactedUsers.find((user) => !!space.view.admins.includes(user)),
+            !!reactedUsers.find((user) => !!space?.view.admins.includes(user)),
         ),
     );
   });
+  */
   let showSettingsDialog = $state(false);
   let channelNameInput = $state("");
   let channelCategoryInput = $state(undefined) as undefined | string;
   $effect(() => {
+    if (!space) { return }
     channelNameInput = channel?.name || "";
     channelCategoryInput = Object.entries(space.view.categories).find(
       ([_id, category]) => category.channels.includes(page.params.channel),
@@ -314,6 +311,32 @@
     });
     showSettingsDialog = false;
   }
+
+  /* TODO: image upload refactor with tiptap
+  async function handleImageSelect(event: Event) {
+    const input = event.target as HTMLInputElement;
+    imageFiles = input.files;
+  }
+
+  async function handlePaste(event: ClipboardEvent) {
+    if (!mayUploadImages) return;
+
+    const items = event.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          imageFiles = new DataTransfer().files;
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(file);
+          imageFiles = dataTransfer.files;
+        }
+      }
+    }
+  }
+  */
 </script>
 
 <header class="flex flex-none items-center justify-between border-b-1 pb-4">
@@ -326,25 +349,9 @@
       <AvatarImage avatarUrl={channel?.avatar} handle={channel?.name ?? ""} />
     {/if}
 
-    <span class="flex gap-2 items-center">
-      {#if !isMobile || (isMobile && !currentThread)}
-        <h4
-          class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-white text-lg font-bold`}
-        >
-          {channel?.name}
-        </h4>
-      {/if}
-
-      {#if currentThread}
-        {#if !isMobile}
-          <Icon icon="mingcute:right-line" color="white" />
-        {/if}
-        <Icon icon="lucide-lab:reel-thread" color="white" />
-        <h5 class="text-white text-lg font-bold line-clamp-1 text-ellipsis">
-          {currentThread.title}
-        </h5>
-      {/if}
-    </span>
+    <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-white text-lg font-bold`}>
+      {channel?.name}
+    </h4>
   </div>
 
   <Tabs.Root bind:value={tab}>
@@ -386,23 +393,43 @@
 
   {#if !isMobile}
     <div class="flex">
-      {@render toolbar({ growButton: false })}
+      {@render toolbar()}
     </div>
   {/if}
 </header>
 
 {#if tab === "chat"}
   {@render chatTab()}
-{:else if tab === "threads"}
+{:else}
   {@render threadsTab()}
 {:else if tab === "wiki"}
   {@render wikiTab()}
 {/if}
 
+{#snippet threadsTab()}
+  {#each Object.entries(relatedThreads) as [ulid, thread]}
+    <a href={`/space/${page.params.space}/thread/${ulid}`} class="w-full px-3 py-2 bg-violet-900 rounded btn">
+      <h3 class="text-lg font-medium text-white">{thread.title}</h3>
+      {@render timestamp(ulid)}
+    </a>
+  {/each}
+{/snippet}
+
+{#snippet timestamp(ulid: Ulid)}
+  {@const decodedTime = decodeTime(ulid)}
+  {@const formattedDate = isToday(decodedTime)
+    ? "Today"
+    : format(decodedTime, "P")}
+  <time class="text-xs text-gray-300">
+    {formattedDate}, {format(decodedTime, "pp")}
+  </time>
+{/snippet}
+
 {#snippet chatTab()}
   {#if space}
     <ChatArea
-      source={{ type: "space", space, channelId: page.params.channel }}
+      source={{ type: "space", space: space }}
+      timeline={channel?.timeline ?? []}
     />
     <div class="flex float-end">
       {#if !isMobile || !isThreading.value}
@@ -435,10 +462,11 @@
             </div>
           {/if}
           <div class="relative">
-            <ChatInput
-              bind:content={messageInput}
-              users={users()}
-              context={contextItems}
+            <!-- TODO: get all users that has joined the server -->
+            <ChatInput 
+              bind:content={messageInput} 
+              users={users.value}
+              context={contextItems.value}
               onEnter={sendMessage}
             />
           </div>
@@ -446,132 +474,42 @@
       {/if}
 
       {#if isMobile}
-        {@render toolbar({ growButton: true })}
+        {@render toolbar()}
       {/if}
     </div>
   {/if}
 {/snippet}
 
-{#snippet threadsTab()}
-  {#if space}
-    {#if currentThread}
-      <section class="flex flex-col gap-4 items-start h-full">
-        <menu class="px-4 py-2 flex w-full justify-between">
-          <Button.Root
-            onclick={() => goto(page.url.pathname)}
-            class="flex gap-2 items-center text-white cursor-pointer hover:scale-105 transitiona-all duration-150"
-          >
-            <Icon icon="uil:left" />
-            Back
-          </Button.Root>
-          <Dialog title="Delete Thread" bind:isDialogOpen={showSettingsDialog}>
-            {#snippet dialogTrigger()}
-              <Icon icon="tabler:trash" color="red" class="text-2xl" />
-            {/snippet}
-            <div class="flex flex-col items-center gap-4">
-              <p>The thread will be unrecoverable once deleted.</p>
-              <Button.Root
-                onclick={() =>
-                  deleteThread(page.url.searchParams.get("thread")!)}
-                class="flex items-center gap-3 px-4 py-2 max-w-[20em] bg-red-600 text-white rounded-lg hover:scale-[102%] active:scale-95 transition-all duration-150"
-              >
-                Confirm Delete
-              </Button.Root>
-            </div>
-          </Dialog>
-        </menu>
 
-        <ScrollArea.Root>
-          <ScrollArea.Viewport class="max-w-screen h-full max-h-[90%]">
-            <ol class="flex flex-col gap-4">
-              {#each currentThread.timeline as id}
-                {@const message = space.view.messages[id]}
-                <ChatMessage
-                  {id}
-                  {message}
-                  messageRepliedTo={message.replyTo
-                    ? space.view.messages[message.replyTo]
-                    : undefined}
-                />
-              {/each}
-            </ol>
-          </ScrollArea.Viewport>
-          <ScrollArea.Scrollbar
-            orientation="vertical"
-            class="flex h-full w-2.5 touch-none select-none rounded-full border-l border-l-transparent p-px transition-all hover:w-3 hover:bg-dark-10"
-          >
-            <ScrollArea.Thumb
-              class="relative flex-1 rounded-full bg-muted-foreground opacity-40 transition-opacity hover:opacity-100"
-            />
-          </ScrollArea.Scrollbar>
-          <ScrollArea.Corner />
-        </ScrollArea.Root>
-      </section>
-    {:else}
-      <ul class="overflow-y-auto px-2 gap-3 flex flex-col">
-        {#each Object.entries(space.view.threads) as [id, thread] (id)}
-          <ThreadRow
-            {id}
-            {thread}
-            onclick={() => goto(`?thread=${id}`)}
-            onclickDelete={() => deleteThread(id)}
-          />
-        {/each}
-      </ul>
-    {/if}
-  {/if}
-{/snippet}
-
-{#snippet toolbar({ growButton = false }: { growButton: boolean })}
-  {#if isThreading.value}
-    <div in:fly class={`${growButton && "grow w-full pr-2"}`}>
-      <Popover.Root>
-        <Popover.Trigger
-          class={`cursor-pointer ${growButton ? "w-full" : "w-fit"} px-4 py-2 rounded bg-violet-800 text-white`}
+{#snippet toolbar()}
+  <menu class="relative flex items-center gap-3 px-2 w-fit self-end">
+    <Popover.Root bind:open={isThreading.value}> 
+      <Popover.Trigger>
+        <Icon
+          icon="tabler:needle-thread"
+          color="white"
+          class="text-2xl"
+        />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content 
+          side="left" 
+          sideOffset={8} 
+          interactOutsideBehavior="ignore" 
+          class="my-4 text-white bg-violet-900 rounded py-4 px-5"
         >
-          Create Thread
-        </Popover.Trigger>
-
-        <Popover.Content
-          sideOffset={8}
-          forceMount
-          class="bg-violet-800 p-4 rounded"
-        >
-          <form onsubmit={createThread} class="text-white flex flex-col gap-4">
-            <label class="flex flex-col gap-1">
-              Thread Title
-              <input
-                bind:value={threadTitleInput}
-                type="text"
-                placeholder="Notes"
-                class="border px-4 py-2 rounded"
-              />
-            </label>
-            <Popover.Close>
-              <button
-                type="submit"
-                class="text-black px-4 py-2 bg-white rounded w-full text-center"
-              >
-                Confirm
-              </button>
-            </Popover.Close>
+          <form onsubmit={createThread} class="flex flex-col gap-4">
+            <input type="text" bind:value={threadTitleInput} class="bg-violet-800 px-2 py-1" placeholder="Thread Title" />
+            <button 
+              type="submit" 
+              class="btn text-violet-900 bg-white"
+            >
+              Create Thread
+            </button>
           </form>
         </Popover.Content>
-      </Popover.Root>
-    </div>
-  {/if}
-  <menu class="relative flex items-center gap-3 px-2 w-fit self-end">
-    <Toggle.Root
-      bind:pressed={isThreading.value}
-      disabled={tab !== "chat"}
-      class={`p-2 ${isThreading.value && "bg-white/10"} cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150 rounded`}
-    >
-      <Icon
-        icon="tabler:needle-thread"
-        color={tab !== "chat" ? "gray" : "white"}
-        class="text-2xl"
-      />
-    </Toggle.Root>
+      </Popover.Portal>
+    </Popover.Root>
     <Button.Root
       title="Copy invite link"
       class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"

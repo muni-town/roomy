@@ -3,28 +3,24 @@
   import { onNavigate } from "$app/navigation";
   import ChatMessage from "./ChatMessage.svelte";
   import type { Autodoc } from "$lib/autodoc/peer";
-  import type { Channel, Message, Space } from "$lib/schemas/types";
+  import type { DM, Message, Space, Ulid } from "$lib/schemas/types";
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
+  import { isAnnouncement } from "$lib/utils";
 
   let {
     source,
+    timeline
   }: {
     source:
-      | { type: "channel"; channel: Autodoc<Channel> }
-      | { type: "space"; space: Autodoc<Space>; channelId: string };
+      | { type: "dm"; channel: Autodoc<DM> }
+      | { type: "space"; space: Autodoc<Space>; };
+    timeline: Ulid[]
   } = $props();
 
-  let messages = $derived(
-    source.type == "channel"
-      ? source.channel.view.messages
-      : source.space.view.messages,
-  );
-
-  let timeline = $derived(
-    source.type == "channel"
-      ? source.channel.view.timeline
-      : source.space.view.channels[source.channelId]?.timeline,
+  let messages = $derived(source.type == "dm"
+    ? source.channel.view.messages
+    : source.space.view.messages
   );
 
   setContext("scrollToMessage", (id: string) => {
@@ -53,8 +49,6 @@
       scrollToEnd = false;
     }
   });
-
-  $inspect({ messages });
 </script>
 
 <ScrollArea.Root type="always">
@@ -83,18 +77,20 @@
         >
           {#snippet children(id, _index)}
             {@const message = messages[id]}
-            {#if message}
+            {#if message && !message.softDeleted}
               <ChatMessage 
                 {id} 
                 {message}
                 messageRepliedTo={
-                  message.replyTo 
+                  (!isAnnouncement(message) && message.replyTo)
                   ? messages[message.replyTo] as Message 
                   : undefined
                 }
               />
             {:else}
-              <p class="italic text-white text-sm">This message has been deleted</p>
+              <p class="italic text-white text-sm">
+                This message has been deleted
+              </p>
             {/if}
           {/snippet}
         </Virtualizer>
