@@ -400,7 +400,7 @@
 
 {#if tab === "chat"}
   {@render chatTab()}
-{:else}
+{:else if tab === "threads"}
   {@render threadsTab()}
 {:else if tab === "wiki"}
   {@render wikiTab()}
