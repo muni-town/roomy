@@ -28,11 +28,6 @@
   scrollbar-color: #5B009C #300051;
 }
 
-hr {
-  border-bottom-width: 1.25px;
-  border-color: var(--color-violet-800);
-}
-
 emoji-picker {
   --background: var(--color-violet-900);
   --border-radius: 8px;

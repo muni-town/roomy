@@ -231,10 +231,7 @@
       </Dialog>
 
       {#if dev}
-        <Button.Root
-          onclick={() => goto("/dev")}
-          class="btn btn-ghost"
-        >
+        <Button.Root onclick={() => goto("/dev")} class="btn btn-ghost">
           <Icon
             icon="fluent:window-dev-tools-16-regular"
             class="text-2xl"
