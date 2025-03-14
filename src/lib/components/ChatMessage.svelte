@@ -339,7 +339,7 @@
             toggleReaction(id, "👍");
             isDrawerOpen = false;
           }}
-          class="px-4 rounded-full bg-primary"
+          class="btn btn-circle"
         >
           👍
         </Button.Root>
@@ -348,12 +348,12 @@
             toggleReaction(id, "😂");
             isDrawerOpen = false;
           }}
-          class="px-4 rounded-full bg-primary"
+          class="btn btn-circle"
         >
           😂
         </Button.Root>
         <Popover.Root bind:open={isEmojiDrawerPickerOpen}>
-          <Popover.Trigger class="p-4 rounded-full bg-primary text-primary-content">
+          <Popover.Trigger class="btn btn-circle">
             <Icon icon="lucide:smile-plus" />
           </Popover.Trigger>
           <Popover.Content>
@@ -369,7 +369,7 @@
               setReplyTo({ id, authorProfile, content: (message as Message).content });
               isDrawerOpen = false;
             }}
-            class="join-item btn btn-primary w-full"
+            class="join-item btn w-full"
           >
             <Icon icon="fa6-solid:reply" />
             Reply

@@ -425,7 +425,7 @@
         <section class="grow flex flex-col">
           {#if replyingTo}
             <div
-              class="flex justify-between bg-violet-800 text-white rounded-t-lg px-4 py-2"
+              class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
             >
               <div class="flex flex-col gap-1">
                 <h5 class="flex gap-2 items-center">
@@ -444,7 +444,7 @@
               <Button.Root
                 type="button"
                 onclick={() => (replyingTo = null)}
-                class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
+                class="btn btn-circle btn-ghost"
               >
                 <Icon icon="zondicons:close-solid" />
               </Button.Root>
@@ -569,25 +569,19 @@
             <input
               bind:value={channelNameInput}
               placeholder="channel-name"
-              class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
+              class="input"
             />
           </label>
           {#if space}
-            <select bind:value={channelCategoryInput}>
-              <option class="bg-violet-900 text-white" value={undefined}
-                >Category: None</option
-              >
+            <select bind:value={channelCategoryInput} class="select">
+              <option value={undefined}>None</option>
               {#each Object.keys(space.view.categories) as categoryId}
                 {@const category = space.view.categories[categoryId]}
-                <option class="bg-violet-900 text-white" value={categoryId}
-                  >Category: {category.name}</option
-                >
+                <option value={categoryId}>{category.name}</option>
               {/each}
             </select>
           {/if}
-          <Button.Root
-            class={`px-4 py-2 bg-white text-black rounded-lg disabled:bg-white/50 active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 hover:scale-[102%]`}
-          >
+          <Button.Root class="btn btn-primary">
             Save Settings
           </Button.Root>
         </form>

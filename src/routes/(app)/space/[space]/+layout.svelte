@@ -204,21 +204,21 @@
             <input
               bind:value={newChannelName}
               placeholder="Name"
-              class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
+              class="input"
             />
-            <select bind:value={newChannelCategory}>
-              <option class="bg-violet-900 text-white" value={undefined}
+            <select bind:value={newChannelCategory} class="select">
+              <option value={undefined}
                 >Category: None</option
               >
               {#each Object.keys(space.view.categories) as categoryId}
                 {@const category = space.view.categories[categoryId]}
-                <option class="bg-violet-900 text-white" value={categoryId}
+                <option value={categoryId}
                   >Category: {category.name}</option
                 >
               {/each}
             </select>
             <Button.Root
-              class="px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2"
+              class="btn btn-primary"
             >
               <Icon icon="basil:add-outline" font-size="1.8em" />
               Create Channel
@@ -244,7 +244,7 @@
             <input
               bind:value={newCategoryName}
               placeholder="Name"
-              class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
+              class="input"
             />
             <Button.Root
               class={`px-4 py-2 bg-white text-black rounded-lg active:scale-95 transition-all duration-150 flex items-center justify-center gap-2`}
