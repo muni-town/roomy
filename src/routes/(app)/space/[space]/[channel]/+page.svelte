@@ -353,26 +353,22 @@
   </div>
 
   <Tabs.Root bind:value={tab}>
-    <Tabs.List class="grid grid-cols-2 gap-4 border text-white p-1 rounded">
+    <Tabs.List class="tabs tabs-box">
       <Tabs.Trigger
         value="chat"
         onclick={() => goto(page.url.pathname)}
-        class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
+        class="tab flex gap-2" 
       >
-        <Icon icon="tabler:message" color="white" class="text-2xl" />
+        <Icon icon="tabler:message" class="text-2xl" />
         {#if !isMobile}
           <p>Chat</p>
         {/if}
       </Tabs.Trigger>
       <Tabs.Trigger
         value="threads"
-        class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
+        class="tab flex gap-2" 
       >
-        <Icon
-          icon="material-symbols:thread-unread-rounded"
-          color="white"
-          class="text-2xl"
-        />
+        <Icon icon="material-symbols:thread-unread-rounded" class="text-2xl" />
         {#if !isMobile}
           <p>Threads</p>
         {/if}
@@ -394,12 +390,16 @@
 {/if}
 
 {#snippet threadsTab()}
-  {#each Object.entries(relatedThreads) as [ulid, thread]}
-    <a href={`/space/${page.params.space}/thread/${ulid}`} class="w-full px-3 py-2 bg-violet-900 rounded btn">
-      <h3 class="text-lg font-medium text-white">{thread.title}</h3>
-      {@render timestamp(ulid)}
-    </a>
-  {/each}
+  <ul>
+    {#each Object.entries(relatedThreads) as [ulid, thread]}
+      <li class="list-row">
+        <a href={`/space/${page.params.space}/thread/${ulid}`} class="card card-border bg-base-200 p-4">
+          <h3 class="card-title text-xl font-medium text-primary">{thread.title}</h3>
+          {@render timestamp(ulid)}
+        </a>
+      </li>
+    {/each}
+  </ul>
 {/snippet}
 
 {#snippet timestamp(ulid: Ulid)}
