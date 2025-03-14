@@ -42,24 +42,23 @@ pub fn run() {
 
 #[command(rename_all = "snake_case")]
 fn open_url(url: &str) -> Result<(), Error> {
-  open::that(url).unwrap();
+    open::that(url).unwrap();
 
-  Ok(())
+    Ok(())
 }
-
 
 #[derive(Debug, thiserror::Error)]
 enum Error {
-  #[error(transparent)]
-  Io(#[from] std::io::Error)
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 // we must manually implement serde::Serialize
 impl serde::Serialize for Error {
-  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-  where
-    S: serde::ser::Serializer,
-  {
-    serializer.serialize_str(self.to_string().as_ref())
-  }
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        serializer.serialize_str(self.to_string().as_ref())
+    }
 }
