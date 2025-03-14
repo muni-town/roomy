@@ -53,7 +53,7 @@
 
 <ScrollArea.Root type="always">
   <ScrollArea.Viewport bind:ref={viewport} class="w-full max-w-full h-full">
-    <ol class="flex flex-col gap-4 max-w-full">
+    <ol class="flex flex-col gap-2 max-w-full">
       <!--
         This use of `key` needs explaining. `key` causes the components below
         it to be deleted and re-created when the expression passed to it is changed.
@@ -75,12 +75,16 @@
           getKey={(k, _) => k}
           scrollRef={viewport}
         >
-          {#snippet children(id, _index)}
+          {#snippet children(id, index)}
             {@const message = messages[id]}
+            {@const previousMessageId = index > 0 ? timeline[index - 1] : undefined}
+            {@const previousMessage = previousMessageId ? messages[previousMessageId] : undefined}
             {#if message && !message.softDeleted}
               <ChatMessage 
                 {id} 
                 {message}
+                {previousMessageId}
+                {previousMessage}
                 messageRepliedTo={
                   (!isAnnouncement(message) && message.replyTo)
                   ? messages[message.replyTo] as Message 

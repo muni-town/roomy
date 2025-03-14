@@ -3,7 +3,7 @@
   import type { Announcement, Message, Space, Ulid } from "$lib/schemas/types";
   import { renderMarkdownSanitized } from "$lib/markdown";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import { format, isToday } from "date-fns";
+  import { format, isToday, differenceInMinutes } from "date-fns";
   import { getContext } from "svelte";
   import { decodeTime } from "ulidx";
   import { getProfile } from "$lib/profile.svelte";
@@ -21,9 +21,12 @@
   type Props = {
     id: Ulid;
     message: Message | Announcement;
+    messageRepliedTo?: Message;
+    previousMessage?: Message;
+    previousMessageId?: Ulid;
   };
 
-  let { id, message }: Props = $props();
+  let { id, message, messageRepliedTo, previousMessage, previousMessageId }: Props = $props();
   let space: { value: Autodoc<Space> } = getContext("space");
 
   // set initial set with entries, no need for $effect
@@ -191,13 +194,32 @@
 
     return getContentHtml(JSON.stringify(schema));
   }
+
+  // Determine if we should show the author
+  let shouldShowAuthor = $derived(() => {
+    // Always show author if there's no previous message
+    if (!previousMessage) return true;
+    
+    // Show if different author
+    if (previousMessage.author !== message.author) return true;
+    
+    // Show if more than 5 minutes apart
+    if (previousMessageId) {
+      const currentTime = decodeTime(id);
+      const previousTime = decodeTime(previousMessageId);
+      return differenceInMinutes(currentTime, previousTime) > 5;
+    }
+    
+    // Default to showing author
+    return true;
+  });
 </script>
 
 <svelte:window onkeydown={onKeydown} onkeyup={onKeyup} />
 
 <li {id} class={`flex flex-col ${isMobile && "max-w-screen"}`}>
   <div
-    class="relative group w-full h-fit flex flex-col gap-4 px-2 py-2.5 hover:bg-white/5 transition-all duration-75"
+    class={`relative group w-full h-fit flex flex-col gap-4 px-2 ${shouldShowAuthor() && "pt-5"}  hover:bg-white/5 transition-all duration-75`}
   >
     {#if isAnnouncement(message)}
       {@render announcementView()}
@@ -282,6 +304,7 @@
   {@render toolbar(authorProfile)}
 
   <div class="flex gap-4">
+    {#if shouldShowAuthor()}
     <a
       href={`https://bsky.app/profile/${authorProfile.handle}`}
       target="_blank"
@@ -291,6 +314,9 @@
         avatarUrl={authorProfile.avatarUrl}
       />
     </a>
+    {:else}
+      <div class="w-8.5"></div>
+    {/if}
 
     <Button.Root
       onclick={() => {
@@ -300,6 +326,7 @@
       }}
       class="flex flex-col text-start gap-2 text-white w-full min-w-0"
     >
+      {#if shouldShowAuthor()}
       <section class="flex items-center gap-2 flex-wrap w-fit">
         <a
           href={`https://bsky.app/profile/${authorProfile.handle}`}
@@ -309,6 +336,7 @@
         </a>
         {@render timestamp(ulid)}
       </section>
+      {/if}
 
       <p
         class="text-lg prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
