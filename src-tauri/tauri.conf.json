@@ -34,5 +34,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "dev.chat.roomy",
+          "chat.roomy",
+          "roomy"
+        ]
+      }
+    }
   }
 }
