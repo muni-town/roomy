@@ -60,3 +60,12 @@ emoji-picker {
   content: "💬";
   padding-right: 0.25rem;
 }
+
+.tiptap p.is-editor-empty:first-child::before {
+  color: var(--color-base-content);
+  opacity: 0.5;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

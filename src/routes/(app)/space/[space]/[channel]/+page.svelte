@@ -392,10 +392,10 @@
 {/if}
 
 {#snippet threadsTab()}
-  <ul class="list w-full">
+  <ul class="list w-full join join-vertical">
     {#each Object.entries(relatedThreads) as [ulid, thread]}
       <a href={`/space/${page.params.space}/thread/${ulid}`}>
-        <li class="list-row flex items-center w-full bg-base-200">
+        <li class="list-row join-item flex items-center w-full bg-base-200">
           <h3 class="card-title text-xl font-medium text-primary">{thread.title}</h3>
           {@render timestamp(ulid)}
         </li>
@@ -409,7 +409,7 @@
   {@const formattedDate = isToday(decodedTime)
     ? "Today"
     : format(decodedTime, "P")}
-  <time class="text-xs text-gray-300">
+  <time class="text-xs">
     {formattedDate}, {format(decodedTime, "pp")}
   </time>
 {/snippet}

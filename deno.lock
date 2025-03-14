@@ -18,6 +18,7 @@
     "npm:@tailwindcss/vite@4": "4.0.0_vite@6.0.11_lightningcss@1.29.1",
     "npm:@tiptap/core@^2.11.5": "2.11.5_@tiptap+pm@2.11.5__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.0",
     "npm:@tiptap/extension-mention@^2.11.5": "2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0_@tiptap+pm@2.11.5__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.0_@tiptap+suggestion@2.11.5__@tiptap+core@2.11.5___@tiptap+pm@2.11.5____prosemirror-model@1.24.1____prosemirror-state@1.4.3____prosemirror-view@1.38.0__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0",
+    "npm:@tiptap/extension-placeholder@^2.11.5": "2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0_@tiptap+pm@2.11.5__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.0",
     "npm:@tiptap/pm@^2.11.5": "2.11.5_prosemirror-model@1.24.1_prosemirror-state@1.4.3_prosemirror-view@1.38.0",
     "npm:@tiptap/starter-kit@^2.11.5": "2.11.5_@tiptap+pm@2.11.5__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.0_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0",
     "npm:@tiptap/suggestion@^2.11.5": "2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0_@tiptap+pm@2.11.5__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.0",
@@ -42,7 +43,6 @@
     "npm:svelte-tiptap@^2.1.0": "2.1.0_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0_@tiptap+extension-bubble-menu@2.11.5__@tiptap+core@2.11.5___@tiptap+pm@2.11.5____prosemirror-model@1.24.1____prosemirror-state@1.4.3____prosemirror-view@1.38.0__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0_@tiptap+extension-floating-menu@2.11.5__@tiptap+core@2.11.5___@tiptap+pm@2.11.5____prosemirror-model@1.24.1____prosemirror-state@1.4.3____prosemirror-view@1.38.0__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0_@tiptap+pm@2.11.5__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.0_svelte@5.19.3__acorn@8.14.0",
     "npm:svelte@^5.19.3": "5.19.3_acorn@8.14.0",
     "npm:tailwindcss@4": "4.0.0",
-    "npm:theme-change@^2.5.0": "2.5.0",
     "npm:tweetnacl@^1.0.3": "1.0.3",
     "npm:typescript-event-target@^1.1.1": "1.1.1",
     "npm:typescript@5": "5.7.3",
@@ -908,6 +908,13 @@
       "integrity": "sha512-YFBWeg7xu/sBnsDIF/+nh9Arf7R0h07VZMd0id5Ydd2Qe3c1uIZwXxeINVtH0SZozuPIQFAT8ICe9M0RxmE+TA==",
       "dependencies": [
         "@tiptap/core"
+      ]
+    },
+    "@tiptap/extension-placeholder@2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0_@tiptap+pm@2.11.5__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.0": {
+      "integrity": "sha512-Pr+0Ju/l2ZvXMd9VQxtaoSZbs0BBp1jbBDqwms88ctpyvQFRfLSfSkqudQcSHyw2ROOz2E31p/7I7fpI8Y0CLA==",
+      "dependencies": [
+        "@tiptap/core",
+        "@tiptap/pm"
       ]
     },
     "@tiptap/extension-strike@2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.0_@tiptap+pm@2.11.5__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.0": {
@@ -2397,9 +2404,6 @@
     "tapable@2.2.1": {
       "integrity": "sha512-GNzQvQTOIP6RyTfE2Qxb8ZVlNmw0n88vp1szwWRimP02mnTsx3Wtn5qRdqY9w2XduFNUgvOwhNnQsjwCp+kqaQ=="
     },
-    "theme-change@2.5.0": {
-      "integrity": "sha512-B/UdsgdHAGhSKHTAQnxg/etN0RaMDpehuJmZIjLMDVJ6DGIliRHGD6pODi1CXLQAN9GV0GSyB3G6yCuK05PkPQ=="
-    },
     "thread-stream@2.7.0": {
       "integrity": "sha512-qQiRWsU/wvNolI6tbbCKd9iKaTnCXsTwVxhhKM6nctPdujTyztjlbUkUTUymidWcMnZ5pWR0ej4a0tjsW021vw==",
       "dependencies": [
@@ -2658,6 +2662,7 @@
         "npm:@tailwindcss/vite@4",
         "npm:@tiptap/core@^2.11.5",
         "npm:@tiptap/extension-mention@^2.11.5",
+        "npm:@tiptap/extension-placeholder@^2.11.5",
         "npm:@tiptap/pm@^2.11.5",
         "npm:@tiptap/starter-kit@^2.11.5",
         "npm:@tiptap/suggestion@^2.11.5",
@@ -2681,7 +2686,6 @@
         "npm:svelte-tiptap@^2.1.0",
         "npm:svelte@^5.19.3",
         "npm:tailwindcss@4",
-        "npm:theme-change@^2.5.0",
         "npm:tweetnacl@^1.0.3",
         "npm:typescript-event-target@^1.1.1",
         "npm:typescript@5",

@@ -388,7 +388,7 @@
     </Drawer>
   {:else}
     <Toolbar.Root
-      class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-base-200 p-1 rounded items-center`}
+      class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-base-300 p-1 rounded items-center`}
     >
       <Toolbar.Button
         onclick={() => toggleReaction(id, "👍")}
@@ -406,7 +406,7 @@
         <Popover.Trigger
           class="btn btn-ghost btn-square"
         >
-          <Icon icon="lucide:smile-plus" color="white" />
+          <Icon icon="lucide:smile-plus" />
         </Popover.Trigger>
         <Popover.Content>
           <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
@@ -427,7 +427,7 @@
             setReplyTo({ id, authorProfile, content: (message as Message).content })}
           class="btn btn-ghost btn-square"
         >
-          <Icon icon="fa6-solid:reply" color="white" />
+          <Icon icon="fa6-solid:reply" />
         </Toolbar.Button>
       {/if}
     </Toolbar.Root>
