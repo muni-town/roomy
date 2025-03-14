@@ -445,13 +445,13 @@
 {/if}
 
 <style>
-  .bn-block {
+  :global(.bn-block) {
     position: relative;
     transition: padding-left 0.15s ease;
     padding-left: 24px; 
   }
   
-  .wiki-editor-container .admin-mode .bn-block::before{
+  :global(.wiki-editor-container .admin-mode .bn-block::before){
     content: '+';
     position: absolute;
     left: 6px;
@@ -473,17 +473,16 @@
     background-color: transparent;
   }
   
-  .wiki-editor-container .admin-mode .bn-block:hover::before{
+  :global(.wiki-editor-container .admin-mode .bn-block:hover::before){
     opacity: 1;
   }
   
-  .wiki-editor-container .admin-mode .bn-block::before:hover {
+  :global(.wiki-editor-container .admin-mode .bn-block::before:hover ){
     background-color: rgba(139, 92, 246, 0.2);
   }
   
-  .bn-default-styles {
+  :global(.wiki-editor){
     color: #fff;
-    padding-inline: 20px;
   }
 
   .slash-menu {
@@ -502,22 +501,22 @@
     overflow: visible;
   }
 
-  .wiki-rendered input[type="checkbox"]{
+  :global(.wiki-rendered input[type="checkbox"]){
     pointer-events: none;
   }
 
-  input[type="checkbox"]{
+  :global([type="checkbox"]){
     pointer-events: auto; 
     cursor: pointer;
   }
 
-  .bn-inline-content a{
+  :global(.bn-inline-content a){
     color: #8b5cf6;
     text-decoration: underline;
     cursor: pointer;
   }
   
-  input[type="checkbox"]{
+  :global(input[type="checkbox"]){
     accent-color: #8b5cf6;
     width: 16px;
     height: 16px;
