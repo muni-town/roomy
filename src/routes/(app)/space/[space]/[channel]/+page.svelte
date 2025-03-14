@@ -390,14 +390,14 @@
 {/if}
 
 {#snippet threadsTab()}
-  <ul>
+  <ul class="list w-full">
     {#each Object.entries(relatedThreads) as [ulid, thread]}
-      <li class="list-row">
-        <a href={`/space/${page.params.space}/thread/${ulid}`} class="card card-border bg-base-200 p-4">
+      <a href={`/space/${page.params.space}/thread/${ulid}`}>
+        <li class="list-row flex items-center w-full bg-base-200">
           <h3 class="card-title text-xl font-medium text-primary">{thread.title}</h3>
           {@render timestamp(ulid)}
-        </a>
-      </li>
+        </li>
+      </a>
     {/each}
   </ul>
 {/snippet}
