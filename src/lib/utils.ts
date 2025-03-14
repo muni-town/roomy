@@ -1,6 +1,6 @@
 import type { DidDocument } from "@atproto/oauth-client-browser";
 import type { Doc } from "@automerge/automerge";
-import { next as Automerge } from "@automerge/automerge";
+// import { next as Automerge } from "@automerge/automerge";
 import { decodeBase32 } from "./base32";
 
 /** Cleans a handle string by removing any characters not valid for a domain. */

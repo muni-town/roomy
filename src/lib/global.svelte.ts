@@ -14,7 +14,7 @@ import type { Agent } from "@atproto/api";
 import { calculateSharedSecretEd25519 } from "./autodoc/encryption";
 import { resolvePublicKey } from "./utils";
 import { encryptedStorage } from "./autodoc/storage";
-import { next as Automerge } from "@automerge/automerge";
+// import { next as Automerge } from "@automerge/automerge";
 
 export let g = $state({
   catalog: undefined as Autodoc<Catalog> | undefined,

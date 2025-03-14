@@ -1,5 +1,5 @@
 import type { Doc } from "@automerge/automerge";
-import { next as Automerge } from "@automerge/automerge";
+// import { next as Automerge } from "@automerge/automerge";
 import { encodeBase32 } from "../base32";
 import { decrypt, encrypt } from "./encryption";
 
