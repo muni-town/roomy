@@ -5,13 +5,13 @@
   import { toast } from "svelte-french-toast";
   import { Button } from "bits-ui";
   import Icon from "@iconify/svelte";
-  import { page } from "$app/stores";
+  import { page } from "$app/state";
   import type { Autodoc } from "$lib/autodoc/peer";
-  import type { Space, SpaceChannel } from "$lib/schemas/types";
+  import type { Space, Channel } from "$lib/schemas/types";
 
   const { space, channel, isAdmin } = $props<{
     space: Autodoc<Space>;
-    channel: SpaceChannel;
+    channel: Channel;
     isAdmin: boolean;
   }>();
 

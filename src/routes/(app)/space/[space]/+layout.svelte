@@ -1,7 +1,7 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { Button, ToggleGroup } from "bits-ui";
+  import { Accordion, Button, ToggleGroup } from "bits-ui";
 
   import { ulid } from "ulidx";
   import { page } from "$app/state";
@@ -13,18 +13,82 @@
   import type { Autodoc } from "$lib/autodoc/peer";
   import { user } from "$lib/user.svelte";
   import { setContext } from "svelte";
+  import { slide } from "svelte/transition";
+  import type { Item } from "$lib/tiptap/editor";
+  import { getProfile } from "$lib/profile.svelte";
+  import { isAnnouncement } from "$lib/utils";
 
   let { children } = $props();
   let isMobile = $derived((outerWidth.current || 0) < 640);
 
-  let space = $derived(g.spaces[page.params.space]) as
-    | Autodoc<Space>
-    | undefined;
+  let space = $derived(g.spaces[page.params.space] as Autodoc<Space> | undefined) 
 
-  let isAdmin = $derived(
-    space && user.agent && space.view.admins.includes(user.agent.assertDid),
+  // TODO: track users via the space data
+  let users = $state(() => {
+    if (!space) { return [] };
+    const result = new Set();
+    for (const message of Object.values(space.view.messages)) {
+      if (!isAnnouncement(message)) {
+        result.add(message.author);
+      }
+    }
+    const items = result.values().toArray().map((author) => { 
+      const profile = getProfile(author as string);
+      return { value: author, label: profile.handle, category: "user" }
+    }) as Item[];
+
+    return items;
+  });
+
+  let availableThreads = $derived(
+    space ? Object.fromEntries(
+      Object.entries(space.view.threads).filter(([ulid, thread]) => 
+      !thread.softDeleted
+    )) : {}
   );
-  setContext("isAdmin", () => isAdmin);
+
+  let contextItems: Item[] = $derived.by(() => {
+    if (!space) { return [] };
+    const items = [];
+
+    // add threads to list
+    for (const thread of Object.values(space.view.threads)) {
+      if (!thread.softDeleted) {
+        items.push({ 
+          value: JSON.stringify({
+            ulid,
+            space: page.params.space,
+            type: "thread"
+          }), 
+          label: thread.title,
+          category: "thread"
+        }) 
+      }
+    }
+
+    // add channels to list
+    items.push(...Object.values(space.view.channels).map((channel) => {
+      return {
+        value: JSON.stringify({
+          ulid,
+          space: page.params.space,
+          type: "channel"
+        }),
+        label: channel.name,
+        category: "channel"
+      }
+    }));
+  
+    return items;
+  });
+  let isAdmin = $derived( 
+    space && user.agent && space.view.admins.includes(user.agent.assertDid)
+  );
+
+  setContext("isAdmin", { get value() { return isAdmin }});
+  setContext("space", { get value() { return space }});
+  setContext("users", { get value() { return users() }});
+  setContext("contextItems", { get value() { return contextItems }});
 
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
@@ -43,7 +107,16 @@
     showNewCategoryDialog = false;
   }
 
-  let currentChannelId = $state("");
+  let currentItemId = $state("");
+  $effect(() => {
+    if (page.params.channel) {
+      currentItemId = page.params.channel;
+    }
+    else {
+      currentItemId = page.params.thread;
+    }
+  });
+  
   let showNewChannelDialog = $state(false);
   let newChannelName = $state("");
   let newChannelCategory = $state(undefined) as undefined | string;
@@ -178,7 +251,7 @@
                 {/each}
               </select>
               <Button.Root
-                class={`px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2`}
+                class="px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2"
               >
                 <Icon icon="basil:add-outline" font-size="1.8em" />
                 Create Channel
@@ -190,7 +263,75 @@
     </div>
 
     <hr />
+    
+    <Accordion.Root 
+      type="multiple" 
+      value={["channels", "threads"]} 
+      class="flex flex-col gap-4"
+    > 
+      <Accordion.Item value="channels">
+        <Accordion.Header>
+          <Accordion.Trigger class="cursor-pointer mb-2 uppercase text-xs font-medium text-gray-300">
+            Channels
+          </Accordion.Trigger>
+        </Accordion.Header>
+        <Accordion.Content forceMount>
+          {#snippet child({ open })}
+            {#if open}
+              {@render channelsSidebar(space as Autodoc<Space>)}
+            {/if}
+          {/snippet}
+        </Accordion.Content>
+      </Accordion.Item>
+      {#if Object.keys(availableThreads).length > 0}
+        <Accordion.Item value="threads">
+          <Accordion.Header>
+            <Accordion.Trigger class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-gray-300">
+              <h3>Threads</h3>
+              <Icon icon="basil:caret-up-solid" class="size-6" /> 
+            </Accordion.Trigger>
+          </Accordion.Header>
+          <Accordion.Content>
+            {#snippet child({ open })}
+              {#if open}
+                {@render threadsSidebar()}
+              {/if}
+            {/snippet}
+          </Accordion.Content>
+        </Accordion.Item>
+      {/if}
+    </Accordion.Root>
+  </nav>
 
+  <!-- Events/Room Content -->
+  {#if !isMobile}
+    <main
+      class="flex flex-col gap-4 bg-violet-950 rounded-lg p-4 grow min-w-0 h-full overflow-clip"
+    >
+      {@render children()}
+    </main>
+  {:else if page.params.channel}
+    <main
+      class="absolute inset-0 flex flex-col gap-4 bg-violet-950 rounded-lg p-4 h-screen overflow-clip"
+    >
+      {@render children()}
+    </main>
+  {/if}
+
+  <!-- If there is no space. -->
+{:else}
+  <div class="flex flex-col justify-center items-center w-full">
+    <Button.Root
+      onclick={openSpace}
+      class="px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer"
+    >
+      Join Space
+    </Button.Root>
+  </div>
+{/if}
+
+{#snippet channelsSidebar(space: Autodoc<Space>)}
+  <div transition:slide class="flex flex-col gap-4">
     <!-- Category and Channels -->
     {#each space.view.sidebarItems as item}
       {#if item.type == "category"}
@@ -240,7 +381,7 @@
         <hr />
         <ToggleGroup.Root
           type="single"
-          bind:value={currentChannelId}
+          bind:value={currentItemId}
           class="flex flex-col gap-2 items-center"
         >
           {#each category.channels as channelId}
@@ -259,7 +400,7 @@
         </ToggleGroup.Root>
       {:else}
         {@const channel = space.view.channels[item.id]}
-        <ToggleGroup.Root type="single" bind:value={currentChannelId}>
+        <ToggleGroup.Root type="single" bind:value={currentItemId}>
           <ToggleGroup.Item
             onclick={() => goto(`/space/${page.params.space}/${item.id}`)}
             value={item.id}
@@ -273,31 +414,24 @@
         </ToggleGroup.Root>
       {/if}
     {/each}
-  </nav>
-
-  <!-- Events/Room Content -->
-  {#if !isMobile}
-    <main
-      class="flex flex-col gap-4 bg-violet-950 rounded-lg p-4 grow min-w-0 h-full overflow-clip"
-    >
-      {@render children()}
-    </main>
-  {:else if page.params.channel}
-    <main
-      class="absolute inset-0 flex flex-col gap-4 bg-violet-950 rounded-lg p-4 h-screen overflow-clip"
-    >
-      {@render children()}
-    </main>
-  {/if}
-
-  <!-- If there is no space. -->
-{:else}
-  <div class="flex flex-col justify-center items-center w-full">
-    <Button.Root
-      onclick={openSpace}
-      class="px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer"
-    >
-      Join Space
-    </Button.Root>
   </div>
-{/if}
+{/snippet}
+
+{#snippet threadsSidebar()}
+  <div transition:slide class="flex flex-col gap-4">
+    {#each Object.entries(availableThreads) as [ulid, thread]} 
+      <ToggleGroup.Root type="single" bind:value={currentItemId}>
+        <ToggleGroup.Item
+          onclick={() => goto(`/space/${page.params.space}/thread/${ulid}`)}
+          value={ulid}
+          class="w-full text-start hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white py-2 rounded-md"
+        >
+          <h3 class="flex justify-start items-center gap-2 px-2">
+            <Icon icon="material-symbols:thread-unread-rounded" />
+            {thread.title}
+          </h3>
+        </ToggleGroup.Item>
+      </ToggleGroup.Root>
+    {/each}
+  </div>
+{/snippet}

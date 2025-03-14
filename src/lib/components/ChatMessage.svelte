@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Avatar, Button, Popover, Toolbar } from "bits-ui";
-  import type { Message, Ulid } from "$lib/schemas/types";
+  import { Avatar, Button, Checkbox, Popover, Toolbar } from "bits-ui";
+  import type { Announcement, Message, Space, Ulid } from "$lib/schemas/types";
   import { renderMarkdownSanitized } from "$lib/markdown";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
@@ -14,19 +14,17 @@
   import Drawer from "./Drawer.svelte";
   import AvatarImage from "./AvatarImage.svelte";
   import { getContentHtml } from "$lib/tiptap/editor";
+  import type { Autodoc } from "$lib/autodoc/peer";
+  import { page } from "$app/state";
+  import { isAnnouncement } from "$lib/utils";
 
   type Props = {
     id: Ulid;
-    message: Message;
-    messageRepliedTo?: Message;
+    message: Message | Announcement;
   };
 
-  let { id, message, messageRepliedTo }: Props = $props();
-
-  // doesn't change after render, so $derived is not necessary
-  const authorProfile = getProfile(message.author);
-  const profileRepliedTo =
-    messageRepliedTo && getProfile(messageRepliedTo.author);
+  let { id, message }: Props = $props();
+  let space: { value: Autodoc<Space> } = getContext("space");
 
   // set initial set with entries, no need for $effect
   let reactionHandles = $state(
@@ -51,8 +49,11 @@
   let isEmojiToolbarPickerOpen = $state(false);
   let isEmojiRowPickerOpen = $state(false);
 
-  const isAdmin = getContext("isAdmin") as () => boolean;
-  let mayDelete = $derived(isAdmin() || user.agent?.did == message.author);
+  const isAdmin: { value: boolean } = getContext("isAdmin"); 
+  let mayDelete = $derived(
+    !isAnnouncement(message) &&  
+    (isAdmin.value || user.agent?.did == message.author)
+  );
 
   const selectMessage = getContext("selectMessage") as (
     messageId: Ulid,
@@ -92,7 +93,7 @@
   }
 
   function scrollToReply() {
-    if (!message.replyTo) {
+    if (isAnnouncement(message) || !message.replyTo) {
       return;
     }
     scrollToMessage(message.replyTo);
@@ -127,64 +128,83 @@
   function onKeyup({ shiftKey }: KeyboardEvent) {
     shiftDown = shiftKey;
   }
+
+  function getAnnouncementHtml(announcement: Announcement) {
+    const schema = {
+      "type": "doc",
+      "content": [] as Record<string, any>[]
+    };
+
+    switch (announcement.kind) {
+      case "threadCreated": {
+        const relatedThread = space.value.view.threads[announcement.relatedThreads![0]];
+        schema.content.push({
+          "type": "paragraph",
+          "content": [
+            { "type": "text", "text": "A new thread has been created: " },
+            { 
+              "type": "channelThreadMention",
+              "attrs": {
+                "id": JSON.stringify({
+                  "ulid": announcement.relatedThreads![0],
+                  "space": page.params.space,
+                  "type": "thread"
+                }),
+                "label": relatedThread.title
+              }
+            }
+          ]
+        });
+        break;
+      }
+      case "messageMoved": {
+        const relatedThread = space.value.view.threads[announcement.relatedThreads![0]];
+        schema.content.push({
+          "type": "paragraph",
+          "content": [
+            { "type": "text", "text": "Moved to: " },
+            { 
+              "type": "channelThreadMention",
+              "attrs": {
+                "id": JSON.stringify({
+                  "ulid": announcement.relatedThreads![0],
+                  "space": page.params.space,
+                  "type": "thread"
+                }),
+                "label": relatedThread.title
+              }
+            }
+          ]
+        });
+        break;
+      }
+      case "messageDeleted": {
+        schema.content.push({
+          "type": "paragraph",
+          "content": [
+            { "type": "text", "text": "This message has been deleted" }
+          ]
+        });
+        break;
+      }
+    };
+
+    return getContentHtml(JSON.stringify(schema));
+  }
 </script>
 
 <svelte:window onkeydown={onKeydown} onkeyup={onKeyup} />
 
 <li {id} class={`flex flex-col ${isMobile && "max-w-screen"}`}>
-  {@render replyBanner()}
-
   <div
     class="relative group w-full h-fit flex flex-col gap-4 px-2 py-2.5 hover:bg-white/5 transition-all duration-75"
   >
-    <div class="flex gap-4">
-      <a
-        href={`https://bsky.app/profile/${authorProfile.handle}`}
-        target="_blank"
-      >
-        <AvatarImage
-          handle={authorProfile.handle}
-          avatarUrl={authorProfile.avatarUrl}
-        />
-      </a>
-
-      <Button.Root
-        onclick={() => {
-          if (isMobile) {
-            isDrawerOpen = true;
-          }
-        }}
-        class="flex flex-col text-start gap-2 text-white w-full min-w-0"
-      >
-        <section class="flex items-center gap-2 flex-wrap w-fit">
-          <a
-            href={`https://bsky.app/profile/${authorProfile.handle}`}
-            target="_blank"
-          >
-            <h5 class="font-bold">{authorProfile.handle}</h5>
-          </a>
-          {@render timestamp()}
-        </section>
-
-        <p
-          class="text-lg prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
-        >
-          {@html getContentHtml(message.content)}
-        </p>
-        {#if message.images?.length}
-          <div class="flex flex-wrap gap-2 mt-2">
-            {#each message.images as image}
-              <img
-                src={image.source}
-                alt={image.alt || ""}
-                class="max-w-md max-h-64 rounded-lg object-cover"
-                loading="lazy"
-              />
-            {/each}
-          </div>
-        {/if}
-      </Button.Root>
-    </div>
+    {#if isAnnouncement(message)}
+      {@render announcementView()}
+    {:else}
+      {@render replyBanner()}
+      {@render messageView(id, message)}
+    {/if}
 
     {#if Object.keys(message.reactions).length > 0}
       <div class="flex gap-2 flex-wrap">
@@ -204,40 +224,150 @@
       </div>
     {/if}
 
-    {#if isMobile}
-      <Drawer bind:isDrawerOpen>
-        <div class="flex gap-4 justify-center mb-4">
-          <Button.Root
-            onclick={() => {
-              toggleReaction(id, "👍");
-              isDrawerOpen = false;
-            }}
-            class="px-4 rounded-full bg-violet-800"
-          >
-            👍
-          </Button.Root>
-          <Button.Root
-            onclick={() => {
-              toggleReaction(id, "😂");
-              isDrawerOpen = false;
-            }}
-            class="px-4 rounded-full bg-violet-800"
-          >
-            😂
-          </Button.Root>
-          <Popover.Root bind:open={isEmojiDrawerPickerOpen}>
-            <Popover.Trigger class="p-4 rounded-full bg-violet-800">
-              <Icon icon="lucide:smile-plus" color="white" />
-            </Popover.Trigger>
-            <Popover.Content>
-              <emoji-picker bind:this={emojiDrawerPicker}></emoji-picker>
-            </Popover.Content>
-          </Popover.Root>
+  </div>
+</li>
+
+{#snippet announcementView()}
+  {@const announcement = message as Announcement}
+  {@render toolbar()}
+  <div class="flex flex-col gap-4">
+    {#if announcement.kind === "threadCreated"}
+      <Button.Root
+        onclick={() => {
+          if (isMobile) {
+            isDrawerOpen = true;
+          }
+        }}
+        class="flex flex-col text-start gap-2 text-white w-full min-w-0"
+      >
+        <section class="flex items-center gap-2 flex-wrap w-fit">
+          {@render timestamp(id)}
+        </section>
+
+        <p
+          class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+        >
+          {@html getAnnouncementHtml(announcement)}
+        </p>
+      </Button.Root>
+    {:else if announcement.kind === "messageMoved"}
+      {@const related = space.value.view.messages[announcement.relatedMessages![0]] as Message} 
+      <Button.Root
+        onclick={() => {
+          if (isMobile) {
+            isDrawerOpen = true;
+          }
+        }}
+        class="cursor-pointer flex gap-2 text-start w-full items-center text-gray-300 px-4 py-1 bg-violet-900 rounded-t"
+      >
+        <Icon icon="prime:reply" width="12px" height="12px" />
+        <p
+          class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+        >
+          {@html getAnnouncementHtml(announcement)}
+        </p>
+        {@render timestamp(id)}
+      </Button.Root>
+      <div class="flex items-start gap-4">
+        {@render messageView(announcement.relatedMessages![0], related)}
+      </div>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet messageView(ulid: Ulid, msg: Message)}
+  <!-- doesn't change after render, so $derived is not necessary -->
+  {@const authorProfile = getProfile(msg.author)}
+
+  {@render toolbar(authorProfile)}
+
+  <div class="flex gap-4">
+    <a
+      href={`https://bsky.app/profile/${authorProfile.handle}`}
+      target="_blank"
+    >
+      <AvatarImage
+        handle={authorProfile.handle}
+        avatarUrl={authorProfile.avatarUrl}
+      />
+    </a>
+
+    <Button.Root
+      onclick={() => {
+        if (isMobile) {
+          isDrawerOpen = true;
+        }
+      }}
+      class="flex flex-col text-start gap-2 text-white w-full min-w-0"
+    >
+      <section class="flex items-center gap-2 flex-wrap w-fit">
+        <a
+          href={`https://bsky.app/profile/${authorProfile.handle}`}
+          target="_blank"
+        >
+          <h5 class="font-bold">{authorProfile.handle}</h5>
+        </a>
+        {@render timestamp(ulid)}
+      </section>
+
+      <p
+        class="text-lg prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+      >
+        {@html getContentHtml(msg.content)}
+      </p>
+      {#if msg.images?.length}
+        <div class="flex flex-wrap gap-2 mt-2">
+          {#each msg.images as image}
+            <img
+              src={image.source}
+              alt={image.alt || ""}
+              class="max-w-md max-h-64 rounded-lg object-cover"
+              loading="lazy"
+            />
+          {/each}
         </div>
+      {/if}
+    </Button.Root>
+  </div>
+{/snippet}
+
+{#snippet toolbar(authorProfile?: { handle: string, avatarUrl: string })}
+  {#if isMobile}
+    <Drawer bind:isDrawerOpen>
+      <div class="flex gap-4 justify-center mb-4">
+        <Button.Root
+          onclick={() => {
+            toggleReaction(id, "👍");
+            isDrawerOpen = false;
+          }}
+          class="px-4 rounded-full bg-violet-800"
+        >
+          👍
+        </Button.Root>
+        <Button.Root
+          onclick={() => {
+            toggleReaction(id, "😂");
+            isDrawerOpen = false;
+          }}
+          class="px-4 rounded-full bg-violet-800"
+        >
+          😂
+        </Button.Root>
+        <Popover.Root bind:open={isEmojiDrawerPickerOpen}>
+          <Popover.Trigger class="p-4 rounded-full bg-violet-800">
+            <Icon icon="lucide:smile-plus" color="white" />
+          </Popover.Trigger>
+          <Popover.Content>
+            <emoji-picker bind:this={emojiDrawerPicker}></emoji-picker>
+          </Popover.Content>
+        </Popover.Root>
+      </div>
+
+      {#if authorProfile}
         <div class="flex flex-col gap-2">
           <Button.Root
             onclick={() => {
-              setReplyTo({ id, authorProfile, content: message.content });
+              setReplyTo({ id, authorProfile, content: (message as Message).content });
               isDrawerOpen = false;
             }}
             class="text-white p-4 flex gap-4 items-center bg-violet-800 w-full rounded-lg"
@@ -255,65 +385,78 @@
             </Button.Root>
           {/if}
         </div>
-      </Drawer>
-    {:else}
-      <Toolbar.Root
-        class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-violet-800 p-2 rounded items-center`}
+      {/if}
+    </Drawer>
+  {:else}
+    <Toolbar.Root
+      class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-violet-800 p-2 rounded items-center`}
+    >
+      <Toolbar.Button
+        onclick={() => toggleReaction(id, "👍")}
+        class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
       >
-        <Toolbar.Button
-          onclick={() => toggleReaction(id, "👍")}
+        👍
+      </Toolbar.Button>
+      <Toolbar.Button
+        onclick={() => toggleReaction(id, "😂")}
+        class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+      >
+        😂
+      </Toolbar.Button>
+      <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
+        <Popover.Trigger
           class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
         >
-          👍
-        </Toolbar.Button>
+          <Icon icon="lucide:smile-plus" color="white" />
+        </Popover.Trigger>
+        <Popover.Content>
+          <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
+        </Popover.Content>
+      </Popover.Root>
+      {#if shiftDown && mayDelete}
         <Toolbar.Button
-          onclick={() => toggleReaction(id, "😂")}
+          onclick={() => deleteMessage(id)}
           class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
         >
-          😂
+          <Icon icon="tabler:trash" color="red" />
         </Toolbar.Button>
-        <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
-          <Popover.Trigger
-            class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
-          >
-            <Icon icon="lucide:smile-plus" color="white" />
-          </Popover.Trigger>
-          <Popover.Content>
-            <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
-          </Popover.Content>
-        </Popover.Root>
-        {#if shiftDown && mayDelete}
-          <Toolbar.Button
-            onclick={() => deleteMessage(id)}
-            class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
-          >
-            <Icon icon="tabler:trash" color="red" />
-          </Toolbar.Button>
-        {/if}
+      {/if}
+
+      {#if authorProfile}
         <Toolbar.Button
           onclick={() =>
-            setReplyTo({ id, authorProfile, content: message.content })}
+            setReplyTo({ id, authorProfile, content: (message as Message).content })}
           class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
         >
           <Icon icon="fa6-solid:reply" color="white" />
         </Toolbar.Button>
-      </Toolbar.Root>
-    {/if}
+      {/if}
+    </Toolbar.Root>
+  {/if}
 
-    {#if isThreading.value}
-      <!-- TODO: Use bits-ui Checkbox -->
-      <input
-        type="checkbox"
-        onchange={updateSelect}
-        bind:checked={isSelected}
-        class="absolute right-4 inset-y-0"
-      />
-    {/if}
-  </div>
-</li>
+  {#if isThreading.value && !isAnnouncement(message)}
+    <Checkbox.Root
+      onCheckedChange={updateSelect} 
+      bind:checked={isSelected}
+      class="absolute right-4 inset-y-0"
+    >
+      {#snippet children({ checked })}
+        <div class="border bg-violet-800 size-4 rounded items-center cursor-pointer">
+          {#if checked}
+            <Icon 
+              icon="material-symbols:check-rounded" 
+              color="#5b21b6" 
+              class="bg-white size-3.5"
+            />
+          {/if}
+        </div>
+      {/snippet}
+    </Checkbox.Root>
+  {/if}
+{/snippet}
 
-{#snippet timestamp()}
-  {@const decodedTime = decodeTime(id)}
+{#snippet timestamp(ulid: Ulid)}
+  {@const decodedTime = decodeTime(ulid)}
   {@const formattedDate = isToday(decodedTime)
     ? "Today"
     : format(decodedTime, "P")}
@@ -337,6 +480,8 @@
 {/snippet}
 
 {#snippet replyBanner()}
+  {@const messageRepliedTo = !isAnnouncement(message) && message.replyTo && space.value.view.messages[message.replyTo] as Message}
+  {@const profileRepliedTo = messageRepliedTo && getProfile(messageRepliedTo.author)}
   {#if messageRepliedTo && profileRepliedTo}
     <Button.Root
       onclick={scrollToReply}

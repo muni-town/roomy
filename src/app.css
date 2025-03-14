@@ -36,6 +36,21 @@ emoji-picker {
   --button-hover-background: --alpha(var(--color-white) / 10%);
 }
 
+/* Universal */
+
+.btn {
+  padding-left: 1rem; 
+  padding-right: 1rem;
+  padding-top: 0.5rem; 
+  padding-bottom: 0.5rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+  @apply hover:scale-[101%] active:scale-95
+}
+
 /* TipTap Nodes */
 
 .mention {
@@ -46,14 +61,17 @@ emoji-picker {
   padding-left: 0.5rem; 
   padding-right: 0.5rem;
   border-radius: 0.25rem;
+  font-style: normal !important;
 }
 
 .thread-mention::before {
   content: "🧵";
+  padding-right: 0.25rem;
 }
 
 .channel-mention::before {
   content: "💬";
+  padding-right: 0.25rem;
 }
 
 /* ChatMessage */
