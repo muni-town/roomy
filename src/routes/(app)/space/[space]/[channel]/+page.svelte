@@ -337,8 +337,8 @@
   */
 </script>
 
-<header class="flex flex-none items-center justify-between border-b-1 pb-4">
-  <div class="flex gap-4 items-center">
+<header class="navbar">
+  <div class="navbar-start flex gap-4">
     {#if isMobile}
       <Button.Root onclick={() => goto(`/space/${page.params.space}`)}>
         <Icon icon="uil:left" color="white" />
@@ -352,7 +352,7 @@
     </h4>
   </div>
 
-  <Tabs.Root bind:value={tab}>
+  <Tabs.Root bind:value={tab} class="navbar-center">
     <Tabs.List class="tabs tabs-box">
       <Tabs.Trigger
         value="chat"
@@ -377,11 +377,13 @@
   </Tabs.Root>
 
   {#if !isMobile}
-    <div class="flex">
+    <div class="navbar-end">
       {@render toolbar()}
     </div>
   {/if}
 </header>
+<div class="divider my-0"></div>
+
 
 {#if tab === "chat"}
   {@render chatTab()}
