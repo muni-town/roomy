@@ -528,13 +528,13 @@
           side="left" 
           sideOffset={8} 
           interactOutsideBehavior="ignore" 
-          class="my-4 text-white bg-violet-900 rounded py-4 px-5"
+          class="my-4 bg-base-300 rounded py-4 px-5"
         >
           <form onsubmit={createThread} class="flex flex-col gap-4">
-            <input type="text" bind:value={threadTitleInput} class="bg-violet-800 px-2 py-1" placeholder="Thread Title" />
+            <input type="text" bind:value={threadTitleInput} class="input" placeholder="Thread Title" />
             <button 
               type="submit" 
-              class="btn text-violet-900 bg-white"
+              class="btn btn-primary"
             >
               Create Thread
             </button>

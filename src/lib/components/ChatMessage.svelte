@@ -339,7 +339,7 @@
             toggleReaction(id, "👍");
             isDrawerOpen = false;
           }}
-          class="px-4 rounded-full bg-violet-800"
+          class="px-4 rounded-full bg-primary"
         >
           👍
         </Button.Root>
@@ -348,13 +348,13 @@
             toggleReaction(id, "😂");
             isDrawerOpen = false;
           }}
-          class="px-4 rounded-full bg-violet-800"
+          class="px-4 rounded-full bg-primary"
         >
           😂
         </Button.Root>
         <Popover.Root bind:open={isEmojiDrawerPickerOpen}>
-          <Popover.Trigger class="p-4 rounded-full bg-violet-800">
-            <Icon icon="lucide:smile-plus" color="white" />
+          <Popover.Trigger class="p-4 rounded-full bg-primary text-primary-content">
+            <Icon icon="lucide:smile-plus" />
           </Popover.Trigger>
           <Popover.Content>
             <emoji-picker bind:this={emojiDrawerPicker}></emoji-picker>
@@ -363,23 +363,23 @@
       </div>
 
       {#if authorProfile}
-        <div class="flex flex-col">
+        <div class="join join-vertical w-full">
           <Button.Root
             onclick={() => {
               setReplyTo({ id, authorProfile, content: (message as Message).content });
               isDrawerOpen = false;
             }}
-            class="text-white p-4 flex gap-4 items-center bg-violet-800 w-full rounded-lg"
+            class="join-item btn btn-primary w-full"
           >
-            <Icon icon="fa6-solid:reply" color="white" />
+            <Icon icon="fa6-solid:reply" />
             Reply
           </Button.Root>
           {#if mayDelete}
             <Button.Root
               onclick={() => deleteMessage(id)}
-              class="text-white p-4 flex gap-4 items-center bg-violet-800 w-full rounded-lg"
+              class="join-item btn btn-error w-full"
             >
-              <Icon icon="tabler:trash" color="red" />
+              <Icon icon="tabler:trash" />
               Delete
             </Button.Root>
           {/if}
@@ -440,12 +440,11 @@
       class="absolute right-4 inset-y-0"
     >
       {#snippet children({ checked })}
-        <div class="border bg-violet-800 size-4 rounded items-center cursor-pointer">
+        <div class="border border-primary bg-base-100 text-primary-content size-4 rounded items-center cursor-pointer">
           {#if checked}
             <Icon 
               icon="material-symbols:check-rounded" 
-              color="#5b21b6" 
-              class="bg-white size-3.5"
+              class="bg-primary size-3.5"
             />
           {/if}
         </div>

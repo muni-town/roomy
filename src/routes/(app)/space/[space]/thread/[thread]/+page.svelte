@@ -258,8 +258,8 @@
   }
 </script>
 
-<header class="flex flex-none items-center justify-between border-b-1 pb-4">
-  <div class="flex gap-4 items-center">
+<header class="navbar">
+  <div class="flex gap-4 navbar-start">
     {#if isMobile}
       <Button.Root onclick={() => goto(`/space/${page.params.space}`)}>
         <Icon icon="uil:left" />
@@ -281,11 +281,13 @@
 
 
   {#if !isMobile}
-    <div class="flex">
+    <div class="flex navbar-end">
       {@render toolbar()}
     </div>
   {/if}
 </header>
+
+<div class="divider my-0"></div>
 
 {#if space}
   <ChatArea
@@ -353,13 +355,13 @@
           side="left" 
           sideOffset={8} 
           interactOutsideBehavior="ignore" 
-          class="my-4 text-white bg-violet-900 rounded py-4 px-5"
+          class="my-4 bg-base-300 rounded py-4 px-5"
         >
           <form onsubmit={createThread} class="flex flex-col gap-4">
-            <input type="text" bind:value={threadTitleInput} class="bg-violet-800 px-2 py-1" placeholder="Thread Title" />
+            <input type="text" bind:value={threadTitleInput} class="input px-2 py-1" placeholder="Thread Title" />
             <button 
               type="submit" 
-              class="btn text-violet-900 bg-white"
+              class="btn btn-primary"
             >
               Create Thread
             </button>
