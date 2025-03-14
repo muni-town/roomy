@@ -34,7 +34,7 @@
       content, 
       editorProps: {
         attributes: {
-          class: "w-full px-3 py-2 rounded bg-violet-900 text-white"
+          class: "w-full px-3 py-2 rounded bg-base-200 text-base-content"
         },
       },
       onUpdate: (ctx) => {
@@ -51,7 +51,7 @@
       content: untrack(() => content),
       editorProps: {
         attributes: {
-          class: "w-full px-3 py-2 rounded bg-violet-900 text-white"
+          class: "w-full px-3 py-2 rounded bg-base-200 text-base-content"
         },
       },
       onUpdate: (ctx) => {
