@@ -262,14 +262,14 @@
   <div class="flex gap-4 items-center">
     {#if isMobile}
       <Button.Root onclick={() => goto(`/space/${page.params.space}`)}>
-        <Icon icon="uil:left" color="white" />
+        <Icon icon="uil:left" />
       </Button.Root>
     {:else}
       <AvatarImage handle={thread?.title ?? ""} />
     {/if}
 
     {#if space && thread}
-      <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-white text-lg font-bold`}>
+      <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}>
         {thread.title}
       </h4>
       <p class="text-gray-400 text-xs">{">"}</p>
@@ -292,12 +292,12 @@
     source={{ type: "space", space: space }}
     timeline={thread?.timeline ?? []}
   />
-  <div class="flex float-end">
+  <div class="flex">
     {#if !isMobile || !isThreading.value}
       <section class="grow flex flex-col">
         {#if replyingTo}
           <div
-            class="flex justify-between bg-violet-800 text-white rounded-t-lg px-4 py-2"
+            class="flex justify-between bg-info text-info-content rounded-t-lg px-4 py-2"
           >
             <div class="flex flex-col gap-1">
               <h5 class="flex gap-2 items-center">
@@ -340,12 +340,11 @@
 {/if}
 
 {#snippet toolbar()}
-  <menu class="relative flex items-center gap-3 px-2 w-fit self-end">
+  <menu class="relative flex items-center gap-3 px-2 w-fit justify-end">
     <Popover.Root bind:open={isThreading.value}> 
       <Popover.Trigger>
         <Icon
           icon="tabler:needle-thread"
-          color="white"
           class="text-2xl"
         />
       </Popover.Trigger>
@@ -368,31 +367,14 @@
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
-
     <Button.Root
       title="Copy invite link"
-      class="btn"
+      class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
       onclick={() => {
         navigator.clipboard.writeText(`${page.url.href}`);
       }}
     >
-      <Icon icon="icon-park-outline:copy-link" color="white" class="text-2xl" />
+      <Icon icon="icon-park-outline:copy-link" class="text-2xl" />
     </Button.Root>
-
-    {#if isAdmin.value}
-      <Dialog 
-        title="Delete thread?" 
-        description={`You are deleting ${thread?.title}. This is only reversible by the Space's admins.`}
-        bind:isDialogOpen={isDeleteThreadDialogOpen}
-      >
-        {#snippet dialogTrigger()}
-          <Icon icon="tabler:trash" color="red" class="text-2xl" />
-        {/snippet}
-
-        <Button.Root onclick={softDeleteThread} class="btn bg-red-500 text-white">
-          Delete
-        </Button.Root>
-      </Dialog>
-    {/if}
   </menu>
 {/snippet}

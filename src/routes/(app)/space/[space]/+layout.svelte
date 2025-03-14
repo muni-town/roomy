@@ -303,13 +303,13 @@
   <!-- Events/Room Content -->
   {#if !isMobile}
     <main
-      class="flex flex-col gap-4 rounded-lg p-4 grow min-w-0 h-full overflow-clip"
+      class="flex flex-col gap-4 rounded-lg p-4 grow min-w-0 h-full overflow-clip bg-base-100"
     >
       {@render children()}
     </main>
-  {:else if page.params.channel}
+  {:else if page.params.channel || page.params.thread}
     <main
-      class="absolute inset-0 flex flex-col gap-4 rounded-lg p-4 h-screen overflow-clip"
+      class="absolute inset-0 flex flex-col gap-4 rounded-lg p-4 h-screen overflow-clip bg-base-100"
     >
       {@render children()}
     </main>

@@ -341,7 +341,7 @@
   <div class="navbar-start flex gap-4">
     {#if isMobile}
       <Button.Root onclick={() => goto(`/space/${page.params.space}`)}>
-        <Icon icon="uil:left" color="white" />
+        <Icon icon="uil:left" />
       </Button.Root>
     {:else}
       <AvatarImage avatarUrl={channel?.avatar} handle={channel?.name ?? ""} />
@@ -352,7 +352,7 @@
     </h4>
   </div>
 
-  <Tabs.Root bind:value={tab} class="navbar-center">
+  <Tabs.Root bind:value={tab} class={isMobile ? "navbar-end" : "navbar-center"}>
     <Tabs.List class="tabs tabs-box">
       <Tabs.Trigger
         value="chat"
@@ -420,7 +420,7 @@
       source={{ type: "space", space: space }}
       timeline={channel?.timeline ?? []}
     />
-    <div class="flex float-end">
+    <div class="flex items-center">
       {#if !isMobile || !isThreading.value}
         <section class="grow flex flex-col">
           {#if replyingTo}
@@ -515,7 +515,7 @@
 
 
 {#snippet toolbar()}
-  <menu class="relative flex items-center gap-3 px-2 w-fit self-end">
+  <menu class="relative flex items-center gap-3 px-2 w-fit justify-end">
     <Popover.Root bind:open={isThreading.value}> 
       <Popover.Trigger>
         <Icon
