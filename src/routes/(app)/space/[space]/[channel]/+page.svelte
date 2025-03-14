@@ -347,7 +347,7 @@
       <AvatarImage avatarUrl={channel?.avatar} handle={channel?.name ?? ""} />
     {/if}
 
-    <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-white text-lg font-bold`}>
+    <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}>
       {channel?.name}
     </h4>
   </div>
@@ -520,7 +520,6 @@
       <Popover.Trigger>
         <Icon
           icon="tabler:needle-thread"
-          color="white"
           class="text-2xl"
         />
       </Popover.Trigger>
@@ -550,7 +549,7 @@
         navigator.clipboard.writeText(`${page.url.href}`);
       }}
     >
-      <Icon icon="icon-park-outline:copy-link" color="white" class="text-2xl" />
+      <Icon icon="icon-park-outline:copy-link" class="text-2xl" />
     </Button.Root>
 
     {#if isAdmin}
@@ -560,7 +559,7 @@
             title="Channel Settings"
             class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150 m-auto flex"
           >
-            <Icon icon="lucide:settings" color="white" class="text-2xl" />
+            <Icon icon="lucide:settings" class="text-2xl" />
           </Button.Root>
         {/snippet}
 

@@ -384,7 +384,7 @@
                       <ToggleGroup.Item
                         onclick={() => goto(`/space/${page.params.space}/${channelId}`)}
                         value={channelId}
-                        class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-accent data-[state=on]:text-accent"
+                        class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
                       >
                         <h3 class="flex justify-start items-center gap-2 px-2">
                           <Icon icon="basil:comment-solid" />
@@ -403,7 +403,7 @@
         <ToggleGroup.Item
           onclick={() => goto(`/space/${page.params.space}/${item.id}`)}
           value={item.id}
-          class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-accent data-[state=on]:text-accent"
+          class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
         >
           <h3 class="flex justify-start items-center gap-2 px-2">
             <Icon icon="basil:comment-solid" />
@@ -421,7 +421,7 @@
         <ToggleGroup.Item
           onclick={() => goto(`/space/${page.params.space}/thread/${ulid}`)}
           value={ulid}
-          class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-accent data-[state=on]:text-accent"
+          class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
         >
           <h3 class="flex justify-start items-center gap-2 px-2">
             <Icon icon="material-symbols:thread-unread-rounded" />

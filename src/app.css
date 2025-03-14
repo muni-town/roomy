@@ -2,7 +2,7 @@
 
 @plugin "@tailwindcss/typography";
 @plugin "daisyui" {
-  themes: synthwave --default, dark, all;
+  themes: all;
 }
 
 /*

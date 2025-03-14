@@ -21,6 +21,7 @@
   import { Avatar, Button, ToggleGroup } from "bits-ui";
 
   import { RoomyPdsStorageAdapter } from "$lib/autodoc-storage";
+  import ThemeSelector from "$lib/components/ThemeSelector.svelte";
 
   let { children } = $props();
 
@@ -148,7 +149,7 @@
             onclick={() => goto(`/space/${server}`)}
             value={server}
             title={space.view.name}
-            class="btn btn-ghost size-16 data-[state=on]:border-accent"
+            class="btn btn-ghost size-16 data-[state=on]:border-primary"
           >
             <!-- TODO: Use server avatar -->
             <Avatar.Root>
@@ -163,6 +164,7 @@
     </ToggleGroup.Root>
 
     <section class="menu gap-3">
+      <ThemeSelector />
       <Dialog
         title="Create Space"
         description="Create a new public chat space"
