@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Avatar, Button, Checkbox, Popover, Toolbar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import { format, isToday } from "date-fns";
+  import { format, isToday, differenceInMinutes } from "date-fns";
   import { getContext } from "svelte";
   import { getProfile } from "$lib/profile.svelte";
   import Icon from "@iconify/svelte";
@@ -19,12 +19,13 @@
 
   type Props = {
     message: Message | Announcement;
+    shouldShowAuthor?: boolean;
   };
 
-  let { message }: Props = $props();
+  let { message, shouldShowAuthor = true }: Props = $props();
 
   let messageRepliedTo = derivePromise(undefined, async () => {
-    if (message.replyTo) {
+    if (g.roomy && message.replyTo) {
       return await g.roomy.open(Message, message.replyTo);
     }
   });
@@ -208,7 +209,7 @@
 
 <li id={message.id} class={`flex flex-col ${isMobile && "max-w-screen"}`}>
   <div
-    class="relative group w-full h-fit flex flex-col gap-4 px-2 py-2.5 hover:bg-white/5 transition-all duration-75"
+    class={`relative group w-full h-fit flex flex-col gap-4 px-2 ${shouldShowAuthor && "pt-5"}  hover:bg-white/5 transition-all duration-75`}
   >
     {#if message instanceof Announcement}
       {@render announcementView(message)}
@@ -298,16 +299,20 @@
     {@render toolbar(authorProfile)}
 
     <div class="flex gap-4">
-      <a
-        href={`https://bsky.app/profile/${authorProfile.handle}`}
-        title={authorProfile.handle}
-        target="_blank"
-      >
-        <AvatarImage
-          handle={authorProfile.handle}
-          avatarUrl={authorProfile.avatarUrl}
-        />
-      </a>
+      {#if shouldShowAuthor}
+        <a
+          href={`https://bsky.app/profile/${authorProfile.handle}`}
+          title={authorProfile.handle}
+          target="_blank"
+        >
+          <AvatarImage
+            handle={authorProfile.handle}
+            avatarUrl={authorProfile.avatarUrl}
+          />
+        </a>
+      {:else}
+        <div class="w-8.5"></div>
+      {/if}
 
       <Button.Root
         onclick={() => {
@@ -317,18 +322,20 @@
         }}
         class="flex flex-col text-start gap-2 w-full min-w-0"
       >
-        <section class="flex items-center gap-2 flex-wrap w-fit">
-          <a
-            href={`https://bsky.app/profile/${authorProfile.handle}`}
-            target="_blank"
-            class="text-primary hover:underline"
-          >
-            <h5 class="font-bold" title={authorProfile.handle}>
-              {authorProfile.displayName || authorProfile.handle}
-            </h5>
-          </a>
-          {@render timestamp(message.createdDate || new Date())}
-        </section>
+        {#if shouldShowAuthor}
+          <section class="flex items-center gap-2 flex-wrap w-fit">
+            <a
+              href={`https://bsky.app/profile/${authorProfile.handle}`}
+              target="_blank"
+              class="text-primary hover:underline"
+            >
+              <h5 class="font-bold" title={authorProfile.handle}>
+                {authorProfile.displayName || authorProfile.handle}
+              </h5>
+            </a>
+            {@render timestamp(message.createdDate || new Date())}
+          </section>
+        {/if}
 
         <span class="prose select-text">
           {@html getContentHtml(JSON.parse(msg.bodyJson))}

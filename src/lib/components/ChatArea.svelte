@@ -12,6 +12,7 @@
   } from "@roomy-chat/sdk";
   import { derivePromise } from "$lib/utils.svelte";
   import { page } from "$app/state";
+  import { getTime } from "date-fns";
 
   let {
     timeline,
@@ -48,7 +49,7 @@
 
 <ScrollArea.Root type="scroll" class="h-full overflow-hidden relative">
   <ScrollArea.Viewport bind:ref={viewport} class="w-full max-w-full h-full">
-    <ol class="flex flex-col gap-4 max-w-full">
+    <ol class="flex flex-col gap-2 max-w-full">
       <!--
         This use of `key` needs explaining. `key` causes the components below
         it to be deleted and re-created when the expression passed to it is changed.
@@ -70,9 +71,14 @@
           getKey={(k, _) => k}
           scrollRef={viewport}
         >
-          {#snippet children(message, _index)}
+          {#snippet children(message: Message | Announcement, index)}
+            {@const previousMessage = index > 0 ? messages.value[index - 1] : undefined}
+            {@const areMessages = previousMessage instanceof Message && message instanceof Message && !previousMessage.softDeleted}
+            {@const authorsAreSame = areMessages && message.authors.get(0) == previousMessage.authors.get(0)}
+            {@const messagesWithin5Minutes = (message.createdDate?.getTime() || 0) - (previousMessage?.createdDate?.getTime() || 0) < 60 * 1000 * 5}
+            {@const shouldShowAuthor = !(authorsAreSame && messagesWithin5Minutes)}
             {#if !message.softDeleted}
-              <ChatMessage {message} />
+              <ChatMessage {message} {shouldShowAuthor} />
             {:else}
               <p class="italic text-error text-sm">
                 This message has been deleted
