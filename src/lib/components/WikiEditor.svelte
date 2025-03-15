@@ -163,6 +163,11 @@
     slashMenuVisible = false;
   }
 
+  function executeFormatCommand(command: { name?: string; icon?: string; action: any; }) {
+    if (!editor) return;
+    command.action();
+  }
+
   async function initBlockNoteEditor() {
     if (!editorElement) return;
     try {
@@ -326,6 +331,30 @@
         <div
           class="wiki-editor bg-violet-900/20 rounded-lg border border-violet-500/30 p-4 h-auto {isAdmin ? 'admin-mode' : ''}"
         >
+          <div class="permanent-formatting-toolbar bg-violet-900 border border-violet-700 rounded-lg shadow-lg p-1 mb-4 flex items-center">
+            {#each formatCommands as command}
+              <button
+                class="p-2 hover:bg-violet-800 text-white rounded-md"
+                title={command.name}
+                onclick={() => executeFormatCommand(command)}
+              >
+                <Icon icon={command.icon} class="text-xl" />
+              </button>
+            {/each}
+            <div class="ml-2 border-l border-violet-600 h-6"></div>
+            {#each slashCommands as command, i}
+              {#if i < 3}
+                <button
+                  class="p-2 hover:bg-violet-800 text-white rounded-md"
+                  title={command.name}
+                  onclick={() => executeSlashCommand(command)}
+                >
+                  <Icon icon={command.icon} class="text-xl" />
+                </button>
+              {/if}
+            {/each}
+          </div>
+          
           <div bind:this={editorElement} class="min-h-[400px]"></div>
 
           {#if slashMenuVisible && isAdmin}
@@ -550,5 +579,23 @@
   @keyframes tooltipFadeIn {
     from { opacity: 0; transform: translateY(5px) translateX(-50%); }
     to { opacity: 1; transform: translateY(0) translateX(-50%); }
+  }
+
+  .permanent-formatting-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+  
+  .permanent-formatting-toolbar button {
+    transition: background-color 0.15s ease;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 </style>
