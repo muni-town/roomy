@@ -213,7 +213,39 @@
     // Default to showing author
     return true;
   });
+
+  function getHourMinuteTime(ulid: Ulid) {
+    const decodedTime = decodeTime(ulid);
+    return format(decodedTime, "HH:mm:ss");
+  }
 </script>
+
+<style>
+  .timestamp-placeholder {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .timestamp-text {
+    opacity: 0;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.75rem;
+    color: rgb(209, 213, 219);
+    transition: opacity 0.2s ease-in-out;
+    white-space: nowrap;
+  }
+
+  .message-container:hover .timestamp-text {
+    opacity: 1;
+  }
+
+
+</style>
 
 <svelte:window onkeydown={onKeydown} onkeyup={onKeyup} />
 
@@ -303,7 +335,7 @@
 
   {@render toolbar(authorProfile)}
 
-  <div class="flex gap-4">
+  <div class="flex gap-4 message-container">
     {#if shouldShowAuthor()}
     <a
       href={`https://bsky.app/profile/${authorProfile.handle}`}
@@ -315,7 +347,9 @@
       />
     </a>
     {:else}
-      <div class="w-8.5"></div>
+      <div class="w-8.5 timestamp-placeholder">
+        <span class="timestamp-text">{getHourMinuteTime(ulid)}</span>
+      </div>
     {/if}
 
     <Button.Root
