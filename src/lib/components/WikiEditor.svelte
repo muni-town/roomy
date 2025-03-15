@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { codeToHtml } from 'shiki';
   import { BlockNoteEditor } from "@blocknote/core";
   import "@blocknote/core/style.css";
   import { onMount } from "svelte";
@@ -8,6 +9,7 @@
   import { page } from "$app/state";
   import type { Autodoc } from "$lib/autodoc/peer";
   import type { Space, Channel } from "$lib/schemas/types";
+  import type { Highlighter } from 'shiki';
 
   const { space, channel, isAdmin } = $props<{
     space: Autodoc<Space>;
@@ -17,6 +19,7 @@
 
   let wikiContent = $state(channel?.wiki?.content || null);
   let wikiRenderedHtml = $state(channel?.wiki?.html || "");
+  let processedHtml = $state("");
   let isEditingWiki = $state(false);
   let editorElement: HTMLElement;
   let editor: BlockNoteEditor | null;
@@ -209,6 +212,108 @@
     }
   }
 
+  async function processCodeBlocks() {
+    if (!wikiRenderedHtml) {
+      processedHtml = wikiRenderedHtml;
+      return;
+    }
+
+    try {
+      // Process the HTML to find code blocks and apply syntax highlighting
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(wikiRenderedHtml, 'text/html');
+      
+      // Find all code blocks with language class
+      const codeBlocks = doc.querySelectorAll('pre code');
+      
+      for (const codeBlock of codeBlocks) {
+        const languageMatch = codeBlock.className.match(/language-(\w+)/);
+        if (!languageMatch) continue;
+        
+        const language = languageMatch[1];
+        const code = codeBlock.textContent || '';
+        
+        try {
+          const highlightedCode = await codeToHtml(code, {
+            lang: language,
+            theme: 'vitesse-dark'
+          });
+          
+          // Replace the code block with highlighted version
+          const preElement = codeBlock.parentElement;
+          if (preElement) {
+            const tempContainer = document.createElement('div');
+            tempContainer.innerHTML = highlightedCode;
+            
+            const labelDiv = document.createElement('div');
+            labelDiv.className = 'code-language-label';
+            labelDiv.textContent = formatLanguageName(language);
+            
+            const shikiElement = tempContainer.firstElementChild;
+            if (shikiElement) {
+              const wrapper = document.createElement('div');
+              wrapper.className = 'code-block-wrapper';
+              wrapper.appendChild(labelDiv);
+              wrapper.appendChild(shikiElement);
+              
+              preElement.replaceWith(wrapper);
+            } else {
+              preElement.replaceWith(tempContainer.firstElementChild);
+            }
+          }
+        } catch (e) {
+          console.error(`Failed to highlight code for language ${language}:`, e);
+        }
+      }
+      
+      processedHtml = doc.body.innerHTML;
+    } catch (e) {
+      console.error("Failed to process code blocks:", e);
+      processedHtml = wikiRenderedHtml;
+    }
+  }
+  
+  // Function to format language name for display
+  function formatLanguageName(lang: string): string {
+    const languageMap: Record<string, string> = {
+      js: "JavaScript",
+      ts: "TypeScript",
+      jsx: "React JSX",
+      tsx: "React TSX",
+      html: "HTML",
+      css: "CSS",
+      scss: "SCSS",
+      sass: "Sass",
+      py: "Python",
+      rb: "Ruby",
+      rs: "Rust",
+      go: "Go",
+      java: "Java",
+      kt: "Kotlin",
+      cs: "C#",
+      cpp: "C++",
+      c: "C",
+      php: "PHP",
+      sh: "Shell",
+      bash: "Bash",
+      zsh: "Zsh",
+      sql: "SQL",
+      json: "JSON",
+      yml: "YAML",
+      yaml: "YAML",
+      md: "Markdown",
+      svelte: "Svelte"
+    };
+    
+    return languageMap[lang] || lang.charAt(0).toUpperCase() + lang.slice(1);
+  }
+
+  $effect(() => {
+    if (wikiRenderedHtml) {
+      processCodeBlocks();
+    }
+  });
+
   async function saveWikiContent() {
     if (!editor || !space) return;
     try {
@@ -294,7 +399,7 @@
     }
   });
 
-  onMount(() => {
+  onMount(async () => {
     const existingLink = document.querySelector(
       'link[href*="@blocknote/core/style.css"]',
     );
@@ -303,6 +408,10 @@
       link.rel = "stylesheet";
       link.href = "https://unpkg.com/@blocknote/core@latest/style.css";
       document.head.appendChild(link);
+    }
+    
+    if (wikiRenderedHtml) {
+      await processCodeBlocks();
     }
   });
 </script>
@@ -434,7 +543,7 @@
       </div>
       <div class="wiki-rendered p-4 bg-violet-900/30 rounded-lg">
         <div class="wiki-html text-white">
-          {@html wikiRenderedHtml}
+          {@html processedHtml}
         </div>
       </div>
     </section>
@@ -513,6 +622,7 @@
   :global(.wiki-editor){
     color: #fff;
   }
+
 
   .slash-menu {
     min-width: 200px;
@@ -597,5 +707,58 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  :global(.shiki) {
+    margin: 0;
+    padding: 1em;
+    border-radius: 0.5em;
+    overflow-x: auto;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.9em;
+    line-height: 1.6;
+    tab-size: 2;
+  }
+
+  :global(.shiki code) {
+    display: block;
+    padding: 0.5em;
+    background: transparent;
+  }
+
+  :global(.wiki-rendered pre) {
+    margin: 1em 0;
+    border-radius: 0.5em;
+    overflow: hidden;
+    background-color: #292d3e; 
+  }
+
+  :global(.wiki-rendered code:not([class])) {
+    padding: 0.2em 0.4em;
+    margin: 0;
+    background-color: rgba(139, 92, 246, 0.2);
+    border-radius: 3px;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.85em;
+  }
+
+  :global(.code-block-wrapper) {
+    position: relative;
+    margin-top: 0.5em;
+    width: inherit;
+  }
+  
+  :global(.code-language-label) {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background-color: rgba(139, 92, 246, 0.7);
+    color: white;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    border-bottom-left-radius: 4px;
+    font-family: 'Fira Code', monospace;
+    z-index: 10;
+    user-select: none;
   }
 </style>
