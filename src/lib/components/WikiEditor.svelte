@@ -10,6 +10,8 @@
   import type { Autodoc } from "$lib/autodoc/peer";
   import type { Space, Channel } from "$lib/schemas/types";
   import type { Highlighter } from 'shiki';
+  import { getContext, setContext } from "svelte";
+  import type { Item } from '$lib/tiptap/editor';
 
   const { space, channel, isAdmin } = $props<{
     space: Autodoc<Space>;
@@ -23,6 +25,14 @@
   let isEditingWiki = $state(false);
   let editorElement: HTMLElement;
   let editor: BlockNoteEditor | null;
+
+  interface UserItem {
+    value: string;   
+    label: string;   
+    category: string; 
+  }
+  
+  let users = getContext<{ value: UserItem[] }>("users");
 
   let slashMenuVisible = $state(false);
   let slashMenuPosition = $state({ x: 0, y: 0 });
@@ -63,6 +73,16 @@
       action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "codeBlock" }),
     }
   ]);
+
+  let mentionMenuVisible = $state(false);
+  let mentionMenuPosition = $state({ x: 0, y: 0 });
+  let filteredUsers = $state<any[]>([]);
+  let mentionQuery = $state("");
+
+  let hashMenuVisible = $state(false);
+  let hashMenuPosition = $state({ x: 0, y: 0 });
+  let filteredItems = $state<{id: string, name: string, type: 'thread' | 'channel'}[]>([]);
+  let hashQuery = $state("");
 
   let selectionTooltipVisible = $state(false);
   let selectionTooltipPosition = $state({ x: 0, y: 0 });
@@ -116,23 +136,95 @@
       const block = cursorPosition.block;
       const content = Array.isArray(block.content) ? block.content[0] : null;
 
-      if (content && content.type === "text" && content.text === "/") {
-        slashMenuVisible = true;
-        const { top, left } = editor.getSelectionBoundingBox()?.toJSON();
-        const menuHeight = 300;
-        const viewportHeight = window.innerHeight;
-        const scrollY = window.scrollY;
-        const wouldOverflow = top + 20 + menuHeight > viewportHeight + scrollY;
-        const yPosition = wouldOverflow
-          ? Math.max(scrollY, top - menuHeight - 10)
-          : top + 20;
-        slashMenuPosition = { x: left, y: yPosition };
+      if (content && content.type === "text") {
+        // Handle slash commands
+        if (content.text === "/") {
+          slashMenuVisible = true;
+          const { top, left } = editor.getSelectionBoundingBox()?.toJSON();
+          const menuHeight = 300;
+          const viewportHeight = window.innerHeight;
+          const scrollY = window.scrollY;
+          const wouldOverflow = top + 20 + menuHeight > viewportHeight + scrollY;
+          const yPosition = wouldOverflow
+            ? Math.max(scrollY, top - menuHeight - 10)
+            : top + 20;
+          slashMenuPosition = { x: left, y: yPosition };
+          mentionMenuVisible = false;
+          hashMenuVisible = false;
+        } 
+        // Handle mentions
+        else if (content.text.endsWith('@')) {
+          mentionMenuVisible = true;
+          mentionQuery = "";
+          const { top, left } = editor.getSelectionBoundingBox()?.toJSON();
+          const menuHeight = 300;
+          const viewportHeight = window.innerHeight;
+          const scrollY = window.scrollY;
+          const wouldOverflow = top + 20 + menuHeight > viewportHeight + scrollY;
+          const yPosition = wouldOverflow
+            ? Math.max(scrollY, top - menuHeight - 10)
+            : top + 20;
+          mentionMenuPosition = { x: left, y: yPosition };
+          updateFilteredUsers();
+          slashMenuVisible = false;
+          hashMenuVisible = false;
+        }
+        // Handle hashtags
+        else if (content.text.endsWith('#')) {
+          hashMenuVisible = true;
+          hashQuery = "";
+          const { top, left } = editor.getSelectionBoundingBox()?.toJSON();
+          const menuHeight = 300;
+          const viewportHeight = window.innerHeight;
+          const scrollY = window.scrollY;
+          const wouldOverflow = top + 20 + menuHeight > viewportHeight + scrollY;
+          const yPosition = wouldOverflow
+            ? Math.max(scrollY, top - menuHeight - 10)
+            : top + 20;
+          hashMenuPosition = { x: left, y: yPosition };
+          updateFilteredItems();
+          slashMenuVisible = false;
+          mentionMenuVisible = false;
+        }
+        // Check if typing in an active mention
+        else if (mentionMenuVisible) {
+          const text = content.text;
+          const atIndex = text.lastIndexOf('@');
+          
+          if (atIndex !== -1) {
+            mentionQuery = text.substring(atIndex + 1);
+            updateFilteredUsers();
+          } else {
+            mentionMenuVisible = false;
+          }
+        }
+        // Check if typing in an active hashtag
+        else if (hashMenuVisible) {
+          const text = content.text;
+          const hashIndex = text.lastIndexOf('#');
+          
+          if (hashIndex !== -1) {
+            hashQuery = text.substring(hashIndex + 1);
+            updateFilteredItems();
+          } else {
+            hashMenuVisible = false;
+          }
+        }
+        else {
+          slashMenuVisible = false;
+          mentionMenuVisible = false;
+          hashMenuVisible = false;
+        }
       } else {
         slashMenuVisible = false;
+        mentionMenuVisible = false;
+        hashMenuVisible = false;
       }
     } catch (e) {
       console.error("Error in EditorHandler:", e);
       slashMenuVisible = false;
+      mentionMenuVisible = false;
+      hashMenuVisible = false;
     }
   };
 
@@ -169,6 +261,151 @@
   function executeFormatCommand(command: { name?: string; icon?: string; action: any; }) {
     if (!editor) return;
     command.action();
+  }
+
+  // Filter users based on mention query
+  function updateFilteredUsers() {
+    if (!users?.value?.length) {
+      filteredUsers = [];
+      return;
+    }
+    
+    const query = mentionQuery.toLowerCase();
+    filteredUsers = users.value
+      .filter(user => user.label?.toLowerCase().includes(query))
+      .slice(0, 10); // Limit to 10 results
+  }
+
+  // Filter channels and threads based on hash query
+  function updateFilteredItems() {
+    if (!space) {
+      filteredItems = [];
+      return;
+    }
+    
+    const query = hashQuery.toLowerCase();
+    const items: {id: string, name: string, type: 'thread' | 'channel'}[] = [];
+    
+    // Add channels
+    if (space.view.channels) {
+      Object.entries(space.view.channels).forEach(([id, channel]) => {
+        if (channel.name && channel.name.toLowerCase().includes(query)) {
+          items.push({
+            id,
+            name: channel.name,
+            type: 'channel'
+          });
+        }
+      });
+    }
+    
+    if (space.view?.threads) {
+      Object.entries(space.view.threads).forEach(([id, thread]) => {
+        const name = thread.title || thread.firstMsg?.text?.substring(0, 30) || id;
+        if (name.toLowerCase().includes(query)) {
+          items.push({
+            id,
+            name: name + (thread.title ? '' : '...'),
+            type: 'thread'
+          });
+        }
+      });
+    }
+    
+    // Limit to 10 results
+    filteredItems = items.slice(0, 10);
+  }
+
+  // Insert user mention
+  function insertUserMention(user: UserItem) {
+    if (!editor) return;
+    
+    try {
+      const cursorPosition = editor.getTextCursorPosition();
+      if (!cursorPosition) return;
+      
+      const block = cursorPosition.block;
+      const content = Array.isArray(block.content) ? block.content[0] : null;
+      
+      if (content && content.type === "text") {
+        const text = content.text;
+        const atIndex = text.lastIndexOf('@');
+        
+        if (atIndex !== -1) {
+          const newText = text.substring(0, atIndex) + `@${user.label}`;
+          
+          editor.updateBlock(block.id, { 
+            content: [{ 
+              type: "text", 
+              text: newText,
+              styles: {
+                backgroundColor: "#8b5cf6",
+              } 
+            }]
+          });
+          editor.insertBlocks([{type: "paragraph", content: ""}], block.id, "after");
+          editor.setSelection(block.id,editor.getNextBlock(block.id)?.id ?? block.id);
+          editor.createLink(user.label.startsWith('https://') ? user.label : `https://${user.label}`);
+          
+
+          editor.setTextCursorPosition(block.id, "end");
+        }
+      }
+      
+      mentionMenuVisible = false;
+    } catch (e) {
+      console.error("Error inserting mention:", e);
+      mentionMenuVisible = false;
+    }
+  }
+
+  function insertHashLink(item: {id: string, name: string, type: 'thread' | 'channel'}) {
+    if (!editor) return;
+    
+    try {
+      const cursorPosition = editor.getTextCursorPosition();
+      if (!cursorPosition) return;
+      
+      const block = cursorPosition.block;
+      const content = Array.isArray(block.content) ? block.content[0] : null;
+      
+      if (content && content.type === "text") {
+        const text = content.text;
+        const hashIndex = text.lastIndexOf('#');
+        
+        if (hashIndex !== -1) {
+          const newText = text.substring(0, hashIndex) + `#${item.name}`;
+          
+          editor.updateBlock(block.id, { 
+            content: [{ 
+              type: "text", 
+              text: newText,
+              styles: {
+                backgroundColor: "#8b5cf6",
+                textColor: "white"
+              } 
+            }]
+          });
+          
+          editor.insertBlocks([{type: "paragraph", content: ""}], block.id, "after");
+          
+          editor.setSelection(block.id, editor.getNextBlock(block.id)?.id ?? block.id);
+          
+          const linkId = item.type === 'channel' 
+            ? item.id                  
+            : `thread/${item.id}`;     
+          
+          editor.createLink(linkId);
+
+          editor.setTextCursorPosition(block.id, "end");
+        }
+      }
+      
+      hashMenuVisible = false;
+    } catch (e) {
+      console.error("Error inserting hash link:", e);
+      hashMenuVisible = false;
+    }
   }
 
   async function initBlockNoteEditor() {
@@ -487,6 +724,68 @@
             </div>
           {/if}
 
+          {#if mentionMenuVisible && isAdmin}
+            <div
+              class="mention-menu bg-violet-900 border border-violet-700 rounded shadow-lg absolute z-50"
+              style="left: {mentionMenuPosition.x}px; top: {mentionMenuPosition.y}px;"
+            >
+              <div class="py-1 max-h-[300px] overflow-y-auto min-w-[200px]">
+                {#if filteredUsers.length > 0}
+                  <ul>
+                    {#each filteredUsers as user}
+                      <li>
+                        <button
+                          class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-violet-800 text-white"
+                          onclick={() => insertUserMention(user)}
+                        >
+                          <div class="w-6 h-6 rounded-full bg-violet-600 flex items-center justify-center overflow-hidden">
+                            <span class="text-xs font-bold">{user.label[0]?.toUpperCase() || '?'}</span>
+                          </div>
+                          <span>{user.label}</span>
+                        </button>
+                      </li>
+                    {/each}
+                  </ul>
+                {:else}
+                  <div class="px-4 py-2 text-gray-300">No users found</div>
+                {/if}
+              </div>
+            </div>
+          {/if}
+
+          {#if hashMenuVisible && isAdmin}
+            <div
+              class="hash-menu bg-violet-900 border border-violet-700 rounded shadow-lg absolute z-50"
+              style="left: {hashMenuPosition.x}px; top: {hashMenuPosition.y}px;"
+            >
+              <div class="py-1 max-h-[300px] overflow-y-auto min-w-[250px]">
+                {#if filteredItems.length > 0}
+                  <ul>
+                    {#each filteredItems as item}
+                      <li>
+                        <button
+                          class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-violet-800 text-white"
+                          onclick={() => insertHashLink(item)}
+                        >
+                          <div class="w-6 h-6 rounded flex items-center justify-center overflow-hidden">
+                            <Icon 
+                              icon={item.type === 'channel' ? 'tabler:hash' : 'tabler:message-circle'} 
+                              class="text-violet-300 text-lg" 
+                            />
+                          </div>
+                          <span>{item.name}</span>
+                          <span class="text-xs text-violet-300 ml-auto">{item.type}</span>
+                        </button>
+                      </li>
+                    {/each}
+                  </ul>
+                {:else}
+                  <div class="px-4 py-2 text-gray-300">No channels or threads found</div>
+                {/if}
+              </div>
+            </div>
+          {/if}
+
           {#if selectionTooltipVisible && isAdmin}
             <div
               class="selection-tooltip bg-violet-900 border border-violet-700 rounded shadow-lg absolute z-50 flex"
@@ -760,5 +1059,46 @@
     font-family: 'Fira Code', monospace;
     z-index: 10;
     user-select: none;
+  }
+
+  .mention-menu {
+    min-width: 200px;
+    max-width: 300px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 100;
+  }
+  
+  :global(.bn-inline-content [data-mention]) {
+    color: #a78bfa;
+    background-color: rgba(167, 139, 250, 0.1);
+    padding: 0 2px;
+    border-radius: 2px;
+    font-weight: 500;
+  }
+
+  .hash-menu {
+    min-width: 250px;
+    max-width: 350px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 100;
+  }
+  
+  :global(.bn-inline-content a[href^="channel-"], 
+          .bn-inline-content a[href^="thread/"], 
+          .bn-inline-content a[href^="thread-"]) {
+    color: #8b5cf6 !important;
+    font-weight: 500;
+    text-decoration: none !important;
+    padding: 0 2px;
+    background-color: rgba(139, 92, 246, 0.1);
+    border-radius: 3px;
+  }
+
+  :global(.bn-inline-content a[href^="channel-"]:hover, 
+          .bn-inline-content a[href^="thread/"]:hover, 
+          .bn-inline-content a[href^="thread-"]:hover) {
+    background-color: rgba(139, 92, 246, 0.2);
   }
 </style>
