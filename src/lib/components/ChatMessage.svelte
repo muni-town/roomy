@@ -22,14 +22,17 @@
     id: Ulid;
     message: Message | Announcement;
     messageRepliedTo?: Message;
-    previousMessage?: Message;
-    previousMessageId?: Ulid;
+    index: number;
+    timeline: Ulid[];
+    messages: Record<string, Message | Announcement>;
   };
 
-  let { id, message, messageRepliedTo, previousMessage, previousMessageId }: Props = $props();
+  let { id, message, messageRepliedTo, index, timeline, messages }: Props = $props();
   let space: { value: Autodoc<Space> } = getContext("space");
 
-  // set initial set with entries, no need for $effect
+  const previousMessageId = index > 0 ? timeline[index - 1] : undefined;
+  const previousMessage = previousMessageId ? messages[previousMessageId] as Message | undefined : undefined;
+
   let reactionHandles = $state(
     Object.fromEntries(
       Object.entries(message.reactions).map(([reaction, dids]) => [
@@ -195,8 +198,7 @@
     return getContentHtml(JSON.stringify(schema));
   }
 
-  // Determine if we should show the author
-  let shouldShowAuthor = $derived(() => {
+  function shouldShowAuthor() {
     // Always show author if there's no previous message
     if (!previousMessage) return true;
     
@@ -212,40 +214,13 @@
     
     // Default to showing author
     return true;
-  });
+  }
 
   function getHourMinuteTime(ulid: Ulid) {
     const decodedTime = decodeTime(ulid);
     return format(decodedTime, "HH:mm:ss");
   }
 </script>
-
-<style>
-  .timestamp-placeholder {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .timestamp-text {
-    opacity: 0;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 0.75rem;
-    color: rgb(209, 213, 219);
-    transition: opacity 0.2s ease-in-out;
-    white-space: nowrap;
-  }
-
-  .message-container:hover .timestamp-text {
-    opacity: 1;
-  }
-
-
-</style>
 
 <svelte:window onkeydown={onKeydown} onkeyup={onKeyup} />
 
@@ -335,7 +310,7 @@
 
   {@render toolbar(authorProfile)}
 
-  <div class="flex gap-4 message-container">
+  <div class="flex gap-4 group">
     {#if shouldShowAuthor()}
     <a
       href={`https://bsky.app/profile/${authorProfile.handle}`}
@@ -347,8 +322,10 @@
       />
     </a>
     {:else}
-      <div class="w-8.5 timestamp-placeholder">
-        <span class="timestamp-text">{getHourMinuteTime(ulid)}</span>
+      <div class="w-8.5 relative flex items-center justify-center">
+        <span class="opacity-0 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100">
+          {getHourMinuteTime(ulid)}
+        </span>
       </div>
     {/if}
 

@@ -77,25 +77,18 @@
         >
           {#snippet children(id, index)}
             {@const message = messages[id]}
-            {@const previousMessageId = index > 0 ? timeline[index - 1] : undefined}
-            {@const previousMessage = previousMessageId ? messages[previousMessageId] : undefined}
-            {#if message && !message.softDeleted}
-              <ChatMessage 
-                {id} 
-                {message}
-                {previousMessageId}
-                {previousMessage}
-                messageRepliedTo={
-                  (!isAnnouncement(message) && message.replyTo)
-                  ? messages[message.replyTo] as Message 
-                  : undefined
-                }
-              />
-            {:else}
-              <p class="italic text-white text-sm">
-                This message has been deleted
-              </p>
-            {/if}
+            <ChatMessage 
+              {id} 
+              {message}
+              {index}
+              {timeline}
+              {messages}
+              messageRepliedTo={
+                (!isAnnouncement(message) && message.replyTo)
+                ? messages[message.replyTo] as Message 
+                : undefined
+              }
+            />
           {/snippet}
         </Virtualizer>
       {/key}
