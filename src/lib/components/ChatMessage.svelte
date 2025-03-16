@@ -298,7 +298,7 @@
   {#await authorProfile then authorProfile}
     {@render toolbar(authorProfile)}
 
-    <div class="flex gap-4 message-container">
+    <div class="flex gap-4 group">
       {#if shouldShowAuthor}
         <a
           href={`https://bsky.app/profile/${authorProfile.handle}`}
@@ -311,8 +311,8 @@
           />
         </a>
       {:else}
-        <div class="w-8.5 timestamp-placeholder">
-          <span class="timestamp-text"
+        <div class="w-8.5 relative flex items-center justify-center">
+          <span class="opacity-0 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100"
             >{message.createdDate &&
               format(message.createdDate, "HH:mm:ss")}</span
           >

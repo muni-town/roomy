@@ -1,6 +1,5 @@
 <script lang="ts">
   import { ScrollArea } from "bits-ui";
-  import { onNavigate } from "$app/navigation";
   import ChatMessage from "./ChatMessage.svelte";
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
@@ -12,7 +11,6 @@
   } from "@roomy-chat/sdk";
   import { derivePromise } from "$lib/utils.svelte";
   import { page } from "$app/state";
-  import { getTime } from "date-fns";
 
   let {
     timeline,
