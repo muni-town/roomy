@@ -500,7 +500,7 @@
         </h5>
       </div>
       <p class="line-clamp-1 basis-1/2 md:basis-auto overflow-hidden italic">
-        {@html renderMarkdownSanitized(messageRepliedTo.content)}
+        {@html getContentHtml(messageRepliedTo.content)}
       </p>
     </Button.Root>
   {/if}
