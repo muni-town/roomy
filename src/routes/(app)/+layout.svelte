@@ -9,7 +9,6 @@
   import { user } from "$lib/user.svelte";
   import { cleanHandle } from "$lib/utils";
   import { themeChange } from "theme-change";
-  import { outerWidth } from "svelte/reactivity/window";
 
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
@@ -38,7 +37,10 @@
   );
   let currentCatalog = $state("");
 
-  let isMobile = $derived((outerWidth.current ?? 0) < 640);
+  $effect(() => {
+    if (page.params.space) { currentCatalog = page.params.space; }
+    else if (page.url.pathname === "/home" ) { currentCatalog = "home"; }
+  });
 
   onMount(async () => {
     await user.init();
@@ -133,11 +135,11 @@
       class="flex flex-col gap-2 items-center"
     >
       <ToggleGroup.Item
-        value="dm"
-        onclick={() => goto("/dm")}
+        value="home"
+        onclick={() => goto("/home")}
         class="btn btn-ghost size-16 data-[state=on]:border-accent"
       >
-        <Icon icon="ri:user-fill" font-size="2em" />
+        <Icon icon="iconamoon:home-fill" font-size="2em" />
       </ToggleGroup.Item>
 
       <div class="divider mt-0 mb-1"></div>

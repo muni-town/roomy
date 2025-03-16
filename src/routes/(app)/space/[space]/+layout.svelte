@@ -201,25 +201,24 @@
           {/snippet}
 
           <form class="flex flex-col gap-4" onsubmit={createChannel}>
-            <input
-              bind:value={newChannelName}
-              placeholder="Name"
-              class="input"
-            />
-            <select bind:value={newChannelCategory} class="select">
-              <option value={undefined}
-                >Category: None</option
-              >
-              {#each Object.keys(space.view.categories) as categoryId}
-                {@const category = space.view.categories[categoryId]}
-                <option value={categoryId}
-                  >Category: {category.name}</option
-                >
-              {/each}
-            </select>
-            <Button.Root
-              class="btn btn-primary"
-            >
+            <label class="input w-full">
+              <span class="label">Name</span>
+              <input
+                bind:value={newChannelName}
+                placeholder="General"
+              />
+            </label>
+            <label class="select w-full">
+              <span class="label">Category</span>
+              <select bind:value={newChannelCategory} class="">
+                <option value={undefined}>None</option>
+                {#each Object.keys(space.view.categories) as categoryId}
+                  {@const category = space.view.categories[categoryId]}
+                  <option value={categoryId}>{category.name}</option>
+                {/each}
+              </select>
+            </label>
+            <Button.Root class="btn btn-primary">
               <Icon icon="basil:add-outline" font-size="1.8em" />
               Create Channel
             </Button.Root>
@@ -241,14 +240,14 @@
           {/snippet}
 
           <form class="flex flex-col gap-4" onsubmit={createCategory}>
-            <input
-              bind:value={newCategoryName}
-              placeholder="Name"
-              class="input"
-            />
-            <Button.Root
-              class={`px-4 py-2 bg-white text-black rounded-lg active:scale-95 transition-all duration-150 flex items-center justify-center gap-2`}
-            >
+            <label class="input w-full">
+              <span class="label">Name</span>
+              <input
+                bind:value={newCategoryName}
+                placeholder="Discussions"
+              />
+            </label>
+            <Button.Root class="btn btn-primary">
               <Icon icon="basil:add-outline" font-size="1.8em" />
               Create Category
             </Button.Root>
