@@ -141,7 +141,8 @@ export const user = {
       scope: atproto.scope,
     });
     if (IN_TAURI) {
-      invoke('open_url', { url })
+      const { openUrl } = window.__TAURI__.opener
+      openUrl(url)
     } else {
       window.location.href = url.href;
 

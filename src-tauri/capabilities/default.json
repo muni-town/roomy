@@ -8,6 +8,7 @@
   "permissions": [
     "core:default",
     "core:event:default",
-    "deep-link:default"
+    "deep-link:default",
+    "opener:default"
   ]
 }

@@ -1,4 +1,4 @@
-use tauri::{command, Builder, Manager};
+use tauri::{Builder, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -15,6 +15,7 @@ pub fn run() {
     }
     builder
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             #[cfg(any(target_os = "linux", windows))]
             {
@@ -35,16 +36,8 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![open_url])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
-}
-
-#[command(rename_all = "snake_case")]
-fn open_url(url: &str) -> Result<(), Error> {
-    open::that(url).unwrap();
-
-    Ok(())
 }
 
 #[derive(Debug, thiserror::Error)]
