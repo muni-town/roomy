@@ -20,6 +20,7 @@
 
   let { children } = $props();
   let isMobile = $derived((outerWidth.current || 0) < 640);
+  let sidebarAccordionValues = $state(["channels", "threads"]);
 
   let space = $derived(g.spaces[page.params.space] as Autodoc<Space> | undefined) 
 
@@ -173,146 +174,141 @@
 {#if space}
   <nav
     class={[
-      !isMobile && "max-w-[16rem] border-r-2 border-violet-900",
-      "p-4 flex flex-col gap-4 w-full",
+      !isMobile && "max-w-[16rem] border-r-2 border-base-200",
+      "px-4 py-5 flex flex-col gap-4 w-full",
     ]}
   >
-    <div class="flex items-center justify-between px-2">
-      <h1 class="text-2xl font-extrabold text-white text-ellipsis">
-        {space.view.name}
-      </h1>
+    <h1 class="text-2xl font-extrabold text-base-content text-ellipsis">
+      {space.view.name}
+    </h1>
 
-      {#if isAdmin}
-        <menu class="flex gap-2">
-          <Dialog
-            title="Create Category"
-            bind:isDialogOpen={showNewCategoryDialog}
-          >
-            {#snippet dialogTrigger()}
-              <Button.Root
-                class="hover:scale-105 active:scale-95 transition-all duration-150"
-                title="Create Category"
-              >
-                <Icon
-                  icon="basil:folder-plus-solid"
-                  color="white"
-                  font-size="2em"
-                />
-              </Button.Root>
-            {/snippet}
+    <div class="divider my-0"></div>
 
-            <form class="flex flex-col gap-4" onsubmit={createCategory}>
-              <input
-                bind:value={newCategoryName}
-                placeholder="Name"
-                class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
-              />
-              <Button.Root
-                class={`px-4 py-2 bg-white text-black rounded-lg active:scale-95 transition-all duration-150 flex items-center justify-center gap-2`}
-              >
-                <Icon icon="basil:add-outline" font-size="1.8em" />
-                Create Category
-              </Button.Root>
-            </form>
-          </Dialog>
+    {#if isAdmin}
+      <menu class="menu p-0 w-full justify-between join join-vertical">
+        <Dialog
+          title="Create Channel"
+          bind:isDialogOpen={showNewChannelDialog}
+        >
+          {#snippet dialogTrigger()}
+            <Button.Root
+              title="Create Channel"
+              class="btn w-full justify-start join-item text-base-content"
+            >
+              <Icon icon="basil:comment-plus-solid" class="size-6" />
+              Create Channel
+            </Button.Root>
+          {/snippet}
 
-          <Dialog
-            title="Create Channel"
-            bind:isDialogOpen={showNewChannelDialog}
-          >
-            {#snippet dialogTrigger()}
-              <Button.Root
-                class="hover:scale-105 active:scale-95 transition-all duration-150"
-                title="Create Channel"
-              >
-                <Icon
-                  icon="basil:comment-plus-solid"
-                  color="white"
-                  font-size="2em"
-                />
-              </Button.Root>
-            {/snippet}
-
-            <form class="flex flex-col gap-4" onsubmit={createChannel}>
+          <form class="flex flex-col gap-4" onsubmit={createChannel}>
+            <label class="input w-full">
+              <span class="label">Name</span>
               <input
                 bind:value={newChannelName}
-                placeholder="Name"
-                class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
+                placeholder="General"
               />
-              <select bind:value={newChannelCategory}>
-                <option class="bg-violet-900 text-white" value={undefined}
-                  >Category: None</option
-                >
+            </label>
+            <label class="select w-full">
+              <span class="label">Category</span>
+              <select bind:value={newChannelCategory} class="">
+                <option value={undefined}>None</option>
                 {#each Object.keys(space.view.categories) as categoryId}
                   {@const category = space.view.categories[categoryId]}
-                  <option class="bg-violet-900 text-white" value={categoryId}
-                    >Category: {category.name}</option
-                  >
+                  <option value={categoryId}>{category.name}</option>
                 {/each}
               </select>
-              <Button.Root
-                class="px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2"
-              >
-                <Icon icon="basil:add-outline" font-size="1.8em" />
-                Create Channel
-              </Button.Root>
-            </form>
-          </Dialog>
-        </menu>
-      {/if}
-    </div>
+            </label>
+            <Button.Root class="btn btn-primary">
+              <Icon icon="basil:add-outline" font-size="1.8em" />
+              Create Channel
+            </Button.Root>
+          </form>
+        </Dialog>
 
-    <hr />
-    
-    <Accordion.Root 
-      type="multiple" 
-      value={["channels", "threads"]} 
-      class="flex flex-col gap-4"
-    > 
-      <Accordion.Item value="channels">
-        <Accordion.Header>
-          <Accordion.Trigger class="cursor-pointer mb-2 uppercase text-xs font-medium text-gray-300">
-            Channels
-          </Accordion.Trigger>
-        </Accordion.Header>
-        <Accordion.Content forceMount>
-          {#snippet child({ open })}
-            {#if open}
-              {@render channelsSidebar(space as Autodoc<Space>)}
-            {/if}
+        <Dialog
+          title="Create Category"
+          bind:isDialogOpen={showNewCategoryDialog}
+        >
+          {#snippet dialogTrigger()}
+            <Button.Root
+              class="btn w-full justify-start join-item text-base-content"
+              title="Create Category"
+            >
+              <Icon icon="basil:folder-plus-solid" class="size-6" />
+              Create Category
+            </Button.Root>
           {/snippet}
-        </Accordion.Content>
-      </Accordion.Item>
-      {#if Object.keys(availableThreads).length > 0}
-        <Accordion.Item value="threads">
+
+          <form class="flex flex-col gap-4" onsubmit={createCategory}>
+            <label class="input w-full">
+              <span class="label">Name</span>
+              <input
+                bind:value={newCategoryName}
+                placeholder="Discussions"
+              />
+            </label>
+            <Button.Root class="btn btn-primary">
+              <Icon icon="basil:add-outline" font-size="1.8em" />
+              Create Category
+            </Button.Root>
+          </form>
+        </Dialog>
+      </menu>
+    {/if}
+  
+    <ToggleGroup.Root type="single" bind:value={currentItemId}>
+      <Accordion.Root 
+        type="multiple" 
+        bind:value={sidebarAccordionValues} 
+        class="flex flex-col gap-4"
+      > 
+        <Accordion.Item value="channels">
           <Accordion.Header>
-            <Accordion.Trigger class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-gray-300">
-              <h3>Threads</h3>
-              <Icon icon="basil:caret-up-solid" class="size-6" /> 
+            <Accordion.Trigger class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content">
+              <h3>Channels</h3>
+              <Icon icon="basil:caret-up-solid" class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("channels") && "rotate-180"}`} /> 
             </Accordion.Trigger>
           </Accordion.Header>
-          <Accordion.Content>
+          <Accordion.Content forceMount>
             {#snippet child({ open })}
               {#if open}
-                {@render threadsSidebar()}
+                {@render channelsSidebar(space as Autodoc<Space>)}
               {/if}
             {/snippet}
           </Accordion.Content>
         </Accordion.Item>
-      {/if}
-    </Accordion.Root>
+        {#if Object.keys(availableThreads).length > 0}
+          <div class="divider my-0"></div>
+          <Accordion.Item value="threads">
+            <Accordion.Header>
+              <Accordion.Trigger class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content">
+                <h3>Threads</h3>
+                <Icon icon="basil:caret-up-solid" class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("threads") && "rotate-180"}`} /> 
+              </Accordion.Trigger>
+            </Accordion.Header>
+            <Accordion.Content>
+              {#snippet child({ open })}
+                {#if open}
+                  {@render threadsSidebar()}
+                {/if}
+              {/snippet}
+            </Accordion.Content>
+          </Accordion.Item>
+        {/if}
+      </Accordion.Root>
+    </ToggleGroup.Root>
   </nav>
 
   <!-- Events/Room Content -->
   {#if !isMobile}
     <main
-      class="flex flex-col gap-4 bg-violet-950 rounded-lg p-4 grow min-w-0 h-full overflow-clip"
+      class="flex flex-col gap-4 rounded-lg p-4 grow min-w-0 h-full overflow-clip bg-base-100"
     >
       {@render children()}
     </main>
-  {:else if page.params.channel}
+  {:else if page.params.channel || page.params.thread}
     <main
-      class="absolute inset-0 flex flex-col gap-4 bg-violet-950 rounded-lg p-4 h-screen overflow-clip"
+      class="absolute inset-0 flex flex-col gap-4 rounded-lg p-4 h-screen overflow-clip bg-base-100"
     >
       {@render children()}
     </main>
@@ -336,82 +332,83 @@
     {#each space.view.sidebarItems as item}
       {#if item.type == "category"}
         {@const category = space.view.categories[item.id]}
-        <h2 class="flex gap-2 items-center justify-start text-white">
-          <Icon icon="basil:folder-solid" />
-          {category.name}
+        <Accordion.Root type="single" value={category.name}> 
+          <Accordion.Item value={category.name}> 
+            <Accordion.Header class="flex justify-between"> 
+              <Accordion.Trigger class="flex text-sm font-semibold gap-2 items-center cursor-pointer">
+                <Icon icon="basil:folder-solid" />
+                {category.name}
+              </Accordion.Trigger>
 
-          <span class="flex-grow"></span>
-
-          {#if isAdmin}
-            <Dialog
-              title="Channel Settings"
-              bind:isDialogOpen={showCategoryDialog}
-            >
-              {#snippet dialogTrigger()}
-                <Button.Root
+              {#if isAdmin}
+                <Dialog
                   title="Channel Settings"
-                  class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150 m-auto flex"
-                  onclick={() => {
-                    editingCategory = item.id;
-                    categoryNameInput = category.name;
-                  }}
+                  bind:isDialogOpen={showCategoryDialog}
                 >
-                  <Icon icon="lucide:settings" color="white" class="text-xl" />
-                </Button.Root>
-              {/snippet}
+                  {#snippet dialogTrigger()}
+                    <Button.Root
+                      title="Channel Settings"
+                      class="cursor-pointer btn btn-ghost btn-circle"
+                      onclick={() => {
+                        editingCategory = item.id;
+                        categoryNameInput = category.name;
+                      }}
+                    >
+                      <Icon icon="lucide:settings" class="size-4" />
+                    </Button.Root>
+                  {/snippet}
 
-              <form class="flex flex-col gap-4 w-full" onsubmit={saveCategory}>
-                <label>
-                  Name
-                  <input
-                    bind:value={categoryNameInput}
-                    placeholder="channel-name"
-                    class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
-                  />
-                </label>
-                <Button.Root
-                  class={`px-4 py-2 bg-white text-black rounded-lg disabled:bg-white/50 active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 hover:scale-[102%]`}
-                >
-                  Save Category
-                </Button.Root>
-              </form>
-            </Dialog>
-          {/if}
-        </h2>
-        <hr />
-        <ToggleGroup.Root
-          type="single"
-          bind:value={currentItemId}
-          class="flex flex-col gap-2 items-center"
-        >
-          {#each category.channels as channelId}
-            {@const channel = space.view.channels[channelId]}
-            <ToggleGroup.Item
-              onclick={() => goto(`/space/${page.params.space}/${channelId}`)}
-              value={channelId}
-              class="w-full text-start hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white px-4 py-2 rounded-md"
-            >
-              <h3 class="flex justify-start items-center gap-2 ml-2">
-                <Icon icon="basil:comment-solid" />
-                {channel.name}
-              </h3>
-            </ToggleGroup.Item>
-          {/each}
-        </ToggleGroup.Root>
+                  <form class="flex flex-col gap-4 w-full" onsubmit={saveCategory}>
+                    <label class="input w-full">
+                      <span class="label">Name</span>
+                      <input
+                        bind:value={categoryNameInput}
+                        placeholder="channel-name"
+                      />
+                    </label>
+                    <Button.Root disabled={!categoryNameInput} class="btn btn-primary">
+                      Save Category
+                    </Button.Root>
+                  </form>
+                </Dialog>
+              {/if}
+            </Accordion.Header>
+
+            <Accordion.Content forceMount>
+              {#snippet child({ props, open })}
+                {#if open}
+                  <div {...props} transition:slide class="flex flex-col gap-4 py-2">
+                    {#each category.channels as channelId}
+                      {@const channel = space.view.channels[channelId]}
+                      <ToggleGroup.Item
+                        onclick={() => goto(`/space/${page.params.space}/${channelId}`)}
+                        value={channelId}
+                        class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
+                      >
+                        <h3 class="flex justify-start items-center gap-2 px-2">
+                          <Icon icon="basil:comment-solid" />
+                          {channel.name}
+                        </h3>
+                      </ToggleGroup.Item>
+                    {/each}
+                  </div>
+                {/if}
+              {/snippet}
+            </Accordion.Content>
+          </Accordion.Item>
+        </Accordion.Root>
       {:else}
         {@const channel = space.view.channels[item.id]}
-        <ToggleGroup.Root type="single" bind:value={currentItemId}>
-          <ToggleGroup.Item
-            onclick={() => goto(`/space/${page.params.space}/${item.id}`)}
-            value={item.id}
-            class="w-full text-start hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white py-2 rounded-md"
-          >
-            <h3 class="flex justify-start items-center gap-2 px-2">
-              <Icon icon="basil:comment-solid" />
-              {channel.name}
-            </h3>
-          </ToggleGroup.Item>
-        </ToggleGroup.Root>
+        <ToggleGroup.Item
+          onclick={() => goto(`/space/${page.params.space}/${item.id}`)}
+          value={item.id}
+          class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
+        >
+          <h3 class="flex justify-start items-center gap-2 px-2">
+            <Icon icon="basil:comment-solid" />
+            {channel.name}
+          </h3>
+        </ToggleGroup.Item>
       {/if}
     {/each}
   </div>
@@ -420,18 +417,16 @@
 {#snippet threadsSidebar()}
   <div transition:slide class="flex flex-col gap-4">
     {#each Object.entries(availableThreads) as [ulid, thread]} 
-      <ToggleGroup.Root type="single" bind:value={currentItemId}>
         <ToggleGroup.Item
           onclick={() => goto(`/space/${page.params.space}/thread/${ulid}`)}
           value={ulid}
-          class="w-full text-start hover:scale-105 transition-all duration-150 active:scale-95 hover:bg-white/5 border border-transparent data-[state=on]:border-white data-[state=on]:scale-98 data-[state=on]:bg-white/5 text-white py-2 rounded-md"
+          class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
         >
           <h3 class="flex justify-start items-center gap-2 px-2">
             <Icon icon="material-symbols:thread-unread-rounded" />
             {thread.title}
           </h3>
         </ToggleGroup.Item>
-      </ToggleGroup.Root>
     {/each}
   </div>
 {/snippet}

@@ -30,18 +30,18 @@
     />
 
     <Dialog.Content
-      class="fixed p-5 flex flex-col text-white gap-4 w-dvw max-w-(--breakpoint-sm) left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] rounded-lg border bg-purple-950"
+      class="fixed p-5 flex flex-col bg-base-200 rounded-box gap-4 w-dvw max-w-(--breakpoint-sm) left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%] "
     >
       <div class="flex flex-col gap-3">
         <header class="flex justify-between items-center">
-          <Dialog.Title class="text-lg font-bold">
+          <Dialog.Title class="text-xl font-bold">
             {title}
           </Dialog.Title>
-          <Dialog.Close class="cursor-pointer transition-all duration-150 hover:scale-105 active:scale-95">
+          <Dialog.Close class="btn btn-circle">
             <Icon icon="zondicons:close-solid" />
           </Dialog.Close>
         </header>
-        <Separator.Root class="border border-white" />
+        <div class="divider my-0"></div>
       </div>
 
       {#if description}
