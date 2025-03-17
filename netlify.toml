@@ -1,3 +1,2 @@
 [build]
   command = "deno run build"
-  publish = "build"
