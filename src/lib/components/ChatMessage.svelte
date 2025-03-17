@@ -312,7 +312,8 @@
         </a>
       {:else}
         <div class="w-8.5 relative flex items-center justify-center">
-          <span class="opacity-0 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100"
+          <span
+            class="opacity-0 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100"
             >{message.createdDate &&
               format(message.createdDate, "HH:mm:ss")}</span
           >
@@ -546,28 +547,3 @@
     {/if}
   {/await}
 {/snippet}
-
-<style>
-  .timestamp-placeholder {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .timestamp-text {
-    opacity: 0;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 0.75rem;
-    color: rgb(209, 213, 219);
-    transition: opacity 0.2s ease-in-out;
-    white-space: nowrap;
-  }
-
-  .message-container:hover .timestamp-text {
-    opacity: 1;
-  }
-</style>
