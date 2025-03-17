@@ -339,42 +339,38 @@
   */
 </script>
 
-<header class="flex flex-none items-center justify-between border-b-1 pb-4">
-  <div class="flex gap-4 items-center">
+<header class="navbar">
+  <div class="navbar-start flex gap-4">
     {#if isMobile}
       <Button.Root onclick={() => goto(`/space/${page.params.space}`)}>
-        <Icon icon="uil:left" color="white" />
+        <Icon icon="uil:left" />
       </Button.Root>
     {:else}
       <AvatarImage avatarUrl={channel?.avatar} handle={channel?.name ?? ""} />
     {/if}
 
-    <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-white text-lg font-bold`}>
+    <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}>
       {channel?.name}
     </h4>
   </div>
 
-  <Tabs.Root bind:value={tab}>
-    <Tabs.List class="grid grid-cols-3 gap-4 border text-white p-1 rounded">
+  <Tabs.Root bind:value={tab} class={isMobile ? "navbar-end" : "navbar-center"}>
+    <Tabs.List class="tabs tabs-box">
       <Tabs.Trigger
         value="chat"
         onclick={() => goto(page.url.pathname)}
-        class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
+        class="tab flex gap-2" 
       >
-        <Icon icon="tabler:message" color="white" class="text-2xl" />
+        <Icon icon="tabler:message" class="text-2xl" />
         {#if !isMobile}
           <p>Chat</p>
         {/if}
       </Tabs.Trigger>
       <Tabs.Trigger
         value="threads"
-        class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
+        class="tab flex gap-2" 
       >
-        <Icon
-          icon="material-symbols:thread-unread-rounded"
-          color="white"
-          class="text-2xl"
-        />
+        <Icon icon="material-symbols:thread-unread-rounded" class="text-2xl" />
         {#if !isMobile}
           <p>Threads</p>
         {/if}
@@ -392,11 +388,13 @@
   </Tabs.Root>
 
   {#if !isMobile}
-    <div class="flex">
+    <div class="navbar-end">
       {@render toolbar()}
     </div>
   {/if}
 </header>
+<div class="divider my-0"></div>
+
 
 {#if tab === "chat"}
   {@render chatTab()}
@@ -407,12 +405,16 @@
 {/if}
 
 {#snippet threadsTab()}
-  {#each Object.entries(relatedThreads) as [ulid, thread]}
-    <a href={`/space/${page.params.space}/thread/${ulid}`} class="w-full px-3 py-2 bg-violet-900 rounded btn">
-      <h3 class="text-lg font-medium text-white">{thread.title}</h3>
-      {@render timestamp(ulid)}
-    </a>
-  {/each}
+  <ul class="list w-full join join-vertical">
+    {#each Object.entries(relatedThreads) as [ulid, thread]}
+      <a href={`/space/${page.params.space}/thread/${ulid}`}>
+        <li class="list-row join-item flex items-center w-full bg-base-200">
+          <h3 class="card-title text-xl font-medium text-primary">{thread.title}</h3>
+          {@render timestamp(ulid)}
+        </li>
+      </a>
+    {/each}
+  </ul>
 {/snippet}
 
 {#snippet timestamp(ulid: Ulid)}
@@ -420,7 +422,7 @@
   {@const formattedDate = isToday(decodedTime)
     ? "Today"
     : format(decodedTime, "P")}
-  <time class="text-xs text-gray-300">
+  <time class="text-xs">
     {formattedDate}, {format(decodedTime, "pp")}
   </time>
 {/snippet}
@@ -431,12 +433,12 @@
       source={{ type: "space", space: space }}
       timeline={channel?.timeline ?? []}
     />
-    <div class="flex float-end">
+    <div class="flex items-center">
       {#if !isMobile || !isThreading.value}
         <section class="grow flex flex-col">
           {#if replyingTo}
             <div
-              class="flex justify-between bg-violet-800 text-white rounded-t-lg px-4 py-2"
+              class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
             >
               <div class="flex flex-col gap-1">
                 <h5 class="flex gap-2 items-center">
@@ -455,7 +457,7 @@
               <Button.Root
                 type="button"
                 onclick={() => (replyingTo = null)}
-                class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
+                class="btn btn-circle btn-ghost"
               >
                 <Icon icon="zondicons:close-solid" />
               </Button.Root>
@@ -482,12 +484,11 @@
 
 
 {#snippet toolbar()}
-  <menu class="relative flex items-center gap-3 px-2 w-fit self-end">
+  <menu class="relative flex items-center gap-3 px-2 w-fit justify-end">
     <Popover.Root bind:open={isThreading.value}> 
       <Popover.Trigger>
         <Icon
           icon="tabler:needle-thread"
-          color="white"
           class="text-2xl"
         />
       </Popover.Trigger>
@@ -496,13 +497,13 @@
           side="left" 
           sideOffset={8} 
           interactOutsideBehavior="ignore" 
-          class="my-4 text-white bg-violet-900 rounded py-4 px-5"
+          class="my-4 bg-base-300 rounded py-4 px-5"
         >
           <form onsubmit={createThread} class="flex flex-col gap-4">
-            <input type="text" bind:value={threadTitleInput} class="bg-violet-800 px-2 py-1" placeholder="Thread Title" />
+            <input type="text" bind:value={threadTitleInput} class="input" placeholder="Thread Title" />
             <button 
               type="submit" 
-              class="btn text-violet-900 bg-white"
+              class="btn btn-primary"
             >
               Create Thread
             </button>
@@ -517,7 +518,7 @@
         navigator.clipboard.writeText(`${page.url.href}`);
       }}
     >
-      <Icon icon="icon-park-outline:copy-link" color="white" class="text-2xl" />
+      <Icon icon="icon-park-outline:copy-link" class="text-2xl" />
     </Button.Root>
 
     {#if isAdmin}
@@ -527,7 +528,7 @@
             title="Channel Settings"
             class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150 m-auto flex"
           >
-            <Icon icon="lucide:settings" color="white" class="text-2xl" />
+            <Icon icon="lucide:settings" class="text-2xl" />
           </Button.Root>
         {/snippet}
 
@@ -537,25 +538,19 @@
             <input
               bind:value={channelNameInput}
               placeholder="channel-name"
-              class="w-full outline-hidden border border-white px-4 py-2 rounded-sm bg-transparent"
+              class="input"
             />
           </label>
           {#if space}
-            <select bind:value={channelCategoryInput}>
-              <option class="bg-violet-900 text-white" value={undefined}
-                >Category: None</option
-              >
+            <select bind:value={channelCategoryInput} class="select">
+              <option value={undefined}>None</option>
               {#each Object.keys(space.view.categories) as categoryId}
                 {@const category = space.view.categories[categoryId]}
-                <option class="bg-violet-900 text-white" value={categoryId}
-                  >Category: {category.name}</option
-                >
+                <option value={categoryId}>{category.name}</option>
               {/each}
             </select>
           {/if}
-          <Button.Root
-            class={`px-4 py-2 bg-white text-black rounded-lg disabled:bg-white/50 active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 hover:scale-[102%]`}
-          >
+          <Button.Root class="btn btn-primary">
             Save Settings
           </Button.Root>
         </form>

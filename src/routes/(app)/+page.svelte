@@ -1,3 +1,3 @@
 <script lang="ts">
-  window.location.href = "/dm";
+  window.location.href = "/home";
 </script>

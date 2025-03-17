@@ -34,24 +34,26 @@
   let virtualizer: Virtualizer<string> | undefined = $state();
 
   // Go to the end of the ScrollArea
-  let scrollToEnd = $state(false);
+  let scrollToEnd = $state(true);
   onNavigate(() => {
     setTimeout(() => {
       if (virtualizer) virtualizer.scrollToIndex(timeline.length - 1);
     }, 100);
   });
+
   $effect(() => {
-    scrollToEnd;
-    viewport;
-    messages;
+    scrollToEnd = true;
     if (viewport && (messages || scrollToEnd)) {
       viewport.scrollTop = viewport.scrollHeight;
-      scrollToEnd = false;
+      setTimeout(() => {
+        if (virtualizer) virtualizer.scrollToIndex(timeline.length - 1);
+      }, 100);
+       scrollToEnd = false;
     }
   });
 </script>
 
-<ScrollArea.Root type="always">
+<ScrollArea.Root type="scroll" class="h-full overflow-hidden relative">
   <ScrollArea.Viewport bind:ref={viewport} class="w-full max-w-full h-full">
     <ol class="flex flex-col gap-4 max-w-full">
       <!--
@@ -81,14 +83,9 @@
               <ChatMessage 
                 {id} 
                 {message}
-                messageRepliedTo={
-                  (!isAnnouncement(message) && message.replyTo)
-                  ? messages[message.replyTo] as Message 
-                  : undefined
-                }
               />
             {:else}
-              <p class="italic text-white text-sm">
+              <p class="italic text-error text-sm">
                 This message has been deleted
               </p>
             {/if}
@@ -102,7 +99,7 @@
     class="flex h-full w-2.5 touch-none select-none rounded-full border-l border-l-transparent p-px transition-all hover:w-3 hover:bg-dark-10 mr-1"
   >
     <ScrollArea.Thumb
-      class="relative flex-1 rounded-full bg-violet-950 transition-opacity"
+      class="relative flex-1 rounded-full bg-base-300 transition-opacity"
     />
   </ScrollArea.Scrollbar>
   <ScrollArea.Corner />

@@ -238,14 +238,14 @@
             isDrawerOpen = true;
           }
         }}
-        class="flex flex-col text-start gap-2 text-white w-full min-w-0"
+        class="flex flex-col text-start gap-2 w-full min-w-0"
       >
         <section class="flex items-center gap-2 flex-wrap w-fit">
           {@render timestamp(id)}
         </section>
 
         <p
-          class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+          class="text-sm italic prose-invert prose min-w-0 max-w-full overflow-hidden text-ellipsis"
         >
           {@html getAnnouncementHtml(announcement)}
         </p>
@@ -258,7 +258,7 @@
             isDrawerOpen = true;
           }
         }}
-        class="cursor-pointer flex gap-2 text-start w-full items-center text-gray-300 px-4 py-1 bg-violet-900 rounded-t"
+        class="cursor-pointer flex gap-2 text-start w-full items-center text-info-content px-4 py-1 bg-info rounded-t"
       >
         <Icon icon="prime:reply" width="12px" height="12px" />
         <p
@@ -298,23 +298,22 @@
           isDrawerOpen = true;
         }
       }}
-      class="flex flex-col text-start gap-2 text-white w-full min-w-0"
+      class="flex flex-col text-start gap-2 w-full min-w-0"
     >
       <section class="flex items-center gap-2 flex-wrap w-fit">
         <a
           href={`https://bsky.app/profile/${authorProfile.handle}`}
           target="_blank"
+          class="text-primary hover:underline"
         >
           <h5 class="font-bold">{authorProfile.handle}</h5>
         </a>
         {@render timestamp(ulid)}
       </section>
 
-      <p
-        class="text-lg prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
-      >
+      <span class="prose select-text">
         {@html getContentHtml(msg.content)}
-      </p>
+      </span>
       {#if msg.images?.length}
         <div class="flex flex-wrap gap-2 mt-2">
           {#each msg.images as image}
@@ -340,7 +339,7 @@
             toggleReaction(id, "👍");
             isDrawerOpen = false;
           }}
-          class="px-4 rounded-full bg-violet-800"
+          class="btn btn-circle"
         >
           👍
         </Button.Root>
@@ -349,13 +348,13 @@
             toggleReaction(id, "😂");
             isDrawerOpen = false;
           }}
-          class="px-4 rounded-full bg-violet-800"
+          class="btn btn-circle"
         >
           😂
         </Button.Root>
         <Popover.Root bind:open={isEmojiDrawerPickerOpen}>
-          <Popover.Trigger class="p-4 rounded-full bg-violet-800">
-            <Icon icon="lucide:smile-plus" color="white" />
+          <Popover.Trigger class="btn btn-circle">
+            <Icon icon="lucide:smile-plus" />
           </Popover.Trigger>
           <Popover.Content>
             <emoji-picker bind:this={emojiDrawerPicker}></emoji-picker>
@@ -364,23 +363,23 @@
       </div>
 
       {#if authorProfile}
-        <div class="flex flex-col gap-2">
+        <div class="join join-vertical w-full">
           <Button.Root
             onclick={() => {
               setReplyTo({ id, authorProfile, content: (message as Message).content });
               isDrawerOpen = false;
             }}
-            class="text-white p-4 flex gap-4 items-center bg-violet-800 w-full rounded-lg"
+            class="join-item btn w-full"
           >
-            <Icon icon="fa6-solid:reply" color="white" />
+            <Icon icon="fa6-solid:reply" />
             Reply
           </Button.Root>
           {#if mayDelete}
             <Button.Root
               onclick={() => deleteMessage(id)}
-              class="text-white p-4 flex gap-4 items-center bg-violet-800 w-full rounded-lg"
+              class="join-item btn btn-error w-full"
             >
-              <Icon icon="tabler:trash" color="red" />
+              <Icon icon="tabler:trash" />
               Delete
             </Button.Root>
           {/if}
@@ -389,25 +388,25 @@
     </Drawer>
   {:else}
     <Toolbar.Root
-      class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-violet-800 p-2 rounded items-center`}
+      class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-base-300 p-1 rounded items-center`}
     >
       <Toolbar.Button
         onclick={() => toggleReaction(id, "👍")}
-        class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+        class="btn btn-ghost btn-square"
       >
         👍
       </Toolbar.Button>
       <Toolbar.Button
         onclick={() => toggleReaction(id, "😂")}
-        class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+        class="btn btn-ghost btn-square"
       >
         😂
       </Toolbar.Button>
       <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
         <Popover.Trigger
-          class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+          class="btn btn-ghost btn-square"
         >
-          <Icon icon="lucide:smile-plus" color="white" />
+          <Icon icon="lucide:smile-plus" />
         </Popover.Trigger>
         <Popover.Content>
           <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
@@ -416,7 +415,7 @@
       {#if shiftDown && mayDelete}
         <Toolbar.Button
           onclick={() => deleteMessage(id)}
-          class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+          class="btn btn-ghost btn-square"
         >
           <Icon icon="tabler:trash" color="red" />
         </Toolbar.Button>
@@ -426,9 +425,9 @@
         <Toolbar.Button
           onclick={() =>
             setReplyTo({ id, authorProfile, content: (message as Message).content })}
-          class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
+          class="btn btn-ghost btn-square"
         >
-          <Icon icon="fa6-solid:reply" color="white" />
+          <Icon icon="fa6-solid:reply" />
         </Toolbar.Button>
       {/if}
     </Toolbar.Root>
@@ -441,12 +440,11 @@
       class="absolute right-4 inset-y-0"
     >
       {#snippet children({ checked })}
-        <div class="border bg-violet-800 size-4 rounded items-center cursor-pointer">
+        <div class="border border-primary bg-base-100 text-primary-content size-4 rounded items-center cursor-pointer">
           {#if checked}
             <Icon 
               icon="material-symbols:check-rounded" 
-              color="#5b21b6" 
-              class="bg-white size-3.5"
+              class="bg-primary size-3.5"
             />
           {/if}
         </div>
@@ -460,7 +458,7 @@
   {@const formattedDate = isToday(decodedTime)
     ? "Today"
     : format(decodedTime, "P")}
-  <time class="text-xs text-gray-300">
+  <time class="text-xs">
     {formattedDate}, {format(decodedTime, "pp")}
   </time>
 {/snippet}
@@ -469,8 +467,8 @@
   <Button.Root
     onclick={() => toggleReaction(id, reaction)}
     class={`
-      ${user.profile.data && message.reactions[reaction].includes(user.profile.data.did) ? "bg-violet-600" : "bg-violet-800"}
-      cursor-pointer text-white border border-violet-500 px-2 py-1 rounded tabular-nums hover:scale-105 active:scale-95 transition-all duration-150
+      btn
+      ${user.profile.data && message.reactions[reaction].includes(user.profile.data.did) ? "bg-accent text-accent-content" : "bg-secondary text-secondary-content"}
     `}
     title={(reactionHandles[reaction] || []).join(", ")}
   >
@@ -485,7 +483,7 @@
   {#if messageRepliedTo && profileRepliedTo}
     <Button.Root
       onclick={scrollToReply}
-      class="cursor-pointer flex gap-2 text-start w-full items-center text-gray-300 px-4 py-1 bg-violet-900 rounded-t"
+      class="cursor-pointer flex gap-2 text-sm text-start w-full items-center text-secondary-content px-4 py-1 bg-secondary rounded-t"
     >
       <div class="flex basis-1/2 md:basis-auto gap-2 items-center">
         <Icon icon="prime:reply" width="12px" height="12px" />
@@ -495,12 +493,12 @@
             <AvatarBeam name={profileRepliedTo.handle} />
           </Avatar.Fallback>
         </Avatar.Root>
-        <h5 class="text-white font-medium text-ellipsis">
+        <h5 class="text-secondary-content font-medium text-ellipsis">
           {profileRepliedTo.handle}
         </h5>
       </div>
       <p class="line-clamp-1 basis-1/2 md:basis-auto overflow-hidden italic">
-        {@html renderMarkdownSanitized(messageRepliedTo.content)}
+        {@html getContentHtml(messageRepliedTo.content)}
       </p>
     </Button.Root>
   {/if}

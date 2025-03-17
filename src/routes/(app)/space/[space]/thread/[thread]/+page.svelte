@@ -258,18 +258,18 @@
   }
 </script>
 
-<header class="flex flex-none items-center justify-between border-b-1 pb-4">
-  <div class="flex gap-4 items-center">
+<header class="navbar">
+  <div class="flex gap-4 navbar-start">
     {#if isMobile}
       <Button.Root onclick={() => goto(`/space/${page.params.space}`)}>
-        <Icon icon="uil:left" color="white" />
+        <Icon icon="uil:left" />
       </Button.Root>
     {:else}
       <AvatarImage handle={thread?.title ?? ""} />
     {/if}
 
     {#if space && thread}
-      <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-white text-lg font-bold`}>
+      <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}>
         {thread.title}
       </h4>
       <p class="text-gray-400 text-xs">{">"}</p>
@@ -281,23 +281,25 @@
 
 
   {#if !isMobile}
-    <div class="flex">
+    <div class="flex navbar-end">
       {@render toolbar()}
     </div>
   {/if}
 </header>
+
+<div class="divider my-0"></div>
 
 {#if space}
   <ChatArea
     source={{ type: "space", space: space }}
     timeline={thread?.timeline ?? []}
   />
-  <div class="flex float-end">
+  <div class="flex">
     {#if !isMobile || !isThreading.value}
       <section class="grow flex flex-col">
         {#if replyingTo}
           <div
-            class="flex justify-between bg-violet-800 text-white rounded-t-lg px-4 py-2"
+            class="flex justify-between bg-info text-info-content rounded-t-lg px-4 py-2"
           >
             <div class="flex flex-col gap-1">
               <h5 class="flex gap-2 items-center">
@@ -340,12 +342,11 @@
 {/if}
 
 {#snippet toolbar()}
-  <menu class="relative flex items-center gap-3 px-2 w-fit self-end">
+  <menu class="relative flex items-center gap-3 px-2 w-fit justify-end">
     <Popover.Root bind:open={isThreading.value}> 
       <Popover.Trigger>
         <Icon
           icon="tabler:needle-thread"
-          color="white"
           class="text-2xl"
         />
       </Popover.Trigger>
@@ -354,13 +355,13 @@
           side="left" 
           sideOffset={8} 
           interactOutsideBehavior="ignore" 
-          class="my-4 text-white bg-violet-900 rounded py-4 px-5"
+          class="my-4 bg-base-300 rounded py-4 px-5"
         >
           <form onsubmit={createThread} class="flex flex-col gap-4">
-            <input type="text" bind:value={threadTitleInput} class="bg-violet-800 px-2 py-1" placeholder="Thread Title" />
+            <input type="text" bind:value={threadTitleInput} class="input px-2 py-1" placeholder="Thread Title" />
             <button 
               type="submit" 
-              class="btn text-violet-900 bg-white"
+              class="btn btn-primary"
             >
               Create Thread
             </button>
@@ -368,31 +369,14 @@
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
-
     <Button.Root
       title="Copy invite link"
-      class="btn"
+      class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
       onclick={() => {
         navigator.clipboard.writeText(`${page.url.href}`);
       }}
     >
-      <Icon icon="icon-park-outline:copy-link" color="white" class="text-2xl" />
+      <Icon icon="icon-park-outline:copy-link" class="text-2xl" />
     </Button.Root>
-
-    {#if isAdmin.value}
-      <Dialog 
-        title="Delete thread?" 
-        description={`You are deleting ${thread?.title}. This is only reversible by the Space's admins.`}
-        bind:isDialogOpen={isDeleteThreadDialogOpen}
-      >
-        {#snippet dialogTrigger()}
-          <Icon icon="tabler:trash" color="red" class="text-2xl" />
-        {/snippet}
-
-        <Button.Root onclick={softDeleteThread} class="btn bg-red-500 text-white">
-          Delete
-        </Button.Root>
-      </Dialog>
-    {/if}
   </menu>
 {/snippet}

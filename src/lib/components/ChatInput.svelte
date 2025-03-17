@@ -2,6 +2,7 @@
   import { onMount, onDestroy, untrack } from "svelte";
   import { Editor } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
+  import Placeholder from "@tiptap/extension-placeholder";
   import { 
     type Item,
     initKeyboardShortcutHandler, 
@@ -20,6 +21,7 @@
   let element: HTMLDivElement | undefined = $state();
   let extensions = $derived([
     StarterKit.configure({ heading: false }),
+    Placeholder.configure({ placeholder: "Write something ..." }),
     initKeyboardShortcutHandler({ onEnter }),
     initUserMention({ users }),
     initSpaceContextMention({ context })
@@ -34,7 +36,7 @@
       content, 
       editorProps: {
         attributes: {
-          class: "w-full px-3 py-2 rounded bg-violet-900 text-white"
+          class: "w-full px-3 py-2 rounded bg-base-300 text-base-content outline-none"
         },
       },
       onUpdate: (ctx) => {
@@ -51,7 +53,7 @@
       content: untrack(() => content),
       editorProps: {
         attributes: {
-          class: "w-full px-3 py-2 rounded bg-violet-900 text-white"
+          class: "w-full px-3 py-2 rounded bg-base-300 text-base-content outline-none"
         },
       },
       onUpdate: (ctx) => {
