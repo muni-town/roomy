@@ -391,10 +391,11 @@
           
           editor.setSelection(block.id, editor.getNextBlock(block.id)?.id ?? block.id);
           
-          const linkId = item.type === 'channel' 
-            ? item.id                  
-            : `thread/${item.id}`;     
           
+          const linkId =
+            item.type === "channel"
+              ? `/space/${page.params.space}/${item.id}`
+              : `/space/${page.params.space}/thread/${item.id}`;
           editor.createLink(linkId);
 
           editor.setTextCursorPosition(block.id, "end");
