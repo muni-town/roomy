@@ -17,13 +17,11 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // runtime deep_link registration
             #[cfg(any(target_os = "linux", windows))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 app.deep_link().register_all()?;
-                app.deep_link().on_open_url(|event| {
-                    println!("deep link URLs: {:?}", event.urls());
-                });
             }
 
             #[cfg(debug_assertions)]
