@@ -10,17 +10,18 @@
 
   let {
     source,
-    timeline
+    timeline,
   }: {
     source:
       | { type: "dm"; channel: Autodoc<DM> }
-      | { type: "space"; space: Autodoc<Space>; };
-    timeline: Ulid[]
+      | { type: "space"; space: Autodoc<Space> };
+    timeline: Ulid[];
   } = $props();
 
-  let messages = $derived(source.type == "dm"
-    ? source.channel.view.messages
-    : source.space.view.messages
+  let messages = $derived(
+    source.type == "dm"
+      ? source.channel.view.messages
+      : source.space.view.messages,
   );
 
   setContext("scrollToMessage", (id: string) => {
@@ -77,18 +78,7 @@
         >
           {#snippet children(id, index)}
             {@const message = messages[id]}
-            <ChatMessage 
-              {id} 
-              {message}
-              {index}
-              {timeline}
-              {messages}
-              messageRepliedTo={
-                (!isAnnouncement(message) && message.replyTo)
-                ? messages[message.replyTo] as Message 
-                : undefined
-              }
-            />
+            <ChatMessage {id} {message} {index} {timeline} />
           {/snippet}
         </Virtualizer>
       {/key}

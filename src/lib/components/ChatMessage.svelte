@@ -21,17 +21,18 @@
   type Props = {
     id: Ulid;
     message: Message | Announcement;
-    messageRepliedTo?: Message;
     index: number;
     timeline: Ulid[];
-    messages: Record<string, Message | Announcement>;
   };
 
-  let { id, message, messageRepliedTo, index, timeline, messages }: Props = $props();
+  let { id, message, index, timeline }: Props = $props();
   let space: { value: Autodoc<Space> } = getContext("space");
+  let messages = space.value.view.messages;
 
   const previousMessageId = index > 0 ? timeline[index - 1] : undefined;
-  const previousMessage = previousMessageId ? messages[previousMessageId] as Message | undefined : undefined;
+  const previousMessage = previousMessageId
+    ? (messages[previousMessageId] as Message | undefined)
+    : undefined;
 
   let reactionHandles = $state(
     Object.fromEntries(
@@ -55,10 +56,10 @@
   let isEmojiToolbarPickerOpen = $state(false);
   let isEmojiRowPickerOpen = $state(false);
 
-  const isAdmin: { value: boolean } = getContext("isAdmin"); 
+  const isAdmin: { value: boolean } = getContext("isAdmin");
   let mayDelete = $derived(
-    !isAnnouncement(message) &&  
-    (isAdmin.value || user.agent?.did == message.author)
+    !isAnnouncement(message) &&
+      (isAdmin.value || user.agent?.did == message.author),
   );
 
   const selectMessage = getContext("selectMessage") as (
@@ -137,63 +138,63 @@
 
   function getAnnouncementHtml(announcement: Announcement) {
     const schema = {
-      "type": "doc",
-      "content": [] as Record<string, any>[]
+      type: "doc",
+      content: [] as Record<string, any>[],
     };
 
     switch (announcement.kind) {
       case "threadCreated": {
-        const relatedThread = space.value.view.threads[announcement.relatedThreads![0]];
+        const relatedThread =
+          space.value.view.threads[announcement.relatedThreads![0]];
         schema.content.push({
-          "type": "paragraph",
-          "content": [
-            { "type": "text", "text": "A new thread has been created: " },
-            { 
-              "type": "channelThreadMention",
-              "attrs": {
-                "id": JSON.stringify({
-                  "ulid": announcement.relatedThreads![0],
-                  "space": page.params.space,
-                  "type": "thread"
+          type: "paragraph",
+          content: [
+            { type: "text", text: "A new thread has been created: " },
+            {
+              type: "channelThreadMention",
+              attrs: {
+                id: JSON.stringify({
+                  ulid: announcement.relatedThreads![0],
+                  space: page.params.space,
+                  type: "thread",
                 }),
-                "label": relatedThread.title
-              }
-            }
-          ]
+                label: relatedThread.title,
+              },
+            },
+          ],
         });
         break;
       }
       case "messageMoved": {
-        const relatedThread = space.value.view.threads[announcement.relatedThreads![0]];
+        const relatedThread =
+          space.value.view.threads[announcement.relatedThreads![0]];
         schema.content.push({
-          "type": "paragraph",
-          "content": [
-            { "type": "text", "text": "Moved to: " },
-            { 
-              "type": "channelThreadMention",
-              "attrs": {
-                "id": JSON.stringify({
-                  "ulid": announcement.relatedThreads![0],
-                  "space": page.params.space,
-                  "type": "thread"
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Moved to: " },
+            {
+              type: "channelThreadMention",
+              attrs: {
+                id: JSON.stringify({
+                  ulid: announcement.relatedThreads![0],
+                  space: page.params.space,
+                  type: "thread",
                 }),
-                "label": relatedThread.title
-              }
-            }
-          ]
+                label: relatedThread.title,
+              },
+            },
+          ],
         });
         break;
       }
       case "messageDeleted": {
         schema.content.push({
-          "type": "paragraph",
-          "content": [
-            { "type": "text", "text": "This message has been deleted" }
-          ]
+          type: "paragraph",
+          content: [{ type: "text", text: "This message has been deleted" }],
         });
         break;
       }
-    };
+    }
 
     return getContentHtml(JSON.stringify(schema));
   }
@@ -201,17 +202,17 @@
   function shouldShowAuthor() {
     // Always show author if there's no previous message
     if (!previousMessage) return true;
-    
+
     // Show if different author
     if (previousMessage.author !== message.author) return true;
-    
+
     // Show if more than 5 minutes apart
     if (previousMessageId) {
       const currentTime = decodeTime(id);
       const previousTime = decodeTime(previousMessageId);
       return differenceInMinutes(currentTime, previousTime) > 5;
     }
-    
+
     // Default to showing author
     return true;
   }
@@ -252,7 +253,6 @@
         </Popover.Root>
       </div>
     {/if}
-
   </div>
 </li>
 
@@ -280,7 +280,9 @@
         </p>
       </Button.Root>
     {:else if announcement.kind === "messageMoved"}
-      {@const related = space.value.view.messages[announcement.relatedMessages![0]] as Message} 
+      {@const related = space.value.view.messages[
+        announcement.relatedMessages![0]
+      ] as Message}
       <Button.Root
         onclick={() => {
           if (isMobile) {
@@ -312,18 +314,20 @@
 
   <div class="flex gap-4 group">
     {#if shouldShowAuthor()}
-    <a
-      href={`https://bsky.app/profile/${authorProfile.handle}`}
-      target="_blank"
-    >
-      <AvatarImage
-        handle={authorProfile.handle}
-        avatarUrl={authorProfile.avatarUrl}
-      />
-    </a>
+      <a
+        href={`https://bsky.app/profile/${authorProfile.handle}`}
+        target="_blank"
+      >
+        <AvatarImage
+          handle={authorProfile.handle}
+          avatarUrl={authorProfile.avatarUrl}
+        />
+      </a>
     {:else}
       <div class="w-8.5 relative flex items-center justify-center">
-        <span class="opacity-0 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100">
+        <span
+          class="opacity-0 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100"
+        >
           {getHourMinuteTime(ulid)}
         </span>
       </div>
@@ -338,15 +342,15 @@
       class="flex flex-col text-start gap-2 text-white w-full min-w-0"
     >
       {#if shouldShowAuthor()}
-      <section class="flex items-center gap-2 flex-wrap w-fit">
-        <a
-          href={`https://bsky.app/profile/${authorProfile.handle}`}
-          target="_blank"
-        >
-          <h5 class="font-bold">{authorProfile.handle}</h5>
-        </a>
-        {@render timestamp(ulid)}
-      </section>
+        <section class="flex items-center gap-2 flex-wrap w-fit">
+          <a
+            href={`https://bsky.app/profile/${authorProfile.handle}`}
+            target="_blank"
+          >
+            <h5 class="font-bold">{authorProfile.handle}</h5>
+          </a>
+          {@render timestamp(ulid)}
+        </section>
       {/if}
 
       <p
@@ -370,7 +374,7 @@
   </div>
 {/snippet}
 
-{#snippet toolbar(authorProfile?: { handle: string, avatarUrl: string })}
+{#snippet toolbar(authorProfile?: { handle: string; avatarUrl: string })}
   {#if isMobile}
     <Drawer bind:isDrawerOpen>
       <div class="flex gap-4 justify-center mb-4">
@@ -406,7 +410,11 @@
         <div class="flex flex-col gap-2">
           <Button.Root
             onclick={() => {
-              setReplyTo({ id, authorProfile, content: (message as Message).content });
+              setReplyTo({
+                id,
+                authorProfile,
+                content: (message as Message).content,
+              });
               isDrawerOpen = false;
             }}
             class="text-white p-4 flex gap-4 items-center bg-violet-800 w-full rounded-lg"
@@ -464,7 +472,11 @@
       {#if authorProfile}
         <Toolbar.Button
           onclick={() =>
-            setReplyTo({ id, authorProfile, content: (message as Message).content })}
+            setReplyTo({
+              id,
+              authorProfile,
+              content: (message as Message).content,
+            })}
           class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
         >
           <Icon icon="fa6-solid:reply" color="white" />
@@ -475,16 +487,18 @@
 
   {#if isThreading.value && !isAnnouncement(message)}
     <Checkbox.Root
-      onCheckedChange={updateSelect} 
+      onCheckedChange={updateSelect}
       bind:checked={isSelected}
       class="absolute right-4 inset-y-0"
     >
       {#snippet children({ checked })}
-        <div class="border bg-violet-800 size-4 rounded items-center cursor-pointer">
+        <div
+          class="border bg-violet-800 size-4 rounded items-center cursor-pointer"
+        >
           {#if checked}
-            <Icon 
-              icon="material-symbols:check-rounded" 
-              color="#5b21b6" 
+            <Icon
+              icon="material-symbols:check-rounded"
+              color="#5b21b6"
               class="bg-white size-3.5"
             />
           {/if}
@@ -519,8 +533,12 @@
 {/snippet}
 
 {#snippet replyBanner()}
-  {@const messageRepliedTo = !isAnnouncement(message) && message.replyTo && space.value.view.messages[message.replyTo] as Message}
-  {@const profileRepliedTo = messageRepliedTo && getProfile(messageRepliedTo.author)}
+  {@const messageRepliedTo =
+    !isAnnouncement(message) &&
+    message.replyTo &&
+    (space.value.view.messages[message.replyTo] as Message)}
+  {@const profileRepliedTo =
+    messageRepliedTo && getProfile(messageRepliedTo.author)}
   {#if messageRepliedTo && profileRepliedTo}
     <Button.Root
       onclick={scrollToReply}
