@@ -35,7 +35,7 @@
     "npm:sanitize-html@^2.14.0": "2.14.0",
     "npm:svelte-boring-avatars@^1.2.6": "1.2.6",
     "npm:svelte-check@4": "4.1.5_svelte@5.23.1__acorn@8.14.1_typescript@5.8.2",
-    "npm:svelte-french-toast@^1.2.0": "1.2.0_svelte@4.2.19",
+    "npm:svelte-french-toast@2.0.0-alpha.0": "2.0.0-alpha.0_svelte@5.23.1__acorn@8.14.1",
     "npm:svelte-render-scan@^1.0.4": "1.0.5_svelte@5.23.1__acorn@8.14.1",
     "npm:svelte-tiptap@^2.1.0": "2.1.0_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+extension-bubble-menu@2.11.5__@tiptap+core@2.11.5___@tiptap+pm@2.11.5____prosemirror-model@1.24.1____prosemirror-state@1.4.3____prosemirror-view@1.38.1__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+extension-floating-menu@2.11.5__@tiptap+core@2.11.5___@tiptap+pm@2.11.5____prosemirror-model@1.24.1____prosemirror-state@1.4.3____prosemirror-view@1.38.1__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.1_svelte@5.23.1__acorn@8.14.1",
     "npm:svelte@^5.23.1": "5.23.1_acorn@8.14.1",
@@ -2400,10 +2400,10 @@
         "typescript"
       ]
     },
-    "svelte-french-toast@1.2.0_svelte@4.2.19": {
-      "integrity": "sha512-5PW+6RFX3xQPbR44CngYAP1Sd9oCq9P2FOox4FZffzJuZI2mHOB7q5gJBVnOiLF5y3moVGZ7u2bYt7+yPAgcEQ==",
+    "svelte-french-toast@2.0.0-alpha.0_svelte@5.23.1__acorn@8.14.1": {
+      "integrity": "sha512-81wcVaY9UZ/0JuzLEizMSoIXqNbX7yhfTZavBuw94T3cnT2HmJ9O+qXY/c91h9FkeMwboo0KHZVmzOEQVTXDFg==",
       "dependencies": [
-        "svelte@4.2.19",
+        "svelte@5.23.1_acorn@8.14.1",
         "svelte-writable-derived"
       ]
     },
@@ -2432,10 +2432,10 @@
         "svelte@5.23.1_acorn@8.14.1"
       ]
     },
-    "svelte-writable-derived@3.1.1_svelte@4.2.19": {
+    "svelte-writable-derived@3.1.1_svelte@5.23.1__acorn@8.14.1": {
       "integrity": "sha512-w4LR6/bYZEuCs7SGr+M54oipk/UQKtiMadyOhW0PTwAtJ/Ai12QS77sLngEcfBx2q4H8ZBQucc9ktSA5sUGZWw==",
       "dependencies": [
-        "svelte@4.2.19"
+        "svelte@5.23.1_acorn@8.14.1"
       ]
     },
     "svelte@4.2.19": {
@@ -2762,7 +2762,7 @@
         "npm:sanitize-html@^2.14.0",
         "npm:svelte-boring-avatars@^1.2.6",
         "npm:svelte-check@4",
-        "npm:svelte-french-toast@^1.2.0",
+        "npm:svelte-french-toast@2.0.0-alpha.0",
         "npm:svelte-render-scan@^1.0.4",
         "npm:svelte-tiptap@^2.1.0",
         "npm:svelte@^5.23.1",

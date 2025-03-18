@@ -28,7 +28,7 @@
     "emoji-picker-element": "^1.26.1",
     "svelte": "^5.23.1",
     "svelte-boring-avatars": "^1.2.6",
-    "svelte-french-toast": "^1.2.0",
+    "svelte-french-toast": "2.0.0-alpha.0",
     "svelte-tiptap": "^2.1.0",
     "ulidx": "^2.4.1",
     "vaul-svelte": "^0.3.2",
