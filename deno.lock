@@ -654,7 +654,7 @@
       "integrity": "sha512-APMX6rrRNnYJTexn1NttHwBOUmcWIc8hMb8bNjJeIa8tfvlPo68DZOYGCfi80yfH9AfEc27g3cwIrV9C9kZKMQ==",
       "dependencies": [
         "@iarna/toml",
-        "@sveltejs/kit",
+        "@sveltejs/kit@2.20.0_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2_vite@6.2.2",
         "esbuild@0.24.2",
         "set-cookie-parser"
       ]
@@ -662,7 +662,7 @@
     "@sveltejs/kit@2.20.0_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2": {
       "integrity": "sha512-xCUGevE2GFhpDAxZiVOsk6HKaBicwU7uWYcMOcpHCDcjoN6mKBIeMEzuddRMqSA4zjbeA+RcillCv1ppkWRwSQ==",
       "dependencies": [
-        "@sveltejs/vite-plugin-svelte",
+        "@sveltejs/vite-plugin-svelte@5.0.3_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2_vite@6.2.2",
         "@types/cookie",
         "cookie@0.6.0",
         "devalue",
@@ -678,26 +678,67 @@
         "vite@6.2.2_lightningcss@1.29.2"
       ]
     },
+    "@sveltejs/kit@2.20.0_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2_vite@6.2.2": {
+      "integrity": "sha512-xCUGevE2GFhpDAxZiVOsk6HKaBicwU7uWYcMOcpHCDcjoN6mKBIeMEzuddRMqSA4zjbeA+RcillCv1ppkWRwSQ==",
+      "dependencies": [
+        "@sveltejs/vite-plugin-svelte@5.0.3_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2_vite@6.2.2",
+        "@types/cookie",
+        "cookie@0.6.0",
+        "devalue",
+        "esm-env",
+        "import-meta-resolve",
+        "kleur",
+        "magic-string",
+        "mrmime",
+        "sade",
+        "set-cookie-parser",
+        "sirv",
+        "svelte@5.23.1_acorn@8.14.1",
+        "vite@6.2.2"
+      ]
+    },
+    "@sveltejs/vite-plugin-svelte-inspector@4.0.1_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2__vite@6.2.2_svelte@5.23.1__acorn@8.14.1_vite@6.2.2": {
+      "integrity": "sha512-J/Nmb2Q2y7mck2hyCX4ckVHcR5tu2J+MtBEQqpDrrgELZ2uvraQcK/ioCV61AqkdXFgriksOKIceDcQmqnGhVw==",
+      "dependencies": [
+        "@sveltejs/vite-plugin-svelte@5.0.3_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2_vite@6.2.2",
+        "debug@4.4.0",
+        "svelte@5.23.1_acorn@8.14.1",
+        "vite@6.2.2"
+      ]
+    },
     "@sveltejs/vite-plugin-svelte-inspector@4.0.1_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2": {
       "integrity": "sha512-J/Nmb2Q2y7mck2hyCX4ckVHcR5tu2J+MtBEQqpDrrgELZ2uvraQcK/ioCV61AqkdXFgriksOKIceDcQmqnGhVw==",
       "dependencies": [
-        "@sveltejs/vite-plugin-svelte",
+        "@sveltejs/vite-plugin-svelte@5.0.3_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
         "debug@4.4.0",
         "svelte@5.23.1_acorn@8.14.1",
-        "vite@6.2.2_lightningcss@1.29.2"
+        "vite@6.2.2"
       ]
     },
     "@sveltejs/vite-plugin-svelte@5.0.3_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2": {
       "integrity": "sha512-MCFS6CrQDu1yGwspm4qtli0e63vaPCehf6V7pIMP15AsWgMKrqDGCPFF/0kn4SP0ii4aySu4Pa62+fIRGFMjgw==",
       "dependencies": [
-        "@sveltejs/vite-plugin-svelte-inspector",
+        "@sveltejs/vite-plugin-svelte-inspector@4.0.1_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
         "debug@4.4.0",
         "deepmerge",
         "kleur",
         "magic-string",
         "svelte@5.23.1_acorn@8.14.1",
         "vite@6.2.2_lightningcss@1.29.2",
-        "vitefu"
+        "vitefu@1.0.6_vite@6.2.2__lightningcss@1.29.2"
+      ]
+    },
+    "@sveltejs/vite-plugin-svelte@5.0.3_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2_vite@6.2.2": {
+      "integrity": "sha512-MCFS6CrQDu1yGwspm4qtli0e63vaPCehf6V7pIMP15AsWgMKrqDGCPFF/0kn4SP0ii4aySu4Pa62+fIRGFMjgw==",
+      "dependencies": [
+        "@sveltejs/vite-plugin-svelte-inspector@4.0.1_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2__vite@6.2.2_svelte@5.23.1__acorn@8.14.1_vite@6.2.2",
+        "debug@4.4.0",
+        "deepmerge",
+        "kleur",
+        "magic-string",
+        "svelte@5.23.1_acorn@8.14.1",
+        "vite@6.2.2",
+        "vitefu@1.0.6_vite@6.2.2"
       ]
     },
     "@swc/core-darwin-arm64@1.11.11": {
@@ -1908,8 +1949,8 @@
     "multiformats@9.9.0": {
       "integrity": "sha512-HoMUjhH9T8DDBNT+6xzkrd9ga/XiBI4xLr58LJACwK6G3HTOPeMz4nB4KJs33L2BelrIJa7P0VuNaVF3hMYfjg=="
     },
-    "nanoid@3.3.9": {
-      "integrity": "sha512-SppoicMGpZvbF1l3z4x7No3OlIjP7QJvC9XR7AhZr1kL133KHnKPztkKDc+Ir4aJ/1VhTySrtKhrsycmrMQfvg=="
+    "nanoid@3.3.10": {
+      "integrity": "sha512-vSJJTG+t/dIKAUhUDw/dLdZ9s//5OxcHqLaDWWrW4Cdq7o6tdLIczUkMXt2MBNmk6sJRZBZRXVixs7URY1CmIg=="
     },
     "nanoid@5.1.4": {
       "integrity": "sha512-GTFcMIDgR7tqji/LpSY8rtg464VnJl/j6ypoehYnuGb+Y8qZUdtKB8WVCXon0UEZgFDbuUxpIl//6FHLHgXSNA=="
@@ -2000,7 +2041,7 @@
     "postcss@8.5.3": {
       "integrity": "sha512-dle9A3yYxlBSrt8Fu+IpjGT8SY8hN0mlaA6GY8t0P5PjIOZemULz/E2Bnm/2dcUOena75OTNkHI76uZBNUUq3A==",
       "dependencies": [
-        "nanoid@3.3.9",
+        "nanoid@3.3.10",
         "picocolors",
         "source-map-js"
       ]
@@ -2668,10 +2709,16 @@
         "rollup"
       ]
     },
+    "vitefu@1.0.6_vite@6.2.2": {
+      "integrity": "sha512-+Rex1GlappUyNN6UfwbVZne/9cYC4+R2XDk9xkNXBKMw6HQagdX9PgZ8V2v1WUSK1wfBLp7qbI1+XSNIlB1xmA==",
+      "dependencies": [
+        "vite@6.2.2"
+      ]
+    },
     "vitefu@1.0.6_vite@6.2.2__lightningcss@1.29.2": {
       "integrity": "sha512-+Rex1GlappUyNN6UfwbVZne/9cYC4+R2XDk9xkNXBKMw6HQagdX9PgZ8V2v1WUSK1wfBLp7qbI1+XSNIlB1xmA==",
       "dependencies": [
-        "vite@6.2.2_lightningcss@1.29.2"
+        "vite@6.2.2"
       ]
     },
     "vitest@3.0.9_vite@6.2.2": {
