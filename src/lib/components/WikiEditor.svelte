@@ -12,6 +12,7 @@
   import type { Highlighter } from 'shiki';
   import { getContext, setContext } from "svelte";
   import type { Item } from '$lib/tiptap/editor';
+  import Link from '@tiptap/extension-link';
 
   const { space, channel, isAdmin } = $props<{
     space: Autodoc<Space>;
@@ -413,7 +414,12 @@
     if (!editorElement) return;
     try {
       editorElement.innerHTML = "";
-      editor = BlockNoteEditor.create();
+          editor = BlockNoteEditor.create({_extensions: {link: Link.configure({
+        HTMLAttributes: {
+          target: null,
+        },
+      })}});
+
       editor.mount(editorElement);
       editor.onChange(EditorHandler);
       editor.onSelectionChange(SelectionHandler);
