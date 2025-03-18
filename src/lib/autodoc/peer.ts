@@ -1,5 +1,5 @@
 import type { DocId, RouterClient } from "@jsr/roomy-chat__router/client";
-// import { next as Automerge } from "@automerge/automerge";
+import { next as Automerge } from "@automerge/automerge";
 import type { Doc } from "@automerge/automerge";
 import { TypedEventTarget } from "typescript-event-target";
 import { StorageManager, type StorageInterface } from "./storage";
