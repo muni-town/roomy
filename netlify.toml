@@ -1,2 +1,2 @@
 [build]
-  command = CI= "deno run build"
+  command = "CI='' deno run build"
