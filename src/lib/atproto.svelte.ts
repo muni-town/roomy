@@ -5,6 +5,7 @@ import {
   buildLoopbackClientId,
   type OAuthClientMetadataInput,
 } from "@atproto/oauth-client-browser";
+import { IN_TAURI } from "$lib/tauri";
 
 const scope = "atproto transition:generic transition:chat.bsky";
 
@@ -33,17 +34,16 @@ export const atproto = {
     // Skip initialization if already initialized.
     if (this.oauth) return;
 
-    // Get the base URL and redirect URL for this deployment
-    const baseUrl = new URL(
-      dev ? "http://127.0.0.1:5173" : globalThis.location.href,
-    );
-    baseUrl.hash = "";
-    baseUrl.pathname = "/";
-    const redirectUri = baseUrl.href + "oauth/callback";
-
     // Build the client metadata
     let clientMetadata: OAuthClientMetadataInput;
-    if (dev) {
+    if (dev && !IN_TAURI) {
+      // Get the base URL and redirect URL for this deployment
+      const baseUrl = new URL(
+        dev ? "http://127.0.0.1:5173" : globalThis.location.href,
+      );
+      baseUrl.hash = "";
+      baseUrl.pathname = "/";
+      const redirectUri = baseUrl.href + "oauth/callback";
       // In dev, we build a development metadata
       clientMetadata = {
         ...atprotoLoopbackClientMetadata(buildLoopbackClientId(baseUrl)),
@@ -56,7 +56,9 @@ export const atproto = {
     } else {
       // In prod, we fetch the `/oauth-client.json` which is expected to be deployed alongside the
       // static build.
-      const resp = await fetch("/oauth-client.json", {
+      // native client metadata is not reuqired to be on the same domin as client_id,
+      // so it can always use the deployed metadata 
+      const resp = await fetch(`/oauth-client${IN_TAURI ? '-native' : ''}.json`, {
         headers: [["accept", "application/json"]],
       });
       clientMetadata = await resp.json();

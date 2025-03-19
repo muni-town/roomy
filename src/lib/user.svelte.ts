@@ -5,6 +5,8 @@ import { Agent, ComAtprotoRepoUploadBlob } from "@atproto/api";
 import { IndexedDBStorageAdapter } from "@automerge/automerge-repo-storage-indexeddb";
 import { lexicons } from "./lexicons";
 import { decodeBase32 } from "./base32";
+import { IN_TAURI, invoke } from "./tauri";
+import { page } from "$app/state";
 
 type Keypair = {
   publicKey: Uint8Array;
@@ -139,16 +141,33 @@ export const user = {
     const url = await atproto.oauth.authorize(handle, {
       scope: atproto.scope,
     });
-    window.location.href = url.href;
+    if (IN_TAURI) {
+      const { openUrl } = window.__TAURI__.opener
+      const { onOpenUrl } = window.__TAURI__.deepLink
 
-    // Protect against browser's back-forward cache
-    await new Promise<never>((_resolve, reject) => {
-      setTimeout(
-        reject,
-        10000,
-        new Error("User navigated back from the authorization page"),
-      );
-    });
+      openUrl(url)
+      await onOpenUrl((urls) => {
+        if (!urls || urls.length < 1) return
+        const url = new URL(urls[0])
+        const path = page.url
+
+        path.search = url.search;
+        path.pathname = url.pathname;
+        window.location.href = path.href
+      })
+
+    } else {
+      window.location.href = url.href;
+
+      // Protect against browser's back-forward cache
+      await new Promise<never>((_resolve, reject) => {
+        setTimeout(
+          reject,
+          10000,
+          new Error("User navigated back from the authorization page"),
+        );
+      });
+    }
   },
 
   async uploadBlob(blob: Blob) {
