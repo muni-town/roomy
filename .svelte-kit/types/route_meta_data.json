@@ -1,0 +1,29 @@
+{
+	"/(internal)": [
+		"src/routes/(internal)/+layout.ts"
+	],
+	"/(app)": [
+		"src/routes/(app)/+layout.ts",
+		"src/routes/(app)/+layout.ts"
+	],
+	"/": [],
+	"/(app)/dev": [
+		"src/routes/(app)/+layout.ts"
+	],
+	"/(app)/home": [
+		"src/routes/(app)/+layout.ts"
+	],
+	"/(internal)/oauth/callback": [
+		"src/routes/(internal)/+layout.ts"
+	],
+	"/(app)/space/[space]": [
+		"src/routes/(app)/+layout.ts",
+		"src/routes/(app)/+layout.ts"
+	],
+	"/(app)/space/[space]/thread/[thread]": [
+		"src/routes/(app)/+layout.ts"
+	],
+	"/(app)/space/[space]/[channel]": [
+		"src/routes/(app)/+layout.ts"
+	]
+}

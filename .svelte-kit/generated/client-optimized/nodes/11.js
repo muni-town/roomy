@@ -1,0 +1,1 @@
+export { default as component } from "../../../../src/routes/(app)/space/[space]/thread/[thread]/+page.svelte";

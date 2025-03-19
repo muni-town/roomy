@@ -1,3 +1,4 @@
+build
 node_modules
 
 # Output
@@ -5,8 +6,10 @@ node_modules
 .vercel
 .netlify
 .wrangler
-/.svelte-kit
 /dist
+
+# Deno
+deno.lock
 
 # OS
 .DS_Store
@@ -21,3 +24,5 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+src-tauri/icons
+src-tauri/gen/android
