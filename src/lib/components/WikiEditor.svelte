@@ -665,40 +665,40 @@
     <section class="wiki-editor-container">
       {#if isEditingWiki}
         <div class="mb-4 flex justify-between items-center">
-          <h3 class="text-xl font-bold text-white">{channel?.name} Wiki</h3>
+          <h3 class="text-xl font-bold text-base-content">{channel?.name} Wiki</h3>
           <div class="flex gap-2">
             <Button.Root
               onclick={() => setEditingWiki(false)}
-              class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors"
+              class="btn btn-ghost"
             >
               Cancel
             </Button.Root>
             <Button.Root
               onclick={saveWikiContent}
-              class="px-4 py-2 bg-violet-700 text-white rounded hover:bg-violet-600 transition-colors"
+              class="btn btn-primary"
             >
               Save
             </Button.Root>
           </div>
         </div>
         <div
-          class="wiki-editor bg-violet-900/20 rounded-lg border border-violet-500/30 p-4 h-auto {isAdmin ? 'admin-mode' : ''}"
+          class="wiki-editor bg-base-300/20 rounded-lg border border-base-content/30 p-4 h-auto {isAdmin ? 'admin-mode' : ''}"
         >
-          <div class="permanent-formatting-toolbar bg-violet-900 border border-violet-700 rounded-lg shadow-lg p-1 mb-4 flex items-center">
+          <div class="permanent-formatting-toolbar bg-base-300 border border-base-content/20 rounded-lg shadow-lg p-1 mb-4 flex items-center">
             {#each formatCommands as command}
               <button
-                class="p-2 hover:bg-violet-800 text-white rounded-md"
+                class="btn btn-ghost btn-square btn-sm"
                 title={command.name}
                 onclick={() => executeFormatCommand(command)}
               >
                 <Icon icon={command.icon} class="text-xl" />
               </button>
             {/each}
-            <div class="ml-2 border-l border-violet-600 h-6"></div>
+            <div class="ml-2 border-l border-base-content/20 h-6"></div>
             {#each slashCommands as command, i}
               {#if i < 3}
                 <button
-                  class="p-2 hover:bg-violet-800 text-white rounded-md"
+                  class="btn btn-ghost btn-square btn-sm"
                   title={command.name}
                   onclick={() => executeSlashCommand(command)}
                 >
@@ -712,14 +712,14 @@
 
           {#if slashMenuVisible && isAdmin}
             <div
-              class="slash-menu bg-violet-900 border border-violet-700 rounded shadow-lg absolute z-50"
+              class="slash-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
               style="left: {slashMenuPosition.x}px; top: {slashMenuPosition.y}px;"
             >
               <ul class="py-1">
                 {#each slashCommands as command}
                   <li>
                     <button
-                      class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-violet-800 text-white"
+                      class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-base-200 text-base-content"
                       onclick={() => executeSlashCommand(command)}
                     >
                       <Icon icon={command.icon} class="text-xl" />
@@ -733,7 +733,7 @@
 
           {#if mentionMenuVisible && isAdmin}
             <div
-              class="mention-menu bg-violet-900 border border-violet-700 rounded shadow-lg absolute z-50"
+              class="mention-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
               style="left: {mentionMenuPosition.x}px; top: {mentionMenuPosition.y}px;"
             >
               <div class="py-1 max-h-[300px] overflow-y-auto min-w-[200px]">
@@ -742,11 +742,11 @@
                     {#each filteredUsers as user}
                       <li>
                         <button
-                          class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-violet-800 text-white"
+                          class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-base-200 text-base-content"
                           onclick={() => insertUserMention(user)}
                         >
-                          <div class="w-6 h-6 rounded-full bg-violet-600 flex items-center justify-center overflow-hidden">
-                            <span class="text-xs font-bold">{user.label[0]?.toUpperCase() || '?'}</span>
+                          <div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center overflow-hidden">
+                            <span class="text-xs font-bold text-primary-content">{user.label[0]?.toUpperCase() || '?'}</span>
                           </div>
                           <span>{user.label}</span>
                         </button>
@@ -754,7 +754,7 @@
                     {/each}
                   </ul>
                 {:else}
-                  <div class="px-4 py-2 text-gray-300">No users found</div>
+                  <div class="px-4 py-2 text-base-content/70">No users found</div>
                 {/if}
               </div>
             </div>
@@ -762,7 +762,7 @@
 
           {#if hashMenuVisible && isAdmin}
             <div
-              class="hash-menu bg-violet-900 border border-violet-700 rounded shadow-lg absolute z-50"
+              class="hash-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
               style="left: {hashMenuPosition.x}px; top: {hashMenuPosition.y}px;"
             >
               <div class="py-1 max-h-[300px] overflow-y-auto min-w-[250px]">
@@ -771,23 +771,23 @@
                     {#each filteredItems as item}
                       <li>
                         <button
-                          class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-violet-800 text-white"
+                          class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-base-200 text-base-content"
                           onclick={() => insertHashLink(item)}
                         >
                           <div class="w-6 h-6 rounded flex items-center justify-center overflow-hidden">
                             <Icon 
                               icon={item.type === 'channel' ? 'tabler:hash' : 'tabler:message-circle'} 
-                              class="text-violet-300 text-lg" 
+                              class="text-lg text-primary" 
                             />
                           </div>
                           <span>{item.name}</span>
-                          <span class="text-xs text-violet-300 ml-auto">{item.type}</span>
+                          <span class="text-xs text-base-content/70 ml-auto">{item.type}</span>
                         </button>
                       </li>
                     {/each}
                   </ul>
                 {:else}
-                  <div class="px-4 py-2 text-gray-300">No channels or threads found</div>
+                  <div class="px-4 py-2 text-base-content/70">No channels or threads found</div>
                 {/if}
               </div>
             </div>
@@ -795,19 +795,19 @@
 
           {#if selectionTooltipVisible && isAdmin}
             <div
-              class="selection-tooltip bg-violet-900 border border-violet-700 rounded shadow-lg absolute z-50 flex"
-              style="left: {selectionTooltipPosition.x}px; top: {selectionTooltipPosition.y}px;"
+              class="tooltip-animate bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50 flex items-center justify-center p-1"
+              style="left: {selectionTooltipPosition.x}px; top: {selectionTooltipPosition.y}px; transform: translateX(-50%);"
             >
               {#each formatCommands as command}
                 <button
-                  class="p-2 hover:bg-violet-800 text-white"
+                  class="btn btn-ghost btn-square btn-sm"
                   title={command.name}
                   onclick={() => {
                     command.action();
                     selectionTooltipVisible = false;
                   }}
                 >
-                  <Icon icon={command.icon} class="text-xl" />
+                  <Icon icon={command.icon} />
                 </button>
               {/each}
             </div>
@@ -815,18 +815,18 @@
         </div>
       {:else}
         <div
-          class="flex justify-center items-center p-8 border border-dashed border-violet-500 rounded-lg"
+          class="flex justify-center items-center p-8 border border-dashed border-base-content/30 rounded-lg"
         >
           {#if isAdmin}
             <Button.Root
               onclick={() => setEditingWiki(true)}
-              class="flex items-center gap-2 px-4 py-2 bg-violet-700 text-white rounded-lg hover:bg-violet-600 transition-colors"
+              class="btn btn-primary"
             >
               <Icon icon="tabler:edit" />
               Create Wiki Page
             </Button.Root>
           {:else}
-            <p class="text-gray-300">
+            <p class="text-base-content/70">
               No wiki page exists yet. Only channel admins can create one.
             </p>
           {/if}
@@ -836,19 +836,19 @@
   {:else}
     <section class="wiki-content">
       <div class="flex justify-between items-center mb-4">
-        <h3 class="text-xl font-bold text-white">{channel?.name} Wiki</h3>
+        <h3 class="text-xl font-bold text-base-content">{channel?.name} Wiki</h3>
         {#if isAdmin}
           <Button.Root
             onclick={() => setEditingWiki(true)}
-            class="px-4 py-2 bg-violet-700 text-white rounded hover:bg-violet-600 transition-colors"
+            class="btn btn-primary"
           >
             <Icon icon="tabler:edit" />
             Edit Wiki
           </Button.Root>
         {/if}
       </div>
-      <div class="wiki-rendered p-4 bg-violet-900/30 rounded-lg">
-        <div class="wiki-html text-white">
+      <div class="wiki-rendered p-4 bg-base-300/30 rounded-lg">
+        <div class="wiki-html text-base-content">
           {@html processedHtml}
         </div>
       </div>
@@ -858,27 +858,27 @@
 
 {#if urlPromptVisible}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
-    <div class="bg-violet-900 border border-violet-700 rounded-lg shadow-lg p-6 max-w-md w-full">
-      <h3 class="text-lg font-bold text-white mb-4">Add Link</h3>
+    <div class="bg-base-300 border border-base-content/20 rounded-lg shadow-lg p-6 max-w-md w-full">
+      <h3 class="text-lg font-bold text-base-content mb-4">Add Link</h3>
       <form onsubmit={submitUrlPrompt} class="flex flex-col gap-4">
         <input
           type="text"
           bind:value={urlInputValue}
           placeholder="https://example.com"
-          class="w-full px-4 py-2 bg-violet-800 border border-violet-600 rounded text-white focus:outline-none focus:border-violet-500"
+          class="input input-bordered w-full"
           autofocus
         />
         <div class="flex justify-end gap-3 mt-2">
           <button
             type="button"
-            class="px-4 py-2 bg-transparent border border-violet-500 text-white rounded hover:bg-violet-800 transition-colors"
+            class="btn btn-outline"
             onclick={cancelUrlPrompt}
           >
             Cancel
           </button>
           <button
             type="submit"
-            class="px-4 py-2 bg-violet-700 text-white rounded hover:bg-violet-600 transition-colors"
+            class="btn btn-primary"
           >
             Add Link
           </button>
@@ -901,7 +901,7 @@
     left: 6px;
     top: 50%;
     transform: translateY(-50%);
-    color: #a78bfa;
+    color: hsl(var(--p));
     font-size: 16px;
     font-weight: bold;
     width: 18px;
@@ -922,24 +922,19 @@
   }
   
   :global(.wiki-editor-container .admin-mode .bn-block::before:hover ){
-    background-color: rgba(139, 92, 246, 0.2);
+    background-color: hsl(var(--p) / 0.2);
   }
   
   :global(.wiki-editor){
-    color: #fff;
+    color: hsl(var(--bc));
   }
 
-
-  .slash-menu {
+  .slash-menu, .hash-menu, .mention-menu {
     min-width: 200px;
-    max-width: 300px;
+    max-width: 350px;
     max-height: 300px;
     overflow-y: auto;
-  }
-
-  .slash-menu ul {
-    max-height: 300px;
-    overflow-y: auto;
+    z-index: 100;
   }
 
   .wiki-editor {
@@ -956,39 +951,19 @@
   }
 
   :global(.bn-inline-content a){
-    color: #8b5cf6;
+    color: hsl(var(--p));
     text-decoration: underline;
     cursor: pointer;
   }
   
   :global(input[type="checkbox"]){
-    accent-color: #8b5cf6;
+    accent-color: hsl(var(--p));
     width: 16px;
     height: 16px;
     margin-right: 8px;
   }
 
-  .selection-tooltip {
-    padding: 4px;
-    border-radius: 6px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transform: translateX(-50%);
-  }
-  
-  .selection-tooltip button {
-    border-radius: 4px;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background-color 0.15s ease;
-  }
-  
-  .selection-tooltip {
+  .tooltip-animate {
     animation: tooltipFadeIn 0.2s ease;
   }
   
@@ -1004,15 +979,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: 2px;
-  }
-  
-  .permanent-formatting-toolbar button {
-    transition: background-color 0.15s ease;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
 
   :global(.shiki) {
@@ -1036,13 +1002,13 @@
     margin: 1em 0;
     border-radius: 0.5em;
     overflow: hidden;
-    background-color: #292d3e; 
+    background-color: hsl(var(--n)); 
   }
 
   :global(.wiki-rendered code:not([class])) {
     padding: 0.2em 0.4em;
     margin: 0;
-    background-color: rgba(139, 92, 246, 0.2);
+    background-color: hsl(var(--p) / 0.2);
     border-radius: 3px;
     font-family: 'Fira Code', monospace;
     font-size: 0.85em;
@@ -1058,8 +1024,8 @@
     position: absolute;
     top: 0;
     right: 0;
-    background-color: rgba(139, 92, 246, 0.7);
-    color: white;
+    background-color: hsl(var(--p) / 0.7);
+    color: hsl(var(--pc));
     padding: 2px 8px;
     font-size: 0.75rem;
     border-bottom-left-radius: 4px;
@@ -1067,45 +1033,29 @@
     z-index: 10;
     user-select: none;
   }
-
-  .mention-menu {
-    min-width: 200px;
-    max-width: 300px;
-    max-height: 300px;
-    overflow-y: auto;
-    z-index: 100;
-  }
   
   :global(.bn-inline-content [data-mention]) {
-    color: #a78bfa;
-    background-color: rgba(167, 139, 250, 0.1);
+    color: hsl(var(--p));
+    background-color: hsl(var(--p) / 0.1);
     padding: 0 2px;
     border-radius: 2px;
     font-weight: 500;
   }
 
-  .hash-menu {
-    min-width: 250px;
-    max-width: 350px;
-    max-height: 300px;
-    overflow-y: auto;
-    z-index: 100;
-  }
-  
   :global(.bn-inline-content a[href^="channel-"], 
           .bn-inline-content a[href^="thread/"], 
           .bn-inline-content a[href^="thread-"]) {
-    color: #8b5cf6 !important;
+    color: hsl(var(--p)) !important;
     font-weight: 500;
     text-decoration: none !important;
     padding: 0 2px;
-    background-color: rgba(139, 92, 246, 0.1);
+    background-color: hsl(var(--p) / 0.1);
     border-radius: 3px;
   }
 
   :global(.bn-inline-content a[href^="channel-"]:hover, 
           .bn-inline-content a[href^="thread/"]:hover, 
           .bn-inline-content a[href^="thread-"]:hover) {
-    background-color: rgba(139, 92, 246, 0.2);
+    background-color: hsl(var(--p) / 0.2);
   }
 </style>
