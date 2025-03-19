@@ -377,7 +377,7 @@
       </Tabs.Trigger>
       <Tabs.Trigger
         value="wiki"
-        class="flex gap-2 w-full justify-center transition-all duration-150 items-center px-4 py-1 data-[state=active]:bg-violet-800 rounded"
+        class="tab flex gap-2"
       >
         <Icon icon="tabler:notebook" color="white" class="text-2xl" />
         {#if !isMobile}
