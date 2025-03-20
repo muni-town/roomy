@@ -1,7 +1,5 @@
 <script lang="ts">
   import { Avatar, Button, Checkbox, Popover, Toolbar } from "bits-ui";
-  import type { Announcement, Message, Space, Ulid } from "$lib/schemas/types";
-  import { renderMarkdownSanitized } from "$lib/markdown";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
   import { getContext } from "svelte";
@@ -14,9 +12,7 @@
   import Drawer from "./Drawer.svelte";
   import AvatarImage from "./AvatarImage.svelte";
   import { getContentHtml } from "$lib/tiptap/editor";
-  import type { Autodoc } from "$lib/autodoc/peer";
   import { page } from "$app/state";
-  import { isAnnouncement } from "$lib/utils";
 
   type Props = {
     id: Ulid;

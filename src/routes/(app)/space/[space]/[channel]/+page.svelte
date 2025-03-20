@@ -16,20 +16,13 @@
   import AvatarImage from "$lib/components/AvatarImage.svelte";
   import { Button, Popover, Tabs } from "bits-ui";
 
-  import type {
-    Did,
-    Space,
-    Channel,
-    Ulid,
-    Announcement,
-    Thread,
-  } from "$lib/schemas/types";
-  import type { Autodoc } from "$lib/autodoc/peer";
   import { format, isToday } from "date-fns";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  let spaceContext = getContext("space") as { get value(): Autodoc<Space> | undefined };
+  let spaceContext = getContext("space") as {
+    get value(): Autodoc<Space> | undefined;
+  };
   let space = $derived(spaceContext.value);
   let channel = $derived(space?.view.channels[page.params.channel]) as
     | Channel
@@ -40,7 +33,10 @@
     let related: { [ulid: string]: Thread } = {};
     if (space && channel) {
       Object.entries(space.view.threads).map(([ulid, thread]) => {
-        if (!thread.softDeleted && thread.relatedChannel === page.params.channel) {
+        if (
+          !thread.softDeleted &&
+          thread.relatedChannel === page.params.channel
+        ) {
           related[ulid] = thread;
         }
       });
@@ -55,7 +51,7 @@
 
   // thread maker
   let isThreading = $state({ value: false });
-  $inspect({ isThreading })
+  $inspect({ isThreading });
   let threadTitleInput = $state("");
   let selectedMessages: Ulid[] = $state([]);
   setContext("isThreading", isThreading);
@@ -66,7 +62,9 @@
     selectedMessages = selectedMessages.filter((m) => m != message);
   });
   setContext("deleteMessage", (message: Ulid) => {
-    if (!space) { return; }
+    if (!space) {
+      return;
+    }
     space.change((doc) => {
       // TODO: don't remove from timeline, just delete ID? We need to eventually add a marker
       // showing the messages is deleted in the timeline.
@@ -143,8 +141,8 @@
 
       // messages can be selected in any order
       // sort them on create based on their position from the channel
-      selectedMessages.sort((a,b) => {
-        return channel.timeline.indexOf(a) - channel.timeline.indexOf(b)
+      selectedMessages.sort((a, b) => {
+        return channel.timeline.indexOf(a) - channel.timeline.indexOf(b);
       });
 
       for (const id of selectedMessages) {
@@ -159,31 +157,35 @@
           kind: "messageMoved",
           relatedMessages: [id],
           relatedThreads: [threadId],
-          reactions: {}
+          reactions: {},
         };
 
-        doc.messages[announcementId] = announcement; 
+        doc.messages[announcementId] = announcement;
 
         // push announcement at moved message's index
-        doc.channels[page.params.channel].timeline.splice(index, 0, announcementId);
+        doc.channels[page.params.channel].timeline.splice(
+          index,
+          0,
+          announcementId,
+        );
       }
 
       // create thread
       doc.threads[threadId] = {
         title: threadTitleInput,
         timeline: threadTimeline,
-        relatedChannel: page.params.channel
+        relatedChannel: page.params.channel,
       };
-      
+
       // create an Announcement about the new Thread in current channel
       const announcementId = ulid();
       const announcement: Announcement = {
         kind: "threadCreated",
         relatedThreads: [threadId],
-        reactions: {}
+        reactions: {},
       };
 
-      doc.messages[announcementId] = announcement; 
+      doc.messages[announcementId] = announcement;
       doc.channels[page.params.channel].timeline.push(announcementId);
     });
 
@@ -228,7 +230,7 @@
         reactions: {},
         content: JSON.stringify(messageInput),
         ...(replyingTo && { replyTo: replyingTo.id }),
-        
+
         // TODO: image upload refactor with tiptap
         // ...(images && { images }),
       };
@@ -268,7 +270,9 @@
   let channelNameInput = $state("");
   let channelCategoryInput = $state(undefined) as undefined | string;
   $effect(() => {
-    if (!space) { return }
+    if (!space) {
+      return;
+    }
     channelNameInput = channel?.name || "";
     channelCategoryInput = Object.entries(space.view.categories).find(
       ([_id, category]) => category.channels.includes(page.params.channel),
@@ -347,7 +351,9 @@
       <AvatarImage avatarUrl={channel?.avatar} handle={channel?.name ?? ""} />
     {/if}
 
-    <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}>
+    <h4
+      class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}
+    >
       {channel?.name}
     </h4>
   </div>
@@ -357,17 +363,14 @@
       <Tabs.Trigger
         value="chat"
         onclick={() => goto(page.url.pathname)}
-        class="tab flex gap-2" 
+        class="tab flex gap-2"
       >
         <Icon icon="tabler:message" class="text-2xl" />
         {#if !isMobile}
           <p>Chat</p>
         {/if}
       </Tabs.Trigger>
-      <Tabs.Trigger
-        value="threads"
-        class="tab flex gap-2" 
-      >
+      <Tabs.Trigger value="threads" class="tab flex gap-2">
         <Icon icon="material-symbols:thread-unread-rounded" class="text-2xl" />
         {#if !isMobile}
           <p>Threads</p>
@@ -384,7 +387,6 @@
 </header>
 <div class="divider my-0"></div>
 
-
 {#if tab === "chat"}
   {@render chatTab()}
 {:else}
@@ -396,7 +398,9 @@
     {#each Object.entries(relatedThreads) as [ulid, thread]}
       <a href={`/space/${page.params.space}/thread/${ulid}`}>
         <li class="list-row join-item flex items-center w-full bg-base-200">
-          <h3 class="card-title text-xl font-medium text-primary">{thread.title}</h3>
+          <h3 class="card-title text-xl font-medium text-primary">
+            {thread.title}
+          </h3>
           {@render timestamp(ulid)}
         </li>
       </a>
@@ -451,10 +455,9 @@
             </div>
           {/if}
           <div class="relative">
-
             <!-- TODO: get all users that has joined the server -->
-            <ChatInput 
-              bind:content={messageInput} 
+            <ChatInput
+              bind:content={messageInput}
               users={users.value}
               context={contextItems.value}
               onEnter={sendMessage}
@@ -513,29 +516,27 @@
   {/if}
 {/snippet}
 
-
 {#snippet toolbar()}
   <menu class="relative flex items-center gap-3 px-2 w-fit justify-end">
-    <Popover.Root bind:open={isThreading.value}> 
+    <Popover.Root bind:open={isThreading.value}>
       <Popover.Trigger>
-        <Icon
-          icon="tabler:needle-thread"
-          class="text-2xl"
-        />
+        <Icon icon="tabler:needle-thread" class="text-2xl" />
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content 
-          side="left" 
-          sideOffset={8} 
-          interactOutsideBehavior="ignore" 
+        <Popover.Content
+          side="left"
+          sideOffset={8}
+          interactOutsideBehavior="ignore"
           class="my-4 bg-base-300 rounded py-4 px-5"
         >
           <form onsubmit={createThread} class="flex flex-col gap-4">
-            <input type="text" bind:value={threadTitleInput} class="input" placeholder="Thread Title" />
-            <button 
-              type="submit" 
-              class="btn btn-primary"
-            >
+            <input
+              type="text"
+              bind:value={threadTitleInput}
+              class="input"
+              placeholder="Thread Title"
+            />
+            <button type="submit" class="btn btn-primary">
               Create Thread
             </button>
           </form>
@@ -581,9 +582,7 @@
               {/each}
             </select>
           {/if}
-          <Button.Root class="btn btn-primary">
-            Save Settings
-          </Button.Root>
+          <Button.Root class="btn btn-primary">Save Settings</Button.Root>
         </form>
       </Dialog>
     {/if}

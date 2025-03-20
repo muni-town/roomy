@@ -2,11 +2,8 @@
   import { ScrollArea } from "bits-ui";
   import { onNavigate } from "$app/navigation";
   import ChatMessage from "./ChatMessage.svelte";
-  import type { Autodoc } from "$lib/autodoc/peer";
-  import type { DM, Message, Space, Ulid } from "$lib/schemas/types";
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
-  import { isAnnouncement } from "$lib/utils";
 
   let {
     source,
