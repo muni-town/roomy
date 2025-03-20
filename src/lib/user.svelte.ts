@@ -1,12 +1,19 @@
 import { atproto } from "./atproto.svelte";
 import type { OAuthSession } from "@atproto/oauth-client-browser";
 import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
-import { Agent, ComAtprotoRepoUploadBlob } from "@atproto/api";
-import { IndexedDBStorageAdapter } from "@automerge/automerge-repo-storage-indexeddb";
+import { Agent } from "@atproto/api";
 import { lexicons } from "./lexicons";
 import { decodeBase32 } from "./base32";
 import { IN_TAURI, invoke } from "./tauri";
 import { page } from "$app/state";
+import { EntityId } from "@muni-town/leaf";
+
+// Reload app when this module changes to prevent accumulated connections
+if (import.meta.hot) {
+  import.meta.hot.accept(() => {
+    window.location.reload();
+  });
+}
 
 type Keypair = {
   publicKey: Uint8Array;
@@ -58,12 +65,38 @@ let keypair: {
   };
 });
 
-/** The user's automerge repository. */
-let storage = $derived.by(() => {
-  if (!session) return;
-  const did = session.did;
+/** The user's Roomy keypair. */
+let catalogId: {
+  value: string | undefined;
+} = $derived.by(() => {
+  let value: string | undefined = $state();
 
-  return new IndexedDBStorageAdapter(did, "autodoc");
+  if (session && agent) {
+    agent.com.atproto.repo
+      .getRecord({
+        repo: agent.assertDid,
+        collection: "chat.roomy.01JPNX7AA9BSM6TY2GWW1TR5V7.catalog",
+        rkey: "self",
+      })
+      .then((resp) => {
+        value = (resp.data.value as { id: string }).id;
+      })
+      .catch(async () => {
+        const newCatalogId = new EntityId().toString();
+        await agent?.com.atproto.repo.createRecord({
+          collection: "chat.roomy.01JPNX7AA9BSM6TY2GWW1TR5V7.catalog",
+          record: { id: newCatalogId },
+          repo: agent.assertDid,
+          rkey: "self",
+        });
+        value = newCatalogId;
+      });
+  }
+  return {
+    get value() {
+      return value;
+    },
+  };
 });
 
 /** The user store. */
@@ -74,6 +107,10 @@ export const user = {
    * */
   get agent() {
     return agent;
+  },
+
+  get catalogId() {
+    return catalogId;
   },
 
   /**
@@ -102,18 +139,8 @@ export const user = {
     return profile;
   },
 
-  /** User storage adapter. */
-  get storage() {
-    return storage;
-  },
-
   get keypair() {
     return keypair;
-  },
-
-  /** Interface to the user's chat data. */
-  get repo() {
-    return storage;
   },
 
   /**
@@ -142,20 +169,19 @@ export const user = {
       scope: atproto.scope,
     });
     if (IN_TAURI) {
-      const { openUrl } = window.__TAURI__.opener
-      const { onOpenUrl } = window.__TAURI__.deepLink
+      const { openUrl } = window.__TAURI__.opener;
+      const { onOpenUrl } = window.__TAURI__.deepLink;
 
-      openUrl(url)
+      openUrl(url);
       await onOpenUrl((urls) => {
-        if (!urls || urls.length < 1) return
-        const url = new URL(urls[0])
-        const path = page.url
+        if (!urls || urls.length < 1) return;
+        const url = new URL(urls[0]);
+        const path = page.url;
 
         path.search = url.search;
         path.pathname = url.pathname;
-        window.location.href = path.href
-      })
-
+        window.location.href = path.href;
+      });
     } else {
       window.location.href = url.href;
 

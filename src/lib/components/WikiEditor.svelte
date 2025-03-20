@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { codeToHtml } from 'shiki';
+  import { codeToHtml } from "shiki";
   import { BlockNoteEditor } from "@blocknote/core";
   import "@blocknote/core/style.css";
   import { onMount } from "svelte";
@@ -7,32 +7,24 @@
   import { Button } from "bits-ui";
   import Icon from "@iconify/svelte";
   import { page } from "$app/state";
-  import type { Autodoc } from "$lib/autodoc/peer";
-  import type { Space, Channel } from "$lib/schemas/types";
-  import type { Highlighter } from 'shiki';
-  import { getContext, setContext } from "svelte";
-  import type { Item } from '$lib/tiptap/editor';
-  import Link from '@tiptap/extension-link';
+  import { getContext } from "svelte";
+  import Link from "@tiptap/extension-link";
+  import { g } from "$lib/global.svelte";
+  import { Content } from "@roomy-chat/sdk";
 
-  const { space, channel, isAdmin } = $props<{
-    space: Autodoc<Space>;
-    channel: Channel;
-    isAdmin: boolean;
-  }>();
-
-  let wikiContent = $state(channel?.wiki?.content || null);
-  let wikiRenderedHtml = $state(channel?.wiki?.html || "");
+  let channelAsWiki = $derived(g.channel?.forceCast(Content));
+  let wikiRenderedHtml = $state("");
   let processedHtml = $state("");
   let isEditingWiki = $state(false);
   let editorElement: HTMLElement;
   let editor: BlockNoteEditor | null;
 
   interface UserItem {
-    value: string;   
-    label: string;   
-    category: string; 
+    value: string;
+    label: string;
+    category: string;
   }
-  
+
   let users = getContext<{ value: UserItem[] }>("users");
 
   let slashMenuVisible = $state(false);
@@ -41,38 +33,62 @@
     {
       name: "Heading 1",
       icon: "tabler:h-1",
-      action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "heading", props: {level: 1} }),
+      action: () =>
+        editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, {
+          type: "heading",
+          props: { level: 1 },
+        }),
     },
     {
       name: "Heading 2",
       icon: "tabler:h-2",
-      action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "heading", props: {level: 2} }),
+      action: () =>
+        editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, {
+          type: "heading",
+          props: { level: 2 },
+        }),
     },
     {
       name: "Heading 3",
       icon: "tabler:h-3",
-      action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "heading", props: {level: 3} }),
+      action: () =>
+        editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, {
+          type: "heading",
+          props: { level: 3 },
+        }),
     },
     {
       name: "Bulleted List",
       icon: "tabler:list",
-      action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "bulletListItem" }),
+      action: () =>
+        editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, {
+          type: "bulletListItem",
+        }),
     },
     {
       name: "Numbered List",
       icon: "tabler:list-numbers",
-      action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "numberedListItem" }),
+      action: () =>
+        editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, {
+          type: "numberedListItem",
+        }),
     },
     {
       name: "Checklist",
       icon: "tabler:checkbox",
-      action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "checkListItem" }),
+      action: () =>
+        editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, {
+          type: "checkListItem",
+        }),
     },
     {
       name: "Code Block",
       icon: "tabler:code",
-      action: () => editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, { type: "codeBlock" }),
-    }
+      action: () =>
+        editor?.updateBlock(editor?.getTextCursorPosition()?.block.id, {
+          type: "codeBlock",
+        }),
+    },
   ]);
 
   let mentionMenuVisible = $state(false);
@@ -82,37 +98,43 @@
 
   let hashMenuVisible = $state(false);
   let hashMenuPosition = $state({ x: 0, y: 0 });
-  let filteredItems = $state<{id: string, name: string, type: 'thread' | 'channel'}[]>([]);
+  let filteredItems = $state<
+    { id: string; name: string; type: "thread" | "channel" }[]
+  >([]);
   let hashQuery = $state("");
 
   let selectionTooltipVisible = $state(false);
   let selectionTooltipPosition = $state({ x: 0, y: 0 });
   let formatCommands = $state([
-    { name: "Bold", icon: "tabler:bold", action: () => editor?.toggleStyles({bold: true}) },
-    { name: "Italic", icon: "tabler:italic", action: () => editor?.toggleStyles({italic: true}) },
-    { name: "Underline", icon: "tabler:underline", action: () => editor?.toggleStyles({underline: true}) },
-    { name: "Strike", icon: "tabler:strikethrough", action: () => editor?.toggleStyles({strike: true}) },
-    { name: "Link", icon: "tabler:link", action: () => addLinkToSelection() }
+    {
+      name: "Bold",
+      icon: "tabler:bold",
+      action: () => editor?.toggleStyles({ bold: true }),
+    },
+    {
+      name: "Italic",
+      icon: "tabler:italic",
+      action: () => editor?.toggleStyles({ italic: true }),
+    },
+    {
+      name: "Underline",
+      icon: "tabler:underline",
+      action: () => editor?.toggleStyles({ underline: true }),
+    },
+    {
+      name: "Strike",
+      icon: "tabler:strikethrough",
+      action: () => editor?.toggleStyles({ strike: true }),
+    },
+    { name: "Link", icon: "tabler:link", action: () => addLinkToSelection() },
   ]);
 
   let urlPromptVisible = $state(false);
   let urlInputValue = $state("https://");
   let urlPromptCallback: ((url: string) => void) | null = $state(null);
 
-  let wikiRelatedThreads = $derived(() => {
-    if (!space || !channel?.wiki?.relatedThreads) return {};
-
-    const threads: { [key: string]: any } = {};
-    for (const threadId of channel.wiki.relatedThreads) {
-      if (space.view.threads[threadId]) {
-        threads[threadId] = space.view.threads[threadId];
-      }
-    }
-    return threads;
-  });
-
   function setEditingWiki(value: boolean) {
-    if (value && !isAdmin) {
+    if (value && !g.isAdmin) {
       toast.error("Only admins can edit the wiki", { position: "bottom-end" });
       return;
     }
@@ -145,23 +167,25 @@
           const menuHeight = 300;
           const viewportHeight = window.innerHeight;
           const scrollY = window.scrollY;
-          const wouldOverflow = top + 20 + menuHeight > viewportHeight + scrollY;
+          const wouldOverflow =
+            top + 20 + menuHeight > viewportHeight + scrollY;
           const yPosition = wouldOverflow
             ? Math.max(scrollY, top - menuHeight - 10)
             : top + 20;
           slashMenuPosition = { x: left, y: yPosition };
           mentionMenuVisible = false;
           hashMenuVisible = false;
-        } 
+        }
         // Handle mentions
-        else if (content.text.endsWith('@')) {
+        else if (content.text.endsWith("@")) {
           mentionMenuVisible = true;
           mentionQuery = "";
           const { top, left } = editor.getSelectionBoundingBox()?.toJSON();
           const menuHeight = 300;
           const viewportHeight = window.innerHeight;
           const scrollY = window.scrollY;
-          const wouldOverflow = top + 20 + menuHeight > viewportHeight + scrollY;
+          const wouldOverflow =
+            top + 20 + menuHeight > viewportHeight + scrollY;
           const yPosition = wouldOverflow
             ? Math.max(scrollY, top - menuHeight - 10)
             : top + 20;
@@ -171,14 +195,15 @@
           hashMenuVisible = false;
         }
         // Handle hashtags
-        else if (content.text.endsWith('#')) {
+        else if (content.text.endsWith("#")) {
           hashMenuVisible = true;
           hashQuery = "";
           const { top, left } = editor.getSelectionBoundingBox()?.toJSON();
           const menuHeight = 300;
           const viewportHeight = window.innerHeight;
           const scrollY = window.scrollY;
-          const wouldOverflow = top + 20 + menuHeight > viewportHeight + scrollY;
+          const wouldOverflow =
+            top + 20 + menuHeight > viewportHeight + scrollY;
           const yPosition = wouldOverflow
             ? Math.max(scrollY, top - menuHeight - 10)
             : top + 20;
@@ -190,8 +215,8 @@
         // Check if typing in an active mention
         else if (mentionMenuVisible) {
           const text = content.text;
-          const atIndex = text.lastIndexOf('@');
-          
+          const atIndex = text.lastIndexOf("@");
+
           if (atIndex !== -1) {
             mentionQuery = text.substring(atIndex + 1);
             updateFilteredUsers();
@@ -202,16 +227,15 @@
         // Check if typing in an active hashtag
         else if (hashMenuVisible) {
           const text = content.text;
-          const hashIndex = text.lastIndexOf('#');
-          
+          const hashIndex = text.lastIndexOf("#");
+
           if (hashIndex !== -1) {
             hashQuery = text.substring(hashIndex + 1);
             updateFilteredItems();
           } else {
             hashMenuVisible = false;
           }
-        }
-        else {
+        } else {
           slashMenuVisible = false;
           mentionMenuVisible = false;
           hashMenuVisible = false;
@@ -236,8 +260,8 @@
         const rect = editor.getSelectionBoundingBox()?.toJSON();
         if (rect) {
           selectionTooltipPosition = {
-            x: rect.left + (rect.width / 2),
-            y: rect.top - 50
+            x: rect.left + rect.width / 2,
+            y: rect.top - 50,
           };
           selectionTooltipVisible = true;
         }
@@ -250,7 +274,11 @@
     }
   };
 
-  function executeSlashCommand(command: { name?: string; icon?: string; action: any; }) {
+  function executeSlashCommand(command: {
+    name?: string;
+    icon?: string;
+    action: any;
+  }) {
     if (!editor) return;
     const pos = editor.getTextCursorPosition();
     command.action();
@@ -259,7 +287,11 @@
     slashMenuVisible = false;
   }
 
-  function executeFormatCommand(command: { name?: string; icon?: string; action: any; }) {
+  function executeFormatCommand(command: {
+    name?: string;
+    icon?: string;
+    action: any;
+  }) {
     if (!editor) return;
     command.action();
   }
@@ -270,49 +302,46 @@
       filteredUsers = [];
       return;
     }
-    
+
     const query = mentionQuery.toLowerCase();
     filteredUsers = users.value
-      .filter(user => user.label?.toLowerCase().includes(query))
+      .filter((user) => user.label?.toLowerCase().includes(query))
       .slice(0, 10); // Limit to 10 results
   }
 
   // Filter channels and threads based on hash query
-  function updateFilteredItems() {
-    if (!space) {
+  async function updateFilteredItems() {
+    if (!g.space) {
       filteredItems = [];
       return;
     }
-    
+
     const query = hashQuery.toLowerCase();
-    const items: {id: string, name: string, type: 'thread' | 'channel'}[] = [];
-    
+    const items: { id: string; name: string; type: "thread" | "channel" }[] =
+      [];
+
     // Add channels
-    if (space.view.channels) {
-      Object.entries(space.view.channels).forEach(([id, channel]) => {
-        if (channel.name && channel.name.toLowerCase().includes(query)) {
-          items.push({
-            id,
-            name: channel.name,
-            type: 'channel'
-          });
-        }
-      });
+
+    for (const channel of await g.space.channels.items()) {
+      if (channel.name && channel.name.toLowerCase().includes(query)) {
+        items.push({
+          id: channel.id,
+          name: channel.name,
+          type: "channel",
+        });
+      }
     }
-    
-    if (space.view?.threads) {
-      Object.entries(space.view.threads).forEach(([id, thread]) => {
-        const name = thread.title || thread.firstMsg?.text?.substring(0, 30) || id;
-        if (name.toLowerCase().includes(query)) {
-          items.push({
-            id,
-            name: name + (thread.title ? '' : '...'),
-            type: 'thread'
-          });
-        }
-      });
+
+    for (const thread of await g.space.threads.items()) {
+      if (thread.name.toLowerCase().includes(query)) {
+        items.push({
+          id: thread.id,
+          name: thread.name,
+          type: "thread",
+        });
+      }
     }
-    
+
     // Limit to 10 results
     filteredItems = items.slice(0, 10);
   }
@@ -320,39 +349,51 @@
   // Insert user mention
   function insertUserMention(user: UserItem) {
     if (!editor) return;
-    
+
     try {
       const cursorPosition = editor.getTextCursorPosition();
       if (!cursorPosition) return;
-      
+
       const block = cursorPosition.block;
       const content = Array.isArray(block.content) ? block.content[0] : null;
-      
+
       if (content && content.type === "text") {
         const text = content.text;
-        const atIndex = text.lastIndexOf('@');
-        
+        const atIndex = text.lastIndexOf("@");
+
         if (atIndex !== -1) {
           const newText = text.substring(0, atIndex) + `@${user.label}`;
-          
-          editor.updateBlock(block.id, { 
-            content: [{ 
-              type: "text", 
-              text: newText,
-              styles: {
-                backgroundColor: "#8b5cf6",
-              } 
-            }]
+
+          editor.updateBlock(block.id, {
+            content: [
+              {
+                type: "text",
+                text: newText,
+                styles: {
+                  backgroundColor: "#8b5cf6",
+                },
+              },
+            ],
           });
-          editor.insertBlocks([{type: "paragraph", content: ""}], block.id, "after");
-          editor.setSelection(block.id,editor.getNextBlock(block.id)?.id ?? block.id);
-          editor.createLink(user.label.startsWith('https://') ? user.label : `https://${user.label}`);
-          
+          editor.insertBlocks(
+            [{ type: "paragraph", content: "" }],
+            block.id,
+            "after",
+          );
+          editor.setSelection(
+            block.id,
+            editor.getNextBlock(block.id)?.id ?? block.id,
+          );
+          editor.createLink(
+            user.label.startsWith("https://")
+              ? user.label
+              : `https://${user.label}`,
+          );
 
           editor.setTextCursorPosition(block.id, "end");
         }
       }
-      
+
       mentionMenuVisible = false;
     } catch (e) {
       console.error("Error inserting mention:", e);
@@ -360,39 +401,51 @@
     }
   }
 
-  function insertHashLink(item: {id: string, name: string, type: 'thread' | 'channel'}) {
+  function insertHashLink(item: {
+    id: string;
+    name: string;
+    type: "thread" | "channel";
+  }) {
     if (!editor) return;
-    
+
     try {
       const cursorPosition = editor.getTextCursorPosition();
       if (!cursorPosition) return;
-      
+
       const block = cursorPosition.block;
       const content = Array.isArray(block.content) ? block.content[0] : null;
-      
+
       if (content && content.type === "text") {
         const text = content.text;
-        const hashIndex = text.lastIndexOf('#');
-        
+        const hashIndex = text.lastIndexOf("#");
+
         if (hashIndex !== -1) {
           const newText = text.substring(0, hashIndex) + `#${item.name}`;
-          
-          editor.updateBlock(block.id, { 
-            content: [{ 
-              type: "text", 
-              text: newText,
-              styles: {
-                backgroundColor: "#8b5cf6",
-                textColor: "white"
-              } 
-            }]
+
+          editor.updateBlock(block.id, {
+            content: [
+              {
+                type: "text",
+                text: newText,
+                styles: {
+                  backgroundColor: "#8b5cf6",
+                  textColor: "white",
+                },
+              },
+            ],
           });
-          
-          editor.insertBlocks([{type: "paragraph", content: ""}], block.id, "after");
-          
-          editor.setSelection(block.id, editor.getNextBlock(block.id)?.id ?? block.id);
-          
-          
+
+          editor.insertBlocks(
+            [{ type: "paragraph", content: "" }],
+            block.id,
+            "after",
+          );
+
+          editor.setSelection(
+            block.id,
+            editor.getNextBlock(block.id)?.id ?? block.id,
+          );
+
           const linkId =
             item.type === "channel"
               ? `/space/${page.params.space}/${item.id}`
@@ -402,7 +455,7 @@
           editor.setTextCursorPosition(block.id, "end");
         }
       }
-      
+
       hashMenuVisible = false;
     } catch (e) {
       console.error("Error inserting hash link:", e);
@@ -414,24 +467,28 @@
     if (!editorElement) return;
     try {
       editorElement.innerHTML = "";
-          editor = BlockNoteEditor.create({_extensions: {link: Link.configure({
-        HTMLAttributes: {
-          target: null,
+      editor = BlockNoteEditor.create({
+        _extensions: {
+          link: Link.configure({
+            HTMLAttributes: {
+              target: null,
+            },
+          }),
         },
-      })}});
+      });
 
       editor.mount(editorElement);
       editor.onChange(EditorHandler);
       editor.onSelectionChange(SelectionHandler);
       let targetBlockId = null;
-      editorElement.addEventListener('click', (e) => {
-        const blockElement = (e.target as Element)?.closest('.bn-block');
+      editorElement.addEventListener("click", (e) => {
+        const blockElement = (e.target as Element)?.closest(".bn-block");
         if (blockElement) {
           const blockRect = blockElement.getBoundingClientRect();
           if (e.clientX < blockRect.left + 24) {
             e.preventDefault();
             e.stopPropagation();
-            const blockId = blockElement.getAttribute('data-id');
+            const blockId = blockElement.getAttribute("data-id");
             if (!blockId) return;
             slashMenuPosition = { x: blockRect.left + 30, y: e.clientY };
             slashMenuVisible = true;
@@ -439,9 +496,9 @@
           }
         }
       });
-      if (wikiContent) {
+      if (channelAsWiki) {
         try {
-          const parsedContent = JSON.parse(wikiContent);
+          const parsedContent = JSON.parse(channelAsWiki.bodyJson);
           setTimeout(() => {
             if (editor && editor.document) {
               editor.replaceBlocks(editor.document, parsedContent);
@@ -465,58 +522,61 @@
     try {
       // Process the HTML to find code blocks and apply syntax highlighting
       const parser = new DOMParser();
-      const doc = parser.parseFromString(wikiRenderedHtml, 'text/html');
-      
+      const doc = parser.parseFromString(wikiRenderedHtml, "text/html");
+
       // Find all code blocks with language class
-      const codeBlocks = doc.querySelectorAll('pre code');
-      
+      const codeBlocks = doc.querySelectorAll("pre code");
+
       for (const codeBlock of codeBlocks) {
         const languageMatch = codeBlock.className.match(/language-(\w+)/);
         if (!languageMatch) continue;
-        
-        const language = languageMatch[1];
-        const code = codeBlock.textContent || '';
-        
+
+        const language = languageMatch[1] || "txt";
+        const code = codeBlock.textContent || "";
+
         try {
           const highlightedCode = await codeToHtml(code, {
             lang: language,
-            theme: 'vitesse-dark'
+            theme: "vitesse-dark",
           });
-          
+
           // Replace the code block with highlighted version
           const preElement = codeBlock.parentElement;
           if (preElement) {
-            const tempContainer = document.createElement('div');
+            const tempContainer = document.createElement("div");
             tempContainer.innerHTML = highlightedCode;
-            
-            const labelDiv = document.createElement('div');
-            labelDiv.className = 'code-language-label';
+
+            const labelDiv = document.createElement("div");
+            labelDiv.className = "code-language-label";
             labelDiv.textContent = formatLanguageName(language);
-            
+
             const shikiElement = tempContainer.firstElementChild;
             if (shikiElement) {
-              const wrapper = document.createElement('div');
-              wrapper.className = 'code-block-wrapper';
+              const wrapper = document.createElement("div");
+              wrapper.className = "code-block-wrapper";
               wrapper.appendChild(labelDiv);
               wrapper.appendChild(shikiElement);
-              
+
               preElement.replaceWith(wrapper);
             } else {
-              preElement.replaceWith(tempContainer.firstElementChild);
+              preElement.replaceWith(tempContainer.firstElementChild!);
             }
           }
         } catch (e) {
-          console.error(`Failed to highlight code for language ${language}:`, e);
+          console.error(
+            `Failed to highlight code for language ${language}:`,
+            e,
+          );
         }
       }
-      
+
       processedHtml = doc.body.innerHTML;
     } catch (e) {
       console.error("Failed to process code blocks:", e);
       processedHtml = wikiRenderedHtml;
     }
   }
-  
+
   // Function to format language name for display
   function formatLanguageName(lang: string): string {
     const languageMap: Record<string, string> = {
@@ -546,45 +606,45 @@
       yml: "YAML",
       yaml: "YAML",
       md: "Markdown",
-      svelte: "Svelte"
+      svelte: "Svelte",
     };
-    
+
     return languageMap[lang] || lang.charAt(0).toUpperCase() + lang.slice(1);
   }
 
   $effect(() => {
-    if (wikiRenderedHtml) {
-      processCodeBlocks();
+    wikiRenderedHtml;
+    processCodeBlocks();
+  });
+
+  $effect(() => {
+    if (!channelAsWiki || channelAsWiki.bodyJson == "{}") {
+      wikiRenderedHtml = "";
+      return;
+    }
+    const json = JSON.parse(channelAsWiki.bodyJson);
+    try {
+      const rendererEditor = BlockNoteEditor.create();
+      rendererEditor
+        .blocksToFullHTML(json)
+        .then((html) => {
+          wikiRenderedHtml = html;
+        })
+        .catch(() => {
+          wikiRenderedHtml = "";
+        });
+    } catch (_e) {
+      wikiRenderedHtml = "";
     }
   });
 
   async function saveWikiContent() {
-    if (!editor || !space) return;
+    if (!editor || !g.space || !channelAsWiki) return;
     try {
-      const content = JSON.stringify(editor.document);
-      const html = await editor.blocksToFullHTML(editor.document);
-      
-      const channelId = page?.params?.channel;
-      
-      space.change((doc: { channels: { [x: string]: { wiki: { content: string; html: string; lastUpdated: number; relatedThreads: string[]; }; }; }; }) => {
-        if (!channelId) return;
-        
-        if (!doc.channels[channelId].wiki) {
-          doc.channels[channelId].wiki = {
-            content,
-            html,
-            relatedThreads: [],
-            lastUpdated: Date.now(),
-          };
-        } else {
-          doc.channels[channelId].wiki.content = content;
-          doc.channels[channelId].wiki.html = html;
-          doc.channels[channelId].wiki.lastUpdated = Date.now();
-        }
-      });
+      channelAsWiki.bodyJson = JSON.stringify(editor.document);
+      channelAsWiki.updatedDate = new Date();
+      channelAsWiki.commit();
 
-      wikiContent = content;
-      wikiRenderedHtml = html;
       setEditingWiki(false);
       toast.success("Wiki saved successfully", { position: "bottom-end" });
     } catch (e) {
@@ -597,7 +657,9 @@
     if (!editor) return;
     const selection = editor.getSelection();
     if (!selection) {
-      toast.error("Please select text to create a link", { position: "bottom-end" });
+      toast.error("Please select text to create a link", {
+        position: "bottom-end",
+      });
       return;
     }
     urlInputValue = "https://";
@@ -631,13 +693,6 @@
   }
 
   $effect(() => {
-    if (channel?.wiki) {
-      wikiContent = channel.wiki.content;
-      wikiRenderedHtml = channel.wiki.html || "";
-    }
-  });
-
-  $effect(() => {
     if (editor) {
       editor = null;
     }
@@ -653,7 +708,7 @@
       link.href = "https://unpkg.com/@blocknote/core@latest/style.css";
       document.head.appendChild(link);
     }
-    
+
     if (wikiRenderedHtml) {
       await processCodeBlocks();
     }
@@ -661,11 +716,13 @@
 </script>
 
 <div class="flex flex-col gap-4 h-full overflow-y-auto p-2">
-  {#if !wikiContent || isEditingWiki}
+  {#if !channelAsWiki || isEditingWiki}
     <section class="wiki-editor-container">
       {#if isEditingWiki}
         <div class="mb-4 flex justify-between items-center">
-          <h3 class="text-xl font-bold text-base-content">{channel?.name} Wiki</h3>
+          <h3 class="text-xl font-bold text-base-content">
+            {g.channel?.name} Wiki
+          </h3>
           <div class="flex gap-2">
             <Button.Root
               onclick={() => setEditingWiki(false)}
@@ -673,18 +730,19 @@
             >
               Cancel
             </Button.Root>
-            <Button.Root
-              onclick={saveWikiContent}
-              class="btn btn-primary"
-            >
+            <Button.Root onclick={saveWikiContent} class="btn btn-primary">
               Save
             </Button.Root>
           </div>
         </div>
         <div
-          class="wiki-editor bg-base-300/20 rounded-lg border border-base-content/30 p-4 h-auto {isAdmin ? 'admin-mode' : ''}"
+          class="wiki-editor bg-base-300/20 rounded-lg border border-base-content/30 p-4 h-auto {g.isAdmin
+            ? 'admin-mode'
+            : ''}"
         >
-          <div class="permanent-formatting-toolbar bg-base-300 border border-base-content/20 rounded-lg shadow-lg p-1 mb-4 flex items-center">
+          <div
+            class="permanent-formatting-toolbar bg-base-300 border border-base-content/20 rounded-lg shadow-lg p-1 mb-4 flex items-center"
+          >
             {#each formatCommands as command}
               <button
                 class="btn btn-ghost btn-square btn-sm"
@@ -707,10 +765,10 @@
               {/if}
             {/each}
           </div>
-          
+
           <div bind:this={editorElement} class="min-h-[400px]"></div>
 
-          {#if slashMenuVisible && isAdmin}
+          {#if slashMenuVisible && g.isAdmin}
             <div
               class="slash-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
               style="left: {slashMenuPosition.x}px; top: {slashMenuPosition.y}px;"
@@ -731,7 +789,7 @@
             </div>
           {/if}
 
-          {#if mentionMenuVisible && isAdmin}
+          {#if mentionMenuVisible && g.isAdmin}
             <div
               class="mention-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
               style="left: {mentionMenuPosition.x}px; top: {mentionMenuPosition.y}px;"
@@ -745,8 +803,12 @@
                           class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-base-200 text-base-content"
                           onclick={() => insertUserMention(user)}
                         >
-                          <div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center overflow-hidden">
-                            <span class="text-xs font-bold text-primary-content">{user.label[0]?.toUpperCase() || '?'}</span>
+                          <div
+                            class="w-6 h-6 rounded-full bg-primary flex items-center justify-center overflow-hidden"
+                          >
+                            <span class="text-xs font-bold text-primary-content"
+                              >{user.label[0]?.toUpperCase() || "?"}</span
+                            >
                           </div>
                           <span>{user.label}</span>
                         </button>
@@ -754,13 +816,15 @@
                     {/each}
                   </ul>
                 {:else}
-                  <div class="px-4 py-2 text-base-content/70">No users found</div>
+                  <div class="px-4 py-2 text-base-content/70">
+                    No users found
+                  </div>
                 {/if}
               </div>
             </div>
           {/if}
 
-          {#if hashMenuVisible && isAdmin}
+          {#if hashMenuVisible && g.isAdmin}
             <div
               class="hash-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
               style="left: {hashMenuPosition.x}px; top: {hashMenuPosition.y}px;"
@@ -774,26 +838,34 @@
                           class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-base-200 text-base-content"
                           onclick={() => insertHashLink(item)}
                         >
-                          <div class="w-6 h-6 rounded flex items-center justify-center overflow-hidden">
-                            <Icon 
-                              icon={item.type === 'channel' ? 'tabler:hash' : 'tabler:message-circle'} 
-                              class="text-lg text-primary" 
+                          <div
+                            class="w-6 h-6 rounded flex items-center justify-center overflow-hidden"
+                          >
+                            <Icon
+                              icon={item.type === "channel"
+                                ? "tabler:hash"
+                                : "tabler:message-circle"}
+                              class="text-lg text-primary"
                             />
                           </div>
                           <span>{item.name}</span>
-                          <span class="text-xs text-base-content/70 ml-auto">{item.type}</span>
+                          <span class="text-xs text-base-content/70 ml-auto"
+                            >{item.type}</span
+                          >
                         </button>
                       </li>
                     {/each}
                   </ul>
                 {:else}
-                  <div class="px-4 py-2 text-base-content/70">No channels or threads found</div>
+                  <div class="px-4 py-2 text-base-content/70">
+                    No channels or threads found
+                  </div>
                 {/if}
               </div>
             </div>
           {/if}
 
-          {#if selectionTooltipVisible && isAdmin}
+          {#if selectionTooltipVisible && g.isAdmin}
             <div
               class="tooltip-animate bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50 flex items-center justify-center p-1"
               style="left: {selectionTooltipPosition.x}px; top: {selectionTooltipPosition.y}px; transform: translateX(-50%);"
@@ -817,7 +889,7 @@
         <div
           class="flex justify-center items-center p-8 border border-dashed border-base-content/30 rounded-lg"
         >
-          {#if isAdmin}
+          {#if g.isAdmin}
             <Button.Root
               onclick={() => setEditingWiki(true)}
               class="btn btn-primary"
@@ -836,8 +908,10 @@
   {:else}
     <section class="wiki-content">
       <div class="flex justify-between items-center mb-4">
-        <h3 class="text-xl font-bold text-base-content">{channel?.name} Wiki</h3>
-        {#if isAdmin}
+        <h3 class="text-xl font-bold text-base-content">
+          {g.channel?.name} Wiki
+        </h3>
+        {#if g.isAdmin}
           <Button.Root
             onclick={() => setEditingWiki(true)}
             class="btn btn-primary"
@@ -857,8 +931,12 @@
 </div>
 
 {#if urlPromptVisible}
-  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
-    <div class="bg-base-300 border border-base-content/20 rounded-lg shadow-lg p-6 max-w-md w-full">
+  <div
+    class="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]"
+  >
+    <div
+      class="bg-base-300 border border-base-content/20 rounded-lg shadow-lg p-6 max-w-md w-full"
+    >
       <h3 class="text-lg font-bold text-base-content mb-4">Add Link</h3>
       <form onsubmit={submitUrlPrompt} class="flex flex-col gap-4">
         <input
@@ -876,12 +954,7 @@
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            class="btn btn-primary"
-          >
-            Add Link
-          </button>
+          <button type="submit" class="btn btn-primary"> Add Link </button>
         </div>
       </form>
     </div>
@@ -892,11 +965,11 @@
   :global(.bn-block) {
     position: relative;
     transition: padding-left 0.15s ease;
-    padding-left: 24px; 
+    padding-left: 24px;
   }
-  
-  :global(.wiki-editor-container .admin-mode .bn-block::before){
-    content: '+';
+
+  :global(.wiki-editor-container .admin-mode .bn-block::before) {
+    content: "+";
     position: absolute;
     left: 6px;
     top: 50%;
@@ -911,25 +984,29 @@
     align-items: center;
     justify-content: center;
     opacity: 0;
-    transition: opacity 0.15s ease, background-color 0.15s ease;
+    transition:
+      opacity 0.15s ease,
+      background-color 0.15s ease;
     cursor: pointer;
     z-index: 10;
     background-color: transparent;
   }
-  
-  :global(.wiki-editor-container .admin-mode .bn-block:hover::before){
+
+  :global(.wiki-editor-container .admin-mode .bn-block:hover::before) {
     opacity: 1;
   }
-  
-  :global(.wiki-editor-container .admin-mode .bn-block::before:hover ){
+
+  :global(.wiki-editor-container .admin-mode .bn-block::before:hover) {
     background-color: hsl(var(--p) / 0.2);
   }
-  
-  :global(.wiki-editor){
+
+  :global(.wiki-editor) {
     color: hsl(var(--bc));
   }
 
-  .slash-menu, .hash-menu, .mention-menu {
+  .slash-menu,
+  .hash-menu,
+  .mention-menu {
     min-width: 200px;
     max-width: 350px;
     max-height: 300px;
@@ -941,22 +1018,22 @@
     overflow: visible;
   }
 
-  :global(.wiki-rendered input[type="checkbox"]){
+  :global(.wiki-rendered input[type="checkbox"]) {
     pointer-events: none;
   }
 
-  :global([type="checkbox"]){
-    pointer-events: auto; 
+  :global([type="checkbox"]) {
+    pointer-events: auto;
     cursor: pointer;
   }
 
-  :global(.bn-inline-content a){
+  :global(.bn-inline-content a) {
     color: hsl(var(--p));
     text-decoration: underline;
     cursor: pointer;
   }
-  
-  :global(input[type="checkbox"]){
+
+  :global(input[type="checkbox"]) {
     accent-color: hsl(var(--p));
     width: 16px;
     height: 16px;
@@ -966,10 +1043,16 @@
   .tooltip-animate {
     animation: tooltipFadeIn 0.2s ease;
   }
-  
+
   @keyframes tooltipFadeIn {
-    from { opacity: 0; transform: translateY(5px) translateX(-50%); }
-    to { opacity: 1; transform: translateY(0) translateX(-50%); }
+    from {
+      opacity: 0;
+      transform: translateY(5px) translateX(-50%);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) translateX(-50%);
+    }
   }
 
   .permanent-formatting-toolbar {
@@ -986,7 +1069,7 @@
     padding: 1em;
     border-radius: 0.5em;
     overflow-x: auto;
-    font-family: 'Fira Code', monospace;
+    font-family: "Fira Code", monospace;
     font-size: 0.9em;
     line-height: 1.6;
     tab-size: 2;
@@ -1002,7 +1085,7 @@
     margin: 1em 0;
     border-radius: 0.5em;
     overflow: hidden;
-    background-color: hsl(var(--n)); 
+    background-color: hsl(var(--n));
   }
 
   :global(.wiki-rendered code:not([class])) {
@@ -1010,7 +1093,7 @@
     margin: 0;
     background-color: hsl(var(--p) / 0.2);
     border-radius: 3px;
-    font-family: 'Fira Code', monospace;
+    font-family: "Fira Code", monospace;
     font-size: 0.85em;
   }
 
@@ -1019,7 +1102,7 @@
     margin-top: 0.5em;
     width: inherit;
   }
-  
+
   :global(.code-language-label) {
     position: absolute;
     top: 0;
@@ -1029,11 +1112,11 @@
     padding: 2px 8px;
     font-size: 0.75rem;
     border-bottom-left-radius: 4px;
-    font-family: 'Fira Code', monospace;
+    font-family: "Fira Code", monospace;
     z-index: 10;
     user-select: none;
   }
-  
+
   :global(.bn-inline-content [data-mention]) {
     color: hsl(var(--p));
     background-color: hsl(var(--p) / 0.1);
@@ -1042,9 +1125,11 @@
     font-weight: 500;
   }
 
-  :global(.bn-inline-content a[href^="channel-"], 
-          .bn-inline-content a[href^="thread/"], 
-          .bn-inline-content a[href^="thread-"]) {
+  :global(
+    .bn-inline-content a[href^="channel-"],
+    .bn-inline-content a[href^="thread/"],
+    .bn-inline-content a[href^="thread-"]
+  ) {
     color: hsl(var(--p)) !important;
     font-weight: 500;
     text-decoration: none !important;
@@ -1053,9 +1138,11 @@
     border-radius: 3px;
   }
 
-  :global(.bn-inline-content a[href^="channel-"]:hover, 
-          .bn-inline-content a[href^="thread/"]:hover, 
-          .bn-inline-content a[href^="thread-"]:hover) {
+  :global(
+    .bn-inline-content a[href^="channel-"]:hover,
+    .bn-inline-content a[href^="thread/"]:hover,
+    .bn-inline-content a[href^="thread-"]:hover
+  ) {
     background-color: hsl(var(--p) / 0.2);
   }
 </style>

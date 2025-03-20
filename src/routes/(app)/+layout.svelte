@@ -1,13 +1,12 @@
 <script lang="ts">
   import "../../app.css";
-  import { ulid } from "ulidx";
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { page } from "$app/state";
   import { dev } from "$app/environment";
   import { goto } from "$app/navigation";
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
-  import { cleanHandle } from "$lib/utils";
+  import { cleanHandle, derivePromise } from "$lib/utils.svelte";
 
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
@@ -18,8 +17,8 @@
   import { AvatarPixel } from "svelte-boring-avatars";
   import { Avatar, Button, ToggleGroup } from "bits-ui";
 
-  import { RoomyPdsStorageAdapter } from "$lib/autodoc-storage";
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
+  import { Channel, Space, Thread, type EntityIdStr } from "@roomy-chat/sdk";
 
   let { children } = $props();
 
@@ -28,29 +27,66 @@
   let isLoginDialogOpen = $state(!user.session);
 
   let newSpaceName = $state("");
-  let deleteLoading = $state(false);
   let isNewSpaceDialogOpen = $state(false);
 
-  let servers: string[] = $derived(
-    g.catalog?.view.spaces.map((x) => x.id) || [],
-  );
+  let spaces = derivePromise([], () => g.roomy.spaces.items());
   let currentCatalog = $state("");
 
+  /** Update the global space and channel when the route changes. */
   $effect(() => {
-    if (page.params.space) { currentCatalog = page.params.space; }
-    else if (page.url.pathname === "/home" ) { currentCatalog = "home"; }
+    if (page.url.pathname === "/home") {
+      currentCatalog = "home";
+      g.space = undefined;
+    } else if (page.params.space) {
+      try {
+        g.roomy
+          .open(Space, page.params.space as EntityIdStr)
+          .then((space) => untrack(() => (g.space = space)));
+
+        currentCatalog = page.params.space;
+      } catch (e) {
+        console.error("Error opening space:", e);
+        goto("/");
+      }
+    } else {
+      g.space = undefined;
+    }
+  });
+
+  $effect(() => {
+    if (g.space && page.params.channel) {
+      try {
+        g.roomy
+          .open(Channel, page.params.channel as EntityIdStr)
+          .then((channel) => untrack(() => (g.channel = channel)));
+      } catch (e) {
+        console.error("Error opening channel:", e);
+        goto("/");
+      }
+    } else if (g.space && page.params.thread) {
+      try {
+        g.roomy
+          .open(Thread, page.params.thread as EntityIdStr)
+          .then((thread) => untrack(() => (g.channel = thread)));
+      } catch (e) {
+        console.error("Error opening thread:", e);
+        goto("/");
+      }
+    } else {
+      g.channel = undefined;
+    }
+  });
+
+  $effect(() => {
+    if (g.space && user.agent) {
+      g.isAdmin = g.space.admins.toArray().includes(user.agent.assertDid);
+    } else {
+      g.isAdmin = false;
+    }
   });
 
   onMount(async () => {
     await user.init();
-  });
-
-  onMount(() => {
-    if (page.params.did) {
-      currentCatalog = "dm";
-    } else if (page.params.space) {
-      currentCatalog = page.params.space;
-    }
   });
 
   $effect(() => {
@@ -58,40 +94,17 @@
   });
 
   async function createSpace() {
-    if (!newSpaceName) return;
-    let id = ulid();
-    if (!g.catalog) return;
-    g.catalog.change((doc) => {
-      doc.spaces.push({
-        id,
-        knownMembers: [],
-      });
-    });
-    setTimeout(() => {
-      g.spaces[id].change((doc) => {
-        doc.name = newSpaceName;
-        doc.admins.push(user.agent!.assertDid);
-      });
-      newSpaceName = "";
-    }, 0);
+    if (!newSpaceName || !user.agent) return;
+    const space = await g.roomy.create(Space);
+    space.name = newSpaceName;
+    space.admins.push(user.agent.assertDid);
+    space.commit();
+
+    g.roomy.spaces.push(space);
+    g.roomy.commit();
+    newSpaceName = "";
+
     isNewSpaceDialogOpen = false;
-  }
-
-  async function deleteData(kind: "all" | "local") {
-    deleteLoading = true;
-
-    if (kind == "all" && user.agent?.did) {
-      await new RoomyPdsStorageAdapter(user.agent!).removeRange([]);
-    }
-
-    localStorage.clear();
-    indexedDB.databases().then((dbs) => {
-      dbs.forEach((db) => {
-        if (db.name) indexedDB.deleteDatabase(db.name);
-      });
-    });
-
-    window.location.reload();
   }
 
   let loginError = $state("");
@@ -141,24 +154,21 @@
 
       <div class="divider mt-0 mb-1"></div>
 
-      {#each servers as server}
-        {@const space = g.spaces[server]}
-        {#if space}
-          <ToggleGroup.Item
-            onclick={() => goto(`/space/${server}`)}
-            value={server}
-            title={space.view.name}
-            class="btn btn-ghost size-16 data-[state=on]:border-primary"
-          >
-            <!-- TODO: Use server avatar -->
-            <Avatar.Root>
-              <Avatar.Image />
-              <Avatar.Fallback>
-                <AvatarPixel name={server} />
-              </Avatar.Fallback>
-            </Avatar.Root>
-          </ToggleGroup.Item>
-        {/if}
+      {#each spaces.value as space}
+        <ToggleGroup.Item
+          onclick={() => goto(`/space/${space.id}`)}
+          value={space.id}
+          title={space.name}
+          class="btn btn-ghost size-16 data-[state=on]:border-primary"
+        >
+          <!-- TODO: Use server avatar -->
+          <Avatar.Root>
+            <Avatar.Image />
+            <Avatar.Fallback>
+              <AvatarPixel name={space.id} />
+            </Avatar.Fallback>
+          </Avatar.Root>
+        </ToggleGroup.Item>
       {/each}
     </ToggleGroup.Root>
 
@@ -170,10 +180,7 @@
         bind:isDialogOpen={isNewSpaceDialogOpen}
       >
         {#snippet dialogTrigger()}
-          <Button.Root
-            title="Create Space"
-            class="btn btn-ghost w-fit"
-          >
+          <Button.Root title="Create Space" class="btn btn-ghost w-fit">
             <Icon icon="basil:add-solid" font-size="2em" />
           </Button.Root>
         {/snippet}
@@ -191,66 +198,14 @@
         </form>
       </Dialog>
 
-      <Dialog title="Delete Data">
-        {#snippet dialogTrigger()}
-          <Button.Root class="btn btn-ghost w-fit">
-            <Icon icon="ri:alarm-warning-fill" class="text-2xl" />
-          </Button.Root>
-        {/snippet}
-
-        <div class="flex flex-col items-center gap-4">
-          <p class="text-sm">
-            <strong>Warning:</strong> This will delete the Roomy data from this device
-            and from your AtProto PDS if you chose.
-          </p>
-          <p class="text-sm">
-            Roomy is currently <em>extremely</em> experimental, so until it gets
-            a little more stable it may be necessary to reset all of your data in
-            order to fix a problem after an update of Roomy is published.
-          </p>
-          <Button.Root
-            onclick={() => deleteData("local")}
-            class="btn btn-error"
-            disabled={deleteLoading}
-          >
-            {#if deleteLoading}
-              <span class="loading loading-spinner"></span>
-            {/if}
-            Delete Local Data 
-          </Button.Root>
-          <Button.Root
-            onclick={() => deleteData("all")}
-            class="btn btn-error"
-            disabled={deleteLoading}
-          >
-            {#if deleteLoading}
-              <span class="loading loading-spinner"></span>
-            {/if}
-            Delete Local and PDS Data
-          </Button.Root>
-        </div>
-      </Dialog>
-
-      {#if dev}
-        <Button.Root onclick={() => goto("/dev")} class="btn btn-ghost">
-          <Icon
-            icon="fluent:window-dev-tools-16-regular"
-            class="text-2xl"
-          />
-        </Button.Root>
-      {/if}
-
       <Dialog
         title={user.session
           ? `Logged In As ${user.profile.data?.handle}`
-          : "Login with AT Protocol"
-        }
+          : "Login with AT Protocol"}
         bind:isDialogOpen={isLoginDialogOpen}
       >
         {#snippet dialogTrigger()}
-          <Button.Root
-            class="btn btn-ghost w-fit" 
-          >
+          <Button.Root class="btn btn-ghost w-fit">
             <AvatarImage
               handle={user.profile.data?.handle || ""}
               avatarUrl={user.profile.data?.avatar}
@@ -260,10 +215,7 @@
 
         {#if user.session}
           <section class="flex flex-col gap-4">
-            <Button.Root
-              onclick={user.logout}
-              class="btn btn-error"
-            >
+            <Button.Root onclick={user.logout} class="btn btn-error">
               Logout
             </Button.Root>
           </section>
@@ -277,7 +229,10 @@
               placeholder="Handle (eg alice.bsky.social)"
               class="input w-full"
             />
-            <Button.Root disabled={loginLoading || !handleInput} class="btn btn-primary">
+            <Button.Root
+              disabled={loginLoading || !handleInput}
+              class="btn btn-primary"
+            >
               {#if loginLoading}
                 <span class="loading loading-spinner"></span>
               {/if}

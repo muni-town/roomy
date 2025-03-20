@@ -3,157 +3,144 @@
   import Dialog from "$lib/components/Dialog.svelte";
   import { Accordion, Button, ToggleGroup } from "bits-ui";
 
-  import { ulid } from "ulidx";
   import { page } from "$app/state";
   import { g } from "$lib/global.svelte";
   import { goto } from "$app/navigation";
   import { outerWidth } from "svelte/reactivity/window";
 
-  import type { Space } from "$lib/schemas/types";
-  import type { Autodoc } from "$lib/autodoc/peer";
-  import { user } from "$lib/user.svelte";
   import { setContext } from "svelte";
   import { slide } from "svelte/transition";
   import type { Item } from "$lib/tiptap/editor";
   import { getProfile } from "$lib/profile.svelte";
-  import { isAnnouncement } from "$lib/utils";
+  import { derivePromise } from "$lib/utils.svelte";
+  import { Category, Channel, Message } from "@roomy-chat/sdk";
 
   let { children } = $props();
   let isMobile = $derived((outerWidth.current || 0) < 640);
   let sidebarAccordionValues = $state(["channels", "threads"]);
 
-  let space = $derived(g.spaces[page.params.space] as Autodoc<Space> | undefined) 
-
   // TODO: track users via the space data
-  let users = $state(() => {
-    if (!space) { return [] };
+  let users = derivePromise([], async () => {
+    if (!g.space) {
+      return [];
+    }
+
     const result = new Set();
-    for (const message of Object.values(space.view.messages)) {
-      if (!isAnnouncement(message)) {
-        result.add(message.author);
+    for (const channel of await g.space.channels.items()) {
+      for (const timelineItem of await channel.timeline.items()) {
+        const message = timelineItem.tryCast(Message);
+        if (message && message.authors.length > 0) {
+          for (const author of message.authors.toArray()) {
+            result.add(author);
+          }
+        }
       }
     }
-    const items = result.values().toArray().map((author) => { 
-      const profile = getProfile(author as string);
-      return { value: author, label: profile.handle, category: "user" }
-    }) as Item[];
+    const items = (await Promise.all(
+      [...result.values()].map(async (author) => {
+        const profile = await getProfile(author as string);
+        return { value: author, label: profile?.handle, category: "user" };
+      }),
+    )) as Item[];
 
     return items;
   });
 
-  let availableThreads = $derived(
-    space ? Object.fromEntries(
-      Object.entries(space.view.threads).filter(([ulid, thread]) => 
-      !thread.softDeleted
-    )) : {}
+  let availableThreads = derivePromise([], async () =>
+    ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
   );
 
-  let contextItems: Item[] = $derived.by(() => {
-    if (!space) { return [] };
+  let categories = derivePromise([], async () => {
+    if (!g.space) return [];
+    return (await g.space.sidebarItems.items())
+      .map((x) => x.tryCast(Category) as Category)
+      .filter((x) => !!x);
+  });
+
+  let sidebarItems = derivePromise([], async () => {
+    if (!g.space) return [];
+    return await g.space.sidebarItems.items();
+  });
+
+  let contextItems: { value: Item[] } = derivePromise([], async () => {
+    if (!g.space) {
+      return [];
+    }
     const items = [];
 
     // add threads to list
-    for (const thread of Object.values(space.view.threads)) {
+    for (const thread of await g.space.threads.items()) {
       if (!thread.softDeleted) {
-        items.push({ 
+        items.push({
           value: JSON.stringify({
-            ulid,
+            id: thread.id,
             space: page.params.space,
-            type: "thread"
-          }), 
-          label: thread.title,
-          category: "thread"
-        }) 
+            type: "thread",
+          }),
+          label: thread.name,
+          category: "thread",
+        });
       }
     }
 
     // add channels to list
-    items.push(...Object.values(space.view.channels).map((channel) => {
-      return {
-        value: JSON.stringify({
-          ulid,
-          space: page.params.space,
-          type: "channel"
-        }),
-        label: channel.name,
-        category: "channel"
-      }
-    }));
-  
+    items.push(
+      ...(await g.space.channels.items()).map((channel) => {
+        return {
+          value: JSON.stringify({
+            id: channel.id,
+            space: page.params.space,
+            type: "channel",
+          }),
+          label: channel.name,
+          category: "channel",
+        };
+      }),
+    );
+
     return items;
   });
-  let isAdmin = $derived( 
-    space && user.agent && space.view.admins.includes(user.agent.assertDid)
-  );
 
-  setContext("isAdmin", { get value() { return isAdmin }});
-  setContext("space", { get value() { return space }});
-  setContext("users", { get value() { return users() }});
-  setContext("contextItems", { get value() { return contextItems }});
+  setContext("users", users);
+  setContext("contextItems", contextItems);
 
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
-  function createCategory() {
-    space?.change((doc) => {
-      const id = ulid();
-      doc.categories[id] = {
-        channels: [],
-        name: newCategoryName,
-      };
-      doc.sidebarItems.push({
-        type: "category",
-        id,
-      });
-    });
+  async function createCategory() {
+    if (!g.space) return;
+
+    const category = await g.roomy.create(Category);
+    category.name = newCategoryName;
+    category.appendAdminsFrom(g.space);
+    category.commit();
+    g.space.sidebarItems.push(category);
+    g.space.commit();
+
     showNewCategoryDialog = false;
   }
 
-  let currentItemId = $state("");
-  $effect(() => {
-    if (page.params.channel) {
-      currentItemId = page.params.channel;
-    }
-    else {
-      currentItemId = page.params.thread;
-    }
-  });
-  
   let showNewChannelDialog = $state(false);
   let newChannelName = $state("");
-  let newChannelCategory = $state(undefined) as undefined | string;
-  function createChannel() {
-    const id = ulid();
-    space?.change((doc) => {
-      doc.channels[id] = {
-        name: newChannelName,
-        threads: [],
-        timeline: [],
-        avatar: "",
-        description: "",
-      };
-      if (!newChannelCategory) {
-        doc.sidebarItems.push({
-          type: "channel",
-          id,
-        });
-      } else {
-        doc.categories[newChannelCategory].channels.push(id);
-      }
-    });
+  let newChannelCategory = $state(undefined) as undefined | Category;
+  async function createChannel() {
+    if (!g.space) return;
+    const channel = await g.roomy.create(Channel);
+    channel.appendAdminsFrom(g.space);
+    channel.name = newChannelName;
+    channel.commit();
+
+    g.space.channels.push(channel);
+    if (newChannelCategory) {
+      newChannelCategory.channels.push(channel);
+      newChannelCategory.commit();
+    } else {
+      g.space.sidebarItems.push(channel);
+    }
+    g.space.commit();
 
     newChannelCategory = undefined;
     newChannelName = "";
     showNewChannelDialog = false;
-  }
-
-  function openSpace() {
-    if (space) return;
-    g.catalog?.change((doc) => {
-      doc.spaces.push({
-        id: page.params.space,
-        knownMembers: [],
-      });
-    });
   }
 
   //
@@ -161,35 +148,32 @@
   //
 
   let showCategoryDialog = $state(false);
-  let editingCategory = $state("");
+  let editingCategory = $state(undefined) as undefined | Category;
   let categoryNameInput = $state("");
   function saveCategory() {
-    space?.change((space) => {
-      space.categories[editingCategory].name = categoryNameInput;
-    });
+    if (!editingCategory) return;
+    editingCategory.name = categoryNameInput;
+    editingCategory.commit();
     showCategoryDialog = false;
   }
 </script>
 
-{#if space}
+{#if g.space}
   <nav
     class={[
       !isMobile && "max-w-[16rem] border-r-2 border-base-200",
       "px-4 py-5 flex flex-col gap-4 w-full",
     ]}
   >
-    <h1 class="text-2xl font-extrabold text-base-content text-ellipsis">
-      {space.view.name}
+    <h1 class="text-2xl font-extrabold text-base-content text-ellipsis flex">
+      {g.space.name}
     </h1>
 
     <div class="divider my-0"></div>
 
-    {#if isAdmin}
+    {#if g.isAdmin}
       <menu class="menu p-0 w-full justify-between join join-vertical">
-        <Dialog
-          title="Create Channel"
-          bind:isDialogOpen={showNewChannelDialog}
-        >
+        <Dialog title="Create Channel" bind:isDialogOpen={showNewChannelDialog}>
           {#snippet dialogTrigger()}
             <Button.Root
               title="Create Channel"
@@ -203,18 +187,14 @@
           <form class="flex flex-col gap-4" onsubmit={createChannel}>
             <label class="input w-full">
               <span class="label">Name</span>
-              <input
-                bind:value={newChannelName}
-                placeholder="General"
-              />
+              <input bind:value={newChannelName} placeholder="General" />
             </label>
             <label class="select w-full">
               <span class="label">Category</span>
-              <select bind:value={newChannelCategory} class="">
+              <select bind:value={newChannelCategory}>
                 <option value={undefined}>None</option>
-                {#each Object.keys(space.view.categories) as categoryId}
-                  {@const category = space.view.categories[categoryId]}
-                  <option value={categoryId}>{category.name}</option>
+                {#each categories.value as category}
+                  <option value={category}>{category.name}</option>
                 {/each}
               </select>
             </label>
@@ -242,10 +222,7 @@
           <form class="flex flex-col gap-4" onsubmit={createCategory}>
             <label class="input w-full">
               <span class="label">Name</span>
-              <input
-                bind:value={newCategoryName}
-                placeholder="Discussions"
-              />
+              <input bind:value={newCategoryName} placeholder="Discussions" />
             </label>
             <Button.Root class="btn btn-primary">
               <Icon icon="basil:add-outline" font-size="1.8em" />
@@ -255,39 +232,49 @@
         </Dialog>
       </menu>
     {/if}
-  
-    <ToggleGroup.Root type="single" bind:value={currentItemId}>
-      <Accordion.Root 
-        type="multiple" 
-        bind:value={sidebarAccordionValues} 
+
+    <ToggleGroup.Root type="single" value={g.channel?.id}>
+      <Accordion.Root
+        type="multiple"
+        bind:value={sidebarAccordionValues}
         class="flex flex-col gap-4"
-      > 
+      >
         <Accordion.Item value="channels">
           <Accordion.Header>
-            <Accordion.Trigger class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content">
+            <Accordion.Trigger
+              class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
+            >
               <h3>Channels</h3>
-              <Icon icon="basil:caret-up-solid" class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("channels") && "rotate-180"}`} /> 
+              <Icon
+                icon="basil:caret-up-solid"
+                class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("channels") && "rotate-180"}`}
+              />
             </Accordion.Trigger>
           </Accordion.Header>
           <Accordion.Content forceMount>
-            {#snippet child({ open })}
+            {#snippet child({ open }: { open: boolean })}
               {#if open}
-                {@render channelsSidebar(space as Autodoc<Space>)}
+                {@render channelsSidebar()}
               {/if}
             {/snippet}
           </Accordion.Content>
         </Accordion.Item>
-        {#if Object.keys(availableThreads).length > 0}
+        {#if availableThreads.value.length > 0}
           <div class="divider my-0"></div>
           <Accordion.Item value="threads">
             <Accordion.Header>
-              <Accordion.Trigger class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content">
+              <Accordion.Trigger
+                class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
+              >
                 <h3>Threads</h3>
-                <Icon icon="basil:caret-up-solid" class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("threads") && "rotate-180"}`} /> 
+                <Icon
+                  icon="basil:caret-up-solid"
+                  class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("threads") && "rotate-180"}`}
+                />
               </Accordion.Trigger>
             </Accordion.Header>
             <Accordion.Content>
-              {#snippet child({ open })}
+              {#snippet child({ open }: { open: boolean })}
                 {#if open}
                   {@render threadsSidebar()}
                 {/if}
@@ -316,31 +303,26 @@
 
   <!-- If there is no space. -->
 {:else}
-  <div class="flex flex-col justify-center items-center w-full">
-    <Button.Root
-      onclick={openSpace}
-      class="px-4 py-2 bg-white text-black rounded-lg  active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer"
-    >
-      Join Space
-    </Button.Root>
-  </div>
+  <span class="loading loading-spinner mx-auto w-25"></span>
 {/if}
 
-{#snippet channelsSidebar(space: Autodoc<Space>)}
+{#snippet channelsSidebar()}
   <div transition:slide class="flex flex-col gap-4">
     <!-- Category and Channels -->
-    {#each space.view.sidebarItems as item}
-      {#if item.type == "category"}
-        {@const category = space.view.categories[item.id]}
-        <Accordion.Root type="single" value={category.name}> 
-          <Accordion.Item value={category.name}> 
-            <Accordion.Header class="flex justify-between"> 
-              <Accordion.Trigger class="flex text-sm font-semibold gap-2 items-center cursor-pointer">
+    {#each sidebarItems.value as item}
+      {@const category = item.tryCast(Category)}
+      {#if category}
+        <Accordion.Root type="single" value={item.name}>
+          <Accordion.Item value={item.name}>
+            <Accordion.Header class="flex justify-between">
+              <Accordion.Trigger
+                class="flex text-sm font-semibold gap-2 items-center cursor-pointer"
+              >
                 <Icon icon="basil:folder-solid" />
-                {category.name}
+                {item.name}
               </Accordion.Trigger>
 
-              {#if isAdmin}
+              {#if g.isAdmin}
                 <Dialog
                   title="Channel Settings"
                   bind:isDialogOpen={showCategoryDialog}
@@ -350,15 +332,18 @@
                       title="Channel Settings"
                       class="cursor-pointer btn btn-ghost btn-circle"
                       onclick={() => {
-                        editingCategory = item.id;
-                        categoryNameInput = category.name;
+                        editingCategory = category;
+                        categoryNameInput = item.name;
                       }}
                     >
                       <Icon icon="lucide:settings" class="size-4" />
                     </Button.Root>
                   {/snippet}
 
-                  <form class="flex flex-col gap-4 w-full" onsubmit={saveCategory}>
+                  <form
+                    class="flex flex-col gap-4 w-full"
+                    onsubmit={saveCategory}
+                  >
                     <label class="input w-full">
                       <span class="label">Name</span>
                       <input
@@ -366,7 +351,10 @@
                         placeholder="channel-name"
                       />
                     </label>
-                    <Button.Root disabled={!categoryNameInput} class="btn btn-primary">
+                    <Button.Root
+                      disabled={!categoryNameInput}
+                      class="btn btn-primary"
+                    >
                       Save Category
                     </Button.Root>
                   </form>
@@ -375,19 +363,33 @@
             </Accordion.Header>
 
             <Accordion.Content forceMount>
-              {#snippet child({ props, open })}
+              {#snippet child({
+                props,
+                open,
+              }: {
+                open: boolean;
+                props: unknown[];
+              })}
                 {#if open}
-                  <div {...props} transition:slide class="flex flex-col gap-4 py-2">
-                    {#each category.channels as channelId}
-                      {@const channel = space.view.channels[channelId]}
+                  <div
+                    {...props}
+                    transition:slide
+                    class="flex flex-col gap-4 py-2"
+                  >
+                    {#each category.channels.ids() as channelId}
                       <ToggleGroup.Item
-                        onclick={() => goto(`/space/${page.params.space}/${channelId}`)}
+                        onclick={() =>
+                          goto(`/space/${page.params.space}/${channelId}`)}
                         value={channelId}
                         class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
                       >
                         <h3 class="flex justify-start items-center gap-2 px-2">
                           <Icon icon="basil:comment-solid" />
-                          {channel.name}
+                          {#await g.roomy.open(Channel, channelId)}
+                            ...
+                          {:then channel}
+                            {channel.name}
+                          {/await}
                         </h3>
                       </ToggleGroup.Item>
                     {/each}
@@ -397,8 +399,7 @@
             </Accordion.Content>
           </Accordion.Item>
         </Accordion.Root>
-      {:else}
-        {@const channel = space.view.channels[item.id]}
+      {:else if item.matches(Channel)}
         <ToggleGroup.Item
           onclick={() => goto(`/space/${page.params.space}/${item.id}`)}
           value={item.id}
@@ -406,7 +407,7 @@
         >
           <h3 class="flex justify-start items-center gap-2 px-2">
             <Icon icon="basil:comment-solid" />
-            {channel.name}
+            {item.name}
           </h3>
         </ToggleGroup.Item>
       {/if}
@@ -416,17 +417,17 @@
 
 {#snippet threadsSidebar()}
   <div transition:slide class="flex flex-col gap-4">
-    {#each Object.entries(availableThreads) as [ulid, thread]} 
-        <ToggleGroup.Item
-          onclick={() => goto(`/space/${page.params.space}/thread/${ulid}`)}
-          value={ulid}
-          class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
-        >
-          <h3 class="flex justify-start items-center gap-2 px-2">
-            <Icon icon="material-symbols:thread-unread-rounded" />
-            {thread.title}
-          </h3>
-        </ToggleGroup.Item>
+    {#each availableThreads.value as thread}
+      <ToggleGroup.Item
+        onclick={() => goto(`/space/${page.params.space}/thread/${thread.id}`)}
+        value={thread.id}
+        class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
+      >
+        <h3 class="flex justify-start items-center gap-2 px-2">
+          <Icon icon="material-symbols:thread-unread-rounded" />
+          {thread.name}
+        </h3>
+      </ToggleGroup.Item>
     {/each}
   </div>
 {/snippet}
