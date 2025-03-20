@@ -78,7 +78,7 @@ async function initRoomy(agent: Agent): Promise<Roomy> {
   const websocket = new WebSocket('ws://127.0.0.1:8095')
 
   const peer = new SveltePeer(
-    new StorageManager(indexedDBStorageAdapter("mini-chat")),
+    new StorageManager(indexedDBStorageAdapter("roomy")),
     await webSocketSyncer(websocket),
   );
 
