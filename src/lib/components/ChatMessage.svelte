@@ -209,9 +209,9 @@
       {@render messageView(message)}
     {/if}
 
-    {#if Object.keys(message.reactions).length > 0}
+    {#if Object.keys(message.reactions.all()).length > 0}
       <div class="flex gap-2 flex-wrap">
-        {#each Object.keys(message.reactions) as reaction}
+        {#each Object.keys(message.reactions.all()) as reaction}
           {@render reactionToggle(reaction)}
         {/each}
         <Popover.Root bind:open={isEmojiRowPickerOpen}>
