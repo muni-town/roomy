@@ -1,29 +1,26 @@
-import { untrack } from "svelte";
 import { user } from "./user.svelte";
 
 let cache: {
   [did: string]: {
     handle: string;
     avatarUrl: string;
-    new: boolean;
   };
 } = $state({});
 
-export function getProfile(did: string): { handle: string; avatarUrl: string } {
-  untrack(() => cache);
-  if (!cache[did]) {
-    cache[did] = { handle: "", avatarUrl: "", new: true };
-  }
+export function getProfile(
+  did: string,
+): { handle: string; avatarUrl: string } | undefined {
   const entry = cache[did];
 
   queueMicrotask(() => {
-    if (entry.new == true) {
-      entry.new = false;
+    if (!cache[did]) {
       if (user.agent) {
         user.agent.getProfile({ actor: did }).then(async (resp) => {
           if (!resp.success) return;
-          entry.handle = resp.data.handle;
-          entry.avatarUrl = resp.data.avatar || "";
+          cache[did] = {
+            handle: resp.data.handle,
+            avatarUrl: resp.data.avatar || "",
+          };
         });
       }
     }

@@ -26,6 +26,8 @@
     Thread,
     Timeline,
   } from "@roomy-chat/sdk";
+  import type { JSONContent } from "@tiptap/core";
+  import { getProfile } from "$lib/profile.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
@@ -53,13 +55,6 @@
   setContext("removeSelectedMessage", (message: Message) => {
     selectedMessages = selectedMessages.filter((m) => m != message);
   });
-  setContext("deleteMessage", (message: Message) => {
-    if (!g.space) {
-      return;
-    }
-    message.softDeleted = true;
-    message.commit();
-  });
 
   $effect(() => {
     if (!isThreading.value && selectedMessages.length > 0) {
@@ -68,22 +63,10 @@
   });
 
   // Reply Utils
-  let replyingTo = $state<{
-    message: Message;
-    authorProfile: { handle: string; avatarUrl: string };
-    content: string;
-  } | null>();
-
-  setContext(
-    "setReplyTo",
-    (value: {
-      message: Message;
-      authorProfile: { handle: string; avatarUrl: string };
-      content: string;
-    }) => {
-      replyingTo = value;
-    },
-  );
+  let replyingTo = $state() as Message | undefined;
+  setContext("setReplyTo", (message: Message) => {
+    replyingTo = message;
+  });
 
   setContext("toggleReaction", (message: Message, reaction: string) => {
     if (!user.agent) return;
@@ -167,8 +150,9 @@
     const message = await g.roomy.create(Message);
     message.authors.push(user.agent.assertDid);
     message.bodyJson = JSON.stringify(messageInput);
+    message.createdDate = new Date();
     message.commit();
-    if (replyingTo) message.replyTo = replyingTo.message;
+    if (replyingTo) message.replyTo = replyingTo;
 
     // TODO: image upload refactor with tiptap
 
@@ -176,7 +160,7 @@
     g.channel.commit();
 
     messageInput = {};
-    replyingTo = null;
+    replyingTo = undefined;
     imageFiles = null;
   }
 
@@ -375,19 +359,20 @@
                 <h5 class="flex gap-2 items-center">
                   Replying to
                   <AvatarImage
-                    handle={replyingTo.authorProfile.handle}
-                    avatarUrl={replyingTo.authorProfile.avatarUrl}
+                    handle={getProfile(replyingTo.authors.get(0))?.handle || ''}
+                    avatarUrl={getProfile(replyingTo.authors.get(0))?.avatarUrl}
                     className="!w-4"
                   />
-                  <strong>{replyingTo.authorProfile.handle}</strong>
+                  <strong>{getProfile(replyingTo.authors.get(0))?.handle}</strong
+                  >
                 </h5>
                 <p class="text-gray-300 text-ellipsis italic">
-                  {@html getContentHtml(replyingTo.content)}
+                  {@html getContentHtml(JSON.parse(replyingTo.bodyJson || '{}'))}
                 </p>
               </div>
               <Button.Root
                 type="button"
-                onclick={() => (replyingTo = null)}
+                onclick={() => (replyingTo = undefined)}
                 class="btn btn-circle btn-ghost"
               >
                 <Icon icon="zondicons:close-solid" />

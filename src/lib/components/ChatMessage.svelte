@@ -3,7 +3,6 @@
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
   import { getContext } from "svelte";
-  import { decodeTime } from "ulidx";
   import { getProfile } from "$lib/profile.svelte";
   import Icon from "@iconify/svelte";
   import { user } from "$lib/user.svelte";
@@ -15,6 +14,7 @@
   import { page } from "$app/state";
   import { Announcement, Message, type EntityIdStr } from "@roomy-chat/sdk";
   import { g } from "$lib/global.svelte";
+  import { derivePromise } from "$lib/utils.svelte";
 
   type Props = {
     message: Message | Announcement;
@@ -22,15 +22,17 @@
 
   let { message }: Props = $props();
 
-  // set initial set with entries, no need for $effect
-  let reactionHandles = $state(
-    Object.fromEntries(
-      Object.entries(message.reactions).map(([reaction, dids]) => [
-        reaction,
-        dids.map((did) => getProfile(did).handle),
-      ]),
-    ),
-  );
+  let messageRepliedTo = derivePromise(undefined, async () => {
+    if (message.replyTo) {
+      return await g.roomy.open(Message, message.replyTo);
+    }
+  });
+  let relatedThreads = derivePromise([], async () => {
+    if (message instanceof Announcement) {
+      return await message.relatedThreads.items();
+    }
+    return [];
+  });
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
   let isDrawerOpen = $state(false);
@@ -58,26 +60,23 @@
   const selectMessage = getContext("selectMessage") as (
     message: Message,
   ) => void;
-  const deleteMessage = getContext("deleteMessage") as (
-    message: Message,
-  ) => void;
   const removeSelectedMessage = getContext("removeSelectedMessage") as (
     message: Message,
   ) => void;
-
-  const setReplyTo = getContext("setReplyTo") as (value: {
-    message: Message;
-    authorProfile: { handle: string; avatarUrl: string };
-    content: string;
-  }) => void;
-
+  const setReplyTo = getContext("setReplyTo") as (message: Message) => void;
   const scrollToMessage = getContext("scrollToMessage") as (
     id: EntityIdStr,
   ) => void;
 
+  function deleteMessage() {
+    message.softDeleted = true;
+    message.commit();
+  }
+
   function onEmojiPick(event: Event & { detail: { unicode: string } }) {
     if (!user.agent) return;
     message.reactions.toggle(event.detail.unicode, user.agent.assertDid);
+    message.commit();
     isEmojiToolbarPickerOpen = false;
     isEmojiRowPickerOpen = false;
   }
@@ -89,6 +88,12 @@
     } else {
       m && removeSelectedMessage(m);
     }
+  }
+
+  function toggleReaction(reaction: string) {
+    if (!user.agent) return;
+    message.reactions.toggle(reaction, user.agent.assertDid);
+    message.commit();
   }
 
   function scrollToReply() {
@@ -139,8 +144,6 @@
 
     switch (announcement.kind) {
       case "threadCreated": {
-        const relatedThread =
-          space.value.view.threads[announcement.relatedThreads![0]];
         schema.content.push({
           type: "paragraph",
           content: [
@@ -149,11 +152,11 @@
               type: "channelThreadMention",
               attrs: {
                 id: JSON.stringify({
-                  ulid: announcement.relatedThreads![0],
+                  ulid: relatedThreads.value[0]?.id,
                   space: page.params.space,
                   type: "thread",
                 }),
-                label: relatedThread.title,
+                label: relatedThreads.value[0]?.name,
               },
             },
           ],
@@ -161,8 +164,6 @@
         break;
       }
       case "messageMoved": {
-        const relatedThread =
-          space.value.view.threads[announcement.relatedThreads![0]];
         schema.content.push({
           type: "paragraph",
           content: [
@@ -171,11 +172,11 @@
               type: "channelThreadMention",
               attrs: {
                 id: JSON.stringify({
-                  ulid: announcement.relatedThreads![0],
+                  ulid: relatedThreads.value[0]?.id,
                   space: page.params.space,
                   type: "thread",
                 }),
-                label: relatedThread.title,
+                label: relatedThreads.value[0]?.name,
               },
             },
           ],
@@ -191,19 +192,19 @@
       }
     }
 
-    return getContentHtml(JSON.stringify(schema));
+    return getContentHtml(schema);
   }
 </script>
 
 <svelte:window onkeydown={onKeydown} onkeyup={onKeyup} />
 
-<li {id} class={`flex flex-col ${isMobile && "max-w-screen"}`}>
+<li id={message.id} class={`flex flex-col ${isMobile && "max-w-screen"}`}>
   <div
     class="relative group w-full h-fit flex flex-col gap-4 px-2 py-2.5 hover:bg-white/5 transition-all duration-75"
   >
-    {#if message.matches(Announcement)}
-      {@render announcementView()}
-    {:else}
+    {#if message instanceof Announcement}
+      {@render announcementView(message)}
+    {:else if message instanceof Message}
       {@render replyBanner()}
       {@render messageView(message)}
     {/if}
@@ -228,8 +229,7 @@
   </div>
 </li>
 
-{#snippet announcementView()}
-  {@const announcement = message as Announcement}
+{#snippet announcementView(announcement: Announcement)}
   {@render toolbar()}
   <div class="flex flex-col gap-4">
     {#if announcement.kind === "threadCreated"}
@@ -242,7 +242,9 @@
         class="flex flex-col text-start gap-2 w-full min-w-0"
       >
         <section class="flex items-center gap-2 flex-wrap w-fit">
-          {@render timestamp(id)}
+          {#if message.createdDate}
+            {@render timestamp(message.createdDate)}
+          {/if}
         </section>
 
         <p
@@ -252,9 +254,6 @@
         </p>
       </Button.Root>
     {:else if announcement.kind === "messageMoved"}
-      {@const related = space.value.view.messages[
-        announcement.relatedMessages![0]
-      ] as Message}
       <Button.Root
         onclick={() => {
           if (isMobile) {
@@ -269,10 +268,13 @@
         >
           {@html getAnnouncementHtml(announcement)}
         </p>
-        {@render timestamp(id)}
+        {#if message.createdDate}
+          {@render timestamp(message.createdDate)}
+        {/if}
       </Button.Root>
       <div class="flex items-start gap-4">
-        {@render messageView(announcement.relatedMessages![0], related)}
+        <!-- TODO: render announcement body -->
+        <!-- {@render messageView(message)} -->
       </div>
     {/if}
   </div>
@@ -286,12 +288,12 @@
 
   <div class="flex gap-4">
     <a
-      href={`https://bsky.app/profile/${authorProfile.handle}`}
+      href={`https://bsky.app/profile/${authorProfile?.handle}`}
       target="_blank"
     >
       <AvatarImage
-        handle={authorProfile.handle}
-        avatarUrl={authorProfile.avatarUrl}
+        handle={authorProfile?.handle || ""}
+        avatarUrl={authorProfile?.avatarUrl}
       />
     </a>
 
@@ -305,19 +307,20 @@
     >
       <section class="flex items-center gap-2 flex-wrap w-fit">
         <a
-          href={`https://bsky.app/profile/${authorProfile.handle}`}
+          href={`https://bsky.app/profile/${authorProfile?.handle}`}
           target="_blank"
           class="text-primary hover:underline"
         >
-          <h5 class="font-bold">{authorProfile.handle}</h5>
+          <h5 class="font-bold">{authorProfile?.handle}</h5>
         </a>
-        {@render timestamp(ulid)}
+        {@render timestamp(message.createdDate || new Date())}
       </section>
 
       <span class="prose select-text">
-        {@html getContentHtml(msg.content)}
+        {@html getContentHtml(JSON.parse(msg.bodyJson))}
       </span>
-      {#if msg.images?.length}
+      <!-- TODO: images. -->
+      <!-- {#if msg.images?.length}
         <div class="flex flex-wrap gap-2 mt-2">
           {#each msg.images as image}
             <img
@@ -328,7 +331,7 @@
             />
           {/each}
         </div>
-      {/if}
+      {/if} -->
     </Button.Root>
   </div>
 {/snippet}
@@ -339,7 +342,7 @@
       <div class="flex gap-4 justify-center mb-4">
         <Button.Root
           onclick={() => {
-            toggleReaction(id, "👍");
+            toggleReaction("👍");
             isDrawerOpen = false;
           }}
           class="btn btn-circle"
@@ -348,7 +351,7 @@
         </Button.Root>
         <Button.Root
           onclick={() => {
-            toggleReaction(id, "😂");
+            toggleReaction("😂");
             isDrawerOpen = false;
           }}
           class="btn btn-circle"
@@ -367,23 +370,21 @@
 
       {#if authorProfile}
         <div class="join join-vertical w-full">
-          <Button.Root
-            onclick={() => {
-              setReplyTo({
-                message: id,
-                authorProfile,
-                content: (message as Message).content,
-              });
-              isDrawerOpen = false;
-            }}
-            class="join-item btn w-full"
-          >
-            <Icon icon="fa6-solid:reply" />
-            Reply
-          </Button.Root>
+          {#if message instanceof Message}
+            <Button.Root
+              onclick={() => {
+                setReplyTo(message);
+                isDrawerOpen = false;
+              }}
+              class="join-item btn w-full"
+            >
+              <Icon icon="fa6-solid:reply" />
+              Reply
+            </Button.Root>
+          {/if}
           {#if mayDelete}
             <Button.Root
-              onclick={() => deleteMessage(id)}
+              onclick={() => deleteMessage()}
               class="join-item btn btn-error w-full"
             >
               <Icon icon="tabler:trash" />
@@ -398,13 +399,13 @@
       class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-base-300 p-1 rounded items-center`}
     >
       <Toolbar.Button
-        onclick={() => toggleReaction(id, "👍")}
+        onclick={() => toggleReaction("👍")}
         class="btn btn-ghost btn-square"
       >
         👍
       </Toolbar.Button>
       <Toolbar.Button
-        onclick={() => toggleReaction(id, "😂")}
+        onclick={() => toggleReaction("😂")}
         class="btn btn-ghost btn-square"
       >
         😂
@@ -419,21 +420,16 @@
       </Popover.Root>
       {#if shiftDown && mayDelete}
         <Toolbar.Button
-          onclick={() => deleteMessage(id)}
+          onclick={() => deleteMessage()}
           class="btn btn-ghost btn-square"
         >
           <Icon icon="tabler:trash" color="red" />
         </Toolbar.Button>
       {/if}
 
-      {#if authorProfile}
+      {#if authorProfile && message instanceof Message}
         <Toolbar.Button
-          onclick={() =>
-            setReplyTo({
-              message: id,
-              authorProfile,
-              content: (message as Message).content,
-            })}
+          onclick={() => setReplyTo(message)}
           class="btn btn-ghost btn-square"
         >
           <Icon icon="fa6-solid:reply" />
@@ -442,13 +438,13 @@
     </Toolbar.Root>
   {/if}
 
-  {#if isThreading.value && !isAnnouncement(message)}
+  {#if isThreading.value && message instanceof Announcement}
     <Checkbox.Root
       onCheckedChange={updateSelect}
       bind:checked={isSelected}
       class="absolute right-4 inset-y-0"
     >
-      {#snippet children({ checked })}
+      {#snippet children({ checked }: { checked: boolean })}
         <div
           class="border border-primary bg-base-100 text-primary-content size-4 rounded items-center cursor-pointer"
         >
@@ -473,22 +469,24 @@
 
 {#snippet reactionToggle(reaction: string)}
   <Button.Root
-    onclick={() => toggleReaction(id, reaction)}
+    onclick={() => toggleReaction(reaction)}
     class={`
       btn
-      ${user.profile.data && message.reactions[reaction].includes(user.profile.data.did) ? "bg-accent text-accent-content" : "bg-secondary text-secondary-content"}
+      ${user.profile.data && message.reactions.all()[reaction]?.has(user.profile.data.did) ? "bg-accent text-accent-content" : "bg-secondary text-secondary-content"}
     `}
-    title={(reactionHandles[reaction] || []).join(", ")}
+    title={[...(message.reactions.all()[reaction]?.values() || [])]
+      .map((x) => getProfile(x)?.handle || "")
+      .join(", ")}
   >
     {reaction}
-    {message.reactions[reaction].length}
+    {message.reactions.all()[reaction]?.size}
   </Button.Root>
 {/snippet}
 
 {#snippet replyBanner()}
   {@const profileRepliedTo =
-    messageRepliedTo && getProfile(messageRepliedTo.author)}
-  {#if messageRepliedTo && profileRepliedTo}
+    messageRepliedTo.value && getProfile(messageRepliedTo.value.authors.get(0))}
+  {#if messageRepliedTo.value && profileRepliedTo}
     <Button.Root
       onclick={scrollToReply}
       class="cursor-pointer flex gap-2 text-sm text-start w-full items-center text-secondary-content px-4 py-1 bg-secondary rounded-t"
@@ -506,7 +504,7 @@
         </h5>
       </div>
       <p class="line-clamp-1 basis-1/2 md:basis-auto overflow-hidden italic">
-        {@html getContentHtml(messageRepliedTo.content)}
+        {@html getContentHtml(JSON.parse(messageRepliedTo.value.bodyJson))}
       </p>
     </Button.Root>
   {/if}
