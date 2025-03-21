@@ -379,7 +379,7 @@
         value="wiki"
         class="tab flex gap-2"
       >
-        <Icon icon="tabler:notebook" color="white" class="text-2xl" />
+        <Icon icon="tabler:notebook" class="text-2xl" />
         {#if !isMobile}
           <p>Wiki</p>
         {/if}

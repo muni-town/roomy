@@ -9,10 +9,10 @@
     "npm:@blocknote/core@0.25": "0.25.2_@tiptap+pm@2.11.5__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.1_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.1_y-prosemirror@1.2.17__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.1__y-protocols@1.0.6___yjs@13.6.24__yjs@13.6.24_prosemirror-model@1.24.1_prosemirror-state@1.4.3_prosemirror-transform@1.10.3_prosemirror-view@1.38.1_shiki@1.29.2_y-protocols@1.0.6__yjs@13.6.24_yjs@13.6.24",
     "npm:@blocknote/react@0.25": "0.25.2_react@19.0.0_react-dom@19.0.0__react@19.0.0_@tiptap+pm@2.11.5__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.1_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.1",
     "npm:@iconify/svelte@^4.2.0": "4.2.0_svelte@5.23.1__acorn@8.14.1",
-    "npm:@jsr/roomy-chat__router@0.1.0-alpha.12": "0.1.0-alpha.12",
+    "npm:@jsr/roomy-chat__router@0.1.0-alpha.14": "0.1.0-alpha.14",
     "npm:@noble/curves@^1.8.1": "1.8.1",
+    "npm:@sveltejs/adapter-netlify@^4.4.2": "4.4.2_@sveltejs+kit@2.20.0__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.23.1____acorn@8.14.1___vite@6.2.2____lightningcss@1.29.2__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
     "npm:@sveltejs/adapter-static@^3.0.8": "3.0.8_@sveltejs+kit@2.20.0__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.23.1____acorn@8.14.1___vite@6.2.2____lightningcss@1.29.2__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
-    "npm:@sveltejs/kit@^2.16.1": "2.20.0_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
     "npm:@sveltejs/vite-plugin-svelte@^5.0.3": "5.0.3_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
     "npm:@tailwindcss/typography@~0.5.16": "0.5.16_tailwindcss@4.0.14",
     "npm:@tailwindcss/vite@4": "4.0.14_vite@6.2.2__lightningcss@1.29.2_lightningcss@1.29.2",
@@ -289,6 +289,12 @@
         "uuid@9.0.1"
       ]
     },
+    "@automerge/automerge@3.0.0-collectionsync-alpha.1": {
+      "integrity": "sha512-FO7QCjMz0pdoNxotVaH84X2sJKZdSYrjo6VHuVwFkQB0N/PQ0EHWi7N6knd9/JC+tIAzhGS3rb4xQwXITsewcg==",
+      "dependencies": [
+        "uuid@9.0.1"
+      ]
+    },
     "@blocknote/core@0.25.2_@tiptap+pm@2.11.5__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.1_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.24.1___prosemirror-state@1.4.3___prosemirror-view@1.38.1_y-prosemirror@1.2.17__prosemirror-model@1.24.1__prosemirror-state@1.4.3__prosemirror-view@1.38.1__y-protocols@1.0.6___yjs@13.6.24__yjs@13.6.24_prosemirror-model@1.24.1_prosemirror-state@1.4.3_prosemirror-transform@1.10.3_prosemirror-view@1.38.1_shiki@1.29.2_y-protocols@1.0.6__yjs@13.6.24_yjs@13.6.24": {
       "integrity": "sha512-SQcQzNXSq0gqM2dNdNOhrQmAH6Q6Rk8NivM0phKm63RNkAEuFw8qkJC12vYrNioSYWBuoLZROOeV/3IKF0Wgxg==",
       "dependencies": [
@@ -379,6 +385,7 @@
     },
     "@emoji-mart/data@1.2.1": {
       "integrity": "sha512-no2pQMWiBy6gpBEiqGeU77/bFejDqUTRY7KX+0+iur13op3bqUsXdnwoZs6Xb1zbv0gAj5VvS1PWoUUckSr5Dw=="
+    },
     "@esbuild/aix-ppc64@0.24.2": {
       "integrity": "sha512-thpVCb/rhxE/BnMLQ7GReQLLN8q9qbHmI55F4489/ByVg2aQaQ6kbcLb6FHkocZzQhxc4gx0sCk0tJkKBFzDhA=="
     },
@@ -827,28 +834,15 @@
       "integrity": "sha512-APMX6rrRNnYJTexn1NttHwBOUmcWIc8hMb8bNjJeIa8tfvlPo68DZOYGCfi80yfH9AfEc27g3cwIrV9C9kZKMQ==",
       "dependencies": [
         "@iarna/toml",
-        "@sveltejs/kit@2.20.0_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2_vite@6.2.2",
+        "@sveltejs/kit",
         "esbuild@0.24.2",
         "set-cookie-parser"
       ]
     },
-    "@sveltejs/kit@2.20.0_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2": {
-      "integrity": "sha512-xCUGevE2GFhpDAxZiVOsk6HKaBicwU7uWYcMOcpHCDcjoN6mKBIeMEzuddRMqSA4zjbeA+RcillCv1ppkWRwSQ==",
+    "@sveltejs/adapter-static@3.0.8_@sveltejs+kit@2.20.0__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.23.1____acorn@8.14.1___vite@6.2.2____lightningcss@1.29.2__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2": {
+      "integrity": "sha512-YaDrquRpZwfcXbnlDsSrBQNCChVOT9MGuSg+dMAyfsAa1SmiAhrA5jUYUiIMC59G92kIbY/AaQOWcBdq+lh+zg==",
       "dependencies": [
-        "@sveltejs/vite-plugin-svelte@5.0.3_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2_vite@6.2.2",
-        "@types/cookie",
-        "cookie@0.6.0",
-        "devalue",
-        "esm-env",
-        "import-meta-resolve",
-        "kleur",
-        "magic-string",
-        "mrmime",
-        "sade",
-        "set-cookie-parser",
-        "sirv",
-        "svelte@5.23.1_acorn@8.14.1",
-        "vite@6.2.2_lightningcss@1.29.2"
+        "@sveltejs/kit"
       ]
     },
     "@sveltejs/kit@2.20.0_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.23.1___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.23.1__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2_vite@6.2.2": {
@@ -4161,7 +4155,8 @@
         "npm:@jsr/roomy-chat__router@0.1.0-alpha.14",
         "npm:@noble/curves@^1.8.1",
         "npm:@sveltejs/adapter-netlify@^4.4.2",
-        "npm:@sveltejs/kit@^2.20.0",
+        "npm:@sveltejs/adapter-static@^3.0.8",
+        "npm:@sveltejs/kit@^2.16.1",
         "npm:@sveltejs/vite-plugin-svelte@^5.0.3",
         "npm:@tailwindcss/typography@~0.5.16",
         "npm:@tailwindcss/vite@4",
