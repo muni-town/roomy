@@ -81,16 +81,16 @@
 
     // messages can be selected in any order
     // sort them on create based on their position from the channel
-    let channelMessageIds = g.channel.messages.ids();
+    let channelMessageIds = g.channel.timeline.ids();
     selectedMessages.sort((a, b) => {
       return channelMessageIds.indexOf(a.id) - channelMessageIds.indexOf(b.id);
     });
 
     for (const message of selectedMessages) {
       // move selected message ID from channel to thread timeline
-      thread.messages.push(message);
-      const index = g.channel.messages.ids().indexOf(message.id);
-      g.channel.messages.remove(index);
+      thread.timeline.push(message);
+      const index = g.channel.timeline.ids().indexOf(message.id);
+      g.channel.timeline.remove(index);
 
       // create an Announcement about the move for each message
       const announcement = await g.roomy.create(Announcement);
@@ -98,7 +98,7 @@
       announcement.relatedMessages.push(message);
       announcement.relatedThreads.push(thread);
       announcement.commit();
-      g.channel.messages.insert(index, announcement);
+      g.channel.timeline.insert(index, announcement);
     }
 
     // TODO: decide whether the thread needs a reference to it's original channel. That might be
@@ -112,7 +112,7 @@
     announcement.relatedThreads.push(thread);
     announcement.commit();
 
-    g.channel.messages.push(announcement);
+    g.channel.timeline.push(announcement);
     g.channel.commit();
 
     threadTitleInput = "";
@@ -156,7 +156,7 @@
 
     // TODO: image upload refactor with tiptap
 
-    g.channel.messages.push(message);
+    g.channel.timeline.push(message);
     g.channel.commit();
 
     messageInput = {};
@@ -358,16 +358,19 @@
               <div class="flex flex-col gap-1">
                 <h5 class="flex gap-2 items-center">
                   Replying to
-                  <AvatarImage
-                    handle={getProfile(replyingTo.authors.get(0))?.handle || ''}
-                    avatarUrl={getProfile(replyingTo.authors.get(0))?.avatarUrl}
-                    className="!w-4"
-                  />
-                  <strong>{getProfile(replyingTo.authors.get(0))?.handle}</strong
-                  >
+                  {#await getProfile(replyingTo.authors.get(0)) then profile}
+                    <AvatarImage
+                      handle={profile.handle || ""}
+                      avatarUrl={profile.avatarUrl}
+                      className="!w-4"
+                    />
+                    <strong>{profile.handle}</strong>
+                  {/await}
                 </h5>
                 <p class="text-gray-300 text-ellipsis italic">
-                  {@html getContentHtml(JSON.parse(replyingTo.bodyJson || '{}'))}
+                  {@html getContentHtml(
+                    JSON.parse(replyingTo.bodyJson),
+                  )}
                 </p>
               </div>
               <Button.Root

@@ -186,5 +186,10 @@ export const extensions = [
 export const editorSchema = getSchema(extensions);
 
 export function getContentHtml(content: JSONContent) {
-  return generateHTML(content, extensions);
+  try {
+    return generateHTML(content, extensions);
+  } catch (e) {
+    console.error("Error", e, "Content", content);
+    throw e;
+  }
 }

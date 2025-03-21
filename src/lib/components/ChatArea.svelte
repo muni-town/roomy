@@ -14,14 +14,14 @@
   } = $props();
 
   setContext("scrollToMessage", (id: EntityIdStr) => {
-    const idx = timeline.messages.ids().indexOf(id);
+    const idx = timeline.timeline.ids().indexOf(id);
     if (idx !== -1 && virtualizer)
       virtualizer.scrollToIndex(idx, { smooth: true });
   });
 
   const messages = derivePromise(
     [],
-    async () => await timeline.messages.items(),
+    async () => await timeline.timeline.items(),
   );
 
   // ScrollArea

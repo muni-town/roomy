@@ -14,7 +14,7 @@
   import type { Item } from "$lib/tiptap/editor";
   import { getProfile } from "$lib/profile.svelte";
   import { derivePromise } from "$lib/utils.svelte";
-  import { Category, Channel, type EntityIdStr } from "@roomy-chat/sdk";
+  import { Category, Channel, Message } from "@roomy-chat/sdk";
 
   let { children } = $props();
   let isMobile = $derived((outerWidth.current || 0) < 640);
@@ -28,18 +28,21 @@
 
     const result = new Set();
     for (const channel of await g.space.channels.items()) {
-      for (const message of await channel.messages.items()) {
-        if (message.authors.length > 0) {
+      for (const timelineItem of await channel.timeline.items()) {
+        const message = timelineItem.tryCast(Message);
+        if (message && message.authors.length > 0) {
           for (const author of message.authors.toArray()) {
             result.add(author);
           }
         }
       }
     }
-    const items = [...result.values()].map((author) => {
-      const profile = getProfile(author as string);
-      return { value: author, label: profile.handle, category: "user" };
-    }) as Item[];
+    const items = (await Promise.all(
+      [...result.values()].map(async (author) => {
+        const profile = await getProfile(author as string);
+        return { value: author, label: profile?.handle, category: "user" };
+      }),
+    )) as Item[];
 
     return items;
   });
@@ -139,27 +142,6 @@
     newChannelCategory = undefined;
     newChannelName = "";
     showNewChannelDialog = false;
-  }
-
-  // TODO: See if there is a more generalized way to accomplish this or make it easier in the Roomy
-  // SDK.
-  let channels = $state({}) as { [id: string]: Channel };
-  // Clear channels when space changes
-  $effect(() => {
-    g.space;
-    channels = {};
-  });
-  /** Get a reactive reference to a channel. */
-  function getChannel(id: string): Channel | undefined {
-    if (!channels[id]) {
-      queueMicrotask(async () => {
-        g.roomy.open(Channel, id as EntityIdStr).then((channel) => {
-          channels[id] = channel;
-        });
-      });
-    }
-
-    return channels[id];
   }
 
   let joinedSpace = $derived(
@@ -424,7 +406,11 @@
                       >
                         <h3 class="flex justify-start items-center gap-2 px-2">
                           <Icon icon="basil:comment-solid" />
-                          {getChannel(channelId)?.name}
+                          {#await g.roomy.open(Channel, channelId)}
+                            ...
+                          {:then channel}
+                            {channel.name}
+                          {/await}
                         </h3>
                       </ToggleGroup.Item>
                     {/each}

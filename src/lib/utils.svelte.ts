@@ -1,6 +1,5 @@
 import type { DidDocument } from "@atproto/oauth-client-browser";
 import { decodeBase32 } from "./base32";
-import { untrack } from "svelte";
 
 /** Cleans a handle string by removing any characters not valid for a domain. */
 export function cleanHandle(handle: string): string {

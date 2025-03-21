@@ -284,43 +284,47 @@
   <!-- doesn't change after render, so $derived is not necessary -->
   {@const authorProfile = getProfile(msg.authors.get(0))}
 
-  {@render toolbar(authorProfile)}
+  {#await authorProfile then authorProfile}
+    {@render toolbar(authorProfile)}
 
-  <div class="flex gap-4">
-    <a
-      href={`https://bsky.app/profile/${authorProfile?.handle}`}
-      target="_blank"
-    >
-      <AvatarImage
-        handle={authorProfile?.handle || ""}
-        avatarUrl={authorProfile?.avatarUrl}
-      />
-    </a>
+    <div class="flex gap-4">
+      <a
+        href={`https://bsky.app/profile/${authorProfile.handle}`}
+        title={authorProfile.handle}
+        target="_blank"
+      >
+        <AvatarImage
+          handle={authorProfile.handle}
+          avatarUrl={authorProfile.avatarUrl}
+        />
+      </a>
 
-    <Button.Root
-      onclick={() => {
-        if (isMobile) {
-          isDrawerOpen = true;
-        }
-      }}
-      class="flex flex-col text-start gap-2 w-full min-w-0"
-    >
-      <section class="flex items-center gap-2 flex-wrap w-fit">
-        <a
-          href={`https://bsky.app/profile/${authorProfile?.handle}`}
-          target="_blank"
-          class="text-primary hover:underline"
-        >
-          <h5 class="font-bold">{authorProfile?.handle}</h5>
-        </a>
-        {@render timestamp(message.createdDate || new Date())}
-      </section>
+      <Button.Root
+        onclick={() => {
+          if (isMobile) {
+            isDrawerOpen = true;
+          }
+        }}
+        class="flex flex-col text-start gap-2 w-full min-w-0"
+      >
+        <section class="flex items-center gap-2 flex-wrap w-fit">
+          <a
+            href={`https://bsky.app/profile/${authorProfile.handle}`}
+            target="_blank"
+            class="text-primary hover:underline"
+          >
+            <h5 class="font-bold" title={authorProfile.handle}>
+              {authorProfile.displayName || authorProfile.handle}
+            </h5>
+          </a>
+          {@render timestamp(message.createdDate || new Date())}
+        </section>
 
-      <span class="prose select-text">
-        {@html getContentHtml(JSON.parse(msg.bodyJson))}
-      </span>
-      <!-- TODO: images. -->
-      <!-- {#if msg.images?.length}
+        <span class="prose select-text">
+          {@html getContentHtml(JSON.parse(msg.bodyJson))}
+        </span>
+        <!-- TODO: images. -->
+        <!-- {#if msg.images?.length}
         <div class="flex flex-wrap gap-2 mt-2">
           {#each msg.images as image}
             <img
@@ -332,8 +336,9 @@
           {/each}
         </div>
       {/if} -->
-    </Button.Root>
-  </div>
+      </Button.Root>
+    </div>
+  {/await}
 {/snippet}
 
 {#snippet toolbar(authorProfile?: { handle: string; avatarUrl: string })}
@@ -468,44 +473,54 @@
 {/snippet}
 
 {#snippet reactionToggle(reaction: string)}
-  <Button.Root
-    onclick={() => toggleReaction(reaction)}
-    class={`
+  {@const reactions = message.reactions.all()[reaction]}
+  {#if reactions}
+    {#await Promise.all([...reactions.values()].map( (x) => getProfile(x), )) then profilesThatReacted}
+      <Button.Root
+        onclick={() => toggleReaction(reaction)}
+        class={`
       btn
-      ${user.profile.data && message.reactions.all()[reaction]?.has(user.profile.data.did) ? "bg-accent text-accent-content" : "bg-secondary text-secondary-content"}
+      ${user.agent && reactions.has(user.agent.assertDid) ? "bg-accent text-accent-content" : "bg-secondary text-secondary-content"}
     `}
-    title={[...(message.reactions.all()[reaction]?.values() || [])]
-      .map((x) => getProfile(x)?.handle || "")
-      .join(", ")}
-  >
-    {reaction}
-    {message.reactions.all()[reaction]?.size}
-  </Button.Root>
+        title={profilesThatReacted
+          .map((x) => x.displayName || x.handle)
+          .join(", ")}
+      >
+        {reaction}
+        {message.reactions.all()[reaction]?.size}
+      </Button.Root>
+    {/await}
+  {/if}
 {/snippet}
 
 {#snippet replyBanner()}
   {@const profileRepliedTo =
     messageRepliedTo.value && getProfile(messageRepliedTo.value.authors.get(0))}
-  {#if messageRepliedTo.value && profileRepliedTo}
-    <Button.Root
-      onclick={scrollToReply}
-      class="cursor-pointer flex gap-2 text-sm text-start w-full items-center text-secondary-content px-4 py-1 bg-secondary rounded-t"
-    >
-      <div class="flex basis-1/2 md:basis-auto gap-2 items-center">
-        <Icon icon="prime:reply" width="12px" height="12px" />
-        <Avatar.Root class="w-4">
-          <Avatar.Image src={profileRepliedTo.avatarUrl} class="rounded-full" />
-          <Avatar.Fallback>
-            <AvatarBeam name={profileRepliedTo.handle} />
-          </Avatar.Fallback>
-        </Avatar.Root>
-        <h5 class="text-secondary-content font-medium text-ellipsis">
-          {profileRepliedTo.handle}
-        </h5>
-      </div>
-      <p class="line-clamp-1 basis-1/2 md:basis-auto overflow-hidden italic">
-        {@html getContentHtml(JSON.parse(messageRepliedTo.value.bodyJson))}
-      </p>
-    </Button.Root>
-  {/if}
+  {#await profileRepliedTo then profileRepliedTo}
+    {#if messageRepliedTo.value && profileRepliedTo}
+      <Button.Root
+        onclick={scrollToReply}
+        class="cursor-pointer flex gap-2 text-sm text-start w-full items-center text-secondary-content px-4 py-1 bg-secondary rounded-t"
+      >
+        <div class="flex basis-1/2 md:basis-auto gap-2 items-center">
+          <Icon icon="prime:reply" width="12px" height="12px" />
+          <Avatar.Root class="w-4">
+            <Avatar.Image
+              src={profileRepliedTo.avatarUrl}
+              class="rounded-full"
+            />
+            <Avatar.Fallback>
+              <AvatarBeam name={profileRepliedTo.handle} />
+            </Avatar.Fallback>
+          </Avatar.Root>
+          <h5 class="text-secondary-content font-medium text-ellipsis">
+            {profileRepliedTo.handle}
+          </h5>
+        </div>
+        <p class="line-clamp-1 basis-1/2 md:basis-auto overflow-hidden italic">
+          {@html getContentHtml(JSON.parse(messageRepliedTo.value.bodyJson))}
+        </p>
+      </Button.Root>
+    {/if}
+  {/await}
 {/snippet}

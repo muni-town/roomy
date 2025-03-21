@@ -1,30 +1,37 @@
 import { user } from "./user.svelte";
 
-let cache: {
-  [did: string]: {
-    handle: string;
-    avatarUrl: string;
-  };
-} = $state({});
-
-export function getProfile(
-  did: string,
-): { handle: string; avatarUrl: string } | undefined {
-  const entry = cache[did];
-
-  queueMicrotask(() => {
-    if (!cache[did]) {
-      if (user.agent) {
-        user.agent.getProfile({ actor: did }).then(async (resp) => {
-          if (!resp.success) return;
-          cache[did] = {
-            handle: resp.data.handle,
-            avatarUrl: resp.data.avatar || "",
-          };
-        });
-      }
-    }
+// Reload window on hot reload to avoid duplicating cache
+if (import.meta.hot) {
+  import.meta.hot.accept(() => {
+    window.location.reload();
   });
+}
 
-  return entry;
+export type ProfileMeta = {
+  did: string;
+  handle: string;
+  displayName?: string;
+  avatarUrl: string;
+};
+
+let cache: Map<string, Promise<ProfileMeta>> = new Map();
+export function getProfile(did: string): Promise<ProfileMeta> {
+  const cached = cache.get(did);
+  if (cached !== undefined) return cached;
+  if (!user.agent) throw new Error("Must have user agent to getProfile()");
+
+  const promise: Promise<ProfileMeta> = new Promise((resolve) =>
+    user.agent!.getProfile({ actor: did }).then((resp) => {
+      if (!resp.success) return;
+      resolve({
+        did,
+        handle: resp.data.handle,
+        displayName: resp.data.displayName,
+        avatarUrl: resp.data.avatar || "",
+      });
+    }),
+  );
+  cache.set(did, promise);
+
+  return promise;
 }
