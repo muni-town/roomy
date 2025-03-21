@@ -27,6 +27,9 @@
   import type { Autodoc } from "$lib/autodoc/peer";
   import { format, isToday } from "date-fns";
 
+  import { onMount, onDestroy } from "svelte";
+  import WikiEditor from "$lib/components/WikiEditor.svelte";
+
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let spaceContext = getContext("space") as { get value(): Autodoc<Space> | undefined };
@@ -34,6 +37,7 @@
   let channel = $derived(space?.view.channels[page.params.channel]) as
     | Channel
     | undefined;
+
   let users: { value: Item[] } = getContext("users");
   let contextItems: { value: Item[] } = getContext("contextItems");
   let relatedThreads = $derived.by(() => {
@@ -218,7 +222,6 @@
         )
       : undefined;
     */
-
     space.change((doc) => {
       if (!user.agent) return;
 
@@ -228,7 +231,6 @@
         reactions: {},
         content: JSON.stringify(messageInput),
         ...(replyingTo && { replyTo: replyingTo.id }),
-        
         // TODO: image upload refactor with tiptap
         // ...(images && { images }),
       };
@@ -373,6 +375,15 @@
           <p>Threads</p>
         {/if}
       </Tabs.Trigger>
+      <Tabs.Trigger
+        value="wiki"
+        class="tab flex gap-2"
+      >
+        <Icon icon="tabler:notebook" class="text-2xl" />
+        {#if !isMobile}
+          <p>Wiki</p>
+        {/if}
+      </Tabs.Trigger>
     </Tabs.List>
   </Tabs.Root>
 
@@ -387,8 +398,10 @@
 
 {#if tab === "chat"}
   {@render chatTab()}
-{:else}
+{:else if tab === "threads"}
   {@render threadsTab()}
+{:else if tab === "wiki"}
+  {@render wikiTab()}
 {/if}
 
 {#snippet threadsTab()}
@@ -451,7 +464,6 @@
             </div>
           {/if}
           <div class="relative">
-
             <!-- TODO: get all users that has joined the server -->
             <ChatInput 
               bind:content={messageInput} 
@@ -459,50 +471,7 @@
               context={contextItems.value}
               onEnter={sendMessage}
             />
-
-            <!--
-            {#if mayUploadImages}
-              <label
-                class="cursor-pointer text-white hover:text-gray-300 absolute right-3 top-1/2 -translate-y-1/2"
-              >
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  class="hidden"
-                  onchange={handleImageSelect}
-                />
-                <Icon
-                  icon="material-symbols:add-photo-alternate"
-                  class="text-2xl"
-                />
-              </label>
-            {/if}
-            -->
           </div>
-
-          <!-- Image preview 
-          {#if imageFiles?.length}
-            <div class="flex gap-2 flex-wrap">
-              {#each Array.from(imageFiles) as file}
-                <div class="relative mt-5">
-                  <img
-                    src={URL.createObjectURL(file)}
-                    alt={file.name}
-                    class="w-20 h-20 object-cover rounded"
-                  />
-                  <button
-                    type="button"
-                    class="absolute -top-2 -right-2 bg-red-500 rounded-full p-1"
-                    onclick={() => (imageFiles = null)}
-                  >
-                    <Icon icon="zondicons:close-solid" color="white" />
-                  </button>
-                </div>
-              {/each}
-            </div>
-          {/if}
-          -->
         </section>
       {/if}
 
@@ -588,4 +557,16 @@
       </Dialog>
     {/if}
   </menu>
+{/snippet}
+
+{#snippet wikiTab()}
+  {#if space}
+    {#if channel !== undefined && isAdmin !== undefined}
+      <WikiEditor
+        {space}
+        {channel}
+        {isAdmin}
+      />
+    {/if}
+  {/if}
 {/snippet}

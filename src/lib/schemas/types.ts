@@ -60,9 +60,14 @@ export type Thread = {
   softDeleted?: boolean;
 };
 
-// Used in DMs
-// TODO: Delete since DMs are not in priority
+export type Wiki = {
+  content: string;     
+  html: string;        
+  relatedThreads: Ulid[]; 
+  lastUpdated?: number;   
+};
 export type DM = {
+
   name: string;
   description: string;
   messages: { [ulid: Ulid]: Message };
@@ -76,6 +81,7 @@ export type Channel = {
   avatar?: string;
   threads: Ulid[];
   timeline: Ulid[];
+  wiki?: Wiki; 
   softDeleted?: boolean;
 };
 
