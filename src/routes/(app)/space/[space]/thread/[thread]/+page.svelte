@@ -14,17 +14,13 @@
   import ChatInput from "$lib/components/ChatInput.svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
   import { Button, Popover } from "bits-ui";
+  import { g } from "$lib/global.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  let spaceContext = getContext("space") as {
-    get value(): Autodoc<Space> | undefined;
-  };
-  let space = $derived(spaceContext.value);
-  let thread = $derived(space?.view.threads[page.params.thread]);
+  let thread = $derived(g.channel);
   let users: { value: Item[] } = getContext("users");
   let contextItems: { value: Item[] } = getContext("contextItems");
-  let isAdmin: { value: boolean } = getContext("isAdmin");
 
   let messageInput = $state({});
   let imageFiles: FileList | null = $state(null);

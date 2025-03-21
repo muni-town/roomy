@@ -1,10 +1,15 @@
 import {
   Channel,
+  components,
   EntityId,
   type EntityIdStr,
+  type IntoEntityId,
+  NamedEntity,
   Peer,
   Roomy,
+  Image,
   Space,
+  Thread,
 } from "@roomy-chat/sdk";
 import { StorageManager } from "@muni-town/leaf/storage";
 import { SveltePeer } from "@muni-town/leaf/svelte";
@@ -25,13 +30,12 @@ export let g = $state({
   // Create an empty roomy instance by default, it will be updated when the user logs in.
   roomy: await Roomy.init(new Peer(), new EntityId()),
   space: undefined as Space | undefined,
-  channel: undefined as Channel | undefined,
+  channel: undefined as Channel | Thread | undefined,
   isAdmin: false,
 });
 (globalThis as any).g = g;
 
 $effect.root(() => {
-
   // Reload Roomy peer when login changes.
   $effect(() => {
     g.space = undefined;
@@ -47,6 +51,34 @@ $effect.root(() => {
     }
   });
 });
+
+type ImageMeta = { uri: string; width?: number; height?: number; alt?: string };
+const imageForEntityCache: { [id: string]: ImageMeta } = $state({});
+/**
+ * Get the reactive image metadata for an entity.
+ * */
+export function getImageForEntity(id: EntityIdStr): ImageMeta {
+  if (!imageForEntityCache[id]) {
+    g.roomy.open(Image, id).then((ent) => {
+      ent.subscribe(() => {
+        imageForEntityCache[id] = {
+          uri: ent.uri,
+          alt: ent.alt,
+          width: ent.width,
+          height: ent.height,
+        };
+      });
+
+      imageForEntityCache[id] = {
+        uri: ent.uri,
+        alt: ent.alt,
+        width: ent.width,
+        height: ent.height,
+      };
+    });
+  }
+  return imageForEntityCache[id];
+}
 
 async function initRoomy(agent: Agent): Promise<Roomy> {
   const catalogId = user.catalogId.value;
@@ -75,7 +107,7 @@ async function initRoomy(agent: Agent): Promise<Roomy> {
   //   ["authorization", token],
   // );
 
-  const websocket = new WebSocket('ws://127.0.0.1:8095')
+  const websocket = new WebSocket("ws://127.0.0.1:8095");
 
   const peer = new SveltePeer(
     new StorageManager(indexedDBStorageAdapter("roomy")),

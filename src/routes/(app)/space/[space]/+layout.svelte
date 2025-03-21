@@ -14,11 +14,7 @@
   import type { Item } from "$lib/tiptap/editor";
   import { getProfile } from "$lib/profile.svelte";
   import { derivePromise } from "$lib/utils.svelte";
-  import {
-    Category,
-    Channel,
-    type EntityIdStr,
-  } from "@roomy-chat/sdk";
+  import { Category, Channel, type EntityIdStr } from "@roomy-chat/sdk";
 
   let { children } = $props();
   let isMobile = $derived((outerWidth.current || 0) < 640);
@@ -55,8 +51,8 @@
   let categories = derivePromise([], async () => {
     if (!g.space) return [];
     return (await g.space.sidebarItems.items())
-      .filter((x) => x.type == "category")
-      .map((x) => x.asCategory() as Category);
+      .map((x) => x.tryCast(Category) as Category)
+      .filter((x) => !!x);
   });
 
   let sidebarItems = derivePromise([], async () => {
@@ -145,6 +141,8 @@
     showNewChannelDialog = false;
   }
 
+  // TODO: See if there is a more generalized way to accomplish this or make it easier in the Roomy
+  // SDK.
   let channels = $state({}) as { [id: string]: Channel };
   // Clear channels when space changes
   $effect(() => {
@@ -171,12 +169,6 @@
     if (!g.space) return;
     g.roomy.spaces.push(g.space);
     g.roomy.commit();
-    // g.catalog?.change((doc) => {
-    //   doc.spaces.push({
-    //     id: page.params.space,
-    //     knownMembers: [],
-    //   });
-    // });
   }
 
   //
@@ -338,7 +330,7 @@
     <main
       class="flex flex-col gap-4 rounded-lg p-4 grow min-w-0 h-full overflow-clip bg-base-100"
     >
-      <!-- {@render children()} -->
+      {@render children()}
     </main>
   {:else if page.params.channel || page.params.thread}
     <main
@@ -357,7 +349,8 @@
   <div transition:slide class="flex flex-col gap-4">
     <!-- Category and Channels -->
     {#each sidebarItems.value as item}
-      {#if item.type == "category"}
+      {@const category = item.tryCast(Category)}
+      {#if category}
         <Accordion.Root type="single" value={item.name}>
           <Accordion.Item value={item.name}>
             <Accordion.Header class="flex justify-between">
@@ -378,7 +371,7 @@
                       title="Channel Settings"
                       class="cursor-pointer btn btn-ghost btn-circle"
                       onclick={() => {
-                        editingCategory = item.asCategory();
+                        editingCategory = category;
                         categoryNameInput = item.name;
                       }}
                     >
@@ -422,7 +415,7 @@
                     transition:slide
                     class="flex flex-col gap-4 py-2"
                   >
-                    {#each item.asCategory()!.channels.ids() as channelId}
+                    {#each category.channels.ids() as channelId}
                       <ToggleGroup.Item
                         onclick={() =>
                           goto(`/space/${page.params.space}/${channelId}`)}
@@ -441,7 +434,7 @@
             </Accordion.Content>
           </Accordion.Item>
         </Accordion.Root>
-      {:else}
+      {:else if item.matches(Channel)}
         <ToggleGroup.Item
           onclick={() => goto(`/space/${page.params.space}/${item.id}`)}
           value={item.id}

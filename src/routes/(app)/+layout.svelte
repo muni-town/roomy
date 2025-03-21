@@ -54,14 +54,22 @@
   });
 
   $effect(() => {
-    if (g.space && (page.params.channel || page.params.thread)) {
-      const channelOrThreadId = page.params.channel || page.params.thread;
+    if (g.space && page.params.channel) {
       try {
         g.roomy
-          .open(Channel, channelOrThreadId as EntityIdStr)
+          .open(Channel, page.params.channel as EntityIdStr)
           .then((channel) => untrack(() => (g.channel = channel)));
       } catch (e) {
         console.error("Error opening channel:", e);
+        goto("/");
+      }
+    } else if (g.space && page.params.thread) {
+      try {
+        g.roomy
+          .open(Channel, page.params.thread as EntityIdStr)
+          .then((channel) => untrack(() => (g.channel = channel)));
+      } catch (e) {
+        console.error("Error opening thread:", e);
         goto("/");
       }
     } else {
