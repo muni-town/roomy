@@ -18,6 +18,7 @@
   };
 
   let { content = $bindable({}), users, context, onEnter }: Props = $props();
+  console.log('chat input content', content);
   let element: HTMLDivElement | undefined = $state();
   let extensions = $derived([
     StarterKit.configure({ heading: false }),

@@ -14,25 +14,13 @@
   import ChatInput from "$lib/components/ChatInput.svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
   import { Button, Popover } from "bits-ui";
-
-  import type {
-  Announcement,
-    Did,
-    Space,
-    Ulid,
-  } from "$lib/schemas/types";
-  import type { Autodoc } from "$lib/autodoc/peer";
-  import Dialog from "$lib/components/Dialog.svelte";
-  import { isAnnouncement } from "$lib/utils";
+  import { g } from "$lib/global.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  let spaceContext = getContext("space") as { get value(): Autodoc<Space> | undefined };
-  let space = $derived(spaceContext.value);
-  let thread = $derived(space?.view.threads[page.params.thread]);
+  let thread = $derived(g.channel);
   let users: { value: Item[] } = getContext("users");
   let contextItems: { value: Item[] } = getContext("contextItems");
-  let isAdmin: { value: boolean } = getContext("isAdmin");
 
   let messageInput = $state({});
   let imageFiles: FileList | null = $state(null);
@@ -49,7 +37,9 @@
     selectedMessages = selectedMessages.filter((m) => m != message);
   });
   setContext("deleteMessage", (message: Ulid) => {
-    if (!space) { return; }
+    if (!space) {
+      return;
+    }
     space.change((doc) => {
       // TODO: don't remove from timeline, just delete ID? We need to eventually add a marker
       // showing the messages is deleted in the timeline.
@@ -126,8 +116,8 @@
 
       // messages can be selected in any order
       // sort them on create based on their position from the thread
-      selectedMessages.sort((a,b) => {
-        return thread.timeline.indexOf(a) - thread.timeline.indexOf(b)
+      selectedMessages.sort((a, b) => {
+        return thread.timeline.indexOf(a) - thread.timeline.indexOf(b);
       });
 
       for (const id of selectedMessages) {
@@ -142,31 +132,35 @@
           kind: "messageMoved",
           relatedMessages: [id],
           relatedThreads: [threadId],
-          reactions: {}
+          reactions: {},
         };
 
-        doc.messages[announcementId] = announcement; 
+        doc.messages[announcementId] = announcement;
 
         // push announcement at moved message's index
-        doc.threads[page.params.thread].timeline.splice(index, 0, announcementId);
+        doc.threads[page.params.thread].timeline.splice(
+          index,
+          0,
+          announcementId,
+        );
       }
 
       // create thread
       doc.threads[threadId] = {
         title: threadTitleInput,
         timeline: threadTimeline,
-        relatedChannel: thread.relatedChannel
+        relatedChannel: thread.relatedChannel,
       };
-      
+
       // create an Announcement about the new Thread in current channel
       const announcementId = ulid();
       const announcement: Announcement = {
         kind: "threadCreated",
         relatedThreads: [threadId],
-        reactions: {}
+        reactions: {},
       };
 
-      doc.messages[announcementId] = announcement; 
+      doc.messages[announcementId] = announcement;
       doc.threads[page.params.thread].timeline.push(announcementId);
     });
 
@@ -222,23 +216,23 @@
 
   let isDeleteThreadDialogOpen = $state(false);
   function softDeleteThread() {
-    if (!space || !thread) { return }
+    if (!space || !thread) {
+      return;
+    }
     isDeleteThreadDialogOpen = false;
 
     space.change((doc) => {
       // soft delete messages and announcements related to thread
       for (const ulid of Object.keys(doc.messages)) {
-        if (
-          isAnnouncement(doc.messages[ulid])
-        ) {
+        if (isAnnouncement(doc.messages[ulid])) {
           const announcement = doc.messages[ulid];
-          if ((
-              announcement.kind === "threadCreated" 
-              && announcement.relatedThreads?.includes(page.params.thread)
-            ) || (
-              announcement.kind === "messageMoved" 
-              && new Set(announcement.relatedMessages).union(new Set(thread.timeline)).size > 0
-            )
+          if (
+            (announcement.kind === "threadCreated" &&
+              announcement.relatedThreads?.includes(page.params.thread)) ||
+            (announcement.kind === "messageMoved" &&
+              new Set(announcement.relatedMessages).union(
+                new Set(thread.timeline),
+              ).size > 0)
           ) {
             doc.messages[ulid].softDeleted = true;
           }
@@ -269,16 +263,20 @@
     {/if}
 
     {#if space && thread}
-      <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}>
+      <h4
+        class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}
+      >
         {thread.title}
       </h4>
       <p class="text-gray-400 text-xs">{">"}</p>
-      <a href={`/space/${page.params.space}/${thread.relatedChannel}`} class="text-xs mention channel-mention">
+      <a
+        href={`/space/${page.params.space}/${thread.relatedChannel}`}
+        class="text-xs mention channel-mention"
+      >
         {space.view.channels[thread.relatedChannel].name}
       </a>
     {/if}
   </div>
-
 
   {#if !isMobile}
     <div class="flex navbar-end">
@@ -325,8 +323,8 @@
           </div>
         {/if}
         <div class="relative">
-          <ChatInput 
-            bind:content={messageInput} 
+          <ChatInput
+            bind:content={messageInput}
             users={users.value}
             context={contextItems.value}
             onEnter={sendMessage}
@@ -343,26 +341,25 @@
 
 {#snippet toolbar()}
   <menu class="relative flex items-center gap-3 px-2 w-fit justify-end">
-    <Popover.Root bind:open={isThreading.value}> 
+    <Popover.Root bind:open={isThreading.value}>
       <Popover.Trigger>
-        <Icon
-          icon="tabler:needle-thread"
-          class="text-2xl"
-        />
+        <Icon icon="tabler:needle-thread" class="text-2xl" />
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content 
-          side="left" 
-          sideOffset={8} 
-          interactOutsideBehavior="ignore" 
+        <Popover.Content
+          side="left"
+          sideOffset={8}
+          interactOutsideBehavior="ignore"
           class="my-4 bg-base-300 rounded py-4 px-5"
         >
           <form onsubmit={createThread} class="flex flex-col gap-4">
-            <input type="text" bind:value={threadTitleInput} class="input px-2 py-1" placeholder="Thread Title" />
-            <button 
-              type="submit" 
-              class="btn btn-primary"
-            >
+            <input
+              type="text"
+              bind:value={threadTitleInput}
+              class="input px-2 py-1"
+              placeholder="Thread Title"
+            />
+            <button type="submit" class="btn btn-primary">
               Create Thread
             </button>
           </form>

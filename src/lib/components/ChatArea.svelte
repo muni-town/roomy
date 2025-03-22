@@ -2,32 +2,33 @@
   import { ScrollArea } from "bits-ui";
   import { onNavigate } from "$app/navigation";
   import ChatMessage from "./ChatMessage.svelte";
-  import type { Autodoc } from "$lib/autodoc/peer";
-  import type { DM, Message, Space, Ulid } from "$lib/schemas/types";
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
-  import { isAnnouncement } from "$lib/utils";
+  import {
+    Announcement,
+    Message,
+    type EntityIdStr,
+    type Timeline,
+  } from "@roomy-chat/sdk";
+  import { derivePromise } from "$lib/utils.svelte";
 
   let {
-    source,
-    timeline
+    timeline,
   }: {
-    source:
-      | { type: "dm"; channel: Autodoc<DM> }
-      | { type: "space"; space: Autodoc<Space>; };
-    timeline: Ulid[]
+    timeline: Timeline;
   } = $props();
 
-  let messages = $derived(source.type == "dm"
-    ? source.channel.view.messages
-    : source.space.view.messages
-  );
-
-  setContext("scrollToMessage", (id: string) => {
-    const idx = timeline.indexOf(id);
+  setContext("scrollToMessage", (id: EntityIdStr) => {
+    const idx = timeline.timeline.ids().indexOf(id);
     if (idx !== -1 && virtualizer)
       virtualizer.scrollToIndex(idx, { smooth: true });
   });
+
+  const messages = derivePromise([], async () =>
+    (await timeline.timeline.items())
+      .map((x) => x.tryCast(Message) || x.tryCast(Announcement))
+      .filter((x) => !!x),
+  );
 
   // ScrollArea
   let viewport: HTMLDivElement = $state(null!);
@@ -37,18 +38,18 @@
   let scrollToEnd = $state(true);
   onNavigate(() => {
     setTimeout(() => {
-      if (virtualizer) virtualizer.scrollToIndex(timeline.length - 1);
+      if (virtualizer) virtualizer.scrollToIndex(messages.value.length - 1);
     }, 100);
   });
 
   $effect(() => {
     scrollToEnd = true;
-    if (viewport && (messages || scrollToEnd)) {
+    if (viewport) {
       viewport.scrollTop = viewport.scrollHeight;
       setTimeout(() => {
-        if (virtualizer) virtualizer.scrollToIndex(timeline.length - 1);
+        if (virtualizer) virtualizer.scrollToIndex(messages.value.length - 1);
       }, 100);
-       scrollToEnd = false;
+      scrollToEnd = false;
     }
   });
 </script>
@@ -73,17 +74,13 @@
       {#key viewport}
         <Virtualizer
           bind:this={virtualizer}
-          data={timeline || []}
+          data={messages.value}
           getKey={(k, _) => k}
           scrollRef={viewport}
         >
-          {#snippet children(id, _index)}
-            {@const message = messages[id]}
-            {#if message && !message.softDeleted}
-              <ChatMessage 
-                {id} 
-                {message}
-              />
+          {#snippet children(message, _index)}
+            {#if !message.softDeleted}
+              <ChatMessage {message} />
             {:else}
               <p class="italic text-error text-sm">
                 This message has been deleted

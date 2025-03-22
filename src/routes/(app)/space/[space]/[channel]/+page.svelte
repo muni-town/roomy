@@ -1,8 +1,7 @@
 <script lang="ts">
   import _ from "underscore";
-  import { decodeTime, ulid } from "ulidx";
   import { page } from "$app/state";
-  import { getContext, setContext } from "svelte";
+  import { getContext, setContext, untrack } from "svelte";
   import { goto } from "$app/navigation";
   import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
@@ -16,70 +15,46 @@
   import AvatarImage from "$lib/components/AvatarImage.svelte";
   import { Button, Popover, Tabs } from "bits-ui";
 
-  import type {
-    Did,
-    Space,
-    Channel,
-    Ulid,
-    Announcement,
-    Thread,
-  } from "$lib/schemas/types";
-  import type { Autodoc } from "$lib/autodoc/peer";
   import { format, isToday } from "date-fns";
+  import { derivePromise } from "$lib/utils.svelte";
+  import { g } from "$lib/global.svelte";
+  import {
+    Announcement,
+    Category,
+    Channel,
+    Message,
+    Image,
+    Thread,
+    Timeline,
+  } from "@roomy-chat/sdk";
+  import type { JSONContent } from "@tiptap/core";
+  import { getProfile } from "$lib/profile.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  let spaceContext = getContext("space") as { get value(): Autodoc<Space> | undefined };
-  let space = $derived(spaceContext.value);
-  let channel = $derived(space?.view.channels[page.params.channel]) as
-    | Channel
-    | undefined;
   let users: { value: Item[] } = getContext("users");
   let contextItems: { value: Item[] } = getContext("contextItems");
-  let relatedThreads = $derived.by(() => {
-    let related: { [ulid: string]: Thread } = {};
-    if (space && channel) {
-      Object.entries(space.view.threads).map(([ulid, thread]) => {
-        if (!thread.softDeleted && thread.relatedChannel === page.params.channel) {
-          related[ulid] = thread;
-        }
-      });
-    }
-    return related;
-  });
+  let relatedThreads = derivePromise([], async () =>
+    g.channel && g.channel instanceof Channel
+      ? await g.channel.threads.items()
+      : [],
+  );
 
   let tab = $state<"chat" | "threads">("chat");
 
-  let messageInput = $state({});
+  let messageInput: JSONContent = $state({});
   let imageFiles: FileList | null = $state(null);
 
   // thread maker
   let isThreading = $state({ value: false });
-  $inspect({ isThreading })
   let threadTitleInput = $state("");
-  let selectedMessages: Ulid[] = $state([]);
+  let selectedMessages: Message[] = $state([]);
   setContext("isThreading", isThreading);
-  setContext("selectMessage", (message: Ulid) => {
+  setContext("selectMessage", (message: Message) => {
     selectedMessages.push(message);
   });
-  setContext("removeSelectedMessage", (message: Ulid) => {
+  setContext("removeSelectedMessage", (message: Message) => {
     selectedMessages = selectedMessages.filter((m) => m != message);
-  });
-  setContext("deleteMessage", (message: Ulid) => {
-    if (!space) { return; }
-    space.change((doc) => {
-      // TODO: don't remove from timeline, just delete ID? We need to eventually add a marker
-      // showing the messages is deleted in the timeline.
-      Object.values(doc.channels).forEach((x) => {
-        const idx = x.timeline.indexOf(message);
-        if (idx !== -1) x.timeline.splice(idx, 1);
-      });
-      Object.values(doc.threads).forEach((x) => {
-        const idx = x.timeline.indexOf(message);
-        if (idx !== -1) x.timeline.splice(idx, 1);
-      });
-      delete doc.messages[message];
-    });
   });
 
   $effect(() => {
@@ -89,103 +64,66 @@
   });
 
   // Reply Utils
-  let replyingTo = $state<{
-    id: Ulid;
-    authorProfile: { handle: string; avatarUrl: string };
-    content: string;
-  } | null>();
-
-  setContext(
-    "setReplyTo",
-    (value: {
-      id: Ulid;
-      authorProfile: { handle: string; avatarUrl: string };
-      content: string;
-    }) => {
-      replyingTo = value;
-    },
-  );
-
-  setContext("toggleReaction", (id: Ulid, reaction: string) => {
-    if (!space) return;
-
-    space.change((doc) => {
-      const did = user.profile.data?.did;
-      if (!did) return;
-
-      let reactions = doc.messages[id].reactions[reaction] ?? [];
-
-      if (reactions.includes(did)) {
-        if (doc.messages[id].reactions[reaction].length - 1 === 0) {
-          delete doc.messages[id].reactions[reaction];
-        } else {
-          doc.messages[id].reactions[reaction] = reactions.filter(
-            (actor: Did) => actor !== did,
-          );
-        }
-      } else {
-        if (!doc.messages[id].reactions) {
-          // init reactions object
-          doc.messages[id].reactions = {};
-        }
-        doc.messages[id].reactions[reaction] = [...reactions, did];
-      }
-    });
+  let replyingTo = $state() as Message | undefined;
+  setContext("setReplyTo", (message: Message) => {
+    replyingTo = message;
   });
 
-  function createThread(e: SubmitEvent) {
+  setContext("toggleReaction", (message: Message, reaction: string) => {
+    if (!user.agent) return;
+    message.reactions.add(reaction, user.agent.assertDid);
+  });
+
+  async function createThread(e: SubmitEvent) {
     e.preventDefault();
-    if (!space || !channel) return;
+    if (!g.space || !g.channel) return;
 
-    space.change((doc) => {
-      const threadId = ulid();
-      const threadTimeline: string[] = [];
+    const thread = await g.roomy.create(Thread);
 
-      // messages can be selected in any order
-      // sort them on create based on their position from the channel
-      selectedMessages.sort((a,b) => {
-        return channel.timeline.indexOf(a) - channel.timeline.indexOf(b)
-      });
-
-      for (const id of selectedMessages) {
-        // move selected message ID from channel to thread timeline
-        threadTimeline.push(id);
-        const index = channel?.timeline.indexOf(id);
-        doc.channels[page.params.channel].timeline.splice(index, 1);
-
-        // create an Announcement about the move for each message
-        const announcementId = ulid();
-        const announcement: Announcement = {
-          kind: "messageMoved",
-          relatedMessages: [id],
-          relatedThreads: [threadId],
-          reactions: {}
-        };
-
-        doc.messages[announcementId] = announcement; 
-
-        // push announcement at moved message's index
-        doc.channels[page.params.channel].timeline.splice(index, 0, announcementId);
-      }
-
-      // create thread
-      doc.threads[threadId] = {
-        title: threadTitleInput,
-        timeline: threadTimeline,
-        relatedChannel: page.params.channel
-      };
-      
-      // create an Announcement about the new Thread in current channel
-      const announcementId = ulid();
-      const announcement: Announcement = {
-        kind: "threadCreated",
-        relatedThreads: [threadId],
-        reactions: {}
-      };
-
-      doc.messages[announcementId] = announcement; 
-      doc.channels[page.params.channel].timeline.push(announcementId);
+    // messages can be selected in any order
+    // sort them on create based on their position from the channel
+    let channelMessageIds = g.channel.timeline.ids();
+    selectedMessages.sort((a, b) => {
+      return channelMessageIds.indexOf(a.id) - channelMessageIds.indexOf(b.id);
     });
+
+    for (const message of selectedMessages) {
+      // move selected message ID from channel to thread timeline
+      thread.timeline.push(message);
+      const index = g.channel.timeline.ids().indexOf(message.id);
+      g.channel.timeline.remove(index);
+
+      // create an Announcement about the move for each message
+      const announcement = await g.roomy.create(Announcement);
+      announcement.kind = "messageMoved";
+      announcement.relatedMessages.push(message);
+      announcement.relatedThreads.push(thread);
+      announcement.commit();
+      g.channel.timeline.insert(index, announcement);
+    }
+
+    // TODO: decide whether the thread needs a reference to it's original channel. That might be
+    // confusing because it's messages could have come from multiple channels?
+    thread.name = threadTitleInput;
+    thread.commit();
+
+    // create an Announcement about the new Thread in current channel
+    const announcement = await g.roomy.create(Announcement);
+    announcement.kind = "threadCreated";
+    announcement.relatedThreads.push(thread);
+    announcement.commit();
+
+    g.channel.timeline.push(announcement);
+
+    // If this is a channel ( the alternative would be a thread )
+    if (g.channel instanceof Channel) {
+      g.channel.threads.push(thread);
+    }
+
+    g.channel.commit();
+
+    g.space.threads.push(thread);
+    g.space.commit();
 
     threadTitleInput = "";
     isThreading.value = false;
@@ -193,7 +131,7 @@
   }
 
   async function sendMessage() {
-    if (!space) return;
+    if (!g.space || !g.channel || !user.agent) return;
 
     /* TODO: image upload refactor with tiptap
     const images = imageFiles
@@ -219,32 +157,26 @@
       : undefined;
     */
 
-    space.change((doc) => {
-      if (!user.agent) return;
+    const message = await g.roomy.create(Message);
+    message.authors.push(user.agent.assertDid);
+    message.bodyJson = JSON.stringify(messageInput);
+    message.createdDate = new Date();
+    message.commit();
+    if (replyingTo) message.replyTo = replyingTo;
 
-      const id = ulid();
-      doc.messages[id] = {
-        author: user.agent.assertDid,
-        reactions: {},
-        content: JSON.stringify(messageInput),
-        ...(replyingTo && { replyTo: replyingTo.id }),
-        
-        // TODO: image upload refactor with tiptap
-        // ...(images && { images }),
-      };
-      doc.channels[page.params.channel].timeline.push(id);
-    });
+    // TODO: image upload refactor with tiptap
+
+    g.channel.timeline.push(message);
+    g.channel.commit();
 
     messageInput = {};
-    replyingTo = null;
+    replyingTo = undefined;
     imageFiles = null;
   }
 
   //
   // Settings Dialog
   //
-
-  let { value: isAdmin }: { value: boolean } = getContext("isAdmin");
 
   /* TODO: image upload refactor with tiptap
   let mayUploadImages = $derived.by(() => {
@@ -268,45 +200,71 @@
   let channelNameInput = $state("");
   let channelCategoryInput = $state(undefined) as undefined | string;
   $effect(() => {
-    if (!space) { return }
-    channelNameInput = channel?.name || "";
-    channelCategoryInput = Object.entries(space.view.categories).find(
-      ([_id, category]) => category.channels.includes(page.params.channel),
-    )?.[0];
-  });
+    if (!g.space) return;
 
-  function saveSettings() {
-    space?.change((space) => {
-      if (channelNameInput) {
-        space.channels[page.params.channel].name = channelNameInput;
-      }
-      Object.entries(space.categories).forEach(([catId, category]) => {
-        if (channelCategoryInput !== catId) {
-          const idx = category.channels.indexOf(page.params.channel);
-          if (idx !== -1) {
-            category.channels.splice(idx, 1);
+    channelNameInput = g.channel?.name || "";
+    channelCategoryInput = undefined;
+    g.space.sidebarItems.items().then((items) => {
+      untrack(() => {
+        for (const item of items) {
+          const category = item.tryCast(Category);
+          if (
+            category &&
+            g.channel &&
+            category.channels.ids().includes(g.channel.id)
+          ) {
+            channelCategoryInput = category.id;
+            return;
           }
-        }
-        if (channelCategoryInput) {
-          const category = space.categories[channelCategoryInput];
-          if (!category.channels.includes(page.params.channel)) {
-            category.channels.push(page.params.channel);
-          }
-          const idx = space.sidebarItems.findIndex(
-            (x) => x.type == "channel" && x.id == page.params.channel,
-          );
-          if (idx !== -1) {
-            space.sidebarItems.splice(idx, 1);
-          }
-        } else if (
-          !space.sidebarItems.find(
-            (x) => x.type == "channel" && x.id == page.params.channel,
-          )
-        ) {
-          space.sidebarItems.push({ type: "channel", id: page.params.channel });
         }
       });
     });
+  });
+
+  async function saveSettings() {
+    if (!g.space || !g.channel || !(g.channel instanceof Channel)) return;
+    if (channelNameInput) {
+      g.channel.name = channelNameInput;
+      g.channel.commit();
+    }
+
+    let foundChannelInSidebar = false;
+    for (const [
+      cursor,
+      unknownItem,
+    ] of await g.space.sidebarItems.itemCursors()) {
+      const item =
+        unknownItem.tryCast(Category) || unknownItem.tryCast(Channel);
+      if (item instanceof Channel && item.id == g.channel.id)
+        foundChannelInSidebar = true;
+
+      if (item instanceof Category) {
+        const categoryItems = item.channels.ids();
+        if (item.id !== channelCategoryInput) {
+          const thisChannelIdx = categoryItems.indexOf(g.channel.id);
+          if (thisChannelIdx != -1) {
+            item.channels.remove(thisChannelIdx);
+            item.commit();
+          }
+        } else {
+          item.channels.push(g.channel);
+          item.commit();
+        }
+      } else if (
+        item instanceof Channel &&
+        channelCategoryInput &&
+        item.id == g.channel.id
+      ) {
+        const { offset } = g.space.entity.doc.getCursorPos(cursor);
+        g.space.sidebarItems.remove(offset);
+      }
+    }
+
+    if (!channelCategoryInput && !foundChannelInSidebar) {
+      g.space.sidebarItems.push(g.channel);
+    }
+    g.space.commit();
+
     showSettingsDialog = false;
   }
 
@@ -339,17 +297,23 @@
 
 <header class="navbar">
   <div class="navbar-start flex gap-4">
-    {#if isMobile}
-      <Button.Root onclick={() => goto(`/space/${page.params.space}`)}>
-        <Icon icon="uil:left" />
-      </Button.Root>
-    {:else}
-      <AvatarImage avatarUrl={channel?.avatar} handle={channel?.name ?? ""} />
-    {/if}
+    {#if g.channel}
+      {#if isMobile}
+        <Button.Root onclick={() => goto(`/space/${page.params.space}`)}>
+          <Icon icon="uil:left" />
+        </Button.Root>
+      {:else}
+        {#await g.channel.image && g.roomy.open(Image, g.channel.image) then image}
+          <AvatarImage avatarUrl={image?.uri} handle={g.channel?.name ?? ""} />
+        {/await}
+      {/if}
 
-    <h4 class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}>
-      {channel?.name}
-    </h4>
+      <h4
+        class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}
+      >
+        {g.channel.name}
+      </h4>
+    {/if}
   </div>
 
   <Tabs.Root bind:value={tab} class={isMobile ? "navbar-end" : "navbar-center"}>
@@ -357,17 +321,14 @@
       <Tabs.Trigger
         value="chat"
         onclick={() => goto(page.url.pathname)}
-        class="tab flex gap-2" 
+        class="tab flex gap-2"
       >
         <Icon icon="tabler:message" class="text-2xl" />
         {#if !isMobile}
           <p>Chat</p>
         {/if}
       </Tabs.Trigger>
-      <Tabs.Trigger
-        value="threads"
-        class="tab flex gap-2" 
-      >
+      <Tabs.Trigger value="threads" class="tab flex gap-2">
         <Icon icon="material-symbols:thread-unread-rounded" class="text-2xl" />
         {#if !isMobile}
           <p>Threads</p>
@@ -384,7 +345,6 @@
 </header>
 <div class="divider my-0"></div>
 
-
 {#if tab === "chat"}
   {@render chatTab()}
 {:else}
@@ -393,33 +353,35 @@
 
 {#snippet threadsTab()}
   <ul class="list w-full join join-vertical">
-    {#each Object.entries(relatedThreads) as [ulid, thread]}
-      <a href={`/space/${page.params.space}/thread/${ulid}`}>
-        <li class="list-row join-item flex items-center w-full bg-base-200">
-          <h3 class="card-title text-xl font-medium text-primary">{thread.title}</h3>
-          {@render timestamp(ulid)}
-        </li>
-      </a>
-    {/each}
+    {#if relatedThreads.value.length > 0}
+      {#each relatedThreads.value as thread}
+        <a href={`/space/${page.params.space}/thread/${thread.id}`}>
+          <li class="list-row join-item flex items-center w-full bg-base-200">
+            <h3 class="card-title text-xl font-medium text-primary">
+              {thread.name}
+            </h3>
+            {#if thread.createdDate}
+              {@render timestamp(thread.createdDate)}
+            {/if}
+          </li>
+        </a>
+      {/each}
+    {:else}
+      No threads for this channel.
+    {/if}
   </ul>
 {/snippet}
 
-{#snippet timestamp(ulid: Ulid)}
-  {@const decodedTime = decodeTime(ulid)}
-  {@const formattedDate = isToday(decodedTime)
-    ? "Today"
-    : format(decodedTime, "P")}
+{#snippet timestamp(date: Date)}
+  {@const formattedDate = isToday(date) ? "Today" : format(date, "P")}
   <time class="text-xs">
-    {formattedDate}, {format(decodedTime, "pp")}
+    {formattedDate}, {format(date, "pp")}
   </time>
 {/snippet}
 
 {#snippet chatTab()}
-  {#if space}
-    <ChatArea
-      source={{ type: "space", space: space }}
-      timeline={channel?.timeline ?? []}
-    />
+  {#if g.space && g.channel}
+    <ChatArea timeline={g.channel.forceCast(Timeline)} />
     <div class="flex items-center">
       {#if !isMobile || !isThreading.value}
         <section class="grow flex flex-col">
@@ -430,20 +392,22 @@
               <div class="flex flex-col gap-1">
                 <h5 class="flex gap-2 items-center">
                   Replying to
-                  <AvatarImage
-                    handle={replyingTo.authorProfile.handle}
-                    avatarUrl={replyingTo.authorProfile.avatarUrl}
-                    className="!w-4"
-                  />
-                  <strong>{replyingTo.authorProfile.handle}</strong>
+                  {#await getProfile(replyingTo.authors.get(0)) then profile}
+                    <AvatarImage
+                      handle={profile.handle || ""}
+                      avatarUrl={profile.avatarUrl}
+                      className="!w-4"
+                    />
+                    <strong>{profile.handle}</strong>
+                  {/await}
                 </h5>
                 <p class="text-gray-300 text-ellipsis italic">
-                  {@html getContentHtml(replyingTo.content)}
+                  {@html getContentHtml(JSON.parse(replyingTo.bodyJson))}
                 </p>
               </div>
               <Button.Root
                 type="button"
-                onclick={() => (replyingTo = null)}
+                onclick={() => (replyingTo = undefined)}
                 class="btn btn-circle btn-ghost"
               >
                 <Icon icon="zondicons:close-solid" />
@@ -451,10 +415,9 @@
             </div>
           {/if}
           <div class="relative">
-
             <!-- TODO: get all users that has joined the server -->
-            <ChatInput 
-              bind:content={messageInput} 
+            <ChatInput
+              bind:content={messageInput}
               users={users.value}
               context={contextItems.value}
               onEnter={sendMessage}
@@ -513,29 +476,27 @@
   {/if}
 {/snippet}
 
-
 {#snippet toolbar()}
   <menu class="relative flex items-center gap-3 px-2 w-fit justify-end">
-    <Popover.Root bind:open={isThreading.value}> 
+    <Popover.Root bind:open={isThreading.value}>
       <Popover.Trigger>
-        <Icon
-          icon="tabler:needle-thread"
-          class="text-2xl"
-        />
+        <Icon icon="tabler:needle-thread" class="text-2xl" />
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content 
-          side="left" 
-          sideOffset={8} 
-          interactOutsideBehavior="ignore" 
+        <Popover.Content
+          side="left"
+          sideOffset={8}
+          interactOutsideBehavior="ignore"
           class="my-4 bg-base-300 rounded py-4 px-5"
         >
           <form onsubmit={createThread} class="flex flex-col gap-4">
-            <input type="text" bind:value={threadTitleInput} class="input" placeholder="Thread Title" />
-            <button 
-              type="submit" 
-              class="btn btn-primary"
-            >
+            <input
+              type="text"
+              bind:value={threadTitleInput}
+              class="input"
+              placeholder="Thread Title"
+            />
+            <button type="submit" class="btn btn-primary">
               Create Thread
             </button>
           </form>
@@ -552,7 +513,7 @@
       <Icon icon="icon-park-outline:copy-link" class="text-2xl" />
     </Button.Root>
 
-    {#if isAdmin}
+    {#if g.isAdmin}
       <Dialog title="Channel Settings" bind:isDialogOpen={showSettingsDialog}>
         {#snippet dialogTrigger()}
           <Button.Root
@@ -572,18 +533,21 @@
               class="input"
             />
           </label>
-          {#if space}
+          {#if g.space}
             <select bind:value={channelCategoryInput} class="select">
               <option value={undefined}>None</option>
-              {#each Object.keys(space.view.categories) as categoryId}
-                {@const category = space.view.categories[categoryId]}
-                <option value={categoryId}>{category.name}</option>
-              {/each}
+              {#await g.space.sidebarItems.items() then sidebarItems}
+                {@const categories = sidebarItems
+                  .map((x) => x.tryCast(Category))
+                  .filter((x) => !!x)}
+
+                {#each categories as category}
+                  <option value={category.id}>{category.name}</option>
+                {/each}
+              {/await}
             </select>
           {/if}
-          <Button.Root class="btn btn-primary">
-            Save Settings
-          </Button.Root>
+          <Button.Root class="btn btn-primary">Save Settings</Button.Root>
         </form>
       </Dialog>
     {/if}

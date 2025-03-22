@@ -80,7 +80,25 @@ export const lexicons: LexiconDoc[] = [
 
   {
     lexicon: 1,
-    id: "chat.roomy.v0.router.token",
+    id: "chat.roomy.01JPNX7AA9BSM6TY2GWW1TR5V7.catalog",
+    defs: {
+      main: {
+        type: "record",
+        record: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+  },
+
+  {
+    lexicon: 1,
+    id: "chat.roomy.v0.sync.token",
     description: "Get an auth token for connecting to the router.",
     defs: {
       main: {
