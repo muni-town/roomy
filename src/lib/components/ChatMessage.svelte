@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Avatar, Button, Checkbox, Popover, Toolbar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import { format, isToday, differenceInMinutes } from "date-fns";
+  import { format, isToday } from "date-fns";
   import { getContext } from "svelte";
   import { getProfile } from "$lib/profile.svelte";
   import Icon from "@iconify/svelte";
@@ -11,7 +11,6 @@
   import Drawer from "./Drawer.svelte";
   import AvatarImage from "./AvatarImage.svelte";
   import { getContentHtml } from "$lib/tiptap/editor";
-  import { page } from "$app/state";
   import { Announcement, Message, type EntityIdStr } from "@roomy-chat/sdk";
   import { g } from "$lib/global.svelte";
   import { derivePromise } from "$lib/utils.svelte";
@@ -19,10 +18,10 @@
 
   type Props = {
     message: Message | Announcement;
-    shouldShowAuthor?: boolean;
+    mergeWithPrevious?: boolean;
   };
 
-  let { message, shouldShowAuthor = true }: Props = $props();
+  let { message, mergeWithPrevious = false }: Props = $props();
 
   let messageRepliedTo = derivePromise(undefined, async () => {
     if (g.roomy && message.replyTo) {
@@ -209,7 +208,7 @@
 
 <li id={message.id} class={`flex flex-col ${isMobile && "max-w-screen"}`}>
   <div
-    class={`relative group w-full h-fit flex flex-col gap-4 px-2 ${shouldShowAuthor && "pt-5"}  hover:bg-white/5 transition-all duration-75`}
+    class={`relative group w-full h-fit flex flex-col gap-4 px-2 ${!mergeWithPrevious && "pt-5"}  hover:bg-white/5 transition-all duration-75`}
   >
     {#if message instanceof Announcement}
       {@render announcementView(message)}
@@ -264,25 +263,29 @@
         </p>
       </Button.Root>
     {:else if announcement.kind === "messageMoved"}
-      <Button.Root
-        onclick={() => {
-          if (isMobile) {
-            isDrawerOpen = true;
-          }
-        }}
-        class="cursor-pointer flex gap-2 text-start w-full items-center text-info-content px-4 py-1 bg-info rounded-t"
-      >
-        <Icon icon="prime:reply" width="12px" height="12px" />
-        <p
-          class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+      {#if !mergeWithPrevious}
+        <Button.Root
+          onclick={() => {
+            if (isMobile) {
+              isDrawerOpen = true;
+            }
+          }}
+          class="cursor-pointer flex gap-2 text-start w-full items-center text-info-content px-4 py-1 bg-info rounded-t"
         >
-          {@html getAnnouncementHtml(announcement)}
-        </p>
-        {#if message.createdDate}
-          {@render timestamp(message.createdDate)}
-        {/if}
-      </Button.Root>
-      <div class="flex items-start gap-4">
+          <Icon icon="prime:reply" width="12px" height="12px" />
+          <p
+            class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+          >
+            {@html getAnnouncementHtml(announcement)}
+          </p>
+          {#if message.createdDate}
+            {@render timestamp(message.createdDate)}
+          {/if}
+        </Button.Root>
+      {/if}
+      <div
+        class="ml-0 border-l-2 border-info pt-0.5 pl-2"
+      >
         {#if relatedMessage}
           {@render messageView(relatedMessage)}
         {/if}
@@ -299,7 +302,7 @@
     {@render toolbar(authorProfile)}
 
     <div class="flex gap-4 group">
-      {#if shouldShowAuthor}
+      {#if !mergeWithPrevious}
         <a
           href={`https://bsky.app/profile/${authorProfile.handle}`}
           title={authorProfile.handle}
@@ -328,7 +331,7 @@
         }}
         class="flex flex-col text-start gap-2 w-full min-w-0"
       >
-        {#if shouldShowAuthor}
+        {#if !mergeWithPrevious}
           <section class="flex items-center gap-2 flex-wrap w-fit">
             <a
               href={`https://bsky.app/profile/${authorProfile.handle}`}
