@@ -52,33 +52,6 @@ $effect.root(() => {
   });
 });
 
-type ImageMeta = { uri: string; width?: number; height?: number; alt?: string };
-const imageForEntityCache: { [id: string]: ImageMeta } = $state({});
-/**
- * Get the reactive image metadata for an entity.
- * */
-export function getImageForEntity(id: EntityIdStr): ImageMeta {
-  if (!imageForEntityCache[id]) {
-    g.roomy.open(Image, id).then((ent) => {
-      ent.subscribe(() => {
-        imageForEntityCache[id] = {
-          uri: ent.uri,
-          alt: ent.alt,
-          width: ent.width,
-          height: ent.height,
-        };
-      });
-
-      imageForEntityCache[id] = {
-        uri: ent.uri,
-        alt: ent.alt,
-        width: ent.width,
-        height: ent.height,
-      };
-    });
-  }
-  return imageForEntityCache[id];
-}
 
 async function initRoomy(agent: Agent): Promise<Roomy> {
   const catalogId = user.catalogId.value;

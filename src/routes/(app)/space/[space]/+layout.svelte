@@ -280,7 +280,7 @@
             {/snippet}
           </Accordion.Content>
         </Accordion.Item>
-        {#if Object.keys(availableThreads).length > 0}
+        {#if availableThreads.value.length > 0}
           <div class="divider my-0"></div>
           <Accordion.Item value="threads">
             <Accordion.Header>
@@ -440,8 +440,8 @@
   <div transition:slide class="flex flex-col gap-4">
     {#each availableThreads.value as thread}
       <ToggleGroup.Item
-        onclick={() => goto(`/space/${page.params.space}/thread/${ulid}`)}
-        value={ulid}
+        onclick={() => goto(`/space/${page.params.space}/thread/${thread.id}`)}
+        value={thread.id}
         class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
       >
         <h3 class="flex justify-start items-center gap-2 px-2">

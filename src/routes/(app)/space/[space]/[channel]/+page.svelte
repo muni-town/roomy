@@ -17,12 +17,13 @@
 
   import { format, isToday } from "date-fns";
   import { derivePromise } from "$lib/utils.svelte";
-  import { g, getImageForEntity } from "$lib/global.svelte";
+  import { g } from "$lib/global.svelte";
   import {
     Announcement,
     Category,
     Channel,
     Message,
+    Image,
     Thread,
     Timeline,
   } from "@roomy-chat/sdk";
@@ -113,7 +114,16 @@
     announcement.commit();
 
     g.channel.timeline.push(announcement);
+
+    // If this is a channel ( the alternative would be a thread )
+    if (g.channel instanceof Channel) {
+      g.channel.threads.push(thread);
+    }
+
     g.channel.commit();
+
+    g.space.threads.push(thread);
+    g.space.commit();
 
     threadTitleInput = "";
     isThreading.value = false;
@@ -293,12 +303,9 @@
           <Icon icon="uil:left" />
         </Button.Root>
       {:else}
-        <AvatarImage
-          avatarUrl={g.channel.image
-            ? getImageForEntity(g.channel.image)?.uri
-            : undefined}
-          handle={g.channel?.name ?? ""}
-        />
+        {#await g.channel.image && g.roomy.open(Image, g.channel.image) then image}
+          <AvatarImage avatarUrl={image?.uri} handle={g.channel?.name ?? ""} />
+        {/await}
       {/if}
 
       <h4
@@ -346,18 +353,22 @@
 
 {#snippet threadsTab()}
   <ul class="list w-full join join-vertical">
-    {#each relatedThreads.value as thread}
-      <a href={`/space/${page.params.space}/thread/${thread.id}`}>
-        <li class="list-row join-item flex items-center w-full bg-base-200">
-          <h3 class="card-title text-xl font-medium text-primary">
-            {thread.name}
-          </h3>
-          {#if thread.createdDate}
-            {@render timestamp(thread.createdDate)}
-          {/if}
-        </li>
-      </a>
-    {/each}
+    {#if relatedThreads.value.length > 0}
+      {#each relatedThreads.value as thread}
+        <a href={`/space/${page.params.space}/thread/${thread.id}`}>
+          <li class="list-row join-item flex items-center w-full bg-base-200">
+            <h3 class="card-title text-xl font-medium text-primary">
+              {thread.name}
+            </h3>
+            {#if thread.createdDate}
+              {@render timestamp(thread.createdDate)}
+            {/if}
+          </li>
+        </a>
+      {/each}
+    {:else}
+      No threads for this channel.
+    {/if}
   </ul>
 {/snippet}
 
