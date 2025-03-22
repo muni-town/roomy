@@ -213,7 +213,10 @@
 
   async function saveSettings() {
     if (!g.space || !g.channel || !(g.channel instanceof Channel)) return;
-    if (channelNameInput) g.channel.name = channelNameInput;
+    if (channelNameInput) {
+      g.channel.name = channelNameInput
+      g.channel.commit();
+    };
 
     for (const item of await g.space.sidebarItems.items()) {
       const category = item.tryCast(Category);
