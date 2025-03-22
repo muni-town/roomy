@@ -134,15 +134,15 @@ const SpaceContextMentionExtension = Mention.extend({
   name: "channelThreadMention",
   // Used by `generateHTML`
   renderHTML({ HTMLAttributes, node }) {
-    const { ulid, space, type } = JSON.parse(node.attrs.id);
+    const { id, space, type } = JSON.parse(node.attrs.id);
     return [
       "a",
       mergeAttributes(
         {
           href:
             type === "thread"
-              ? `/space/${space}/thread/${ulid}`
-              : `/space/${space}/${ulid}`,
+              ? `/space/${space}/thread/${id}`
+              : `/space/${space}/${id}`,
           class: `mention ${type === "thread" ? "thread-mention" : "channel-mention"} !no-underline`,
         },
         HTMLAttributes,

@@ -4,7 +4,12 @@
   import ChatMessage from "./ChatMessage.svelte";
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
-  import type { EntityIdStr, Timeline } from "@roomy-chat/sdk";
+  import {
+    Announcement,
+    Message,
+    type EntityIdStr,
+    type Timeline,
+  } from "@roomy-chat/sdk";
   import { derivePromise } from "$lib/utils.svelte";
 
   let {
@@ -19,9 +24,10 @@
       virtualizer.scrollToIndex(idx, { smooth: true });
   });
 
-  const messages = derivePromise(
-    [],
-    async () => await timeline.timeline.items(),
+  const messages = derivePromise([], async () =>
+    (await timeline.timeline.items())
+      .map((x) => x.tryCast(Message) || x.tryCast(Announcement))
+      .filter((x) => !!x),
   );
 
   // ScrollArea

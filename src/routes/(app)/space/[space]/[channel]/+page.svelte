@@ -214,26 +214,46 @@
   async function saveSettings() {
     if (!g.space || !g.channel || !(g.channel instanceof Channel)) return;
     if (channelNameInput) {
-      g.channel.name = channelNameInput
+      g.channel.name = channelNameInput;
       g.channel.commit();
-    };
+    }
 
-    for (const item of await g.space.sidebarItems.items()) {
-      const category = item.tryCast(Category);
-      if (category) {
-        const categoryItems = category.channels.ids();
-        if (category.id !== channelCategoryInput) {
+    let foundChannelInSidebar = false;
+    for (const [
+      cursor,
+      unknownItem,
+    ] of await g.space.sidebarItems.itemCursors()) {
+      const item =
+        unknownItem.tryCast(Category) || unknownItem.tryCast(Channel);
+      if (item instanceof Channel && item.id == g.channel.id)
+        foundChannelInSidebar = true;
+
+      if (item instanceof Category) {
+        const categoryItems = item.channels.ids();
+        if (item.id !== channelCategoryInput) {
           const thisChannelIdx = categoryItems.indexOf(g.channel.id);
           if (thisChannelIdx != -1) {
-            category.channels.remove(thisChannelIdx);
-            category.commit();
+            item.channels.remove(thisChannelIdx);
+            item.commit();
           }
         } else {
-          category.channels.push(g.channel);
-          category.commit();
+          item.channels.push(g.channel);
+          item.commit();
         }
+      } else if (
+        item instanceof Channel &&
+        channelCategoryInput &&
+        item.id == g.channel.id
+      ) {
+        const { offset } = g.space.entity.doc.getCursorPos(cursor);
+        g.space.sidebarItems.remove(offset);
       }
     }
+
+    if (!channelCategoryInput && !foundChannelInSidebar) {
+      g.space.sidebarItems.push(g.channel);
+    }
+    g.space.commit();
 
     showSettingsDialog = false;
   }
@@ -371,9 +391,7 @@
                   {/await}
                 </h5>
                 <p class="text-gray-300 text-ellipsis italic">
-                  {@html getContentHtml(
-                    JSON.parse(replyingTo.bodyJson),
-                  )}
+                  {@html getContentHtml(JSON.parse(replyingTo.bodyJson))}
                 </p>
               </div>
               <Button.Root
@@ -507,11 +525,15 @@
           {#if g.space}
             <select bind:value={channelCategoryInput} class="select">
               <option value={undefined}>None</option>
-              <!-- FIXME: list categories -->
-              <!-- {#each Object.keys(g.space.view.categories) as categoryId}
-                {@const category = space.view.categories[categoryId]}
-                <option value={categoryId}>{category.name}</option>
-              {/each} -->
+              {#await g.space.sidebarItems.items() then sidebarItems}
+                {@const categories = sidebarItems
+                  .map((x) => x.tryCast(Category))
+                  .filter((x) => !!x)}
+
+                {#each categories as category}
+                  <option value={category.id}>{category.name}</option>
+                {/each}
+              {/await}
             </select>
           {/if}
           <Button.Root class="btn btn-primary">Save Settings</Button.Root>

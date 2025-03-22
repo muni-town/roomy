@@ -15,6 +15,7 @@
   import { Announcement, Message, type EntityIdStr } from "@roomy-chat/sdk";
   import { g } from "$lib/global.svelte";
   import { derivePromise } from "$lib/utils.svelte";
+  import type { JSONContent } from "@tiptap/core";
 
   type Props = {
     message: Message | Announcement;
@@ -30,6 +31,12 @@
   let relatedThreads = derivePromise([], async () => {
     if (message instanceof Announcement) {
       return await message.relatedThreads.items();
+    }
+    return [];
+  });
+  let relatedMessages = derivePromise([], async () => {
+    if (message instanceof Announcement) {
+      return await message.relatedMessages.items();
     }
     return [];
   });
@@ -140,7 +147,7 @@
     const schema = {
       type: "doc",
       content: [] as Record<string, any>[],
-    };
+    } satisfies JSONContent;
 
     switch (announcement.kind) {
       case "threadCreated": {
@@ -152,11 +159,11 @@
               type: "channelThreadMention",
               attrs: {
                 id: JSON.stringify({
-                  ulid: relatedThreads.value[0]?.id,
+                  id: relatedThreads.value[0]?.id,
                   space: page.params.space,
                   type: "thread",
                 }),
-                label: relatedThreads.value[0]?.name,
+                label: relatedThreads.value[0]?.name || "loading...",
               },
             },
           ],
@@ -176,7 +183,7 @@
                   space: page.params.space,
                   type: "thread",
                 }),
-                label: relatedThreads.value[0]?.name,
+                label: relatedThreads.value[0]?.name || "loading...",
               },
             },
           ],
@@ -230,6 +237,7 @@
 </li>
 
 {#snippet announcementView(announcement: Announcement)}
+  {@const relatedMessage = relatedMessages.value[0]}
   {@render toolbar()}
   <div class="flex flex-col gap-4">
     {#if announcement.kind === "threadCreated"}
@@ -273,8 +281,9 @@
         {/if}
       </Button.Root>
       <div class="flex items-start gap-4">
-        <!-- TODO: render announcement body -->
-        <!-- {@render messageView(message)} -->
+        {#if relatedMessage}
+          {@render messageView(relatedMessage)}
+        {/if}
       </div>
     {/if}
   </div>
@@ -443,7 +452,7 @@
     </Toolbar.Root>
   {/if}
 
-  {#if isThreading.value && message instanceof Announcement}
+  {#if isThreading.value && message instanceof Message}
     <Checkbox.Root
       onCheckedChange={updateSelect}
       bind:checked={isSelected}
