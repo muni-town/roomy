@@ -10,17 +10,18 @@
 
   let {
     source,
-    timeline
+    timeline,
   }: {
     source:
       | { type: "dm"; channel: Autodoc<DM> }
-      | { type: "space"; space: Autodoc<Space>; };
-    timeline: Ulid[]
+      | { type: "space"; space: Autodoc<Space> };
+    timeline: Ulid[];
   } = $props();
 
-  let messages = $derived(source.type == "dm"
-    ? source.channel.view.messages
-    : source.space.view.messages
+  let messages = $derived(
+    source.type == "dm"
+      ? source.channel.view.messages
+      : source.space.view.messages,
   );
 
   setContext("scrollToMessage", (id: string) => {
@@ -55,7 +56,7 @@
 
 <ScrollArea.Root type="scroll" class="h-full overflow-hidden relative">
   <ScrollArea.Viewport bind:ref={viewport} class="w-full max-w-full h-full">
-    <ol class="flex flex-col gap-4 max-w-full">
+    <ol class="flex flex-col gap-2 max-w-full">
       <!--
         This use of `key` needs explaining. `key` causes the components below
         it to be deleted and re-created when the expression passed to it is changed.
@@ -77,12 +78,14 @@
           getKey={(k, _) => k}
           scrollRef={viewport}
         >
-          {#snippet children(id, _index)}
+          {#snippet children(id, index)}
             {@const message = messages[id]}
             {#if message && !message.softDeleted}
               <ChatMessage 
                 {id} 
                 {message}
+                {index}
+                {timeline}
               />
             {:else}
               <p class="italic text-error text-sm">

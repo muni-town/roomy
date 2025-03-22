@@ -3,7 +3,7 @@
   import type { Announcement, Message, Space, Ulid } from "$lib/schemas/types";
   import { renderMarkdownSanitized } from "$lib/markdown";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import { format, isToday } from "date-fns";
+  import { format, isToday, differenceInMinutes } from "date-fns";
   import { getContext } from "svelte";
   import { decodeTime } from "ulidx";
   import { getProfile } from "$lib/profile.svelte";
@@ -21,12 +21,19 @@
   type Props = {
     id: Ulid;
     message: Message | Announcement;
+    index: number;
+    timeline: Ulid[];
   };
 
-  let { id, message }: Props = $props();
+  let { id, message, index, timeline }: Props = $props();
   let space: { value: Autodoc<Space> } = getContext("space");
+  let messages = space.value.view.messages;
 
-  // set initial set with entries, no need for $effect
+  const previousMessageId = index > 0 ? timeline[index - 1] : undefined;
+  const previousMessage = previousMessageId
+    ? (messages[previousMessageId] as Message | undefined)
+    : undefined;
+
   let reactionHandles = $state(
     Object.fromEntries(
       Object.entries(message.reactions).map(([reaction, dids]) => [
@@ -49,10 +56,10 @@
   let isEmojiToolbarPickerOpen = $state(false);
   let isEmojiRowPickerOpen = $state(false);
 
-  const isAdmin: { value: boolean } = getContext("isAdmin"); 
+  const isAdmin: { value: boolean } = getContext("isAdmin");
   let mayDelete = $derived(
-    !isAnnouncement(message) &&  
-    (isAdmin.value || user.agent?.did == message.author)
+    !isAnnouncement(message) &&
+      (isAdmin.value || user.agent?.did == message.author),
   );
 
   const selectMessage = getContext("selectMessage") as (
@@ -131,65 +138,100 @@
 
   function getAnnouncementHtml(announcement: Announcement) {
     const schema = {
-      "type": "doc",
-      "content": [] as Record<string, any>[]
+      type: "doc",
+      content: [] as Record<string, any>[],
     };
 
     switch (announcement.kind) {
       case "threadCreated": {
-        const relatedThread = space.value.view.threads[announcement.relatedThreads![0]];
+        const relatedThread =
+          space.value.view.threads[announcement.relatedThreads![0]];
         schema.content.push({
-          "type": "paragraph",
-          "content": [
-            { "type": "text", "text": "A new thread has been created: " },
-            { 
-              "type": "channelThreadMention",
-              "attrs": {
-                "id": JSON.stringify({
-                  "ulid": announcement.relatedThreads![0],
-                  "space": page.params.space,
-                  "type": "thread"
+          type: "paragraph",
+          content: [
+            { type: "text", text: "A new thread has been created: " },
+            {
+              type: "channelThreadMention",
+              attrs: {
+                id: JSON.stringify({
+                  ulid: announcement.relatedThreads![0],
+                  space: page.params.space,
+                  type: "thread",
                 }),
-                "label": relatedThread.title
-              }
-            }
-          ]
+                label: relatedThread.title,
+              },
+            },
+          ],
         });
         break;
       }
       case "messageMoved": {
-        const relatedThread = space.value.view.threads[announcement.relatedThreads![0]];
+        const relatedThread =
+          space.value.view.threads[announcement.relatedThreads![0]];
         schema.content.push({
-          "type": "paragraph",
-          "content": [
-            { "type": "text", "text": "Moved to: " },
-            { 
-              "type": "channelThreadMention",
-              "attrs": {
-                "id": JSON.stringify({
-                  "ulid": announcement.relatedThreads![0],
-                  "space": page.params.space,
-                  "type": "thread"
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Moved to: " },
+            {
+              type: "channelThreadMention",
+              attrs: {
+                id: JSON.stringify({
+                  ulid: announcement.relatedThreads![0],
+                  space: page.params.space,
+                  type: "thread",
                 }),
-                "label": relatedThread.title
-              }
-            }
-          ]
+                label: relatedThread.title,
+              },
+            },
+          ],
         });
         break;
       }
       case "messageDeleted": {
         schema.content.push({
-          "type": "paragraph",
-          "content": [
-            { "type": "text", "text": "This message has been deleted" }
-          ]
+          type: "paragraph",
+          content: [{ type: "text", text: "This message has been deleted" }],
         });
         break;
       }
-    };
+    }
 
     return getContentHtml(JSON.stringify(schema));
+  }
+
+  function shouldShowAuthor() {
+    // Always show author if there's no previous message
+    if (!previousMessage) return true;
+
+    // Show if different author
+    if (previousMessage.author !== message.author) return true;
+
+    // Show if more than 5 minutes apart
+    if (previousMessageId) {
+      const currentTime = decodeTime(id);
+      const previousTime = decodeTime(previousMessageId);
+      return differenceInMinutes(currentTime, previousTime) > 5;
+    }
+
+    // Default to showing author
+    return true;
+  }
+
+  function shouldShowMovedToHeader(announcement: Announcement) {
+    if (announcement.kind !== "messageMoved") return true;
+    
+    if (!previousMessage) return true;
+    
+    if (!isAnnouncement(previousMessage)) return true;
+    
+    if (previousMessage.kind !== "messageMoved") return true;
+    
+    return previousMessage.relatedThreads?.[0] !== announcement.relatedThreads?.[0];
+  }
+
+  function getHourMinuteTime(ulid: Ulid) {
+    const decodedTime = decodeTime(ulid);
+    return format(decodedTime, "HH:mm:ss");
   }
 </script>
 
@@ -197,7 +239,7 @@
 
 <li {id} class={`flex flex-col ${isMobile && "max-w-screen"}`}>
   <div
-    class="relative group w-full h-fit flex flex-col gap-4 px-2 py-2.5 hover:bg-white/5 transition-all duration-75"
+    class={`relative group w-full h-fit flex flex-col gap-4 px-2 ${shouldShowAuthor() && "pt-5"}  hover:bg-white/5 transition-all duration-75`}
   >
     {#if isAnnouncement(message)}
       {@render announcementView()}
@@ -223,7 +265,6 @@
         </Popover.Root>
       </div>
     {/if}
-
   </div>
 </li>
 
@@ -251,24 +292,30 @@
         </p>
       </Button.Root>
     {:else if announcement.kind === "messageMoved"}
-      {@const related = space.value.view.messages[announcement.relatedMessages![0]] as Message} 
-      <Button.Root
-        onclick={() => {
-          if (isMobile) {
-            isDrawerOpen = true;
-          }
-        }}
-        class="cursor-pointer flex gap-2 text-start w-full items-center text-info-content px-4 py-1 bg-info rounded-t"
-      >
-        <Icon icon="prime:reply" width="12px" height="12px" />
-        <p
-          class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+      {@const related = space.value.view.messages[
+        announcement.relatedMessages![0]
+      ] as Message}
+      
+      {#if shouldShowMovedToHeader(announcement)}
+        <Button.Root
+          onclick={() => {
+            if (isMobile) {
+              isDrawerOpen = true;
+            }
+          }}
+          class="cursor-pointer flex gap-2 text-start w-full items-center text-info-content px-4 py-1 bg-info rounded-t"
         >
-          {@html getAnnouncementHtml(announcement)}
-        </p>
-        {@render timestamp(id)}
-      </Button.Root>
-      <div class="flex items-start gap-4">
+          <Icon icon="prime:reply" width="12px" height="12px" />
+          <p
+            class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+          >
+            {@html getAnnouncementHtml(announcement)}
+          </p>
+          {@render timestamp(id)}
+        </Button.Root>
+      {/if}
+      
+      <div class={`${!shouldShowMovedToHeader(announcement) ? 'ml-0 border-l-2 border-info pt-0.5' : ''}`}>
         {@render messageView(announcement.relatedMessages![0], related)}
       </div>
     {/if}
@@ -281,16 +328,26 @@
 
   {@render toolbar(authorProfile)}
 
-  <div class="flex gap-4">
-    <a
-      href={`https://bsky.app/profile/${authorProfile.handle}`}
-      target="_blank"
-    >
-      <AvatarImage
-        handle={authorProfile.handle}
-        avatarUrl={authorProfile.avatarUrl}
-      />
-    </a>
+  <div class="flex gap-4 group">
+    {#if shouldShowAuthor()}
+      <a
+        href={`https://bsky.app/profile/${authorProfile.handle}`}
+        target="_blank"
+      >
+        <AvatarImage
+          handle={authorProfile.handle}
+          avatarUrl={authorProfile.avatarUrl}
+        />
+      </a>
+    {:else}
+      <div class="w-8.5 relative flex items-center justify-center">
+        <span
+          class="opacity-0 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100"
+        >
+          {getHourMinuteTime(ulid)}
+        </span>
+      </div>
+    {/if}
 
     <Button.Root
       onclick={() => {
@@ -300,16 +357,18 @@
       }}
       class="flex flex-col text-start gap-2 w-full min-w-0"
     >
-      <section class="flex items-center gap-2 flex-wrap w-fit">
-        <a
-          href={`https://bsky.app/profile/${authorProfile.handle}`}
-          target="_blank"
-          class="text-primary hover:underline"
-        >
-          <h5 class="font-bold">{authorProfile.handle}</h5>
-        </a>
-        {@render timestamp(ulid)}
-      </section>
+      {#if shouldShowAuthor()}
+        <section class="flex items-center gap-2 flex-wrap w-fit">
+          <a
+            href={`https://bsky.app/profile/${authorProfile.handle}`}
+            target="_blank"
+            class="text-primary hover:underline"
+          >
+            <h5 class="font-bold">{authorProfile.handle}</h5>
+          </a>
+          {@render timestamp(ulid)}
+        </section>
+      {/if}
 
       <span class="prose select-text">
         {@html getContentHtml(msg.content)}
@@ -330,7 +389,7 @@
   </div>
 {/snippet}
 
-{#snippet toolbar(authorProfile?: { handle: string, avatarUrl: string })}
+{#snippet toolbar(authorProfile?: { handle: string; avatarUrl: string })}
   {#if isMobile}
     <Drawer bind:isDrawerOpen>
       <div class="flex gap-4 justify-center mb-4">
@@ -366,7 +425,11 @@
         <div class="join join-vertical w-full">
           <Button.Root
             onclick={() => {
-              setReplyTo({ id, authorProfile, content: (message as Message).content });
+              setReplyTo({
+                id,
+                authorProfile,
+                content: (message as Message).content,
+              });
               isDrawerOpen = false;
             }}
             class="join-item btn w-full"
@@ -424,7 +487,8 @@
       {#if authorProfile}
         <Toolbar.Button
           onclick={() =>
-            setReplyTo({ id, authorProfile, content: (message as Message).content })}
+            setReplyTo({ id, authorProfile, content: (message as Message).content })
+          }
           class="btn btn-ghost btn-square"
         >
           <Icon icon="fa6-solid:reply" />
@@ -435,7 +499,7 @@
 
   {#if isThreading.value && !isAnnouncement(message)}
     <Checkbox.Root
-      onCheckedChange={updateSelect} 
+      onCheckedChange={updateSelect}
       bind:checked={isSelected}
       class="absolute right-4 inset-y-0"
     >
@@ -478,8 +542,12 @@
 {/snippet}
 
 {#snippet replyBanner()}
-  {@const messageRepliedTo = !isAnnouncement(message) && message.replyTo && space.value.view.messages[message.replyTo] as Message}
-  {@const profileRepliedTo = messageRepliedTo && getProfile(messageRepliedTo.author)}
+  {@const messageRepliedTo =
+    !isAnnouncement(message) &&
+    message.replyTo &&
+    (space.value.view.messages[message.replyTo] as Message)}
+  {@const profileRepliedTo =
+    messageRepliedTo && getProfile(messageRepliedTo.author)}
   {#if messageRepliedTo && profileRepliedTo}
     <Button.Root
       onclick={scrollToReply}
