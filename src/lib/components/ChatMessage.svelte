@@ -217,6 +217,18 @@
     return true;
   }
 
+  function shouldShowMovedToHeader(announcement: Announcement) {
+    if (announcement.kind !== "messageMoved") return true;
+    
+    if (!previousMessage) return true;
+    
+    if (!isAnnouncement(previousMessage)) return true;
+    
+    if (previousMessage.kind !== "messageMoved") return true;
+    
+    return previousMessage.relatedThreads?.[0] !== announcement.relatedThreads?.[0];
+  }
+
   function getHourMinuteTime(ulid: Ulid) {
     const decodedTime = decodeTime(ulid);
     return format(decodedTime, "HH:mm:ss");
@@ -283,23 +295,27 @@
       {@const related = space.value.view.messages[
         announcement.relatedMessages![0]
       ] as Message}
-      <Button.Root
-        onclick={() => {
-          if (isMobile) {
-            isDrawerOpen = true;
-          }
-        }}
-        class="cursor-pointer flex gap-2 text-start w-full items-center text-info-content px-4 py-1 bg-info rounded-t"
-      >
-        <Icon icon="prime:reply" width="12px" height="12px" />
-        <p
-          class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+      
+      {#if shouldShowMovedToHeader(announcement)}
+        <Button.Root
+          onclick={() => {
+            if (isMobile) {
+              isDrawerOpen = true;
+            }
+          }}
+          class="cursor-pointer flex gap-2 text-start w-full items-center text-info-content px-4 py-1 bg-info rounded-t"
         >
-          {@html getAnnouncementHtml(announcement)}
-        </p>
-        {@render timestamp(id)}
-      </Button.Root>
-      <div class="flex items-start gap-4">
+          <Icon icon="prime:reply" width="12px" height="12px" />
+          <p
+            class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+          >
+            {@html getAnnouncementHtml(announcement)}
+          </p>
+          {@render timestamp(id)}
+        </Button.Root>
+      {/if}
+      
+      <div class={`${!shouldShowMovedToHeader(announcement) ? 'ml-0 border-l-2 border-info pt-0.5' : ''}`}>
         {@render messageView(announcement.relatedMessages![0], related)}
       </div>
     {/if}
