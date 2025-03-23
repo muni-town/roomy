@@ -1,13 +1,9 @@
 import {
   Channel,
-  components,
   EntityId,
   type EntityIdStr,
-  type IntoEntityId,
-  NamedEntity,
   Peer,
   Roomy,
-  Image,
   Space,
   Thread,
 } from "@roomy-chat/sdk";
@@ -83,7 +79,9 @@ async function initRoomy(agent: Agent): Promise<Roomy> {
   // const websocket = new WebSocket("ws://127.0.0.1:8095");
 
   const peer = new SveltePeer(
-    new StorageManager(indexedDBStorageAdapter("roomy")),
+    new StorageManager(
+      indexedDBStorageAdapter("roomy-01JQ0EP4SMJW9D58JXMV9E1CF2"),
+    ),
     await webSocketSyncer(websocket),
   );
 
