@@ -1,8 +1,11 @@
 # example netlify.toml
 [build]
-  command = "deno upgrade && deno run build"
+  command = "./scripts/netlify_build.sh"
   functions = "netlify/functions"
   publish = "dist"
+
+[build.environment]
+  NPM_FLAGS = "--help" # hack to prevent netlify from installing deps with npm.
 
   ## Uncomment to use this redirect for Single Page Applications like create-react-app.
   ## Not needed for static site generators.
