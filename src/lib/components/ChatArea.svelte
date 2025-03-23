@@ -11,6 +11,7 @@
     type Timeline,
   } from "@roomy-chat/sdk";
   import { derivePromise } from "$lib/utils.svelte";
+  import { page } from "$app/state";
 
   let {
     timeline,
@@ -34,22 +35,13 @@
   let viewport: HTMLDivElement = $state(null!);
   let virtualizer: Virtualizer<string> | undefined = $state();
 
-  // Go to the end of the ScrollArea
-  let scrollToEnd = $state(true);
-  onNavigate(() => {
-    setTimeout(() => {
-      if (virtualizer) virtualizer.scrollToIndex(messages.value.length - 1);
-    }, 100);
-  });
-
   $effect(() => {
-    scrollToEnd = true;
+    page.route; // Scroll-to-end when route changes
+    messages.value; // Scroll to end when message list changes.
     if (viewport) {
-      viewport.scrollTop = viewport.scrollHeight;
       setTimeout(() => {
         if (virtualizer) virtualizer.scrollToIndex(messages.value.length - 1);
-      }, 100);
-      scrollToEnd = false;
+      });
     }
   });
 </script>
