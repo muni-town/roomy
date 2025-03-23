@@ -4239,6 +4239,7 @@
         "npm:@iconify/svelte@^4.2.0",
         "npm:@jsr/muni-town__leaf@0.2.0-preview.12",
         "npm:@jsr/roomy-chat__router@0.1.0-alpha.14",
+        "npm:@jsr/roomy-chat__sdk@0.1.0-preview.8",
         "npm:@noble/curves@^1.8.1",
         "npm:@sveltejs/adapter-netlify@^4.4.2",
         "npm:@sveltejs/adapter-static@^3.0.8",

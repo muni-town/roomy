@@ -14,7 +14,7 @@
 
   import { Toaster } from "svelte-french-toast";
   import { RenderScan } from "svelte-render-scan";
-  import { AvatarPixel } from "svelte-boring-avatars";
+  import { AvatarMarble } from "svelte-boring-avatars";
   import { Avatar, Button, ToggleGroup } from "bits-ui";
 
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
@@ -165,7 +165,7 @@
           <Avatar.Root>
             <Avatar.Image />
             <Avatar.Fallback>
-              <AvatarPixel name={space.id} />
+              <AvatarMarble name={space.id} />
             </Avatar.Fallback>
           </Avatar.Root>
         </ToggleGroup.Item>
