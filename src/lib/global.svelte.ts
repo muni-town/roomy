@@ -52,35 +52,35 @@ $effect.root(() => {
   });
 });
 
-
 async function initRoomy(agent: Agent): Promise<Roomy> {
   const catalogId = user.catalogId.value;
   if (!catalogId)
     throw new Error("Cannot initialize roomy without catalog ID.");
 
-  // // Fetch a syncserver authentication token
-  // const resp = await agent.call(
-  //   "chat.roomy.v0.sync.token",
-  //   undefined,
-  //   undefined,
-  //   {
-  //     headers: {
-  //       "atproto-proxy": "did:web:syncserver.roomy.chat#roomy_syncserver",
-  //     },
-  //   },
-  // );
-  // if (!resp.success) {
-  //   throw new Error(`Error obtaining router auth token ${resp}`);
-  // }
-  // const token = resp.data.token as string;
+  // Fetch a syncserver authentication token
+  const resp = await agent.call(
+    "chat.roomy.v0.sync.token",
+    undefined,
+    undefined,
+    {
+      headers: {
+        "atproto-proxy": "did:web:syncserver.roomy.chat#roomy_syncserver",
+      },
+    },
+  );
+  if (!resp.success) {
+    throw new Error(`Error obtaining router auth token ${resp}`);
+  }
+  const token = resp.data.token as string;
 
-  // // Open router client
-  // const websocket = new WebSocket(
-  //   `wss://syncserver.roomy.chat/sync/as/${agent.assertDid}`,
-  //   ["authorization", token],
-  // );
+  // Open router client
+  const websocket = new WebSocket(
+    `wss://syncserver.roomy.chat/sync/as/${agent.assertDid}`,
+    ["authorization", token],
+  );
 
-  const websocket = new WebSocket("ws://127.0.0.1:8095");
+  // Use this instead of you want to test with a local development Leaf syncserver.
+  // const websocket = new WebSocket("ws://127.0.0.1:8095");
 
   const peer = new SveltePeer(
     new StorageManager(indexedDBStorageAdapter("roomy")),
