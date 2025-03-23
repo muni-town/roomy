@@ -448,8 +448,8 @@
 
           const linkId =
             item.type === "channel"
-              ? `/space/${page.params.space}/${item.id}`
-              : `/space/${page.params.space}/thread/${item.id}`;
+              ? `/${page.params.space}/${item.id}`
+              : `/${page.params.space}/thread/${item.id}`;
           editor.createLink(linkId);
 
           editor.setTextCursorPosition(block.id, "end");

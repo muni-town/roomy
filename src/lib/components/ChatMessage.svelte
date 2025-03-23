@@ -144,6 +144,7 @@
   }
 
   function getAnnouncementHtml(announcement: Announcement) {
+    if (!g.space) return "";
     const schema = {
       type: "doc",
       content: [] as Record<string, any>[],
@@ -160,7 +161,7 @@
               attrs: {
                 id: JSON.stringify({
                   id: relatedThreads.value[0]?.id,
-                  space: page.params.space,
+                  space: g.space.id,
                   type: "thread",
                 }),
                 label: relatedThreads.value[0]?.name || "loading...",
@@ -180,7 +181,7 @@
               attrs: {
                 id: JSON.stringify({
                   id: relatedThreads.value[0]?.id,
-                  space: page.params.space,
+                  space: g.space.id,
                   type: "thread",
                 }),
                 label: relatedThreads.value[0]?.name || "loading...",

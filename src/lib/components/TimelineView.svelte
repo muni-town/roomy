@@ -304,7 +304,7 @@
   <div class="navbar-start flex gap-4">
     {#if g.channel}
       {#if isMobile}
-        <Button.Root onclick={() => goto(`/space/${page.params.space}`)}>
+        <Button.Root onclick={() => goto(`/${page.params.space}`)}>
           <Icon icon="uil:left" />
         </Button.Root>
       {:else}
@@ -388,7 +388,7 @@
   <ul class="list w-full join join-vertical">
     {#if relatedThreads.value.length > 0}
       {#each relatedThreads.value as thread}
-        <a href={`/space/${page.params.space}/thread/${thread.id}`}>
+        <a href={`/${page.params.space}/thread/${thread.id}`}>
           <li class="list-row join-item flex items-center w-full bg-base-200">
             <h3 class="card-title text-xl font-medium text-primary">
               {thread.name}

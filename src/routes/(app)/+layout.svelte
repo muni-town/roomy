@@ -1,7 +1,6 @@
 <script lang="ts">
   import "../../app.css";
-  import { onMount, untrack } from "svelte";
-  import { page } from "$app/state";
+  import { onMount } from "svelte";
   import { dev } from "$app/environment";
   import { goto } from "$app/navigation";
   import { g } from "$lib/global.svelte";
@@ -18,7 +17,7 @@
   import { Avatar, Button, ToggleGroup } from "bits-ui";
 
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
-  import { Channel, Space, Thread, type EntityIdStr } from "@roomy-chat/sdk";
+  import { Space } from "@roomy-chat/sdk";
 
   let { children } = $props();
 
@@ -29,61 +28,7 @@
   let newSpaceName = $state("");
   let isNewSpaceDialogOpen = $state(false);
 
-  let spaces = derivePromise([], () => g.roomy.spaces.items());
-  let currentCatalog = $state("");
-
-  /** Update the global space and channel when the route changes. */
-  $effect(() => {
-    if (page.url.pathname === "/home") {
-      currentCatalog = "home";
-      g.space = undefined;
-    } else if (page.params.space) {
-      try {
-        g.roomy
-          .open(Space, page.params.space as EntityIdStr)
-          .then((space) => untrack(() => (g.space = space)));
-
-        currentCatalog = page.params.space;
-      } catch (e) {
-        console.error("Error opening space:", e);
-        goto("/");
-      }
-    } else {
-      g.space = undefined;
-    }
-  });
-
-  $effect(() => {
-    if (g.space && page.params.channel) {
-      try {
-        g.roomy
-          .open(Channel, page.params.channel as EntityIdStr)
-          .then((channel) => untrack(() => (g.channel = channel)));
-      } catch (e) {
-        console.error("Error opening channel:", e);
-        goto("/");
-      }
-    } else if (g.space && page.params.thread) {
-      try {
-        g.roomy
-          .open(Thread, page.params.thread as EntityIdStr)
-          .then((thread) => untrack(() => (g.channel = thread)));
-      } catch (e) {
-        console.error("Error opening thread:", e);
-        goto("/");
-      }
-    } else {
-      g.channel = undefined;
-    }
-  });
-
-  $effect(() => {
-    if (g.space && user.agent) {
-      g.isAdmin = g.space.admins.toArray().includes(user.agent.assertDid);
-    } else {
-      g.isAdmin = false;
-    }
-  });
+  let spaces = derivePromise([], async () => (await g.roomy?.spaces.items()) || []);
 
   onMount(async () => {
     await user.init();
@@ -94,7 +39,7 @@
   });
 
   async function createSpace() {
-    if (!newSpaceName || !user.agent) return;
+    if (!newSpaceName || !user.agent || !g.roomy) return;
     const space = await g.roomy.create(Space);
     space.name = newSpaceName;
     space.admins.push(user.agent.assertDid);
@@ -141,7 +86,7 @@
   >
     <ToggleGroup.Root
       type="single"
-      value={currentCatalog}
+      value={g.currentCatalog}
       class="flex flex-col gap-2 items-center"
     >
       <ToggleGroup.Item
@@ -156,12 +101,11 @@
 
       {#each spaces.value as space}
         <ToggleGroup.Item
-          onclick={() => goto(`/space/${space.id}`)}
+          onclick={() => goto(`/${space.handles.get(0) || space.id}`)}
           value={space.id}
           title={space.name}
           class="btn btn-ghost size-16 data-[state=on]:border-primary"
         >
-          <!-- TODO: Use server avatar -->
           <Avatar.Root>
             <Avatar.Image />
             <Avatar.Fallback>

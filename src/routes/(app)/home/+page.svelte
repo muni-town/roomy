@@ -2,7 +2,10 @@
   import { g } from "$lib/global.svelte";
   import { derivePromise } from "$lib/utils.svelte";
 
-  let spaces = derivePromise([], () => g.roomy.spaces.items());
+  let spaces = derivePromise(
+    undefined,
+    async () => await g.roomy?.spaces.items(),
+  );
 </script>
 
 <header class="hero bg-base-200 min-h-screen">
@@ -15,7 +18,9 @@
       </p>
       <div class="divider"></div>
 
-      {#if spaces.value.length > 0}
+      {#if !spaces.value}
+        <span class="loading loading-spinner mx-auto w-25"></span>
+      {:else if spaces.value.length > 0}
         <h2 class="text-3xl font-bold">Your Spaces</h2>
         <section class="flex gap-4 flex-wrap justify-center max-w-5xl">
           {#each spaces.value as space}
@@ -23,8 +28,9 @@
               <div class="card-body">
                 <h2 class="card-title">{space.name}</h2>
                 <div class="card-actions justify-end">
-                  <a href={`/space/${space.id}`} class="btn btn-primary"
-                    >Open Space</a
+                  <a
+                    href={`/${space.handles.get(0) || space.id}`}
+                    class="btn btn-primary">Open Space</a
                   >
                 </div>
               </div>

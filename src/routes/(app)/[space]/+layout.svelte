@@ -74,7 +74,7 @@
         items.push({
           value: JSON.stringify({
             id: thread.id,
-            space: page.params.space,
+            space: g.space.id,
             type: "thread",
           }),
           label: thread.name,
@@ -89,7 +89,8 @@
         return {
           value: JSON.stringify({
             id: channel.id,
-            space: page.params.space,
+            // TODO: I don't know that the space is necessary here or not.
+            space: g.space!.id,
             type: "channel",
           }),
           label: channel.name,
@@ -379,7 +380,7 @@
                     {#each category.channels.ids() as channelId}
                       <ToggleGroup.Item
                         onclick={() =>
-                          goto(`/space/${page.params.space}/${channelId}`)}
+                          goto(`/${page.params.space}/${channelId}`)}
                         value={channelId}
                         class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
                       >
@@ -401,7 +402,7 @@
         </Accordion.Root>
       {:else if item.matches(Channel)}
         <ToggleGroup.Item
-          onclick={() => goto(`/space/${page.params.space}/${item.id}`)}
+          onclick={() => goto(`/${page.params.space}/${item.id}`)}
           value={item.id}
           class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
         >
@@ -419,7 +420,7 @@
   <div transition:slide class="flex flex-col gap-4">
     {#each availableThreads.value as thread}
       <ToggleGroup.Item
-        onclick={() => goto(`/space/${page.params.space}/thread/${thread.id}`)}
+        onclick={() => goto(`/${page.params.space}/thread/${thread.id}`)}
         value={thread.id}
         class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
       >
