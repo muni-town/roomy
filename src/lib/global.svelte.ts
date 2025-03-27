@@ -5,6 +5,7 @@ import {
   Roomy,
   Space,
   Thread,
+  WikiPage
 } from "@roomy-chat/sdk";
 import { StorageManager } from "@muni-town/leaf/storage";
 import { SveltePeer } from "@muni-town/leaf/svelte";
