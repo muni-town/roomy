@@ -43,6 +43,35 @@
       });
     }
   });
+
+  function shouldMergeWithPrevious(
+    message: Message | Announcement,
+    previousMessage?: Message | Announcement,
+  ): boolean {
+    const areMessages =
+      previousMessage instanceof Message &&
+      message instanceof Message &&
+      !previousMessage.softDeleted;
+    const authorsAreSame =
+      areMessages && message.authors.get(0) == previousMessage.authors.get(0);
+    const messagesWithin5Minutes =
+      (message.createdDate?.getTime() || 0) -
+        (previousMessage?.createdDate?.getTime() || 0) <
+      60 * 1000 * 5;
+    const areAnnouncements =
+      previousMessage instanceof Announcement &&
+      message instanceof Announcement;
+    const isSequentialMovedAnnouncement =
+      areAnnouncements &&
+      previousMessage.kind == "messageMoved" &&
+      message.kind == "messageMoved" &&
+      previousMessage.relatedThreads.ids()[0] ==
+        message.relatedThreads.ids()[0];
+    const mergeWithPrevious =
+      (authorsAreSame && messagesWithin5Minutes) ||
+      isSequentialMovedAnnouncement;
+    return mergeWithPrevious;
+  }
 </script>
 
 <ScrollArea.Root type="scroll" class="h-full overflow-hidden relative">
@@ -73,31 +102,14 @@
           {#snippet children(message: Message | Announcement, index)}
             {@const previousMessage =
               index > 0 ? messages.value[index - 1] : undefined}
-            {@const areMessages =
-              previousMessage instanceof Message &&
-              message instanceof Message &&
-              !previousMessage.softDeleted}
-            {@const authorsAreSame =
-              areMessages &&
-              message.authors.get(0) == previousMessage.authors.get(0)}
-            {@const messagesWithin5Minutes =
-              (message.createdDate?.getTime() || 0) -
-                (previousMessage?.createdDate?.getTime() || 0) <
-              60 * 1000 * 5}
-            {@const areAnnouncements =
-              previousMessage instanceof Announcement &&
-              message instanceof Announcement}
-            {@const isSequentialMovedAnnouncement =
-              areAnnouncements &&
-              previousMessage.kind == "messageMoved" &&
-              message.kind == "messageMoved" &&
-              previousMessage.relatedThreads.ids()[0] ==
-                message.relatedThreads.ids()[0]}
-            {@const mergeWithPrevious =
-              (authorsAreSame && messagesWithin5Minutes) ||
-              isSequentialMovedAnnouncement}
             {#if !message.softDeleted}
-              <ChatMessage {message} {mergeWithPrevious} />
+              <ChatMessage
+                {message}
+                mergeWithPrevious={shouldMergeWithPrevious(
+                  message,
+                  previousMessage,
+                )}
+              />
             {:else}
               <p class="italic text-error text-sm">
                 This message has been deleted
