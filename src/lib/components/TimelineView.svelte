@@ -53,14 +53,6 @@
 
   $effect(() => {
     updateTabFromHash();
-    
-    // Add listener for hash changes
-    window.addEventListener('hashchange', updateTabFromHash);
-    
-    // Cleanup when component is destroyed
-    return () => {
-      window.removeEventListener('hashchange', updateTabFromHash);
-    };
   });
 
   // Update the hash when tab changes
