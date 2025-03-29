@@ -42,6 +42,25 @@
   );
 
   let tab = $state<"chat" | "threads" | "wiki">("chat");
+  
+  // Initialize tab based on hash if present
+  function updateTabFromHash() {
+    const hash = window.location.hash.replace('#', '');
+    if (hash === 'chat' || hash === 'threads' || hash === 'wiki') {
+      tab = hash as "chat" | "threads" | "wiki";
+    }
+  }
+
+  $effect(() => {
+    updateTabFromHash();
+  });
+
+  // Update the hash when tab changes
+  $effect(() => {
+    if (tab) {
+      window.location.hash = tab;
+    }
+  });
 
   let messageInput: JSONContent = $state({});
   let imageFiles: FileList | null = $state(null);
@@ -341,7 +360,6 @@
       <Tabs.List class="tabs tabs-box">
         <Tabs.Trigger
           value="chat"
-          onclick={() => goto(page.url.pathname)}
           class="tab flex gap-2"
         >
           <Icon icon="tabler:message" class="text-2xl" />
@@ -349,7 +367,10 @@
             <p>Chat</p>
           {/if}
         </Tabs.Trigger>
-        <Tabs.Trigger value="threads" class="tab flex gap-2">
+        <Tabs.Trigger 
+          value="threads" 
+          class="tab flex gap-2"
+        >
           <Icon
             icon="material-symbols:thread-unread-rounded"
             class="text-2xl"
@@ -358,7 +379,10 @@
             <p>Threads</p>
           {/if}
         </Tabs.Trigger>
-        <Tabs.Trigger value="wiki" class="tab flex gap-2">
+        <Tabs.Trigger 
+          value="wiki" 
+          class="tab flex gap-2"
+        >
           <Icon icon="tabler:notebook" class="text-2xl" />
           {#if !isMobile}
             <p>Wiki</p>
