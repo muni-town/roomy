@@ -5,15 +5,14 @@
 
   import { page } from "$app/state";
   import { g } from "$lib/global.svelte";
-  import { goto } from "$app/navigation";
   import { outerWidth } from "svelte/reactivity/window";
 
   import { setContext } from "svelte";
   import { slide } from "svelte/transition";
   import type { Item } from "$lib/tiptap/editor";
   import { getProfile } from "$lib/profile.svelte";
-  import { derivePromise, resolveLeafId } from "$lib/utils.svelte";
-  import { Category, Channel, Message, Space } from "@roomy-chat/sdk";
+  import { derivePromise, navigate, resolveLeafId } from "$lib/utils.svelte";
+  import { Category, Channel, Message } from "@roomy-chat/sdk";
   import toast from "svelte-french-toast";
 
   let { children } = $props();
@@ -514,7 +513,10 @@
                     {#each category.channels.ids() as channelId}
                       <ToggleGroup.Item
                         onclick={() =>
-                          goto(`/${page.params.space}/${channelId}`)}
+                          navigate({
+                            space: page.params.space!,
+                            channel: channelId,
+                          })}
                         value={channelId}
                         class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
                       >
@@ -536,7 +538,11 @@
         </Accordion.Root>
       {:else if item.matches(Channel)}
         <ToggleGroup.Item
-          onclick={() => goto(`/${page.params.space}/${item.id}`)}
+          onclick={() =>
+            navigate({
+              space: page.params.space!,
+              channel: item.id,
+            })}
           value={item.id}
           class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
         >
@@ -554,7 +560,8 @@
   <div transition:slide class="flex flex-col gap-4">
     {#each availableThreads.value as thread}
       <ToggleGroup.Item
-        onclick={() => goto(`/${page.params.space}/thread/${thread.id}`)}
+        onclick={() =>
+          navigate({ space: page.params.space!, thread: thread.id })}
         value={thread.id}
         class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
       >

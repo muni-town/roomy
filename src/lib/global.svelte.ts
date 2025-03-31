@@ -14,12 +14,12 @@ import { webSocketSyncer } from "@muni-town/leaf/sync1/ws-client";
 import { user } from "./user.svelte";
 import type { Agent } from "@atproto/api";
 import { page } from "$app/state";
-import { goto } from "$app/navigation";
 import { untrack } from "svelte";
 
 import * as roomy from "@roomy-chat/sdk";
-import { resolveLeafId } from "./utils.svelte";
+import { navigate, resolveLeafId } from "./utils.svelte";
 (window as any).r = roomy;
+(window as any).page = page;
 
 // Reload app when this module changes to prevent accumulated connections.
 if (import.meta.hot) {
@@ -39,6 +39,24 @@ export let g = $state({
 (globalThis as any).g = g;
 
 $effect.root(() => {
+  // Redirect to the `/-/space.domain` or `/leaf:id` as appropriate.
+  $effect(() => {
+    if (
+      (page.params.space &&
+        page.params.spaceIndicator !== undefined &&
+        page.params.space.startsWith("leaf:")) ||
+      (page.params.space &&
+        page.params.spaceIndicator === undefined &&
+        !page.params.space.startsWith("leaf:"))
+    ) {
+      navigate({
+        space: page.params.space,
+        channel: page.params.channel,
+        thread: page.params.thread,
+      });
+    }
+  });
+
   // Reload Roomy peer when login changes.
   $effect(() => {
     if (user.agent && user.catalogId.value) {
@@ -60,21 +78,18 @@ $effect.root(() => {
 
     untrack(() => {
       if (page.url.pathname === "/home") {
-        console.log("setting home");
         g.currentCatalog = "home";
       } else if (page.params.space) {
-        console.log("space ID", page.params.space);
         if (page.params.space.includes(".")) {
           resolveLeafId(page.params.space).then(async (id) => {
             if (!id) {
               console.error("Leaf ID not found for domain:", page.params.space);
-              goto("/home");
+              navigate("home");
               return;
             }
 
             g.roomy!.open(Space, id)
               .then((space) => {
-                console.log("space from domain", space);
                 g.currentCatalog = id;
                 g.space = space;
               })
@@ -83,10 +98,8 @@ $effect.root(() => {
               });
           });
         } else {
-          console.log("id id", page.params.space);
           g.roomy!.open(Space, page.params.space as EntityIdStr).then(
             (space) => {
-              console.log("space from id", space);
               g.currentCatalog = page.params.space!;
               g.space = space;
             },
@@ -106,7 +119,7 @@ $effect.root(() => {
           .then((channel) => (g.channel = channel));
       } catch (e) {
         console.error("Error opening channel:", e);
-        goto("/");
+        navigate("home");
       }
     } else if (g.space && page.params.thread) {
       try {
@@ -115,7 +128,7 @@ $effect.root(() => {
           .then((thread) => (g.channel = thread));
       } catch (e) {
         console.error("Error opening thread:", e);
-        goto("/");
+        navigate("home");
       }
     } else {
       g.channel = undefined;

@@ -2,10 +2,9 @@
   import "../../app.css";
   import { onMount } from "svelte";
   import { dev } from "$app/environment";
-  import { goto } from "$app/navigation";
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
-  import { cleanHandle, derivePromise } from "$lib/utils.svelte";
+  import { cleanHandle, derivePromise, navigate } from "$lib/utils.svelte";
 
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
@@ -28,7 +27,10 @@
   let newSpaceName = $state("");
   let isNewSpaceDialogOpen = $state(false);
 
-  let spaces = derivePromise([], async () => (await g.roomy?.spaces.items()) || []);
+  let spaces = derivePromise(
+    [],
+    async () => (await g.roomy?.spaces.items()) || [],
+  );
 
   onMount(async () => {
     await user.init();
@@ -91,7 +93,7 @@
     >
       <ToggleGroup.Item
         value="home"
-        onclick={() => goto("/home")}
+        onclick={() => navigate("home")}
         class="btn btn-ghost size-16 data-[state=on]:border-accent"
       >
         <Icon icon="iconamoon:home-fill" font-size="2em" />
@@ -101,7 +103,7 @@
 
       {#each spaces.value as space}
         <ToggleGroup.Item
-          onclick={() => goto(`/${space.handles.get(0) || space.id}`)}
+          onclick={() => navigate({ space: space.handles.get(0) || space.id })}
           value={space.id}
           title={space.name}
           class="btn btn-ghost size-16 data-[state=on]:border-primary"
