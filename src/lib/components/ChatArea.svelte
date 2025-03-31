@@ -1,6 +1,5 @@
 <script lang="ts">
   import { ScrollArea } from "bits-ui";
-  import { onNavigate } from "$app/navigation";
   import ChatMessage from "./ChatMessage.svelte";
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
@@ -44,11 +43,40 @@
       });
     }
   });
+
+  function shouldMergeWithPrevious(
+    message: Message | Announcement,
+    previousMessage?: Message | Announcement,
+  ): boolean {
+    const areMessages =
+      previousMessage instanceof Message &&
+      message instanceof Message &&
+      !previousMessage.softDeleted;
+    const authorsAreSame =
+      areMessages && message.authors.get(0) == previousMessage.authors.get(0);
+    const messagesWithin5Minutes =
+      (message.createdDate?.getTime() || 0) -
+        (previousMessage?.createdDate?.getTime() || 0) <
+      60 * 1000 * 5;
+    const areAnnouncements =
+      previousMessage instanceof Announcement &&
+      message instanceof Announcement;
+    const isSequentialMovedAnnouncement =
+      areAnnouncements &&
+      previousMessage.kind == "messageMoved" &&
+      message.kind == "messageMoved" &&
+      previousMessage.relatedThreads.ids()[0] ==
+        message.relatedThreads.ids()[0];
+    const mergeWithPrevious =
+      (authorsAreSame && messagesWithin5Minutes) ||
+      isSequentialMovedAnnouncement;
+    return mergeWithPrevious;
+  }
 </script>
 
 <ScrollArea.Root type="scroll" class="h-full overflow-hidden relative">
   <ScrollArea.Viewport bind:ref={viewport} class="w-full max-w-full h-full">
-    <ol class="flex flex-col gap-4 max-w-full">
+    <ol class="flex flex-col gap-2 max-w-full">
       <!--
         This use of `key` needs explaining. `key` causes the components below
         it to be deleted and re-created when the expression passed to it is changed.
@@ -63,6 +91,7 @@
         By using `key` we make sure that the virtualizer is re-mounted after the `viewport` is
         assigned, so that it's scroll integration works properly.
       -->
+
       {#key viewport}
         <Virtualizer
           bind:this={virtualizer}
@@ -70,9 +99,17 @@
           getKey={(k, _) => k}
           scrollRef={viewport}
         >
-          {#snippet children(message, _index)}
+          {#snippet children(message: Message | Announcement, index)}
+            {@const previousMessage =
+              index > 0 ? messages.value[index - 1] : undefined}
             {#if !message.softDeleted}
-              <ChatMessage {message} />
+              <ChatMessage
+                {message}
+                mergeWithPrevious={shouldMergeWithPrevious(
+                  message,
+                  previousMessage,
+                )}
+              />
             {:else}
               <p class="italic text-error text-sm">
                 This message has been deleted

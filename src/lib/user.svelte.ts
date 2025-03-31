@@ -200,7 +200,6 @@ export const user = {
     if (!agent) return Promise.reject("No agent available");
     const resp = await agent.com.atproto.repo.uploadBlob(blob);
     const blobRef = resp.data.blob;
-    console.log(resp.data.blob.toJSON());
     // Create a record that links to the blob
     const record = {
       $type: "chat.roomy.v0.images",

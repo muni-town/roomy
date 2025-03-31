@@ -1,9 +1,34 @@
 import type { DidDocument } from "@atproto/oauth-client-browser";
 import { decodeBase32 } from "./base32";
+import type { EntityIdStr } from "@muni-town/leaf";
+import { goto } from "$app/navigation";
 
 /** Cleans a handle string by removing any characters not valid for a domain. */
 export function cleanHandle(handle: string): string {
   return handle.replaceAll(/[^a-z0-9-\.]/gi, "");
+}
+
+export type NavigationTarget =
+  | "home"
+  | { space: string; channel?: string; thread?: string };
+
+/** A helper function to navigate to a specific roomy object, like a space, channel, or thread */
+export function navigate(target: NavigationTarget) {
+  if (target == "home") {
+    goto("/home");
+  } else if ("space" in target) {
+    let url = ``;
+    if (target.space.includes(".")) {
+      url += "/-";
+    }
+    url += `/${target.space}`;
+    if (target.channel) {
+      url += `/${target.channel}`;
+    } else if (target.thread) {
+      url += `/${target.thread}`;
+    }
+    goto(url);
+  }
 }
 
 const handleCache: { [did: string]: DidDocument } = {};
@@ -29,6 +54,20 @@ export async function resolvePublicKey(did: string): Promise<Uint8Array> {
   const json = await resp.json();
   keyCache[did] = decodeBase32(json.publicKey);
   return keyCache[did];
+}
+
+export async function resolveLeafId(
+  handle: string,
+): Promise<EntityIdStr | undefined> {
+  const resp = await fetch(
+    `https://leaf-resolver.roomy.chat/xrpc/town.muni.01JQ1SV7YGYKTZ9JFG5ZZEFDNK.resolve-leaf-id?domain=${encodeURIComponent(handle)}`,
+    {
+      headers: [["accept", "application/json"]],
+    },
+  );
+  const json = await resp.json();
+  const id = json.id;
+  return id;
 }
 
 /**

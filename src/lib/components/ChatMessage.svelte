@@ -11,7 +11,6 @@
   import Drawer from "./Drawer.svelte";
   import AvatarImage from "./AvatarImage.svelte";
   import { getContentHtml } from "$lib/tiptap/editor";
-  import { page } from "$app/state";
   import { Announcement, Message, type EntityIdStr } from "@roomy-chat/sdk";
   import { g } from "$lib/global.svelte";
   import { derivePromise } from "$lib/utils.svelte";
@@ -19,12 +18,13 @@
 
   type Props = {
     message: Message | Announcement;
+    mergeWithPrevious?: boolean;
   };
 
-  let { message }: Props = $props();
+  let { message, mergeWithPrevious = false }: Props = $props();
 
   let messageRepliedTo = derivePromise(undefined, async () => {
-    if (message.replyTo) {
+    if (g.roomy && message.replyTo) {
       return await g.roomy.open(Message, message.replyTo);
     }
   });
@@ -208,7 +208,7 @@
 
 <li id={message.id} class={`flex flex-col ${isMobile && "max-w-screen"}`}>
   <div
-    class="relative group w-full h-fit flex flex-col gap-4 px-2 py-2.5 hover:bg-white/5 transition-all duration-75"
+    class={`relative group w-full h-fit flex flex-col gap-4 px-2 ${!mergeWithPrevious && "pt-5"}  hover:bg-white/5 transition-all duration-75`}
   >
     {#if message instanceof Announcement}
       {@render announcementView(message)}
@@ -263,25 +263,29 @@
         </p>
       </Button.Root>
     {:else if announcement.kind === "messageMoved"}
-      <Button.Root
-        onclick={() => {
-          if (isMobile) {
-            isDrawerOpen = true;
-          }
-        }}
-        class="cursor-pointer flex gap-2 text-start w-full items-center text-info-content px-4 py-1 bg-info rounded-t"
-      >
-        <Icon icon="prime:reply" width="12px" height="12px" />
-        <p
-          class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+      {#if !mergeWithPrevious}
+        <Button.Root
+          onclick={() => {
+            if (isMobile) {
+              isDrawerOpen = true;
+            }
+          }}
+          class="cursor-pointer flex gap-2 text-start w-full items-center text-info-content px-4 py-1 bg-info rounded-t"
         >
-          {@html getAnnouncementHtml(announcement)}
-        </p>
-        {#if message.createdDate}
-          {@render timestamp(message.createdDate)}
-        {/if}
-      </Button.Root>
-      <div class="flex items-start gap-4">
+          <Icon icon="prime:reply" width="12px" height="12px" />
+          <p
+            class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+          >
+            {@html getAnnouncementHtml(announcement)}
+          </p>
+          {#if message.createdDate}
+            {@render timestamp(message.createdDate)}
+          {/if}
+        </Button.Root>
+      {/if}
+      <div
+        class="ml-0 border-l-2 border-info pt-0.5 pl-2"
+      >
         {#if relatedMessage}
           {@render messageView(relatedMessage)}
         {/if}
@@ -297,17 +301,27 @@
   {#await authorProfile then authorProfile}
     {@render toolbar(authorProfile)}
 
-    <div class="flex gap-4">
-      <a
-        href={`https://bsky.app/profile/${authorProfile.handle}`}
-        title={authorProfile.handle}
-        target="_blank"
-      >
-        <AvatarImage
-          handle={authorProfile.handle}
-          avatarUrl={authorProfile.avatarUrl}
-        />
-      </a>
+    <div class="flex gap-4 group">
+      {#if !mergeWithPrevious}
+        <a
+          href={`https://bsky.app/profile/${authorProfile.handle}`}
+          title={authorProfile.handle}
+          target="_blank"
+        >
+          <AvatarImage
+            handle={authorProfile.handle}
+            avatarUrl={authorProfile.avatarUrl}
+          />
+        </a>
+      {:else}
+        <div class="w-8.5 relative flex items-center justify-center">
+          <span
+            class="opacity-0 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100"
+            >{message.createdDate &&
+              format(message.createdDate, "HH:mm:ss")}</span
+          >
+        </div>
+      {/if}
 
       <Button.Root
         onclick={() => {
@@ -317,18 +331,20 @@
         }}
         class="flex flex-col text-start gap-2 w-full min-w-0"
       >
-        <section class="flex items-center gap-2 flex-wrap w-fit">
-          <a
-            href={`https://bsky.app/profile/${authorProfile.handle}`}
-            target="_blank"
-            class="text-primary hover:underline"
-          >
-            <h5 class="font-bold" title={authorProfile.handle}>
-              {authorProfile.displayName || authorProfile.handle}
-            </h5>
-          </a>
-          {@render timestamp(message.createdDate || new Date())}
-        </section>
+        {#if !mergeWithPrevious}
+          <section class="flex items-center gap-2 flex-wrap w-fit">
+            <a
+              href={`https://bsky.app/profile/${authorProfile.handle}`}
+              target="_blank"
+              class="text-primary hover:underline"
+            >
+              <h5 class="font-bold" title={authorProfile.handle}>
+                {authorProfile.displayName || authorProfile.handle}
+              </h5>
+            </a>
+            {@render timestamp(message.createdDate || new Date())}
+          </section>
+        {/if}
 
         <span class="prose select-text">
           {@html getContentHtml(JSON.parse(msg.bodyJson))}

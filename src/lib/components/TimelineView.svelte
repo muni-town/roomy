@@ -2,7 +2,6 @@
   import _ from "underscore";
   import { page } from "$app/state";
   import { getContext, setContext, untrack } from "svelte";
-  import { goto } from "$app/navigation";
   import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
   import { getContentHtml, type Item } from "$lib/tiptap/editor";
@@ -16,7 +15,7 @@
   import { Button, Popover, Tabs } from "bits-ui";
 
   import { format, isToday } from "date-fns";
-  import { derivePromise } from "$lib/utils.svelte";
+  import { derivePromise, navigate } from "$lib/utils.svelte";
   import { g } from "$lib/global.svelte";
   import {
     Announcement,
@@ -91,7 +90,7 @@
 
   async function createThread(e: SubmitEvent) {
     e.preventDefault();
-    if (!g.space || !g.channel) return;
+    if (!g.roomy || !g.space || !g.channel) return;
 
     const thread = await g.roomy.create(Thread);
 
@@ -146,7 +145,7 @@
   }
 
   async function sendMessage() {
-    if (!g.space || !g.channel || !user.agent) return;
+    if (!g.roomy || !g.space || !g.channel || !user.agent) return;
 
     /* TODO: image upload refactor with tiptap
     const images = imageFiles
@@ -282,7 +281,6 @@
         }
       }
 
-      console.log("category input", channelCategoryInput);
       if (!channelCategoryInput && !foundChannelInSidebar) {
         g.space.sidebarItems.push(g.channel);
       }
@@ -323,11 +321,14 @@
   <div class="navbar-start flex gap-4">
     {#if g.channel}
       {#if isMobile}
-        <Button.Root onclick={() => goto(`/${page.params.space}`)}>
+        <Button.Root
+          onclick={() =>
+            navigate(page.params.space ? { space: page.params.space } : "home")}
+        >
           <Icon icon="uil:left" />
         </Button.Root>
       {:else}
-        {#await g.channel.image && g.roomy.open(Image, g.channel.image) then image}
+        {#await g.channel.image && g.roomy && g.roomy.open(Image, g.channel.image) then image}
           <!-- TODO: We're using #key to recreate avatar image when channel changes since for some reason the
           avatarimage component doesn't re-render properly by itself.  -->
           {#key g.channel.id}
@@ -358,10 +359,7 @@
       class={isMobile ? "navbar-end" : "navbar-center"}
     >
       <Tabs.List class="tabs tabs-box">
-        <Tabs.Trigger
-          value="chat"
-          class="tab flex gap-2"
-        >
+        <Tabs.Trigger value="chat" class="tab flex gap-2">
           <Icon icon="tabler:message" class="text-2xl" />
           {#if !isMobile}
             <p>Chat</p>
@@ -473,7 +471,7 @@
           {/if}
           <div class="relative">
             <!-- TODO: get all users that has joined the server -->
-            {#if g.roomy.spaces.ids().includes(g.space.id)}
+            {#if g.roomy && g.roomy.spaces.ids().includes(g.space.id)}
               <ChatInput
                 bind:content={messageInput}
                 users={users.value}
@@ -484,7 +482,7 @@
               <Button.Root
                 class="w-full btn"
                 onclick={() => {
-                  if (g.space) {
+                  if (g.space && g.roomy) {
                     g.roomy.spaces.push(g.space);
                     g.roomy.commit();
                   }
