@@ -210,9 +210,11 @@
 {#if g.space}
   <nav
     class={[
-      !isMobile && "max-w-[16rem] border-r-2 border-base-200",
+      !isMobile &&
+        "max-w-[16rem] border-r-2 border-base-200 max-h-full h-full min-h-0 overflow-y-auto",
       "px-4 py-5 flex flex-col gap-4 w-full",
     ]}
+    style="scrollbar-width: thin;"
   >
     <div class="flex justify-between">
       <h1 class="text-2xl font-extrabold text-base-content text-ellipsis flex">
