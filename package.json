@@ -51,6 +51,7 @@
     "@tailwindcss/typography": "^0.5.16",
     "@types/sanitize-html": "^2.13.0",
     "@types/underscore": "^1.13.0",
+    "@vite-pwa/sveltekit": "^1.0.0",
     "base32-decode": "^1.0.0",
     "base32-encode": "^2.0.0",
     "daisyui": "^5.0.6",
