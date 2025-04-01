@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "chat.roomy.app",
   "build": {
-    "frontendDist": "../dist",
+    "frontendDist": "../build",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "beforeBuildCommand": "pnpm build:t"
   },
   "app": {
     "withGlobalTauri": true,
