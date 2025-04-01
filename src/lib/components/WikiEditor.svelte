@@ -193,11 +193,6 @@
   }
 
   function setEditingWiki(value: boolean) {
-    if (value && !g.isAdmin) {
-      toast.error("Only admins can edit the wiki", { position: "bottom-end" });
-      return;
-    }
-
     isEditingWiki = value;
 
     if (value) {
@@ -799,11 +794,9 @@
   <aside class="w-1/4 border-r p-4">
     <div class="mb-4 flex justify-between items-center">
       <h3 class="text-xl font-bold text-base-content">Wikis</h3>
-      {#if g.isAdmin}
-        <button class="btn btn-primary btn-sm text-lg" onclick={createWiki}>
-          +
-        </button>
-      {/if}
+      <button class="btn btn-primary btn-sm text-lg" onclick={createWiki}>
+        +
+      </button>
     </div>
     <ul>
       {#each wikis.value as wiki}
@@ -840,13 +833,7 @@
       <div
         class="flex justify-center items-center p-8 border border-dashed border-base-content/30 rounded-lg"
       >
-        {#if g.isAdmin}
-          <p class="text-base-content/70">
-            No wiki page is available. Please create one.
-          </p>
-        {:else}
-          <p class="text-base-content/70">No wiki page is available.</p>
-        {/if}
+        <p class="text-base-content/70">No wiki pages.</p>
       </div>
     {:else if isEditingWiki}
       <section class="wiki-editor-container">
@@ -870,8 +857,8 @@
           </div>
         </div>
         <div
-          class="wiki-editor bg-base-300/20 rounded-lg border border-base-content/30 p-4 h-auto {g.isAdmin
-            ? 'admin-mode'
+          class="wiki-editor bg-base-300/20 rounded-lg border border-base-content/30 p-4 h-auto {isEditingWiki
+            ? 'edit-mode'
             : ''}"
         >
           <div
@@ -902,7 +889,7 @@
 
           <div bind:this={editorElement} class="min-h-[400px]"></div>
 
-          {#if slashMenuVisible && g.isAdmin}
+          {#if slashMenuVisible && isEditingWiki}
             <div
               class="slash-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
               style="left: {slashMenuPosition.x}px; top: {slashMenuPosition.y}px;"
@@ -923,7 +910,7 @@
             </div>
           {/if}
 
-          {#if mentionMenuVisible && g.isAdmin}
+          {#if mentionMenuVisible && isEditingWiki}
             <div
               class="mention-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
               style="left: {mentionMenuPosition.x}px; top: {mentionMenuPosition.y}px;"
@@ -958,7 +945,7 @@
             </div>
           {/if}
 
-          {#if hashMenuVisible && g.isAdmin}
+          {#if hashMenuVisible && isEditingWiki}
             <div
               class="hash-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
               style="left: {hashMenuPosition.x}px; top: {hashMenuPosition.y}px;"
@@ -999,7 +986,7 @@
             </div>
           {/if}
 
-          {#if selectionTooltipVisible && g.isAdmin}
+          {#if selectionTooltipVisible && isEditingWiki}
             <div
               class="tooltip-animate bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50 flex items-center justify-center p-1"
               style="left: {selectionTooltipPosition.x}px; top: {selectionTooltipPosition.y}px; transform: translateX(-50%);"
@@ -1026,15 +1013,13 @@
           <h3 class="text-xl font-bold text-base-content">
             {selectedWiki.name}
           </h3>
-          {#if g.isAdmin}
-            <Button.Root
-              onclick={() => setEditingWiki(true)}
-              class="btn btn-primary"
-            >
-              <Icon icon="tabler:edit" />
-              Edit Wiki
-            </Button.Root>
-          {/if}
+          <Button.Root
+            onclick={() => setEditingWiki(true)}
+            class="btn btn-primary"
+          >
+            <Icon icon="tabler:edit" />
+            Edit Wiki
+          </Button.Root>
         </div>
         <div class="wiki-rendered p-4 bg-base-300/30 rounded-lg">
           <div class="wiki-html text-base-content">
@@ -1137,7 +1122,7 @@
     padding-left: 24px;
   }
 
-  :global(.wiki-editor-container .admin-mode .bn-block::before) {
+  :global(.wiki-editor-container .edit-mode .bn-block::before) {
     content: "+";
     position: absolute;
     left: 6px;
@@ -1161,11 +1146,11 @@
     background-color: transparent;
   }
 
-  :global(.wiki-editor-container .admin-mode .bn-block:hover::before) {
+  :global(.wiki-editor-container .edit-mode .bn-block:hover::before) {
     opacity: 1;
   }
 
-  :global(.wiki-editor-container .admin-mode .bn-block::before:hover) {
+  :global(.wiki-editor-container .edit-mode .bn-block::before:hover) {
     background-color: hsl(var(--p) / 0.2);
   }
 
