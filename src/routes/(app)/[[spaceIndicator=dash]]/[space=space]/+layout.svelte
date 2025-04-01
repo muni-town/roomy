@@ -238,7 +238,7 @@
               <p>
                 Space handles are created with DNS records and allow your space
                 to be reached at a URL like <code
-                  >https://roomy.chat/example.org</code
+                  >https://roomy.chat/-/example.org</code
                 >.
               </p>
               {#if !!newSpaceHandle}
