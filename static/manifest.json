@@ -6,8 +6,14 @@
   "icons": [
     {
       "src": "favicon.png",
-      "type": "image.png",
-      "size": "48x48"
+      "type": "image/png",
+      "sizes": "48x48"
+    },
+    {
+      "src": "icon-432.png",
+      "type": "image/png",
+      "sizes": "432x432",
+      "purpose": "any"
     }
   ]
 }
