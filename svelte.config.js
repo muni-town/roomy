@@ -9,8 +9,8 @@ const config = {
   preprocess: vitePreprocess(),
 
   kit: {
-    adapter: process.env.MODE === 'tauri' ? adapterStatic({
-      fallback: 'index.html',
+    adapter: process.env.MODE === "tauri" ? adapterStatic({
+      fallback: "index.html",
     }) : adapter(),
   },
 };
