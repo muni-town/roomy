@@ -2,5 +2,12 @@
   "name": "Roomy",
   "description": "A peer to peer community platform on the AT Protocol",
   "display": "standalone",
-  "start_url": "/home"
+  "start_url": "/home",
+  "icons": [
+    {
+      "src": "favicon.png",
+      "type": "image.png",
+      "size": "48x48"
+    }
+  ]
 }
