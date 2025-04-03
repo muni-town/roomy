@@ -5,12 +5,12 @@ import {
   Roomy,
   Space,
   Thread,
-  WikiPage
 } from "@roomy-chat/sdk";
 import { StorageManager } from "@muni-town/leaf/storage";
 import { SveltePeer } from "@muni-town/leaf/svelte";
 import { indexedDBStorageAdapter } from "@muni-town/leaf/storage/indexed-db";
 import { webSocketSyncer } from "@muni-town/leaf/sync1/ws-client";
+import { decode } from "@msgpack/msgpack";
 
 import { user } from "./user.svelte";
 import type { Agent } from "@atproto/api";
@@ -29,6 +29,48 @@ if (import.meta.hot) {
   });
 }
 
+class ObservableLocalStorage {
+  constructor() {
+    this.listeners = {};
+  }
+
+  setItem(key, value) {
+    const oldValue = localStorage.getItem(key);
+    localStorage.setItem(key, value);
+    this._notifyListeners(key, oldValue, value);
+  }
+
+  getItem(key) {
+    return localStorage.getItem(key);
+  }
+
+  removeItem(key) {
+    const oldValue = localStorage.getItem(key);
+    localStorage.removeItem(key);
+    this._notifyListeners(key, oldValue, null);
+  }
+
+  subscribe(key, callback) {
+    if (!this.listeners[key]) {
+      this.listeners[key] = [];
+    }
+    this.listeners[key].push(callback);
+
+    return () => {
+      this.listeners[key] = this.listeners[key].filter((cb) => cb !== callback);
+    };
+  }
+
+  _notifyListeners(key, oldValue, newValue) {
+    if (this.listeners[key]) {
+      this.listeners[key].forEach((callback) => {
+        callback(newValue, oldValue);
+      });
+    }
+  }
+}
+
+export const storage = new ObservableLocalStorage();
 export let g = $state({
   // Create an empty roomy instance by default, it will be updated when the user logs in.
   roomy: undefined as Roomy | undefined,
@@ -172,8 +214,33 @@ async function initRoomy(agent: Agent): Promise<Roomy> {
     ["authorization", token],
   );
 
-  // Use this instead of you want to test with a local development Leaf syncserver.
+  // // Use this instead of you want to test with a local development Leaf syncserver.
   // const websocket = new WebSocket("ws://127.0.0.1:8095");
+  let str = storage.getItem(g.channel.id) || "0";
+  let count = parseInt(str);
+  storage.setItem(g.channel.id, count);
+  setTimeout(() => {
+    websocket.addEventListener("message", async (event) => {
+      const decoded = decode(event.data);
+      const entityId = decoded.entityId;
+      const decoder = new TextDecoder("utf-8");
+      const update = decoder.decode(decoded.update);
+
+      // const items = await g.space?.sidebarItems.items();
+      // console.log("space sidebar items");
+      // for (const item of items!) {
+      //   let channel = item.tryCast(Channel);
+      //   console.log("channel", channel!.id);
+      // }
+      if (g.channel.id != entityId) {
+        count += 1;
+        // localStorage.setItem(`unreads:${entityId}`, unread_count.toString());
+        storage.setItem(entityId, count);
+      }
+      // console.log("channels", g.channel.id, entityId);
+      // console.log("message event", decoded, update);
+    });
+  }, 5000); // wait until initial page load is done, probably a better way to do this
 
   const peer = new SveltePeer(
     new StorageManager(
