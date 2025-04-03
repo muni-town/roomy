@@ -68,9 +68,13 @@
 
     loginLoading = false;
   }
+  let base = $state(getComputedStyle(document.querySelector("html")).getPropertyValue("--color-base-300") ?? "#e6ddac")
 </script>
 
 <svelte:head>
+  <meta name="theme-color" content={base}>
+  <meta name="msapplication-navbutton-color" content={base}>
+  <meta name="msapplication-TileColor" content={base}>
   <title>Roomy</title>
 </svelte:head>
 
@@ -119,7 +123,7 @@
     </ToggleGroup.Root>
 
     <section class="menu gap-3">
-      <ThemeSelector />
+      <ThemeSelector bind:base />
       <Dialog
         title="Create Space"
         description="Create a new public chat space"
