@@ -9,7 +9,7 @@
     "npm:@blocknote/react@0.25": "0.25.2_react@19.0.0_react-dom@19.0.0__react@19.0.0_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1",
     "npm:@iconify/svelte@^4.2.0": "4.2.0_svelte@5.25.3__acorn@8.14.1",
     "npm:@jsr/muni-town__leaf@0.2.0-preview.12": "0.2.0-preview.12_typescript@5.8.2",
-    "npm:@jsr/roomy-chat__sdk@0.1.0-preview.11": "0.1.0-preview.11_typescript@5.8.2",
+    "npm:@jsr/roomy-chat__sdk@0.1.0-preview.12": "0.1.0-preview.12_typescript@5.8.2",
     "npm:@noble/curves@^1.8.1": "1.8.1",
     "npm:@sveltejs/adapter-netlify@^4.4.2": "4.4.2_@sveltejs+kit@2.20.2__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.25.3____acorn@8.14.1___vite@6.2.2____lightningcss@1.29.2__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
     "npm:@sveltejs/adapter-static@^3.0.8": "3.0.8_@sveltejs+kit@2.20.2__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.25.3____acorn@8.14.1___vite@6.2.2____lightningcss@1.29.2__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
@@ -622,8 +622,8 @@
         "svelte@5.25.3_acorn@8.14.1"
       ]
     },
-    "@jsr/roomy-chat__sdk@0.1.0-preview.11_typescript@5.8.2": {
-      "integrity": "sha512-0X/PetDLo3gIE0g9jLNXwUO17UGbnA2DC0+ZV1nwI9vtcC3X6hDv53Q2//6tl2pYfAOduNs6ME/AY0d88cfbTA==",
+    "@jsr/roomy-chat__sdk@0.1.0-preview.12_typescript@5.8.2": {
+      "integrity": "sha512-DFbrwifjUt7NakV5UDIa/AzSvuuHfY7Cg0L89ptaFAk0z7CkPQiiO8d91IKi+MueVvD1PHF7JPT1dJ5NM9creg==",
       "dependencies": [
         "@jsr/muni-town__leaf"
       ]
@@ -3681,7 +3681,7 @@
         "npm:@blocknote/react@0.25",
         "npm:@iconify/svelte@^4.2.0",
         "npm:@jsr/muni-town__leaf@0.2.0-preview.12",
-        "npm:@jsr/roomy-chat__sdk@0.1.0-preview.11",
+        "npm:@jsr/roomy-chat__sdk@0.1.0-preview.12",
         "npm:@noble/curves@^1.8.1",
         "npm:@sveltejs/adapter-netlify@^4.4.2",
         "npm:@sveltejs/adapter-static@^3.0.8",

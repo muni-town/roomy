@@ -14,6 +14,7 @@
   import { derivePromise, navigate, resolveLeafId } from "$lib/utils.svelte";
   import { Category, Channel, Message } from "@roomy-chat/sdk";
   import toast from "svelte-french-toast";
+  import { user } from "$lib/user.svelte";
 
   let { children } = $props();
   let isMobile = $derived((outerWidth.current || 0) < 640);
@@ -122,16 +123,42 @@
 
   let saveSpaceLoading = $state(false);
   let showSpaceSettings = $state(false);
-  let newSpaceHandle = $state() as string;
+  let newSpaceHandle = $state("");
+  let bannedHandlesInput = $state("");
   let verificationFailed = $state(false);
   $effect(() => {
+    if (!g.space) return;
     if (!showSpaceSettings) {
       newSpaceHandle = g.space?.handles.get(0) || "";
       verificationFailed = false;
       saveSpaceLoading = false;
+      Promise.all(
+        Object.keys(g.space.bans.toJSON()).map((x) => getProfile(x)),
+      ).then(
+        (profiles) =>
+          (bannedHandlesInput = profiles.map((x) => x.handle).join(", ")),
+      );
     }
   });
-  async function saveSpace() {
+  async function saveBannedHandles() {
+    if (!g.space || !user.agent) return;
+    const bannedIds = (
+      await Promise.all(
+        bannedHandlesInput
+          .split(",")
+          .map((x) => x.trim())
+          .filter((x) => !!x)
+          .map((x) => user.agent!.resolveHandle({ handle: x })),
+      )
+    ).map((x) => x.data.did);
+    g.space.bans.clear();
+    for (const ban of bannedIds) {
+      g.space.bans.set(ban, true);
+    }
+    g.space.commit();
+    showSpaceSettings = false;
+  }
+  async function saveSpaceHandle() {
     if (!g.space) return;
     saveSpaceLoading = true;
 
@@ -232,7 +259,7 @@
             </Button.Root>
           {/snippet}
 
-          <form class="flex flex-col gap-6" onsubmit={saveSpace}>
+          <form class="flex flex-col gap-6" onsubmit={saveSpaceHandle}>
             <h2 class="font-bold text-xl">Handle</h2>
             <div class="flex flex-col gap-2">
               <p>
@@ -299,6 +326,30 @@
                 <span class="loading loading-spinner"></span>
               {/if}
               {!!newSpaceHandle ? "Verify" : "Save Without Handle"}
+            </Button.Root>
+          </form>
+
+          <form class="flex flex-col gap-4" onsubmit={saveBannedHandles}>
+            <h2 class="font-bold text-xl">Bans</h2>
+
+            <div>
+              <input class="input w-full" bind:value={bannedHandlesInput} />
+              <div class="flex flex-col">
+                <span class="mx-2 mt-1 text-sm"
+                  >Input a list of handles separated by commas.</span
+                >
+                <span class="mx-2 mt-1 text-sm"
+                  >Note: the ban is "best effort" right now. The Roomy alpha is
+                  generally insecure.</span
+                >
+              </div>
+            </div>
+
+            <Button.Root
+              class="btn btn-primary w-full"
+              bind:disabled={saveSpaceLoading}
+            >
+              Save Bans
             </Button.Root>
           </form>
         </Dialog>

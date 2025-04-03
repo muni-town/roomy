@@ -5,7 +5,7 @@ import {
   Roomy,
   Space,
   Thread,
-  WikiPage
+  WikiPage,
 } from "@roomy-chat/sdk";
 import { StorageManager } from "@muni-town/leaf/storage";
 import { SveltePeer } from "@muni-town/leaf/svelte";
@@ -35,6 +35,7 @@ export let g = $state({
   space: undefined as Space | undefined,
   channel: undefined as Channel | Thread | undefined,
   isAdmin: false,
+  isBanned: false,
   currentCatalog: "home",
 });
 (globalThis as any).g = g;
@@ -139,8 +140,10 @@ $effect.root(() => {
   $effect(() => {
     if (g.space && user.agent) {
       g.isAdmin = g.space.admins.toArray().includes(user.agent.assertDid);
+      g.isBanned = !!g.space.bans.get(user.agent.assertDid);
     } else {
       g.isAdmin = false;
+      g.isBanned = false;
     }
   });
 });

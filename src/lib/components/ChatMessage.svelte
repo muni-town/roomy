@@ -283,9 +283,7 @@
           {/if}
         </Button.Root>
       {/if}
-      <div
-        class="ml-0 border-l-2 border-info pt-0.5 pl-2"
-      >
+      <div class="ml-0 border-l-2 border-info pt-0.5 pl-2">
         {#if relatedMessage}
           {@render messageView(relatedMessage)}
         {/if}
@@ -368,126 +366,128 @@
 {/snippet}
 
 {#snippet toolbar(authorProfile?: { handle: string; avatarUrl: string })}
-  {#if isMobile}
-    <Drawer bind:isDrawerOpen>
-      <div class="flex gap-4 justify-center mb-4">
-        <Button.Root
-          onclick={() => {
-            toggleReaction("👍");
-            isDrawerOpen = false;
-          }}
-          class="btn btn-circle"
+  {#if !g.isBanned}
+    {#if isMobile}
+      <Drawer bind:isDrawerOpen>
+        <div class="flex gap-4 justify-center mb-4">
+          <Button.Root
+            onclick={() => {
+              toggleReaction("👍");
+              isDrawerOpen = false;
+            }}
+            class="btn btn-circle"
+          >
+            👍
+          </Button.Root>
+          <Button.Root
+            onclick={() => {
+              toggleReaction("😂");
+              isDrawerOpen = false;
+            }}
+            class="btn btn-circle"
+          >
+            😂
+          </Button.Root>
+          <Popover.Root bind:open={isEmojiDrawerPickerOpen}>
+            <Popover.Trigger class="btn btn-circle">
+              <Icon icon="lucide:smile-plus" />
+            </Popover.Trigger>
+            <Popover.Content>
+              <emoji-picker bind:this={emojiDrawerPicker}></emoji-picker>
+            </Popover.Content>
+          </Popover.Root>
+        </div>
+
+        {#if authorProfile}
+          <div class="join join-vertical w-full">
+            {#if message instanceof Message}
+              <Button.Root
+                onclick={() => {
+                  setReplyTo(message);
+                  isDrawerOpen = false;
+                }}
+                class="join-item btn w-full"
+              >
+                <Icon icon="fa6-solid:reply" />
+                Reply
+              </Button.Root>
+            {/if}
+            {#if mayDelete}
+              <Button.Root
+                onclick={() => deleteMessage()}
+                class="join-item btn btn-error w-full"
+              >
+                <Icon icon="tabler:trash" />
+                Delete
+              </Button.Root>
+            {/if}
+          </div>
+        {/if}
+      </Drawer>
+    {:else}
+      <Toolbar.Root
+        class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-base-300 p-1 rounded items-center`}
+      >
+        <Toolbar.Button
+          onclick={() => toggleReaction("👍")}
+          class="btn btn-ghost btn-square"
         >
           👍
-        </Button.Root>
-        <Button.Root
-          onclick={() => {
-            toggleReaction("😂");
-            isDrawerOpen = false;
-          }}
-          class="btn btn-circle"
+        </Toolbar.Button>
+        <Toolbar.Button
+          onclick={() => toggleReaction("😂")}
+          class="btn btn-ghost btn-square"
         >
           😂
-        </Button.Root>
-        <Popover.Root bind:open={isEmojiDrawerPickerOpen}>
-          <Popover.Trigger class="btn btn-circle">
+        </Toolbar.Button>
+        <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
+          <Popover.Trigger class="btn btn-ghost btn-square">
             <Icon icon="lucide:smile-plus" />
           </Popover.Trigger>
           <Popover.Content>
-            <emoji-picker bind:this={emojiDrawerPicker}></emoji-picker>
+            <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
           </Popover.Content>
         </Popover.Root>
-      </div>
+        {#if shiftDown && mayDelete}
+          <Toolbar.Button
+            onclick={() => deleteMessage()}
+            class="btn btn-ghost btn-square"
+          >
+            <Icon icon="tabler:trash" color="red" />
+          </Toolbar.Button>
+        {/if}
 
-      {#if authorProfile}
-        <div class="join join-vertical w-full">
-          {#if message instanceof Message}
-            <Button.Root
-              onclick={() => {
-                setReplyTo(message);
-                isDrawerOpen = false;
-              }}
-              class="join-item btn w-full"
-            >
-              <Icon icon="fa6-solid:reply" />
-              Reply
-            </Button.Root>
-          {/if}
-          {#if mayDelete}
-            <Button.Root
-              onclick={() => deleteMessage()}
-              class="join-item btn btn-error w-full"
-            >
-              <Icon icon="tabler:trash" />
-              Delete
-            </Button.Root>
-          {/if}
-        </div>
-      {/if}
-    </Drawer>
-  {:else}
-    <Toolbar.Root
-      class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-base-300 p-1 rounded items-center`}
-    >
-      <Toolbar.Button
-        onclick={() => toggleReaction("👍")}
-        class="btn btn-ghost btn-square"
+        {#if authorProfile && message instanceof Message}
+          <Toolbar.Button
+            onclick={() => setReplyTo(message)}
+            class="btn btn-ghost btn-square"
+          >
+            <Icon icon="fa6-solid:reply" />
+          </Toolbar.Button>
+        {/if}
+      </Toolbar.Root>
+    {/if}
+
+    {#if isThreading.value && message instanceof Message}
+      <Checkbox.Root
+        onCheckedChange={updateSelect}
+        bind:checked={isSelected}
+        class="absolute right-4 inset-y-0"
       >
-        👍
-      </Toolbar.Button>
-      <Toolbar.Button
-        onclick={() => toggleReaction("😂")}
-        class="btn btn-ghost btn-square"
-      >
-        😂
-      </Toolbar.Button>
-      <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
-        <Popover.Trigger class="btn btn-ghost btn-square">
-          <Icon icon="lucide:smile-plus" />
-        </Popover.Trigger>
-        <Popover.Content>
-          <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
-        </Popover.Content>
-      </Popover.Root>
-      {#if shiftDown && mayDelete}
-        <Toolbar.Button
-          onclick={() => deleteMessage()}
-          class="btn btn-ghost btn-square"
-        >
-          <Icon icon="tabler:trash" color="red" />
-        </Toolbar.Button>
-      {/if}
-
-      {#if authorProfile && message instanceof Message}
-        <Toolbar.Button
-          onclick={() => setReplyTo(message)}
-          class="btn btn-ghost btn-square"
-        >
-          <Icon icon="fa6-solid:reply" />
-        </Toolbar.Button>
-      {/if}
-    </Toolbar.Root>
-  {/if}
-
-  {#if isThreading.value && message instanceof Message}
-    <Checkbox.Root
-      onCheckedChange={updateSelect}
-      bind:checked={isSelected}
-      class="absolute right-4 inset-y-0"
-    >
-      {#snippet children({ checked }: { checked: boolean })}
-        <div
-          class="border border-primary bg-base-100 text-primary-content size-4 rounded items-center cursor-pointer"
-        >
-          {#if checked}
-            <Icon
-              icon="material-symbols:check-rounded"
-              class="bg-primary size-3.5"
-            />
-          {/if}
-        </div>
-      {/snippet}
-    </Checkbox.Root>
+        {#snippet children({ checked }: { checked: boolean })}
+          <div
+            class="border border-primary bg-base-100 text-primary-content size-4 rounded items-center cursor-pointer"
+          >
+            {#if checked}
+              <Icon
+                icon="material-symbols:check-rounded"
+                class="bg-primary size-3.5"
+              />
+            {/if}
+          </div>
+        {/snippet}
+      </Checkbox.Root>
+    {/if}
   {/if}
 {/snippet}
 
