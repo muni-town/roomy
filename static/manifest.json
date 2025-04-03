@@ -3,6 +3,8 @@
   "description": "A peer to peer community platform on the AT Protocol",
   "display": "standalone",
   "start_url": "/home",
+  "theme_color": "#e6ddac",
+  "background_color": "#e6ddac",
   "icons": [
     {
       "src": "favicon.png",
