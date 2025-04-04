@@ -10,7 +10,6 @@
     initSpaceContextMention,
   } from "$lib/tiptap/editor";
   import { g } from "$lib/global.svelte";
-  import { user } from "$lib/user.svelte";
 
   type Props = {
     content: Record<any, any>;
@@ -35,7 +34,7 @@
     tiptap = new Editor({
       element,
       extensions,
-      content,
+      content: content.type ? content : { type: "doc", children: [] },
       editorProps: {
         attributes: {
           class:
@@ -53,7 +52,9 @@
     tiptap = new Editor({
       element,
       extensions,
-      content: untrack(() => content),
+      content: untrack(() =>
+        content.type ? content : { type: "doc", children: [] },
+      ),
       editorProps: {
         attributes: {
           class:
