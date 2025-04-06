@@ -25,7 +25,7 @@ export function navigate(target: NavigationTarget) {
     if (target.channel) {
       url += `/${target.channel}`;
     } else if (target.thread) {
-      url += `/${target.thread}`;
+      url += `/thread/${target.thread}`;
     }
     goto(url);
   }

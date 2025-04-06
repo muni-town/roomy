@@ -41,11 +41,11 @@
   );
 
   let tab = $state<"chat" | "threads" | "wiki">("chat");
-  
+
   // Initialize tab based on hash if present
   function updateTabFromHash() {
-    const hash = window.location.hash.replace('#', '');
-    if (hash === 'chat' || hash === 'threads' || hash === 'wiki') {
+    const hash = window.location.hash.replace("#", "");
+    if (hash === "chat" || hash === "threads" || hash === "wiki") {
       tab = hash as "chat" | "threads" | "wiki";
     }
   }
@@ -365,10 +365,7 @@
             <p>Chat</p>
           {/if}
         </Tabs.Trigger>
-        <Tabs.Trigger 
-          value="threads" 
-          class="tab flex gap-2"
-        >
+        <Tabs.Trigger value="threads" class="tab flex gap-2">
           <Icon
             icon="material-symbols:thread-unread-rounded"
             class="text-2xl"
@@ -377,10 +374,7 @@
             <p>Threads</p>
           {/if}
         </Tabs.Trigger>
-        <Tabs.Trigger 
-          value="wiki" 
-          class="tab flex gap-2"
-        >
+        <Tabs.Trigger value="wiki" class="tab flex gap-2">
           <Icon icon="tabler:notebook" class="text-2xl" />
           {#if !isMobile}
             <p>Wiki</p>
@@ -581,10 +575,17 @@
     </Button.Root>
 
     {#if g.isAdmin}
-      <Dialog title="Channel Settings" bind:isDialogOpen={showSettingsDialog}>
+      <Dialog
+        title={g.channel instanceof Channel
+          ? "Channel Settings"
+          : "Thread Settings"}
+        bind:isDialogOpen={showSettingsDialog}
+      >
         {#snippet dialogTrigger()}
           <Button.Root
-            title="Channel Settings"
+            title={g.channel instanceof Channel
+              ? "Channel Settings"
+              : "Thread Settings"}
             class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150 m-auto flex"
           >
             <Icon icon="lucide:settings" class="text-2xl" />
@@ -596,7 +597,7 @@
             Name
             <input
               bind:value={channelNameInput}
-              placeholder="channel-name"
+              placeholder="name"
               class="input"
             />
           </label>
