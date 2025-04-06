@@ -17,6 +17,7 @@
 
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import { Space } from "@roomy-chat/sdk";
+  import ContextMenu from "$lib/components/ContextMenu.svelte";
 
   let { children } = $props();
 
@@ -101,20 +102,35 @@
 
       <div class="divider mt-0 mb-1"></div>
 
-      {#each spaces.value as space}
-        <ToggleGroup.Item
-          onclick={() => navigate({ space: space.handles.get(0) || space.id })}
-          value={space.id}
-          title={space.name}
-          class="btn btn-ghost size-16 data-[state=on]:border-primary"
+      {#each spaces.value as space, i}
+        <ContextMenu
+          menuTitle={space.name}
+          items={[
+            {
+              label: "Leave Space",
+              icon: "mdi:exit-to-app",
+              onselect: () => {
+                g.roomy?.spaces.remove(i);
+                g.roomy?.commit();
+              },
+            },
+          ]}
         >
-          <Avatar.Root>
-            <Avatar.Image />
-            <Avatar.Fallback>
-              <AvatarMarble name={space.id} />
-            </Avatar.Fallback>
-          </Avatar.Root>
-        </ToggleGroup.Item>
+          <ToggleGroup.Item
+            onclick={() =>
+              navigate({ space: space.handles.get(0) || space.id })}
+            value={space.id}
+            title={space.name}
+            class="btn btn-ghost size-16 data-[state=on]:border-primary"
+          >
+            <Avatar.Root>
+              <Avatar.Image />
+              <Avatar.Fallback>
+                <AvatarMarble name={space.id} />
+              </Avatar.Fallback>
+            </Avatar.Root>
+          </ToggleGroup.Item>
+        </ContextMenu>
       {/each}
     </ToggleGroup.Root>
 
