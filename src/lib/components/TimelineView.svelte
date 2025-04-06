@@ -617,6 +617,29 @@
           {/if}
           <Button.Root class="btn btn-primary">Save Settings</Button.Root>
         </form>
+
+        <form
+          onsubmit={(e) => {
+            e.preventDefault();
+            if (!g.channel) return;
+            g.channel.softDeleted = true;
+            g.channel.commit();
+            showSettingsDialog = false;
+            navigate({ space: page.params.space! });
+          }}
+          class="flex flex-col gap-3 mt-3"
+        >
+          <h2 class="text-xl font-bold">Danger Zone</h2>
+          <p>
+            Deleting a {g.channel instanceof Channel ? "channel" : "thread"} doesn't
+            delete the data permanently, it just hides the thread from the UI.
+          </p>
+          <Button.Root class="btn btn-error"
+            >Delete {g.channel instanceof Channel
+              ? "Channel"
+              : "Thread"}</Button.Root
+          >
+        </form>
       </Dialog>
     {/if}
   </menu>

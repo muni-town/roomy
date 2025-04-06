@@ -510,7 +510,7 @@
 {#snippet channelsSidebar()}
   <div transition:slide class="flex flex-col gap-4">
     <!-- Category and Channels -->
-    {#each sidebarItems.value as item}
+    {#each sidebarItems.value.filter((x) => !x.softDeleted) as item}
       {@const category = item.tryCast(Category)}
       {#if category}
         <Accordion.Root type="single" value={item.name}>
@@ -578,24 +578,26 @@
                     class="flex flex-col gap-4 py-2"
                   >
                     {#each category.channels.ids() as channelId}
-                      <ToggleGroup.Item
-                        onclick={() =>
-                          navigate({
-                            space: page.params.space!,
-                            channel: channelId,
-                          })}
-                        value={channelId}
-                        class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
-                      >
-                        <h3 class="flex justify-start items-center gap-2 px-2">
-                          <Icon icon="basil:comment-solid" />
-                          {#await g.roomy && g.roomy.open(Channel, channelId)}
-                            ...
-                          {:then channel}
-                            {channel?.name}
-                          {/await}
-                        </h3>
-                      </ToggleGroup.Item>
+                      {#await g.roomy && g.roomy.open(Channel, channelId) then channel}
+                        {#if !channel?.softDeleted}
+                          <ToggleGroup.Item
+                            onclick={() =>
+                              navigate({
+                                space: page.params.space!,
+                                channel: channelId,
+                              })}
+                            value={channelId}
+                            class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
+                          >
+                            <h3
+                              class="flex justify-start items-center gap-2 px-2"
+                            >
+                              <Icon icon="basil:comment-solid" />
+                              {channel?.name || "..."}
+                            </h3>
+                          </ToggleGroup.Item>
+                        {/if}
+                      {/await}
                     {/each}
                   </div>
                 {/if}
