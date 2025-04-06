@@ -124,11 +124,13 @@
   let saveSpaceLoading = $state(false);
   let showSpaceSettings = $state(false);
   let newSpaceHandle = $state("");
+  let spaceNameInput = $state("");
   let bannedHandlesInput = $state("");
   let verificationFailed = $state(false);
   $effect(() => {
     if (!g.space) return;
     if (!showSpaceSettings) {
+      spaceNameInput = g.space.name;
       newSpaceHandle = g.space?.handles.get(0) || "";
       verificationFailed = false;
       saveSpaceLoading = false;
@@ -157,6 +159,11 @@
     }
     g.space.commit();
     showSpaceSettings = false;
+  }
+  async function saveSpaceName() {
+    if (!g.space) return;
+    g.space.name = spaceNameInput;
+    g.space.commit();
   }
   async function saveSpaceHandle() {
     if (!g.space) return;
@@ -259,6 +266,13 @@
             </Button.Root>
           {/snippet}
 
+          <form onsubmit={saveSpaceName} class="flex flex-col gap-3">
+            <label class="input w-full">
+              <span class="label">Name</span>
+              <input bind:value={spaceNameInput} placeholder="My Space" />
+            </label>
+            <Button.Root class="btn btn-primary w-full">Save Name</Button.Root>
+          </form>
           <form class="flex flex-col gap-6" onsubmit={saveSpaceHandle}>
             <h2 class="font-bold text-xl">Handle</h2>
             <div class="flex flex-col gap-2">
