@@ -18,9 +18,13 @@
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import { Space } from "@roomy-chat/sdk";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
+  import ChatMode from "$lib/components/ChatMode.svelte";
+  import { page } from "$app/state";
 
   let { children } = $props();
+  import { outerWidth } from "svelte/reactivity/window";
 
+  let isMobile = $derived((outerWidth.current || 0) < 640);
   let handleInput = $state("");
   let loginLoading = $state(false);
   let isLoginDialogOpen = $state(!user.session);
@@ -206,5 +210,22 @@
     </section>
   </aside>
 
-  {@render children()}
+    {#if g.channel}
+      
+    <ChatMode/>
+    {#if !isMobile}
+        <main
+          class="flex flex-col gap-4 rounded-lg p-4 grow min-w-0 h-full overflow-clip bg-base-100"
+        >
+          {@render children()}
+        </main>
+      {:else if page.params.channel || page.params.thread}
+        <main
+          class="absolute inset-0 flex flex-col gap-4 rounded-lg p-4 h-screen overflow-clip bg-base-100"
+        >
+          {@render children()}
+        </main>
+      {/if}
+    {/if}
+  </div>
 </div>

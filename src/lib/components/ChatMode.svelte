@@ -5,7 +5,6 @@
 
   import { page } from "$app/state";
   import { g } from "$lib/global.svelte";
-  import { outerWidth } from "svelte/reactivity/window";
 
   import { setContext } from "svelte";
   import { slide } from "svelte/transition";
@@ -15,9 +14,10 @@
   import { Category, Channel, Message } from "@roomy-chat/sdk";
   import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
+  import { outerWidth } from "svelte/reactivity/window";
 
-  let { children } = $props();
   let isMobile = $derived((outerWidth.current || 0) < 640);
+
   let sidebarAccordionValues = $state(["channels", "threads"]);
 
   // Navigate to first channel in space if we do not have a channel selected.
@@ -278,9 +278,6 @@
     style="scrollbar-width: thin;"
   >
     <div class="flex justify-between">
-      <h1 class="text-2xl font-extrabold text-base-content text-ellipsis flex">
-        {g.space.name}
-      </h1>
 
       {#if g.isAdmin}
         <Dialog title="Space Settings" bind:isDialogOpen={showSpaceSettings}>
@@ -397,7 +394,6 @@
       {/if}
     </div>
 
-    <div class="divider my-0"></div>
 
     {#if g.isAdmin}
       <menu class="menu p-0 w-full justify-between join join-vertical">
@@ -515,19 +511,7 @@
   </nav>
 
   <!-- Events/Room Content -->
-  {#if !isMobile}
-    <main
-      class="flex flex-col gap-4 rounded-lg p-4 grow min-w-0 h-full overflow-clip bg-base-100"
-    >
-      {@render children()}
-    </main>
-  {:else if page.params.channel || page.params.thread}
-    <main
-      class="absolute inset-0 flex flex-col gap-4 rounded-lg p-4 h-screen overflow-clip bg-base-100"
-    >
-      {@render children()}
-    </main>
-  {/if}
+  
 
   <!-- If there is no space. -->
 {:else}
