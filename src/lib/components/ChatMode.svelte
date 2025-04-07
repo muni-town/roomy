@@ -196,255 +196,242 @@
   }
 </script>
 
-{#if g.space}
-  <nav
-    class={[
-      !isMobile &&
-        "max-w-[16rem] border-r-2 border-base-200 max-h-full h-full min-h-0 overflow-y-auto",
-      "px-4 py-5 flex flex-col gap-4 w-full",
-    ]}
-    style="scrollbar-width: thin;"
-  >
-    <div class="flex justify-between">
-
-      {#if g.isAdmin}
-        <Dialog title="Space Settings" bind:isDialogOpen={showSpaceSettings}>
-          {#snippet dialogTrigger()}
-            <Button.Root
-              title="Space Settings"
-              class="btn w-full justify-start join-item text-base-content"
-            >
-              <Icon icon="lucide:settings" class="size-6" />
-            </Button.Root>
-          {/snippet}
-
-          <form onsubmit={saveSpaceName} class="flex flex-col gap-3">
-            <label class="input w-full">
-              <span class="label">Name</span>
-              <input bind:value={spaceNameInput} placeholder="My Space" />
-            </label>
-            <Button.Root class="btn btn-primary w-full">Save Name</Button.Root>
-          </form>
-          <form class="flex flex-col gap-6" onsubmit={saveSpaceHandle}>
-            <h2 class="font-bold text-xl">Handle</h2>
-            <div class="flex flex-col gap-2">
-              <p>
-                Space handles are created with DNS records and allow your space
-                to be reached at a URL like <code
-                  >https://roomy.chat/-/example.org</code
-                >.
-              </p>
-              {#if !!newSpaceHandle}
-                {@const subdomain = newSpaceHandle
-                  .split(".")
-                  .slice(0, -2)
-                  .join(".")}
-                <p>
-                  Add the following DNS record to your DNS provider to use the
-                  domain as your handle.
-                </p>
-                <div class="max-w-full overflow-x-auto min-w-0">
-                  <table class="table text-[0.85em]">
-                    <thead>
-                      <tr>
-                        <th>Type</th>
-                        <th>Host</th>
-                        <th>Value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>TXT</td>
-                        <td>
-                          _leaf{subdomain ? "." + subdomain : ""}
-                        </td>
-                        <td>
-                          "id={g.space.id}"
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              {:else}
-                <p>Provide a domain to see which DNS record to add for it.</p>
-              {/if}
-            </div>
-            <label class="input w-full">
-              <span class="label">Handle</span>
-              <input bind:value={newSpaceHandle} placeholder="example.org" />
-            </label>
-
-            {#if verificationFailed}
-              <div role="alert" class="alert alert-error">
-                <span
-                  >Verification failed. It may take several minutes before DNS
-                  records are propagated. If you have configured them correctly
-                  try again in a few minutes.</span
-                >
-              </div>
-            {/if}
-
-            <Button.Root
-              class="btn btn-primary"
-              bind:disabled={saveSpaceLoading}
-            >
-              {#if saveSpaceLoading}
-                <span class="loading loading-spinner"></span>
-              {/if}
-              {!!newSpaceHandle ? "Verify" : "Save Without Handle"}
-            </Button.Root>
-          </form>
-
-          <form class="flex flex-col gap-4" onsubmit={saveBannedHandles}>
-            <h2 class="font-bold text-xl">Bans</h2>
-
-            <div>
-              <input class="input w-full" bind:value={bannedHandlesInput} />
-              <div class="flex flex-col">
-                <span class="mx-2 mt-1 text-sm"
-                  >Input a list of handles separated by commas.</span
-                >
-                <span class="mx-2 mt-1 text-sm"
-                  >Note: the ban is "best effort" right now. The Roomy alpha is
-                  generally insecure.</span
-                >
-              </div>
-            </div>
-
-            <Button.Root
-              class="btn btn-primary w-full"
-              bind:disabled={saveSpaceLoading}
-            >
-              Save Bans
-            </Button.Root>
-          </form>
-        </Dialog>
-      {/if}
-    </div>
-
-
+<nav
+  class={[
+    !isMobile &&
+      "max-w-[16rem] border-r-2 border-base-200 min-h-0 overflow-y-auto",
+    "px-4 py-5 flex flex-col gap-4 w-full",
+  ]}
+  style="scrollbar-width: thin;"
+>
+  <div class="flex justify-between">
     {#if g.isAdmin}
-      <menu class="menu p-0 w-full justify-between join join-vertical">
-        <Dialog title="Create Channel" bind:isDialogOpen={showNewChannelDialog}>
-          {#snippet dialogTrigger()}
-            <Button.Root
-              title="Create Channel"
-              class="btn w-full justify-start join-item text-base-content"
-            >
-              <Icon icon="basil:comment-plus-solid" class="size-6" />
-              Create Channel
-            </Button.Root>
-          {/snippet}
+      <Dialog title="Space Settings" bind:isDialogOpen={showSpaceSettings}>
+        {#snippet dialogTrigger()}
+          <Button.Root
+            title="Space Settings"
+            class="btn w-full justify-start join-item text-base-content"
+          >
+            <Icon icon="lucide:settings" class="size-6" />
+          </Button.Root>
+        {/snippet}
 
-          <form class="flex flex-col gap-4" onsubmit={createChannel}>
-            <label class="input w-full">
-              <span class="label">Name</span>
-              <input bind:value={newChannelName} placeholder="General" />
-            </label>
-            <label class="select w-full">
-              <span class="label">Category</span>
-              <select bind:value={newChannelCategory}>
-                <option value={undefined}>None</option>
-                {#each categories.value as category}
-                  <option value={category}>{category.name}</option>
-                {/each}
-              </select>
-            </label>
-            <Button.Root class="btn btn-primary">
-              <Icon icon="basil:add-outline" font-size="1.8em" />
-              Create Channel
-            </Button.Root>
-          </form>
-        </Dialog>
+        <form onsubmit={saveSpaceName} class="flex flex-col gap-3">
+          <label class="input w-full">
+            <span class="label">Name</span>
+            <input bind:value={spaceNameInput} placeholder="My Space" />
+          </label>
+          <Button.Root class="btn btn-primary w-full">Save Name</Button.Root>
+        </form>
+        <form class="flex flex-col gap-6" onsubmit={saveSpaceHandle}>
+          <h2 class="font-bold text-xl">Handle</h2>
+          <div class="flex flex-col gap-2">
+            <p>
+              Space handles are created with DNS records and allow your space to
+              be reached at a URL like <code
+                >https://roomy.chat/-/example.org</code
+              >.
+            </p>
+            {#if !!newSpaceHandle}
+              {@const subdomain = newSpaceHandle
+                .split(".")
+                .slice(0, -2)
+                .join(".")}
+              <p>
+                Add the following DNS record to your DNS provider to use the
+                domain as your handle.
+              </p>
+              <div class="max-w-full overflow-x-auto min-w-0">
+                <table class="table text-[0.85em]">
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Host</th>
+                      <th>Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>TXT</td>
+                      <td>
+                        _leaf{subdomain ? "." + subdomain : ""}
+                      </td>
+                      <td>
+                        "id={g.space.id}"
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            {:else}
+              <p>Provide a domain to see which DNS record to add for it.</p>
+            {/if}
+          </div>
+          <label class="input w-full">
+            <span class="label">Handle</span>
+            <input bind:value={newSpaceHandle} placeholder="example.org" />
+          </label>
 
-        <Dialog
-          title="Create Category"
-          bind:isDialogOpen={showNewCategoryDialog}
-        >
-          {#snippet dialogTrigger()}
-            <Button.Root
-              class="btn w-full justify-start join-item text-base-content"
-              title="Create Category"
-            >
-              <Icon icon="basil:folder-plus-solid" class="size-6" />
-              Create Category
-            </Button.Root>
-          {/snippet}
+          {#if verificationFailed}
+            <div role="alert" class="alert alert-error">
+              <span
+                >Verification failed. It may take several minutes before DNS
+                records are propagated. If you have configured them correctly
+                try again in a few minutes.</span
+              >
+            </div>
+          {/if}
 
-          <form class="flex flex-col gap-4" onsubmit={createCategory}>
-            <label class="input w-full">
-              <span class="label">Name</span>
-              <input bind:value={newCategoryName} placeholder="Discussions" />
-            </label>
-            <Button.Root class="btn btn-primary">
-              <Icon icon="basil:add-outline" font-size="1.8em" />
-              Create Category
-            </Button.Root>
-          </form>
-        </Dialog>
-      </menu>
+          <Button.Root class="btn btn-primary" bind:disabled={saveSpaceLoading}>
+            {#if saveSpaceLoading}
+              <span class="loading loading-spinner"></span>
+            {/if}
+            {!!newSpaceHandle ? "Verify" : "Save Without Handle"}
+          </Button.Root>
+        </form>
+
+        <form class="flex flex-col gap-4" onsubmit={saveBannedHandles}>
+          <h2 class="font-bold text-xl">Bans</h2>
+
+          <div>
+            <input class="input w-full" bind:value={bannedHandlesInput} />
+            <div class="flex flex-col">
+              <span class="mx-2 mt-1 text-sm"
+                >Input a list of handles separated by commas.</span
+              >
+              <span class="mx-2 mt-1 text-sm"
+                >Note: the ban is "best effort" right now. The Roomy alpha is
+                generally insecure.</span
+              >
+            </div>
+          </div>
+
+          <Button.Root
+            class="btn btn-primary w-full"
+            bind:disabled={saveSpaceLoading}
+          >
+            Save Bans
+          </Button.Root>
+        </form>
+      </Dialog>
     {/if}
+  </div>
 
-    <ToggleGroup.Root type="single" value={g.channel?.id}>
-      <Accordion.Root
-        type="multiple"
-        bind:value={sidebarAccordionValues}
-        class="flex flex-col gap-4"
-      >
-        <Accordion.Item value="channels">
+  {#if g.isAdmin}
+    <menu class="menu p-0 w-full justify-between join join-vertical">
+      <Dialog title="Create Channel" bind:isDialogOpen={showNewChannelDialog}>
+        {#snippet dialogTrigger()}
+          <Button.Root
+            title="Create Channel"
+            class="btn w-full justify-start join-item text-base-content"
+          >
+            <Icon icon="basil:comment-plus-solid" class="size-6" />
+            Create Channel
+          </Button.Root>
+        {/snippet}
+
+        <form class="flex flex-col gap-4" onsubmit={createChannel}>
+          <label class="input w-full">
+            <span class="label">Name</span>
+            <input bind:value={newChannelName} placeholder="General" />
+          </label>
+          <label class="select w-full">
+            <span class="label">Category</span>
+            <select bind:value={newChannelCategory}>
+              <option value={undefined}>None</option>
+              {#each categories.value as category}
+                <option value={category}>{category.name}</option>
+              {/each}
+            </select>
+          </label>
+          <Button.Root class="btn btn-primary">
+            <Icon icon="basil:add-outline" font-size="1.8em" />
+            Create Channel
+          </Button.Root>
+        </form>
+      </Dialog>
+
+      <Dialog title="Create Category" bind:isDialogOpen={showNewCategoryDialog}>
+        {#snippet dialogTrigger()}
+          <Button.Root
+            class="btn w-full justify-start join-item text-base-content"
+            title="Create Category"
+          >
+            <Icon icon="basil:folder-plus-solid" class="size-6" />
+            Create Category
+          </Button.Root>
+        {/snippet}
+
+        <form class="flex flex-col gap-4" onsubmit={createCategory}>
+          <label class="input w-full">
+            <span class="label">Name</span>
+            <input bind:value={newCategoryName} placeholder="Discussions" />
+          </label>
+          <Button.Root class="btn btn-primary">
+            <Icon icon="basil:add-outline" font-size="1.8em" />
+            Create Category
+          </Button.Root>
+        </form>
+      </Dialog>
+    </menu>
+  {/if}
+
+  <ToggleGroup.Root type="single" value={g.channel?.id}>
+    <Accordion.Root
+      type="multiple"
+      bind:value={sidebarAccordionValues}
+      class="flex flex-col gap-4"
+    >
+      <Accordion.Item value="channels">
+        <Accordion.Header>
+          <Accordion.Trigger
+            class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
+          >
+            <h3>Channels</h3>
+            <Icon
+              icon="basil:caret-up-solid"
+              class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("channels") && "rotate-180"}`}
+            />
+          </Accordion.Trigger>
+        </Accordion.Header>
+        <Accordion.Content forceMount>
+          {#snippet child({ open }: { open: boolean })}
+            {#if open}
+              {@render channelsSidebar()}
+            {/if}
+          {/snippet}
+        </Accordion.Content>
+      </Accordion.Item>
+      {#if availableThreads.value.length > 0}
+        <div class="divider my-0"></div>
+        <Accordion.Item value="threads">
           <Accordion.Header>
             <Accordion.Trigger
               class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
             >
-              <h3>Channels</h3>
+              <h3>Threads</h3>
               <Icon
                 icon="basil:caret-up-solid"
-                class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("channels") && "rotate-180"}`}
+                class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("threads") && "rotate-180"}`}
               />
             </Accordion.Trigger>
           </Accordion.Header>
-          <Accordion.Content forceMount>
+          <Accordion.Content>
             {#snippet child({ open }: { open: boolean })}
               {#if open}
-                {@render channelsSidebar()}
+                {@render threadsSidebar()}
               {/if}
             {/snippet}
           </Accordion.Content>
         </Accordion.Item>
-        {#if availableThreads.value.length > 0}
-          <div class="divider my-0"></div>
-          <Accordion.Item value="threads">
-            <Accordion.Header>
-              <Accordion.Trigger
-                class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
-              >
-                <h3>Threads</h3>
-                <Icon
-                  icon="basil:caret-up-solid"
-                  class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("threads") && "rotate-180"}`}
-                />
-              </Accordion.Trigger>
-            </Accordion.Header>
-            <Accordion.Content>
-              {#snippet child({ open }: { open: boolean })}
-                {#if open}
-                  {@render threadsSidebar()}
-                {/if}
-              {/snippet}
-            </Accordion.Content>
-          </Accordion.Item>
-        {/if}
-      </Accordion.Root>
-    </ToggleGroup.Root>
-  </nav>
+      {/if}
+    </Accordion.Root>
+  </ToggleGroup.Root>
+</nav>
 
-  <!-- Events/Room Content -->
-  
+<!-- Events/Room Content -->
 
-  <!-- If there is no space. -->
-{:else}
-  <span class="loading loading-spinner mx-auto w-25"></span>
-{/if}
+<!-- If there is no space. -->
 
 {#snippet channelsSidebar()}
   <div transition:slide class="flex flex-col gap-4">

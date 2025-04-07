@@ -1,6 +1,6 @@
 <script lang="ts">
   import "../../app.css";
-  import { onMount } from "svelte";
+  import { onMount, setContext } from "svelte";
   import { dev } from "$app/environment";
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
@@ -16,7 +16,7 @@
   import { Avatar, Button, ToggleGroup } from "bits-ui";
 
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
-  import { Space } from "@roomy-chat/sdk";
+  import { Message, Space } from "@roomy-chat/sdk";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
   import ChatMode from "$lib/components/ChatMode.svelte";
   import { page } from "$app/state";
@@ -84,7 +84,7 @@
 {/if}
 
 <!-- Container -->
-<div class="flex flex-col gap-0 w-screen h-screen bg-base-100">
+<div class="flex flex-col gap-0 w-screen h-[100dvh] justify-stretch max-h-screen bg-base-100">
   <Toaster />
 
   <!-- Header -->
@@ -93,7 +93,7 @@
       <span class="font-bold">{g.space?.name}</span> / {g.channel?.name}
     </h1>
   </div>
-  <div class="flex w-screen h-full bg-base-100 py-0">
+  <div class="flex h-full w-screen bg-base-100 py-0">
     <!-- Server Bar -->
     <aside
       class="w-fit col-span-2 flex flex-col justify-between py-2 items-center border-r-2 border-base-200"
@@ -217,22 +217,21 @@
       </section>
     </aside>
 
-    {#if g.channel}
-      
-    <ChatMode/>
-    {#if !isMobile}
-        <main
-          class="flex flex-col gap-4 rounded-lg p-4 grow min-w-0 h-full overflow-clip bg-base-100"
-        >
-          {@render children()}
-        </main>
-      {:else if page.params.channel || page.params.thread}
-        <main
-          class="absolute inset-0 flex flex-col gap-4 rounded-lg p-4 h-screen overflow-clip bg-base-100"
-        >
-          {@render children()}
-        </main>
-      {/if}
+    {#if g.space}
+      <ChatMode />
+      <main
+        class="flex flex-col gap-4 rounded-lg p-4 overflow-clip bg-base-100 {
+        !isMobile
+          ? 'grow min-w-0'
+          : page.params.channel || page.params.thread
+            ? 'absolute inset-0'
+            : 'hidden'}"
+      >
+        {@render children()}
+      </main>
+      {:else}
+        <span class="loading loading-spinner mx-auto w-25"></span>
     {/if}
+
   </div>
 </div>
