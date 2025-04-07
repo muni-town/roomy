@@ -5,7 +5,6 @@ import {
   Roomy,
   Space,
   Thread,
-  WikiPage,
 } from "@roomy-chat/sdk";
 import { StorageManager } from "@muni-town/leaf/storage";
 import { SveltePeer } from "@muni-town/leaf/svelte";
@@ -32,6 +31,12 @@ if (import.meta.hot) {
 export let g = $state({
   // Create an empty roomy instance by default, it will be updated when the user logs in.
   roomy: undefined as Roomy | undefined,
+  /**
+   * This is set to the value page.params.space once the space has been loaded. It allows other code
+   * to check whether or not `g.space` has been loaded after a route change or if it is still set to
+   * the value from the previous route.
+   * */
+  loadedSpace: undefined as string | undefined,
   space: undefined as Space | undefined,
   channel: undefined as Channel | Thread | undefined,
   isAdmin: false,
@@ -92,6 +97,7 @@ $effect.root(() => {
 
             g.roomy!.open(Space, id)
               .then((space) => {
+                g.loadedSpace = page.params.space!;
                 g.currentCatalog = id;
                 g.space = space;
               })
@@ -102,6 +108,7 @@ $effect.root(() => {
         } else {
           g.roomy!.open(Space, page.params.space as EntityIdStr).then(
             (space) => {
+              g.loadedSpace = page.params.space!;
               g.currentCatalog = page.params.space!;
               g.space = space;
             },

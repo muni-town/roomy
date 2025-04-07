@@ -20,33 +20,6 @@
   let isMobile = $derived((outerWidth.current || 0) < 640);
   let sidebarAccordionValues = $state(["channels", "threads"]);
 
-  // Navigate to first channel in space if we do not have a channel selected.
-  $effect(() => {
-    if (!page.params.channel && !page.params.thread) {
-      (async () => {
-        if (!g.space) return;
-
-        for (const item of await g.space.sidebarItems.items()) {
-          const category = item.tryCast(Category);
-          const channel = item.tryCast(Channel);
-          if (category) {
-            for (const channel of await category.channels.items()) {
-              return navigate({
-                space: page.params.space!,
-                channel: channel.id,
-              });
-            }
-          } else if (channel) {
-            return navigate({
-              space: page.params.space!,
-              channel: channel.id,
-            });
-          }
-        }
-      })();
-    }
-  });
-
   // TODO: track users via the space data
   let users = derivePromise([], async () => {
     if (!g.space) {
