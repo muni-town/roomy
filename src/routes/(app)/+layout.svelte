@@ -84,131 +84,138 @@
 {/if}
 
 <!-- Container -->
-<div class="flex w-screen h-screen bg-base-100">
+<div class="flex flex-col gap-0 w-screen h-screen bg-base-100">
   <Toaster />
-  <!-- Server Bar -->
 
-  <aside
-    class="w-fit col-span-2 flex flex-col justify-between px-4 py-8 items-center border-r-2 border-base-200"
-  >
-    <ToggleGroup.Root
-      type="single"
-      value={g.currentCatalog}
-      class="flex flex-col gap-2 items-center"
+  <!-- Header -->
+  <div class="w-full h-fit flex items-center border-b-2 border-base-200">
+    <h1 class="px-4 py-1 text-sm font-medium text-base-content">
+      <span class="font-bold">{g.space?.name}</span> / {g.channel?.name}
+    </h1>
+  </div>
+  <div class="flex w-screen h-full bg-base-100 py-0">
+    <!-- Server Bar -->
+    <aside
+      class="w-fit col-span-2 flex flex-col justify-between py-2 items-center border-r-2 border-base-200"
     >
-      <ToggleGroup.Item
-        value="home"
-        onclick={() => navigate("home")}
-        class="btn btn-ghost size-16 data-[state=on]:border-accent"
+      <ToggleGroup.Root
+        type="single"
+        value={g.currentCatalog}
+        class="flex flex-col gap-2 items-center"
       >
-        <Icon icon="iconamoon:home-fill" font-size="2em" />
-      </ToggleGroup.Item>
-
-      <div class="divider mt-0 mb-1"></div>
-
-      {#each spaces.value as space, i}
-        <ContextMenu
-          menuTitle={space.name}
-          items={[
-            {
-              label: "Leave Space",
-              icon: "mdi:exit-to-app",
-              onselect: () => {
-                g.roomy?.spaces.remove(i);
-                g.roomy?.commit();
-              },
-            },
-          ]}
+        <ToggleGroup.Item
+          value="home"
+          onclick={() => navigate("home")}
+          class="btn btn-ghost size-15 data-[state=on]:border-accent"
         >
-          <ToggleGroup.Item
-            onclick={() =>
-              navigate({ space: space.handles.get(0) || space.id })}
-            value={space.id}
-            title={space.name}
-            class="btn btn-ghost size-16 data-[state=on]:border-primary"
+          <Icon icon="iconamoon:home-fill" font-size="2em" />
+        </ToggleGroup.Item>
+
+        <div class="divider mt-0 mb-1"></div>
+
+        {#each spaces.value as space, i}
+          <ContextMenu
+            menuTitle={space.name}
+            items={[
+              {
+                label: "Leave Space",
+                icon: "mdi:exit-to-app",
+                onselect: () => {
+                  g.roomy?.spaces.remove(i);
+                  g.roomy?.commit();
+                },
+              },
+            ]}
           >
-            <Avatar.Root>
-              <Avatar.Image />
-              <Avatar.Fallback>
-                <AvatarMarble name={space.id} />
-              </Avatar.Fallback>
-            </Avatar.Root>
-          </ToggleGroup.Item>
-        </ContextMenu>
-      {/each}
-    </ToggleGroup.Root>
+            <ToggleGroup.Item
+              onclick={() =>
+                navigate({ space: space.handles.get(0) || space.id })}
+              value={space.id}
+              title={space.name}
+              class="btn btn-ghost rounded-full size-11 data-[state=on]:border-primary"
+            >
+              <Avatar.Root>
+                <Avatar.Image />
+                <Avatar.Fallback>
+                  <AvatarMarble name={space.id} size={33} />
+                </Avatar.Fallback>
+              </Avatar.Root>
+            </ToggleGroup.Item>
+          </ContextMenu>
+        {/each}
+      </ToggleGroup.Root>
 
-    <section class="menu gap-3">
-      <ThemeSelector />
-      <Dialog
-        title="Create Space"
-        description="Create a new public chat space"
-        bind:isDialogOpen={isNewSpaceDialogOpen}
-      >
-        {#snippet dialogTrigger()}
-          <Button.Root title="Create Space" class="btn btn-ghost w-fit">
-            <Icon icon="basil:add-solid" font-size="2em" />
-          </Button.Root>
-        {/snippet}
-
-        <form class="flex flex-col gap-4" onsubmit={createSpace}>
-          <input
-            bind:value={newSpaceName}
-            placeholder="Name"
-            class="input w-full"
-          />
-          <Button.Root disabled={!newSpaceName} class="btn btn-primary">
-            <Icon icon="basil:add-outline" font-size="1.8em" />
-            Create Space
-          </Button.Root>
-        </form>
-      </Dialog>
-
-      <Dialog
-        title={user.session
-          ? `Logged In As ${user.profile.data?.handle}`
-          : "Login with AT Protocol"}
-        bind:isDialogOpen={isLoginDialogOpen}
-      >
-        {#snippet dialogTrigger()}
-          <Button.Root class="btn btn-ghost w-fit">
-            <AvatarImage
-              handle={user.profile.data?.handle || ""}
-              avatarUrl={user.profile.data?.avatar}
-            />
-          </Button.Root>
-        {/snippet}
-
-        {#if user.session}
-          <section class="flex flex-col gap-4">
-            <Button.Root onclick={user.logout} class="btn btn-error">
-              Logout
+      <section class="menu gap-3">
+        <ThemeSelector />
+        <Dialog
+          title="Create Space"
+          description="Create a new public chat space"
+          bind:isDialogOpen={isNewSpaceDialogOpen}
+        >
+          {#snippet dialogTrigger()}
+            <Button.Root title="Create Space" class="btn btn-ghost w-fit">
+              <Icon icon="basil:add-solid" font-size="1.5em" />
             </Button.Root>
-          </section>
-        {:else}
-          <form class="flex flex-col gap-4" onsubmit={login}>
-            {#if loginError}
-              <p class="text-error">{loginError}</p>
-            {/if}
+          {/snippet}
+
+          <form class="flex flex-col gap-4" onsubmit={createSpace}>
             <input
-              bind:value={handleInput}
-              placeholder="Handle (eg alice.bsky.social)"
+              bind:value={newSpaceName}
+              placeholder="Name"
               class="input w-full"
             />
-            <Button.Root
-              disabled={loginLoading || !handleInput}
-              class="btn btn-primary"
-            >
-              {#if loginLoading}
-                <span class="loading loading-spinner"></span>
-              {/if}
-              Login with Bluesky
+            <Button.Root disabled={!newSpaceName} class="btn btn-primary">
+              <Icon icon="basil:add-outline" font-size="1.8em" />
+              Create Space
             </Button.Root>
           </form>
-        {/if}
-      </Dialog>
-    </section>
-  </aside>
+        </Dialog>
+
+        <Dialog
+          title={user.session
+            ? `Logged In As ${user.profile.data?.handle}`
+            : "Login with AT Protocol"}
+          bind:isDialogOpen={isLoginDialogOpen}
+        >
+          {#snippet dialogTrigger()}
+            <Button.Root class="btn btn-ghost w-fit">
+              <AvatarImage
+                handle={user.profile.data?.handle || ""}
+                avatarUrl={user.profile.data?.avatar}
+              />
+            </Button.Root>
+          {/snippet}
+
+          {#if user.session}
+            <section class="flex flex-col gap-4">
+              <Button.Root onclick={user.logout} class="btn btn-error">
+                Logout
+              </Button.Root>
+            </section>
+          {:else}
+            <form class="flex flex-col gap-4" onsubmit={login}>
+              {#if loginError}
+                <p class="text-error">{loginError}</p>
+              {/if}
+              <input
+                bind:value={handleInput}
+                placeholder="Handle (eg alice.bsky.social)"
+                class="input w-full"
+              />
+              <Button.Root
+                disabled={loginLoading || !handleInput}
+                class="btn btn-primary"
+              >
+                {#if loginLoading}
+                  <span class="loading loading-spinner"></span>
+                {/if}
+                Login with Bluesky
+              </Button.Root>
+            </form>
+          {/if}
+        </Dialog>
+      </section>
+    </aside>
 
     {#if g.channel}
       
