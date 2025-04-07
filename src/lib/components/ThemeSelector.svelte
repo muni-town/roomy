@@ -4,6 +4,7 @@
   import Icon from "@iconify/svelte";
 
   let currentTheme = $state("");
+  let previewTheme = $state("");
   const selectItems = themes.map((t) => { 
     return { 
       value: t,
@@ -32,6 +33,21 @@
     document.cookie = `theme=${theme}; path=/`;
     document.documentElement.setAttribute("data-theme", theme);
     currentTheme = theme;
+    previewTheme = "";
+  }
+
+  function previewThemeOnHover(theme: string) {
+    if (theme !== currentTheme) {
+      previewTheme = theme;
+      document.documentElement.setAttribute("data-theme", theme);
+    }
+  }
+
+  function resetPreview() {
+    if (previewTheme) {
+      document.documentElement.setAttribute("data-theme", currentTheme);
+      previewTheme = "";
+    }
   }
 </script>
 
@@ -43,7 +59,12 @@
     <Select.Content side="right" sideOffset={8} class="w-fit h-48 bg-base-300 p-2 rounded">
       <Select.Viewport> 
         {#each selectItems as theme, i (i + theme.value)}
-          <Select.Item value={theme.value} label={theme.label}>
+          <Select.Item 
+            value={theme.value} 
+            label={theme.label}
+            onmouseenter={() => previewThemeOnHover(theme.value)}
+            onmouseleave={resetPreview}
+          >
             {#snippet children({ selected })}
               <span class="px-1 py-2 rounded cursor-pointer hover:bg-base-100 flex gap-2 items-center">
                 {theme.label} 
