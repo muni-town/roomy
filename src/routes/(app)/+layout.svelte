@@ -12,13 +12,11 @@
 
   import { Toaster } from "svelte-french-toast";
   import { RenderScan } from "svelte-render-scan";
-  import { AvatarMarble } from "svelte-boring-avatars";
-  import { Avatar, Button, ToggleGroup } from "bits-ui";
+  import { Button, ToggleGroup, Avatar } from "bits-ui";
 
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import { Space } from "@roomy-chat/sdk";
-  import ContextMenu from "$lib/components/ContextMenu.svelte";
-  import TooltipPortal from "$lib/components/TooltipPortal.svelte";
+  import SidebarSpace from "$lib/components/SidebarSpace.svelte";
 
   const { children } = $props();
 
@@ -33,10 +31,6 @@
     [],
     async () => (await g.roomy?.spaces.items()) || [],
   );
-
-  // Tooltip state
-  let activeTooltip = $state("");
-  let tooltipPosition = $state({ x: 0, y: 0 });
 
   onMount(async () => {
     await user.init();
@@ -87,7 +81,6 @@
 <!-- Container -->
 <div class="flex w-screen h-screen bg-base-100">
   <Toaster />
-  <TooltipPortal text={activeTooltip} visible={!!activeTooltip} x={tooltipPosition.x} y={tooltipPosition.y} />
   <!-- Server Bar -->
 
   <aside
@@ -96,54 +89,20 @@
     <ToggleGroup.Root
       type="single"
       value={g.currentCatalog}
-      class="flex flex-col gap-2 items-center"
+      class="flex flex-col gap-1 items-center"
     >
       <ToggleGroup.Item
         value="home"
         onclick={() => navigate("home")}
-        class="btn btn-ghost size-16 data-[state=on]:border-accent"
+        class="btn btn-ghost size-14 data-[state=on]:border-accent"
       >
-        <Icon icon="iconamoon:home-fill" font-size="2em" />
+        <Icon icon="iconamoon:home-fill" font-size="1.5em" />
       </ToggleGroup.Item>
 
-      <div class="divider mt-0 mb-1"></div>
+      <div class="divider my-0"></div>
 
       {#each spaces.value as space, i}
-        <ContextMenu
-          menuTitle={space.name}
-          items={[
-            {
-              label: "Leave Space",
-              icon: "mdi:exit-to-app",
-              onselect: () => {
-                g.roomy?.spaces.remove(i);
-                g.roomy?.commit();
-              },
-            },
-          ]}
-        >
-          <ToggleGroup.Item
-            onclick={() =>
-              navigate({ space: space.handles((x) => x.get(0)) || space.id })}
-            value={space.id}
-            class="btn btn-ghost size-16 data-[state=on]:border-primary relative"
-            onmouseenter={(e) => {
-              activeTooltip = space.name;
-              const rect = e.currentTarget.getBoundingClientRect();
-              tooltipPosition = { x: rect.right + 8, y: rect.top + rect.height / 2 };
-            }}
-            onmouseleave={() => {
-              activeTooltip = "";
-            }}
-          >
-            <Avatar.Root>
-              <Avatar.Image />
-              <Avatar.Fallback>
-                <AvatarMarble name={space.id} />
-              </Avatar.Fallback>
-            </Avatar.Root>
-          </ToggleGroup.Item>
-        </ContextMenu>
+        <SidebarSpace {space} {i} />
       {/each}
     </ToggleGroup.Root>
 
