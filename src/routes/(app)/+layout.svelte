@@ -120,8 +120,7 @@
             onclick={() =>
               navigate({ space: space.handles.get(0) || space.id })}
             value={space.id}
-            title={space.name}
-            class="btn btn-ghost size-16 data-[state=on]:border-primary"
+            class="btn btn-ghost size-16 data-[state=on]:border-primary relative group"
           >
             <Avatar.Root>
               <Avatar.Image />
@@ -129,6 +128,11 @@
                 <AvatarMarble name={space.id} />
               </Avatar.Fallback>
             </Avatar.Root>
+            
+            <!-- Fast tooltip with no delay -->
+            <div class="absolute left-full ml-2 px-2 py-1 bg-base-300 rounded shadow-md text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50">
+              {space.name}
+            </div>
           </ToggleGroup.Item>
         </ContextMenu>
       {/each}
