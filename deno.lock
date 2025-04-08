@@ -18,6 +18,7 @@
     "npm:@tailwindcss/typography@~0.5.16": "0.5.16_tailwindcss@4.0.15",
     "npm:@tailwindcss/vite@4": "4.0.15_vite@6.2.2__lightningcss@1.29.2_lightningcss@1.29.2",
     "npm:@tiptap/core@^2.11.5": "2.11.5_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1",
+    "npm:@tiptap/extension-image@^2.11.7": "2.11.7_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1",
     "npm:@tiptap/extension-link@^2.11.5": "2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1",
     "npm:@tiptap/extension-mention@^2.11.5": "2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1_@tiptap+suggestion@2.11.5__@tiptap+core@2.11.5___@tiptap+pm@2.11.5____prosemirror-model@1.25.0____prosemirror-state@1.4.3____prosemirror-view@1.38.1__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1",
     "npm:@tiptap/extension-placeholder@^2.11.5": "2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1",
@@ -1178,6 +1179,12 @@
       "dependencies": [
         "@tiptap/core",
         "@tiptap/pm"
+      ]
+    },
+    "@tiptap/extension-image@2.11.7_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1": {
+      "integrity": "sha512-YvCmTDB7Oo+A56tR4S/gcNaYpqU4DDlSQcRp5IQvmQV5EekSe0lnEazGDoqOCwsit9qQhj4MPQJhKrnaWrJUrg==",
+      "dependencies": [
+        "@tiptap/core"
       ]
     },
     "@tiptap/extension-italic@2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1": {
@@ -3690,6 +3697,7 @@
         "npm:@tailwindcss/typography@~0.5.16",
         "npm:@tailwindcss/vite@4",
         "npm:@tiptap/core@^2.11.5",
+        "npm:@tiptap/extension-image@^2.11.7",
         "npm:@tiptap/extension-link@^2.11.5",
         "npm:@tiptap/extension-mention@^2.11.5",
         "npm:@tiptap/extension-placeholder@^2.11.5",

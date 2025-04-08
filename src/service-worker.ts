@@ -1,7 +1,12 @@
 /// <reference types="@sveltejs/kit" />
+/// <reference lib="webworker" />
+/// <reference no-default-lib="true"/>
+/// <reference lib="esnext" />
 
-// @ts-nocheck
+// Import service worker components from SvelteKit
 import { build, files, version } from '$service-worker';
+
+declare const self: ServiceWorkerGlobalScope;
 
 // Create a unique cache name for this deployment
 const CACHE = `cache-${version}`;
@@ -12,20 +17,36 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+    console.log('[ServiceWorker] Install');
     // Create a new cache and add all files to it
     async function addFilesToCache() {
-        const cache = await caches.open(CACHE);
-        await cache.addAll(ASSETS);
+        try {
+            const cache = await caches.open(CACHE);
+            await cache.addAll(ASSETS);
+            console.log('[ServiceWorker] Cache populated successfully');
+        } catch (error) {
+            console.error('[ServiceWorker] Cache population failed:', error);
+        }
     }
 
     event.waitUntil(addFilesToCache());
 });
 
 self.addEventListener('activate', (event) => {
+    console.log('[ServiceWorker] Activate');
     // Remove previous cached data from disk
     async function deleteOldCaches() {
-        for (const key of await caches.keys()) {
-            if (key !== CACHE) await caches.delete(key);
+        try {
+            const cacheKeys = await caches.keys();
+            for (const key of cacheKeys) {
+                if (key !== CACHE) {
+                    console.log(`[ServiceWorker] Deleting old cache: ${key}`);
+                    await caches.delete(key);
+                }
+            }
+            console.log('[ServiceWorker] Old caches deleted successfully');
+        } catch (error) {
+            console.error('[ServiceWorker] Error deleting old caches:', error);
         }
     }
 
@@ -37,26 +58,39 @@ self.addEventListener('fetch', (event) => {
     if (event.request.method !== 'GET') return;
 
     async function respond() {
-        const url = new URL(event.request.url);
-        const cache = await caches.open(CACHE);
-
-        // `build`/`files` can always be served from the cache
-        if (ASSETS.includes(url.pathname)) {
-            return cache.match(url.pathname);
-        }
-
-        // for everything else, try the network first, but
-        // fall back to the cache if we're offline
         try {
-            const response = await fetch(event.request);
+            const url = new URL(event.request.url);
+            const cache = await caches.open(CACHE);
 
-            if (response.status === 200) {
-                cache.put(event.request, response.clone());
+            // `build`/`files` can always be served from the cache
+            if (ASSETS.includes(url.pathname)) {
+                const cachedResponse = await cache.match(url.pathname);
+                if (cachedResponse) {
+                    return cachedResponse;
+                }
             }
 
-            return response;
-        } catch {
-            return cache.match(event.request);
+            // for everything else, try the network first, but
+            // fall back to the cache if we're offline
+            try {
+                const response = await fetch(event.request);
+
+                if (response.status === 200) {
+                    await cache.put(event.request, response.clone());
+                }
+
+                return response;
+            } catch (networkError) {
+                console.log('[ServiceWorker] Network request failed, falling back to cache', networkError);
+                const cachedResponse = await cache.match(event.request);
+                if (cachedResponse) {
+                    return cachedResponse;
+                }
+                throw networkError;
+            }
+        } catch (error) {
+            console.error('[ServiceWorker] Error in fetch handler:', error);
+            throw error;
         }
     }
 
