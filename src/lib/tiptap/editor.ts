@@ -16,6 +16,7 @@ import type {
   SuggestionProps,
 } from "@tiptap/suggestion";
 import type { LoroText } from "@muni-town/leaf";
+import { convertUrlsToLinks } from "$lib/urlUtils";
 
 /* Keyboard Shortcuts: used to add and override existing shortcuts */
 type KeyboardShortcutHandlerProps = {
@@ -185,7 +186,11 @@ export const editorSchema = getSchema(extensions);
 
 export function getContentHtml(content: JSONContent) {
   try {
-    return generateHTML(content, extensions);
+    // Generate HTML from the content using TipTap
+    const html = generateHTML(content, extensions);
+
+    // Convert any URLs in the HTML to clickable links
+    return convertUrlsToLinks(html);
   } catch (e) {
     console.error("Error", e, "Content", content);
     throw e;
