@@ -10,11 +10,13 @@
   import { outerWidth } from "svelte/reactivity/window";
   import Drawer from "./Drawer.svelte";
   import AvatarImage from "./AvatarImage.svelte";
-  import { getContentHtml } from "$lib/tiptap/editor";
+  import { getContentHtml, type Item } from "$lib/tiptap/editor";
   import { Announcement, Message, type EntityIdStr } from "@roomy-chat/sdk";
   import { g } from "$lib/global.svelte";
   import { derivePromise } from "$lib/utils.svelte";
   import type { JSONContent } from "@tiptap/core";
+  import ChatInput from "./ChatInput.svelte";
+  import toast from "svelte-french-toast";
 
   type Props = {
     message: Message | Announcement;
@@ -46,6 +48,8 @@
 
   let isSelected = $state(false);
   let isThreading: { value: boolean } = getContext("isThreading");
+  let users: { value: Item[] } = getContext("users");
+  let contextItems: { value: Item[] } = getContext("contextItems");
 
   let emojiDrawerPicker: (HTMLElement & any) | undefined = $state();
   let emojiToolbarPicker: (HTMLElement & any) | undefined = $state();
@@ -53,6 +57,10 @@
   let isEmojiDrawerPickerOpen = $state(false);
   let isEmojiToolbarPickerOpen = $state(false);
   let isEmojiRowPickerOpen = $state(false);
+
+  // Editing state
+  let isEditing = $state(false);
+  let editMessageContent: JSONContent = $state({});
 
   let mayDelete = $derived(
     message.matches(Message) &&
@@ -62,6 +70,15 @@
             .forceCast(Message)
             .authors.toArray()
             .includes(user.agent?.assertDid))),
+  );
+
+  let mayEdit = $derived(
+    message.matches(Message) &&
+      user.agent &&
+      message
+        .forceCast(Message)
+        .authors.toArray()
+        .includes(user.agent?.assertDid)
   );
 
   const selectMessage = getContext("selectMessage") as (
@@ -78,6 +95,47 @@
   function deleteMessage() {
     message.softDeleted = true;
     message.commit();
+  }
+
+  function startEditing() {
+    if (message instanceof Message) {
+      editMessageContent = JSON.parse(message.bodyJson);
+      isEditing = true;
+    }
+  }
+
+  function saveEditedMessage() {
+    if (message instanceof Message && Object.keys(editMessageContent).length > 0) {
+      // Update the message
+      message.bodyJson = JSON.stringify(editMessageContent);
+
+      // Add an updatedDate field to track edits
+      // @ts-ignore - Adding custom property for edit tracking
+      message.updatedDate = new Date();
+
+      message.commit();
+      isEditing = false;
+      toast.success("Message updated", { position: "bottom-end" });
+    }
+  }
+
+  function cancelEditing() {
+    isEditing = false;
+    editMessageContent = {};
+  }
+
+  function isMessageEdited(msg: Message): boolean {
+    // @ts-ignore - Check for custom property
+    return !!msg.updatedDate;
+  }
+
+  function getEditedTime(msg: Message): string {
+    // @ts-ignore - Access custom property
+    if (msg.updatedDate) {
+      // @ts-ignore - Access custom property
+      return format(msg.updatedDate, 'PPpp');
+    }
+    return '';
   }
 
   function onEmojiPick(event: Event & { detail: { unicode: string } }) {
@@ -321,46 +379,112 @@
         </div>
       {/if}
 
-      <Button.Root
-        onclick={() => {
-          if (isMobile) {
-            isDrawerOpen = true;
-          }
-        }}
-        class="flex flex-col text-start gap-2 w-full min-w-0"
-      >
-        {#if !mergeWithPrevious}
-          <section class="flex items-center gap-2 flex-wrap w-fit">
-            <a
-              href={`https://bsky.app/profile/${authorProfile.handle}`}
-              target="_blank"
-              class="text-primary hover:underline"
-            >
-              <h5 class="font-bold" title={authorProfile.handle}>
-                {authorProfile.displayName || authorProfile.handle}
-              </h5>
-            </a>
-            {@render timestamp(message.createdDate || new Date())}
-          </section>
-        {/if}
+      {#if isEditing && message === msg}
+        <div class="flex flex-col w-full gap-2">
+          {#if !mergeWithPrevious}
+            <section class="flex items-center gap-2 flex-wrap w-fit">
+              <a
+                href={`https://bsky.app/profile/${authorProfile.handle}`}
+                target="_blank"
+                class="text-primary hover:underline"
+              >
+                <h5 class="font-bold" title={authorProfile.handle}>
+                  {authorProfile.displayName || authorProfile.handle}
+                </h5>
+              </a>
+              {@render timestamp(message.createdDate || new Date())}
+            </section>
+          {/if}
 
-        <span class="prose select-text">
-          {@html getContentHtml(JSON.parse(msg.bodyJson))}
-        </span>
-        <!-- TODO: images. -->
-        <!-- {#if msg.images?.length}
-        <div class="flex flex-wrap gap-2 mt-2">
-          {#each msg.images as image}
-            <img
-              src={image.source}
-              alt={image.alt || ""}
-              class="max-w-md max-h-64 rounded-lg object-cover"
-              loading="lazy"
+          <div class="w-full">
+            <ChatInput
+              bind:content={editMessageContent}
+              users={users.value || []}
+              context={contextItems.value || []}
+              onEnter={saveEditedMessage}
             />
-          {/each}
+          </div>
+
+          <div class="flex justify-end gap-2 mt-2">
+            <Button.Root
+              onclick={cancelEditing}
+              class="btn btn-sm btn-ghost"
+            >
+              Cancel
+            </Button.Root>
+            <Button.Root
+              onclick={saveEditedMessage}
+              class="btn btn-sm btn-primary"
+            >
+              Save
+            </Button.Root>
+          </div>
         </div>
-      {/if} -->
-      </Button.Root>
+      {:else}
+        <Button.Root
+          onclick={() => {
+            if (isMobile) {
+              isDrawerOpen = true;
+            }
+          }}
+          class="flex flex-col text-start gap-2 w-full min-w-0"
+        >
+          {#if !mergeWithPrevious}
+            <section class="flex items-center gap-2 flex-wrap w-fit">
+              <a
+                href={`https://bsky.app/profile/${authorProfile.handle}`}
+                target="_blank"
+                class="text-primary hover:underline"
+              >
+                <h5 class="font-bold" title={authorProfile.handle}>
+                  {authorProfile.displayName || authorProfile.handle}
+                </h5>
+              </a>
+              {@render timestamp(message.createdDate || new Date())}
+            </section>
+          {/if}
+
+          <div class="flex flex-col gap-1">
+            <span class="prose select-text">
+              {@html getContentHtml(JSON.parse(msg.bodyJson))}
+            </span>
+
+            {#if isMessageEdited(msg)}
+              <div class="relative group/edit">
+                <span class="text-xs text-gray-400 italic flex items-center gap-1 hover:text-gray-300 cursor-default">
+                  <Icon icon="mdi:pencil" width="12px" height="12px" />
+                  <span>edited</span>
+                </span>
+
+                <!-- Tooltip that appears on hover -->
+                <div class="absolute bottom-full left-0 mb-2 opacity-0 group-hover/edit:opacity-100 transition-opacity duration-200 bg-base-300 p-3 rounded shadow-lg text-xs z-10 min-w-[200px]">
+                  <div class="flex flex-col gap-1">
+                    <p class="font-semibold">Message edited</p>
+                    <p>Original: {format(msg.createdDate || new Date(), 'PPpp')}</p>
+                    <p>Edited: {getEditedTime(msg)}</p>
+                  </div>
+
+                  <!-- Arrow pointing down -->
+                  <div class="absolute -bottom-1 left-3 w-2 h-2 bg-base-300 rotate-45"></div>
+                </div>
+              </div>
+            {/if}
+          </div>
+          <!-- TODO: images. -->
+          <!-- {#if msg.images?.length}
+          <div class="flex flex-wrap gap-2 mt-2">
+            {#each msg.images as image}
+              <img
+                src={image.source}
+                alt={image.alt || ""}
+                class="max-w-md max-h-64 rounded-lg object-cover"
+                loading="lazy"
+              />
+            {/each}
+          </div>
+        {/if} -->
+        </Button.Root>
+      {/if}
     </div>
   {/await}
 {/snippet}
@@ -412,6 +536,18 @@
                 Reply
               </Button.Root>
             {/if}
+            {#if mayEdit}
+              <Button.Root
+                onclick={() => {
+                  startEditing();
+                  isDrawerOpen = false;
+                }}
+                class="join-item btn w-full"
+              >
+                <Icon icon="tabler:edit" />
+                Edit
+              </Button.Root>
+            {/if}
             {#if mayDelete}
               <Button.Root
                 onclick={() => deleteMessage()}
@@ -448,6 +584,15 @@
             <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
           </Popover.Content>
         </Popover.Root>
+        {#if mayEdit}
+          <Toolbar.Button
+            onclick={() => startEditing()}
+            class="btn btn-ghost btn-square"
+          >
+            <Icon icon="tabler:edit" />
+          </Toolbar.Button>
+        {/if}
+
         {#if shiftDown && mayDelete}
           <Toolbar.Button
             onclick={() => deleteMessage()}
