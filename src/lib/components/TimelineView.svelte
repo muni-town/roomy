@@ -22,7 +22,6 @@
     Category,
     Channel,
     Message,
-    Image,
     Thread,
     Timeline,
   } from "@roomy-chat/sdk";
@@ -62,7 +61,6 @@
   });
 
   let messageInput: JSONContent = $state({});
-  let imageFiles: FileList | null = $state(null);
 
   // thread maker
   let isThreading = $state({ value: false });
@@ -185,7 +183,6 @@
 
     messageInput = {};
     replyingTo = undefined;
-    imageFiles = null;
   }
 
   //
@@ -327,14 +324,6 @@
         >
           <Icon icon="uil:left" />
         </Button.Root>
-      {:else}
-        {#await g.channel.image && g.roomy && g.roomy.open(Image, g.channel.image) then image}
-          <!-- TODO: We're using #key to recreate avatar image when channel changes since for some reason the
-          avatarimage component doesn't re-render properly by itself.  -->
-          {#key g.channel.id}
-            <AvatarImage avatarUrl={image?.uri} handle={g.channel.id} />
-          {/key}
-        {/await}
       {/if}
 
       <h4
@@ -505,7 +494,7 @@
             -->
           </div>
 
-          <!-- Image preview 
+          <!-- Image preview
           {#if imageFiles?.length}
             <div class="flex gap-2 flex-wrap">
               {#each Array.from(imageFiles) as file}
