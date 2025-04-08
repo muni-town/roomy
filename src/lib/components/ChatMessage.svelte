@@ -60,8 +60,7 @@
         (user.agent &&
           message
             .forceCast(Message)
-            .authors.toArray()
-            .includes(user.agent?.assertDid))),
+            .authors((x) => x.toArray().includes(user.agent!.assertDid)))),
   );
 
   const selectMessage = getContext("selectMessage") as (
@@ -294,7 +293,7 @@
 
 {#snippet messageView(msg: Message)}
   <!-- doesn't change after render, so $derived is not necessary -->
-  {@const authorProfile = getProfile(msg.authors.get(0))}
+  {@const authorProfile = getProfile(msg.authors((x) => x.get(0)))}
 
   {#await authorProfile then authorProfile}
     {@render toolbar(authorProfile)}
@@ -521,7 +520,8 @@
 
 {#snippet replyBanner()}
   {@const profileRepliedTo =
-    messageRepliedTo.value && getProfile(messageRepliedTo.value.authors.get(0))}
+    messageRepliedTo.value &&
+    getProfile(messageRepliedTo.value.authors((x) => x.get(0)))}
   {#await profileRepliedTo then profileRepliedTo}
     {#if messageRepliedTo.value && profileRepliedTo}
       <Button.Root

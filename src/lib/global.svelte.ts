@@ -146,8 +146,10 @@ $effect.root(() => {
 
   $effect(() => {
     if (g.space && user.agent) {
-      g.isAdmin = g.space.admins.toArray().includes(user.agent.assertDid);
-      g.isBanned = !!g.space.bans.get(user.agent.assertDid);
+      g.isAdmin = g.space.admins((x) =>
+        x.toArray().includes(user.agent!.assertDid),
+      );
+      g.isBanned = !!g.space.bans((x) => x.get(user.agent!.assertDid));
     } else {
       g.isAdmin = false;
       g.isBanned = false;

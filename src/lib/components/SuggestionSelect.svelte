@@ -16,7 +16,7 @@
   let categories = $derived.by(() => {
     const name = new Set<string>();
     items.map((i) => name.add(i.category));
-    return name.values().toArray();
+    return [...name.values()];
   });
 
   export function setItems(value: any[]) { items = value; }
@@ -42,7 +42,7 @@
         return true;
       }
       case "Enter": {
-        const selected = items[activeIndex];
+        const selected = items[activeIndex]!;
         callback({ id: selected.value, label: selected.label });
         return true;
       }

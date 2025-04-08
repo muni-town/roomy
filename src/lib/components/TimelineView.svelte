@@ -172,7 +172,9 @@
     */
 
     const message = await g.roomy.create(Message);
-    message.authors.push(user.agent.assertDid);
+    message.authors(
+      (authors) => user.agent && authors.push(user.agent.assertDid),
+    );
     message.bodyJson = JSON.stringify(messageInput);
     message.createdDate = new Date();
     message.commit();
@@ -441,7 +443,7 @@
               <div class="flex flex-col gap-1">
                 <h5 class="flex gap-2 items-center">
                   Replying to
-                  {#await getProfile(replyingTo.authors.get(0)) then profile}
+                  {#await getProfile(replyingTo.authors( (x) => x.get(0), )) then profile}
                     <AvatarImage
                       handle={profile.handle || ""}
                       avatarUrl={profile.avatarUrl}

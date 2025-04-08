@@ -29,7 +29,7 @@
                 <h2 class="card-title">{space.name}</h2>
                 <div class="card-actions justify-end">
                   <a
-                    href={`/${space.handles.get(0) || space.id}`}
+                    href={`/${space.handles(x => x.get(0)) || space.id}`}
                     class="btn btn-primary">Open Space</a
                   >
                 </div>
