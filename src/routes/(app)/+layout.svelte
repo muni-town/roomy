@@ -95,18 +95,18 @@
     </h1>
   </div>
 
-  <div class="flex h-full w-screen overflow-y-auto bg-base-100 py-0">
-    <!-- Server Bar -->
-    <aside class="w-fit flex flex-col">
+  <div class="flex h-full  w-screen overflow-y-auto bg-base-100 py-0">
+    <aside class="w-[16rem] flex flex-col gap-4 px-2 ">
+      <!-- Index Chat Toggle -->
       <Tabs.Root bind:value={tab}>
-        <Tabs.List class="flex ">
-          <Tabs.Trigger value="index" class="tab flex gap-2">
+        <Tabs.List class="flex w-full rounded-lg tabs-box">
+          <Tabs.Trigger value="index" class="grow tab flex gap-2">
             <Icon
               icon="material-symbols:thread-unread-rounded"
               class="text-2xl"
             />
           </Tabs.Trigger>
-          <Tabs.Trigger value="chat" class="tab flex gap-2">
+          <Tabs.Trigger disabled={!g.roomy} value="chat" class="grow tab flex gap-2">
             <Icon icon="tabler:message" class="text-2xl" />
           </Tabs.Trigger>
         </Tabs.List>
@@ -114,22 +114,47 @@
 
       {#if tab === "index"}
         <div
-          class="w-fit h-full col-span-2 flex flex-col justify-between items-center"
+          class="w-full h-full col-span-2 flex flex-col justify-between"
         >
           <ToggleGroup.Root
             type="single"
             value={g.currentCatalog}
-            class="flex flex-col gap-2 items-center"
+            class="flex flex-col gap-2 "
           >
             <ToggleGroup.Item
               value="home"
               onclick={() => navigate("home")}
-              class="btn btn-ghost size-15 data-[state=on]:border-accent"
+              class="btn btn-ghost justify-start gap-3 data-[state=on]:border-accent"
             >
               <Icon icon="iconamoon:home-fill" font-size="2em" />
+              Home
             </ToggleGroup.Item>
 
-            <div class="divider mt-0 mb-1"></div>
+            <Dialog
+              title="Create Space"
+              description="Create a new public chat space"
+              bind:isDialogOpen={isNewSpaceDialogOpen}
+            >
+              {#snippet dialogTrigger()}
+                <Button.Root title="Create Space" class="btn btn-ghost w-full justify-start flex gap-3">
+                  <Icon icon="basil:add-solid" font-size="2em" />
+                  Create a Space
+                </Button.Root>
+              {/snippet}
+
+              <form class="flex flex-col gap-4" onsubmit={createSpace}>
+                <input
+                  bind:value={newSpaceName}
+                  placeholder="Name"
+                  class="input w-full"
+                />
+                <Button.Root disabled={!newSpaceName} class="btn btn-primary">
+                  <Icon icon="basil:add-outline" font-size="1.8em" />
+                  Create Space
+                </Button.Root>
+
+              </form>
+            </Dialog>
 
             {#each spaces.value as space, i}
               <ContextMenu
@@ -150,7 +175,7 @@
                     navigate({ space: space.handles.get(0) || space.id })}
                   value={space.id}
                   title={space.name}
-                  class="btn btn-ghost rounded-full size-11 data-[state=on]:border-primary"
+                  class="btn btn-ghost w-full justify-start flex gap-3 data-[state=on]:border-primary"
                 >
                   <Avatar.Root>
                     <Avatar.Image />
@@ -158,37 +183,14 @@
                       <AvatarMarble name={space.id} size={33} />
                     </Avatar.Fallback>
                   </Avatar.Root>
+                  {space.name}
                 </ToggleGroup.Item>
               </ContextMenu>
             {/each}
           </ToggleGroup.Root>
 
-          <section class="menu gap-3">
-            <ThemeSelector />
-            <Dialog
-              title="Create Space"
-              description="Create a new public chat space"
-              bind:isDialogOpen={isNewSpaceDialogOpen}
-            >
-              {#snippet dialogTrigger()}
-                <Button.Root title="Create Space" class="btn btn-ghost w-fit">
-                  <Icon icon="basil:add-solid" font-size="1.5em" />
-                </Button.Root>
-              {/snippet}
-
-              <form class="flex flex-col gap-4" onsubmit={createSpace}>
-                <input
-                  bind:value={newSpaceName}
-                  placeholder="Name"
-                  class="input w-full"
-                />
-                <Button.Root disabled={!newSpaceName} class="btn btn-primary">
-                  <Icon icon="basil:add-outline" font-size="1.8em" />
-                  Create Space
-                </Button.Root>
-              </form>
-            </Dialog>
-
+          <!-- TODO: Move out off flex group. should be independent of tabs -->
+          <section class="flex justify-between bg-base-300 rounded-lg gap-3 p-1 my-3">
             <Dialog
               title={user.session
                 ? `Logged In As ${user.profile.data?.handle}`
@@ -232,23 +234,24 @@
                 </form>
               {/if}
             </Dialog>
+            <ThemeSelector />
           </section>
         </div>
-      {:else if tab === "chat"}
+      {:else if tab === "chat" && g.space}
         <ChatMode />
       {/if}
     </aside>
 
     {#if g.space}
-          <main
-            class="flex flex-col gap-4 rounded-lg p-4 overflow-clip bg-base-100 {!isMobile
-              ? 'grow min-w-0 rounded-tl-2xl rounded-sm border-2 border-b-0 border-base-200'
-              : page.params.channel || page.params.thread
-                ? 'absolute inset-0'
-                : 'hidden'}"
-          >
-            {@render children()}
-          </main>
+      <main
+        class="flex flex-col gap-4 rounded-lg p-4 overflow-clip bg-base-100 {!isMobile
+          ? 'grow min-w-0 rounded-tl-xl rounded-none border-t-2 border-l-2 border-base-200'
+          : page.params.channel || page.params.thread
+            ? 'absolute inset-0'
+            : 'hidden'}"
+      >
+        {@render children()}
+      </main>
     {:else}
       <span class="loading loading-spinner mx-auto w-25"></span>
     {/if}

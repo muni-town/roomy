@@ -199,7 +199,7 @@
 <nav
   class={[
     !isMobile &&
-      "max-w-[16rem] border-r-2 border-base-200 min-h-0 overflow-y-auto",
+      "min-h-0 overflow-y-auto",
     "px-4 py-5 flex flex-col gap-4 w-full",
   ]}
   style="scrollbar-width: thin;"
