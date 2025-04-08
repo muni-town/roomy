@@ -61,6 +61,11 @@
     return await g.space.sidebarItems.items();
   });
 
+  let channels = derivePromise([], async () =>{
+    if (!g.space) return [];
+    return await g.space.channels.items();
+  })
+
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
   async function createCategory() {
@@ -199,8 +204,8 @@
 <nav
   class={[
     !isMobile &&
-      "min-h-0 overflow-y-auto",
-    "px-4 py-5 flex flex-col gap-4 w-full",
+      "min-h-0 p-0 overflow-y-auto",
+    "p-0 flex flex-col gap-4 w-full",
   ]}
   style="scrollbar-width: thin;"
 >
