@@ -1,6 +1,7 @@
 <script lang="ts">
   import { g } from "$lib/global.svelte";
   import { derivePromise } from "$lib/utils.svelte";
+  import Icon from "@iconify/svelte";
 
   const spaces = derivePromise(
     undefined,
@@ -25,19 +26,16 @@
         <span class="loading loading-spinner mx-auto w-25"></span>
       {:else if spaces.value.length > 0}
         <h2 class="text-3xl font-bold">Your Spaces</h2>
-        <section class="flex gap-4 flex-wrap justify-center max-w-5xl">
+        <section class="flex flex-wrap justify-center gap-4 max-w-5xl">
           {#each spaces.value as space}
-            <div class="card card-dash bg-base-100 w-full md:w-96">
-              <div class="card-body">
+            <button class="card border border-base-300 hover:bg-accent cursor-pointer bg-accent/75 transition-colors text-accent-content w-full md:w-96" on:click={() => window.location.href = `/${space.handles((x) => x.get(0)) || space.id}`}>
+              <div class="card-body flex-row items-center justify-between">
                 <h2 class="card-title">{space.name}</h2>
-                <div class="card-actions justify-end">
-                  <a
-                    href={`/${space.handles((x) => x.get(0)) || space.id}`}
-                    class="btn btn-primary">Open Space</a
-                  >
+                <div class="card-actions">
+                  <Icon icon="lucide:circle-arrow-right" class="text-2xl" />
                 </div>
               </div>
-            </div>
+            </button>
           {/each}
         </section>
       {:else}
