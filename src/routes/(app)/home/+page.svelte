@@ -28,14 +28,20 @@
         <h2 class="text-3xl font-bold">Your Spaces</h2>
         <section class="flex flex-wrap justify-center gap-4 max-w-5xl">
           {#each spaces.value as space}
-            <button class="card border border-base-300 hover:bg-accent cursor-pointer bg-accent/75 transition-colors text-accent-content w-full md:w-96" on:click={() => window.location.href = `/${space.handles((x) => x.get(0)) || space.id}`}>
+            <a
+              href={`/${space.handles((x) => x.get(0)) || space.id}`}
+              class="card border border-base-300 hover:border-primary bg-base-100 transition-colors cursor-pointer text-base-content w-full md:w-96"
+            >
               <div class="card-body flex-row items-center justify-between">
                 <h2 class="card-title">{space.name}</h2>
                 <div class="card-actions">
-                  <Icon icon="lucide:circle-arrow-right" class="text-2xl" />
+                  <Icon
+                    icon="lucide:circle-arrow-right"
+                    class="text-2xl text-primary"
+                  />
                 </div>
               </div>
-            </button>
+            </a>
           {/each}
         </section>
       {:else}
