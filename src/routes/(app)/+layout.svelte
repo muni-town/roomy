@@ -18,6 +18,7 @@
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import { Space } from "@roomy-chat/sdk";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
+  import TooltipPortal from "$lib/components/TooltipPortal.svelte";
 
   const { children } = $props();
 
@@ -32,6 +33,10 @@
     [],
     async () => (await g.roomy?.spaces.items()) || [],
   );
+
+  // Tooltip state
+  let activeTooltip = $state("");
+  let tooltipPosition = $state({ x: 0, y: 0 });
 
   onMount(async () => {
     await user.init();
@@ -82,10 +87,11 @@
 <!-- Container -->
 <div class="flex w-screen h-screen bg-base-100">
   <Toaster />
+  <TooltipPortal text={activeTooltip} visible={!!activeTooltip} x={tooltipPosition.x} y={tooltipPosition.y} />
   <!-- Server Bar -->
 
   <aside
-    class="w-fit col-span-2 flex flex-col justify-between px-0 md:px-4 py-8 items-center border-r-2 border-base-200"
+    class="w-fit col-span-2 flex flex-col justify-between px-0 md:px-4 py-8 items-center border-r-2 border-base-200 h-screen overflow-y-auto"
   >
     <ToggleGroup.Root
       type="single"
@@ -120,7 +126,15 @@
             onclick={() =>
               navigate({ space: space.handles((x) => x.get(0)) || space.id })}
             value={space.id}
-            class="btn btn-ghost size-16 data-[state=on]:border-primary relative group"
+            class="btn btn-ghost size-16 data-[state=on]:border-primary relative"
+            onmouseenter={(e) => {
+              activeTooltip = space.name;
+              const rect = e.currentTarget.getBoundingClientRect();
+              tooltipPosition = { x: rect.right + 8, y: rect.top + rect.height / 2 };
+            }}
+            onmouseleave={() => {
+              activeTooltip = "";
+            }}
           >
             <Avatar.Root>
               <Avatar.Image />
@@ -128,13 +142,6 @@
                 <AvatarMarble name={space.id} />
               </Avatar.Fallback>
             </Avatar.Root>
-
-            <!-- Fast tooltip with no delay -->
-            <div
-              class="absolute left-full ml-2 px-2 py-1 bg-base-300 rounded shadow-md text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50"
-            >
-              {space.name}
-            </div>
           </ToggleGroup.Item>
         </ContextMenu>
       {/each}
