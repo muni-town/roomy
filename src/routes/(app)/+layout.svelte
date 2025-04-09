@@ -19,7 +19,7 @@
   import { Space } from "@roomy-chat/sdk";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
 
-  let { children } = $props();
+  const { children } = $props();
 
   let handleInput = $state("");
   let loginLoading = $state(false);
@@ -28,7 +28,7 @@
   let newSpaceName = $state("");
   let isNewSpaceDialogOpen = $state(false);
 
-  let spaces = derivePromise(
+  const spaces = derivePromise(
     [],
     async () => (await g.roomy?.spaces.items()) || [],
   );
@@ -62,9 +62,9 @@
     try {
       handleInput = cleanHandle(handleInput);
       await user.loginWithHandle(handleInput);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      loginError = e.toString();
+      loginError = e instanceof Error ? e.message.toString() : "Unknown error";
     }
 
     loginLoading = false;
@@ -85,7 +85,7 @@
   <!-- Server Bar -->
 
   <aside
-    class="w-fit col-span-2 flex flex-col justify-between px-4 py-8 items-center border-r-2 border-base-200"
+    class="w-fit col-span-2 flex flex-col justify-between px-0 md:px-4 py-8 items-center border-r-2 border-base-200"
   >
     <ToggleGroup.Root
       type="single"
