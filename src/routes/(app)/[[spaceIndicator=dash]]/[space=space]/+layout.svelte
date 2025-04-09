@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { g } from '$lib/global.svelte';
-  import type { Item } from '$lib/tiptap/editor';
-  import { derivePromise } from '$lib/utils.svelte';
+  import { g } from "$lib/global.svelte";
+  import type { Item } from "$lib/tiptap/editor";
+  import { derivePromise, navigate } from "$lib/utils.svelte";
   import { getProfile } from "$lib/profile.svelte";
-  import { setContext } from 'svelte';
-  import { Message } from '@roomy-chat/sdk';
-
+  import { setContext } from "svelte";
+  import { Category, Channel, Message } from "@roomy-chat/sdk";
+  import RoomBar from "$lib/components/RoomBar.svelte";
+  import { page } from "$app/state";
+  import { outerWidth } from "svelte/reactivity/window";
 
   // TODO: track users via the space data
   let users = derivePromise([], async () => {
@@ -73,9 +75,49 @@
     return items;
   });
 
+  // Navigate to first channel in space if we do not have a channel selected.
+  $effect(() => {
+    if (!page.params.channel && !page.params.thread) {
+      (async () => {
+        if (!g.space) return;
+
+        for (const item of await g.space.sidebarItems.items()) {
+          const category = item.tryCast(Category);
+          const channel = item.tryCast(Channel);
+          if (category) {
+            for (const channel of await category.channels.items()) {
+              return navigate({
+                space: page.params.space!,
+                channel: channel.id,
+              });
+            }
+          } else if (channel) {
+            return navigate({
+              space: page.params.space!,
+              channel: channel.id,
+            });
+          }
+        }
+      })();
+    }
+  });
   setContext("users", users);
   setContext("contextItems", contextItems);
-  let { children } = $props()
+  let { children } = $props();
+  let isMobile = $derived((outerWidth.current || 0) < 640);
 </script>
 
-{@render children()}
+<RoomBar />
+{#if g.channel}
+  <main
+    class="flex flex-col gap-4 p-4 overflow-clip bg-base-100 {!isMobile
+      ? 'grow min-w-0 rounded-xl border-4 border-base-300'
+      : page.params.channel || page.params.thread
+        ? 'absolute inset-0'
+        : 'hidden'}"
+  >
+    {@render children()}
+  </main>
+{:else}
+  <span class="loading loading-spinner mx-auto w-25"></span>
+{/if}

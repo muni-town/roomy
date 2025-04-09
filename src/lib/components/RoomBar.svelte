@@ -1,0 +1,268 @@
+<script lang="ts">
+  import "../../app.css";
+  import { g } from "$lib/global.svelte";
+  import { derivePromise, resolveLeafId } from "$lib/utils.svelte";
+
+  import Icon from "@iconify/svelte";
+  import Dialog from "$lib/components/Dialog.svelte";
+
+  import { Button, Tabs } from "bits-ui";
+
+  import ThemeSelector from "$lib/components/ThemeSelector.svelte";
+  import ChatMode from "$lib/components/ChatMode.svelte";
+
+  import { outerWidth } from "svelte/reactivity/window";
+  import { Category, Channel } from "@roomy-chat/sdk";
+  import UserSession from "./UserSession.svelte";
+  import { getProfile } from "$lib/profile.svelte";
+  import toast from "svelte-french-toast";
+  import { user } from "$lib/user.svelte";
+
+  let isMobile = $derived((outerWidth.current || 0) < 640);
+
+  let tab = $state("index");
+
+  let categories = derivePromise([], async () => {
+    if (!g.space) return [];
+    return (await g.space.sidebarItems.items())
+      .map((x) => x.tryCast(Category) as Category)
+      .filter((x) => !!x);
+  });
+  let sidebarItems = derivePromise([], async () => {
+    if (!g.space) return [];
+    return await g.space.sidebarItems.items();
+  });
+  let channels = derivePromise([], async () => {
+    if (!g.space) return [];
+    return await g.space.channels.items();
+  });
+
+  let saveSpaceLoading = $state(false);
+  let showSpaceSettings = $state(false);
+  let newSpaceHandle = $state("");
+  let spaceNameInput = $state("");
+  let bannedHandlesInput = $state("");
+  let verificationFailed = $state(false);
+  $effect(() => {
+    if (!g.space) return;
+    if (!showSpaceSettings) {
+      spaceNameInput = g.space.name;
+      newSpaceHandle = g.space?.handles.get(0) || "";
+      verificationFailed = false;
+      saveSpaceLoading = false;
+      Promise.all(
+        Object.keys(g.space.bans.toJSON()).map((x) => getProfile(x)),
+      ).then(
+        (profiles) =>
+          (bannedHandlesInput = profiles.map((x) => x.handle).join(", ")),
+      );
+    }
+  });
+  async function saveBannedHandles() {
+    if (!g.space || !user.agent) return;
+    const bannedIds = (
+      await Promise.all(
+        bannedHandlesInput
+          .split(",")
+          .map((x) => x.trim())
+          .filter((x) => !!x)
+          .map((x) => user.agent!.resolveHandle({ handle: x })),
+      )
+    ).map((x) => x.data.did);
+    g.space.bans.clear();
+    for (const ban of bannedIds) {
+      g.space.bans.set(ban, true);
+    }
+    g.space.commit();
+    showSpaceSettings = false;
+  }
+  async function saveSpaceName() {
+    if (!g.space) return;
+    g.space.name = spaceNameInput;
+    g.space.commit();
+  }
+  async function saveSpaceHandle() {
+    if (!g.space) return;
+    saveSpaceLoading = true;
+
+    if (!newSpaceHandle) {
+      g.space.handles.clear();
+      g.space.commit();
+      saveSpaceLoading = false;
+      showSpaceSettings = false;
+      toast.success("Saved space with without handle.", {
+        position: "bottom-right",
+      });
+      return;
+    }
+
+    try {
+      const id = await resolveLeafId(newSpaceHandle);
+      if (!id) {
+        verificationFailed = true;
+        saveSpaceLoading = false;
+        return;
+      }
+      g.space.handles.clear();
+      g.space.handles.push(newSpaceHandle);
+      g.space.commit();
+      saveSpaceLoading = false;
+      showSpaceSettings = false;
+      toast.success("Space handle successfully verified & saved!", {
+        position: "bottom-right",
+      });
+    } catch (e) {
+      saveSpaceLoading = false;
+      verificationFailed = true;
+      console.error(e);
+    }
+  }
+</script>
+
+<aside
+  class="w-[16rem] flex h-full flex-col gap-1 px-2 border-r-2 border-base-300"
+>
+  <!-- Header -->
+  <div class="w-full py-1 h-fit flex justify-between items-center">
+    <h1 class="text-sm font-medium text-base-content">
+      <span class="font-bold">{g.space?.name}</span> / {g.channel?.name}
+    </h1>
+    {@render spaceSettings()}
+  </div>
+  <!-- Index Chat Toggle -->
+  <Tabs.Root bind:value={tab}>
+    <Tabs.List class="flex w-full rounded-lg tabs-box">
+      <Tabs.Trigger value="index" class="grow tab flex gap-2">
+        <Icon icon="material-symbols:thread-unread-rounded" class="text-2xl" />
+      </Tabs.Trigger>
+      <Tabs.Trigger
+        disabled={!g.roomy}
+        value="chat"
+        class="grow tab flex gap-2"
+      >
+        <Icon icon="tabler:message" class="text-2xl" />
+      </Tabs.Trigger>
+    </Tabs.List>
+  </Tabs.Root>
+  {#if tab === "index"}
+    <div
+      class="w-full h-full overflow-auto col-span-2 flex flex-col justify-between"
+    ></div>
+  {:else if tab === "chat" && g.space}
+    <ChatMode {categories} {channels} />
+  {/if}
+  <div class="grow"></div>
+  <!-- User + Theme -->
+  <section
+    class="flex justify-self-end justify-between bg-base-200 rounded-lg gap-3 px-1 py-2 shadow-inner my-3 mt-1"
+  >
+    <UserSession />
+    <ThemeSelector />
+  </section>
+</aside>
+
+{#snippet spaceSettings()}
+  <Dialog title="Space Settings" bind:isDialogOpen={showSpaceSettings}>
+    {#snippet dialogTrigger()}
+      <Button.Root
+        title="Space Settings"
+        class="btn btn-ghost w-full justify-start join-item text-base-content"
+      >
+        <Icon icon="lucide:settings" class="size-4" />
+      </Button.Root>
+    {/snippet}
+
+    <form onsubmit={saveSpaceName} class="flex flex-col gap-3">
+      <label class="input w-full">
+        <span class="label">Name</span>
+        <input bind:value={spaceNameInput} placeholder="My Space" />
+      </label>
+      <Button.Root class="btn btn-primary w-full">Save Name</Button.Root>
+    </form>
+    <form class="flex flex-col gap-6" onsubmit={saveSpaceHandle}>
+      <h2 class="font-bold text-xl">Handle</h2>
+      <div class="flex flex-col gap-2">
+        <p>
+          Space handles are created with DNS records and allow your space to be
+          reached at a URL like <code>https://roomy.chat/-/example.org</code>.
+        </p>
+        {#if !!newSpaceHandle}
+          {@const subdomain = newSpaceHandle.split(".").slice(0, -2).join(".")}
+          <p>
+            Add the following DNS record to your DNS provider to use the domain
+            as your handle.
+          </p>
+          <div class="max-w-full overflow-x-auto min-w-0">
+            <table class="table text-[0.85em]">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Host</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>TXT</td>
+                  <td>
+                    _leaf{subdomain ? "." + subdomain : ""}
+                  </td>
+                  <td>
+                    "id={g.space?.id}"
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        {:else}
+          <p>Provide a domain to see which DNS record to add for it.</p>
+        {/if}
+      </div>
+      <label class="input w-full">
+        <span class="label">Handle</span>
+        <input bind:value={newSpaceHandle} placeholder="example.org" />
+      </label>
+
+      {#if verificationFailed}
+        <div role="alert" class="alert alert-error">
+          <span
+            >Verification failed. It may take several minutes before DNS records
+            are propagated. If you have configured them correctly try again in a
+            few minutes.</span
+          >
+        </div>
+      {/if}
+
+      <Button.Root class="btn btn-primary" bind:disabled={saveSpaceLoading}>
+        {#if saveSpaceLoading}
+          <span class="loading loading-spinner"></span>
+        {/if}
+        {!!newSpaceHandle ? "Verify" : "Save Without Handle"}
+      </Button.Root>
+    </form>
+
+    <form class="flex flex-col gap-4" onsubmit={saveBannedHandles}>
+      <h2 class="font-bold text-xl">Bans</h2>
+
+      <div>
+        <input class="input w-full" bind:value={bannedHandlesInput} />
+        <div class="flex flex-col">
+          <span class="mx-2 mt-1 text-sm"
+            >Input a list of handles separated by commas.</span
+          >
+          <span class="mx-2 mt-1 text-sm"
+            >Note: the ban is "best effort" right now. The Roomy alpha is
+            generally insecure.</span
+          >
+        </div>
+      </div>
+
+      <Button.Root
+        class="btn btn-primary w-full"
+        bind:disabled={saveSpaceLoading}
+      >
+        Save Bans
+      </Button.Root>
+    </form>
+  </Dialog>
+{/snippet}

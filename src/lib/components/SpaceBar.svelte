@@ -2,7 +2,7 @@
   import "../../app.css";
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
-  import { derivePromise, navigate } from "$lib/utils.svelte";
+  import { navigate } from "$lib/utils.svelte";
 
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
@@ -12,17 +12,14 @@
 
   import { Space } from "@roomy-chat/sdk";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
-  import { outerWidth } from "svelte/reactivity/window";
-
-  let isMobile = $derived((outerWidth.current || 0) < 640);
+  import ThemeSelector from "$lib/components/ThemeSelector.svelte";
+  import UserSession from "$lib/components/UserSession.svelte";
+  import { page } from "$app/state";
 
   let newSpaceName = $state("");
   let isNewSpaceDialogOpen = $state(false);
 
-  let spaces = derivePromise(
-    [],
-    async () => (await g.roomy?.spaces.items()) || [],
-  );
+  let { spaces } = $props();
 
   async function createSpace() {
     if (!newSpaceName || !user.agent || !g.roomy) return;
@@ -39,11 +36,13 @@
   }
 </script>
 
-<aside class="flex h-full px-1 py-4 border-r-2 border-base-200 bg-base-300">
+<aside
+  class="flex flex-col justify-between align-center h-full px-1 py-4 border-r-2 border-base-200 bg-base-300"
+>
   <ToggleGroup.Root
     type="single"
     value={g.currentCatalog}
-    class="flex flex-col gap-2"
+    class="flex flex-col gap-2 align-center"
   >
     <ToggleGroup.Item
       value="home"
@@ -59,10 +58,7 @@
       bind:isDialogOpen={isNewSpaceDialogOpen}
     >
       {#snippet dialogTrigger()}
-        <Button.Root
-          title="Create Space"
-          class="btn btn-ghost px-1 w-full"
-        >
+        <Button.Root title="Create Space" class="btn btn-ghost px-1 w-full">
           <Icon icon="basil:add-solid" font-size="2em" />
         </Button.Root>
       {/snippet}
@@ -111,5 +107,11 @@
       </ContextMenu>
     {/each}
   </ToggleGroup.Root>
+
+  {#if !page.params.space}
+    <div class="w-fit grid justify-center gap-2">
+      <ThemeSelector class="px-1" />
+      <UserSession class="px-1" />
+    </div>
+  {/if}
 </aside>
-<div class="divider"></div>
