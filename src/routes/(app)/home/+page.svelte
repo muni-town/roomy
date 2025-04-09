@@ -2,16 +2,19 @@
   import { g } from "$lib/global.svelte";
   import { derivePromise } from "$lib/utils.svelte";
 
-  let spaces = derivePromise(
+  const spaces = derivePromise(
     undefined,
     async () => await g.roomy?.spaces.items(),
   );
 </script>
 
-<header class="hero bg-base-200 min-h-screen">
+<!-- NOTE: Some of these classes (hero, hero-content, divider) come from Daisy UI,
+ which is confusing because there is nothing telling you that's where they are coming from.
+ Suggest removing these and replacing with raw Tailwind. -->
+<div class="hero bg-base-200 min-h-screen">
   <div class="hero-content">
     <div class="flex flex-col gap-8 items-center">
-      <h1 class="text-5xl font-bold">Hello Roomy</h1>
+      <h1 class="text-5xl font-bold text-center">Hello Roomy</h1>
       <p class="text-lg font-medium max-w-2xl text-center">
         A digital gardening platform for communities. Built on the AT Protocol.
         Flourish in Spaces, curating knowledge and conversations together.
@@ -24,12 +27,12 @@
         <h2 class="text-3xl font-bold">Your Spaces</h2>
         <section class="flex gap-4 flex-wrap justify-center max-w-5xl">
           {#each spaces.value as space}
-            <div class="card card-dash bg-base-100 w-96">
+            <div class="card card-dash bg-base-100 w-full md:w-96">
               <div class="card-body">
                 <h2 class="card-title">{space.name}</h2>
                 <div class="card-actions justify-end">
                   <a
-                    href={`/${space.handles(x => x.get(0)) || space.id}`}
+                    href={`/${space.handles((x) => x.get(0)) || space.id}`}
                     class="btn btn-primary">Open Space</a
                   >
                 </div>
@@ -42,4 +45,4 @@
       {/if}
     </div>
   </div>
-</header>
+</div>
