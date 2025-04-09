@@ -3,6 +3,11 @@
   import { themes } from "../themes";
   import Icon from "@iconify/svelte";
 
+  let {
+    class: classNames = "",
+  }: {
+    class?: string
+  } = $props();
   let currentTheme = $state("");
   const selectItems = themes.map((t) => { 
     return { 
@@ -36,7 +41,7 @@
 </script>
 
 <Select.Root type="single" items={selectItems} onValueChange={setTheme}>
-  <Select.Trigger class="btn btn-ghost hover:bg-base-200 cursor-pointer">
+  <Select.Trigger class="btn btn-ghost hover:bg-base-200 cursor-pointer {classNames}">
     <Icon icon="material-symbols:palette-outline" class="size-6" />
   </Select.Trigger>
   <Select.Portal>
