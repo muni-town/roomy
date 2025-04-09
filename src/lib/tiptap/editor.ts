@@ -190,6 +190,9 @@ export function getContentHtml(content: JSONContent) {
     const html = generateHTML(content, extensions);
 
     // Convert any URLs in the HTML to clickable links
+    // TODO: Handle links in the rich text editor instead.
+    // In the long term we want to handle creating links in the rich text
+    // editor and remove this post-processing step.
     return convertUrlsToLinks(html);
   } catch (e) {
     console.error("Error", e, "Content", content);
