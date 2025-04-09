@@ -4,7 +4,7 @@
   import { dev } from "$app/environment";
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
-  import { cleanHandle, derivePromise, navigate } from "$lib/utils.svelte";
+  import { cleanHandle, navigate } from "$lib/utils.svelte";
 
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
@@ -16,26 +16,18 @@
   import { Avatar, Button, Tabs, ToggleGroup } from "bits-ui";
 
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
-  import { Space } from "@roomy-chat/sdk";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
   import ChatMode from "$lib/components/ChatMode.svelte";
   import { page } from "$app/state";
 
   let { children } = $props();
   import { outerWidth } from "svelte/reactivity/window";
+  import SpaceBar from "$lib/components/SpaceBar.svelte";
 
   let isMobile = $derived((outerWidth.current || 0) < 640);
   let handleInput = $state("");
   let loginLoading = $state(false);
   let isLoginDialogOpen = $state(!user.session);
-
-  let newSpaceName = $state("");
-  let isNewSpaceDialogOpen = $state(false);
-
-  let spaces = derivePromise(
-    [],
-    async () => (await g.roomy?.spaces.items()) || [],
-  );
 
   onMount(async () => {
     await user.init();
@@ -45,20 +37,6 @@
   $effect(() => {
     if (user.session) isLoginDialogOpen = false;
   });
-
-  async function createSpace() {
-    if (!newSpaceName || !user.agent || !g.roomy) return;
-    const space = await g.roomy.create(Space);
-    space.name = newSpaceName;
-    space.admins.push(user.agent.assertDid);
-    space.commit();
-
-    g.roomy.spaces.push(space);
-    g.roomy.commit();
-    newSpaceName = "";
-
-    isNewSpaceDialogOpen = false;
-  }
 
   let loginError = $state("");
   async function login() {
@@ -88,6 +66,7 @@
 <div class="flex gap-0 w-screen h-screen bg-base-300">
   <Toaster />
 
+  <SpaceBar />
   <aside
     class="w-[16rem] flex h-full flex-col gap-1 px-2 border-r-2 border-base-300"
   >
@@ -120,81 +99,7 @@
       <div
         class="w-full h-full overflow-auto col-span-2 flex flex-col justify-between"
       >
-        <ToggleGroup.Root
-          type="single"
-          value={g.currentCatalog}
-          class="flex flex-col gap-2 "
-        >
-          <ToggleGroup.Item
-            value="home"
-            onclick={() => navigate("home")}
-            class="btn btn-ghost justify-start gap-3 data-[state=on]:border-accent"
-          >
-            <Icon icon="iconamoon:home-fill" font-size="2em" />
-            Home
-          </ToggleGroup.Item>
-
-          <Dialog
-            title="Create Space"
-            description="Create a new public chat space"
-            bind:isDialogOpen={isNewSpaceDialogOpen}
-          >
-            {#snippet dialogTrigger()}
-              <Button.Root
-                title="Create Space"
-                class="btn btn-ghost w-full justify-start flex gap-3"
-              >
-                <Icon icon="basil:add-solid" font-size="2em" />
-                Create a Space
-              </Button.Root>
-            {/snippet}
-
-            <form class="flex flex-col gap-4" onsubmit={createSpace}>
-              <input
-                bind:value={newSpaceName}
-                placeholder="Name"
-                class="input w-full"
-              />
-              <Button.Root disabled={!newSpaceName} class="btn btn-primary">
-                <Icon icon="basil:add-outline" font-size="1.8em" />
-                Create Space
-              </Button.Root>
-            </form>
-          </Dialog>
-
-          {#each spaces.value as space, i}
-            {@debug space}
-            <ContextMenu
-              menuTitle={space.name}
-              items={[
-                {
-                  label: "Leave Space",
-                  icon: "mdi:exit-to-app",
-                  onselect: () => {
-                    g.roomy?.spaces.remove(i);
-                    g.roomy?.commit();
-                  },
-                },
-              ]}
-            >
-              <ToggleGroup.Item
-                onclick={() =>
-                  navigate({ space: space.handles.get(0) || space.id })}
-                value={space.id}
-                title={space.name}
-                class="btn btn-ghost w-full justify-start flex gap-3 data-[state=on]:border-primary"
-              >
-                <Avatar.Root>
-                  <Avatar.Image />
-                  <Avatar.Fallback>
-                    <AvatarMarble name={space.id} size={33} />
-                  </Avatar.Fallback>
-                </Avatar.Root>
-                {space.name}
-              </ToggleGroup.Item>
-            </ContextMenu>
-          {/each}
-        </ToggleGroup.Root>
+        
       </div>
     {:else if tab === "chat" && g.space}
       <ChatMode />
