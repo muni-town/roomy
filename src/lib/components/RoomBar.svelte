@@ -121,7 +121,7 @@
 </script>
 
 <aside
-  class="w-[min(70vw,20rem)] sm:w-[max(16rem,100%)] bg-base-300 flex h-full flex-col gap-1 border-r-2 border-base-300"
+  class="w-[min(70vw,20rem)] sm:w-[16rem] bg-base-300 flex h-full flex-col gap-1 border-r-2 border-base-300"
 >
   <!-- Header -->
   <div
