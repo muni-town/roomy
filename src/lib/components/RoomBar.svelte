@@ -159,14 +159,16 @@
       </Tabs.Trigger>
     </Tabs.List>
   </Tabs.Root>
+<nav
+  class="min-h-0 overflow-y-auto p-2 flex flex-col gap-4 w-full"
+  style="scrollbar-width: thin;"
+>
   {#if tab === "index"}
-    <div
-      class="w-full h-full overflow-auto col-span-2 flex flex-col justify-between"
-    ></div>
     <IndexMode {availableThreads} />
   {:else if tab === "chat" && g.space}
-    <ChatMode {categories} {channels} />
+    <ChatMode {categories} channels={sidebarItems} />
   {/if}
+</nav>
   <div class="grow"></div>
   <!-- User + Theme -->
   <div class="px-2">

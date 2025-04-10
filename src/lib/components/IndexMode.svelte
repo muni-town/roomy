@@ -25,7 +25,7 @@ Links
           <Accordion.Trigger
             class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
           >
-            <h3>Threads</h3>
+            <h3>All Threads</h3>
             <Icon
               icon="basil:caret-up-solid"
               class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("threads") && "rotate-180"}`}
