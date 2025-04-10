@@ -11,7 +11,9 @@
     "format": "prettier . --write",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "generate-schemas": "deno run -A src/lib/schemas/generate.ts"
+    "generate-schemas": "deno run -A src/lib/schemas/generate.ts",
+    "prepare": "husky",
+    "lint-staged": "lint-staged"
   },
   "dependencies": {
     "@atproto/api": "^0.14.9",
@@ -57,7 +59,9 @@
     "base32-encode": "^2.0.0",
     "daisyui": "^5.0.6",
     "date-fns": "^4.1.0",
+    "husky": "^9.1.7",
     "js-base64": "^3.7.7",
+    "lint-staged": "^15.5.0",
     "marked": "^15.0.6",
     "prettier": "3.5.3",
     "prettier-plugin-svelte": "3.3.3",
@@ -74,5 +78,10 @@
     "vite-plugin-top-level-await": "^1.4.4",
     "vite-plugin-wasm": "^3.4.1",
     "vitest": "^3.0.9"
+  },
+  "lint-staged": {
+    "*.{json,js,ts,tsx,html,svelte,css}": [
+      "prettier --write --ignore-unknown"
+    ]
   }
 }
