@@ -18,9 +18,13 @@
   import { user } from "$lib/user.svelte";
   import SidebarIcon from "./SidebarIcon.svelte";
   import { getContext } from "svelte";
+  import IndexMode from "./IndexMode.svelte";
 
   let tab = $state("index");
 
+  let availableThreads = derivePromise([], async () =>
+    ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
+  );
   let categories = derivePromise([], async () => {
     if (!g.space) return [];
     return (await g.space.sidebarItems.items())
@@ -132,7 +136,9 @@
       <span class="font-bold">
         {g.space?.name && g.space?.name !== "Unnamed" ? g.space.name : ""}
       </span>
-      {g.channel?.name && g.channel.name !== "Unnamed" ? "/ " + g.channel.name : ""}
+      {g.channel?.name && g.channel.name !== "Unnamed"
+        ? "/ " + g.channel.name
+        : ""}
     </h1>
     {#if g.isAdmin}
       {@render spaceSettings()}
@@ -157,6 +163,7 @@
     <div
       class="w-full h-full overflow-auto col-span-2 flex flex-col justify-between"
     ></div>
+    <IndexMode {availableThreads} />
   {:else if tab === "chat" && g.space}
     <ChatMode {categories} {channels} />
   {/if}
