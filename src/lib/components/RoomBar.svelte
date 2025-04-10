@@ -128,8 +128,11 @@
     class="w-full py-1 px-2 h-fit grid grid-cols-[auto_1fr_auto] justify-center items-center"
   >
     <SidebarIcon class="mr-2 px-1 py-1" open={isSpacesVisible} />
-    <h1 class="text-sm font-medium text-base-content truncate">
-      <span class="font-bold">{g.space?.name}</span> / {g.channel?.name}
+    <h1 class="text-sm font-medium text-base-content breadcrumbs">
+      <span class="font-bold">
+        {g.space?.name && g.space?.name !== "Unnamed" ? g.space.name : ""}
+      </span>
+      {g.channel?.name && g.channel.name !== "Unnamed" ? "/ " + g.channel.name : ""}
     </h1>
     {#if g.isAdmin}
       {@render spaceSettings()}
