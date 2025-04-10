@@ -80,7 +80,7 @@
   let isMobile = $derived((outerWidth.current || 0) < 640);
 </script>
 
-{#if g.channel}
+{#if g.channel || !(page.params.thread || page.params.channel)}
   <main
     class="drawer-content h-full overflox-x-auto flex flex-col gap-4 p-4 overflow-clip bg-base-100 {!isMobile
       ? 'grow min-w-0 rounded-xl border-4 border-base-300'
