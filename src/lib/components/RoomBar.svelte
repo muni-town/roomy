@@ -12,13 +12,15 @@
   import ChatMode from "$lib/components/ChatMode.svelte";
 
   import { outerWidth } from "svelte/reactivity/window";
-  import { Category, Channel } from "@roomy-chat/sdk";
+  import { Category } from "@roomy-chat/sdk";
   import UserSession from "./UserSession.svelte";
   import { getProfile } from "$lib/profile.svelte";
   import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
 
   let isMobile = $derived((outerWidth.current || 0) < 640);
+  import SidebarIcon from "./SidebarIcon.svelte";
+  import { getContext } from "svelte";
 
   let tab = $state("index");
 
@@ -117,17 +119,25 @@
       console.error(e);
     }
   }
+  let isSpacesVisible: { value: boolean; toggle: () => void } =
+    getContext("isSpacesVisible");
 </script>
 
 <aside
   class="w-[16rem] flex h-full flex-col gap-1 px-2 border-r-2 border-base-300"
 >
   <!-- Header -->
-  <div class="w-full py-1 h-fit flex justify-between items-center">
-    <h1 class="text-sm font-medium text-base-content">
-      <span class="font-bold">{g.space?.name}</span> / {g.channel?.name}
+  <div
+    class="w-full py-1 h-fit grid grid-cols-[auto_1fr_auto] justify-center items-center"
+  >
+    <SidebarIcon class="mr-2 px-1 py-1" open={isSpacesVisible} />
+    <h1 class="text-sm font-medium text-base-content truncate">
+      <span class="font-bold">{g.space?.name}</span> / {g.channel
+        ?.name}
     </h1>
-    {@render spaceSettings()}
+    {#if g.isAdmin}
+      {@render spaceSettings()}
+    {/if}
   </div>
   <!-- Index Chat Toggle -->
   <Tabs.Root bind:value={tab}>

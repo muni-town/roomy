@@ -1,12 +1,11 @@
 <script lang="ts">
   import "../../app.css";
-  import { onMount } from "svelte";
+  import { onMount, setContext } from "svelte";
   import { dev } from "$app/environment";
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { Toaster } from "svelte-french-toast";
   import { RenderScan } from "svelte-render-scan";
-  import { page } from "$app/state";
 
   let { children } = $props();
   import { outerWidth } from "svelte/reactivity/window";
@@ -22,8 +21,19 @@
     [],
     async () => (await g.roomy?.spaces.items()) || [],
   );
-
-
+  const Toggle = (init = false) => {
+    let value = $state(init);
+    return {
+      get value() {
+        return value;
+      },
+      toggle() {
+        value = !value;
+      },
+    };
+  };
+  const isSpacesVisible = Toggle(true);
+  setContext("isSpacesVisible", isSpacesVisible);
 </script>
 
 <svelte:head>
@@ -37,6 +47,6 @@
 <!-- Container -->
 <div class="flex gap-0 w-screen h-screen bg-base-300">
   <Toaster />
-  <SpaceBar {spaces} />
+  <SpaceBar {spaces} visible={isSpacesVisible.value} />
   {@render children()}
 </div>
