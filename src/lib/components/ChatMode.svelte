@@ -78,9 +78,7 @@
 </script>
 
 <nav
-  class={[
-    "min-h-0 overflow-y-auto px-2 flex flex-col gap-4 w-full",
-  ]}
+  class="min-h-0 overflow-y-auto px-2 flex flex-col gap-4 w-full"
   style="scrollbar-width: thin;"
 >
   {#if g.isAdmin}

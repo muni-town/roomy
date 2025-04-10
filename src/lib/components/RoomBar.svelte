@@ -160,12 +160,12 @@
   <div class="grow"></div>
   <!-- User + Theme -->
   <div class="px-2">
-  <section
-    class="flex justify-self-end justify-between bg-base-200 rounded-lg gap-3 px-1 py-2 shadow-inner my-3 mt-1"
-  >
-    <UserSession />
-    <ThemeSelector />
-  </section>
+    <section
+      class="flex justify-self-end justify-between bg-base-200 rounded-lg gap-3 px-1 py-2 shadow-inner my-3 mt-1"
+    >
+      <UserSession />
+      <ThemeSelector />
+    </section>
   </div>
 </aside>
 
