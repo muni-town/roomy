@@ -45,8 +45,8 @@
 <!-- 53px = aside innerWidth + 8px padding + 1px border. Manually set for transition to w-0  -->
 <aside
   class="flex flex-col justify-between align-center h-full {visible
-    ? 'w-[53px]'
-    : 'w-[0]'} px-1 py-2 border-r-2 border-base-200 bg-base-300 transition-all duration-100 ease-out"
+    ? 'w-[53px] px-1 border-r-2'
+    : 'w-[0]'} py-2  border-base-200 bg-base-300 transition-all duration-100 ease-out"
   class:opacity-0={!visible}
 >
   <ToggleGroup.Root

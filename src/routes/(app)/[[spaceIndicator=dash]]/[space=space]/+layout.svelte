@@ -107,10 +107,9 @@
   let isMobile = $derived((outerWidth.current || 0) < 640);
 </script>
 
-<RoomBar />
 {#if g.channel}
   <main
-    class="flex flex-col gap-4 p-4 overflow-clip bg-base-100 {!isMobile
+    class="drawer-content h-full overflox-x-auto flex flex-col gap-4 p-4 overflow-clip bg-base-100 {!isMobile
       ? 'grow min-w-0 rounded-xl border-4 border-base-300'
       : page.params.channel || page.params.thread
         ? 'absolute inset-0'

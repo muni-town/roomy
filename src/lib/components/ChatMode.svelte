@@ -2,19 +2,16 @@
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import { Accordion, Button, ToggleGroup } from "bits-ui";
-
   import { page } from "$app/state";
   import { g } from "$lib/global.svelte";
-
   import { slide } from "svelte/transition";
-  import { derivePromise, navigate, resolveLeafId } from "$lib/utils.svelte";
+  import { derivePromise, navigate } from "$lib/utils.svelte";
   import { Category, Channel } from "@roomy-chat/sdk";
   import { outerWidth } from "svelte/reactivity/window";
 
   let isMobile = $derived((outerWidth.current || 0) < 640);
 
   let sidebarAccordionValues = $state(["channels", "threads"]);
-
 
   let availableThreads = derivePromise([], async () => {
     const active = g.channel;
@@ -25,8 +22,6 @@
   });
 
   let { categories, channels } = $props();
-
-
 
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
@@ -84,8 +79,7 @@
 
 <nav
   class={[
-    !isMobile && "min-h-0 p-0 overflow-y-auto",
-    "p-0 flex flex-col gap-4 w-full",
+    "min-h-0 overflow-y-auto px-2 flex flex-col gap-4 w-full",
   ]}
   style="scrollbar-width: thin;"
 >

@@ -320,22 +320,16 @@
 <header class="navbar">
   <div class="navbar-start flex gap-4">
     {#if g.channel}
-      {#if isMobile}
-        <Button.Root
-          onclick={() =>
-            navigate(page.params.space ? { space: page.params.space } : "home")}
-        >
-          <Icon icon="uil:left" />
-        </Button.Root>
-      {:else}
-        {#await g.channel.image && g.roomy && g.roomy.open(Image, g.channel.image) then image}
-          <!-- TODO: We're using #key to recreate avatar image when channel changes since for some reason the
+      <label for="my-drawer-4" class="drawer-button btn btn-ghost sm:hidden">
+        <Icon icon="uil:left" />
+      </label>
+      {#await g.channel.image && g.roomy && g.roomy.open(Image, g.channel.image) then image}
+        <!-- TODO: We're using #key to recreate avatar image when channel changes since for some reason the
           avatarimage component doesn't re-render properly by itself.  -->
-          {#key g.channel.id}
-            <AvatarImage avatarUrl={image?.uri} handle={g.channel.id} />
-          {/key}
-        {/await}
-      {/if}
+        {#key g.channel.id}
+          <AvatarImage avatarUrl={image?.uri} handle={g.channel.id} />
+        {/key}
+      {/await}
 
       <h4
         class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}

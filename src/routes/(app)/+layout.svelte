@@ -8,12 +8,11 @@
   import { RenderScan } from "svelte-render-scan";
 
   let { children } = $props();
-  import { outerWidth } from "svelte/reactivity/window";
   import SpaceBar from "$lib/components/SpaceBar.svelte";
   import { derivePromise } from "$lib/utils.svelte";
   import { page } from "$app/state";
+  import RoomBar from "$lib/components/RoomBar.svelte";
 
-  let isMobile = $derived((outerWidth.current || 0) < 640);
   onMount(async () => {
     await user.init();
   });
@@ -46,8 +45,21 @@
 {/if}
 
 <!-- Container -->
-<div class="flex gap-0 w-screen h-screen bg-base-300">
+<div class="drawer sm:drawer-open {!page.params.space ? "drawer-open" : ""} flex gap-0 w-screen h-screen bg-base-300 max-h-screen overflow-clip ">
   <Toaster />
-  <SpaceBar {spaces} visible={isSpacesVisible.value || !page.params.space} />
+  <input id="my-drawer-4" type="checkbox" class="drawer-toggle" />
+  <div class="drawer-side z-10 max-h-screen shrink-0">
+    <label for="my-drawer-4" aria-label="close sidebar" class="drawer-overlay opacity-0"
+    ></label>
+    <div class="flex h-full max-h-full gap-0 overflow-x-clip sm:w-fit">
+      <SpaceBar
+        {spaces}
+        visible={isSpacesVisible.value || !page.params.space}
+      />
+      {#if page.params.space}
+        <RoomBar />
+      {/if}
+    </div>
+  </div>
   {@render children()}
 </div>

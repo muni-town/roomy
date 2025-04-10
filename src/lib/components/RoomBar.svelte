@@ -11,14 +11,11 @@
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import ChatMode from "$lib/components/ChatMode.svelte";
 
-  import { outerWidth } from "svelte/reactivity/window";
   import { Category } from "@roomy-chat/sdk";
   import UserSession from "./UserSession.svelte";
   import { getProfile } from "$lib/profile.svelte";
   import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
-
-  let isMobile = $derived((outerWidth.current || 0) < 640);
   import SidebarIcon from "./SidebarIcon.svelte";
   import { getContext } from "svelte";
 
@@ -124,23 +121,22 @@
 </script>
 
 <aside
-  class="w-[16rem] flex h-full flex-col gap-1 px-2 border-r-2 border-base-300"
+  class="w-[min(70vw,20rem)] sm:w-[max(16rem,100%)] bg-base-300 flex h-full flex-col gap-1 border-r-2 border-base-300"
 >
   <!-- Header -->
   <div
-    class="w-full py-1 h-fit grid grid-cols-[auto_1fr_auto] justify-center items-center"
+    class="w-full py-1 px-2 h-fit grid grid-cols-[auto_1fr_auto] justify-center items-center"
   >
     <SidebarIcon class="mr-2 px-1 py-1" open={isSpacesVisible} />
     <h1 class="text-sm font-medium text-base-content truncate">
-      <span class="font-bold">{g.space?.name}</span> / {g.channel
-        ?.name}
+      <span class="font-bold">{g.space?.name}</span> / {g.channel?.name}
     </h1>
     {#if g.isAdmin}
       {@render spaceSettings()}
     {/if}
   </div>
   <!-- Index Chat Toggle -->
-  <Tabs.Root bind:value={tab}>
+  <Tabs.Root bind:value={tab} class="px-2">
     <Tabs.List class="flex w-full rounded-lg tabs-box">
       <Tabs.Trigger value="index" class="grow tab flex gap-2">
         <Icon icon="material-symbols:thread-unread-rounded" class="text-2xl" />
@@ -163,12 +159,14 @@
   {/if}
   <div class="grow"></div>
   <!-- User + Theme -->
+  <div class="px-2">
   <section
     class="flex justify-self-end justify-between bg-base-200 rounded-lg gap-3 px-1 py-2 shadow-inner my-3 mt-1"
   >
     <UserSession />
     <ThemeSelector />
   </section>
+  </div>
 </aside>
 
 {#snippet spaceSettings()}
