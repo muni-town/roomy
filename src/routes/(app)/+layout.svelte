@@ -11,6 +11,7 @@
   import { outerWidth } from "svelte/reactivity/window";
   import SpaceBar from "$lib/components/SpaceBar.svelte";
   import { derivePromise } from "$lib/utils.svelte";
+  import { page } from "$app/state";
 
   let isMobile = $derived((outerWidth.current || 0) < 640);
   onMount(async () => {
@@ -32,7 +33,7 @@
       },
     };
   };
-  const isSpacesVisible = Toggle(true);
+  const isSpacesVisible = Toggle(false);
   setContext("isSpacesVisible", isSpacesVisible);
 </script>
 
@@ -47,6 +48,6 @@
 <!-- Container -->
 <div class="flex gap-0 w-screen h-screen bg-base-300">
   <Toaster />
-  <SpaceBar {spaces} visible={isSpacesVisible.value} />
+  <SpaceBar {spaces} visible={isSpacesVisible.value || !page.params.space} />
   {@render children()}
 </div>
