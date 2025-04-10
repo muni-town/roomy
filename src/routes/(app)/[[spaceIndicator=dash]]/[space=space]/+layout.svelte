@@ -1,7 +1,7 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { Accordion, Button, ToggleGroup } from "bits-ui";
+  import { Accordion, Button, ToggleGroup, ScrollArea } from "bits-ui";
 
   import { page } from "$app/state";
   import { g } from "$lib/global.svelte";
@@ -30,7 +30,11 @@
     for (const channel of await g.space.channels.items()) {
       for (const timelineItem of await channel.timeline.items()) {
         const message = timelineItem.tryCast(Message);
-        if (message && message.authors.length > 0) {
+        if (
+          message &&
+          message.authors &&
+          typeof message.authors === "function"
+        ) {
           for (const author of message.authors((x) => x.toArray())) {
             result.add(author);
           }
@@ -131,36 +135,69 @@
     if (!g.space) return;
     if (!showSpaceSettings) {
       spaceNameInput = g.space.name;
-      newSpaceHandle = g.space?.handles((x) => x.get(0)) || "";
+      // Check if handles is a function before calling it
+      newSpaceHandle =
+        typeof g.space.handles === "function"
+          ? g.space.handles((x) => x.get(0)) || ""
+          : "";
       verificationFailed = false;
       saveSpaceLoading = false;
-      Promise.all(
-        Object.keys(g.space.bans((x) => x.toJSON())).map((x) => getProfile(x)),
-      ).then(
-        (profiles) =>
-          (bannedHandlesInput = profiles.map((x) => x.handle).join(", ")),
-      );
+      if (typeof g.space.bans === "function") {
+        Promise.all(
+          Object.keys(g.space.bans((x) => x.toJSON())).map((x) =>
+            getProfile(x),
+          ),
+        ).then(
+          (profiles) =>
+            (bannedHandlesInput = profiles.map((x) => x.handle).join(", ")),
+        );
+      } else {
+        console.warn("g.space.bans is not a function");
+        bannedHandlesInput = "";
+      }
     }
   });
   async function saveBannedHandles() {
     if (!g.space || !user.agent) return;
-    const bannedIds = (
-      await Promise.all(
-        bannedHandlesInput
-          .split(",")
-          .map((x) => x.trim())
-          .filter((x) => !!x)
-          .map((x) => user.agent!.resolveHandle({ handle: x })),
-      )
-    ).map((x) => x.data.did);
-    g.space.bans((bans) => {
-      bans.clear();
-      for (const ban of bannedIds) {
-        bans.set(ban, true);
+    try {
+      const bannedIds = (
+        await Promise.all(
+          bannedHandlesInput
+            .split(",")
+            .map((x) => x.trim())
+            .filter((x) => !!x)
+            .map(async (handle) => {
+              // Use the com.atproto.identity.resolveHandle method
+              const response =
+                await user.agent!.com.atproto.identity.resolveHandle({
+                  handle,
+                });
+              return { data: { did: response.data.did } };
+            }),
+        )
+      ).map((x) => x.data.did);
+
+      if (typeof g.space.bans === "function") {
+        g.space.bans((bans) => {
+          bans.clear();
+          for (const ban of bannedIds) {
+            bans.set(ban, true);
+          }
+        });
+        g.space.commit();
+      } else {
+        console.warn("g.space.bans is not a function");
+        toast.error("Cannot save bans: feature not available", {
+          position: "bottom-right",
+        });
       }
-    });
-    g.space.commit();
-    showSpaceSettings = false;
+      showSpaceSettings = false;
+    } catch (error) {
+      console.error("Error saving banned handles:", error);
+      toast.error("Failed to resolve one or more handles", {
+        position: "bottom-right",
+      });
+    }
   }
   async function saveSpaceName() {
     if (!g.space) return;
@@ -170,6 +207,14 @@
   async function saveSpaceHandle() {
     if (!g.space) return;
     saveSpaceLoading = true;
+
+    // Check if handles is a function
+    if (typeof g.space.handles !== "function") {
+      console.error("g.space.handles is not a function");
+      saveSpaceLoading = false;
+      verificationFailed = true;
+      return;
+    }
 
     if (!newSpaceHandle) {
       g.space.handles((h) => h.clear());
@@ -249,10 +294,9 @@
   <nav
     class={[
       !isMobile &&
-        "max-w-[16rem] border-r-2 border-base-200 max-h-full h-full min-h-0 overflow-y-auto",
+        "max-w-[16rem] border-r-2 border-base-200 max-h-full h-full min-h-0 sidebar-scroll",
       "px-4 py-5 flex flex-col gap-4 w-full",
     ]}
-    style="scrollbar-width: thin;"
   >
     <div class="flex justify-between">
       <h1 class="text-2xl font-extrabold text-base-content text-ellipsis flex">
@@ -336,10 +380,7 @@
               </div>
             {/if}
 
-            <Button.Root
-              class="btn btn-primary"
-              bind:disabled={saveSpaceLoading}
-            >
+            <Button.Root class="btn btn-primary" disabled={saveSpaceLoading}>
               {#if saveSpaceLoading}
                 <span class="loading loading-spinner"></span>
               {/if}
@@ -365,7 +406,7 @@
 
             <Button.Root
               class="btn btn-primary w-full"
-              bind:disabled={saveSpaceLoading}
+              disabled={saveSpaceLoading}
             >
               Save Bans
             </Button.Root>
@@ -438,57 +479,70 @@
       </menu>
     {/if}
 
-    <ToggleGroup.Root type="single" value={g.channel?.id}>
-      <Accordion.Root
-        type="multiple"
-        bind:value={sidebarAccordionValues}
-        class="flex flex-col gap-4"
+    <ScrollArea.Root class="flex-grow h-full sidebar-content">
+      <ScrollArea.Viewport class="h-full w-full">
+        <ToggleGroup.Root type="single" value={g.channel?.id}>
+          <Accordion.Root
+            type="multiple"
+            bind:value={sidebarAccordionValues}
+            class="flex flex-col gap-4"
+          >
+            <Accordion.Item value="channels">
+              <Accordion.Header>
+                <Accordion.Trigger
+                  class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
+                >
+                  <h3>Channels</h3>
+                  <Icon
+                    icon="basil:caret-up-solid"
+                    class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("channels") && "rotate-180"}`}
+                  />
+                </Accordion.Trigger>
+              </Accordion.Header>
+              <Accordion.Content forceMount>
+                {#snippet child({ open }: { open: boolean })}
+                  {#if open}
+                    {@render channelsSidebar()}
+                  {/if}
+                {/snippet}
+              </Accordion.Content>
+            </Accordion.Item>
+            {#if availableThreads.value.length > 0}
+              <div class="divider my-0"></div>
+              <Accordion.Item value="threads">
+                <Accordion.Header>
+                  <Accordion.Trigger
+                    class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
+                  >
+                    <h3>Threads</h3>
+                    <Icon
+                      icon="basil:caret-up-solid"
+                      class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("threads") && "rotate-180"}`}
+                    />
+                  </Accordion.Trigger>
+                </Accordion.Header>
+                <Accordion.Content>
+                  {#snippet child({ open }: { open: boolean })}
+                    {#if open}
+                      {@render threadsSidebar()}
+                    {/if}
+                  {/snippet}
+                </Accordion.Content>
+              </Accordion.Item>
+            {/if}
+          </Accordion.Root>
+        </ToggleGroup.Root>
+      </ScrollArea.Viewport>
+      <ScrollArea.Scrollbar
+        orientation="vertical"
+        class="flex h-full w-2.5 touch-none select-none rounded-full border-l border-l-transparent p-px transition-all hover:w-3 hover:bg-dark-10 mr-1"
       >
-        <Accordion.Item value="channels">
-          <Accordion.Header>
-            <Accordion.Trigger
-              class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
-            >
-              <h3>Channels</h3>
-              <Icon
-                icon="basil:caret-up-solid"
-                class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("channels") && "rotate-180"}`}
-              />
-            </Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content forceMount>
-            {#snippet child({ open }: { open: boolean })}
-              {#if open}
-                {@render channelsSidebar()}
-              {/if}
-            {/snippet}
-          </Accordion.Content>
-        </Accordion.Item>
-        {#if availableThreads.value.length > 0}
-          <div class="divider my-0"></div>
-          <Accordion.Item value="threads">
-            <Accordion.Header>
-              <Accordion.Trigger
-                class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
-              >
-                <h3>Threads</h3>
-                <Icon
-                  icon="basil:caret-up-solid"
-                  class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("threads") && "rotate-180"}`}
-                />
-              </Accordion.Trigger>
-            </Accordion.Header>
-            <Accordion.Content>
-              {#snippet child({ open }: { open: boolean })}
-                {#if open}
-                  {@render threadsSidebar()}
-                {/if}
-              {/snippet}
-            </Accordion.Content>
-          </Accordion.Item>
-        {/if}
-      </Accordion.Root>
-    </ToggleGroup.Root>
+        <ScrollArea.Thumb
+          class="relative flex-1 rounded-full bg-base-300 transition-opacity"
+        />
+      </ScrollArea.Scrollbar>
+      <ScrollArea.Corner />
+    </ScrollArea.Root>
   </nav>
 
   <!-- Events/Room Content -->
@@ -568,13 +622,7 @@
             </Accordion.Header>
 
             <Accordion.Content forceMount>
-              {#snippet child({
-                props,
-                open,
-              }: {
-                open: boolean;
-                props: unknown[];
-              })}
+              {#snippet child({ open, props })}
                 {#if open}
                   <div
                     {...props}

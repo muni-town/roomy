@@ -1,25 +1,30 @@
 <script lang="ts">
   import "../../app.css";
+  import "$lib/tiptap/tiptap-styles.css";
   import { onMount } from "svelte";
   import { dev } from "$app/environment";
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { cleanHandle, derivePromise, navigate } from "$lib/utils.svelte";
+  import { registerServiceWorker } from "$lib/registerServiceWorker";
+
+  // No tooltip state needed
 
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
 
   import { Toaster } from "svelte-french-toast";
-  import { RenderScan } from "svelte-render-scan";
   import { AvatarMarble } from "svelte-boring-avatars";
   import { Avatar, Button, ToggleGroup } from "bits-ui";
 
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import { Space } from "@roomy-chat/sdk";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
+  import { RenderScan } from "svelte-render-scan";
+  import SyncStatus from "$lib/components/SyncStatus.svelte";
 
-  let { children } = $props();
+  const { children } = $props();
 
   let handleInput = $state("");
   let loginLoading = $state(false);
@@ -28,14 +33,24 @@
   let newSpaceName = $state("");
   let isNewSpaceDialogOpen = $state(false);
 
-  let spaces = derivePromise(
-    [],
-    async () => (await g.roomy?.spaces.items()) || [],
-  );
 
-  onMount(async () => {
-    await user.init();
+
+  const spaces = derivePromise([], async () => {
+    const items = (await g.roomy?.spaces.items()) || [];
+    console.log("Loaded spaces:", items.length, items);
+    return items;
   });
+
+  onMount(() => {
+    user.init();
+
+    // Register service worker
+    if (!dev) {
+      registerServiceWorker();
+    }
+  });
+
+
 
   $effect(() => {
     if (user.session) isLoginDialogOpen = false;
@@ -45,7 +60,7 @@
     if (!newSpaceName || !user.agent || !g.roomy) return;
     const space = await g.roomy.create(Space);
     space.name = newSpaceName;
-    space.admins((x) => x.push(user.agent!.assertDid));
+    space.admins((admins) => user.agent && admins.push(user.agent.assertDid));
     space.commit();
 
     g.roomy.spaces.push(space);
@@ -62,9 +77,9 @@
     try {
       handleInput = cleanHandle(handleInput);
       await user.loginWithHandle(handleInput);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      loginError = e.toString();
+      loginError = e instanceof Error ? e.message : String(e);
     }
 
     loginLoading = false;
@@ -131,7 +146,7 @@
 
             <!-- Fast tooltip with no delay -->
             <div
-              class="absolute left-full ml-2 px-2 py-1 bg-base-300 rounded shadow-md text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50"
+              class="absolute left-full ml-2 px-2 py-1 rounded shadow-md text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-[9999] bg-base-300 backdrop-blur-sm isolate"
             >
               {space.name}
             </div>
@@ -213,4 +228,11 @@
   </aside>
 
   {@render children()}
+
+  <!-- Add the sync status component -->
+  <SyncStatus />
 </div>
+
+<style>
+  /* Simple styles */
+</style>

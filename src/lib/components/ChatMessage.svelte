@@ -301,13 +301,13 @@
     <div class="flex gap-4 group">
       {#if !mergeWithPrevious}
         <a
-          href={`https://bsky.app/profile/${authorProfile.handle}`}
-          title={authorProfile.handle}
+          href={authorProfile ? `https://bsky.app/profile/${authorProfile.handle}` : "#"}
+          title={authorProfile?.handle || "Unknown User"}
           target="_blank"
         >
           <AvatarImage
-            handle={authorProfile.handle}
-            avatarUrl={authorProfile.avatarUrl}
+            handle={authorProfile?.handle || "unknown"}
+            avatarUrl={authorProfile?.avatarUrl || ""}
           />
         </a>
       {:else}
@@ -331,12 +331,14 @@
         {#if !mergeWithPrevious}
           <section class="flex items-center gap-2 flex-wrap w-fit">
             <a
-              href={`https://bsky.app/profile/${authorProfile.handle}`}
+              href={authorProfile
+                ? `https://bsky.app/profile/${authorProfile.handle}`
+                : "#"}
               target="_blank"
               class="text-primary hover:underline"
             >
-              <h5 class="font-bold" title={authorProfile.handle}>
-                {authorProfile.displayName || authorProfile.handle}
+              <h5 class="font-bold" title={authorProfile?.handle || "Unknown User"}>
+                {authorProfile?.displayName || authorProfile?.handle || "Unknown User"}
               </h5>
             </a>
             {@render timestamp(message.createdDate || new Date())}
@@ -346,19 +348,6 @@
         <span class="prose select-text">
           {@html getContentHtml(JSON.parse(msg.bodyJson))}
         </span>
-        <!-- TODO: images. -->
-        <!-- {#if msg.images?.length}
-        <div class="flex flex-wrap gap-2 mt-2">
-          {#each msg.images as image}
-            <img
-              src={image.source}
-              alt={image.alt || ""}
-              class="max-w-md max-h-64 rounded-lg object-cover"
-              loading="lazy"
-            />
-          {/each}
-        </div>
-      {/if} -->
       </Button.Root>
     </div>
   {/await}
@@ -500,7 +489,7 @@
 {#snippet reactionToggle(reaction: string)}
   {@const reactions = message.reactions.all()[reaction]}
   {#if reactions}
-    {#await Promise.all([...reactions.values()].map( (x) => getProfile(x), )) then profilesThatReacted}
+    {#await Promise.all([...reactions.values()].map( (x) => (x ? getProfile(x) : Promise.resolve(null)), )).then( (profiles) => profiles.filter((p) => p !== null), ) then profilesThatReacted}
       <Button.Root
         onclick={() => toggleReaction(reaction)}
         class={`
@@ -519,9 +508,93 @@
 {/snippet}
 
 {#snippet replyBanner()}
-  {@const profileRepliedTo =
-    messageRepliedTo.value &&
-    getProfile(messageRepliedTo.value.authors((x) => x.get(0)))}
+  {@const authorId = (() => {
+    try {
+      if (!messageRepliedTo.value) {
+        return null;
+      }
+
+      const msg = messageRepliedTo.value;
+
+      // Method 1: Try using the authors function (standard approach)
+      if (msg.authors && typeof msg.authors === "function") {
+        const authorId = msg.authors((x) => x.get(0));
+        console.log("Reply author ID found via authors function:", authorId);
+        return authorId;
+      }
+
+      // Method 2: Try accessing author directly if it exists
+      // Use type assertion to bypass TypeScript checking
+      const msgAny = msg as any;
+      if (msgAny.author) {
+        console.log(
+          "Reply author found via direct author property:",
+          msgAny.author,
+        );
+        return msgAny.author;
+      }
+
+      // Method 3: Try to find any property that might contain author information
+      // Look for common author-related property names
+      const possibleAuthorProps = [
+        "authorId",
+        "creator",
+        "createdBy",
+        "sender",
+        "from",
+        "userId",
+      ];
+      for (const prop of possibleAuthorProps) {
+        if (msgAny[prop]) {
+          console.log(`Reply author found via ${prop} property:`, msgAny[prop]);
+          return msgAny[prop];
+        }
+      }
+
+      // Method 4: Inspect the message object for any DID-like strings that might be authors
+      for (const key in msgAny) {
+        if (
+          typeof msgAny[key] === "string" &&
+          (msgAny[key].startsWith("did:") ||
+            (typeof msgAny[key] === "string" && msgAny[key].includes("did:")))
+        ) {
+          console.log(
+            `Potential reply author DID found in property ${key}:`,
+            msgAny[key],
+          );
+          return msgAny[key];
+        }
+      }
+
+      // Method 5: Try to access the raw data of the message
+      if (msgAny._data && typeof msgAny._data === "object") {
+        // Look for author in _data
+        if (msgAny._data.author) {
+          console.log(
+            "Reply author found in _data.author:",
+            msgAny._data.author,
+          );
+          return msgAny._data.author;
+        }
+      }
+
+      console.warn(
+        "Reply message has no identifiable author information",
+        messageRepliedTo.value,
+      );
+      return null;
+    } catch (error) {
+      console.error(
+        "Error getting reply author ID:",
+        error,
+        messageRepliedTo.value,
+      );
+      return null;
+    }
+  })()}
+  {@const profileRepliedTo = authorId
+    ? getProfile(authorId)
+    : Promise.resolve(null)}
   {#await profileRepliedTo then profileRepliedTo}
     {#if messageRepliedTo.value && profileRepliedTo}
       <Button.Root

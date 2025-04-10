@@ -1,11 +1,12 @@
 <script lang="ts">
   import _ from "underscore";
   import { page } from "$app/state";
-  import { getContext, setContext, untrack } from "svelte";
+  import { getContext, setContext, untrack, onMount, onDestroy } from "svelte";
   import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
   import { getContentHtml, type Item } from "$lib/tiptap/editor";
   import { outerWidth } from "svelte/reactivity/window";
+  import { networkStatus, attemptReconnect } from "$lib/network-status.svelte";
 
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
@@ -71,7 +72,7 @@
     selectedMessages.push(message);
   });
   setContext("removeSelectedMessage", (message: Message) => {
-    selectedMessages = selectedMessages.filter((m) => m != message);
+    selectedMessages = selectedMessages.filter((m) => m !== message);
   });
 
   $effect(() => {
@@ -85,6 +86,39 @@
   setContext("setReplyTo", (message: Message) => {
     replyingTo = message;
   });
+
+  // Function to get the profile of the user being replied to
+  async function getReplyingToProfile() {
+    if (!replyingTo) return { handle: 'unknown', avatarUrl: '' };
+
+    try {
+      // Try to get the author ID using various methods
+      let authorId = null;
+
+      if (typeof replyingTo.authors === 'function') {
+        authorId = replyingTo.authors((x) => x.get(0));
+      } else {
+        // Fallback to any available method
+        const msgAny = replyingTo as unknown as Record<string, any>;
+        if (msgAny.author) {
+          authorId = msgAny.author;
+        } else if (msgAny._data?.author) {
+          authorId = msgAny._data.author;
+        }
+      }
+
+      if (!authorId) {
+        console.warn('Could not find author ID for reply message');
+        return { handle: 'unknown', avatarUrl: '' };
+      }
+
+      // Get the profile using the author ID
+      return await getProfile(authorId);
+    } catch (error) {
+      console.error('Error getting reply profile:', error);
+      return { handle: 'unknown', avatarUrl: '' };
+    }
+  }
 
   async function createThread(e: SubmitEvent) {
     e.preventDefault();
@@ -142,73 +176,158 @@
     toast.success("Thread created", { position: "bottom-end" });
   }
 
+  // Track pending messages that need to be retried
+
+  interface PendingMessage {
+    id: string;
+    message: Message;
+    timestamp: Date;
+  }
+
+  let pendingMessages = $state<PendingMessage[]>([]);
+
+  // Function to retry sending pending messages
+  async function retryPendingMessages() {
+    if (pendingMessages.length === 0) return;
+
+    console.log(`Attempting to retry ${pendingMessages.length} pending messages`);
+
+    // Check if we're online and can reach the sync server
+    if (!networkStatus.isOnline || !networkStatus.syncServerReachable) {
+      console.log('Cannot retry messages - network or sync server unavailable');
+      return;
+    }
+
+    // Make sure we have a channel to send to
+    if (!g.channel) {
+      console.log('No active channel to retry messages in');
+      return;
+    }
+
+    // Try to send each pending message
+    const messagesToRetry = [...pendingMessages];
+    pendingMessages = [];
+
+    for (const pendingMsg of messagesToRetry) {
+      try {
+        console.log('Retrying message:', pendingMsg.id);
+
+        // Re-add the message to the channel timeline
+        g.channel.timeline.push(pendingMsg.message);
+        g.channel.commit();
+
+        console.log('Successfully retried message:', pendingMsg.id);
+        toast.success('Message sent', { position: 'bottom-end' });
+      } catch (error) {
+        console.error('Failed to retry message:', pendingMsg.id, error);
+        // Add back to pending queue
+        pendingMessages.push(pendingMsg);
+      }
+    }
+  }
+
+  // Set up an interval to retry pending messages
+  let retryInterval: ReturnType<typeof setInterval> | undefined;
+  onMount(() => {
+    retryInterval = setInterval(() => {
+      if (pendingMessages.length > 0) {
+        retryPendingMessages();
+      }
+    }, 10000); // Try every 10 seconds
+  });
+
+  onDestroy(() => {
+    if (retryInterval) clearInterval(retryInterval);
+  });
+
   async function sendMessage() {
-    if (!g.roomy || !g.space || !g.channel || !user.agent) return;
+    console.log('Starting sendMessage function');
+    if (!g.roomy || !g.space || !g.channel || !user.agent) {
+      console.error('Missing required objects for sending message:', {
+        roomy: !!g.roomy,
+        space: !!g.space,
+        channel: !!g.channel,
+        agent: !!user.agent
+      });
+      return;
+    }
 
-    /* TODO: image upload refactor with tiptap
-    const images = imageFiles
-      ? await Promise.all(
-          Array.from(imageFiles).map(async (file) => {
-            try {
-              const resp = await user.uploadBlob(file);
-              return {
-                source: resp.url, // Use the blob reference from ATP
-                alt: file.name,
-              };
-            } catch (error) {
-              console.error("Failed to upload image:", error);
-              toast.error("Failed to upload image", { position: "bottom-end" });
-              return null;
-            }
-          }),
-        ).then((results) =>
-          results.filter(
-            (result): result is NonNullable<typeof result> => result !== null,
-          ),
-        )
-      : undefined;
-    */
+    // Store the message input in case we need to retry
+    const currentMessageInput = JSON.parse(JSON.stringify(messageInput));
+    const currentReplyingTo = replyingTo;
 
-    const message = await g.roomy.create(Message);
-    message.authors(
-      (authors) => user.agent && authors.push(user.agent.assertDid),
-    );
-    message.bodyJson = JSON.stringify(messageInput);
-    message.createdDate = new Date();
-    message.commit();
-    if (replyingTo) message.replyTo = replyingTo;
-
-    // TODO: image upload refactor with tiptap
-
-    g.channel.timeline.push(message);
-    g.channel.commit();
-
+    // Clear the input field immediately for better UX
     messageInput = {};
     replyingTo = undefined;
+
+    try {
+      console.log('Creating message...');
+      const message = await g.roomy.create(Message);
+      console.log('Message created:', message);
+
+      try {
+        // Try to set the author using the function approach
+        if (typeof message.authors === "function") {
+          console.log('Setting message author...');
+          message.authors(
+            (authors) => user.agent && authors.push(user.agent.assertDid),
+          );
+          console.log('Author set successfully');
+        } else {
+          // If authors is not a function, log a warning but continue
+          console.warn("message.authors is not a function", message);
+        }
+      } catch (error) {
+        console.error("Error setting message authors:", error);
+      }
+
+      console.log('Setting message body and date...');
+      message.bodyJson = JSON.stringify(currentMessageInput);
+      message.createdDate = new Date();
+
+      console.log('Committing message...');
+      message.commit();
+      console.log('Message committed');
+
+      if (currentReplyingTo) {
+        console.log('Setting reply reference...');
+        message.replyTo = currentReplyingTo;
+      }
+
+      // Check network status before trying to send
+      if (!networkStatus.isOnline || !networkStatus.syncServerReachable) {
+        console.log('Network or sync server unavailable, queuing message for later');
+        pendingMessages.push({
+          id: message.id,
+          message: message,
+          timestamp: new Date()
+        });
+        toast.success('Message queued for sending when connection is restored', { position: 'bottom-end' });
+        return;
+      }
+
+      console.log('Adding message to channel timeline...');
+      g.channel.timeline.push(message);
+
+      console.log('Committing channel changes...');
+      g.channel.commit();
+      console.log('Channel committed');
+
+      console.log('Message sent successfully');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast.error('Failed to send message. Will retry automatically.', { position: 'bottom-end' });
+
+      // Try to reconnect if there was an error
+      attemptReconnect();
+    }
   }
 
   //
   // Settings Dialog
   //
 
-  /* TODO: image upload refactor with tiptap
-  let mayUploadImages = $derived.by(() => {
-    if (isAdmin) return true;
-    if (!space) { return }
-
-    let messagesByUser = Object.values(space.view.messages).filter(
-      (x) => user.agent && x.author == user.agent.assertDid,
-    );
-    if (messagesByUser.length > 5) return true;
-    return !!messagesByUser.find(
-      (message) =>
-        !!Object.values(message.reactions).find(
-          (reactedUsers) =>
-            !!reactedUsers.find((user) => !!space?.view.admins.includes(user)),
-        ),
-    );
-  });
-  */
+  // All users can upload images now
   let showSettingsDialog = $state(false);
   let channelNameInput = $state("");
   let channelCategoryInput = $state(undefined) as undefined | string;
@@ -218,20 +337,19 @@
     untrack(() => {
       channelNameInput = g.channel?.name || "";
       channelCategoryInput = undefined;
-      g.space &&
-        g.space.sidebarItems.items().then((items) => {
-          for (const item of items) {
-            const category = item.tryCast(Category);
-            if (
-              category &&
-              g.channel &&
-              category.channels.ids().includes(g.channel.id)
-            ) {
-              channelCategoryInput = category.id;
-              return;
-            }
+      g.space?.sidebarItems.items().then((items) => {
+        for (const item of items) {
+          const category = item.tryCast(Category);
+          if (
+            category &&
+            g.channel &&
+            category.channels.ids().includes(g.channel.id)
+          ) {
+            channelCategoryInput = category.id;
+            return;
           }
-        });
+        }
+      });
     });
   });
 
@@ -251,7 +369,7 @@
         const item =
           unknownItem.tryCast(Category) || unknownItem.tryCast(Channel);
 
-        if (item instanceof Channel && item.id == g.channel.id) {
+        if (item instanceof Channel && item.id === g.channel.id) {
           foundChannelInSidebar = true;
         }
 
@@ -259,12 +377,12 @@
           const categoryItems = item.channels.ids();
           if (item.id !== channelCategoryInput) {
             const thisChannelIdx = categoryItems.indexOf(g.channel.id);
-            if (thisChannelIdx != -1) {
+            if (thisChannelIdx !== -1) {
               item.channels.remove(thisChannelIdx);
               item.commit();
             }
           } else if (
-            item.id == channelCategoryInput &&
+            item.id === channelCategoryInput &&
             !categoryItems.includes(g.channel.id)
           ) {
             item.channels.push(g.channel);
@@ -273,7 +391,7 @@
         } else if (
           item instanceof Channel &&
           channelCategoryInput &&
-          item.id == g.channel.id
+          item.id === g.channel.id
         ) {
           const { offset } = g.space.entity.doc.getCursorPos(cursor);
           g.space.sidebarItems.remove(offset);
@@ -289,31 +407,7 @@
     showSettingsDialog = false;
   }
 
-  /* TODO: image upload refactor with tiptap
-  async function handleImageSelect(event: Event) {
-    const input = event.target as HTMLInputElement;
-    imageFiles = input.files;
-  }
-
-  async function handlePaste(event: ClipboardEvent) {
-    if (!mayUploadImages) return;
-
-    const items = event.clipboardData?.items;
-    if (!items) return;
-
-    for (const item of items) {
-      if (item.type.startsWith("image/")) {
-        const file = item.getAsFile();
-        if (file) {
-          imageFiles = new DataTransfer().files;
-          const dataTransfer = new DataTransfer();
-          dataTransfer.items.add(file);
-          imageFiles = dataTransfer.files;
-        }
-      }
-    }
-  }
-  */
+  // Image upload is now handled in ChatInput.svelte
 </script>
 
 <header class="navbar">
@@ -432,7 +526,7 @@
               <div class="flex flex-col gap-1">
                 <h5 class="flex gap-2 items-center">
                   Replying to
-                  {#await getProfile(replyingTo.authors( (x) => x.get(0), )) then profile}
+                  {#await getReplyingToProfile() then profile}
                     <AvatarImage
                       handle={profile.handle || ""}
                       avatarUrl={profile.avatarUrl}
@@ -475,49 +569,8 @@
               >
             {/if}
 
-            <!--
-            {#if mayUploadImages}
-              <label
-                class="cursor-pointer text-white hover:text-gray-300 absolute right-3 top-1/2 -translate-y-1/2"
-              >
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  class="hidden"
-                  onchange={handleImageSelect}
-                />
-                <Icon
-                  icon="material-symbols:add-photo-alternate"
-                  class="text-2xl"
-                />
-              </label>
-            {/if}
-            -->
+            <!-- Image upload button is now in ChatInput.svelte -->
           </div>
-
-          <!-- Image preview
-          {#if imageFiles?.length}
-            <div class="flex gap-2 flex-wrap">
-              {#each Array.from(imageFiles) as file}
-                <div class="relative mt-5">
-                  <img
-                    src={URL.createObjectURL(file)}
-                    alt={file.name}
-                    class="w-20 h-20 object-cover rounded"
-                  />
-                  <button
-                    type="button"
-                    class="absolute -top-2 -right-2 bg-red-500 rounded-full p-1"
-                    onclick={() => (imageFiles = null)}
-                  >
-                    <Icon icon="zondicons:close-solid" color="white" />
-                  </button>
-                </div>
-              {/each}
-            </div>
-          {/if}
-          -->
         </section>
       {/if}
 

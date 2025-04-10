@@ -15,8 +15,8 @@ import type {
   SuggestionKeyDownProps,
   SuggestionProps,
 } from "@tiptap/suggestion";
-import type { LoroText } from "@muni-town/leaf";
 import { convertUrlsToLinks } from "$lib/urlUtils";
+
 
 /* Keyboard Shortcuts: used to add and override existing shortcuts */
 type KeyboardShortcutHandlerProps = {
@@ -70,7 +70,7 @@ function suggestion({
         .slice(0, 5);
     },
     render: () => {
-      let wrapper;
+      let wrapper: HTMLElement | undefined;
       let component: ReturnType<typeof SuggestionSelect>;
 
       return {
@@ -184,10 +184,61 @@ export const extensions = [
 
 export const editorSchema = getSchema(extensions);
 
+// Import the CustomImage from image-extension to avoid duplication
+import { CustomImage } from "./image-extension";
+
 export function getContentHtml(content: JSONContent) {
+  // Define a type for node objects in the content tree
+  type ContentNode = {
+    type?: string;
+    content?: ContentNode[];
+    [key: string]: unknown;
+  };
+
+  function sanitizeContent(node: ContentNode | null | undefined): ContentNode | null {
+    // Handle null, undefined, or non-object values
+    if (!node || typeof node !== 'object') return null;
+
+    // Handle arrays (like content arrays)
+    if (Array.isArray(node)) {
+      const filtered = node
+        .map((item) => sanitizeContent(item as ContentNode))
+        .filter((child): child is ContentNode => child !== null);
+      return filtered.length > 0 ? filtered as unknown as ContentNode : null;
+    }
+
+    // Skip nodes with undefined type
+    if (node.type === undefined) {
+      return null;
+    }
+
+    // Process node content recursively
+    if (node.content && Array.isArray(node.content)) {
+      node.content = node.content
+        .map((item) => sanitizeContent(item))
+        .filter((child): child is ContentNode => child !== null);
+    }
+
+    return node;
+  }
+
   try {
-    // Generate HTML from the content using TipTap
-    const html = generateHTML(content, extensions);
+    // Create a deep copy of the content to avoid modifying the original
+    const contentCopy = JSON.parse(JSON.stringify(content));
+    // Sanitize the content to remove invalid nodes
+    const sanitizedContent = sanitizeContent(contentCopy);
+
+    // If sanitization removed everything, return empty string
+    if (!sanitizedContent) return '';
+
+    // Include all extensions including CustomImage
+    const renderExtensions = [
+      ...extensions,
+      CustomImage,
+    ];
+
+    // Generate HTML from the sanitized content using TipTap
+    const html = generateHTML(sanitizedContent, renderExtensions);
 
     // Convert any URLs in the HTML to clickable links
     // TODO: Handle links in the rich text editor instead.
@@ -195,7 +246,33 @@ export function getContentHtml(content: JSONContent) {
     // editor and remove this post-processing step.
     return convertUrlsToLinks(html);
   } catch (e) {
-    console.error("Error", e, "Content", content);
-    throw e;
+    console.error("Error in primary rendering:", e, "Content:", content);
+
+    try {
+      if (content && typeof content === 'object') {
+        // Create a safe copy for the fallback attempt
+        const safeCopy = JSON.parse(JSON.stringify(content));
+
+        // Remove image nodes which might be causing issues
+        if (safeCopy.content && Array.isArray(safeCopy.content)) {
+          safeCopy.content = safeCopy.content.filter((node: Record<string, unknown>) => {
+            return node && typeof node === 'object' && node.type !== undefined && node.type !== 'image';
+          });
+        }
+
+        // Make sure we include all extensions in the fallback attempt too
+        const fallbackExtensions = [
+          ...extensions,
+          CustomImage,
+        ];
+
+        return generateHTML(safeCopy, fallbackExtensions);
+      }
+    } catch (fallbackError) {
+      console.error("Fallback rendering also failed:", fallbackError);
+    }
+
+    // Return empty string if all rendering attempts fail
+    return '';
   }
 }

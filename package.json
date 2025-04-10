@@ -23,6 +23,7 @@
     "@sveltejs/adapter-netlify": "^4.4.2",
     "@tailwindcss/vite": "^4.0.0",
     "@tiptap/core": "^2.11.5",
+    "@tiptap/extension-image": "^2.11.7",
     "@tiptap/extension-link": "^2.11.5",
     "@tiptap/extension-mention": "^2.11.5",
     "@tiptap/extension-placeholder": "^2.11.5",

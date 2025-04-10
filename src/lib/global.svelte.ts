@@ -146,10 +146,23 @@ $effect.root(() => {
 
   $effect(() => {
     if (g.space && user.agent) {
-      g.isAdmin = g.space.admins((x) =>
-        x.toArray().includes(user.agent!.assertDid),
-      );
-      g.isBanned = !!g.space.bans((x) => x.get(user.agent!.assertDid));
+      // Check if admins is a function before calling it
+      if (typeof g.space.admins === "function") {
+        g.isAdmin = g.space.admins((x) =>
+          x.toArray().includes(user.agent!.assertDid),
+        );
+      } else {
+        console.warn("g.space.admins is not a function");
+        g.isAdmin = false;
+      }
+
+      // Check if bans is a function before calling it
+      if (typeof g.space.bans === "function") {
+        g.isBanned = !!g.space.bans((x) => x.get(user.agent!.assertDid));
+      } else {
+        console.warn("g.space.bans is not a function");
+        g.isBanned = false;
+      }
     } else {
       g.isAdmin = false;
       g.isBanned = false;
@@ -183,6 +196,19 @@ async function initRoomy(agent: Agent): Promise<Roomy> {
     `wss://syncserver.roomy.chat/sync/as/${agent.assertDid}`,
     ["authorization", token],
   );
+
+  // Add event listeners to monitor WebSocket connection
+  websocket.addEventListener('open', () => {
+    console.log('WebSocket connection established successfully');
+  });
+
+  websocket.addEventListener('close', (event) => {
+    console.error(`WebSocket connection closed: ${event.code} ${event.reason}`);
+  });
+
+  websocket.addEventListener('error', (error) => {
+    console.error('WebSocket connection error:', error);
+  });
 
   // Use this instead of you want to test with a local development Leaf syncserver.
   // const websocket = new WebSocket("ws://127.0.0.1:8095");
