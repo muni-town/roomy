@@ -58,14 +58,31 @@ function suggestion({
   char: string;
   pluginKey: string;
 }) {
+  const fuzzyMatch = (text: string, query: string): boolean => {
+    if (!query) return true;
+    
+    text = text.toLowerCase();
+    query = query.toLowerCase();
+    
+    let textIndex = 0;
+    let queryIndex = 0;
+    
+    while (textIndex < text.length && queryIndex < query.length) {
+      if (text[textIndex] === query[queryIndex]) {
+        queryIndex++;
+      }
+      textIndex++;
+    }
+    
+    return queryIndex === query.length;
+  };
+
   return {
     char,
     pluginKey: new PluginKey(pluginKey),
     items: ({ query }: { query: string }) => {
       return items
-        .filter((item) =>
-          item.label.toLowerCase().startsWith(query.toLowerCase()),
-        )
+        .filter((item) => fuzzyMatch(item.label, query))
         .slice(0, 5);
     },
     render: () => {
