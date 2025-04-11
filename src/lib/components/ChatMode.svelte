@@ -8,7 +8,7 @@
   import { navigate } from "$lib/utils.svelte";
   import { Category, Channel, Thread } from "@roomy-chat/sdk";
 
-  let { categories, channels  } = $props();
+  let { categories, channels } = $props();
 
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");

@@ -12,7 +12,7 @@
   let {
     class: classNames = "",
   }: {
-    class?: string
+    class?: string;
   } = $props();
 
   let isLoginDialogOpen = $state(!user.session);

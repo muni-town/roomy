@@ -6,7 +6,7 @@
   let {
     class: classNames = "",
   }: {
-    class?: string
+    class?: string;
   } = $props();
   let currentTheme = $state("");
   const selectItems = themes.map((t) => {
@@ -40,7 +40,9 @@
 </script>
 
 <Select.Root type="single" items={selectItems} onValueChange={setTheme}>
-  <Select.Trigger class="btn btn-ghost hover:bg-base-200 cursor-pointer {classNames}">
+  <Select.Trigger
+    class="btn btn-ghost hover:bg-base-200 cursor-pointer {classNames}"
+  >
     <Icon icon="material-symbols:palette-outline" class="size-6" />
   </Select.Trigger>
   <Select.Portal>
