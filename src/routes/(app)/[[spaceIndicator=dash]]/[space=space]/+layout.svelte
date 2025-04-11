@@ -8,6 +8,8 @@
   import { page } from "$app/state";
   import { outerWidth } from "svelte/reactivity/window";
 
+  let { children } = $props();
+  let isMobile = $derived((outerWidth.current || 0) < 640);
   // TODO: track users via the space data
   let users = derivePromise([], async () => {
     if (!g.space) {
@@ -19,7 +21,7 @@
       for (const timelineItem of await channel.timeline.items()) {
         const message = timelineItem.tryCast(Message);
         if (message && message.authors.length > 0) {
-          for (const author of message.authors.toArray()) {
+          for (const author of message.authors((x) => x.toArray())) {
             result.add(author);
           }
         }
@@ -76,11 +78,9 @@
 
   setContext("users", users);
   setContext("contextItems", contextItems);
-  let { children } = $props();
-  let isMobile = $derived((outerWidth.current || 0) < 640);
 </script>
 
-{#if g.channel || !(page.params.thread || page.params.channel)}
+{#if g.space}
   <main
     class="drawer-content h-full overflox-x-auto flex flex-col gap-4 p-4 overflow-clip bg-base-100 {!isMobile
       ? 'grow min-w-0 rounded-xl border-4 border-base-300'
@@ -90,6 +90,7 @@
   >
     {@render children()}
   </main>
+  <!-- If there is no space. -->
 {:else}
   <span class="loading loading-spinner mx-auto w-25"></span>
 {/if}

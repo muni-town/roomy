@@ -25,12 +25,14 @@
   let availableThreads = derivePromise([], async () =>
     ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
   );
+
   let categories = derivePromise([], async () => {
     if (!g.space) return [];
     return (await g.space.sidebarItems.items())
       .map((x) => x.tryCast(Category) as Category)
       .filter((x) => !!x);
   });
+
   let sidebarItems = derivePromise([], async () => {
     if (!g.space) return [];
     return await g.space.sidebarItems.items();
@@ -50,11 +52,11 @@
     if (!g.space) return;
     if (!showSpaceSettings) {
       spaceNameInput = g.space.name;
-      newSpaceHandle = g.space?.handles.get(0) || "";
+      newSpaceHandle = g.space?.handles((x) => x.get(0)) || "";
       verificationFailed = false;
       saveSpaceLoading = false;
       Promise.all(
-        Object.keys(g.space.bans.toJSON()).map((x) => getProfile(x)),
+        Object.keys(g.space.bans((x) => x.toJSON())).map((x) => getProfile(x)),
       ).then(
         (profiles) =>
           (bannedHandlesInput = profiles.map((x) => x.handle).join(", ")),
@@ -72,10 +74,12 @@
           .map((x) => user.agent!.resolveHandle({ handle: x })),
       )
     ).map((x) => x.data.did);
-    g.space.bans.clear();
-    for (const ban of bannedIds) {
-      g.space.bans.set(ban, true);
-    }
+    g.space.bans((bans) => {
+      bans.clear();
+      for (const ban of bannedIds) {
+        bans.set(ban, true);
+      }
+    });
     g.space.commit();
     showSpaceSettings = false;
   }
@@ -89,7 +93,7 @@
     saveSpaceLoading = true;
 
     if (!newSpaceHandle) {
-      g.space.handles.clear();
+      g.space.handles((h) => h.clear());
       g.space.commit();
       saveSpaceLoading = false;
       showSpaceSettings = false;
@@ -106,8 +110,10 @@
         saveSpaceLoading = false;
         return;
       }
-      g.space.handles.clear();
-      g.space.handles.push(newSpaceHandle);
+      g.space.handles((h) => {
+        h.clear();
+        h.push(newSpaceHandle);
+      });
       g.space.commit();
       saveSpaceLoading = false;
       showSpaceSettings = false;
