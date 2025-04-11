@@ -27,9 +27,9 @@
     try {
       handleInput = cleanHandle(handleInput);
       await user.loginWithHandle(handleInput);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      loginError = e.toString();
+      loginError = e instanceof Error ? e.message.toString() : "Unknown error";
     }
 
     loginLoading = false;
@@ -37,9 +37,10 @@
 </script>
 
 <Dialog
-  title={user.session
-    ? `Logged In As ${user.profile.data?.handle}`
-    : "Login with AT Protocol"}
+  title={user.session ? "Log Out" : "Log In"}
+  description={user.session
+    ? `Logged in as ${user.profile.data?.handle}`
+    : "Log in with AT Protocol"}
   bind:isDialogOpen={isLoginDialogOpen}
 >
   {#snippet dialogTrigger()}
@@ -54,7 +55,7 @@
   {#if user.session}
     <section class="flex flex-col gap-4">
       <Button.Root onclick={user.logout} class="btn btn-error">
-        Logout
+        Log Out
       </Button.Root>
     </section>
   {:else}
@@ -74,7 +75,7 @@
         {#if loginLoading}
           <span class="loading loading-spinner"></span>
         {/if}
-        Login with Bluesky
+        Log In with Bluesky
       </Button.Root>
     </form>
   {/if}

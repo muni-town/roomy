@@ -10,9 +10,11 @@
   import { AvatarMarble } from "svelte-boring-avatars";
   import { Avatar, Button, ToggleGroup } from "bits-ui";
 
+  import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import { Space } from "@roomy-chat/sdk";
   import ContextMenu from "$lib/components/ContextMenu.svelte";
-  import ThemeSelector from "$lib/components/ThemeSelector.svelte";
+  import TooltipPortal from "$lib/components/TooltipPortal.svelte";
+
   import UserSession from "$lib/components/UserSession.svelte";
   import { page } from "$app/state";
 
@@ -27,11 +29,15 @@
     visible: boolean;
   } = $props();
 
+  // Tooltip state
+  let activeTooltip = $state("");
+  let tooltipPosition = $state({ x: 0, y: 0 });
+
   async function createSpace() {
     if (!newSpaceName || !user.agent || !g.roomy) return;
     const space = await g.roomy.create(Space);
     space.name = newSpaceName;
-    space.admins.push(user.agent.assertDid);
+    space.admins((x) => x.push(user.agent!.assertDid));
     space.commit();
 
     g.roomy.spaces.push(space);
@@ -42,7 +48,11 @@
   }
 </script>
 
-<!-- 53px = aside innerWidth + 8px padding + 1px border. Manually set for transition to w-0  -->
+ 
+
+  <TooltipPortal text={activeTooltip} visible={!!activeTooltip} x={tooltipPosition.x} y={tooltipPosition.y} />
+  <!-- Server Bar -->
+  <!-- 53px = aside innerWidth + 8px padding + 1px border. Manually set for transition to w-0 --> 
 <aside
   class="flex flex-col justify-between align-center h-full {visible
     ? 'w-[53px] px-1 border-r-2'
@@ -52,7 +62,7 @@
   <ToggleGroup.Root
     type="single"
     value={g.currentCatalog}
-    class="flex flex-col gap-2 align-center"
+    class="flex flex-col gap-2 items-center"
   >
     <ToggleGroup.Item
       value="home"
@@ -101,10 +111,17 @@
         ]}
       >
         <ToggleGroup.Item
-          onclick={() => navigate({ space: space.handles.get(0) || space.id })}
+          onclick={() => navigate({ space: space.handles((x) => x.get(0)) || space.id })}
           value={space.id}
-          title={space.name}
           class="btn btn-ghost px-1 w-full rounded-3xlit justify-start flex data-[state=on]:border-base-content"
+          onmouseenter={(e) => {
+            activeTooltip = space.name;
+            const rect = e.currentTarget.getBoundingClientRect();
+            tooltipPosition = { x: rect.right + 8, y: rect.top + rect.height / 2 };
+          }}
+          onmouseleave={() => {
+            activeTooltip = "";
+          }}
         >
           <Avatar.Root>
             <Avatar.Image />
