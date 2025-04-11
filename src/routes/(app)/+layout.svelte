@@ -51,10 +51,10 @@
     : ''} flex gap-0 w-screen h-screen bg-base-300 max-h-screen overflow-clip"
 >
   <Toaster />
-  <input id="my-drawer-4" type="checkbox" class="drawer-toggle" />
+  <input id="sidebar-left" type="checkbox" class="drawer-toggle" />
   <div class="drawer-side z-10 max-h-screen shrink-0">
     <label
-      for="my-drawer-4"
+      for="sidebar-left"
       aria-label="close sidebar"
       class="drawer-overlay opacity-0"
     ></label>

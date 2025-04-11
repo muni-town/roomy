@@ -319,14 +319,13 @@
 <header class="navbar">
   <div class="navbar-start flex gap-4">
     {#if g.channel}
-      {#if isMobile}
-        <Button.Root
-          onclick={() =>
-            navigate(page.params.space ? { space: page.params.space } : "home")}
-        >
-          <Icon icon="uil:left" />
-        </Button.Root>
-      {/if}
+      <label
+        for="sidebar-left"
+        class="btn btn-ghost p-1 shrink-0 drawer-button sm:hidden"
+        title="Open sidebar"
+      >
+        <Icon icon="basil:menu-outline" font-size="1.75rem" />
+      </label>
 
       <h4
         class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}
