@@ -22,7 +22,6 @@
     Category,
     Channel,
     Message,
-    Image,
     Thread,
     Timeline,
   } from "@roomy-chat/sdk";
@@ -62,7 +61,6 @@
   });
 
   let messageInput: JSONContent = $state({});
-  let imageFiles: FileList | null = $state(null);
 
   // thread maker
   let isThreading = $state({ value: false });
@@ -172,7 +170,9 @@
     */
 
     const message = await g.roomy.create(Message);
-    message.authors.push(user.agent.assertDid);
+    message.authors(
+      (authors) => user.agent && authors.push(user.agent.assertDid),
+    );
     message.bodyJson = JSON.stringify(messageInput);
     message.createdDate = new Date();
     message.commit();
@@ -185,7 +185,6 @@
 
     messageInput = {};
     replyingTo = undefined;
-    imageFiles = null;
   }
 
   //
@@ -320,16 +319,14 @@
 <header class="navbar">
   <div class="navbar-start flex gap-4">
     {#if g.channel}
-      <label for="my-drawer-4" class="drawer-button btn btn-ghost sm:hidden">
-        <Icon icon="uil:left" />
-      </label>
-      {#await g.channel.image && g.roomy && g.roomy.open(Image, g.channel.image) then image}
-        <!-- TODO: We're using #key to recreate avatar image when channel changes since for some reason the
-          avatarimage component doesn't re-render properly by itself.  -->
-        {#key g.channel.id}
-          <AvatarImage avatarUrl={image?.uri} handle={g.channel.id} />
-        {/key}
-      {/await}
+      {#if isMobile}
+        <Button.Root
+          onclick={() =>
+            navigate(page.params.space ? { space: page.params.space } : "home")}
+        >
+          <Icon icon="uil:left" />
+        </Button.Root>
+      {/if}
 
       <h4
         class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}
@@ -435,7 +432,7 @@
               <div class="flex flex-col gap-1">
                 <h5 class="flex gap-2 items-center">
                   Replying to
-                  {#await getProfile(replyingTo.authors.get(0)) then profile}
+                  {#await getProfile(replyingTo.authors( (x) => x.get(0), )) then profile}
                     <AvatarImage
                       handle={profile.handle || ""}
                       avatarUrl={profile.avatarUrl}
@@ -499,7 +496,7 @@
             -->
           </div>
 
-          <!-- Image preview 
+          <!-- Image preview
           {#if imageFiles?.length}
             <div class="flex gap-2 flex-wrap">
               {#each Array.from(imageFiles) as file}
