@@ -8,10 +8,10 @@
   import { RenderScan } from "svelte-render-scan";
 
   let { children } = $props();
-  import SpaceBar from "$lib/components/SpaceBar.svelte";
+  import SpacesColumn from "$lib/components/SpacesColumn.svelte";
   import { derivePromise } from "$lib/utils.svelte";
   import { page } from "$app/state";
-  import RoomBar from "$lib/components/RoomBar.svelte";
+  import RoomSidebar from "$lib/components/RoomSidebar.svelte";
 
   onMount(async () => {
     await user.init();
@@ -59,12 +59,12 @@
       class="drawer-overlay opacity-0"
     ></label>
     <div class="flex h-full max-h-full gap-0 overflow-x-clip sm:w-fit">
-      <SpaceBar
+      <SpacesColumn
         {spaces}
         visible={isSpacesVisible.value || !page.params.space}
       />
       {#if page.params.space}
-        <RoomBar />
+        <RoomSidebar />
       {/if}
     </div>
   </div>

@@ -48,15 +48,18 @@
   }
 </script>
 
- 
-
-  <TooltipPortal text={activeTooltip} visible={!!activeTooltip} x={tooltipPosition.x} y={tooltipPosition.y} />
-  <!-- Server Bar -->
-  <!-- 53px = aside innerWidth + 8px padding + 1px border. Manually set for transition to w-0 --> 
+<TooltipPortal
+  text={activeTooltip}
+  visible={!!activeTooltip}
+  x={tooltipPosition.x}
+  y={tooltipPosition.y}
+/>
+<!-- Server Bar -->
+<!-- 53px = aside innerWidth + 8px padding + 1px border. Manually set for transition to w-0 -->
 <aside
   class="flex flex-col justify-between align-center h-full {visible
     ? 'w-[53px] px-1 border-r-2'
-    : 'w-[0]'} py-2  border-base-200 bg-base-300 transition-all duration-100 ease-out"
+    : 'w-[0]'} py-2 border-base-200 bg-base-300 transition-all duration-100 ease-out"
   class:opacity-0={!visible}
 >
   <ToggleGroup.Root
@@ -111,13 +114,17 @@
         ]}
       >
         <ToggleGroup.Item
-          onclick={() => navigate({ space: space.handles((x) => x.get(0)) || space.id })}
+          onclick={() =>
+            navigate({ space: space.handles((x) => x.get(0)) || space.id })}
           value={space.id}
           class="btn btn-ghost px-1 w-full rounded-3xlit justify-start flex data-[state=on]:border-base-content"
           onmouseenter={(e) => {
             activeTooltip = space.name;
             const rect = e.currentTarget.getBoundingClientRect();
-            tooltipPosition = { x: rect.right + 8, y: rect.top + rect.height / 2 };
+            tooltipPosition = {
+              x: rect.right + 8,
+              y: rect.top + rect.height / 2,
+            };
           }}
           onmouseleave={() => {
             activeTooltip = "";
