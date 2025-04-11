@@ -148,9 +148,8 @@
       // Access the image entity directly
       const imageId = g.space.image;
 
-
       if (imageId && g.roomy) {
-        g.roomy.open(Image, imageId).then(image => {
+        g.roomy.open(Image, imageId).then((image) => {
           if (image.uri) {
             spaceAvatarUrl = image.uri;
             console.log("Set avatar URL:", spaceAvatarUrl);
@@ -224,13 +223,9 @@
         image.commit();
         console.log("Committed image entity:", image);
 
-        // Set the image reference on the space using a custom field
-        // We need to use a custom approach since the Space class might not have an image property
         try {
-          // Try to directly set the image property
-          g.space.image = image;
+          g.space.image = image.id;
           g.space.commit();
-          console.log("Set space image directly:", g.space.image);
 
           // Update the preview URL
           spaceAvatarUrl = uploadResult.url;
@@ -240,7 +235,6 @@
           });
         } catch (err) {
           console.error("Error setting space image directly:", err);
-
         }
       } catch (imageErr) {
         console.error("Error creating image entity:", imageErr);
@@ -368,20 +362,33 @@
                 <span class="label">Name</span>
                 <input bind:value={spaceNameInput} placeholder="My Space" />
               </label>
-              <Button.Root class="btn btn-primary w-full">Save Name</Button.Root>
+              <Button.Root class="btn btn-primary w-full">Save Name</Button.Root
+              >
             </form>
 
             <form class="flex flex-col gap-4 mb-8" onsubmit={uploadAvatar}>
               <h2 class="font-bold text-xl">Avatar</h2>
               <div class="flex flex-col gap-4">
                 <div class="flex items-center gap-4">
-                  <div class="w-20 h-20 rounded-full overflow-hidden bg-base-300 flex items-center justify-center">
+                  <div
+                    class="w-20 h-20 rounded-full overflow-hidden bg-base-300 flex items-center justify-center"
+                  >
                     {#if avatarPreviewUrl}
-                      <img src={avatarPreviewUrl} alt="Avatar preview" class="w-full h-full object-cover" />
+                      <img
+                        src={avatarPreviewUrl}
+                        alt="Avatar preview"
+                        class="w-full h-full object-cover"
+                      />
                     {:else if spaceAvatarUrl}
-                      <img src={spaceAvatarUrl} alt="Current avatar" class="w-full h-full object-cover" />
+                      <img
+                        src={spaceAvatarUrl}
+                        alt="Current avatar"
+                        class="w-full h-full object-cover"
+                      />
                     {:else if g.space && g.space.id}
-                      <div class="w-full h-full flex items-center justify-center">
+                      <div
+                        class="w-full h-full flex items-center justify-center"
+                      >
                         <AvatarMarble name={g.space.id} />
                       </div>
                     {/if}
@@ -429,8 +436,8 @@
               <h2 class="font-bold text-xl">Handle</h2>
               <div class="flex flex-col gap-2">
                 <p>
-                  Space handles are created with DNS records and allow your space
-                  to be reached at a URL like <code
+                  Space handles are created with DNS records and allow your
+                  space to be reached at a URL like <code
                     >https://roomy.chat/-/example.org</code
                   >.
                 </p>
@@ -478,8 +485,8 @@
                 <div role="alert" class="alert alert-error">
                   <span
                     >Verification failed. It may take several minutes before DNS
-                    records are propagated. If you have configured them correctly
-                    try again in a few minutes.</span
+                    records are propagated. If you have configured them
+                    correctly try again in a few minutes.</span
                   >
                 </div>
               {/if}
@@ -505,8 +512,8 @@
                     >Input a list of handles separated by commas.</span
                   >
                   <span class="mx-2 mt-1 text-sm"
-                    >Note: the ban is "best effort" right now. The Roomy alpha is
-                    generally insecure.</span
+                    >Note: the ban is "best effort" right now. The Roomy alpha
+                    is generally insecure.</span
                   >
                 </div>
               </div>

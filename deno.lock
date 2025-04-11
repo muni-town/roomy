@@ -8,8 +8,8 @@
     "npm:@blocknote/core@0.25": "0.25.2_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_y-prosemirror@1.2.17__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1__y-protocols@1.0.6___yjs@13.6.24__yjs@13.6.24_prosemirror-model@1.25.0_prosemirror-state@1.4.3_prosemirror-transform@1.10.3_prosemirror-view@1.38.1_shiki@1.29.2_y-protocols@1.0.6__yjs@13.6.24_yjs@13.6.24",
     "npm:@blocknote/react@0.25": "0.25.2_react@19.0.0_react-dom@19.0.0__react@19.0.0_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1",
     "npm:@iconify/svelte@^4.2.0": "4.2.0_svelte@5.25.3__acorn@8.14.1",
-    "npm:@jsr/muni-town__leaf@0.2.0-preview.13": "0.2.0-preview.13_typescript@5.8.2",
-    "npm:@jsr/roomy-chat__sdk@0.1.0-preview.13": "0.1.0-preview.13_typescript@5.8.2",
+    "npm:@jsr/muni-town__leaf@0.2.0-preview.15": "0.2.0-preview.15_typescript@5.8.2",
+    "npm:@jsr/roomy-chat__sdk@0.1.0-preview.15": "0.1.0-preview.15_typescript@5.8.2",
     "npm:@noble/curves@^1.8.1": "1.8.1",
     "npm:@sveltejs/adapter-netlify@^4.4.2": "4.4.2_@sveltejs+kit@2.20.2__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.25.3____acorn@8.14.1___vite@6.2.2____lightningcss@1.29.2__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
     "npm:@sveltejs/adapter-static@^3.0.8": "3.0.8_@sveltejs+kit@2.20.2__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.25.3____acorn@8.14.1___vite@6.2.2____lightningcss@1.29.2__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
@@ -612,10 +612,29 @@
         "@jridgewell/sourcemap-codec"
       ]
     },
-    "@jsr/muni-town__leaf@0.2.0-preview.13_typescript@5.8.2": {
-      "integrity": "sha512-wjFem1QK/4xLiZeEgaG1VAY4O2vHZT6+oHYlBCkN6bddfJKxRqzGWJ1epgPRc5kOr23JFYG9yzcxwfeHdokSwQ==",
+    "@jsr/deno__kv-utils@0.1.3": {
+      "integrity": "sha512-H1kFktioYs15mNu+l+uDKJe7qi/wq/6BHm9ubRyAGgiplELGZYX+i2dvrJ2+I7CptbPJYMVHDccrWHg81jJoeg==",
+      "dependencies": [
+        "@jsr/std__bytes",
+        "@jsr/std__encoding"
+      ]
+    },
+    "@jsr/kitsonk__kv-toolbox@0.27.4": {
+      "integrity": "sha512-6GDsczA22cieX733yazDIUxPyWzd2PatvgHQfer4mVdSWk8n6WHRdiFo0z23GbSlXT3P5eaGOoP0lIaEy9LBuA==",
+      "dependencies": [
+        "@jsr/deno__kv-utils",
+        "@jsr/std__assert",
+        "@jsr/std__bytes",
+        "@jsr/std__crypto",
+        "@jsr/std__encoding",
+        "@jsr/std__media-types"
+      ]
+    },
+    "@jsr/muni-town__leaf@0.2.0-preview.15_typescript@5.8.2": {
+      "integrity": "sha512-mIK2ydK6AS+6Q+nBnZs50H9x2RZVQXxrhSdAR65P1a8XvAsai8oFh6Fue/tA05hARntklrmYGw4iiZ06re2PpA==",
       "dependencies": [
         "@automerge/automerge-repo-storage-indexeddb@1.2.1_typescript@5.8.2",
+        "@jsr/kitsonk__kv-toolbox",
         "@jsr/std__fs",
         "@jsr/std__path",
         "@msgpack/msgpack",
@@ -626,17 +645,38 @@
         "svelte@5.25.3_acorn@8.14.1"
       ]
     },
-    "@jsr/roomy-chat__sdk@0.1.0-preview.13_typescript@5.8.2": {
-      "integrity": "sha512-RxL7bwGBTHq1aYmkoI4skXAjiPqjojm/mKpJ4oLBJCEXvqrwv6/UvZAS74Uh5cEIKlHkLudAeQUV+pWLsOYCFw==",
+    "@jsr/roomy-chat__sdk@0.1.0-preview.15_typescript@5.8.2": {
+      "integrity": "sha512-FNjc94WdaycRfF5aLL3DrD/ykhtmDasbuQDz+A6hVJNqHMKRkO+gIpWGlt0OOy3DV2tYxEaxs4U8iADYckG7sw==",
       "dependencies": [
         "@jsr/muni-town__leaf"
       ]
+    },
+    "@jsr/std__assert@1.0.12": {
+      "integrity": "sha512-9pmgjJhuljZCmLlbvsRV6aLT5+YCmhX/yIjaWYav7R7Vup2DOLAgpUOs4JkzRbwn7fdKYrwHT8+DjqPr7Ti8mg==",
+      "dependencies": [
+        "@jsr/std__internal"
+      ]
+    },
+    "@jsr/std__bytes@1.0.5": {
+      "integrity": "sha512-jcyXQSy5zAh2/6NLMWUkhJuQ0HihY5RwWF5RvpZyEmpmBaokkTwPkev0sqHzNJJvNusDUMznVBIclTT9augCkg=="
+    },
+    "@jsr/std__crypto@1.0.4": {
+      "integrity": "sha512-qtfyxcQbfhqTEOYRel8h6vssKpT2yD4kC39mzzwN1KsH53+nbiQZfXC5lmBxcfyihH7V2EibbP/MvSsYMmv6ZA=="
+    },
+    "@jsr/std__encoding@1.0.9": {
+      "integrity": "sha512-Qi+jPntT9SwhbBn3yotEz3sFs1u8QKfVVOUqeQcVYk+m4JaEnVM7OyeFad5DZQXwcfjIHGJwChntr3aYfSIwPg=="
     },
     "@jsr/std__fs@1.0.10": {
       "integrity": "sha512-rVH3Y73A2uJMn1XA6NLvJtVYTYNnpHlTFuqrvVVD3AZ8q/Q9h4WL14Us02ThzfZp2SqUhG9bD974vzXA3QIeZA==",
       "dependencies": [
         "@jsr/std__path"
       ]
+    },
+    "@jsr/std__internal@1.0.6": {
+      "integrity": "sha512-1NLtCx9XAL44nt56gzmRSCgXjIthHVzK62fTkJdq8/XsP7eN9a21AZDpc0EGJ/cgvmmOB52UGh46OuKrrY7eVg=="
+    },
+    "@jsr/std__media-types@1.1.0": {
+      "integrity": "sha512-dHvaxHL7ENWnltgL653uo3KnKFse3ZbopZop2gqsT7yrscx7irZEClu5Cba7gMPPRk4Lg1FbriNcaBViM2RSBw=="
     },
     "@jsr/std__path@1.0.8": {
       "integrity": "sha512-eNBGlh/8ZVkMxtFH4bwIzlAeKoHYk5in4wrBZhi20zMdOiuX4QozP4+19mIXBT2lzHDjhuVLyECbhFeR304iDg=="
@@ -2372,8 +2412,8 @@
     "longest-streak@3.1.0": {
       "integrity": "sha512-9Ri+o0JYgehTaVBBDoMqIl8GXtbWg711O3srftcHhZ0dqnETqLaoIK0x17fUw9rFSlK/0NlsKe0Ahhyl5pXE2g=="
     },
-    "loro-crdt@1.5.2": {
-      "integrity": "sha512-MvSY5sf8+86d7NL8cesXvIgQc4XZmGyDhAySrcSDCz5ahyvedaICDWXZ7tMCB33TQtp+wqnuausPalFfP8G/eA=="
+    "loro-crdt@1.5.3": {
+      "integrity": "sha512-rrAoUcpcxmrZgkBdqU3CkU+QFSE8zrAELMyU66s5WjG9Jqt/4jGoU/wU8ciSrDAHb3LLBwgOFtUMFRETd0FV6g=="
     },
     "loupe@3.1.3": {
       "integrity": "sha512-kkIp7XSkP78ZxJEsSxW3712C6teJVoeHHwgo9zJ380de7IYyJ2ISlxojcH2pC5OFLewESmnRi/+XCDIEEVyoug=="
@@ -3952,8 +3992,8 @@
         "npm:@blocknote/core@0.25",
         "npm:@blocknote/react@0.25",
         "npm:@iconify/svelte@^4.2.0",
-        "npm:@jsr/muni-town__leaf@0.2.0-preview.13",
-        "npm:@jsr/roomy-chat__sdk@0.1.0-preview.13",
+        "npm:@jsr/muni-town__leaf@0.2.0-preview.15",
+        "npm:@jsr/roomy-chat__sdk@0.1.0-preview.15",
         "npm:@noble/curves@^1.8.1",
         "npm:@sveltejs/adapter-netlify@^4.4.2",
         "npm:@sveltejs/adapter-static@^3.0.8",
