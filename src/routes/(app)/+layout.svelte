@@ -91,7 +91,7 @@
   <!-- Server Bar -->
 
   <aside
-    class="w-fit col-span-2 flex flex-col justify-between px-0 md:px-4 py-8 items-center border-r-2 border-base-200 h-screen overflow-y-auto"
+    class="w-fit col-span-2 flex flex-col justify-between px-0 md:px-4 py-8 items-center border-r-2 border-base-200 h-screen overflow-y-auto overflow-x-hidden"
   >
     <ToggleGroup.Root
       type="single"
