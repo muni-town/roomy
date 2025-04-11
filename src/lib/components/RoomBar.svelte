@@ -154,7 +154,7 @@
   <Tabs.Root bind:value={tab} class="px-2">
     <Tabs.List class="flex w-full rounded-lg tabs-box">
       <Tabs.Trigger value="index" class="grow tab flex gap-2">
-        <Icon icon="material-symbols:thread-unread-rounded" class="text-2xl" />
+        <Icon icon="material-symbols:inbox-rounded" class="text-2xl" />
       </Tabs.Trigger>
       <Tabs.Trigger
         disabled={!g.roomy}
@@ -165,16 +165,16 @@
       </Tabs.Trigger>
     </Tabs.List>
   </Tabs.Root>
-<nav
-  class="min-h-0 overflow-y-auto p-2 flex flex-col gap-4 w-full"
-  style="scrollbar-width: thin;"
->
-  {#if tab === "index"}
-    <IndexMode {availableThreads} />
-  {:else if tab === "chat" && g.space}
-    <ChatMode {categories} channels={sidebarItems} />
-  {/if}
-</nav>
+  <nav
+    class="min-h-0 overflow-y-auto p-2 flex flex-col gap-4 w-full"
+    style="scrollbar-width: thin;"
+  >
+    {#if tab === "index"}
+      <IndexMode {availableThreads} />
+    {:else if tab === "chat" && g.space}
+      <ChatMode {categories} channels={sidebarItems} />
+    {/if}
+  </nav>
   <div class="grow"></div>
   <!-- User + Theme -->
   <div class="px-2">
