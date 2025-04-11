@@ -10,6 +10,7 @@
 
   let { children } = $props();
   let isMobile = $derived((outerWidth.current || 0) < 640);
+
   // TODO: track users via the space data
   let users = derivePromise([], async () => {
     if (!g.space) {

@@ -17,7 +17,7 @@
     await user.init();
   });
 
-  let spaces = derivePromise(
+  const spaces = derivePromise(
     [],
     async () => (await g.roomy?.spaces.items()) || [],
   );

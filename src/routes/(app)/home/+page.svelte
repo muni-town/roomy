@@ -1,17 +1,21 @@
 <script lang="ts">
   import { g } from "$lib/global.svelte";
   import { derivePromise } from "$lib/utils.svelte";
+  import Icon from "@iconify/svelte";
 
-  let spaces = derivePromise(
+  const spaces = derivePromise(
     undefined,
     async () => await g.roomy?.spaces.items(),
   );
 </script>
 
-<header class="hero bg-base-200 min-h-screen">
+<!-- NOTE: Some of these classes (hero, hero-content, divider) come from Daisy UI,
+ which is confusing because there is nothing telling you that's where they are coming from.
+ Suggest removing these and replacing with raw Tailwind. -->
+<div class="hero bg-base-200 min-h-screen">
   <div class="hero-content">
     <div class="flex flex-col gap-8 items-center">
-      <h1 class="text-5xl font-bold">Hello Roomy</h1>
+      <h1 class="text-5xl font-bold text-center">Hello Roomy</h1>
       <p class="text-lg font-medium max-w-2xl text-center">
         A digital gardening platform for communities. Built on the AT Protocol.
         Flourish in Spaces, curating knowledge and conversations together.
@@ -22,19 +26,22 @@
         <span class="loading loading-spinner mx-auto w-25"></span>
       {:else if spaces.value.length > 0}
         <h2 class="text-3xl font-bold">Your Spaces</h2>
-        <section class="flex gap-4 flex-wrap justify-center max-w-5xl">
+        <section class="flex flex-wrap justify-center gap-4 max-w-5xl">
           {#each spaces.value as space}
-            <div class="card card-dash bg-base-100 w-96">
-              <div class="card-body">
+            <a
+              href={`/${space.handles((x) => x.get(0)) || space.id}`}
+              class="card border border-base-300 hover:border-primary bg-base-100 transition-colors cursor-pointer text-base-content w-full md:w-96"
+            >
+              <div class="card-body flex-row items-center justify-between">
                 <h2 class="card-title">{space.name}</h2>
-                <div class="card-actions justify-end">
-                  <a
-                    href={`/${space.handles.get(0) || space.id}`}
-                    class="btn btn-primary">Open Space</a
-                  >
+                <div class="card-actions">
+                  <Icon
+                    icon="lucide:circle-arrow-right"
+                    class="text-2xl text-primary"
+                  />
                 </div>
               </div>
-            </div>
+            </a>
           {/each}
         </section>
       {:else}
@@ -42,4 +49,4 @@
       {/if}
     </div>
   </div>
-</header>
+</div>
