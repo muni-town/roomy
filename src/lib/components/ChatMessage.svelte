@@ -16,6 +16,17 @@
   import { derivePromise } from "$lib/utils.svelte";
   import type { JSONContent } from "@tiptap/core";
 
+  // Helper function to safely parse message content
+  function parseMessageContent(bodyJson: string | undefined): JSONContent {
+    try {
+      if (!bodyJson) return {};
+      return JSON.parse(bodyJson);
+    } catch (e) {
+      console.error('Error parsing message JSON:', e);
+      return {};
+    }
+  }
+
   type Props = {
     message: Message | Announcement;
     mergeWithPrevious?: boolean;
@@ -352,7 +363,7 @@
         {/if}
 
         <span class="prose select-text">
-          {@html getContentHtml(JSON.parse(msg.bodyJson))}
+          {@html getContentHtml(parseMessageContent(msg.bodyJson))}
         </span>
         <!-- TODO: images. -->
         <!-- {#if msg.images?.length}
