@@ -5,7 +5,7 @@
 
   type Props = {
     title: string;
-    description?: string;
+    description?: string; // may be formatted with HTML
     isDialogOpen?: boolean;
     disabled?: boolean;
     dialogTrigger?: Snippet;
@@ -54,7 +54,8 @@
 
         {#if description}
           <Dialog.Description class="text-sm">
-            {description}
+            <!-- allows text to be formed with HTML -->
+            {@html description}
           </Dialog.Description>
         {/if}
 
