@@ -17,10 +17,11 @@
   import Dialog from "$lib/components/Dialog.svelte";
 
   const wikis = derivePromise([], async () => {
-    return g.space && g.channel && g.channel instanceof Channel
+    return g.space && g.channel instanceof Channel
       ? (await g.channel.wikipages.items()).filter((x) => !x.softDeleted)
       : [];
   });
+
   let selectedWiki: WikiPage | undefined = $state(wikis.value[0]);
   $effect(() => {
     if (wikis.value.length > 0 && !selectedWiki) {
@@ -220,7 +221,7 @@
       wikiToDelete.commit();
 
       isEditingWiki = false; // Close the editor to remove cached wiki
-      selectedWiki = wikis.value[0]; // Select the first wiki after deletion
+      selectedWiki = undefined;
     }
     isDeleteDialogOpen = false;
     wikiToDelete = undefined;
@@ -695,6 +696,7 @@
   $effect(() => {
     if (!selectedWiki || selectedWiki.bodyJson == "{}") {
       wikiRenderedHtml = "";
+      processedHtml = "";
       return;
     }
     const json = JSON.parse(selectedWiki.bodyJson);
@@ -1036,7 +1038,11 @@
         </div>
         <div class="wiki-rendered p-4 bg-base-300/30 rounded-lg">
           <div class="wiki-html text-base-content">
-            {@html processedHtml}
+            {#if selectedWiki && !selectedWiki.softDeleted}
+              {@html processedHtml}
+            {:else}
+              <p class="text-base-content/70">No content available.</p>
+            {/if}
           </div>
         </div>
       </section>
