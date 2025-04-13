@@ -150,7 +150,7 @@
 
   let isWikiTitleDialogOpen = $state(false);
   let newWikiTitleElement: HTMLInputElement | null = $state(null);
-  let deleteDialogVisible = $state(false);
+  let isDeleteDialogOpen = $state(false);
   let wikiToDelete: WikiPage | undefined = $state();
 
   function selectWiki(wiki: any) {
@@ -211,7 +211,7 @@
   function showDeleteDialog(wiki: any, event: Event) {
     event.stopPropagation();
     wikiToDelete = wiki;
-    deleteDialogVisible = true;
+    isDeleteDialogOpen = true;
   }
 
   function confirmDeleteWiki() {
@@ -219,12 +219,7 @@
       wikiToDelete.softDeleted = true;
       wikiToDelete.commit();
     }
-    deleteDialogVisible = false;
-    wikiToDelete = undefined;
-  }
-
-  function cancelDeleteWiki() {
-    deleteDialogVisible = false;
+    isDeleteDialogOpen = false;
     wikiToDelete = undefined;
   }
 
@@ -826,16 +821,15 @@
               }}
             >
               <span>{wiki.name}</span>
-              {#if g.isAdmin}
-                <div class="delete-container">
-                  <button
-                    class="btn btn-error btn-xs delete-button hidden group-hover:block"
-                    onclick={(e) => showDeleteDialog(wiki, e)}
-                  >
-                    <Icon icon="tabler:trash" />
-                  </button>
-                </div>
-              {/if}
+
+              <div class="delete-container">
+                <button
+                  class="btn btn-error btn-xs delete-button hidden group-hover:block"
+                  onclick={(e) => showDeleteDialog(wiki, e)}
+                >
+                  <Icon icon="tabler:trash" />
+                </button>
+              </div>
             </div>
           </li>
         {/if}
@@ -1088,27 +1082,15 @@
   </form>
 </Dialog>
 
-{#if deleteDialogVisible}
-  <div
-    class="fixed inset-0 bg-black/50 flex items-center justify-center z-[120]"
-  >
-    <div
-      class="bg-base-300 border border-base-content/20 rounded-lg shadow-lg p-6 max-w-md w-full"
-    >
-      <h3 class="text-lg font-bold text-base-content mb-4">Confirm Deletion</h3>
-      <p class="mb-4 text-base-content">
-        Are you sure you want to delete this wiki: {wikiToDelete?.name}?
-      </p>
-      <div class="flex justify-end gap-3">
-        <button class="btn btn-outline" onclick={cancelDeleteWiki}
-          >Cancel</button
-        >
-        <button class="btn btn-error" onclick={confirmDeleteWiki}>Delete</button
-        >
-      </div>
-    </div>
+<Dialog
+  title="Confirm Wiki Deletion"
+  description="Are you sure you want to delete <b>{wikiToDelete?.name}</b>?"
+  bind:isDialogOpen={isDeleteDialogOpen}
+>
+  <div class="flex justify-end gap-3">
+    <button class="btn btn-error" onclick={confirmDeleteWiki}>Delete</button>
   </div>
-{/if}
+</Dialog>
 
 <style>
   :global(.bn-block) {
