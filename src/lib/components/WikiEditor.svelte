@@ -793,7 +793,7 @@
 
 <!-- NEW: Two-column layout for multiple wikis -->
 <div class="flex h-full overflow-y-auto">
-  <aside class="w-1/4 border-r p-4">
+  <aside class="w-1/4 border-r border-base-content/10 p-4">
     <div class="mb-4 flex justify-between items-center">
       <h3 class="text-xl font-bold text-base-content">Wikis</h3>
       <button class="btn btn-primary btn-sm text-lg" onclick={createWiki}>
