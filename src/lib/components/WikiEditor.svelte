@@ -1,14 +1,9 @@
 <script lang="ts">
   import { onMount, getContext, tick } from "svelte";
   import { codeToHtml } from "shiki";
-  import { BlockNoteEditor } from "@blocknote/core";
-  import "@blocknote/core/style.css";
-  import { onMount } from "svelte";
   import { toast } from "svelte-french-toast";
   import { Button } from "bits-ui";
   import Icon from "@iconify/svelte";
-  import { page } from "$app/state";
-  import { getContext } from "svelte";
   import Link from "@tiptap/extension-link";
   import { BlockNoteEditor } from "@blocknote/core";
   import "@blocknote/core/style.css";
@@ -818,9 +813,18 @@
             selectedWiki?.id
               ? 'bg-base-200'
               : ''}"
-            onclick={() => selectWiki(wiki)}
           >
-            <div class="flex justify-between items-center group">
+            <div
+              class="flex justify-between items-center group"
+              onclick={() => selectWiki(wiki)}
+              role="button"
+              tabindex="0"
+              onkeydown={(e) => {
+                if (e.key === "Enter") {
+                  selectWiki(wiki);
+                }
+              }}
+            >
               <span>{wiki.name}</span>
               {#if g.isAdmin}
                 <div class="delete-container">
