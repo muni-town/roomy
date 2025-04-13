@@ -218,6 +218,9 @@
     if (wikiToDelete) {
       wikiToDelete.softDeleted = true;
       wikiToDelete.commit();
+
+      isEditingWiki = false; // Close the editor to remove cached wiki
+      selectedWiki = wikis.value[0]; // Select the first wiki after deletion
     }
     isDeleteDialogOpen = false;
     wikiToDelete = undefined;
@@ -810,7 +813,7 @@
               : ''}"
           >
             <div
-              class="flex justify-between items-center group"
+              class="flex justify-between items-center group relative"
               onclick={() => selectWiki(wiki)}
               role="button"
               tabindex="0"
@@ -821,15 +824,14 @@
               }}
             >
               <span>{wiki.name}</span>
-
-              <div class="delete-container">
+              {#if g.isAdmin}
                 <button
-                  class="btn btn-error btn-xs delete-button hidden group-hover:block"
+                  class="absolute right-0 btn btn-error btn-xs delete-button hidden group-hover:block"
                   onclick={(e) => showDeleteDialog(wiki, e)}
                 >
                   <Icon icon="tabler:trash" />
                 </button>
-              </div>
+              {/if}
             </div>
           </li>
         {/if}
@@ -845,7 +847,7 @@
       >
         <p class="text-base-content/70">No wiki pages.</p>
       </div>
-    {:else if isEditingWiki}
+    {:else if isEditingWiki && !selectedWiki.softDeleted}
       <section class="wiki-editor-container">
         <div class="mb-4 flex justify-between items-center">
           <input
