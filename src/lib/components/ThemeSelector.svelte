@@ -24,11 +24,12 @@
   function isDarkTheme(baseColor: string): boolean {
     try {
       // Convert hex to RGB and calculate luminance
-      const hex = baseColor.replace('#', '');
+      const hex = baseColor.replace("#", "");
       // Handle both 3-digit and 6-digit hex codes
-      const fullHex = hex.length === 3
-        ? `${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`
-        : hex;
+      const fullHex =
+        hex.length === 3
+          ? `${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`
+          : hex;
 
       if (fullHex.length < 6) return false; // Default to light theme if invalid hex
 
@@ -61,10 +62,10 @@
         secondary: t.secondary,
         accent: t.accent,
         neutral: t.neutral,
-        base100: baseColor
+        base100: baseColor,
       },
-      isDark
-    }
+      isDark,
+    };
   });
 
   $effect(() => {
@@ -89,20 +90,6 @@
     currentTheme = theme;
     previewTheme = "";
   }
-
-  function previewThemeOnHover(theme: string) {
-    if (theme !== currentTheme) {
-      previewTheme = theme;
-      document.documentElement.setAttribute("data-theme", theme);
-    }
-  }
-
-  function resetPreview() {
-    if (previewTheme) {
-      document.documentElement.setAttribute("data-theme", currentTheme);
-      previewTheme = "";
-    }
-  }
 </script>
 
 <Select.Root type="single" items={selectItems} onValueChange={setTheme}>
@@ -119,16 +106,34 @@
         {#each selectItems as theme, i (i + theme.value)}
           <Select.Item value={theme.value} label={theme.label}>
             {#snippet children({ selected })}
-              <span class="px-1 py-2 rounded cursor-pointer hover:bg-base-100 flex gap-2 items-center">
+              <span
+                class="px-1 py-2 rounded cursor-pointer hover:bg-base-100 flex gap-2 items-center"
+              >
                 <span
                   class="w-6 h-6 rounded-lg border flex items-center justify-center mr-2"
-                  style="background: {theme.isDark ? '#333' : '#fff'}; border-color: {theme.isDark ? '#555' : '#bbb'}; display: inline-flex;"
+                  style="background: {theme.isDark
+                    ? '#333'
+                    : '#fff'}; border-color: {theme.isDark
+                    ? '#555'
+                    : '#bbb'}; display: inline-flex;"
                 >
                   <span class="grid grid-cols-2 grid-rows-2 gap-0.5 w-4 h-4">
-                    <span class="w-2 h-2 rounded-full" style="background: {theme.colors.primary};"></span>
-                    <span class="w-2 h-2 rounded-full" style="background: {theme.colors.secondary};"></span>
-                    <span class="w-2 h-2 rounded-full" style="background: {theme.colors.accent};"></span>
-                    <span class="w-2 h-2 rounded-full" style="background: {theme.colors.neutral};"></span>
+                    <span
+                      class="w-2 h-2 rounded-full"
+                      style="background: {theme.colors.primary};"
+                    ></span>
+                    <span
+                      class="w-2 h-2 rounded-full"
+                      style="background: {theme.colors.secondary};"
+                    ></span>
+                    <span
+                      class="w-2 h-2 rounded-full"
+                      style="background: {theme.colors.accent};"
+                    ></span>
+                    <span
+                      class="w-2 h-2 rounded-full"
+                      style="background: {theme.colors.neutral};"
+                    ></span>
                   </span>
                 </span>
                 {theme.label}
