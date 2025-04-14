@@ -304,7 +304,6 @@
           href={`https://bsky.app/profile/${authorProfile.handle}`}
           title={authorProfile.handle}
           target="_blank"
-          class="w-10 flex items-center justify-center"
         >
           <AvatarImage
             handle={authorProfile.handle}
