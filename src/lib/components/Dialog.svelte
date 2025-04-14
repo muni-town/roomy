@@ -7,6 +7,7 @@
     title: string;
     description?: string;
     isDialogOpen?: boolean;
+    disabled?: boolean;
     dialogTrigger: Snippet;
     children?: Snippet;
   };
@@ -15,13 +16,14 @@
     title,
     description,
     isDialogOpen = $bindable<boolean>(false),
+    disabled,
     dialogTrigger,
     children,
   }: Props = $props();
 </script>
 
 <Dialog.Root bind:open={isDialogOpen}>
-  <Dialog.Trigger>
+  <Dialog.Trigger {disabled}>
     {@render dialogTrigger()}
   </Dialog.Trigger>
   <Dialog.Portal>
