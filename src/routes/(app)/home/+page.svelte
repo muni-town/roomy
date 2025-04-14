@@ -1,7 +1,11 @@
 <script lang="ts">
-  import { g } from "$lib/global.svelte";
-  import { derivePromise } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
+  import { Button } from "bits-ui";
+
+  import { g } from "$lib/global.svelte";
+  import { user } from "$lib/user.svelte";
+  import { derivePromise } from "$lib/utils.svelte";
+  import { isLoginDialogOpen } from "$lib/stores/dialog";
 
   const spaces = derivePromise(
     undefined,
@@ -22,7 +26,14 @@
       </p>
       <div class="divider"></div>
 
-      {#if !spaces.value}
+      {#if !user.session}
+        <Button.Root
+          onclick={() => ($isLoginDialogOpen = true)}
+          class="btn btn-primary"
+        >
+          Log In with Bluesky
+        </Button.Root>
+      {:else if !spaces.value}
         <span class="loading loading-spinner mx-auto w-25"></span>
       {:else if spaces.value.length > 0}
         <h2 class="text-3xl font-bold">Your Spaces</h2>
@@ -44,6 +55,10 @@
             </a>
           {/each}
         </section>
+      {:else if spaces.value.length === 0}
+        <p class="text-lg font-medium text-center">
+          You don't have any spaces yet. Create one to get started!
+        </p>
       {:else}
         <p>No servers found.</p>
       {/if}

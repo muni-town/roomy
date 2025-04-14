@@ -1,6 +1,10 @@
 <script lang="ts">
   import "../../app.css";
   import { onMount } from "svelte";
+  import { Toaster } from "svelte-french-toast";
+  import { RenderScan } from "svelte-render-scan";
+  import { Button, ToggleGroup } from "bits-ui";
+
   import { dev } from "$app/environment";
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
@@ -9,20 +13,15 @@
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
-
-  import { Toaster } from "svelte-french-toast";
-  import { RenderScan } from "svelte-render-scan";
-  import { Button, ToggleGroup, Avatar } from "bits-ui";
-
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import { Space } from "@roomy-chat/sdk";
   import SidebarSpace from "$lib/components/SidebarSpace.svelte";
+  import { isLoginDialogOpen } from "$lib/stores/dialog";
 
   const { children } = $props();
 
   let handleInput = $state("");
   let loginLoading = $state(false);
-  let isLoginDialogOpen = $state(!user.session);
 
   let newSpaceName = $state("");
   let isNewSpaceDialogOpen = $state(false);
@@ -34,10 +33,9 @@
 
   onMount(async () => {
     await user.init();
-  });
-
-  $effect(() => {
-    if (user.session) isLoginDialogOpen = false;
+    if (!user.session) {
+      $isLoginDialogOpen = true;
+    }
   });
 
   async function createSpace() {
@@ -112,9 +110,14 @@
         title="Create Space"
         description="Create a new public chat space"
         bind:isDialogOpen={isNewSpaceDialogOpen}
+        disabled={!user.session}
       >
         {#snippet dialogTrigger()}
-          <Button.Root title="Create Space" class="btn btn-ghost w-fit">
+          <Button.Root
+            title="Create Space"
+            class="btn btn-ghost w-fit"
+            disabled={!user.session}
+          >
             <Icon icon="basil:add-solid" font-size="2em" />
           </Button.Root>
         {/snippet}
@@ -137,7 +140,7 @@
         description={user.session
           ? `Logged in as ${user.profile.data?.handle}`
           : "Log in with AT Protocol"}
-        bind:isDialogOpen={isLoginDialogOpen}
+        bind:isDialogOpen={$isLoginDialogOpen}
       >
         {#snippet dialogTrigger()}
           <Button.Root class="btn btn-ghost w-fit">
