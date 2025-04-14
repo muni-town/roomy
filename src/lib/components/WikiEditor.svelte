@@ -1092,7 +1092,7 @@
 
 <Dialog
   title="Confirm Wiki Deletion"
-  description="Are you sure you want to delete <b>{wikiToDelete?.name}</b>?"
+  description="Are you sure you want to delete <b>{wikiToDelete?.name}</b>?</br></br><b>Note:</b> Deletes are not permanent and only hide the data from view. The data is still publicly accessible."
   bind:isDialogOpen={isDeleteDialogOpen}
 >
   <div class="flex justify-end gap-3">
