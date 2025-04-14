@@ -5,7 +5,6 @@
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { derivePromise } from "$lib/utils.svelte";
-  import { isLoginDialogOpen } from "$lib/stores/dialog";
 
   const spaces = derivePromise(
     undefined,
@@ -28,7 +27,7 @@
 
       {#if !user.session}
         <Button.Root
-          onclick={() => ($isLoginDialogOpen = true)}
+          onclick={() => (user.isLoginDialogOpen = true)}
           class="btn btn-primary"
         >
           Log In with Bluesky

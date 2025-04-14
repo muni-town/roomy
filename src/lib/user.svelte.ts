@@ -12,6 +12,9 @@ import { IN_TAURI } from "./tauri";
 import { page } from "$app/state";
 import { navigate } from "$lib/utils.svelte";
 
+// TODO: add proper Tauri type definitions.
+declare let window: Window & { __TAURI__: any };
+
 // Reload app when this module changes to prevent accumulated connections
 if (import.meta.hot) {
   import.meta.hot.accept(() => {
@@ -103,8 +106,17 @@ let catalogId: {
   };
 });
 
+let isLoginDialogOpen = $state(false);
+
 /** The user store. */
 export const user = {
+  get isLoginDialogOpen() {
+    return isLoginDialogOpen;
+  },
+  set isLoginDialogOpen(value) {
+    isLoginDialogOpen = value;
+  },
+
   /**
    * The AtProto agent that can be used to interact with the AtProto API
    * through the user's login.
@@ -191,9 +203,9 @@ export const user = {
       const { onOpenUrl } = window.__TAURI__.deepLink;
 
       openUrl(url);
-      await onOpenUrl((urls) => {
+      await onOpenUrl((urls: string[]) => {
         if (!urls || urls.length < 1) return;
-        const url = new URL(urls[0]);
+        const url = new URL(urls[0]!);
         const path = page.url;
 
         path.search = url.search;

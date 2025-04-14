@@ -16,7 +16,6 @@
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import { Space } from "@roomy-chat/sdk";
   import SidebarSpace from "$lib/components/SidebarSpace.svelte";
-  import { isLoginDialogOpen } from "$lib/stores/dialog";
 
   const { children } = $props();
 
@@ -34,7 +33,7 @@
   onMount(async () => {
     await user.init();
     if (!user.session) {
-      $isLoginDialogOpen = true;
+      user.isLoginDialogOpen = true;
     }
   });
 
@@ -140,7 +139,7 @@
         description={user.session
           ? `Logged in as ${user.profile.data?.handle}`
           : "Log in with AT Protocol"}
-        bind:isDialogOpen={$isLoginDialogOpen}
+        bind:isDialogOpen={user.isLoginDialogOpen}
       >
         {#snippet dialogTrigger()}
           <Button.Root class="btn btn-ghost w-fit">
