@@ -10,6 +10,12 @@ const config = {
   kit: {
     adapter: adapter(),
   },
+  vitePlugin: {
+    inspector: {
+      toggleKeyCombo: "alt-x",
+      showToggleButton: "active",
+    },
+  },
 };
 
 export default config;

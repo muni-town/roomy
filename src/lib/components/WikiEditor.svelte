@@ -1,23 +1,27 @@
 <script lang="ts">
+  import { onMount, getContext, tick } from "svelte";
   import { codeToHtml } from "shiki";
-  import { BlockNoteEditor } from "@blocknote/core";
-  import "@blocknote/core/style.css";
-  import { onMount } from "svelte";
   import { toast } from "svelte-french-toast";
   import { Button } from "bits-ui";
   import Icon from "@iconify/svelte";
-  import { page } from "$app/state";
-  import { getContext } from "svelte";
   import Link from "@tiptap/extension-link";
-  import { g } from "$lib/global.svelte";
+  import { BlockNoteEditor } from "@blocknote/core";
+  import "@blocknote/core/style.css";
+
   import { Channel, WikiPage } from "@roomy-chat/sdk";
+
+  import { page } from "$app/state";
+  import { g } from "$lib/global.svelte";
   import { derivePromise } from "$lib/utils.svelte";
+  import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
+  import Dialog from "$lib/components/Dialog.svelte";
 
   const wikis = derivePromise([], async () => {
-    return g.space && g.channel && g.channel instanceof Channel
+    return g.space && g.channel instanceof Channel
       ? (await g.channel.wikipages.items()).filter((x) => !x.softDeleted)
       : [];
   });
+
   let selectedWiki: WikiPage | undefined = $state(wikis.value[0]);
   $effect(() => {
     if (wikis.value.length > 0 && !selectedWiki) {
@@ -28,7 +32,7 @@
 
   let wikiRenderedHtml = $state("");
   let processedHtml = $state("");
-  let editorElement: HTMLElement;
+  let editorElement: HTMLElement | null = $state(null);
   let editor: BlockNoteEditor | null;
 
   interface UserItem {
@@ -141,13 +145,13 @@
     { name: "Link", icon: "tabler:link", action: () => addLinkToSelection() },
   ]);
 
-  let urlPromptVisible = $state(false);
-  let urlInputValue = $state("https://");
+  let isUrlPromptDialogOpen = $state(false);
+  let urlInputElement: HTMLInputElement | null = $state(null);
   let urlPromptCallback: ((url: string) => void) | null = $state(null);
 
-  let wikiTitleDialogVisible = $state(false);
-  let newWikiTitle = $state("");
-  let deleteDialogVisible = $state(false);
+  let isWikiTitleDialogOpen = $state(false);
+  let newWikiTitleElement: HTMLInputElement | null = $state(null);
+  let isDeleteDialogOpen = $state(false);
   let wikiToDelete: WikiPage | undefined = $state();
 
   function selectWiki(wiki: any) {
@@ -156,21 +160,25 @@
   }
 
   function createWiki() {
-    newWikiTitle = "";
-    wikiTitleDialogVisible = true;
+    if (newWikiTitleElement) {
+      newWikiTitleElement.value = "";
+    }
+    isWikiTitleDialogOpen = true;
   }
 
   async function submitWikiTitle() {
     if (!g.space || !g.channel || !(g.channel instanceof Channel)) return;
-    if (!newWikiTitle) {
+    if (!newWikiTitleElement) {
       toast.error("Title cannot be empty", { position: "bottom-end" });
       return;
     }
+    const newWikiTitle = newWikiTitleElement.value; // Retrieve the title from the input element
     // Create a temporary wiki with the provided title
     const wiki = await g.space.create(WikiPage);
     selectWiki(wiki);
 
-    wikiTitleDialogVisible = false;
+    isWikiTitleDialogOpen = false;
+
     try {
       selectedWiki;
       wiki.name = newWikiTitle;
@@ -186,10 +194,6 @@
       toast.error("Failed to create wiki", { position: "bottom-end" });
     }
     setEditingWiki(true);
-  }
-
-  function cancelWikiTitle() {
-    wikiTitleDialogVisible = false;
   }
 
   function setEditingWiki(value: boolean) {
@@ -208,20 +212,18 @@
   function showDeleteDialog(wiki: any, event: Event) {
     event.stopPropagation();
     wikiToDelete = wiki;
-    deleteDialogVisible = true;
+    isDeleteDialogOpen = true;
   }
 
   function confirmDeleteWiki() {
     if (wikiToDelete) {
       wikiToDelete.softDeleted = true;
       wikiToDelete.commit();
-    }
-    deleteDialogVisible = false;
-    wikiToDelete = undefined;
-  }
 
-  function cancelDeleteWiki() {
-    deleteDialogVisible = false;
+      isEditingWiki = false; // Close the editor to remove cached wiki
+      selectedWiki = undefined;
+    }
+    isDeleteDialogOpen = false;
     wikiToDelete = undefined;
   }
 
@@ -694,6 +696,7 @@
   $effect(() => {
     if (!selectedWiki || selectedWiki.bodyJson == "{}") {
       wikiRenderedHtml = "";
+      processedHtml = "";
       return;
     }
     const json = JSON.parse(selectedWiki.bodyJson);
@@ -736,8 +739,12 @@
       });
       return;
     }
-    urlInputValue = "https://";
-    urlPromptVisible = true;
+
+    if (urlInputElement) {
+      urlInputElement.value = "https://";
+    }
+    isUrlPromptDialogOpen = true;
+
     urlPromptCallback = (url) => {
       if (url) {
         try {
@@ -754,16 +761,16 @@
   }
 
   function submitUrlPrompt() {
-    if (urlPromptCallback) {
-      urlPromptCallback(urlInputValue);
-      urlPromptCallback = null;
+    if (urlPromptCallback && urlInputElement) {
+      urlPromptCallback(urlInputElement.value);
+      tick().then(() => {
+        if (urlInputElement) {
+          urlInputElement.value = ""; // Reset the input value after submission
+        }
+        urlPromptCallback = null;
+        isUrlPromptDialogOpen = false;
+      });
     }
-    urlPromptVisible = false;
-  }
-
-  function cancelUrlPrompt() {
-    urlPromptCallback = null;
-    urlPromptVisible = false;
   }
 
   $effect(() => {
@@ -791,7 +798,7 @@
 
 <!-- NEW: Two-column layout for multiple wikis -->
 <div class="flex h-full overflow-y-auto">
-  <aside class="w-1/4 border-r p-4">
+  <aside class="w-1/4 border-r border-base-content/10 p-4">
     <div class="mb-4 flex justify-between items-center">
       <h3 class="text-xl font-bold text-base-content">Wikis</h3>
       <button class="btn btn-primary btn-sm text-lg" onclick={createWiki}>
@@ -806,19 +813,26 @@
             selectedWiki?.id
               ? 'bg-base-200'
               : ''}"
-            onclick={() => selectWiki(wiki)}
           >
-            <div class="flex justify-between items-center group">
+            <div
+              class="flex justify-between items-center group relative"
+              onclick={() => selectWiki(wiki)}
+              role="button"
+              tabindex="0"
+              onkeydown={(e) => {
+                if (e.key === "Enter") {
+                  selectWiki(wiki);
+                }
+              }}
+            >
               <span>{wiki.name}</span>
               {#if g.isAdmin}
-                <div class="delete-container">
-                  <button
-                    class="btn btn-error btn-xs delete-button hidden group-hover:block"
-                    onclick={(e) => showDeleteDialog(wiki, e)}
-                  >
-                    <Icon icon="tabler:trash" />
-                  </button>
-                </div>
+                <button
+                  class="absolute right-0 btn btn-error btn-xs delete-button hidden group-hover:block"
+                  onclick={(e) => showDeleteDialog(wiki, e)}
+                >
+                  <Icon icon="tabler:trash" />
+                </button>
               {/if}
             </div>
           </li>
@@ -835,7 +849,7 @@
       >
         <p class="text-base-content/70">No wiki pages.</p>
       </div>
-    {:else if isEditingWiki}
+    {:else if isEditingWiki && !selectedWiki.softDeleted}
       <section class="wiki-editor-container">
         <div class="mb-4 flex justify-between items-center">
           <input
@@ -843,6 +857,7 @@
             bind:value={selectedWiki.name}
             class="input input-bordered flex-1 mr-2"
             placeholder="Wiki title"
+            required
           />
           <div class="flex gap-2">
             <Button.Root
@@ -1023,7 +1038,11 @@
         </div>
         <div class="wiki-rendered p-4 bg-base-300/30 rounded-lg">
           <div class="wiki-html text-base-content">
-            {@html processedHtml}
+            {#if selectedWiki && !selectedWiki.softDeleted}
+              {@html processedHtml}
+            {:else}
+              <p class="text-base-content/70">No content available.</p>
+            {/if}
           </div>
         </div>
       </section>
@@ -1031,89 +1050,55 @@
   </main>
 </div>
 
-{#if urlPromptVisible}
-  <div
-    class="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]"
-  >
-    <div
-      class="bg-base-300 border border-base-content/20 rounded-lg shadow-lg p-6 max-w-md w-full"
-    >
-      <h3 class="text-lg font-bold text-base-content mb-4">Add Link</h3>
-      <form onsubmit={submitUrlPrompt} class="flex flex-col gap-4">
-        <input
-          type="text"
-          bind:value={urlInputValue}
-          placeholder="https://example.com"
-          class="input input-bordered w-full"
-          autofocus
-        />
-        <div class="flex justify-end gap-3 mt-2">
-          <button
-            type="button"
-            class="btn btn-outline"
-            onclick={cancelUrlPrompt}
-          >
-            Cancel
-          </button>
-          <button type="submit" class="btn btn-primary"> Add Link </button>
-        </div>
-      </form>
+<Dialog
+  title="Add Link"
+  description="Embed link into text"
+  bind:isDialogOpen={isUrlPromptDialogOpen}
+>
+  <form onsubmit={submitUrlPrompt} class="flex flex-col gap-4">
+    <input
+      type="text"
+      bind:this={urlInputElement}
+      use:focusOnRender
+      placeholder="https://example.com"
+      class="input input-bordered w-full"
+      required
+    />
+    <div class="flex justify-end gap-3 mt-2">
+      <button type="submit" class="btn btn-primary">Add Link</button>
     </div>
-  </div>
-{/if}
+  </form>
+</Dialog>
 
-{#if wikiTitleDialogVisible}
-  <div
-    class="fixed inset-0 bg-black/50 flex items-center justify-center z-[110]"
-  >
-    <div
-      class="bg-base-300 border border-base-content/20 rounded-lg shadow-lg p-6 max-w-md w-full"
-    >
-      <h3 class="text-lg font-bold text-base-content mb-4">Enter Wiki Title</h3>
-      <form onsubmit={submitWikiTitle} class="flex flex-col gap-4">
-        <input
-          type="text"
-          bind:value={newWikiTitle}
-          placeholder="Enter wiki title..."
-          class="input input-bordered w-full"
-          autofocus
-        />
-        <div class="flex justify-end gap-3 mt-2">
-          <button
-            type="button"
-            class="btn btn-outline"
-            onclick={cancelWikiTitle}
-          >
-            Cancel
-          </button>
-          <button type="submit" class="btn btn-primary"> Confirm </button>
-        </div>
-      </form>
+<Dialog
+  title="New Wiki"
+  description="Give your new wiki a title"
+  bind:isDialogOpen={isWikiTitleDialogOpen}
+>
+  <form onsubmit={submitWikiTitle} class="flex flex-col gap-4">
+    <input
+      type="text"
+      bind:this={newWikiTitleElement}
+      use:focusOnRender
+      placeholder="Tips on moderation..."
+      class="input input-bordered w-full"
+      required
+    />
+    <div class="flex justify-end gap-3 mt-2">
+      <button type="submit" class="btn btn-primary">Create</button>
     </div>
-  </div>
-{/if}
+  </form>
+</Dialog>
 
-{#if deleteDialogVisible}
-  <div
-    class="fixed inset-0 bg-black/50 flex items-center justify-center z-[120]"
-  >
-    <div
-      class="bg-base-300 border border-base-content/20 rounded-lg shadow-lg p-6 max-w-md w-full"
-    >
-      <h3 class="text-lg font-bold text-base-content mb-4">Confirm Deletion</h3>
-      <p class="mb-4 text-base-content">
-        Are you sure you want to delete this wiki: {wikiToDelete?.name}?
-      </p>
-      <div class="flex justify-end gap-3">
-        <button class="btn btn-outline" onclick={cancelDeleteWiki}
-          >Cancel</button
-        >
-        <button class="btn btn-error" onclick={confirmDeleteWiki}>Delete</button
-        >
-      </div>
-    </div>
+<Dialog
+  title="Confirm Wiki Deletion"
+  description="Are you sure you want to delete <b>{wikiToDelete?.name}</b>?</br></br><b>Note:</b> Deletes are not permanent and only hide the data from view. The data is still publicly accessible."
+  bind:isDialogOpen={isDeleteDialogOpen}
+>
+  <div class="flex justify-end gap-3">
+    <button class="btn btn-error" onclick={confirmDeleteWiki}>Delete</button>
   </div>
-{/if}
+</Dialog>
 
 <style>
   :global(.bn-block) {
