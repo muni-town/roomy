@@ -1,5 +1,4 @@
 <script lang="ts">
-  import "../../app.css";
   import { g } from "$lib/global.svelte";
   import { derivePromise, resolveLeafId } from "$lib/utils.svelte";
 
@@ -11,7 +10,7 @@
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import ChatMode from "$lib/components/ChatMode.svelte";
 
-  import { Category } from "@roomy-chat/sdk";
+  import { Category, Image } from "@roomy-chat/sdk";
   import UserSession from "./UserSession.svelte";
   import { getProfile } from "$lib/profile.svelte";
   import toast from "svelte-french-toast";
@@ -19,6 +18,7 @@
   import SidebarIcon from "./SidebarIcon.svelte";
   import { getContext } from "svelte";
   import IndexMode from "./IndexMode.svelte";
+  import { AvatarMarble } from "svelte-boring-avatars";
 
   let tab = $state("index");
 
@@ -48,6 +48,11 @@
   let spaceNameInput = $state("");
   let bannedHandlesInput = $state("");
   let verificationFailed = $state(false);
+  let avatarFile = $state<File | null>(null);
+  let avatarPreviewUrl = $state("");
+  let spaceAvatarUrl = $state("");
+  let uploadingAvatar = $state(false);
+
   $effect(() => {
     if (!g.space) return;
     if (!showSpaceSettings) {
@@ -55,6 +60,23 @@
       newSpaceHandle = g.space?.handles((x) => x.get(0)) || "";
       verificationFailed = false;
       saveSpaceLoading = false;
+      avatarFile = null;
+      avatarPreviewUrl = "";
+
+      // Load current avatar if exists
+      spaceAvatarUrl = "";
+      // Access the image entity directly
+      const imageId = g.space.image;
+
+      if (imageId && g.roomy) {
+        g.roomy.open(Image, imageId).then((image) => {
+          if (image.uri) {
+            spaceAvatarUrl = image.uri;
+            console.log("Set avatar URL:", spaceAvatarUrl);
+          }
+        });
+      }
+
       Promise.all(
         Object.keys(g.space.bans((x) => x.toJSON())).map((x) => getProfile(x)),
       ).then(
@@ -87,6 +109,69 @@
     if (!g.space) return;
     g.space.name = spaceNameInput;
     g.space.commit();
+  }
+
+  async function handleAvatarSelect(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      const file = input.files[0];
+      if (file) {
+        avatarFile = file;
+        avatarPreviewUrl = URL.createObjectURL(file);
+      }
+    }
+  }
+
+  async function uploadAvatar(ev: Event) {
+    ev.preventDefault();
+    if (!avatarFile || !g.space || !g.roomy || !user.agent) return;
+
+    try {
+      uploadingAvatar = true;
+
+      // Upload the image using the user's agent
+      const uploadResult = await user.uploadBlob(avatarFile);
+      console.log("Upload result:", uploadResult);
+
+      try {
+        // Create an Image entity
+        const image = await g.roomy.create(Image);
+        console.log("Created image entity:", image);
+
+        // Set the image URI
+        image.uri = uploadResult.url;
+        image.commit();
+        console.log("Committed image entity:", image);
+
+        try {
+          g.space.image = image.id;
+          g.space.commit();
+
+          // Update the preview URL
+          spaceAvatarUrl = uploadResult.url;
+
+          toast.success("Space avatar updated successfully", {
+            position: "bottom-right",
+          });
+        } catch (err) {
+          console.error("Error setting space image directly:", err);
+        }
+      } catch (imageErr) {
+        console.error("Error creating image entity:", imageErr);
+        toast.error("Failed to create image entity", {
+          position: "bottom-right",
+        });
+      }
+    } catch (error) {
+      console.error("Error uploading avatar:", error);
+      toast.error("Failed to upload avatar", {
+        position: "bottom-right",
+      });
+    } finally {
+      uploadingAvatar = false;
+      avatarFile = null;
+      avatarPreviewUrl = "";
+    }
   }
   async function saveSpaceHandle() {
     if (!g.space) return;
@@ -204,6 +289,67 @@
         <input bind:value={spaceNameInput} placeholder="My Space" />
       </label>
       <Button.Root class="btn btn-primary w-full">Save Name</Button.Root>
+    </form>
+    <form class="flex flex-col gap-4 mb-8" onsubmit={uploadAvatar}>
+      <h2 class="font-bold text-xl">Avatar</h2>
+      <div class="flex flex-col gap-4">
+        <div class="flex items-center gap-4">
+          <div
+            class="w-20 h-20 rounded-full overflow-hidden bg-base-300 flex items-center justify-center"
+          >
+            {#if avatarPreviewUrl}
+              <img
+                src={avatarPreviewUrl}
+                alt="Avatar preview"
+                class="w-full h-full object-cover"
+              />
+            {:else if spaceAvatarUrl}
+              <img
+                src={spaceAvatarUrl}
+                alt="Current avatar"
+                class="w-full h-full object-cover"
+              />
+            {:else if g.space && g.space.id}
+              <div class="w-full h-full flex items-center justify-center">
+                <AvatarMarble name={g.space.id} />
+              </div>
+            {/if}
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <label class="btn btn-sm btn-outline">
+              <input
+                type="file"
+                accept="image/*"
+                class="hidden"
+                onchange={handleAvatarSelect}
+              />
+              Choose Image
+            </label>
+            {#if avatarFile}
+              <Button.Root
+                type="button"
+                class="btn btn-sm btn-outline btn-error"
+                onclick={() => {
+                  avatarFile = null;
+                  avatarPreviewUrl = "";
+                }}
+              >
+                Clear
+              </Button.Root>
+            {/if}
+          </div>
+        </div>
+
+        {#if avatarFile}
+          <Button.Root class="btn btn-primary" disabled={uploadingAvatar}>
+            {#if uploadingAvatar}
+              <span class="loading loading-spinner"></span>
+            {/if}
+            Upload Avatar
+          </Button.Root>
+        {/if}
+      </div>
     </form>
     <form class="flex flex-col gap-6" onsubmit={saveSpaceHandle}>
       <h2 class="font-bold text-xl">Handle</h2>

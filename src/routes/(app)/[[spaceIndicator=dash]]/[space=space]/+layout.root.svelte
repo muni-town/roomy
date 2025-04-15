@@ -13,7 +13,7 @@
 
   // TODO: track users via the space data
   let users = derivePromise([], async () => {
-    if (!g.space) {
+    if (!g.space || !g.space.channels) {
       return [];
     }
 
