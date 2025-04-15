@@ -79,6 +79,7 @@
       title="Create Space"
       description="Create a new public chat space"
       bind:isDialogOpen={isNewSpaceDialogOpen}
+      disabled={!user.session}
     >
       {#snippet dialogTrigger()}
         <Button.Root title="Create Space" class="btn btn-ghost px-1 w-full">

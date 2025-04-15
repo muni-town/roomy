@@ -15,9 +15,10 @@
     class?: string;
   } = $props();
 
-  let isLoginDialogOpen = $state(!user.session);
   $effect(() => {
-    if (user.session) isLoginDialogOpen = false;
+    if (!user.session) {
+      user.isLoginDialogOpen = true;
+    }
   });
 
   let loginError = $state("");
@@ -41,10 +42,14 @@
   description={user.session
     ? `Logged in as ${user.profile.data?.handle}`
     : "Log in with AT Protocol"}
-  bind:isDialogOpen={isLoginDialogOpen}
+  bind:isDialogOpen={user.isLoginDialogOpen}
+  disabled={!user.isLoginDialogOpen}
 >
   {#snippet dialogTrigger()}
-    <Button.Root class="btn btn-ghost w-fit {classNames}">
+    <Button.Root
+      class="btn btn-ghost w-fit {classNames}"
+      disabled={!user.session}
+    >
       <AvatarImage
         handle={user.profile.data?.handle || ""}
         avatarUrl={user.profile.data?.avatar}
