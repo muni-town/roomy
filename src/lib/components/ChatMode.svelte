@@ -244,7 +244,6 @@
         </ToggleGroup.Item>
         {@const threads = item.tryCast(Channel).threads.items()}
         {#await threads then threads}
-          {@debug threads}
           <div class="opacity-80 pl-2">
             {@render threadsSidebar(threads, 4)}
           </div>
