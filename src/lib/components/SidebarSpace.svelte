@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Space, Roomy } from "@roomy-chat/sdk";
+  import type { Space } from "@roomy-chat/sdk";
 
   import ContextMenu from "./ContextMenu.svelte";
   import { AvatarMarble } from "svelte-boring-avatars";
@@ -28,6 +28,7 @@
   });
 </script>
 
+<!-- BUG: Currently duplicates portal for each channel. Will fix after Sidebar gets merged -->
 <TooltipPortal
   text={activeTooltip}
   visible={!!activeTooltip}
@@ -59,7 +60,7 @@
     onmouseleave={() => {
       activeTooltip = "";
     }}
-    class="btn btn-ghost size-14 data-[state=on]:border-primary relative group p-0.5"
+    class="btn btn-ghost px-1 w-full rounded-3xl justify-start flex data-[state=on]:border-base-content"
   >
     <div class="flex items-center justify-center overflow-hidden">
       {#if spaceImage.value?.uri}

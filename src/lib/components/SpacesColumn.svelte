@@ -1,20 +1,14 @@
 <script lang="ts">
-  import "../../app.css";
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { navigate } from "$lib/utils.svelte";
-
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-
-  import { AvatarMarble } from "svelte-boring-avatars";
-  import { Avatar, Button, ToggleGroup } from "bits-ui";
-
+  import { Button, ToggleGroup } from "bits-ui";
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import { Space } from "@roomy-chat/sdk";
-  import ContextMenu from "$lib/components/ContextMenu.svelte";
-  import TooltipPortal from "$lib/components/TooltipPortal.svelte";
-
+  // import TooltipPortal from "$lib/components/TooltipPortal.svelte";
+  import SidebarSpace from "$lib/components/SidebarSpace.svelte";
   import UserSession from "$lib/components/UserSession.svelte";
   import { page } from "$app/state";
 
@@ -30,8 +24,8 @@
   } = $props();
 
   // Tooltip state
-  let activeTooltip = $state("");
-  let tooltipPosition = $state({ x: 0, y: 0 });
+  // let activeTooltip = $state("");
+  // let tooltipPosition = $state({ x: 0, y: 0 });
 
   async function createSpace() {
     if (!newSpaceName || !user.agent || !g.roomy) return;
@@ -48,12 +42,14 @@
   }
 </script>
 
+<!--
 <TooltipPortal
   text={activeTooltip}
   visible={!!activeTooltip}
   x={tooltipPosition.x}
   y={tooltipPosition.y}
 />
+-->
 <!-- Server Bar -->
 <!-- 53px = aside innerWidth + 8px padding + 1px border. Manually set for transition to w-0 -->
 <aside
@@ -101,44 +97,7 @@
     </Dialog>
 
     {#each spaces.value as space, i}
-      <ContextMenu
-        menuTitle={space.name}
-        items={[
-          {
-            label: "Leave Space",
-            icon: "mdi:exit-to-app",
-            onselect: () => {
-              g.roomy?.spaces.remove(i);
-              g.roomy?.commit();
-            },
-          },
-        ]}
-      >
-        <ToggleGroup.Item
-          onclick={() =>
-            navigate({ space: space.handles((x) => x.get(0)) || space.id })}
-          value={space.id}
-          class="btn btn-ghost px-1 w-full rounded-3xlit justify-start flex data-[state=on]:border-base-content"
-          onmouseenter={(e) => {
-            activeTooltip = space.name;
-            const rect = e.currentTarget.getBoundingClientRect();
-            tooltipPosition = {
-              x: rect.right + 8,
-              y: rect.top + rect.height / 2,
-            };
-          }}
-          onmouseleave={() => {
-            activeTooltip = "";
-          }}
-        >
-          <Avatar.Root>
-            <Avatar.Image />
-            <Avatar.Fallback>
-              <AvatarMarble name={space.id} size={33} />
-            </Avatar.Fallback>
-          </Avatar.Root>
-        </ToggleGroup.Item>
-      </ContextMenu>
+      <SidebarSpace {space} {i} />
     {/each}
   </ToggleGroup.Root>
 
