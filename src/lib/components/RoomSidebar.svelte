@@ -37,10 +37,6 @@
     if (!g.space) return [];
     return await g.space.sidebarItems.items();
   });
-  let channels = derivePromise([], async () => {
-    if (!g.space) return [];
-    return await g.space.channels.items();
-  });
 
   let saveSpaceLoading = $state(false);
   let showSpaceSettings = $state(false);
