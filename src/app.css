@@ -35,7 +35,7 @@ emoji-picker {
   transition-property: all;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
-  @apply hover:scale-[101%] active:scale-95
+  @apply hover:scale-[101%] active:scale-95;
 }
 
 /* TipTap Nodes */
@@ -43,9 +43,9 @@ emoji-picker {
 .mention {
   background-color: var(--color-accent);
   color: var(--color-accent-content);
-  padding-top: 0.125rem; 
+  padding-top: 0.125rem;
   padding-bottom: 0.125rem;
-  padding-left: 0.5rem; 
+  padding-left: 0.5rem;
   padding-right: 0.5rem;
   border-radius: 0.25rem;
   font-style: normal !important;
