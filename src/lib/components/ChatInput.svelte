@@ -10,6 +10,7 @@
   import { createCompleteExtensions } from "$lib/tiptap/editor";
   import { user } from "$lib/user.svelte";
   import { toast } from "svelte-french-toast";
+  import { untrack } from "svelte";
 
   // Props (use Svelte's export let)
   export let content: Record<string, unknown> = { type: "doc", children: [] };
