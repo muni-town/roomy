@@ -13,8 +13,7 @@
   import AvatarImage from "$lib/components/AvatarImage.svelte";
   import { Button, Tabs } from "bits-ui";
 
-  import { format, isToday } from "date-fns";
-  import { derivePromise, navigate } from "$lib/utils.svelte";
+  import { navigate } from "$lib/utils.svelte";
   import { g } from "$lib/global.svelte";
   import {
     Announcement,
@@ -27,16 +26,12 @@
   import { getProfile } from "$lib/profile.svelte";
   import WikiEditor from "$lib/components/WikiEditor.svelte";
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
+  import ThreadsTab from "$lib/components/ThreadsTab.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let users: { value: Item[] } = getContext("users");
   let contextItems: { value: Item[] } = getContext("contextItems");
-  let relatedThreads = derivePromise([], async () =>
-    g.channel && g.channel instanceof Channel
-      ? await g.channel.threads.items()
-      : [],
-  );
 
   let tab = $state<"chat" | "threads" | "wiki">("chat");
 
@@ -303,41 +298,11 @@
 </header>
 <div class="divider my-0"></div>
 
-{#if tab === "chat" || g.channel instanceof Thread}
-  {@render chatTab()}
-{:else if tab === "threads"}
-  {@render threadsTab()}
+{#if tab === "threads"}
+  <ThreadsTab />
 {:else if tab === "wiki"}
   <WikiEditor />
-{/if}
-
-{#snippet threadsTab()}
-  <ul class="list w-full join join-vertical">
-    {#if relatedThreads.value.length > 0}
-      {#each relatedThreads.value as thread}
-        <a href={`/${page.params.space}/thread/${thread.id}`}>
-          <li class="list-row join-item flex items-center w-full bg-base-200">
-            <h3 class="card-title text-xl font-medium text-primary">
-              {thread.name}
-            </h3>
-            {#if thread.createdDate}
-              {@const formattedDate = isToday(thread.createdDate)
-                ? "Today"
-                : format(thread.createdDate, "P")}
-              <time class="text-xs">
-                {formattedDate}, {format(thread.createdDate, "pp")}
-              </time>
-            {/if}
-          </li>
-        </a>
-      {/each}
-    {:else}
-      No threads for this channel.
-    {/if}
-  </ul>
-{/snippet}
-
-{#snippet chatTab()}
+{:else if tab === "chat" || g.channel instanceof Thread}
   {#if g.space && g.channel}
     <ChatArea timeline={g.channel.forceCast(Timeline)} />
     <div class="flex items-center">
@@ -444,4 +409,4 @@
       {/if}
     </div>
   {/if}
-{/snippet}
+{/if}
