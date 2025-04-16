@@ -11,7 +11,7 @@
   import { user } from "$lib/user.svelte";
   import { toast } from "svelte-french-toast";
 
-  // Props (replace $props/$bindable with Svelte's export let)
+  // Props (use Svelte's export let)
   export let content: Record<string, unknown> = { type: "doc", children: [] };
   export let users: Item[] = [];
   export let context: Item[] = [];

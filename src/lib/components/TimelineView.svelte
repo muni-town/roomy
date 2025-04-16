@@ -187,24 +187,21 @@
   $effect(() => {
     if (!g.space) return;
 
-    untrack(() => {
-      channelNameInput = g.channel?.name || "";
-      channelCategoryInput = undefined;
-      g.space &&
-        g.space.sidebarItems.items().then((items) => {
-          for (const item of items) {
-            const category = item.tryCast(Category);
-            if (
-              category &&
-              g.channel &&
-              category.channels.ids().includes(g.channel.id)
-            ) {
-              channelCategoryInput = category.id;
-              return;
-            }
+    channelNameInput = g.channel?.name || "";
+    channelCategoryInput = undefined;
+    g.space &&
+      g.space.sidebarItems.items().then((items) => {
+        for (const category of items) {
+          if (
+            category &&
+            g.channel &&
+            category.channels.ids().includes(g.channel.id)
+          ) {
+            channelCategoryInput = category.id;
+            return;
           }
-        });
-    });
+        }
+      });
   });
 
   async function saveSettings() {

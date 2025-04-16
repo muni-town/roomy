@@ -18,6 +18,7 @@
     "npm:@tailwindcss/typography@~0.5.16": "0.5.16_tailwindcss@4.0.15",
     "npm:@tailwindcss/vite@4": "4.0.15_vite@6.2.2__lightningcss@1.29.2_lightningcss@1.29.2",
     "npm:@tiptap/core@^2.11.5": "2.11.5_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1",
+    "npm:@tiptap/extension-image@^2.11.7": "2.11.7_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1",
     "npm:@tiptap/extension-link@^2.11.5": "2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1",
     "npm:@tiptap/extension-mention@^2.11.5": "2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1_@tiptap+suggestion@2.11.5__@tiptap+core@2.11.5___@tiptap+pm@2.11.5____prosemirror-model@1.25.0____prosemirror-state@1.4.3____prosemirror-view@1.38.1__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1",
     "npm:@tiptap/extension-placeholder@^2.11.5": "2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1",
@@ -1225,6 +1226,12 @@
         "@tiptap/pm"
       ]
     },
+    "@tiptap/extension-image@2.11.7_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1": {
+      "integrity": "sha512-YvCmTDB7Oo+A56tR4S/gcNaYpqU4DDlSQcRp5IQvmQV5EekSe0lnEazGDoqOCwsit9qQhj4MPQJhKrnaWrJUrg==",
+      "dependencies": [
+        "@tiptap/core"
+      ]
+    },
     "@tiptap/extension-italic@2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1": {
       "integrity": "sha512-9VGfb2/LfPhQ6TjzDwuYLRvw0A6VGbaIp3F+5Mql8XVdTBHb2+rhELbyhNGiGVR78CaB/EiKb6dO9xu/tBWSYA==",
       "dependencies": [
@@ -1612,8 +1619,8 @@
         "@internationalized/date",
         "esm-env",
         "runed",
-        "svelte@5.25.3_acorn@8.14.1",
         "svelte-toolbelt",
+        "svelte@5.25.3_acorn@8.14.1",
         "tabbable"
       ]
     },
@@ -1858,15 +1865,15 @@
       "integrity": "sha512-+9egpBW8I3CD5XPe0n6BfT5fxLzxrlDzqydF3aviG+9ni1lDC/OvMHcxqEFV0+LANZG5R1bFMWfUrjVsdwxJvA==",
       "dependencies": [
         "@esbuild/aix-ppc64@0.24.2",
-        "@esbuild/android-arm@0.24.2",
         "@esbuild/android-arm64@0.24.2",
+        "@esbuild/android-arm@0.24.2",
         "@esbuild/android-x64@0.24.2",
         "@esbuild/darwin-arm64@0.24.2",
         "@esbuild/darwin-x64@0.24.2",
         "@esbuild/freebsd-arm64@0.24.2",
         "@esbuild/freebsd-x64@0.24.2",
-        "@esbuild/linux-arm@0.24.2",
         "@esbuild/linux-arm64@0.24.2",
+        "@esbuild/linux-arm@0.24.2",
         "@esbuild/linux-ia32@0.24.2",
         "@esbuild/linux-loong64@0.24.2",
         "@esbuild/linux-mips64el@0.24.2",
@@ -1888,15 +1895,15 @@
       "integrity": "sha512-BGO5LtrGC7vxnqucAe/rmvKdJllfGaYWdyABvyMoXQlfYMb2bbRuReWR5tEGE//4LcNJj9XrkovTqNYRFZHAMQ==",
       "dependencies": [
         "@esbuild/aix-ppc64@0.25.1",
-        "@esbuild/android-arm@0.25.1",
         "@esbuild/android-arm64@0.25.1",
+        "@esbuild/android-arm@0.25.1",
         "@esbuild/android-x64@0.25.1",
         "@esbuild/darwin-arm64@0.25.1",
         "@esbuild/darwin-x64@0.25.1",
         "@esbuild/freebsd-arm64@0.25.1",
         "@esbuild/freebsd-x64@0.25.1",
-        "@esbuild/linux-arm@0.25.1",
         "@esbuild/linux-arm64@0.25.1",
+        "@esbuild/linux-arm@0.25.1",
         "@esbuild/linux-ia32@0.25.1",
         "@esbuild/linux-loong64@0.25.1",
         "@esbuild/linux-mips64el@0.25.1",
@@ -2036,8 +2043,8 @@
         "@types/unist@2.0.11",
         "hastscript",
         "property-information@6.5.0",
-        "vfile@5.3.7",
         "vfile-location",
+        "vfile@5.3.7",
         "web-namespaces"
       ]
     },
@@ -2929,8 +2936,8 @@
       "integrity": "sha512-bwALDxriqfKGfUufKGGepCzu9x7nJQuoRoAFp4AnwehhC2crqrDIAP/uN2qdlsAvSMpeRC3+Yzhqc7hLmle5+g==",
       "dependencies": [
         "emoji-regex-xs",
-        "regex@5.1.1",
-        "regex-recursion@5.1.1"
+        "regex-recursion@5.1.1",
+        "regex@5.1.1"
       ]
     },
     "oniguruma-to-es@4.1.0": {
@@ -2938,8 +2945,8 @@
       "dependencies": [
         "emoji-regex-xs",
         "oniguruma-parser",
-        "regex@6.0.1",
-        "regex-recursion@6.0.2"
+        "regex-recursion@6.0.2",
+        "regex@6.0.1"
       ]
     },
     "orderedmap@2.1.1": {
@@ -3197,8 +3204,8 @@
     "regex-recursion@5.1.1": {
       "integrity": "sha512-ae7SBCbzVNrIjgSbh7wMznPcQel1DNlDtzensnFxpiNpXt1U2ju/bHugH422r+4LAVS1FpW1YCwilmnNsjum9w==",
       "dependencies": [
-        "regex@5.1.1",
-        "regex-utilities"
+        "regex-utilities",
+        "regex@5.1.1"
       ]
     },
     "regex-recursion@6.0.2": {
@@ -3496,8 +3503,8 @@
     "svelte-french-toast@2.0.0-alpha.0_svelte@5.25.3__acorn@8.14.1": {
       "integrity": "sha512-81wcVaY9UZ/0JuzLEizMSoIXqNbX7yhfTZavBuw94T3cnT2HmJ9O+qXY/c91h9FkeMwboo0KHZVmzOEQVTXDFg==",
       "dependencies": [
-        "svelte@5.25.3_acorn@8.14.1",
-        "svelte-writable-derived"
+        "svelte-writable-derived",
+        "svelte@5.25.3_acorn@8.14.1"
       ]
     },
     "svelte-render-scan@1.1.0_svelte@5.25.3__acorn@8.14.1": {
@@ -3926,8 +3933,8 @@
         "tinyexec",
         "tinypool",
         "tinyrainbow",
-        "vite@6.2.2_lightningcss@1.29.2",
         "vite-node",
+        "vite@6.2.2_lightningcss@1.29.2",
         "why-is-node-running"
       ]
     },
@@ -4024,6 +4031,7 @@
         "npm:@tailwindcss/typography@~0.5.16",
         "npm:@tailwindcss/vite@4",
         "npm:@tiptap/core@^2.11.5",
+        "npm:@tiptap/extension-image@^2.11.7",
         "npm:@tiptap/extension-link@^2.11.5",
         "npm:@tiptap/extension-mention@^2.11.5",
         "npm:@tiptap/extension-placeholder@^2.11.5",
