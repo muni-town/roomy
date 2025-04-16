@@ -1,6 +1,6 @@
 <script lang="ts">
   import { g } from "$lib/global.svelte";
-  import { derivePromise, resolveLeafId } from "$lib/utils.svelte";
+  import { derivePromise, resolveLeafId, type Toggle } from "$lib/utils.svelte";
 
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
@@ -207,7 +207,7 @@
       console.error(e);
     }
   }
-  let isSpacesVisible: { value: boolean; toggle: () => void } =
+  let isSpacesVisible: ReturnType<typeof Toggle> =
     getContext("isSpacesVisible");
 </script>
 

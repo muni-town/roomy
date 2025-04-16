@@ -95,6 +95,37 @@ export function derivePromise<T>(
   return state;
 }
 
+/**
+ * Toggle store with state persisted to localStorage
+ */
+export const Toggle = ({
+  value: init,
+  key,
+}: {
+  value: boolean;
+  key?: string;
+}) => {
+  let value = $state(init);
+  if (key) {
+    let localValue = localStorage.getItem(key);
+    if (localValue) {
+      value = JSON.parse(localValue);
+    } else {
+      localStorage.setItem(key, value.toString());
+    }
+  }
+  return {
+    get value() {
+      return value;
+    },
+    toggle() {
+      value = !value;
+      if (key) localStorage.setItem(key, value.toString());
+      return value;
+    },
+  };
+};
+
 // export function unreadCount<Channel>(
 //   doc: Doc<Channel>,
 //   viewedHeads: Automerge.Heads,

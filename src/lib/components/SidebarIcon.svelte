@@ -1,5 +1,10 @@
 <script lang="ts">
-  let { open, class: classNames = "" } = $props();
+  import type { Toggle } from "$lib/utils.svelte";
+
+  let {
+    open,
+    class: classNames = "",
+  }: { open: ReturnType<typeof Toggle>; class: string } = $props();
   const handleClick = () => open.toggle();
 </script>
 

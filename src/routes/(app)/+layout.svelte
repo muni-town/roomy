@@ -9,7 +9,7 @@
 
   let { children } = $props();
   import SpacesColumn from "$lib/components/SpacesColumn.svelte";
-  import { derivePromise } from "$lib/utils.svelte";
+  import { derivePromise, Toggle } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import RoomSidebar from "$lib/components/RoomSidebar.svelte";
 
@@ -21,18 +21,7 @@
     [],
     async () => (await g.roomy?.spaces.items()) || [],
   );
-  const Toggle = (init = false) => {
-    let value = $state(init);
-    return {
-      get value() {
-        return value;
-      },
-      toggle() {
-        value = !value;
-      },
-    };
-  };
-  const isSpacesVisible = Toggle(false);
+  const isSpacesVisible = Toggle({ value: false, key: "isSpacesVisible" });
   setContext("isSpacesVisible", isSpacesVisible);
 </script>
 
