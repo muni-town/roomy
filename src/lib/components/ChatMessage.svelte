@@ -227,7 +227,7 @@
           >
             <Icon icon="lucide:smile-plus" color="white" />
           </Popover.Trigger>
-          <Popover.Content>
+          <Popover.Content class="z-10">
             <emoji-picker bind:this={emojiRowPicker}></emoji-picker>
           </Popover.Content>
         </Popover.Root>
@@ -399,7 +399,7 @@
             <Popover.Trigger class="btn btn-circle">
               <Icon icon="lucide:smile-plus" />
             </Popover.Trigger>
-            <Popover.Content>
+            <Popover.Content class="z-10">
               <emoji-picker bind:this={emojiDrawerPicker}></emoji-picker>
             </Popover.Content>
           </Popover.Root>
@@ -451,7 +451,7 @@
           <Popover.Trigger class="btn btn-ghost btn-square">
             <Icon icon="lucide:smile-plus" />
           </Popover.Trigger>
-          <Popover.Content>
+          <Popover.Content class="z-10">
             <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
           </Popover.Content>
         </Popover.Root>
