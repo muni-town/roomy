@@ -321,7 +321,12 @@
               {thread.name}
             </h3>
             {#if thread.createdDate}
-              {@render timestamp(thread.createdDate)}
+              {@const formattedDate = isToday(thread.createdDate)
+                ? "Today"
+                : format(thread.createdDate, "P")}
+              <time class="text-xs">
+                {formattedDate}, {format(thread.createdDate, "pp")}
+              </time>
             {/if}
           </li>
         </a>
@@ -330,13 +335,6 @@
       No threads for this channel.
     {/if}
   </ul>
-{/snippet}
-
-{#snippet timestamp(date: Date)}
-  {@const formattedDate = isToday(date) ? "Today" : format(date, "P")}
-  <time class="text-xs">
-    {formattedDate}, {format(date, "pp")}
-  </time>
 {/snippet}
 
 {#snippet chatTab()}
