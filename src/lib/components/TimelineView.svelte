@@ -25,7 +25,7 @@
   } from "@roomy-chat/sdk";
   import type { JSONContent } from "@tiptap/core";
   import { getProfile } from "$lib/profile.svelte";
-  import WikiEditor from "./WikiEditor.svelte";
+  import WikiEditor from "$lib/components/WikiEditor.svelte";
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
@@ -308,7 +308,7 @@
 {:else if tab === "threads"}
   {@render threadsTab()}
 {:else if tab === "wiki"}
-  {@render wikiTab()}
+  <WikiEditor />
 {/if}
 
 {#snippet threadsTab()}
@@ -446,7 +446,4 @@
       {/if}
     </div>
   {/if}
-{/snippet}
-{#snippet wikiTab()}
-  <WikiEditor />
 {/snippet}
