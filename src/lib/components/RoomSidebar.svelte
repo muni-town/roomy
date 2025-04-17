@@ -230,7 +230,7 @@
   <Tabs.Root bind:value={tab} class="px-2">
     <Tabs.List class="flex w-full rounded-lg tabs-box">
       <Tabs.Trigger value="index" class="grow tab flex gap-2">
-        <Icon icon="material-symbols:inbox-rounded" class="text-2xl" />
+        <Icon icon="material-symbols:info-rounded" class="text-2xl" />
       </Tabs.Trigger>
       <Tabs.Trigger
         disabled={!g.roomy}
