@@ -178,6 +178,8 @@
         for (const category of items) {
           if (
             category &&
+            typeof category.channels === "object" &&
+            typeof category.channels.ids === "function" &&
             g.channel &&
             category.channels.ids().includes(g.channel.id)
           ) {

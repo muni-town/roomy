@@ -259,6 +259,8 @@ export function getContentHtml(content: JSONContent) {
       ? { type: 'doc', content: [] }
       : content;
 
+    console.log("Generating HTML from content:", validContent);
+
     // Generate HTML from the content using TipTap with complete extensions
     // to ensure all node types (including mentions) are properly rendered
     // We use the default completeExtensions here since we don't need user/context data for rendering

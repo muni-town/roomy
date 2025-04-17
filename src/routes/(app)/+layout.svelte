@@ -27,6 +27,8 @@
   let newSpaceName = $state("");
   let isNewSpaceDialogOpen = $state(false);
 
+  let userInitComplete = $state(false);
+
   const spaces = derivePromise(
     [],
     async () => (await g.roomy?.spaces.items()) || [],
@@ -34,6 +36,7 @@
 
   onMount(async () => {
     await user.init();
+    userInitComplete = true;
 
     if (!dev && browser) {
       posthog.init("phc_j80ksIuoxjfjRI7rPBmTLWx79rntg4Njz6Dixc3I3ik", {
@@ -44,7 +47,7 @@
   });
 
   $effect(() => {
-    if (!user.session) {
+    if (userInitComplete && !user.session) {
       user.isLoginDialogOpen = true;
     }
   });

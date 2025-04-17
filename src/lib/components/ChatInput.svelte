@@ -36,6 +36,12 @@
     onEnter: onEnter.toString()
   });
 
+  // Flag to track whether an image is being uploaded
+  let isUploading = $state(false);
+
+  // Flag to track whether a file is being dragged over the drop area
+  let isDragOver = $state(false);
+
   // Consolidated image file processing logic
   async function processImageFile(file: File, input?: HTMLInputElement) {
     // Show loading indicator or disable the button while uploading
@@ -60,7 +66,6 @@
       // Insert image into editor with the raw URL
       tiptap.chain().focus().insertContent({
         type: "image",
-        attrs: { src: imageUrl }
       }).run();
       
       // Update content state to ensure persistence
@@ -244,7 +249,7 @@
     const newContent = content.type ? content : { type: "doc", children: [] };
 
     // Simple check to avoid unnecessary updates
-    if (JSON.stringify(currentContent) !== JSON.stringify(newContent)) {
+    if (!isEqual(currentContent, newContent)) {
       // Use a try-catch to handle potential errors
       try {
         tiptap.commands.setContent(newContent);
