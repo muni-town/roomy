@@ -186,7 +186,7 @@
                 open,
               }: {
                 open: boolean;
-                props: unknown[];
+                props: Record<string, unknown>;
               })}
                 {#if open}
                   <div
