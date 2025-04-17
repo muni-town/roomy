@@ -53,7 +53,9 @@
       message instanceof Message &&
       !previousMessage.softDeleted;
     const authorsAreSame =
-      areMessages && message.authors.get(0) == previousMessage.authors.get(0);
+      areMessages &&
+      message.authors((x) => x.get(0)) ==
+        previousMessage.authors((x) => x.get(0));
     const messagesWithin5Minutes =
       (message.createdDate?.getTime() || 0) -
         (previousMessage?.createdDate?.getTime() || 0) <
@@ -99,7 +101,7 @@
           getKey={(k, _) => k}
           scrollRef={viewport}
         >
-          {#snippet children(message: Message | Announcement, index)}
+          {#snippet children(message: Message | Announcement, index: number)}
             {@const previousMessage =
               index > 0 ? messages.value[index - 1] : undefined}
             {#if !message.softDeleted}

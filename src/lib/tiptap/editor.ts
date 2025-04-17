@@ -16,6 +16,7 @@ import type {
   SuggestionProps,
 } from "@tiptap/suggestion";
 import type { LoroText } from "@muni-town/leaf";
+import { convertUrlsToLinks } from "$lib/urlUtils";
 
 /* Keyboard Shortcuts: used to add and override existing shortcuts */
 type KeyboardShortcutHandlerProps = {
@@ -58,14 +59,31 @@ function suggestion({
   char: string;
   pluginKey: string;
 }) {
+  const fuzzyMatch = (text: string, query: string): boolean => {
+    if (!query) return true;
+    
+    text = text.toLowerCase();
+    query = query.toLowerCase();
+    
+    let textIndex = 0;
+    let queryIndex = 0;
+    
+    while (textIndex < text.length && queryIndex < query.length) {
+      if (text[textIndex] === query[queryIndex]) {
+        queryIndex++;
+      }
+      textIndex++;
+    }
+    
+    return queryIndex === query.length;
+  };
+
   return {
     char,
     pluginKey: new PluginKey(pluginKey),
     items: ({ query }: { query: string }) => {
       return items
-        .filter((item) =>
-          item.label.toLowerCase().startsWith(query.toLowerCase()),
-        )
+        .filter((item) => fuzzyMatch(item.label, query))
         .slice(0, 5);
     },
     render: () => {
@@ -185,7 +203,14 @@ export const editorSchema = getSchema(extensions);
 
 export function getContentHtml(content: JSONContent) {
   try {
-    return generateHTML(content, extensions);
+    // Generate HTML from the content using TipTap
+    const html = generateHTML(content, extensions);
+
+    // Convert any URLs in the HTML to clickable links
+    // TODO: Handle links in the rich text editor instead.
+    // In the long term we want to handle creating links in the rich text
+    // editor and remove this post-processing step.
+    return convertUrlsToLinks(html);
   } catch (e) {
     console.error("Error", e, "Content", content);
     throw e;

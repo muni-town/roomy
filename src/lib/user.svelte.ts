@@ -1,12 +1,19 @@
-import { atproto } from "./atproto.svelte";
 import type { OAuthSession } from "@atproto/oauth-client-browser";
 import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import { Agent } from "@atproto/api";
+import toast from "svelte-french-toast";
+
+import { EntityId } from "@muni-town/leaf";
+
+import { atproto } from "./atproto.svelte";
 import { lexicons } from "./lexicons";
 import { decodeBase32 } from "./base32";
-import { IN_TAURI, invoke } from "./tauri";
+import { IN_TAURI } from "./tauri";
 import { page } from "$app/state";
-import { EntityId } from "@muni-town/leaf";
+import { navigate } from "$lib/utils.svelte";
+
+// TODO: add proper Tauri type definitions.
+declare let window: Window & { __TAURI__: any };
 
 // Reload app when this module changes to prevent accumulated connections
 if (import.meta.hot) {
@@ -99,8 +106,17 @@ let catalogId: {
   };
 });
 
+let isLoginDialogOpen = $state(false);
+
 /** The user store. */
 export const user = {
+  get isLoginDialogOpen() {
+    return isLoginDialogOpen;
+  },
+  set isLoginDialogOpen(value) {
+    isLoginDialogOpen = value;
+  },
+
   /**
    * The AtProto agent that can be used to interact with the AtProto API
    * through the user's login.
@@ -127,8 +143,7 @@ export const user = {
       agent = new Agent(newSession);
       lexicons.forEach((l) => agent!.lex.add(l));
     } else {
-      agent = undefined;
-      localStorage.removeItem("did");
+      this.logout();
     }
   },
 
@@ -158,7 +173,22 @@ export const user = {
     // restore the session
     const storedDid = localStorage.getItem("did");
     if (!session && storedDid) {
-      atproto.oauth.restore(storedDid).then((s) => (this.session = s));
+      try {
+        // atproto.oauth must be awaited to get the correct result
+        const restoredSession = await atproto.oauth.restore(storedDid);
+        this.session = restoredSession;
+      } catch (error) {
+        // Session expired, clean up previous session
+        toast.error("Session expired. Please log in again.");
+        console.error("Failed to restore session:", error);
+        this.logout();
+      }
+    }
+
+    // When user session is removed, clean up user
+    // and redirect using logout function
+    if (!session) {
+      this.logout();
     }
   },
 
@@ -173,9 +203,9 @@ export const user = {
       const { onOpenUrl } = window.__TAURI__.deepLink;
 
       openUrl(url);
-      await onOpenUrl((urls) => {
+      await onOpenUrl((urls: string[]) => {
         if (!urls || urls.length < 1) return;
-        const url = new URL(urls[0]);
+        const url = new URL(urls[0]!);
         const path = page.url;
 
         path.search = url.search;
@@ -226,5 +256,8 @@ export const user = {
   logout() {
     localStorage.removeItem("did");
     session = undefined;
+    agent = undefined;
+    navigate("home");
+    console.log("logout");
   },
 };

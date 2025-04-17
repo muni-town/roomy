@@ -12,9 +12,10 @@
   import type { Item } from "$lib/tiptap/editor";
   import { getProfile } from "$lib/profile.svelte";
   import { derivePromise, navigate, resolveLeafId } from "$lib/utils.svelte";
-  import { Category, Channel, Message } from "@roomy-chat/sdk";
+  import { Category, Channel, Message, Image } from "@roomy-chat/sdk";
   import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
+  import { AvatarMarble } from "svelte-boring-avatars";
 
   let { children } = $props();
   let isMobile = $derived((outerWidth.current || 0) < 640);
@@ -22,7 +23,7 @@
 
   // TODO: track users via the space data
   let users = derivePromise([], async () => {
-    if (!g.space) {
+    if (!g.space || !g.space.channels) {
       return [];
     }
 
@@ -31,7 +32,7 @@
       for (const timelineItem of await channel.timeline.items()) {
         const message = timelineItem.tryCast(Message);
         if (message && message.authors.length > 0) {
-          for (const author of message.authors.toArray()) {
+          for (const author of message.authors((x) => x.toArray())) {
             result.add(author);
           }
         }
@@ -127,15 +128,37 @@
   let spaceNameInput = $state("");
   let bannedHandlesInput = $state("");
   let verificationFailed = $state(false);
+  let avatarFile = $state<File | null>(null);
+  let avatarPreviewUrl = $state("");
+  let spaceAvatarUrl = $state("");
+  let uploadingAvatar = $state(false);
+
   $effect(() => {
     if (!g.space) return;
     if (!showSpaceSettings) {
       spaceNameInput = g.space.name;
-      newSpaceHandle = g.space?.handles.get(0) || "";
+      newSpaceHandle = g.space?.handles((x) => x.get(0)) || "";
       verificationFailed = false;
       saveSpaceLoading = false;
+      avatarFile = null;
+      avatarPreviewUrl = "";
+
+      // Load current avatar if exists
+      spaceAvatarUrl = "";
+      // Access the image entity directly
+      const imageId = g.space.image;
+
+      if (imageId && g.roomy) {
+        g.roomy.open(Image, imageId).then((image) => {
+          if (image.uri) {
+            spaceAvatarUrl = image.uri;
+            console.log("Set avatar URL:", spaceAvatarUrl);
+          }
+        });
+      }
+
       Promise.all(
-        Object.keys(g.space.bans.toJSON()).map((x) => getProfile(x)),
+        Object.keys(g.space.bans((x) => x.toJSON())).map((x) => getProfile(x)),
       ).then(
         (profiles) =>
           (bannedHandlesInput = profiles.map((x) => x.handle).join(", ")),
@@ -153,10 +176,12 @@
           .map((x) => user.agent!.resolveHandle({ handle: x })),
       )
     ).map((x) => x.data.did);
-    g.space.bans.clear();
-    for (const ban of bannedIds) {
-      g.space.bans.set(ban, true);
-    }
+    g.space.bans((bans) => {
+      bans.clear();
+      for (const ban of bannedIds) {
+        bans.set(ban, true);
+      }
+    });
     g.space.commit();
     showSpaceSettings = false;
   }
@@ -165,12 +190,75 @@
     g.space.name = spaceNameInput;
     g.space.commit();
   }
+
+  async function handleAvatarSelect(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      const file = input.files[0];
+      if (file) {
+        avatarFile = file;
+        avatarPreviewUrl = URL.createObjectURL(file);
+      }
+    }
+  }
+
+  async function uploadAvatar(ev: Event) {
+    ev.preventDefault();
+    if (!avatarFile || !g.space || !g.roomy || !user.agent) return;
+
+    try {
+      uploadingAvatar = true;
+
+      // Upload the image using the user's agent
+      const uploadResult = await user.uploadBlob(avatarFile);
+      console.log("Upload result:", uploadResult);
+
+      try {
+        // Create an Image entity
+        const image = await g.roomy.create(Image);
+        console.log("Created image entity:", image);
+
+        // Set the image URI
+        image.uri = uploadResult.url;
+        image.commit();
+        console.log("Committed image entity:", image);
+
+        try {
+          g.space.image = image.id;
+          g.space.commit();
+
+          // Update the preview URL
+          spaceAvatarUrl = uploadResult.url;
+
+          toast.success("Space avatar updated successfully", {
+            position: "bottom-right",
+          });
+        } catch (err) {
+          console.error("Error setting space image directly:", err);
+        }
+      } catch (imageErr) {
+        console.error("Error creating image entity:", imageErr);
+        toast.error("Failed to create image entity", {
+          position: "bottom-right",
+        });
+      }
+    } catch (error) {
+      console.error("Error uploading avatar:", error);
+      toast.error("Failed to upload avatar", {
+        position: "bottom-right",
+      });
+    } finally {
+      uploadingAvatar = false;
+      avatarFile = null;
+      avatarPreviewUrl = "";
+    }
+  }
   async function saveSpaceHandle() {
     if (!g.space) return;
     saveSpaceLoading = true;
 
     if (!newSpaceHandle) {
-      g.space.handles.clear();
+      g.space.handles((h) => h.clear());
       g.space.commit();
       saveSpaceLoading = false;
       showSpaceSettings = false;
@@ -187,8 +275,10 @@
         saveSpaceLoading = false;
         return;
       }
-      g.space.handles.clear();
-      g.space.handles.push(newSpaceHandle);
+      g.space.handles((h) => {
+        h.clear();
+        h.push(newSpaceHandle);
+      });
       g.space.commit();
       saveSpaceLoading = false;
       showSpaceSettings = false;
@@ -266,106 +356,176 @@
             </Button.Root>
           {/snippet}
 
-          <form onsubmit={saveSpaceName} class="flex flex-col gap-3">
-            <label class="input w-full">
-              <span class="label">Name</span>
-              <input bind:value={spaceNameInput} placeholder="My Space" />
-            </label>
-            <Button.Root class="btn btn-primary w-full">Save Name</Button.Root>
-          </form>
-          <form class="flex flex-col gap-6" onsubmit={saveSpaceHandle}>
-            <h2 class="font-bold text-xl">Handle</h2>
-            <div class="flex flex-col gap-2">
-              <p>
-                Space handles are created with DNS records and allow your space
-                to be reached at a URL like <code
-                  >https://roomy.chat/-/example.org</code
-                >.
-              </p>
-              {#if !!newSpaceHandle}
-                {@const subdomain = newSpaceHandle
-                  .split(".")
-                  .slice(0, -2)
-                  .join(".")}
-                <p>
-                  Add the following DNS record to your DNS provider to use the
-                  domain as your handle.
-                </p>
-                <div class="max-w-full overflow-x-auto min-w-0">
-                  <table class="table text-[0.85em]">
-                    <thead>
-                      <tr>
-                        <th>Type</th>
-                        <th>Host</th>
-                        <th>Value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>TXT</td>
-                        <td>
-                          _leaf{subdomain ? "." + subdomain : ""}
-                        </td>
-                        <td>
-                          "id={g.space.id}"
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+          <div class="max-h-[80vh] overflow-y-auto pr-2">
+            <form onsubmit={saveSpaceName} class="flex flex-col gap-3 mb-8">
+              <label class="input w-full">
+                <span class="label">Name</span>
+                <input bind:value={spaceNameInput} placeholder="My Space" />
+              </label>
+              <Button.Root class="btn btn-primary w-full">Save Name</Button.Root
+              >
+            </form>
+
+            <form class="flex flex-col gap-4 mb-8" onsubmit={uploadAvatar}>
+              <h2 class="font-bold text-xl">Avatar</h2>
+              <div class="flex flex-col gap-4">
+                <div class="flex items-center gap-4">
+                  <div
+                    class="w-20 h-20 rounded-full overflow-hidden bg-base-300 flex items-center justify-center"
+                  >
+                    {#if avatarPreviewUrl}
+                      <img
+                        src={avatarPreviewUrl}
+                        alt="Avatar preview"
+                        class="w-full h-full object-cover"
+                      />
+                    {:else if spaceAvatarUrl}
+                      <img
+                        src={spaceAvatarUrl}
+                        alt="Current avatar"
+                        class="w-full h-full object-cover"
+                      />
+                    {:else if g.space && g.space.id}
+                      <div
+                        class="w-full h-full flex items-center justify-center"
+                      >
+                        <AvatarMarble name={g.space.id} />
+                      </div>
+                    {/if}
+                  </div>
+
+                  <div class="flex flex-col gap-2">
+                    <label class="btn btn-sm btn-outline">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        class="hidden"
+                        onchange={handleAvatarSelect}
+                      />
+                      Choose Image
+                    </label>
+                    {#if avatarFile}
+                      <Button.Root
+                        type="button"
+                        class="btn btn-sm btn-outline btn-error"
+                        onclick={() => {
+                          avatarFile = null;
+                          avatarPreviewUrl = "";
+                        }}
+                      >
+                        Clear
+                      </Button.Root>
+                    {/if}
+                  </div>
                 </div>
-              {:else}
-                <p>Provide a domain to see which DNS record to add for it.</p>
-              {/if}
-            </div>
-            <label class="input w-full">
-              <span class="label">Handle</span>
-              <input bind:value={newSpaceHandle} placeholder="example.org" />
-            </label>
 
-            {#if verificationFailed}
-              <div role="alert" class="alert alert-error">
-                <span
-                  >Verification failed. It may take several minutes before DNS
-                  records are propagated. If you have configured them correctly
-                  try again in a few minutes.</span
-                >
+                {#if avatarFile}
+                  <Button.Root
+                    class="btn btn-primary"
+                    disabled={uploadingAvatar}
+                  >
+                    {#if uploadingAvatar}
+                      <span class="loading loading-spinner"></span>
+                    {/if}
+                    Upload Avatar
+                  </Button.Root>
+                {/if}
               </div>
-            {/if}
-
-            <Button.Root
-              class="btn btn-primary"
-              bind:disabled={saveSpaceLoading}
-            >
-              {#if saveSpaceLoading}
-                <span class="loading loading-spinner"></span>
-              {/if}
-              {!!newSpaceHandle ? "Verify" : "Save Without Handle"}
-            </Button.Root>
-          </form>
-
-          <form class="flex flex-col gap-4" onsubmit={saveBannedHandles}>
-            <h2 class="font-bold text-xl">Bans</h2>
-
-            <div>
-              <input class="input w-full" bind:value={bannedHandlesInput} />
-              <div class="flex flex-col">
-                <span class="mx-2 mt-1 text-sm"
-                  >Input a list of handles separated by commas.</span
-                >
-                <span class="mx-2 mt-1 text-sm"
-                  >Note: the ban is "best effort" right now. The Roomy alpha is
-                  generally insecure.</span
-                >
+            </form>
+            <form class="flex flex-col gap-6 mb-8" onsubmit={saveSpaceHandle}>
+              <h2 class="font-bold text-xl">Handle</h2>
+              <div class="flex flex-col gap-2">
+                <p>
+                  Space handles are created with DNS records and allow your
+                  space to be reached at a URL like <code
+                    >https://roomy.chat/-/example.org</code
+                  >.
+                </p>
+                {#if !!newSpaceHandle}
+                  {@const subdomain = newSpaceHandle
+                    .split(".")
+                    .slice(0, -2)
+                    .join(".")}
+                  <p>
+                    Add the following DNS record to your DNS provider to use the
+                    domain as your handle.
+                  </p>
+                  <div class="max-w-full overflow-x-auto min-w-0">
+                    <table class="table text-[0.85em]">
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>Host</th>
+                          <th>Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>TXT</td>
+                          <td>
+                            _leaf{subdomain ? "." + subdomain : ""}
+                          </td>
+                          <td>
+                            "id={g.space.id}"
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                {:else}
+                  <p>Provide a domain to see which DNS record to add for it.</p>
+                {/if}
               </div>
-            </div>
+              <label class="input w-full">
+                <span class="label">Handle</span>
+                <input bind:value={newSpaceHandle} placeholder="example.org" />
+              </label>
 
-            <Button.Root
-              class="btn btn-primary w-full"
-              bind:disabled={saveSpaceLoading}
-            >
-              Save Bans
-            </Button.Root>
-          </form>
+              {#if verificationFailed}
+                <div role="alert" class="alert alert-error">
+                  <span
+                    >Verification failed. It may take several minutes before DNS
+                    records are propagated. If you have configured them
+                    correctly try again in a few minutes.</span
+                  >
+                </div>
+              {/if}
+
+              <Button.Root
+                class="btn btn-primary"
+                bind:disabled={saveSpaceLoading}
+              >
+                {#if saveSpaceLoading}
+                  <span class="loading loading-spinner"></span>
+                {/if}
+                {!!newSpaceHandle ? "Verify" : "Save Without Handle"}
+              </Button.Root>
+            </form>
+
+            <form class="flex flex-col gap-4 mb-8" onsubmit={saveBannedHandles}>
+              <h2 class="font-bold text-xl">Bans</h2>
+
+              <div>
+                <input class="input w-full" bind:value={bannedHandlesInput} />
+                <div class="flex flex-col">
+                  <span class="mx-2 mt-1 text-sm"
+                    >Input a list of handles separated by commas.</span
+                  >
+                  <span class="mx-2 mt-1 text-sm"
+                    >Note: the ban is "best effort" right now. The Roomy alpha
+                    is generally insecure.</span
+                  >
+                </div>
+              </div>
+
+              <Button.Root
+                class="btn btn-primary w-full"
+                bind:disabled={saveSpaceLoading}
+              >
+                Save Bans
+              </Button.Root>
+            </form>
+          </div>
         </Dialog>
       {/if}
     </div>

@@ -11,7 +11,9 @@
     "format": "prettier . --write",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "generate-schemas": "deno run -A src/lib/schemas/generate.ts"
+    "generate-schemas": "deno run -A src/lib/schemas/generate.ts",
+    "prepare": "husky",
+    "lint-staged": "lint-staged"
   },
   "dependencies": {
     "@atproto/api": "^0.14.9",
@@ -27,8 +29,10 @@
     "@tiptap/pm": "^2.11.5",
     "@tiptap/starter-kit": "^2.11.5",
     "@tiptap/suggestion": "^2.11.5",
+    "@types/linkify-it": "^5.0.0",
     "bits-ui": "^1.3.13",
     "emoji-picker-element": "^1.26.1",
+    "linkify-it": "^5.0.0",
     "shiki": "^3.2.1",
     "svelte": "^5.23.1",
     "svelte-boring-avatars": "^1.2.6",
@@ -40,8 +44,8 @@
   },
   "devDependencies": {
     "@atproto/lexicon": "^0.4.5",
-    "@roomy-chat/sdk": "npm:@jsr/roomy-chat__sdk@0.1.0-preview.12",
-    "@muni-town/leaf": "npm:@jsr/muni-town__leaf@0.2.0-preview.12",
+    "@roomy-chat/sdk": "npm:@jsr/roomy-chat__sdk@0.1.0-preview.15",
+    "@muni-town/leaf": "npm:@jsr/muni-town__leaf@0.2.0-preview.15",
     "@iconify/svelte": "^4.2.0",
     "@automerge/automerge-repo-storage-indexeddb": "2.0.0-collectionsync-alpha.1",
     "@noble/curves": "^1.8.1",
@@ -55,7 +59,9 @@
     "base32-encode": "^2.0.0",
     "daisyui": "^5.0.6",
     "date-fns": "^4.1.0",
+    "husky": "^9.1.7",
     "js-base64": "^3.7.7",
+    "lint-staged": "^15.5.0",
     "marked": "^15.0.6",
     "prettier": "3.5.3",
     "prettier-plugin-svelte": "3.3.3",
@@ -72,5 +78,10 @@
     "vite-plugin-top-level-await": "^1.4.4",
     "vite-plugin-wasm": "^3.4.1",
     "vitest": "^3.0.9"
+  },
+  "lint-staged": {
+    "*.{json,js,ts,tsx,html,svelte,css}": [
+      "prettier --write --ignore-unknown"
+    ]
   }
 }

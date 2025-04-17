@@ -1,6 +1,10 @@
 <script lang="ts">
   import "../../app.css";
   import { onMount } from "svelte";
+  import { Toaster } from "svelte-french-toast";
+  import { RenderScan } from "svelte-render-scan";
+  import { Button, ToggleGroup } from "bits-ui";
+
   import { dev } from "$app/environment";
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
@@ -9,43 +13,35 @@
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
-
-  import { Toaster } from "svelte-french-toast";
-  import { RenderScan } from "svelte-render-scan";
-  import { AvatarMarble } from "svelte-boring-avatars";
-  import { Avatar, Button, ToggleGroup } from "bits-ui";
-
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import { Space } from "@roomy-chat/sdk";
-  import ContextMenu from "$lib/components/ContextMenu.svelte";
+  import SidebarSpace from "$lib/components/SidebarSpace.svelte";
 
-  let { children } = $props();
+  const { children } = $props();
 
   let handleInput = $state("");
   let loginLoading = $state(false);
-  let isLoginDialogOpen = $state(!user.session);
 
   let newSpaceName = $state("");
   let isNewSpaceDialogOpen = $state(false);
 
-  let spaces = derivePromise(
+  const spaces = derivePromise(
     [],
     async () => (await g.roomy?.spaces.items()) || [],
   );
 
   onMount(async () => {
     await user.init();
-  });
-
-  $effect(() => {
-    if (user.session) isLoginDialogOpen = false;
+    if (!user.session) {
+      user.isLoginDialogOpen = true;
+    }
   });
 
   async function createSpace() {
     if (!newSpaceName || !user.agent || !g.roomy) return;
     const space = await g.roomy.create(Space);
     space.name = newSpaceName;
-    space.admins.push(user.agent.assertDid);
+    space.admins((x) => x.push(user.agent!.assertDid));
     space.commit();
 
     g.roomy.spaces.push(space);
@@ -62,9 +58,9 @@
     try {
       handleInput = cleanHandle(handleInput);
       await user.loginWithHandle(handleInput);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      loginError = e.toString();
+      loginError = e instanceof Error ? e.message.toString() : "Unknown error";
     }
 
     loginLoading = false;
@@ -85,56 +81,25 @@
   <!-- Server Bar -->
 
   <aside
-    class="w-fit col-span-2 flex flex-col justify-between px-4 py-8 items-center border-r-2 border-base-200"
+    class="w-fit col-span-2 flex flex-col justify-between px-0 md:px-4 py-8 items-center border-r-2 border-base-200 h-screen overflow-y-auto overflow-x-hidden"
   >
     <ToggleGroup.Root
       type="single"
       value={g.currentCatalog}
-      class="flex flex-col gap-2 items-center"
+      class="flex flex-col gap-1 items-center"
     >
       <ToggleGroup.Item
         value="home"
         onclick={() => navigate("home")}
-        class="btn btn-ghost size-16 data-[state=on]:border-accent"
+        class="btn btn-ghost size-14 data-[state=on]:border-accent"
       >
-        <Icon icon="iconamoon:home-fill" font-size="2em" />
+        <Icon icon="iconamoon:home-fill" font-size="1.5em" />
       </ToggleGroup.Item>
 
-      <div class="divider mt-0 mb-1"></div>
+      <div class="divider my-0"></div>
 
       {#each spaces.value as space, i}
-        <ContextMenu
-          menuTitle={space.name}
-          items={[
-            {
-              label: "Leave Space",
-              icon: "mdi:exit-to-app",
-              onselect: () => {
-                g.roomy?.spaces.remove(i);
-                g.roomy?.commit();
-              },
-            },
-          ]}
-        >
-          <ToggleGroup.Item
-            onclick={() =>
-              navigate({ space: space.handles.get(0) || space.id })}
-            value={space.id}
-            class="btn btn-ghost size-16 data-[state=on]:border-primary relative group"
-          >
-            <Avatar.Root>
-              <Avatar.Image />
-              <Avatar.Fallback>
-                <AvatarMarble name={space.id} />
-              </Avatar.Fallback>
-            </Avatar.Root>
-            
-            <!-- Fast tooltip with no delay -->
-            <div class="absolute left-full ml-2 px-2 py-1 bg-base-300 rounded shadow-md text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50">
-              {space.name}
-            </div>
-          </ToggleGroup.Item>
-        </ContextMenu>
+        <SidebarSpace {space} {i} />
       {/each}
     </ToggleGroup.Root>
 
@@ -144,9 +109,14 @@
         title="Create Space"
         description="Create a new public chat space"
         bind:isDialogOpen={isNewSpaceDialogOpen}
+        disabled={!user.session}
       >
         {#snippet dialogTrigger()}
-          <Button.Root title="Create Space" class="btn btn-ghost w-fit">
+          <Button.Root
+            title="Create Space"
+            class="btn btn-ghost w-fit"
+            disabled={!user.session}
+          >
             <Icon icon="basil:add-solid" font-size="2em" />
           </Button.Root>
         {/snippet}
@@ -165,10 +135,11 @@
       </Dialog>
 
       <Dialog
-        title={user.session
-          ? `Logged In As ${user.profile.data?.handle}`
-          : "Login with AT Protocol"}
-        bind:isDialogOpen={isLoginDialogOpen}
+        title={user.session ? "Log Out" : "Log In"}
+        description={user.session
+          ? `Logged in as ${user.profile.data?.handle}`
+          : "Log in with AT Protocol"}
+        bind:isDialogOpen={user.isLoginDialogOpen}
       >
         {#snippet dialogTrigger()}
           <Button.Root class="btn btn-ghost w-fit">
@@ -182,7 +153,7 @@
         {#if user.session}
           <section class="flex flex-col gap-4">
             <Button.Root onclick={user.logout} class="btn btn-error">
-              Logout
+              Log Out
             </Button.Root>
           </section>
         {:else}
@@ -202,7 +173,7 @@
               {#if loginLoading}
                 <span class="loading loading-spinner"></span>
               {/if}
-              Login with Bluesky
+              Log In with Bluesky
             </Button.Root>
           </form>
         {/if}
