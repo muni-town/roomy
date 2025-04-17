@@ -13,19 +13,10 @@
   import { getContentHtml } from "$lib/tiptap/editor";
   import { Announcement, Message, type EntityIdStr } from "@roomy-chat/sdk";
   import { g } from "$lib/global.svelte";
-  import { derivePromise } from "$lib/utils.svelte";
+  import { derivePromise, parseMessageContent } from "$lib/utils.svelte";
   import type { JSONContent } from "@tiptap/core";
 
-  // Helper function to safely parse message content
-  function parseMessageContent(bodyJson: string | undefined): JSONContent {
-    try {
-      if (!bodyJson) return {};
-      return JSON.parse(bodyJson);
-    } catch (e) {
-      console.error('Error parsing message JSON:', e);
-      return {};
-    }
-  }
+
 
   type Props = {
     message: Message | Announcement;

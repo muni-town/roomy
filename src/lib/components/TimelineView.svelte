@@ -151,6 +151,7 @@
     if (replyingTo) message.replyTo = replyingTo;
 
     // Images are now handled by TipTap in the message content
+    // Limit image size in message input to 300x300
 
     g.channel.timeline.push(message);
     g.channel.commit();
@@ -163,24 +164,7 @@
   // Settings Dialog
   //
 
-  /* TODO: image upload refactor with tiptap
-  let mayUploadImages = $derived.by(() => {
-    if (isAdmin) return true;
-    if (!space) { return }
-
-    let messagesByUser = Object.values(space.view.messages).filter(
-      (x) => user.agent && x.author == user.agent.assertDid,
-    );
-    if (messagesByUser.length > 5) return true;
-    return !!messagesByUser.find(
-      (message) =>
-        !!Object.values(message.reactions).find(
-          (reactedUsers) =>
-            !!reactedUsers.find((user) => !!space?.view.admins.includes(user)),
-        ),
-    );
-  });
-  */
+  // Image upload permissions are now handled in ChatInput.svelte
   let showSettingsDialog = $state(false);
   let channelNameInput = $state("");
   let channelCategoryInput = $state(undefined) as undefined | string;
@@ -391,7 +375,6 @@
             <!-- Image upload button is now in ChatInput.svelte -->
           </div>
 
-          <!-- Image preview is now handled by TipTap editor -->
         </section>
       {/if}
 

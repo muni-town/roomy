@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { Editor } from "@tiptap/core";
   import Placeholder from "@tiptap/extension-placeholder";
+  import Image from "@tiptap/extension-image";
   import {
     type Item,
     initKeyboardShortcutHandler,
@@ -11,174 +12,39 @@
   import { user } from "$lib/user.svelte";
   import { toast } from "svelte-french-toast";
   import { untrack } from "svelte";
+  import { isEqual } from "underscore";
 
-  // Props (use Svelte's export let)
-  export let content: Record<string, unknown> = { type: "doc", children: [] };
-  export let users: Item[] = [];
-  export let context: Item[] = [];
-  export let onEnter: () => void;
+  type Props = {
+    content: Record<string, unknown>;
+    users: Item[];
+    context: Item[];
+    onEnter: () => void;
+  };
 
-  // Remove non-Svelte $state, $effect, and $bindable usage
-  let tiptap: Editor | undefined;
-  let element: HTMLDivElement | undefined;
-  let fileInput: HTMLInputElement | null = null;
-  let isInternalUpdate = false;
+  let { content = $bindable({}), users, context, onEnter }: Props = $props();
+  let element: HTMLDivElement | undefined = $state();
+  let tiptap: Editor | undefined = $state();
+  let fileInput: HTMLInputElement | null = $state(null);
 
-  // Extensions (replace createCompleteExtensions if needed)
-  const extensions = [
-    ...createCompleteExtensions({ users, context }),
-    Placeholder.configure({ placeholder: "Write something ..." }),
-    initKeyboardShortcutHandler({ onEnter })
-  ];
+  // Flag to prevent circular updates between editor and content
+  let isInternalUpdate = $state(false);
 
-  onMount(() => {
-    tiptap = new Editor({
-      element,
-      extensions,
-      content,
-      editorProps: {
-        attributes: {
-          class: "w-full px-3 py-2 rounded bg-base-300 text-base-content outline-none",
-        },
-      },
-      onUpdate({ editor }) {
-        isInternalUpdate = true;
-        content = editor.getJSON();
-        isInternalUpdate = false;
-      }
-    });
+  // Track dependencies to avoid unnecessary editor recreation
+  let lastDeps = $state({
+    users: JSON.stringify(users),
+    context: JSON.stringify(context),
+    onEnter: onEnter.toString()
   });
 
-  // Keep editor content in sync with external content changes
-  $: if (tiptap && !isInternalUpdate) {
-    const currentContent = tiptap.getJSON();
-    const newContent = content.type ? content : { type: "doc", children: [] };
-    if (JSON.stringify(currentContent) !== JSON.stringify(newContent)) {
-      try {
-        tiptap.commands.setContent(newContent);
-      } catch (error) {
-        console.error('Error updating editor content:', error);
-      }
-    }
-  }
-
-  onDestroy(() => {
-    tiptap?.destroy();
-  });
-
-  // Action functions for event handling
-  export function handleClick(node: HTMLElement) {
-    const clickHandler = () => {
-      fileInput?.click();
-    };
-
-    node.addEventListener('click', clickHandler);
-
-    return {
-      destroy() {
-        node.removeEventListener('click', clickHandler);
-      }
-    };
-  }
-
-  export function handleChange(node: HTMLElement) {
-    const changeHandler = (event: Event) => {
-      handleFileProcess(event);
-    };
-
-    node.addEventListener('change', changeHandler);
-
-    return {
-      destroy() {
-        node.removeEventListener('change', changeHandler);
-      }
-    };
-  }
-
-  export function handlePaste(node: HTMLElement) {
-    const pasteHandler = async (event: ClipboardEvent) => {
-      // Get clipboard data
-      const items = event.clipboardData?.items;
-      if (!items) return;
-
-      // Check for image data in clipboard
-      for (const item of items) {
-        if (item.type.startsWith('image/')) {
-          // Get the image file from clipboard
-          const file = item.getAsFile();
-          if (!file) continue;
-
-          // Prevent default paste behavior
-          event.preventDefault();
-
-          // Show loading indicator
-          const uploadButton = document.querySelector('[aria-label="Upload image"]');
-          if (uploadButton) {
-            uploadButton.setAttribute('disabled', 'true');
-            uploadButton.setAttribute('title', 'Uploading...');
-          }
-
-          try {
-            // Upload the image using the user.uploadBlob method
-            const uploadResult = await user.uploadBlob(file);
-
-            if (!tiptap) {
-              console.warn("Tiptap editor not initialized");
-              return;
-            }
-
-            // Get the raw image URL without any processing
-            const imageUrl = uploadResult.url;
-
-            // Insert image into editor with the raw URL
-            tiptap.chain().focus().insertContent({
-              type: "image",
-              attrs: { src: imageUrl }
-            }).run();
-
-            // Update content state to ensure persistence
-            content = tiptap.getJSON();
-          } catch (error) {
-            console.error("Error uploading pasted image:", error);
-            toast.error("Failed to upload pasted image", { position: "bottom-right" });
-          } finally {
-            // Re-enable the upload button
-            if (uploadButton) {
-              uploadButton.removeAttribute('disabled');
-              uploadButton.setAttribute('title', 'Upload image');
-            }
-          }
-
-          // Only process the first image found
-          return;
-        }
-      }
-    };
-
-    node.addEventListener('paste', pasteHandler);
-
-    return {
-      destroy() {
-        node.removeEventListener('paste', pasteHandler);
-      }
-    };
-  }
-
-  async function handleFileProcess(event: Event) {
-    const input = event.target as HTMLInputElement;
-    if (!input.files?.length) return;
-
-    const file = input.files[0];
-    // Type guard to ensure file is defined
-    if (!file || !file.type.startsWith("image/")) return;
-
+  // Consolidated image file processing logic
+  async function processImageFile(file: File, input?: HTMLInputElement) {
     // Show loading indicator or disable the button while uploading
     const uploadButton = document.querySelector('[aria-label="Upload image"]');
     if (uploadButton) {
       uploadButton.setAttribute('disabled', 'true');
       uploadButton.setAttribute('title', 'Uploading...');
     }
-
+    isUploading = true;
     try {
       // Upload the image using the user.uploadBlob method
       const uploadResult = await user.uploadBlob(file);
@@ -196,16 +62,15 @@
         type: "image",
         attrs: { src: imageUrl }
       }).run();
-
+      
       // Update content state to ensure persistence
       content = tiptap.getJSON();
     } catch (error) {
       console.error("Error uploading image:", error);
       toast.error("Failed to upload image", { position: "bottom-right" });
     } finally {
-      // Reset input so same file can be uploaded again if needed
-      input.value = "";
-
+      if (input) input.value = "";
+      isUploading = false;
       // Re-enable the upload button
       if (uploadButton) {
         uploadButton.removeAttribute('disabled');
@@ -213,24 +78,213 @@
       }
     }
   }
+
+  // Action functions for event handling
+  export function handleClick(node: HTMLElement) {
+    const clickHandler = () => {
+      fileInput?.click();
+    };
+
+    node.addEventListener('click', clickHandler);
+
+    return {
+      destroy() {
+        node.removeEventListener('click', clickHandler);
+      }
+    };
+  }
+
+  // Updated handleFileProcess to use processImageFile
+  async function handleFileProcess(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (!input.files?.length) return;
+    const file = input.files[0];
+    if (!file || !file.type.startsWith("image/")) return;
+    await processImageFile(file, input);
+  }
+
+  export function handleChange(node: HTMLElement) {
+    const changeHandler = (event: Event) => {
+      handleFileProcess(event);
+    };
+
+    node.addEventListener('change', changeHandler);
+
+    return {
+      destroy() {
+        node.removeEventListener('change', changeHandler);
+      }
+    };
+  }
+
+  // Updated handlePaste to use processImageFile
+  export function handlePaste(node: HTMLElement) {
+    const pasteHandler = async (event: ClipboardEvent) => {
+      const items = event.clipboardData?.items;
+      if (!items) return;
+      // Check for image data in clipboard
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          // Get the image file from clipboard
+          const file = item.getAsFile();
+          if (!file) continue;
+          // Prevent default paste behavior
+          event.preventDefault();
+          await processImageFile(file);
+          // Only process the first image found
+          return;
+        }
+      }
+    };
+
+    node.addEventListener('paste', pasteHandler);
+
+    return {
+      destroy() {
+        node.removeEventListener('paste', pasteHandler);
+      }
+    };
+  }
+
+  // --- Drag-and-drop handlers for image upload ---
+  function handleDragOver(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    isDragOver = true;
+  }
+  function handleDragLeave(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    isDragOver = false;
+  }
+  async function handleDrop(event: DragEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    isDragOver = false;
+    if (!event.dataTransfer?.files?.length) return;
+    const file = event.dataTransfer.files[0];
+    if (file && file.type.startsWith("image/")) {
+      await processImageFile(file);
+    }
+  }
+
+  // Wrapped send handler for spinner
+  function wrappedOnEnter() {
+    Promise.resolve(onEnter());
+  }
+
+  // First effect: Create/recreate editor when dependencies change
+  $effect(() => {
+
+    if (!element) return;
+
+    // Check if dependencies have actually changed
+    const currentDeps = {
+      users: JSON.stringify(users),
+      context: JSON.stringify(context),
+      onEnter: onEnter.toString()
+    };
+
+    const depsChanged =
+      currentDeps.users !== lastDeps.users ||
+      currentDeps.context !== lastDeps.context ||
+      currentDeps.onEnter !== lastDeps.onEnter;
+
+    // Only recreate editor if dependencies changed or editor doesn't exist
+    if (!tiptap || depsChanged) {
+      // Update tracked dependencies
+      lastDeps = currentDeps;
+
+      // Destroy previous editor if it exists
+      tiptap?.destroy();
+
+      // Create new extensions with current users/context/onEnter
+      const extensions = [
+        ...createCompleteExtensions({ users, context }),
+        Placeholder.configure({ placeholder: "Write something ..." }),
+        initKeyboardShortcutHandler({ onEnter })
+      ];
+      untrack(() => tiptap?.destroy());
+      // Initialize the editor
+      tiptap = new Editor({
+        element,
+        extensions,
+        content: content.type ? content : { type: "doc", children: [] },
+        editorProps: {
+          attributes: {
+            class: "w-full px-3 py-2 rounded bg-base-300 text-base-content outline-none",
+          },
+        },
+        onUpdate: (ctx) => {
+          const newContent = ctx.editor.getJSON();
+          if (JSON.stringify(content) !== JSON.stringify(newContent)) {
+            isInternalUpdate = true;
+            content = newContent;
+            // Reset the flag after the update is processed
+            setTimeout(() => {
+              isInternalUpdate = false;
+            }, 0);
+          }
+
+        },
+      });
+
+      // Ensure fileInput is properly initialized
+      if (!fileInput) {
+        console.warn('File input not initialized properly');
+      }
+    }
+  });
+
+  // Second effect: Update editor content when content prop changes externally
+  $effect(() => {
+    if (!tiptap || isInternalUpdate) return;
+
+    const currentContent = tiptap.getJSON();
+    const newContent = content.type ? content : { type: "doc", children: [] };
+
+    // Simple check to avoid unnecessary updates
+    if (JSON.stringify(currentContent) !== JSON.stringify(newContent)) {
+      // Use a try-catch to handle potential errors
+      try {
+        tiptap.commands.setContent(newContent);
+      } catch (error) {
+        console.error('Error updating editor content:', error);
+      }
+    }
+  });
+
+  onDestroy(() => {
+    tiptap?.destroy();
+  });
 </script>
 {#if !g.isBanned}
   <div class="flex items-center gap-2">
     <!-- Plus icon button for image upload -->
     <button
       type="button"
-      class="p-1 rounded hover:bg-base-200 disabled:opacity-50"
+      class="p-1 rounded hover:bg-base-200 disabled:opacity-50 cursor-pointer"
       aria-label="Upload image"
       use:handleClick
       tabindex="-1"
-      disabled={tiptap == null}
-      title={tiptap == null ? "Editor not ready" : "Upload image"}
+      disabled={tiptap == null || isUploading}
+      title={isUploading ? "Uploading..." : "Upload image"}
     >
-      <!-- Simple SVG plus icon -->
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <rect x="9" y="4" width="2" height="12" rx="1" fill="currentColor"/>
-        <rect x="4" y="9" width="12" height="2" rx="1" fill="currentColor"/>
-      </svg>
+      {#if isUploading}
+        <!-- Loading spinner -->
+        <div class="animate-spin h-5 w-5">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        </div>
+      {:else}
+        <!-- Regular upload icon -->
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <rect x="9" y="4" width="2" height="12" rx="1" fill="currentColor"/>
+          <rect x="4" y="9" width="12" height="2" rx="1" fill="currentColor"/>
+        </svg>
+      {/if}
     </button>
     <!-- Hidden file input for image upload -->
     <input
@@ -242,7 +296,33 @@
       tabindex="-1"
     />
     <!-- Tiptap editor -->
-    <div bind:this={element} class="flex-1" use:handlePaste></div>
+    <div
+      bind:this={element}
+      class="flex-1 relative"
+      use:handlePaste
+      ondragover={handleDragOver}
+      ondragleave={handleDragLeave}
+      ondrop={handleDrop}
+      role="region"
+      aria-label="Chat editor and image drop area"
+    >
+      {#if isDragOver}
+        <div class="absolute inset-0 z-10 bg-base-200/80 border-4 border-primary rounded flex justify-center items-center pointer-events-none select-none">
+          <span class="text-lg font-semibold text-primary">Drop image to upload</span>
+        </div>
+      {/if}
+    </div>
+  </div>
+  <div class="flex items-center gap-2 mt-2">
+    <button
+      class="btn btn-primary flex items-center"
+      type="button"
+      onclick={wrappedOnEnter}
+      disabled={tiptap == null}
+      aria-label="Send message"
+    >
+      Send
+    </button>
   </div>
 {:else}
   <div

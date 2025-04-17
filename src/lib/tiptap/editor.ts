@@ -16,6 +16,7 @@ import type {
   SuggestionKeyDownProps,
   SuggestionProps,
 } from "@tiptap/suggestion";
+import type { Editor } from '@tiptap/core';
 // Import types needed for the editor
 import { convertUrlsToLinks } from "$lib/urlUtils";
 
@@ -219,7 +220,12 @@ export const completeExtensions = [
 // Function to create complete extensions with configured mention plugins
 export function createCompleteExtensions({ users = [], context = [] }: { users?: Item[], context?: Item[] }) {
   return [
-    ...baseExtensions,
+    ...baseExtensions.filter(ext => ext.name !== 'image'), // Remove default image extension
+    Image.configure({
+      HTMLAttributes: {
+        class: 'max-w-[300px] max-h-[300px] object-contain relative',
+      },
+    }),
     UserMentionExtension.configure({
       HTMLAttributes: { class: "mention" },
       suggestion: suggestion({
@@ -276,4 +282,66 @@ export function getContentHtml(content: JSONContent) {
     // Return empty string instead of throwing to prevent UI crashes
     return '';
   }
+}
+
+export async function handleImageUpload(editor: Editor, file: File, uploadFn: (file: File) => Promise<{ url: string }>) {
+  // Insert a loading placeholder
+  editor.chain().focus().insertContent({
+    type: 'image',
+    attrs: {
+      src: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmMGYwIi8+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTUwLCAxNTApIj48Y2lyY2xlIHI9IjMwIiBmaWxsPSJ0cmFuc3BhcmVudCIgc3Ryb2tlPSIjNjM2M2ZmIiBzdHJva2Utd2lkdGg9IjgiIHN0cm9rZS1kYXNoYXJyYXk9IjE4OC41IiBzdHJva2UtZGFzaG9mZnNldD0iMCI+PGFuaW1hdGVUcmFuc2Zvcm0gYXR0cmlidXRlTmFtZT0idHJhbnNmb3JtIiB0eXBlPSJyb3RhdGUiIHJlcGVhdENvdW50PSJpbmRlZmluaXRlIiBkdXI9IjFzIiB2YWx1ZXM9IjAgMCAwOzM2MCAwIDAiIGtleVRpbWVzPSIwOzEiPjwvYW5pbWF0ZVRyYW5zZm9ybT48L2NpcmNsZT48L2c+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIyMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgZmlsbD0iIzYzNjNmZiI+VXBsb2FkaW5nIGltYWdlLi4uPC90ZXh0Pjwvc3ZnPg==',
+      alt: 'Uploading image...',
+      'data-loading': 'true'
+    }
+  }).run();
+
+  // Upload the image
+  return uploadFn(file)
+    .then(result => {
+      // Find and replace the loading placeholder with the actual image
+      const transaction = editor.state.tr;
+      let placeholderFound = false;
+      
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'image' && node.attrs['data-loading'] === 'true') {
+          transaction.setNodeMarkup(pos, undefined, {
+            ...node.attrs,
+            src: result.url,
+            alt: 'User uploaded image',
+            'data-loading': null
+          });
+          placeholderFound = true;
+          return false; // Stop traversal once we find the placeholder
+        }
+        return true;
+      });
+      
+      if (placeholderFound) {
+        editor.view.dispatch(transaction);
+      } else {
+        // If placeholder not found (rare case), insert the image directly
+        editor.chain().focus().insertContent({
+          type: 'image',
+          attrs: {
+            src: result.url,
+            alt: 'User uploaded image'
+          }
+        }).run();
+      }
+      
+      return result;
+    })
+    .catch(error => {
+      // Remove the loading placeholder on error
+      const transaction = editor.state.tr;
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'image' && node.attrs['data-loading'] === 'true') {
+          transaction.delete(pos, pos + node.nodeSize);
+          return false;
+        }
+        return true;
+      });
+      editor.view.dispatch(transaction);
+      throw error; // Re-throw to allow caller to handle the error
+    });
 }
