@@ -1,25 +1,22 @@
 <script lang="ts">
   import _ from "underscore";
   import { page } from "$app/state";
-  import { getContext, setContext, untrack } from "svelte";
+  import { getContext, setContext } from "svelte";
   import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
   import { getContentHtml, type Item } from "$lib/tiptap/editor";
   import { outerWidth } from "svelte/reactivity/window";
 
   import Icon from "@iconify/svelte";
-  import Dialog from "$lib/components/Dialog.svelte";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
-  import { Button, Popover, Tabs } from "bits-ui";
+  import { Button, Tabs } from "bits-ui";
 
-  import { format, isToday } from "date-fns";
-  import { derivePromise, navigate } from "$lib/utils.svelte";
+  import { navigate } from "$lib/utils.svelte";
   import { g } from "$lib/global.svelte";
   import {
     Announcement,
-    Category,
     Channel,
     Message,
     Thread,
@@ -27,17 +24,14 @@
   } from "@roomy-chat/sdk";
   import type { JSONContent } from "@tiptap/core";
   import { getProfile } from "$lib/profile.svelte";
-  import WikiEditor from "./WikiEditor.svelte";
+  import WikiEditor from "$lib/components/WikiEditor.svelte";
+  import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
+  import ThreadsTab from "$lib/components/ThreadsTab.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let users: { value: Item[] } = getContext("users");
   let contextItems: { value: Item[] } = getContext("contextItems");
-  let relatedThreads = derivePromise([], async () =>
-    g.channel && g.channel instanceof Channel
-      ? await g.channel.threads.items()
-      : [],
-  );
 
   let tab = $state<"chat" | "threads" | "wiki">("chat");
 
@@ -209,85 +203,6 @@
     );
   });
   */
-  let showSettingsDialog = $state(false);
-  let channelNameInput = $state("");
-  let channelCategoryInput = $state(undefined) as undefined | string;
-  $effect(() => {
-    if (!g.space) return;
-
-    untrack(() => {
-      channelNameInput = g.channel?.name || "";
-      channelCategoryInput = undefined;
-      g.space &&
-        g.space.sidebarItems.items().then((items) => {
-          for (const item of items) {
-            const category = item.tryCast(Category);
-            if (
-              category &&
-              g.channel &&
-              category.channels.ids().includes(g.channel.id)
-            ) {
-              channelCategoryInput = category.id;
-              return;
-            }
-          }
-        });
-    });
-  });
-
-  async function saveSettings() {
-    if (!g.space || !g.channel) return;
-    if (channelNameInput) {
-      g.channel.name = channelNameInput;
-      g.channel.commit();
-    }
-
-    if (g.channel instanceof Channel) {
-      let foundChannelInSidebar = false;
-      for (const [
-        cursor,
-        unknownItem,
-      ] of await g.space.sidebarItems.itemCursors()) {
-        const item =
-          unknownItem.tryCast(Category) || unknownItem.tryCast(Channel);
-
-        if (item instanceof Channel && item.id == g.channel.id) {
-          foundChannelInSidebar = true;
-        }
-
-        if (item instanceof Category) {
-          const categoryItems = item.channels.ids();
-          if (item.id !== channelCategoryInput) {
-            const thisChannelIdx = categoryItems.indexOf(g.channel.id);
-            if (thisChannelIdx != -1) {
-              item.channels.remove(thisChannelIdx);
-              item.commit();
-            }
-          } else if (
-            item.id == channelCategoryInput &&
-            !categoryItems.includes(g.channel.id)
-          ) {
-            item.channels.push(g.channel);
-            item.commit();
-          }
-        } else if (
-          item instanceof Channel &&
-          channelCategoryInput &&
-          item.id == g.channel.id
-        ) {
-          const { offset } = g.space.entity.doc.getCursorPos(cursor);
-          g.space.sidebarItems.remove(offset);
-        }
-      }
-
-      if (!channelCategoryInput && !foundChannelInSidebar) {
-        g.space.sidebarItems.push(g.channel);
-      }
-      g.space.commit();
-    }
-
-    showSettingsDialog = false;
-  }
 
   /* TODO: image upload refactor with tiptap
   async function handleImageSelect(event: Event) {
@@ -377,49 +292,17 @@
 
   {#if !isMobile}
     <div class="navbar-end">
-      {@render toolbar()}
+      <TimelineToolbar {createThread} bind:threadTitleInput />
     </div>
   {/if}
 </header>
 <div class="divider my-0"></div>
 
-{#if tab === "chat" || g.channel instanceof Thread}
-  {@render chatTab()}
-{:else if tab === "threads"}
-  {@render threadsTab()}
+{#if tab === "threads"}
+  <ThreadsTab />
 {:else if tab === "wiki"}
-  {@render wikiTab()}
-{/if}
-
-{#snippet threadsTab()}
-  <ul class="list w-full join join-vertical">
-    {#if relatedThreads.value.length > 0}
-      {#each relatedThreads.value as thread}
-        <a href={`/${page.params.space}/thread/${thread.id}`}>
-          <li class="list-row join-item flex items-center w-full bg-base-200">
-            <h3 class="card-title text-xl font-medium text-primary">
-              {thread.name}
-            </h3>
-            {#if thread.createdDate}
-              {@render timestamp(thread.createdDate)}
-            {/if}
-          </li>
-        </a>
-      {/each}
-    {:else}
-      No threads for this channel.
-    {/if}
-  </ul>
-{/snippet}
-
-{#snippet timestamp(date: Date)}
-  {@const formattedDate = isToday(date) ? "Today" : format(date, "P")}
-  <time class="text-xs">
-    {formattedDate}, {format(date, "pp")}
-  </time>
-{/snippet}
-
-{#snippet chatTab()}
+  <WikiEditor />
+{:else if tab === "chat" || g.channel instanceof Thread}
   {#if g.space && g.channel}
     <ChatArea timeline={g.channel.forceCast(Timeline)} />
     <div class="flex items-center">
@@ -522,120 +405,8 @@
       {/if}
 
       {#if isMobile}
-        {@render toolbar()}
+        <TimelineToolbar {createThread} bind:threadTitleInput />
       {/if}
     </div>
   {/if}
-{/snippet}
-
-{#snippet toolbar()}
-  <menu class="relative flex items-center gap-3 px-2 w-fit justify-end">
-    <Popover.Root bind:open={isThreading.value}>
-      <Popover.Trigger>
-        <Icon icon="tabler:needle-thread" class="text-2xl" />
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content
-          side="left"
-          sideOffset={8}
-          interactOutsideBehavior="ignore"
-          class="my-4 bg-base-300 rounded py-4 px-5"
-        >
-          <form onsubmit={createThread} class="flex flex-col gap-4">
-            <input
-              type="text"
-              bind:value={threadTitleInput}
-              class="input"
-              placeholder="Thread Title"
-            />
-            <button type="submit" class="btn btn-primary">
-              Create Thread
-            </button>
-          </form>
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
-    <Button.Root
-      title="Copy invite link"
-      class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
-      onclick={() => {
-        navigator.clipboard.writeText(`${page.url.href}`);
-      }}
-    >
-      <Icon icon="icon-park-outline:copy-link" class="text-2xl" />
-    </Button.Root>
-
-    {#if g.isAdmin}
-      <Dialog
-        title={g.channel instanceof Channel
-          ? "Channel Settings"
-          : "Thread Settings"}
-        bind:isDialogOpen={showSettingsDialog}
-      >
-        {#snippet dialogTrigger()}
-          <Button.Root
-            title={g.channel instanceof Channel
-              ? "Channel Settings"
-              : "Thread Settings"}
-            class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150 m-auto flex"
-          >
-            <Icon icon="lucide:settings" class="text-2xl" />
-          </Button.Root>
-        {/snippet}
-
-        <form class="flex flex-col gap-4 w-full" onsubmit={saveSettings}>
-          <label>
-            Name
-            <input
-              bind:value={channelNameInput}
-              placeholder="name"
-              class="input"
-            />
-          </label>
-          {#if g.space && g.channel instanceof Channel}
-            <select bind:value={channelCategoryInput} class="select">
-              <option value={undefined}>None</option>
-              {#await g.space.sidebarItems.items() then sidebarItems}
-                {@const categories = sidebarItems
-                  .map((x) => x.tryCast(Category))
-                  .filter((x) => !!x)}
-
-                {#each categories as category}
-                  <option value={category.id}>{category.name}</option>
-                {/each}
-              {/await}
-            </select>
-          {/if}
-          <Button.Root class="btn btn-primary">Save Settings</Button.Root>
-        </form>
-
-        <form
-          onsubmit={(e) => {
-            e.preventDefault();
-            if (!g.channel) return;
-            g.channel.softDeleted = true;
-            g.channel.commit();
-            showSettingsDialog = false;
-            navigate({ space: page.params.space! });
-          }}
-          class="flex flex-col gap-3 mt-3"
-        >
-          <h2 class="text-xl font-bold">Danger Zone</h2>
-          <p>
-            Deleting a {g.channel instanceof Channel ? "channel" : "thread"} doesn't
-            delete the data permanently, it just hides the thread from the UI.
-          </p>
-          <Button.Root class="btn btn-error"
-            >Delete {g.channel instanceof Channel
-              ? "Channel"
-              : "Thread"}</Button.Root
-          >
-        </form>
-      </Dialog>
-    {/if}
-  </menu>
-{/snippet}
-
-{#snippet wikiTab()}
-  <WikiEditor />
-{/snippet}
+{/if}

@@ -227,7 +227,7 @@
           >
             <Icon icon="lucide:smile-plus" color="white" />
           </Popover.Trigger>
-          <Popover.Content>
+          <Popover.Content class="z-10">
             <emoji-picker bind:this={emojiRowPicker}></emoji-picker>
           </Popover.Content>
         </Popover.Root>
@@ -311,12 +311,20 @@
           />
         </a>
       {:else}
-        <div class="w-8.5 relative flex items-center justify-center">
-          <span
-            class="opacity-0 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-xs text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100"
-            >{message.createdDate &&
-              format(message.createdDate, "HH:mm:ss")}</span
-          >
+        <div
+          class="w-10 flex items-center justify-center relative group select-none pointer-events-none"
+        >
+          <AvatarImage
+            handle={authorProfile.handle}
+            className="opacity-0 pointer-events-none select-none"
+          />
+          {#if message.createdDate}
+            <span
+              class="opacity-0 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[8px] text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100"
+            >
+               {format(message.createdDate, "pp")}
+            </span>
+          {/if}
         </div>
       {/if}
 
@@ -391,7 +399,7 @@
             <Popover.Trigger class="btn btn-circle">
               <Icon icon="lucide:smile-plus" />
             </Popover.Trigger>
-            <Popover.Content>
+            <Popover.Content class="z-10">
               <emoji-picker bind:this={emojiDrawerPicker}></emoji-picker>
             </Popover.Content>
           </Popover.Root>
@@ -443,7 +451,7 @@
           <Popover.Trigger class="btn btn-ghost btn-square">
             <Icon icon="lucide:smile-plus" />
           </Popover.Trigger>
-          <Popover.Content>
+          <Popover.Content class="z-10">
             <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
           </Popover.Content>
         </Popover.Root>

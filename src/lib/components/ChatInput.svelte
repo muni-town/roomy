@@ -52,9 +52,6 @@
     tiptap = new Editor({
       element,
       extensions,
-      content: untrack(() =>
-        content.type ? content : { type: "doc", children: [] },
-      ),
       editorProps: {
         attributes: {
           class:
