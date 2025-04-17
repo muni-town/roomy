@@ -7,7 +7,6 @@
   import { Button, ToggleGroup } from "bits-ui";
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import { Space } from "@roomy-chat/sdk";
-  // import TooltipPortal from "$lib/components/TooltipPortal.svelte";
   import SidebarSpace from "$lib/components/SidebarSpace.svelte";
   import UserSession from "$lib/components/UserSession.svelte";
   import { page } from "$app/state";
@@ -22,10 +21,6 @@
     spaces: { value: Space[] };
     visible: boolean;
   } = $props();
-
-  // Tooltip state
-  // let activeTooltip = $state("");
-  // let tooltipPosition = $state({ x: 0, y: 0 });
 
   async function createSpace() {
     if (!newSpaceName || !user.agent || !g.roomy) return;
@@ -42,20 +37,12 @@
   }
 </script>
 
-<!--
-<TooltipPortal
-  text={activeTooltip}
-  visible={!!activeTooltip}
-  x={tooltipPosition.x}
-  y={tooltipPosition.y}
-/>
--->
 <!-- Server Bar -->
-<!-- Manually set for transition to w-0 -->
+<!-- Width manually set for transition to w-0 -->
 <aside
   class="flex flex-col justify-between align-center h-full {visible
     ? 'w-[60px] px-1 border-r-2'
-    : 'w-[0]'} py-2 border-base-200 bg-base-300 transition-all duration-100 ease-out"
+    : 'w-[0]'} py-2 border-base-200 bg-base-300 transition-[width] duration-100 ease-out"
   class:opacity-0={!visible}
 >
   <ToggleGroup.Root
