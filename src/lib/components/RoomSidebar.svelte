@@ -8,7 +8,7 @@
   import { Button, Tabs } from "bits-ui";
 
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
-  import ChatMode from "$lib/components/ChatMode.svelte";
+  import SidebarChat from "$lib/components/SidebarChat.svelte";
 
   import { Category, Image } from "@roomy-chat/sdk";
   import UserSession from "./UserSession.svelte";
@@ -17,7 +17,7 @@
   import { user } from "$lib/user.svelte";
   import SidebarIcon from "./SidebarIcon.svelte";
   import { getContext } from "svelte";
-  import IndexMode from "./IndexMode.svelte";
+  import SidebarIndex from "./SidebarIndex.svelte";
   import { AvatarMarble } from "svelte-boring-avatars";
 
   let tab = $state("index");
@@ -246,9 +246,9 @@
     style="scrollbar-width: thin;"
   >
     {#if tab === "index"}
-      <IndexMode {availableThreads} />
+      <SidebarIndex {availableThreads} />
     {:else if tab === "chat" && g.space}
-      <ChatMode {categories} channels={sidebarItems} />
+      <SidebarChat {categories} channels={sidebarItems} />
     {/if}
   </nav>
   <div class="grow"></div>
