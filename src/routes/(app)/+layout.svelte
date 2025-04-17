@@ -1,7 +1,13 @@
 <script lang="ts">
   import "../../app.css";
+  import { browser, dev } from "$app/environment";
+  
   import { onMount, setContext } from "svelte";
-  import { dev } from "$app/environment";
+  import posthog from "posthog-js";
+  import { Toaster } from "svelte-french-toast";
+  import { RenderScan } from "svelte-render-scan";
+  import { Button, ToggleGroup } from "bits-ui";
+  
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { Toaster } from "svelte-french-toast";
@@ -21,8 +27,21 @@
     [],
     async () => (await g.roomy?.spaces.items()) || [],
   );
+
   const isSpacesVisible = Toggle({ value: false, key: "isSpacesVisible" });
   setContext("isSpacesVisible", isSpacesVisible);
+  
+  onMount(async () => {
+    await user.init();
+
+    if (!dev && browser) {
+      posthog.init("phc_j80ksIuoxjfjRI7rPBmTLWx79rntg4Njz6Dixc3I3ik", {
+        api_host: "https://us.i.posthog.com",
+        person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well
+      });
+    }
+  });
+
 </script>
 
 <svelte:head>
