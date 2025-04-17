@@ -76,7 +76,7 @@
       user.agent &&
       message
         .forceCast(Message)
-        .authors.toArray()
+        .authors((x) => x.toArray())
         .includes(user.agent?.assertDid)
   );
 
@@ -98,8 +98,10 @@
 
   function startEditing() {
     if (message instanceof Message) {
+      isEmojiToolbarPickerOpen = false;
       editMessageContent = JSON.parse(message.bodyJson);
-      isEditing = true;
+        isEditing = true;
+
     }
   }
 
@@ -259,6 +261,36 @@
 
     return getContentHtml(schema);
   }
+
+  function getPlainTextContent(content: JSONContent): string {
+    try {
+      if (!content) return "Edit message...";
+      
+      // Extract text from content
+      let text = "";
+      
+      // Handle direct text content
+      if (content.text) {
+        text += content.text;
+      }
+      
+      // Recursively extract text from content array
+      if (content.content && Array.isArray(content.content)) {
+        content.content.forEach(node => {
+          if (node.text) {
+            text += node.text + " ";
+          } else if (node.content) {
+            text += getPlainTextContent(node) + " ";
+          }
+        });
+      }
+      
+      return text.trim() || "Edit message...";
+    } catch (error) {
+      console.error("Error extracting plain text:", error);
+      return "Edit message...";
+    }
+  }
 </script>
 
 <svelte:window onkeydown={onKeydown} onkeyup={onKeyup} />
@@ -409,6 +441,7 @@
               users={users.value || []}
               context={contextItems.value || []}
               onEnter={saveEditedMessage}
+              placeholder={message instanceof Message ? getPlainTextContent(JSON.parse(message.bodyJson)) : "Edit message..."}
             />
           </div>
 
@@ -568,37 +601,38 @@
         {/if}
       </Drawer>
     {:else}
-      <Toolbar.Root
-        class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-base-300 p-1 rounded items-center`}
-      >
-        <Toolbar.Button
-          onclick={() => toggleReaction("👍")}
-          class="btn btn-ghost btn-square"
+      {#if !isEditing}
+        <Toolbar.Root
+          class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-base-300 p-1 rounded items-center`}
         >
-          👍
-        </Toolbar.Button>
-        <Toolbar.Button
-          onclick={() => toggleReaction("😂")}
-          class="btn btn-ghost btn-square"
-        >
-          😂
-        </Toolbar.Button>
-        <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
-          <Popover.Trigger class="btn btn-ghost btn-square">
-            <Icon icon="lucide:smile-plus" />
-          </Popover.Trigger>
-          <Popover.Content class="z-10">
-            <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
-          </Popover.Content>
-        </Popover.Root>
-        {#if mayEdit}
           <Toolbar.Button
-            onclick={() => startEditing()}
+            onclick={() => toggleReaction("👍")}
             class="btn btn-ghost btn-square"
           >
-            <Icon icon="tabler:edit" />
+            👍
           </Toolbar.Button>
-        {/if}
+          <Toolbar.Button
+            onclick={() => toggleReaction("😂")}
+            class="btn btn-ghost btn-square"
+          >
+            😂
+          </Toolbar.Button>
+          <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
+            <Popover.Trigger class="btn btn-ghost btn-square">
+              <Icon icon="lucide:smile-plus" />
+            </Popover.Trigger>
+            <Popover.Content class="z-10">
+              <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
+            </Popover.Content>
+          </Popover.Root>
+          {#if mayEdit}
+            <Toolbar.Button
+              onclick={() => startEditing()}
+              class="btn btn-ghost btn-square"
+            >
+              <Icon icon="tabler:edit" />
+            </Toolbar.Button>
+          {/if}
 
         {#if shiftDown && mayDelete}
           <Toolbar.Button
@@ -609,15 +643,16 @@
           </Toolbar.Button>
         {/if}
 
-        {#if authorProfile && message instanceof Message}
-          <Toolbar.Button
-            onclick={() => setReplyTo(message)}
-            class="btn btn-ghost btn-square"
-          >
-            <Icon icon="fa6-solid:reply" />
-          </Toolbar.Button>
-        {/if}
-      </Toolbar.Root>
+          {#if authorProfile && message instanceof Message}
+            <Toolbar.Button
+              onclick={() => setReplyTo(message)}
+              class="btn btn-ghost btn-square"
+            >
+              <Icon icon="fa6-solid:reply" />
+            </Toolbar.Button>
+          {/if}
+        </Toolbar.Root>
+      {/if}
     {/if}
 
     {#if isThreading.value && message instanceof Message}
