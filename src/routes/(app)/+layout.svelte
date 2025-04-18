@@ -1,11 +1,13 @@
 <script lang="ts">
   import "../../app.css";
   import { onMount } from "svelte";
+  import { browser, dev } from "$app/environment";
+  
+  import posthog from "posthog-js";
   import { Toaster } from "svelte-french-toast";
   import { RenderScan } from "svelte-render-scan";
   import { Button, ToggleGroup } from "bits-ui";
-
-  import { dev } from "$app/environment";
+  
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { cleanHandle, derivePromise, navigate } from "$lib/utils.svelte";
@@ -32,6 +34,16 @@
 
   onMount(async () => {
     await user.init();
+
+    if (!dev && browser) {
+      posthog.init("phc_j80ksIuoxjfjRI7rPBmTLWx79rntg4Njz6Dixc3I3ik", {
+        api_host: "https://us.i.posthog.com",
+        person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well
+      });
+    }
+  });
+
+  $effect(() => {
     if (!user.session) {
       user.isLoginDialogOpen = true;
     }
@@ -41,7 +53,7 @@
     if (!newSpaceName || !user.agent || !g.roomy) return;
     const space = await g.roomy.create(Space);
     space.name = newSpaceName;
-    space.admins((x) => x.push(user.agent!.assertDid));
+    space.admins((x) => user.agent && x.push(user.agent.assertDid));
     space.commit();
 
     g.roomy.spaces.push(space);
