@@ -441,17 +441,7 @@
         <span class="prose select-text">
           {@html getContentHtml(parseMessageContent(msg.bodyJson))}
         </span>
-        <!-- TODO: images. -->
-        <!-- {#if msg.images?.length}
-        <div class="flex flex-wrap gap-2 mt-2">
-          {#each msg.images as image}
-            <img
-              src={image.source}
-              alt={image.alt || ""}
-              class="max-w-md max-h-64 rounded-lg object-cover"
-              loading="lazy"
-
-          <div class="w-full">
+        <div class="w-full">
             <ChatInput
               bind:content={editMessageContent}
               users={users.value || []}

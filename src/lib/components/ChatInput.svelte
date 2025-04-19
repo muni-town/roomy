@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { Editor } from "@tiptap/core";
+  import StarterKit from "@tiptap/starter-kit";
   import Placeholder from "@tiptap/extension-placeholder";
   import Image from "@tiptap/extension-image";
+  import { initUserMention, initSpaceContextMention } from "$lib/tiptap/editor";
   import {
     type Item,
     initKeyboardShortcutHandler,
@@ -36,6 +38,7 @@
     users: JSON.stringify(users),
     context: JSON.stringify(context),
     onEnter: onEnter.toString()
+  });
 
   let extensions = $derived([
     StarterKit.configure({ heading: false }),
@@ -45,7 +48,6 @@
     initSpaceContextMention({ context }),
   ]);
 
-  let tiptap: Editor;
   let hasFocus = false;
 
   onMount(() => {
@@ -102,6 +104,7 @@
       // Insert image into editor with the raw URL
       tiptap.chain().focus().insertContent({
         type: "image",
+        attrs: { src: imageUrl }
       }).run();
       
       // Update content state to ensure persistence
@@ -216,8 +219,6 @@
 
   // First effect: Create/recreate editor when dependencies change
   $effect(() => {
-
-
     if (!element) return;
 
     // Check if dependencies have actually changed
@@ -285,70 +286,16 @@
     const currentContent = tiptap.getJSON();
     const newContent = content.type ? content : { type: "doc", children: [] };
 
-    // Simple check to avoid unnecessary updates
+    // Only update if content is actually different
     if (!isEqual(currentContent, newContent)) {
-      // Use a try-catch to handle potential errors
+      isInternalUpdate = true;
       try {
         tiptap.commands.setContent(newContent);
-      } catch (error) {
-        console.error('Error updating editor content:', error);
+      } finally {
+        setTimeout(() => { isInternalUpdate = false; }, 0);
       }
 
-    // Store focus state and cursor position before destroying
-    const wasFocused = hasFocus;
-    let cursorPos = null;
-    
-    if (tiptap && wasFocused) {
-      try {
-        // Save the current selection state
-        const { from, to } = tiptap.state.selection;
-        cursorPos = { from, to };
-      } catch (e) {
-        console.error("Failed to save cursor position:", e);
-      }
-    }
-    
-    untrack(() => tiptap?.destroy());
-    
-    tiptap = new Editor({
-      element,
-      extensions,
-      content: content.type ? content : { type: "doc", content: [] },
-      editorProps: {
-        attributes: {
-          class:
-            "w-full px-3 py-2 rounded bg-base-300 text-base-content outline-none",
-        },
-      },
-      onUpdate: (ctx) => {
-        content = ctx.editor.getJSON();
-      },
-      onFocus: () => {
-        hasFocus = true;
-      },
-      onBlur: () => {
-        hasFocus = false;
-      },
-    });
-    
-    // Restore focus and cursor position if it was focused before
-    if (wasFocused) {
-      setTimeout(() => {
-        tiptap.commands.focus();
-        
-        // Restore cursor position if we have it
-        if (cursorPos) {
-          try {
-            const { from, to } = cursorPos;
-            const { state, view } = tiptap;
-            const tr = state.tr.setSelection(state.selection.constructor.create(state.doc, from, to));
-            view.dispatch(tr);
-          } catch (e) {
-            console.error("Failed to restore cursor position:", e);
-          }
-        }
-      }, 0);
-
+      // (Optional) Restore focus/cursor logic here if needed
     }
   });
 
