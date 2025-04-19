@@ -22,9 +22,10 @@
     context: Item[];
     onEnter: () => void;
     placeholder?: string;
+    editMode?: boolean; // Add this to indicate if the component is being used for editing
   };
 
-  let { content = $bindable({}), users, context, onEnter, placeholder = "Write something ..." }: Props = $props();
+  let { content = $bindable({}), users, context, onEnter, placeholder = "Write something ...", editMode = false }: Props = $props();
   let element: HTMLDivElement | undefined = $state();
 
   let tiptap: Editor | undefined = $state();
@@ -43,6 +44,11 @@
   let extensions = $derived([
     StarterKit.configure({ heading: false }),
     Placeholder.configure({ placeholder }),
+    Image.configure({
+      HTMLAttributes: {
+        class: 'max-w-[300px] max-h-[300px] object-contain relative',
+      },
+    }),
     initKeyboardShortcutHandler({ onEnter }),
     initUserMention({ users }),
     initSpaceContextMention({ context }),
@@ -106,7 +112,7 @@
         type: "image",
         attrs: { src: imageUrl }
       }).run();
-      
+
       // Update content state to ensure persistence
       content = tiptap.getJSON();
     } catch (error) {
@@ -244,33 +250,52 @@
       // Create new extensions with current users/context/onEnter
       const extensions = [
         ...createCompleteExtensions({ users, context }),
-        Placeholder.configure({ placeholder: "Write something ..." }),
-        initKeyboardShortcutHandler({ onEnter })
+        Placeholder.configure({ placeholder }),
+        initKeyboardShortcutHandler({ onEnter }),
+        // Explicitly add Image extension to ensure it's available for editing messages with images
+        Image.configure({
+          HTMLAttributes: {
+            class: 'max-w-[300px] max-h-[300px] object-contain relative',
+          },
+        })
       ];
       untrack(() => tiptap?.destroy());
       // Initialize the editor
-      tiptap = new Editor({
-        element,
-        extensions,
-        content: content.type ? content : { type: "doc", children: [] },
-        editorProps: {
-          attributes: {
-            class: "w-full px-3 py-2 rounded bg-base-300 text-base-content outline-none",
-          },
-        },
-        onUpdate: (ctx) => {
-          const newContent = ctx.editor.getJSON();
-          if (JSON.stringify(content) !== JSON.stringify(newContent)) {
-            isInternalUpdate = true;
-            content = newContent;
-            // Reset the flag after the update is processed
-            setTimeout(() => {
-              isInternalUpdate = false;
-            }, 0);
-          }
+      try {
+        // Convert content to a plain object if it's a Proxy
+        let initialContent: Record<string, unknown>;
+        try {
+          initialContent = JSON.parse(JSON.stringify(content));
+        } catch (e) {
+          console.warn('Failed to convert initial content to plain object:', e);
+          initialContent = content as Record<string, unknown>;
+        }
 
-        },
-      });
+        tiptap = new Editor({
+          element,
+          extensions,
+          content: initialContent.type ? initialContent : { type: "doc", content: [] },
+          editorProps: {
+            attributes: {
+              class: "w-full px-3 py-2 rounded bg-base-300 text-base-content outline-none",
+            },
+          },
+          onUpdate: (ctx) => {
+            const newContent = ctx.editor.getJSON();
+            if (JSON.stringify(content) !== JSON.stringify(newContent)) {
+              isInternalUpdate = true;
+              content = newContent;
+              // Reset the flag after the update is processed
+              setTimeout(() => {
+                isInternalUpdate = false;
+              }, 0);
+            }
+          },
+        });
+      } catch (error) {
+        console.error('Error initializing editor:', error);
+        toast.error("Failed to initialize editor", { position: "bottom-right" });
+      }
 
       // Ensure fileInput is properly initialized
       if (!fileInput) {
@@ -283,19 +308,33 @@
   $effect(() => {
     if (!tiptap || isInternalUpdate) return;
 
-    const currentContent = tiptap.getJSON();
-    const newContent = content.type ? content : { type: "doc", children: [] };
+    try {
+      const currentContent = tiptap.getJSON();
 
-    // Only update if content is actually different
-    if (!isEqual(currentContent, newContent)) {
-      isInternalUpdate = true;
+      // Convert content to a plain object if it's a Proxy
+      // This is crucial for handling images properly
+      let plainContent: Record<string, unknown>;
       try {
-        tiptap.commands.setContent(newContent);
-      } finally {
-        setTimeout(() => { isInternalUpdate = false; }, 0);
+        // Try to convert to plain object using JSON serialization
+        plainContent = JSON.parse(JSON.stringify(content));
+      } catch (e) {
+        console.warn('Failed to convert content to plain object:', e);
+        plainContent = content as Record<string, unknown>;
       }
 
-      // (Optional) Restore focus/cursor logic here if needed
+      const newContent = plainContent.type ? plainContent : { type: "doc", content: [] };
+
+      // Only update if content is actually different
+      if (!isEqual(currentContent, newContent)) {
+        isInternalUpdate = true;
+        try {
+          tiptap.commands.setContent(newContent);
+        } finally {
+          setTimeout(() => { isInternalUpdate = false; }, 0);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating editor content:', error);
     }
   });
 
@@ -306,40 +345,42 @@
 {#if !g.isBanned}
   <div class="flex items-center gap-2">
     <!-- Plus icon button for image upload -->
-    <button
-      type="button"
-      class="p-1 rounded hover:bg-base-200 disabled:opacity-50 cursor-pointer"
-      aria-label="Upload image"
-      use:handleClick
-      tabindex="-1"
-      disabled={tiptap == null || isUploading}
-      title={isUploading ? "Uploading..." : "Upload image"}
-    >
-      {#if isUploading}
-        <!-- Loading spinner -->
-        <div class="animate-spin h-5 w-5">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    {#if !editMode}
+      <button
+        type="button"
+        class="p-1 rounded hover:bg-base-200 disabled:opacity-50 cursor-pointer"
+        aria-label="Upload image"
+        use:handleClick
+        tabindex="-1"
+        disabled={tiptap == null || isUploading}
+        title={isUploading ? "Uploading..." : "Upload image"}
+      >
+        {#if isUploading}
+          <!-- Loading spinner -->
+          <div class="animate-spin h-5 w-5">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        {:else}
+          <!-- Regular upload icon -->
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <rect x="9" y="4" width="2" height="12" rx="1" fill="currentColor"/>
+            <rect x="4" y="9" width="12" height="2" rx="1" fill="currentColor"/>
           </svg>
-        </div>
-      {:else}
-        <!-- Regular upload icon -->
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-          <rect x="9" y="4" width="2" height="12" rx="1" fill="currentColor"/>
-          <rect x="4" y="9" width="12" height="2" rx="1" fill="currentColor"/>
-        </svg>
-      {/if}
-    </button>
-    <!-- Hidden file input for image upload -->
-    <input
-      type="file"
-      accept="image/*"
-      bind:this={fileInput}
-      class="hidden"
-      use:handleChange
-      tabindex="-1"
-    />
+        {/if}
+      </button>
+      <!-- Hidden file input for image upload -->
+      <input
+        type="file"
+        accept="image/*"
+        bind:this={fileInput}
+        class="hidden"
+        use:handleChange
+        tabindex="-1"
+      />
+    {/if}
     <!-- Tiptap editor -->
     <div
       bind:this={element}
@@ -358,17 +399,19 @@
       {/if}
     </div>
   </div>
-  <div class="flex items-center gap-2 mt-2">
-    <button
-      class="btn btn-primary flex items-center"
-      type="button"
-      onclick={wrappedOnEnter}
-      disabled={tiptap == null}
-      aria-label="Send message"
-    >
-      Send
-    </button>
-  </div>
+  {#if !editMode}
+    <div class="flex items-center gap-2 mt-2">
+      <button
+        class="btn btn-primary flex items-center"
+        type="button"
+        onclick={wrappedOnEnter}
+        disabled={tiptap == null}
+        aria-label="Send message"
+      >
+        Send
+      </button>
+    </div>
+  {/if}
 {:else}
   <div
     class="w-full px-3 py-2 rounded bg-base-300 text-base-content outline-none cursor-not-allowed"
