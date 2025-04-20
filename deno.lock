@@ -8,8 +8,11 @@
     "npm:@blocknote/core@0.25": "0.25.2_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_y-prosemirror@1.2.17__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1__y-protocols@1.0.6___yjs@13.6.24__yjs@13.6.24_prosemirror-model@1.25.0_prosemirror-state@1.4.3_prosemirror-transform@1.10.3_prosemirror-view@1.38.1_shiki@1.29.2_y-protocols@1.0.6__yjs@13.6.24_yjs@13.6.24",
     "npm:@blocknote/react@0.25": "0.25.2_react@19.0.0_react-dom@19.0.0__react@19.0.0_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1",
     "npm:@iconify/svelte@^4.2.0": "4.2.0_svelte@5.25.3__acorn@8.14.1",
-    "npm:@jsr/muni-town__leaf@0.2.0-preview.15": "0.2.0-preview.15_typescript@5.8.2",
-    "npm:@jsr/roomy-chat__sdk@0.1.0-preview.15": "0.1.0-preview.15_typescript@5.8.2",
+    "npm:@jsr/muni-town__leaf-storage-indexeddb@0.1.0-preview.1": "0.1.0-preview.1_typescript@5.8.2",
+    "npm:@jsr/muni-town__leaf-svelte@0.1.0-preview.1": "0.1.0-preview.1",
+    "npm:@jsr/muni-town__leaf-sync-ws@0.1.0-preview.1": "0.1.0-preview.1",
+    "npm:@jsr/muni-town__leaf@0.2.0-preview.16": "0.2.0-preview.16",
+    "npm:@jsr/roomy-chat__sdk@0.1.0-preview.16": "0.1.0-preview.16",
     "npm:@noble/curves@^1.8.1": "1.8.1",
     "npm:@sveltejs/adapter-netlify@^4.4.2": "4.4.2_@sveltejs+kit@2.20.2__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.25.3____acorn@8.14.1___vite@6.2.2____lightningcss@1.29.2__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
     "npm:@sveltejs/adapter-static@^3.0.8": "3.0.8_@sveltejs+kit@2.20.2__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.25.3____acorn@8.14.1___vite@6.2.2____lightningcss@1.29.2__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
@@ -72,14 +75,14 @@
         "@jridgewell/trace-mapping@0.3.25"
       ]
     },
-    "@ark/schema@0.45.9": {
-      "integrity": "sha512-rG0v/JI0sibn/0wERAHTYVLCtEqoMP2IIlxnb+S5DrEjCI5wpubbZSWMDW50tZ8tV6FANu6zzHDeeKbp6lsZdg==",
+    "@ark/schema@0.46.0": {
+      "integrity": "sha512-c2UQdKgP2eqqDArfBqQIJppxJHvNNXuQPeuSPlDML4rjw+f1cu0qAlzOG4b8ujgm9ctIDWwhpyw6gjG5ledIVQ==",
       "dependencies": [
         "@ark/util"
       ]
     },
-    "@ark/util@0.45.9": {
-      "integrity": "sha512-0WYNAb8aRGp7dNt6xIvIrRzL7V1XL3u3PK2vcklhtTrdaP235DjC9qJhzidrxtWr68mA5ySSjUrgrXk622bKkw=="
+    "@ark/util@0.46.0": {
+      "integrity": "sha512-JPy/NGWn/lvf1WmGCPw2VGpBg5utZraE84I7wli18EDF3p3zc/e9WolT35tINeZO3l7C77SjqRJeAUoT0CvMRg=="
     },
     "@atproto-labs/did-resolver@0.1.11": {
       "integrity": "sha512-qXNzIX2GPQnxT1gl35nv/8ErDdc4Fj/+RlJE7oyE7JGkFAPUyuY03TvKJ79SmWFsWE8wyTXEpLuphr9Da1Vhkw==",
@@ -632,23 +635,46 @@
         "@jsr/std__media-types"
       ]
     },
-    "@jsr/muni-town__leaf@0.2.0-preview.15_typescript@5.8.2": {
-      "integrity": "sha512-mIK2ydK6AS+6Q+nBnZs50H9x2RZVQXxrhSdAR65P1a8XvAsai8oFh6Fue/tA05hARntklrmYGw4iiZ06re2PpA==",
+    "@jsr/muni-town__leaf-storage-deno-kv@0.1.0-preview.1": {
+      "integrity": "sha512-Ntdv1s4GjMFSOPMvEpOIR1wCCbH2/03hAyBZMM/iCS9B13u+V3zeX7vt6NqiRTbW1FhkBxN14UcJCVUsHa9UjQ==",
+      "dependencies": [
+        "@jsr/kitsonk__kv-toolbox",
+        "@jsr/muni-town__leaf"
+      ]
+    },
+    "@jsr/muni-town__leaf-storage-indexeddb@0.1.0-preview.1_typescript@5.8.2": {
+      "integrity": "sha512-SH66NwUOkpS3aEjMDTCXraZsa4VcsBcvujbUzELItCT2ieqDU30RHpWGeXTiVJc6DW66BOXGf1F5ET7lgT99VQ==",
       "dependencies": [
         "@automerge/automerge-repo-storage-indexeddb@1.2.1_typescript@5.8.2",
-        "@jsr/kitsonk__kv-toolbox",
-        "@jsr/std__fs",
-        "@jsr/std__path",
+        "@jsr/muni-town__leaf"
+      ]
+    },
+    "@jsr/muni-town__leaf-svelte@0.1.0-preview.1": {
+      "integrity": "sha512-Y1cs6xrz8tw7xSXgYE3a9x4RGdgaHpHOhhpjA/t5ZfWuTKzDXBNFQjuQPHb8hXxTQRIpUrF7WkIrpxzEYFxxyA==",
+      "dependencies": [
+        "@jsr/muni-town__leaf",
+        "svelte@5.28.1_acorn@8.14.1"
+      ]
+    },
+    "@jsr/muni-town__leaf-sync-ws@0.1.0-preview.1": {
+      "integrity": "sha512-EcbUD/VFkWXwITVVqpRNhk8enDh7OjzLCDNBu49ipkStFeqfxD4/zoY2e5oWtUIjgz5xvJgMH6/BOeJthXLDCw==",
+      "dependencies": [
+        "@jsr/muni-town__leaf",
+        "@jsr/muni-town__leaf-storage-deno-kv"
+      ]
+    },
+    "@jsr/muni-town__leaf@0.2.0-preview.16": {
+      "integrity": "sha512-ZErA2u5MNxUxjL3Bb7Dp3vSGta3wvLtih6Nhyde/waSbEdrJ/kjhsx5HUYBmM4FcU24Jg/Q0k+JNzC7dROPoKA==",
+      "dependencies": [
         "@msgpack/msgpack",
         "arktype",
         "base32-decode",
         "base32-encode",
-        "loro-crdt",
-        "svelte@5.25.3_acorn@8.14.1"
+        "loro-crdt"
       ]
     },
-    "@jsr/roomy-chat__sdk@0.1.0-preview.15_typescript@5.8.2": {
-      "integrity": "sha512-FNjc94WdaycRfF5aLL3DrD/ykhtmDasbuQDz+A6hVJNqHMKRkO+gIpWGlt0OOy3DV2tYxEaxs4U8iADYckG7sw==",
+    "@jsr/roomy-chat__sdk@0.1.0-preview.16": {
+      "integrity": "sha512-mhGLrG6PojFrDmJDhBVz4b02ELn+WxONVpzreALsHibHRNwZwLXx2kTupKhl4YYhu0FY4h7H6JWBZ/i3kNM44g==",
       "dependencies": [
         "@jsr/muni-town__leaf"
       ]
@@ -668,20 +694,11 @@
     "@jsr/std__encoding@1.0.9": {
       "integrity": "sha512-Qi+jPntT9SwhbBn3yotEz3sFs1u8QKfVVOUqeQcVYk+m4JaEnVM7OyeFad5DZQXwcfjIHGJwChntr3aYfSIwPg=="
     },
-    "@jsr/std__fs@1.0.10": {
-      "integrity": "sha512-rVH3Y73A2uJMn1XA6NLvJtVYTYNnpHlTFuqrvVVD3AZ8q/Q9h4WL14Us02ThzfZp2SqUhG9bD974vzXA3QIeZA==",
-      "dependencies": [
-        "@jsr/std__path"
-      ]
-    },
     "@jsr/std__internal@1.0.6": {
       "integrity": "sha512-1NLtCx9XAL44nt56gzmRSCgXjIthHVzK62fTkJdq8/XsP7eN9a21AZDpc0EGJ/cgvmmOB52UGh46OuKrrY7eVg=="
     },
     "@jsr/std__media-types@1.1.0": {
       "integrity": "sha512-dHvaxHL7ENWnltgL653uo3KnKFse3ZbopZop2gqsT7yrscx7irZEClu5Cba7gMPPRk4Lg1FbriNcaBViM2RSBw=="
-    },
-    "@jsr/std__path@1.0.8": {
-      "integrity": "sha512-eNBGlh/8ZVkMxtFH4bwIzlAeKoHYk5in4wrBZhi20zMdOiuX4QozP4+19mIXBT2lzHDjhuVLyECbhFeR304iDg=="
     },
     "@melt-ui/svelte@0.76.2_svelte@4.2.19": {
       "integrity": "sha512-7SbOa11tXUS95T3fReL+dwDs5FyJtCEqrqG3inRziDws346SYLsxOQ6HmX+4BkIsQh1R8U3XNa+EMmdMt38lMA==",
@@ -1571,8 +1588,8 @@
     "aria-query@5.3.2": {
       "integrity": "sha512-COROpnaoap1E2F000S62r6A60uHZnmlvomhfyT2DlTcrY1OrBKn2UhH7qn5wTC9zMvD0AY7csdPSNwKP+7WiQw=="
     },
-    "arktype@2.1.19": {
-      "integrity": "sha512-notORSuTSpfLV7rq0kYC4mTgIVlVR0xQuvtFxOaE9aKiXyON/kgoIBwZZcKeSSb4BebNcfJoGlxJicAUl/HMdw==",
+    "arktype@2.1.20": {
+      "integrity": "sha512-IZCEEXaJ8g+Ijd59WtSYwtjnqXiwM8sWQ5EjGamcto7+HVN9eK0C4p0zDlCuAwWhpqr6fIBkxPuYDl4/Mcj/+Q==",
       "dependencies": [
         "@ark/schema",
         "@ark/util"
@@ -1932,6 +1949,12 @@
     },
     "esrap@1.4.5": {
       "integrity": "sha512-CjNMjkBWWZeHn+VX+gS8YvFwJ5+NDhg8aWZBSFJPR8qQduDNjbJodA2WcwCm7uQa5Rjqj+nZvVmceg1RbHFB9g==",
+      "dependencies": [
+        "@jridgewell/sourcemap-codec"
+      ]
+    },
+    "esrap@1.4.6": {
+      "integrity": "sha512-F/D2mADJ9SHY3IwksD4DAXjTt7qt7GWUf3/8RhCNWmC/67tyb55dpimHmy7EplakFaflV0R/PC+fdSPqrRHAQw==",
       "dependencies": [
         "@jridgewell/sourcemap-codec"
       ]
@@ -3569,7 +3592,26 @@
         "axobject-query",
         "clsx",
         "esm-env",
-        "esrap",
+        "esrap@1.4.5",
+        "is-reference",
+        "locate-character",
+        "magic-string",
+        "zimmerframe"
+      ]
+    },
+    "svelte@5.28.1_acorn@8.14.1": {
+      "integrity": "sha512-iOa9WmfNG95lSOSJdMhdjJ4Afok7IRAQYXpbnxhd5EINnXseG0GVa9j6WPght4eX78XfFez45Fi+uRglGKPV/Q==",
+      "dependencies": [
+        "@ampproject/remapping",
+        "@jridgewell/sourcemap-codec",
+        "@sveltejs/acorn-typescript",
+        "@types/estree",
+        "acorn",
+        "aria-query",
+        "axobject-query",
+        "clsx",
+        "esm-env",
+        "esrap@1.4.6",
         "is-reference",
         "locate-character",
         "magic-string",
@@ -4021,8 +4063,11 @@
         "npm:@blocknote/core@0.25",
         "npm:@blocknote/react@0.25",
         "npm:@iconify/svelte@^4.2.0",
-        "npm:@jsr/muni-town__leaf@0.2.0-preview.15",
-        "npm:@jsr/roomy-chat__sdk@0.1.0-preview.15",
+        "npm:@jsr/muni-town__leaf-storage-indexeddb@0.1.0-preview.1",
+        "npm:@jsr/muni-town__leaf-svelte@0.1.0-preview.1",
+        "npm:@jsr/muni-town__leaf-sync-ws@0.1.0-preview.1",
+        "npm:@jsr/muni-town__leaf@0.2.0-preview.16",
+        "npm:@jsr/roomy-chat__sdk@0.1.0-preview.16",
         "npm:@noble/curves@^1.8.1",
         "npm:@sveltejs/adapter-netlify@^4.4.2",
         "npm:@sveltejs/adapter-static@^3.0.8",
