@@ -216,3 +216,5 @@ export function getContentHtml(content: JSONContent) {
     throw e;
   }
 }
+
+export { suggestion };
