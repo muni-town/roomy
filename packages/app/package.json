@@ -24,6 +24,7 @@
     "lint-staged": "lint-staged"
   },
   "devDependencies": {
+    "@zip-js/zip-js": "jsr:@zip-js/zip-js@2.7.59",
     "@atproto/api": "^0.14.9",
     "@atproto/lexicon": "^0.4.5",
     "@atproto/oauth-client-browser": "^0.3.7",
@@ -31,10 +32,10 @@
     "@blocknote/core": "^0.25.0",
     "@blocknote/react": "^0.25.0",
     "@iconify/svelte": "^4.2.0",
-    "@muni-town/leaf": "^0.2.0-preview.19",
-    "@muni-town/leaf-storage-indexeddb": "^0.1.0-preview.4",
-    "@muni-town/leaf-svelte": "^0.1.0-preview.4",
-    "@muni-town/leaf-sync-ws": "^0.1.0-preview.4",
+    "@muni-town/leaf": "^0.2.0-preview.20",
+    "@muni-town/leaf-storage-indexeddb": "^0.1.0-preview.5",
+    "@muni-town/leaf-svelte": "^0.1.0-preview.5",
+    "@muni-town/leaf-sync-ws": "^0.1.0-preview.6",
     "@noble/curves": "^1.8.1",
     "@repo/tsconfig": "workspace:*",
     "@roomy-chat/sdk": "workspace:*",

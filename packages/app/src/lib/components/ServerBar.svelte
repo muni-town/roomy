@@ -12,6 +12,7 @@
   import { cleanHandle } from "$lib/utils.svelte";
   import { atproto } from "$lib/atproto.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
+  import { env } from "$env/dynamic/public";
 
   let {
     spaces,
@@ -131,6 +132,18 @@
   </div>
 
   <section class="flex flex-col items-center gap-2 p-0">
+    <!-- Only expose Discord import in dev with a flag for now. -->
+    {#if env.PUBLIC_ENABLE_DISCORD_IMPORT == "true"}
+      <Button.Root
+        title="Import Discord Archive"
+        class="p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
+        disabled={!user.session}
+        href="/discord-import"
+      >
+        <Icon icon="mdi:folder-upload-outline" font-size="1.8em" />
+      </Button.Root>
+    {/if}
+
     <ThemeSelector />
     <Dialog
       title={user.session ? "Log Out" : "Create Account or Log In"}

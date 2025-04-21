@@ -24,6 +24,6 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@muni-town/leaf": "0.2.0-preview.19"
+    "@muni-town/leaf": "0.2.0-preview.20"
   }
 }

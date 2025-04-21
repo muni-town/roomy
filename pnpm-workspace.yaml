@@ -5,3 +5,10 @@ onlyBuiltDependencies:
   - cbor-extract
   - core-js
   - esbuild
+
+# Uncomment the below for doing local dev with Leaf.
+# overrides:
+#   "@muni-town/leaf": link:../leaf/packages/leaf
+#   "@muni-town/leaf-svelte": link:../leaf/packages/leaf-svelte
+#   "@muni-town/leaf-storage-indexeddb": link:../leaf/packages/leaf-storage-indexeddb
+#   "@muni-town/leaf-sync-ws": link:../leaf/packages/leaf-sync-ws

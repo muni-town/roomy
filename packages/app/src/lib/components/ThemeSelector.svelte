@@ -55,6 +55,7 @@
 >
   <Select.Trigger
     class="w-full flex justify-center items-center aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
+    title="theme"
   >
     <Icon icon="material-symbols:palette-outline" class="size-6" />
   </Select.Trigger>
