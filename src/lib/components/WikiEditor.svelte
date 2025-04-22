@@ -827,7 +827,8 @@
       {/if}
       {#if g.isAdmin}
         <button
-          class="absolute right-0 btn btn-error btn-xs delete-button hidden group-hover:block"
+          class="btn btn-error delete-btn group-hover:block"
+          class:hidden={selectedWiki !== wiki}
           onclick={(e) => showDeleteDialog(wiki, e)}
         >
           <Icon icon="tabler:trash" />
