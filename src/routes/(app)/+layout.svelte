@@ -5,8 +5,6 @@
   import { onMount, setContext } from "svelte";
   import posthog from "posthog-js";
   import { Toaster } from "svelte-french-toast";
-  import { RenderScan } from "svelte-render-scan";
-  import { Button, ToggleGroup } from "bits-ui";
 
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
