@@ -20,7 +20,7 @@
   import SidebarIndex from "./SidebarIndex.svelte";
   import { AvatarMarble } from "svelte-boring-avatars";
 
-  let tab = $state("index");
+  let tab = $state("board");
 
   let availableThreads = derivePromise([], async () =>
     ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
@@ -229,15 +229,21 @@
   <!-- Index Chat Toggle -->
   <Tabs.Root bind:value={tab} class="px-2">
     <Tabs.List class="flex w-full rounded-lg tabs-box">
-      <Tabs.Trigger value="index" class="grow tab flex gap-2">
-        <Icon icon="material-symbols:info-rounded" class="text-2xl" />
+      <Tabs.Trigger value="board" class="grow tab flex gap-2">
+        <Icon
+          icon="tabler:clipboard-text{tab === 'board' ? '-filled' : ''}"
+          class="text-2xl"
+        />
       </Tabs.Trigger>
       <Tabs.Trigger
         disabled={!g.roomy}
         value="chat"
         class="grow tab flex gap-2"
       >
-        <Icon icon="tabler:message" class="text-2xl" />
+        <Icon
+          icon="tabler:message{tab === 'chat' ? '-filled' : ''}"
+          class="text-2xl"
+        />
       </Tabs.Trigger>
     </Tabs.List>
   </Tabs.Root>
@@ -245,7 +251,7 @@
     class="min-h-0 overflow-y-auto p-2 flex flex-col gap-4 w-full"
     style="scrollbar-width: thin;"
   >
-    {#if tab === "index"}
+    {#if tab === "board"}
       <SidebarIndex {availableThreads} />
     {:else if tab === "chat" && g.space}
       <SidebarChat {categories} channels={sidebarItems} />

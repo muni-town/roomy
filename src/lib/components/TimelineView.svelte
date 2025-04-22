@@ -263,13 +263,19 @@
     >
       <Tabs.List class="tabs tabs-box">
         <Tabs.Trigger value="board" class="tab flex gap-2">
-          <Icon icon="tabler:clipboard" class="text-2xl" />
+          <Icon
+            icon="tabler:clipboard-text{tab === 'board' ? '-filled' : ''}"
+            class="text-2xl"
+          />
           {#if !isMobile}
             <p>Board</p>
           {/if}
         </Tabs.Trigger>
         <Tabs.Trigger value="chat" class="tab flex gap-2">
-          <Icon icon="tabler:message" class="text-2xl" />
+          <Icon
+            icon="tabler:message{tab === 'chat' ? '-filled' : ''}"
+            class="text-2xl"
+          />
           {#if !isMobile}
             <p>Chat</p>
           {/if}
