@@ -287,8 +287,8 @@
 <div class="divider my-0"></div>
 
 {#if tab === "board"}
-  <ThreadsTab />
   <WikiEditor />
+  <ThreadsTab />
 {:else if tab === "chat" || g.channel instanceof Thread}
   {#if g.space && g.channel}
     <ChatArea timeline={g.channel.forceCast(Timeline)} />

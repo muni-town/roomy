@@ -12,13 +12,18 @@
   );
 </script>
 
+<div class="flex justify-between items-center">
+  <h3 class="text-xl font-bold text-base-content">Topics</h3>
+</div>
 <ul class="list w-full join join-vertical">
   {#each relatedThreads.value as thread}
     <a href={`/${page.params.space}/thread/${thread.id}`}>
-      <li class="list-row join-item flex items-center w-full bg-base-200">
-        <h3 class="card-title text-md font-medium text-content-primary">
+      <li
+        class="list-row join-item flex items-center w-full bg-base-200 card-title text-md text-content-primary"
+      >
+        <span>
           {thread.name}
-        </h3>
+        </span>
         {#if thread.createdDate}
           {@const formattedDate = isToday(thread.createdDate)
             ? "Today"
