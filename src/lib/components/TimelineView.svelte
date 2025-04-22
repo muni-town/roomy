@@ -31,7 +31,7 @@
   let users: { value: Item[] } = getContext("users");
   let contextItems: { value: Item[] } = getContext("contextItems");
 
-  let tab = $state<"chat" | "board">("board");
+  let tab = $state<"chat" | "board">("chat");
 
   // Initialize tab based on hash if present
   function updateTabFromHash() {
