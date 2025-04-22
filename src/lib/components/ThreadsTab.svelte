@@ -13,25 +13,23 @@
 </script>
 
 <ul class="list w-full join join-vertical">
-  {#if relatedThreads.value.length > 0}
-    {#each relatedThreads.value as thread}
-      <a href={`/${page.params.space}/thread/${thread.id}`}>
-        <li class="list-row join-item flex items-center w-full bg-base-200">
-          <h3 class="card-title text-xl font-medium text-primary">
-            {thread.name}
-          </h3>
-          {#if thread.createdDate}
-            {@const formattedDate = isToday(thread.createdDate)
-              ? "Today"
-              : format(thread.createdDate, "P")}
-            <time class="text-xs">
-              {formattedDate}, {format(thread.createdDate, "pp")}
-            </time>
-          {/if}
-        </li>
-      </a>
-    {/each}
+  {#each relatedThreads.value as thread}
+    <a href={`/${page.params.space}/thread/${thread.id}`}>
+      <li class="list-row join-item flex items-center w-full bg-base-200">
+        <h3 class="card-title text-md font-medium text-content-primary">
+          {thread.name}
+        </h3>
+        {#if thread.createdDate}
+          {@const formattedDate = isToday(thread.createdDate)
+            ? "Today"
+            : format(thread.createdDate, "P")}
+          <time class="text-xs">
+            {formattedDate}, {format(thread.createdDate, "pp")}
+          </time>
+        {/if}
+      </li>
+    </a>
   {:else}
     No threads for this channel.
-  {/if}
+  {/each}
 </ul>
