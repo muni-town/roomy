@@ -33,13 +33,13 @@
   let users: { value: Item[] } = getContext("users");
   let contextItems: { value: Item[] } = getContext("contextItems");
 
-  let tab = $state<"chat" | "threads" | "wiki">("chat");
+  let tab = $state<"chat" | "board">("board");
 
   // Initialize tab based on hash if present
   function updateTabFromHash() {
     const hash = window.location.hash.replace("#", "");
-    if (hash === "chat" || hash === "threads" || hash === "wiki") {
-      tab = hash as "chat" | "threads" | "wiki";
+    if (hash === "chat" || hash === "board") {
+      tab = hash as "chat" | "board";
     }
   }
 
@@ -264,25 +264,16 @@
       class={isMobile ? "navbar-end" : "navbar-center"}
     >
       <Tabs.List class="tabs tabs-box">
+        <Tabs.Trigger value="board" class="tab flex gap-2">
+          <Icon icon="tabler:clipboard" class="text-2xl" />
+          {#if !isMobile}
+            <p>Board</p>
+          {/if}
+        </Tabs.Trigger>
         <Tabs.Trigger value="chat" class="tab flex gap-2">
           <Icon icon="tabler:message" class="text-2xl" />
           {#if !isMobile}
             <p>Chat</p>
-          {/if}
-        </Tabs.Trigger>
-        <Tabs.Trigger value="threads" class="tab flex gap-2">
-          <Icon
-            icon="material-symbols:thread-unread-rounded"
-            class="text-2xl"
-          />
-          {#if !isMobile}
-            <p>Threads</p>
-          {/if}
-        </Tabs.Trigger>
-        <Tabs.Trigger value="wiki" class="tab flex gap-2">
-          <Icon icon="tabler:notebook" class="text-2xl" />
-          {#if !isMobile}
-            <p>Wiki</p>
           {/if}
         </Tabs.Trigger>
       </Tabs.List>
@@ -297,9 +288,8 @@
 </header>
 <div class="divider my-0"></div>
 
-{#if tab === "threads"}
+{#if tab === "board"}
   <ThreadsTab />
-{:else if tab === "wiki"}
   <WikiEditor />
 {:else if tab === "chat" || g.channel instanceof Thread}
   {#if g.space && g.channel}
