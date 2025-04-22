@@ -1,16 +1,15 @@
 <script lang="ts">
   import "../../app.css";
   import { browser, dev } from "$app/environment";
-  
+
   import { onMount, setContext } from "svelte";
   import posthog from "posthog-js";
   import { Toaster } from "svelte-french-toast";
   import { RenderScan } from "svelte-render-scan";
   import { Button, ToggleGroup } from "bits-ui";
-  
+
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
-  import { Toaster } from "svelte-french-toast";
   import { RenderScan } from "svelte-render-scan";
 
   let { children } = $props();
@@ -30,7 +29,7 @@
 
   const isSpacesVisible = Toggle({ value: false, key: "isSpacesVisible" });
   setContext("isSpacesVisible", isSpacesVisible);
-  
+
   onMount(async () => {
     await user.init();
 
@@ -41,7 +40,6 @@
       });
     }
   });
-
 </script>
 
 <svelte:head>
