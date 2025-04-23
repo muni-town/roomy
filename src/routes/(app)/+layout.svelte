@@ -2,12 +2,12 @@
   import "../../app.css";
   import { onMount } from "svelte";
   import { browser, dev } from "$app/environment";
-  
+
   import posthog from "posthog-js";
   import { Toaster } from "svelte-french-toast";
   import { RenderScan } from "svelte-render-scan";
   import { Button, ToggleGroup } from "bits-ui";
-  
+
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { cleanHandle, derivePromise, navigate } from "$lib/utils.svelte";
@@ -46,11 +46,6 @@
     }
   });
 
-  $effect(() => {
-    if (userInitComplete && !user.session) {
-      user.isLoginDialogOpen = true;
-    }
-  });
 
   async function createSpace() {
     if (!newSpaceName || !user.agent || !g.roomy) return;
