@@ -350,7 +350,7 @@
           {#snippet dialogTrigger()}
             <Button.Root
               title="Space Settings"
-              class="btn w-full justify-start join-item text-base-content"
+              class="dz-btn w-full justify-start dz-join-item text-base-content"
             >
               <Icon icon="lucide:settings" class="size-6" />
             </Button.Root>
@@ -362,7 +362,8 @@
                 <span class="label">Name</span>
                 <input bind:value={spaceNameInput} placeholder="My Space" />
               </label>
-              <Button.Root class="btn btn-primary w-full">Save Name</Button.Root
+              <Button.Root class="dz-btn dz-btn-primary w-full"
+                >Save Name</Button.Root
               >
             </form>
 
@@ -395,7 +396,7 @@
                   </div>
 
                   <div class="flex flex-col gap-2">
-                    <label class="btn btn-sm btn-outline">
+                    <label class="dz-btn dz-btn-sm dz-btn-outline">
                       <input
                         type="file"
                         accept="image/*"
@@ -407,7 +408,7 @@
                     {#if avatarFile}
                       <Button.Root
                         type="button"
-                        class="btn btn-sm btn-outline btn-error"
+                        class="dz-btn dz-btn-sm dz-btn-outline dz-btn-error"
                         onclick={() => {
                           avatarFile = null;
                           avatarPreviewUrl = "";
@@ -421,11 +422,11 @@
 
                 {#if avatarFile}
                   <Button.Root
-                    class="btn btn-primary"
+                    class="dz-btn dz-btn-primary"
                     disabled={uploadingAvatar}
                   >
                     {#if uploadingAvatar}
-                      <span class="loading loading-spinner"></span>
+                      <span class="dz-loading dz-loading-spinner"></span>
                     {/if}
                     Upload Avatar
                   </Button.Root>
@@ -492,11 +493,11 @@
               {/if}
 
               <Button.Root
-                class="btn btn-primary"
+                class="dz-btn dz-btn-primary"
                 bind:disabled={saveSpaceLoading}
               >
                 {#if saveSpaceLoading}
-                  <span class="loading loading-spinner"></span>
+                  <span class="dz-loading dz-loading-spinner"></span>
                 {/if}
                 {!!newSpaceHandle ? "Verify" : "Save Without Handle"}
               </Button.Root>
@@ -519,7 +520,7 @@
               </div>
 
               <Button.Root
-                class="btn btn-primary w-full"
+                class="dz-btn dz-btn-primary w-full"
                 bind:disabled={saveSpaceLoading}
               >
                 Save Bans
@@ -533,12 +534,12 @@
     <div class="divider my-0"></div>
 
     {#if g.isAdmin}
-      <menu class="menu p-0 w-full justify-between join join-vertical">
+      <menu class="dz-menu p-0 w-full justify-between dz-join dz-join-vertical">
         <Dialog title="Create Channel" bind:isDialogOpen={showNewChannelDialog}>
           {#snippet dialogTrigger()}
             <Button.Root
               title="Create Channel"
-              class="btn w-full justify-start join-item text-base-content"
+              class="dz-btn w-full justify-start dz-join-item text-base-content"
             >
               <Icon icon="basil:comment-plus-solid" class="size-6" />
               Create Channel
@@ -559,7 +560,7 @@
                 {/each}
               </select>
             </label>
-            <Button.Root class="btn btn-primary">
+            <Button.Root class="dz-btn dz-btn-primary">
               <Icon icon="basil:add-outline" font-size="1.8em" />
               Create Channel
             </Button.Root>
@@ -572,7 +573,7 @@
         >
           {#snippet dialogTrigger()}
             <Button.Root
-              class="btn w-full justify-start join-item text-base-content"
+              class="dz-btn w-full justify-start dz-join-item text-base-content"
               title="Create Category"
             >
               <Icon icon="basil:folder-plus-solid" class="size-6" />
@@ -585,7 +586,7 @@
               <span class="label">Name</span>
               <input bind:value={newCategoryName} placeholder="Discussions" />
             </label>
-            <Button.Root class="btn btn-primary">
+            <Button.Root class="dz-btn dz-btn-primary">
               <Icon icon="basil:add-outline" font-size="1.8em" />
               Create Category
             </Button.Root>
@@ -664,7 +665,7 @@
 
   <!-- If there is no space. -->
 {:else}
-  <span class="loading loading-spinner mx-auto w-25"></span>
+  <span class="dz-loading dz-loading-spinner mx-auto w-25"></span>
 {/if}
 
 {#snippet channelsSidebar()}
@@ -691,7 +692,7 @@
                   {#snippet dialogTrigger()}
                     <Button.Root
                       title="Channel Settings"
-                      class="cursor-pointer btn btn-ghost btn-circle"
+                      class="cursor-pointer dz-btn dz-btn-ghost dz-btn-circle"
                       onclick={() => {
                         editingCategory = category;
                         categoryNameInput = item.name;
@@ -714,7 +715,7 @@
                     </label>
                     <Button.Root
                       disabled={!categoryNameInput}
-                      class="btn btn-primary"
+                      class="dz-btn dz-btn-primary"
                     >
                       Save Category
                     </Button.Root>
@@ -747,7 +748,7 @@
                                 channel: channelId,
                               })}
                             value={channelId}
-                            class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
+                            class="w-full cursor-pointer px-1 dz-btn dz-btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
                           >
                             <h3
                               class="flex justify-start items-center gap-2 px-2"
@@ -773,7 +774,7 @@
               channel: item.id,
             })}
           value={item.id}
-          class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
+          class="w-full cursor-pointer px-1 dz-btn dz-btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
         >
           <h3 class="flex justify-start items-center gap-2 px-2">
             <Icon icon="basil:comment-solid" />
@@ -792,7 +793,7 @@
         onclick={() =>
           navigate({ space: page.params.space!, thread: thread.id })}
         value={thread.id}
-        class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
+        class="w-full cursor-pointer px-1 dz-btn dz-btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
       >
         <h3 class="flex justify-start items-center gap-2 px-2">
           <Icon icon="material-symbols:thread-unread-rounded" />

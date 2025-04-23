@@ -45,7 +45,7 @@
             <Dialog.Title class="text-xl font-bold">
               {title}
             </Dialog.Title>
-            <Dialog.Close class="btn btn-circle">
+            <Dialog.Close class="dz-btn dz-btn-circle">
               <Icon icon="zondicons:close-solid" />
             </Dialog.Close>
           </header>

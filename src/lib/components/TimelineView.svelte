@@ -231,8 +231,8 @@
   */
 </script>
 
-<header class="navbar">
-  <div class="navbar-start flex gap-4">
+<header class="dz-navbar">
+  <div class="dz-navbar-start flex gap-4">
     {#if g.channel}
       {#if isMobile}
         <Button.Root
@@ -262,16 +262,16 @@
   {#if g.channel instanceof Channel}
     <Tabs.Root
       bind:value={tab}
-      class={isMobile ? "navbar-end" : "navbar-center"}
+      class={isMobile ? "dz-navbar-end" : "dz-navbar-center"}
     >
-      <Tabs.List class="tabs tabs-box">
-        <Tabs.Trigger value="chat" class="tab flex gap-2">
+      <Tabs.List class="dz-tabs dz-tabs-box">
+        <Tabs.Trigger value="chat" class="dz-tab flex gap-2">
           <Icon icon="tabler:message" class="text-2xl" />
           {#if !isMobile}
             <p>Chat</p>
           {/if}
         </Tabs.Trigger>
-        <Tabs.Trigger value="threads" class="tab flex gap-2">
+        <Tabs.Trigger value="threads" class="dz-tab flex gap-2">
           <Icon
             icon="material-symbols:thread-unread-rounded"
             class="text-2xl"
@@ -280,7 +280,7 @@
             <p>Threads</p>
           {/if}
         </Tabs.Trigger>
-        <Tabs.Trigger value="wiki" class="tab flex gap-2">
+        <Tabs.Trigger value="wiki" class="dz-tab flex gap-2">
           <Icon icon="tabler:notebook" class="text-2xl" />
           {#if !isMobile}
             <p>Wiki</p>
@@ -291,7 +291,7 @@
   {/if}
 
   {#if !isMobile}
-    <div class="navbar-end">
+    <div class="dz-navbar-end">
       <TimelineToolbar {createThread} bind:threadTitleInput />
     </div>
   {/if}
@@ -331,14 +331,14 @@
               <Button.Root
                 type="button"
                 onclick={() => (replyingTo = undefined)}
-                class="btn btn-circle btn-ghost"
+                class="dz-btn dz-btn-circle dz-btn-ghost"
               >
                 <Icon icon="zondicons:close-solid" />
               </Button.Root>
             </div>
           {/if}
           <div class="relative">
-            <!-- TODO: get all users that has joined the server -->
+            <!-- TODO: get all users that has dz-joined the server -->
             {#if g.roomy && g.roomy.spaces.ids().includes(g.space.id)}
               <ChatInput
                 bind:content={messageInput}
@@ -348,13 +348,13 @@
               />
             {:else}
               <Button.Root
-                class="w-full btn"
+                class="w-full dz-btn"
                 onclick={() => {
                   if (g.space && g.roomy) {
                     g.roomy.spaces.push(g.space);
                     g.roomy.commit();
                   }
-                }}>Join Space To Chat</Button.Root
+                }}>join Space To Chat</Button.Root
               >
             {/if}
 

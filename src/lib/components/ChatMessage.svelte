@@ -77,7 +77,7 @@
       message
         .forceCast(Message)
         .authors((x) => x.toArray())
-        .includes(user.agent?.assertDid)
+        .includes(user.agent?.assertDid),
   );
 
   const selectMessage = getContext("selectMessage") as (
@@ -100,13 +100,15 @@
     if (message instanceof Message) {
       isEmojiToolbarPickerOpen = false;
       editMessageContent = JSON.parse(message.bodyJson);
-        isEditing = true;
-
+      isEditing = true;
     }
   }
 
   function saveEditedMessage() {
-    if (message instanceof Message && Object.keys(editMessageContent).length > 0) {
+    if (
+      message instanceof Message &&
+      Object.keys(editMessageContent).length > 0
+    ) {
       // Update the message
       message.bodyJson = JSON.stringify(editMessageContent);
 
@@ -134,9 +136,9 @@
     // @ts-ignore - Access custom property
     if (msg.updatedDate) {
       // @ts-ignore - Access custom property
-      return format(msg.updatedDate, 'PPpp');
+      return format(msg.updatedDate, "PPpp");
     }
-    return '';
+    return "";
   }
 
   function onEmojiPick(event: Event & { detail: { unicode: string } }) {
@@ -265,18 +267,18 @@
   function getPlainTextContent(content: JSONContent): string {
     try {
       if (!content) return "Edit message...";
-      
+
       // Extract text from content
       let text = "";
-      
+
       // Handle direct text content
       if (content.text) {
         text += content.text;
       }
-      
+
       // Recursively extract text from content array
       if (content.content && Array.isArray(content.content)) {
-        content.content.forEach(node => {
+        content.content.forEach((node) => {
           if (node.text) {
             text += node.text + " ";
           } else if (node.content) {
@@ -284,7 +286,7 @@
           }
         });
       }
-      
+
       return text.trim() || "Edit message...";
     } catch (error) {
       console.error("Error extracting plain text:", error);
@@ -346,7 +348,7 @@
         </section>
 
         <p
-          class="text-sm italic prose-invert prose min-w-0 max-w-full overflow-hidden text-ellipsis"
+          class="text-sm italic dz-prose dz-prose-invert min-w-0 max-w-full overflow-hidden text-ellipsis"
         >
           {@html getAnnouncementHtml(announcement)}
         </p>
@@ -363,7 +365,7 @@
         >
           <Icon icon="prime:reply" width="12px" height="12px" />
           <p
-            class="text-sm italic prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
+            class="text-sm italic dz-prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
           >
             {@html getAnnouncementHtml(announcement)}
           </p>
@@ -412,7 +414,7 @@
             <span
               class="opacity-0 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[8px] text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100"
             >
-               {format(message.createdDate, "pp")}
+              {format(message.createdDate, "pp")}
             </span>
           {/if}
         </div>
@@ -441,20 +443,22 @@
               users={users.value || []}
               context={contextItems.value || []}
               onEnter={saveEditedMessage}
-              placeholder={message instanceof Message ? getPlainTextContent(JSON.parse(message.bodyJson)) : "Edit message..."}
+              placeholder={message instanceof Message
+                ? getPlainTextContent(JSON.parse(message.bodyJson))
+                : "Edit message..."}
             />
           </div>
 
           <div class="flex justify-end gap-2 mt-2">
             <Button.Root
               onclick={cancelEditing}
-              class="btn btn-sm btn-ghost"
+              class="dz-btn dz-btn-sm dz-btn-ghost"
             >
               Cancel
             </Button.Root>
             <Button.Root
               onclick={saveEditedMessage}
-              class="btn btn-sm btn-primary"
+              class="dz-btn dz-btn-sm dz-btn-primary"
             >
               Save
             </Button.Root>
@@ -485,27 +489,35 @@
           {/if}
 
           <div class="flex flex-col gap-1">
-            <span class="prose select-text">
+            <span class="dz-prose select-text">
               {@html getContentHtml(JSON.parse(msg.bodyJson))}
             </span>
 
             {#if isMessageEdited(msg)}
               <div class="relative group/edit">
-                <span class="text-xs text-gray-400 italic flex items-center gap-1 hover:text-gray-300 cursor-default">
+                <span
+                  class="text-xs text-gray-400 italic flex items-center gap-1 hover:text-gray-300 cursor-default"
+                >
                   <Icon icon="mdi:pencil" width="12px" height="12px" />
                   <span>edited</span>
                 </span>
 
                 <!-- Tooltip that appears on hover -->
-                <div class="absolute bottom-full left-0 mb-2 opacity-0 group-hover/edit:opacity-100 transition-opacity duration-200 bg-base-300 p-3 rounded shadow-lg text-xs z-10 min-w-[200px]">
+                <div
+                  class="absolute bottom-full left-0 mb-2 opacity-0 group-hover/edit:opacity-100 transition-opacity duration-200 bg-base-300 p-3 rounded shadow-lg text-xs z-10 min-w-[200px]"
+                >
                   <div class="flex flex-col gap-1">
                     <p class="font-semibold">Message edited</p>
-                    <p>Original: {format(msg.createdDate || new Date(), 'PPpp')}</p>
+                    <p>
+                      Original: {format(msg.createdDate || new Date(), "PPpp")}
+                    </p>
                     <p>Edited: {getEditedTime(msg)}</p>
                   </div>
 
                   <!-- Arrow pointing down -->
-                  <div class="absolute -bottom-1 left-3 w-2 h-2 bg-base-300 rotate-45"></div>
+                  <div
+                    class="absolute -bottom-1 left-3 w-2 h-2 bg-base-300 rotate-45"
+                  ></div>
                 </div>
               </div>
             {/if}
@@ -539,7 +551,7 @@
               toggleReaction("👍");
               isDrawerOpen = false;
             }}
-            class="btn btn-circle"
+            class="dz-btn dz-btn-circle"
           >
             👍
           </Button.Root>
@@ -548,12 +560,12 @@
               toggleReaction("😂");
               isDrawerOpen = false;
             }}
-            class="btn btn-circle"
+            class="dz-btn dz-btn-circle"
           >
             😂
           </Button.Root>
           <Popover.Root bind:open={isEmojiDrawerPickerOpen}>
-            <Popover.Trigger class="btn btn-circle">
+            <Popover.Trigger class="dz-btn dz-btn-circle">
               <Icon icon="lucide:smile-plus" />
             </Popover.Trigger>
             <Popover.Content class="z-10">
@@ -563,14 +575,14 @@
         </div>
 
         {#if authorProfile}
-          <div class="join join-vertical w-full">
+          <div class="dz-join dz-join-vertical w-full">
             {#if message instanceof Message}
               <Button.Root
                 onclick={() => {
                   setReplyTo(message);
                   isDrawerOpen = false;
                 }}
-                class="join-item btn w-full"
+                class="dz-join-item dz-btn w-full"
               >
                 <Icon icon="fa6-solid:reply" />
                 Reply
@@ -582,7 +594,7 @@
                   startEditing();
                   isDrawerOpen = false;
                 }}
-                class="join-item btn w-full"
+                class="dz-join-item dz-btn w-full"
               >
                 <Icon icon="tabler:edit" />
                 Edit
@@ -591,7 +603,7 @@
             {#if mayDelete}
               <Button.Root
                 onclick={() => deleteMessage()}
-                class="join-item btn btn-error w-full"
+                class="dz-join-item dz-btn dz-btn-error w-full"
               >
                 <Icon icon="tabler:trash" />
                 Delete
@@ -600,59 +612,57 @@
           </div>
         {/if}
       </Drawer>
-    {:else}
-      {#if !isEditing}
-        <Toolbar.Root
-          class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-base-300 p-1 rounded items-center`}
+    {:else if !isEditing}
+      <Toolbar.Root
+        class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-base-300 p-1 rounded items-center`}
+      >
+        <Toolbar.Button
+          onclick={() => toggleReaction("👍")}
+          class="dz-btn dz-btn-ghost dz-btn-square"
         >
+          👍
+        </Toolbar.Button>
+        <Toolbar.Button
+          onclick={() => toggleReaction("😂")}
+          class="dz-btn dz-btn-ghost dz-btn-square"
+        >
+          😂
+        </Toolbar.Button>
+        <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
+          <Popover.Trigger class="dz-btn dz-btn-ghost dz-btn-square">
+            <Icon icon="lucide:smile-plus" />
+          </Popover.Trigger>
+          <Popover.Content class="z-10">
+            <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
+          </Popover.Content>
+        </Popover.Root>
+        {#if mayEdit}
           <Toolbar.Button
-            onclick={() => toggleReaction("👍")}
-            class="btn btn-ghost btn-square"
+            onclick={() => startEditing()}
+            class="dz-btn dz-btn-ghost dz-btn-square"
           >
-            👍
+            <Icon icon="tabler:edit" />
           </Toolbar.Button>
-          <Toolbar.Button
-            onclick={() => toggleReaction("😂")}
-            class="btn btn-ghost btn-square"
-          >
-            😂
-          </Toolbar.Button>
-          <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
-            <Popover.Trigger class="btn btn-ghost btn-square">
-              <Icon icon="lucide:smile-plus" />
-            </Popover.Trigger>
-            <Popover.Content class="z-10">
-              <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
-            </Popover.Content>
-          </Popover.Root>
-          {#if mayEdit}
-            <Toolbar.Button
-              onclick={() => startEditing()}
-              class="btn btn-ghost btn-square"
-            >
-              <Icon icon="tabler:edit" />
-            </Toolbar.Button>
-          {/if}
+        {/if}
 
         {#if shiftDown && mayDelete}
           <Toolbar.Button
             onclick={() => deleteMessage()}
-            class="btn btn-ghost btn-square"
+            class="dz-btn dz-btn-ghost dz-btn-square"
           >
             <Icon icon="tabler:trash" color="red" />
           </Toolbar.Button>
         {/if}
 
-          {#if authorProfile && message instanceof Message}
-            <Toolbar.Button
-              onclick={() => setReplyTo(message)}
-              class="btn btn-ghost btn-square"
-            >
-              <Icon icon="fa6-solid:reply" />
-            </Toolbar.Button>
-          {/if}
-        </Toolbar.Root>
-      {/if}
+        {#if authorProfile && message instanceof Message}
+          <Toolbar.Button
+            onclick={() => setReplyTo(message)}
+            class="dz-btn dz-btn-ghost dz-btn-square"
+          >
+            <Icon icon="fa6-solid:reply" />
+          </Toolbar.Button>
+        {/if}
+      </Toolbar.Root>
     {/if}
 
     {#if isThreading.value && message instanceof Message}
@@ -692,7 +702,7 @@
       <Button.Root
         onclick={() => toggleReaction(reaction)}
         class={`
-      btn
+      dz-btn
       ${user.agent && reactions.has(user.agent.assertDid) ? "bg-accent text-accent-content" : "bg-secondary text-secondary-content"}
     `}
         title={profilesThatReacted

@@ -99,7 +99,7 @@
       <ToggleGroup.Item
         value="home"
         onclick={() => navigate("home")}
-        class="btn btn-ghost size-14 data-[state=on]:border-accent"
+        class="dz-btn dz-btn-ghost size-14 data-[state=on]:border-accent"
       >
         <Icon icon="iconamoon:home-fill" font-size="1.5em" />
       </ToggleGroup.Item>
@@ -111,7 +111,7 @@
       {/each}
     </ToggleGroup.Root>
 
-    <section class="menu gap-3">
+    <section class="dz-menu gap-3">
       <ThemeSelector />
       <Dialog
         title="Create Space"
@@ -122,7 +122,7 @@
         {#snippet dialogTrigger()}
           <Button.Root
             title="Create Space"
-            class="btn btn-ghost w-fit"
+            class="dz-btn dz-btn-ghost w-fit"
             disabled={!user.session}
           >
             <Icon icon="basil:add-solid" font-size="2em" />
@@ -135,7 +135,7 @@
             placeholder="Name"
             class="input w-full"
           />
-          <Button.Root disabled={!newSpaceName} class="btn btn-primary">
+          <Button.Root disabled={!newSpaceName} class="dz-btn dz-btn-primary">
             <Icon icon="basil:add-outline" font-size="1.8em" />
             Create Space
           </Button.Root>
@@ -150,7 +150,7 @@
         bind:isDialogOpen={user.isLoginDialogOpen}
       >
         {#snippet dialogTrigger()}
-          <Button.Root class="btn btn-ghost w-fit">
+          <Button.Root class="dz-btn dz-btn-ghost w-fit">
             <AvatarImage
               handle={user.profile.data?.handle || ""}
               avatarUrl={user.profile.data?.avatar}
@@ -160,7 +160,7 @@
 
         {#if user.session}
           <section class="flex flex-col gap-4">
-            <Button.Root onclick={user.logout} class="btn btn-error">
+            <Button.Root onclick={user.logout} class="dz-btn dz-btn-error">
               Log Out
             </Button.Root>
           </section>
@@ -176,10 +176,10 @@
             />
             <Button.Root
               disabled={loginLoading || !handleInput}
-              class="btn btn-primary"
+              class="dz-btn dz-btn-primary"
             >
               {#if loginLoading}
-                <span class="loading loading-spinner"></span>
+                <span class="dz-loading dz-loading-spinner"></span>
               {/if}
               Log In with Bluesky
             </Button.Root>
