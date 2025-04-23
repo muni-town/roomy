@@ -358,7 +358,7 @@
 
           <div class="max-h-[80vh] overflow-y-auto pr-2">
             <form onsubmit={saveSpaceName} class="flex flex-col gap-3 mb-8">
-              <label class="input w-full">
+              <label class="dz-input w-full">
                 <span class="label">Name</span>
                 <input bind:value={spaceNameInput} placeholder="My Space" />
               </label>
@@ -477,7 +477,7 @@
                   <p>Provide a domain to see which DNS record to add for it.</p>
                 {/if}
               </div>
-              <label class="input w-full">
+              <label class="dz-input w-full">
                 <span class="label">Handle</span>
                 <input bind:value={newSpaceHandle} placeholder="example.org" />
               </label>
@@ -507,7 +507,10 @@
               <h2 class="font-bold text-xl">Bans</h2>
 
               <div>
-                <input class="input w-full" bind:value={bannedHandlesInput} />
+                <input
+                  class="dz-input w-full"
+                  bind:value={bannedHandlesInput}
+                />
                 <div class="flex flex-col">
                   <span class="mx-2 mt-1 text-sm"
                     >Input a list of handles separated by commas.</span
@@ -547,7 +550,7 @@
           {/snippet}
 
           <form class="flex flex-col gap-4" onsubmit={createChannel}>
-            <label class="input w-full">
+            <label class="dz-input w-full">
               <span class="label">Name</span>
               <input bind:value={newChannelName} placeholder="General" />
             </label>
@@ -582,7 +585,7 @@
           {/snippet}
 
           <form class="flex flex-col gap-4" onsubmit={createCategory}>
-            <label class="input w-full">
+            <label class="dz-input w-full">
               <span class="label">Name</span>
               <input bind:value={newCategoryName} placeholder="Discussions" />
             </label>
@@ -706,7 +709,7 @@
                     class="flex flex-col gap-4 w-full"
                     onsubmit={saveCategory}
                   >
-                    <label class="input w-full">
+                    <label class="dz-input w-full">
                       <span class="label">Name</span>
                       <input
                         bind:value={categoryNameInput}

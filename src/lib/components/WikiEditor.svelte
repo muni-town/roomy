@@ -858,7 +858,7 @@
           <input
             type="text"
             bind:value={selectedWiki.name}
-            class="input input-bordered flex-1 mr-2"
+            class="dz-input "dz-bordered flex-1 mr-2"
             placeholder="Wiki title"
             required
           />
@@ -1067,7 +1067,7 @@
       bind:this={urlInputElement}
       use:focusOnRender
       placeholder="https://example.com"
-      class="input input-bordered w-full"
+      class="dz-input "dz-bordered w-full"
       required
     />
     <div class="flex justify-end gap-3 mt-2">
@@ -1087,7 +1087,7 @@
       bind:this={newWikiTitleElement}
       use:focusOnRender
       placeholder="Tips on moderation..."
-      class="input input-bordered w-full"
+      class="dz-input "dz-bordered w-full"
       required
     />
     <div class="flex justify-end gap-3 mt-2">

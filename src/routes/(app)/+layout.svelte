@@ -133,7 +133,7 @@
           <input
             bind:value={newSpaceName}
             placeholder="Name"
-            class="input w-full"
+            class="dz-input w-full"
           />
           <Button.Root disabled={!newSpaceName} class="dz-btn dz-btn-primary">
             <Icon icon="basil:add-outline" font-size="1.8em" />
@@ -172,7 +172,7 @@
             <input
               bind:value={handleInput}
               placeholder="Handle (eg alice.bsky.social)"
-              class="input w-full"
+              class="dz-input w-full"
             />
             <Button.Root
               disabled={loginLoading || !handleInput}

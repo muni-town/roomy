@@ -108,7 +108,7 @@
           <input
             type="text"
             bind:value={threadTitleInput}
-            class="input"
+            class="dz-input"
             placeholder="Thread Title"
           />
           <button type="submit" class="dz-btn dz-btn-primary">
@@ -152,7 +152,7 @@
           <input
             bind:value={channelNameInput}
             placeholder="name"
-            class="input"
+            class="dz-input"
           />
         </label>
         {#if g.space && g.channel instanceof Channel}
