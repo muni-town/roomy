@@ -7,9 +7,8 @@
   import { slide } from "svelte/transition";
   let { availableThreads } = $props();
   let sidebarAccordionValues = $state(["pages", "topics"]);
-  const wikipages = derivePromise(
-    [],
-    async () => await g.space.wikipages.items(),
+  const wikipages = derivePromise([], async () =>
+    ((await g.space?.wikipages.items()) ?? []).filter((x) => !x.softDeleted),
   );
 </script>
 
