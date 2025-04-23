@@ -858,7 +858,7 @@
           <input
             type="text"
             bind:value={selectedWiki.name}
-            class="dz-input "dz-bordered flex-1 mr-2"
+            class="dz-input dz-bordered flex-1 mr-2"
             placeholder="Wiki title"
             required
           />
@@ -912,7 +912,7 @@
 
           {#if slashMenuVisible && isEditingWiki}
             <div
-              class="slash-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
+              class="slash-menu border border-base-content/20 rounded shadow-lg absolute z-50"
               style="left: {slashMenuPosition.x}px; top: {slashMenuPosition.y}px;"
             >
               <ul class="py-1">
@@ -1067,7 +1067,7 @@
       bind:this={urlInputElement}
       use:focusOnRender
       placeholder="https://example.com"
-      class="dz-input "dz-bordered w-full"
+      class="dz-input dz-bordered w-full"
       required
     />
     <div class="flex justify-end gap-3 mt-2">
@@ -1087,7 +1087,7 @@
       bind:this={newWikiTitleElement}
       use:focusOnRender
       placeholder="Tips on moderation..."
-      class="dz-input "dz-bordered w-full"
+      class="dz-input dz-bordered w-full"
       required
     />
     <div class="flex justify-end gap-3 mt-2">
