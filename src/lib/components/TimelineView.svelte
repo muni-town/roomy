@@ -24,9 +24,9 @@
   } from "@roomy-chat/sdk";
   import type { JSONContent } from "@tiptap/core";
   import { getProfile } from "$lib/profile.svelte";
-  import WikiEditor from "$lib/components/WikiEditor.svelte";
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
-  import ThreadsTab from "$lib/components/ThreadsTab.svelte";
+  import BoardList from "./BoardList.svelte";
+  import { derivePromise } from "$lib/utils.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
@@ -191,6 +191,25 @@
   });
 
   // Image upload is now handled in ChatInput.svelte
+  
+  let isWikiTitleDialogOpen = $state(false);
+  let newWikiTitleElement: HTMLInputElement | null = $state(null);
+  function createWiki() {
+    if (newWikiTitleElement) {
+      newWikiTitleElement.value = "";
+    }
+    isWikiTitleDialogOpen = true;
+  }
+  let relatedThreads = derivePromise([], async () =>
+    g.channel && g.channel instanceof Channel
+      ? await g.channel.threads.items()
+      : [],
+  );
+  const wikis = derivePromise([], async () => {
+    return g.space && g.channel instanceof Channel
+      ? (await g.channel.wikipages.items()).filter((x) => !x.softDeleted)
+      : [];
+  });
 </script>
 
 <header class="dz-navbar">
@@ -260,10 +279,18 @@
 </header>
 <div class="divider my-0"></div>
 
-{#if tab === "threads"}
-  <ThreadsTab />
-{:else if tab === "wiki"}
-  <WikiEditor />
+{#if tab === "board"}
+  <BoardList items={wikis.value} title="Pages" route="wiki">
+    {#snippet header()}
+      <button class="btn btn-primary btn-sm text-lg" onclick={createWiki}>
+        +
+      </button>
+    {/snippet}
+    No pages for this channel.
+  </BoardList>
+  <BoardList items={relatedThreads.value} title="Topics" route="thread">
+    No topics for this channel.
+  </BoardList>
 {:else if tab === "chat" || g.channel instanceof Thread}
   {#if g.space && g.channel}
     <ChatArea timeline={g.channel.forceCast(Timeline)} />

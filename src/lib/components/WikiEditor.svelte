@@ -12,22 +12,10 @@
 
   import { page } from "$app/state";
   import { g } from "$lib/global.svelte";
-  import { derivePromise } from "$lib/utils.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
 
-  const wikis = derivePromise([], async () => {
-    return g.space && g.channel instanceof Channel
-      ? (await g.channel.wikipages.items()).filter((x) => !x.softDeleted)
-      : [];
-  });
-
-  let selectedWiki: WikiPage | undefined = $state(wikis.value[0]);
-  $effect(() => {
-    if (wikis.value.length > 0 && !selectedWiki) {
-      selectedWiki = wikis.value[0];
-    }
-  });
+  let { selectedWiki }: { selectedWiki: WikiPage } = $props();
   let isEditingWiki = $state(false);
 
   let wikiRenderedHtml = $state("");
@@ -157,13 +145,6 @@
   function selectWiki(wiki: any) {
     selectedWiki = wiki;
     isEditingWiki = false;
-  }
-
-  function createWiki() {
-    if (newWikiTitleElement) {
-      newWikiTitleElement.value = "";
-    }
-    isWikiTitleDialogOpen = true;
   }
 
   async function submitWikiTitle() {
@@ -796,265 +777,206 @@
   });
 </script>
 
-<!-- NEW: Two-column layout for multiple wikis -->
-<div class="flex h-full overflow-y-auto">
-  <aside class="w-1/4 border-r border-base-content/10 p-4">
-    <div class="mb-4 flex justify-between items-center">
-      <h3 class="text-xl font-bold text-base-content">Wikis</h3>
-      <button
-        class="dz-btn dz-btn-primary dz-btn-sm text-lg"
-        onclick={createWiki}
-      >
-        +
-      </button>
-    </div>
-    <ul>
-      {#each wikis.value as wiki}
-        {#if !wiki.softDeleted}
-          <li
-            class="wiki-item mb-2 p-2 rounded cursor-pointer {wiki.id ===
-            selectedWiki?.id
-              ? 'bg-base-200'
-              : ''}"
-          >
-            <div
-              class="flex justify-between items-center group relative"
-              onclick={() => selectWiki(wiki)}
-              role="button"
-              tabindex="0"
-              onkeydown={(e) => {
-                if (e.key === "Enter") {
-                  selectWiki(wiki);
-                }
-              }}
-            >
-              <span>{wiki.name}</span>
-              {#if g.isAdmin}
-                <button
-                  class="absolute right-0 dz-btn dz-btn-error dz-btn-xs delete-button hidden group-hover:block"
-                  onclick={(e) => showDeleteDialog(wiki, e)}
-                >
-                  <Icon icon="tabler:trash" />
-                </button>
-              {/if}
-            </div>
-          </li>
+{#if g.isAdmin}
+  <button
+    class="btn btn-error delete-btn group-hover:block"
+    onclick={(e) => showDeleteDialog(selectedWiki, e)}
+  >
+    <Icon icon="tabler:trash" />
+  </button>
+{/if}
+<Button.Root
+  onclick={() => setEditingWiki(true)}
+  class="btn max-w-fit btn-primary"
+>
+  <Icon icon="tabler:edit" />
+  Edit
+</Button.Root>
+<!-- If no wiki selected, show guidance -->
+{#if !isEditingWiki}
+  <section class="wiki-content">
+    <div class="wiki-rendered p-4 bg-base-300/30">
+      <div class="wiki-html text-base-content">
+        {#if selectedWiki && !selectedWiki.softDeleted}
+          {@html processedHtml}
+        {:else}
+          <p class="text-base-content/70">No content available.</p>
         {/if}
-      {/each}
-    </ul>
-  </aside>
-
-  <main class="flex-1 p-4">
-    <!-- If no wiki selected, show guidance -->
-    {#if !selectedWiki}
-      <div
-        class="flex justify-center items-center p-8 border border-dashed border-base-content/30 rounded-lg"
-      >
-        <p class="text-base-content/70">No wiki pages.</p>
       </div>
-    {:else if isEditingWiki && !selectedWiki.softDeleted}
-      <section class="wiki-editor-container">
-        <div class="mb-4 flex justify-between items-center">
-          <input
-            type="text"
-            bind:value={selectedWiki.name}
-            class="dz-input dz-bordered flex-1 mr-2"
-            placeholder="Wiki title"
-            required
-          />
-          <div class="flex gap-2">
-            <Button.Root
-              onclick={() => setEditingWiki(false)}
-              class="dz-btn dz-btn-ghost"
-            >
-              Cancel
-            </Button.Root>
-            <Button.Root
-              onclick={saveWikiContent}
-              class="dz-btn dz-btn-primary"
-            >
-              Save
-            </Button.Root>
-          </div>
-        </div>
-        <div
-          class="wiki-editor bg-base-300/20 rounded-lg border border-base-content/30 p-4 h-auto {isEditingWiki
-            ? 'edit-mode'
-            : ''}"
+    </div>
+  </section>
+{:else}
+  <section class="wiki-editor-container p-4">
+    <div class="mb-4 flex justify-between items-center">
+      <input
+        type="text"
+        bind:value={selectedWiki.name}
+        class="input input-bordered flex-1 mr-2"
+        placeholder="Wiki title"
+        required
+      />
+      <div class="flex gap-2">
+        <Button.Root
+          onclick={() => setEditingWiki(false)}
+          class="btn btn-ghost"
         >
-          <div
-            class="permanent-formatting-toolbar bg-base-300 border border-base-content/20 rounded-lg shadow-lg p-1 mb-4 flex items-center"
+          Cancel
+        </Button.Root>
+        <Button.Root onclick={saveWikiContent} class="btn btn-primary">
+          Save
+        </Button.Root>
+      </div>
+    </div>
+    <div
+      class="wiki-editor bg-base-300/20 rounded-lg border border-base-content/30 p-4 h-auto {isEditingWiki
+        ? 'edit-mode'
+        : ''}"
+    >
+      <div
+        class="permanent-formatting-toolbar bg-base-300 border border-base-content/20 rounded-lg shadow-lg p-1 mb-4 flex items-center"
+      >
+        {#each formatCommands as command}
+          <button
+            class="btn btn-ghost btn-square btn-sm"
+            title={command.name}
+            onclick={() => executeFormatCommand(command)}
           >
-            {#each formatCommands as command}
-              <button
-                class="dz-btn dz-btn-ghost dz-btn-square dz-btn-sm"
-                title={command.name}
-                onclick={() => executeFormatCommand(command)}
-              >
-                <Icon icon={command.icon} class="text-xl" />
-              </button>
-            {/each}
-            <div class="ml-2 border-l border-base-content/20 h-6"></div>
-            {#each slashCommands as command, i}
-              {#if i < 3}
+            <Icon icon={command.icon} class="text-xl" />
+          </button>
+        {/each}
+        <div class="ml-2 border-l border-base-content/20 h-6"></div>
+        {#each slashCommands as command, i}
+          {#if i < 3}
+            <button
+              class="btn btn-ghost btn-square btn-sm"
+              title={command.name}
+              onclick={() => executeSlashCommand(command)}
+            >
+              <Icon icon={command.icon} class="text-xl" />
+            </button>
+          {/if}
+        {/each}
+      </div>
+
+      <div bind:this={editorElement} class="min-h-[400px]"></div>
+
+      {#if slashMenuVisible && isEditingWiki}
+        <div
+          class="slash-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
+          style="left: {slashMenuPosition.x}px; top: {slashMenuPosition.y}px;"
+        >
+          <ul class="py-1">
+            {#each slashCommands as command}
+              <li>
                 <button
-                  class="dz-btn dz-btn-ghost dz-btn-square dz-btn-sm"
-                  title={command.name}
+                  class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-base-200 text-base-content"
                   onclick={() => executeSlashCommand(command)}
                 >
                   <Icon icon={command.icon} class="text-xl" />
+                  <span>{command.name}</span>
                 </button>
-              {/if}
+              </li>
             {/each}
-          </div>
+          </ul>
+        </div>
+      {/if}
 
-          <div bind:this={editorElement} class="min-h-[400px]"></div>
-
-          {#if slashMenuVisible && isEditingWiki}
-            <div
-              class="slash-menu border border-base-content/20 rounded shadow-lg absolute z-50"
-              style="left: {slashMenuPosition.x}px; top: {slashMenuPosition.y}px;"
-            >
-              <ul class="py-1">
-                {#each slashCommands as command}
+      {#if mentionMenuVisible && isEditingWiki}
+        <div
+          class="mention-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
+          style="left: {mentionMenuPosition.x}px; top: {mentionMenuPosition.y}px;"
+        >
+          <div class="py-1 max-h-[300px] overflow-y-auto min-w-[200px]">
+            {#if filteredUsers.length > 0}
+              <ul>
+                {#each filteredUsers as user}
                   <li>
                     <button
                       class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-base-200 text-base-content"
-                      onclick={() => executeSlashCommand(command)}
+                      onclick={() => insertUserMention(user)}
                     >
-                      <Icon icon={command.icon} class="text-xl" />
-                      <span>{command.name}</span>
+                      <div
+                        class="w-6 h-6 rounded-full bg-primary flex items-center justify-center overflow-hidden"
+                      >
+                        <span class="text-xs font-bold text-primary-content"
+                          >{user.label[0]?.toUpperCase() || "?"}</span
+                        >
+                      </div>
+                      <span>{user.label}</span>
                     </button>
                   </li>
                 {/each}
               </ul>
-            </div>
-          {/if}
-
-          {#if mentionMenuVisible && isEditingWiki}
-            <div
-              class="mention-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
-              style="left: {mentionMenuPosition.x}px; top: {mentionMenuPosition.y}px;"
-            >
-              <div class="py-1 max-h-[300px] overflow-y-auto min-w-[200px]">
-                {#if filteredUsers.length > 0}
-                  <ul>
-                    {#each filteredUsers as user}
-                      <li>
-                        <button
-                          class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-base-200 text-base-content"
-                          onclick={() => insertUserMention(user)}
-                        >
-                          <div
-                            class="w-6 h-6 rounded-full bg-primary flex items-center justify-center overflow-hidden"
-                          >
-                            <span class="text-xs font-bold text-primary-content"
-                              >{user.label[0]?.toUpperCase() || "?"}</span
-                            >
-                          </div>
-                          <span>{user.label}</span>
-                        </button>
-                      </li>
-                    {/each}
-                  </ul>
-                {:else}
-                  <div class="px-4 py-2 text-base-content/70">
-                    No users found
-                  </div>
-                {/if}
-              </div>
-            </div>
-          {/if}
-
-          {#if hashMenuVisible && isEditingWiki}
-            <div
-              class="hash-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
-              style="left: {hashMenuPosition.x}px; top: {hashMenuPosition.y}px;"
-            >
-              <div class="py-1 max-h-[300px] overflow-y-auto min-w-[250px]">
-                {#if filteredItems.length > 0}
-                  <ul>
-                    {#each filteredItems as item}
-                      <li>
-                        <button
-                          class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-base-200 text-base-content"
-                          onclick={() => insertHashLink(item)}
-                        >
-                          <div
-                            class="w-6 h-6 rounded flex items-center justify-center overflow-hidden"
-                          >
-                            <Icon
-                              icon={item.type === "channel"
-                                ? "tabler:hash"
-                                : "tabler:message-circle"}
-                              class="text-lg text-primary"
-                            />
-                          </div>
-                          <span>{item.name}</span>
-                          <span class="text-xs text-base-content/70 ml-auto"
-                            >{item.type}</span
-                          >
-                        </button>
-                      </li>
-                    {/each}
-                  </ul>
-                {:else}
-                  <div class="px-4 py-2 text-base-content/70">
-                    No channels or threads found
-                  </div>
-                {/if}
-              </div>
-            </div>
-          {/if}
-
-          {#if selectionTooltipVisible && isEditingWiki}
-            <div
-              class="tooltip-animate bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50 flex items-center justify-center p-1"
-              style="left: {selectionTooltipPosition.x}px; top: {selectionTooltipPosition.y}px; transform: translateX(-50%);"
-            >
-              {#each formatCommands as command}
-                <button
-                  class="dz-btn dz-btn-ghost dz-btn-square dz-btn-sm"
-                  title={command.name}
-                  onclick={() => {
-                    command.action();
-                    selectionTooltipVisible = false;
-                  }}
-                >
-                  <Icon icon={command.icon} />
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      </section>
-    {:else}
-      <section class="wiki-content">
-        <div class="flex justify-between items-center mb-4">
-          <h3 class="text-xl font-bold text-base-content">
-            {selectedWiki.name}
-          </h3>
-          <Button.Root
-            onclick={() => setEditingWiki(true)}
-            class="dz-btn dz-btn-primary"
-          >
-            <Icon icon="tabler:edit" />
-            Edit Wiki
-          </Button.Root>
-        </div>
-        <div class="wiki-rendered p-4 bg-base-300/30 rounded-lg">
-          <div class="wiki-html text-base-content">
-            {#if selectedWiki && !selectedWiki.softDeleted}
-              {@html processedHtml}
             {:else}
-              <p class="text-base-content/70">No content available.</p>
+              <div class="px-4 py-2 text-base-content/70">No users found</div>
             {/if}
           </div>
         </div>
-      </section>
-    {/if}
-  </main>
-</div>
+      {/if}
+
+      {#if hashMenuVisible && isEditingWiki}
+        <div
+          class="hash-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
+          style="left: {hashMenuPosition.x}px; top: {hashMenuPosition.y}px;"
+        >
+          <div class="py-1 max-h-[300px] overflow-y-auto min-w-[250px]">
+            {#if filteredItems.length > 0}
+              <ul>
+                {#each filteredItems as item}
+                  <li>
+                    <button
+                      class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-base-200 text-base-content"
+                      onclick={() => insertHashLink(item)}
+                    >
+                      <div
+                        class="w-6 h-6 rounded flex items-center justify-center overflow-hidden"
+                      >
+                        <Icon
+                          icon={item.type === "channel"
+                            ? "tabler:hash"
+                            : "tabler:message-circle"}
+                          class="text-lg text-primary"
+                        />
+                      </div>
+                      <span>{item.name}</span>
+                      <span class="text-xs text-base-content/70 ml-auto"
+                        >{item.type}</span
+                      >
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            {:else}
+              <div class="px-4 py-2 text-base-content/70">
+                No channels or threads found
+              </div>
+            {/if}
+          </div>
+        </div>
+      {/if}
+
+      {#if selectionTooltipVisible && isEditingWiki}
+        <div
+          class="tooltip-animate bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50 flex items-center justify-center p-1"
+          style="left: {selectionTooltipPosition.x}px; top: {selectionTooltipPosition.y}px; transform: translateX(-50%);"
+        >
+          {#each formatCommands as command}
+            <button
+              class="btn btn-ghost btn-square btn-sm"
+              title={command.name}
+              onclick={() => {
+                command.action();
+                selectionTooltipVisible = false;
+              }}
+            >
+              <Icon icon={command.icon} />
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  </section>
+{/if}
 
 <Dialog
   title="Add Link"
