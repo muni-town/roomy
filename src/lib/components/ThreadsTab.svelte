@@ -35,6 +35,6 @@
       </li>
     </a>
   {:else}
-    No threads for this channel.
+    No topics for this channel.
   {/each}
 </ul>

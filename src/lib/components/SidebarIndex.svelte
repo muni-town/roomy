@@ -1,17 +1,21 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { g } from "$lib/global.svelte";
-  import { navigate } from "$lib/utils.svelte";
+  import { derivePromise, navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
   import { Accordion, ToggleGroup } from "bits-ui";
   import { slide } from "svelte/transition";
   let { availableThreads } = $props();
-  let sidebarAccordionValues = $state(["threads"]);
+  let sidebarAccordionValues = $state(["pages", "topics"]);
+  const wikipages = derivePromise(
+    [],
+    async () => await g.space.wikipages.items(),
+  );
 </script>
 
 <!--
 Pages
-Threads
+Topics
 Links
 --->
 <ToggleGroup.Root type="single" value={g.channel?.id}>
@@ -20,46 +24,68 @@ Links
     bind:value={sidebarAccordionValues}
     class="flex flex-col gap-4"
   >
-    <Accordion.Item value="threads">
+    <Accordion.Item value="pages">
       <Accordion.Header>
         <Accordion.Trigger
           class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
         >
-          <h3>All Threads</h3>
+          <h3>pages</h3>
           <Icon
             icon="basil:caret-up-solid"
-            class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("threads") && "rotate-180"}`}
+            class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("pages") && "rotate-180"}`}
           />
         </Accordion.Trigger>
       </Accordion.Header>
-      <Accordion.Content forceMount>
-        {#snippet child({ open }: { open: boolean })}
-          {#if open}
-            {@render threadsSidebar()}
-          {/if}
-        {/snippet}
+      <Accordion.Content>
+        <div transition:slide={{ duration: 100 }} class="flex flex-col gap-1">
+          {#each wikipages.value as wikipage}
+            <ToggleGroup.Item
+              onclick={() =>
+                navigate({ space: page.params.space!, wiki: wikipage.id })}
+              value={wikipage.id}
+              class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
+            >
+              <h3 class="flex justify-start items-center gap-2 px-2 w-full">
+                <Icon icon="material-symbols:book-outline" class="shrink-0" />
+                <span class="truncate">{wikipage.name}</span>
+              </h3>
+            </ToggleGroup.Item>
+          {/each}
+        </div>
+      </Accordion.Content>
+    </Accordion.Item>
+    <Accordion.Item value="topics">
+      <Accordion.Header>
+        <Accordion.Trigger
+          class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
+        >
+          <h3>topics</h3>
+          <Icon
+            icon="basil:caret-up-solid"
+            class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("topics") && "rotate-180"}`}
+          />
+        </Accordion.Trigger>
+      </Accordion.Header>
+      <Accordion.Content>
+        <div transition:slide={{ duration: 100 }} class="flex flex-col gap-1">
+          {#each availableThreads.value as thread}
+            <ToggleGroup.Item
+              onclick={() =>
+                navigate({ space: page.params.space!, thread: thread.id })}
+              value={thread.id}
+              class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
+            >
+              <h3 class="flex justify-start items-center gap-2 px-2 w-full">
+                <Icon
+                  icon="material-symbols:thread-unread-rounded"
+                  class="shrink-0"
+                />
+                <span class="truncate">{thread.name}</span>
+              </h3>
+            </ToggleGroup.Item>
+          {/each}
+        </div>
       </Accordion.Content>
     </Accordion.Item>
   </Accordion.Root>
 </ToggleGroup.Root>
-
-{#snippet threadsSidebar(limit = Infinity)}
-  <div transition:slide={{ duration: 100 }} class="flex flex-col gap-1">
-    {#each availableThreads.value.filter((_, i) => i < limit) as thread}
-      <ToggleGroup.Item
-        onclick={() =>
-          navigate({ space: page.params.space!, thread: thread.id })}
-        value={thread.id}
-        class="w-full cursor-pointer px-1 btn btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
-      >
-        <h3 class="flex justify-start items-center gap-2 px-2 w-full">
-          <Icon
-            icon="material-symbols:thread-unread-rounded"
-            class="shrink-0"
-          />
-          <span class="truncate">{thread.name}</span>
-        </h3>
-      </ToggleGroup.Item>
-    {/each}
-  </div>
-{/snippet}
