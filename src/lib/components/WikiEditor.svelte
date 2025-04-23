@@ -856,7 +856,7 @@
       </div>
     </section>
   {:else}
-    <section class="wiki-editor-container">
+    <section class="wiki-editor-container p-4">
       <div class="mb-4 flex justify-between items-center">
         <input
           type="text"
