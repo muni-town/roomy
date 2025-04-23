@@ -1,9 +1,37 @@
 # Roomy
 
-Gardenable group chat made with [AT Protocol](https://atproto.com/), [Loro](https://loro.dev) and [Leaf SDK](https://github.com/muni-town/leaf).
+Gardenable group chat made with [Loro](https://loro.dev) and [Leaf SDK](https://github.com/muni-town/leaf). Authentication with [AT Protocol](https://atproto.com/).
 
-Currently working on producing a functional proof-of-concept. See the
-[Roadmap](https://github.com/orgs/muni-town/projects/8/views/4).
+
+## Table of Contents
+- [Features](#features)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Running the Application](#running-the-application)
+- [Contributing](#contributing)
+  - [How to Contribute](#how-to-contribute)
+  - [Finding Issues](#finding-issues)
+  - [Development Guidelines](#development-guidelines)
+  - [Pull Request Process](#pull-request-process)
+  - [Code of Conduct](#code-of-conduct)
+- [License](#license)
+- [Contact](#contact)
+
+
+## Features
+
+## Getting Started
+
+
+
+
+
+
+
+
+
+
 
 ## Devlog
 
@@ -13,6 +41,9 @@ Currently working on producing a functional proof-of-concept. See the
 ## Design
 
 Roomy is a spiritual sibling of [Commune](https://github.com/commune-sh). The same core concepts of 'digital gardening applied to group messaging' apply.
+
+
+ ## Extended reading
 
 * [Assembling Community OS](https://blog.erlend.sh/assembling-community-os)
 * [Communal Bonfires](https://blog.erlend.sh/communal-bonfires)
