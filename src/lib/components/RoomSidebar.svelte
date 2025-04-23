@@ -10,7 +10,7 @@
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import SidebarChat from "$lib/components/SidebarChat.svelte";
 
-  import { Category, Image } from "@roomy-chat/sdk";
+  import { Image } from "@roomy-chat/sdk";
   import UserSession from "./UserSession.svelte";
   import { getProfile } from "$lib/profile.svelte";
   import toast from "svelte-french-toast";
@@ -25,13 +25,6 @@
   let availableThreads = derivePromise([], async () =>
     ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
   );
-
-  let categories = derivePromise([], async () => {
-    if (!g.space) return [];
-    return (await g.space.sidebarItems.items())
-      .map((x) => x.tryCast(Category) as Category)
-      .filter((x) => !!x);
-  });
 
   let sidebarItems = derivePromise([], async () => {
     if (!g.space) return [];
@@ -254,7 +247,7 @@
     {#if tab === "board"}
       <SidebarIndex {availableThreads} />
     {:else if tab === "chat" && g.space}
-      <SidebarChat {categories} channels={sidebarItems} />
+      <SidebarChat channels={sidebarItems} />
     {/if}
   </nav>
   <div class="grow"></div>

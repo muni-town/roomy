@@ -5,10 +5,18 @@
   import { page } from "$app/state";
   import { g } from "$lib/global.svelte";
   import { slide } from "svelte/transition";
-  import { navigate } from "$lib/utils.svelte";
-  import { Category, Channel, Thread } from "@roomy-chat/sdk";
+  import { derivePromise, navigate } from "$lib/utils.svelte";
+  import { Category, Channel, NamedEntity, Thread } from "@roomy-chat/sdk";
 
-  let { categories, channels } = $props();
+  let { channels }: { channels: { value: NamedEntity[] } } = $props();
+
+  let categories = derivePromise([], async () =>
+    channels.value.reduce((acc: Category[], curr) => {
+      let item = curr.tryCast(Category);
+      if (item !== undefined) acc.push(item);
+      return acc;
+    }, []),
+  );
 
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
