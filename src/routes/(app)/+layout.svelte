@@ -27,6 +27,8 @@
   let newSpaceName = $state("");
   let isNewSpaceDialogOpen = $state(false);
 
+  let userInitComplete = $state(false);
+
   const spaces = derivePromise(
     [],
     async () => (await g.roomy?.spaces.items()) || [],
@@ -34,6 +36,7 @@
 
   onMount(async () => {
     await user.init();
+    userInitComplete = true;
 
     if (!dev && browser) {
       posthog.init("phc_j80ksIuoxjfjRI7rPBmTLWx79rntg4Njz6Dixc3I3ik", {
@@ -43,7 +46,6 @@
     }
   });
 
-  // Removed auto-popup effect to only show login dialog when user clicks avatar
 
   async function createSpace() {
     if (!newSpaceName || !user.agent || !g.roomy) return;

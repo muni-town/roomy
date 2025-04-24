@@ -21,6 +21,7 @@
     "npm:@tailwindcss/typography@~0.5.16": "0.5.16_tailwindcss@4.1.4",
     "npm:@tailwindcss/vite@4": "4.1.4_vite@6.3.2__picomatch@4.0.2",
     "npm:@tiptap/core@^2.11.5": "2.11.7_@tiptap+pm@2.11.7__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.39.1",
+    "npm:@tiptap/extension-image@^2.11.7": "2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.39.1_@tiptap+pm@2.11.7__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.39.1",
     "npm:@tiptap/extension-link@^2.11.5": "2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.39.1_@tiptap+pm@2.11.7__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.39.1",
     "npm:@tiptap/extension-mention@^2.11.5": "2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.39.1_@tiptap+pm@2.11.7__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.39.1_@tiptap+suggestion@2.11.7__@tiptap+core@2.11.7___@tiptap+pm@2.11.7____prosemirror-model@1.25.0____prosemirror-state@1.4.3____prosemirror-view@1.39.1__@tiptap+pm@2.11.7___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.39.1",
     "npm:@tiptap/extension-placeholder@^2.11.5": "2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.39.1_@tiptap+pm@2.11.7__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.39.1",
@@ -379,8 +380,8 @@
         "@jridgewell/trace-mapping@0.3.9"
       ]
     },
-    "@emnapi/core@1.4.3": {
-      "integrity": "sha512-4m62DuCE07lw01soJwPiBGC0nAww0Q+RY70VZ+n49yDIO13yyinhbWCeNnaob0lakDtWQzSdtNWzJeOJt2ma+g==",
+    "@emnapi/core@1.4.0": {
+      "integrity": "sha512-H+N/FqT07NmLmt6OFFtDfwe8PNygprzBikrEMyQfgqSmT0vzE515Pz7R8izwB9q/zsH/MA64AKoul3sA6/CzVg==",
       "dependencies": [
         "@emnapi/wasi-threads",
         "tslib"
@@ -392,8 +393,8 @@
         "tslib"
       ]
     },
-    "@emnapi/wasi-threads@1.0.2": {
-      "integrity": "sha512-5n3nTJblwRi8LlXkJ9eBzu+kZR8Yxcc7ubakyQTFzPMtIhFpUBRbsnc2Dv88IZDIbCDlBiWrknhB4Lsz7mg6BA==",
+    "@emnapi/wasi-threads@1.0.1": {
+      "integrity": "sha512-iIBu7mwkq4UQGeMEM8bLwNK962nXdhodeScX4slfQnRhEMMzvYivHhutCIk8uojvmASXXPC2WNEjwxFWk72Oqw==",
       "dependencies": [
         "tslib"
       ]
@@ -687,8 +688,8 @@
     "@msgpack/msgpack@3.1.1": {
       "integrity": "sha512-DnBpqkMOUGayNVKyTLlkM6ILmU/m/+VUxGkuQlPQVAcvreLz5jn1OlQnWd8uHKL/ZSiljpM12rjRhr51VtvJUQ=="
     },
-    "@napi-rs/wasm-runtime@0.2.9": {
-      "integrity": "sha512-OKRBiajrrxB9ATokgEQoG87Z25c67pCpYcCwmXYX8PBftC9pBfN18gnm/fh1wurSLEKIAt+QRFLFCQISrb66Jg==",
+    "@napi-rs/wasm-runtime@0.2.8": {
+      "integrity": "sha512-OBlgKdX7gin7OIq4fadsjpg+cp2ZphvAIKucHsNfTdJiqdOmOEwQd/bHi0VwNrcw5xpBJyUw6cK/QilCqy1BSg==",
       "dependencies": [
         "@emnapi/core",
         "@emnapi/runtime",
@@ -1195,6 +1196,12 @@
       "dependencies": [
         "@tiptap/core",
         "@tiptap/pm"
+      ]
+    },
+    "@tiptap/extension-image@2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.39.1_@tiptap+pm@2.11.7__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.39.1": {
+      "integrity": "sha512-YvCmTDB7Oo+A56tR4S/gcNaYpqU4DDlSQcRp5IQvmQV5EekSe0lnEazGDoqOCwsit9qQhj4MPQJhKrnaWrJUrg==",
+      "dependencies": [
+        "@tiptap/core"
       ]
     },
     "@tiptap/extension-italic@2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.39.1_@tiptap+pm@2.11.7__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.39.1": {
@@ -3999,6 +4006,7 @@
         "npm:@tailwindcss/typography@~0.5.16",
         "npm:@tailwindcss/vite@4",
         "npm:@tiptap/core@^2.11.5",
+        "npm:@tiptap/extension-image@^2.11.7",
         "npm:@tiptap/extension-link@^2.11.5",
         "npm:@tiptap/extension-mention@^2.11.5",
         "npm:@tiptap/extension-placeholder@^2.11.5",

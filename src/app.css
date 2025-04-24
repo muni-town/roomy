@@ -71,3 +71,7 @@ emoji-picker {
   height: 0;
   pointer-events: none;
 }
+
+.prose img {
+  @apply max-w-[300px] max-h-[300px];
+}
