@@ -14,10 +14,8 @@
   import { g } from "$lib/global.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { outerWidth } from "svelte/reactivity/window";
-  let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  let { wiki }: { wiki: WikiPage } = $props();
+  let { selectedWiki }: { selectedWiki: WikiPage } = $props();
   let isEditingWiki = $state(false);
 
   let wikiRenderedHtml = $state("");
@@ -140,6 +138,7 @@
   let urlPromptCallback: ((url: string) => void) | null = $state(null);
 
   let isDeleteDialogOpen = $state(false);
+  let wikiToDelete: WikiPage | undefined = $state();
 
   function setEditingWiki(value: boolean) {
     isEditingWiki = value;
@@ -154,17 +153,22 @@
     }
   }
 
-  function showDeleteDialog(event: Event) {
+  function showDeleteDialog(wiki: any, event: Event) {
     event.stopPropagation();
+    wikiToDelete = wiki;
     isDeleteDialogOpen = true;
   }
 
   function confirmDeleteWiki() {
-    wiki.softDeleted = true;
-    wiki.commit();
+    if (wikiToDelete) {
+      wikiToDelete.softDeleted = true;
+      wikiToDelete.commit();
 
-    isEditingWiki = false; // Close the editor to remove cached wiki
+      isEditingWiki = false; // Close the editor to remove cached wiki
+      selectedWiki = undefined;
+    }
     isDeleteDialogOpen = false;
+    wikiToDelete = undefined;
   }
 
   const EditorHandler = (editor: BlockNoteEditor) => {
@@ -512,9 +516,9 @@
           }
         }
       });
-      if (wiki) {
+      if (selectedWiki) {
         try {
-          const parsedContent = JSON.parse(wiki.bodyJson);
+          const parsedContent = JSON.parse(selectedWiki.bodyJson);
           setTimeout(() => {
             if (editor && editor.document) {
               editor.replaceBlocks(editor.document, parsedContent);
@@ -634,12 +638,12 @@
   });
 
   $effect(() => {
-    if (wiki.bodyJson == "{}") {
+    if (!selectedWiki || selectedWiki.bodyJson == "{}") {
       wikiRenderedHtml = "";
       processedHtml = "";
       return;
     }
-    const json = JSON.parse(wiki.bodyJson);
+    const json = JSON.parse(selectedWiki.bodyJson);
     try {
       const rendererEditor = BlockNoteEditor.create();
       rendererEditor
@@ -656,11 +660,11 @@
   });
 
   async function saveWikiContent() {
-    if (!editor || !g.space || !wiki) return;
+    if (!editor || !g.space || !selectedWiki) return;
     try {
       const res = JSON.stringify(editor.document);
-      wiki.bodyJson = res;
-      wiki.commit();
+      selectedWiki.bodyJson = res;
+      selectedWiki.commit();
 
       setEditingWiki(false);
       toast.success("Wiki saved successfully", { position: "bottom-end" });
@@ -736,49 +740,44 @@
   });
 </script>
 
-<header class="navbar">
-  <div class="navbar-start flex w-full justify-between gap-4">
-    <label
-      for="sidebar-left"
-      class="btn btn-ghost p-1 shrink-0 drawer-button sm:hidden"
-      title="Open sidebar"
-    >
-      <Icon
-        icon="material-symbols:book-outline"
-        font-size="1.75rem"
-        class="shrink-0"
-      />
-    </label>
-
-    <div class="flex gap-2 items-center" class:input={isEditingWiki}>
-      <Icon icon={"material-symbols:thread-unread-rounded"} />
-      {#if !isEditingWiki}
-        <h4
-          class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold flex gap-2 items-center`}
-        >
-          {wiki.name}
-        </h4>
-      {:else}
-        <input
-          type="text"
-          bind:value={wiki.name}
-          class="text-base-content text-lg font-bold p-0 flex-1 mr-2"
-          placeholder="Wiki title"
-          required
-        />
-      {/if}
+{#if g.isAdmin}
+  <button
+    class="btn btn-error delete-btn group-hover:block"
+    onclick={(e) => showDeleteDialog(selectedWiki, e)}
+  >
+    <Icon icon="tabler:trash" />
+  </button>
+{/if}
+<Button.Root
+  onclick={() => setEditingWiki(true)}
+  class="btn max-w-fit btn-primary"
+>
+  <Icon icon="tabler:edit" />
+  Edit
+</Button.Root>
+<!-- If no wiki selected, show guidance -->
+{#if !isEditingWiki}
+  <section class="wiki-content">
+    <div class="wiki-rendered p-4 bg-base-300/30">
+      <div class="wiki-html text-base-content">
+        {#if selectedWiki && !selectedWiki.softDeleted}
+          {@html processedHtml}
+        {:else}
+          <p class="text-base-content/70">No content available.</p>
+        {/if}
+      </div>
     </div>
-  </div>
-  <div class="flex gap-2">
-    {#if !isEditingWiki}
-      <Button.Root
-        onclick={() => setEditingWiki(true)}
-        class="btn max-w-fit btn-primary"
-      >
-        <Icon icon="tabler:edit" />
-        Edit
-      </Button.Root>
-    {:else}
+  </section>
+{:else}
+  <section class="wiki-editor-container p-4">
+    <div class="mb-4 flex justify-between items-center">
+      <input
+        type="text"
+        bind:value={selectedWiki.name}
+        class="input input-bordered flex-1 mr-2"
+        placeholder="Wiki title"
+        required
+      />
       <div class="flex gap-2">
         <Button.Root
           onclick={() => setEditingWiki(false)}
@@ -790,35 +789,7 @@
           Save
         </Button.Root>
       </div>
-    {/if}
-
-    {#if g.isAdmin}
-      <button
-        class="btn btn-error delete-btn group-hover:block"
-        onclick={showDeleteDialog}
-      >
-        <Icon icon="tabler:trash" />
-      </button>
-    {/if}
-  </div>
-</header>
-<!-- If no wiki selected, show guidance -->
-<div class="divider my-0"></div>
-
-{#if !isEditingWiki}
-  <section class="wiki-content">
-    <div class="wiki-rendered p-4">
-      <div class="wiki-html text-base-content">
-        {#if wiki && !wiki.softDeleted}
-          {@html processedHtml}
-        {:else}
-          <p class="text-base-content/70">No content available.</p>
-        {/if}
-      </div>
     </div>
-  </section>
-{:else}
-  <section class="wiki-editor-container p-4">
     <div
       class="wiki-editor bg-base-300/20 rounded-lg border border-base-content/30 p-4 h-auto {isEditingWiki
         ? 'edit-mode'
@@ -992,7 +963,7 @@
 
 <Dialog
   title="Confirm Wiki Deletion"
-  description="Are you sure you want to delete <b>{wiki?.name}</b>?</br></br><b>Note:</b> Deletes are not permanent and only hide the data from view. The data is still publicly accessible."
+  description="Are you sure you want to delete <b>{wikiToDelete?.name}</b>?</br></br><b>Note:</b> Deletes are not permanent and only hide the data from view. The data is still publicly accessible."
   bind:isDialogOpen={isDeleteDialogOpen}
 >
   <div class="flex justify-end gap-3">
