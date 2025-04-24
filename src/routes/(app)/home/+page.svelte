@@ -37,11 +37,11 @@
           {#each spaces.value as space}
             <a
               href={`/${space.handles((x) => x.get(0)) || space.id}`}
-              class="card border border-base-300 hover:border-primary bg-base-100 transition-colors cursor-pointer text-base-content w-full md:w-96"
+              class="dz-card border border-base-300 hover:border-primary bg-base-100 transition-colors cursor-pointer text-base-content w-full md:w-96"
             >
-              <div class="card-body flex-row items-center justify-between">
-                <h2 class="card-title">{space.name}</h2>
-                <div class="card-actions">
+              <div class="dz-card-body flex-row items-center justify-between">
+                <h2 class="dz-card-title">{space.name}</h2>
+                <div class="dz-card-actions">
                   <Icon
                     icon="lucide:circle-arrow-right"
                     class="text-2xl text-primary"
