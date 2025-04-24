@@ -1,5 +1,4 @@
 <script lang="ts">
-  import _ from "underscore";
   import { page } from "$app/state";
   import { getContext, setContext } from "svelte";
   import toast from "svelte-french-toast";
@@ -338,7 +337,7 @@
             </div>
           {/if}
           <div class="relative">
-            <!-- TODO: get all users that has dz-joined the server -->
+            <!-- TODO: get all users that has joined the server -->
             {#if g.roomy && g.roomy.spaces.ids().includes(g.space.id)}
               <ChatInput
                 bind:content={messageInput}
