@@ -218,14 +218,37 @@ export const completeExtensions = [
 ];
 
 // Function to create complete extensions with configured mention plugins
-export function createCompleteExtensions({ users = [], context = [] }: { users?: Item[], context?: Item[] }) {
-  return [
-    ...baseExtensions.filter(ext => ext.name !== 'image'), // Remove default image extension
-    Image.configure({
-      HTMLAttributes: {
-        class: 'max-w-[300px] max-h-[300px] object-contain relative',
-      },
-    }),
+export function createCompleteExtensions({
+  users = [],
+  context = [],
+  includeImage = true
+}: {
+  users?: Item[],
+  context?: Item[],
+  includeImage?: boolean
+}) {
+  // Use any[] to avoid TypeScript compatibility issues
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: any[] = [];
+
+  // Add all base extensions except image
+  for (const ext of baseExtensions.filter(ext => ext.name !== 'image')) {
+    result.push(ext);
+  }
+
+  // Only add the Image extension if includeImage is true
+  if (includeImage) {
+    result.push(
+      Image.configure({
+        HTMLAttributes: {
+          class: 'max-w-[300px] max-h-[300px] object-contain relative',
+        },
+      })
+    );
+  }
+
+  // Add mention extensions
+  result.push(
     UserMentionExtension.configure({
       HTMLAttributes: { class: "mention" },
       suggestion: suggestion({
@@ -233,7 +256,10 @@ export function createCompleteExtensions({ users = [], context = [] }: { users?:
         char: "@",
         pluginKey: "userMention",
       }),
-    }),
+    })
+  );
+
+  result.push(
     SpaceContextMentionExtension.configure({
       HTMLAttributes: { class: "mention" },
       suggestion: suggestion({
@@ -241,8 +267,10 @@ export function createCompleteExtensions({ users = [], context = [] }: { users?:
         char: "#",
         pluginKey: "spaceContextMention",
       }),
-    }),
-  ];
+    })
+  );
+
+  return result;
 };
 
 export const editorSchema = getSchema(extensions);
@@ -302,7 +330,7 @@ export async function handleImageUpload(editor: Editor, file: File, uploadFn: (f
       // Find and replace the loading placeholder with the actual image
       const transaction = editor.state.tr;
       let placeholderFound = false;
-      
+
       editor.state.doc.descendants((node, pos) => {
         if (node.type.name === 'image' && node.attrs['data-loading'] === 'true') {
           transaction.setNodeMarkup(pos, undefined, {
@@ -316,7 +344,7 @@ export async function handleImageUpload(editor: Editor, file: File, uploadFn: (f
         }
         return true;
       });
-      
+
       if (placeholderFound) {
         editor.view.dispatch(transaction);
       } else {
@@ -329,7 +357,7 @@ export async function handleImageUpload(editor: Editor, file: File, uploadFn: (f
           }
         }).run();
       }
-      
+
       return result;
     })
     .catch(error => {

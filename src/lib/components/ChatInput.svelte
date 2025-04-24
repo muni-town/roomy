@@ -68,15 +68,46 @@
     onEnter: onEnter.toString()
   });
 
+  // Wrapped send handler for spinner
+  async function wrappedOnEnter() {
+    // If there are local images, upload them first
+    if (localImages.size > 0) {
+      // Show loading state
+      isUploading = true;
+
+      try {
+        // Upload all local images and get updated content
+        const updatedContent = await uploadLocalImages();
+
+        // Update the content with the uploaded images
+        content = updatedContent;
+
+        // Now call the onEnter handler with the updated content
+        await Promise.resolve(onEnter());
+      } catch (error) {
+        console.error("Error uploading images before sending:", error);
+        toast.error("Failed to upload images", { position: "bottom-right" });
+      } finally {
+        isUploading = false;
+      }
+    } else {
+      // No local images, just call onEnter
+      await Promise.resolve(onEnter());
+    }
+  }
+
+  // We'll use the extensions created in the effect instead of these initial ones
+  // This avoids potential duplicate extensions
   let extensions = $derived([
     StarterKit.configure({ heading: false }),
     Placeholder.configure({ placeholder }),
+    // Only use CustomImage, not the standard Image extension
     CustomImage.configure({
       HTMLAttributes: {
         class: 'max-w-[300px] max-h-[300px] object-contain relative',
       },
     }),
-    initKeyboardShortcutHandler({ onEnter }),
+    initKeyboardShortcutHandler({ onEnter: wrappedOnEnter }),
     initUserMention({ users }),
     initSpaceContextMention({ context }),
   ]);
@@ -168,15 +199,20 @@
     try {
       // Create a deep copy of the content to modify
       const contentCopy = JSON.parse(JSON.stringify(content));
+      console.log("Original content before upload:", contentCopy);
 
       // Process all local images
       const uploadPromises: Promise<{localUrl: string, remoteUrl: string}>[] = [];
 
       // Start all uploads in parallel
       for (const [localUrl, file] of localImages.entries()) {
+        console.log("Uploading local image:", localUrl);
         uploadPromises.push(
           user.uploadBlob(file)
-            .then(result => ({ localUrl, remoteUrl: result.url }))
+            .then(result => {
+              console.log("Upload successful, CDN URL:", result.url);
+              return { localUrl, remoteUrl: result.url };
+            })
             .catch(error => {
               console.error("Error uploading image:", error);
               toast.error("Failed to upload an image", { position: "bottom-right" });
@@ -188,16 +224,29 @@
 
       // Wait for all uploads to complete
       const results = await Promise.all(uploadPromises);
+      console.log("Upload results:", results);
 
       // Replace local URLs with remote URLs in the content
       for (const { localUrl, remoteUrl } of results) {
+        console.log(`Replacing ${localUrl} with ${remoteUrl}`);
+
         // Replace in the editor content
         replaceImageUrlInContent(contentCopy, localUrl, remoteUrl);
+      }
 
-        // Clean up the local URL
+      console.log("Updated content after replacement:", contentCopy);
+
+      // Clean up local URLs after successful replacement
+      for (const { localUrl } of results) {
         URL.revokeObjectURL(localUrl);
         localImages.delete(localUrl);
         localImageUrls.delete(localUrl);
+      }
+
+      // If tiptap editor is available, update its content too
+      if (tiptap) {
+        console.log("Updating tiptap editor content");
+        tiptap.commands.setContent(contentCopy);
       }
 
       return contentCopy;
@@ -243,6 +292,7 @@
         const attrs = obj.attrs as Record<string, unknown>;
 
         if (attrs.src === oldUrl) {
+          console.log(`Found image with src=${oldUrl}, replacing with ${newUrl}`);
           attrs.src = newUrl;
           // Remove the local data attribute
           if ('data-local' in attrs) {
@@ -261,6 +311,10 @@
               oldUrl,
               newUrl
             );
+          } else if (key === 'src' && typeof value === 'string' && value === oldUrl) {
+            // Also check for direct src attributes that might not be in the attrs object
+            console.log(`Found direct src attribute with value ${oldUrl}, replacing with ${newUrl}`);
+            obj[key] = newUrl;
           }
         }
       }
@@ -356,33 +410,7 @@
     }
   }
 
-  // Wrapped send handler for spinner
-  async function wrappedOnEnter() {
-    // If there are local images, upload them first
-    if (localImages.size > 0) {
-      // Show loading state
-      isUploading = true;
 
-      try {
-        // Upload all local images and get updated content
-        const updatedContent = await uploadLocalImages();
-
-        // Update the content with the uploaded images
-        content = updatedContent;
-
-        // Now call the onEnter handler with the updated content
-        await Promise.resolve(onEnter());
-      } catch (error) {
-        console.error("Error uploading images before sending:", error);
-        toast.error("Failed to upload images", { position: "bottom-right" });
-      } finally {
-        isUploading = false;
-      }
-    } else {
-      // No local images, just call onEnter
-      await Promise.resolve(onEnter());
-    }
-  }
 
   // First effect: Create/recreate editor when dependencies change
   $effect(() => {
@@ -409,11 +437,12 @@
       tiptap?.destroy();
 
       // Create new extensions with current users/context/onEnter
+      // Set includeImage to false to avoid duplicate image extensions
       const extensions = [
-        ...createCompleteExtensions({ users, context }),
+        ...createCompleteExtensions({ users, context, includeImage: false }),
         Placeholder.configure({ placeholder }),
-        initKeyboardShortcutHandler({ onEnter }),
-        // Explicitly add CustomImage extension to ensure it's available for editing messages with images
+        initKeyboardShortcutHandler({ onEnter: wrappedOnEnter }),
+        // Only add CustomImage extension (not the standard Image extension)
         CustomImage.configure({
           HTMLAttributes: {
             class: 'max-w-[300px] max-h-[300px] object-contain relative',
