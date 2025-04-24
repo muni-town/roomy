@@ -13,20 +13,19 @@
     "npm:@jsr/muni-town__leaf-sync-ws@0.1.0-preview.1": "0.1.0-preview.1",
     "npm:@jsr/muni-town__leaf@0.2.0-preview.16": "0.2.0-preview.16",
     "npm:@jsr/roomy-chat__sdk@0.1.0-preview.16": "0.1.0-preview.16",
-    "npm:@noble/curves@^1.8.1": "1.8.1",
-    "npm:@sveltejs/adapter-netlify@^4.4.2": "4.4.2_@sveltejs+kit@2.20.2__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.25.3____acorn@8.14.1___vite@6.2.2____lightningcss@1.29.2__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
-    "npm:@sveltejs/adapter-static@^3.0.8": "3.0.8_@sveltejs+kit@2.20.2__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.25.3____acorn@8.14.1___vite@6.2.2____lightningcss@1.29.2__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
-    "npm:@sveltejs/kit@^2.16.1": "2.20.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
-    "npm:@sveltejs/vite-plugin-svelte@^5.0.3": "5.0.3_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2",
-    "npm:@tailwindcss/typography@~0.5.16": "0.5.16_tailwindcss@4.0.15",
-    "npm:@tailwindcss/vite@4": "4.0.15_vite@6.2.2__lightningcss@1.29.2_lightningcss@1.29.2",
-    "npm:@tiptap/core@^2.11.5": "2.11.5_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1",
-    "npm:@tiptap/extension-link@^2.11.5": "2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1",
-    "npm:@tiptap/extension-mention@^2.11.5": "2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1_@tiptap+suggestion@2.11.5__@tiptap+core@2.11.5___@tiptap+pm@2.11.5____prosemirror-model@1.25.0____prosemirror-state@1.4.3____prosemirror-view@1.38.1__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1",
-    "npm:@tiptap/extension-placeholder@^2.11.5": "2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1",
-    "npm:@tiptap/pm@^2.11.5": "2.11.5_prosemirror-model@1.25.0_prosemirror-state@1.4.3_prosemirror-view@1.38.1",
-    "npm:@tiptap/starter-kit@^2.11.5": "2.11.5_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1",
-    "npm:@tiptap/suggestion@^2.11.5": "2.11.5_@tiptap+core@2.11.5__@tiptap+pm@2.11.5___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.38.1_@tiptap+pm@2.11.5__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.38.1",
+    "npm:@noble/curves@^1.8.1": "1.8.2",
+    "npm:@sveltejs/adapter-netlify@5": "5.0.0_@sveltejs+kit@2.20.7__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.28.1____acorn@8.14.1___vite@6.3.2____picomatch@4.0.2__svelte@5.28.1___acorn@8.14.1__vite@6.3.2___picomatch@4.0.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.28.1___acorn@8.14.1__vite@6.3.2___picomatch@4.0.2_svelte@5.28.1__acorn@8.14.1_vite@6.3.2__picomatch@4.0.2",
+    "npm:@sveltejs/kit@^2.16.1": "2.20.7_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.28.1___acorn@8.14.1__vite@6.3.2___picomatch@4.0.2_svelte@5.28.1__acorn@8.14.1_vite@6.3.2__picomatch@4.0.2",
+    "npm:@sveltejs/vite-plugin-svelte@^5.0.3": "5.0.3_svelte@5.28.1__acorn@8.14.1_vite@6.3.2__picomatch@4.0.2",
+    "npm:@tailwindcss/typography@~0.5.16": "0.5.16_tailwindcss@4.1.4",
+    "npm:@tailwindcss/vite@^4.1.4": "4.1.4_vite@6.3.2__picomatch@4.0.2",
+    "npm:@tiptap/core@^2.11.5": "2.11.7_@tiptap+pm@2.11.7__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.39.1",
+    "npm:@tiptap/extension-link@^2.11.5": "2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.39.1_@tiptap+pm@2.11.7__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.39.1",
+    "npm:@tiptap/extension-mention@^2.11.5": "2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.39.1_@tiptap+pm@2.11.7__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.39.1_@tiptap+suggestion@2.11.7__@tiptap+core@2.11.7___@tiptap+pm@2.11.7____prosemirror-model@1.25.0____prosemirror-state@1.4.3____prosemirror-view@1.39.1__@tiptap+pm@2.11.7___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.39.1",
+    "npm:@tiptap/extension-placeholder@^2.11.5": "2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.39.1_@tiptap+pm@2.11.7__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.39.1",
+    "npm:@tiptap/pm@^2.11.5": "2.11.7_prosemirror-model@1.25.0_prosemirror-state@1.4.3_prosemirror-view@1.39.1",
+    "npm:@tiptap/starter-kit@^2.11.5": "2.11.7_@tiptap+pm@2.11.7__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.39.1_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.39.1",
+    "npm:@tiptap/suggestion@^2.11.5": "2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.0___prosemirror-state@1.4.3___prosemirror-view@1.39.1_@tiptap+pm@2.11.7__prosemirror-model@1.25.0__prosemirror-state@1.4.3__prosemirror-view@1.39.1",
     "npm:@types/linkify-it@5": "5.0.0",
     "npm:@types/sanitize-html@^2.13.0": "2.13.0",
     "npm:@types/underscore@^1.13.0": "1.13.0",
@@ -55,8 +54,7 @@
     "npm:tailwindcss@4": "4.0.15",
     "npm:tweetnacl@^1.0.3": "1.0.3",
     "npm:typescript-event-target@^1.1.1": "1.1.1",
-    "npm:typescript@5": "5.8.2",
-    "npm:ulidx@^2.4.1": "2.4.1",
+    "npm:typescript@5": "5.8.3",
     "npm:underscore@^1.13.7": "1.13.7",
     "npm:vaul-svelte@~0.3.2": "0.3.2_svelte@5.25.3__acorn@8.14.1",
     "npm:virtua@0.40": "0.40.3_svelte@5.25.3__acorn@8.14.1",
@@ -377,6 +375,25 @@
       "integrity": "sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==",
       "dependencies": [
         "@jridgewell/trace-mapping@0.3.9"
+      ]
+    },
+    "@emnapi/core@1.4.3": {
+      "integrity": "sha512-4m62DuCE07lw01soJwPiBGC0nAww0Q+RY70VZ+n49yDIO13yyinhbWCeNnaob0lakDtWQzSdtNWzJeOJt2ma+g==",
+      "dependencies": [
+        "@emnapi/wasi-threads",
+        "tslib"
+      ]
+    },
+    "@emnapi/runtime@1.4.3": {
+      "integrity": "sha512-pBPWdu6MLKROBX05wSNKcNb++m5Er+KQ9QkB+WVM+pW2Kx9hoSrVTnu3BdkI5eBLZoKu/J6mW/B6i6bJB2ytXQ==",
+      "dependencies": [
+        "tslib"
+      ]
+    },
+    "@emnapi/wasi-threads@1.0.2": {
+      "integrity": "sha512-5n3nTJblwRi8LlXkJ9eBzu+kZR8Yxcc7ubakyQTFzPMtIhFpUBRbsnc2Dv88IZDIbCDlBiWrknhB4Lsz7mg6BA==",
+      "dependencies": [
+        "tslib"
       ]
     },
     "@emoji-mart/data@1.2.1": {
@@ -892,8 +909,8 @@
         "acorn"
       ]
     },
-    "@sveltejs/adapter-netlify@4.4.2_@sveltejs+kit@2.20.2__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.25.3____acorn@8.14.1___vite@6.2.2____lightningcss@1.29.2__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2": {
-      "integrity": "sha512-APMX6rrRNnYJTexn1NttHwBOUmcWIc8hMb8bNjJeIa8tfvlPo68DZOYGCfi80yfH9AfEc27g3cwIrV9C9kZKMQ==",
+    "@sveltejs/adapter-netlify@5.0.0_@sveltejs+kit@2.20.7__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.28.1____acorn@8.14.1___vite@6.3.2____picomatch@4.0.2__svelte@5.28.1___acorn@8.14.1__vite@6.3.2___picomatch@4.0.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.28.1___acorn@8.14.1__vite@6.3.2___picomatch@4.0.2_svelte@5.28.1__acorn@8.14.1_vite@6.3.2__picomatch@4.0.2": {
+      "integrity": "sha512-if2JvVHuQWRG9V2A3P8CrbB+qo0qLFvpIu2Nb/sbMqoejDL+4kuzT4WPA7dUgruAF0Hj/AAGpxaJedgNd6ZENw==",
       "dependencies": [
         "@iarna/toml",
         "@sveltejs/kit@2.20.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2_vite@6.2.2",
@@ -901,14 +918,8 @@
         "set-cookie-parser"
       ]
     },
-    "@sveltejs/adapter-static@3.0.8_@sveltejs+kit@2.20.2__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.25.3____acorn@8.14.1___vite@6.2.2____lightningcss@1.29.2__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2": {
-      "integrity": "sha512-YaDrquRpZwfcXbnlDsSrBQNCChVOT9MGuSg+dMAyfsAa1SmiAhrA5jUYUiIMC59G92kIbY/AaQOWcBdq+lh+zg==",
-      "dependencies": [
-        "@sveltejs/kit@2.20.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2_vite@6.2.2"
-      ]
-    },
-    "@sveltejs/kit@2.20.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.25.3___acorn@8.14.1__vite@6.2.2___lightningcss@1.29.2_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2": {
-      "integrity": "sha512-Dv8TOAZC9vyfcAB9TMsvUEJsRbklRTeNfcYBPaeH6KnABJ99i3CvCB2eNx8fiiliIqe+9GIchBg4RodRH5p1BQ==",
+    "@sveltejs/kit@2.20.7_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.28.1___acorn@8.14.1__vite@6.3.2___picomatch@4.0.2_svelte@5.28.1__acorn@8.14.1_vite@6.3.2__picomatch@4.0.2": {
+      "integrity": "sha512-dVbLMubpJJSLI4OYB+yWYNHGAhgc2bVevWuBjDj8jFUXIJOAnLwYP3vsmtcgoxNGUXoq0rHS5f7MFCsryb6nzg==",
       "dependencies": [
         "@sveltejs/vite-plugin-svelte@5.0.3_svelte@5.25.3__acorn@8.14.1_vite@6.2.2__lightningcss@1.29.2_vite@6.2.2",
         "@types/cookie",
@@ -2324,11 +2335,8 @@
     "kleur@4.1.5": {
       "integrity": "sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ=="
     },
-    "layerr@3.0.0": {
-      "integrity": "sha512-tv754Ki2dXpPVApOrjTyRo4/QegVb9eVFq4mjqp4+NM5NaX7syQvN5BBNfV/ZpAHCEHV24XdUVrBAoka4jt3pA=="
-    },
-    "lib0@0.2.100": {
-      "integrity": "sha512-ACQmtZ8cRD7/SpBEzBP88KrgrjOnhfcOANhhk8ASv+HFEvBSHOprxur3vuhmNw4YLq29y4Yen4jU0jHpIqVYWw==",
+    "lib0@0.2.104": {
+      "integrity": "sha512-1tqKRANSPTcjs/yjPoKh52oRM2u5AYdd8jie8sDiN8/5kpWWiQSHUGgtB4VEXLw1chVL3QPSPp8q9RWqzSn2FA==",
       "dependencies": [
         "isomorphic.js"
       ]
@@ -3709,12 +3717,6 @@
         "multiformats"
       ]
     },
-    "ulidx@2.4.1": {
-      "integrity": "sha512-xY7c8LPyzvhvew0Fn+Ek3wBC9STZAuDI/Y5andCKi9AX6/jvfaX45PhsDX8oxgPL0YFp0Jhr8qWMbS/p9375Xg==",
-      "dependencies": [
-        "layerr"
-      ]
-    },
     "underscore@1.13.7": {
       "integrity": "sha512-GMXzWtsc57XAtguZgaQViUOzs0KTkk8ojr3/xAxXLITqf/3EMwxC0inyETfDFjH/Krbhuep0HNbbjI9i/q3F3g=="
     },
@@ -4062,12 +4064,11 @@
         "npm:@jsr/muni-town__leaf@0.2.0-preview.16",
         "npm:@jsr/roomy-chat__sdk@0.1.0-preview.16",
         "npm:@noble/curves@^1.8.1",
-        "npm:@sveltejs/adapter-netlify@^4.4.2",
-        "npm:@sveltejs/adapter-static@^3.0.8",
+        "npm:@sveltejs/adapter-netlify@5",
         "npm:@sveltejs/kit@^2.16.1",
         "npm:@sveltejs/vite-plugin-svelte@^5.0.3",
         "npm:@tailwindcss/typography@~0.5.16",
-        "npm:@tailwindcss/vite@4",
+        "npm:@tailwindcss/vite@^4.1.4",
         "npm:@tiptap/core@^2.11.5",
         "npm:@tiptap/extension-link@^2.11.5",
         "npm:@tiptap/extension-mention@^2.11.5",
@@ -4104,7 +4105,6 @@
         "npm:tweetnacl@^1.0.3",
         "npm:typescript-event-target@^1.1.1",
         "npm:typescript@5",
-        "npm:ulidx@^2.4.1",
         "npm:underscore@^1.13.7",
         "npm:vaul-svelte@~0.3.2",
         "npm:virtua@0.40",
