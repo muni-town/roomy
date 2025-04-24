@@ -42,6 +42,8 @@ self.addEventListener("fetch", (event: FetchEvent) => {
   if (event.request.method !== "GET") return;
   // ignore oauth pages
   if (url.pathname.startsWith("/oauth")) return;
+  // Ignore socket.io request
+  if (url.pathname.includes("socket.io")) return;
 
   async function respond() {
     const cache = await caches.open(CACHE);
