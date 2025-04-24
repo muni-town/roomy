@@ -3,6 +3,8 @@
 @plugin "@tailwindcss/typography";
 @plugin "daisyui" {
   themes: all;
+  prefix: "dz-";
+  logs: false;
 }
 
 /*

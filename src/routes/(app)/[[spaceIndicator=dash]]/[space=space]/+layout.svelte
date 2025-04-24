@@ -89,9 +89,10 @@
         ? 'absolute inset-0'
         : 'hidden'}"
   >
+
     {@render children()}
   </main>
-  <!-- If there is no space. -->
+<!-- If there is no space. -->
 {:else}
   <span class="loading loading-spinner mx-auto w-25"></span>
 {/if}

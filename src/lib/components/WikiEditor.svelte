@@ -801,7 +801,10 @@
   <aside class="w-1/4 border-r border-base-content/10 p-4">
     <div class="mb-4 flex justify-between items-center">
       <h3 class="text-xl font-bold text-base-content">Wikis</h3>
-      <button class="btn btn-primary btn-sm text-lg" onclick={createWiki}>
+      <button
+        class="dz-btn dz-btn-primary dz-btn-sm text-lg"
+        onclick={createWiki}
+      >
         +
       </button>
     </div>
@@ -828,7 +831,7 @@
               <span>{wiki.name}</span>
               {#if g.isAdmin}
                 <button
-                  class="absolute right-0 btn btn-error btn-xs delete-button hidden group-hover:block"
+                  class="absolute right-0 dz-btn dz-btn-error dz-btn-xs delete-button hidden group-hover:block"
                   onclick={(e) => showDeleteDialog(wiki, e)}
                 >
                   <Icon icon="tabler:trash" />
@@ -855,18 +858,21 @@
           <input
             type="text"
             bind:value={selectedWiki.name}
-            class="input input-bordered flex-1 mr-2"
+            class="dz-input dz-bordered flex-1 mr-2"
             placeholder="Wiki title"
             required
           />
           <div class="flex gap-2">
             <Button.Root
               onclick={() => setEditingWiki(false)}
-              class="btn btn-ghost"
+              class="dz-btn dz-btn-ghost"
             >
               Cancel
             </Button.Root>
-            <Button.Root onclick={saveWikiContent} class="btn btn-primary">
+            <Button.Root
+              onclick={saveWikiContent}
+              class="dz-btn dz-btn-primary"
+            >
               Save
             </Button.Root>
           </div>
@@ -881,7 +887,7 @@
           >
             {#each formatCommands as command}
               <button
-                class="btn btn-ghost btn-square btn-sm"
+                class="dz-btn dz-btn-ghost dz-btn-square dz-btn-sm"
                 title={command.name}
                 onclick={() => executeFormatCommand(command)}
               >
@@ -892,7 +898,7 @@
             {#each slashCommands as command, i}
               {#if i < 3}
                 <button
-                  class="btn btn-ghost btn-square btn-sm"
+                  class="dz-btn dz-btn-ghost dz-btn-square dz-btn-sm"
                   title={command.name}
                   onclick={() => executeSlashCommand(command)}
                 >
@@ -906,7 +912,7 @@
 
           {#if slashMenuVisible && isEditingWiki}
             <div
-              class="slash-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
+              class="slash-menu border border-base-content/20 rounded shadow-lg absolute z-50"
               style="left: {slashMenuPosition.x}px; top: {slashMenuPosition.y}px;"
             >
               <ul class="py-1">
@@ -1008,7 +1014,7 @@
             >
               {#each formatCommands as command}
                 <button
-                  class="btn btn-ghost btn-square btn-sm"
+                  class="dz-btn dz-btn-ghost dz-btn-square dz-btn-sm"
                   title={command.name}
                   onclick={() => {
                     command.action();
@@ -1030,7 +1036,7 @@
           </h3>
           <Button.Root
             onclick={() => setEditingWiki(true)}
-            class="btn btn-primary"
+            class="dz-btn dz-btn-primary"
           >
             <Icon icon="tabler:edit" />
             Edit Wiki
@@ -1061,11 +1067,11 @@
       bind:this={urlInputElement}
       use:focusOnRender
       placeholder="https://example.com"
-      class="input input-bordered w-full"
+      class="dz-input dz-bordered w-full"
       required
     />
     <div class="flex justify-end gap-3 mt-2">
-      <button type="submit" class="btn btn-primary">Add Link</button>
+      <button type="submit" class="dz-btn dz-btn-primary">Add Link</button>
     </div>
   </form>
 </Dialog>
@@ -1081,11 +1087,11 @@
       bind:this={newWikiTitleElement}
       use:focusOnRender
       placeholder="Tips on moderation..."
-      class="input input-bordered w-full"
+      class="dz-input dz-bordered w-full"
       required
     />
     <div class="flex justify-end gap-3 mt-2">
-      <button type="submit" class="btn btn-primary">Create</button>
+      <button type="submit" class="dz-btn dz-btn-primary">Create</button>
     </div>
   </form>
 </Dialog>
@@ -1096,7 +1102,9 @@
   bind:isDialogOpen={isDeleteDialogOpen}
 >
   <div class="flex justify-end gap-3">
-    <button class="btn btn-error" onclick={confirmDeleteWiki}>Delete</button>
+    <button class="dz-btn dz-btn-error" onclick={confirmDeleteWiki}
+      >Delete</button
+    >
   </div>
 </Dialog>
 

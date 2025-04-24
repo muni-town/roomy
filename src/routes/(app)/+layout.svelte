@@ -1,10 +1,10 @@
 <script lang="ts">
   import "../../app.css";
   import { browser, dev } from "$app/environment";
-
   import { onMount, setContext } from "svelte";
   import posthog from "posthog-js";
   import { Toaster } from "svelte-french-toast";
+  import { RenderScan } from "svelte-render-scan";
 
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
@@ -71,6 +71,6 @@
         <RoomSidebar />
       {/if}
     </div>
-  </div>
+  </div> 
   {@render children()}
 </div>

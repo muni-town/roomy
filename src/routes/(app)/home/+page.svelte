@@ -12,11 +12,8 @@
   );
 </script>
 
-<!-- NOTE: Some of these classes (hero, hero-content, divider) come from Daisy UI,
- which is confusing because there is nothing telling you that's where they are coming from.
- Suggest removing these and replacing with raw Tailwind. -->
-<div class="hero bg-base-200 min-h-screen">
-  <div class="hero-content">
+<div class="dz-hero bg-base-200 min-h-screen">
+  <div class="dz-hero-content">
     <div class="flex flex-col gap-8 items-center">
       <h1 class="text-5xl font-bold text-center">Hello Roomy</h1>
       <p class="text-lg font-medium max-w-2xl text-center">
@@ -28,12 +25,12 @@
       {#if !user.session}
         <Button.Root
           onclick={() => (user.isLoginDialogOpen = true)}
-          class="btn btn-primary"
+          class="dz-btn dz-btn-primary"
         >
           Log In with Bluesky
         </Button.Root>
       {:else if !spaces.value}
-        <span class="loading loading-spinner mx-auto w-25"></span>
+        <span class="dz-loading dz-loading-spinner mx-auto w-25"></span>
       {:else if spaces.value.length > 0}
         <h2 class="text-3xl font-bold">Your Spaces</h2>
         <section class="flex flex-wrap justify-center gap-4 max-w-5xl">

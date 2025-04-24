@@ -28,10 +28,11 @@
     {@render children()}
   </ContextMenu.Trigger>
   <ContextMenu.Portal>
+
     <ContextMenu.Content {...contentProps} class="z-40">
-      <ContextMenu.Group class="menu bg-base-200 rounded-box w-56">
+      <ContextMenu.Group class="dz-menu bg-base-200 rounded-box w-56">
         {#if menuTitle}
-          <li class="menu-title">
+          <li class="dz-menu-title">
             <ContextMenu.GroupHeading>{menuTitle}</ContextMenu.GroupHeading>
           </li>
         {/if}
