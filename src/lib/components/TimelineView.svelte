@@ -27,6 +27,7 @@
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
   import BoardList from "./BoardList.svelte";
   import { derivePromise } from "$lib/utils.svelte";
+  import CreateWikiDialog from "$lib/components/CreateWikiDialog.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
@@ -191,7 +192,6 @@
   });
 
   // Image upload is now handled in ChatInput.svelte
-  
   let isWikiTitleDialogOpen = $state(false);
   let newWikiTitleElement: HTMLInputElement | null = $state(null);
   function createWiki() {
@@ -282,9 +282,7 @@
 {#if tab === "board"}
   <BoardList items={wikis.value} title="Pages" route="wiki">
     {#snippet header()}
-      <button class="btn btn-primary btn-sm text-lg" onclick={createWiki}>
-        +
-      </button>
+      <CreateWikiDialog />
     {/snippet}
     No pages for this channel.
   </BoardList>
