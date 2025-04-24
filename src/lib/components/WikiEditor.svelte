@@ -736,8 +736,8 @@
   });
 </script>
 
-<header class="navbar">
-  <div class="navbar-start flex w-full justify-between gap-4">
+<header class="dz-navbar">
+  <div class="dz-navbar-start flex w-full justify-between gap-4">
     <label
       for="sidebar-left"
       class="btn btn-ghost p-1 shrink-0 drawer-button sm:hidden"
@@ -750,7 +750,7 @@
       />
     </label>
 
-    <div class="flex gap-2 items-center" class:input={isEditingWiki}>
+    <div class="flex gap-2 items-center" class:dz-input={isEditingWiki}>
       <Icon icon={"material-symbols:thread-unread-rounded"} />
       {#if !isEditingWiki}
         <h4
@@ -769,24 +769,24 @@
       {/if}
     </div>
   </div>
-  <div class="flex gap-2">
+  <div class="flex gap-3">
     {#if !isEditingWiki}
       <Button.Root
         onclick={() => setEditingWiki(true)}
-        class="btn max-w-fit btn-primary"
+        class=" max-w-fit dz-btn dz-btn-primary"
       >
         <Icon icon="tabler:edit" />
         Edit
       </Button.Root>
     {:else}
-      <div class="flex gap-2">
+      <div class="pl-3 flex gap-2 grow">
         <Button.Root
           onclick={() => setEditingWiki(false)}
-          class="btn btn-ghost"
+          class="dz-btn dz-btn-ghost"
         >
           Cancel
         </Button.Root>
-        <Button.Root onclick={saveWikiContent} class="btn btn-primary">
+        <Button.Root onclick={saveWikiContent} class="dz-btn dz-btn-primary">
           Save
         </Button.Root>
       </div>
@@ -794,7 +794,7 @@
 
     {#if g.isAdmin}
       <button
-        class="btn btn-error delete-btn group-hover:block"
+        class="dz-btn dz-btn-error dz-delete-btn group-hover:block"
         onclick={showDeleteDialog}
       >
         <Icon icon="tabler:trash" />
@@ -803,7 +803,7 @@
   </div>
 </header>
 <!-- If no wiki selected, show guidance -->
-<div class="divider my-0"></div>
+<div class="dz-divider"></div>
 
 {#if !isEditingWiki}
   <section class="wiki-content">
