@@ -7,7 +7,7 @@
   import type { Item } from "$lib/tiptap/editor";
   import { getProfile } from "$lib/profile.svelte";
   import { derivePromise } from "$lib/utils.svelte";
-  import { Message, Image } from "@roomy-chat/sdk";
+  import { Message } from "@roomy-chat/sdk";
   import SidebarMain from "$lib/components/SidebarMain.svelte";
 
   let { children } = $props();
