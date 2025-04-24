@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { Editor } from "@tiptap/core";
+  import { Editor, Node, mergeAttributes } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
   import Placeholder from "@tiptap/extension-placeholder";
   import Image from "@tiptap/extension-image";
@@ -15,6 +15,27 @@
   import { toast } from "svelte-french-toast";
   import { untrack } from "svelte";
   import { isEqual } from "underscore";
+
+  // Custom Image extension that adds a visual indicator for local images
+  const CustomImage = Image.extend({
+    renderHTML({ HTMLAttributes }) {
+      const attrs = mergeAttributes(this.options.HTMLAttributes, HTMLAttributes);
+      const isLocal = attrs['data-local'] === 'true';
+
+      if (isLocal) {
+        // For local images, wrap in a container with a label
+        return [
+          'div',
+          { class: 'image-container' },
+          ['img', { ...attrs, class: `${attrs.class || ''} local-image` }],
+          ['span', { class: 'local-image-label' }, 'Local preview']
+        ];
+      }
+
+      // For regular images, just return the img tag
+      return ['img', attrs];
+    }
+  });
 
   type Props = {
     content: Record<string, unknown>;
@@ -44,7 +65,7 @@
   let extensions = $derived([
     StarterKit.configure({ heading: false }),
     Placeholder.configure({ placeholder }),
-    Image.configure({
+    CustomImage.configure({
       HTMLAttributes: {
         class: 'max-w-[300px] max-h-[300px] object-contain relative',
       },
@@ -86,45 +107,156 @@
   // Flag to track whether a file is being dragged over the drop area
   let isDragOver = $state(false);
 
-  // Consolidated image file processing logic
-  async function processImageFile(file: File, input?: HTMLInputElement) {
-    // Show loading indicator or disable the button while uploading
+  // Store local image files for later upload
+  let localImages: Map<string, File> = $state(new Map());
+
+  // Track which image URLs in the editor are local previews
+  let localImageUrls: Set<string> = $state(new Set());
+
+  // Process image file to create a local preview
+  function processImageFile(file: File, input?: HTMLInputElement) {
+    if (!tiptap) {
+      console.warn("Tiptap editor not initialized");
+      return;
+    }
+
+    try {
+      // Create a local blob URL for the image
+      const localUrl = URL.createObjectURL(file);
+
+      // Store the file for later upload
+      localImages.set(localUrl, file);
+      localImageUrls.add(localUrl);
+
+      // Insert image into editor with the local URL
+      tiptap.chain().focus().insertContent({
+        type: "image",
+        attrs: {
+          src: localUrl,
+          'data-local': 'true' // Mark as local image
+        }
+      }).run();
+
+      // Update content state to ensure persistence
+      content = tiptap.getJSON();
+
+      // Clear the file input if provided
+      if (input) input.value = "";
+    } catch (error) {
+      console.error("Error creating image preview:", error);
+      toast.error("Failed to create image preview", { position: "bottom-right" });
+    }
+  }
+
+  // Upload all local images and replace their URLs in the editor content
+  async function uploadLocalImages() {
+    if (localImages.size === 0) return content;
+
+    isUploading = true;
     const uploadButton = document.querySelector('[aria-label="Upload image"]');
     if (uploadButton) {
       uploadButton.setAttribute('disabled', 'true');
       uploadButton.setAttribute('title', 'Uploading...');
     }
-    isUploading = true;
-    try {
-      // Upload the image using the user.uploadBlob method
-      const uploadResult = await user.uploadBlob(file);
 
-      if (!tiptap) {
-        console.warn("Tiptap editor not initialized");
-        return;
+    try {
+      // Create a deep copy of the content to modify
+      const contentCopy = JSON.parse(JSON.stringify(content));
+
+      // Process all local images
+      const uploadPromises: Promise<{localUrl: string, remoteUrl: string}>[] = [];
+
+      // Start all uploads in parallel
+      for (const [localUrl, file] of localImages.entries()) {
+        uploadPromises.push(
+          user.uploadBlob(file)
+            .then(result => ({ localUrl, remoteUrl: result.url }))
+            .catch(error => {
+              console.error("Error uploading image:", error);
+              toast.error("Failed to upload an image", { position: "bottom-right" });
+              // Return the local URL as both to avoid breaking the content
+              return { localUrl, remoteUrl: localUrl };
+            })
+        );
       }
 
-      // Get the raw image URL without any processing
-      const imageUrl = uploadResult.url;
+      // Wait for all uploads to complete
+      const results = await Promise.all(uploadPromises);
 
-      // Insert image into editor with the raw URL
-      tiptap.chain().focus().insertContent({
-        type: "image",
-        attrs: { src: imageUrl }
-      }).run();
+      // Replace local URLs with remote URLs in the content
+      for (const { localUrl, remoteUrl } of results) {
+        // Replace in the editor content
+        replaceImageUrlInContent(contentCopy, localUrl, remoteUrl);
 
-      // Update content state to ensure persistence
-      content = tiptap.getJSON();
+        // Clean up the local URL
+        URL.revokeObjectURL(localUrl);
+        localImages.delete(localUrl);
+        localImageUrls.delete(localUrl);
+      }
+
+      return contentCopy;
     } catch (error) {
-      console.error("Error uploading image:", error);
-      toast.error("Failed to upload image", { position: "bottom-right" });
+      console.error("Error uploading images:", error);
+      toast.error("Failed to upload images", { position: "bottom-right" });
+      return content;
     } finally {
-      if (input) input.value = "";
       isUploading = false;
-      // Re-enable the upload button
       if (uploadButton) {
         uploadButton.removeAttribute('disabled');
         uploadButton.setAttribute('title', 'Upload image');
+      }
+    }
+  }
+
+  // Helper function to replace image URLs in the content object
+  function replaceImageUrlInContent(
+    contentObj: Record<string, unknown> | Array<unknown> | null | undefined,
+    oldUrl: string,
+    newUrl: string
+  ) {
+    if (!contentObj) return;
+
+    // If it's an array, process each item
+    if (Array.isArray(contentObj)) {
+      for (const item of contentObj) {
+        if (item && typeof item === 'object') {
+          replaceImageUrlInContent(item as Record<string, unknown>, oldUrl, newUrl);
+        }
+      }
+      return;
+    }
+
+    // If it's an object, check if it's an image node
+    if (typeof contentObj === 'object') {
+      const obj = contentObj as Record<string, unknown>;
+
+      if (obj.type === 'image' &&
+          obj.attrs &&
+          typeof obj.attrs === 'object') {
+
+        const attrs = obj.attrs as Record<string, unknown>;
+
+        if (attrs.src === oldUrl) {
+          attrs.src = newUrl;
+          // Remove the local data attribute
+          if ('data-local' in attrs) {
+            attrs['data-local'] = undefined;
+          }
+        }
+      }
+
+      // Process all properties recursively
+      for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+          const value = obj[key];
+          if (value && typeof value === 'object') {
+            replaceImageUrlInContent(
+              value as Record<string, unknown> | Array<unknown>,
+              oldUrl,
+              newUrl
+            );
+          }
+        }
       }
     }
   }
@@ -145,12 +277,12 @@
   }
 
   // Updated handleFileProcess to use processImageFile
-  async function handleFileProcess(event: Event) {
+  function handleFileProcess(event: Event) {
     const input = event.target as HTMLInputElement;
     if (!input.files?.length) return;
     const file = input.files[0];
     if (!file || !file.type.startsWith("image/")) return;
-    await processImageFile(file, input);
+    processImageFile(file, input);
   }
 
   export function handleChange(node: HTMLElement) {
@@ -169,7 +301,7 @@
 
   // Updated handlePaste to use processImageFile
   export function handlePaste(node: HTMLElement) {
-    const pasteHandler = async (event: ClipboardEvent) => {
+    const pasteHandler = (event: ClipboardEvent) => {
       const items = event.clipboardData?.items;
       if (!items) return;
       // Check for image data in clipboard
@@ -180,7 +312,7 @@
           if (!file) continue;
           // Prevent default paste behavior
           event.preventDefault();
-          await processImageFile(file);
+          processImageFile(file);
           // Only process the first image found
           return;
         }
@@ -207,20 +339,43 @@
     event.stopPropagation();
     isDragOver = false;
   }
-  async function handleDrop(event: DragEvent) {
+  function handleDrop(event: DragEvent) {
     event.preventDefault();
     event.stopPropagation();
     isDragOver = false;
     if (!event.dataTransfer?.files?.length) return;
     const file = event.dataTransfer.files[0];
-    if (file && file.type.startsWith("image/")) {
-      await processImageFile(file);
+    if (file?.type.startsWith("image/")) {
+      processImageFile(file);
     }
   }
 
   // Wrapped send handler for spinner
-  function wrappedOnEnter() {
-    Promise.resolve(onEnter());
+  async function wrappedOnEnter() {
+    // If there are local images, upload them first
+    if (localImages.size > 0) {
+      // Show loading state
+      isUploading = true;
+
+      try {
+        // Upload all local images and get updated content
+        const updatedContent = await uploadLocalImages();
+
+        // Update the content with the uploaded images
+        content = updatedContent;
+
+        // Now call the onEnter handler with the updated content
+        await Promise.resolve(onEnter());
+      } catch (error) {
+        console.error("Error uploading images before sending:", error);
+        toast.error("Failed to upload images", { position: "bottom-right" });
+      } finally {
+        isUploading = false;
+      }
+    } else {
+      // No local images, just call onEnter
+      await Promise.resolve(onEnter());
+    }
   }
 
   // First effect: Create/recreate editor when dependencies change
@@ -252,8 +407,8 @@
         ...createCompleteExtensions({ users, context }),
         Placeholder.configure({ placeholder }),
         initKeyboardShortcutHandler({ onEnter }),
-        // Explicitly add Image extension to ensure it's available for editing messages with images
-        Image.configure({
+        // Explicitly add CustomImage extension to ensure it's available for editing messages with images
+        CustomImage.configure({
           HTMLAttributes: {
             class: 'max-w-[300px] max-h-[300px] object-contain relative',
           },
@@ -339,9 +494,45 @@
   });
 
   onDestroy(() => {
+    // Clean up any local blob URLs
+    for (const localUrl of localImageUrls) {
+      URL.revokeObjectURL(localUrl);
+    }
+
+    // Destroy the editor
     tiptap?.destroy();
   });
 </script>
+<style>
+  /* Style for local image previews */
+  :global(.local-image) {
+    border: 2px dashed #3498db !important;
+    border-radius: 4px !important;
+    padding: 2px !important;
+  }
+
+  /* Container for local images to allow for the label */
+  :global(.image-container) {
+    position: relative;
+    display: inline-block;
+    margin: 2px;
+  }
+
+  /* Label for local images */
+  :global(.local-image-label) {
+    position: absolute;
+    top: 0;
+    left: 0;
+    background-color: rgba(52, 152, 219, 0.7);
+    color: white;
+    font-size: 10px;
+    padding: 2px 4px;
+    border-bottom-right-radius: 4px;
+    pointer-events: none;
+    z-index: 1;
+  }
+</style>
+
 {#if !g.isBanned}
   <div class="flex items-center gap-2">
     <!-- Plus icon button for image upload -->
@@ -353,7 +544,7 @@
         use:handleClick
         tabindex="-1"
         disabled={tiptap == null || isUploading}
-        title={isUploading ? "Uploading..." : "Upload image"}
+        title={isUploading ? "Uploading..." : localImages.size > 0 ? `${localImages.size} image${localImages.size > 1 ? 's' : ''} will be uploaded when you send` : "Upload image"}
       >
         {#if isUploading}
           <!-- Loading spinner -->
@@ -402,12 +593,20 @@
   {#if !editMode}
     <div class="flex items-center gap-2 mt-2">
       <button
-        class="btn btn-primary flex items-center"
+        class="btn btn-primary flex items-center gap-2"
         type="button"
         onclick={wrappedOnEnter}
-        disabled={tiptap == null}
+        disabled={tiptap == null || isUploading}
         aria-label="Send message"
       >
+        {#if isUploading}
+          <div class="animate-spin h-4 w-4">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        {/if}
         Send
       </button>
     </div>
