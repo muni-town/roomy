@@ -25,7 +25,6 @@
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
   import BoardList from "./BoardList.svelte";
   import { derivePromise } from "$lib/utils.svelte";
-  import CreateWikiDialog from "$lib/components/CreateWikiDialog.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
@@ -228,6 +227,14 @@
     }
   }
   */
+  let isWikiTitleDialogOpen = $state(false);
+  let newWikiTitleElement: HTMLInputElement | null = $state(null);
+  function createWiki() {
+    if (newWikiTitleElement) {
+      newWikiTitleElement.value = "";
+    }
+    isWikiTitleDialogOpen = true;
+  }
   let relatedThreads = derivePromise([], async () =>
     g.channel && g.channel instanceof Channel
       ? await g.channel.threads.items()
@@ -306,7 +313,9 @@
 {#if tab === "board"}
   <BoardList items={wikis.value} title="Pages" route="wiki">
     {#snippet header()}
-      <CreateWikiDialog />
+      <button class="btn btn-primary btn-sm text-lg" onclick={createWiki}>
+        +
+      </button>
     {/snippet}
     No pages for this channel.
   </BoardList>

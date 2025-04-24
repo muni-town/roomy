@@ -8,7 +8,7 @@
   import { BlockNoteEditor } from "@blocknote/core";
   import "@blocknote/core/style.css";
 
-  import { WikiPage } from "@roomy-chat/sdk";
+  import { Channel, WikiPage } from "@roomy-chat/sdk";
 
   import { page } from "$app/state";
   import { g } from "$lib/global.svelte";
@@ -137,8 +137,45 @@
   let urlInputElement: HTMLInputElement | null = $state(null);
   let urlPromptCallback: ((url: string) => void) | null = $state(null);
 
+  let isWikiTitleDialogOpen = $state(false);
+  let newWikiTitleElement: HTMLInputElement | null = $state(null);
   let isDeleteDialogOpen = $state(false);
   let wikiToDelete: WikiPage | undefined = $state();
+
+  function selectWiki(wiki: any) {
+    selectedWiki = wiki;
+    isEditingWiki = false;
+  }
+
+  async function submitWikiTitle() {
+    if (!g.space || !g.channel || !(g.channel instanceof Channel)) return;
+    if (!newWikiTitleElement) {
+      toast.error("Title cannot be empty", { position: "bottom-end" });
+      return;
+    }
+    const newWikiTitle = newWikiTitleElement.value; // Retrieve the title from the input element
+    // Create a temporary wiki with the provided title
+    const wiki = await g.space.create(WikiPage);
+    selectWiki(wiki);
+
+    isWikiTitleDialogOpen = false;
+
+    try {
+      selectedWiki;
+      wiki.name = newWikiTitle;
+
+      g.channel.wikipages.push(wiki);
+      g.channel?.commit();
+
+      g.space.wikipages.push(wiki);
+      g.space.commit();
+      wiki.commit();
+    } catch (e) {
+      console.error("Error creating wiki", e);
+      toast.error("Failed to create wiki", { position: "bottom-end" });
+    }
+    setEditingWiki(true);
+  }
 
   function setEditingWiki(value: boolean) {
     isEditingWiki = value;
@@ -957,6 +994,26 @@
     />
     <div class="flex justify-end gap-3 mt-2">
       <button type="submit" class="btn btn-primary">Add Link</button>
+    </div>
+  </form>
+</Dialog>
+
+<Dialog
+  title="New Wiki"
+  description="Give your new wiki a title"
+  bind:isDialogOpen={isWikiTitleDialogOpen}
+>
+  <form onsubmit={submitWikiTitle} class="flex flex-col gap-4">
+    <input
+      type="text"
+      bind:this={newWikiTitleElement}
+      use:focusOnRender
+      placeholder="Tips on moderation..."
+      class="input input-bordered w-full"
+      required
+    />
+    <div class="flex justify-end gap-3 mt-2">
+      <button type="submit" class="btn btn-primary">Create</button>
     </div>
   </form>
 </Dialog>
