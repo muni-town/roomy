@@ -3,6 +3,7 @@
   import { Editor } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
   import Placeholder from "@tiptap/extension-placeholder";
+  import { TextSelection } from "@tiptap/pm/state";
   import {
     type Item,
     initKeyboardShortcutHandler,
@@ -110,7 +111,7 @@
             const { from, to } = cursorPos;
             const { state, view } = tiptap;
             const tr = state.tr.setSelection(
-              state.selection.constructor.create(state.doc, from, to),
+              TextSelection.create(state.doc, from, to),
             );
             view.dispatch(tr);
           } catch (e) {
