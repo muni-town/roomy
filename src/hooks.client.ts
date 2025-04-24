@@ -2,19 +2,20 @@ import { themes } from "$lib/themes";
 import type { Handle, HandleClientError } from "@sveltejs/kit";
 import posthog from "posthog-js";
 
-export const handle: Handle = async ({ event, resolve }) => {
-  const theme = event.cookies.get("theme");
-  if (!theme || !themes.includes(theme)) {
-    event.cookies.set("theme", "retro", { path: "/" });
-    return await resolve(event);
-  }
+// We're handling this in ThemeSelector.svelte
+// export const handle: Handle = async ({ event, resolve }) => {
+//   const theme = event.cookies.get("theme");
+//   if (!theme || !Object.keys(themes).includes("data-theme=${theme}")) {
+//     event.cookies.set("theme", "synthwave", { path: "/" });
+//     return await resolve(event);
+//   }
 
-  return await resolve(event, {
-    transformPageChunk: ({ html }) => {
-      return html.replace('data-theme=""', `data-theme="${theme}"`);
-    },
-  });
-};
+//   return await resolve(event, {
+//     transformPageChunk: ({ html }) => {
+//       return html.replace('data-theme=""', `data-theme="${theme}"`);
+//     },
+//   });
+// };
 
 export const handleError: HandleClientError = async ({
   error,
