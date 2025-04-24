@@ -15,7 +15,6 @@ import type {
   SuggestionKeyDownProps,
   SuggestionProps,
 } from "@tiptap/suggestion";
-import type { LoroText } from "@muni-town/leaf";
 import { convertUrlsToLinks } from "$lib/urlUtils";
 
 /* Keyboard Shortcuts: used to add and override existing shortcuts */
@@ -61,20 +60,20 @@ function suggestion({
 }) {
   const fuzzyMatch = (text: string, query: string): boolean => {
     if (!query) return true;
-    
+
     text = text.toLowerCase();
     query = query.toLowerCase();
-    
+
     let textIndex = 0;
     let queryIndex = 0;
-    
+
     while (textIndex < text.length && queryIndex < query.length) {
       if (text[textIndex] === query[queryIndex]) {
         queryIndex++;
       }
       textIndex++;
     }
-    
+
     return queryIndex === query.length;
   };
 
@@ -82,9 +81,7 @@ function suggestion({
     char,
     pluginKey: new PluginKey(pluginKey),
     items: ({ query }: { query: string }) => {
-      return items
-        .filter((item) => fuzzyMatch(item.label, query))
-        .slice(0, 5);
+      return items.filter((item) => fuzzyMatch(item.label, query)).slice(0, 5);
     },
     render: () => {
       let wrapper;
