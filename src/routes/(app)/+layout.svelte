@@ -8,7 +8,6 @@
 
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
-  import { RenderScan } from "svelte-render-scan";
 
   let { children } = $props();
   import SpacesColumn from "$lib/components/SpacesColumn.svelte";
@@ -71,6 +70,6 @@
         <RoomSidebar />
       {/if}
     </div>
-  </div> 
+  </div>
   {@render children()}
 </div>
