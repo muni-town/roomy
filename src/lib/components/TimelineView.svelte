@@ -28,6 +28,7 @@
   import BoardList from "./BoardList.svelte";
   import { derivePromise } from "$lib/utils.svelte";
   import CreateWikiDialog from "$lib/components/CreateWikiDialog.svelte";
+  import ThreadsTab from "./ThreadsTab.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
@@ -200,11 +201,11 @@
     }
     isWikiTitleDialogOpen = true;
   }
-  let relatedThreads = derivePromise([], async () =>
-    g.channel && g.channel instanceof Channel
-      ? await g.channel.threads.items()
-      : [],
-  );
+  // let relatedThreads = derivePromise([], async () =>
+  //   g.channel && g.channel instanceof Channel
+  //     ? await g.channel.threads.items()
+  //     : [],
+  // );
   const wikis = derivePromise([], async () => {
     return g.space && g.channel instanceof Channel
       ? (await g.channel.wikipages.items()).filter((x) => !x.softDeleted)
@@ -279,16 +280,15 @@
 </header>
 <div class="divider my-0"></div>
 
-{#if tab === "board"}
+{#if tab === "wiki"}
   <BoardList items={wikis.value} title="Pages" route="wiki">
     {#snippet header()}
       <CreateWikiDialog />
     {/snippet}
     No pages for this channel.
   </BoardList>
-  <BoardList items={relatedThreads.value} title="Topics" route="thread">
-    No topics for this channel.
-  </BoardList>
+{:else if tab === "threads"}
+  <ThreadsTab />
 {:else if tab === "chat" || g.channel instanceof Thread}
   {#if g.space && g.channel}
     <ChatArea timeline={g.channel.forceCast(Timeline)} />
