@@ -30,3 +30,8 @@ echo "{
   \"application_type\": \"web\",
   \"dpop_bound_access_tokens\": true
 }" > dist/oauth-client.json
+
+echo '
+/ingest/static/*  https://us-assets.i.posthog.com/static/:splat  200!
+/ingest/*         https://us.i.posthog.com/:splat  200!
+' > dist/_redirects
