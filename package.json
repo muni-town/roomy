@@ -38,7 +38,7 @@
     "svelte-french-toast": "2.0.0-alpha.0",
     "svelte-tiptap": "^2.1.0",
     "vaul-svelte": "^0.3.2",
-    "virtua": "^0.40.0"
+    "virtua": "^0.40.4"
   },
   "devDependencies": {
     "@atproto/lexicon": "^0.4.5",
