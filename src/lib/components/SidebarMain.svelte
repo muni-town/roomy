@@ -1,19 +1,17 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { Accordion, Button, ToggleGroup } from "bits-ui";
+  import { Button } from "bits-ui";
 
   import { g } from "$lib/global.svelte";
   import { outerWidth } from "svelte/reactivity/window";
 
   import { derivePromise } from "$lib/utils.svelte";
   import { Category, Channel } from "@roomy-chat/sdk";
-  import SidebarChannelsList from "$lib/components/SidebarChannelList.svelte";
-  import SidebarThreadsList from "$lib/components/SidebarThreadList.svelte";
   import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
+  import SidebarChat from "./SidebarChat.svelte";
 
   let isMobile = $derived((outerWidth.current || 0) < 640);
-  let sidebarAccordionValues = $state(["channels", "threads"]);
 
   let availableThreads = derivePromise([], async () =>
     ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
@@ -150,55 +148,5 @@
     </menu>
   {/if}
 
-  <ToggleGroup.Root type="single" value={g.channel?.id}>
-    <Accordion.Root
-      type="multiple"
-      bind:value={sidebarAccordionValues}
-      class="flex flex-col gap-4"
-    >
-      <Accordion.Item value="channels">
-        <Accordion.Header>
-          <Accordion.Trigger
-            class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
-          >
-            <h3>Channels</h3>
-            <Icon
-              icon="basil:caret-up-solid"
-              class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("channels") && "rotate-180"}`}
-            />
-          </Accordion.Trigger>
-        </Accordion.Header>
-        <Accordion.Content forceMount>
-          {#snippet child({ open }: { open: boolean })}
-            {#if open}
-              <SidebarChannelsList {sidebarItems} />
-            {/if}
-          {/snippet}
-        </Accordion.Content>
-      </Accordion.Item>
-      {#if availableThreads.value.length > 0}
-        <div class="divider my-0"></div>
-        <Accordion.Item value="threads">
-          <Accordion.Header>
-            <Accordion.Trigger
-              class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
-            >
-              <h3>Threads</h3>
-              <Icon
-                icon="basil:caret-up-solid"
-                class={`size-4 transition-transform duration-150 ${sidebarAccordionValues.includes("threads") && "rotate-180"}`}
-              />
-            </Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content>
-            {#snippet child({ open }: { open: boolean })}
-              {#if open}
-                <SidebarThreadsList {availableThreads} />
-              {/if}
-            {/snippet}
-          </Accordion.Content>
-        </Accordion.Item>
-      {/if}
-    </Accordion.Root>
-  </ToggleGroup.Root>
+  <SidebarChat {availableThreads} {sidebarItems} />
 </nav>
