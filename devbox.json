@@ -1,7 +1,9 @@
 {
   "packages": [
     "jujutsu@latest",
-    "deno@latest"
+    "deno@latest",
+    "nodejs@latest",
+    "bun@latest"
   ],
   "shell": {
     "init_hook": [
