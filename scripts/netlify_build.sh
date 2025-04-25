@@ -34,4 +34,5 @@ echo "{
 echo '
 /ingest/static/*  https://us-assets.i.posthog.com/static/:splat  200!
 /ingest/*         https://us.i.posthog.com/:splat  200!
+/* /index.html 200
 ' > dist/_redirects
