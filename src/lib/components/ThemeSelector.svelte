@@ -4,7 +4,6 @@
   import Icon from "@iconify/svelte";
 
   let currentTheme = $state("");
-  let previewTheme = $state("");
 
   // Extract theme names and color values from the themes object
   function getThemeName(selector: string): string {
@@ -85,15 +84,13 @@
 
   function setTheme(theme: string) {
     window.localStorage.setItem("theme", theme);
-    document.cookie = `theme=${theme}; path=/`;
     document.documentElement.setAttribute("data-theme", theme);
     currentTheme = theme;
-    previewTheme = "";
   }
 </script>
 
 <Select.Root type="single" items={selectItems} onValueChange={setTheme}>
-  <Select.Trigger class="btn btn-ghost hover:bg-base-200 cursor-pointer">
+  <Select.Trigger class="dz-btn dz-btn-ghost hover:bg-base-200 cursor-pointer">
     <Icon icon="material-symbols:palette-outline" class="size-6" />
   </Select.Trigger>
   <Select.Portal>

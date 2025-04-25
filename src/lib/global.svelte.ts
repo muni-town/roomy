@@ -5,11 +5,11 @@ import {
   Roomy,
   Space,
   Thread,
+  StorageManager,
 } from "@roomy-chat/sdk";
-import { StorageManager } from "@muni-town/leaf/storage";
-import { SveltePeer } from "@muni-town/leaf/svelte";
-import { indexedDBStorageAdapter } from "@muni-town/leaf/storage/indexed-db";
-import { webSocketSyncer } from "@muni-town/leaf/sync1/ws-client";
+import { SveltePeer } from "@muni-town/leaf-svelte"
+import { indexedDBStorageAdapter } from "@muni-town/leaf-storage-indexeddb"
+import { webSocketSyncer } from "@muni-town/leaf-sync-ws"
 
 import { user } from "./user.svelte";
 import type { Agent } from "@atproto/api";

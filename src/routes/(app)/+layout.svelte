@@ -2,12 +2,12 @@
   import "../../app.css";
   import { onMount } from "svelte";
   import { browser, dev } from "$app/environment";
-  
+
   import posthog from "posthog-js";
   import { Toaster } from "svelte-french-toast";
   import { RenderScan } from "svelte-render-scan";
   import { Button, ToggleGroup } from "bits-ui";
-  
+
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { cleanHandle, derivePromise, navigate } from "$lib/utils.svelte";
@@ -37,17 +37,13 @@
 
     if (!dev && browser) {
       posthog.init("phc_j80ksIuoxjfjRI7rPBmTLWx79rntg4Njz6Dixc3I3ik", {
-        api_host: "https://us.i.posthog.com",
+        api_host: "https://roomy.chat/ingest",
         person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well
       });
     }
   });
 
-  $effect(() => {
-    if (!user.session) {
-      user.isLoginDialogOpen = true;
-    }
-  });
+  // Removed auto-popup effect to only show login dialog when user clicks avatar
 
   async function createSpace() {
     if (!newSpaceName || !user.agent || !g.roomy) return;
@@ -103,7 +99,7 @@
       <ToggleGroup.Item
         value="home"
         onclick={() => navigate("home")}
-        class="btn btn-ghost size-14 data-[state=on]:border-accent"
+        class="dz-btn dz-btn-ghost size-14 data-[state=on]:border-accent"
       >
         <Icon icon="iconamoon:home-fill" font-size="1.5em" />
       </ToggleGroup.Item>
@@ -115,7 +111,7 @@
       {/each}
     </ToggleGroup.Root>
 
-    <section class="menu gap-3">
+    <section class="dz-menu gap-3">
       <ThemeSelector />
       <Dialog
         title="Create Space"
@@ -126,7 +122,7 @@
         {#snippet dialogTrigger()}
           <Button.Root
             title="Create Space"
-            class="btn btn-ghost w-fit"
+            class="dz-btn dz-btn-ghost w-fit"
             disabled={!user.session}
           >
             <Icon icon="basil:add-solid" font-size="2em" />
@@ -137,9 +133,9 @@
           <input
             bind:value={newSpaceName}
             placeholder="Name"
-            class="input w-full"
+            class="dz-input w-full"
           />
-          <Button.Root disabled={!newSpaceName} class="btn btn-primary">
+          <Button.Root disabled={!newSpaceName} class="dz-btn dz-btn-primary">
             <Icon icon="basil:add-outline" font-size="1.8em" />
             Create Space
           </Button.Root>
@@ -154,7 +150,7 @@
         bind:isDialogOpen={user.isLoginDialogOpen}
       >
         {#snippet dialogTrigger()}
-          <Button.Root class="btn btn-ghost w-fit">
+          <Button.Root class="dz-btn dz-btn-ghost w-fit">
             <AvatarImage
               handle={user.profile.data?.handle || ""}
               avatarUrl={user.profile.data?.avatar}
@@ -164,7 +160,7 @@
 
         {#if user.session}
           <section class="flex flex-col gap-4">
-            <Button.Root onclick={user.logout} class="btn btn-error">
+            <Button.Root onclick={user.logout} class="dz-btn dz-btn-error">
               Log Out
             </Button.Root>
           </section>
@@ -176,14 +172,14 @@
             <input
               bind:value={handleInput}
               placeholder="Handle (eg alice.bsky.social)"
-              class="input w-full"
+              class="dz-input w-full"
             />
             <Button.Root
               disabled={loginLoading || !handleInput}
-              class="btn btn-primary"
+              class="dz-btn dz-btn-primary"
             >
               {#if loginLoading}
-                <span class="loading loading-spinner"></span>
+                <span class="dz-loading dz-loading-spinner"></span>
               {/if}
               Log In with Bluesky
             </Button.Root>

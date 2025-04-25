@@ -59,7 +59,7 @@
     onmouseleave={() => {
       activeTooltip = "";
     }}
-    class="btn btn-ghost size-14 data-[state=on]:border-primary relative group p-0.5"
+    class="dz-btn dz-btn-ghost size-14 data-[state=on]:border-primary relative group p-0.5"
   >
     <div class="flex items-center justify-center overflow-hidden">
       {#if spaceImage.value?.uri}

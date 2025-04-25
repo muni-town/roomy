@@ -108,10 +108,12 @@
           <input
             type="text"
             bind:value={threadTitleInput}
-            class="input"
+            class="dz-input"
             placeholder="Thread Title"
           />
-          <button type="submit" class="btn btn-primary"> Create Thread </button>
+          <button type="submit" class="dz-btn dz-btn-primary">
+            Create Thread
+          </button>
         </form>
       </Popover.Content>
     </Popover.Portal>
@@ -150,7 +152,7 @@
           <input
             bind:value={channelNameInput}
             placeholder="name"
-            class="input"
+            class="dz-input"
           />
         </label>
         {#if g.space && g.channel instanceof Channel}
@@ -167,7 +169,7 @@
             {/await}
           </select>
         {/if}
-        <Button.Root class="btn btn-primary">Save Settings</Button.Root>
+        <Button.Root class="dz-btn dz-btn-primary">Save Settings</Button.Root>
       </form>
 
       <form
@@ -186,7 +188,7 @@
           Deleting a {g.channel instanceof Channel ? "channel" : "thread"} doesn't
           delete the data permanently, it just hides the thread from the UI.
         </p>
-        <Button.Root class="btn btn-error"
+        <Button.Root class="dz-btn dz-btn-error"
           >Delete {g.channel instanceof Channel
             ? "Channel"
             : "Thread"}</Button.Root
