@@ -7,9 +7,9 @@ import {
   Thread,
   StorageManager,
 } from "@roomy-chat/sdk";
-import { SveltePeer } from "@muni-town/leaf-svelte";
-import { indexedDBStorageAdapter } from "@muni-town/leaf-storage-indexeddb";
-import { socketIoSyncer } from "@muni-town/leaf-sync-socket-io-client";
+import { SveltePeer } from "@muni-town/leaf-svelte"
+import { indexedDBStorageAdapter } from "@muni-town/leaf-storage-indexeddb"
+import { webSocketSyncer } from "@muni-town/leaf-sync-ws"
 
 import { user } from "./user.svelte";
 import type { Agent } from "@atproto/api";
@@ -178,18 +178,20 @@ async function initRoomy(agent: Agent): Promise<Roomy> {
   }
   const token = resp.data.token as string;
 
+  // Open router client
+  const websocket = new WebSocket(
+    `wss://syncserver.roomy.chat/sync/as/${agent.assertDid}`,
+    ["authorization", token],
+  );
+
   // Use this instead of you want to test with a local development Leaf syncserver.
+  // const websocket = new WebSocket("ws://127.0.0.1:8095");
 
   const peer = new SveltePeer(
     new StorageManager(
       indexedDBStorageAdapter("roomy-01JQ0EP4SMJW9D58JXMV9E1CF2"),
     ),
-    await socketIoSyncer("wss://syncserver.roomy.chat", {
-      auth: {
-        did: agent.assertDid,
-        token,
-      },
-    }),
+    await webSocketSyncer(websocket),
   );
 
   return await Roomy.init(peer, catalogId as EntityIdStr);

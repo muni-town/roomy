@@ -49,7 +49,7 @@
     "@muni-town/leaf": "npm:@jsr/muni-town__leaf@0.2.0-preview.16",
     "@muni-town/leaf-storage-indexeddb": "npm:@jsr/muni-town__leaf-storage-indexeddb@0.1.0-preview.1",
     "@muni-town/leaf-svelte": "npm:@jsr/muni-town__leaf-svelte@0.1.0-preview.1",
-    "@muni-town/leaf-sync-socket-io-client": "npm:@jsr/muni-town__leaf-sync-socket-io-client@0.1.0-preview.1",
+    "@muni-town/leaf-sync-ws": "npm:@jsr/muni-town__leaf-sync-ws@0.1.0-preview.1",
     "@iconify/svelte": "^4.2.0",
     "@automerge/automerge-repo-storage-indexeddb": "2.0.0-collectionsync-alpha.1",
     "@noble/curves": "^1.8.1",
