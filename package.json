@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite dev --host 127.0.0.1",
     "build": "vite build",
+    "build:t": "env MODE=tauri vite build --mode tauri",
     "test": "vitest",
     "preview": "vite preview",
     "format": "prettier . --write",

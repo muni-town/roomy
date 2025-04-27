@@ -6,7 +6,7 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-          println!("a new app instance was opened with {args:?} and the deep link event was already triggered");
+          log::info!("a new app instance was opened with {args:?} and the deep link event was already triggered");
           // focus running instance when new app instance is requested
           let _ = app.get_webview_window("main")
            .expect("no main window")
