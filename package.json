@@ -1,8 +1,17 @@
 {
-  "name": "roomy",
+  "name": "roomy.chat",
+  "version": "0.2.1",
   "private": true,
-  "version": "0.0.1",
   "type": "module",
+  "description": "A shared web space for digital gardening.",
+  "homepage": "https://github.com/muni-town/roomy#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/muni-town/roomy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/muni-town/roomy/issues"
+  },
   "scripts": {
     "dev": "vite dev --host 127.0.0.1",
     "build": "vite build",
@@ -14,6 +23,9 @@
     "generate-schemas": "deno run -A src/lib/schemas/generate.ts",
     "prepare": "husky",
     "lint-staged": "lint-staged"
+  },
+  "engines": {
+    "deno": ">=2.2.0"
   },
   "dependencies": {
     "@atproto/api": "^0.14.9",
@@ -87,5 +99,23 @@
     "*.{json,js,ts,tsx,html,svelte,css}": [
       "prettier --write --ignore-unknown"
     ]
-  }
+  },
+  "keyords": [
+    "forum",
+    "chat",
+    "organize",
+    "collaboration",
+    "open-source",
+    "deno",
+    "atproto",
+    "at protocal",
+    "pds",
+    "federated"
+  ],
+  "collective": {
+    "type": "opencollective",
+    "url": "https://opencollective.com/weird-inc",
+    "logo": "https://opencollective.com/opencollective/logo.txt"
+  },
+  "license": "https://blueoakcouncil.org/license/1.0.0"
 }
