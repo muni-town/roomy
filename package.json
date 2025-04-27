@@ -8,6 +8,7 @@
     "build": "vite build",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
+    "build:t": "env MODE=tauri vite build --mode tauri",
     "preview": "vite preview",
     "format": "prettier . --write",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
