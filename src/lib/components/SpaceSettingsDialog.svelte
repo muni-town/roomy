@@ -316,10 +316,7 @@
         </div>
       {/if}
 
-      <Button.Root
-        class="dz-btn dz-btn-primary"
-        bind:disabled={saveSpaceLoading}
-      >
+      <Button.Root class="dz-btn dz-btn-primary" disabled={saveSpaceLoading}>
         {#if saveSpaceLoading}
           <span class="dz-loading dz-loading-spinner"></span>
         {/if}
@@ -345,7 +342,7 @@
 
       <Button.Root
         class="dz-btn dz-btn-primary w-full"
-        bind:disabled={saveSpaceLoading}
+        disabled={saveSpaceLoading}
       >
         Save Bans
       </Button.Root>

@@ -29,7 +29,7 @@
 
 <div transition:slide class="flex flex-col gap-4">
   <!-- Category and Channels -->
-  {#each sidebarItems.value.filter((x) => !x.softDeleted) as item}
+  {#each sidebarItems.value.filter((x: { softDeleted?: boolean }) => !x.softDeleted) as item}
     {@const category = item.tryCast(Category)}
     {#if category}
       <Accordion.Root type="single" value={item.name}>
@@ -88,7 +88,7 @@
               open,
             }: {
               open: boolean;
-              props: unknown[];
+              props: Record<string, any>;
             })}
               {#if open}
                 <div
