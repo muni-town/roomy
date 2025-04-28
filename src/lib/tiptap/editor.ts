@@ -385,3 +385,7 @@ export async function handleImageUpload(
       throw error; // Re-throw to allow caller to handle the error
     });
 }
+
+
+
+export { suggestion };
