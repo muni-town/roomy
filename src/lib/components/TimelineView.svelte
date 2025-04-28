@@ -167,8 +167,6 @@
   //
 
   // Image upload permissions are now handled in ChatInput.svelte
-  let channelNameInput = $state("");
-  let channelCategoryInput = $state(undefined) as undefined | string;
   $effect(() => {
     if (!g.space) return;
 
@@ -193,19 +191,6 @@
   });
 
   // Image upload is now handled in ChatInput.svelte
-  let isWikiTitleDialogOpen = $state(false);
-  let newWikiTitleElement: HTMLInputElement | null = $state(null);
-  function createWiki() {
-    if (newWikiTitleElement) {
-      newWikiTitleElement.value = "";
-    }
-    isWikiTitleDialogOpen = true;
-  }
-  // let relatedThreads = derivePromise([], async () =>
-  //   g.channel && g.channel instanceof Channel
-  //     ? await g.channel.threads.items()
-  //     : [],
-  // );
   const wikis = derivePromise([], async () => {
     return g.space && g.channel instanceof Channel
       ? (await g.channel.wikipages.items()).filter((x) => !x.softDeleted)
