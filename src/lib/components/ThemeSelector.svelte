@@ -96,7 +96,9 @@
 </script>
 
 <Select.Root type="single" items={selectItems} onValueChange={setTheme}>
-  <Select.Trigger class="dz-btn dz-btn-ghost hover:bg-base-200 cursor-pointer">
+  <Select.Trigger
+    class="w-full flex justify-center items-center aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
+  >
     <Icon icon="material-symbols:palette-outline" class="size-6" />
   </Select.Trigger>
   <Select.Portal>

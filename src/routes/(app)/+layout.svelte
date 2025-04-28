@@ -9,7 +9,7 @@
 
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
-  import { derivePromise } from "$lib/utils.svelte";
+  import { derivePromise, Toggle } from "$lib/utils.svelte";
   import ServerBar from "$lib/components/ServerBar.svelte";
 
   const { children } = $props();
@@ -28,6 +28,9 @@
       });
     }
   });
+
+  const isSpacesVisible = Toggle({ value: false, key: "isSpacesVisible" });
+  setContext("isSpacesVisible", isSpacesVisible);
 
   let themeColor = $state({
     value:
@@ -53,7 +56,7 @@
 <!-- Container -->
 <div class="flex w-screen h-screen bg-base-100">
   <Toaster />
-  <ServerBar {spaces} />
+  <ServerBar {spaces} visible={isSpacesVisible.value || !page.params.space} />
 
   {@render children()}
 </div>
