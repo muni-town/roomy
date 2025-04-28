@@ -23,11 +23,11 @@
   <h3 class="text-xl font-bold text-base-content">{title}</h3>
   {@render header?.()}
 </div>
-<ul class="list w-full join join-vertical rounded">
+<ul class="dz-list w-full dz-join dz-join-vertical rounded">
   {#each items as item}
     <a href={`/${page.params.space}/${route}/${item.id}`}>
       <li
-        class="list-row card-title join-item bg-base-200 text-md group w-full text-content-primary"
+        class="dz-list-row dz-card-title dz-join-item bg-base-200 text-md group w-full text-content-primary"
       >
         {item.name}
       </li>

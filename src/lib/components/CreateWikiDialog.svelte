@@ -6,7 +6,7 @@
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
 
   let {
-    triggerStyle = "btn btn-primary btn-sm text-lg",
+    triggerStyle = "dz-btn dz-btn-primary dz-btn-sm text-lg",
   }: {
     triggerStyle?: string;
   } = $props();
@@ -61,11 +61,11 @@
       bind:this={newWikiTitleElement}
       use:focusOnRender
       placeholder="Tips on moderation..."
-      class="input input-bordered w-full"
+      class="dz-input dz-input-bordered w-full"
       required
     />
     <div class="flex justify-end gap-3 mt-2">
-      <button type="submit" class="btn btn-primary">Create</button>
+      <button type="submit" class="dz-btn dz-btn-primary">Create</button>
     </div>
   </form>
 </Dialog>
