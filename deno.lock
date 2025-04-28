@@ -20,6 +20,7 @@
     "npm:@tailwindcss/typography@~0.5.16": "0.5.16_tailwindcss@4.1.4",
     "npm:@tailwindcss/vite@^4.1.4": "4.1.4_vite@6.3.2__picomatch@4.0.2",
     "npm:@tiptap/core@^2.11.5": "2.11.7_@tiptap+pm@2.11.7__prosemirror-model@1.25.1__prosemirror-state@1.4.3__prosemirror-view@1.39.2",
+    "npm:@tiptap/extension-image@^2.11.7": "2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.1___prosemirror-state@1.4.3___prosemirror-view@1.39.2_@tiptap+pm@2.11.7__prosemirror-model@1.25.1__prosemirror-state@1.4.3__prosemirror-view@1.39.2",
     "npm:@tiptap/extension-link@^2.11.5": "2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.1___prosemirror-state@1.4.3___prosemirror-view@1.39.2_@tiptap+pm@2.11.7__prosemirror-model@1.25.1__prosemirror-state@1.4.3__prosemirror-view@1.39.2",
     "npm:@tiptap/extension-mention@^2.11.5": "2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.1___prosemirror-state@1.4.3___prosemirror-view@1.39.2_@tiptap+pm@2.11.7__prosemirror-model@1.25.1__prosemirror-state@1.4.3__prosemirror-view@1.39.2_@tiptap+suggestion@2.11.7__@tiptap+core@2.11.7___@tiptap+pm@2.11.7____prosemirror-model@1.25.1____prosemirror-state@1.4.3____prosemirror-view@1.39.2__@tiptap+pm@2.11.7___prosemirror-model@1.25.1___prosemirror-state@1.4.3___prosemirror-view@1.39.2",
     "npm:@tiptap/extension-placeholder@^2.11.5": "2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.1___prosemirror-state@1.4.3___prosemirror-view@1.39.2_@tiptap+pm@2.11.7__prosemirror-model@1.25.1__prosemirror-state@1.4.3__prosemirror-view@1.39.2",
@@ -30,7 +31,7 @@
     "npm:@types/sanitize-html@^2.13.0": "2.15.0",
     "npm:base32-decode@1": "1.0.0",
     "npm:base32-encode@2": "2.0.0",
-    "npm:bits-ui@^1.3.13": "1.3.19_svelte@5.28.2__acorn@8.14.1",
+    "npm:bits-ui@^1.3.19": "1.3.19_svelte@5.28.2__acorn@8.14.1",
     "npm:daisyui@^5.0.6": "5.0.28",
     "npm:date-fns@^4.1.0": "4.1.0",
     "npm:emoji-picker-element@^1.26.1": "1.26.3",
@@ -1228,6 +1229,12 @@
       "dependencies": [
         "@tiptap/core",
         "@tiptap/pm"
+      ]
+    },
+    "@tiptap/extension-image@2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.1___prosemirror-state@1.4.3___prosemirror-view@1.39.2_@tiptap+pm@2.11.7__prosemirror-model@1.25.1__prosemirror-state@1.4.3__prosemirror-view@1.39.2": {
+      "integrity": "sha512-YvCmTDB7Oo+A56tR4S/gcNaYpqU4DDlSQcRp5IQvmQV5EekSe0lnEazGDoqOCwsit9qQhj4MPQJhKrnaWrJUrg==",
+      "dependencies": [
+        "@tiptap/core"
       ]
     },
     "@tiptap/extension-italic@2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.1___prosemirror-state@1.4.3___prosemirror-view@1.39.2_@tiptap+pm@2.11.7__prosemirror-model@1.25.1__prosemirror-state@1.4.3__prosemirror-view@1.39.2": {
@@ -3976,6 +3983,7 @@
         "npm:@tailwindcss/typography@~0.5.16",
         "npm:@tailwindcss/vite@^4.1.4",
         "npm:@tiptap/core@^2.11.5",
+        "npm:@tiptap/extension-image@^2.11.7",
         "npm:@tiptap/extension-link@^2.11.5",
         "npm:@tiptap/extension-mention@^2.11.5",
         "npm:@tiptap/extension-placeholder@^2.11.5",
@@ -3986,7 +3994,7 @@
         "npm:@types/sanitize-html@^2.13.0",
         "npm:base32-decode@1",
         "npm:base32-encode@2",
-        "npm:bits-ui@^1.3.13",
+        "npm:bits-ui@^1.3.19",
         "npm:daisyui@^5.0.6",
         "npm:date-fns@^4.1.0",
         "npm:emoji-picker-element@^1.26.1",
