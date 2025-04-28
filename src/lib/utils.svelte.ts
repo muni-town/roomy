@@ -1,8 +1,10 @@
 import type { DidDocument } from "@atproto/oauth-client-browser";
 import { decodeBase32 } from "./base32";
+export { decodeBase32 }; // <-- Export for test mocking
 import type { EntityIdStr } from "@muni-town/leaf";
 import { goto } from "$app/navigation";
 import type { JSONContent } from "@tiptap/core";
+import { browser } from "$app/environment";
 
 /** Cleans a handle string by removing any characters not valid for a domain. */
 export function cleanHandle(handle: string): string {
@@ -15,10 +17,16 @@ export type NavigationTarget =
 
 /** A helper function to navigate to a specific roomy object, like a space, channel, or thread */
 export function navigate(target: NavigationTarget) {
-  if (target == "home") {
-    goto("/home");
-  } else if ("space" in target) {
-    let url = ``;
+  if (target === "home") {
+    const url = "/home";
+    if (browser) {
+      goto(url);
+    }
+    return url;
+  }
+
+  if ("space" in target) {
+    let url = "";
     if (target.space.includes(".")) {
       url += "/-";
     }
@@ -28,8 +36,12 @@ export function navigate(target: NavigationTarget) {
     } else if (target.thread) {
       url += `/thread/${target.thread}`;
     }
-    goto(url);
+    if (browser) {
+      goto(url);
+    }
+    return url;
   }
+  return "";
 }
 
 const handleCache: { [did: string]: DidDocument } = {};

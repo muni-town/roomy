@@ -25,3 +25,4 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 src-tauri/icons
 src-tauri/gen/android
+/coverage
