@@ -20,7 +20,6 @@
 
   onMount(async () => {
     await user.init();
-    userInitComplete = true;
 
     if (!dev && browser) {
       posthog.init("phc_j80ksIuoxjfjRI7rPBmTLWx79rntg4Njz6Dixc3I3ik", {

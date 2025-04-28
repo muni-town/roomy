@@ -13,12 +13,10 @@
   import { getContentHtml, type Item } from "$lib/tiptap/editor";
   import { Announcement, Message, type EntityIdStr } from "@roomy-chat/sdk";
   import { g } from "$lib/global.svelte";
-  import { derivePromise, parseMessageContent } from "$lib/utils.svelte";
+  import { derivePromise } from "$lib/utils.svelte";
   import type { JSONContent } from "@tiptap/core";
   import ChatInput from "./ChatInput.svelte";
   import toast from "svelte-french-toast";
-
-
 
   type Props = {
     message: Message | Announcement;
@@ -108,7 +106,9 @@
 
         // Create a deep copy to ensure we're not working with a Proxy object
         // This keeps all content including images intact
-        editMessageContent = JSON.parse(JSON.stringify(parsedContent)) as JSONContent;
+        editMessageContent = JSON.parse(
+          JSON.stringify(parsedContent),
+        ) as JSONContent;
 
         isEditing = true;
       } catch (error) {
@@ -119,10 +119,15 @@
   }
 
   function saveEditedMessage() {
-    if (message instanceof Message && Object.keys(editMessageContent).length > 0) {
+    if (
+      message instanceof Message &&
+      Object.keys(editMessageContent).length > 0
+    ) {
       try {
         // Ensure we're working with a plain object, not a Proxy
-        const plainContent = JSON.parse(JSON.stringify(editMessageContent)) as JSONContent;
+        const plainContent = JSON.parse(
+          JSON.stringify(editMessageContent),
+        ) as JSONContent;
 
         // Update the message
         message.bodyJson = JSON.stringify(plainContent);
@@ -456,32 +461,30 @@
             </section>
           {/if}
 
+          <div class="w-full">
+            <ChatInput
+              bind:content={editMessageContent}
+              users={users.value || []}
+              context={contextItems.value || []}
+              onEnter={saveEditedMessage}
+              placeholder={message instanceof Message
+                ? getPlainTextContent(JSON.parse(message.bodyJson))
+                : "Edit message..."}
+              editMode={true}
+            />
+          </div>
 
-        <div class="w-full">
-          <ChatInput
-            bind:content={editMessageContent}
-            users={users.value || []}
-            context={contextItems.value || []}
-            onEnter={saveEditedMessage}
-            placeholder={message instanceof Message ? getPlainTextContent(JSON.parse(message.bodyJson)) : "Edit message..."}
-            editMode={true}
-          />
-        </div>
-
-        <div class="flex justify-end gap-2 mt-2">
-          <Button.Root
-            onclick={cancelEditing}
-            class="btn btn-sm btn-ghost"
-          >
-            Cancel
-          </Button.Root>
-          <Button.Root
-            onclick={saveEditedMessage}
-            class="btn btn-sm btn-primary"
-          >
-            Save
-          </Button.Root>
-        </div>
+          <div class="flex justify-end gap-2 mt-2">
+            <Button.Root onclick={cancelEditing} class="btn btn-sm btn-ghost">
+              Cancel
+            </Button.Root>
+            <Button.Root
+              onclick={saveEditedMessage}
+              class="btn btn-sm btn-primary"
+            >
+              Save
+            </Button.Root>
+          </div>
         </div>
       {:else}
         <Button.Root

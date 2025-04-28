@@ -1,4 +1,4 @@
-import adapter from "@sveltejs/adapter-netlify";
+import adapterNetlify from "@sveltejs/adapter-netlify";
 import adapterStatic from "@sveltejs/adapter-static";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 
@@ -14,7 +14,7 @@ const config = {
         ? adapterStatic({
             fallback: "index.html",
           })
-        : adapter({
+        : adapterNetlify({
             fallback: "index.html",
           }),
   },

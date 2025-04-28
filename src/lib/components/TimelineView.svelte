@@ -20,6 +20,7 @@
     Message,
     Thread,
     Timeline,
+    Category,
   } from "@roomy-chat/sdk";
   import type { JSONContent } from "@tiptap/core";
   import { getProfile } from "$lib/profile.svelte";
@@ -164,7 +165,6 @@
   //
 
   // Image upload permissions are now handled in ChatInput.svelte
-  let showSettingsDialog = $state(false);
   let channelNameInput = $state("");
   let channelCategoryInput = $state(undefined) as undefined | string;
   $effect(() => {
@@ -174,7 +174,8 @@
     channelCategoryInput = undefined;
     g.space &&
       g.space.sidebarItems.items().then((items) => {
-        for (const category of items) {
+        for (const item of items) {
+          const category = item.tryCast(Category);
           if (
             category &&
             typeof category.channels === "object" &&
@@ -188,60 +189,6 @@
         }
       });
   });
-
-  async function saveSettings() {
-    if (!g.space || !g.channel) return;
-    if (channelNameInput) {
-      g.channel.name = channelNameInput;
-      g.channel.commit();
-    }
-
-    if (g.channel instanceof Channel) {
-      let foundChannelInSidebar = false;
-      for (const [
-        cursor,
-        unknownItem,
-      ] of await g.space.sidebarItems.itemCursors()) {
-        const item =
-          unknownItem.tryCast(Category) || unknownItem.tryCast(Channel);
-
-        if (item instanceof Channel && item.id == g.channel.id) {
-          foundChannelInSidebar = true;
-        }
-
-        if (item instanceof Category) {
-          const categoryItems = item.channels.ids();
-          if (item.id !== channelCategoryInput) {
-            const thisChannelIdx = categoryItems.indexOf(g.channel.id);
-            if (thisChannelIdx != -1) {
-              item.channels.remove(thisChannelIdx);
-              item.commit();
-            }
-          } else if (
-            item.id == channelCategoryInput &&
-            !categoryItems.includes(g.channel.id)
-          ) {
-            item.channels.push(g.channel);
-            item.commit();
-          }
-        } else if (
-          item instanceof Channel &&
-          channelCategoryInput &&
-          item.id == g.channel.id
-        ) {
-          const { offset } = g.space.entity.doc.getCursorPos(cursor);
-          g.space.sidebarItems.remove(offset);
-        }
-      }
-
-      if (!channelCategoryInput && !foundChannelInSidebar) {
-        g.space.sidebarItems.push(g.channel);
-      }
-      g.space.commit();
-    }
-
-    showSettingsDialog = false;
-  }
 
   // Image upload is now handled in ChatInput.svelte
 </script>
@@ -375,7 +322,6 @@
 
             <!-- Image upload button is now in ChatInput.svelte -->
           </div>
-
         </section>
       {/if}
 

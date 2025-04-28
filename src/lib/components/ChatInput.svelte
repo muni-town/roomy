@@ -205,7 +205,6 @@
     try {
       // Create a deep copy of the content to modify
       const contentCopy = JSON.parse(JSON.stringify(content));
-      console.log("Original content before upload:", contentCopy);
 
       // Process all local images
       const uploadPromises: Promise<{ localUrl: string; remoteUrl: string }>[] =
@@ -213,12 +212,10 @@
 
       // Start all uploads in parallel
       for (const [localUrl, file] of localImages.entries()) {
-        console.log("Uploading local image:", localUrl);
         uploadPromises.push(
           user
             .uploadBlob(file)
             .then((result) => {
-              console.log("Upload successful, CDN URL:", result.url);
               return { localUrl, remoteUrl: result.url };
             })
             .catch((error) => {
@@ -234,17 +231,12 @@
 
       // Wait for all uploads to complete
       const results = await Promise.all(uploadPromises);
-      console.log("Upload results:", results);
 
       // Replace local URLs with remote URLs in the content
       for (const { localUrl, remoteUrl } of results) {
-        console.log(`Replacing ${localUrl} with ${remoteUrl}`);
-
         // Replace in the editor content
         replaceImageUrlInContent(contentCopy, localUrl, remoteUrl);
       }
-
-      console.log("Updated content after replacement:", contentCopy);
 
       // Clean up local URLs after successful replacement
       for (const { localUrl } of results) {
@@ -255,7 +247,6 @@
 
       // If tiptap editor is available, update its content too
       if (tiptap) {
-        console.log("Updating tiptap editor content");
         tiptap.commands.setContent(contentCopy);
       }
 
@@ -303,9 +294,6 @@
         const attrs = obj.attrs as Record<string, unknown>;
 
         if (attrs.src === oldUrl) {
-          console.log(
-            `Found image with src=${oldUrl}, replacing with ${newUrl}`,
-          );
           attrs.src = newUrl;
           // Remove the local data attribute
           if ("data-local" in attrs) {
@@ -330,9 +318,6 @@
             value === oldUrl
           ) {
             // Also check for direct src attributes that might not be in the attrs object
-            console.log(
-              `Found direct src attribute with value ${oldUrl}, replacing with ${newUrl}`,
-            );
             obj[key] = newUrl;
           }
         }
@@ -340,7 +325,6 @@
     }
   }
 
-  // Action functions for event handling
   export function handleClick(node: HTMLElement) {
     const clickHandler = () => {
       fileInput?.click();
@@ -355,7 +339,6 @@
     };
   }
 
-  // Updated handleFileProcess to use processImageFile
   function handleFileProcess(event: Event) {
     const input = event.target as HTMLInputElement;
     if (!input.files?.length) return;
@@ -378,7 +361,6 @@
     };
   }
 
-  // Updated handlePaste to use processImageFile
   export function handlePaste(node: HTMLElement) {
     const pasteHandler = (event: ClipboardEvent) => {
       const items = event.clipboardData?.items;

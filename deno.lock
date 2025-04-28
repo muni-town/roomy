@@ -15,7 +15,9 @@
     "npm:@jsr/roomy-chat__sdk@0.1.0-preview.16": "0.1.0-preview.16",
     "npm:@noble/curves@^1.8.1": "1.9.0",
     "npm:@sveltejs/adapter-netlify@5": "5.0.0_@sveltejs+kit@2.20.7__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.28.2____acorn@8.14.1___vite@6.3.2____picomatch@4.0.2__svelte@5.28.2___acorn@8.14.1__vite@6.3.2___picomatch@4.0.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.28.2___acorn@8.14.1__vite@6.3.2___picomatch@4.0.2_svelte@5.28.2__acorn@8.14.1_vite@6.3.2__picomatch@4.0.2",
+    "npm:@sveltejs/adapter-static@^3.0.8": "3.0.8_@sveltejs+kit@2.20.7__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.28.2____acorn@8.14.1___vite@6.3.2____picomatch@4.0.2__svelte@5.28.2___acorn@8.14.1__vite@6.3.2___picomatch@4.0.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.28.2___acorn@8.14.1__vite@6.3.2___picomatch@4.0.2_svelte@5.28.2__acorn@8.14.1_vite@6.3.2__picomatch@4.0.2",
     "npm:@sveltejs/kit@^2.16.1": "2.20.7_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.28.2___acorn@8.14.1__vite@6.3.2___picomatch@4.0.2_svelte@5.28.2__acorn@8.14.1_vite@6.3.2__picomatch@4.0.2",
+    "npm:@sveltejs/kit@^2.20.7": "2.20.7_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.28.2___acorn@8.14.1__vite@6.3.2___picomatch@4.0.2_svelte@5.28.2__acorn@8.14.1_vite@6.3.2__picomatch@4.0.2",
     "npm:@sveltejs/vite-plugin-svelte@^5.0.3": "5.0.3_svelte@5.28.2__acorn@8.14.1_vite@6.3.2__picomatch@4.0.2",
     "npm:@tailwindcss/typography@~0.5.16": "0.5.16_tailwindcss@4.1.4",
     "npm:@tailwindcss/vite@^4.1.4": "4.1.4_vite@6.3.2__picomatch@4.0.2",
@@ -29,6 +31,7 @@
     "npm:@tiptap/suggestion@^2.11.5": "2.11.7_@tiptap+core@2.11.7__@tiptap+pm@2.11.7___prosemirror-model@1.25.1___prosemirror-state@1.4.3___prosemirror-view@1.39.2_@tiptap+pm@2.11.7__prosemirror-model@1.25.1__prosemirror-state@1.4.3__prosemirror-view@1.39.2",
     "npm:@types/linkify-it@5": "5.0.0",
     "npm:@types/sanitize-html@^2.13.0": "2.15.0",
+    "npm:@types/underscore@^1.13.0": "1.13.0",
     "npm:base32-decode@1": "1.0.0",
     "npm:base32-encode@2": "2.0.0",
     "npm:bits-ui@^1.3.19": "1.3.19_svelte@5.28.2__acorn@8.14.1",
@@ -55,6 +58,7 @@
     "npm:tweetnacl@^1.0.3": "1.0.3",
     "npm:typescript-event-target@^1.1.1": "1.1.1",
     "npm:typescript@5": "5.8.3",
+    "npm:underscore@^1.13.7": "1.13.7",
     "npm:vaul-svelte@~0.3.2": "0.3.2_svelte@5.28.2__acorn@8.14.1",
     "npm:virtua@~0.40.4": "0.40.4_svelte@5.28.2__acorn@8.14.1",
     "npm:vite-plugin-arraybuffer@0.1": "0.1.0",
@@ -925,6 +929,12 @@
         "set-cookie-parser"
       ]
     },
+    "@sveltejs/adapter-static@3.0.8_@sveltejs+kit@2.20.7__@sveltejs+vite-plugin-svelte@5.0.3___svelte@5.28.2____acorn@8.14.1___vite@6.3.2____picomatch@4.0.2__svelte@5.28.2___acorn@8.14.1__vite@6.3.2___picomatch@4.0.2_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.28.2___acorn@8.14.1__vite@6.3.2___picomatch@4.0.2_svelte@5.28.2__acorn@8.14.1_vite@6.3.2__picomatch@4.0.2": {
+      "integrity": "sha512-YaDrquRpZwfcXbnlDsSrBQNCChVOT9MGuSg+dMAyfsAa1SmiAhrA5jUYUiIMC59G92kIbY/AaQOWcBdq+lh+zg==",
+      "dependencies": [
+        "@sveltejs/kit"
+      ]
+    },
     "@sveltejs/kit@2.20.7_@sveltejs+vite-plugin-svelte@5.0.3__svelte@5.28.2___acorn@8.14.1__vite@6.3.2___picomatch@4.0.2_svelte@5.28.2__acorn@8.14.1_vite@6.3.2__picomatch@4.0.2": {
       "integrity": "sha512-dVbLMubpJJSLI4OYB+yWYNHGAhgc2bVevWuBjDj8jFUXIJOAnLwYP3vsmtcgoxNGUXoq0rHS5f7MFCsryb6nzg==",
       "dependencies": [
@@ -1483,6 +1493,9 @@
       "dependencies": [
         "htmlparser2"
       ]
+    },
+    "@types/underscore@1.13.0": {
+      "integrity": "sha512-L6LBgy1f0EFQZ+7uSA57+n2g/s4Qs5r06Vwrwn0/nuK1de+adz00NWaztRQ30aEqw5qOaWbPI8u2cGQ52lj6VA=="
     },
     "@types/unist@2.0.11": {
       "integrity": "sha512-CmBKiL6NNo/OqgmMn95Fk9Whlp2mtvIv+KNpQKN2F4SjvrEesubTRWGYSg+BnWZOnlCaSTU1sMpsBOzgbYhnsA=="
@@ -3645,6 +3658,9 @@
         "multiformats"
       ]
     },
+    "underscore@1.13.7": {
+      "integrity": "sha512-GMXzWtsc57XAtguZgaQViUOzs0KTkk8ojr3/xAxXLITqf/3EMwxC0inyETfDFjH/Krbhuep0HNbbjI9i/q3F3g=="
+    },
     "undici-types@6.20.0": {
       "integrity": "sha512-Ny6QZ2Nju20vw1SRHe3d9jVu6gJ+4e3+MMpqu7pqE5HT6WsTSlce++GQmK5UXS8mzV8DSYHrQH+Xrf2jVcuKNg=="
     },
@@ -3978,7 +3994,8 @@
         "npm:@jsr/roomy-chat__sdk@0.1.0-preview.16",
         "npm:@noble/curves@^1.8.1",
         "npm:@sveltejs/adapter-netlify@5",
-        "npm:@sveltejs/kit@^2.16.1",
+        "npm:@sveltejs/adapter-static@^3.0.8",
+        "npm:@sveltejs/kit@^2.20.7",
         "npm:@sveltejs/vite-plugin-svelte@^5.0.3",
         "npm:@tailwindcss/typography@~0.5.16",
         "npm:@tailwindcss/vite@^4.1.4",
@@ -3992,6 +4009,7 @@
         "npm:@tiptap/suggestion@^2.11.5",
         "npm:@types/linkify-it@5",
         "npm:@types/sanitize-html@^2.13.0",
+        "npm:@types/underscore@^1.13.0",
         "npm:base32-decode@1",
         "npm:base32-encode@2",
         "npm:bits-ui@^1.3.19",
@@ -4018,6 +4036,7 @@
         "npm:tweetnacl@^1.0.3",
         "npm:typescript-event-target@^1.1.1",
         "npm:typescript@5",
+        "npm:underscore@^1.13.7",
         "npm:vaul-svelte@~0.3.2",
         "npm:virtua@~0.40.4",
         "npm:vite-plugin-arraybuffer@0.1",

@@ -40,7 +40,6 @@
         g.roomy.open(Image, imageId).then((image) => {
           if (image.uri) {
             spaceAvatarUrl = image.uri;
-            console.log("Set avatar URL:", spaceAvatarUrl);
           }
         });
       }
@@ -100,17 +99,14 @@
 
       // Upload the image using the user's agent
       const uploadResult = await user.uploadBlob(avatarFile);
-      console.log("Upload result:", uploadResult);
 
       try {
         // Create an Image entity
         const image = await g.roomy.create(Image);
-        console.log("Created image entity:", image);
 
         // Set the image URI
         image.uri = uploadResult.url;
         image.commit();
-        console.log("Committed image entity:", image);
 
         try {
           g.space.image = image.id;
