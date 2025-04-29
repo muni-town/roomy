@@ -6,10 +6,12 @@
   import { g } from "$lib/global.svelte";
   import { outerWidth } from "svelte/reactivity/window";
 
-  import { derivePromise } from "$lib/utils.svelte";
+  import { derivePromise, Toggle } from "$lib/utils.svelte";
   import { Category, Channel } from "@roomy-chat/sdk";
   import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
   import SidebarChat from "./SidebarChat.svelte";
+  import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
+  import { getContext } from "svelte";
 
   let isMobile = $derived((outerWidth.current || 0) < 640);
 
@@ -67,19 +69,21 @@
     newChannelName = "";
     showNewChannelDialog = false;
   }
+  let isSpacesVisible: ReturnType<typeof Toggle> =
+    getContext("isSpacesVisible");
 </script>
 
 <nav
-  class={[
-    !isMobile &&
-      "max-w-[16rem] border-r-2 border-base-200 max-h-full h-full min-h-0 overflow-y-auto",
-    "px-4 py-5 flex flex-col gap-4 w-full",
-  ]}
+  class="w-[min(70vw,20rem)] sm:w-[16rem] bg-base-300 flex h-full flex-col gap-1 border-r-2 border-base-300"
   style="scrollbar-width: thin;"
 >
-  <div class="flex justify-between">
-    <h1 class="text-2xl font-extrabold text-base-content text-ellipsis flex">
-      {g.space!.name}
+  <!-- Header -->
+  <div
+    class="w-full py-1 px-2 h-fit grid grid-cols-[auto_1fr_auto] justify-center items-center"
+  >
+    <ToggleSidebarIcon class="mr-2 px-1 py-1" open={isSpacesVisible} />
+    <h1 class="text-sm font-bold text-base-content truncate">
+      {g.space?.name && g.space?.name !== "Unnamed" ? g.space.name : ""}
     </h1>
 
     {#if g.isAdmin}
