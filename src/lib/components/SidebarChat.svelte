@@ -13,12 +13,12 @@
   <Accordion.Root
     type="multiple"
     bind:value={sidebarAccordionValues}
-    class="flex flex-col gap-4"
+    class="flex flex-col px-2 gap-4"
   >
     <Accordion.Item value="channels">
       <Accordion.Header>
         <Accordion.Trigger
-          class="cursor-pointer flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
+          class="cursor-pointer px-2  flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
         >
           <h3>Channels</h3>
           <Icon
@@ -36,7 +36,7 @@
       </Accordion.Content>
     </Accordion.Item>
     {#if availableThreads.value.length > 0}
-      <div class="divider my-0"></div>
+      <div class="dz-divider my-0"></div>
       <Accordion.Item value="threads">
         <Accordion.Header>
           <Accordion.Trigger
