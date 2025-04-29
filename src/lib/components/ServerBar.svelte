@@ -10,6 +10,7 @@
   import SidebarSpace from "$lib/components/SidebarSpace.svelte";
   import { Space } from "@roomy-chat/sdk";
   import { cleanHandle } from "$lib/utils.svelte";
+  import { atproto } from "$lib/atproto.svelte";
 
   const { spaces } = $props();
 
@@ -48,6 +49,9 @@
     }
 
     loginLoading = false;
+  }
+  async function signup() {
+    atproto.oauth.signIn("https://bsky.social");
   }
 </script>
 
@@ -145,6 +149,16 @@
               <span class="dz-loading dz-loading-spinner"></span>
             {/if}
             Log In with Bluesky
+          </Button.Root>
+          <Button.Root
+            onclick={(e) => {
+              e.preventDefault();
+              signup();
+            }}
+            disabled={loginLoading}
+            class="dz-btn dz-btn-outline"
+          >
+            Signup with bsky.social
           </Button.Root>
         </form>
       {/if}
