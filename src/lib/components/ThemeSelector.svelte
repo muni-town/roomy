@@ -105,7 +105,7 @@
     <Select.Content
       side="right"
       sideOffset={8}
-      class="w-fit h-48 bg-base-300 p-2 rounded"
+      class="w-fit h-48 bg-base-300 p-2 rounded z-10"
     >
       <Select.Viewport>
         {#each selectItems as theme, i (i + theme.value)}
