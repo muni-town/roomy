@@ -1,6 +1,6 @@
 <script lang="ts">
   import "../../app.css";
-  import { onMount } from "svelte";
+  import { onMount, setContext } from "svelte";
   import { browser, dev } from "$app/environment";
 
   import posthog from "posthog-js";
@@ -28,9 +28,21 @@
       });
     }
   });
+
+  let themeColor = $state({
+    value:
+      getComputedStyle(document.querySelector("html")).getPropertyValue(
+        "--color-base-300",
+      ) ?? "#e6ddac",
+  });
+  $inspect(themeColor);
+  setContext("themeColor", themeColor);
 </script>
 
 <svelte:head>
+  <meta name="theme-color" content={themeColor.value} />
+  <meta name="msapplication-navbutton-color" content={themeColor.value} />
+  <meta name="msapplication-TileColor" content={themeColor.value} />
   <title>Roomy</title>
 </svelte:head>
 

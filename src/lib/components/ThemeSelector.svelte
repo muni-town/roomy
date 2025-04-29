@@ -2,6 +2,7 @@
   import { Select } from "bits-ui";
   import { themes } from "../themes";
   import Icon from "@iconify/svelte";
+  import { getContext } from "svelte";
 
   let currentTheme = $state("");
 
@@ -82,10 +83,15 @@
     }
   });
 
+  const themeColor = getContext("themeColor");
   function setTheme(theme: string) {
     window.localStorage.setItem("theme", theme);
     document.documentElement.setAttribute("data-theme", theme);
     currentTheme = theme;
+    themeColor.value =
+      getComputedStyle(document.querySelector("html")).getPropertyValue(
+        "--color-base-300",
+      ) ?? "#e6ddac";
   }
 </script>
 
