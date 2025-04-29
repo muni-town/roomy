@@ -3,7 +3,7 @@
   import WikiEditor from "$lib/components/WikiEditor.svelte";
   import { g } from "$lib/global.svelte";
   import { derivePromise } from "$lib/utils.svelte";
-  import { Channel, WikiPage } from "@roomy-chat/sdk";
+  import { WikiPage } from "@roomy-chat/sdk";
 
   const wiki = derivePromise(
     null,
