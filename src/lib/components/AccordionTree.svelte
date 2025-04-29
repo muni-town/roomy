@@ -1,13 +1,13 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
-  import { Accordion, ToggleGroup } from "bits-ui";
+  import { Accordion, Button, ToggleGroup } from "bits-ui";
   import { page } from "$app/state";
   import { navigate, type NavigationTarget } from "$lib/utils.svelte";
-  import type { NamedEntity } from "@roomy-chat/sdk";
+  import { type NamedEntity } from "@roomy-chat/sdk";
   import { slide } from "svelte/transition";
 
   type Section = {
-    items: { value: NamedEntity[] };
+    items: NamedEntity[];
     route: "channel" | "thread";
     key: string;
   };
@@ -27,7 +27,7 @@
     bind:value={keys}
     class="flex flex-col px-2 gap-4"
   >
-    {#each items as { key, ...section }, i (key)}
+    {#each items as { key, route, ...section }, i (key)}
       {#if i > 0}
         <div class="dz-divider my-0"></div>
       {/if}
@@ -52,27 +52,27 @@
                 transition:slide={{ duration: 100 }}
                 class="flex flex-col gap-1"
               >
-                {#each section.items.value as { id, name }}
+                {#each section.items as item}
                   <ToggleGroup.Item
-                    onclick={() => {
-                      const target: NavigationTarget = {
-                        space: page.params.space!,
-                      };
-                      target[section.route] = id;
-                      navigate(target);
-                    }}
-                    value={id}
-                    class="w-full cursor-pointer px-1 dz-btn dz-btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
+                    value={item.id}
+                    class="w-full px-1 dz-btn dz-btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
                   >
-                    <div
-                      class="flex justify-start items-center gap-2 px-2 w-full"
+                    <Button.Root
+                      onclick={() => {
+                        const target: NavigationTarget = {
+                          space: page.params.space!,
+                        };
+                        target[route] = item.id;
+                        navigate(target);
+                      }}
+                      class="flex cursor-pointer justify-start items-center gap-2 px-2 w-full"
                     >
                       <Icon
                         icon="material-symbols:thread-unread-rounded"
                         class="shrink-0"
                       />
-                      <span class="truncate">{name}</span>
-                    </div>
+                      <span class="truncate">{item.name}</span>
+                    </Button.Root>
                   </ToggleGroup.Item>
                 {/each}
               </div>
