@@ -1,10 +1,9 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { Button } from "bits-ui";
+  import { Button, Tabs } from "bits-ui";
 
   import { g } from "$lib/global.svelte";
-  import { outerWidth } from "svelte/reactivity/window";
 
   import { derivePromise, Toggle } from "$lib/utils.svelte";
   import { Category, Channel } from "@roomy-chat/sdk";
@@ -12,8 +11,7 @@
   import SidebarChat from "./SidebarChat.svelte";
   import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
   import { getContext } from "svelte";
-
-  let isMobile = $derived((outerWidth.current || 0) < 640);
+  import SidebarBoard from "./SidebarBoard.svelte";
 
   let availableThreads = derivePromise([], async () =>
     ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
@@ -71,6 +69,7 @@
   }
   let isSpacesVisible: ReturnType<typeof Toggle> =
     getContext("isSpacesVisible");
+  let tab: "board" | "chat" = $state("board");
 </script>
 
 <nav
@@ -81,7 +80,7 @@
   <div
     class="w-full py-1 px-2 h-fit grid grid-cols-[auto_1fr_auto] justify-center items-center"
   >
-    <ToggleSidebarIcon class="mr-2 px-1 py-1" open={isSpacesVisible} />
+    <ToggleSidebarIcon class="pr-2" open={isSpacesVisible} />
     <h1 class="text-sm font-bold text-base-content truncate">
       {g.space?.name && g.space?.name !== "Unnamed" ? g.space.name : ""}
     </h1>
@@ -94,7 +93,9 @@
   <div class="divider my-0"></div>
 
   {#if g.isAdmin}
-    <menu class="dz-menu p-0 w-full justify-between dz-join dz-join-vertical">
+    <menu
+      class="dz-menu p-0 w-full justify-between px-2 dz-join dz-join-vertical"
+    >
       <Dialog title="Create Channel" bind:isDialogOpen={showNewChannelDialog}>
         {#snippet dialogTrigger()}
           <Button.Root
@@ -152,5 +153,32 @@
     </menu>
   {/if}
 
-  <SidebarChat {availableThreads} {sidebarItems} />
+  <!-- Index Chat Toggle -->
+  <Tabs.Root bind:value={tab} class="py-1 px-2">
+    <Tabs.List class="flex w-full rounded-lg dz-tabs-box">
+      <Tabs.Trigger value="board" class="grow dz-tab flex gap-2">
+        <Icon
+          icon="tabler:clipboard-text{tab === 'board' ? '-filled' : ''}"
+          class="text-2xl"
+        />
+      </Tabs.Trigger>
+      <Tabs.Trigger
+        disabled={!g.roomy}
+        value="chat"
+        class="grow dz-tab flex gap-2"
+      >
+        <Icon
+          icon="tabler:message{tab === 'chat' ? '-filled' : ''}"
+          class="text-2xl"
+        />
+      </Tabs.Trigger>
+    </Tabs.List>
+  </Tabs.Root>
+  <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-clip">
+    {#if tab === "board"}
+      <SidebarBoard {availableThreads} />
+    {:else}
+      <SidebarChat {availableThreads} {sidebarItems} />
+    {/if}
+  </div>
 </nav>
