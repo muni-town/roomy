@@ -54,7 +54,9 @@
 {/if}
 
 <!-- Container -->
-<div class="flex w-screen h-screen bg-base-100">
+<div
+  class="flex w-screen h-screen bg-base-300 max-h-screen overflow-clip gap-0"
+>
   <Toaster />
   <ServerBar {spaces} visible={isSpacesVisible.value || !page.params.space} />
 
