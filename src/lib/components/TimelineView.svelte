@@ -12,7 +12,7 @@
   import AvatarImage from "$lib/components/AvatarImage.svelte";
   import { Button, Tabs } from "bits-ui";
 
-  import { navigate } from "$lib/utils.svelte";
+  import { derivePromise, navigate } from "$lib/utils.svelte";
   import { g } from "$lib/global.svelte";
   import {
     Announcement,
@@ -25,23 +25,21 @@
   import type { JSONContent } from "@tiptap/core";
   import { getProfile } from "$lib/profile.svelte";
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
-  import BoardList from "./BoardList.svelte";
-  import { derivePromise } from "$lib/utils.svelte";
   import CreateWikiDialog from "$lib/components/CreateWikiDialog.svelte";
-  import ThreadsTab from "./ThreadsTab.svelte";
+  import BoardList from "./BoardList.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let users: { value: Item[] } = getContext("users");
   let contextItems: { value: Item[] } = getContext("contextItems");
 
-  let tab = $state<"chat" | "threads" | "wiki">("chat");
+  let tab = $state<"chat" | "board">("chat");
 
   // Initialize tab based on hash if present
   function updateTabFromHash() {
     const hash = window.location.hash.replace("#", "");
-    if (hash === "chat" || hash === "threads" || hash === "wiki") {
-      tab = hash as "chat" | "threads" | "wiki";
+    if (hash === "chat" || hash === "board") {
+      tab = hash as "chat" | "board";
     }
   }
 
@@ -193,6 +191,11 @@
   });
 
   // Image upload is now handled in ChatInput.svelte
+  let relatedThreads = derivePromise([], async () =>
+    g.channel && g.channel instanceof Channel
+      ? await g.channel.threads.items()
+      : [],
+  );
   const wikis = derivePromise([], async () => {
     return g.space && g.channel instanceof Channel
       ? (await g.channel.wikipages.items()).filter((x) => !x.softDeleted)
@@ -234,26 +237,19 @@
       class={isMobile ? "dz-navbar-end" : "dz-navbar-center"}
     >
       <Tabs.List class="dz-tabs dz-tabs-box">
-        <Tabs.Trigger value="chat" class="dz-tab flex gap-2">
-          <Icon icon="tabler:message" class="text-2xl" />
-          {#if !isMobile}
-            <p>Chat</p>
-          {/if}
-        </Tabs.Trigger>
-        <Tabs.Trigger value="threads" class="dz-tab flex gap-2">
+        <Tabs.Trigger value="board" class="dz-tab flex gap-2">
           <Icon
-            icon="material-symbols:thread-unread-rounded"
+            icon="tabler:clipboard-text{tab === 'board' ? '-filled' : ''}"
             class="text-2xl"
           />
-          {#if !isMobile}
-            <p>Threads</p>
-          {/if}
+          <p class="hidden sm:block">Board</p>
         </Tabs.Trigger>
-        <Tabs.Trigger value="wiki" class="dz-tab flex gap-2">
-          <Icon icon="tabler:notebook" class="text-2xl" />
-          {#if !isMobile}
-            <p>Wiki</p>
-          {/if}
+        <Tabs.Trigger value="chat" class="dz-tab flex gap-2">
+          <Icon
+            icon="tabler:message{tab === 'chat' ? '-filled' : ''}"
+            class="text-2xl"
+          />
+          <p class="hidden sm:block">Chat</p>
         </Tabs.Trigger>
       </Tabs.List>
     </Tabs.Root>
@@ -267,15 +263,16 @@
 </header>
 <div class="divider my-0"></div>
 
-{#if tab === "wiki"}
+{#if tab === "board"}
   <BoardList items={wikis.value} title="Pages" route="wiki">
     {#snippet header()}
       <CreateWikiDialog />
     {/snippet}
     No pages for this channel.
   </BoardList>
-{:else if tab === "threads"}
-  <ThreadsTab />
+  <BoardList items={relatedThreads.value} title="Topics" route="thread">
+    No topics for this channel.
+  </BoardList>
 {:else if tab === "chat" || g.channel instanceof Thread}
   {#if g.space && g.channel}
     <ChatArea timeline={g.channel.forceCast(Timeline)} />
