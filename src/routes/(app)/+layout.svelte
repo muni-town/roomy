@@ -71,7 +71,7 @@
 <div class="flex w-screen h-screen max-h-screen overflow-clip gap-0">
   <Toaster />
   <div
-    class="{page.url.pathname !== '/home' &&
+    class="{page.params.space &&
       (isSidebarVisible.value
         ? 'flex z-1 absolute w-full'
         : 'hidden')} sm:w-auto sm:relative sm:flex h-full overflow-clip gap-0
