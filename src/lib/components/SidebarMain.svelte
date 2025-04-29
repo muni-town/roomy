@@ -8,10 +8,9 @@
   import { derivePromise, Toggle } from "$lib/utils.svelte";
   import { Category, Channel } from "@roomy-chat/sdk";
   import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
-  import SidebarChat from "./SidebarChat.svelte";
   import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
   import { getContext } from "svelte";
-  import SidebarBoard from "./SidebarBoard.svelte";
+  import AccordionTree from "./AccordionTree.svelte";
 
   let availableThreads = derivePromise([], async () =>
     ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
@@ -69,7 +68,7 @@
   }
   let isSpacesVisible: ReturnType<typeof Toggle> =
     getContext("isSpacesVisible");
-  let tab: "board" | "chat" = $state("board");
+  let tab: "board" | "chat" = $state("chat");
 </script>
 
 <nav
@@ -176,9 +175,25 @@
   </Tabs.Root>
   <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-clip">
     {#if tab === "board"}
-      <SidebarBoard {availableThreads} />
+      <!--
+        add after wiki routes: { key: "pages", route: "wiki", items: wikis }
+      -->
+      <AccordionTree
+        items={[{ key: "topics", route: "thread", items: availableThreads }]}
+        active={g.channel?.id ?? ""}
+      />
     {:else}
-      <SidebarChat {availableThreads} {sidebarItems} />
+      <AccordionTree
+        items={[
+          {
+            key: "channels",
+            route: "channel",
+            items: sidebarItems,
+          },
+          { key: "topics", route: "thread", items: availableThreads },
+        ]}
+        active={g.channel?.id ?? ""}
+      />
     {/if}
   </div>
 </nav>
