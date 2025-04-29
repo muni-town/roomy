@@ -77,7 +77,7 @@
 >
   <!-- Header -->
   <div
-    class="w-full py-1 px-2 h-fit grid grid-cols-[auto_1fr_auto] justify-center items-center"
+    class="w-full pt-4 pb-1 px-2 h-fit grid grid-cols-[auto_1fr_auto] justify-center items-center"
   >
     <ToggleSidebarIcon class="pr-2" open={isSpacesVisible} />
     <h1 class="text-sm font-bold text-base-content truncate">
