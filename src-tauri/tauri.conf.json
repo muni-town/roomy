@@ -4,10 +4,9 @@
   "version": "0.1.0",
   "identifier": "chat.roomy.app",
   "build": {
-    "frontendDist": "../dist",
-    "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "frontendDist": "../build",
+    "devUrl": "http://localhost:4173",
+    "beforeDevCommand": "pnpm preview"
   },
   "app": {
     "withGlobalTauri": true,
@@ -38,11 +37,7 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": [
-          "dev.chat.roomy",
-          "chat.roomy",
-          "roomy"
-        ]
+        "schemes": ["chat.roomy", "roomy"]
       }
     }
   }

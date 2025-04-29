@@ -1,5 +1,4 @@
 <script lang="ts">
-  import _ from "underscore";
   import { page } from "$app/state";
   import { getContext, setContext } from "svelte";
   import toast from "svelte-french-toast";
@@ -21,6 +20,7 @@
     Message,
     Thread,
     Timeline,
+    Category,
   } from "@roomy-chat/sdk";
   import type { JSONContent } from "@tiptap/core";
   import { getProfile } from "$lib/profile.svelte";
@@ -139,29 +139,7 @@
   async function sendMessage() {
     if (!g.roomy || !g.space || !g.channel || !user.agent) return;
 
-    /* TODO: image upload refactor with tiptap
-    const images = imageFiles
-      ? await Promise.all(
-          Array.from(imageFiles).map(async (file) => {
-            try {
-              const resp = await user.uploadBlob(file);
-              return {
-                source: resp.url, // Use the blob reference from ATP
-                alt: file.name,
-              };
-            } catch (error) {
-              console.error("Failed to upload image:", error);
-              toast.error("Failed to upload image", { position: "bottom-end" });
-              return null;
-            }
-          }),
-        ).then((results) =>
-          results.filter(
-            (result): result is NonNullable<typeof result> => result !== null,
-          ),
-        )
-      : undefined;
-    */
+    // Image upload is now handled in ChatInput.svelte
 
     const message = await g.roomy.create(Message);
     message.authors(
@@ -172,7 +150,8 @@
     message.commit();
     if (replyingTo) message.replyTo = replyingTo;
 
-    // TODO: image upload refactor with tiptap
+    // Images are now handled by TipTap in the message content
+    // Limit image size in message input to 300x300
 
     g.channel.timeline.push(message);
     g.channel.commit();
@@ -185,50 +164,33 @@
   // Settings Dialog
   //
 
-  /* TODO: image upload refactor with tiptap
-  let mayUploadImages = $derived.by(() => {
-    if (isAdmin) return true;
-    if (!space) { return }
+  // Image upload permissions are now handled in ChatInput.svelte
+  let channelNameInput = $state("");
+  let channelCategoryInput = $state(undefined) as undefined | string;
+  $effect(() => {
+    if (!g.space) return;
 
-    let messagesByUser = Object.values(space.view.messages).filter(
-      (x) => user.agent && x.author == user.agent.assertDid,
-    );
-    if (messagesByUser.length > 5) return true;
-    return !!messagesByUser.find(
-      (message) =>
-        !!Object.values(message.reactions).find(
-          (reactedUsers) =>
-            !!reactedUsers.find((user) => !!space?.view.admins.includes(user)),
-        ),
-    );
-  });
-  */
-
-  /* TODO: image upload refactor with tiptap
-  async function handleImageSelect(event: Event) {
-    const input = event.target as HTMLInputElement;
-    imageFiles = input.files;
-  }
-
-  async function handlePaste(event: ClipboardEvent) {
-    if (!mayUploadImages) return;
-
-    const items = event.clipboardData?.items;
-    if (!items) return;
-
-    for (const item of items) {
-      if (item.type.startsWith("image/")) {
-        const file = item.getAsFile();
-        if (file) {
-          imageFiles = new DataTransfer().files;
-          const dataTransfer = new DataTransfer();
-          dataTransfer.items.add(file);
-          imageFiles = dataTransfer.files;
+    channelNameInput = g.channel?.name || "";
+    channelCategoryInput = undefined;
+    g.space &&
+      g.space.sidebarItems.items().then((items) => {
+        for (const item of items) {
+          const category = item.tryCast(Category);
+          if (
+            category &&
+            typeof category.channels === "object" &&
+            typeof category.channels.ids === "function" &&
+            g.channel &&
+            category.channels.ids().includes(g.channel.id)
+          ) {
+            channelCategoryInput = category.id;
+            return;
+          }
         }
-      }
-    }
-  }
-  */
+      });
+  });
+
+  // Image upload is now handled in ChatInput.svelte
 </script>
 
 <header class="dz-navbar">
@@ -338,7 +300,7 @@
             </div>
           {/if}
           <div class="relative">
-            <!-- TODO: get all users that has dz-joined the server -->
+            <!-- TODO: get all users that has joined the server -->
             {#if g.roomy && g.roomy.spaces.ids().includes(g.space.id)}
               <ChatInput
                 bind:content={messageInput}
@@ -358,49 +320,8 @@
               >
             {/if}
 
-            <!--
-            {#if mayUploadImages}
-              <label
-                class="cursor-pointer text-white hover:text-gray-300 absolute right-3 top-1/2 -translate-y-1/2"
-              >
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  class="hidden"
-                  onchange={handleImageSelect}
-                />
-                <Icon
-                  icon="material-symbols:add-photo-alternate"
-                  class="text-2xl"
-                />
-              </label>
-            {/if}
-            -->
+            <!-- Image upload button is now in ChatInput.svelte -->
           </div>
-
-          <!-- Image preview
-          {#if imageFiles?.length}
-            <div class="flex gap-2 flex-wrap">
-              {#each Array.from(imageFiles) as file}
-                <div class="relative mt-5">
-                  <img
-                    src={URL.createObjectURL(file)}
-                    alt={file.name}
-                    class="w-20 h-20 object-cover rounded"
-                  />
-                  <button
-                    type="button"
-                    class="absolute -top-2 -right-2 bg-red-500 rounded-full p-1"
-                    onclick={() => (imageFiles = null)}
-                  >
-                    <Icon icon="zondicons:close-solid" color="white" />
-                  </button>
-                </div>
-              {/each}
-            </div>
-          {/if}
-          -->
         </section>
       {/if}
 

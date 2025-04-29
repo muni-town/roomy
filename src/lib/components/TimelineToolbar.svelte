@@ -110,6 +110,7 @@
             bind:value={threadTitleInput}
             class="dz-input"
             placeholder="Thread Title"
+            required
           />
           <button type="submit" class="dz-btn dz-btn-primary">
             Create Thread
@@ -153,6 +154,7 @@
             bind:value={channelNameInput}
             placeholder="name"
             class="dz-input"
+            required
           />
         </label>
         {#if g.space && g.channel instanceof Channel}

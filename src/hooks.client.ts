@@ -1,5 +1,4 @@
-import { themes } from "$lib/themes";
-import type { Handle, HandleClientError } from "@sveltejs/kit";
+import type { HandleClientError } from "@sveltejs/kit";
 import posthog from "posthog-js";
 
 // We're handling this in ThemeSelector.svelte

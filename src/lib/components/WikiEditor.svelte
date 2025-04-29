@@ -603,7 +603,7 @@
       // Find all code blocks with language class
       const codeBlocks = doc.querySelectorAll("pre code");
 
-      for (const codeBlock of codeBlocks) {
+      for (const codeBlock of Array.from(codeBlocks)) {
         const languageMatch = codeBlock.className.match(/language-(\w+)/);
         if (!languageMatch) continue;
 

@@ -99,8 +99,22 @@
   function startEditing() {
     if (message instanceof Message) {
       isEmojiToolbarPickerOpen = false;
-      editMessageContent = JSON.parse(message.bodyJson);
-      isEditing = true;
+
+      try {
+        // Parse the message body JSON to get a plain object
+        const parsedContent = JSON.parse(message.bodyJson) as JSONContent;
+
+        // Create a deep copy to ensure we're not working with a Proxy object
+        // This keeps all content including images intact
+        editMessageContent = JSON.parse(
+          JSON.stringify(parsedContent),
+        ) as JSONContent;
+
+        isEditing = true;
+      } catch (error) {
+        console.error("Error starting message edit:", error);
+        toast.error("Failed to edit message", { position: "bottom-end" });
+      }
     }
   }
 
@@ -109,16 +123,26 @@
       message instanceof Message &&
       Object.keys(editMessageContent).length > 0
     ) {
-      // Update the message
-      message.bodyJson = JSON.stringify(editMessageContent);
+      try {
+        // Ensure we're working with a plain object, not a Proxy
+        const plainContent = JSON.parse(
+          JSON.stringify(editMessageContent),
+        ) as JSONContent;
 
-      // Add an updatedDate field to track edits
-      // @ts-ignore - Adding custom property for edit tracking
-      message.updatedDate = new Date();
+        // Update the message
+        message.bodyJson = JSON.stringify(plainContent);
 
-      message.commit();
-      isEditing = false;
-      toast.success("Message updated", { position: "bottom-end" });
+        // Add an updatedDate field to track edits
+        // @ts-ignore - Adding custom property for edit tracking
+        message.updatedDate = new Date();
+
+        message.commit();
+        isEditing = false;
+        toast.success("Message updated", { position: "bottom-end" });
+      } catch (error) {
+        console.error("Error saving edited message:", error);
+        toast.error("Failed to save message", { position: "bottom-end" });
+      }
     }
   }
 
@@ -208,7 +232,7 @@
     if (!g.space) return "";
     const schema = {
       type: "doc",
-      content: [] as Record<string, any>[],
+      content: [] as Record<string, unknown>[],
     } satisfies JSONContent;
 
     switch (announcement.kind) {
@@ -278,13 +302,13 @@
 
       // Recursively extract text from content array
       if (content.content && Array.isArray(content.content)) {
-        content.content.forEach((node) => {
+        for (const node of content.content) {
           if (node.text) {
-            text += node.text + " ";
+            text += `${node.text} `;
           } else if (node.content) {
-            text += getPlainTextContent(node) + " ";
+            text += `${getPlainTextContent(node)} `;
           }
-        });
+        }
       }
 
       return text.trim() || "Edit message...";
@@ -446,19 +470,17 @@
               placeholder={message instanceof Message
                 ? getPlainTextContent(JSON.parse(message.bodyJson))
                 : "Edit message..."}
+              editMode={true}
             />
           </div>
 
           <div class="flex justify-end gap-2 mt-2">
-            <Button.Root
-              onclick={cancelEditing}
-              class="dz-btn dz-btn-sm dz-btn-ghost"
-            >
+            <Button.Root onclick={cancelEditing} class="btn btn-sm btn-ghost">
               Cancel
             </Button.Root>
             <Button.Root
               onclick={saveEditedMessage}
-              class="dz-btn dz-btn-sm dz-btn-primary"
+              class="btn btn-sm btn-primary"
             >
               Save
             </Button.Root>

@@ -12,9 +12,10 @@
     "strict": true,
     "moduleResolution": "bundler",
     "types": [
-      "vite-plugin-arraybuffer/types"
-    ]
-  }
+      "vite-plugin-arraybuffer/types",
+      "./src/extra-types.d.ts"
+    ],
+  },
   // Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
   // except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
   //

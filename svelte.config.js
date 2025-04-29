@@ -1,14 +1,22 @@
-import adapter from "@sveltejs/adapter-netlify";
+import adapterNetlify from "@sveltejs/adapter-netlify";
+import adapterStatic from "@sveltejs/adapter-static";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 
-/** @type {import('@sveltejs/kit').Config} */
 const config = {
-  // Consult https://svelte.dev/docs/kit/integrations
-  // for more information about preprocessors
   preprocess: vitePreprocess(),
 
   kit: {
-    adapter: adapter(),
+    serviceWorker: {
+      register: process.env.MODE === "tauri" ? false : true,
+    },
+    adapter:
+      process.env.MODE === "tauri"
+        ? adapterStatic({
+            fallback: "index.html",
+          })
+        : adapterNetlify({
+            fallback: "index.html",
+          }),
   },
 };
 

@@ -258,6 +258,5 @@ export const user = {
     session = undefined;
     agent = undefined;
     navigate("home");
-    console.log("logout");
   },
 };

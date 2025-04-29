@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Space, Roomy } from "@roomy-chat/sdk";
+  import type { Space } from "@roomy-chat/sdk";
 
   import ContextMenu from "./ContextMenu.svelte";
   import { AvatarMarble } from "svelte-boring-avatars";

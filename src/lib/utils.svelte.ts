@@ -2,6 +2,7 @@ import type { DidDocument } from "@atproto/oauth-client-browser";
 import { decodeBase32 } from "./base32";
 import type { EntityIdStr } from "@muni-town/leaf";
 import { goto } from "$app/navigation";
+import type { JSONContent } from "@tiptap/core";
 
 /** Cleans a handle string by removing any characters not valid for a domain. */
 export function cleanHandle(handle: string): string {
@@ -69,6 +70,22 @@ export async function resolveLeafId(
   const id = json.id;
   return id;
 }
+
+
+
+
+  // Helper function to safely parse message content
+  export function parseMessageContent(bodyJson: string | undefined): JSONContent {
+    try {
+      if (!bodyJson) return {};
+      return JSON.parse(bodyJson);
+    } catch (e) {
+      console.error('Error parsing message JSON:', e);
+      return {};
+    }
+  }
+
+
 
 /**
  * Helper that allows you to do something similar to the `$derive` rune but for a function returning
