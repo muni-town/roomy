@@ -1,7 +1,7 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { Button, Tabs } from "bits-ui";
+  import { Button, Tabs, ToggleGroup } from "bits-ui";
 
   import { g } from "$lib/global.svelte";
 
@@ -11,6 +11,7 @@
   import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
   import { getContext } from "svelte";
   import AccordionTree from "./AccordionTree.svelte";
+  import SidebarChannelList from "./SidebarChannelList.svelte";
 
   let availableThreads = derivePromise([], async () =>
     ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
@@ -27,7 +28,6 @@
     if (!g.space) return [];
     return await g.space.sidebarItems.items();
   });
-
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
   async function createCategory() {
@@ -179,21 +179,15 @@
         add after wiki routes: { key: "pages", route: "wiki", items: wikis }
       -->
       <AccordionTree
-        items={[{ key: "topics", route: "thread", items: availableThreads }]}
-        active={g.channel?.id ?? ""}
-      />
-    {:else}
-      <AccordionTree
         items={[
-          {
-            key: "channels",
-            route: "channel",
-            items: sidebarItems,
-          },
-          { key: "topics", route: "thread", items: availableThreads },
+          { key: "topics", route: "thread", items: availableThreads.value },
         ]}
         active={g.channel?.id ?? ""}
       />
+    {:else}
+      <ToggleGroup.Root class="px-2" type="single" value={g.channel?.id}>
+        <SidebarChannelList {sidebarItems} />
+      </ToggleGroup.Root>
     {/if}
   </div>
 </nav>
