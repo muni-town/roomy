@@ -89,8 +89,6 @@
     {/if}
   </div>
 
-  <div class="divider my-0"></div>
-
   {#if g.isAdmin}
     <menu
       class="dz-menu p-0 w-full justify-between px-2 dz-join dz-join-vertical"
@@ -108,11 +106,11 @@
 
         <form class="flex flex-col gap-4" onsubmit={createChannel}>
           <label class="dz-input w-full">
-            <span class="label">Name</span>
+            <span class="dz-label">Name</span>
             <input bind:value={newChannelName} placeholder="General" />
           </label>
-          <label class="select w-full">
-            <span class="label">Category</span>
+          <label class="dz-select w-full">
+            <span class="dz-label">Category</span>
             <select bind:value={newChannelCategory}>
               <option value={undefined}>None</option>
               {#each categories.value as category}
@@ -140,7 +138,7 @@
 
         <form class="flex flex-col gap-4" onsubmit={createCategory}>
           <label class="dz-input w-full">
-            <span class="label">Name</span>
+            <span class="dz-label">Name</span>
             <input bind:value={newCategoryName} placeholder="Discussions" />
           </label>
           <Button.Root class="dz-btn dz-btn-primary">
