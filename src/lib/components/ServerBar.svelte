@@ -16,6 +16,8 @@
 
   let handleInput = $state("");
   let loginLoading = $state(false);
+  let signupLoading = $state(false);
+  const loadingAuth = $derived(signupLoading || loginLoading);
 
   let newSpaceName = $state("");
   let isNewSpaceDialogOpen = $state(false);
@@ -51,7 +53,14 @@
     loginLoading = false;
   }
   async function signup() {
-    atproto.oauth.signIn("https://bsky.social");
+    signupLoading = true;
+    try {
+      await atproto.oauth.signIn("https://bsky.social");
+    } catch (e: unknown) {
+      console.error(e);
+      loginError = e instanceof Error ? e.message.toString() : "Unknown error";
+    }
+    signupLoading = false;
   }
 </script>
 
@@ -142,7 +151,7 @@
             class="dz-input w-full"
           />
           <Button.Root
-            disabled={loginLoading || !handleInput}
+            disabled={loadingAuth || !handleInput}
             class="dz-btn dz-btn-primary"
           >
             {#if loginLoading}
@@ -150,17 +159,17 @@
             {/if}
             Log In with Bluesky
           </Button.Root>
-          <Button.Root
-            onclick={(e) => {
-              e.preventDefault();
-              signup();
-            }}
-            disabled={loginLoading}
-            class="dz-btn dz-btn-outline"
-          >
-            Signup with bsky.social
-          </Button.Root>
         </form>
+        <Button.Root
+          onclick={signup}
+          disabled={loadingAuth}
+          class="dz-btn dz-btn-outline"
+        >
+          {#if signupLoading}
+            <span class="dz-loading dz-loading-spinner"></span>
+          {/if}
+          Signup with bsky.social
+        </Button.Root>
       {/if}
     </Dialog>
   </section>
