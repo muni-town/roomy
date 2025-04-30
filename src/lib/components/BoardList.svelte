@@ -25,9 +25,11 @@
 </div>
 <ul class="dz-list w-full dz-join dz-join-vertical rounded">
   {#each items as item}
-    <a href={`/${page.params.space}/${route}/${item.id}`}>
+    <a
+      href={`${page.params.space?.includes(".") ? "/-" : ""}/${page.params.space}/${route}/${item.id}`}
+    >
       <li
-        class="dz-list-row dz-card-title dz-join-item bg-base-200 text-md group w-full text-content-primary"
+        class="dz-list-row dz-card-title dz-join-item bg-base-200 text-md group w-full"
       >
         {item.name}
       </li>
