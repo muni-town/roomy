@@ -98,6 +98,9 @@
     "vitest": "^3.0.9"
   },
   "lint-staged": {
+    "*.{svelte,svelte.ts}": [
+      "check"
+    ],
     "*.{json,js,ts,tsx,html,svelte,css}": [
       "prettier --write --ignore-unknown"
     ]
