@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { page } from "$app/state";
   import { getContext, setContext } from "svelte";
   import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
@@ -12,7 +11,7 @@
   import AvatarImage from "$lib/components/AvatarImage.svelte";
   import { Button, Tabs } from "bits-ui";
 
-  import { derivePromise, navigate } from "$lib/utils.svelte";
+  import { derivePromise } from "$lib/utils.svelte";
   import { g } from "$lib/global.svelte";
   import {
     Announcement,
