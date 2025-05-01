@@ -3,9 +3,12 @@
 set -ex
 
 # Install dependencies
-deno upgrade
-deno install
-deno run build
+# deno upgrade
+# deno install
+# deno run build
+
+pnpm install
+pnpm build
 
 target_url=""
 if [ "$PULL_REQUEST" = "true" ]; then
