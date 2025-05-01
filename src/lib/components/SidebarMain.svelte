@@ -1,17 +1,17 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { Button } from "bits-ui";
+  import { Button, Tabs, ToggleGroup } from "bits-ui";
 
   import { g } from "$lib/global.svelte";
-  import { outerWidth } from "svelte/reactivity/window";
 
-  import { derivePromise } from "$lib/utils.svelte";
+  import { derivePromise, Toggle } from "$lib/utils.svelte";
   import { Category, Channel } from "@roomy-chat/sdk";
   import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
-  import SidebarChat from "./SidebarChat.svelte";
-
-  let isMobile = $derived((outerWidth.current || 0) < 640);
+  import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
+  import { getContext } from "svelte";
+  import AccordionTree from "./AccordionTree.svelte";
+  import SidebarChannelList from "./SidebarChannelList.svelte";
 
   let availableThreads = derivePromise([], async () =>
     ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
@@ -28,7 +28,6 @@
     if (!g.space) return [];
     return await g.space.sidebarItems.items();
   });
-
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
   async function createCategory() {
@@ -67,19 +66,22 @@
     newChannelName = "";
     showNewChannelDialog = false;
   }
+  let isSpacesVisible: ReturnType<typeof Toggle> =
+    getContext("isSpacesVisible");
+  let tab: "board" | "chat" = $state("chat");
 </script>
 
 <nav
-  class={[
-    !isMobile &&
-      "max-w-[16rem] border-r-2 border-base-200 max-h-full h-full min-h-0 overflow-y-auto",
-    "px-4 py-5 flex flex-col gap-4 w-full",
-  ]}
+  class="w-[min(70vw,16rem)] bg-base-300 flex h-full flex-col gap-1 border-r-2 border-base-300"
   style="scrollbar-width: thin;"
 >
-  <div class="flex justify-between">
-    <h1 class="text-2xl font-extrabold text-base-content text-ellipsis flex">
-      {g.space!.name}
+  <!-- Header -->
+  <div
+    class="w-full pt-4 pb-1 px-2 h-fit grid grid-cols-[auto_1fr_auto] justify-center items-center"
+  >
+    <ToggleSidebarIcon class="pr-2" open={isSpacesVisible} />
+    <h1 class="text-sm font-bold text-base-content truncate">
+      {g.space?.name && g.space?.name !== "Unnamed" ? g.space.name : ""}
     </h1>
 
     {#if g.isAdmin}
@@ -87,10 +89,10 @@
     {/if}
   </div>
 
-  <div class="divider my-0"></div>
-
   {#if g.isAdmin}
-    <menu class="dz-menu p-0 w-full justify-between dz-join dz-join-vertical">
+    <menu
+      class="dz-menu p-0 w-full justify-between px-2 dz-join dz-join-vertical"
+    >
       <Dialog title="Create Channel" bind:isDialogOpen={showNewChannelDialog}>
         {#snippet dialogTrigger()}
           <Button.Root
@@ -104,11 +106,11 @@
 
         <form class="flex flex-col gap-4" onsubmit={createChannel}>
           <label class="dz-input w-full">
-            <span class="label">Name</span>
+            <span class="dz-label">Name</span>
             <input bind:value={newChannelName} placeholder="General" />
           </label>
-          <label class="select w-full">
-            <span class="label">Category</span>
+          <label class="dz-select w-full">
+            <span class="dz-label">Category</span>
             <select bind:value={newChannelCategory}>
               <option value={undefined}>None</option>
               {#each categories.value as category}
@@ -136,7 +138,7 @@
 
         <form class="flex flex-col gap-4" onsubmit={createCategory}>
           <label class="dz-input w-full">
-            <span class="label">Name</span>
+            <span class="dz-label">Name</span>
             <input bind:value={newCategoryName} placeholder="Discussions" />
           </label>
           <Button.Root class="dz-btn dz-btn-primary">
@@ -148,5 +150,42 @@
     </menu>
   {/if}
 
-  <SidebarChat {availableThreads} {sidebarItems} />
+  <!-- Index Chat Toggle -->
+  <Tabs.Root bind:value={tab} class="py-1 px-2">
+    <Tabs.List class="flex w-full rounded-lg dz-tabs-box">
+      <Tabs.Trigger value="board" class="grow dz-tab flex gap-2">
+        <Icon
+          icon="tabler:clipboard-text{tab === 'board' ? '-filled' : ''}"
+          class="text-2xl"
+        />
+      </Tabs.Trigger>
+      <Tabs.Trigger
+        disabled={!g.roomy}
+        value="chat"
+        class="grow dz-tab flex gap-2"
+      >
+        <Icon
+          icon="tabler:message{tab === 'chat' ? '-filled' : ''}"
+          class="text-2xl"
+        />
+      </Tabs.Trigger>
+    </Tabs.List>
+  </Tabs.Root>
+  <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-clip">
+    {#if tab === "board"}
+      <!--
+        add after wiki routes: { key: "pages", route: "wiki", items: wikis }
+      -->
+      <AccordionTree
+        items={[
+          { key: "topics", route: "thread", items: availableThreads.value },
+        ]}
+        active={g.channel?.id ?? ""}
+      />
+    {:else}
+      <ToggleGroup.Root class="px-2" type="single" value={g.channel?.id}>
+        <SidebarChannelList {sidebarItems} />
+      </ToggleGroup.Root>
+    {/if}
+  </div>
 </nav>

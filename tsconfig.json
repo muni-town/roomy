@@ -12,23 +12,10 @@
     "strict": true,
     "moduleResolution": "bundler",
     "types": [
-      "vite-plugin-arraybuffer/types"
-    ],
-    "lib": [
-      "esnext",
-      "DOM",
-      "DOM.Iterable"
+      "vite-plugin-arraybuffer/types",
+      "./src/extra-types.d.ts"
     ],
   },
-  "include": [
-    "src/**/*",
-    "tests/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    ".svelte-kit",
-    "build"
-  ]
   // Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
   // except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
   //

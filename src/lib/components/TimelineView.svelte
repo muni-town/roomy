@@ -27,6 +27,7 @@
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
   import CreateWikiDialog from "$lib/components/CreateWikiDialog.svelte";
   import BoardList from "./BoardList.svelte";
+  import ToggleNavigation from "./ToggleNavigation.svelte";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
@@ -189,7 +190,6 @@
         }
       });
   });
-
   // Image upload is now handled in ChatInput.svelte
   let relatedThreads = derivePromise([], async () =>
     g.channel && g.channel instanceof Channel
@@ -206,14 +206,7 @@
 <header class="dz-navbar">
   <div class="dz-navbar-start flex gap-4">
     {#if g.channel}
-      {#if isMobile}
-        <Button.Root
-          onclick={() =>
-            navigate(page.params.space ? { space: page.params.space } : "home")}
-        >
-          <Icon icon="uil:left" />
-        </Button.Root>
-      {/if}
+      <ToggleNavigation />
 
       <h4
         class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}

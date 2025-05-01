@@ -27,19 +27,19 @@
   }
 </script>
 
-<div transition:slide class="flex flex-col gap-4">
+<div transition:slide={{ duration: 100 }} class="flex flex-col gap-2">
   <!-- Category and Channels -->
   {#each sidebarItems.value.filter((x: { softDeleted?: boolean }) => !x.softDeleted) as item}
     {@const category = item.tryCast(Category)}
     {#if category}
       <Accordion.Root type="single" value={item.name}>
         <Accordion.Item value={item.name}>
-          <Accordion.Header class="flex justify-between">
+          <Accordion.Header class="flex w-full justify-between">
             <Accordion.Trigger
-              class="flex text-sm font-semibold gap-2 items-center cursor-pointer"
+              class="flex text-sm max-w-full uppercase truncate gap-2 items-center justify-start cursor-pointer"
             >
-              <Icon icon="basil:folder-solid" />
-              {item.name}
+              <Icon icon="basil:folder-solid" class="shrink-0" />
+              <span class="truncate">{item.name}</span>
             </Accordion.Trigger>
 
             {#if g.isAdmin}
@@ -56,7 +56,7 @@
                       categoryNameInput = item.name;
                     }}
                   >
-                    <Icon icon="lucide:settings" class="size-4" />
+                    <Icon icon="lucide:settings" class="size-4 shrink-0" />
                   </Button.Root>
                 {/snippet}
 
@@ -93,8 +93,8 @@
               {#if open}
                 <div
                   {...props}
-                  transition:slide
-                  class="flex flex-col gap-4 py-2"
+                  transition:slide={{ duration: 100 }}
+                  class="flex flex-col gap-2"
                 >
                   {#each category.channels.ids() as channelId}
                     {#await g.roomy && g.roomy.open(Channel, channelId) then channel}
@@ -109,10 +109,12 @@
                           class="w-full cursor-pointer px-1 dz-btn dz-btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
                         >
                           <h3
-                            class="flex justify-start items-center gap-2 px-2"
+                            class="flex justify-start items-center w-full gap-2 px-2"
                           >
-                            <Icon icon="basil:comment-solid" />
-                            {channel?.name || "..."}
+                            <Icon icon="basil:comment-solid" class="shrink-0" />
+                            <span class="truncate"
+                              >{channel?.name || "..."}</span
+                            >
                           </h3>
                         </ToggleGroup.Item>
                       {/if}
@@ -134,9 +136,9 @@
         value={item.id}
         class="w-full cursor-pointer px-1 dz-btn dz-btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
       >
-        <h3 class="flex justify-start items-center gap-2 px-2">
-          <Icon icon="basil:comment-solid" />
-          {item.name}
+        <h3 class="flex justify-start items-center w-full gap-2">
+          <Icon icon="basil:comment-solid" class="shrink-0" />
+          <span class="truncate"> {item.name} </span>
         </h3>
       </ToggleGroup.Item>
     {/if}

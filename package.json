@@ -1,8 +1,17 @@
 {
-  "name": "roomy",
+  "name": "roomy.chat",
+  "version": "0.2.1",
   "private": true,
-  "version": "0.0.1",
   "type": "module",
+  "description": "A shared web space for digital gardening.",
+  "homepage": "https://github.com/muni-town/roomy#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/muni-town/roomy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/muni-town/roomy/issues"
+  },
   "scripts": {
     "dev": "vite dev --host 127.0.0.1",
     "build": "vite build",
@@ -15,6 +24,9 @@
     "generate-schemas": "deno run -A src/lib/schemas/generate.ts",
     "prepare": "husky",
     "lint-staged": "lint-staged"
+  },
+  "engines": {
+    "deno": ">=2.2.0"
   },
   "dependencies": {
     "@atproto/api": "^0.14.9",
@@ -43,12 +55,13 @@
     "virtua": "^0.40.4"
   },
   "devDependencies": {
+    "loro-crdt": "^1.5.1",
     "@atproto/lexicon": "^0.4.5",
-    "@roomy-chat/sdk": "npm:@jsr/roomy-chat__sdk@0.1.0-preview.16",
-    "@muni-town/leaf": "npm:@jsr/muni-town__leaf@0.2.0-preview.16",
-    "@muni-town/leaf-storage-indexeddb": "npm:@jsr/muni-town__leaf-storage-indexeddb@0.1.0-preview.1",
-    "@muni-town/leaf-svelte": "npm:@jsr/muni-town__leaf-svelte@0.1.0-preview.1",
-    "@muni-town/leaf-sync-ws": "npm:@jsr/muni-town__leaf-sync-ws@0.1.0-preview.1",
+    "@roomy-chat/sdk": "npm:@jsr/roomy-chat__sdk@0.1.0-preview.18",
+    "@muni-town/leaf": "npm:@jsr/muni-town__leaf@0.2.0-preview.17",
+    "@muni-town/leaf-storage-indexeddb": "npm:@jsr/muni-town__leaf-storage-indexeddb@0.1.0-preview.2",
+    "@muni-town/leaf-svelte": "npm:@jsr/muni-town__leaf-svelte@0.1.0-preview.2",
+    "@muni-town/leaf-sync-ws": "npm:@jsr/muni-town__leaf-sync-ws@0.1.0-preview.2",
     "@iconify/svelte": "^4.2.0",
     "@automerge/automerge-repo-storage-indexeddb": "2.0.0-collectionsync-alpha.1",
     "@noble/curves": "^1.8.1",
@@ -88,5 +101,23 @@
     "*.{json,js,ts,tsx,html,svelte,css}": [
       "prettier --write --ignore-unknown"
     ]
-  }
+  },
+  "keyords": [
+    "forum",
+    "chat",
+    "organize",
+    "collaboration",
+    "open-source",
+    "deno",
+    "atproto",
+    "at protocal",
+    "pds",
+    "federated"
+  ],
+  "collective": {
+    "type": "opencollective",
+    "url": "https://opencollective.com/weird-inc",
+    "logo": "https://opencollective.com/opencollective/logo.txt"
+  },
+  "license": "https://blueoakcouncil.org/license/1.0.0"
 }

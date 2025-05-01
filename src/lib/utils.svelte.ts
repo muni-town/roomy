@@ -73,21 +73,16 @@ export async function resolveLeafId(
   return id;
 }
 
-
-
-
-  // Helper function to safely parse message content
-  export function parseMessageContent(bodyJson: string | undefined): JSONContent {
-    try {
-      if (!bodyJson) return {};
-      return JSON.parse(bodyJson);
-    } catch (e) {
-      console.error('Error parsing message JSON:', e);
-      return {};
-    }
+// Helper function to safely parse message content
+export function parseMessageContent(bodyJson: string | undefined): JSONContent {
+  try {
+    if (!bodyJson) return {};
+    return JSON.parse(bodyJson);
+  } catch (e) {
+    console.error("Error parsing message JSON:", e);
+    return {};
   }
-
-
+}
 
 /**
  * Helper that allows you to do something similar to the `$derive` rune but for a function returning
@@ -113,6 +108,34 @@ export function derivePromise<T>(
   });
   return state;
 }
+
+export const Toggle = ({
+  value: init,
+  key,
+}: {
+  value: boolean;
+  key?: string;
+}) => {
+  let value = $state(init);
+  if (key) {
+    let localValue = localStorage.getItem(key);
+    if (localValue) {
+      value = JSON.parse(localValue);
+    } else {
+      localStorage.setItem(key, value.toString());
+    }
+  }
+  return {
+    get value() {
+      return value;
+    },
+    toggle() {
+      value = !value;
+      if (key) localStorage.setItem(key, value.toString());
+      return value;
+    },
+  };
+};
 
 // export function unreadCount<Channel>(
 //   doc: Doc<Channel>,
