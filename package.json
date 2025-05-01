@@ -22,11 +22,12 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "generate-schemas": "deno run -A src/lib/schemas/generate.ts",
-    "prepare": "husky",
+    "prepare": "node .husky/install.mjs",
     "lint-staged": "lint-staged"
   },
   "engines": {
-    "deno": ">=2.2.0"
+    "node": ">=22.15.0",
+    "pnpm": ">=10.10.0"
   },
   "dependencies": {
     "@atproto/api": "^0.14.9",
@@ -99,7 +100,7 @@
   },
   "lint-staged": {
     "*.{svelte,svelte.ts}": [
-      "check"
+      "svelte-check --tsconfig ./tsconfig.json"
     ],
     "*.{json,js,ts,tsx,html,svelte,css}": [
       "prettier --write --ignore-unknown"
@@ -111,7 +112,6 @@
     "organize",
     "collaboration",
     "open-source",
-    "deno",
     "atproto",
     "at protocal",
     "pds",
