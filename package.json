@@ -21,7 +21,6 @@
     "format": "prettier . --write",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "generate-schemas": "deno run -A src/lib/schemas/generate.ts",
     "prepare": "node .husky/install.mjs",
     "lint-staged": "lint-staged"
   },

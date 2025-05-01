@@ -1,3 +1,0 @@
-{
-    "deno.enablePaths": ["./src/lib/schemas/", "./gitignore"]
-}
