@@ -3,11 +3,12 @@
   import WikiEditor from "$lib/components/WikiEditor.svelte";
   import { g } from "$lib/global.svelte";
   import { derivePromise } from "$lib/utils.svelte";
-  import { WikiPage } from "@roomy-chat/sdk";
+  import { WikiPage, type IntoEntityId } from "@roomy-chat/sdk";
 
   const wiki = derivePromise(
     null,
-    async () => await g.space?.wikipages.open(WikiPage, page.params.wiki),
+    async () =>
+      await g.space?.wikipages.open(WikiPage, page.params.wiki as IntoEntityId),
   );
 </script>
 

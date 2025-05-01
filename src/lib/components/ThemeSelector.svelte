@@ -83,15 +83,17 @@
     }
   });
 
-  const themeColor = getContext("themeColor");
+  const themeColor = getContext("themeColor") as { value: string };
   function setTheme(theme: string) {
     window.localStorage.setItem("theme", theme);
     document.documentElement.setAttribute("data-theme", theme);
     currentTheme = theme;
-    themeColor.value =
-      getComputedStyle(document.querySelector("html")).getPropertyValue(
-        "--color-base-300",
-      ) ?? "#e6ddac";
+    const htmlElement = document.querySelector("html");
+    if (htmlElement) {
+      themeColor.value =
+        getComputedStyle(htmlElement).getPropertyValue("--color-base-300") ??
+        "#e6ddac";
+    }
   }
 </script>
 

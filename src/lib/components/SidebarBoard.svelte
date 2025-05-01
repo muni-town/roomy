@@ -45,7 +45,7 @@ Links
 
 {#snippet threadsSidebar(limit = Infinity)}
   <div transition:slide={{ duration: 100 }} class="flex flex-col gap-1">
-    {#each availableThreads.value.filter((_, i) => i < limit) as thread}
+    {#each availableThreads.value.filter((_: any, i: number) => i < limit) as thread}
       <ToggleGroup.Item
         onclick={() =>
           navigate({ space: page.params.space!, thread: thread.id })}

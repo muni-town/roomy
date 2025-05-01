@@ -37,7 +37,7 @@
 
   let themeColor = $state({
     value:
-      getComputedStyle(document.querySelector("html")).getPropertyValue(
+      getComputedStyle(document.querySelector("html")!).getPropertyValue(
         "--color-base-300",
       ) ?? "#e6ddac",
   });
