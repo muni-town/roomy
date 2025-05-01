@@ -16,6 +16,9 @@
   let availableThreads = derivePromise([], async () =>
     ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
   );
+  const wikis = derivePromise([], async () =>
+    ((await g.space?.wikipages.items()) || []).filter((x) => !x.softDeleted),
+  );
 
   let categories = derivePromise([], async () => {
     if (!g.space) return [];
@@ -173,11 +176,9 @@
   </Tabs.Root>
   <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-clip">
     {#if tab === "board"}
-      <!--
-        add after wiki routes: { key: "pages", route: "wiki", items: wikis }
-      -->
       <AccordionTree
         items={[
+          { key: "pages", route: "wiki", items: wikis.value },
           { key: "topics", route: "thread", items: availableThreads.value },
         ]}
         active={g.channel?.id ?? ""}

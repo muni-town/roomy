@@ -8,7 +8,7 @@
 
   type Section = {
     items: NamedEntity[];
-    route: "channel" | "thread";
+    route: "channel" | "thread" | "wiki";
     key: string;
   };
   let {
