@@ -64,7 +64,9 @@
 </svelte:head>
 
 {#if dev}
-  <RenderScan />
+  <!-- Displays rendering scanner for debugging.
+       Uncomment then recomment before committing. -->
+  <!-- <RenderScan /> -->
 {/if}
 
 <!-- Container -->
