@@ -27,8 +27,12 @@
 
 emoji-picker {
   --background: var(--color-neutral);
+  --border-color: var(--color-accent-content);
   --border-radius: 8px;
   --button-hover-background: --alpha(var(--color-white) / 10%);
+  --input-border-color: --alpha(var(--color-neutral-content) / 50%);
+  --outline-color: --alpha(var(--color-neutral-content) / 80%);
+  --outline-size: 1px;
 }
 
 /* Universal */
