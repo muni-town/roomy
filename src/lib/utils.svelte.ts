@@ -117,12 +117,17 @@ export const Toggle = ({
   key?: string;
 }) => {
   let value = $state(init);
+
+  // Wrapped in a function to avoid calling toString() on the value
+  // which has a chance of not being updated.
+  const stringValue = () => value.toString();
+
   if (key) {
     let localValue = localStorage.getItem(key);
     if (localValue) {
       value = JSON.parse(localValue);
     } else {
-      localStorage.setItem(key, value.toString());
+      localStorage.setItem(key, stringValue());
     }
   }
   return {
@@ -131,7 +136,7 @@ export const Toggle = ({
     },
     toggle() {
       value = !value;
-      if (key) localStorage.setItem(key, value.toString());
+      if (key) localStorage.setItem(key, stringValue());
       return value;
     },
   };
