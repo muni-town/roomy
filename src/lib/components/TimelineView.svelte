@@ -287,7 +287,7 @@
                     <strong>{profile.handle}</strong>
                   {/await}
                 </h5>
-                <p class="text-gray-300 text-ellipsis italic">
+                <p class="text-primary-content text-ellipsis italic">
                   {@html getContentHtml(JSON.parse(replyingTo.bodyJson))}
                 </p>
               </div>

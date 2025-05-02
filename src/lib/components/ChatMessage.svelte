@@ -321,9 +321,9 @@
 
 <svelte:window onkeydown={onKeydown} onkeyup={onKeyup} />
 
-<li id={message.id} class={`flex flex-col ${isMobile && "max-w-screen"}`}>
+<div id={message.id} class={`flex flex-col ${isMobile && "max-w-screen"}`}>
   <div
-    class={`relative group w-full h-fit flex flex-col gap-4 px-2 ${!mergeWithPrevious && "pt-5"}  hover:bg-white/5 transition-all duration-75`}
+    class={`relative group w-full h-fit flex flex-col gap-2 px-2 py-2 hover:bg-white/5`}
   >
     {#if message instanceof Announcement}
       {@render announcementView(message)}
@@ -333,15 +333,13 @@
     {/if}
 
     {#if Object.keys(message.reactions.all()).length > 0}
-      <div class="flex gap-2 flex-wrap">
+      <div class="flex gap-2 flex-wrap pl-14">
         {#each Object.keys(message.reactions.all()) as reaction}
           {@render reactionToggle(reaction)}
         {/each}
         <Popover.Root bind:open={isEmojiRowPickerOpen}>
-          <Popover.Trigger
-            class="p-2 hover:bg-white/5 hover:scale-105 active:scale-95 transition-all duration-150 rounded cursor-pointer"
-          >
-            <Icon icon="lucide:smile-plus" color="white" />
+          <Popover.Trigger class="p-2 hover:bg-white/5 rounded cursor-pointer">
+            <Icon icon="lucide:smile-plus" class="text-primary" />
           </Popover.Trigger>
           <Popover.Content class="z-10">
             <emoji-picker bind:this={emojiRowPicker}></emoji-picker>
@@ -350,12 +348,12 @@
       </div>
     {/if}
   </div>
-</li>
+</div>
 
 {#snippet announcementView(announcement: Announcement)}
   {@const relatedMessage = relatedMessages.value[0]}
   {@render toolbar()}
-  <div class="flex flex-col gap-4">
+  <div class="flex flex-col gap-4 pl-14">
     {#if announcement.kind === "threadCreated"}
       <Button.Root
         onclick={() => {
@@ -427,16 +425,10 @@
           />
         </a>
       {:else}
-        <div
-          class="w-10 flex items-center justify-center relative group select-none pointer-events-none"
-        >
-          <AvatarImage
-            handle={authorProfile.handle}
-            className="opacity-0 pointer-events-none select-none"
-          />
+        <div class="w-11">
           {#if message.createdDate}
             <span
-              class="opacity-0 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[8px] text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100"
+              class="opacity-0 text-[8px] text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100"
             >
               {format(message.createdDate, "pp")}
             </span>
@@ -511,7 +503,10 @@
           {/if}
 
           <div class="flex flex-col gap-1">
-            <span class="dz-prose select-text">
+            <!-- Using a fancy Tailwind trick to target all href elements inside of this parent -->
+            <span
+              class="dz-prose select-text [&_a]:text-primary [&_a]:hover:underline"
+            >
               {@html getContentHtml(JSON.parse(msg.bodyJson))}
             </span>
 
@@ -725,7 +720,7 @@
         onclick={() => toggleReaction(reaction)}
         class={`
       dz-btn
-      ${user.agent && reactions.has(user.agent.assertDid) ? "bg-accent text-accent-content" : "bg-secondary text-secondary-content"}
+      ${user.agent && reactions.has(user.agent.assertDid) ? "bg-secondary text-secondary-content" : "bg-secondary/30 hover:bg-secondary/50 text-base-content"}
     `}
         title={profilesThatReacted
           .map((x) => x.displayName || x.handle)
@@ -746,7 +741,7 @@
     {#if messageRepliedTo.value && profileRepliedTo}
       <Button.Root
         onclick={scrollToReply}
-        class="cursor-pointer flex gap-2 text-sm text-start w-full items-center text-secondary-content px-4 py-1 bg-secondary rounded-t"
+        class="cursor-pointer flex gap-2 text-sm text-start w-full items-center text-base-content px-4 py-1"
       >
         <div class="flex basis-1/2 md:basis-auto gap-2 items-center">
           <Icon icon="prime:reply" width="12px" height="12px" />
@@ -759,7 +754,7 @@
               <AvatarBeam name={profileRepliedTo.handle} />
             </Avatar.Fallback>
           </Avatar.Root>
-          <h5 class="text-secondary-content font-medium text-ellipsis">
+          <h5 class="text-base-content font-medium text-ellipsis">
             {profileRepliedTo.handle}
           </h5>
         </div>
