@@ -7,6 +7,7 @@
   import { Popover, Button } from "bits-ui";
   import Dialog from "$lib/components/Dialog.svelte";
   import { getContext, untrack } from "svelte";
+  import { toast } from "svelte-french-toast";
 
   let { createThread, threadTitleInput = $bindable() } = $props();
   let isThreading: { value: false } = getContext("isThreading");
@@ -100,33 +101,46 @@
     <Popover.Portal>
       <Popover.Content
         side="left"
-        sideOffset={8}
+        sideOffset={16}
         interactOutsideBehavior="ignore"
-        class="my-4 bg-base-300 rounded py-4 px-5"
+        class="my-4 bg-base-300 rounded py-4 px-5 max-w-[300px] w-full"
       >
-        <form onsubmit={createThread} class="flex flex-col gap-4">
-          <input
-            type="text"
-            bind:value={threadTitleInput}
-            class="dz-input"
-            placeholder="Thread Title"
-            required
-          />
-          <button type="submit" class="dz-btn dz-btn-primary">
-            Create Thread
-          </button>
-        </form>
+        <div class="flex flex-col gap-4">
+          <div class="flex justify-between items-center">
+            <h2 class="text-xl font-bold">Create Thread</h2>
+            <Popover.Close>
+              <Icon icon="lucide:x" class="text-2xl" />
+            </Popover.Close>
+          </div>
+          <p class="text-sm text-base-content">
+            Threads are a way to organize messages in a channel. Select as many
+            messages as you want and join them into a new thread.
+          </p>
+          <form onsubmit={createThread} class="flex flex-col gap-4">
+            <input
+              type="text"
+              bind:value={threadTitleInput}
+              class="dz-input"
+              placeholder="Thread Title"
+              required
+            />
+            <button type="submit" class="dz-btn dz-btn-primary">
+              Create Thread
+            </button>
+          </form>
+        </div>
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>
+
   <Button.Root
     title="Copy invite link"
-    class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150"
     onclick={() => {
       navigator.clipboard.writeText(`${page.url.href}`);
+      toast.success("Invite link copied to clipboard");
     }}
   >
-    <Icon icon="icon-park-outline:copy-link" class="text-2xl" />
+    <Icon icon="icon-park-outline:people-plus" class="text-2xl" />
   </Button.Root>
 
   {#if g.isAdmin}
@@ -141,7 +155,7 @@
           title={g.channel instanceof Channel
             ? "Channel Settings"
             : "Thread Settings"}
-          class="cursor-pointer hover:scale-105 active:scale-95 transition-all duration-150 m-auto flex"
+          class="m-auto flex"
         >
           <Icon icon="lucide:settings" class="text-2xl" />
         </Button.Root>
