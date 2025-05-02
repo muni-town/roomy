@@ -5,6 +5,27 @@ Gardenable group chat made with [AT Protocol](https://atproto.com/), [Loro](http
 Currently working on producing a functional proof-of-concept. See the
 [Roadmap](https://github.com/orgs/muni-town/projects/8/views/4).
 
+## Contributions welcome!
+
+Take a look at [our issues](https://github.com/muni-town/roomy/issues) and let us know if there is anything you can take on that isn't already assigned.
+
+## Local Development Requirements
+
+📦 pnpm 10.10.0
+🟢 node 22.15.0
+
+```
+pnpm install
+pnpm run build  # Needed to generate files needed for dev
+pnpm run dev
+```
+
+Tools we use:
+
+🔸 svelte 5
+🌬️ tailwind 4
+
+
 ## Devlog
 
 * [Roomy Chat - Alpha](https://blog.muni.town/roomy-chat-alpha/)
