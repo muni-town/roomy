@@ -146,6 +146,14 @@
       (authors) => user.agent && authors.push(user.agent.assertDid),
     );
     message.bodyJson = JSON.stringify(messageInput);
+
+    console.log(message.bodyJson);
+    // If message is empty, don't save it
+    if (Object.keys(JSON.parse(message.bodyJson)).length === 0) {
+      toast.error("Message cannot be empty", { position: "bottom-end" });
+      return;
+    }
+
     message.createdDate = new Date();
     message.commit();
     if (replyingTo) message.replyTo = replyingTo;

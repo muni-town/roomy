@@ -132,6 +132,15 @@
         // Update the message
         message.bodyJson = JSON.stringify(plainContent);
 
+        console.log("Saving edited message:", message.bodyJson);
+        // If message is empty, don't save it
+        if (
+          message.bodyJson === '{"type":"doc","content":[{"type":"paragraph"}]}'
+        ) {
+          toast.error("Message cannot be empty", { position: "bottom-end" });
+          return;
+        }
+
         // Add an updatedDate field to track edits
         // @ts-ignore - Adding custom property for edit tracking
         message.updatedDate = new Date();
