@@ -146,14 +146,41 @@
       (authors) => user.agent && authors.push(user.agent.assertDid),
     );
     message.bodyJson = JSON.stringify(messageInput);
+    let messageJSON = JSON.parse(message.bodyJson) as JSONContent;
 
-    console.log(message.bodyJson);
+    messageJSON.content = (messageJSON.content ?? []).map((block) => {
+      if (block.type === "paragraph" && Array.isArray(block.content)) {
+        let foundText = false;
+        block.content = block.content.filter((inline) => {
+          if (inline.type === "hardBreak" && !foundText) {
+            return false; // remove leading hardBreaks
+          }
+
+          if (inline.type === "text") {
+            inline.text = (inline?.text ?? "").replace(/^\s+/, ""); // remove leading spaces
+            if (inline.text.trim() === "") {
+              return false; // remove text node if it's empty or all spaces
+            }
+            foundText = true;
+          }
+
+          return true;
+        });
+      }
+      return block;
+    });
+
+    console.log("messageJSON", messageJSON);
+
     // If message is empty, don't save it
-    if (Object.keys(JSON.parse(message.bodyJson)).length === 0) {
+    if (
+      messageJSON.content[0]?.content?.length === 0 ||
+      !messageJSON.content[0]?.content
+    ) {
       toast.error("Message cannot be empty", { position: "bottom-end" });
       return;
     }
-
+    message.bodyJson = JSON.stringify(messageJSON);
     message.createdDate = new Date();
     message.commit();
     if (replyingTo) message.replyTo = replyingTo;
