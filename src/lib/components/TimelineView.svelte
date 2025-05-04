@@ -170,14 +170,13 @@
       return block;
     });
 
-    console.log("messageJSON", messageJSON);
 
     // If message is empty, don't save it
     if (
       messageJSON.content[0]?.content?.length === 0 ||
       !messageJSON.content[0]?.content
     ) {
-      toast.error("Message cannot be empty", { position: "bottom-end" });
+      toast.error("Message cannot be empty");
       return;
     }
     message.bodyJson = JSON.stringify(messageJSON);

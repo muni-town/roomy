@@ -132,7 +132,6 @@
         // Update the message
         message.bodyJson = JSON.stringify(plainContent);
 
-        console.log("Saving edited message:", message.bodyJson);
         let messageJSON = JSON.parse(message.bodyJson) as JSONContent;
 
         messageJSON.content = (messageJSON.content ?? []).map((block) => {
@@ -157,14 +156,12 @@
           return block;
         });
 
-        console.log("messageJSON", messageJSON);
 
         // If message is empty, don't save it
         if (
           messageJSON.content[0]?.content?.length === 0 ||
           !messageJSON.content[0]?.content
         ) {
-          toast.error("Message cannot be empty", { position: "bottom-end" });
           return;
         }
         message.bodyJson = JSON.stringify(messageJSON);
