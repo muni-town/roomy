@@ -76,3 +76,25 @@ button {
 .dz-prose img {
   @apply max-w-[300px] max-h-[300px];
 }
+
+/* Novu  */
+
+.nv-bellContainer {
+  padding: 1rem;
+  background-color: white;
+  border-radius: 50%;
+}
+
+.nv-bellContainer:hover {
+  background-color: #f9fafb;
+}
+
+.nv-notification {
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.nv-notification:hover {
+  background-color: #f9fafb;
+}

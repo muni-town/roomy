@@ -14,6 +14,7 @@
   import SidebarMain from "$lib/components/SidebarMain.svelte";
   import { page } from "$app/state";
   import { afterNavigate } from "$app/navigation";
+  import { NovuUI } from "@novu/js/ui";
 
   const { children } = $props();
   const spaces = derivePromise(
@@ -30,6 +31,26 @@
         person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well
       });
     }
+
+    const novuInputElement = document.getElementById("notification-inbox");
+
+    if (!novuInputElement) {
+      console.error("Novu input element not found");
+      return;
+    }
+
+    const novu = new NovuUI({
+      options: {
+        applicationIdentifier: "Op-g56waUucs",
+        subscriberId: "68190285fcff1051b499d05b",
+      },
+    });
+
+    novu.mountComponent({
+      name: "Inbox",
+      props: {},
+      element: novuInputElement,
+    });
   });
 
   const isSpacesVisible = Toggle({ value: false, key: "isSpacesVisible" });
@@ -72,6 +93,7 @@
 <!-- Container -->
 <div class="flex w-screen h-screen max-h-screen overflow-clip gap-0">
   <Toaster />
+  <div id="notification-inbox" class="top-0 left-0"></div>
   <div
     class="{page.params.space &&
       (isSidebarVisible.value
