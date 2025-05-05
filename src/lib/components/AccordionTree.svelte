@@ -25,7 +25,7 @@
   <Accordion.Root
     type="multiple"
     bind:value={keys}
-    class="flex flex-col px-2 gap-4"
+    class="flex flex-col px-2 gap-2"
   >
     {#each items as { key, route, ...section }, i (key)}
       {#if section.items.length > 0}

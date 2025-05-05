@@ -5,13 +5,14 @@
 
   import { g } from "$lib/global.svelte";
 
-  import { derivePromise, Toggle } from "$lib/utils.svelte";
+  import { derivePromise, navigate, Toggle } from "$lib/utils.svelte";
   import { Category, Channel } from "@roomy-chat/sdk";
   import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
   import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
   import { getContext } from "svelte";
   import AccordionTree from "./AccordionTree.svelte";
   import SidebarChannelList from "./SidebarChannelList.svelte";
+  import { page } from "$app/state";
 
   let availableThreads = derivePromise([], async () =>
     ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
@@ -174,8 +175,19 @@
       </Tabs.Trigger>
     </Tabs.List>
   </Tabs.Root>
-  <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-clip">
+  <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-clip mx-1">
     {#if tab === "board"}
+      <div class="flex-flex-col gap-4 p-2">
+        <Button.Root
+          class="cursor-pointer px-2 flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
+          onclick={() => {
+            navigate({ space: page.params.space!, thread: "@links" });
+          }}
+        >
+          Links
+        </Button.Root>
+        <div class="dz-divider my-0"></div>
+      </div>
       <AccordionTree
         items={[
           { key: "pages", route: "wiki", items: wikis.value },
