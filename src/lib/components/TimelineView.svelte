@@ -24,7 +24,7 @@
   import type { JSONContent } from "@tiptap/core";
   import { getProfile } from "$lib/profile.svelte";
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
-  import CreateWikiDialog from "$lib/components/CreateWikiDialog.svelte";
+  import CreatePageDialog from "$lib/components/CreatePageDialog.svelte";
   import BoardList from "./BoardList.svelte";
   import ToggleNavigation from "./ToggleNavigation.svelte";
 
@@ -170,7 +170,6 @@
       return block;
     });
 
-
     // If message is empty, don't save it
     if (
       messageJSON.content[0]?.content?.length === 0 ||
@@ -229,7 +228,7 @@
       ? await g.channel.threads.items()
       : [],
   );
-  const wikis = derivePromise([], async () => {
+  const pages = derivePromise([], async () => {
     return g.space && g.channel instanceof Channel
       ? (await g.channel.wikipages.items()).filter((x) => !x.softDeleted)
       : [];
@@ -290,9 +289,9 @@
 <div class="divider my-0"></div>
 
 {#if tab === "board"}
-  <BoardList items={wikis.value} title="Pages" route="wiki">
+  <BoardList items={pages.value} title="Pages" route="page">
     {#snippet header()}
-      <CreateWikiDialog />
+      <CreatePageDialog />
     {/snippet}
     No pages for this channel.
   </BoardList>

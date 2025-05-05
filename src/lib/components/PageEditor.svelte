@@ -17,10 +17,10 @@
   import { outerWidth } from "svelte/reactivity/window";
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  let { wiki }: { wiki: WikiPage } = $props();
-  let isEditingWiki = $state(false);
+  let { page: pg }: { page: WikiPage } = $props();
+  let isEditingPage = $state(false);
 
-  let wikiRenderedHtml = $state("");
+  let pageRenderedHtml = $state("");
   let processedHtml = $state("");
   let editorElement: HTMLElement | null = $state(null);
   let editor: BlockNoteEditor | null;
@@ -141,8 +141,8 @@
 
   let isDeleteDialogOpen = $state(false);
 
-  function setEditingWiki(value: boolean) {
-    isEditingWiki = value;
+  function setEditingPage(value: boolean) {
+    isEditingPage = value;
 
     if (value) {
       if (editor) {
@@ -159,11 +159,11 @@
     isDeleteDialogOpen = true;
   }
 
-  function confirmDeleteWiki() {
-    wiki.softDeleted = true;
-    wiki.commit();
+  function confirmDeletePage() {
+    pg.softDeleted = true;
+    pg.commit();
 
-    isEditingWiki = false; // Close the editor to remove cached wiki
+    isEditingPage = false; // Close the editor to remove cached page
     isDeleteDialogOpen = false;
   }
 
@@ -512,16 +512,16 @@
           }
         }
       });
-      if (wiki) {
+      if (pg) {
         try {
-          const parsedContent = JSON.parse(wiki.bodyJson);
+          const parsedContent = JSON.parse(pg.bodyJson);
           setTimeout(() => {
             if (editor && editor.document) {
               editor.replaceBlocks(editor.document, parsedContent);
             }
           }, 200);
         } catch (e) {
-          console.error("Failed to parse wiki content", e);
+          console.error("Failed to parse page content", e);
         }
       }
     } catch (e) {
@@ -530,15 +530,15 @@
   }
 
   async function processCodeBlocks() {
-    if (!wikiRenderedHtml) {
-      processedHtml = wikiRenderedHtml;
+    if (!pageRenderedHtml) {
+      processedHtml = pageRenderedHtml;
       return;
     }
 
     try {
       // Process the HTML to find code blocks and apply syntax highlighting
       const parser = new DOMParser();
-      const doc = parser.parseFromString(wikiRenderedHtml, "text/html");
+      const doc = parser.parseFromString(pageRenderedHtml, "text/html");
 
       // Find all code blocks with language class
       const codeBlocks = doc.querySelectorAll("pre code");
@@ -589,7 +589,7 @@
       processedHtml = doc.body.innerHTML;
     } catch (e) {
       console.error("Failed to process code blocks:", e);
-      processedHtml = wikiRenderedHtml;
+      processedHtml = pageRenderedHtml;
     }
   }
 
@@ -629,44 +629,44 @@
   }
 
   $effect(() => {
-    wikiRenderedHtml;
+    pageRenderedHtml;
     processCodeBlocks();
   });
 
   $effect(() => {
-    if (wiki.bodyJson == "{}") {
-      wikiRenderedHtml = "";
+    if (pg.bodyJson == "{}") {
+      pageRenderedHtml = "";
       processedHtml = "";
       return;
     }
-    const json = JSON.parse(wiki.bodyJson);
+    const json = JSON.parse(pg.bodyJson);
     try {
       const rendererEditor = BlockNoteEditor.create();
       rendererEditor
         .blocksToFullHTML(json)
         .then((html) => {
-          wikiRenderedHtml = html;
+          pageRenderedHtml = html;
         })
         .catch(() => {
-          wikiRenderedHtml = "";
+          pageRenderedHtml = "";
         });
     } catch (_e) {
-      wikiRenderedHtml = "";
+      pageRenderedHtml = "";
     }
   });
 
-  async function saveWikiContent() {
-    if (!editor || !g.space || !wiki) return;
+  async function savePageContent() {
+    if (!editor || !g.space || !pg) return;
     try {
       const res = JSON.stringify(editor.document);
-      wiki.bodyJson = res;
-      wiki.commit();
+      pg.bodyJson = res;
+      pg.commit();
 
-      setEditingWiki(false);
-      toast.success("Wiki saved successfully", { position: "bottom-end" });
+      setEditingPage(false);
+      toast.success("Page saved successfully", { position: "bottom-end" });
     } catch (e) {
-      console.error("Failed to save wiki content", e);
-      toast.error("Failed to save wiki content", { position: "bottom-end" });
+      console.error("Failed to save page content", e);
+      toast.error("Failed to save page content", { position: "bottom-end" });
     }
   }
 
@@ -730,7 +730,7 @@
       document.head.appendChild(link);
     }
 
-    if (wikiRenderedHtml) {
+    if (pageRenderedHtml) {
       await processCodeBlocks();
     }
   });
@@ -750,29 +750,29 @@
       />
     </label>
 
-    <div class="flex gap-2 items-center" class:dz-input={isEditingWiki}>
+    <div class="flex gap-2 items-center" class:dz-input={isEditingPage}>
       <Icon icon={"material-symbols:thread-unread-rounded"} />
-      {#if !isEditingWiki}
+      {#if !isEditingPage}
         <h4
           class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold flex gap-2 items-center`}
         >
-          {wiki.name}
+          {pg.name}
         </h4>
       {:else}
         <input
           type="text"
-          bind:value={wiki.name}
+          bind:value={pg.name}
           class="text-base-content text-lg font-bold p-0 flex-1 mr-2"
-          placeholder="Wiki title"
+          placeholder="Page title"
           required
         />
       {/if}
     </div>
   </div>
   <div class="flex gap-3">
-    {#if !isEditingWiki}
+    {#if !isEditingPage}
       <Button.Root
-        onclick={() => setEditingWiki(true)}
+        onclick={() => setEditingPage(true)}
         class=" max-w-fit dz-btn dz-btn-primary"
       >
         <Icon icon="tabler:edit" />
@@ -781,12 +781,12 @@
     {:else}
       <div class="pl-3 flex gap-2 grow">
         <Button.Root
-          onclick={() => setEditingWiki(false)}
+          onclick={() => setEditingPage(false)}
           class="dz-btn dz-btn-ghost"
         >
           Cancel
         </Button.Root>
-        <Button.Root onclick={saveWikiContent} class="dz-btn dz-btn-primary">
+        <Button.Root onclick={savePageContent} class="dz-btn dz-btn-primary">
           Save
         </Button.Root>
       </div>
@@ -802,14 +802,14 @@
     {/if}
   </div>
 </header>
-<!-- If no wiki selected, show guidance -->
+<!-- If no page selected, show guidance -->
 <div class="dz-divider"></div>
 
-{#if !isEditingWiki}
-  <section class="wiki-content">
-    <div class="wiki-rendered p-4">
-      <div class="wiki-html text-base-content">
-        {#if wiki && !wiki.softDeleted}
+{#if !isEditingPage}
+  <section class="page-content">
+    <div class="page-rendered p-4">
+      <div class="page-html text-base-content">
+        {#if pg && !pg.softDeleted}
           {@html processedHtml}
         {:else}
           <p class="text-base-content/70">No content available.</p>
@@ -818,9 +818,9 @@
     </div>
   </section>
 {:else}
-  <section class="wiki-editor-container p-4">
+  <section class="page-editor-container p-4">
     <div
-      class="wiki-editor bg-base-300/20 rounded-lg border border-base-content/30 p-4 h-auto {isEditingWiki
+      class="page-editor bg-base-300/20 rounded-lg border border-base-content/30 p-4 h-auto {isEditingPage
         ? 'edit-mode'
         : ''}"
     >
@@ -852,7 +852,7 @@
 
       <div bind:this={editorElement} class="min-h-[400px]"></div>
 
-      {#if slashMenuVisible && isEditingWiki}
+      {#if slashMenuVisible && isEditingPage}
         <div
           class="slash-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
           style="left: {slashMenuPosition.x}px; top: {slashMenuPosition.y}px;"
@@ -873,7 +873,7 @@
         </div>
       {/if}
 
-      {#if mentionMenuVisible && isEditingWiki}
+      {#if mentionMenuVisible && isEditingPage}
         <div
           class="mention-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
           style="left: {mentionMenuPosition.x}px; top: {mentionMenuPosition.y}px;"
@@ -906,7 +906,7 @@
         </div>
       {/if}
 
-      {#if hashMenuVisible && isEditingWiki}
+      {#if hashMenuVisible && isEditingPage}
         <div
           class="hash-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
           style="left: {hashMenuPosition.x}px; top: {hashMenuPosition.y}px;"
@@ -947,7 +947,7 @@
         </div>
       {/if}
 
-      {#if selectionTooltipVisible && isEditingWiki}
+      {#if selectionTooltipVisible && isEditingPage}
         <div
           class="tooltip-animate bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50 flex items-center justify-center p-1"
           style="left: {selectionTooltipPosition.x}px; top: {selectionTooltipPosition.y}px; transform: translateX(-50%);"
@@ -991,12 +991,12 @@
 </Dialog>
 
 <Dialog
-  title="Confirm Wiki Deletion"
-  description="Are you sure you want to delete <b>{wiki?.name}</b>?</br></br><b>Note:</b> Deletes are not permanent and only hide the data from view. The data is still publicly accessible."
+  title="Confirm Page Deletion"
+  description="Are you sure you want to delete <b>{pg?.name}</b>?</br></br><b>Note:</b> Deletes are not permanent and only hide the data from view. The data is still publicly accessible."
   bind:isDialogOpen={isDeleteDialogOpen}
 >
   <div class="flex justify-end gap-3">
-    <button class="dz-btn dz-btn-error" onclick={confirmDeleteWiki}
+    <button class="dz-btn dz-btn-error" onclick={confirmDeletePage}
       >Delete</button
     >
   </div>
@@ -1009,7 +1009,7 @@
     padding-left: 24px;
   }
 
-  :global(.wiki-editor-container .edit-mode .bn-block::before) {
+  :global(.page-editor-container .edit-mode .bn-block::before) {
     content: "+";
     position: absolute;
     left: 6px;
@@ -1033,15 +1033,15 @@
     background-color: transparent;
   }
 
-  :global(.wiki-editor-container .edit-mode .bn-block:hover::before) {
+  :global(.page-editor-container .edit-mode .bn-block:hover::before) {
     opacity: 1;
   }
 
-  :global(.wiki-editor-container .edit-mode .bn-block::before:hover) {
+  :global(.page-editor-container .edit-mode .bn-block::before:hover) {
     background-color: hsl(var(--p) / 0.2);
   }
 
-  :global(.wiki-editor) {
+  :global(.page-editor) {
     color: hsl(var(--bc));
   }
 
@@ -1055,11 +1055,11 @@
     z-index: 100;
   }
 
-  .wiki-editor {
+  .page-editor {
     overflow: visible;
   }
 
-  :global(.wiki-rendered input[type="checkbox"]) {
+  :global(.page-rendered input[type="checkbox"]) {
     pointer-events: none;
   }
 
@@ -1122,14 +1122,14 @@
     background: transparent;
   }
 
-  :global(.wiki-rendered pre) {
+  :global(.page-rendered pre) {
     margin: 1em 0;
     border-radius: 0.5em;
     overflow: hidden;
     background-color: hsl(var(--n));
   }
 
-  :global(.wiki-rendered code:not([class])) {
+  :global(.page-rendered code:not([class])) {
     padding: 0.2em 0.4em;
     margin: 0;
     background-color: hsl(var(--p) / 0.2);

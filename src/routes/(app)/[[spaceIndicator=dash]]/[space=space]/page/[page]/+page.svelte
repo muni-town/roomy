@@ -1,19 +1,19 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import WikiEditor from "$lib/components/WikiEditor.svelte";
+  import PageEditor from "$lib/components/PageEditor.svelte";
   import { g } from "$lib/global.svelte";
   import { derivePromise } from "$lib/utils.svelte";
   import { WikiPage, type IntoEntityId } from "@roomy-chat/sdk";
 
-  const wiki = derivePromise(
+  const pg = derivePromise(
     null,
     async () =>
-      await g.space?.wikipages.open(WikiPage, page.params.wiki as IntoEntityId),
+      await g.space?.wikipages.open(WikiPage, page.params.page as IntoEntityId),
   );
 </script>
 
-{#if wiki.value}
+{#if pg.value}
   <div class="w-full">
-    <WikiEditor wiki={wiki.value} />
+    <PageEditor page={pg.value} />
   </div>
 {/if}

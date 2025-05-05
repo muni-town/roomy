@@ -11,7 +11,7 @@ export function cleanHandle(handle: string): string {
 
 export type NavigationTarget =
   | "home"
-  | { space: string; channel?: string; thread?: string; wiki?: string };
+  | { space: string; channel?: string; thread?: string; page?: string };
 
 /** A helper function to navigate to a specific roomy object, like a space, channel, or thread */
 export function navigate(target: NavigationTarget) {
@@ -27,8 +27,8 @@ export function navigate(target: NavigationTarget) {
       url += `/${target.channel}`;
     } else if (target.thread) {
       url += `/thread/${target.thread}`;
-    } else if (target.wiki) {
-      url += `/wiki/${target.wiki}`;
+    } else if (target.page) {
+      url += `/page/${target.page}`;
     }
     goto(url);
   }
