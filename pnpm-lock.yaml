@@ -91,23 +91,23 @@ importers:
         specifier: ^4.2.0
         version: 4.2.0(svelte@5.28.2)
       '@muni-town/leaf':
-        specifier: npm:@jsr/muni-town__leaf@0.2.0-preview.17
-        version: '@jsr/muni-town__leaf@0.2.0-preview.17'
+        specifier: ^0.2.0-preview.19
+        version: 0.2.0-preview.19
       '@muni-town/leaf-storage-indexeddb':
-        specifier: npm:@jsr/muni-town__leaf-storage-indexeddb@0.1.0-preview.2
-        version: '@jsr/muni-town__leaf-storage-indexeddb@0.1.0-preview.2(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)'
+        specifier: ^0.1.0-preview.4
+        version: 0.1.0-preview.4(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)
       '@muni-town/leaf-svelte':
-        specifier: npm:@jsr/muni-town__leaf-svelte@0.1.0-preview.2
-        version: '@jsr/muni-town__leaf-svelte@0.1.0-preview.2'
+        specifier: ^0.1.0-preview.4
+        version: 0.1.0-preview.4
       '@muni-town/leaf-sync-ws':
-        specifier: npm:@jsr/muni-town__leaf-sync-ws@0.1.0-preview.2
-        version: '@jsr/muni-town__leaf-sync-ws@0.1.0-preview.2'
+        specifier: ^0.1.0-preview.4
+        version: 0.1.0-preview.4
       '@noble/curves':
         specifier: ^1.8.1
         version: 1.9.0
       '@roomy-chat/sdk':
-        specifier: npm:@jsr/roomy-chat__sdk@0.1.0-preview.18
-        version: '@jsr/roomy-chat__sdk@0.1.0-preview.18'
+        specifier: ^0.1.0-preview.20
+        version: 0.1.0-preview.20
       '@sveltejs/adapter-netlify':
         specifier: ^5.0.0
         version: 5.0.1(@sveltejs/kit@2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.4(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.4(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))
@@ -555,24 +555,6 @@ packages:
   '@jsr/kitsonk__kv-toolbox@0.27.4':
     resolution: {integrity: sha512-6GDsczA22cieX733yazDIUxPyWzd2PatvgHQfer4mVdSWk8n6WHRdiFo0z23GbSlXT3P5eaGOoP0lIaEy9LBuA==, tarball: https://npm.jsr.io/~/11/@jsr/kitsonk__kv-toolbox/0.27.4.tgz}
 
-  '@jsr/muni-town__leaf-storage-deno-kv@0.1.0-preview.2':
-    resolution: {integrity: sha512-fJsHrvSfysBWhv26y3N1WlS/G1tLAWrsZbyd3j5Q4OrfxHzZJ2hjrT44cvUC+jBSrD/3dpyeODEKRcuxYyCn8g==, tarball: https://npm.jsr.io/~/11/@jsr/muni-town__leaf-storage-deno-kv/0.1.0-preview.2.tgz}
-
-  '@jsr/muni-town__leaf-storage-indexeddb@0.1.0-preview.2':
-    resolution: {integrity: sha512-YpnyG9g9dp3aLjOMZY6lgwVbAOqs9Hbv5c9G78a62vlSAbHE0UwGAQb2y+9TNCoPOtXfU+zPZzu+GNffYLrt6g==, tarball: https://npm.jsr.io/~/11/@jsr/muni-town__leaf-storage-indexeddb/0.1.0-preview.2.tgz}
-
-  '@jsr/muni-town__leaf-svelte@0.1.0-preview.2':
-    resolution: {integrity: sha512-8MxDobkmO2CpWm+ttTaV82UwzZ3D5rKmyi9z2EWPAoDXBPfho2CkExOLAHB00eV7rfjkQaq0CIkdR1OtfIVvtw==, tarball: https://npm.jsr.io/~/11/@jsr/muni-town__leaf-svelte/0.1.0-preview.2.tgz}
-
-  '@jsr/muni-town__leaf-sync-ws@0.1.0-preview.2':
-    resolution: {integrity: sha512-8C1p5hQhtXCCvyLPoiAenRsERh0ca/eUezT+CaRRr6B0Eo/QurhULzNEH9bBAu+pEBfkmLnCMKEfWeMBPOliEA==, tarball: https://npm.jsr.io/~/11/@jsr/muni-town__leaf-sync-ws/0.1.0-preview.2.tgz}
-
-  '@jsr/muni-town__leaf@0.2.0-preview.17':
-    resolution: {integrity: sha512-coAwovgTe1Kn/XjbergcfLPayGWS9Q2OTf2I4EGeOVNKP74YjzosBTh10t6ZdcRze7dmskbwEMnDeO297JeHxA==, tarball: https://npm.jsr.io/~/11/@jsr/muni-town__leaf/0.2.0-preview.17.tgz}
-
-  '@jsr/roomy-chat__sdk@0.1.0-preview.18':
-    resolution: {integrity: sha512-bFgaE+yrk17efbQ8RVJ5rDZrsCveUmai56XpYU8nETnf+jy+6OqbOBq1XtREGoZFXwEBpkXH7AVwyoQzVT4+cw==, tarball: https://npm.jsr.io/~/11/@jsr/roomy-chat__sdk/0.1.0-preview.18.tgz}
-
   '@jsr/std__assert@1.0.13':
     resolution: {integrity: sha512-rZ44REoi2/p+gqu8OfkcNeaTOSiG1kD6v8gyA0YjkXsOkDsiGw9g8h7JuGC/OD7GgOVgTEY+9Cih49Y18rkrCQ==, tarball: https://npm.jsr.io/~/11/@jsr/std__assert/1.0.13.tgz}
 
@@ -599,6 +581,21 @@ packages:
   '@msgpack/msgpack@3.1.1':
     resolution: {integrity: sha512-DnBpqkMOUGayNVKyTLlkM6ILmU/m/+VUxGkuQlPQVAcvreLz5jn1OlQnWd8uHKL/ZSiljpM12rjRhr51VtvJUQ==}
     engines: {node: '>= 18'}
+
+  '@muni-town/leaf-storage-deno-kv@0.1.0-preview.4':
+    resolution: {integrity: sha512-ZkS+Q/QBbrFWUQyDRqQWpcQ7wZGPuwxgY3m5BDylj8BrV7npzx5xmUFUb5xFYHxXheClH5BzASp6jajOZvBMxw==}
+
+  '@muni-town/leaf-storage-indexeddb@0.1.0-preview.4':
+    resolution: {integrity: sha512-IaXkKun9PDdoS9ZaKvpnKM29u0VBtcGmH+ipFr9qJLjaundRwwlydwPuniQ12TrLVMmkFz2pXQw27wm6VklqEA==}
+
+  '@muni-town/leaf-svelte@0.1.0-preview.4':
+    resolution: {integrity: sha512-Wn0Z6X/H+e2yfEox87AS8BalqfDxHobLSTGf3qqh4vehcfQP88/vmm6GBr7kVOhFdeCBsjqS6DfEwSGTTLuGvA==}
+
+  '@muni-town/leaf-sync-ws@0.1.0-preview.4':
+    resolution: {integrity: sha512-A5HNksvB6s0BjYIbB7L4shApBKdULUMRdbewRLMz72pfwYZQkIyj1+QRIHXvzYZ06tFWvSUNSmRkT4pRm4nlew==}
+
+  '@muni-town/leaf@0.2.0-preview.19':
+    resolution: {integrity: sha512-uKseTbtjn2hf6DsxLVlRJrTZerg9LNLShAkl4K2/Edz3eZI4HX/Jj7lt6ec7TQ5yitpmp1ufnH7Rn08ZFl4C9w==}
 
   '@noble/curves@1.9.0':
     resolution: {integrity: sha512-7YDlXiNMdO1YZeH6t/kvopHHbIZzlxrCV9WLqCY6QhcXOoXiNCMDqJIglZ9Yjx5+w7Dz30TITFrlTjnRg7sKEg==}
@@ -725,6 +722,9 @@ packages:
     resolution: {integrity: sha512-ECyOuDeH3C1I8jH2MK1RtBJW+YPMvSfT0a5NN0nHfQYnDSJ6tUiZH3gzwVP5/Kfh/+Tt7tpWVF9LXNTnhTJ3kA==}
     cpu: [x64]
     os: [win32]
+
+  '@roomy-chat/sdk@0.1.0-preview.20':
+    resolution: {integrity: sha512-+3vd1WWC+5DyCDVm6kA8n3s9H5VFwv4C6vR0x396mKSixe4zJUtzEbK334F/vipXo0sFOillPBgH4WWJ2xeGHA==}
 
   '@shikijs/core@1.29.2':
     resolution: {integrity: sha512-vju0lY9r27jJfOY4Z7+Rt/nIOjzJpZ3y+nYpqtUZInVoXQ/TJZcfGnNOGnKjFdVZb8qexiCuSlZRKcGfhhTTZQ==}
@@ -3292,44 +3292,6 @@ snapshots:
       '@jsr/std__encoding': 1.0.10
       '@jsr/std__media-types': 1.1.0
 
-  '@jsr/muni-town__leaf-storage-deno-kv@0.1.0-preview.2':
-    dependencies:
-      '@jsr/kitsonk__kv-toolbox': 0.27.4
-      '@jsr/muni-town__leaf': 0.2.0-preview.17
-
-  '@jsr/muni-town__leaf-storage-indexeddb@0.1.0-preview.2(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)':
-    dependencies:
-      '@automerge/automerge-repo-storage-indexeddb': 1.2.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)
-      '@jsr/muni-town__leaf': 0.2.0-preview.17
-    transitivePeerDependencies:
-      - '@swc/core'
-      - '@swc/wasm'
-      - '@types/node'
-      - supports-color
-      - typescript
-
-  '@jsr/muni-town__leaf-svelte@0.1.0-preview.2':
-    dependencies:
-      '@jsr/muni-town__leaf': 0.2.0-preview.17
-      svelte: 5.28.2
-
-  '@jsr/muni-town__leaf-sync-ws@0.1.0-preview.2':
-    dependencies:
-      '@jsr/muni-town__leaf': 0.2.0-preview.17
-      '@jsr/muni-town__leaf-storage-deno-kv': 0.1.0-preview.2
-
-  '@jsr/muni-town__leaf@0.2.0-preview.17':
-    dependencies:
-      '@msgpack/msgpack': 3.1.1
-      arktype: 2.1.20
-      base32-decode: 1.0.0
-      base32-encode: 2.0.0
-      loro-crdt: 1.5.4
-
-  '@jsr/roomy-chat__sdk@0.1.0-preview.18':
-    dependencies:
-      '@jsr/muni-town__leaf': 0.2.0-preview.17
-
   '@jsr/std__assert@1.0.13':
     dependencies:
       '@jsr/std__internal': 1.0.6
@@ -3355,6 +3317,40 @@ snapshots:
       svelte: 5.28.2
 
   '@msgpack/msgpack@3.1.1': {}
+
+  '@muni-town/leaf-storage-deno-kv@0.1.0-preview.4':
+    dependencies:
+      '@kitsonk/kv-toolbox': '@jsr/kitsonk__kv-toolbox@0.27.4'
+      '@muni-town/leaf': 0.2.0-preview.19
+
+  '@muni-town/leaf-storage-indexeddb@0.1.0-preview.4(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)':
+    dependencies:
+      '@automerge/automerge-repo-storage-indexeddb': 1.2.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)
+      '@muni-town/leaf': 0.2.0-preview.19
+    transitivePeerDependencies:
+      - '@swc/core'
+      - '@swc/wasm'
+      - '@types/node'
+      - supports-color
+      - typescript
+
+  '@muni-town/leaf-svelte@0.1.0-preview.4':
+    dependencies:
+      '@muni-town/leaf': 0.2.0-preview.19
+      svelte: 5.28.2
+
+  '@muni-town/leaf-sync-ws@0.1.0-preview.4':
+    dependencies:
+      '@muni-town/leaf': 0.2.0-preview.19
+      '@muni-town/leaf-storage-deno-kv': 0.1.0-preview.4
+
+  '@muni-town/leaf@0.2.0-preview.19':
+    dependencies:
+      '@msgpack/msgpack': 3.1.1
+      arktype: 2.1.20
+      base32-decode: 1.0.0
+      base32-encode: 2.0.0
+      loro-crdt: 1.5.4
 
   '@noble/curves@1.9.0':
     dependencies:
@@ -3431,6 +3427,10 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.40.1':
     optional: true
+
+  '@roomy-chat/sdk@0.1.0-preview.20':
+    dependencies:
+      '@muni-town/leaf': 0.2.0-preview.19
 
   '@shikijs/core@1.29.2':
     dependencies:
