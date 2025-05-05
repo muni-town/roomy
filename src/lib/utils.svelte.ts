@@ -142,6 +142,28 @@ export const Toggle = ({
   };
 };
 
+/**
+ * Find urls in TipTap content
+ * */
+export function parseLinks(jsonContent: JSONContent) {
+  if (!jsonContent.content) return null;
+
+  const urlRegex =
+    /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/gi;
+
+  const contentString = jsonContent.content.flatMap((c) => {
+    let text: string = "";
+    if (!c.content) {
+      return;
+    }
+    for (const obj of c.content) {
+      if (obj.type === "text") text += obj.text + "\n";
+    }
+    return text;
+  })[0];
+  return contentString?.match(urlRegex);
+}
+
 // export function unreadCount<Channel>(
 //   doc: Doc<Channel>,
 //   viewedHeads: Automerge.Heads,

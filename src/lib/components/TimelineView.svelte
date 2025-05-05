@@ -11,7 +11,7 @@
   import AvatarImage from "$lib/components/AvatarImage.svelte";
   import { Button, Tabs } from "bits-ui";
 
-  import { derivePromise } from "$lib/utils.svelte";
+  import { derivePromise, parseLinks } from "$lib/utils.svelte";
   import { g } from "$lib/global.svelte";
   import {
     Announcement,
@@ -28,6 +28,9 @@
   import BoardList from "./BoardList.svelte";
   import ToggleNavigation from "./ToggleNavigation.svelte";
 
+  const links = derivePromise(null, async () =>
+    (await g.space?.threads.items())?.find((x) => x.name === "@links"),
+  );
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let users: { value: Item[] } = getContext("users");
@@ -170,7 +173,6 @@
       return block;
     });
 
-
     // If message is empty, don't save it
     if (
       messageJSON.content[0]?.content?.length === 0 ||
@@ -186,6 +188,12 @@
 
     // Images are now handled by TipTap in the message content
     // Limit image size in message input to 300x300
+    if (parseLinks(messageInput)) {
+      if (links.value) {
+        links.value.timeline.push(message);
+        links.value.commit();
+      }
+    }
 
     g.channel.timeline.push(message);
     g.channel.commit();
