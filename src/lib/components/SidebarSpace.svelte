@@ -3,12 +3,13 @@
 
   import ContextMenu from "./ContextMenu.svelte";
   import { AvatarMarble } from "svelte-boring-avatars";
-  import { ToggleGroup } from "bits-ui";
+
   import { navigate } from "$lib/utils.svelte";
   import { derivePromise } from "$lib/utils.svelte";
   import { Image } from "@roomy-chat/sdk";
   import TooltipPortal from "./TooltipPortal.svelte";
   import { g } from "$lib/global.svelte";
+  import { page } from "$app/stores";
 
   type Props = {
     space: Space;
@@ -47,7 +48,8 @@
     },
   ]}
 >
-  <ToggleGroup.Item
+  <button
+    type="button"
     onclick={() =>
       navigate({ space: space.handles((x) => x.get(0)) || space.id })}
     value={space.id}
@@ -59,7 +61,10 @@
     onmouseleave={() => {
       activeTooltip = "";
     }}
-    class="dz-btn dz-btn-ghost size-12 rounded-full  data-[state=on]:border-primary relative group p-0.5"
+    onblur={() => {
+      activeTooltip = "";
+    }}
+    class={`dz-btn dz-btn-ghost size-12 rounded-full ${$page.url.pathname.includes(`${space.handles((x) => x.get(0)) || space.id}`) && "border-accent"} relative group p-0.5`}
   >
     <div class="flex items-center justify-center overflow-hidden">
       {#if spaceImage.value?.uri}
@@ -76,5 +81,5 @@
         <div class="w-10 h-10 bg-base-300 rounded-full"></div>
       {/if}
     </div>
-  </ToggleGroup.Item>
+  </button>
 </ContextMenu>
