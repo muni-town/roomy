@@ -1,31 +1,22 @@
 <script lang="ts">
-  import { setContext } from "svelte";
   import { outerWidth } from "svelte/reactivity/window";
   import Icon from "@iconify/svelte";
-  import ChatArea from "$lib/components/ChatArea.svelte";
-  import { Button } from "bits-ui";
   import { g } from "$lib/global.svelte";
   import { Channel, Message, Timeline } from "@roomy-chat/sdk";
-  import ToggleNavigation from "./ToggleNavigation.svelte";
+  import ToggleNavigation from "$lib/components/ToggleNavigation.svelte";
+  import LinkPreview from "$lib/components/LinkPreview.svelte";
+  import { derivePromise } from "$lib/utils.svelte";
+  import VirtualScroll from "$lib/components/VirtualScroll.svelte";
+  import { Button } from "bits-ui";
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  // thread maker
-  let isThreading = $state({ value: false });
-  let selectedMessages: Message[] = $state([]);
-  setContext("isThreading", isThreading);
-  setContext("selectMessage", (message: Message) => {
-    selectedMessages.push(message);
-  });
-  setContext("removeSelectedMessage", (message: Message) => {
-    selectedMessages = selectedMessages.filter((m) => m != message);
-  });
-
-  $effect(() => {
-    if (!isThreading.value && selectedMessages.length > 0) {
-      selectedMessages = [];
-    }
-  });
+  const timeline = g.channel?.forceCast(Timeline)!;
+  const messages = derivePromise([], async () =>
+    (await timeline.timeline.items())
+      .map((x) => x.tryCast(Message))
+      .filter((x) => (x && x.softDeleted) || !!x),
+  );
 </script>
 
 <header class="dz-navbar">
@@ -50,11 +41,11 @@
 </header>
 <div class="dz-divider my-0"></div>
 
-{#if g.space && g.channel}
-  <ChatArea timeline={g.channel.forceCast(Timeline)} />
-  <div class="flex items-center grow flex-col">
-    <Button.Root disabled class="w-full dz-btn"
-      >Broadcast Only Thread</Button.Root
-    >
-  </div>
-{/if}
+<VirtualScroll {timeline} items={messages.value}>
+  {#snippet children(message)}
+    <LinkPreview {message} />
+  {/snippet}
+</VirtualScroll>
+<div class="flex items-center grow flex-col">
+  <Button.Root disabled class="w-full dz-btn">Automatted Thread</Button.Root>
+</div>
