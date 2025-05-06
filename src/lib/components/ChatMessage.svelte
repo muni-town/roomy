@@ -132,40 +132,6 @@
         // Update the message
         message.bodyJson = JSON.stringify(plainContent);
 
-        let messageJSON = JSON.parse(message.bodyJson) as JSONContent;
-
-        messageJSON.content = (messageJSON.content ?? []).map((block) => {
-          if (block.type === "paragraph" && Array.isArray(block.content)) {
-            let foundText = false;
-            block.content = block.content.filter((inline) => {
-              if (inline.type === "hardBreak" && !foundText) {
-                return false; // remove leading hardBreaks
-              }
-
-              if (inline.type === "text") {
-                inline.text = (inline?.text ?? "").replace(/^\s+/, ""); // remove leading spaces
-                if (inline.text.trim() === "") {
-                  return false; // remove text node if it's empty or all spaces
-                }
-                foundText = true;
-              }
-
-              return true;
-            });
-          }
-          return block;
-        });
-
-
-        // If message is empty, don't save it
-        if (
-          messageJSON.content[0]?.content?.length === 0 ||
-          !messageJSON.content[0]?.content
-        ) {
-          return;
-        }
-        message.bodyJson = JSON.stringify(messageJSON);
-
         // Add an updatedDate field to track edits
         // @ts-ignore - Adding custom property for edit tracking
         message.updatedDate = new Date();

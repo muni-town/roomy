@@ -21,9 +21,19 @@
     async () => (await g.roomy?.spaces.items()) || [],
   );
 
+  let themeColor = $state("synthwave"); // defualt theme color
+
   onMount(async () => {
     await user.init();
 
+    // Set the theme color based on local storage
+    const storedColor = window.localStorage.getItem("theme");
+    if (storedColor) {
+      themeColor = storedColor;
+    }
+    document.documentElement.setAttribute("data-theme", themeColor);
+
+    // Initialize PostHog for analytics
     if (!dev && browser) {
       posthog.init("phc_j80ksIuoxjfjRI7rPBmTLWx79rntg4Njz6Dixc3I3ik", {
         api_host: "https://roomy.chat/ingest",
@@ -34,14 +44,6 @@
 
   const isSpacesVisible = Toggle({ value: false, key: "isSpacesVisible" });
   setContext("isSpacesVisible", isSpacesVisible);
-
-  let themeColor = $state({
-    value:
-      getComputedStyle(document.querySelector("html")!).getPropertyValue(
-        "--color-base-300",
-      ) ?? "#e6ddac",
-  });
-  setContext("themeColor", themeColor);
 
   const isSidebarVisible = Toggle({ value: false, key: "isSidebarVisible" });
   setContext("isSidebarVisible", isSidebarVisible);
@@ -57,9 +59,9 @@
 </script>
 
 <svelte:head>
-  <meta name="theme-color" content={themeColor.value} />
-  <meta name="msapplication-navbutton-color" content={themeColor.value} />
-  <meta name="msapplication-TileColor" content={themeColor.value} />
+  <meta name="theme-color" content={themeColor} />
+  <meta name="msapplication-navbutton-color" content={themeColor} />
+  <meta name="msapplication-TileColor" content={themeColor} />
   <title>Roomy</title>
 </svelte:head>
 
@@ -80,7 +82,7 @@
       "
   >
     <!-- Content -->
-    <div class="flex bg-base-300 h-full">
+    <div class="flex bg-base-100 h-full">
       <ServerBar
         {spaces}
         visible={isSpacesVisible.value || !page.params.space}
