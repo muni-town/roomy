@@ -12,6 +12,7 @@
   import { getContext } from "svelte";
   import AccordionTree from "./AccordionTree.svelte";
   import SidebarChannelList from "./SidebarChannelList.svelte";
+  import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
 
   let availableThreads = derivePromise([], async () =>
     ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
@@ -107,10 +108,20 @@
           </Button.Root>
         {/snippet}
 
-        <form class="flex flex-col gap-4" onsubmit={createChannel}>
+        <form
+          id="createChannel"
+          class="flex flex-col gap-4"
+          onsubmit={createChannel}
+        >
           <label class="dz-input w-full">
             <span class="dz-label">Name</span>
-            <input bind:value={newChannelName} placeholder="General" />
+            <input
+              bind:value={newChannelName}
+              use:focusOnRender
+              placeholder="General"
+              type="text"
+              required
+            />
           </label>
           <label class="dz-select w-full">
             <span class="dz-label">Category</span>
@@ -139,10 +150,20 @@
           </Button.Root>
         {/snippet}
 
-        <form class="flex flex-col gap-4" onsubmit={createCategory}>
+        <form
+          id="createCategory"
+          class="flex flex-col gap-4"
+          onsubmit={createCategory}
+        >
           <label class="dz-input w-full">
             <span class="dz-label">Name</span>
-            <input bind:value={newCategoryName} placeholder="Discussions" />
+            <input
+              bind:value={newCategoryName}
+              use:focusOnRender
+              placeholder="Discussions"
+              type="text"
+              required
+            />
           </label>
           <Button.Root class="dz-btn dz-btn-primary">
             <Icon icon="basil:add-outline" font-size="1.8em" />
