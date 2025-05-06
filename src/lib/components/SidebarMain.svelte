@@ -14,9 +14,12 @@
   import SidebarChannelList from "./SidebarChannelList.svelte";
   import { page } from "$app/state";
 
-  let availableThreads = derivePromise([], async () =>
+  let allThreads = derivePromise([], async () =>
     ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
   );
+  let topics = $derived(allThreads.value.filter((x) => x.name !== "@links"));
+  let links = $derived(allThreads.value.find((x) => x.name === "@links"));
+
   const wikis = derivePromise([], async () =>
     ((await g.space?.wikipages.items()) || []).filter((x) => !x.softDeleted),
   );
@@ -177,21 +180,23 @@
   </Tabs.Root>
   <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-clip mx-1">
     {#if tab === "board"}
-      <div class="flex-flex-col gap-4 p-2">
-        <Button.Root
-          class="cursor-pointer px-2 flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
-          onclick={() => {
-            navigate({ space: page.params.space!, thread: "@links" });
-          }}
-        >
-          Links
-        </Button.Root>
-        <div class="dz-divider my-0"></div>
-      </div>
+      {#if links}
+        <div class="flex-flex-col gap-4 p-2">
+          <Button.Root
+            class="cursor-pointer px-2 flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
+            onclick={() => {
+              navigate({ space: page.params.space!, thread: links.id });
+            }}
+          >
+            Links
+          </Button.Root>
+          <div class="dz-divider my-0"></div>
+        </div>
+      {/if}
       <AccordionTree
         items={[
           { key: "pages", route: "wiki", items: wikis.value },
-          { key: "topics", route: "thread", items: availableThreads.value },
+          { key: "topics", route: "thread", items: topics },
         ]}
         active={g.channel?.id ?? ""}
       />
