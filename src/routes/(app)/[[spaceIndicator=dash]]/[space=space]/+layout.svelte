@@ -85,6 +85,21 @@
       }
     }
 
+    for (const wiki of await g.space.wikipages.items()) {
+      if (!wiki.softDeleted) {
+        items.push({
+          value: JSON.stringify({
+            id: wiki.id,
+            space: g.space.id,
+            channel: g.channel?.id,
+            type: "wiki",
+          }),
+          label: wiki.name,
+          category: "wiki",
+        });
+      }
+    }
+
     // add channels to list
     items.push(
       ...(await g.space.channels.items()).map((channel) => {

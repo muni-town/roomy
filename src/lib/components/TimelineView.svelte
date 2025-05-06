@@ -1,7 +1,7 @@
 <script lang="ts">
   import _ from "underscore";
   import { page } from "$app/state";
-  import { getContext, setContext } from "svelte";
+  import { getContext, setContext, onMount } from "svelte";
   import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
   import { getContentHtml, type Item } from "$lib/tiptap/editor";
@@ -40,6 +40,8 @@
     const hash = window.location.hash.replace("#", "");
     if (hash === "chat" || hash === "threads" || hash === "wiki") {
       tab = hash as "chat" | "threads" | "wiki";
+    } else if (hash.startsWith("wiki-")) {
+      tab = "wiki";
     }
   }
 
@@ -47,9 +49,28 @@
     updateTabFromHash();
   });
 
+  function setupHashChangeListener() {
+    // Update tab when hash changes
+    const handleHashChange = () => {
+      updateTabFromHash();
+    };
+
+    window.addEventListener("hashchange", handleHashChange);
+
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+    };
+  }
+
+  onMount(() => {
+    const cleanup = setupHashChangeListener();
+
+    return cleanup;
+  });
+
   // Update the hash when tab changes
   $effect(() => {
-    if (tab) {
+    if (tab && tab !== "wiki") {
       window.location.hash = tab;
     }
   });
@@ -301,7 +322,11 @@
 {#if tab === "threads"}
   <ThreadsTab />
 {:else if tab === "wiki"}
-  <WikiEditor />
+  <WikiEditor
+    wikiId={window.location.hash.startsWith("#wiki-")
+      ? window.location.hash.replace("#wiki", "")
+      : undefined}
+  />
 {:else if tab === "chat" || g.channel instanceof Thread}
   {#if g.space && g.channel}
     <ChatArea timeline={g.channel.forceCast(Timeline)} />

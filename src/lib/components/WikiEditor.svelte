@@ -15,6 +15,7 @@
   import { derivePromise } from "$lib/utils.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
+  let isBacklinksExpanded = $state(false);
 
   const wikis = derivePromise([], async () => {
     return g.space && g.channel instanceof Channel
@@ -23,6 +24,12 @@
   });
 
   let selectedWiki: WikiPage | undefined = $state(wikis.value[0]);
+  // Update to reference the prop directly
+  interface Props {
+    wikiId: string | undefined;
+  }
+  const { wikiId }: Props = $props();
+  let selectedWikiId: string | undefined = wikiId;
   $effect(() => {
     if (wikis.value.length > 0 && !selectedWiki) {
       selectedWiki = wikis.value[0];
@@ -154,9 +161,28 @@
   let isDeleteDialogOpen = $state(false);
   let wikiToDelete: WikiPage | undefined = $state();
 
+  $effect(() => {
+    if (wikiId !== undefined) {
+      selectedWikiId = wikiId;
+
+      if (wikis.value.length > 0) {
+        const foundWiki = wikis.value.find(
+          (w: { id: string }) => w.id === wikiId,
+        );
+        if (foundWiki) {
+          selectedWiki = foundWiki;
+        }
+      }
+    }
+  });
+
   function selectWiki(wiki: any) {
     selectedWiki = wiki;
     isEditingWiki = false;
+    // Update URL when selecting a wiki
+    if (wiki && wiki.id) {
+      window.location.hash = `wiki-${wiki.id}`;
+    }
   }
 
   function createWiki() {
@@ -393,8 +419,11 @@
     }
 
     const query = hashQuery.toLowerCase();
-    const items: { id: string; name: string; type: "thread" | "channel" }[] =
-      [];
+    const items: {
+      id: string;
+      name: string;
+      type: "thread" | "channel" | "wiki";
+    }[] = [];
 
     // Add channels
 
@@ -417,7 +446,19 @@
         });
       }
     }
-
+    for (const wiki of await g.space.wikipages.items()) {
+      if (
+        !wiki.softDeleted &&
+        wiki.name &&
+        wiki.name.toLowerCase().includes(query)
+      ) {
+        items.push({
+          id: wiki.id,
+          name: wiki.name,
+          type: "wiki",
+        });
+      }
+    }
     // Limit to 10 results
     filteredItems = items.slice(0, 10);
   }
@@ -480,7 +521,7 @@
   function insertHashLink(item: {
     id: string;
     name: string;
-    type: "thread" | "channel";
+    type: "thread" | "channel" | "wiki";
   }) {
     if (!editor) return;
 
@@ -525,7 +566,9 @@
           const linkId =
             item.type === "channel"
               ? `/${page.params.space}/${item.id}`
-              : `/${page.params.space}/thread/${item.id}`;
+              : item.type === "thread"
+                ? `/${page.params.space}/thread/${item.id}`
+                : `/${page.params.space}/${page.params.channel}#wiki-${item.id}`;
           editor.createLink(linkId);
 
           editor.setTextCursorPosition(block.id, "end");
@@ -715,14 +758,100 @@
     }
   });
 
+  function extractWikiLinks(document: any) {
+    const wikiLinkIds = new Set();
+
+    // Recursively process the blocks to find all links
+    function processBlocks(blocks: any) {
+      if (!blocks || !Array.isArray(blocks)) return;
+
+      for (const block of blocks) {
+        if (block.content && Array.isArray(block.content)) {
+          for (const contentItem of block.content) {
+            // If it's text content with a link
+            if (contentItem.type === "link" && contentItem.href) {
+              const link = contentItem.href;
+              // Extract from full complex path with leaf IDs
+              const fullPathMatch = link.match(/#wiki-leaf:([a-zA-Z0-9]+)/);
+              if (fullPathMatch && fullPathMatch[1]) {
+                wikiLinkIds.add(`leaf:${fullPathMatch[1]}`);
+              }
+            }
+          }
+        }
+
+        // If this block has children, process them too
+        if (block.children) {
+          processBlocks(block.children);
+        }
+      }
+    }
+
+    // Start processing from the root level blocks
+    if (document && document.length > 0) {
+      processBlocks(document);
+    }
+
+    return Array.from(wikiLinkIds);
+  }
+
   async function saveWikiContent() {
     if (!editor || !g.space || !selectedWiki) return;
     try {
       const res = JSON.stringify(editor.document);
+      const oldContent = selectedWiki.bodyJson;
       selectedWiki.bodyJson = res;
-      selectedWiki.commit();
 
+      const currentLinks = extractWikiLinks(editor.document);
+
+      // Get all wikis from the space
+      const allWikis = await g.space.wikipages.items();
+
+      // For each linked wiki, add this wiki as a backlink
+      for (const linkId of currentLinks) {
+        const linkedWiki = allWikis.find((wiki) => wiki.id === linkId);
+        if (!linkedWiki || linkedWiki.id === selectedWiki.id) {
+          console.log(
+            `Skipping link to wiki ${linkId} (self-reference or not found)`,
+          );
+          continue;
+        }
+
+        console.log(
+          `Adding backlink to wiki ${linkedWiki.name} (${linkedWiki.id})`,
+        );
+        linkedWiki.addBacklink(selectedWiki);
+        linkedWiki.commit();
+      }
+
+      // If this is an update, check for removed links
+      if (oldContent) {
+        try {
+          const oldDocument = JSON.parse(oldContent);
+          const oldLinks = extractWikiLinks(oldDocument);
+
+          // Find removed links
+          const removedLinks = oldLinks.filter(
+            (id) => !currentLinks.includes(id),
+          );
+
+          // Remove backlinks for wikis that are no longer linked
+          for (const removedId of removedLinks) {
+            const unlinkedWiki = allWikis.find((wiki) => wiki.id === removedId);
+            if (unlinkedWiki) {
+              unlinkedWiki.removeBacklink(selectedWiki);
+              unlinkedWiki.commit();
+            }
+          }
+        } catch (e) {
+          console.error("Error processing old links:", e);
+        }
+      }
+
+      selectedWiki.commit();
       setEditingWiki(false);
+
+      window.location.hash = `wiki-${selectedWiki.id}`;
       toast.success("Wiki saved successfully", { position: "bottom-end" });
     } catch (e) {
       console.error("Failed to save wiki content", e);
@@ -779,6 +908,21 @@
     }
   });
 
+  function checkUrlForWikiId() {
+    const hash = window.location.hash;
+    if (hash.startsWith("#wiki-")) {
+      const wikiId = hash.replace("#wiki-", "");
+      selectedWikiId = wikiId;
+
+      if (wikis.value.length > 0) {
+        const foundWiki = wikis.value.find((w) => w.id === wikiId);
+        if (foundWiki) {
+          selectedWiki = foundWiki;
+        }
+      }
+    }
+  }
+
   onMount(async () => {
     const existingLink = document.querySelector(
       'link[href*="@blocknote/core/style.css"]',
@@ -792,6 +936,73 @@
 
     if (wikiRenderedHtml) {
       await processCodeBlocks();
+    }
+
+    // Check if we should load a specific wiki from the URL
+    checkUrlForWikiId();
+
+    // Add event listener for hash changes
+    window.addEventListener("hashchange", checkUrlForWikiId);
+
+    return () => {
+      // Clean up event listener
+      window.removeEventListener("hashchange", checkUrlForWikiId);
+    };
+  });
+
+  // Update the fallback wiki selection to use window.location.hash
+  $effect(() => {
+    if (wikis.value.length > 0) {
+      if (selectedWikiId) {
+        const foundWiki = wikis.value.find((w) => w.id === selectedWikiId);
+        if (foundWiki) {
+          selectedWiki = foundWiki;
+          return;
+        }
+      }
+
+      // Fall back to first wiki if no ID is specified or not found
+      if (!selectedWiki) {
+        selectedWiki = wikis.value[0];
+        if (selectedWiki) {
+          window.location.hash = `wiki-${selectedWiki.id}`;
+        }
+      }
+    }
+  });
+
+  $effect(() => {
+    if (wikis.value.length > 0) {
+      // First priority: Use the wikiId from URL hash if available
+      const hash = window.location.hash;
+      if (hash.startsWith("#wiki-")) {
+        const idFromHash = hash.replace("#wiki-", "");
+        const foundWikiFromHash = wikis.value.find((w) => w.id === idFromHash);
+        if (foundWikiFromHash) {
+          selectedWiki = foundWikiFromHash;
+          selectedWikiId = idFromHash;
+          return;
+        }
+      }
+
+      // Second priority: Use the wikiId prop if provided
+      if (wikiId) {
+        const foundWikiFromProp = wikis.value.find((w) => w.id === wikiId);
+        if (foundWikiFromProp) {
+          selectedWiki = foundWikiFromProp;
+          selectedWikiId = wikiId;
+          return;
+        }
+      }
+
+      // Fallback: Select first wiki if nothing else matches
+      if (!selectedWiki) {
+        selectedWiki = wikis.value[0];
+        if (selectedWiki) {
+          window.location.hash = `wiki-${selectedWiki.id}`;
+          selectedWikiId = selectedWiki.id;
+        }
+      }
     }
   });
 </script>
@@ -986,7 +1197,9 @@
                             <Icon
                               icon={item.type === "channel"
                                 ? "tabler:hash"
-                                : "tabler:message-circle"}
+                                : item.type === "thread"
+                                  ? "tabler:message-circle"
+                                  : "tabler:notebook"}
                               class="text-lg text-primary"
                             />
                           </div>
@@ -1000,7 +1213,7 @@
                   </ul>
                 {:else}
                   <div class="px-4 py-2 text-base-content/70">
-                    No channels or threads found
+                    No channels, threads, or wikis found
                   </div>
                 {/if}
               </div>
@@ -1051,6 +1264,96 @@
             {/if}
           </div>
         </div>
+
+        <!-- Replace the existing backlinks section with this collapsible version -->
+        {#await selectedWiki.backlinks.items() then backlinks}
+          {#if backlinks.length > 0}
+            <div class="mt-8 bg-base-200/50 rounded-lg p-5 shadow-sm">
+              <button
+                class="w-full flex items-center gap-2 justify-between focus:outline-none"
+                onclick={() => (isBacklinksExpanded = !isBacklinksExpanded)}
+                aria-expanded={isBacklinksExpanded}
+              >
+                <div class="flex items-center gap-2">
+                  <Icon
+                    icon="tabler:arrow-back-up"
+                    class="text-base-content/60"
+                  />
+                  <h4 class="text-base font-medium text-base-content/90">
+                    Linked to this page ({backlinks.length})
+                  </h4>
+                </div>
+                <Icon
+                  icon={isBacklinksExpanded
+                    ? "tabler:chevron-up"
+                    : "tabler:chevron-down"}
+                  class="text-base-content/60 transition-transform duration-200"
+                />
+              </button>
+
+              {#if isBacklinksExpanded}
+                <div
+                  class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 transition-all duration-300 ease-in-out"
+                >
+                  {#each backlinks as linkedWiki}
+                    <a
+                      href="#{`wiki-${linkedWiki.id}`}"
+                      class="group bg-base-100 border border-base-300 hover:border-primary/30 rounded-md p-3 transition-all duration-150 hover:shadow-sm hover:-translate-y-0.5"
+                      onclick={() => selectWiki(linkedWiki)}
+                    >
+                      <div class="flex items-start gap-3">
+                        <div class="text-primary mt-1">
+                          <Icon icon="tabler:notebook" />
+                        </div>
+                        <div class="overflow-hidden">
+                          <h5
+                            class="font-medium text-sm text-base-content mb-1 group-hover:text-primary truncate"
+                          >
+                            {linkedWiki.name || "Untitled Wiki"}
+                          </h5>
+                          {#if linkedWiki.bodyJson}
+                            <p
+                              class="text-xs text-base-content/70 line-clamp-2"
+                            >
+                              {(() => {
+                                try {
+                                  const content = JSON.parse(
+                                    linkedWiki.bodyJson,
+                                  );
+                                  // Extract first block of text as preview
+                                  for (const block of content) {
+                                    if (
+                                      block.content &&
+                                      Array.isArray(block.content)
+                                    ) {
+                                      for (const item of block.content) {
+                                        if (item.type === "text" && item.text) {
+                                          return (
+                                            item.text.slice(0, 120) +
+                                            (item.text.length > 120
+                                              ? "..."
+                                              : "")
+                                          );
+                                        }
+                                      }
+                                    }
+                                  }
+                                  return "No preview available";
+                                } catch (e) {
+                                  return "No preview available";
+                                }
+                              })()}
+                            </p>
+                          {/if}
+                        </div>
+                      </div>
+                    </a>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
+        {/await}
       </section>
     {/if}
   </main>

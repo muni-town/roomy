@@ -61,20 +61,20 @@ function suggestion({
 }) {
   const fuzzyMatch = (text: string, query: string): boolean => {
     if (!query) return true;
-    
+
     text = text.toLowerCase();
     query = query.toLowerCase();
-    
+
     let textIndex = 0;
     let queryIndex = 0;
-    
+
     while (textIndex < text.length && queryIndex < query.length) {
       if (text[textIndex] === query[queryIndex]) {
         queryIndex++;
       }
       textIndex++;
     }
-    
+
     return queryIndex === query.length;
   };
 
@@ -82,9 +82,7 @@ function suggestion({
     char,
     pluginKey: new PluginKey(pluginKey),
     items: ({ query }: { query: string }) => {
-      return items
-        .filter((item) => fuzzyMatch(item.label, query))
-        .slice(0, 5);
+      return items.filter((item) => fuzzyMatch(item.label, query)).slice(0, 5);
     },
     render: () => {
       let wrapper;
@@ -152,14 +150,24 @@ const SpaceContextMentionExtension = Mention.extend({
   name: "channelThreadMention",
   // Used by `generateHTML`
   renderHTML({ HTMLAttributes, node }) {
-    const { id, space, type } = JSON.parse(node.attrs.id);
+    const { id, space, type, channel } = JSON.parse(node.attrs.id);
     return [
       "a",
       mergeAttributes(
         {
           href:
-            type === "thread" ? `/${space}/thread/${id}` : `/${space}/${id}`,
-          class: `mention ${type === "thread" ? "thread-mention" : "channel-mention"} !no-underline`,
+            type === "thread"
+              ? `/${space}/thread/${id}`
+              : type === "wiki"
+                ? `/${space}/${channel}#wiki-${id}`
+                : `/${space}/${id}`,
+          class: `mention ${
+            type === "thread"
+              ? "thread-mention"
+              : type === "wiki"
+                ? "wiki-mention"
+                : "channel-mention"
+          } !no-underline`,
         },
         HTMLAttributes,
       ),
@@ -167,6 +175,7 @@ const SpaceContextMentionExtension = Mention.extend({
     ];
   },
 });
+
 export const initSpaceContextMention = ({
   context,
 }: SpaceContextMentionProps) =>
@@ -183,7 +192,13 @@ export const initSpaceContextMention = ({
         "span",
         mergeAttributes(
           {
-            class: `mention ${type === "thread" ? "thread-mention" : "channel-mention"} !no-underline`,
+            class: `mention ${
+              type === "thread"
+                ? "thread-mention"
+                : type === "wiki"
+                  ? "wiki-mention"
+                  : "channel-mention"
+            } !no-underline`,
           },
           options.HTMLAttributes,
         ),
