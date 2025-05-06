@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { getContext, setContext } from "svelte";
+  import _ from "underscore";
+  import { page } from "$app/state";
+  import { getContext, setContext, onMount } from "svelte";
   import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
   import { getContentHtml, type Item } from "$lib/tiptap/editor";
@@ -40,6 +42,8 @@
     const hash = window.location.hash.replace("#", "");
     if (hash === "chat" || hash === "board") {
       tab = hash as "chat" | "board";
+    } else if (hash.startsWith("wiki-")) {
+      tab = "wiki";
     }
   }
 
@@ -47,9 +51,28 @@
     updateTabFromHash();
   });
 
+  function setupHashChangeListener() {
+    // Update tab when hash changes
+    const handleHashChange = () => {
+      updateTabFromHash();
+    };
+
+    window.addEventListener("hashchange", handleHashChange);
+
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+    };
+  }
+
+  onMount(() => {
+    const cleanup = setupHashChangeListener();
+
+    return cleanup;
+  });
+
   // Update the hash when tab changes
   $effect(() => {
-    if (tab) {
+    if (tab && tab !== "wiki") {
       window.location.hash = tab;
     }
   });

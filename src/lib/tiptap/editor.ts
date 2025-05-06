@@ -151,14 +151,24 @@ const SpaceContextMentionExtension = Mention.extend({
   name: "channelThreadMention",
   // Used by `generateHTML`
   renderHTML({ HTMLAttributes, node }) {
-    const { id, space, type } = JSON.parse(node.attrs.id);
+    const { id, space, type, channel } = JSON.parse(node.attrs.id);
     return [
       "a",
       mergeAttributes(
         {
           href:
-            type === "thread" ? `/${space}/thread/${id}` : `/${space}/${id}`,
-          class: `mention ${type === "thread" ? "thread-mention" : "channel-mention"} !no-underline`,
+            type === "thread"
+              ? `/${space}/thread/${id}`
+              : type === "wiki"
+                ? `/${space}/${channel}#wiki-${id}`
+                : `/${space}/${id}`,
+          class: `mention ${
+            type === "thread"
+              ? "thread-mention"
+              : type === "wiki"
+                ? "wiki-mention"
+                : "channel-mention"
+          } !no-underline`,
         },
         HTMLAttributes,
       ),
@@ -166,6 +176,7 @@ const SpaceContextMentionExtension = Mention.extend({
     ];
   },
 });
+
 export const initSpaceContextMention = ({
   context,
 }: SpaceContextMentionProps) =>
@@ -182,7 +193,13 @@ export const initSpaceContextMention = ({
         "span",
         mergeAttributes(
           {
-            class: `mention ${type === "thread" ? "thread-mention" : "channel-mention"} !no-underline`,
+            class: `mention ${
+              type === "thread"
+                ? "thread-mention"
+                : type === "wiki"
+                  ? "wiki-mention"
+                  : "channel-mention"
+            } !no-underline`,
           },
           options.HTMLAttributes,
         ),
