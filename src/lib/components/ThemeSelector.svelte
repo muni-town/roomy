@@ -1,9 +1,17 @@
 <script lang="ts">
   import { Select } from "bits-ui";
-  import { themes } from "../themes";
+  import { themes, type ThemeName } from "../themes";
   import Icon from "@iconify/svelte";
+  import { onMount } from "svelte";
 
-  let currentTheme = $state("synthwave");
+  let currentTheme = $state<ThemeName>();
+
+  onMount(() => {
+    // Note: could get this from context if it were available
+    // but that might be overkill. Worth considering in the future.
+    const theme = window.localStorage.getItem("theme") as ThemeName;
+    currentTheme = theme;
+  });
 
   function formatThemeLabel(t: string): string {
     if (typeof t === "string" && t.length > 0) {
@@ -19,7 +27,7 @@
     const isDark = t["color-scheme"] === "dark";
 
     return {
-      value: name,
+      value: name as ThemeName,
       label: formatThemeLabel(name),
       colors: {
         primary: t.primary,
@@ -32,7 +40,7 @@
     };
   });
 
-  function setTheme(theme: string) {
+  function setTheme(theme: ThemeName) {
     window.localStorage.setItem("theme", theme);
     document.documentElement.setAttribute("data-theme", theme);
     currentTheme = theme;
@@ -42,7 +50,7 @@
 <Select.Root
   type="single"
   items={selectItems}
-  onValueChange={setTheme}
+  onValueChange={(theme) => setTheme(theme as ThemeName)}
   value={currentTheme}
 >
   <Select.Trigger
@@ -54,7 +62,7 @@
     <Select.Content
       side="right"
       sideOffset={8}
-      class="w-fit h-48 bg-base-300 p-2 rounded z-10"
+      class="w-fit h-48 bg-base-300 p-2 rounded z-10 border border-base-100"
     >
       <Select.Viewport>
         {#each selectItems as theme, i (i + theme.value)}
@@ -64,11 +72,9 @@
                 class="px-1 py-2 rounded cursor-pointer hover:bg-base-100 flex gap-2 items-center"
               >
                 <span
-                  class="w-6 h-6 rounded-lg border flex items-center justify-center mr-2"
+                  class="w-6 h-6 rounded-lg border inline-flex items-center justify-center mr-2"
                   style="background: {theme.colors.base};
-                    border-color: {theme.isDark
-                    ? '#555'
-                    : '#bbb'}; display: inline-flex;"
+                    border-color: {theme.isDark ? '#555' : '#bbb'};"
                 >
                   <span class="grid grid-cols-2 grid-rows-2 gap-0.5 w-4 h-4">
                     <span
