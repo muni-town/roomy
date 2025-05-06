@@ -2,7 +2,7 @@
   import { g } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { navigate } from "$lib/utils.svelte";
-  import { Button, ToggleGroup } from "bits-ui";
+  import { Button } from "bits-ui";
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
@@ -11,6 +11,8 @@
   import { Space } from "@roomy-chat/sdk";
   import { cleanHandle } from "$lib/utils.svelte";
   import { atproto } from "$lib/atproto.svelte";
+  import { page } from "$app/stores";
+  import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
 
   let {
     spaces,
@@ -28,8 +30,6 @@
   let newSpaceName = $state("");
   let isNewSpaceDialogOpen = $state(false);
 
-  // Removed auto-popup effect to only show login dialog when user clicks avatar
-
   async function createSpace() {
     if (!newSpaceName || !user.agent || !g.roomy) return;
     const space = await g.roomy.create(Space);
@@ -45,6 +45,7 @@
   }
 
   let loginError = $state("");
+
   async function login() {
     loginLoading = true;
 
@@ -58,6 +59,7 @@
 
     loginLoading = false;
   }
+
   async function signup() {
     signupLoading = true;
     try {
@@ -77,62 +79,65 @@
     : 'w-[0]'} py-2 border-base-200 bg-base-300 transition-[width] duration-100 ease-out"
   class:opacity-0={!visible}
 >
-  <ToggleGroup.Root
-    type="single"
-    value={g.currentCatalog}
-    class="flex flex-col gap-1 items-center"
-  >
-    <ToggleGroup.Item
-      value="home"
+  <div class="flex flex-col gap-1 items-center">
+    <button
+      type="button"
       onclick={() => navigate("home")}
-      class="dz-btn dz-btn-ghost px-1 w-full aspect-square data-[state=on]:border-accent"
+      class="dz-btn dz-btn-ghost px-1 w-full aspect-square"
     >
       <Icon icon="iconamoon:home-fill" font-size="1.75em" />
-    </ToggleGroup.Item>
+    </button>
+
+    {#if user.session}
+      <Dialog
+        title="Create Space"
+        description="Create a new public chat space"
+        bind:isDialogOpen={isNewSpaceDialogOpen}
+      >
+        {#snippet dialogTrigger()}
+          <Button.Root
+            title="Create Space"
+            class="p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
+          >
+            <Icon icon="basil:add-solid" font-size="2em" />
+          </Button.Root>
+        {/snippet}
+
+        <form
+          id="createSpace"
+          class="flex flex-col gap-4"
+          onsubmit={createSpace}
+        >
+          <input
+            bind:value={newSpaceName}
+            use:focusOnRender
+            placeholder="Name"
+            class="dz-input w-full"
+            type="text"
+            required
+          />
+          <Button.Root disabled={!newSpaceName} class="dz-btn dz-btn-primary">
+            <Icon icon="basil:add-outline" font-size="1.8em" />
+            Create Space
+          </Button.Root>
+        </form>
+      </Dialog>
+    {/if}
 
     <div class="divider my-0"></div>
 
     {#each spaces.value as space, i}
       <SidebarSpace {space} {i} />
     {/each}
-  </ToggleGroup.Root>
+  </div>
 
   <section class="flex flex-col items-center gap-2 p-0">
     <ThemeSelector />
     <Dialog
-      title="Create Space"
-      description="Create a new public chat space"
-      bind:isDialogOpen={isNewSpaceDialogOpen}
-      disabled={!user.session}
-    >
-      {#snippet dialogTrigger()}
-        <Button.Root
-          title="Create Space"
-          class="p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
-          disabled={!user.session}
-        >
-          <Icon icon="basil:add-solid" font-size="2em" />
-        </Button.Root>
-      {/snippet}
-
-      <form class="flex flex-col gap-4" onsubmit={createSpace}>
-        <input
-          bind:value={newSpaceName}
-          placeholder="Name"
-          class="dz-input w-full"
-        />
-        <Button.Root disabled={!newSpaceName} class="dz-btn dz-btn-primary">
-          <Icon icon="basil:add-outline" font-size="1.8em" />
-          Create Space
-        </Button.Root>
-      </form>
-    </Dialog>
-
-    <Dialog
-      title={user.session ? "Log Out" : "Log In"}
+      title={user.session ? "Log Out" : "Create Account or Log In"}
       description={user.session
         ? `Logged in as ${user.profile.data?.handle}`
-        : "Log in with AT Protocol"}
+        : `We use the AT Protocol to authenticate users <a href="https://atproto.com/guides/identity" class="text-primary hover:text-primary/75"> learn more </a>`}
       bind:isDialogOpen={user.isLoginDialogOpen}
     >
       {#snippet dialogTrigger()}
@@ -150,6 +155,21 @@
           </Button.Root>
         </section>
       {:else}
+        <Button.Root
+          onclick={signup}
+          disabled={loadingAuth}
+          class="dz-btn dz-btn-primary"
+        >
+          {#if signupLoading}
+            <span class="dz-loading dz-loading-spinner"></span>
+          {/if}
+          <Icon
+            icon="simple-icons:bluesky"
+            width="16"
+            height="16"
+          />Authenticate with Bluesky
+        </Button.Root>
+        <p class="text-sm pt-4">Know your handle? Log in with it below.</p>
         <form class="flex flex-col gap-4" onsubmit={login}>
           {#if loginError}
             <p class="text-error">{loginError}</p>
@@ -158,6 +178,8 @@
             bind:value={handleInput}
             placeholder="Handle (eg alice.bsky.social)"
             class="dz-input w-full"
+            type="text"
+            required
           />
           <Button.Root
             disabled={loadingAuth || !handleInput}
@@ -166,19 +188,13 @@
             {#if loginLoading}
               <span class="dz-loading dz-loading-spinner"></span>
             {/if}
-            Log In with Bluesky
+            Log in with bsky.social
           </Button.Root>
         </form>
-        <Button.Root
-          onclick={signup}
-          disabled={loadingAuth}
-          class="dz-btn dz-btn-outline"
-        >
-          {#if signupLoading}
-            <span class="dz-loading dz-loading-spinner"></span>
-          {/if}
-          Signup with bsky.social
-        </Button.Root>
+
+        <p class="text-sm text-center pt-4 text-base-content/50">
+          More options coming soon!
+        </p>
       {/if}
     </Dialog>
   </section>
