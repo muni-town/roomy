@@ -1,6 +1,7 @@
 build
 node_modules
 .svelte-kit/
+.turbo/
 
 # Output
 .output
@@ -9,6 +10,7 @@ node_modules
 .wrangler
 /.svelte-kit
 /dist
+**/dist
 
 # OS
 .DS_Store
