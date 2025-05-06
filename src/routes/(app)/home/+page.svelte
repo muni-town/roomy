@@ -15,20 +15,22 @@
 <div class="dz-hero bg-base-200 min-h-screen">
   <div class="dz-hero-content">
     <div class="flex flex-col gap-8 items-center">
-      <h1 class="text-5xl font-bold text-center">Hello Roomy</h1>
+      <h1 class="text-5xl font-bold text-center">Hi Roomy 👋</h1>
       <p class="text-lg font-medium max-w-2xl text-center">
-        A digital gardening platform for communities. Built on the AT Protocol.
-        Flourish in Spaces, curating knowledge and conversations together.
+        A digital gardening platform for communities. Flourish in Spaces,
+        curating knowledge and conversations together.
       </p>
       <div class="divider"></div>
 
       {#if !user.session}
-        <Button.Root
-          onclick={() => (user.isLoginDialogOpen = true)}
-          class="dz-btn dz-btn-primary"
-        >
-          Log In with Bluesky
-        </Button.Root>
+        <div class="flex gap-4">
+          <Button.Root
+            onclick={() => (user.isLoginDialogOpen = true)}
+            class="dz-btn dz-btn-primary"
+          >
+            Create Account or Log In
+          </Button.Root>
+        </div>
       {:else if !spaces.value}
         <span class="dz-loading dz-loading-spinner mx-auto w-25"></span>
       {:else if spaces.value.length > 0}
