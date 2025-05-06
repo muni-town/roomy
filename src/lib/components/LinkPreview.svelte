@@ -9,26 +9,32 @@
   import { outerWidth } from "svelte/reactivity/window";
   import Drawer from "./Drawer.svelte";
   import AvatarImage from "./AvatarImage.svelte";
-  import { getContentHtml, type Item } from "$lib/tiptap/editor";
-  import { Announcement, Message } from "@roomy-chat/sdk";
+  import { type Item } from "$lib/tiptap/editor";
+  import { Message } from "@roomy-chat/sdk";
   import { g } from "$lib/global.svelte";
-  import { derivePromise } from "$lib/utils.svelte";
   import type { JSONContent } from "@tiptap/core";
   import ChatInput from "./ChatInput.svelte";
   import toast from "svelte-french-toast";
+  import LinkCard from "./LinkCard.svelte";
+  import { parseLinks } from "$lib/utils.svelte";
 
   type Props = {
     message: Message;
   };
 
   let { message }: Props = $props();
-
-  let relatedThreads = derivePromise([], async () => {
-    if (message instanceof Announcement) {
-      return await message.relatedThreads.items();
-    }
-    return [];
-  });
+  const links = $derived.by(() =>
+    (parseLinks(JSON.parse(message.bodyJson)) ?? []).map((url) => {
+      const value = $state({
+        url,
+        data: undefined,
+      });
+      fetch(`/api/link-preview?url=${url}`).then(async (res) => {
+        value.data = (await res.json())[1];
+      });
+      return value;
+    }),
+  );
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
   let isDrawerOpen = $state(false);
@@ -158,20 +164,6 @@
     editMessageContent = {};
   }
 
-  function isMessageEdited(msg: Message): boolean {
-    // @ts-ignore - Check for custom property
-    return !!msg.updatedDate;
-  }
-
-  function getEditedTime(msg: Message): string {
-    // @ts-ignore - Access custom property
-    if (msg.updatedDate) {
-      // @ts-ignore - Access custom property
-      return format(msg.updatedDate, "PPpp");
-    }
-    return "";
-  }
-
   function onEmojiPick(event: Event & { detail: { unicode: string } }) {
     if (!user.agent) return;
     message.reactions.toggle(event.detail.unicode, user.agent.assertDid);
@@ -213,66 +205,6 @@
     shiftDown = shiftKey;
   }
 
-  function getAnnouncementHtml(announcement: Announcement) {
-    if (!g.space) return "";
-    const schema = {
-      type: "doc",
-      content: [] as Record<string, unknown>[],
-    } satisfies JSONContent;
-
-    switch (announcement.kind) {
-      case "threadCreated": {
-        schema.content.push({
-          type: "paragraph",
-          content: [
-            { type: "text", text: "A new thread has been created: " },
-            {
-              type: "channelThreadMention",
-              attrs: {
-                id: JSON.stringify({
-                  id: relatedThreads.value[0]?.id,
-                  space: g.space.id,
-                  type: "thread",
-                }),
-                label: relatedThreads.value[0]?.name || "loading...",
-              },
-            },
-          ],
-        });
-        break;
-      }
-      case "messageMoved": {
-        schema.content.push({
-          type: "paragraph",
-          content: [
-            { type: "text", text: "Moved to: " },
-            {
-              type: "channelThreadMention",
-              attrs: {
-                id: JSON.stringify({
-                  id: relatedThreads.value[0]?.id,
-                  space: g.space.id,
-                  type: "thread",
-                }),
-                label: relatedThreads.value[0]?.name || "loading...",
-              },
-            },
-          ],
-        });
-        break;
-      }
-      case "messageDeleted": {
-        schema.content.push({
-          type: "paragraph",
-          content: [{ type: "text", text: "This message has been deleted" }],
-        });
-        break;
-      }
-    }
-
-    return getContentHtml(schema);
-  }
-
   function getPlainTextContent(content: JSONContent): string {
     try {
       if (!content) return "Edit message...";
@@ -302,6 +234,10 @@
       return "Edit message...";
     }
   }
+  // doesn't change after render, so $derived is not necessary
+  const authorProfile = getProfile(message.authors((x) => x.get(0)));
+  const date = message.createdDate || new Date();
+  const formattedDate = isToday(date) ? "Today" : format(date, "P");
 </script>
 
 <svelte:window onkeydown={onKeydown} onkeyup={onKeyup} />
@@ -310,10 +246,88 @@
   <div
     class={`relative group w-full h-fit flex flex-col gap-2 px-2 py-2 hover:bg-white/5`}
   >
-    {@render messageView(message)}
+    {#await authorProfile then authorProfile}
+      {@render toolbar(authorProfile)}
+    {/await}
+    <div class="flex gap-4 group">
+      <div class="flex flex-col w-full gap-2">
+        <section class="flex items-center gap-2 flex-wrap w-fit">
+          {#await authorProfile}
+            l
+          {:then authorProfile}
+            <a
+              href={`https://bsky.app/profile/${authorProfile.handle}`}
+              title={authorProfile.handle}
+              target="_blank"
+              class="text-primary hover:underline flex gap-2 items-center"
+            >
+              <AvatarImage
+                handle={authorProfile.handle}
+                avatarUrl={authorProfile.avatarUrl}
+                className="max-w-5"
+              />
+              <span class="font-bold" title={authorProfile.handle}>
+                {authorProfile.displayName || authorProfile.handle}
+              </span>
+            </a>
+          {/await}
+          <time class="text-xs">
+            {formattedDate}, {format(date, "pp")}
+          </time>
+        </section>
+
+        {#if isEditing}
+          <div class="w-full">
+            <ChatInput
+              bind:content={editMessageContent}
+              users={users.value || []}
+              context={contextItems.value || []}
+              onEnter={saveEditedMessage}
+              placeholder={message instanceof Message
+                ? getPlainTextContent(JSON.parse(message.bodyJson))
+                : "Edit message..."}
+              editMode={true}
+            />
+          </div>
+
+          <div class="flex justify-end gap-2 mt-2">
+            <Button.Root onclick={cancelEditing} class="btn btn-sm btn-ghost">
+              Cancel
+            </Button.Root>
+            <Button.Root
+              onclick={saveEditedMessage}
+              class="btn btn-sm btn-primary"
+            >
+              Save
+            </Button.Root>
+          </div>
+        {:else}
+          <Button.Root
+            onclick={() => {
+              if (isMobile) {
+                isDrawerOpen = true;
+              }
+            }}
+            class="flex flex-col text-start gap-2 w-full min-w-0"
+          >
+            <div
+              class="flex flex-col gap-1 dz-prose select-text [&_a]:text-primary [&_a]:hover:underline"
+            >
+              {#each links as { url, data } (url)}
+                {#if data}
+                  <LinkCard {data} {url} />
+                {:else}
+                  <a href={url}>{url}</a>
+                {/if}
+              {/each}
+            </div>
+          </Button.Root>
+        {/if}
+      </div>
+    </div>
 
     {#if Object.keys(message.reactions.all()).length > 0}
-      <div class="flex gap-2 flex-wrap pl-14">
+      <div class="flex gap-2 flex-wrap">
         {#each Object.keys(message.reactions.all()) as reaction}
           {@const reactions = message.reactions.all()[reaction]}
           {#if reactions}
@@ -346,130 +360,6 @@
     {/if}
   </div>
 </div>
-
-{#snippet messageView(msg: Message)}
-  <!-- doesn't change after render, so $derived is not necessary -->
-  {@const authorProfile = getProfile(msg.authors((x) => x.get(0)))}
-
-  {#await authorProfile then authorProfile}
-    {@render toolbar(authorProfile)}
-
-    <div class="flex gap-4 group">
-      <a
-        href={`https://bsky.app/profile/${authorProfile.handle}`}
-        title={authorProfile.handle}
-        target="_blank"
-      >
-        <AvatarImage
-          handle={authorProfile.handle}
-          avatarUrl={authorProfile.avatarUrl}
-        />
-      </a>
-
-      {#if isEditing && message === msg}
-        <div class="flex flex-col w-full gap-2">
-          <section class="flex items-center gap-2 flex-wrap w-fit">
-            <a
-              href={`https://bsky.app/profile/${authorProfile.handle}`}
-              target="_blank"
-              class="text-primary hover:underline"
-            >
-              <h5 class="font-bold" title={authorProfile.handle}>
-                {authorProfile.displayName || authorProfile.handle}
-              </h5>
-            </a>
-            {@render timestamp(message.createdDate || new Date())}
-          </section>
-
-          <div class="w-full">
-            <ChatInput
-              bind:content={editMessageContent}
-              users={users.value || []}
-              context={contextItems.value || []}
-              onEnter={saveEditedMessage}
-              placeholder={message instanceof Message
-                ? getPlainTextContent(JSON.parse(message.bodyJson))
-                : "Edit message..."}
-              editMode={true}
-            />
-          </div>
-
-          <div class="flex justify-end gap-2 mt-2">
-            <Button.Root onclick={cancelEditing} class="btn btn-sm btn-ghost">
-              Cancel
-            </Button.Root>
-            <Button.Root
-              onclick={saveEditedMessage}
-              class="btn btn-sm btn-primary"
-            >
-              Save
-            </Button.Root>
-          </div>
-        </div>
-      {:else}
-        <Button.Root
-          onclick={() => {
-            if (isMobile) {
-              isDrawerOpen = true;
-            }
-          }}
-          class="flex flex-col text-start gap-2 w-full min-w-0"
-        >
-          <section class="flex items-center gap-2 flex-wrap w-fit">
-            <a
-              href={`https://bsky.app/profile/${authorProfile.handle}`}
-              target="_blank"
-              class="text-primary hover:underline"
-            >
-              <h5 class="font-bold" title={authorProfile.handle}>
-                {authorProfile.displayName || authorProfile.handle}
-              </h5>
-            </a>
-            {@render timestamp(message.createdDate || new Date())}
-          </section>
-
-          <div class="flex flex-col gap-1">
-            <!-- Using a fancy Tailwind trick to target all href elements inside of this parent -->
-            <span
-              class="dz-prose select-text [&_a]:text-primary [&_a]:hover:underline"
-            >
-              {@html getContentHtml(JSON.parse(msg.bodyJson))}
-            </span>
-
-            {#if isMessageEdited(msg)}
-              <div class="relative group/edit">
-                <span
-                  class="text-xs text-gray-400 italic flex items-center gap-1 hover:text-gray-300 cursor-default"
-                >
-                  <Icon icon="mdi:pencil" width="12px" height="12px" />
-                  <span>edited</span>
-                </span>
-
-                <!-- Tooltip that appears on hover -->
-                <div
-                  class="absolute bottom-full left-0 mb-2 opacity-0 group-hover/edit:opacity-100 transition-opacity duration-200 bg-base-300 p-3 rounded shadow-lg text-xs z-10 min-w-[200px]"
-                >
-                  <div class="flex flex-col gap-1">
-                    <p class="font-semibold">Message edited</p>
-                    <p>
-                      Original: {format(msg.createdDate || new Date(), "PPpp")}
-                    </p>
-                    <p>Edited: {getEditedTime(msg)}</p>
-                  </div>
-
-                  <!-- Arrow pointing down -->
-                  <div
-                    class="absolute -bottom-1 left-3 w-2 h-2 bg-base-300 rotate-45"
-                  ></div>
-                </div>
-              </div>
-            {/if}
-          </div>
-        </Button.Root>
-      {/if}
-    </div>
-  {/await}
-{/snippet}
 
 {#snippet toolbar(authorProfile?: { handle: string; avatarUrl: string })}
   {#if !g.isBanned}
@@ -574,11 +464,4 @@
       </Toolbar.Root>
     {/if}
   {/if}
-{/snippet}
-
-{#snippet timestamp(date: Date)}
-  {@const formattedDate = isToday(date) ? "Today" : format(date, "P")}
-  <time class="text-xs">
-    {formattedDate}, {format(date, "pp")}
-  </time>
 {/snippet}
