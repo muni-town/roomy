@@ -164,7 +164,12 @@
       <form class="flex flex-col gap-4 w-full" onsubmit={saveSettings}>
         <label class="dz-input w-full">
           <span class="dz-label">Name</span>
-          <input bind:value={channelNameInput} placeholder="name" required />
+          <input
+            bind:value={channelNameInput}
+            placeholder="name"
+            type="text"
+            required
+          />
         </label>
         {#if g.space && g.channel instanceof Channel}
           <select bind:value={channelCategoryInput} class="select">

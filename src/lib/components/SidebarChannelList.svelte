@@ -69,6 +69,8 @@
                     <input
                       bind:value={categoryNameInput}
                       placeholder="channel-name"
+                      type="text"
+                      required
                     />
                   </label>
                   <Button.Root

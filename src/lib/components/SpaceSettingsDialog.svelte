@@ -192,7 +192,12 @@
     <form onsubmit={saveSpaceName} class="flex flex-col gap-3 mb-8">
       <label class="dz-input w-full">
         <span class="label">Name</span>
-        <input bind:value={spaceNameInput} placeholder="My Space" />
+        <input
+          bind:value={spaceNameInput}
+          placeholder="My Space"
+          type="text"
+          required
+        />
       </label>
       <Button.Root class="dz-btn dz-btn-primary w-full">Save Name</Button.Root>
     </form>
@@ -299,7 +304,11 @@
       </div>
       <label class="dz-input w-full">
         <span class="label">Handle</span>
-        <input bind:value={newSpaceHandle} placeholder="example.org" />
+        <input
+          bind:value={newSpaceHandle}
+          placeholder="example.org"
+          type="text"
+        />
       </label>
 
       {#if verificationFailed}
@@ -324,7 +333,11 @@
       <h2 class="font-bold text-xl">Bans</h2>
 
       <div>
-        <input class="dz-input w-full" bind:value={bannedHandlesInput} />
+        <input
+          class="dz-input w-full"
+          bind:value={bannedHandlesInput}
+          type="text"
+        />
         <div class="flex flex-col">
           <span class="mx-2 mt-1 text-sm"
             >Input a list of handles separated by commas.</span
