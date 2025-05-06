@@ -220,14 +220,6 @@
     }
   });
 
-  let shiftDown = $state(false);
-  function onKeydown({ shiftKey }: KeyboardEvent) {
-    shiftDown = shiftKey;
-  }
-  function onKeyup({ shiftKey }: KeyboardEvent) {
-    shiftDown = shiftKey;
-  }
-
   function getAnnouncementHtml(announcement: Announcement) {
     if (!g.space) return "";
     const schema = {
@@ -318,8 +310,6 @@
     }
   }
 </script>
-
-<svelte:window onkeydown={onKeydown} onkeyup={onKeyup} />
 
 <div id={message.id} class={`flex flex-col ${isMobile && "max-w-screen"}`}>
   <div
@@ -662,12 +652,12 @@
           </Toolbar.Button>
         {/if}
 
-        {#if shiftDown && mayDelete}
+        {#if mayDelete}
           <Toolbar.Button
             onclick={() => deleteMessage()}
             class="dz-btn dz-btn-ghost dz-btn-square"
           >
-            <Icon icon="tabler:trash" color="red" />
+            <Icon icon="tabler:trash" class="text-warning" />
           </Toolbar.Button>
         {/if}
 
@@ -758,9 +748,11 @@
             {profileRepliedTo.handle}
           </h5>
         </div>
-        <p class="line-clamp-1 basis-1/2 md:basis-auto overflow-hidden italic">
+        <div
+          class="line-clamp-1 basis-1/2 md:basis-auto overflow-hidden italic"
+        >
           {@html getContentHtml(JSON.parse(messageRepliedTo.value.bodyJson))}
-        </p>
+        </div>
       </Button.Root>
     {/if}
   {/await}
