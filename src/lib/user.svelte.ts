@@ -34,9 +34,18 @@ let agent: Agent | undefined = $state();
 let profile: { data: ProfileViewDetailed | undefined } = $derived.by(() => {
   let data: ProfileViewDetailed | undefined = $state();
   if (session && agent) {
-    agent.getProfile({ actor: agent.assertDid }).then((res) => {
-      data = res.data;
-    });
+    try {
+      agent
+        .getProfile({ actor: agent.assertDid })
+        .then((res) => {
+          data = res.data;
+        })
+        .catch((error) => {
+          console.error("Failed to fetch profile:", error);
+        });
+    } catch (error) {
+      console.error("Error in profile fetch:", error);
+    }
   }
   return {
     get data() {
