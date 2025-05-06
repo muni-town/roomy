@@ -6,13 +6,29 @@
   import { g } from "$lib/global.svelte";
 
   import { derivePromise, navigate, Toggle } from "$lib/utils.svelte";
-  import { Category, Channel } from "@roomy-chat/sdk";
+  import { Category, Channel, Thread } from "@roomy-chat/sdk";
   import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
   import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
   import { getContext } from "svelte";
   import AccordionTree from "./AccordionTree.svelte";
   import SidebarChannelList from "./SidebarChannelList.svelte";
   import { page } from "$app/state";
+
+  export async function createLinkFeed() {
+    if (!g.roomy || !g.space) return;
+
+    try {
+      const thread = await g.roomy.create(Thread);
+      thread.name = "@links";
+      thread.commit();
+      g.space.threads.push(thread);
+      g.space.commit();
+
+      navigate({ space: page.params.space!, thread: thread.id });
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
   let allThreads = derivePromise([], async () =>
     ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
@@ -189,6 +205,16 @@
             }}
           >
             Links
+          </Button.Root>
+          <div class="dz-divider my-0"></div>
+        </div>
+      {:else}
+        <div class="flex-flex-col gap-4 p-2">
+          <Button.Root
+            class="cursor-pointer px-2 flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
+            onclick={createLinkFeed}
+          >
+            Create Links Feed
           </Button.Root>
           <div class="dz-divider my-0"></div>
         </div>
