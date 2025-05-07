@@ -42,8 +42,6 @@
     const hash = window.location.hash.replace("#", "");
     if (hash === "chat" || hash === "board") {
       tab = hash as "chat" | "board";
-    } else if (hash.startsWith("wiki-")) {
-      tab = "wiki";
     }
   }
 
@@ -72,7 +70,7 @@
 
   // Update the hash when tab changes
   $effect(() => {
-    if (tab && tab !== "wiki") {
+    if (tab) {
       window.location.hash = tab;
     }
   });

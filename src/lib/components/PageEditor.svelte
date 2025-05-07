@@ -8,10 +8,11 @@
   import { BlockNoteEditor } from "@blocknote/core";
   import "@blocknote/core/style.css";
 
-  import { WikiPage } from "@roomy-chat/sdk";
+  import { WikiPage, Channel } from "@roomy-chat/sdk";
 
   import { page } from "$app/state";
   import { g } from "$lib/global.svelte";
+  import { derivePromise } from "$lib/utils.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import { outerWidth } from "svelte/reactivity/window";
@@ -22,21 +23,6 @@
   let isEditingPage = $state(false);
 
   let pageRenderedHtml = $state("");
-  let selectedWiki: WikiPage | undefined = $state(wikis.value[0]);
-  // Update to reference the prop directly
-  interface Props {
-    wikiId: string | undefined;
-  }
-  const { wikiId }: Props = $props();
-  let selectedWikiId: string | undefined = wikiId;
-  $effect(() => {
-    if (wikis.value.length > 0 && !selectedWiki) {
-      selectedWiki = wikis.value[0];
-    }
-  });
-  let isEditingWiki = $state(false);
-
-  let wikiRenderedHtml = $state("");
   let processedHtml = $state("");
   let editorElement: HTMLElement | null = $state(null);
   let editor: BlockNoteEditor | null;
@@ -50,6 +36,7 @@
   let users = getContext<{ value: UserItem[] }>("users");
 
   let slashMenuVisible = $state(false);
+
   let slashMenuPosition = $state({ x: 0, y: 0 });
   let slashCommands = $state([
     {
@@ -121,7 +108,7 @@
   let hashMenuVisible = $state(false);
   let hashMenuPosition = $state({ x: 0, y: 0 });
   let filteredItems = $state<
-    { id: string; name: string; type: "thread" | "channel" }[]
+    { id: string; name: string; type: "thread" | "channel" | "wiki" }[]
   >([]);
   let hashQuery = $state("");
 
@@ -157,69 +144,8 @@
 
   let isDeleteDialogOpen = $state(false);
 
-  $effect(() => {
-    if (wikiId !== undefined) {
-      selectedWikiId = wikiId;
-
-      if (wikis.value.length > 0) {
-        const foundWiki = wikis.value.find(
-          (w: { id: string }) => w.id === wikiId,
-        );
-        if (foundWiki) {
-          selectedWiki = foundWiki;
-        }
-      }
-    }
-  });
-
-  function selectWiki(wiki: any) {
-    selectedWiki = wiki;
-    isEditingWiki = false;
-    // Update URL when selecting a wiki
-    if (wiki && wiki.id) {
-      window.location.hash = `wiki-${wiki.id}`;
-    }
-  }
-
-  function createWiki() {
-    if (newWikiTitleElement) {
-      newWikiTitleElement.value = "";
-    }
-    isWikiTitleDialogOpen = true;
-  }
-
-  async function submitWikiTitle() {
-    if (!g.space || !g.channel || !(g.channel instanceof Channel)) return;
-    if (!newWikiTitleElement) {
-      toast.error("Title cannot be empty", { position: "bottom-end" });
-      return;
-    }
-    const newWikiTitle = newWikiTitleElement.value; // Retrieve the title from the input element
-    // Create a temporary wiki with the provided title
-    const wiki = await g.space.create(WikiPage);
-    selectWiki(wiki);
-
-    isWikiTitleDialogOpen = false;
-
-    try {
-      selectedWiki;
-      wiki.name = newWikiTitle;
-
-      g.channel.wikipages.push(wiki);
-      g.channel?.commit();
-
-      g.space.wikipages.push(wiki);
-      g.space.commit();
-      wiki.commit();
-    } catch (e) {
-      console.error("Error creating wiki", e);
-      toast.error("Failed to create wiki", { position: "bottom-end" });
-    }
-    setEditingWiki(true);
-  }
-
   function setEditingPage(value: boolean) {
-    isEditingWiki = value;
+    isEditingPage = value;
 
     if (value) {
       if (editor) {
@@ -413,7 +339,7 @@
     const items: {
       id: string;
       name: string;
-      type: "thread" | "channel" | "wiki";
+      type: "channel" | "thread" | "wiki";
     }[] = [];
 
     // Add channels
@@ -559,7 +485,9 @@
               ? `/${page.params.space}/${item.id}`
               : item.type === "thread"
                 ? `/${page.params.space}/thread/${item.id}`
-                : `/${page.params.space}/${page.params.channel}#wiki-${item.id}`;
+                : item.type === "wiki"
+                  ? `/${page.params.space}/page/${item.id}`
+                  : `/${page.params.space}/${page.params.channel}`;
           editor.createLink(linkId);
 
           editor.setTextCursorPosition(block.id, "end");
@@ -722,6 +650,53 @@
     return languageMap[lang] || lang.charAt(0).toUpperCase() + lang.slice(1);
   }
 
+  function extractPageLinks(document: any) {
+    const pageLinkIds = new Set();
+
+    // Recursively process the blocks to find all links
+    function processBlocks(blocks: any) {
+      if (!blocks || !Array.isArray(blocks)) return;
+
+      for (const block of blocks) {
+        if (block.content && Array.isArray(block.content)) {
+          for (const contentItem of block.content) {
+            // If it's text content with a link
+            if (contentItem.type === "link" && contentItem.href) {
+              const link = contentItem.href;
+
+              // Extract from full complex path with leaf IDs
+              const pagePathMatch = link.match(
+                /\/[^\/]+\/page\/([a-zA-Z0-9:]+)/,
+              );
+              if (pagePathMatch && pagePathMatch[1]) {
+                pageLinkIds.add(pagePathMatch[1]);
+                continue;
+              }
+
+              // Legacy format as fallback (for backwards compatibility)
+              const wikiHashMatch = link.match(/#wiki-leaf:([a-zA-Z0-9]+)/);
+              if (wikiHashMatch && wikiHashMatch[1]) {
+                pageLinkIds.add(`leaf:${wikiHashMatch[1]}`);
+              }
+            }
+          }
+        }
+
+        // If this block has children, process them too
+        if (block.children) {
+          processBlocks(block.children);
+        }
+      }
+    }
+
+    // Start processing from the root level blocks
+    if (document && document.length > 0) {
+      processBlocks(document);
+    }
+
+    return Array.from(pageLinkIds);
+  }
+
   $effect(() => {
     pageRenderedHtml;
     processCodeBlocks();
@@ -749,89 +724,52 @@
     }
   });
 
- 
-  function extractWikiLinks(document: any) {
-    const wikiLinkIds = new Set();
-
-    // Recursively process the blocks to find all links
-    function processBlocks(blocks: any) {
-      if (!blocks || !Array.isArray(blocks)) return;
-
-      for (const block of blocks) {
-        if (block.content && Array.isArray(block.content)) {
-          for (const contentItem of block.content) {
-            // If it's text content with a link
-            if (contentItem.type === "link" && contentItem.href) {
-              const link = contentItem.href;
-              // Extract from full complex path with leaf IDs
-              const fullPathMatch = link.match(/#wiki-leaf:([a-zA-Z0-9]+)/);
-              if (fullPathMatch && fullPathMatch[1]) {
-                wikiLinkIds.add(`leaf:${fullPathMatch[1]}`);
-              }
-            }
-          }
-        }
-
-        // If this block has children, process them too
-        if (block.children) {
-          processBlocks(block.children);
-        }
-      }
-    }
-
-    // Start processing from the root level blocks
-    if (document && document.length > 0) {
-      processBlocks(document);
-    }
-
-    return Array.from(wikiLinkIds);
-  }
   async function savePageContent() {
     if (!editor || !g.space || !pg) return;
     try {
       const res = JSON.stringify(editor.document);
-      const oldContent = selectedWiki.bodyJson;
+      const oldContent = pg.bodyJson;
       pg.bodyJson = res;
 
-      const currentLinks = extractWikiLinks(editor.document);
+      const currentLinks = extractPageLinks(editor.document);
 
-      // Get all wikis from the space
-      const allWikis = await g.space.wikipages.items();
+      // Get all pages from the space
+      const allPages = await g.space.wikipages.items();
 
-      // For each linked wiki, add this wiki as a backlink
+      // For each linked page, add this page as a backlink
       for (const linkId of currentLinks) {
-        const linkedWiki = allWikis.find((wiki) => wiki.id === linkId);
-        if (!linkedWiki || linkedWiki.id === selectedWiki.id) {
+        const linkedPage = allPages.find((page) => page.id === linkId);
+        if (!linkedPage || linkedPage.id === pg.id) {
           console.log(
-            `Skipping link to wiki ${linkId} (self-reference or not found)`,
+            `Skipping link to page ${linkId} (self-reference or not found)`,
           );
           continue;
         }
 
         console.log(
-          `Adding backlink to wiki ${linkedWiki.name} (${linkedWiki.id})`,
+          `Adding backlink to page ${linkedPage.name} (${linkedPage.id})`,
         );
-        linkedWiki.addBacklink(selectedWiki);
-        linkedWiki.commit();
+        linkedPage.addBacklink(pg);
+        linkedPage.commit();
       }
 
       // If this is an update, check for removed links
       if (oldContent) {
         try {
           const oldDocument = JSON.parse(oldContent);
-          const oldLinks = extractWikiLinks(oldDocument);
+          const oldLinks = extractPageLinks(oldDocument);
 
           // Find removed links
           const removedLinks = oldLinks.filter(
             (id) => !currentLinks.includes(id),
           );
 
-          // Remove backlinks for wikis that are no longer linked
+          // Remove backlinks for pages that are no longer linked
           for (const removedId of removedLinks) {
-            const unlinkedWiki = allWikis.find((wiki) => wiki.id === removedId);
-            if (unlinkedWiki) {
-              unlinkedWiki.removeBacklink(selectedWiki);
-              unlinkedWiki.commit();
+            const unlinkedPage = allPages.find((page) => page.id === removedId);
+            if (unlinkedPage) {
+              unlinkedPage.removeBacklink(pg);
+              unlinkedPage.commit();
             }
           }
         } catch (e) {
@@ -840,10 +778,9 @@
       }
 
       pg.commit();
-      setEditingWiki(false);
+      setEditingPage(false);
 
-      window.location.hash = `wiki-${selectedWiki.id}`;
-      toast.success("Wiki saved successfully", { position: "bottom-end" });
+      toast.success("Page saved successfully", { position: "bottom-end" });
     } catch (e) {
       console.error("Failed to save page content", e);
       toast.error("Failed to save page content", { position: "bottom-end" });
@@ -899,21 +836,6 @@
     }
   });
 
-  function checkUrlForWikiId() {
-    const hash = window.location.hash;
-    if (hash.startsWith("#wiki-")) {
-      const wikiId = hash.replace("#wiki-", "");
-      selectedWikiId = wikiId;
-
-      if (wikis.value.length > 0) {
-        const foundWiki = wikis.value.find((w) => w.id === wikiId);
-        if (foundWiki) {
-          selectedWiki = foundWiki;
-        }
-      }
-    }
-  }
-
   onMount(async () => {
     const existingLink = document.querySelector(
       'link[href*="@blocknote/core/style.css"]',
@@ -927,73 +849,6 @@
 
     if (pageRenderedHtml) {
       await processCodeBlocks();
-    }
-
-    // Check if we should load a specific wiki from the URL
-    checkUrlForWikiId();
-
-    // Add event listener for hash changes
-    window.addEventListener("hashchange", checkUrlForWikiId);
-
-    return () => {
-      // Clean up event listener
-      window.removeEventListener("hashchange", checkUrlForWikiId);
-    };
-  });
-
-  // Update the fallback wiki selection to use window.location.hash
-  $effect(() => {
-    if (wikis.value.length > 0) {
-      if (selectedWikiId) {
-        const foundWiki = wikis.value.find((w) => w.id === selectedWikiId);
-        if (foundWiki) {
-          selectedWiki = foundWiki;
-          return;
-        }
-      }
-
-      // Fall back to first wiki if no ID is specified or not found
-      if (!selectedWiki) {
-        selectedWiki = wikis.value[0];
-        if (selectedWiki) {
-          window.location.hash = `wiki-${selectedWiki.id}`;
-        }
-      }
-    }
-  });
-
-  $effect(() => {
-    if (wikis.value.length > 0) {
-      // First priority: Use the wikiId from URL hash if available
-      const hash = window.location.hash;
-      if (hash.startsWith("#wiki-")) {
-        const idFromHash = hash.replace("#wiki-", "");
-        const foundWikiFromHash = wikis.value.find((w) => w.id === idFromHash);
-        if (foundWikiFromHash) {
-          selectedWiki = foundWikiFromHash;
-          selectedWikiId = idFromHash;
-          return;
-        }
-      }
-
-      // Second priority: Use the wikiId prop if provided
-      if (wikiId) {
-        const foundWikiFromProp = wikis.value.find((w) => w.id === wikiId);
-        if (foundWikiFromProp) {
-          selectedWiki = foundWikiFromProp;
-          selectedWikiId = wikiId;
-          return;
-        }
-      }
-
-      // Fallback: Select first wiki if nothing else matches
-      if (!selectedWiki) {
-        selectedWiki = wikis.value[0];
-        if (selectedWiki) {
-          window.location.hash = `wiki-${selectedWiki.id}`;
-          selectedWikiId = selectedWiki.id;
-        }
-      }
     }
   });
 </script>
@@ -1078,6 +933,86 @@
         {/if}
       </div>
     </div>
+
+    <!-- Add backlinks section -->
+    {#await pg.backlinks.items() then backlinks}
+      {#if backlinks.length > 0}
+        <div class="mt-8 bg-base-200/50 rounded-lg p-5 shadow-sm">
+          <button
+            class="w-full flex items-center gap-2 justify-between focus:outline-none"
+            onclick={() => (isBacklinksExpanded = !isBacklinksExpanded)}
+            aria-expanded={isBacklinksExpanded}
+          >
+            <div class="flex items-center gap-2">
+              <Icon icon="tabler:arrow-back-up" class="text-base-content/60" />
+              <h4 class="text-base font-medium text-base-content/90">
+                Linked to this page ({backlinks.length})
+              </h4>
+            </div>
+            <Icon
+              icon={isBacklinksExpanded
+                ? "tabler:chevron-up"
+                : "tabler:chevron-down"}
+              class="text-base-content/60 transition-transform duration-200"
+            />
+          </button>
+
+          {#if isBacklinksExpanded}
+            <div
+              class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 transition-all duration-300 ease-in-out"
+            >
+              {#each backlinks as linkedPage}
+                <a
+                  href="/{page.params.space}/page/{linkedPage.id}"
+                  class="group bg-base-100 border border-base-300 hover:border-primary/30 rounded-md p-3 transition-all duration-150 hover:shadow-sm hover:-translate-y-0.5"
+                >
+                  <div class="flex items-start gap-3">
+                    <div class="text-primary mt-1">
+                      <Icon icon="tabler:notebook" />
+                    </div>
+                    <div class="overflow-hidden">
+                      <h5
+                        class="font-medium text-sm text-base-content mb-1 group-hover:text-primary truncate"
+                      >
+                        {linkedPage.name || "Untitled Page"}
+                      </h5>
+                      {#if linkedPage.bodyJson}
+                        <p class="text-xs text-base-content/70 line-clamp-2">
+                          {(() => {
+                            try {
+                              const content = JSON.parse(linkedPage.bodyJson);
+                              // Extract first block of text as preview
+                              for (const block of content) {
+                                if (
+                                  block.content &&
+                                  Array.isArray(block.content)
+                                ) {
+                                  for (const item of block.content) {
+                                    if (item.type === "text" && item.text) {
+                                      return (
+                                        item.text.slice(0, 120) +
+                                        (item.text.length > 120 ? "..." : "")
+                                      );
+                                    }
+                                  }
+                                }
+                              }
+                              return "No preview available";
+                            } catch (e) {
+                              return "No preview available";
+                            }
+                          })()}
+                        </p>
+                      {/if}
+                    </div>
+                  </div>
+                </a>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
+    {/await}
   </section>
 {:else}
   <section class="page-editor-container p-4">
@@ -1161,126 +1096,6 @@
                   </li>
                 {/each}
               </ul>
-            </div>
-          {/if}
-
-          {#if mentionMenuVisible && isEditingWiki}
-            <div
-              class="mention-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
-              style="left: {mentionMenuPosition.x}px; top: {mentionMenuPosition.y}px;"
-            >
-              <div class="py-1 max-h-[300px] overflow-y-auto min-w-[200px]">
-                {#if filteredUsers.length > 0}
-                  <ul>
-                    {#each filteredUsers as user}
-                      <li>
-                        <button
-                          class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-base-200 text-base-content"
-                          onclick={() => insertUserMention(user)}
-                        >
-                          <div
-                            class="w-6 h-6 rounded-full bg-primary flex items-center justify-center overflow-hidden"
-                          >
-                            <span class="text-xs font-bold text-primary-content"
-                              >{user.label[0]?.toUpperCase() || "?"}</span
-                            >
-                          </div>
-                          <span>{user.label}</span>
-                        </button>
-                      </li>
-                    {/each}
-                  </ul>
-                {:else}
-                  <div class="px-4 py-2 text-base-content/70">
-                    No users found
-                  </div>
-                {/if}
-              </div>
-            </div>
-          {/if}
-
-          {#if hashMenuVisible && isEditingWiki}
-            <div
-              class="hash-menu bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50"
-              style="left: {hashMenuPosition.x}px; top: {hashMenuPosition.y}px;"
-            >
-              <div class="py-1 max-h-[300px] overflow-y-auto min-w-[250px]">
-                {#if filteredItems.length > 0}
-                  <ul>
-                    {#each filteredItems as item}
-                      <li>
-                        <button
-                          class="flex items-center gap-2 w-full text-left px-4 py-2 hover:bg-base-200 text-base-content"
-                          onclick={() => insertHashLink(item)}
-                        >
-                          <div
-                            class="w-6 h-6 rounded flex items-center justify-center overflow-hidden"
-                          >
-                            <Icon
-                              icon={item.type === "channel"
-                                ? "tabler:hash"
-                                : item.type === "thread"
-                                  ? "tabler:message-circle"
-                                  : "tabler:notebook"}
-                              class="text-lg text-primary"
-                            />
-                          </div>
-                          <span>{item.name}</span>
-                          <span class="text-xs text-base-content/70 ml-auto"
-                            >{item.type}</span
-                          >
-                        </button>
-                      </li>
-                    {/each}
-                  </ul>
-                {:else}
-                  <div class="px-4 py-2 text-base-content/70">
-                    No channels, threads, or wikis found
-                  </div>
-                {/if}
-              </div>
-            </div>
-          {/if}
-
-          {#if selectionTooltipVisible && isEditingWiki}
-            <div
-              class="tooltip-animate bg-base-300 border border-base-content/20 rounded shadow-lg absolute z-50 flex items-center justify-center p-1"
-              style="left: {selectionTooltipPosition.x}px; top: {selectionTooltipPosition.y}px; transform: translateX(-50%);"
-            >
-              {#each formatCommands as command}
-                <button
-                  class="dz-btn dz-btn-ghost dz-btn-square dz-btn-sm"
-                  title={command.name}
-                  onclick={() => {
-                    command.action();
-                    selectionTooltipVisible = false;
-                  }}
-                >
-                  <Icon icon={command.icon} />
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      </section>
-    {:else}
-      <section class="wiki-content">
-        <div class="flex justify-between items-center mb-4">
-          <h3 class="text-xl font-bold text-base-content">
-            {selectedWiki.name}
-          </h3>
-          <Button.Root
-            onclick={() => setEditingWiki(true)}
-            class="dz-btn dz-btn-primary"
-          >
-            <Icon icon="tabler:edit" />
-            Edit Wiki
-          </Button.Root>
-        </div>
-        <div class="wiki-rendered p-4 bg-base-300/30 rounded-lg">
-          <div class="wiki-html text-base-content">
-            {#if selectedWiki && !selectedWiki.softDeleted}
-              {@html processedHtml}
             {:else}
               <div class="px-4 py-2 text-base-content/70">No users found</div>
             {/if}
@@ -1351,100 +1166,6 @@
     </div>
   </section>
 {/if}
-
-        <!-- Replace the existing backlinks section with this collapsible version -->
-        {#await selectedWiki.backlinks.items() then backlinks}
-          {#if backlinks.length > 0}
-            <div class="mt-8 bg-base-200/50 rounded-lg p-5 shadow-sm">
-              <button
-                class="w-full flex items-center gap-2 justify-between focus:outline-none"
-                onclick={() => (isBacklinksExpanded = !isBacklinksExpanded)}
-                aria-expanded={isBacklinksExpanded}
-              >
-                <div class="flex items-center gap-2">
-                  <Icon
-                    icon="tabler:arrow-back-up"
-                    class="text-base-content/60"
-                  />
-                  <h4 class="text-base font-medium text-base-content/90">
-                    Linked to this page ({backlinks.length})
-                  </h4>
-                </div>
-                <Icon
-                  icon={isBacklinksExpanded
-                    ? "tabler:chevron-up"
-                    : "tabler:chevron-down"}
-                  class="text-base-content/60 transition-transform duration-200"
-                />
-              </button>
-
-              {#if isBacklinksExpanded}
-                <div
-                  class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 transition-all duration-300 ease-in-out"
-                >
-                  {#each backlinks as linkedWiki}
-                    <a
-                      href="#{`wiki-${linkedWiki.id}`}"
-                      class="group bg-base-100 border border-base-300 hover:border-primary/30 rounded-md p-3 transition-all duration-150 hover:shadow-sm hover:-translate-y-0.5"
-                      onclick={() => selectWiki(linkedWiki)}
-                    >
-                      <div class="flex items-start gap-3">
-                        <div class="text-primary mt-1">
-                          <Icon icon="tabler:notebook" />
-                        </div>
-                        <div class="overflow-hidden">
-                          <h5
-                            class="font-medium text-sm text-base-content mb-1 group-hover:text-primary truncate"
-                          >
-                            {linkedWiki.name || "Untitled Wiki"}
-                          </h5>
-                          {#if linkedWiki.bodyJson}
-                            <p
-                              class="text-xs text-base-content/70 line-clamp-2"
-                            >
-                              {(() => {
-                                try {
-                                  const content = JSON.parse(
-                                    linkedWiki.bodyJson,
-                                  );
-                                  // Extract first block of text as preview
-                                  for (const block of content) {
-                                    if (
-                                      block.content &&
-                                      Array.isArray(block.content)
-                                    ) {
-                                      for (const item of block.content) {
-                                        if (item.type === "text" && item.text) {
-                                          return (
-                                            item.text.slice(0, 120) +
-                                            (item.text.length > 120
-                                              ? "..."
-                                              : "")
-                                          );
-                                        }
-                                      }
-                                    }
-                                  }
-                                  return "No preview available";
-                                } catch (e) {
-                                  return "No preview available";
-                                }
-                              })()}
-                            </p>
-                          {/if}
-                        </div>
-                      </div>
-                    </a>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/if}
-        {/await}
-      </section>
-    {/if}
-  </main>
-</div>
 
 <Dialog
   title="Add Link"
