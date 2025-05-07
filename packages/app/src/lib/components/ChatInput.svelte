@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { Editor, mergeAttributes } from "@tiptap/core";
+  import { Editor, mergeAttributes, type JSONContent } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
   import Placeholder from "@tiptap/extension-placeholder";
   import Image from "@tiptap/extension-image";
@@ -113,8 +113,6 @@
     initSpaceContextMention({ context }),
   ]);
 
-  let hasFocus = true;
-
   onMount(() => {
     tiptap = new Editor({
       element,
@@ -128,12 +126,6 @@
       },
       onUpdate: (ctx) => {
         content = ctx.editor.getJSON();
-      },
-      onFocus: () => {
-        hasFocus = true;
-      },
-      onBlur: () => {
-        hasFocus = false;
       },
     });
   });
@@ -498,6 +490,13 @@
     }
   });
 
+  // Utility function to compare two JSON objects
+  // This abstraction lives outside of the effect because
+  // Typescript doesn't see the use of the imported `isEqual` otherwise
+  function verifyEquals(a: JSONContent, b: Record<string, unknown>): boolean {
+    return isEqual(a, b);
+  }
+
   // Second effect: Update editor content when content prop changes externally
   $effect(() => {
     if (!tiptap || isInternalUpdate) return;
@@ -521,7 +520,7 @@
         : { type: "doc", content: [] };
 
       // Only update if content is actually different
-      if (!isEqual(currentContent, newContent)) {
+      if (!verifyEquals(currentContent, newContent)) {
         isInternalUpdate = true;
         try {
           tiptap.commands.setContent(newContent);
