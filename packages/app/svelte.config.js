@@ -7,7 +7,7 @@ const config = {
 
   kit: {
     serviceWorker: {
-      register: process.env.MODE === "tauri" ? false : true,
+      register: process.env.MODE !== "tauri",
     },
     adapter:
       process.env.MODE === "tauri"
