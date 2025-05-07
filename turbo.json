@@ -1,0 +1,26 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "tasks": {
+    "build-api-docs": {
+      "dependsOn": ["^build-api-docs", "build-lib"],
+      "outputs": ["./dist/**"]
+    },
+    "lint-staged": {
+      "dependsOn": ["^lint-staged"],
+      "cache": false
+    },
+    "build-lib": {
+      "dependsOn": ["^build-lib"],
+      "outputs": ["./dist/**"]
+    },
+    "build-web-app": {
+      "dependsOn": ["^build-web-app", "build-lib"],
+      "outputs": ["./dist/**"]
+    },
+    "dev": {
+      "dependsOn": ["build-lib"],
+      "persistent": true,
+      "cache": false
+    }
+  }
+}

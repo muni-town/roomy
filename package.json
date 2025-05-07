@@ -1,125 +1,26 @@
 {
-  "name": "roomy.chat",
-  "version": "0.2.1",
-  "private": true,
-  "type": "module",
-  "description": "A shared web space for digital gardening.",
-  "homepage": "https://github.com/muni-town/roomy#readme",
+  "packageManager": "pnpm@10.10.0",
   "repository": {
-    "type": "git",
-    "url": "git+https://github.com/muni-town/roomy.git"
-  },
-  "bugs": {
-    "url": "https://github.com/muni-town/roomy/issues"
-  },
-  "scripts": {
-    "dev": "vite dev --host 127.0.0.1",
-    "build": "vite build",
-    "build:t": "env MODE=tauri vite build --mode tauri",
-    "test": "vitest",
-    "preview": "vite preview",
-    "format": "prettier . --write",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "prepare": "node .husky/install.mjs",
-    "lint-staged": "lint-staged"
+    "url": "https://github.com/muni-town/roomy"
   },
   "engines": {
     "node": ">=22.15.0",
     "pnpm": ">=10.10.0"
   },
-  "dependencies": {
-    "@atproto/api": "^0.14.9",
-    "@atproto/oauth-client-browser": "^0.3.7",
-    "@blocknote/core": "^0.25.0",
-    "@blocknote/react": "^0.25.0",
-    "@tiptap/core": "^2.11.5",
-    "@tiptap/extension-image": "^2.11.7",
-    "@tiptap/extension-link": "^2.11.5",
-    "@tiptap/extension-mention": "^2.11.5",
-    "@tiptap/extension-placeholder": "^2.11.5",
-    "@tiptap/pm": "^2.11.5",
-    "@tiptap/starter-kit": "^2.11.5",
-    "@tiptap/suggestion": "^2.11.5",
-    "bits-ui": "^1.3.19",
-    "emoji-picker-element": "^1.26.1",
-    "linkify-it": "^5.0.0",
-    "posthog-js": "^1.236.1",
-    "shiki": "^3.2.1",
-    "svelte": "^5.23.1",
-    "svelte-boring-avatars": "^1.2.6",
-    "svelte-french-toast": "2.0.0-alpha.0",
-    "svelte-tiptap": "^2.1.0",
-    "underscore": "^1.13.7",
-    "vaul-svelte": "^0.3.2",
-    "virtua": "^0.40.4"
+  "scripts": {
+    "build-api-docs": "turbo build-api-docs",
+    "build-web-app": "turbo build-web-app",
+    "lint-staged": "turbo lint-staged",
+    "publish-packages": "turbo build && beachball publish -m 'chore: publish packages.'",
+    "prepare": "node ./.husky/install.mjs",
+    "dev": "turbo dev"
   },
   "devDependencies": {
-    "loro-crdt": "^1.5.1",
-    "@atproto/lexicon": "^0.4.5",
-    "@roomy-chat/sdk": "^0.1.0-preview.20",
-    "@muni-town/leaf": "^0.2.0-preview.19",
-    "@muni-town/leaf-storage-indexeddb": "^0.1.0-preview.4",
-    "@muni-town/leaf-svelte": "^0.1.0-preview.4",
-    "@muni-town/leaf-sync-ws": "^0.1.0-preview.4",
-    "@iconify/svelte": "^4.2.0",
-    "@automerge/automerge-repo-storage-indexeddb": "2.0.0-collectionsync-alpha.1",
-    "@noble/curves": "^1.8.1",
-    "@sveltejs/adapter-netlify": "^5.0.0",
-    "@sveltejs/adapter-static": "^3.0.8",
-    "@sveltejs/kit": "^2.20.7",
-    "@sveltejs/vite-plugin-svelte": "^5.0.3",
-    "@tailwindcss/typography": "^0.5.16",
-    "@tailwindcss/vite": "^4.1.4",
-    "@types/linkify-it": "^5.0.0",
-    "@types/sanitize-html": "^2.13.0",
-    "@types/underscore": "^1.13.0",
-    "base32-decode": "^1.0.0",
-    "base32-encode": "^2.0.0",
-    "daisyui": "^5.0.6",
-    "date-fns": "^4.1.0",
     "husky": "^9.1.7",
-    "js-base64": "^3.7.7",
-    "lint-staged": "^15.5.0",
-    "marked": "^15.0.6",
-    "prettier": "3.5.3",
-    "prettier-plugin-svelte": "3.3.3",
-    "sanitize-html": "^2.14.0",
-    "svelte-check": "^4.0.0",
-    "svelte-render-scan": "^1.0.4",
-    "tailwindcss": "^4.0.0",
-    "tweetnacl": "^1.0.3",
-    "typescript": "^5.0.0",
-    "typescript-event-target": "^1.1.1",
-    "vite": "^6.2.2",
-    "vite-plugin-arraybuffer": "^0.1.0",
-    "vite-plugin-top-level-await": "^1.4.4",
-    "vite-plugin-wasm": "^3.4.1",
-    "vitest": "^3.0.9"
-  },
-  "lint-staged": {
-    "*.{svelte,svelte.ts}": [
-      "svelte-check --tsconfig ./tsconfig.json"
-    ],
-    "*.{json,js,ts,tsx,html,svelte,css}": [
-      "prettier --write --ignore-unknown"
-    ]
-  },
-  "keyords": [
-    "forum",
-    "chat",
-    "organize",
-    "collaboration",
-    "open-source",
-    "atproto",
-    "at protocal",
-    "pds",
-    "federated"
-  ],
-  "collective": {
-    "type": "opencollective",
-    "url": "https://opencollective.com/weird-inc",
-    "logo": "https://opencollective.com/opencollective/logo.txt"
-  },
-  "license": "https://blueoakcouncil.org/license/1.0.0"
+    "@repo/tsconfig": "workspace:*",
+    "beachball": "^2.54.0",
+    "pkgroll": "^2.12.2",
+    "turbo": "^2.5.2",
+    "typescript": "^5.8.3"
+  }
 }

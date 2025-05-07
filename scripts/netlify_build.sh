@@ -8,7 +8,7 @@ set -ex
 # deno run build
 
 pnpm install
-pnpm build
+pnpm build-web-app
 
 target_url=""
 if [ "$PULL_REQUEST" = "true" ]; then
@@ -32,4 +32,6 @@ echo "{
   \"token_endpoint_auth_method\": \"none\",
   \"application_type\": \"web\",
   \"dpop_bound_access_tokens\": true
-}" > dist/oauth-client.json
+}" > packages/app/dist/oauth-client.json
+
+mv packages/app/dist .
