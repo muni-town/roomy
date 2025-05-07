@@ -1,0 +1,121 @@
+name: 'Build and release tauri'
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*' # Should match `version` in ./src-tauri/tauri.conf.json
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest' # for Arm based macs (M1 and above).
+            args: '--target aarch64-apple-darwin'
+          - platform: 'macos-latest' # for Intel based macs.
+            args: '--target x86_64-apple-darwin'
+          - platform: 'ubuntu-latest'
+            android: yes
+          - platform: 'ubuntu-latest'
+          - platform: 'windows-latest'
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'pnpm'
+
+      - name: Generate Icons
+        if: ${{ matrix.android }}
+        run: |
+          
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: install frontend dependencies
+        run: pnpm install
+
+      - name: Setup java
+        uses: actions/setup-java@v3
+        if: ${{ matrix.android }}
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup NDK 
+        uses: nttld/setup-ndk@v1
+        if: ${{ matrix.android }}
+        id: setup-ndk
+        with:
+          ndk-version: r25b
+          local-cache: true
+
+      - name: Get app version
+        if: ${{ matrix.android }}
+        run: echo "APP_VERSION=$(jq -r .version src-tauri/tauri.conf.json)" >> $GITHUB_ENV
+
+      - name: Generate Icons
+        run: |
+          cargo install tauri-cli --version "^2.0.0" --locked
+          cargo tauri icon -o src-tauri/icons static/icon-512.png
+
+      - name: Build Android
+        if: ${{ matrix.android }}
+        run: |
+          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+          cargo tauri android init
+          cargo tauri android build --apk
+          cp ./src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk ./src-tauri/gen/android/app/build/outputs/apk/universal/release/roomy-chat_${{ env.APP_VERSION}}.apk
+        env:
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
+      # Could use this for everything if it gets more complicated
+      - name: Release Android
+        uses: softprops/action-gh-release@v2
+        if: ${{ matrix.android }}
+        with:
+          draft: false
+          files: |
+            ${{ github.workspace }}/src-tauri/gen/android/app/build/outputs/apk/universal/release/roomy-chat_*.apk
+          append_body: true
+          name: ${{ env.APP_VERSION }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: tauri-apps/tauri-action@v0
+        if: ${{ !matrix.android }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'v__VERSION__'
+          releaseBody: 'See the assets to download this version and install.'
+          releaseDraft: false
+          prerelease: true
+          args: ${{ matrix.args }}
+
