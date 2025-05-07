@@ -3,6 +3,8 @@
   import { Announcement, Message, type Timeline } from "@roomy-chat/sdk";
   import { derivePromise } from "$lib/utils.svelte";
   import VirtualScroll from "./VirtualScroll.svelte";
+  import LinkPreview from "./LinkPreview.svelte";
+  import { g } from "$lib/global.svelte";
 
   let {
     timeline,
@@ -52,10 +54,14 @@
   {#snippet children(message, index)}
     {@const previousMessage = index > 0 ? messages.value[index - 1] : undefined}
     {#if !message.softDeleted}
-      <ChatMessage
-        {message}
-        mergeWithPrevious={shouldMergeWithPrevious(message, previousMessage)}
-      />
+      {#if g.channel?.name !== "@links"}
+        <ChatMessage
+          {message}
+          mergeWithPrevious={shouldMergeWithPrevious(message, previousMessage)}
+        />
+      {:else if "bodyJson" in message}
+        <LinkPreview {message} />
+      {/if}
     {:else}
       <p class="italic text-error text-sm">This message has been deleted</p>
     {/if}

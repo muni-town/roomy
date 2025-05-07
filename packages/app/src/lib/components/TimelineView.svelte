@@ -32,6 +32,7 @@
   const links = derivePromise(null, async () =>
     (await g.space?.threads.items())?.find((x) => x.name === "@links"),
   );
+  const readonly = $derived(g.channel?.name === "@links");
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let users: { value: Item[] } = getContext("users");
@@ -307,12 +308,20 @@
           <div class="relative">
             <!-- TODO: get all users that has joined the server -->
             {#if g.roomy && g.roomy.spaces.ids().includes(g.space.id)}
-              <ChatInput
-                bind:content={messageInput}
-                users={users.value}
-                context={contextItems.value}
-                onEnter={sendMessage}
-              />
+              {#if !readonly}
+                <ChatInput
+                  bind:content={messageInput}
+                  users={users.value}
+                  context={contextItems.value}
+                  onEnter={sendMessage}
+                />
+              {:else}
+                <div class="flex items-center grow flex-col">
+                  <Button.Root disabled class="w-full dz-btn"
+                    >Automatted Thread</Button.Root
+                  >
+                </div>
+              {/if}
             {:else}
               <Button.Root
                 class="w-full dz-btn"
