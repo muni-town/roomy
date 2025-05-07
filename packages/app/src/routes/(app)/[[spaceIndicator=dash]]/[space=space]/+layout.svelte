@@ -90,5 +90,5 @@
 
   <!-- If there is no space. -->
 {:else}
-  <span class="dz-loading dz-loading-spinner mx-auto w-25"></span>
+  <span class="dz-loading dz-loading-spinner mx-auto"></span>
 {/if}
