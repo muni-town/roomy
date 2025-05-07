@@ -1,0 +1,7 @@
+{
+  "name": "@repo/tsconfig",
+  "private": true,
+  "beachball": {
+    "shouldPublish": false
+  }
+}
