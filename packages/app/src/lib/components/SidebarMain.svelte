@@ -1,7 +1,7 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { Button, Tabs, ToggleGroup } from "bits-ui";
+  import { Button, Tabs } from "bits-ui";
 
   import { g } from "$lib/global.svelte";
 
@@ -224,9 +224,7 @@
         active={g.channel?.id ?? ""}
       />
     {:else}
-      <ToggleGroup.Root class="px-2" type="single" value={g.channel?.id}>
-        <SidebarChannelList {sidebarItems} />
-      </ToggleGroup.Root>
+      <SidebarChannelList {sidebarItems} />
     {/if}
   </div>
 </nav>

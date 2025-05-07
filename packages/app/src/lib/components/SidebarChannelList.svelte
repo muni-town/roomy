@@ -3,10 +3,10 @@
 
   import { g } from "$lib/global.svelte";
 
-  import { navigate } from "$lib/utils.svelte";
+  import { navigateSync } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
   import { Category, Channel } from "@roomy-chat/sdk";
-  import { Accordion, Button, ToggleGroup } from "bits-ui";
+  import { Accordion, Button } from "bits-ui";
   import { slide } from "svelte/transition";
   import Dialog from "./Dialog.svelte";
 
@@ -27,7 +27,7 @@
   }
 </script>
 
-<div transition:slide={{ duration: 100 }} class="flex flex-col gap-2">
+<div transition:slide={{ duration: 100 }} class="flex flex-col gap-2 px-2">
   <!-- Category and Channels -->
   {#each sidebarItems.value.filter((x: { softDeleted?: boolean }) => !x.softDeleted) as item}
     {@const category = item.tryCast(Category)}
@@ -101,14 +101,15 @@
                   {#each category.channels.ids() as channelId}
                     {#await g.roomy && g.roomy.open(Channel, channelId) then channel}
                       {#if !channel?.softDeleted}
-                        <ToggleGroup.Item
-                          onclick={() =>
-                            navigate({
-                              space: page.params.space!,
-                              channel: channelId,
-                            })}
-                          value={channelId}
-                          class="w-full cursor-pointer px-1 dz-btn dz-btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
+                        <Button.Root
+                          href={navigateSync({
+                            space: page.params.space!,
+                            channel: channelId,
+                          })}
+                          class="w-full cursor-pointer px-1 dz-btn dz-btn-ghost justify-start border page.params.channel && {channelId ===
+                          page.params.channel
+                            ? 'border-primary text-primary'
+                            : ' border-transparent'}"
                         >
                           <h3
                             class="flex justify-start items-center w-full gap-2 px-2"
@@ -118,7 +119,7 @@
                               >{channel?.name || "..."}</span
                             >
                           </h3>
-                        </ToggleGroup.Item>
+                        </Button.Root>
                       {/if}
                     {/await}
                   {/each}
@@ -129,20 +130,21 @@
         </Accordion.Item>
       </Accordion.Root>
     {:else if item.matches(Channel)}
-      <ToggleGroup.Item
-        onclick={() =>
-          navigate({
-            space: page.params.space!,
-            channel: item.id,
-          })}
-        value={item.id}
-        class="w-full cursor-pointer px-1 dz-btn dz-btn-ghost justify-start border border-transparent data-[state=on]:border-primary data-[state=on]:text-primary"
+      <Button.Root
+        href={navigateSync({
+          space: page.params.space!,
+          channel: item.id,
+        })}
+        class="w-full cursor-pointer px-1 dz-btn dz-btn-ghost justify-start border page.params.channel && {item.id ===
+        page.params.channel
+          ? 'border-primary text-primary'
+          : ' border-transparent'}"
       >
         <h3 class="flex justify-start items-center w-full gap-2">
           <Icon icon="basil:comment-solid" class="shrink-0" />
           <span class="truncate"> {item.name} </span>
         </h3>
-      </ToggleGroup.Item>
+      </Button.Root>
     {/if}
   {/each}
 </div>
