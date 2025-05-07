@@ -37,6 +37,7 @@
     <div class=" w-full flex-shrink-0 p-2 aspect-auto">
       <video
         class="my-0 h-full w-full rounded object-cover"
+        muted
         poster={data.thumb?.u}
         src={data.vid.u}
       ></video>
