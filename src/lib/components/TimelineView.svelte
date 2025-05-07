@@ -11,7 +11,8 @@
   import AvatarImage from "$lib/components/AvatarImage.svelte";
   import { Button, Tabs } from "bits-ui";
 
-  import { derivePromise, parseLinks } from "$lib/utils.svelte";
+  import { derivePromise } from "$lib/utils.svelte";
+  import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
   import { g } from "$lib/global.svelte";
   import {
     Announcement,
@@ -155,7 +156,7 @@
 
     // Images are now handled by TipTap in the message content
     // Limit image size in message input to 300x300
-    if (parseLinks(messageInput)) {
+    if (collectLinks(tiptapJsontoString(messageInput))) {
       if (links.value) {
         links.value.timeline.push(message);
         links.value.commit();

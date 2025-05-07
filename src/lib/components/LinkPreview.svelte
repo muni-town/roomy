@@ -16,7 +16,7 @@
   import ChatInput from "./ChatInput.svelte";
   import toast from "svelte-french-toast";
   import LinkCard from "./LinkCard.svelte";
-  import { parseLinks } from "$lib/utils.svelte";
+  import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
 
   type Props = {
     message: Message;
@@ -24,7 +24,7 @@
 
   let { message }: Props = $props();
   const links = $derived.by(() =>
-    (parseLinks(JSON.parse(message.bodyJson)) ?? []).map((url) => {
+    collectLinks(tiptapJsontoString(message.bodyJson)).map((url) => {
       const value = $state({
         url,
         data: undefined,
