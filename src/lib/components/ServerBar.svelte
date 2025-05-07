@@ -11,7 +11,6 @@
   import { Space } from "@roomy-chat/sdk";
   import { cleanHandle } from "$lib/utils.svelte";
   import { atproto } from "$lib/atproto.svelte";
-  import { page } from "$app/stores";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
 
   let {

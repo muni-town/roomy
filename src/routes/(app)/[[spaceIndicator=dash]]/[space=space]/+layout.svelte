@@ -1,17 +1,13 @@
 <script lang="ts">
-  import { page } from "$app/state";
   import { g } from "$lib/global.svelte";
-  import { outerWidth } from "svelte/reactivity/window";
 
   import { setContext } from "svelte";
   import type { Item } from "$lib/tiptap/editor";
   import { getProfile } from "$lib/profile.svelte";
   import { derivePromise } from "$lib/utils.svelte";
   import { Message } from "@roomy-chat/sdk";
-  import SidebarMain from "$lib/components/SidebarMain.svelte";
 
   let { children } = $props();
-  let isMobile = $derived((outerWidth.current || 0) < 640);
 
   // TODO: track users via the space data
   let users = derivePromise([], async () => {

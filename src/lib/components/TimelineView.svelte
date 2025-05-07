@@ -164,14 +164,9 @@
   // Settings Dialog
   //
 
-  // Image upload permissions are now handled in ChatInput.svelte
-  let channelNameInput = $state("");
-  let channelCategoryInput = $state(undefined) as undefined | string;
   $effect(() => {
     if (!g.space) return;
 
-    channelNameInput = g.channel?.name || "";
-    channelCategoryInput = undefined;
     g.space &&
       g.space.sidebarItems.items().then((items) => {
         for (const item of items) {
@@ -183,7 +178,6 @@
             g.channel &&
             category.channels.ids().includes(g.channel.id)
           ) {
-            channelCategoryInput = category.id;
             return;
           }
         }

@@ -496,7 +496,6 @@
       editor.mount(editorElement);
       editor.onChange(EditorHandler);
       editor.onSelectionChange(SelectionHandler);
-      let targetBlockId = null;
       editorElement.addEventListener("click", (e) => {
         const blockElement = (e.target as Element)?.closest(".bn-block");
         if (blockElement) {
@@ -508,7 +507,6 @@
             if (!blockId) return;
             slashMenuPosition = { x: blockRect.left + 30, y: e.clientY };
             slashMenuVisible = true;
-            targetBlockId = blockId;
           }
         }
       });
