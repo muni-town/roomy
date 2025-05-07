@@ -2,7 +2,7 @@ import type { DidDocument } from "@atproto/oauth-client-browser";
 import { decodeBase32 } from "./base32";
 import type { EntityIdStr } from "@muni-town/leaf";
 import { goto } from "$app/navigation";
-import { type JSONContent } from "@tiptap/core";
+import type { JSONContent } from "@tiptap/core";
 
 /** Cleans a handle string by removing any characters not valid for a domain. */
 export function cleanHandle(handle: string): string {
