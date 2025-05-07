@@ -204,8 +204,8 @@ importers:
         specifier: ^0.3.2
         version: 0.3.2(svelte@5.28.2)
       virtua:
-        specifier: ^0.40.4
-        version: 0.40.4(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(svelte@5.28.2)
+        specifier: ^0.41.0
+        version: 0.41.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(svelte@5.28.2)
       vite:
         specifier: ^6.2.2
         version: 6.3.4(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
@@ -3143,8 +3143,8 @@ packages:
   vfile@6.0.3:
     resolution: {integrity: sha512-KzIbH/9tXat2u30jf+smMwFCsno4wHVdNmzFyL+T/L3UGqqk6JKfVqOFOZEpZSHADH1k40ab6NUIXZq422ov3Q==}
 
-  virtua@0.40.4:
-    resolution: {integrity: sha512-eV55eOm2b5Lzc9upivqIcAFPgfBrfcVrppW9T4vhTH+QAbaxfw5ypq25apkG83T5FuiFEoQYnefix1fQyx/GXQ==}
+  virtua@0.41.0:
+    resolution: {integrity: sha512-P8XJhPAz3mNrxAjPc+NRvD8a8+JtInKgHXuvtucThXW93U1ztUKJ2TDCAMaCPRY0CQCR465mYcOf26yQkCHWEw==}
     peerDependencies:
       react: '>=16.14.0'
       react-dom: '>=16.14.0'
@@ -6588,7 +6588,7 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.2
 
-  virtua@0.40.4(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(svelte@5.28.2):
+  virtua@0.41.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(svelte@5.28.2):
     optionalDependencies:
       react: 19.1.0
       react-dom: 19.1.0(react@19.1.0)
