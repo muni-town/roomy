@@ -123,14 +123,15 @@ We recommend [fnm](https://github.com/Schniz/fnm) for installing and managing No
    ```sh
    pnpm install
    ```
-3. Run build to generate required Svelte-kit dependencies
-   ```sh
-   pnpm run build
-   ```
-4. Run build to generate required Svelte-kit dependencies
+3. Run dev to start svelte-kit server
+   
+   You can safely ignore the svelte-kit dependencies warning on first run (they will be generated)
    ```sh
    pnpm run dev
    ```
+4. Join the Roomy developer space
+
+  Sign into the app via Bluesky, then [Join the Developer Space](https://roomy.chat/-/roomy.chat/leaf:r1mbft1jhmep7atcn3mfy7mx0tkzg71dqe4c73htk0w2v6pn9zf0)
 
    If you run into any issues during this process, please notify the team asap. [Discord](https://discord.gg/wfqBzKjac3) is the fastest, but commenting on [this discussion](https://github.com/muni-town/roomy/discussions/224) is a close second.
 
@@ -144,6 +145,11 @@ Take a look at [our issues](https://github.com/muni-town/roomy/issues) and let u
 [![Discord][discord-shield]][discord-url]
 
 Join the conversation on Discord until we make the move to Roomy, once we've finished a number of features.
+
+
+## Tips
+
+The core of Roomy runs on the Roomy SDK. You can read the [docs here](https://muni-town.github.io/roomy/). The SDK is also included inside this repo (/packages/sdk/).
 
 
 ## Devlog
