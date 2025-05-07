@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { navigate } from "$lib/utils.svelte";
   import { Button } from "bits-ui";
@@ -30,14 +30,14 @@
   let isNewSpaceDialogOpen = $state(false);
 
   async function createSpace() {
-    if (!newSpaceName || !user.agent || !g.roomy) return;
-    const space = await g.roomy.create(Space);
+    if (!newSpaceName || !user.agent || !globalState.roomy) return;
+    const space = await globalState.roomy.create(Space);
     space.name = newSpaceName;
     space.admins((x) => user.agent && x.push(user.agent.assertDid));
     space.commit();
 
-    g.roomy.spaces.push(space);
-    g.roomy.commit();
+    globalState.roomy.spaces.push(space);
+    globalState.roomy.commit();
     newSpaceName = "";
 
     isNewSpaceDialogOpen = false;

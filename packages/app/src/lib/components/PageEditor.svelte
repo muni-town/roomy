@@ -11,7 +11,7 @@
   import { WikiPage } from "@roomy-chat/sdk";
 
   import { page } from "$app/state";
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import { outerWidth } from "svelte/reactivity/window";
@@ -327,7 +327,7 @@
 
   // Filter channels and threads based on hash query
   async function updateFilteredItems() {
-    if (!g.space) {
+    if (!globalState.space) {
       filteredItems = [];
       return;
     }
@@ -338,7 +338,7 @@
 
     // Add channels
 
-    for (const channel of await g.space.channels.items()) {
+    for (const channel of await globalState.space.channels.items()) {
       if (channel.name && channel.name.toLowerCase().includes(query)) {
         items.push({
           id: channel.id,
@@ -348,7 +348,7 @@
       }
     }
 
-    for (const thread of await g.space.threads.items()) {
+    for (const thread of await globalState.space.threads.items()) {
       if (thread.name.toLowerCase().includes(query)) {
         items.push({
           id: thread.id,
@@ -654,7 +654,7 @@
   });
 
   async function savePageContent() {
-    if (!editor || !g.space || !pg) return;
+    if (!editor || !globalState.space || !pg) return;
     try {
       const res = JSON.stringify(editor.document);
       pg.bodyJson = res;
@@ -790,7 +790,7 @@
       </div>
     {/if}
 
-    {#if g.isAdmin}
+    {#if globalState.isAdmin}
       <button
         class="dz-btn dz-btn-error dz-delete-btn group-hover:block"
         onclick={showDeleteDialog}

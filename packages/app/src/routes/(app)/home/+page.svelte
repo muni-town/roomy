@@ -2,13 +2,13 @@
   import Icon from "@iconify/svelte";
   import { Button } from "bits-ui";
 
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { derivePromise } from "$lib/utils.svelte";
 
   const spaces = derivePromise(
     undefined,
-    async () => await g.roomy?.spaces.items(),
+    async () => await globalState.roomy?.spaces.items(),
   );
 </script>
 

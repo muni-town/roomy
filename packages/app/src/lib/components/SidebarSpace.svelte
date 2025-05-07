@@ -8,7 +8,7 @@
   import { derivePromise } from "$lib/utils.svelte";
   import { Image } from "@roomy-chat/sdk";
   import TooltipPortal from "./TooltipPortal.svelte";
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
   import { page } from "$app/stores";
 
   type Props = {
@@ -23,8 +23,8 @@
   let tooltipPosition = $state({ x: 0, y: 0 });
 
   const spaceImage = derivePromise(null, async () => {
-    if (space.image && g.roomy) {
-      return (await g.roomy.open(Image, space.image)) as Image;
+    if (space.image && globalState.roomy) {
+      return (await globalState.roomy.open(Image, space.image)) as Image;
     }
   });
 </script>
@@ -42,8 +42,8 @@
       label: "Leave Space",
       icon: "mdi:exit-to-app",
       onselect: () => {
-        g.roomy?.spaces.remove(i);
-        g.roomy?.commit();
+        globalState.roomy?.spaces.remove(i);
+        globalState.roomy?.commit();
       },
     },
   ]}

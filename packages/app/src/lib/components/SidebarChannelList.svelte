@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
 
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
 
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
@@ -42,7 +42,7 @@
               <span class="truncate">{item.name}</span>
             </Accordion.Trigger>
 
-            {#if g.isAdmin}
+            {#if globalState.isAdmin}
               <Dialog
                 title="Channel Settings"
                 bind:isDialogOpen={showCategoryDialog}
@@ -99,7 +99,7 @@
                   class="flex flex-col gap-2"
                 >
                   {#each category.channels.ids() as channelId}
-                    {#await g.roomy && g.roomy.open(Channel, channelId) then channel}
+                    {#await globalState.roomy && globalState.roomy.open(Channel, channelId) then channel}
                       {#if !channel?.softDeleted}
                         <ToggleGroup.Item
                           onclick={() =>

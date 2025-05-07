@@ -3,7 +3,7 @@
   import Dialog from "$lib/components/Dialog.svelte";
   import { Button, Tabs, ToggleGroup } from "bits-ui";
 
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
 
   import { derivePromise, Toggle } from "$lib/utils.svelte";
   import { Category, Channel } from "@roomy-chat/sdk";
@@ -15,34 +15,38 @@
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
 
   let availableThreads = derivePromise([], async () =>
-    ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
+    ((await globalState.space?.threads.items()) || []).filter(
+      (x) => !x.softDeleted,
+    ),
   );
   const wikis = derivePromise([], async () =>
-    ((await g.space?.wikipages.items()) || []).filter((x) => !x.softDeleted),
+    ((await globalState.space?.wikipages.items()) || []).filter(
+      (x) => !x.softDeleted,
+    ),
   );
 
   let categories = derivePromise([], async () => {
-    if (!g.space) return [];
-    return (await g.space.sidebarItems.items())
+    if (!globalState.space) return [];
+    return (await globalState.space.sidebarItems.items())
       .map((x) => x.tryCast(Category) as Category)
       .filter((x) => !!x);
   });
 
   let sidebarItems = derivePromise([], async () => {
-    if (!g.space) return [];
-    return await g.space.sidebarItems.items();
+    if (!globalState.space) return [];
+    return await globalState.space.sidebarItems.items();
   });
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
   async function createCategory() {
-    if (!g.roomy || !g.space) return;
+    if (!globalState.roomy || !globalState.space) return;
 
-    const category = await g.roomy.create(Category);
+    const category = await globalState.roomy.create(Category);
     category.name = newCategoryName;
-    category.appendAdminsFrom(g.space);
+    category.appendAdminsFrom(globalState.space);
     category.commit();
-    g.space.sidebarItems.push(category);
-    g.space.commit();
+    globalState.space.sidebarItems.push(category);
+    globalState.space.commit();
 
     showNewCategoryDialog = false;
   }
@@ -51,20 +55,20 @@
   let newChannelName = $state("");
   let newChannelCategory = $state(undefined) as undefined | Category;
   async function createChannel() {
-    if (!g.roomy || !g.space) return;
-    const channel = await g.roomy.create(Channel);
-    channel.appendAdminsFrom(g.space);
+    if (!globalState.roomy || !globalState.space) return;
+    const channel = await globalState.roomy.create(Channel);
+    channel.appendAdminsFrom(globalState.space);
     channel.name = newChannelName;
     channel.commit();
 
-    g.space.channels.push(channel);
+    globalState.space.channels.push(channel);
     if (newChannelCategory) {
       newChannelCategory.channels.push(channel);
       newChannelCategory.commit();
     } else {
-      g.space.sidebarItems.push(channel);
+      globalState.space.sidebarItems.push(channel);
     }
-    g.space.commit();
+    globalState.space.commit();
 
     newChannelCategory = undefined;
     newChannelName = "";
@@ -85,15 +89,17 @@
   >
     <ToggleSidebarIcon class="pr-2" open={isSpacesVisible} />
     <h1 class="text-sm font-bold text-base-content truncate">
-      {g.space?.name && g.space?.name !== "Unnamed" ? g.space.name : ""}
+      {globalState.space?.name && globalState.space?.name !== "Unnamed"
+        ? globalState.space.name
+        : ""}
     </h1>
 
-    {#if g.isAdmin}
+    {#if globalState.isAdmin}
       <SpaceSettingsDialog />
     {/if}
   </div>
 
-  {#if g.isAdmin}
+  {#if globalState.isAdmin}
     <menu
       class="dz-menu p-0 w-full justify-between px-2 dz-join dz-join-vertical"
     >
@@ -184,7 +190,7 @@
         />
       </Tabs.Trigger>
       <Tabs.Trigger
-        disabled={!g.roomy}
+        disabled={!globalState.roomy}
         value="chat"
         class="grow dz-tab flex gap-2"
       >
@@ -202,10 +208,14 @@
           { key: "pages", route: "page", items: wikis.value },
           { key: "topics", route: "thread", items: availableThreads.value },
         ]}
-        active={g.channel?.id ?? ""}
+        active={globalState.channel?.id ?? ""}
       />
     {:else}
-      <ToggleGroup.Root class="px-2" type="single" value={g.channel?.id}>
+      <ToggleGroup.Root
+        class="px-2"
+        type="single"
+        value={globalState.channel?.id}
+      >
         <SidebarChannelList {sidebarItems} />
       </ToggleGroup.Root>
     {/if}
