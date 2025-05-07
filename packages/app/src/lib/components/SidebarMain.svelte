@@ -13,12 +13,31 @@
   import AccordionTree from "./AccordionTree.svelte";
   import SidebarChannelList from "./SidebarChannelList.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
+  import { page } from "$app/state";
 
   let availableThreads = derivePromise([], async () =>
-    ((await g.space?.threads.items()) || []).filter((x) => !x.softDeleted),
+    ((await g.space?.threads.items()) || [])
+      .filter((x) => !x.softDeleted)
+      .map((x) => ({
+        target: {
+          space: page.params.space!,
+          thread: x.id,
+        },
+        name: x.name,
+        id: x.id,
+      })),
   );
-  const wikis = derivePromise([], async () =>
-    ((await g.space?.wikipages.items()) || []).filter((x) => !x.softDeleted),
+  const pages = derivePromise([], async () =>
+    ((await g.space?.wikipages.items()) || [])
+      .filter((x) => !x.softDeleted)
+      .map((x) => ({
+        target: {
+          space: page.params.space!,
+          page: x.id,
+        },
+        name: x.name,
+        id: x.id,
+      })),
   );
 
   let categories = derivePromise([], async () => {
@@ -198,9 +217,9 @@
   <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-clip">
     {#if tab === "board"}
       <AccordionTree
-        items={[
-          { key: "pages", route: "page", items: wikis.value },
-          { key: "topics", route: "thread", items: availableThreads.value },
+        sections={[
+          { key: "pages", items: pages.value },
+          { key: "topics", items: availableThreads.value },
         ]}
         active={g.channel?.id ?? ""}
       />
