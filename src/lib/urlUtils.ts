@@ -1,5 +1,4 @@
-import linkifyit from "linkify-it";
-const linkify = new linkifyit();
+import { linkify } from "$lib/linkify";
 
 /**
  * Converts plain text URLs in a string to HTML anchor tags,

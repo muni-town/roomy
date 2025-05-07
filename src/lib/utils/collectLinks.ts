@@ -1,12 +1,15 @@
 import type { JSONContent } from "@tiptap/core";
-
-const urlRegex =
-  /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/gi;
+import { linkify } from "$lib/linkify";
 /**
  * return an array of urls found in a plain text string
  * */
 export function collectLinks(content = "") {
-  return content?.match(urlRegex) ?? [];
+  if (!linkify.pretest(content)) return false;
+  let links = linkify.match(content)?.map((m) => m.url);
+
+  //dedupe
+  links = [...new Set(links).values()];
+  return links;
 }
 
 export function tiptapJsontoString(jsonContent: JSONContent | string) {
@@ -24,6 +27,3 @@ export function tiptapJsontoString(jsonContent: JSONContent | string) {
     return text;
   })[0];
 }
-
-// import { convertUrlsToLinks } from "$lib/urlUtils";
-// const html = convertUrlsToLinks(content)
