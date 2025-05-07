@@ -34,6 +34,27 @@ export function navigate(target: NavigationTarget) {
   }
 }
 
+/** A helper function to create a route to a specific roomy object, like a space, channel, or thread */
+export function navigateSync(target: NavigationTarget) {
+  if (target == "home") {
+    return "/home";
+  } else if ("space" in target) {
+    let url = ``;
+    if (target.space.includes(".")) {
+      url += "/-";
+    }
+    url += `/${target.space}`;
+    if (target.channel) {
+      url += `/${target.channel}`;
+    } else if (target.thread) {
+      url += `/thread/${target.thread}`;
+    } else if (target.page) {
+      url += `/page/${target.page}`;
+    }
+    return url;
+  }
+}
+
 const handleCache: { [did: string]: DidDocument } = {};
 export async function resolveDid(
   did: string,
