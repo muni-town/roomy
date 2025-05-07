@@ -15,7 +15,7 @@ export const GET: RequestHandler = async ({ url }) => {
 
     if (res.ok) {
       const data = await res.json();
-      return json(data);
+      return json(data[1]);
     } else {
       console.error(
         `Embed server error: ${res.status} ${res.statusText}: for url ${body}`,

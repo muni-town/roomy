@@ -5,13 +5,13 @@
 </script>
 
 <div
-  class="flex border rounded-xs border-base-content/30 bg-base-content/5 max-w-[60ch] justify-stretch gap-4 flex-row"
+  class="flex border rounded-xs text-sm border-base-content/30 bg-base-content/5 max-w-[60ch] justify-stretch gap-4 flex-row"
 >
   <div class="min-w-0 flex-1 pl-3 py-2 flex flex-col">
     <p class="mb-1 mt-1 line-clamp-2 leading-snug">
       <b class="font-bold">{data.t}</b>
     </p>
-    <p class="my-0 line-clamp-4 text-sm leading-tight">{cr(data.d)}</p>
+    <p class="my-0 line-clamp-4 leading-tight">{cr(data.d)}</p>
     <div class="grow py-2"></div>
     {#if data.footer}
       <p class="mt-2 mb-0 text-sm">{data.footer.t}</p>

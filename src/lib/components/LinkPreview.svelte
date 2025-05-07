@@ -23,14 +23,26 @@
   };
 
   let { message }: Props = $props();
-  const links = $derived.by(() =>
-    collectLinks(tiptapJsontoString(message.bodyJson)).map((url) => {
+
+  const getLinkData = async (url: string) => {
+    try {
+      const res = await fetch(`/api/link-preview?url=${url}`);
+      if (res.ok) {
+        const data = await res.json();
+        return data;
+      }
+    } catch (e) {
+      console.warn(e);
+    }
+  };
+  const links = $derived(
+    (collectLinks(tiptapJsontoString(message.bodyJson)) || []).map((url) => {
       const value = $state({
-        url,
+        url: url.replace("http:", "https:"),
         data: undefined,
       });
-      fetch(`/api/link-preview?url=${url}`).then(async (res) => {
-        value.data = (await res.json())[1];
+      getLinkData(url).then((data) => {
+        value.data = data;
       });
       return value;
     }),
