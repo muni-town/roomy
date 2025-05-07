@@ -1,5 +1,13 @@
 <script lang="ts">
-  let { data, url } = $props();
+  import type { Embed } from "$lib/types/embed-sdk";
+
+  let {
+    data,
+    url,
+  }: {
+    data: Embed;
+    url: string;
+  } = $props();
   const cr = (value: string | undefined, seperator = ""): string =>
     value !== undefined ? ` ${seperator} ${value}` : "";
 </script>
@@ -24,12 +32,12 @@
       {cr(data.au?.n, "-")} | {url}
     </a>
   </div>
-  {#if data.imgs && data.imgs.length}
+  {#if data.imgs && data.imgs.length > 0}
     <div class=" w-full flex-shrink-0 max-w-40">
       <img
         class="my-0 h-full w-full object-cover"
         alt="link preview"
-        src={data.imgs[0].u}
+        src={data.imgs[0]?.u}
       />
     </div>
   {/if}

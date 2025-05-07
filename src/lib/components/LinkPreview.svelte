@@ -17,6 +17,8 @@
   import toast from "svelte-french-toast";
   import LinkCard from "./LinkCard.svelte";
   import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
+  import { getLinkEmbedData } from "$lib/utils/getLinkEmbedData";
+  import type { Embed } from "$lib/types/embed-sdk";
 
   type Props = {
     message: Message;
@@ -24,25 +26,14 @@
 
   let { message }: Props = $props();
 
-  const getLinkData = async (url: string) => {
-    try {
-      const res = await fetch(`/api/link-preview?url=${url}`);
-      if (res.ok) {
-        const data = await res.json();
-        return data;
-      }
-    } catch (e) {
-      console.warn(e);
-    }
-  };
   const links = $derived(
     (collectLinks(tiptapJsontoString(message.bodyJson)) || []).map((url) => {
       const value = $state({
         url: url.replace("http:", "https:"),
-        data: undefined,
+        data: undefined as Embed | undefined,
       });
-      getLinkData(url).then((data) => {
-        value.data = data;
+      getLinkEmbedData(url).then((data) => {
+        if (data) value.data = data;
       });
       return value;
     }),
