@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  pull_request:
 
 jobs:
   # Build job
@@ -21,10 +22,11 @@ jobs:
         id: deployment
         uses: actions/upload-pages-artifact@v3
         with:
-          path: packages/api-docs/dist
+          path: packages/sdk-docs/dist
 
   # Deployment job
   deploy:
+    if: github.event_name == 'push' && github.ref_name == 'main'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
