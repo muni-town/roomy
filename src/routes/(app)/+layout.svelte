@@ -5,6 +5,8 @@
 
   import posthog from "posthog-js";
   import { Toaster } from "svelte-french-toast";
+
+  // @ts-ignore used for debugging
   import { RenderScan } from "svelte-render-scan";
 
   import { g } from "$lib/global.svelte";

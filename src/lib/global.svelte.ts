@@ -7,9 +7,9 @@ import {
   Thread,
   StorageManager,
 } from "@roomy-chat/sdk";
-import { SveltePeer } from "@muni-town/leaf-svelte"
-import { indexedDBStorageAdapter } from "@muni-town/leaf-storage-indexeddb"
-import { webSocketSyncer } from "@muni-town/leaf-sync-ws"
+import { SveltePeer } from "@muni-town/leaf-svelte";
+import { indexedDBStorageAdapter } from "@muni-town/leaf-storage-indexeddb";
+import { webSocketSyncer } from "@muni-town/leaf-sync-ws";
 
 import { user } from "./user.svelte";
 import type { Agent } from "@atproto/api";
@@ -45,6 +45,8 @@ export let g = $state({
 });
 (globalThis as any).g = g;
 
+const entityId = new EntityId();
+
 $effect.root(() => {
   // Redirect to the `/-/space.domain` or `/leaf:id` as appropriate.
   $effect(() => {
@@ -71,7 +73,7 @@ $effect.root(() => {
       initRoomy(user.agent).then((roomy) => (g.roomy = roomy));
     } else {
       // Set a blank roomy instance just to avoid having to set it to undefined.
-      Roomy.init(new SveltePeer(), new EntityId()).then((roomy) => {
+      Roomy.init(new SveltePeer(), entityId).then((roomy) => {
         g.roomy = roomy;
       });
     }
@@ -122,24 +124,21 @@ $effect.root(() => {
     if (!g.roomy) return;
 
     if (g.space && page.params.channel) {
-      try {
-        g.roomy
-          .open(Channel, page.params.channel as EntityIdStr)
-          .then((channel) => (g.channel = channel));
-      } catch (e) {
-        console.error("Error opening channel:", e);
-        navigate("home");
-      }
+      g.roomy
+        .open(Channel, page.params.channel as EntityIdStr)
+        .then((channel) => (g.channel = channel))
+        .catch((e) => {
+          console.error("Error opening channel:", e);
+          navigate("home");
+        });
     } else if (g.space && page.params.thread) {
-      try {
-        g.roomy
-          .open(Thread, page.params.thread as EntityIdStr)
-          .then((thread) => (g.channel = thread));
-      } catch (e) {
-        console.error("Error opening thread:", e);
-        navigate("home");
-      }
-    } else {
+      g.roomy
+        .open(Thread, page.params.thread as EntityIdStr)
+        .then((thread) => (g.channel = thread))
+        .catch((e) => {
+          console.error("Error opening thread:", e);
+          navigate("home");
+        });
       g.channel = undefined;
     }
   });
@@ -174,7 +173,9 @@ async function initRoomy(agent: Agent): Promise<Roomy> {
     },
   );
   if (!resp.success) {
-    throw new Error(`Error obtaining router auth token ${resp}`);
+    throw new Error(
+      `Error obtaining router auth token ${JSON.stringify(resp)}`,
+    );
   }
   const token = resp.data.token as string;
 
