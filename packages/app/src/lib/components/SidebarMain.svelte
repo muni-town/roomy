@@ -16,7 +16,7 @@
   import { page } from "$app/state";
 
   let availableThreads = derivePromise([], async () =>
-    ((await g.space?.threads.items()) || [])
+    ((await globalState.space?.threads.items()) || [])
       .filter((x) => !x.softDeleted)
       .map((x) => ({
         target: {
@@ -28,7 +28,7 @@
       })),
   );
   const pages = derivePromise([], async () =>
-    ((await g.space?.wikipages.items()) || [])
+    ((await globalState.space?.wikipages.items()) || [])
       .filter((x) => !x.softDeleted)
       .map((x) => ({
         target: {
