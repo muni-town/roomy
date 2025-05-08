@@ -25,6 +25,11 @@
   }
 }
 
+/* Increase font size of inputs so mobile devices don't zoom on focus */
+input {
+  font-size: 16px;
+}
+
 html {
   min-height: calc(100% + env(safe-area-inset-top));
   padding: env(safe-area-inset-top) env(safe-area-inset-right)
