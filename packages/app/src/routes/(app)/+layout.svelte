@@ -9,7 +9,7 @@
   // @ts-ignore used for debugging
   import { RenderScan } from "svelte-render-scan";
 
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { derivePromise, Toggle } from "$lib/utils.svelte";
   import ServerBar from "$lib/components/ServerBar.svelte";
@@ -20,7 +20,7 @@
   const { children } = $props();
   const spaces = derivePromise(
     [],
-    async () => (await g.roomy?.spaces.items()) || [],
+    async () => (await globalState.roomy?.spaces.items()) || [],
   );
 
   let themeColor = $state("synthwave"); // defualt theme color

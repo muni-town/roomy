@@ -28,12 +28,12 @@ if (import.meta.hot) {
   });
 }
 
-export let g = $state({
+export let globalState = $state({
   // Create an empty roomy instance by default, it will be updated when the user logs in.
   roomy: undefined as Roomy | undefined,
   /**
    * This is set to the value page.params.space once the space has been loaded. It allows other code
-   * to check whether or not `g.space` has been loaded after a route change or if it is still set to
+   * to check whether or not `globalState.space` has been loaded after a route change or if it is still set to
    * the value from the previous route.
    * */
   loadedSpace: undefined as string | undefined,
@@ -43,7 +43,6 @@ export let g = $state({
   isBanned: false,
   currentCatalog: "home",
 });
-(globalThis as any).g = g;
 
 const entityId = new EntityId();
 
@@ -70,11 +69,11 @@ $effect.root(() => {
   $effect(() => {
     if (user.agent && user.catalogId.value) {
       // Initialize new roomy instance
-      initRoomy(user.agent).then((roomy) => (g.roomy = roomy));
+      initRoomy(user.agent).then((roomy) => (globalState.roomy = roomy));
     } else {
       // Set a blank roomy instance just to avoid having to set it to undefined.
       Roomy.init(new SveltePeer(), entityId).then((roomy) => {
-        g.roomy = roomy;
+        globalState.roomy = roomy;
       });
     }
   });
@@ -83,11 +82,11 @@ $effect.root(() => {
   $effect(() => {
     page.url.pathname;
     page.params.space;
-    if (!g.roomy) return;
+    if (!globalState.roomy) return;
 
     untrack(() => {
       if (page.url.pathname === "/home") {
-        g.currentCatalog = "home";
+        globalState.currentCatalog = "home";
       } else if (page.params.space) {
         if (page.params.space.includes(".")) {
           resolveLeafId(page.params.space).then(async (id) => {
@@ -97,61 +96,64 @@ $effect.root(() => {
               return;
             }
 
-            g.roomy!.open(Space, id)
+            globalState
+              .roomy!.open(Space, id)
               .then((space) => {
-                g.loadedSpace = page.params.space!;
-                g.currentCatalog = id;
-                g.space = space;
+                globalState.loadedSpace = page.params.space!;
+                globalState.currentCatalog = id;
+                globalState.space = space;
               })
               .catch((e) => {
                 console.error(e);
               });
           });
         } else {
-          g.roomy!.open(Space, page.params.space as EntityIdStr).then(
-            (space) => {
-              g.loadedSpace = page.params.space!;
-              g.currentCatalog = page.params.space!;
-              g.space = space;
-            },
-          );
+          globalState
+            .roomy!.open(Space, page.params.space as EntityIdStr)
+            .then((space) => {
+              globalState.loadedSpace = page.params.space!;
+              globalState.currentCatalog = page.params.space!;
+              globalState.space = space;
+            });
         }
       }
     });
   });
 
   $effect(() => {
-    if (!g.roomy) return;
+    if (!globalState.roomy) return;
 
-    if (g.space && page.params.channel) {
-      g.roomy
+    if (globalState.space && page.params.channel) {
+      globalState.roomy
         .open(Channel, page.params.channel as EntityIdStr)
-        .then((channel) => (g.channel = channel))
+        .then((channel) => (globalState.channel = channel))
         .catch((e) => {
           console.error("Error opening channel:", e);
           navigate("home");
         });
-    } else if (g.space && page.params.thread) {
-      g.roomy
+    } else if (globalState.space && page.params.thread) {
+      globalState.roomy
         .open(Thread, page.params.thread as EntityIdStr)
-        .then((thread) => (g.channel = thread))
+        .then((thread) => (globalState.channel = thread))
         .catch((e) => {
           console.error("Error opening thread:", e);
           navigate("home");
         });
-      g.channel = undefined;
+      globalState.channel = undefined;
     }
   });
 
   $effect(() => {
-    if (g.space && user.agent) {
-      g.isAdmin = g.space.admins((x) =>
+    if (globalState.space && user.agent) {
+      globalState.isAdmin = globalState.space.admins((x) =>
         x.toArray().includes(user.agent!.assertDid),
       );
-      g.isBanned = !!g.space.bans((x) => x.get(user.agent!.assertDid));
+      globalState.isBanned = !!globalState.space.bans((x) =>
+        x.get(user.agent!.assertDid),
+      );
     } else {
-      g.isAdmin = false;
-      g.isBanned = false;
+      globalState.isAdmin = false;
+      globalState.isBanned = false;
     }
   });
 });

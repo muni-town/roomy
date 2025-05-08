@@ -18,10 +18,13 @@
     timeline: Timeline;
   } = $props();
 
+  let viewport: HTMLDivElement = $state(null!);
+  let virtualizer: Virtualizer<string> | undefined = $state();
+  let messagesLoaded = $state(false);
+
   setContext("scrollToMessage", (id: EntityIdStr) => {
     const idx = timeline.timeline.ids().indexOf(id);
-    if (idx !== -1 && virtualizer)
-      virtualizer.scrollToIndex(idx, { smooth: true });
+    if (idx !== -1 && virtualizer) virtualizer.scrollToIndex(idx);
   });
 
   const messages = derivePromise([], async () =>
@@ -30,18 +33,20 @@
       .filter((x) => !!x),
   );
 
-  // ScrollArea
-  let viewport: HTMLDivElement = $state(null!);
-  let virtualizer: Virtualizer<string> | undefined = $state();
-
   $effect(() => {
     page.route; // Scroll-to-end when route changes
     messages.value; // Scroll to end when message list changes.
-    if (viewport) {
-      setTimeout(() => {
-        if (virtualizer) virtualizer.scrollToIndex(messages.value.length - 1);
-      });
-    }
+
+    if (!viewport || !virtualizer) return;
+
+    virtualizer.scrollToIndex(messages.value.length - 1, { align: "end" });
+    setTimeout(() => {
+      messagesLoaded = true;
+    }, 3000);
+    // TODO: remove this artificial timeout
+    // Right now (May 2025)
+    // This is needed to give a nicer user experience when
+    // we navigate to a new space and load it for the first time.
   });
 
   function shouldMergeWithPrevious(
@@ -76,10 +81,22 @@
   }
 </script>
 
-<ScrollArea.Root type="scroll" class="h-full overflow-hidden relative">
-  <ScrollArea.Viewport bind:ref={viewport} class="w-full max-w-full h-full">
-    <ol class="flex flex-col gap-2 max-w-full">
-      <!--
+<ScrollArea.Root type="scroll" class="h-full overflow-hidden">
+  {#if !messagesLoaded}
+    <!-- Important: This area takes the place of the chat which pushes chat offscreen
+       which allows it to load then pop into place once the spinner is gone. -->
+    <div class="grid items-center justify-center h-full w-full bg-transparent">
+      <span class="dz-loading dz-loading-spinner"></span>
+    </div>
+  {/if}
+
+  <ScrollArea.Viewport
+    bind:ref={viewport}
+    class="relative max-w-full w-full h-full"
+  >
+    <div class="flex flex-col-reverse w-full h-full">
+      <ol class="flex flex-col gap-2 max-w-ful">
+        <!--
         This use of `key` needs explaining. `key` causes the components below
         it to be deleted and re-created when the expression passed to it is changed.
         This means that every time the `viewport` binding si updated, the virtualizer
@@ -94,33 +111,34 @@
         assigned, so that it's scroll integration works properly.
       -->
 
-      {#key viewport}
-        <Virtualizer
-          bind:this={virtualizer}
-          data={messages.value}
-          getKey={(k, _) => k}
-          scrollRef={viewport}
-        >
-          {#snippet children(message: Message | Announcement, index: number)}
-            {@const previousMessage =
-              index > 0 ? messages.value[index - 1] : undefined}
-            {#if !message.softDeleted}
-              <ChatMessage
-                {message}
-                mergeWithPrevious={shouldMergeWithPrevious(
-                  message,
-                  previousMessage,
-                )}
-              />
-            {:else}
-              <p class="italic text-error text-sm">
-                This message has been deleted
-              </p>
-            {/if}
-          {/snippet}
-        </Virtualizer>
-      {/key}
-    </ol>
+        {#key viewport}
+          <Virtualizer
+            bind:this={virtualizer}
+            data={messages.value}
+            getKey={(message) => message.id}
+            scrollRef={viewport}
+          >
+            {#snippet children(message: Message | Announcement, index: number)}
+              {@const previousMessage =
+                index > 0 ? messages.value[index - 1] : undefined}
+              {#if !message.softDeleted}
+                <ChatMessage
+                  {message}
+                  mergeWithPrevious={shouldMergeWithPrevious(
+                    message,
+                    previousMessage,
+                  )}
+                />
+              {:else}
+                <p class="italic text-error text-sm">
+                  This message has been deleted
+                </p>
+              {/if}
+            {/snippet}
+          </Virtualizer>
+        {/key}
+      </ol>
+    </div>
   </ScrollArea.Viewport>
   <ScrollArea.Scrollbar
     orientation="vertical"

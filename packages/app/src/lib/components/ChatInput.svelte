@@ -6,7 +6,7 @@
   import Image from "@tiptap/extension-image";
   import { initUserMention, initSpaceContextMention } from "$lib/tiptap/editor";
   import { type Item, initKeyboardShortcutHandler } from "$lib/tiptap/editor";
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
   import { createCompleteExtensions } from "$lib/tiptap/editor";
   import { user } from "$lib/user.svelte";
   import { toast } from "svelte-french-toast";
@@ -546,7 +546,7 @@
   });
 </script>
 
-{#if !g.isBanned}
+{#if !globalState.isBanned}
   <div class="flex items-center gap-2">
     <!-- Plus icon button for image upload -->
     {#if !editMode}
