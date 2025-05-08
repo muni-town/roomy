@@ -89,7 +89,6 @@ jobs:
         if: ${{ matrix.android }}
         run: |
           rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
-          cargo tauri android init
           cargo tauri android build --apk
           cp ./src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk ./src-tauri/gen/android/app/build/outputs/apk/universal/release/roomy-chat_${{ env.APP_VERSION}}.apk
         env:
