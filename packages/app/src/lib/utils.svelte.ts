@@ -3,6 +3,7 @@ import { decodeBase32 } from "./base32";
 import type { EntityIdStr } from "@muni-town/leaf";
 import { goto } from "$app/navigation";
 import type { JSONContent } from "@tiptap/core";
+import { type ThemeName } from "./themes";
 
 /** Cleans a handle string by removing any characters not valid for a domain. */
 export function cleanHandle(handle: string): string {
@@ -162,6 +163,14 @@ export const Toggle = ({
     },
   };
 };
+
+export function setTheme(theme: ThemeName) {
+  window.localStorage.setItem("theme", theme);
+  document.documentElement.setAttribute("data-theme", theme);
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute("content", theme);
+}
 
 // export function unreadCount<Channel>(
 //   doc: Doc<Channel>,

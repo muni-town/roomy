@@ -3,6 +3,7 @@
   import { themes, type ThemeName } from "../themes";
   import Icon from "@iconify/svelte";
   import { onMount } from "svelte";
+  import { setTheme } from "$lib/utils.svelte";
 
   let currentTheme = $state<ThemeName>();
 
@@ -40,17 +41,16 @@
     };
   });
 
-  function setTheme(theme: ThemeName) {
-    window.localStorage.setItem("theme", theme);
-    document.documentElement.setAttribute("data-theme", theme);
+  function handleSetTheme(theme: ThemeName) {
     currentTheme = theme;
+    setTheme(theme);
   }
 </script>
 
 <Select.Root
   type="single"
   items={selectItems}
-  onValueChange={(theme) => setTheme(theme as ThemeName)}
+  onValueChange={(theme) => handleSetTheme(theme as ThemeName)}
   value={currentTheme}
 >
   <Select.Trigger
