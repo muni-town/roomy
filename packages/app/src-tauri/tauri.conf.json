@@ -36,6 +36,11 @@
   },
   "plugins": {
     "deep-link": {
+      "mobile": [
+        {
+          "host": "roomy.chat"
+        }
+      ],
       "desktop": {
         "schemes": ["chat.roomy", "roomy"]
       }
