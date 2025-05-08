@@ -85,12 +85,22 @@ jobs:
           cargo install tauri-cli --version "^2.0.0" --locked
           cargo tauri icon -o src-tauri/icons static/icon-512.png
 
+      - name: Setup Android Signing
+        if: ${{ matrix.android }}
+        run: |
+          cd ./packages/app/src-tauri/gen/android
+          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
+          echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
+          # generate keystore.jks locally and add to secrets with `base64 -i keystore.jks`
+          base64 -d <<< "${{ secrets.ANDROID_KEY_BASE64 }}" > $RUNNER_TEMP/keystore.jks
+          echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
+
       - name: Build Android
         if: ${{ matrix.android }}
         run: |
           rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
           cargo tauri android build --apk
-          cp ./src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk ./src-tauri/gen/android/app/build/outputs/apk/universal/release/roomy-chat_${{ env.APP_VERSION}}.apk
+          cp ./src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk ./src-tauri/gen/android/app/build/outputs/apk/universal/release/roomy-chat_${{ env.APP_VERSION}}.apk
         env:
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
 
