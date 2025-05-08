@@ -57,10 +57,13 @@ export const atproto = {
       // In prod, we fetch the `/oauth-client.json` which is expected to be deployed alongside the
       // static build.
       // native client metadata is not reuqired to be on the same domin as client_id,
-      // so it can always use the deployed metadata 
-      const resp = await fetch(`/oauth-client${IN_TAURI ? '-native' : ''}.json`, {
-        headers: [["accept", "application/json"]],
-      });
+      // so it can always use the deployed metadata
+      const resp = await fetch(
+        `/oauth-client${IN_TAURI ? "-native" : ""}.json`,
+        {
+          headers: [["accept", "application/json"]],
+        },
+      );
       clientMetadata = await resp.json();
     }
 

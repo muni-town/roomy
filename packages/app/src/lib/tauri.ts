@@ -1,4 +1,4 @@
-export const IN_TAURI = '__TAURI__' in window
+export const IN_TAURI = "__TAURI__" in window;
 
 /**
  * Command arguments.
@@ -27,8 +27,13 @@ interface InvokeOptions {
  *
  * @since 1.0.0
  */
-export async function invoke<T>(cmd: string, args?: InvokeArgs, options?: InvokeOptions): Promise<T | null> {
-  if (!('__TAURI__' in window)) throw Error('This function can only run in tauri')
+export async function invoke<T>(
+  cmd: string,
+  args?: InvokeArgs,
+  options?: InvokeOptions,
+): Promise<T | null> {
+  if (!("__TAURI__" in window))
+    throw Error("This function can only run in tauri");
 
-  return await (window.__TAURI__ as any).core.invoke(cmd, args, options)
+  return await (window.__TAURI__ as any).core.invoke(cmd, args, options);
 }
