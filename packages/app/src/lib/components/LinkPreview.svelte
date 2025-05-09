@@ -11,7 +11,7 @@
   import AvatarImage from "./AvatarImage.svelte";
   import { type Item } from "$lib/tiptap/editor";
   import { Message } from "@roomy-chat/sdk";
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
   import type { JSONContent } from "@tiptap/core";
   import ChatInput from "./ChatInput.svelte";
   import toast from "svelte-french-toast";
@@ -58,7 +58,7 @@
 
   let mayDelete = $derived(
     message.matches(Message) &&
-      (g.isAdmin ||
+      (globalState.isAdmin ||
         (user.agent &&
           message
             .forceCast(Message)
@@ -365,7 +365,7 @@
 </div>
 
 {#snippet toolbar(authorProfile?: { handle: string; avatarUrl: string })}
-  {#if !g.isBanned}
+  {#if !globalState.isBanned}
     {#if isMobile}
       <Drawer bind:isDrawerOpen>
         <div class="flex gap-4 justify-center mb-4">
