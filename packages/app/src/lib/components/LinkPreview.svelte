@@ -19,7 +19,6 @@
   import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
   import { getLinkEmbedData } from "$lib/utils/getLinkEmbedData";
   import type { Embed } from "$lib/types/embed-sdk";
-
   type Props = {
     message: Message;
   };
@@ -32,9 +31,16 @@
         url: url.replace("http:", "https:"),
         data: undefined as Embed | undefined,
       });
-      getLinkEmbedData(url).then((data) => {
-        if (data) value.data = data;
-      });
+
+      const data = getLinkEmbedData(url);
+      if (data && !("then" in data)) value.data = data;
+      else if (data) {
+        data
+          .then((data) => {
+            if (data) value.data = data;
+          })
+          .catch(console.error);
+      }
       return value;
     }),
   );
