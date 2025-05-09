@@ -13,7 +13,7 @@
 
   import { derivePromise } from "$lib/utils.svelte";
   import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
   import {
     Announcement,
     Channel,
@@ -30,9 +30,9 @@
   import ToggleNavigation from "./ToggleNavigation.svelte";
 
   const links = derivePromise(null, async () =>
-    (await g.space?.threads.items())?.find((x) => x.name === "@links"),
+    (await globalState.space?.threads.items())?.find((x) => x.name === "@links"),
   );
-  const readonly = $derived(g.channel?.name === "@links");
+  const readonly = $derived(globalState.channel?.name === "@links");
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let users: { value: Item[] } = getContext("users");
@@ -87,13 +87,14 @@
 
   async function createThread(e: SubmitEvent) {
     e.preventDefault();
-    if (!g.roomy || !g.space || !g.channel) return;
+    if (!globalState.roomy || !globalState.space || !globalState.channel)
+      return;
 
-    const thread = await g.roomy.create(Thread);
+    const thread = await globalState.roomy.create(Thread);
 
     // messages can be selected in any order
     // sort them on create based on their position from the channel
-    let channelMessageIds = g.channel.timeline.ids();
+    let channelMessageIds = globalState.channel.timeline.ids();
     selectedMessages.sort((a, b) => {
       return channelMessageIds.indexOf(a.id) - channelMessageIds.indexOf(b.id);
     });
@@ -101,16 +102,16 @@
     for (const message of selectedMessages) {
       // move selected message ID from channel to thread timeline
       thread.timeline.push(message);
-      const index = g.channel.timeline.ids().indexOf(message.id);
-      g.channel.timeline.remove(index);
+      const index = globalState.channel.timeline.ids().indexOf(message.id);
+      globalState.channel.timeline.remove(index);
 
       // create an Announcement about the move for each message
-      const announcement = await g.roomy.create(Announcement);
+      const announcement = await globalState.roomy.create(Announcement);
       announcement.kind = "messageMoved";
       announcement.relatedMessages.push(message);
       announcement.relatedThreads.push(thread);
       announcement.commit();
-      g.channel.timeline.insert(index, announcement);
+      globalState.channel.timeline.insert(index, announcement);
     }
 
     // TODO: decide whether the thread needs a reference to it's original channel. That might be
@@ -119,22 +120,22 @@
     thread.commit();
 
     // create an Announcement about the new Thread in current channel
-    const announcement = await g.roomy.create(Announcement);
+    const announcement = await globalState.roomy.create(Announcement);
     announcement.kind = "threadCreated";
     announcement.relatedThreads.push(thread);
     announcement.commit();
 
-    g.channel.timeline.push(announcement);
+    globalState.channel.timeline.push(announcement);
 
     // If this is a channel ( the alternative would be a thread )
-    if (g.channel instanceof Channel) {
-      g.channel.threads.push(thread);
+    if (globalState.channel instanceof Channel) {
+      globalState.channel.threads.push(thread);
     }
 
-    g.channel.commit();
+    globalState.channel.commit();
 
-    g.space.threads.push(thread);
-    g.space.commit();
+    globalState.space.threads.push(thread);
+    globalState.space.commit();
 
     threadTitleInput = "";
     isThreading.value = false;
@@ -142,11 +143,17 @@
   }
 
   async function sendMessage() {
-    if (!g.roomy || !g.space || !g.channel || !user.agent) return;
+    if (
+      !globalState.roomy ||
+      !globalState.space ||
+      !globalState.channel ||
+      !user.agent
+    )
+      return;
 
     // Image upload is now handled in ChatInput.svelte
 
-    const message = await g.roomy.create(Message);
+    const message = await globalState.roomy.create(Message);
     message.authors(
       (authors) => user.agent && authors.push(user.agent.assertDid),
     );
@@ -164,8 +171,8 @@
       }
     }
 
-    g.channel.timeline.push(message);
-    g.channel.commit();
+    globalState.channel.timeline.push(message);
+    globalState.channel.commit();
 
     messageInput = {};
     replyingTo = undefined;
@@ -176,18 +183,18 @@
   //
 
   $effect(() => {
-    if (!g.space) return;
+    if (!globalState.space) return;
 
-    g.space &&
-      g.space.sidebarItems.items().then((items) => {
+    globalState.space &&
+      globalState.space.sidebarItems.items().then((items) => {
         for (const item of items) {
           const category = item.tryCast(Category);
           if (
             category &&
             typeof category.channels === "object" &&
             typeof category.channels.ids === "function" &&
-            g.channel &&
-            category.channels.ids().includes(g.channel.id)
+            globalState.channel &&
+            category.channels.ids().includes(globalState.channel.id)
           ) {
             return;
           }
@@ -196,39 +203,41 @@
   });
   // Image upload is now handled in ChatInput.svelte
   let relatedThreads = derivePromise([], async () =>
-    g.channel && g.channel instanceof Channel
-      ? await g.channel.threads.items()
+    globalState.channel && globalState.channel instanceof Channel
+      ? await globalState.channel.threads.items()
       : [],
   );
   const pages = derivePromise([], async () => {
-    return g.space && g.channel instanceof Channel
-      ? (await g.channel.wikipages.items()).filter((x) => !x.softDeleted)
+    return globalState.space && globalState.channel instanceof Channel
+      ? (await globalState.channel.wikipages.items()).filter(
+          (x) => !x.softDeleted,
+        )
       : [];
   });
 </script>
 
 <header class="dz-navbar">
   <div class="dz-navbar-start flex gap-4">
-    {#if g.channel}
+    {#if globalState.channel}
       <ToggleNavigation />
 
       <h4
         class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}
-        title={g.channel instanceof Channel ? "Channel" : "Thread"}
+        title={globalState.channel instanceof Channel ? "Channel" : "Thread"}
       >
         <span class="flex gap-2 items-center">
           <Icon
-            icon={g.channel instanceof Channel
+            icon={globalState.channel instanceof Channel
               ? "basil:comment-solid"
               : "material-symbols:thread-unread-rounded"}
           />
-          {g.channel.name}
+          {globalState.channel.name}
         </span>
       </h4>
     {/if}
   </div>
 
-  {#if g.channel instanceof Channel}
+  {#if globalState.channel instanceof Channel}
     <Tabs.Root
       bind:value={tab}
       class={isMobile ? "dz-navbar-end" : "dz-navbar-center"}
@@ -270,9 +279,9 @@
   <BoardList items={relatedThreads.value} title="Topics" route="thread">
     No topics for this channel.
   </BoardList>
-{:else if tab === "chat" || g.channel instanceof Thread}
-  {#if g.space && g.channel}
-    <ChatArea timeline={g.channel.forceCast(Timeline)} />
+{:else if tab === "chat" || globalState.channel instanceof Thread}
+  {#if globalState.space && globalState.channel}
+    <ChatArea timeline={globalState.channel.forceCast(Timeline)} />
     <div class="flex items-center">
       {#if !isMobile || !isThreading.value}
         <section class="grow flex flex-col">
@@ -307,14 +316,16 @@
           {/if}
           <div class="relative">
             <!-- TODO: get all users that has joined the server -->
-            {#if g.roomy && g.roomy.spaces.ids().includes(g.space.id)}
+            {#if globalState.roomy && globalState.roomy.spaces
+                .ids()
+                .includes(globalState.space.id)}
               {#if !readonly}
-                <ChatInput
-                  bind:content={messageInput}
-                  users={users.value}
-                  context={contextItems.value}
-                  onEnter={sendMessage}
-                />
+              <ChatInput
+                bind:content={messageInput}
+                users={users.value}
+                context={contextItems.value}
+                onEnter={sendMessage}
+              />
               {:else}
                 <div class="flex items-center grow flex-col">
                   <Button.Root disabled class="w-full dz-btn"
@@ -326,9 +337,9 @@
               <Button.Root
                 class="w-full dz-btn"
                 onclick={() => {
-                  if (g.space && g.roomy) {
-                    g.roomy.spaces.push(g.space);
-                    g.roomy.commit();
+                  if (globalState.space && globalState.roomy) {
+                    globalState.roomy.spaces.push(globalState.space);
+                    globalState.roomy.commit();
                   }
                 }}>join Space To Chat</Button.Root
               >

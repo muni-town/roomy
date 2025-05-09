@@ -1,7 +1,7 @@
 <script lang="ts">
   import { toast } from "svelte-french-toast";
   import { Channel, WikiPage } from "@roomy-chat/sdk";
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
   import Dialog from "./Dialog.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
 
@@ -22,25 +22,30 @@
   }
 
   async function submitPageTitle() {
-    if (!g.space || !g.channel || !(g.channel instanceof Channel)) return;
+    if (
+      !globalState.space ||
+      !globalState.channel ||
+      !(globalState.channel instanceof Channel)
+    )
+      return;
     if (!newPageTitleElement) {
       toast.error("Title cannot be empty", { position: "bottom-end" });
       return;
     }
     const newPageTitle = newPageTitleElement.value; // Retrieve the title from the input element
     // Create a temporary page with the provided title
-    const pg = await g.space.create(WikiPage);
+    const pg = await globalState.space.create(WikiPage);
 
     isPageTitleDialogOpen = false;
 
     try {
       pg.name = newPageTitle;
 
-      g.channel.wikipages.push(pg);
-      g.channel?.commit();
+      globalState.channel.wikipages.push(pg);
+      globalState.channel?.commit();
 
-      g.space.wikipages.push(pg);
-      g.space.commit();
+      globalState.space.wikipages.push(pg);
+      globalState.space.commit();
       pg.commit();
     } catch (e) {
       console.error("Error creating page", e);

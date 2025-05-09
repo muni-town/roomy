@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { navigate } from "$lib/utils.svelte";
   import { Button } from "bits-ui";
@@ -12,6 +12,7 @@
   import { cleanHandle } from "$lib/utils.svelte";
   import { atproto } from "$lib/atproto.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
+  import { env } from "$env/dynamic/public";
 
   let {
     spaces,
@@ -30,14 +31,14 @@
   let isNewSpaceDialogOpen = $state(false);
 
   async function createSpace() {
-    if (!newSpaceName || !user.agent || !g.roomy) return;
-    const space = await g.roomy.create(Space);
+    if (!newSpaceName || !user.agent || !globalState.roomy) return;
+    const space = await globalState.roomy.create(Space);
     space.name = newSpaceName;
     space.admins((x) => user.agent && x.push(user.agent.assertDid));
     space.commit();
 
-    g.roomy.spaces.push(space);
-    g.roomy.commit();
+    globalState.roomy.spaces.push(space);
+    globalState.roomy.commit();
     newSpaceName = "";
 
     isNewSpaceDialogOpen = false;
@@ -131,6 +132,18 @@
   </div>
 
   <section class="flex flex-col items-center gap-2 p-0">
+    <!-- Only expose Discord import in dev with a flag for now. -->
+    {#if env.PUBLIC_ENABLE_DISCORD_IMPORT == "true"}
+      <Button.Root
+        title="Import Discord Archive"
+        class="p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
+        disabled={!user.session}
+        href="/discord-import"
+      >
+        <Icon icon="mdi:folder-upload-outline" font-size="1.8em" />
+      </Button.Root>
+    {/if}
+
     <ThemeSelector />
     <Dialog
       title={user.session ? "Log Out" : "Create Account or Log In"}

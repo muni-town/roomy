@@ -12,7 +12,7 @@
   import AvatarImage from "./AvatarImage.svelte";
   import { getContentHtml, type Item } from "$lib/tiptap/editor";
   import { Announcement, Message, type EntityIdStr } from "@roomy-chat/sdk";
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
   import { derivePromise } from "$lib/utils.svelte";
   import type { JSONContent } from "@tiptap/core";
   import ChatInput from "./ChatInput.svelte";
@@ -26,8 +26,8 @@
   let { message, mergeWithPrevious = false }: Props = $props();
 
   let messageRepliedTo = derivePromise(undefined, async () => {
-    if (g.roomy && message.replyTo) {
-      return await g.roomy.open(Message, message.replyTo);
+    if (globalState.roomy && message.replyTo) {
+      return await globalState.roomy.open(Message, message.replyTo);
     }
   });
   let relatedThreads = derivePromise([], async () => {
@@ -64,7 +64,7 @@
 
   let mayDelete = $derived(
     message.matches(Message) &&
-      (g.isAdmin ||
+      (globalState.isAdmin ||
         (user.agent &&
           message
             .forceCast(Message)
@@ -221,7 +221,7 @@
   });
 
   function getAnnouncementHtml(announcement: Announcement) {
-    if (!g.space) return "";
+    if (!globalState.space) return "";
     const schema = {
       type: "doc",
       content: [] as Record<string, unknown>[],
@@ -238,7 +238,7 @@
               attrs: {
                 id: JSON.stringify({
                   id: relatedThreads.value[0]?.id,
-                  space: g.space.id,
+                  space: globalState.space.id,
                   type: "thread",
                 }),
                 label: relatedThreads.value[0]?.name || "loading...",
@@ -258,7 +258,7 @@
               attrs: {
                 id: JSON.stringify({
                   id: relatedThreads.value[0]?.id,
-                  space: g.space.id,
+                  space: globalState.space.id,
                   type: "thread",
                 }),
                 label: relatedThreads.value[0]?.name || "loading...",
@@ -549,7 +549,7 @@
 {/snippet}
 
 {#snippet toolbar(authorProfile?: { handle: string; avatarUrl: string })}
-  {#if !g.isBanned}
+  {#if !globalState.isBanned}
     {#if isMobile}
       <Drawer bind:isDrawerOpen>
         <div class="flex gap-4 justify-center mb-4">

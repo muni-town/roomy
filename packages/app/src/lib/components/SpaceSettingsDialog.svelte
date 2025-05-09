@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Button } from "bits-ui";
   import Dialog from "./Dialog.svelte";
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
   import Icon from "@iconify/svelte";
   import { AvatarMarble } from "svelte-boring-avatars";
   import { Image } from "@roomy-chat/sdk";
@@ -22,10 +22,10 @@
   let spaceAvatarUrl = $state("");
 
   $effect(() => {
-    if (!g.space) return;
+    if (!globalState.space) return;
     if (!showSpaceSettings) {
-      spaceNameInput = g.space.name;
-      newSpaceHandle = g.space?.handles((x) => x.get(0)) || "";
+      spaceNameInput = globalState.space.name;
+      newSpaceHandle = globalState.space?.handles((x) => x.get(0)) || "";
       verificationFailed = false;
       saveSpaceLoading = false;
       avatarFile = null;
@@ -34,10 +34,10 @@
       // Load current avatar if exists
       spaceAvatarUrl = "";
       // Access the image entity directly
-      const imageId = g.space.image;
+      const imageId = globalState.space.image;
 
-      if (imageId && g.roomy) {
-        g.roomy.open(Image, imageId).then((image) => {
+      if (imageId && globalState.roomy) {
+        globalState.roomy.open(Image, imageId).then((image) => {
           if (image.uri) {
             spaceAvatarUrl = image.uri;
           }
@@ -45,7 +45,9 @@
       }
 
       Promise.all(
-        Object.keys(g.space.bans((x) => x.toJSON())).map((x) => getProfile(x)),
+        Object.keys(globalState.space.bans((x) => x.toJSON())).map((x) =>
+          getProfile(x),
+        ),
       ).then(
         (profiles) =>
           (bannedHandlesInput = profiles.map((x) => x.handle).join(", ")),
@@ -54,7 +56,7 @@
   });
 
   async function saveBannedHandles() {
-    if (!g.space || !user.agent) return;
+    if (!globalState.space || !user.agent) return;
     const bannedIds = (
       await Promise.all(
         bannedHandlesInput
@@ -64,19 +66,19 @@
           .map((x) => user.agent!.resolveHandle({ handle: x })),
       )
     ).map((x) => x.data.did);
-    g.space.bans((bans) => {
+    globalState.space.bans((bans) => {
       bans.clear();
       for (const ban of bannedIds) {
         bans.set(ban, true);
       }
     });
-    g.space.commit();
+    globalState.space.commit();
     showSpaceSettings = false;
   }
   async function saveSpaceName() {
-    if (!g.space) return;
-    g.space.name = spaceNameInput;
-    g.space.commit();
+    if (!globalState.space) return;
+    globalState.space.name = spaceNameInput;
+    globalState.space.commit();
   }
 
   async function handleAvatarSelect(event: Event) {
@@ -92,7 +94,8 @@
 
   async function uploadAvatar(ev: Event) {
     ev.preventDefault();
-    if (!avatarFile || !g.space || !g.roomy || !user.agent) return;
+    if (!avatarFile || !globalState.space || !globalState.roomy || !user.agent)
+      return;
 
     try {
       uploadingAvatar = true;
@@ -102,15 +105,15 @@
 
       try {
         // Create an Image entity
-        const image = await g.roomy.create(Image);
+        const image = await globalState.roomy.create(Image);
 
         // Set the image URI
         image.uri = uploadResult.url;
         image.commit();
 
         try {
-          g.space.image = image.id;
-          g.space.commit();
+          globalState.space.image = image.id;
+          globalState.space.commit();
 
           // Update the preview URL
           spaceAvatarUrl = uploadResult.url;
@@ -139,12 +142,12 @@
     }
   }
   async function saveSpaceHandle() {
-    if (!g.space) return;
+    if (!globalState.space) return;
     saveSpaceLoading = true;
 
     if (!newSpaceHandle) {
-      g.space.handles((h) => h.clear());
-      g.space.commit();
+      globalState.space.handles((h) => h.clear());
+      globalState.space.commit();
       saveSpaceLoading = false;
       showSpaceSettings = false;
       toast.success("Saved space with without handle.", {
@@ -160,11 +163,11 @@
         saveSpaceLoading = false;
         return;
       }
-      g.space.handles((h) => {
+      globalState.space.handles((h) => {
         h.clear();
         h.push(newSpaceHandle);
       });
-      g.space.commit();
+      globalState.space.commit();
       saveSpaceLoading = false;
       showSpaceSettings = false;
       toast.success("Space handle successfully verified & saved!", {
@@ -221,9 +224,9 @@
                 alt="Current avatar"
                 class="w-full h-full object-cover"
               />
-            {:else if g.space && g.space.id}
+            {:else if globalState.space && globalState.space.id}
               <div class="w-full h-full flex items-center justify-center">
-                <AvatarMarble name={g.space.id} />
+                <AvatarMarble name={globalState.space.id} />
               </div>
             {/if}
           </div>
@@ -292,7 +295,7 @@
                     _leaf{subdomain ? "." + subdomain : ""}
                   </td>
                   <td>
-                    "id={g.space!.id}"
+                    "id={globalState.space!.id}"
                   </td>
                 </tr>
               </tbody>

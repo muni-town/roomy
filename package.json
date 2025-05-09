@@ -16,11 +16,11 @@
     "dev": "turbo dev"
   },
   "devDependencies": {
-    "husky": "^9.1.7",
     "@repo/tsconfig": "workspace:*",
     "beachball": "^2.54.0",
+    "husky": "^9.1.7",
     "pkgroll": "^2.12.2",
-    "turbo": "^2.5.2",
+    "turbo": "^2.5.3",
     "typescript": "^5.8.3"
   }
 }

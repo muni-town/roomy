@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
   import { Category, Channel } from "@roomy-chat/sdk";
@@ -9,10 +9,12 @@
   // Automatically navigate to the first channel in the space if we come to this empty space index
   // page. We might have useful features on this index page eventually.
   $effect(() => {
-    if (!g.space || g.loadedSpace !== page.params.space) return;
+    if (!globalState.space || globalState.loadedSpace !== page.params.space)
+      return;
 
     untrack(async () => {
-      for (const item of (await g.space?.sidebarItems.items()) || []) {
+      for (const item of (await globalState.space?.sidebarItems.items()) ||
+        []) {
         const category = item.tryCast(Category);
         const channel = item.tryCast(Channel);
         if (category) {

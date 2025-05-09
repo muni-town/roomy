@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
   import { Accordion, ToggleGroup } from "bits-ui";
@@ -14,7 +14,7 @@ Pages
 Threads
 Links
 --->
-<ToggleGroup.Root type="single" value={g.channel?.id}>
+<ToggleGroup.Root type="single" value={globalState.channel?.id}>
   <Accordion.Root
     type="multiple"
     bind:value={sidebarAccordionValues}

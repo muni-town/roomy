@@ -9,9 +9,10 @@
   // @ts-ignore used for debugging
   import { RenderScan } from "svelte-render-scan";
 
-  import { g } from "$lib/global.svelte";
+  import { globalState } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
-  import { derivePromise, Toggle } from "$lib/utils.svelte";
+  import { derivePromise, Toggle, setTheme } from "$lib/utils.svelte";
+  import { type ThemeName } from "$lib/themes.ts";
   import ServerBar from "$lib/components/ServerBar.svelte";
   import SidebarMain from "$lib/components/SidebarMain.svelte";
   import { page } from "$app/state";
@@ -20,20 +21,26 @@
   const { children } = $props();
   const spaces = derivePromise(
     [],
-    async () => (await g.roomy?.spaces.items()) || [],
+    async () => (await globalState.roomy?.spaces.items()) || [],
   );
 
-  let themeColor = $state("synthwave"); // defualt theme color
+  let themeColor = $state<ThemeName>("synthwave"); // defualt theme color
 
   onMount(async () => {
     await user.init();
 
     // Set the theme color based on local storage
-    const storedColor = window.localStorage.getItem("theme");
+    const storedColor = window.localStorage.getItem("theme") as ThemeName;
     if (storedColor) {
       themeColor = storedColor;
     }
+
+    setTheme(themeColor);
+    // set color on data-theme for DaisyUI and theme-color meta tag for mobile
     document.documentElement.setAttribute("data-theme", themeColor);
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", themeColor);
 
     // Initialize PostHog for analytics
     if (!dev && browser) {
