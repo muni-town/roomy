@@ -11,6 +11,8 @@
   } from "@roomy-chat/sdk";
   import { derivePromise } from "$lib/utils.svelte";
   import { page } from "$app/state";
+  import LinkPreview from "./LinkPreview.svelte";
+  import { globalState } from "$lib/global.svelte";
 
   let {
     timeline,
@@ -122,13 +124,17 @@
               {@const previousMessage =
                 index > 0 ? messages.value[index - 1] : undefined}
               {#if !message.softDeleted}
-                <ChatMessage
-                  {message}
-                  mergeWithPrevious={shouldMergeWithPrevious(
-                    message,
-                    previousMessage,
-                  )}
-                />
+                {#if globalState.channel?.name !== "@links"}
+                  <ChatMessage
+                    {message}
+                    mergeWithPrevious={shouldMergeWithPrevious(
+                      message,
+                      previousMessage,
+                    )}
+                  />
+                {:else if "bodyJson" in message}
+                  <LinkPreview {message} />
+                {/if}
               {:else}
                 <p class="italic text-error text-sm">
                   This message has been deleted

@@ -5,8 +5,8 @@
 
   import { globalState } from "$lib/global.svelte";
 
-  import { derivePromise, Toggle } from "$lib/utils.svelte";
-  import { Category, Channel } from "@roomy-chat/sdk";
+  import { derivePromise, navigate, Toggle } from "$lib/utils.svelte";
+  import { Category, Channel, Thread } from "@roomy-chat/sdk";
   import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
   import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
   import { getContext } from "svelte";
@@ -15,7 +15,23 @@
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { page } from "$app/state";
 
-  let availableThreads = derivePromise([], async () =>
+  export async function createLinkFeed() {
+    if (!globalState.roomy || !globalState.space) return;
+
+    try {
+      const thread = await globalState.roomy.create(Thread);
+      thread.name = "@links";
+      thread.commit();
+      globalState.space.threads.push(thread);
+      globalState.space.commit();
+
+      navigate({ space: page.params.space!, thread: thread.id });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  let allThreads = derivePromise([], async () =>
     ((await globalState.space?.threads.items()) || [])
       .filter((x) => !x.softDeleted)
       .map((x) => ({
@@ -27,6 +43,9 @@
         id: x.id,
       })),
   );
+  let topics = $derived(allThreads.value.filter((x) => x.name !== "@links"));
+  let links = $derived(allThreads.value.find((x) => x.name === "@links"));
+
   const pages = derivePromise([], async () =>
     ((await globalState.space?.wikipages.items()) || [])
       .filter((x) => !x.softDeleted)
@@ -216,12 +235,35 @@
       </Tabs.Trigger>
     </Tabs.List>
   </Tabs.Root>
-  <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-clip">
+  <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-clip mx-1">
     {#if tab === "board"}
+      {#if links}
+        <div class="flex-flex-col gap-4 p-2">
+          <Button.Root
+            class="cursor-pointer px-2 flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
+            onclick={() => {
+              navigate({ space: page.params.space!, thread: links.id });
+            }}
+          >
+            Links
+          </Button.Root>
+          <div class="dz-divider my-0"></div>
+        </div>
+      {:else}
+        <div class="flex-flex-col gap-4 p-2">
+          <Button.Root
+            class="cursor-pointer px-2 flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
+            onclick={createLinkFeed}
+          >
+            Create Links Feed
+          </Button.Root>
+          <div class="dz-divider my-0"></div>
+        </div>
+      {/if}
       <AccordionTree
         sections={[
           { key: "pages", items: pages.value },
-          { key: "topics", items: availableThreads.value },
+          { key: "topics", items: topics },
         ]}
         active={globalState.channel?.id ?? ""}
       />
