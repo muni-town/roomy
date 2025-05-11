@@ -3,6 +3,9 @@
   import { onMount, setContext } from "svelte";
   import { browser, dev } from "$app/environment";
 
+  // Add this import
+  import { discordBridgeService } from "$lib/discord-bridge/bridge-service";
+
   import posthog from "posthog-js";
   import { Toaster } from "svelte-french-toast";
 
@@ -28,6 +31,11 @@
 
   onMount(async () => {
     await user.init();
+
+    // Add this: Initialize Discord bridge service
+    if (browser) {
+      await discordBridgeService.initialize();
+    }
 
     // Set the theme color based on local storage
     const storedColor = window.localStorage.getItem("theme") as ThemeName;
