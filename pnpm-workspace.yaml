@@ -5,3 +5,5 @@ onlyBuiltDependencies:
   - cbor-extract
   - core-js
   - esbuild
+patchedDependencies:
+  '@discordjs/util': patches/@discordjs__util.patch

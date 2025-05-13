@@ -21,6 +21,7 @@
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "socket.io": "^4.8.1",
+    "undici": "6.21.1",
     "ws": "^8.18.2"
   },
   "devDependencies": {
