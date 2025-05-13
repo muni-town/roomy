@@ -3,14 +3,14 @@
 
   import { globalState } from "$lib/global.svelte";
 
-  import { navigateSync } from "$lib/utils.svelte";
+  import { entityVersion, navigateSync } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  import { Category, Channel } from "@roomy-chat/sdk";
+  import { Category, Channel, NamedEntity } from "@roomy-chat/sdk";
   import { Accordion, Button } from "bits-ui";
   import { slide } from "svelte/transition";
   import Dialog from "./Dialog.svelte";
 
-  let { sidebarItems } = $props();
+  let { sidebarItems }: { sidebarItems: { value: NamedEntity[] } } = $props();
 
   //
   // Category Edit Dialog
@@ -24,6 +24,16 @@
     editingCategory.name = categoryNameInput;
     editingCategory.commit();
     showCategoryDialog = false;
+  }
+
+  async function hasUnreads(channel: NamedEntity): Promise<boolean> {
+    if (!globalState.space) return false;
+    const spaceReads = globalState.channelsRead.spaces[globalState.space.id];
+    if (!spaceReads) return true;
+    const readVersion = spaceReads.channels[channel.id];
+    if (!readVersion) return true;
+    const currentVersion = await entityVersion(channel);
+    return currentVersion != readVersion;
   }
 </script>
 
@@ -100,7 +110,7 @@
                 >
                   {#each category.channels.ids() as channelId}
                     {#await globalState.roomy && globalState.roomy.open(Channel, channelId) then channel}
-                      {#if !channel?.softDeleted}
+                      {#if !channel?.softDeleted && channel}
                         <Button.Root
                           href={navigateSync({
                             space: page.params.space!,
@@ -116,8 +126,14 @@
                           >
                             <Icon icon="basil:comment-solid" class="shrink-0" />
                             <span class="truncate"
-                              >{channel?.name || "..."}</span
-                            >
+                              >{channel.name || "..."}
+                              {#await hasUnreads(channel) then unread}
+                                {unread ? "*" : ""}
+                              {/await}
+                              {#await entityVersion(channel) then version}
+                                {version}
+                              {/await}
+                            </span>
                           </h3>
                         </Button.Root>
                       {/if}
@@ -142,7 +158,15 @@
       >
         <h3 class="flex justify-start items-center w-full gap-2">
           <Icon icon="basil:comment-solid" class="shrink-0" />
-          <span class="truncate"> {item.name} </span>
+          <span class="truncate">
+            {item.name}
+            {#await hasUnreads(item) then unread}
+              {unread ? "*" : ""}
+            {/await}
+            {#await entityVersion(item) then version}
+              {version}
+            {/await}
+          </span>
         </h3>
       </Button.Root>
     {/if}

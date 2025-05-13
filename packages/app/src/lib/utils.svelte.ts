@@ -4,6 +4,7 @@ import type { EntityIdStr } from "@muni-town/leaf";
 import { goto } from "$app/navigation";
 import type { JSONContent } from "@tiptap/core";
 import { type ThemeName } from "./themes";
+import type { EntityWrapper } from "@roomy-chat/sdk";
 
 /** Cleans a handle string by removing any characters not valid for a domain. */
 export function cleanHandle(handle: string): string {
@@ -171,6 +172,39 @@ export function setTheme(theme: ThemeName) {
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute("content", theme);
 }
+
+export async function entityVersion(message: EntityWrapper): Promise<string> {
+  const id = `${message.id.toString()}`;
+  // console.time(id);
+  // const version = message.entity.doc.version();
+  // const hashBuffer = await window.crypto.subtle.digest(
+  //   "SHA-256",
+  //   new Uint8Array(version.encode()),
+  // );
+  // version.free();
+  // const hash = encodeBase32(new Uint8Array(hashBuffer));
+  // if (
+  //   message.id == "leaf:33c5g7e9g8897exdfsxswk3d7wbbf8eneembka3vedwabfj7rhr0"
+  // ) {
+  //   console.log(hash);
+  // }
+  // console.timeEnd(id);
+  return id;
+}
+
+export function downloadUint8Array(
+  uint8Array: Uint8Array,
+  filename = "file.bin",
+) {
+  const blob = new Blob([uint8Array], { type: "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
+}
+(globalThis as any).downloadUint8Array = downloadUint8Array;
 
 // export function unreadCount<Channel>(
 //   doc: Doc<Channel>,

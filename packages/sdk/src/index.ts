@@ -90,7 +90,7 @@ export class HasPeer {
   async create<T extends EntityWrapper>(
     constructor: EntityConstructor<T>
   ): Promise<T> {
-    const ent = await this.peer.open();
+    const ent = await this.peer.create();
     return new constructor(this.peer, ent);
   }
 
@@ -194,6 +194,7 @@ export class EntityWrapper extends HasPeer {
    * @group General
    */
   commit() {
+    console.trace('Entity commit');
     this.entity.commit();
   }
 
@@ -463,7 +464,7 @@ export class Roomy extends EntityWrapper {
    * joined spaces, preferences, etc.
    * */
   static async init(peer: Peer, catalogId: IntoEntityId): Promise<Roomy> {
-    const catalog = await peer.open(intoEntityId(catalogId));
+    const catalog = await peer.open(intoEntityId(catalogId), { createAfterTimeout: 5000 });
     return new Roomy(peer, catalog);
   }
 

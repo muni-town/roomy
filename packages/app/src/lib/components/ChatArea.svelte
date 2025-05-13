@@ -40,9 +40,10 @@
     if (!viewport || !virtualizer) return;
 
     virtualizer.scrollToIndex(messages.value.length - 1, { align: "end" });
-    setTimeout(() => {
-      messagesLoaded = true;
-    }, 3000);
+    messagesLoaded = true;
+    // setTimeout(() => {
+    //   messagesLoaded = true;
+    // }, 3000);
     // TODO: remove this artificial timeout
     // Right now (May 2025)
     // This is needed to give a nicer user experience when

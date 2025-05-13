@@ -4,6 +4,12 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@muni-town/leaf': link:../leaf/packages/leaf
+  '@muni-town/leaf-svelte': link:../leaf/packages/leaf-svelte
+  '@muni-town/leaf-storage-indexeddb': link:../leaf/packages/leaf-storage-indexeddb
+  '@muni-town/leaf-sync-ws': link:../leaf/packages/leaf-sync-ws
+
 importers:
 
   .:
@@ -51,17 +57,17 @@ importers:
         specifier: ^4.2.0
         version: 4.2.0(svelte@5.28.2)
       '@muni-town/leaf':
-        specifier: ^0.2.0-preview.20
-        version: 0.2.0-preview.20
+        specifier: link:../../../leaf/packages/leaf
+        version: link:../../../leaf/packages/leaf
       '@muni-town/leaf-storage-indexeddb':
-        specifier: ^0.1.0-preview.5
-        version: 0.1.0-preview.5(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)
+        specifier: link:../../../leaf/packages/leaf-storage-indexeddb
+        version: link:../../../leaf/packages/leaf-storage-indexeddb
       '@muni-town/leaf-svelte':
-        specifier: ^0.1.0-preview.5
-        version: 0.1.0-preview.5
+        specifier: link:../../../leaf/packages/leaf-svelte
+        version: link:../../../leaf/packages/leaf-svelte
       '@muni-town/leaf-sync-ws':
-        specifier: ^0.1.0-preview.6
-        version: 0.1.0-preview.6
+        specifier: link:../../../leaf/packages/leaf-sync-ws
+        version: link:../../../leaf/packages/leaf-sync-ws
       '@noble/curves':
         specifier: ^1.8.1
         version: 1.9.0
@@ -128,6 +134,9 @@ importers:
       '@zip-js/zip-js':
         specifier: jsr:@zip-js/zip-js@2.7.59
         version: '@jsr/zip-js__zip-js@2.7.59'
+      arktype:
+        specifier: ^2.1.20
+        version: 2.1.20
       base32-decode:
         specifier: ^1.0.0
         version: 1.0.0
@@ -237,8 +246,8 @@ importers:
   packages/sdk:
     dependencies:
       '@muni-town/leaf':
-        specifier: 0.2.0-preview.20
-        version: 0.2.0-preview.20
+        specifier: link:../../../leaf/packages/leaf
+        version: link:../../../leaf/packages/leaf
     devDependencies:
       beachball:
         specifier: ^2.54.0
@@ -256,8 +265,8 @@ importers:
   packages/sdk-docs:
     dependencies:
       '@muni-town/leaf':
-        specifier: ^0.2.0-preview.19
-        version: 0.2.0-preview.20
+        specifier: link:../../../leaf/packages/leaf
+        version: link:../../../leaf/packages/leaf
       '@roomy-chat/sdk':
         specifier: workspace:*
         version: link:../sdk
@@ -346,20 +355,11 @@ packages:
   '@atproto/xrpc@0.7.0':
     resolution: {integrity: sha512-SfhP9dGx2qclaScFDb58Jnrmim5nk4geZXCqg6sB0I/KZhZEkr9iIx1hLCp+sxkIfEsmEJjeWO4B0rjUIJW5cw==}
 
-  '@automerge/automerge-repo-storage-indexeddb@1.2.1':
-    resolution: {integrity: sha512-u+9eZZJK7DAr541buF4ut1ipkuiKRoaAtoFYo/ilq7zOLO7JX+GQOFx/8eKKRDlGt/AHTcDaFktkcaX0vKahQQ==}
-
   '@automerge/automerge-repo-storage-indexeddb@2.0.0-collectionsync-alpha.1':
     resolution: {integrity: sha512-eK9CJLutYGWg0BQGathQjE9bI/h3/HQsiR3OWLluloQkkPOcZHTPG2P9UUTZ2ub/eyVB2GdU8MpXB6iDSiqJUw==}
 
-  '@automerge/automerge-repo@1.2.1':
-    resolution: {integrity: sha512-uEBr4bM01aSWkEt2tDKQxfW0Pahz2zbTTn4sRJfeKJlAg2SLr4QepFJ+3Tp4CNEkkU485olfnKYf6gt7uilMZQ==}
-
   '@automerge/automerge-repo@2.0.0-collectionsync-alpha.1':
     resolution: {integrity: sha512-IRjwNOHOCL/E+qqKAqyLro/K/MrTCTsBGyXwlvgN19lHV0v2mMngXJUHF3iSGS2DY7nTeP4dSzGR/8+uFXDLSQ==}
-
-  '@automerge/automerge@2.2.9':
-    resolution: {integrity: sha512-6HM52Ops79hAQBWMg/t0MNfGOdEiXyenQjO9F1hKZq0RWDsMLpPa1SzRy/C4/4UyX67sTHuA5CwBpH34SpfZlA==}
 
   '@automerge/automerge@3.0.0-collectionsync-alpha.1':
     resolution: {integrity: sha512-FO7QCjMz0pdoNxotVaH84X2sJKZdSYrjo6VHuVwFkQB0N/PQ0EHWi7N6knd9/JC+tIAzhGS3rb4xQwXITsewcg==}
@@ -782,30 +782,6 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
-  '@jsr/deno__kv-utils@0.1.3':
-    resolution: {integrity: sha512-H1kFktioYs15mNu+l+uDKJe7qi/wq/6BHm9ubRyAGgiplELGZYX+i2dvrJ2+I7CptbPJYMVHDccrWHg81jJoeg==, tarball: https://npm.jsr.io/~/11/@jsr/deno__kv-utils/0.1.3.tgz}
-
-  '@jsr/kitsonk__kv-toolbox@0.27.4':
-    resolution: {integrity: sha512-6GDsczA22cieX733yazDIUxPyWzd2PatvgHQfer4mVdSWk8n6WHRdiFo0z23GbSlXT3P5eaGOoP0lIaEy9LBuA==, tarball: https://npm.jsr.io/~/11/@jsr/kitsonk__kv-toolbox/0.27.4.tgz}
-
-  '@jsr/std__assert@1.0.13':
-    resolution: {integrity: sha512-rZ44REoi2/p+gqu8OfkcNeaTOSiG1kD6v8gyA0YjkXsOkDsiGw9g8h7JuGC/OD7GgOVgTEY+9Cih49Y18rkrCQ==, tarball: https://npm.jsr.io/~/11/@jsr/std__assert/1.0.13.tgz}
-
-  '@jsr/std__bytes@1.0.5':
-    resolution: {integrity: sha512-jcyXQSy5zAh2/6NLMWUkhJuQ0HihY5RwWF5RvpZyEmpmBaokkTwPkev0sqHzNJJvNusDUMznVBIclTT9augCkg==, tarball: https://npm.jsr.io/~/11/@jsr/std__bytes/1.0.5.tgz}
-
-  '@jsr/std__crypto@1.0.4':
-    resolution: {integrity: sha512-qtfyxcQbfhqTEOYRel8h6vssKpT2yD4kC39mzzwN1KsH53+nbiQZfXC5lmBxcfyihH7V2EibbP/MvSsYMmv6ZA==, tarball: https://npm.jsr.io/~/11/@jsr/std__crypto/1.0.4.tgz}
-
-  '@jsr/std__encoding@1.0.10':
-    resolution: {integrity: sha512-WK2njnDTyKefroRNk2Ooq7GStp6Y0ccAvr4To+Z/zecRAGe7+OSvH9DbiaHpAKwEi2KQbmpWMOYsdNt+TsdmSw==, tarball: https://npm.jsr.io/~/11/@jsr/std__encoding/1.0.10.tgz}
-
-  '@jsr/std__internal@1.0.6':
-    resolution: {integrity: sha512-1NLtCx9XAL44nt56gzmRSCgXjIthHVzK62fTkJdq8/XsP7eN9a21AZDpc0EGJ/cgvmmOB52UGh46OuKrrY7eVg==, tarball: https://npm.jsr.io/~/11/@jsr/std__internal/1.0.6.tgz}
-
-  '@jsr/std__media-types@1.1.0':
-    resolution: {integrity: sha512-dHvaxHL7ENWnltgL653uo3KnKFse3ZbopZop2gqsT7yrscx7irZEClu5Cba7gMPPRk4Lg1FbriNcaBViM2RSBw==, tarball: https://npm.jsr.io/~/11/@jsr/std__media-types/1.1.0.tgz}
-
   '@jsr/zip-js__zip-js@2.7.59':
     resolution: {integrity: sha512-iIQwS6Q9hWsyQSDYL8syLfIYpiLJphakW2NJG3kAb88Q0sp4CwiqVJ5RLsbRF96kw8AEV2eV3O36G6UkwVhTxg==, tarball: https://npm.jsr.io/~/11/@jsr/zip-js__zip-js/2.7.59.tgz}
 
@@ -813,25 +789,6 @@ packages:
     resolution: {integrity: sha512-7SbOa11tXUS95T3fReL+dwDs5FyJtCEqrqG3inRziDws346SYLsxOQ6HmX+4BkIsQh1R8U3XNa+EMmdMt38lMA==}
     peerDependencies:
       svelte: '>=3 <5'
-
-  '@msgpack/msgpack@3.1.1':
-    resolution: {integrity: sha512-DnBpqkMOUGayNVKyTLlkM6ILmU/m/+VUxGkuQlPQVAcvreLz5jn1OlQnWd8uHKL/ZSiljpM12rjRhr51VtvJUQ==}
-    engines: {node: '>= 18'}
-
-  '@muni-town/leaf-storage-deno-kv@0.1.0-preview.5':
-    resolution: {integrity: sha512-WSWMykKPwWpABggW9l3beH+/cYZP0uCkCNYWrzEBX9U8d91a/srNnVnWWafUwd11rZg+nO/9+kaWwNQD0+mPWA==}
-
-  '@muni-town/leaf-storage-indexeddb@0.1.0-preview.5':
-    resolution: {integrity: sha512-NToAVfd4npz5v8DxslZ4aQYXXVWVNWnmyRUXntbukWVABkMQpJjZFEtm8yJRu8lUlsKvWWl1gT2QdA7Ter6EUA==}
-
-  '@muni-town/leaf-svelte@0.1.0-preview.5':
-    resolution: {integrity: sha512-7riJ0BMmCLoh1feDVAI2GRQdZUdUeRsY/j1CHksV5r+5+eoHgYLlE7xn5m3EIRzmqaf9Mil9Lc0SR6TBQSOC3A==}
-
-  '@muni-town/leaf-sync-ws@0.1.0-preview.6':
-    resolution: {integrity: sha512-iKaramsJeVuUlZ/9GYwuXsCOw/j6ZPzJrpAJVmA18nnhhizbYoxhG1jFIeMKn69jDSYFOGYt0n16izrR49X7xw==}
-
-  '@muni-town/leaf@0.2.0-preview.20':
-    resolution: {integrity: sha512-sP/PjHJFFo+muHtjbe07fBhEG25YZMCTkGD7sQXXVQpDiKg1DmKkAC+5m0GkQGqbcRgsrtdpUKy+LYouWES9LQ==}
 
   '@noble/curves@1.9.0':
     resolution: {integrity: sha512-7YDlXiNMdO1YZeH6t/kvopHHbIZzlxrCV9WLqCY6QhcXOoXiNCMDqJIglZ9Yjx5+w7Dz30TITFrlTjnRg7sKEg==}
@@ -2524,9 +2481,6 @@ packages:
   longest-streak@3.1.0:
     resolution: {integrity: sha512-9Ri+o0JYgehTaVBBDoMqIl8GXtbWg711O3srftcHhZ0dqnETqLaoIK0x17fUw9rFSlK/0NlsKe0Ahhyl5pXE2g==}
 
-  loro-crdt@1.5.4:
-    resolution: {integrity: sha512-yqtu2/JhuVTbGLCQT29P8nyUsMtetMpdqINJzxfIC9ZKsIXob3mhIFCo/BcsA7gga2Ck+BcOvOhC+OBQvSj8xg==}
-
   loupe@3.1.3:
     resolution: {integrity: sha512-kkIp7XSkP78ZxJEsSxW3712C6teJVoeHHwgo9zJ380de7IYyJ2ISlxojcH2pC5OFLewESmnRi/+XCDIEEVyoug==}
 
@@ -3855,38 +3809,9 @@ snapshots:
       '@atproto/lexicon': 0.4.11
       zod: 3.24.4
 
-  '@automerge/automerge-repo-storage-indexeddb@1.2.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)':
-    dependencies:
-      '@automerge/automerge-repo': 1.2.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)
-    transitivePeerDependencies:
-      - '@swc/core'
-      - '@swc/wasm'
-      - '@types/node'
-      - supports-color
-      - typescript
-
   '@automerge/automerge-repo-storage-indexeddb@2.0.0-collectionsync-alpha.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)':
     dependencies:
       '@automerge/automerge-repo': 2.0.0-collectionsync-alpha.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)
-    transitivePeerDependencies:
-      - '@swc/core'
-      - '@swc/wasm'
-      - '@types/node'
-      - supports-color
-      - typescript
-
-  '@automerge/automerge-repo@1.2.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)':
-    dependencies:
-      '@automerge/automerge': 2.2.9
-      bs58check: 3.0.1
-      cbor-x: 1.6.0
-      debug: 4.4.0
-      eventemitter3: 5.0.1
-      fast-sha256: 1.3.0
-      tiny-typed-emitter: 2.1.0
-      ts-node: 10.9.2(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)
-      uuid: 9.0.1
-      xstate: 5.19.2
     transitivePeerDependencies:
       - '@swc/core'
       - '@swc/wasm'
@@ -3912,10 +3837,6 @@ snapshots:
       - '@types/node'
       - supports-color
       - typescript
-
-  '@automerge/automerge@2.2.9':
-    dependencies:
-      uuid: 9.0.1
 
   '@automerge/automerge@3.0.0-collectionsync-alpha.1':
     dependencies:
@@ -4246,34 +4167,6 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.0
 
-  '@jsr/deno__kv-utils@0.1.3':
-    dependencies:
-      '@jsr/std__bytes': 1.0.5
-      '@jsr/std__encoding': 1.0.10
-
-  '@jsr/kitsonk__kv-toolbox@0.27.4':
-    dependencies:
-      '@jsr/deno__kv-utils': 0.1.3
-      '@jsr/std__assert': 1.0.13
-      '@jsr/std__bytes': 1.0.5
-      '@jsr/std__crypto': 1.0.4
-      '@jsr/std__encoding': 1.0.10
-      '@jsr/std__media-types': 1.1.0
-
-  '@jsr/std__assert@1.0.13':
-    dependencies:
-      '@jsr/std__internal': 1.0.6
-
-  '@jsr/std__bytes@1.0.5': {}
-
-  '@jsr/std__crypto@1.0.4': {}
-
-  '@jsr/std__encoding@1.0.10': {}
-
-  '@jsr/std__internal@1.0.6': {}
-
-  '@jsr/std__media-types@1.1.0': {}
-
   '@jsr/zip-js__zip-js@2.7.59': {}
 
   '@melt-ui/svelte@0.76.2(svelte@5.28.2)':
@@ -4285,42 +4178,6 @@ snapshots:
       focus-trap: 7.6.4
       nanoid: 5.1.5
       svelte: 5.28.2
-
-  '@msgpack/msgpack@3.1.1': {}
-
-  '@muni-town/leaf-storage-deno-kv@0.1.0-preview.5':
-    dependencies:
-      '@kitsonk/kv-toolbox': '@jsr/kitsonk__kv-toolbox@0.27.4'
-      '@muni-town/leaf': 0.2.0-preview.20
-
-  '@muni-town/leaf-storage-indexeddb@0.1.0-preview.5(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)':
-    dependencies:
-      '@automerge/automerge-repo-storage-indexeddb': 1.2.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)
-      '@muni-town/leaf': 0.2.0-preview.20
-    transitivePeerDependencies:
-      - '@swc/core'
-      - '@swc/wasm'
-      - '@types/node'
-      - supports-color
-      - typescript
-
-  '@muni-town/leaf-svelte@0.1.0-preview.5':
-    dependencies:
-      '@muni-town/leaf': 0.2.0-preview.20
-      svelte: 5.28.2
-
-  '@muni-town/leaf-sync-ws@0.1.0-preview.6':
-    dependencies:
-      '@muni-town/leaf': 0.2.0-preview.20
-      '@muni-town/leaf-storage-deno-kv': 0.1.0-preview.5
-
-  '@muni-town/leaf@0.2.0-preview.20':
-    dependencies:
-      '@msgpack/msgpack': 3.1.1
-      arktype: 2.1.20
-      base32-decode: 1.0.0
-      base32-encode: 2.0.0
-      loro-crdt: 1.5.4
 
   '@noble/curves@1.9.0':
     dependencies:
@@ -6001,8 +5858,6 @@ snapshots:
       wrap-ansi: 9.0.0
 
   longest-streak@3.1.0: {}
-
-  loro-crdt@1.5.4: {}
 
   loupe@3.1.3: {}
 

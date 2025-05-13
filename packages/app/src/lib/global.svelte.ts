@@ -1,12 +1,12 @@
 import {
   Channel,
-  EntityId,
   type EntityIdStr,
   Roomy,
   Space,
   Thread,
   StorageManager,
 } from "@roomy-chat/sdk";
+import { type } from "arktype";
 import { SveltePeer } from "@muni-town/leaf-svelte";
 import { indexedDBStorageAdapter } from "@muni-town/leaf-storage-indexeddb";
 import { webSocketSyncer } from "@muni-town/leaf-sync-ws";
@@ -17,9 +17,9 @@ import { page } from "$app/state";
 import { untrack } from "svelte";
 
 import * as roomy from "@roomy-chat/sdk";
-import { navigate, resolveLeafId } from "./utils.svelte";
-(window as any).r = roomy;
-(window as any).page = page;
+import { entityVersion, navigate, resolveLeafId } from "./utils.svelte";
+(globalThis as any).r = roomy;
+(globalThis as any).page = page;
 
 // Reload app when this module changes to prevent accumulated connections.
 if (import.meta.hot) {
@@ -27,6 +27,24 @@ if (import.meta.hot) {
     window.location.reload();
   });
 }
+
+/**
+ * Mapping of channel IDs to the Loro frontiers for the last time that the user looked at this
+ * channel. */
+const ChannelsRead = type({
+  spaces: {
+    "[string]": {
+      channels: {
+        "[string]": "string",
+      },
+    },
+  },
+});
+
+/** The channels read that we have from local storage. */
+const savedChannelsRead = ChannelsRead(
+  JSON.parse(localStorage.getItem("channelsRead") || "{}"),
+);
 
 export let globalState = $state({
   // Create an empty roomy instance by default, it will be updated when the user logs in.
@@ -42,9 +60,11 @@ export let globalState = $state({
   isAdmin: false,
   isBanned: false,
   currentCatalog: "home",
+  channelsRead: (savedChannelsRead instanceof type.errors
+    ? { spaces: {} }
+    : savedChannelsRead) as typeof ChannelsRead.infer,
 });
-
-const entityId = new EntityId();
+(globalThis as any).globalState = globalState;
 
 $effect.root(() => {
   // Redirect to the `/-/space.domain` or `/leaf:id` as appropriate.
@@ -70,11 +90,6 @@ $effect.root(() => {
     if (user.agent && user.catalogId.value) {
       // Initialize new roomy instance
       initRoomy(user.agent).then((roomy) => (globalState.roomy = roomy));
-    } else {
-      // Set a blank roomy instance just to avoid having to set it to undefined.
-      Roomy.init(new SveltePeer(), entityId).then((roomy) => {
-        globalState.roomy = roomy;
-      });
     }
   });
 
@@ -156,6 +171,34 @@ $effect.root(() => {
       globalState.isBanned = false;
     }
   });
+
+  $effect(() => {
+    localStorage.setItem(
+      "channelsRead",
+      JSON.stringify(globalState.channelsRead),
+    );
+  });
+
+  $effect(() => {
+    globalState.space;
+    globalState.channel;
+    if (globalState.space && globalState.channel) {
+      if (
+        !Object.keys(globalState.channelsRead.spaces).includes(
+          globalState.space.id,
+        )
+      ) {
+        globalState.channelsRead.spaces[globalState.space.id] = {
+          channels: {},
+        };
+      }
+      const spaceRead = globalState.channelsRead.spaces[globalState.space.id]!;
+      const channelId = globalState.channel.id;
+      entityVersion(globalState.channel).then((version) => {
+        spaceRead.channels[channelId] = version;
+      });
+    }
+  });
 });
 
 async function initRoomy(agent: Agent): Promise<Roomy> {
@@ -179,21 +222,23 @@ async function initRoomy(agent: Agent): Promise<Roomy> {
       `Error obtaining router auth token ${JSON.stringify(resp)}`,
     );
   }
-  const token = resp.data.token as string;
+  // const token = resp.data.token as string;
 
   // Open router client
-  const websocket = new WebSocket(
-    `wss://syncserver.roomy.chat/sync/as/${agent.assertDid}`,
-    ["authorization", token],
-  );
+  // const websocket = new WebSocket(
+  //   `wss://syncserver.roomy.chat/sync/as/${agent.assertDid}`,
+  //   ["authorization", token],
+  // );
 
   // Use this instead of you want to test with a local development Leaf syncserver.
-  // const websocket = new WebSocket("ws://127.0.0.1:8095");
+  const websocket = new WebSocket("ws://127.0.0.1:8095");
+  const storageAdapter = indexedDBStorageAdapter(
+    "roomy-01JQ0EP4SMJW9D58JXMV9E1CF2",
+  );
+  (globalThis as any).storageAdapter = storageAdapter;
 
   const peer = new SveltePeer(
-    new StorageManager(
-      indexedDBStorageAdapter("roomy-01JQ0EP4SMJW9D58JXMV9E1CF2"),
-    ),
+    new StorageManager(storageAdapter),
     await webSocketSyncer(websocket),
   );
 
