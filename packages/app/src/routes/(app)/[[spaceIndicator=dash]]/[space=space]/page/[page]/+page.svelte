@@ -16,7 +16,7 @@
 </script>
 
 {#if pg.value}
-  <div class="w-full">
+  <div class="w-full h-full flex flex-col">
     <PageEditor page={pg.value} />
   </div>
 {/if}
