@@ -5,12 +5,17 @@
 
   import { navigateSync } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  import { Category, Channel } from "@roomy-chat/sdk";
+  import {
+    Category,
+    Channel,
+    NamedEntity,
+    type Frontiers,
+  } from "@roomy-chat/sdk";
   import { Accordion, Button } from "bits-ui";
   import { slide } from "svelte/transition";
   import Dialog from "./Dialog.svelte";
 
-  let { sidebarItems } = $props();
+  let { sidebarItems }: { sidebarItems: { value: NamedEntity[] } } = $props();
 
   //
   // Category Edit Dialog
@@ -24,6 +29,17 @@
     editingCategory.name = categoryNameInput;
     editingCategory.commit();
     showCategoryDialog = false;
+  }
+
+  function hasUnreads(channel: NamedEntity): boolean {
+    if (!globalState.space) return false;
+    const spaceReads = globalState.channelsRead.spaces[globalState.space.id];
+    if (!spaceReads) return true;
+    const readFrontiers = spaceReads.channels[channel.id];
+    if (!readFrontiers) return true;
+
+    const cmp = channel.entity.doc.cmpWithFrontiers(readFrontiers as Frontiers);
+    return cmp == 1 ? true : false;
   }
 </script>
 
@@ -142,7 +158,10 @@
       >
         <h3 class="flex justify-start items-center w-full gap-2">
           <Icon icon="basil:comment-solid" class="shrink-0" />
-          <span class="truncate"> {item.name} </span>
+          <span class="truncate">
+            {item.name}
+            {hasUnreads(item) ? "*" : ""}
+          </span>
         </h3>
       </Button.Root>
     {/if}
