@@ -8,6 +8,11 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { setGlobalDispatcher, EnvHttpProxyAgent } from 'undici'
+
+// Add support for running behind an http proxy.
+const envHttpProxyAgent = new EnvHttpProxyAgent()
+setGlobalDispatcher(envHttpProxyAgent)
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -57,6 +62,9 @@ const processedMessages = new Set<string>();
 // Setup Discord client
 function createDiscordClient(token: string): Client {
   const client = new Client({
+    rest: {
+      agent: envHttpProxyAgent,
+    },
     intents: [
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
