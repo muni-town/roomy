@@ -24,7 +24,6 @@
     "lint-staged": "lint-staged"
   },
   "devDependencies": {
-    "@zip-js/zip-js": "jsr:@zip-js/zip-js@2.7.59",
     "@atproto/api": "^0.14.9",
     "@atproto/lexicon": "^0.4.5",
     "@atproto/oauth-client-browser": "^0.3.7",
@@ -45,6 +44,12 @@
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.1.4",
+    "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/cli": "^2.5.0",
+    "@tauri-apps/plugin-deep-link": "^2.2.1",
+    "@tauri-apps/plugin-log": "^2.4.0",
+    "@tauri-apps/plugin-opener": "^2.2.6",
+    "@tauri-apps/plugin-os": "^2.2.1",
     "@tiptap/core": "^2.11.5",
     "@tiptap/extension-image": "^2.11.7",
     "@tiptap/extension-link": "^2.11.5",
@@ -56,6 +61,7 @@
     "@types/linkify-it": "^5.0.0",
     "@types/sanitize-html": "^2.13.0",
     "@types/underscore": "^1.13.0",
+    "@zip-js/zip-js": "jsr:@zip-js/zip-js@2.7.59",
     "base32-decode": "^1.0.0",
     "base32-encode": "^2.0.0",
     "bits-ui": "^1.3.19",
