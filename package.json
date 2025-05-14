@@ -22,5 +22,8 @@
     "pkgroll": "^2.12.2",
     "turbo": "^2.5.3",
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "flexsearch": "^0.8.164"
   }
 }

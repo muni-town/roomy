@@ -14,12 +14,13 @@
 
   let {
     timeline,
+    virtualizer = $bindable(),
   }: {
     timeline: Timeline;
+    virtualizer?: Virtualizer<string>;
   } = $props();
 
   let viewport: HTMLDivElement = $state(null!);
-  let virtualizer: Virtualizer<string> | undefined = $state();
   let messagesLoaded = $state(false);
 
   setContext("scrollToMessage", (id: EntityIdStr) => {

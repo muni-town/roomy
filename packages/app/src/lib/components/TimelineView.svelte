@@ -20,6 +20,7 @@
     Thread,
     Timeline,
     Category,
+    type EntityIdStr,
   } from "@roomy-chat/sdk";
   import type { JSONContent } from "@tiptap/core";
   import { getProfile } from "$lib/profile.svelte";
@@ -27,6 +28,43 @@
   import CreatePageDialog from "$lib/components/CreatePageDialog.svelte";
   import BoardList from "./BoardList.svelte";
   import ToggleNavigation from "./ToggleNavigation.svelte";
+  import { Index } from 'flexsearch';
+  import SearchResults from "./SearchResults.svelte";
+  import type { Virtualizer } from "virtua/svelte";
+
+  
+  // Helper function to extract text content from TipTap JSON content
+  function extractTextContent(parsedBody: Record<string, unknown>): string {
+    if (!parsedBody || typeof parsedBody !== 'object' || !('content' in parsedBody)) return '';
+    
+    let text = '';
+    
+    // Process the content recursively to extract text
+    function processNode(node: Record<string, unknown>): void {
+      if ('text' in node && typeof node.text === 'string') {
+        text = `${text}${node.text} `;
+      }
+      
+      if ('content' in node && Array.isArray(node.content)) {
+        for (const item of node.content) {
+          if (typeof item === 'object' && item !== null) {
+            processNode(item as Record<string, unknown>);
+          }
+        }
+      }
+    }
+    
+    // Start processing from the root content
+    if ('content' in parsedBody && Array.isArray(parsedBody.content)) {
+      for (const node of parsedBody.content) {
+        if (typeof node === 'object' && node !== null) {
+          processNode(node as Record<string, unknown>);
+        }
+      }
+    }
+    
+    return text.trim();
+  }
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
@@ -64,8 +102,8 @@
   setContext("selectMessage", (message: Message) => {
     selectedMessages.push(message);
   });
-  setContext("removeSelectedMessage", (message: Message) => {
-    selectedMessages = selectedMessages.filter((m) => m != message);
+  setContext("removeSelectedMessage", (msg: Message) => {
+    selectedMessages = selectedMessages.filter((m) => m !== msg);
   });
 
   $effect(() => {
@@ -78,6 +116,75 @@
   let replyingTo = $state() as Message | undefined;
   setContext("setReplyTo", (message: Message) => {
     replyingTo = message;
+  });
+
+  // Initialize FlexSearch with appropriate options for message content
+  let searchIndex = new Index({
+    tokenize: "forward",
+    preset: "performance"
+  });
+  let searchQuery = $state('');
+  let filteredMessageIds = $state<string[] | undefined>(undefined);
+  let showSearchInput = $state(false);
+  let searchResults = $state<Message[]>([]);
+  let showSearchResults = $state(false);
+  let virtualizer = $state<Virtualizer<string> | undefined>(undefined);
+
+  const scrollToMessage = getContext("scrollToMessage") as (
+    id: EntityIdStr,
+  ) => void;
+
+  console.dir("scroll to messages", scrollToMessage)
+
+
+  // Function to handle search result click
+  function handleSearchResultClick(messageId: string) {
+    console.dir("handle result click");
+    // Hide search results
+    showSearchResults = false;
+    
+    // Find the message in the timeline to get its index
+    if (globalState.channel) {
+      // Get the timeline IDs - this returns an array, not a Promise
+      const ids = globalState.channel.timeline.ids();
+      const messageIndex = ids.indexOf(messageId);
+      
+      if (messageIndex !== -1) {
+        virtualizer.scrollToIndex(messageIndex);
+      } else {
+        console.error("Message not found in timeline:", messageId);
+      }
+    } else {
+      console.error("No active channel");
+    }
+  }
+
+  // Index existing messages when timeline items are loaded
+  $effect(() => {
+    console.dir("effect for indexing")
+    if (searchIndex && globalState.channel?.timeline) {
+      // items() returns a Promise, unlike ids() which returns an array directly
+      globalState.channel.timeline.items().then(items => {
+        // Clear index before re-indexing to avoid duplicates
+        searchIndex.clear();
+        
+        for (const item of items) {
+          const message = item.tryCast(Message);
+          if (message) {
+            // Try parsing the message body
+            const parsedBody= JSON.parse(message.bodyJson);
+           
+            // Extract text content from the parsed body
+            const textContent = extractTextContent(parsedBody);
+            
+            if (textContent) {
+              console.dir(`adding ${textContent}`)
+              searchIndex.add(message.id, textContent);
+            }
+          }
+        }
+      });
+    }
   });
 
   async function createThread(e: SubmitEvent) {
@@ -157,6 +264,19 @@
     message.commit();
     if (replyingTo) message.replyTo = replyingTo;
 
+    // Add new message to search index
+    if (searchIndex) {
+        const parsedBody = JSON.parse(message.bodyJson);
+        
+        // Extract text content from the parsed body
+        const textContent = extractTextContent(parsedBody);
+        
+        if (textContent) {
+          searchIndex.add(message.id, textContent);
+          console.dir(`added ${textContent}`)
+        }
+    }
+
     // Images are now handled by TipTap in the message content
     // Limit image size in message input to 300x300
 
@@ -166,6 +286,43 @@
     messageInput = {};
     replyingTo = undefined;
   }
+
+  // Handle search input
+  $effect(() => {
+    if (searchIndex && searchQuery) {
+      // Perform synchronous search
+      const results = searchIndex.search(searchQuery);
+      console.dir(`searching ${searchQuery}`);
+      console.dir({results});
+      
+      if (results.length > 0) {
+        // Convert numeric IDs to strings before assigning
+        filteredMessageIds = results.map(id => String(id));
+        showSearchResults = true;
+        
+        // Get the actual Message objects for the search results
+        if (globalState.channel?.timeline) {
+          globalState.channel.timeline.items().then(items => {
+            searchResults = items
+              .map(x => x.tryCast(Message))
+              .filter((msg): msg is Message => 
+                msg !== null && 
+                msg !== undefined && 
+                results.includes(msg.id)
+              );
+          });
+        }
+      } else {
+        filteredMessageIds = undefined;
+        searchResults = [];
+        showSearchResults = searchQuery.length > 0;
+      }
+    } else {
+      filteredMessageIds = undefined;
+      searchResults = [];
+      showSearchResults = false;
+    }
+  });
 
   //
   // Settings Dialog
@@ -204,6 +361,32 @@
       : [];
   });
 </script>
+
+<style>
+  .reply-highlight {
+    animation: pulse-highlight 2s ease-in-out;
+  }
+
+  @keyframes pulse-highlight {
+    0% {
+      background-color: rgba(59, 130, 246, 0.1);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+    50% {
+      background-color: rgba(59, 130, 246, 0.2);
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3);
+    }
+    100% {
+      background-color: transparent;
+      box-shadow: none;
+    }
+  }
+
+  /* Same style for search result highlight for consistency */
+  .search-result-highlight {
+    animation: pulse-highlight 2s ease-in-out;
+  }
+</style>
 
 <header class="dz-navbar">
   <div class="dz-navbar-start flex gap-4">
@@ -251,7 +434,16 @@
   {/if}
 
   {#if !isMobile}
-    <div class="dz-navbar-end">
+    <div class="dz-navbar-end flex items-center gap-2">
+      {#if tab === "chat" || globalState.channel instanceof Thread}
+        <button 
+          class="btn btn-ghost btn-sm btn-circle" 
+          onclick={() => showSearchInput = !showSearchInput}
+          title="Toggle search"
+        >
+          <Icon icon="tabler:search" class="text-base-content" />
+        </button>
+      {/if}
       <TimelineToolbar {createThread} bind:threadTitleInput />
     </div>
   {/if}
@@ -270,40 +462,79 @@
   </BoardList>
 {:else if tab === "chat" || globalState.channel instanceof Thread}
   {#if globalState.space && globalState.channel}
-    <ChatArea timeline={globalState.channel.forceCast(Timeline)} />
-    <div class="flex items-center">
-      {#if !isMobile || !isThreading.value}
-        <section class="grow flex flex-col">
-          {#if replyingTo}
-            <div
-              class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
-            >
-              <div class="flex flex-col gap-1">
-                <h5 class="flex gap-2 items-center">
-                  Replying to
-                  {#await getProfile(replyingTo.authors( (x) => x.get(0), )) then profile}
-                    <AvatarImage
-                      handle={profile.handle || ""}
-                      avatarUrl={profile.avatarUrl}
-                      className="!w-4"
-                    />
-                    <strong>{profile.handle}</strong>
-                  {/await}
-                </h5>
-                <p class="text-primary-content text-ellipsis italic">
-                  {@html getContentHtml(JSON.parse(replyingTo.bodyJson))}
-                </p>
-              </div>
-              <Button.Root
-                type="button"
-                onclick={() => (replyingTo = undefined)}
-                class="dz-btn dz-btn-circle dz-btn-ghost"
-              >
-                <Icon icon="zondicons:close-solid" />
-              </Button.Root>
-            </div>
-          {/if}
+    <div class="flex h-full flex-col">
+      {#if showSearchInput}
+        <div class="flex items-center border-b border-gray-200 dark:border-gray-700 px-2 py-1">
+          <Icon icon="tabler:search" class="text-base-content/50 mr-2" />
+          <input
+            type="text"
+            placeholder="Search messages..."
+            bind:value={searchQuery}
+            class="input input-sm input-ghost w-full focus:outline-none"
+            autoComplete="off"
+          />
+          <button 
+            class="btn btn-ghost btn-sm btn-circle" 
+            onclick={() => {
+              searchQuery = '';
+              showSearchInput = false;
+              showSearchResults = false;
+            }}
+          >
+            <Icon icon="tabler:x" class="text-base-content/50" />
+          </button>
+        </div>
+        
+        {#if showSearchResults}
           <div class="relative">
+            <div class="absolute z-20 w-full">
+              <SearchResults 
+                messages={searchResults} 
+                query={searchQuery}
+                onMessageClick={handleSearchResultClick}
+                onClose={() => {
+                  showSearchResults = false;
+                }}
+              />
+            </div>
+          </div>
+        {/if}
+      {/if}
+      <div class="flex-grow overflow-auto relative" style="max-height: calc(100vh - 180px);">
+        <ChatArea timeline={globalState.channel.forceCast(Timeline)} {filteredMessageIds} bind:virtualizer />
+        
+        {#if replyingTo}
+          <div
+            class="reply-container flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2 absolute bottom-0 left-0 right-0"
+          >
+            <div class="flex items-center gap-2 overflow-hidden">
+              <span>Replying to</span>
+              {#await getProfile(replyingTo.authors( (x) => x.get(0), )) then profile}
+                <AvatarImage
+                  handle={profile.handle || ""}
+                  avatarUrl={profile.avatarUrl}
+                  className="!w-4"
+                />
+                <strong>{profile.handle}</strong>
+              {/await}
+              <p class="text-primary-content text-ellipsis italic max-h-12 overflow-hidden ml-2">
+                {@html getContentHtml(JSON.parse(replyingTo.bodyJson))}
+              </p>
+            </div>
+            <Button.Root
+              type="button"
+              onclick={() => (replyingTo = undefined)}
+              class="dz-btn dz-btn-circle dz-btn-ghost flex-shrink-0"
+            >
+              <Icon icon="zondicons:close-solid" />
+            </Button.Root>
+          </div>
+        {/if}
+      </div>
+      
+      <div>
+        {#if !isMobile || !isThreading.value}
+          <div class="chat-input-container">
             <!-- TODO: get all users that has joined the server -->
             {#if globalState.roomy && globalState.roomy.spaces
                 .ids()
@@ -325,15 +556,13 @@
                 }}>join Space To Chat</Button.Root
               >
             {/if}
-
-            <!-- Image upload button is now in ChatInput.svelte -->
           </div>
-        </section>
-      {/if}
+        {/if}
 
-      {#if isMobile}
-        <TimelineToolbar {createThread} bind:threadTitleInput />
-      {/if}
+        {#if isMobile}
+          <TimelineToolbar {createThread} bind:threadTitleInput />
+        {/if}
+      </div>
     </div>
   {/if}
 {/if}
