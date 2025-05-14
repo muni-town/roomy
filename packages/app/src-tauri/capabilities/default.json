@@ -15,6 +15,7 @@
         }
       ]
     },
-    "os:default"
+    "os:default",
+    "log:default"
   ]
 }
