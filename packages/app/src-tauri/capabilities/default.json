@@ -7,6 +7,13 @@
     "core:default",
     "core:event:default",
     "deep-link:default",
-    "opener:default"
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://*"
+        }
+      ]
+    }
   ]
 }
