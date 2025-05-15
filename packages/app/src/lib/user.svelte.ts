@@ -10,9 +10,9 @@ import { EntityId } from "@muni-town/leaf";
 import { atproto } from "./atproto.svelte";
 import { lexicons } from "./lexicons";
 import { decodeBase32 } from "./base32";
-import { page } from "$app/state";
 import { isTauri } from "@tauri-apps/api/core";
 import { navigate } from "$lib/utils.svelte";
+import { handleOauthCallback } from "./handleOauthCallback";
 
 // Reload app when this module changes to prevent accumulated connections
 if (import.meta.hot) {
@@ -207,16 +207,14 @@ export const user = {
       scope: atproto.scope,
     });
     if (isTauri()) {
-
       openUrl(url.toString());
+      // runs on tauri desktop platforms
       await onOpenUrl((urls: string[]) => {
         if (!urls || urls.length < 1) return;
         const url = new URL(urls[0]!);
-        const path = page.url;
-
-        path.search = url.search;
-        path.pathname = url.pathname;
-        window.location.href = path.href;
+        // redirecting to "/oauth/callback" from here counts as opening the link twice.
+        // instead we handle the returned searchParams directly here
+        return handleOauthCallback(url.searchParams);
       });
     } else {
       window.location.href = url.href;
