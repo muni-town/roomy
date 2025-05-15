@@ -6,6 +6,7 @@ import {
   type OAuthClientMetadataInput,
 } from "@atproto/oauth-client-browser";
 import { isTauri } from "@tauri-apps/api/core";
+import { type } from "@tauri-apps/plugin-os";
 
 const scope = "atproto transition:generic transition:chat.bsky";
 
@@ -65,6 +66,13 @@ export const atproto = {
         },
       );
       clientMetadata = await resp.json();
+      if (isTauri()) {
+        // only include redirect uri for current platform
+        clientMetadata.redirect_uris =
+          type() === "android" || type() === "ios"
+            ? ["https://roomy.chat/oauth/callback"]
+            : ["chat.roomy:/oauth/callback"];
+      }
     }
 
     // Build the oauth client
