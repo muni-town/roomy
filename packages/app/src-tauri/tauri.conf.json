@@ -9,7 +9,6 @@
     "beforeDevCommand": "pnpm dev"
   },
   "app": {
-    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Roomy",

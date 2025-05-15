@@ -5,7 +5,7 @@ import {
   buildLoopbackClientId,
   type OAuthClientMetadataInput,
 } from "@atproto/oauth-client-browser";
-import { IN_TAURI } from "$lib/tauri";
+import { isTauri } from "@tauri-apps/api/core";
 
 const scope = "atproto transition:generic transition:chat.bsky";
 
@@ -36,7 +36,7 @@ export const atproto = {
 
     // Build the client metadata
     let clientMetadata: OAuthClientMetadataInput;
-    if (dev && !IN_TAURI) {
+    if (dev && !isTauri()) {
       // Get the base URL and redirect URL for this deployment
       const baseUrl = new URL(
         dev ? "http://127.0.0.1:5173" : globalThis.location.href,
@@ -59,7 +59,7 @@ export const atproto = {
       // native client metadata is not reuqired to be on the same domin as client_id,
       // so it can always use the deployed metadata
       const resp = await fetch(
-        `/oauth-client${IN_TAURI ? "-native" : ""}.json`,
+        `/oauth-client${isTauri() ? "-native" : ""}.json`,
         {
           headers: [["accept", "application/json"]],
         },
