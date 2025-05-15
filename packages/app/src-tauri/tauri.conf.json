@@ -38,13 +38,10 @@
       "mobile": [
         {
           "host": "roomy.chat"
-        },
-        {
-          "host": "tauri.localhost"
         }
       ],
       "desktop": {
-        "schemes": ["chat.roomy", "roomy", "tauri"]
+        "schemes": ["chat.roomy", "roomy"]
       }
     }
   }
