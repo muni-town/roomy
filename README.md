@@ -16,7 +16,6 @@ Take a look at [our issues](https://github.com/muni-town/roomy/issues) and let u
 
 ```
 pnpm install
-pnpm run build  # Needed to generate files needed for dev
 pnpm run dev
 ```
 
