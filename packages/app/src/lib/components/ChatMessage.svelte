@@ -17,13 +17,33 @@
   import type { JSONContent } from "@tiptap/core";
   import ChatInput from "./ChatInput.svelte";
   import toast from "svelte-french-toast";
+  import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
 
   type Props = {
-    message: Message | Announcement;
     mergeWithPrevious?: boolean;
-  };
+  } & (
+    | {
+        message: Message | Announcement;
+        type: "message";
+      }
+    | {
+        message: Message;
+        type: "link";
+      }
+  );
 
-  let { message, mergeWithPrevious = false }: Props = $props();
+  let {
+    message,
+    mergeWithPrevious = false,
+    type = "message",
+  }: Props = $props();
+
+  const isReplyable = type === "message";
+  const links =
+    type === "link" &&
+    (collectLinks(tiptapJsontoString((message as Message).bodyJson)) || []).map(
+      (url) => url.replace("http:", "https:"),
+    );
 
   let messageRepliedTo = derivePromise(undefined, async () => {
     if (globalState.roomy && message.replyTo) {
@@ -493,12 +513,22 @@
           {/if}
 
           <div class="flex flex-col gap-1">
-            <!-- Using a fancy Tailwind trick to target all href elements inside of this parent -->
-            <span
-              class="dz-prose select-text [&_a]:text-primary [&_a]:hover:underline"
-            >
-              {@html getContentHtml(JSON.parse(msg.bodyJson))}
-            </span>
+            {#if type === "message"}
+              <!-- Using a fancy Tailwind trick to target all href elements inside of this parent -->
+              <span
+                class="dz-prose select-text [&_a]:text-primary [&_a]:hover:underline"
+              >
+                {@html getContentHtml(JSON.parse(msg.bodyJson))}
+              </span>
+            {:else if links && type === "link"}
+              {#each links as url}
+                <a
+                  href={url}
+                  target="_blank"
+                  class="text-primary hover:underline">{url}</a
+                >
+              {/each}
+            {/if}
 
             {#if isMessageEdited(msg)}
               <div class="relative group/edit">
@@ -583,7 +613,7 @@
 
         {#if authorProfile}
           <div class="dz-join dz-join-vertical w-full">
-            {#if message instanceof Message}
+            {#if message instanceof Message && isReplyable}
               <Button.Root
                 onclick={() => {
                   setReplyTo(message);
@@ -661,7 +691,7 @@
           </Toolbar.Button>
         {/if}
 
-        {#if authorProfile && message instanceof Message}
+        {#if authorProfile && message instanceof Message && isReplyable}
           <Toolbar.Button
             onclick={() => setReplyTo(message)}
             class="dz-btn dz-btn-ghost dz-btn-square"

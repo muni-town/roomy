@@ -12,6 +12,7 @@
   import { Button, Tabs } from "bits-ui";
 
   import { derivePromise } from "$lib/utils.svelte";
+  import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
   import { globalState } from "$lib/global.svelte";
   import {
     Announcement,
@@ -28,6 +29,10 @@
   import BoardList from "./BoardList.svelte";
   import ToggleNavigation from "./ToggleNavigation.svelte";
 
+  const links = derivePromise(null, async () =>
+    (await globalState.space?.threads.items())?.find((x) => x.name === "@links"),
+  );
+  const readonly = $derived(globalState.channel?.name === "@links");
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let users: { value: Item[] } = getContext("users");
@@ -159,6 +164,12 @@
 
     // Images are now handled by TipTap in the message content
     // Limit image size in message input to 300x300
+    if (collectLinks(tiptapJsontoString(messageInput))) {
+      if (links.value) {
+        links.value.timeline.push(message);
+        links.value.commit();
+      }
+    }
 
     globalState.channel.timeline.push(message);
     globalState.channel.commit();
@@ -308,12 +319,20 @@
             {#if globalState.roomy && globalState.roomy.spaces
                 .ids()
                 .includes(globalState.space.id)}
+              {#if !readonly}
               <ChatInput
                 bind:content={messageInput}
                 users={users.value}
                 context={contextItems.value}
                 onEnter={sendMessage}
               />
+              {:else}
+                <div class="flex items-center grow flex-col">
+                  <Button.Root disabled class="w-full dz-btn"
+                    >Automatted Thread</Button.Root
+                  >
+                </div>
+              {/if}
             {:else}
               <Button.Root
                 class="w-full dz-btn"
