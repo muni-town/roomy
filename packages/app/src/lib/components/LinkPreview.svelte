@@ -15,10 +15,10 @@
   import type { JSONContent } from "@tiptap/core";
   import ChatInput from "./ChatInput.svelte";
   import toast from "svelte-french-toast";
-  import LinkCard from "./LinkCard.svelte";
+  // import LinkCard from "./LinkCard.svelte";
   import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
-  import { getLinkEmbedData } from "$lib/utils/getLinkEmbedData";
-  import type { Embed } from "$lib/types/embed-sdk";
+  // import { getLinkEmbedData } from "$lib/utils/getLinkEmbedData";
+  // import type { Embed } from "$lib/types/embed-sdk";
   type Props = {
     message: Message;
   };
@@ -29,9 +29,10 @@
     (collectLinks(tiptapJsontoString(message.bodyJson)) || []).map((url) => {
       const value = $state({
         url: url.replace("http:", "https:"),
-        data: undefined as Embed | undefined,
+        data: undefined /*as Embed | undefined */,
       });
 
+      /*
       const data = getLinkEmbedData(url);
       if (data && !("then" in data)) value.data = data;
       else if (data) {
@@ -41,6 +42,7 @@
           })
           .catch(console.error);
       }
+      */
       return value;
     }),
   );
@@ -324,7 +326,7 @@
             >
               {#each links as { url, data } (url)}
                 {#if data}
-                  <LinkCard {data} {url} />
+                  <!--LinkCard {data} {url} /-->
                 {:else}
                   <a href={url}>{url}</a>
                 {/if}
