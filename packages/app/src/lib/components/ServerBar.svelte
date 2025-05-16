@@ -13,6 +13,8 @@
   import { atproto } from "$lib/atproto.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { env } from "$env/dynamic/public";
+  import JSZip from "jszip";
+  import FileSaver from "file-saver";
 
   let {
     spaces,
@@ -69,6 +71,51 @@
       loginError = e instanceof Error ? e.message.toString() : "Unknown error";
     }
     signupLoading = false;
+  }
+
+  async function addEntityToZip(zip, entity) {
+    var id = entity.entity.id.toString();
+    var doc = entity.entity.doc;
+
+    if (id in zip.files)
+      return
+
+    zip.file(id, doc.export({ mode: "snapshot" }));
+
+    if ("timeline" in entity) {
+      await addEntityListToZip(zip, entity.timeline)
+    }
+  }
+
+  async function addEntityListToZip(zip, entity_list) {
+    var items = await entity_list.items();
+    for(var i in items) {
+      await addEntityToZip(zip, items[i]);
+    }
+  }
+
+  async function exportZip() {
+    var metadata = {
+      "Type": "RoomyData",
+      "Version": "0"
+    }
+
+    var zip = new JSZip();
+
+    var space = globalState.space;
+    metadata["space_id"] = space.entity.id.toString();
+
+    await addEntityToZip(zip, space);
+
+    await addEntityListToZip(zip, space.threads);
+    await addEntityListToZip(zip, space.channels);
+    await addEntityListToZip(zip, space.wikipages);
+
+    zip.file("meta.json", JSON.stringify(metadata));
+
+    zip.generateAsync({ type: 'blob' }).then(function (content) {
+      FileSaver.saveAs(content, 'roomy-data.zip');
+    });
   }
 </script>
 
@@ -143,6 +190,15 @@
         <Icon icon="mdi:folder-upload-outline" font-size="1.8em" />
       </Button.Root>
     {/if}
+
+    <Button.Root
+      title="Export ZIP Archive"
+      class="p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
+      disabled={!user.session}
+      onclick={exportZip}
+    >
+      <Icon icon="mdi:folder-download-outline" font-size="1.8em" />
+    </Button.Root>
 
     <ThemeSelector />
     <Dialog
