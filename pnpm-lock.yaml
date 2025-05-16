@@ -8,12 +8,9 @@ importers:
 
   .:
     dependencies:
-      file-saver:
-        specifier: ^2.0.5
-        version: 2.0.5
-      jszip:
-        specifier: ^3.10.1
-        version: 3.10.1
+      flexsearch:
+        specifier: ^0.8.164
+        version: 0.8.164
     devDependencies:
       '@repo/tsconfig':
         specifier: workspace:*
@@ -21,9 +18,15 @@ importers:
       beachball:
         specifier: ^2.54.0
         version: 2.54.0(typescript@5.8.3)
+      file-saver:
+        specifier: ^2.0.5
+        version: 2.0.5
       husky:
         specifier: ^9.1.7
         version: 9.1.7
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
       pkgroll:
         specifier: ^2.12.2
         version: 2.12.2(typescript@5.8.3)
@@ -2126,6 +2129,9 @@ packages:
   fill-range@7.1.1:
     resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
     engines: {node: '>=8'}
+
+  flexsearch@0.8.164:
+    resolution: {integrity: sha512-tauQG+NlwSWW6uL3BIJdHNEXYiei2xTR3H/mrjNadAOwvXgiLbLvLzQWSJvD31Yn0+1lAxG2NVRndywGnDZZiA==}
 
   focus-trap@7.6.4:
     resolution: {integrity: sha512-xx560wGBk7seZ6y933idtjJQc1l+ck+pI3sKvhKozdBV1dRZoKhkW5xoCaFv9tQiX5RH1xfSxjuNu6g+lmN/gw==}
@@ -5540,6 +5546,8 @@ snapshots:
   fill-range@7.1.1:
     dependencies:
       to-regex-range: 5.0.1
+
+  flexsearch@0.8.164: {}
 
   focus-trap@7.6.4:
     dependencies:
