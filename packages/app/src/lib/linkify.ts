@@ -7,6 +7,7 @@ const TLDS = [
   "biz",
   "online",
   "club",
+  "chat",
   "site",
   "live",
   "tech",
