@@ -804,7 +804,7 @@
 <div class="dz-divider"></div>
 
 {#if !isEditingPage}
-  <section class="page-content">
+  <section class="page-content h-full overflow-y-auto">
     <div class="page-rendered p-4">
       <div class="page-html text-base-content">
         {#if pg && !pg.softDeleted}
@@ -816,7 +816,7 @@
     </div>
   </section>
 {:else}
-  <section class="page-editor-container p-4">
+  <section class="page-editor-container p-4 h-full overflow-y-auto">
     <div
       class="page-editor bg-base-300/20 rounded-lg border border-base-content/30 p-4 h-auto {isEditingPage
         ? 'edit-mode'
