@@ -14,6 +14,7 @@ pub fn run() {
         }));
     }
     builder
+        .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
@@ -27,7 +28,10 @@ pub fn run() {
             #[cfg(debug_assertions)]
             {
                 app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
+                    tauri_plugin_log::Builder::new()
+                        .target(tauri_plugin_log::Target::new(
+                            tauri_plugin_log::TargetKind::Stdout,
+                        ))
                         .level(log::LevelFilter::Info)
                         .build(),
                 )?;

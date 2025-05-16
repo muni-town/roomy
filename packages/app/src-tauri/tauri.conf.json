@@ -5,11 +5,10 @@
   "identifier": "chat.roomy.app",
   "build": {
     "frontendDist": "../build",
-    "devUrl": "http://localhost:4173",
-    "beforeDevCommand": "pnpm preview"
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "pnpm dev"
   },
   "app": {
-    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Roomy",
