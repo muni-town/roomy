@@ -132,6 +132,9 @@ importers:
       '@zip-js/zip-js':
         specifier: jsr:@zip-js/zip-js@2.7.59
         version: '@jsr/zip-js__zip-js@2.7.59'
+      arktype:
+        specifier: ^2.1.20
+        version: 2.1.20
       base32-decode:
         specifier: ^1.0.0
         version: 1.0.0

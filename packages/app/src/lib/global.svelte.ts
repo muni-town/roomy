@@ -7,6 +7,7 @@ import {
   Thread,
   StorageManager,
 } from "@roomy-chat/sdk";
+import { type } from "arktype";
 import { SveltePeer } from "@muni-town/leaf-svelte";
 import { indexedDBStorageAdapter } from "@muni-town/leaf-storage-indexeddb";
 import { webSocketSyncer } from "@muni-town/leaf-sync-ws";
@@ -28,6 +29,25 @@ if (import.meta.hot) {
   });
 }
 
+/**
+ * Mapping of channel IDs to the Loro frontiers for the last time that the user looked at this
+ * channel. */
+const Frontier = type({ peer: "string", counter: "number " });
+const ChannelsRead = type({
+  spaces: {
+    "[string]": {
+      channels: {
+        "[string]": Frontier.array(),
+      },
+    },
+  },
+});
+
+/** The channels read that we have from local storage. */
+const savedChannelsRead = ChannelsRead(
+  localStorage.getItem("channelsRead") || "{}",
+);
+
 export let globalState = $state({
   // Create an empty roomy instance by default, it will be updated when the user logs in.
   roomy: undefined as Roomy | undefined,
@@ -42,6 +62,9 @@ export let globalState = $state({
   isAdmin: false,
   isBanned: false,
   currentCatalog: "home",
+  channelsRead: (savedChannelsRead instanceof type.errors
+    ? { spaces: {} }
+    : savedChannelsRead) as typeof ChannelsRead.infer,
 });
 
 const entityId = new EntityId();
@@ -154,6 +177,32 @@ $effect.root(() => {
     } else {
       globalState.isAdmin = false;
       globalState.isBanned = false;
+    }
+  });
+
+  $effect(() => {
+    localStorage.setItem(
+      "channelsRead",
+      JSON.stringify(globalState.channelsRead),
+    );
+  });
+
+  $effect(() => {
+    globalState.space;
+    globalState.channel;
+    if (globalState.space && globalState.channel) {
+      if (
+        !Object.keys(globalState.channelsRead.spaces).includes(
+          globalState.space.id,
+        )
+      ) {
+        globalState.channelsRead.spaces[globalState.space.id] = {
+          channels: {},
+        };
+      }
+      const spaceRead = globalState.channelsRead.spaces[globalState.space.id]!;
+      spaceRead.channels[globalState.channel.id] =
+        globalState.channel.entity.doc.frontiers();
     }
   });
 });
