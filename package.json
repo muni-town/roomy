@@ -18,9 +18,7 @@
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",
     "beachball": "^2.54.0",
-    "file-saver": "^2.0.5",
     "husky": "^9.1.7",
-    "jszip": "^3.10.1",
     "pkgroll": "^2.12.2",
     "turbo": "^2.5.3",
     "typescript": "^5.8.3"
