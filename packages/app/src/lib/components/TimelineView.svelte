@@ -19,7 +19,6 @@
     Message,
     Thread,
     Timeline,
-    Category,
   } from "@roomy-chat/sdk";
   import type { JSONContent } from "@tiptap/core";
   import { getProfile } from "$lib/profile.svelte";
@@ -167,35 +166,12 @@
     replyingTo = undefined;
   }
 
-  //
-  // Settings Dialog
-  //
-
-  $effect(() => {
-    if (!globalState.space) return;
-
-    globalState.space &&
-      globalState.space.sidebarItems.items().then((items) => {
-        for (const item of items) {
-          const category = item.tryCast(Category);
-          if (
-            category &&
-            typeof category.channels === "object" &&
-            typeof category.channels.ids === "function" &&
-            globalState.channel &&
-            category.channels.ids().includes(globalState.channel.id)
-          ) {
-            return;
-          }
-        }
-      });
-  });
-  // Image upload is now handled in ChatInput.svelte
   let relatedThreads = derivePromise([], async () =>
     globalState.channel && globalState.channel instanceof Channel
       ? await globalState.channel.threads.items()
       : [],
   );
+
   const pages = derivePromise([], async () => {
     return globalState.space && globalState.channel instanceof Channel
       ? (await globalState.channel.wikipages.items()).filter(
@@ -304,14 +280,13 @@
             </div>
           {/if}
           <div class="relative">
-            <!-- TODO: get all users that has joined the server -->
             {#if globalState.roomy && globalState.roomy.spaces
                 .ids()
                 .includes(globalState.space.id)}
               <ChatInput
                 bind:content={messageInput}
-                users={users.value}
-                context={contextItems.value}
+                users={users.value || []}
+                context={contextItems.value || []}
                 onEnter={sendMessage}
               />
             {:else}
@@ -322,7 +297,7 @@
                     globalState.roomy.spaces.push(globalState.space);
                     globalState.roomy.commit();
                   }
-                }}>join Space To Chat</Button.Root
+                }}>Join Space To Chat</Button.Root
               >
             {/if}
 
