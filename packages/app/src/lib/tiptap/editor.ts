@@ -11,12 +11,12 @@ import {
   getSchema,
   mergeAttributes,
   type JSONContent,
+  type Editor,
 } from "@tiptap/core";
 import type {
   SuggestionKeyDownProps,
   SuggestionProps,
 } from "@tiptap/suggestion";
-import type { Editor } from "@tiptap/core";
 import { convertUrlsToLinks } from "$lib/urlUtils";
 
 /* Keyboard Shortcuts: used to add and override existing shortcuts */
@@ -101,7 +101,7 @@ function suggestion({
               callback: ({ id, label }: { id: string; label: string }) =>
                 props.command({ id, label }),
             },
-          }) as ReturnType<typeof SuggestionSelect>;
+          });
         },
         onUpdate: (props: SuggestionProps) => {
           component.setItems(props.items);

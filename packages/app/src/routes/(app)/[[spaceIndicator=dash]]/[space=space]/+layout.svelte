@@ -11,29 +11,57 @@
 
   // TODO: track users via the space data
   let users = derivePromise([], async () => {
-    if (!globalState.space || !globalState.space.channels) {
+    if (!globalState.space?.channels) {
+      return [];
+    }
+
+    const channels = await globalState.space.channels.items();
+    if (!channels.length) {
       return [];
     }
 
     const result = new Set();
-    for (const channel of await globalState.space.channels.items()) {
-      for (const timelineItem of await channel.timeline.items()) {
-        const message = timelineItem.tryCast(Message);
-        if (message && message.authors.length > 0) {
-          for (const author of message.authors((x) => x.toArray())) {
-            result.add(author);
+
+    for (const channel of channels) {
+      try {
+        for (const timelineItem of await channel.timeline.items()) {
+          const message = timelineItem.tryCast(Message);
+          if (message && message.authors.length > 0) {
+            for (const author of message.authors((x) => x.toArray())) {
+              result.add(author);
+            }
           }
         }
+      } catch (err) {
+        console.error("Missing author info", err);
       }
     }
-    const items = (await Promise.all(
-      [...result.values()].map(async (author) => {
-        const profile = await getProfile(author as string);
-        return { value: author, label: profile?.handle, category: "user" };
-      }),
-    )) as Item[];
 
-    return items;
+    let arrayOfUsers: Item[];
+    try {
+      arrayOfUsers = (
+        await Promise.all(
+          [...result.values()].map(async (author) => {
+            try {
+              const profile = await getProfile(author as string);
+              return {
+                value: author,
+                label: profile?.handle,
+                category: "user",
+              };
+            } catch (err) {
+              console.error("Error fetching user profile for", author, err);
+              return null; // Skip this entity
+            }
+          }),
+        )
+      ).filter(Boolean) as Item[];
+    } catch (err) {
+      console.error("Error fetching user profiles", err);
+      arrayOfUsers = [];
+    }
+
+    return arrayOfUsers;
   });
 
   let contextItems: { value: Item[] } = derivePromise([], async () => {

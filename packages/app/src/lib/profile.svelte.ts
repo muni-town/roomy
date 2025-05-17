@@ -32,16 +32,29 @@ export function getProfile(did: string): Promise<ProfileMeta> {
       return;
     }
 
-    user.agent!.getProfile({ actor: did }).then((resp) => {
-      if (!resp.success) return;
-      resolve({
-        did,
-        handle: resp.data.handle,
-        displayName: resp.data.displayName,
-        avatarUrl: resp.data.avatar || "",
+    user
+      .agent!.getProfile({ actor: did })
+      .then((resp) => {
+        if (!resp.success) throw new Error();
+
+        resolve({
+          did,
+          handle: resp.data.handle,
+          displayName: resp.data.displayName,
+          avatarUrl: resp.data.avatar ?? "",
+        });
+      })
+      .catch(() => {
+        // fallback: resolve with minimal info if error occurs
+        resolve({
+          did,
+          handle: did,
+          displayName: undefined,
+          avatarUrl: "",
+        });
       });
-    });
   });
+
   cache.set(did, promise);
 
   return promise;
