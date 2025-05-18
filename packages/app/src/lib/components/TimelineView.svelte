@@ -19,7 +19,6 @@
     Message,
     Thread,
     Timeline,
-    Category,
     type EntityIdStr,
   } from "@roomy-chat/sdk";
   import type { JSONContent } from "@tiptap/core";
@@ -322,35 +321,47 @@
     }
   });
 
-  //
-  // Settings Dialog
-  //
-
+  // Handle search input
   $effect(() => {
-    if (!globalState.space) return;
-
-    globalState.space &&
-      globalState.space.sidebarItems.items().then((items) => {
-        for (const item of items) {
-          const category = item.tryCast(Category);
-          if (
-            category &&
-            typeof category.channels === "object" &&
-            typeof category.channels.ids === "function" &&
-            globalState.channel &&
-            category.channels.ids().includes(globalState.channel.id)
-          ) {
-            return;
-          }
+    if (searchIndex && searchQuery) {
+      // Perform synchronous search
+      const results = searchIndex.search(searchQuery);
+      
+      if (results.length > 0) {
+        // Convert numeric IDs to strings before assigning
+        filteredMessageIds = results.map(id => String(id));
+        showSearchResults = true;
+        
+        // Get the actual Message objects for the search results
+        if (globalState.channel?.timeline) {
+          globalState.channel.timeline.items().then(items => {
+            searchResults = items
+              .map(x => x.tryCast(Message))
+              .filter((msg): msg is Message => 
+                msg !== null && 
+                msg !== undefined && 
+                results.includes(msg.id)
+              );
+          });
         }
-      });
+      } else {
+        filteredMessageIds = undefined;
+        searchResults = [];
+        showSearchResults = searchQuery.length > 0;
+      }
+    } else {
+      filteredMessageIds = undefined;
+      searchResults = [];
+      showSearchResults = false;
+    }
   });
-  // Image upload is now handled in ChatInput.svelte
+
   let relatedThreads = derivePromise([], async () =>
     globalState.channel && globalState.channel instanceof Channel
       ? await globalState.channel.threads.items()
       : [],
   );
+
   const pages = derivePromise([], async () => {
     return globalState.space && globalState.channel instanceof Channel
       ? (await globalState.channel.wikipages.items()).filter(
@@ -533,14 +544,13 @@
       <div>
         {#if !isMobile || !isThreading.value}
           <div class="chat-input-container">
-            <!-- TODO: get all users that has joined the server -->
             {#if globalState.roomy && globalState.roomy.spaces
                 .ids()
                 .includes(globalState.space.id)}
               <ChatInput
                 bind:content={messageInput}
-                users={users.value}
-                context={contextItems.value}
+                users={users.value || []}
+                context={contextItems.value || []}
                 onEnter={sendMessage}
               />
             {:else}
@@ -551,7 +561,7 @@
                     globalState.roomy.spaces.push(globalState.space);
                     globalState.roomy.commit();
                   }
-                }}>join Space To Chat</Button.Root
+                }}>Join Space To Chat</Button.Root
               >
             {/if}
           </div>

@@ -7,10 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      flexsearch:
-        specifier: ^0.8.164
-        version: 0.8.164
     devDependencies:
       '@repo/tsconfig':
         specifier: workspace:*
@@ -18,15 +14,12 @@ importers:
       beachball:
         specifier: ^2.54.0
         version: 2.54.0(typescript@5.8.3)
-      file-saver:
-        specifier: ^2.0.5
-        version: 2.0.5
+      flexsearch:
+        specifier: ^0.8.164
+        version: 0.8.164
       husky:
         specifier: ^9.1.7
         version: 9.1.7
-      jszip:
-        specifier: ^3.10.1
-        version: 3.10.1
       pkgroll:
         specifier: ^2.12.2
         version: 2.12.2(typescript@5.8.3)
@@ -123,6 +116,9 @@ importers:
       '@tiptap/suggestion':
         specifier: ^2.11.5
         version: 2.12.0(@tiptap/core@2.12.0(@tiptap/pm@2.12.0))(@tiptap/pm@2.12.0)
+      '@types/file-saver':
+        specifier: ^2.0.7
+        version: 2.0.7
       '@types/linkify-it':
         specifier: ^5.0.0
         version: 5.0.0
@@ -153,9 +149,15 @@ importers:
       emoji-picker-element:
         specifier: ^1.26.1
         version: 1.26.3
+      file-saver:
+        specifier: ^2.0.5
+        version: 2.0.5
       js-base64:
         specifier: ^3.7.7
         version: 3.7.7
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
       linkify-it:
         specifier: ^5.0.0
         version: 5.0.0
@@ -1659,6 +1661,9 @@ packages:
 
   '@types/extend@3.0.4':
     resolution: {integrity: sha512-ArMouDUTJEz1SQRpFsT2rIw7DeqICFv5aaVzLSIYMYQSLcwcGOfT3VyglQs/p7K3F7fT4zxr0NWxYZIdifD6dA==}
+
+  '@types/file-saver@2.0.7':
+    resolution: {integrity: sha512-dNKVfHd/jk0SkR/exKGj2ggkB45MAkzvWCaqLUUgkyjITkGNzH8H+yUwr+BLJUBjZOe9w8X3wgmXhZDRg1ED6A==}
 
   '@types/hast@2.3.10':
     resolution: {integrity: sha512-McWspRw8xx8J9HurkVBfYj0xKoE25tOFlHGdx4MJ5xORQrMGZNqJhVQWaIbm6Oyla5kYOXtDiopzKRJzEOkwJw==}
@@ -5048,6 +5053,8 @@ snapshots:
   '@types/estree@1.0.7': {}
 
   '@types/extend@3.0.4': {}
+
+  '@types/file-saver@2.0.7': {}
 
   '@types/hast@2.3.10':
     dependencies:
