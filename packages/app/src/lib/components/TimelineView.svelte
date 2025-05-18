@@ -292,8 +292,6 @@
     if (searchIndex && searchQuery) {
       // Perform synchronous search
       const results = searchIndex.search(searchQuery);
-      console.dir(`searching ${searchQuery}`);
-      console.dir({results});
       
       if (results.length > 0) {
         // Convert numeric IDs to strings before assigning

@@ -23,9 +23,7 @@
     "jszip": "^3.10.1",
     "pkgroll": "^2.12.2",
     "turbo": "^2.5.3",
-    "typescript": "^5.8.3"
-  },
-  "dependencies": {
+    "typescript": "^5.8.3",
     "flexsearch": "^0.8.164"
   }
 }
