@@ -73,36 +73,37 @@
     signupLoading = false;
   }
 
-  async function addEntityToZip(zip, entity) {
+  async function addEntityToZip(zip: any, entity: any) {
     var id = entity.entity.id.toString();
     var doc = entity.entity.doc;
 
-    if (id in zip.files)
-      return
+    if (id in zip.files) return;
 
     zip.file(id, doc.export({ mode: "snapshot" }));
 
     if ("timeline" in entity) {
-      await addEntityListToZip(zip, entity.timeline)
+      await addEntityListToZip(zip, entity.timeline);
     }
   }
 
-  async function addEntityListToZip(zip, entity_list) {
+  async function addEntityListToZip(zip: any, entity_list: any) {
     var items = await entity_list.items();
-    for(var i in items) {
+    for (var i in items) {
       await addEntityToZip(zip, items[i]);
     }
   }
 
   async function exportZip() {
-    var metadata = {
-      "Type": "RoomyData",
-      "Version": "0"
-    }
+    var metadata: { Type: string; Version: string; [key: string]: any } = {
+      Type: "RoomyData",
+      Version: "0",
+    };
 
     var zip = new JSZip();
 
     var space = globalState.space;
+    if (!space) return;
+
     metadata["space_id"] = space.entity.id.toString();
 
     await addEntityToZip(zip, space);
@@ -113,8 +114,8 @@
 
     zip.file("meta.json", JSON.stringify(metadata));
 
-    zip.generateAsync({ type: 'blob' }).then(function (content) {
-      FileSaver.saveAs(content, 'roomy-data.zip');
+    zip.generateAsync({ type: "blob" }).then(function (content) {
+      FileSaver.saveAs(content, "roomy-data.zip");
     });
   }
 </script>
