@@ -43,7 +43,7 @@
         id: x.id,
       })),
   );
-  let topics = $derived(allThreads.value.filter((x) => x.name !== "@links"));
+  let threads = $derived(allThreads.value.filter((x) => x.name !== "@links"));
   let links = $derived(allThreads.value.find((x) => x.name === "@links"));
 
   const pages = derivePromise([], async () =>
@@ -263,7 +263,7 @@
       <AccordionTree
         sections={[
           { key: "pages", items: pages.value },
-          { key: "topics", items: topics },
+          { key: "threads", items: threads },
         ]}
         active={globalState.channel?.id ?? ""}
       />

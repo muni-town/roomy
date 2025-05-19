@@ -71,7 +71,9 @@
   }
 
   const links = derivePromise(null, async () =>
-    (await globalState.space?.threads.items())?.find((x) => x.name === "@links"),
+    (await globalState.space?.threads.items())?.find(
+      (x) => x.name === "@links",
+    ),
   );
   const readonly = $derived(globalState.channel?.name === "@links");
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
@@ -408,8 +410,8 @@
     {/snippet}
     No pages for this channel.
   </BoardList>
-  <BoardList items={relatedThreads.value} title="Topics" route="thread">
-    No topics for this channel.
+  <BoardList items={relatedThreads.value} title="Threads" route="thread">
+    No threads for this channel.
   </BoardList>
 {:else if tab === "chat" || globalState.channel instanceof Thread}
   {#if globalState.space && globalState.channel}
@@ -501,12 +503,12 @@
                 .ids()
                 .includes(globalState.space.id)}
               {#if !readonly}
-              <ChatInput
-                bind:content={messageInput}
-                users={users.value || []}
-                context={contextItems.value || []}
-                onEnter={sendMessage}
-              />
+                <ChatInput
+                  bind:content={messageInput}
+                  users={users.value || []}
+                  context={contextItems.value || []}
+                  onEnter={sendMessage}
+                />
               {:else}
                 <div class="flex items-center grow flex-col">
                   <Button.Root disabled class="w-full dz-btn"
