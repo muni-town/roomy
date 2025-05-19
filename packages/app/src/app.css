@@ -87,3 +87,7 @@ button {
 .dz-prose img {
   @apply max-w-[300px] max-h-[300px];
 }
+
+.contain-images-within img {
+  max-width: 100px;
+}
