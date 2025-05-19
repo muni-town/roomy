@@ -552,7 +552,7 @@
     {#if !editMode}
       <button
         type="button"
-        class="p-1 rounded hover:bg-base-200 disabled:opacity-50 cursor-pointer"
+        class="p-1 rounded hover:bg-base-200 disabled:opacity-50"
         aria-label="Upload image"
         use:handleClick
         tabindex="-1"

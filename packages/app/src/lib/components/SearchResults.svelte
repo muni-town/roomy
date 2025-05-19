@@ -65,7 +65,7 @@
   {:else}
     <ul class="divide-y divide-base-300">
       {#each messages as message}
-        <li class="hover:bg-base-200 cursor-pointer transition-colors">
+        <li class="hover:bg-base-200 transition-colors">
           <button
             type="button"
             class="p-3 flex items-start gap-2"
