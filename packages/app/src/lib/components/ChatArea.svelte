@@ -27,11 +27,13 @@
     if (idx !== -1 && virtualizer) virtualizer.scrollToIndex(idx);
   });
 
-  const messages = derivePromise([], async () =>
-    (await timeline.timeline.items())
+  const messages = derivePromise([], async () => {
+    const items = await timeline.timeline.items();
+    messagesLoaded = true;
+    return items
       .map((x) => x.tryCast(Message) || x.tryCast(Announcement))
-      .filter((x) => !!x),
-  );
+      .filter((x) => !!x);
+  });
 
   $effect(() => {
     page.route; // Scroll-to-end when route changes
@@ -40,13 +42,6 @@
     if (!viewport || !virtualizer) return;
 
     virtualizer.scrollToIndex(messages.value.length - 1, { align: "end" });
-    setTimeout(() => {
-      messagesLoaded = true;
-    }, 3000);
-    // TODO: remove this artificial timeout
-    // Right now (May 2025)
-    // This is needed to give a nicer user experience when
-    // we navigate to a new space and load it for the first time.
   });
 
   function shouldMergeWithPrevious(

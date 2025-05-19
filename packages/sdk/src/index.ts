@@ -90,7 +90,7 @@ export class HasPeer {
   async create<T extends EntityWrapper>(
     constructor: EntityConstructor<T>
   ): Promise<T> {
-    const ent = await this.peer.open();
+    const ent = await this.peer.create();
     return new constructor(this.peer, ent);
   }
 
