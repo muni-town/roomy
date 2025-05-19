@@ -21,16 +21,10 @@
 
   type Props = {
     mergeWithPrevious?: boolean;
-  } & (
-    | {
-        message: Message | Announcement;
-        type: "message";
-      }
-    | {
-        message: Message;
-        type: "link";
-      }
-  );
+  } & {
+    message: Message | Announcement;
+    type: "message" | "link";
+  };
 
   let {
     message,
@@ -416,7 +410,6 @@
 {/snippet}
 
 {#snippet messageView(msg: Message)}
-  <!-- doesn't change after render, so $derived is not necessary -->
   {@const authorProfile = getProfile(msg.authors((x) => x.get(0)))}
 
   {#await authorProfile then authorProfile}
@@ -495,7 +488,7 @@
               isDrawerOpen = true;
             }
           }}
-          class="flex flex-col text-start gap-2 w-full min-w-0"
+          class="flex flex-col text-start gap-2 w-full min-w-0 cursor-default!"
         >
           {#if !mergeWithPrevious}
             <section class="flex items-center gap-2 flex-wrap w-fit">
@@ -512,53 +505,53 @@
             </section>
           {/if}
 
-          <div class="flex flex-col gap-1">
-            {#if type === "message"}
-              <!-- Using a fancy Tailwind trick to target all href elements inside of this parent -->
-              <span
-                class="dz-prose select-text [&_a]:text-primary [&_a]:hover:underline"
-              >
-                {@html getContentHtml(JSON.parse(msg.bodyJson))}
-              </span>
-            {:else if links && type === "link"}
-              {#each links as url}
+          {#if type === "message"}
+            <!-- Using a fancy Tailwind trick to target all href elements inside of this parent -->
+            <span
+              class="dz-prose select-text [&_a]:text-primary [&_a]:hover:underline"
+            >
+              {@html getContentHtml(JSON.parse(msg.bodyJson))}
+            </span>
+          {:else if links && type === "link"}
+            {#each links as url}
+              <p>
                 <a
                   href={url}
                   target="_blank"
-                  class="text-primary hover:underline">{url}</a
+                  class="text-primary hover:underline inline-block">{url}</a
                 >
-              {/each}
-            {/if}
+              </p>
+            {/each}
+          {/if}
 
-            {#if isMessageEdited(msg)}
-              <div class="relative group/edit">
-                <span
-                  class="text-xs text-gray-400 italic flex items-center gap-1 hover:text-gray-300 cursor-default"
-                >
-                  <Icon icon="mdi:pencil" width="12px" height="12px" />
-                  <span>edited</span>
-                </span>
+          {#if isMessageEdited(msg)}
+            <div class="relative group/edit">
+              <span
+                class="text-xs text-gray-400 italic flex items-center gap-1 hover:text-gray-300 cursor-default"
+              >
+                <Icon icon="mdi:pencil" width="12px" height="12px" />
+                <span>edited</span>
+              </span>
 
-                <!-- Tooltip that appears on hover -->
-                <div
-                  class="absolute bottom-full left-0 mb-2 opacity-0 group-hover/edit:opacity-100 transition-opacity duration-200 bg-base-300 p-3 rounded shadow-lg text-xs z-10 min-w-[200px]"
-                >
-                  <div class="flex flex-col gap-1">
-                    <p class="font-semibold">Message edited</p>
-                    <p>
-                      Original: {format(msg.createdDate || new Date(), "PPpp")}
-                    </p>
-                    <p>Edited: {getEditedTime(msg)}</p>
-                  </div>
-
-                  <!-- Arrow pointing down -->
-                  <div
-                    class="absolute -bottom-1 left-3 w-2 h-2 bg-base-300 rotate-45"
-                  ></div>
+              <!-- Tooltip that appears on hover -->
+              <div
+                class="absolute bottom-full left-0 mb-2 opacity-0 group-hover/edit:opacity-100 transition-opacity duration-200 bg-base-300 p-3 rounded shadow-lg text-xs z-10 min-w-[200px]"
+              >
+                <div class="flex flex-col gap-1">
+                  <p class="font-semibold">Message edited</p>
+                  <p>
+                    Original: {format(msg.createdDate || new Date(), "PPpp")}
+                  </p>
+                  <p>Edited: {getEditedTime(msg)}</p>
                 </div>
+
+                <!-- Arrow pointing down -->
+                <div
+                  class="absolute -bottom-1 left-3 w-2 h-2 bg-base-300 rotate-45"
+                ></div>
               </div>
-            {/if}
-          </div>
+            </div>
+          {/if}
           <!-- TODO: images. -->
           <!-- {#if msg.images?.length}
           <div class="flex flex-wrap gap-2 mt-2">
