@@ -123,7 +123,6 @@
     preset: "performance"
   });
   let searchQuery = $state('');
-  let filteredMessageIds = $state<string[] | undefined>(undefined);
   let showSearchInput = $state(false);
   let searchResults = $state<Message[]>([]);
   let showSearchResults = $state(false);
@@ -293,8 +292,6 @@
       const results = searchIndex.search(searchQuery);
       
       if (results.length > 0) {
-        // Convert numeric IDs to strings before assigning
-        filteredMessageIds = results.map(id => String(id));
         showSearchResults = true;
         
         // Get the actual Message objects for the search results
@@ -310,47 +307,10 @@
           });
         }
       } else {
-        filteredMessageIds = undefined;
         searchResults = [];
         showSearchResults = searchQuery.length > 0;
       }
     } else {
-      filteredMessageIds = undefined;
-      searchResults = [];
-      showSearchResults = false;
-    }
-  });
-
-  // Handle search input
-  $effect(() => {
-    if (searchIndex && searchQuery) {
-      // Perform synchronous search
-      const results = searchIndex.search(searchQuery);
-      
-      if (results.length > 0) {
-        // Convert numeric IDs to strings before assigning
-        filteredMessageIds = results.map(id => String(id));
-        showSearchResults = true;
-        
-        // Get the actual Message objects for the search results
-        if (globalState.channel?.timeline) {
-          globalState.channel.timeline.items().then(items => {
-            searchResults = items
-              .map(x => x.tryCast(Message))
-              .filter((msg): msg is Message => 
-                msg !== null && 
-                msg !== undefined && 
-                results.includes(msg.id)
-              );
-          });
-        }
-      } else {
-        filteredMessageIds = undefined;
-        searchResults = [];
-        showSearchResults = searchQuery.length > 0;
-      }
-    } else {
-      filteredMessageIds = undefined;
       searchResults = [];
       showSearchResults = false;
     }
@@ -510,7 +470,7 @@
         {/if}
       {/if}
       <div class="flex-grow overflow-auto relative" style="max-height: calc(100vh - 180px);">
-        <ChatArea timeline={globalState.channel.forceCast(Timeline)} {filteredMessageIds} bind:virtualizer />
+        <ChatArea timeline={globalState.channel.forceCast(Timeline)} bind:virtualizer />
         
         {#if replyingTo}
           <div
