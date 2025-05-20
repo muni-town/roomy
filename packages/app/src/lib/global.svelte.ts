@@ -163,10 +163,13 @@ $effect.root(() => {
         }
         if (!page.params.channel && !page.params.thread) {
           const lastChannel = globalState.getLastChannel(page.params.space);
+          console.dir(lastChannel)
           if (lastChannel) {
             // Check if it's a thread or channel by the ID format
             if (lastChannel.startsWith('thread_')) {
-              navigate({ space: page.params.space, thread: lastChannel });
+            const threadId = lastChannel.split('_').pop() || '';
+
+              navigate({ space: page.params.space, thread: threadId });
             } else {
               navigate({ space: page.params.space, channel: lastChannel });
             }
