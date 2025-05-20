@@ -51,8 +51,13 @@ jobs:
         with:
           workspaces: '.packages/app/src-tauri -> target'
 
-      - name: install frontend dependencies
-        run: pnpm install
+      - name: Generate Build Assets
+        run: |
+          pnpm install
+          pnpm turbo run build-lib
+          cd ./packages/app
+          pnpm tauri icon -o src-tauri/icons static/icons/icon-512.png
+          pnpm build:t
 
       - name: Setup java
         uses: actions/setup-java@v3
@@ -72,14 +77,6 @@ jobs:
       - name: Get app version
         if: ${{ matrix.android }}
         run: echo "APP_VERSION=$(jq -r .version packages/app/src-tauri/tauri.conf.json)" >> $GITHUB_ENV
-
-      - name: Generate Build Assets
-        run: |
-          cd ./packages/app
-          # Generate Icons
-          pnpm tauri icon -o src-tauri/icons static/icons/icon-512.png
-          # Build Web App
-          pnpm build:t
 
       - name: Setup Android Signing
         if: ${{ matrix.android }}
