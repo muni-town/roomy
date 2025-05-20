@@ -26,6 +26,7 @@
   let isRestoringScroll = $state(false);
   let scrollPosition = $state(0);
   let isAtBottom = $state(true);
+  let currentChannelId = $state<string | null>(null);
   let showScrollToBottom = $derived(!isAtBottom && messagesLoaded);
 
   setContext("scrollToMessage", (id: EntityIdStr) => {
@@ -87,16 +88,22 @@
   $effect(() => {
     if (!messagesLoaded || !virtualizer || !globalState.channel) return;
 
-    // Restore scroll position if available
-    const savedPosition = globalState.getScrollPosition(globalState.channel.id);
-    console.dir("got scroll position", globalState.channel.id,savedPosition)
-    if (savedPosition > 0 && !isRestoringScroll) {
-      isRestoringScroll = true;
-      // virtualizer.scrollToIndex(0); // First scroll to top
-      // requestAnimationFrame(() => {
-      //   virtualizer.scrollToIndex(savedPosition, { align: "start" });
-      //   isRestoringScroll = false;
-      // });
+    // Only restore scroll position if we've switched to a different channel
+    if (globalState.channel.id !== currentChannelId) {
+      currentChannelId = globalState.channel.id;
+      
+      // Restore scroll position if available
+      const savedPosition = globalState.getScrollPosition(globalState.channel.id);
+      console.log("Restoring scroll position for channel", globalState.channel.id, "position:", savedPosition);
+      
+      if (!isRestoringScroll) {
+        isRestoringScroll = true;
+        // Scroll to the saved position in the next frame
+        requestAnimationFrame(() => {
+          virtualizer.scrollToIndex(savedPosition, { align: "start" });
+          isRestoringScroll = false;
+        });
+      }
     }
   });
 
