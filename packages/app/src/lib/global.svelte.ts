@@ -43,6 +43,31 @@ export let globalState = $state({
   isAdmin: false,
   isBanned: false,
   currentCatalog: "home",
+  _scrollPositions: {} as Record<string, number>, // Private state for scroll positions
+  saveScrollPosition: (channelId: string, position: number) => {
+    if (typeof window === 'undefined') return;
+    const state = JSON.parse(localStorage.getItem('scrollPositions') || '{}');
+    state[channelId] = position;
+    localStorage.setItem('scrollPositions', JSON.stringify(state));
+    globalState._scrollPositions = { ...globalState._scrollPositions, [channelId]: position };
+  },
+  getScrollPosition: (channelId: string): number => {
+    if (typeof window === 'undefined') return 0;
+    // Check if we already have the position in memory
+    if (globalState._scrollPositions[channelId] !== undefined) {
+      return globalState._scrollPositions[channelId];
+    }
+    // If not, try to load from localStorage
+    try {
+      const state = JSON.parse(localStorage.getItem('scrollPositions') || '{}');
+      // Update the in-memory cache without triggering reactivity
+      Object.assign(globalState._scrollPositions, state);
+      return state[channelId] || 0;
+    } catch (e) {
+      console.error('Error reading scroll positions from localStorage', e);
+      return 0;
+    }
+  },
   saveChannelState: (spaceId: string, channelId?: string) => {
     if (typeof window === 'undefined') return;
     const state = JSON.parse(localStorage.getItem('channelState') || '{}');
@@ -59,7 +84,6 @@ export let globalState = $state({
   getLastChannel: (spaceId: string): string | null => {
     if (typeof window === 'undefined') return null;
     const state = JSON.parse(localStorage.getItem('channelState') || '{}');
-    console.dir(state)
     return state[spaceId] || (page.params.space ? state[page.params.space] : null);
 
   }
@@ -140,12 +164,10 @@ $effect.root(() => {
         if (!page.params.channel && !page.params.thread) {
           const lastChannel = globalState.getLastChannel(page.params.space);
           if (lastChannel) {
-            console.dir(lastChannel)
             // Check if it's a thread or channel by the ID format
             if (lastChannel.startsWith('thread_')) {
               navigate({ space: page.params.space, thread: lastChannel });
             } else {
-              console.dir("navigating")
               navigate({ space: page.params.space, channel: lastChannel });
             }
             return;

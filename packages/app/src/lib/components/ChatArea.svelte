@@ -23,6 +23,10 @@
 
   let viewport: HTMLDivElement = $state(null!);
   let messagesLoaded = $state(false);
+  let isRestoringScroll = $state(false);
+  let scrollPosition = $state(0);
+  let isAtBottom = $state(true);
+  let showScrollToBottom = $derived(!isAtBottom && messagesLoaded);
 
   setContext("scrollToMessage", (id: EntityIdStr) => {
     const idx = timeline.timeline.ids().indexOf(id);
@@ -43,7 +47,10 @@
 
     if (!viewport || !virtualizer) return;
 
-    virtualizer.scrollToIndex(messages.value.length - 1, { align: "end" });
+    // Auto-scroll to bottom if we're already at the bottom or if scroll-to-bottom button is not visible
+    if (isAtBottom || !showScrollToBottom) {
+      virtualizer.scrollToIndex(messages.value.length - 1, { align: "end" });
+    }
   });
 
   function shouldMergeWithPrevious(
@@ -76,9 +83,52 @@
       isSequentialMovedAnnouncement;
     return mergeWithPrevious;
   }
+
+  $effect(() => {
+    if (!messagesLoaded || !virtualizer || !globalState.channel) return;
+
+    // Restore scroll position if available
+    const savedPosition = globalState.getScrollPosition(globalState.channel.id);
+    console.dir("got scroll position", globalState.channel.id,savedPosition)
+    if (savedPosition > 0 && !isRestoringScroll) {
+      isRestoringScroll = true;
+      // virtualizer.scrollToIndex(0); // First scroll to top
+      // requestAnimationFrame(() => {
+      //   virtualizer.scrollToIndex(savedPosition, { align: "start" });
+      //   isRestoringScroll = false;
+      // });
+    }
+  });
+
+  // Handle scroll events to save position and check if at bottom
+  function handleScroll(e: UIEvent) {
+    if (!viewport) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = viewport;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100; // 100px threshold
+    if (isNearBottom !== isAtBottom) {
+      isAtBottom = isNearBottom;
+    }
+    
+    // Save scroll position
+    const currentIndex = Math.floor(scrollTop / 50);
+    if (globalState.channel) {
+      globalState.saveScrollPosition(globalState.channel.id, currentIndex);
+    }
+  }
+  
+  function scrollToBottom() {
+    if (virtualizer && messages.value.length > 0) {
+      virtualizer.scrollToIndex(messages.value.length - 1, { align: "end" });
+      isAtBottom = true;
+    }
+  }
 </script>
 
-<ScrollArea.Root type="scroll" class="h-full overflow-hidden">
+<ScrollArea.Root
+  type="scroll"
+  class="h-full overflow-hidden"
+>
   {#if !messagesLoaded}
     <!-- Important: This area takes the place of the chat which pushes chat offscreen
        which allows it to load then pop into place once the spinner is gone. -->
@@ -90,8 +140,17 @@
   <ScrollArea.Viewport
     bind:ref={viewport}
     class="relative max-w-full w-full h-full"
+    onscroll={handleScroll}
   >
     <div class="flex flex-col-reverse w-full h-full">
+      {#if showScrollToBottom}
+        <button
+          onclick={scrollToBottom}
+          class="fixed bottom-20 right-6 z-50 bg-primary text-primary-content px-4 py-2 rounded-full shadow-lg hover:bg-primary-focus transition-colors"
+        >
+          Scroll to Present
+        </button>
+      {/if}
       <ol class="flex flex-col gap-2 max-w-ful">
         <!--
         This use of `key` needs explaining. `key` causes the components below
