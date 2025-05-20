@@ -3912,7 +3912,7 @@ snapshots:
   '@atproto/jwk@0.1.5':
     dependencies:
       multiformats: 9.9.0
-      zod: 3.24.3
+      zod: 3.24.4
 
   '@atproto/lexicon@0.4.11':
     dependencies:
