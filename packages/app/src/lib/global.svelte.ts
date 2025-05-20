@@ -68,25 +68,55 @@ export let globalState = $state({
       return 0;
     }
   },
-  saveChannelState: (spaceId: string, channelId?: string) => {
+  saveChannelState: (spaceId: string, entityType: 'channel' | 'thread' | 'page', entityId?: string) => {
     if (typeof window === 'undefined') return;
     const state = JSON.parse(localStorage.getItem('channelState') || '{}');
     const spaceKey = page.params.space || spaceId;
-    if (channelId) {
-      state[spaceKey] = channelId;
+    
+    if (entityId) {
+      state[spaceKey] = {
+        type: entityType,
+        id: entityId
+      };
     } else {
-      delete state[spaceKey]; // Remove the entry if no channel is provided
+      delete state[spaceKey];
     }
+    
     localStorage.setItem('channelState', JSON.stringify(state));
   },
   
-  // Add this function to get the last channel for a space
+  // For backward compatibility
   getLastChannel: (spaceId: string): string | null => {
     if (typeof window === 'undefined') return null;
     const state = JSON.parse(localStorage.getItem('channelState') || '{}');
-    return state[spaceId] || (page.params.space ? state[page.params.space] : null);
-
-  }
+    const entity = state[spaceId] || (page.params.space ? state[page.params.space] : null);
+    
+    // For backward compatibility with old format
+    if (typeof entity === 'string') {
+      return entity;
+    }
+    
+    return entity?.id || null;
+  },
+  
+  // New function to get the last entity with type information
+  getLastEntity: (spaceId: string): { type: 'channel' | 'thread' | 'page', id: string } | null => {
+    if (typeof window === 'undefined') return null;
+    const state = JSON.parse(localStorage.getItem('channelState') || '{}');
+    const spaceKey = page.params.space || spaceId;
+    const entity = state[spaceKey] || (page.params.space ? state[page.params.space] : null);
+    
+    // For backward compatibility with old format
+    if (typeof entity === 'string') {
+      const type = entity.startsWith('thread_') ? 'thread' : 'channel';
+      return { 
+        type, 
+        id: entity.startsWith('thread_') ? entity.replace('thread_', '') : entity 
+      };
+    }
+    
+    return entity || null;
+  },
 });
 
 const entityId = new EntityId();
@@ -161,17 +191,20 @@ $effect.root(() => {
               globalState.space = space;
             });
         }
-        if (!page.params.channel && !page.params.thread) {
-          const lastChannel = globalState.getLastChannel(page.params.space);
-          console.dir(lastChannel)
-          if (lastChannel) {
-            // Check if it's a thread or channel by the ID format
-            if (lastChannel.startsWith('thread_')) {
-            const threadId = lastChannel.split('_').pop() || '';
-
-              navigate({ space: page.params.space, thread: threadId });
-            } else {
-              navigate({ space: page.params.space, channel: lastChannel });
+        if (!page.params.channel && !page.params.thread && !page.params.page) {
+          const lastEntity = globalState.getLastEntity(page.params.space);
+          console.dir(lastEntity)
+          if (lastEntity) {
+            switch (lastEntity.type) {
+              case 'channel':
+                navigate({ space: page.params.space, channel: lastEntity.id });
+                break;
+              case 'thread':
+                navigate({ space: page.params.space, thread: lastEntity.id });
+                break;
+              case 'page':
+                navigate({ space: page.params.space, page: lastEntity.id });
+                break;
             }
             return;
           }
@@ -189,7 +222,7 @@ $effect.root(() => {
         .open(Channel, page.params.channel as EntityIdStr)
         .then((channel) => {
           globalState.channel = channel;
-          globalState.saveChannelState(globalState.space!.id, channel.id);
+          globalState.saveChannelState(globalState.space!.id, 'channel', channel.id);
         })
         .catch((e) => {
           console.error("Error opening channel:", e);
@@ -200,12 +233,25 @@ $effect.root(() => {
         .open(Thread, page.params.thread as EntityIdStr)
         .then((thread) => {
           globalState.channel = thread;
-          globalState.saveChannelState(globalState.space!.id, `thread_${thread.id}`);
+          globalState.saveChannelState(globalState.space!.id, 'thread', thread.id);
         })
         .catch((e) => {
           console.error("Error opening thread:", e);
           navigate("home");
         });
+    } else if (globalState.space && page.params.page) {
+      // Handle page navigation
+      globalState.roomy
+        .open(Channel, page.params.page as EntityIdStr) // Assuming pages are stored in the same way as channels
+        .then((page) => {
+          globalState.channel = page;
+          globalState.saveChannelState(globalState.space!.id, 'page', page.id);
+        })
+        .catch((e) => {
+          console.error("Error opening page:", e);
+          navigate("home");
+        });
+    } else {
       globalState.channel = undefined;
     }
   });
