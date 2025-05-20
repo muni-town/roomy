@@ -18,6 +18,7 @@ import { untrack } from "svelte";
 
 import * as roomy from "@roomy-chat/sdk";
 import { navigate, resolveLeafId } from "./utils.svelte";
+import { setCustomIconsLoader } from "@iconify/svelte";
 (window as any).r = roomy;
 (window as any).page = page;
 
@@ -42,6 +43,26 @@ export let globalState = $state({
   isAdmin: false,
   isBanned: false,
   currentCatalog: "home",
+  saveChannelState: (spaceId: string, channelId?: string) => {
+    if (typeof window === 'undefined') return;
+    const state = JSON.parse(localStorage.getItem('channelState') || '{}');
+    const spaceKey = page.params.space || spaceId;
+    if (channelId) {
+      state[spaceKey] = channelId;
+    } else {
+      delete state[spaceKey]; // Remove the entry if no channel is provided
+    }
+    localStorage.setItem('channelState', JSON.stringify(state));
+  },
+  
+  // Add this function to get the last channel for a space
+  getLastChannel: (spaceId: string): string | null => {
+    if (typeof window === 'undefined') return null;
+    const state = JSON.parse(localStorage.getItem('channelState') || '{}');
+    console.dir(state)
+    return state[spaceId] || (page.params.space ? state[page.params.space] : null);
+
+  }
 });
 
 const entityId = new EntityId();
@@ -116,6 +137,21 @@ $effect.root(() => {
               globalState.space = space;
             });
         }
+        if (!page.params.channel && !page.params.thread) {
+          const lastChannel = globalState.getLastChannel(page.params.space);
+          if (lastChannel) {
+            console.dir(lastChannel)
+            // Check if it's a thread or channel by the ID format
+            if (lastChannel.startsWith('thread_')) {
+              navigate({ space: page.params.space, thread: lastChannel });
+            } else {
+              console.dir("navigating")
+              navigate({ space: page.params.space, channel: lastChannel });
+            }
+            return;
+          }
+        }
+
       }
     });
   });
@@ -126,7 +162,10 @@ $effect.root(() => {
     if (globalState.space && page.params.channel) {
       globalState.roomy
         .open(Channel, page.params.channel as EntityIdStr)
-        .then((channel) => (globalState.channel = channel))
+        .then((channel) => {
+          globalState.channel = channel;
+          globalState.saveChannelState(globalState.space!.id, channel.id);
+        })
         .catch((e) => {
           console.error("Error opening channel:", e);
           navigate("home");
@@ -134,7 +173,10 @@ $effect.root(() => {
     } else if (globalState.space && page.params.thread) {
       globalState.roomy
         .open(Thread, page.params.thread as EntityIdStr)
-        .then((thread) => (globalState.channel = thread))
+        .then((thread) => {
+          globalState.channel = thread;
+          globalState.saveChannelState(globalState.space!.id, `thread_${thread.id}`);
+        })
         .catch((e) => {
           console.error("Error opening thread:", e);
           navigate("home");

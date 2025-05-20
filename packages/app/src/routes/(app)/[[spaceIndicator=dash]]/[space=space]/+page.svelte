@@ -17,19 +17,19 @@
         []) {
         const category = item.tryCast(Category);
         const channel = item.tryCast(Channel);
-        if (category) {
-          for (const channel of await category.channels.items()) {
-            return navigate({
-              space: page.params.space!,
-              channel: channel.id,
-            });
-          }
-        } else if (channel) {
-          return navigate({
-            space: page.params.space!,
-            channel: channel.id,
-          });
-        }
+        // if (category) {
+        //   for (const channel of await category.channels.items()) {
+        //     return navigate({
+        //       space: page.params.space!,
+        //       channel: channel.id,
+        //     });
+        //   }
+        // } else if (channel) {
+        //   return navigate({
+        //     space: page.params.space!,
+        //     channel: channel.id,
+        //   });
+        // }
       }
     });
   });

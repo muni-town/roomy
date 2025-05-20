@@ -24,6 +24,7 @@ export function navigate(target: NavigationTarget) {
       url += "/-";
     }
     url += `/${target.space}`;
+    console.dir(url,target)
     if (target.channel) {
       url += `/${target.channel}`;
     } else if (target.thread) {
