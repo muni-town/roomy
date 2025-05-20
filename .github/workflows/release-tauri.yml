@@ -73,15 +73,10 @@ jobs:
         if: ${{ matrix.android }}
         run: echo "APP_VERSION=$(jq -r .version packages/app/src-tauri/tauri.conf.json)" >> $GITHUB_ENV
 
-      - name: Install Tauri CLI
-        run: |
-          cd ./packages/app
-          cargo install tauri-cli --version "^2.0.0" --locked
-
       - name: Generate Icons
         run: |
           cd ./packages/app
-          cargo tauri icon -o src-tauri/icons static/icon-512.png
+          pnpm tauri icon -o src-tauri/icons static/icon-512.png
 
       - name: Setup Android Signing
         if: ${{ matrix.android }}
@@ -98,7 +93,7 @@ jobs:
         run: |
           cd ./packages/app
           rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
-          cargo tauri android build --apk
+          pnpm tauri android build --apk
           cp ./src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk ./src-tauri/gen/android/app/build/outputs/apk/universal/release/roomy-chat_${{ env.APP_VERSION}}.apk
         env:
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
