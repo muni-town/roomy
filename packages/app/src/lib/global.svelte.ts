@@ -17,7 +17,7 @@ import { page } from "$app/state";
 import { untrack } from "svelte";
 
 import * as roomy from "@roomy-chat/sdk";
-import { navigate, resolveLeafId } from "./utils.svelte";
+import { devlog, navigate, resolveLeafId } from "./utils.svelte";
 (window as any).r = roomy;
 (window as any).page = page;
 
@@ -44,6 +44,7 @@ export let globalState = $state({
   currentCatalog: "home",
   _scrollPositions: {} as Record<string, number>, // Private state for scroll positions
   saveScrollPosition: (channelId: string, position: number) => {
+    devlog("Saving scroll position for", channelId, position);
     if (typeof window === 'undefined') return;
     const state = JSON.parse(localStorage.getItem('scrollPositions') || '{}');
     state[channelId] = position;

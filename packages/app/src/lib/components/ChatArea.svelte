@@ -9,8 +9,7 @@
     type EntityIdStr,
     type Timeline,
   } from "@roomy-chat/sdk";
-  import { derivePromise } from "$lib/utils.svelte";
-  import { page } from "$app/state";
+  import { derivePromise, devlog } from "$lib/utils.svelte";
   import { globalState } from "$lib/global.svelte";
 
   let {
@@ -24,10 +23,12 @@
   let viewport: HTMLDivElement = $state(null!);
   let messagesLoaded = $state(false);
   let isRestoringScroll = $state(false);
-  let scrollPosition = $state(0);
+  let isFirstLoad = $state(true);
   let isAtBottom = $state(true);
   let currentChannelId = $state<string | null>(null);
   let showScrollToBottom = $derived(!isAtBottom && messagesLoaded);
+  let lastScrollTime = $state(0);
+  let userScrolled = $state(false);
 
   setContext("scrollToMessage", (id: EntityIdStr) => {
     const idx = timeline.timeline.ids().indexOf(id);
@@ -43,14 +44,60 @@
   });
 
   $effect(() => {
-    page.route; // Scroll-to-end when route changes
-    messages.value; // Scroll to end when message list changes.
+    const currentMessages = messages.value;
+    
+    // Don't do anything if we don't have what we need
+    if (!viewport || !virtualizer || isRestoringScroll || !messagesLoaded) return;
+    
+    // Only auto-scroll if we're at the bottom and user hasn't scrolled up
+    if (isAtBottom && !userScrolled && currentMessages.length > 0 && !isRestoringScroll) {
+      // Use requestAnimationFrame to ensure smooth scrolling
+      requestAnimationFrame(() => {
+        virtualizer.scrollToIndex(currentMessages.length - 1, { align: "end" });
+      });
+    }
+  });
 
-    if (!viewport || !virtualizer) return;
+  $effect(() => {
+    devlog(isAtBottom);
+    if (!messagesLoaded || !virtualizer || !globalState.channel || isAtBottom) return;
 
-    // Auto-scroll to bottom if we're already at the bottom or if scroll-to-bottom button is not visible
-    if (isAtBottom || !showScrollToBottom) {
-      virtualizer.scrollToIndex(messages.value.length - 1, { align: "end" });
+    // Only restore scroll position if we've switched to a different channel
+    if (globalState.channel.id !== currentChannelId) {
+      currentChannelId = globalState.channel.id;
+      userScrolled = false; // Reset user scroll state on channel change
+
+      const savedPosition = globalState.getScrollPosition(
+        globalState.channel.id,
+      );
+
+      if (savedPosition > 0) {
+        isRestoringScroll = true;
+        isFirstLoad = false;
+
+        const restoreScroll = () => {
+          if (virtualizer && messages.value.length > 0) {
+            console.log("Restoring scroll to index:", savedPosition);
+            
+            // Set flags to prevent auto-scroll
+            isRestoringScroll = true;
+            userScrolled = false;
+            
+            // Use requestAnimationFrame for smoother scroll
+            requestAnimationFrame(() => {
+              virtualizer.scrollToIndex(savedPosition, {align: "start"});
+              
+ 
+            });
+          }
+        };
+
+        setTimeout(restoreScroll, 100);
+      } else if (isFirstLoad) {
+        // If no saved position and it's the first load, scroll to bottom
+        isFirstLoad = false;
+        scrollToBottom();
+      }
     }
   });
 
@@ -85,57 +132,75 @@
     return mergeWithPrevious;
   }
 
-  $effect(() => {
-    if (!messagesLoaded || !virtualizer || !globalState.channel) return;
+  function getMessageIndexAtScrollPosition(scrollTop: number): number | null {
+    if (!virtualizer || messages.value.length === 0) return null;
 
-    // Only restore scroll position if we've switched to a different channel
-    if (globalState.channel.id !== currentChannelId) {
-      currentChannelId = globalState.channel.id;
-      
-      // Restore scroll position if available
-      const savedPosition = globalState.getScrollPosition(globalState.channel.id);
-      
-      if (!isRestoringScroll) {
-        isRestoringScroll = true;
-        // Scroll to the saved position in the next frame
-        requestAnimationFrame(() => {
-          virtualizer.scrollToIndex(savedPosition, { align: "start" });
-          isRestoringScroll = false;
-        });
+    // Binary search to find the message at scroll position
+    let low = 0;
+    let high = messages.value.length - 1;
+    let result = 0;
+
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const itemOffset = virtualizer.getItemOffset(mid);
+
+      if (itemOffset <= scrollTop) {
+        result = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
       }
     }
-  });
+
+    return result;
+  }
 
   // Handle scroll events to save position and check if at bottom
   function handleScroll(e: UIEvent) {
     if (!viewport) return;
-    
+
     const { scrollTop, scrollHeight, clientHeight } = viewport;
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100; // 100px threshold
-    if (isNearBottom !== isAtBottom) {
-      isAtBottom = isNearBottom;
+    const now = Date.now();
+    
+    const wasAtBottom = isAtBottom;
+    if(!isRestoringScroll) {
+      isAtBottom = scrollHeight - scrollTop - clientHeight < 10;
     }
     
-    // Save scroll position
-    const messageHeight = 50 // estimated message height
-    const currentIndex = Math.floor(scrollTop / messageHeight);
-    if (globalState.channel) {
-      globalState.saveScrollPosition(globalState.channel.id, currentIndex);
+
+    
+    // If we were at bottom and now we're not, mark as user scrolled
+    if (wasAtBottom && !isAtBottom && now - lastScrollTime > 100) {
+      userScrolled = true;
+    }
+    
+    // If we're back at bottom, reset userScrolled
+    if (isAtBottom) {
+      isRestoringScroll = false;
+      userScrolled = false;
+    }
+    
+    lastScrollTime = now;
+
+    // Save scroll position if we're not at the bottom
+    if (!isAtBottom && globalState.channel) {
+      const currentIndex = getMessageIndexAtScrollPosition(scrollTop);
+      if (currentIndex !== null) {
+        globalState.saveScrollPosition(globalState.channel.id, currentIndex);
+      }
     }
   }
-  
+
   function scrollToBottom() {
-    if (virtualizer && messages.value.length > 0) {
-      virtualizer.scrollToIndex(messages.value.length - 1, { align: "end" });
-      isAtBottom = true;
-    }
+    if (!virtualizer) return;
+    virtualizer.scrollToIndex(messages.value.length - 1, { align: "end" });
+    isAtBottom = true;
+    isRestoringScroll = false;
+    userScrolled = false;
   }
 </script>
 
-<ScrollArea.Root
-  type="scroll"
-  class="h-full overflow-hidden"
->
+<ScrollArea.Root type="scroll" class="h-full overflow-hidden">
   {#if !messagesLoaded}
     <!-- Important: This area takes the place of the chat which pushes chat offscreen
        which allows it to load then pop into place once the spinner is gone. -->

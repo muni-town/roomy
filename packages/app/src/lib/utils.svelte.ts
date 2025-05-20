@@ -35,6 +35,12 @@ export function navigate(target: NavigationTarget) {
   }
 }
 
+export function devlog(...args: any[]) {
+  if (localStorage.getItem("devMode") === "true") {
+    console.log(...args);
+  }
+}
+
 /** A helper function to create a route to a specific roomy object, like a space, channel, or thread */
 export function navigateSync(target: NavigationTarget) {
   if (target == "home") {
