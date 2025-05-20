@@ -18,7 +18,6 @@ import { untrack } from "svelte";
 
 import * as roomy from "@roomy-chat/sdk";
 import { navigate, resolveLeafId } from "./utils.svelte";
-import { setCustomIconsLoader } from "@iconify/svelte";
 (window as any).r = roomy;
 (window as any).page = page;
 
@@ -193,7 +192,6 @@ $effect.root(() => {
         }
         if (!page.params.channel && !page.params.thread && !page.params.page) {
           const lastEntity = globalState.getLastEntity(page.params.space);
-          console.dir(lastEntity)
           if (lastEntity) {
             switch (lastEntity.type) {
               case 'channel':

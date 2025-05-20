@@ -94,7 +94,6 @@
       
       // Restore scroll position if available
       const savedPosition = globalState.getScrollPosition(globalState.channel.id);
-      console.log("Restoring scroll position for channel", globalState.channel.id, "position:", savedPosition);
       
       if (!isRestoringScroll) {
         isRestoringScroll = true;
@@ -118,7 +117,8 @@
     }
     
     // Save scroll position
-    const currentIndex = Math.floor(scrollTop / 50);
+    const messageHeight = 50 // estimated message height
+    const currentIndex = Math.floor(scrollTop / messageHeight);
     if (globalState.channel) {
       globalState.saveScrollPosition(globalState.channel.id, currentIndex);
     }

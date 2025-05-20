@@ -9,27 +9,34 @@
   // Automatically navigate to the first channel in the space if we come to this empty space index
   // page. We might have useful features on this index page eventually.
   $effect(() => {
-    if (!globalState.space || globalState.loadedSpace !== page.params.space)
+    const space = page.params.space;
+    if (!space || !globalState.space || globalState.loadedSpace !== space)
       return;
 
     untrack(async () => {
-      for (const item of (await globalState.space?.sidebarItems.items()) ||
-        []) {
+      // Check if there's a saved state for this space
+      const lastEntity = globalState.getLastEntity(space);
+      if (lastEntity) {
+        return
+      }
+
+      // Only navigate to first channel if no saved state exists
+      for (const item of (await globalState.space.sidebarItems.items()) || []) {
         const category = item.tryCast(Category);
         const channel = item.tryCast(Channel);
-        // if (category) {
-        //   for (const channel of await category.channels.items()) {
-        //     return navigate({
-        //       space: page.params.space!,
-        //       channel: channel.id,
-        //     });
-        //   }
-        // } else if (channel) {
-        //   return navigate({
-        //     space: page.params.space!,
-        //     channel: channel.id,
-        //   });
-        // }
+        if (category) {
+          for (const channel of await category.channels.items()) {
+            return navigate({
+              space,
+              channel: channel.id,
+            });
+          }
+        } else if (channel) {
+          return navigate({
+            space,
+            channel: channel.id,
+          });
+        }
       }
     });
   });
