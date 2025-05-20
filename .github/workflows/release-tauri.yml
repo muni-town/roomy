@@ -76,7 +76,7 @@ jobs:
       - name: Generate Icons
         run: |
           cd ./packages/app
-          pnpm tauri icon -o src-tauri/icons static/icon-512.png
+          pnpm tauri icon -o src-tauri/icons static/icons/icon-512.png
 
       - name: Setup Android Signing
         if: ${{ matrix.android }}
