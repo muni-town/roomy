@@ -463,7 +463,7 @@ export class Roomy extends EntityWrapper {
    * joined spaces, preferences, etc.
    * */
   static async init(peer: Peer, catalogId: IntoEntityId): Promise<Roomy> {
-    const catalog = await peer.open(intoEntityId(catalogId));
+    const catalog = await peer.open(intoEntityId(catalogId), { createAfterTimeout: 4000 });
     return new Roomy(peer, catalog);
   }
 
