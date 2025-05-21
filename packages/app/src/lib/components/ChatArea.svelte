@@ -26,7 +26,7 @@
   let isFirstLoad = $state(true);
   let isAtBottom = $state(true);
   let currentChannelId = $state<string | null>(null);
-  let showScrollToBottom = $derived(!isAtBottom && messagesLoaded);
+  let showScrollToBottom = $state(false)
   let lastScrollTime = $state(0);
   let userScrolled = $state(false);
 
@@ -48,6 +48,8 @@
     
     // Don't do anything if we don't have what we need
     if (!viewport || !virtualizer || isRestoringScroll || !messagesLoaded) return;
+
+   
     
     // Only auto-scroll if we're at the bottom and user hasn't scrolled up
     if (isAtBottom && !userScrolled && currentMessages.length > 0 && !isRestoringScroll) {
@@ -59,12 +61,14 @@
   });
 
   $effect(() => {
-    devlog(isAtBottom);
     if (!messagesLoaded || !virtualizer || !globalState.channel || isAtBottom) return;
 
     // Only restore scroll position if we've switched to a different channel
     if (globalState.channel.id !== currentChannelId) {
       currentChannelId = globalState.channel.id;
+      const { scrollTop, scrollHeight, clientHeight } = viewport;
+      const diff = scrollHeight - scrollTop - clientHeight;
+      showScrollToBottom = diff > 500;
       userScrolled = false; // Reset user scroll state on channel change
 
       const savedPosition = globalState.getScrollPosition(
@@ -77,7 +81,6 @@
 
         const restoreScroll = () => {
           if (virtualizer && messages.value.length > 0) {
-            console.log("Restoring scroll to index:", savedPosition);
             
             // Set flags to prevent auto-scroll
             isRestoringScroll = true;
@@ -163,9 +166,11 @@
     const now = Date.now();
     
     const wasAtBottom = isAtBottom;
+    const diff = scrollHeight - scrollTop - clientHeight;
     if(!isRestoringScroll) {
-      isAtBottom = scrollHeight - scrollTop - clientHeight < 10;
+      isAtBottom = diff < 10;
     }
+    showScrollToBottom = diff > 100;
     
 
     
