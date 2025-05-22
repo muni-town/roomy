@@ -1,6 +1,5 @@
 import {
   Channel,
-  EntityId,
   type EntityIdStr,
   Roomy,
   Space,
@@ -44,8 +43,6 @@ export let globalState = $state({
   currentCatalog: "home",
 });
 
-const entityId = new EntityId();
-
 $effect.root(() => {
   // Redirect to the `/-/space.domain` or `/leaf:id` as appropriate.
   $effect(() => {
@@ -70,11 +67,6 @@ $effect.root(() => {
     if (user.agent && user.catalogId.value) {
       // Initialize new roomy instance
       initRoomy(user.agent).then((roomy) => (globalState.roomy = roomy));
-    } else {
-      // Set a blank roomy instance just to avoid having to set it to undefined.
-      Roomy.init(new SveltePeer(), entityId).then((roomy) => {
-        globalState.roomy = roomy;
-      });
     }
   });
 
