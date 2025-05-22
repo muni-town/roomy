@@ -66,6 +66,11 @@ export class HasPeer {
 
   /** @group Advanced */
   constructor(peer: Peer) {
+    // Temporary hack to add a createAfterTimeout to every open call.
+    const origOpen = peer.open.bind(peer);
+    peer.open = (id, opts) => {
+      return origOpen(id, { ...{ createAfterTimeout: 5000 }, ...opts});
+    }
     this.peer = peer;
   }
 
