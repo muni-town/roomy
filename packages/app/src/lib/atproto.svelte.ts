@@ -8,7 +8,8 @@ import {
 import { isTauri } from "@tauri-apps/api/core";
 import { type } from "@tauri-apps/plugin-os";
 
-const scope = "atproto transition:generic transition:chat.bsky";
+const scope =
+  "atproto transition:generic transition:email transition:chat.bsky";
 
 let oauth = $state() as BrowserOAuthClient | undefined;
 

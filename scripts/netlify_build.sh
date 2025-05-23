@@ -26,7 +26,7 @@ echo "{
   \"tos_uri\": \"$target_url\",
   \"policy_uri\": \"$target_url\",
   \"redirect_uris\": [\"$target_url/oauth/callback\"],
-  \"scope\": \"atproto transition:generic transition:chat.bsky\",
+  \"scope\": \"atproto transition:generic transition:email transition:chat.bsky\",
   \"grant_types\": [\"authorization_code\", \"refresh_token\"],
   \"response_types\": [\"code\"],
   \"token_endpoint_auth_method\": \"none\",

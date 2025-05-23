@@ -231,7 +231,7 @@ export const user = {
   },
 
   async uploadBlob(blob: Blob) {
-    if (!agent) return Promise.reject("No agent available");
+    if (!agent) return Promise.reject(new Error("No agent available"));
     const resp = await agent.com.atproto.repo.uploadBlob(blob);
     const blobRef = resp.data.blob;
     // Create a record that links to the blob
