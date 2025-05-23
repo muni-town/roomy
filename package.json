@@ -23,5 +23,8 @@
     "jazz-tools": "^0.14.10",
     "pkgroll": "^2.12.2",
     "turbo": "^2.5.3"
+  },
+  "dependencies": {
+    "jazz-svelte": "^0.14.10"
   }
 }

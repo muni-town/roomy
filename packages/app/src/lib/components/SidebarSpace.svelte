@@ -12,7 +12,7 @@ import {Space,Image} from "$lib/schema"
   import { page } from "$app/stores";
 
   type Props = {
-    space: Space;
+    space: Space | null | undefined;
     i: number;
   };
 
@@ -23,7 +23,7 @@ import {Space,Image} from "$lib/schema"
   let tooltipPosition = $state({ x: 0, y: 0 });
 
   const spaceImage = derivePromise(null, async () => {
-    if (space.image) {
+    if (space?.image) {
       return space.image;
     }
   });
@@ -36,7 +36,7 @@ import {Space,Image} from "$lib/schema"
   y={tooltipPosition.y}
 />
 <ContextMenu
-  menuTitle={space.name}
+  menuTitle={space?.name}
   items={[
     {
       label: "Leave Space",
@@ -50,10 +50,11 @@ import {Space,Image} from "$lib/schema"
 >
   <button
     type="button"
-
-    value={space.id}
+    onclick={() =>
+      navigate({ space: space?.id || ""})}
+    value={space?.id}
     onmouseenter={(e: Event) => {
-      activeTooltip = space.name;
+      activeTooltip = space?.name || "";
       const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
       tooltipPosition = { x: rect.right + 8, y: rect.top + rect.height / 2 };
     }}
@@ -69,7 +70,7 @@ import {Space,Image} from "$lib/schema"
       {#if spaceImage.value?.uri}
         <img
           src={spaceImage.value?.uri}
-          alt={space.name}
+          alt={space?.name || ""}
           class="w-10 h-10 object-cover rounded-full object-center"
         />
       {:else if space && space.id}

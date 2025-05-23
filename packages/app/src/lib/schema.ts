@@ -24,7 +24,7 @@ export const ImageUri = co.map({
 
 export const Images = co.list(z.string());
 
-export const Spaces = co.list(z.string());
+
 export const Collection = co.list(z.string());
 
 export const Channels = co.list(z.string());
@@ -88,6 +88,9 @@ export const Space = co.map({
     }
 
 }))
+export const Spaces = co.list(Space);
+export type Spaces = Loaded<typeof Spaces>
+
 export const Thread = co.map({
     name: z.string(),
     softDeleted: z.boolean(),
@@ -107,3 +110,20 @@ export type Thread = Loaded<typeof Thread>
 export type Category = Loaded<typeof Category>
 export type Image = Loaded<typeof Image>
 
+export const Catalog = co.map({spaces: z.optional(Spaces)})
+export type Catalog = Loaded<typeof Catalog>
+
+export const RoomyRoot = co.map({
+});
+
+const profile = co.map({
+    did: z.string(),
+    name: z.string(),
+    inbox: z.string().optional(),
+    inboxInvite: z.string().optional(),
+})
+export let AccountSchema = co.account({
+    root: RoomyRoot,
+    profile,
+
+});

@@ -13,6 +13,7 @@ import { decodeBase32 } from "./base32";
 import { isTauri } from "@tauri-apps/api/core";
 import { navigate } from "$lib/utils.svelte";
 import { handleOauthCallback } from "./handleOauthCallback";
+import { Catalog } from "./schema";
 
 // Reload app when this module changes to prevent accumulated connections
 if (import.meta.hot) {
@@ -90,16 +91,17 @@ let catalogId: {
     agent.com.atproto.repo
       .getRecord({
         repo: agent.assertDid,
-        collection: "chat.roomy.01JPNX7AA9BSM6TY2GWW1TR5V7.catalog",
+        collection: "chat.roomy.jazz.catalog",
         rkey: "self",
       })
       .then((resp) => {
         value = (resp.data.value as { id: string }).id;
       })
       .catch(async () => {
-        const newCatalogId = new EntityId().toString();
+        const catalog = Catalog.create({});
+        const newCatalogId = catalog.id;
         await agent?.com.atproto.repo.createRecord({
-          collection: "chat.roomy.01JPNX7AA9BSM6TY2GWW1TR5V7.catalog",
+          collection: "chat.roomy.jazz.catalog",
           record: { id: newCatalogId },
           repo: agent.assertDid,
           rkey: "self",

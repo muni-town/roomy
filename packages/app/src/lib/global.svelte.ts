@@ -15,7 +15,7 @@ import type { Agent } from "@atproto/api";
 import { page } from "$app/state";
 import { untrack } from "svelte";
 
-import { Space, Channel, Thread } from "./schema.ts";
+import { Space, Channel, Thread, Catalog } from "./schema.ts";
 
 // import * as roomy from "@roomy-chat/sdk";
 import { navigate, resolveLeafId } from "./utils.svelte";
@@ -37,6 +37,7 @@ export let globalState = $state({
    * to check whether or not `globalState.space` has been loaded after a route change or if it is still set to
    * the value from the previous route.
    * */
+  catalog: undefined as Catalog | undefined | null,
   loadedSpace: undefined as string | undefined,
   space: undefined as Space | undefined | null,
   channel: undefined as Channel | Thread | undefined | null,
@@ -65,12 +66,18 @@ $effect.root(() => {
   });
 
   // Reload Roomy peer when login changes.
-  // $effect(() => {
-  //   if (user.agent && user.catalogId.value) {
-  //     // Initialize new roomy instance
-  //     initRoomy(user.agent).then((roomy) => (globalState.roomy = roomy));
-  //   }
-  // });
+  $effect(() => {
+    if (user.agent && user.catalogId.value) {
+      console.log("user.agent", user.agent)
+      if(!globalState.catalog){
+        Catalog.load(user.catalogId.value).then((catalog) =>  {
+          globalState.catalog = catalog
+        })
+      } 
+      // Initialize new roomy instance
+      // initRoomy(user.agent).then((roomy) => (globalState.roomy = roomy));
+    }
+  });
 
   /** Update the global space and channel when the route changes. */
   $effect(() => {

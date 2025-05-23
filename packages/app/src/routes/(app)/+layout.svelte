@@ -2,7 +2,7 @@
   import "../../app.css";
   import { onMount, setContext } from "svelte";
   import { browser, dev } from "$app/environment";
-
+  import { JazzProvider } from "jazz-svelte";
   import posthog from "posthog-js";
   import { Toaster } from "svelte-french-toast";
 
@@ -17,15 +17,25 @@
   import SidebarMain from "$lib/components/SidebarMain.svelte";
   import { page } from "$app/state";
   import { afterNavigate } from "$app/navigation";
-
+  import { AccountSchema, Catalog } from "$lib/schema";
+  const peerUrl = "wss://cloud.jazz.tools/?key=nandithebull@outlook.com";
+  let sync = { peer: peerUrl };
   const { children } = $props();
-  const spaces = derivePromise(
-    [],
-    async () => (await globalState.roomy?.spaces.items()) || [],
-  );
+  // const spaces = $derived(SpaceglobalState.catalog?.spaces)
+  // $inspect(spaces).with((kind,spaces) => console.log(kind,"inspect spaces", spaces?.toJSON()))
+  let spaces = $state()
+  $inspect(globalState.catalog).with(async (kind,catalog) => {
+    if(catalog){
+      Catalog.subscribe(catalog.id, {},(catalog) => {
+        console.log("inspect catalog sub", catalog.toJSON())
+        spaces = catalog.spaces
+      })
+    }
 
+  })
+
+  // console.log("catalog", globalState.catalog)
   let themeColor = $state<ThemeName>("synthwave"); // defualt theme color
-
   onMount(async () => {
     await user.init();
 
@@ -80,39 +90,41 @@
   <!-- <RenderScan /> -->
 {/if}
 
-<!-- Container -->
-<div class="flex w-screen h-screen max-h-screen overflow-clip gap-0">
-  <Toaster />
-  <div
-    class="{page.params.space &&
-      (isSidebarVisible.value
-        ? 'flex z-1 absolute w-full'
-        : 'hidden')} sm:w-auto sm:relative sm:flex h-full overflow-clip gap-0
+<JazzProvider {sync} {AccountSchema}>
+  <!-- Container -->
+  <div class="flex w-screen h-screen max-h-screen overflow-clip gap-0">
+    <Toaster />
+    <div
+      class="{page.params.space &&
+        (isSidebarVisible.value
+          ? 'flex z-1 absolute w-full'
+          : 'hidden')} sm:w-auto sm:relative sm:flex h-full overflow-clip gap-0
       "
-  >
-    <!-- Content -->
-    <div class="flex bg-base-100 h-full">
-      <ServerBar
-        {spaces}
-        visible={isSpacesVisible.value || !page.params.space}
-      />
+    >
+      <!-- Content -->
+      <div class="flex bg-base-100 h-full">
+        <ServerBar
+          {spaces}
+          visible={isSpacesVisible.value || !page.params.space}
+        />
+        {#if page.params.space}
+          <SidebarMain />
+        {/if}
+      </div>
+      <!-- Overlay -->
       {#if page.params.space}
-        <SidebarMain />
+        <button
+          onclick={() => {
+            isSidebarVisible.toggle();
+          }}
+          aria-label="toggle navigation"
+          class="{!isSidebarVisible.value
+            ? 'hidden w-full'
+            : 'sm:hidden'} cursor-pointer grow-2 h-full bg-black/10"
+        ></button>
       {/if}
     </div>
-    <!-- Overlay -->
-    {#if page.params.space}
-      <button
-        onclick={() => {
-          isSidebarVisible.toggle();
-        }}
-        aria-label="toggle navigation"
-        class="{!isSidebarVisible.value
-          ? 'hidden w-full'
-          : 'sm:hidden'} cursor-pointer grow-2 h-full bg-black/10"
-      ></button>
-    {/if}
-  </div>
 
-  {@render children()}
-</div>
+    {@render children()}
+  </div>
+</JazzProvider>

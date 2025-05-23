@@ -9,7 +9,7 @@
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import SidebarSpace from "$lib/components/SidebarSpace.svelte";
   // import { Space } from "@roomy-chat/sdk";
-  import {Space} from "$lib/schema.ts";
+  import { Space, Spaces } from "$lib/schema.ts";
   import { cleanHandle } from "$lib/utils.svelte";
   import { atproto } from "$lib/atproto.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
@@ -21,10 +21,10 @@
     spaces,
     visible,
   }: {
-    spaces: { value: Space[] };
+    spaces: Spaces | undefined | null;
     visible: boolean;
   } = $props();
-
+  console.log("server bar spaces", spaces?.toJSON())
   let handleInput = $state("");
   let loginLoading = $state(false);
   let signupLoading = $state(false);
@@ -36,11 +36,19 @@
   async function createSpace() {
     // if (!newSpaceName || !user.agent || !globalState.roomy) return;
     // const space = await globalState.roomy.create(Space);
-    const space = Space.create(
-      {name: newSpaceName}
-    );
+    const space = Space.create({ name: newSpaceName });
     // space.admins((x) => user.agent && x.push(user.agent.assertDid));
     // space.commit();
+    console.log("spaces", globalState.catalog?.spaces);
+    if (globalState.catalog) {
+      if (!globalState.catalog?.spaces) {
+        console.log("creating new spaces list for catalog");
+        globalState.catalog.spaces = Spaces.create([space]);
+      } else {
+        console.log("pushing space to catalog");
+        globalState.catalog.spaces.push(space);
+      }
+    }
 
     // globalState.roomy.spaces.push(space);
     // globalState.roomy.commit();
@@ -177,10 +185,11 @@
     {/if}
 
     <div class="divider my-0"></div>
-
-    {#each spaces.value as space, i}
-      <SidebarSpace {space} {i} />
-    {/each}
+    {#if spaces}
+      {#each spaces as space, i}
+        <SidebarSpace {space} {i} />
+      {/each}
+    {/if}
   </div>
 
   <section class="flex flex-col items-center gap-2 p-0">
