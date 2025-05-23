@@ -7,9 +7,11 @@ Currently working on producing a functional proof-of-concept. See the
 
 ## Key Features
 
-**Content fluidity:** In Roomy every communication artifact can be expanded seamlessly from chat message up to a wiki-page or even standalone channel. [Chatty message gardening](https://blog.muni.town/chatty-community-gardens/)
+**Content fluidity:** In Roomy, every communication artifact can be expanded seamlessly from chat message up to a wiki-page or even standalone channel. [Chatty message gardening](https://blog.muni.town/chatty-community-gardens/)
 
-**Self-sovereign:** Build a self-sovereign community; you will have a local copy of your community's data at all times. And so will all your community members! [Local-first software.](https://localfirstweb.dev/)
+**Auto-documenting:** Every page, every thread, every post in Roomy is fundamentally a type of *document*. Any single chat message, or a series of them strung together, can at any point be 'transitioned' into the first draft of a Documentation Page.
+
+**Personally agentic:** Build sovereign communities. You will have a local copy of your community's data at all times, and so will all your community members! [Local-first software.](https://localfirstweb.dev/)
 
 **Peer powered:** Make communities that can, if necessary, endure purely on the shared resources of sufficiently aligned peers in a mutual-sharing network. [Peer-2-Peer software](https://blog.muni.town/roomy-deep-dive/) *(slightly outdated but gist of it remains the same)*
 
