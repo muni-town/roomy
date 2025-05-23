@@ -4,7 +4,8 @@
   import { globalState } from "$lib/global.svelte";
   import Icon from "@iconify/svelte";
   import { AvatarMarble } from "svelte-boring-avatars";
-  import { Image } from "@roomy-chat/sdk";
+  // import { Image } from "@roomy-chat/sdk";
+  import {Image} from "$lib/schema"
   import { user } from "$lib/user.svelte";
   import { getProfile } from "$lib/profile.svelte";
   import { resolveLeafId } from "$lib/utils.svelte";
@@ -25,7 +26,7 @@
     if (!globalState.space) return;
     if (!showSpaceSettings) {
       spaceNameInput = globalState.space.name;
-      newSpaceHandle = globalState.space?.handles((x) => x.get(0)) || "";
+      // newSpaceHandle = globalState.space?.handles((x) => x.get(0)) || "";
       verificationFailed = false;
       saveSpaceLoading = false;
       avatarFile = null;
@@ -36,22 +37,22 @@
       // Access the image entity directly
       const imageId = globalState.space.image;
 
-      if (imageId && globalState.roomy) {
-        globalState.roomy.open(Image, imageId).then((image) => {
-          if (image.uri) {
-            spaceAvatarUrl = image.uri;
-          }
-        });
-      }
+      // if (imageId) {
+      //   globalState.roomy.open(Image, imageId).then((image) => {
+      //     if (image.uri) {
+      //       spaceAvatarUrl = image.uri;
+      //     }
+      //   });
+      // }
 
-      Promise.all(
-        Object.keys(globalState.space.bans((x) => x.toJSON())).map((x) =>
-          getProfile(x),
-        ),
-      ).then(
-        (profiles) =>
-          (bannedHandlesInput = profiles.map((x) => x.handle).join(", ")),
-      );
+      // Promise.all(
+      //   Object.keys(globalState.space.bans((x) => x.toJSON())).map((x) =>
+      //     getProfile(x),
+      //   ),
+      // ).then(
+      //   (profiles) =>
+      //     (bannedHandlesInput = profiles.map((x) => x.handle).join(", ")),
+      // );
     }
   });
 
@@ -66,19 +67,19 @@
           .map((x) => user.agent!.resolveHandle({ handle: x })),
       )
     ).map((x) => x.data.did);
-    globalState.space.bans((bans) => {
-      bans.clear();
-      for (const ban of bannedIds) {
-        bans.set(ban, true);
-      }
-    });
-    globalState.space.commit();
+    // globalState.space.bans((bans) => {
+    //   bans.clear();
+    //   for (const ban of bannedIds) {
+    //     bans.set(ban, true);
+    //   }
+    // });
+    // globalState.space.commit();
     showSpaceSettings = false;
   }
   async function saveSpaceName() {
     if (!globalState.space) return;
     globalState.space.name = spaceNameInput;
-    globalState.space.commit();
+    // globalState.space.commit();
   }
 
   async function handleAvatarSelect(event: Event) {
@@ -105,15 +106,15 @@
 
       try {
         // Create an Image entity
-        const image = await globalState.roomy.create(Image);
-
+        // const image = await globalState.roomy.create(Image);
+        const image = Image.create({ uri: uploadResult.url })
         // Set the image URI
-        image.uri = uploadResult.url;
-        image.commit();
+        // image.uri = uploadResult.url;
+        // image.commit();
 
         try {
-          globalState.space.image = image.id;
-          globalState.space.commit();
+          globalState.space.image = image;
+          // globalState.space.commit();
 
           // Update the preview URL
           spaceAvatarUrl = uploadResult.url;
@@ -146,8 +147,8 @@
     saveSpaceLoading = true;
 
     if (!newSpaceHandle) {
-      globalState.space.handles((h) => h.clear());
-      globalState.space.commit();
+      // globalState.space.handles((h) => h.clear());
+      // globalState.space.commit();
       saveSpaceLoading = false;
       showSpaceSettings = false;
       toast.success("Saved space with without handle.", {
@@ -163,11 +164,11 @@
         saveSpaceLoading = false;
         return;
       }
-      globalState.space.handles((h) => {
-        h.clear();
-        h.push(newSpaceHandle);
-      });
-      globalState.space.commit();
+      // globalState.space.handles((h) => {
+      //   h.clear();
+      //   h.push(newSpaceHandle);
+      // });
+      // globalState.space.commit();
       saveSpaceLoading = false;
       showSpaceSettings = false;
       toast.success("Space handle successfully verified & saved!", {

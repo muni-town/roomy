@@ -37,7 +37,6 @@
     "@muni-town/leaf-sync-ws": "^0.1.0-preview.7",
     "@noble/curves": "^1.8.1",
     "@repo/tsconfig": "workspace:*",
-    "@roomy-chat/sdk": "workspace:*",
     "@sveltejs/adapter-netlify": "^5.0.0",
     "@sveltejs/adapter-static": "^3.0.8",
     "@sveltejs/kit": "^2.20.7",

@@ -8,7 +8,8 @@
   import AvatarImage from "$lib/components/AvatarImage.svelte";
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import SidebarSpace from "$lib/components/SidebarSpace.svelte";
-  import { Space } from "@roomy-chat/sdk";
+  // import { Space } from "@roomy-chat/sdk";
+  import {Space} from "$lib/schema.ts";
   import { cleanHandle } from "$lib/utils.svelte";
   import { atproto } from "$lib/atproto.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
@@ -33,14 +34,16 @@
   let isNewSpaceDialogOpen = $state(false);
 
   async function createSpace() {
-    if (!newSpaceName || !user.agent || !globalState.roomy) return;
-    const space = await globalState.roomy.create(Space);
-    space.name = newSpaceName;
-    space.admins((x) => user.agent && x.push(user.agent.assertDid));
-    space.commit();
+    // if (!newSpaceName || !user.agent || !globalState.roomy) return;
+    // const space = await globalState.roomy.create(Space);
+    const space = Space.create(
+      {name: newSpaceName}
+    );
+    // space.admins((x) => user.agent && x.push(user.agent.assertDid));
+    // space.commit();
 
-    globalState.roomy.spaces.push(space);
-    globalState.roomy.commit();
+    // globalState.roomy.spaces.push(space);
+    // globalState.roomy.commit();
     newSpaceName = "";
 
     isNewSpaceDialogOpen = false;
@@ -93,31 +96,32 @@
     }
   }
 
-  async function exportZip() {
-    var metadata: { Type: string; Version: string; [key: string]: any } = {
-      Type: "RoomyData",
-      Version: "0",
-    };
+  // async function exportZip() {
+  //   var metadata: { Type: string; Version: string; [key: string]: any } = {
+  //     Type: "RoomyData",
+  //     Version: "0",
+  //   };
 
-    var zip = new JSZip();
+  //   var zip = new JSZip();
 
-    var space = globalState.space;
-    if (!space) return;
+  //   // var space = globalState.space;
+  //   const space = null
+  //   if (!space) return;
 
-    metadata["space_id"] = space.entity.id.toString();
+  //   metadata["space_id"] = space.entity.id.toString();
 
-    await addEntityToZip(zip, space);
+  //   await addEntityToZip(zip, space);
 
-    await addEntityListToZip(zip, space.threads);
-    await addEntityListToZip(zip, space.channels);
-    await addEntityListToZip(zip, space.wikipages);
+  //   await addEntityListToZip(zip, space.threads);
+  //   await addEntityListToZip(zip, space.channels);
+  //   await addEntityListToZip(zip, space.wikipages);
 
-    zip.file("meta.json", JSON.stringify(metadata));
+  //   zip.file("meta.json", JSON.stringify(metadata));
 
-    zip.generateAsync({ type: "blob" }).then(function (content) {
-      FileSaver.saveAs(content, "roomy-data.zip");
-    });
-  }
+  //   zip.generateAsync({ type: "blob" }).then(function (content) {
+  //     FileSaver.saveAs(content, "roomy-data.zip");
+  //   });
+  // }
 </script>
 
 <!-- Width manually set for transition to w-0 -->
@@ -196,7 +200,6 @@
       title="Export ZIP Archive"
       class="p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
       disabled={!user.session}
-      onclick={exportZip}
     >
       <Icon icon="mdi:folder-download-outline" font-size="1.8em" />
     </Button.Root>

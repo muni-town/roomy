@@ -5,7 +5,8 @@
 
   import { navigateSync } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  import { Category, Channel } from "@roomy-chat/sdk";
+  // import { Category, Channel } from "@roomy-chat/sdk";
+  import { Category, Channel } from "$lib/schema.ts";
   import { Accordion, Button } from "bits-ui";
   import { slide } from "svelte/transition";
   import Dialog from "./Dialog.svelte";
@@ -22,7 +23,7 @@
   function saveCategory() {
     if (!editingCategory) return;
     editingCategory.name = categoryNameInput;
-    editingCategory.commit();
+    // editingCategory.commit();
     showCategoryDialog = false;
   }
 </script>
@@ -99,7 +100,7 @@
                   class="flex flex-col gap-2"
                 >
                   {#each category.channels.ids() as channelId}
-                    {#await globalState.roomy && globalState.roomy.open(Channel, channelId) then channel}
+                    {#await Channel.load(channelId) then channel}
                       {#if !channel?.softDeleted}
                         <Button.Root
                           href={navigateSync({

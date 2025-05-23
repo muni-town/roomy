@@ -43,7 +43,7 @@ export * from "@muni-town/leaf";
  * */
 // export * as components from "./components.ts";
 
-export * as compoents from "./schema.ts"
+export * as components from "./schema.ts"
 import * as c from "./components.ts";
 
 /** A constructor for an {@linkcode EntityWrapper}. */

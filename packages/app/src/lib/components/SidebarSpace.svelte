@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type { Space } from "@roomy-chat/sdk";
-
+  // import type { Space } from "@roomy-chat/sdk";
+import {Space,Image} from "$lib/schema"
   import ContextMenu from "./ContextMenu.svelte";
   import { AvatarMarble } from "svelte-boring-avatars";
 
   import { navigate } from "$lib/utils.svelte";
   import { derivePromise } from "$lib/utils.svelte";
-  import { Image } from "@roomy-chat/sdk";
+  // import { Image } from "@roomy-chat/sdk";
   import TooltipPortal from "./TooltipPortal.svelte";
   import { globalState } from "$lib/global.svelte";
   import { page } from "$app/stores";
@@ -23,8 +23,8 @@
   let tooltipPosition = $state({ x: 0, y: 0 });
 
   const spaceImage = derivePromise(null, async () => {
-    if (space.image && globalState.roomy) {
-      return (await globalState.roomy.open(Image, space.image)) as Image;
+    if (space.image) {
+      return space.image;
     }
   });
 </script>
@@ -42,16 +42,15 @@
       label: "Leave Space",
       icon: "mdi:exit-to-app",
       onselect: () => {
-        globalState.roomy?.spaces.remove(i);
-        globalState.roomy?.commit();
+        // globalState.roomy?.spaces.remove(i);
+        // globalState.roomy?.commit();
       },
     },
   ]}
 >
   <button
     type="button"
-    onclick={() =>
-      navigate({ space: space.handles((x) => x.get(0)) || space.id })}
+
     value={space.id}
     onmouseenter={(e: Event) => {
       activeTooltip = space.name;
@@ -64,7 +63,7 @@
     onblur={() => {
       activeTooltip = "";
     }}
-    class={`dz-btn dz-btn-ghost size-12 rounded-full ${$page.url.pathname.includes(`${space.handles((x) => x.get(0)) || space.id}`) && "border-accent"} relative group p-0.5`}
+    class={`dz-btn dz-btn-ghost size-12 rounded-full relative group p-0.5`}
   >
     <div class="flex items-center justify-center overflow-hidden">
       {#if spaceImage.value?.uri}

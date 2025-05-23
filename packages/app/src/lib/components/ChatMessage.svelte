@@ -11,18 +11,20 @@
   import Drawer from "./Drawer.svelte";
   import AvatarImage from "./AvatarImage.svelte";
   import { getContentHtml, type Item } from "$lib/tiptap/editor";
-  import { Announcement, Message, type EntityIdStr } from "@roomy-chat/sdk";
+  // import { Announcement, Message, type EntityIdStr } from "$lib/schema"
+  import { Message, Profile } from "$lib/schema";
+  // import type {CoValue} from "jazz-tools"
   import { globalState } from "$lib/global.svelte";
-  import { derivePromise } from "$lib/utils.svelte";
+  // import { derivePromise } from "$lib/utils.svelte";
   import type { JSONContent } from "@tiptap/core";
   import ChatInput from "./ChatInput.svelte";
   import toast from "svelte-french-toast";
-  import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
+  // import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
 
   type Props = {
     mergeWithPrevious?: boolean;
   } & {
-    message: Message | Announcement;
+    message: Message;
     type: "message" | "link";
   };
 
@@ -33,29 +35,30 @@
   }: Props = $props();
 
   const isReplyable = type === "message";
-  const links =
-    type === "link" &&
-    (collectLinks(tiptapJsontoString((message as Message).bodyJson)) || []).map(
-      (url) => url.replace("http:", "https:"),
-    );
+  // const links =
+  //   type === "link" &&
+  //   (collectLinks(tiptapJsontoString((message as Message).bodyJson)) || []).map(
+  //     (url) => url.replace("http:", "https:"),
+  //   );
 
-  let messageRepliedTo = derivePromise(undefined, async () => {
-    if (globalState.roomy && message.replyTo) {
-      return await globalState.roomy.open(Message, message.replyTo);
-    }
-  });
-  let relatedThreads = derivePromise([], async () => {
-    if (message instanceof Announcement) {
-      return await message.relatedThreads.items();
-    }
-    return [];
-  });
-  let relatedMessages = derivePromise([], async () => {
-    if (message instanceof Announcement) {
-      return await message.relatedMessages.items();
-    }
-    return [];
-  });
+  // let messageRepliedTo = derivePromise(undefined, async () => {
+  //   if (globalState.roomy && message.replyTo) {
+  //     return await globalState.roomy.open(Message, message.replyTo);
+  //   }
+  // });
+
+  // let relatedThreads = derivePromise([], async () => {
+  //   if (message instanceof Announcement) {
+  //     return await message.relatedThreads.items();
+  //   }
+  //   return [];
+  // });
+  // let relatedMessages = derivePromise([], async () => {
+  //   if (message instanceof Announcement) {
+  //     return await message.relatedMessages.items();
+  //   }
+  //   return [];
+  // });
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
   let isDrawerOpen = $state(false);
@@ -76,67 +79,61 @@
   let isEditing = $state(false);
   let editMessageContent: JSONContent = $state({});
 
-  let mayDelete = $derived(
-    message.matches(Message) &&
-      (globalState.isAdmin ||
-        (user.agent &&
-          message
-            .forceCast(Message)
-            .authors((x) => x.toArray().includes(user.agent!.assertDid)))),
-  );
+  // let mayDelete = $derived(
+  //   message.matches(Message) &&
+  //     (globalState.isAdmin ||
+  //       (user.agent &&
+  //         message
+  //           .forceCast(Message)
+  //           .authors((x) => x.toArray().includes(user.agent!.assertDid)))),
+  // );
 
-  let mayEdit = $derived(
-    message.matches(Message) &&
-      user.agent &&
-      message
-        .forceCast(Message)
-        .authors((x) => x.toArray())
-        .includes(user.agent?.assertDid),
-  );
+  // let mayEdit = $derived(
+  //   message.matches(Message) &&
+  //     user.agent &&
+  //     message
+  //       .forceCast(Message)
+  //       .authors((x) => x.toArray())
+  //       .includes(user.agent?.assertDid),
+  // );
 
-  const selectMessage = getContext("selectMessage") as (
-    message: Message,
-  ) => void;
-  const removeSelectedMessage = getContext("removeSelectedMessage") as (
-    message: Message,
-  ) => void;
+  // const selectMessage = getContext("selectMessage") as (
+  //   message: Message,
+  // ) => void;
+  // const removeSelectedMessage = getContext("removeSelectedMessage") as (
+  //   message: Message,
+  // ) => void;
   const setReplyTo = getContext("setReplyTo") as (message: Message) => void;
-  const scrollToMessage = getContext("scrollToMessage") as (
-    id: EntityIdStr,
-  ) => void;
+  // const scrollToMessage = getContext("scrollToMessage") as (
+  //   id: EntityIdStr,
+  // ) => void;
 
   function deleteMessage() {
     message.softDeleted = true;
-    message.commit();
   }
 
   function startEditing() {
-    if (message instanceof Message) {
-      isEmojiToolbarPickerOpen = false;
+    isEmojiToolbarPickerOpen = false;
 
-      try {
-        // Parse the message body JSON to get a plain object
-        const parsedContent = JSON.parse(message.bodyJson) as JSONContent;
+    try {
+      // Parse the message body JSON to get a plain object
+      const parsedContent = JSON.parse(message.body) as JSONContent;
 
-        // Create a deep copy to ensure we're not working with a Proxy object
-        // This keeps all content including images intact
-        editMessageContent = JSON.parse(
-          JSON.stringify(parsedContent),
-        ) as JSONContent;
+      // Create a deep copy to ensure we're not working with a Proxy object
+      // This keeps all content including images intact
+      editMessageContent = JSON.parse(
+        JSON.stringify(parsedContent),
+      ) as JSONContent;
 
-        isEditing = true;
-      } catch (error) {
-        console.error("Error starting message edit:", error);
-        toast.error("Failed to edit message", { position: "bottom-end" });
-      }
+      isEditing = true;
+    } catch (error) {
+      console.error("Error starting message edit:", error);
+      toast.error("Failed to edit message", { position: "bottom-end" });
     }
   }
 
   function saveEditedMessage() {
-    if (
-      message instanceof Message &&
-      Object.keys(editMessageContent).length > 0
-    ) {
+    if (Object.keys(editMessageContent).length > 0) {
       try {
         // Ensure we're working with a plain object, not a Proxy
         const plainContent = JSON.parse(
@@ -144,13 +141,12 @@
         ) as JSONContent;
 
         // Update the message
-        message.bodyJson = JSON.stringify(plainContent);
+        message.body = JSON.stringify(plainContent);
 
         // Add an updatedDate field to track edits
         // @ts-ignore - Adding custom property for edit tracking
         message.updatedDate = new Date();
 
-        message.commit();
         isEditing = false;
         toast.success("Message updated", { position: "bottom-end" });
       } catch (error) {
@@ -181,33 +177,33 @@
 
   function onEmojiPick(event: Event & { detail: { unicode: string } }) {
     if (!user.agent) return;
-    message.reactions.toggle(event.detail.unicode, user.agent.assertDid);
-    message.commit();
+    // message.reactions.toggle(event.detail.unicode, user.agent.assertDid);
+    // message.commit();
     isEmojiToolbarPickerOpen = false;
     isEmojiRowPickerOpen = false;
   }
 
-  function updateSelect() {
-    const m = message.tryCast(Message);
-    if (isSelected) {
-      m && selectMessage(m);
-    } else {
-      m && removeSelectedMessage(m);
-    }
-  }
+  // function updateSelect() {
+  //   const m = message.tryCast(Message);
+  //   if (isSelected) {
+  //     m && selectMessage(m);
+  //   } else {
+  //     m && removeSelectedMessage(m);
+  //   }
+  // }
 
-  function toggleReaction(reaction: string) {
-    if (!user.agent) return;
-    message.reactions.toggle(reaction, user.agent.assertDid);
-    message.commit();
-  }
+  // function toggleReaction(reaction: string) {
+  //   if (!user.agent) return;
+  //   message.reactions.toggle(reaction, user.agent.assertDid);
+  //   message.commit();
+  // }
 
-  function scrollToReply() {
-    if (message.matches(Announcement) || !message.replyTo) {
-      return;
-    }
-    scrollToMessage(message.replyTo);
-  }
+  // function scrollToReply() {
+  //   if (message.matches(Announcement) || !message.replyTo) {
+  //     return;
+  //   }
+  //   scrollToMessage(message.replyTo);
+  // }
 
   $effect(() => {
     if (!isThreading.value) {
@@ -234,65 +230,65 @@
     }
   });
 
-  function getAnnouncementHtml(announcement: Announcement) {
-    if (!globalState.space) return "";
-    const schema = {
-      type: "doc",
-      content: [] as Record<string, unknown>[],
-    } satisfies JSONContent;
+  // function getAnnouncementHtml(announcement: Announcement) {
+  //   if (!globalState.space) return "";
+  //   const schema = {
+  //     type: "doc",
+  //     content: [] as Record<string, unknown>[],
+  //   } satisfies JSONContent;
 
-    switch (announcement.kind) {
-      case "threadCreated": {
-        schema.content.push({
-          type: "paragraph",
-          content: [
-            { type: "text", text: "A new thread has been created: " },
-            {
-              type: "channelThreadMention",
-              attrs: {
-                id: JSON.stringify({
-                  id: relatedThreads.value[0]?.id,
-                  space: globalState.space.id,
-                  type: "thread",
-                }),
-                label: relatedThreads.value[0]?.name || "loading...",
-              },
-            },
-          ],
-        });
-        break;
-      }
-      case "messageMoved": {
-        schema.content.push({
-          type: "paragraph",
-          content: [
-            { type: "text", text: "Moved to: " },
-            {
-              type: "channelThreadMention",
-              attrs: {
-                id: JSON.stringify({
-                  id: relatedThreads.value[0]?.id,
-                  space: globalState.space.id,
-                  type: "thread",
-                }),
-                label: relatedThreads.value[0]?.name || "loading...",
-              },
-            },
-          ],
-        });
-        break;
-      }
-      case "messageDeleted": {
-        schema.content.push({
-          type: "paragraph",
-          content: [{ type: "text", text: "This message has been deleted" }],
-        });
-        break;
-      }
-    }
+  //   switch (announcement.kind) {
+  //     case "threadCreated": {
+  //       schema.content.push({
+  //         type: "paragraph",
+  //         content: [
+  //           { type: "text", text: "A new thread has been created: " },
+  //           {
+  //             type: "channelThreadMention",
+  //             attrs: {
+  //               id: JSON.stringify({
+  //                 id: relatedThreads.value[0]?.id,
+  //                 space: globalState.space.id,
+  //                 type: "thread",
+  //               }),
+  //               label: relatedThreads.value[0]?.name || "loading...",
+  //             },
+  //           },
+  //         ],
+  //       });
+  //       break;
+  //     }
+  //     case "messageMoved": {
+  //       schema.content.push({
+  //         type: "paragraph",
+  //         content: [
+  //           { type: "text", text: "Moved to: " },
+  //           {
+  //             type: "channelThreadMention",
+  //             attrs: {
+  //               id: JSON.stringify({
+  //                 id: relatedThreads.value[0]?.id,
+  //                 space: globalState.space.id,
+  //                 type: "thread",
+  //               }),
+  //               label: relatedThreads.value[0]?.name || "loading...",
+  //             },
+  //           },
+  //         ],
+  //       });
+  //       break;
+  //     }
+  //     case "messageDeleted": {
+  //       schema.content.push({
+  //         type: "paragraph",
+  //         content: [{ type: "text", text: "This message has been deleted" }],
+  //       });
+  //       break;
+  //     }
+  //   }
 
-    return getContentHtml(schema);
-  }
+  //   return getContentHtml(schema);
+  // }
 
   function getPlainTextContent(content: JSONContent): string {
     try {
@@ -329,14 +325,14 @@
   <div
     class={`relative group w-full h-fit flex flex-col gap-2 px-2 py-2 hover:bg-white/5`}
   >
-    {#if message instanceof Announcement}
+    {@render messageView(message)}
+    <!-- {#if message instanceof Announcement}
       {@render announcementView(message)}
     {:else if message instanceof Message}
       {@render replyBanner()}
-      {@render messageView(message)}
-    {/if}
+    {/if} -->
 
-    {#if Object.keys(message.reactions.all()).length > 0}
+    <!-- {#if Object.keys(message.reactions.all()).length > 0}
       <div class="flex gap-2 flex-wrap pl-14">
         {#each Object.keys(message.reactions.all()) as reaction}
           {@render reactionToggle(reaction)}
@@ -350,11 +346,11 @@
           </Popover.Content>
         </Popover.Root>
       </div>
-    {/if}
+    {/if} -->
   </div>
 </div>
 
-{#snippet announcementView(announcement: Announcement)}
+<!-- {#snippet announcementView(announcement: Announcement)}
   {@const relatedMessage = relatedMessages.value[0]}
   {@render toolbar()}
   <div class="flex flex-col gap-4 pl-14">
@@ -407,153 +403,150 @@
       </div>
     {/if}
   </div>
-{/snippet}
+{/snippet} -->
 
 {#snippet messageView(msg: Message)}
-  {@const authorProfile = getProfile(msg.authors((x) => x.get(0)))}
+  {@const authorProfile = msg.profile as Profile}
 
-  {#await authorProfile then authorProfile}
-    {@render toolbar(authorProfile)}
+  {@render toolbar(authorProfile)}
 
-    <div class="flex gap-4 group">
-      {#if !mergeWithPrevious}
-        <a
-          href={`https://bsky.app/profile/${authorProfile.handle}`}
-          title={authorProfile.handle}
-          target="_blank"
-        >
-          <AvatarImage
-            handle={authorProfile.handle}
-            avatarUrl={authorProfile.avatarUrl}
+  <div class="flex gap-4 group">
+    {#if !mergeWithPrevious}
+      <a
+        href={`https://bsky.app/profile/${authorProfile.handle}`}
+        title={authorProfile.handle}
+        target="_blank"
+      >
+        <AvatarImage
+          handle={authorProfile.handle}
+          avatarUrl={authorProfile.avatarUrl}
+        />
+      </a>
+    {:else}
+      <div class="w-11">
+        {#if message.createdDate}
+          <span
+            class="opacity-0 text-[8px] text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100"
+          >
+            {format(message.createdDate, "pp")}
+          </span>
+        {/if}
+      </div>
+    {/if}
+
+    {#if isEditing && message === msg}
+      <div class="flex flex-col w-full gap-2">
+        {#if !mergeWithPrevious}
+          <section class="flex items-center gap-2 flex-wrap w-fit">
+            <a
+              href={`https://bsky.app/profile/${authorProfile.handle}`}
+              target="_blank"
+              class="text-primary hover:underline"
+            >
+              <h5 class="font-bold" title={authorProfile.handle}>
+                {authorProfile.displayName || authorProfile.handle}
+              </h5>
+            </a>
+            {@render timestamp(message.createdDate || new Date())}
+          </section>
+        {/if}
+
+        <div class="w-full">
+          <ChatInput
+            bind:content={editMessageContent}
+            users={users.value || []}
+            context={contextItems.value || []}
+            onEnter={saveEditedMessage}
+
+            editMode={true}
           />
-        </a>
-      {:else}
-        <div class="w-11">
-          {#if message.createdDate}
-            <span
-              class="opacity-0 text-[8px] text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100"
-            >
-              {format(message.createdDate, "pp")}
-            </span>
-          {/if}
         </div>
-      {/if}
 
-      {#if isEditing && message === msg}
-        <div class="flex flex-col w-full gap-2">
-          {#if !mergeWithPrevious}
-            <section class="flex items-center gap-2 flex-wrap w-fit">
-              <a
-                href={`https://bsky.app/profile/${authorProfile.handle}`}
-                target="_blank"
-                class="text-primary hover:underline"
-              >
-                <h5 class="font-bold" title={authorProfile.handle}>
-                  {authorProfile.displayName || authorProfile.handle}
-                </h5>
-              </a>
-              {@render timestamp(message.createdDate || new Date())}
-            </section>
-          {/if}
-
-          <div class="w-full">
-            <ChatInput
-              bind:content={editMessageContent}
-              users={users.value || []}
-              context={contextItems.value || []}
-              onEnter={saveEditedMessage}
-              placeholder={message instanceof Message
-                ? getPlainTextContent(JSON.parse(message.bodyJson))
-                : "Edit message..."}
-              editMode={true}
-            />
-          </div>
-
-          <div class="flex justify-end gap-2 mt-2">
-            <Button.Root onclick={cancelEditing} class="btn btn-sm btn-ghost">
-              Cancel
-            </Button.Root>
-            <Button.Root
-              onclick={saveEditedMessage}
-              class="btn btn-sm btn-primary"
-            >
-              Save
-            </Button.Root>
-          </div>
+        <div class="flex justify-end gap-2 mt-2">
+          <Button.Root onclick={cancelEditing} class="btn btn-sm btn-ghost">
+            Cancel
+          </Button.Root>
+          <Button.Root
+            onclick={saveEditedMessage}
+            class="btn btn-sm btn-primary"
+          >
+            Save
+          </Button.Root>
         </div>
-      {:else}
-        <Button.Root
-          onclick={() => {
-            if (isMobile) {
-              isDrawerOpen = true;
-            }
-          }}
-          class="flex flex-col text-start gap-2 w-full min-w-0 cursor-default!"
-        >
-          {#if !mergeWithPrevious}
-            <section class="flex items-center gap-2 flex-wrap w-fit">
-              <a
-                href={`https://bsky.app/profile/${authorProfile.handle}`}
-                target="_blank"
-                class="text-primary hover:underline"
-              >
-                <h5 class="font-bold" title={authorProfile.handle}>
-                  {authorProfile.displayName || authorProfile.handle}
-                </h5>
-              </a>
-              {@render timestamp(message.createdDate || new Date())}
-            </section>
-          {/if}
-
-          {#if type === "message"}
-            <!-- Using a fancy Tailwind trick to target all href elements inside of this parent -->
-            <span
-              class="dz-prose select-text [&_a]:text-primary [&_a]:hover:underline"
+      </div>
+    {:else}
+      <Button.Root
+        onclick={() => {
+          if (isMobile) {
+            isDrawerOpen = true;
+          }
+        }}
+        class="flex flex-col text-start gap-2 w-full min-w-0 cursor-default!"
+      >
+        {#if !mergeWithPrevious}
+          <section class="flex items-center gap-2 flex-wrap w-fit">
+            <a
+              href={`https://bsky.app/profile/${authorProfile.handle}`}
+              target="_blank"
+              class="text-primary hover:underline"
             >
-              {@html getContentHtml(JSON.parse(msg.bodyJson))}
+              <h5 class="font-bold" title={authorProfile.handle}>
+                {authorProfile.displayName || authorProfile.handle}
+              </h5>
+            </a>
+            {@render timestamp(message.createdDate || new Date())}
+          </section>
+        {/if}
+
+        {#if type === "message"}
+          <!-- Using a fancy Tailwind trick to target all href elements inside of this parent -->
+          <span
+            class="dz-prose select-text [&_a]:text-primary [&_a]:hover:underline"
+          >
+            {@html getContentHtml(JSON.parse(msg.body))}
+          </span>
+        <!-- {:else if links && type === "link"}
+          {#each links as url}
+            <p>
+              <a
+                href={url}
+                target="_blank"
+                class="text-primary hover:underline inline-block">{url}</a
+              >
+            </p>
+          {/each} -->
+        {/if}
+
+        {#if isMessageEdited(msg)}
+          <div class="relative group/edit">
+            <span
+              class="text-xs text-gray-400 italic flex items-center gap-1 hover:text-gray-300 cursor-default"
+            >
+              <Icon icon="mdi:pencil" width="12px" height="12px" />
+              <span>edited</span>
             </span>
-          {:else if links && type === "link"}
-            {#each links as url}
-              <p>
-                <a
-                  href={url}
-                  target="_blank"
-                  class="text-primary hover:underline inline-block">{url}</a
-                >
-              </p>
-            {/each}
-          {/if}
 
-          {#if isMessageEdited(msg)}
-            <div class="relative group/edit">
-              <span
-                class="text-xs text-gray-400 italic flex items-center gap-1 hover:text-gray-300 cursor-default"
-              >
-                <Icon icon="mdi:pencil" width="12px" height="12px" />
-                <span>edited</span>
-              </span>
-
-              <!-- Tooltip that appears on hover -->
-              <div
-                class="absolute bottom-full left-0 mb-2 opacity-0 group-hover/edit:opacity-100 transition-opacity duration-200 bg-base-300 p-3 rounded shadow-lg text-xs z-10 min-w-[200px]"
-              >
-                <div class="flex flex-col gap-1">
-                  <p class="font-semibold">Message edited</p>
-                  <p>
-                    Original: {format(msg.createdDate || new Date(), "PPpp")}
-                  </p>
-                  <p>Edited: {getEditedTime(msg)}</p>
-                </div>
-
-                <!-- Arrow pointing down -->
-                <div
-                  class="absolute -bottom-1 left-3 w-2 h-2 bg-base-300 rotate-45"
-                ></div>
+            <!-- Tooltip that appears on hover -->
+            <div
+              class="absolute bottom-full left-0 mb-2 opacity-0 group-hover/edit:opacity-100 transition-opacity duration-200 bg-base-300 p-3 rounded shadow-lg text-xs z-10 min-w-[200px]"
+            >
+              <div class="flex flex-col gap-1">
+                <p class="font-semibold">Message edited</p>
+                <p>
+                  Original: {format(msg.createdDate || new Date(), "PPpp")}
+                </p>
+                <p>Edited: {getEditedTime(msg)}</p>
               </div>
+
+              <!-- Arrow pointing down -->
+              <div
+                class="absolute -bottom-1 left-3 w-2 h-2 bg-base-300 rotate-45"
+              ></div>
             </div>
-          {/if}
-          <!-- TODO: images. -->
-          <!-- {#if msg.images?.length}
+          </div>
+        {/if}
+        <!-- TODO: images. -->
+        <!-- {#if msg.images?.length}
           <div class="flex flex-wrap gap-2 mt-2">
             {#each msg.images as image}
               <img
@@ -565,18 +558,17 @@
             {/each}
           </div>
         {/if} -->
-        </Button.Root>
-      {/if}
-    </div>
-  {/await}
+      </Button.Root>
+    {/if}
+  </div>
 {/snippet}
 
-{#snippet toolbar(authorProfile?: { handle: string; avatarUrl: string })}
+{#snippet toolbar(authorProfile?: Profile)}
   {#if !globalState.isBanned}
     {#if isMobile}
       <Drawer bind:isDrawerOpen>
         <div class="flex gap-4 justify-center mb-4">
-          <Button.Root
+          <!-- <Button.Root
             onclick={() => {
               toggleReaction("👍");
               isDrawerOpen = false;
@@ -591,9 +583,10 @@
               isDrawerOpen = false;
             }}
             class="dz-btn dz-btn-circle"
-          >
+          > 
             😂
           </Button.Root>
+        -->
           <Popover.Root bind:open={isEmojiDrawerPickerOpen}>
             <Popover.Trigger class="dz-btn dz-btn-circle">
               <Icon icon="lucide:smile-plus" />
@@ -618,7 +611,7 @@
                 Reply
               </Button.Root>
             {/if}
-            {#if mayEdit}
+            <!-- {#if mayEdit}
               <Button.Root
                 onclick={() => {
                   startEditing();
@@ -629,8 +622,8 @@
                 <Icon icon="tabler:edit" />
                 Edit
               </Button.Root>
-            {/if}
-            {#if mayDelete}
+            {/if} -->
+            <!-- {#if mayDelete}
               <Button.Root
                 onclick={() => deleteMessage()}
                 class="dz-join-item dz-btn dz-btn-error w-full"
@@ -638,7 +631,7 @@
                 <Icon icon="tabler:trash" />
                 Delete
               </Button.Root>
-            {/if}
+            {/if} -->
           </div>
         {/if}
       </Drawer>
@@ -646,7 +639,7 @@
       <Toolbar.Root
         class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-base-300 p-1 rounded items-center`}
       >
-        <Toolbar.Button
+        <!-- <Toolbar.Button
           onclick={() => toggleReaction("👍")}
           class="dz-btn dz-btn-ghost dz-btn-square"
         >
@@ -657,7 +650,7 @@
           class="dz-btn dz-btn-ghost dz-btn-square"
         >
           😂
-        </Toolbar.Button>
+        </Toolbar.Button> -->
         <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
           <Popover.Trigger class="dz-btn dz-btn-ghost dz-btn-square">
             <Icon icon="lucide:smile-plus" />
@@ -666,25 +659,25 @@
             <emoji-picker bind:this={emojiToolbarPicker}></emoji-picker>
           </Popover.Content>
         </Popover.Root>
-        {#if mayEdit}
+        <!-- {#if mayEdit}
           <Toolbar.Button
             onclick={() => startEditing()}
             class="dz-btn dz-btn-ghost dz-btn-square"
           >
             <Icon icon="tabler:edit" />
           </Toolbar.Button>
-        {/if}
+        {/if} -->
 
-        {#if mayDelete}
+        <!-- {#if mayDelete}
           <Toolbar.Button
             onclick={() => deleteMessage()}
             class="dz-btn dz-btn-ghost dz-btn-square"
           >
             <Icon icon="tabler:trash" class="text-warning" />
           </Toolbar.Button>
-        {/if}
+        {/if} -->
 
-        {#if authorProfile && message instanceof Message && isReplyable}
+        {#if authorProfile && isReplyable}
           <Toolbar.Button
             onclick={() => setReplyTo(message)}
             class="dz-btn dz-btn-ghost dz-btn-square"
@@ -695,8 +688,8 @@
       </Toolbar.Root>
     {/if}
 
-    {#if isThreading.value && message instanceof Message}
-      <Checkbox.Root
+    {#if isThreading.value}
+      <!-- <Checkbox.Root
         onCheckedChange={updateSelect}
         bind:checked={isSelected}
         class="absolute right-4 inset-y-0"
@@ -713,7 +706,7 @@
             {/if}
           </div>
         {/snippet}
-      </Checkbox.Root>
+      </Checkbox.Root> -->
     {/if}
   {/if}
 {/snippet}
@@ -725,7 +718,7 @@
   </time>
 {/snippet}
 
-{#snippet reactionToggle(reaction: string)}
+<!-- {#snippet reactionToggle(reaction: string)}
   {@const reactions = message.reactions.all()[reaction]}
   {#if reactions}
     {#await Promise.all([...reactions.values()].map( (x) => getProfile(x), )) then profilesThatReacted}
@@ -744,9 +737,9 @@
       </Button.Root>
     {/await}
   {/if}
-{/snippet}
+{/snippet} -->
 
-{#snippet replyBanner()}
+<!-- {#snippet replyBanner()}
   {@const profileRepliedTo =
     messageRepliedTo.value &&
     getProfile(messageRepliedTo.value.authors((x) => x.get(0)))}
@@ -779,4 +772,4 @@
       </Button.Root>
     {/if}
   {/await}
-{/snippet}
+{/snippet} -->

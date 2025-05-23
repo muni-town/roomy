@@ -8,8 +8,7 @@
     "shouldPublish": false
   },
   "dependencies": {
-    "@muni-town/leaf": "^0.2.0-preview.19",
-    "@roomy-chat/sdk": "workspace:*"
+    "@muni-town/leaf": "^0.2.0-preview.19"
   },
   "devDependencies": {
     "typedoc": "^0.28.4",
