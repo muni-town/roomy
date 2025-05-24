@@ -3,12 +3,13 @@
   import ChatMessage from "./ChatMessage.svelte";
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
-  import {
-    Announcement,
-    Message,
-    type EntityIdStr,
-    type Timeline,
-  } from "@roomy-chat/sdk";
+  // import {
+  //   Announcement,
+  //   Message,
+  //   type EntityIdStr,
+  //   type Timeline,
+  // } from "@roomy-chat/sdk";
+  import {Channel, Message} from "$lib/schema"
   import { derivePromise } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import { globalState } from "$lib/global.svelte";
@@ -17,65 +18,57 @@
     timeline,
     virtualizer = $bindable(),
   }: {
-    timeline: Timeline;
+    timeline: Channel;
     virtualizer?: Virtualizer<string>;
   } = $props();
 
   let viewport: HTMLDivElement = $state(null!);
   let messagesLoaded = $state(false);
 
-  setContext("scrollToMessage", (id: EntityIdStr) => {
-    const idx = timeline.timeline.ids().indexOf(id);
-    if (idx !== -1 && virtualizer) virtualizer.scrollToIndex(idx);
-  });
+  // setContext("scrollToMessage", (id: string) => {
+  //   const idx = timeline.timeline.ids().indexOf(id);
+  //   if (idx !== -1 && virtualizer) virtualizer.scrollToIndex(idx);
+  // });
 
-  const messages = derivePromise([], async () => {
-    const items = await timeline.timeline.items();
-    messagesLoaded = true;
-    return items
-      .map((x) => x.tryCast(Message) || x.tryCast(Announcement))
-      .filter((x) => !!x);
-  });
+  const messages = timeline.messages
 
   $effect(() => {
     page.route; // Scroll-to-end when route changes
-    messages.value; // Scroll to end when message list changes.
 
     if (!viewport || !virtualizer) return;
-
-    virtualizer.scrollToIndex(messages.value.length - 1, { align: "end" });
+    if(messages){
+      virtualizer.scrollToIndex(messages.length - 1, { align: "end" });
+    }
   });
 
-  function shouldMergeWithPrevious(
-    message: Message | Announcement,
-    previousMessage?: Message | Announcement,
-  ): boolean {
-    const areMessages =
-      previousMessage instanceof Message &&
-      message instanceof Message &&
-      !previousMessage.softDeleted;
-    const authorsAreSame =
-      areMessages &&
-      message.authors((x) => x.get(0)) ==
-        previousMessage.authors((x) => x.get(0));
-    const messagesWithin5Minutes =
-      (message.createdDate?.getTime() || 0) -
-        (previousMessage?.createdDate?.getTime() || 0) <
-      60 * 1000 * 5;
-    const areAnnouncements =
-      previousMessage instanceof Announcement &&
-      message instanceof Announcement;
-    const isSequentialMovedAnnouncement =
-      areAnnouncements &&
-      previousMessage.kind == "messageMoved" &&
-      message.kind == "messageMoved" &&
-      previousMessage.relatedThreads.ids()[0] ==
-        message.relatedThreads.ids()[0];
-    const mergeWithPrevious =
-      (authorsAreSame && messagesWithin5Minutes) ||
-      isSequentialMovedAnnouncement;
-    return mergeWithPrevious;
-  }
+  // function shouldMergeWithPrevious(
+  //   message: Message,
+  //   previousMessage?: Message,
+  // ): boolean {
+  //   const areMessages =
+  //   !previousMessage?.softDeleted;
+  //   const authorsAreSame =
+  //     areMessages &&
+  //     message.authors((x) => x.get(0)) ==
+  //       previousMessage.authors((x) => x.get(0));
+  //   const messagesWithin5Minutes =
+  //     (message.createdDate?.getTime() || 0) -
+  //       (previousMessage?.createdDate?.getTime() || 0) <
+  //     60 * 1000 * 5;
+  //   const areAnnouncements =
+  //     previousMessage instanceof Announcement &&
+  //     message instanceof Announcement;
+  //   const isSequentialMovedAnnouncement =
+  //     areAnnouncements &&
+  //     previousMessage.kind == "messageMoved" &&
+  //     message.kind == "messageMoved" &&
+  //     previousMessage.relatedThreads.ids()[0] ==
+  //       message.relatedThreads.ids()[0];
+  //   const mergeWithPrevious =
+  //     (authorsAreSame && messagesWithin5Minutes) ||
+  //     isSequentialMovedAnnouncement;
+  //   return mergeWithPrevious;
+  // }
 </script>
 
 <ScrollArea.Root type="scroll" class="h-full overflow-hidden">
@@ -111,19 +104,17 @@
         {#key viewport}
           <Virtualizer
             bind:this={virtualizer}
-            data={messages.value}
+            data={messages || []}
             getKey={(message) => message.id}
             scrollRef={viewport}
           >
-            {#snippet children(message: Message | Announcement, index: number)}
-              {@const previousMessage =
-                index > 0 ? messages.value[index - 1] : undefined}
+            {#snippet children(message: Message, index: number)}
+
               {#if !message.softDeleted}
                 {@const isLinkThread = globalState.channel?.name === "@links"}
                 <ChatMessage
                   {message}
-                  mergeWithPrevious={!isLinkThread &&
-                    shouldMergeWithPrevious(message, previousMessage)}
+
                   type={isLinkThread ? "link" : "message"}
                 />
               {:else}

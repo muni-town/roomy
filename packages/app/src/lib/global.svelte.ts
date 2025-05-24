@@ -47,15 +47,15 @@ export let globalState = $state({
 });
 
 $effect.root(() => {
-  // Redirect to the `/-/space.domain` or `/leaf:id` as appropriate.
+  // Redirect to the `/-/space.domain` or `/co_id` as appropriate.
   $effect(() => {
     if (
       (page.params.space &&
         page.params.spaceIndicator !== undefined &&
-        page.params.space.startsWith("leaf:")) ||
+        page.params.space.startsWith("co_")) ||
       (page.params.space &&
         page.params.spaceIndicator === undefined &&
-        !page.params.space.startsWith("leaf:"))
+        !page.params.space.startsWith("co_"))
     ) {
       navigate({
         space: page.params.space,

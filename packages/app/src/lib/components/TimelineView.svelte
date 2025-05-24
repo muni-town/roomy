@@ -14,13 +14,14 @@
   import { derivePromise } from "$lib/utils.svelte";
   import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
   import { globalState } from "$lib/global.svelte";
-  import {
-    Announcement,
-    Channel,
-    Message,
-    Thread,
-    Timeline,
-  } from "@roomy-chat/sdk";
+  // import {
+  //   Announcement,
+  //   Channel,
+  //   Message,
+  //   Thread,
+  //   Timeline,
+  // } from "@roomy-chat/sdk";
+  import { Channel, Message, Messages, Profile } from "$lib/schema";
   import type { JSONContent } from "@tiptap/core";
   import { getProfile } from "$lib/profile.svelte";
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
@@ -70,11 +71,11 @@
     return text.trim();
   }
 
-  const links = derivePromise(null, async () =>
-    (await globalState.space?.threads.items())?.find(
-      (x) => x.name === "@links",
-    ),
-  );
+  // const links = derivePromise(null, async () =>
+  //   (await globalState.space?.threads.items())?.find(
+  //     (x) => x.name === "@links",
+  //   ),
+  // );
   const readonly = $derived(globalState.channel?.name === "@links");
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
@@ -123,7 +124,7 @@
   });
 
   // Reply Utils
-  let replyingTo = $state() as Message | undefined;
+  let replyingTo = $state<Message>();
   setContext("setReplyTo", (message: Message) => {
     replyingTo = message;
   });
@@ -147,15 +148,15 @@
     // Find the message in the timeline to get its index
     if (globalState.channel) {
       // Get the timeline IDs - this returns an array, not a Promise
-      const ids = globalState.channel.timeline.ids();
+      const ids = globalState.channel?.messages?.map((message) => message?.id);
 
-      if (!messageId.includes("leaf:")) {
+      if (!messageId.includes("co_  ")) {
         return;
       }
 
-      const messageIndex = ids.indexOf(messageId as `leaf:${string}`);
+      const messageIndex = ids?.indexOf(messageId as `co_${string}`);
 
-      if (messageIndex !== -1) {
+      if (messageIndex && messageIndex !== -1) {
         virtualizer?.scrollToIndex(messageIndex);
       } else {
         console.error("Message not found in timeline:", messageId);
@@ -167,17 +168,16 @@
 
   // Index existing messages when timeline items are loaded
   $effect(() => {
-    if (searchIndex && globalState.channel?.timeline) {
+    if (searchIndex && globalState.channel) {
+      const messages = globalState.channel.messages;
       // items() returns a Promise, unlike ids() which returns an array directly
-      globalState.channel.timeline.items().then((items) => {
-        // Clear index before re-indexing to avoid duplicates
-        searchIndex.clear();
-
-        for (const item of items) {
-          const message = item.tryCast(Message);
+      // Clear index before re-indexing to avoid duplicates
+      searchIndex.clear();
+      if (messages) {
+        for (const message of messages) {
           if (message) {
             // Try parsing the message body
-            const parsedBody = JSON.parse(message.bodyJson);
+            const parsedBody = JSON.parse(message.body);
 
             // Extract text content from the parsed body
             const textContent = extractTextContent(parsedBody);
@@ -187,90 +187,91 @@
             }
           }
         }
-      });
+      }
     }
   });
 
-  async function createThread(e: SubmitEvent) {
-    e.preventDefault();
-    if (!globalState.roomy || !globalState.space || !globalState.channel)
-      return;
+  // async function createThread(e: SubmitEvent) {
+  //   e.preventDefault();
+  //   if (!globalState.space || !globalState.channel)
+  //     return;
 
-    const thread = await globalState.roomy.create(Thread);
+  //   const thread = await globalState.roomy.create(Thread);
 
-    // messages can be selected in any order
-    // sort them on create based on their position from the channel
-    let channelMessageIds = globalState.channel.timeline.ids();
-    selectedMessages.sort((a, b) => {
-      return channelMessageIds.indexOf(a.id) - channelMessageIds.indexOf(b.id);
-    });
+  //   // messages can be selected in any order
+  //   // sort them on create based on their position from the channel
+  //   let channelMessageIds = globalState.channel.timeline.ids();
+  //   selectedMessages.sort((a, b) => {
+  //     return channelMessageIds.indexOf(a.id) - channelMessageIds.indexOf(b.id);
+  //   });
 
-    for (const message of selectedMessages) {
-      // move selected message ID from channel to thread timeline
-      thread.timeline.push(message);
-      const index = globalState.channel.timeline.ids().indexOf(message.id);
-      globalState.channel.timeline.remove(index);
+  //   for (const message of selectedMessages) {
+  //     // move selected message ID from channel to thread timeline
+  //     thread.timeline.push(message);
+  //     const index = globalState.channel.timeline.ids().indexOf(message.id);
+  //     globalState.channel.timeline.remove(index);
 
-      // create an Announcement about the move for each message
-      const announcement = await globalState.roomy.create(Announcement);
-      announcement.kind = "messageMoved";
-      announcement.relatedMessages.push(message);
-      announcement.relatedThreads.push(thread);
-      announcement.commit();
-      globalState.channel.timeline.insert(index, announcement);
-    }
+  //     // create an Announcement about the move for each message
+  //     const announcement = await globalState.roomy.create(Announcement);
+  //     announcement.kind = "messageMoved";
+  //     announcement.relatedMessages.push(message);
+  //     announcement.relatedThreads.push(thread);
+  //     announcement.commit();
+  //     globalState.channel.timeline.insert(index, announcement);
+  //   }
 
-    // TODO: decide whether the thread needs a reference to it's original channel. That might be
-    // confusing because it's messages could have come from multiple channels?
-    thread.name = threadTitleInput;
-    thread.commit();
+  //   // TODO: decide whether the thread needs a reference to it's original channel. That might be
+  //   // confusing because it's messages could have come from multiple channels?
+  //   thread.name = threadTitleInput;
+  //   thread.commit();
 
-    // create an Announcement about the new Thread in current channel
-    const announcement = await globalState.roomy.create(Announcement);
-    announcement.kind = "threadCreated";
-    announcement.relatedThreads.push(thread);
-    announcement.commit();
+  //   // create an Announcement about the new Thread in current channel
+  //   const announcement = await globalState.roomy.create(Announcement);
+  //   announcement.kind = "threadCreated";
+  //   announcement.relatedThreads.push(thread);
+  //   announcement.commit();
 
-    globalState.channel.timeline.push(announcement);
+  //   globalState.channel.timeline.push(announcement);
 
-    // If this is a channel ( the alternative would be a thread )
-    if (globalState.channel instanceof Channel) {
-      globalState.channel.threads.push(thread);
-    }
+  //   // If this is a channel ( the alternative would be a thread )
+  //   if (globalState.channel instanceof Channel) {
+  //     globalState.channel.threads.push(thread);
+  //   }
 
-    globalState.channel.commit();
+  //   globalState.channel.commit();
 
-    globalState.space.threads.push(thread);
-    globalState.space.commit();
+  //   globalState.space.threads.push(thread);
+  //   globalState.space.commit();
 
-    threadTitleInput = "";
-    isThreading.value = false;
-    toast.success("Thread created", { position: "bottom-end" });
-  }
+  //   threadTitleInput = "";
+  //   isThreading.value = false;
+  //   toast.success("Thread created", { position: "bottom-end" });
+  // }
 
   async function sendMessage() {
-    if (
-      !globalState.roomy ||
-      !globalState.space ||
-      !globalState.channel ||
-      !user.agent
-    )
-      return;
+    if (!globalState.space || !globalState.channel || !user.agent) return;
 
     // Image upload is now handled in ChatInput.svelte
-
-    const message = await globalState.roomy.create(Message);
-    message.authors(
-      (authors) => user.agent && authors.push(user.agent.assertDid),
-    );
-    message.bodyJson = JSON.stringify(messageInput);
-    message.createdDate = new Date();
-    message.commit();
-    if (replyingTo) message.replyTo = replyingTo;
+    console.log("creating message", JSON.stringify(messageInput))
+    const did = user.agent.did;
+    if(!did){
+      throw "missing did from agent"
+    }
+    const profileMeta = await getProfile(did);
+    const profile = Profile.create({
+      handle: profileMeta.handle,
+      displayName: profileMeta.displayName || "",
+      avatarUrl: profileMeta.avatarUrl,
+    })
+    const message = Message.create({
+      body: JSON.stringify(messageInput),
+      profile,
+    });
+    // if (replyingTo) message.replyTo = replyingTo;
 
     // Add new message to search index
     if (searchIndex) {
-      const parsedBody = JSON.parse(message.bodyJson);
+      const parsedBody = JSON.parse(message.body);
 
       // Extract text content from the parsed body
       const textContent = extractTextContent(parsedBody);
@@ -283,14 +284,17 @@
     // Images are now handled by TipTap in the message content
     // Limit image size in message input to 300x300
     if (collectLinks(tiptapJsontoString(messageInput))) {
-      if (links.value) {
-        links.value.timeline.push(message);
-        links.value.commit();
-      }
+      // if (links.value) {
+      //   links.value.timeline.push(message);
+      //   links.value.commit();
+      // }
     }
-
-    globalState.channel.timeline.push(message);
-    globalState.channel.commit();
+    if(!globalState.channel.messages){
+      globalState.channel.messages = Messages.create([message]);
+    } else {
+      globalState.channel.messages.push(message);
+    }
+    console.log(globalState.channel.messages.toJSON())
 
     messageInput = {};
     replyingTo = undefined;
@@ -306,15 +310,12 @@
         showSearchResults = true;
 
         // Get the actual Message objects for the search results
-        if (globalState.channel?.timeline) {
-          globalState.channel.timeline.items().then((items) => {
-            searchResults = items
-              .map((x) => x.tryCast(Message))
-              .filter(
-                (msg): msg is Message =>
-                  msg !== null && msg !== undefined && results.includes(msg.id),
-              );
-          });
+        if (globalState.channel?.messages) {
+          const messages = globalState.channel.messages;
+          searchResults = messages.filter(
+            (msg): msg is Message =>
+              msg !== null && msg !== undefined && results.includes(msg.id),
+          );
         }
       } else {
         searchResults = [];
@@ -326,19 +327,19 @@
     }
   });
 
-  let relatedThreads = derivePromise([], async () =>
-    globalState.channel && globalState.channel instanceof Channel
-      ? await globalState.channel.threads.items()
-      : [],
-  );
+  // let relatedThreads = derivePromise([], async () =>
+  //   globalState.channel && globalState.channel instanceof Channel
+  //     ? await globalState.channel.threads.items()
+  //     : [],
+  // );
 
-  const pages = derivePromise([], async () => {
-    return globalState.space && globalState.channel instanceof Channel
-      ? (await globalState.channel.wikipages.items()).filter(
-          (x) => !x.softDeleted,
-        )
-      : [];
-  });
+  // const pages = derivePromise([], async () => {
+  //   return globalState.space && globalState.channel instanceof Channel
+  //     ? (await globalState.channel.wikipages.items()).filter(
+  //         (x) => !x.softDeleted,
+  //       )
+  //     : [];
+  // });
 </script>
 
 <header class="dz-navbar">
@@ -348,13 +349,11 @@
 
       <h4
         class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}
-        title={globalState.channel instanceof Channel ? "Channel" : "Thread"}
+        title={"Channel"}
       >
         <span class="flex gap-2 items-center">
           <Icon
-            icon={globalState.channel instanceof Channel
-              ? "basil:comment-solid"
-              : "material-symbols:thread-unread-rounded"}
+            icon={"basil:comment-solid"}
           />
           {globalState.channel.name}
         </span>
@@ -362,7 +361,7 @@
     {/if}
   </div>
 
-  {#if globalState.channel instanceof Channel}
+  {#if globalState.channel}
     <Tabs.Root
       bind:value={tab}
       class={isMobile ? "dz-navbar-end" : "dz-navbar-center"}
@@ -388,7 +387,7 @@
 
   {#if !isMobile}
     <div class="dz-navbar-end flex items-center gap-2">
-      {#if tab === "chat" || globalState.channel instanceof Thread}
+      {#if tab === "chat"}
         <button
           class="btn btn-ghost btn-sm btn-circle"
           onclick={() => (showSearchInput = !showSearchInput)}
@@ -397,7 +396,7 @@
           <Icon icon="tabler:search" class="text-base-content" />
         </button>
       {/if}
-      <TimelineToolbar {createThread} bind:threadTitleInput />
+      <!-- <TimelineToolbar {createThread} bind:threadTitleInput /> -->
     </div>
   {/if}
 </header>
@@ -410,10 +409,10 @@
     {/snippet}
     No pages for this channel.
   </BoardList>
-  <BoardList items={relatedThreads.value} title="Threads" route="thread">
+  <!-- <BoardList items={relatedThreads.value} title="Threads" route="thread">
     No threads for this channel.
-  </BoardList>
-{:else if tab === "chat" || globalState.channel instanceof Thread}
+  </BoardList> -->
+{:else if tab === "chat"}
   {#if globalState.space && globalState.channel}
     <div class="flex h-full flex-col">
       {#if showSearchInput}
@@ -461,7 +460,7 @@
         style="max-height: calc(100vh - 180px);"
       >
         <ChatArea
-          timeline={globalState.channel.forceCast(Timeline)}
+          timeline={globalState.channel}
           bind:virtualizer
         />
 
@@ -471,18 +470,18 @@
           >
             <div class="flex items-center gap-2 overflow-hidden">
               <span>Replying to</span>
-              {#await getProfile(replyingTo.authors( (x) => x.get(0), )) then profile}
+              <!-- {#await getProfile(replyingTo.authors( (x) => x.get(0), )) then profile}
                 <AvatarImage
                   handle={profile.handle || ""}
                   avatarUrl={profile.avatarUrl}
                   className="!w-4"
                 />
                 <strong>{profile.handle}</strong>
-              {/await}
+              {/await} -->
               <p
                 class="text-primary-content text-ellipsis italic max-h-12 overflow-hidden ml-2 contain-images-within"
               >
-                {@html getContentHtml(JSON.parse(replyingTo.bodyJson))}
+                {@html getContentHtml(JSON.parse(replyingTo.body))}
               </p>
             </div>
             <Button.Root
@@ -499,14 +498,12 @@
       <div>
         {#if !isMobile || !isThreading.value}
           <div class="chat-input-container">
-            {#if globalState.roomy && globalState.roomy.spaces
-                .ids()
-                .includes(globalState.space.id)}
+            {#if true}
               {#if !readonly}
                 <ChatInput
                   bind:content={messageInput}
-                  users={users.value || []}
-                  context={contextItems.value || []}
+                  users={[]}
+                  context={[]}
                   onEnter={sendMessage}
                 />
               {:else}
@@ -520,10 +517,10 @@
               <Button.Root
                 class="w-full dz-btn"
                 onclick={() => {
-                  if (globalState.space && globalState.roomy) {
-                    globalState.roomy.spaces.push(globalState.space);
-                    globalState.roomy.commit();
-                  }
+                  // if (globalState.space && globalState.roomy) {
+                  //   globalState.roomy.spaces.push(globalState.space);
+                  //   globalState.roomy.commit();
+                  // }
                 }}>Join Space To Chat</Button.Root
               >
             {/if}
@@ -531,7 +528,7 @@
         {/if}
 
         {#if isMobile}
-          <TimelineToolbar {createThread} bind:threadTitleInput />
+          <!-- <TimelineToolbar {createThread} bind:threadTitleInput /> -->
         {/if}
       </div>
     </div>

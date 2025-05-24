@@ -1,111 +1,111 @@
 <script lang="ts">
   import { globalState } from "$lib/global.svelte";
-
+  import { JazzProvider } from "jazz-svelte";
   import { setContext } from "svelte";
   import type { Item } from "$lib/tiptap/editor";
   import { getProfile } from "$lib/profile.svelte";
   import { derivePromise } from "$lib/utils.svelte";
-  import { Message } from "@roomy-chat/sdk";
-
+  import { AccountSchema, Catalog } from "$lib/schema";
+  // import { Message } from "@roomy-chat/sdk";
+  import { Message } from "$lib/schema";
   let { children } = $props();
-
+  const peerUrl = "wss://cloud.jazz.tools/?key=nandithebull@outlook.com";
+  let sync = { peer: peerUrl };
+  let users = []
   // TODO: track users via the space data
-  let users = derivePromise([], async () => {
-    if (!globalState.space?.channels) {
-      return [];
-    }
+  // let users = derivePromise([], async () => {
+  //   if (!globalState.space?.channels) {
+  //     return [];
+  //   }
 
-    const channels = await globalState.space.channels.items();
-    if (!channels.length) {
-      return [];
-    }
+  //   const channels = globalState.space.channels
+  //   if (!channels.length) {
+  //     return [];
+  //   }
 
-    const result = new Set();
+  //   // const result = new Set();
 
-    for (const channel of channels) {
-      try {
-        for (const timelineItem of await channel.timeline.items()) {
-          const message = timelineItem.tryCast(Message);
-          if (message && message.authors.length > 0) {
-            for (const author of message.authors((x) => x.toArray())) {
-              result.add(author);
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Missing author info", err);
-      }
-    }
+  //   // for (const channel of channels) {
+  //   //     for (const message of channel?.messages || []) {
+  //   //       if (message) {
+  //   //         for (const author of message.authors((x) => x.toArray())) {
+  //   //           result.add(author);
+  //   //         }
+  //   //       }
+  //   //     }
 
-    let arrayOfUsers: Item[];
-    try {
-      arrayOfUsers = (
-        await Promise.all(
-          [...result.values()].map(async (author) => {
-            try {
-              const profile = await getProfile(author as string);
-              return {
-                value: author,
-                label: profile?.handle,
-                category: "user",
-              };
-            } catch (err) {
-              console.error("Error fetching user profile for", author, err);
-              return null; // Skip this entity
-            }
-          }),
-        )
-      ).filter(Boolean) as Item[];
-    } catch (err) {
-      console.error("Error fetching user profiles", err);
-      arrayOfUsers = [];
-    }
+  //   // }
 
-    return arrayOfUsers;
-  });
+  //   let arrayOfUsers: Item[];
+  //   try {
+  //     arrayOfUsers = (
+  //       await Promise.all(
+  //         [...result.values()].map(async (author) => {
+  //           try {
+  //             const profile = await getProfile(author as string);
+  //             return {
+  //               value: author,
+  //               label: profile?.handle,
+  //               category: "user",
+  //             };
+  //           } catch (err) {
+  //             console.error("Error fetching user profile for", author, err);
+  //             return null; // Skip this entity
+  //           }
+  //         }),
+  //       )
+  //     ).filter(Boolean) as Item[];
+  //   } catch (err) {
+  //     console.error("Error fetching user profiles", err);
+  //     arrayOfUsers = [];
+  //   }
 
-  let contextItems: { value: Item[] } = derivePromise([], async () => {
-    if (!globalState.space) {
-      return [];
-    }
-    const items = [];
+  //   return arrayOfUsers;
+  // });
 
-    // add threads to list
-    for (const thread of await globalState.space.threads.items()) {
-      if (!thread.softDeleted) {
-        items.push({
-          value: JSON.stringify({
-            id: thread.id,
-            space: globalState.space.id,
-            type: "thread",
-          }),
-          label: thread.name,
-          category: "thread",
-        });
-      }
-    }
+  // let contextItems: { value: Item[] } = derivePromise([], async () => {
+  //   if (!globalState.space) {
+  //     return [];
+  //   }
+  //   const items = [];
 
-    // add channels to list
-    items.push(
-      ...(await globalState.space.channels.items()).map((channel) => {
-        return {
-          value: JSON.stringify({
-            id: channel.id,
-            // TODO: I don't know that the space is necessary here or not.
-            space: globalState.space!.id,
-            type: "channel",
-          }),
-          label: channel.name,
-          category: "channel",
-        };
-      }),
-    );
+  //   // add threads to list
+  //   // for (const thread of await globalState.space.threads.items()) {
+  //   //   if (!thread.softDeleted) {
+  //   //     items.push({
+  //   //       value: JSON.stringify({
+  //   //         id: thread.id,
+  //   //         space: globalState.space.id,
+  //   //         type: "thread",
+  //   //       }),
+  //   //       label: thread.name,
+  //   //       category: "thread",
+  //   //     });
+  //   //   }
+  //   // }
 
-    return items;
-  });
+  //   // add channels to list
 
-  setContext("users", users);
-  setContext("contextItems", contextItems);
+
+  //   for (const channel of globalState.space.channels || []) {
+  //     if (channel) {
+  //       items.push({
+  //         value: JSON.stringify({
+  //           id: channel.id,
+  //           space: globalState.space!.id,
+  //           type: "channel",
+  //         }),
+  //         label: channel.name,
+  //         category: "channel",
+  //       });
+  //     }
+  //   }
+
+  //   return items;
+  // });
+
+  // setContext("users", users);
+  // setContext("contextItems", contextItems);
 </script>
 
 {#if globalState.space}

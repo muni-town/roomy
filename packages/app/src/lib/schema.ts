@@ -27,7 +27,7 @@ export const Images = co.list(z.string());
 
 export const Collection = co.list(z.string());
 
-export const Channels = co.list(z.string());
+
 
 export const Threads = co.list(z.string());
 export const WikiPages = co.list(z.string());
@@ -60,19 +60,21 @@ export const Profile = co.map({
 
 
 export const Message = co.map({
-    replyTo: z.string(),
-    softDeleted: z.boolean(),
+    softDeleted: z.boolean().optional(),
     body: z.string(),
     profile: Profile,
-    createdDate: z.date()
+    get replyTo(): z.ZodOptional<typeof Message>{
+        return z.optional(Message)
+    }
 })
 
-
+export const Messages = co.list(Message)
+export type Messages = Loaded<typeof Messages>
 
 export const Channel = co.map({
     name: z.string(),
     softDeleted: z.boolean().optional(),
-    messages: z.optional(co.list(Message))
+    messages: z.optional(Messages)
 })
 
 export const Image = co.map({
@@ -90,6 +92,9 @@ export const Space = co.map({
 }))
 export const Spaces = co.list(Space);
 export type Spaces = Loaded<typeof Spaces>
+
+export const Channels = co.list(Channel);
+export type Channels = Loaded<typeof Channels>
 
 export const Thread = co.map({
     name: z.string(),

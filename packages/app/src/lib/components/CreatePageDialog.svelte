@@ -1,6 +1,6 @@
 <script lang="ts">
   import { toast } from "svelte-french-toast";
-  import { Channel, WikiPage } from "@roomy-chat/sdk";
+  // import { Channel, WikiPage } from "@roomy-chat/sdk";
   import { globalState } from "$lib/global.svelte";
   import Dialog from "./Dialog.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";

@@ -3,7 +3,7 @@
   import { globalState } from "$lib/global.svelte";
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  import { Channel, Category } from "@roomy-chat/sdk";
+  // import { Channel, Category } from "@roomy-chat/sdk";
   import { Popover, Button } from "bits-ui";
   import Dialog from "$lib/components/Dialog.svelte";
   import { getContext, untrack } from "svelte";

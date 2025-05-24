@@ -18,6 +18,7 @@
   import { page } from "$app/state";
   import { afterNavigate } from "$app/navigation";
   import { AccountSchema, Catalog } from "$lib/schema";
+  import "jazz-inspector-element"
   const peerUrl = "wss://cloud.jazz.tools/?key=nandithebull@outlook.com";
   let sync = { peer: peerUrl };
   const { children } = $props();
@@ -91,6 +92,7 @@
 {/if}
 
 <JazzProvider {sync} {AccountSchema}>
+  <jazz-inspector />
   <!-- Container -->
   <div class="flex w-screen h-screen max-h-screen overflow-clip gap-0">
     <Toaster />

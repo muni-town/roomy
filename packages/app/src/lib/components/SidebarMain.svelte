@@ -2,9 +2,9 @@
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import { Button, Tabs } from "bits-ui";
-  import { Category, Channel, Space } from "$lib/schema.ts";
+  import { Category, Channel, Channels, Space } from "$lib/schema.ts";
   import { globalState } from "$lib/global.svelte";
-
+import {Group,Account, CoList} from "jazz-tools"
   import { derivePromise, navigate, Toggle } from "$lib/utils.svelte";
   // import { Category, Channel, Thread } from "@roomy-chat/sdk";
   import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
@@ -65,10 +65,27 @@
   //     .map((x) => x.tryCast(Category) as Category)
   //     .filter((x) => !!x);
   // });
-
-  let sidebarItems = derivePromise([], async () => {
-    if (!globalState.space) return [];
-    return Space.sidebarItems(globalState.space);
+  
+  let sidebarItems = $state();
+  let initial = true
+  $inspect(globalState.space).with((kind, space) => {
+    console.log("space", space);
+    const me = Account.getMe();
+    // const group = globalState.space?._owner.castAs(Group)
+    // console.log("owner", globalState.space?._owner.toJSON())
+    if (space && globalState.space) {
+      if(me.canAdmin(globalState.space)){
+        globalState.isAdmin = true;
+      }
+      let items = Space.sidebarItems(space);
+      console.log("sidebar items", items);
+      if(initial){
+        initial = false;
+        console.log("setting sidebar items")
+        sidebarItems = items;
+      }
+  
+    }
   });
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
@@ -91,12 +108,16 @@
   let newChannelCategory = $state(undefined) as undefined | Category;
   async function createChannel() {
     if (!globalState.space) return;
+    const space = globalState.space
     const channel = Channel.create({ name: newChannelName });
     // channel.appendAdminsFrom(globalState.space);
     // channel.name = newChannelName;
     // channel.commit();
-
-    globalState.space.channels?.push(channel);
+    if(!space.channels){
+      space.channels = Channels.create([channel])
+    }else{
+      space.channels.push(channel)
+    }
     if (newChannelCategory) {
       newChannelCategory.channels?.push(channel);
       // newChannelCategory.commit();

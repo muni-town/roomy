@@ -3,7 +3,7 @@
   import { globalState } from "$lib/global.svelte";
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  import { Category, Channel } from "@roomy-chat/sdk";
+  // import { Category, Channel } from "@roomy-chat/sdk";
   import { untrack } from "svelte";
 
   // Automatically navigate to the first channel in the space if we come to this empty space index
@@ -35,8 +35,10 @@
   // });
 </script>
 
-<main class="flex h-full">
+<!-- <main class="flex h-full">
   <div class="m-auto text-white">
     <Icon icon="ri:group-fill" class="text-6xl" />
   </div>
-</main>
+</main> -->
+
+Test

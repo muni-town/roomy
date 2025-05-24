@@ -14,6 +14,7 @@
   import { atproto } from "$lib/atproto.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { env } from "$env/dynamic/public";
+  import {Group} from "jazz-tools"
   import JSZip from "jszip";
   import FileSaver from "file-saver";
 
@@ -36,7 +37,7 @@
   async function createSpace() {
     // if (!newSpaceName || !user.agent || !globalState.roomy) return;
     // const space = await globalState.roomy.create(Space);
-    const space = Space.create({ name: newSpaceName });
+    const space = Space.create({ name: newSpaceName }, {owner: Group.create()});
     // space.admins((x) => user.agent && x.push(user.agent.assertDid));
     // space.commit();
     console.log("spaces", globalState.catalog?.spaces);

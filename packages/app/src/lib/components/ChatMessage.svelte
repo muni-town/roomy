@@ -406,7 +406,7 @@
 {/snippet} -->
 
 {#snippet messageView(msg: Message)}
-  {@const authorProfile = msg.profile as Profile}
+  {@const authorProfile:Profile  = msg.profile!}
 
   {@render toolbar(authorProfile)}
 
