@@ -19,21 +19,20 @@
   import { afterNavigate } from "$app/navigation";
   import { AccountSchema, Catalog } from "$lib/schema";
   import "jazz-inspector-element"
-  const peerUrl = "wss://cloud.jazz.tools/?key=nandithebull@outlook.com";
+  // const peerUrl = "wss://cloud.jazz.tools/?key=nandithebull@outlook.com";
+  const peerUrl = "ws://127.0.0.1:4200"
   let sync = { peer: peerUrl };
   const { children } = $props();
   // const spaces = $derived(SpaceglobalState.catalog?.spaces)
   // $inspect(spaces).with((kind,spaces) => console.log(kind,"inspect spaces", spaces?.toJSON()))
-  let spaces = $state()
-  $inspect(globalState.catalog).with(async (kind,catalog) => {
-    if(catalog){
-      Catalog.subscribe(catalog.id, {},(catalog) => {
-        console.log("inspect catalog sub", catalog.toJSON())
-        spaces = catalog.spaces
-      })
-    }
-
+  let spaces = $derived(globalState.catalog?.spaces)
+  $inspect(globalState.catalog?.spaces).with(()=>{
+    console.log("inspect spaces", globalState.catalog?.spaces?.toJSON())
   })
+
+  // $effect(()=>{
+
+  // })
 
   // console.log("catalog", globalState.catalog)
   let themeColor = $state<ThemeName>("synthwave"); // defualt theme color

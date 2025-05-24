@@ -15,7 +15,7 @@ import type { Agent } from "@atproto/api";
 import { page } from "$app/state";
 import { untrack } from "svelte";
 
-import { Space, Channel, Thread, Catalog } from "./schema.ts";
+import { Space, Channel, Thread, Catalog, Messages } from "./schema.ts";
 
 // import * as roomy from "@roomy-chat/sdk";
 import { navigate, resolveLeafId } from "./utils.svelte";
@@ -70,7 +70,8 @@ $effect.root(() => {
     if (user.agent && user.catalogId.value) {
       console.log("user.agent", user.agent)
       if(!globalState.catalog){
-        Catalog.load(user.catalogId.value).then((catalog) =>  {
+        Catalog.load(user.catalogId.value, {resolve: {spaces: {$each: true}}}).then((catalog) =>  {
+          console.log("catalog",catalog?.toJSON())
           globalState.catalog = catalog
         })
       } 
@@ -97,9 +98,10 @@ $effect.root(() => {
               return;
             }
 
-            const space = await Space.load(id)
+            const space = await Space.load(id, {resolve: {channels: {$each: true}}})
             globalState.loadedSpace = page.params.space!;
             globalState.currentCatalog = id;
+            console.log("setting space")
             globalState.space = space;
           })
             .catch((e) => {
@@ -107,9 +109,10 @@ $effect.root(() => {
             });
 
         } else {
-          const space = await Space.load(page.params.space)
+          const space = await Space.load(page.params.space, {resolve: {channels: {$each: true}}})
           globalState.loadedSpace = page.params.space!;
           globalState.currentCatalog = page.params.space!;
+          console.log("setting space")
           globalState.space = space;
         }
       }
@@ -121,9 +124,10 @@ $effect.root(() => {
     // if (!globalState.roomy) return;
 
     if (globalState.space && page.params.channel) {
-      Channel.load(page.params.channel).then((channel) => {
+      Channel.load(page.params.channel, {resolve: {messages: {$each: true}}}).then((channel) => {
         globalState.channel = channel;
       })
+      
 
     } else if (globalState.space && page.params.thread) {
       Thread.load(page.params.thread).then((thread) => (globalState.channel = thread))

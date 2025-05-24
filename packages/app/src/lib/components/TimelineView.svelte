@@ -10,7 +10,7 @@
   import ChatInput from "$lib/components/ChatInput.svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
   import { Button, Tabs } from "bits-ui";
-
+import {co,z} from "jazz-tools"
   import { derivePromise } from "$lib/utils.svelte";
   import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
   import { globalState } from "$lib/global.svelte";
@@ -32,6 +32,8 @@
   import SearchResults from "./SearchResults.svelte";
   import type { Virtualizer } from "virtua/svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
+
+  let messages = $derived(globalState.channel?.messages)
 
   // Helper function to extract text content from TipTap JSON content
   function extractTextContent(parsedBody: Record<string, unknown>): string {
@@ -146,7 +148,7 @@
     showSearchResults = false;
 
     // Find the message in the timeline to get its index
-    if (globalState.channel) {
+    if (globalState.channel?.messages) {
       // Get the timeline IDs - this returns an array, not a Promise
       const ids = globalState.channel?.messages?.map((message) => message?.id);
 
@@ -168,8 +170,8 @@
 
   // Index existing messages when timeline items are loaded
   $effect(() => {
-    if (searchIndex && globalState.channel) {
-      const messages = globalState.channel.messages;
+    if (searchIndex && globalState.channel?.messages) {
+      const messages = globalState.channel?.messages;
       // items() returns a Promise, unlike ids() which returns an array directly
       // Clear index before re-indexing to avoid duplicates
       searchIndex.clear();
@@ -258,6 +260,11 @@
       throw "missing did from agent"
     }
     const profileMeta = await getProfile(did);
+    // const profileMeta = {
+    //   handle: "",
+    //   displayName: "",
+    //   avatarUrl: "",
+    // }
     const profile = Profile.create({
       handle: profileMeta.handle,
       displayName: profileMeta.displayName || "",
@@ -267,19 +274,20 @@
       body: JSON.stringify(messageInput),
       profile,
     });
+    // console.log(message.toJSON())
     // if (replyingTo) message.replyTo = replyingTo;
 
     // Add new message to search index
-    if (searchIndex) {
-      const parsedBody = JSON.parse(message.body);
+    // if (searchIndex) {
+    //   const parsedBody = JSON.parse(message.body);
 
-      // Extract text content from the parsed body
-      const textContent = extractTextContent(parsedBody);
+    //   // Extract text content from the parsed body
+    //   const textContent = extractTextContent(parsedBody);
 
-      if (textContent) {
-        searchIndex.add(message.id, textContent);
-      }
-    }
+    //   if (textContent) {
+    //     searchIndex.add(message.id, textContent);
+    //   }
+    // }
 
     // Images are now handled by TipTap in the message content
     // Limit image size in message input to 300x300
@@ -289,13 +297,15 @@
       //   links.value.commit();
       // }
     }
-    if(!globalState.channel.messages){
-      globalState.channel.messages = Messages.create([message]);
-    } else {
-      globalState.channel.messages.push(message);
-    }
-    console.log(globalState.channel.messages.toJSON())
-
+    const messages = globalState.channel.messages || co.list(z.string()).create([])
+    console.log("messs", messages.toJSON())
+    messages.push(message)
+    globalState.channel.messages = messages
+    // const holder = globalState.channel.messages;
+    // globalState.channel.messages = co.list(z.string()).create([]);
+    const channel = await Channel.load(globalState.channel.id, {resolve: {messages: {$each: true}}})
+    console.log("channel?", channel.toJSON())
+    globalState.channel = channel
     messageInput = {};
     replyingTo = undefined;
   }
@@ -310,7 +320,7 @@
         showSearchResults = true;
 
         // Get the actual Message objects for the search results
-        if (globalState.channel?.messages) {
+        if (globalState.channel.messages) {
           const messages = globalState.channel.messages;
           searchResults = messages.filter(
             (msg): msg is Message =>
@@ -460,7 +470,7 @@
         style="max-height: calc(100vh - 180px);"
       >
         <ChatArea
-          timeline={globalState.channel}
+          timeline={messages}
           bind:virtualizer
         />
 
