@@ -34,6 +34,8 @@
     type = "message",
   }: Props = $props();
 
+  console.log("message", message.toJSON());
+
   const isReplyable = type === "message";
   // const links =
   //   type === "link" &&

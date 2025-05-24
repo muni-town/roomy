@@ -23,7 +23,8 @@
   } = $props();
 
   let viewport: HTMLDivElement = $state(null!);
-  let messagesLoaded = $state(false);
+  // let messagesLoaded = $state(false);
+  let messagesLoaded = $state(true);
 
   // setContext("scrollToMessage", (id: string) => {
   //   const idx = timeline.timeline.ids().indexOf(id);
@@ -77,6 +78,7 @@
        which allows it to load then pop into place once the spinner is gone. -->
     <div class="grid items-center justify-center h-full w-full bg-transparent">
       <span class="dz-loading dz-loading-spinner"></span>
+      <div>is this the spinner?</div>
     </div>
   {/if}
 
@@ -110,7 +112,7 @@
           >
             {#snippet children(message: Message, index: number)}
 
-              {#if !message.softDeleted}
+              {#if !message.softDeleted && message.profile}
                 {@const isLinkThread = globalState.channel?.name === "@links"}
                 <ChatMessage
                   {message}
