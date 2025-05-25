@@ -16,7 +16,7 @@ import { page } from "$app/state";
 import { untrack } from "svelte";
 
 import * as roomy from "@roomy-chat/sdk";
-import { navigate, resolveLeafId } from "./utils.svelte";
+import { devlog, navigate, resolveLeafId } from "./utils.svelte";
 (window as any).r = roomy;
 (window as any).page = page;
 
@@ -41,6 +41,81 @@ export let globalState = $state({
   isAdmin: false,
   isBanned: false,
   currentCatalog: "home",
+  _scrollPositions: {} as Record<string, number>, // Private state for scroll positions
+  saveScrollPosition: (channelId: string, position: number) => {
+    devlog("Saving scroll position for", channelId, position);
+    if (typeof window === 'undefined') return;
+    const state = JSON.parse(localStorage.getItem('scrollPositions') || '{}');
+    state[channelId] = position;
+    localStorage.setItem('scrollPositions', JSON.stringify(state));
+    globalState._scrollPositions = { ...globalState._scrollPositions, [channelId]: position };
+  },
+  getScrollPosition: (channelId: string): number => {
+    if (typeof window === 'undefined') return 0;
+    // Check if we already have the position in memory
+    if (globalState._scrollPositions[channelId] !== undefined) {
+      return globalState._scrollPositions[channelId];
+    }
+    // If not, try to load from localStorage
+    try {
+      const state = JSON.parse(localStorage.getItem('scrollPositions') || '{}');
+      // Update the in-memory cache without triggering reactivity
+      Object.assign(globalState._scrollPositions, state);
+      return state[channelId] || 0;
+    } catch (e) {
+      console.error('Error reading scroll positions from localStorage', e);
+      return 0;
+    }
+  },
+  saveChannelState: (spaceId: string, entityType: 'channel' | 'thread' | 'page', entityId?: string) => {
+    if (typeof window === 'undefined') return;
+    const state = JSON.parse(localStorage.getItem('channelState') || '{}');
+    const spaceKey = page.params.space || spaceId;
+    
+    if (entityId) {
+      state[spaceKey] = {
+        type: entityType,
+        id: entityId
+      };
+    } else {
+      delete state[spaceKey];
+    }
+    
+    localStorage.setItem('channelState', JSON.stringify(state));
+  },
+  
+  // For backward compatibility
+  getLastChannel: (spaceId: string): string | null => {
+    if (typeof window === 'undefined') return null;
+    const state = JSON.parse(localStorage.getItem('channelState') || '{}');
+    const entity = state[spaceId] || (page.params.space ? state[page.params.space] : null);
+    
+    // For backward compatibility with old format
+    if (typeof entity === 'string') {
+      return entity;
+    }
+    
+    return entity?.id || null;
+  },
+  
+  // New function to get the last entity with type information
+  getLastEntity: (spaceId: string): { type: 'channel' | 'thread' | 'page', id: string } | null => {
+    if (typeof window === 'undefined') return null;
+    const state = JSON.parse(localStorage.getItem('channelState') || '{}');
+    const spaceKey = page.params.space || spaceId;
+    const entity = state[spaceKey] || (page.params.space ? state[page.params.space] : null);
+    
+    // For backward compatibility with old format
+    if (typeof entity === 'string') {
+      const type = entity.startsWith('thread_') ? 'thread' : 'channel';
+      return { 
+        type, 
+        id: entity.startsWith('thread_') ? entity.replace('thread_', '') : entity 
+      };
+    }
+    
+    return entity || null;
+  },
 });
 
 $effect.root(() => {
@@ -108,6 +183,24 @@ $effect.root(() => {
               globalState.space = space;
             });
         }
+        if (!page.params.channel && !page.params.thread && !page.params.page) {
+          const lastEntity = globalState.getLastEntity(page.params.space);
+          if (lastEntity) {
+            switch (lastEntity.type) {
+              case 'channel':
+                navigate({ space: page.params.space, channel: lastEntity.id });
+                break;
+              case 'thread':
+                navigate({ space: page.params.space, thread: lastEntity.id });
+                break;
+              case 'page':
+                navigate({ space: page.params.space, page: lastEntity.id });
+                break;
+            }
+            return;
+          }
+        }
+
       }
     });
   });
@@ -118,7 +211,10 @@ $effect.root(() => {
     if (globalState.space && page.params.channel) {
       globalState.roomy
         .open(Channel, page.params.channel as EntityIdStr)
-        .then((channel) => (globalState.channel = channel))
+        .then((channel) => {
+          globalState.channel = channel;
+          globalState.saveChannelState(globalState.space!.id, 'channel', channel.id);
+        })
         .catch((e) => {
           console.error("Error opening channel:", e);
           navigate("home");
@@ -126,11 +222,27 @@ $effect.root(() => {
     } else if (globalState.space && page.params.thread) {
       globalState.roomy
         .open(Thread, page.params.thread as EntityIdStr)
-        .then((thread) => (globalState.channel = thread))
+        .then((thread) => {
+          globalState.channel = thread;
+          globalState.saveChannelState(globalState.space!.id, 'thread', thread.id);
+        })
         .catch((e) => {
           console.error("Error opening thread:", e);
           navigate("home");
         });
+    } else if (globalState.space && page.params.page) {
+      // Handle page navigation
+      globalState.roomy
+        .open(Channel, page.params.page as EntityIdStr) // Assuming pages are stored in the same way as channels
+        .then((page) => {
+          globalState.channel = page;
+          globalState.saveChannelState(globalState.space!.id, 'page', page.id);
+        })
+        .catch((e) => {
+          console.error("Error opening page:", e);
+          navigate("home");
+        });
+    } else {
       globalState.channel = undefined;
     }
   });
