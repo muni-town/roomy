@@ -35,6 +35,9 @@
 
   const messages = $derived(globalState.channel?.messages?.filter((message) => message) || [])
   $inspect(messages).with((kind,messages) => {
+    for(const message of messages){
+      console.log("inspect message", message.profile)
+    }
     console.log("inspect messages", messages)
   })
   $effect(() => {

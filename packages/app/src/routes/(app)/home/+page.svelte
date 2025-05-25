@@ -7,13 +7,13 @@
   import { derivePromise } from "$lib/utils.svelte";
   import { AccountCoState } from "jazz-svelte";
   import { AccountSchema } from "$lib/schema";
-  const account = new AccountCoState(AccountSchema, {
-    resolve: {
-      profile: true,
-    },
-  });
 
-  console.log("account", account.current)
+  const account = new AccountCoState(AccountSchema, {
+  resolve: {
+    profile: true,
+  },
+});
+const me = $derived(account.current);
   const spaces = derivePromise(
     undefined,
     async () => await globalState.roomy?.spaces.items(),
@@ -28,6 +28,7 @@
         A digital gardening platform for communities. Flourish in Spaces,
         curating knowledge and conversations together.
       </p>
+      <div>Hi ma! ${me.profile.inbox} woo</div>
       <div class="divider"></div>
 
       {#if !user.session}

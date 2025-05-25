@@ -20,6 +20,13 @@ import { Space, Channel, Thread, Catalog, Messages, AccountSchema } from "./sche
 // import * as roomy from "@roomy-chat/sdk";
 import { navigate, resolveLeafId } from "./utils.svelte";
 import { CoState, AccountCoState } from "jazz-svelte";
+
+const account = new AccountCoState(AccountSchema, {
+  resolve: {
+    profile: true,
+  },
+});
+const me = $derived(account.current);
 // (window as any).r = roomy;
 (window as any).page = page;
 
@@ -60,6 +67,7 @@ export let globalState = $state({
   isAdmin: false,
   isBanned: false,
   currentCatalog: "home",
+  account,
 });
 
 $effect.root(() => {
@@ -103,6 +111,7 @@ $effect.root(() => {
     // if (!globalState.roomy) return;
     untrack(async () => {
       await waitForValue(() => user.agent)
+      console.log("ACCOUNT", account.current)
       if (page.url.pathname === "/home") {
         globalState.currentCatalog = "home";
       } else if (page.params.space) {
@@ -138,7 +147,8 @@ $effect.root(() => {
     // if (!globalState.roomy) return;
 
     if (globalState.space && page.params.channel) {
-      Channel.load(page.params.channel, { resolve: { messages: { $each: true } } }).then((channel) => {
+      Channel.load(page.params.channel, { resolve: { messages: { $each: { profile: true } } } }).then((channel) => {
+        console.log("loading channel with messages")
         globalState.channel = channel;
       })
 

@@ -274,6 +274,7 @@ import {co,z} from "jazz-tools"
       body: JSON.stringify(messageInput),
       profile,
     });
+    console.log("ACCOUNT", globalState.account.current)
     // console.log(message.toJSON())
     // if (replyingTo) message.replyTo = replyingTo;
 
