@@ -107,7 +107,7 @@ export const Category = co.map({
     channels: z.optional(co.list(Channel))
 })
 
-export type Space = Loaded<typeof Space>
+export type Space = co.loaded<typeof Space>
 export type Profile = Loaded<typeof Profile>
 export type Message = Loaded<typeof Message>
 export type Channel = Loaded<typeof Channel>

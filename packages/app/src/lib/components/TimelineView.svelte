@@ -297,7 +297,7 @@ import {co,z} from "jazz-tools"
       //   links.value.commit();
       // }
     }
-    const messages = globalState.channel.messages || co.list(z.string()).create([])
+    const messages = globalState.channel.messages || co.list(Message).create([])
     console.log("messs", messages.toJSON())
     messages.push(message)
     globalState.channel.messages = messages

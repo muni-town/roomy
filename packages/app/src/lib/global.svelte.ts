@@ -15,12 +15,27 @@ import type { Agent } from "@atproto/api";
 import { page } from "$app/state";
 import { untrack } from "svelte";
 
-import { Space, Channel, Thread, Catalog, Messages } from "./schema.ts";
+import { Space, Channel, Thread, Catalog, Messages, AccountSchema } from "./schema.ts";
 
 // import * as roomy from "@roomy-chat/sdk";
 import { navigate, resolveLeafId } from "./utils.svelte";
+import { CoState, AccountCoState } from "jazz-svelte";
 // (window as any).r = roomy;
 (window as any).page = page;
+
+function waitForValue<T>(getValue: () => T | null | undefined, interval = 100): Promise<T> {
+  return new Promise((resolve) => {
+    const checkValue = () => {
+      const value = getValue();
+      if (value !== null && value !== undefined) {
+        resolve(value);
+      } else {
+        setTimeout(checkValue, interval);
+      }
+    };
+    checkValue();
+  })
+}
 
 // Reload app when this module changes to prevent accumulated connections.
 if (import.meta.hot) {
@@ -28,6 +43,7 @@ if (import.meta.hot) {
     window.location.reload();
   });
 }
+
 
 export let globalState = $state({
   // Create an empty roomy instance by default, it will be updated when the user logs in.
@@ -69,12 +85,12 @@ $effect.root(() => {
   $effect(() => {
     if (user.agent && user.catalogId.value) {
       console.log("user.agent", user.agent)
-      if(!globalState.catalog){
-        Catalog.load(user.catalogId.value, {resolve: {spaces: {$each: true}}}).then((catalog) =>  {
-          console.log("catalog",catalog?.toJSON())
+      if (!globalState.catalog) {
+        Catalog.load(user.catalogId.value, { resolve: { spaces: { $each: true } } }).then((catalog) => {
+          console.log("catalog", catalog?.toJSON())
           globalState.catalog = catalog
         })
-      } 
+      }
       // Initialize new roomy instance
       // initRoomy(user.agent).then((roomy) => (globalState.roomy = roomy));
     }
@@ -85,8 +101,8 @@ $effect.root(() => {
     page.url.pathname;
     page.params.space;
     // if (!globalState.roomy) return;
-
     untrack(async () => {
+      await waitForValue(() => user.agent)
       if (page.url.pathname === "/home") {
         globalState.currentCatalog = "home";
       } else if (page.params.space) {
@@ -97,11 +113,10 @@ $effect.root(() => {
               navigate("home");
               return;
             }
-
-            const space = await Space.load(id, {resolve: {channels: {$each: true}}})
+            const space = await Space.load(id, { resolve: { channels: { $each: true } } })
             globalState.loadedSpace = page.params.space!;
             globalState.currentCatalog = id;
-            console.log("setting space")
+            console.log("setting space", space?.toJSON())
             globalState.space = space;
           })
             .catch((e) => {
@@ -109,10 +124,9 @@ $effect.root(() => {
             });
 
         } else {
-          const space = await Space.load(page.params.space, {resolve: {channels: {$each: true}}})
+          const space = await Space.load(page.params.space, { resolve: { channels: { $each: true } } })
           globalState.loadedSpace = page.params.space!;
           globalState.currentCatalog = page.params.space!;
-          console.log("setting space")
           globalState.space = space;
         }
       }
@@ -124,10 +138,10 @@ $effect.root(() => {
     // if (!globalState.roomy) return;
 
     if (globalState.space && page.params.channel) {
-      Channel.load(page.params.channel, {resolve: {messages: {$each: true}}}).then((channel) => {
+      Channel.load(page.params.channel, { resolve: { messages: { $each: true } } }).then((channel) => {
         globalState.channel = channel;
       })
-      
+
 
     } else if (globalState.space && page.params.thread) {
       Thread.load(page.params.thread).then((thread) => (globalState.channel = thread))
@@ -153,6 +167,8 @@ $effect.root(() => {
   //   }
   // });
 });
+
+
 
 // async function initRoomy(agent: Agent): Promise<Roomy> {
 //   const catalogId = user.catalogId.value;

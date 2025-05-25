@@ -5,7 +5,15 @@
   import { globalState } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { derivePromise } from "$lib/utils.svelte";
+  import { AccountCoState } from "jazz-svelte";
+  import { AccountSchema } from "$lib/schema";
+  const account = new AccountCoState(AccountSchema, {
+    resolve: {
+      profile: true,
+    },
+  });
 
+  console.log("account", account.current)
   const spaces = derivePromise(
     undefined,
     async () => await globalState.roomy?.spaces.items(),
