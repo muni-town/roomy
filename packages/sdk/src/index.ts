@@ -66,6 +66,14 @@ export class HasPeer {
 
   /** @group Advanced */
   constructor(peer: Peer) {
+    if (!(peer.open as any).hacked) {
+      // Temporary hack to add a createAfterTimeout to every open call.
+      const origOpen = peer.open.bind(peer);
+      peer.open = (id, opts) => {
+        return origOpen(id, { ...{ createAfterTimeout: 5000 }, ...opts});
+      }
+      (peer.open as any).hacked = true;
+    }
     this.peer = peer;
   }
 
@@ -463,7 +471,7 @@ export class Roomy extends EntityWrapper {
    * joined spaces, preferences, etc.
    * */
   static async init(peer: Peer, catalogId: IntoEntityId): Promise<Roomy> {
-    const catalog = await peer.open(intoEntityId(catalogId));
+    const catalog = await peer.open(intoEntityId(catalogId), { createAfterTimeout: 4000 });
     return new Roomy(peer, catalog);
   }
 

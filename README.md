@@ -5,6 +5,22 @@ Gardenable group chat made with [AT Protocol](https://atproto.com/), [Loro](http
 Currently working on producing a functional proof-of-concept. See the
 [Roadmap](https://github.com/orgs/muni-town/projects/8/views/4).
 
+## Key Features
+
+**Content fluidity:** In Roomy, every communication artifact can be expanded seamlessly from chat message up to a wiki-page or even standalone channel. [Chatty message gardening](https://blog.muni.town/chatty-community-gardens/)
+
+**Auto-documenting:** Every page, every thread, every post in Roomy is fundamentally a type of *document*. Any single chat message, or a series of them strung together, can at any point be 'transitioned' into the first draft of a Documentation Page.
+
+**Personally agentic:** Build sovereign communities. You will have a local copy of your community's data at all times, and so will all your community members! [Local-first software.](https://localfirstweb.dev/)
+
+**Peer powered:** Make communities that can, if necessary, endure purely on the shared resources of sufficiently aligned peers in a mutual-sharing network. [Peer-2-Peer software](https://blog.muni.town/roomy-deep-dive/) *(slightly outdated but gist of it remains the same)*
+
+**Public-first; privacy-friendly:** Roomy is designed first and foremost for publicly shared, collaborative content exchange. Private conversations are carefully supported, but private spaces hosted on our network needs to go through screenings. If you don't want your private group subjected to scrutiny, we will soon support self-hosting for full privacy. [Capabilities](https://blog.muni.town/capabilities-and-identity-with-leaf/) *(also pending update)*
+
+**Bring your own ID:** Login with Bluesky (default) (soon also Mastodon, GitHub...).  Extend your existing social profile with Roomy. [Digital Homeownership](https://blog.muni.town/digital-homeownership/)
+
+**Bluesky-connected:** Roomy is optionally connected with the Bluesky network of 30M people. [Make a Roomy-space for any atproto Bluesky account (domain)]()
+
 ## Contributions welcome!
 
 Take a look at [our issues](https://github.com/muni-town/roomy/issues) and let us know if there is anything you can take on that isn't already assigned.
