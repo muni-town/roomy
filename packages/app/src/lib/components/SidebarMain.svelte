@@ -2,14 +2,14 @@
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import { Button, Tabs } from "bits-ui";
-  import { Category, Channel, Channels, Space } from "$lib/schema.ts";
+  import { Category, Channel, Channels, Space, Thread } from "$lib/schema.ts";
   import { globalState } from "$lib/global.svelte";
-import {Group,Account, CoList} from "jazz-tools"
+  import { Group, Account, CoList } from "jazz-tools";
   import { derivePromise, navigate, Toggle } from "$lib/utils.svelte";
   // import { Category, Channel, Thread } from "@roomy-chat/sdk";
   import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
   import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
-  import { getContext } from "svelte";
+  import { getContext, untrack } from "svelte";
   import AccordionTree from "./AccordionTree.svelte";
   import SidebarChannelList from "./SidebarChannelList.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
@@ -32,7 +32,7 @@ import {Group,Account, CoList} from "jazz-tools"
   // }
 
   // let allThreads = derivePromise([], async () =>
-  //   ((await globalState.space?.threads.items()) || [])
+  //   { let threads = await globalState.space?.threads.items()) || [])
   //     .filter((x) => !x.softDeleted)
   //     .map((x) => ({
   //       target: {
@@ -43,7 +43,23 @@ import {Group,Account, CoList} from "jazz-tools"
   //       id: x.id,
   //     })),
   // );
-  // let threads = $derived(allThreads.value.filter((x) => x.name !== "@links"));
+
+  function allThreads() {
+    let threads = globalState.space?.threads || [];
+    return threads
+      .filter((thread) => thread !== null && !thread.softDeleted)
+      .map((thread) => {
+        return {
+          target: {
+            space: page.params.space!,
+            thread: thread?.id,
+          },
+          name: thread?.name,
+          id: thread?.id,
+        };
+      });
+  }
+  let threads = $derived(allThreads().filter((x) => x?.name !== "@links"));
   // let links = $derived(allThreads.value.find((x) => x.name === "@links"));
 
   // const pages = derivePromise([], async () =>
@@ -65,28 +81,45 @@ import {Group,Account, CoList} from "jazz-tools"
   //     .map((x) => x.tryCast(Category) as Category)
   //     .filter((x) => !!x);
   // });
-  
-  let sidebarItems = $state();
-  let initial = true
-  $inspect(globalState.space).with((kind, space) => {
-    console.log("space", space);
-    const me = Account.getMe();
-    // const group = globalState.space?._owner.castAs(Group)
-    // console.log("owner", globalState.space?._owner.toJSON())
-    if (space && globalState.space) {
-      if(me.canAdmin(globalState.space)){
-        globalState.isAdmin = true;
-      }
-      let items = Space.sidebarItems(space);
-      console.log("sidebar items", items);
-      if(initial){
-        initial = false;
-        console.log("setting sidebar items")
-        sidebarItems = items;
-      }
-  
+  function getSidebarItems() {
+    const space = globalState.space;
+    if (!space) return [];
+    const threads = space.threads || [];
+    const channels = space.channels || [];
+
+    return [...channels];
+  }
+
+  $effect(() => {
+    if (globalState.space) {
+      const me = Account.getMe();
+      untrack(() => {
+        if (me.canAdmin(globalState.space)) {
+          globalState.isAdmin = true;
+        }
+      });
     }
   });
+  let sidebarItems = $state(getSidebarItems());
+  // let initial = true;
+  // $inspect(globalState.space).with((kind, space) => {
+  //   console.log("space", space);
+  //   // const group = globalState.space?._owner.castAs(Group)
+  //   // console.log("owner", globalState.space?._owner.toJSON())
+  //   if (space && globalState.space) {
+  //     if(me.canAdmin(globalState.space)){
+  //       globalState.isAdmin = true;
+  //     }
+  //     let items = Space.sidebarItems(space);
+  //     console.log("sidebar items", items);
+  //     if(initial){
+  //       initial = false;
+  //       console.log("setting sidebar items")
+  //       sidebarItems = items;
+  //     }
+
+  //   }
+  // });
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
   async function createCategory() {
@@ -108,15 +141,15 @@ import {Group,Account, CoList} from "jazz-tools"
   let newChannelCategory = $state(undefined) as undefined | Category;
   async function createChannel() {
     if (!globalState.space) return;
-    const space = globalState.space
+    const space = globalState.space;
     const channel = Channel.create({ name: newChannelName });
     // channel.appendAdminsFrom(globalState.space);
     // channel.name = newChannelName;
     // channel.commit();
-    if(!space.channels){
-      space.channels = Channels.create([channel])
-    }else{
-      space.channels.push(channel)
+    if (!space.channels) {
+      space.channels = Channels.create([channel]);
+    } else {
+      space.channels.push(channel);
     }
     if (newChannelCategory) {
       newChannelCategory.channels?.push(channel);
@@ -281,7 +314,7 @@ import {Group,Account, CoList} from "jazz-tools"
       <AccordionTree
         sections={[
           // { key: "pages", items: pages.value },
-          // { key: "threads", items: threads },
+          { key: "threads", items: threads },
         ]}
         active={globalState.channel?.id ?? ""}
       />

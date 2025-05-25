@@ -19,6 +19,7 @@
   import type { JSONContent } from "@tiptap/core";
   import ChatInput from "./ChatInput.svelte";
   import toast from "svelte-french-toast";
+  import { selectMessage } from "$lib/thread.svelte";
   // import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
 
   type Props = {
@@ -98,12 +99,12 @@
   //       .includes(user.agent?.assertDid),
   // );
 
-  // const selectMessage = getContext("selectMessage") as (
-  //   message: Message,
-  // ) => void;
-  // const removeSelectedMessage = getContext("removeSelectedMessage") as (
-  //   message: Message,
-  // ) => void;
+  // const selectMessage = getContext("selectMessage") as (message: Message) => void;
+  const removeSelectedMessage = getContext("removeSelectedMessage") as (
+    message: Message,
+  ) => void;
+
+
   const setReplyTo = getContext("setReplyTo") as (message: Message) => void;
   // const scrollToMessage = getContext("scrollToMessage") as (
   //   id: EntityIdStr,
@@ -184,14 +185,16 @@
     isEmojiRowPickerOpen = false;
   }
 
-  // function updateSelect() {
-  //   const m = message.tryCast(Message);
-  //   if (isSelected) {
-  //     m && selectMessage(m);
-  //   } else {
-  //     m && removeSelectedMessage(m);
-  //   }
-  // }
+  function updateSelect() {
+    console.log("updateSelect", isSelected, message.toJSON());
+    if(!message) return
+    if (isSelected) {
+      console.log("selecting?")
+      selectMessage(message);
+      } else {
+      removeSelectedMessage(message);
+    }
+  }
 
   // function toggleReaction(reaction: string) {
   //   if (!user.agent) return;
@@ -690,7 +693,7 @@
     {/if}
 
     {#if isThreading.value}
-      <!-- <Checkbox.Root
+      <Checkbox.Root
         onCheckedChange={updateSelect}
         bind:checked={isSelected}
         class="absolute right-4 inset-y-0"
@@ -707,7 +710,7 @@
             {/if}
           </div>
         {/snippet}
-      </Checkbox.Root> -->
+      </Checkbox.Root>
     {/if}
   {/if}
 {/snippet}

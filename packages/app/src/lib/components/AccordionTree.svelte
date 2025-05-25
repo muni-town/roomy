@@ -4,6 +4,8 @@
   import { page } from "$app/state";
   import { navigateSync, type NavigationTarget } from "$lib/utils.svelte";
   import { slide } from "svelte/transition";
+  import { globalState } from "$lib/global.svelte";
+  import { Channel, Thread } from "$lib/schema.ts";
 
   type Item = { target: NavigationTarget; name: string; id: string };
   type Section = {
@@ -17,7 +19,21 @@
     sections: Section[];
     active: string;
   } = $props();
+  console.log("sections", sections)
   let keys = $derived(sections.map((i) => i.key));
+
+  async function deleteItem(item: Item) {
+    if (!confirm(`Are you sure you want to delete "${item.name}"?`)) return;
+    
+    // Find and mark the thread as softDeleted
+    if (globalState.space) {
+      const thread = globalState.space.threads.find(t => t?.id === item.id);
+      if (thread) {
+        thread.softDeleted = true;
+        // thread.commit(); // Uncomment when ready to persist changes
+      }
+    }
+  }
 </script>
 
 <Accordion.Root
@@ -56,18 +72,29 @@
                     item.id === page.params.channel ||
                     item.id === page.params.thread ||
                     item.id === page.params.page}
-                  <Button.Root
-                    href={navigateSync(item.target)}
-                    class="flex cursor-pointer items-center gap-2 px-3 w-full dz-btn dz-btn-ghost justify-start border {active
-                      ? 'border-primary text-primary'
-                      : ' border-transparent'}"
-                  >
-                    <Icon
-                      icon="material-symbols:thread-unread-rounded"
-                      class="shrink-0"
-                    />
-                    <span class="truncate">{item.name} </span>
-                  </Button.Root>
+                  <div class="group flex items-center gap-1">
+                    <Button.Root
+                      href={navigateSync(item.target)}
+                      class="flex-1 cursor-pointer items-center gap-2 px-3 dz-btn dz-btn-ghost justify-start border {active
+                        ? 'border-primary text-primary'
+                        : ' border-transparent'}"
+                    >
+                      <Icon
+                        icon="material-symbols:thread-unread-rounded"
+                        class="shrink-0"
+                      />
+                      <span class="truncate">{item.name} </span>
+                    </Button.Root>
+                    {#if globalState.isAdmin}
+                      <Button.Root
+                        title="Delete"
+                        class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer dz-btn dz-btn-ghost dz-btn-circle text-error hover:bg-error/10"
+                        onclick={() => deleteItem(item)}
+                      >
+                        <Icon icon="lucide:x" class="size-4" />
+                      </Button.Root>
+                    {/if}
+                  </div>
                 {/each}
               </div>
             {/if}

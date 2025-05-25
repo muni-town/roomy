@@ -111,7 +111,6 @@ $effect.root(() => {
     // if (!globalState.roomy) return;
     untrack(async () => {
       await waitForValue(() => user.agent)
-      console.log("ACCOUNT", account.current)
       if (page.url.pathname === "/home") {
         globalState.currentCatalog = "home";
       } else if (page.params.space) {
@@ -155,11 +154,10 @@ $effect.root(() => {
 
     } else if (globalState.space && page.params.thread) {
       Thread.load(page.params.thread).then((thread) => (globalState.channel = thread))
-        .catch((e) => {
-          console.error("Error opening thread:", e);
-          navigate("home");
-        });
-      globalState.channel = undefined;
+      .catch((e) => {
+        console.error("Error opening thread:", e);
+        navigate("home");
+      });
     }
   });
 

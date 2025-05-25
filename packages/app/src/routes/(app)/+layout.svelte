@@ -19,8 +19,8 @@
   import { afterNavigate } from "$app/navigation";
   import { AccountSchema, Catalog } from "$lib/schema";
   import "jazz-inspector-element"
-  // const peerUrl = "wss://cloud.jazz.tools/?key=nandithebull@outlook.com";
-  const peerUrl = "ws://127.0.0.1:4200"
+  const peerUrl = "wss://cloud.jazz.tools/?key=nandithebull@outlook.com";
+  // const peerUrl = "ws://127.0.0.1:4200"
   let sync = { peer: peerUrl };
   const { children } = $props();
   // const spaces = $derived(SpaceglobalState.catalog?.spaces)

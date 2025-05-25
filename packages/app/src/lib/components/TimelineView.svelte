@@ -21,7 +21,7 @@ import {co,z} from "jazz-tools"
   //   Thread,
   //   Timeline,
   // } from "@roomy-chat/sdk";
-  import { Channel, Message, Messages, Profile } from "$lib/schema";
+  import { Channel, Message, Messages, Profile, Thread } from "$lib/schema";
   import type { JSONContent } from "@tiptap/core";
   import { getProfile } from "$lib/profile.svelte";
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
@@ -32,6 +32,9 @@ import {co,z} from "jazz-tools"
   import SearchResults from "./SearchResults.svelte";
   import type { Virtualizer } from "virtua/svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
+  import { threads } from "$lib/thread.svelte";
+
+  let selectedMessages = $derived(threads.selected);
 
   let messages = $derived(globalState.channel?.messages)
 
@@ -110,11 +113,14 @@ import {co,z} from "jazz-tools"
   // thread maker
   let isThreading = $state({ value: false });
   let threadTitleInput = $state("");
-  let selectedMessages: Message[] = $state([]);
+  // let selectedMessages: Message[] = $state([]);
+  
+ 
   setContext("isThreading", isThreading);
-  setContext("selectMessage", (message: Message) => {
-    selectedMessages.push(message);
-  });
+  // setContext("selectMessage", (message) => {
+  //   console.log("attempting push")
+  //   selectedMessages.push(message);
+  // });
   setContext("removeSelectedMessage", (msg: Message) => {
     selectedMessages = selectedMessages.filter((m) => m !== msg);
   });
@@ -193,62 +199,69 @@ import {co,z} from "jazz-tools"
     }
   });
 
-  // async function createThread(e: SubmitEvent) {
-  //   e.preventDefault();
-  //   if (!globalState.space || !globalState.channel)
-  //     return;
+  async function createThread(e: SubmitEvent) {
+    e.preventDefault();
+    if (!globalState.space || !globalState.channel)
+      return;
+    let thread = Thread.create({
+      name: threadTitleInput,
+      channel: globalState.channel,
+    });
+    thread.messages = co.list(Message).create([]);
+    // messages can be selected in any order
+    // sort them on create based on their position from the channel
+    let channelMessageIds = globalState.channel.messages?.filter((message) => message !== null).map((message) => message.id) || [];
+    selectedMessages.sort((a, b) => {
+      return channelMessageIds.indexOf(a.id) - channelMessageIds.indexOf(b.id);
+    });
+    if(!globalState.space.threads){
+      globalState.space.threads = co.list(Thread).create([]);
+    } 
+    
 
-  //   const thread = await globalState.roomy.create(Thread);
+    for (const message of selectedMessages) {
+      // move selected message ID from channel to thread timeline
+      thread.messages.push(message);
+      // const index = globalState.channel.messages.ids().indexOf(message.id);
+      // globalState.channel.messages.remove(index);
 
-  //   // messages can be selected in any order
-  //   // sort them on create based on their position from the channel
-  //   let channelMessageIds = globalState.channel.timeline.ids();
-  //   selectedMessages.sort((a, b) => {
-  //     return channelMessageIds.indexOf(a.id) - channelMessageIds.indexOf(b.id);
-  //   });
+      // create an Announcement about the move for each message
+      // const announcement = await globalState.roomy.create(Announcement);
+      // announcement.kind = "messageMoved";
+      // announcement.relatedMessages.push(message);
+      // announcement.relatedThreads.push(thread);
+      // announcement.commit();
+      // globalState.channel.timeline.insert(index, announcement);
+    }
 
-  //   for (const message of selectedMessages) {
-  //     // move selected message ID from channel to thread timeline
-  //     thread.timeline.push(message);
-  //     const index = globalState.channel.timeline.ids().indexOf(message.id);
-  //     globalState.channel.timeline.remove(index);
+    // TODO: decide whether the thread needs a reference to it's original channel. That might be
+    // // confusing because it's messages could have come from multiple channels?
+    // thread.name = threadTitleInput;
+    // thread.commit();
 
-  //     // create an Announcement about the move for each message
-  //     const announcement = await globalState.roomy.create(Announcement);
-  //     announcement.kind = "messageMoved";
-  //     announcement.relatedMessages.push(message);
-  //     announcement.relatedThreads.push(thread);
-  //     announcement.commit();
-  //     globalState.channel.timeline.insert(index, announcement);
-  //   }
+    // // create an Announcement about the new Thread in current channel
+    // const announcement = await globalState.roomy.create(Announcement);
+    // announcement.kind = "threadCreated";
+    // announcement.relatedThreads.push(thread);
+    // announcement.commit();
 
-  //   // TODO: decide whether the thread needs a reference to it's original channel. That might be
-  //   // confusing because it's messages could have come from multiple channels?
-  //   thread.name = threadTitleInput;
-  //   thread.commit();
+    // globalState.channel.timeline.push(announcement);
 
-  //   // create an Announcement about the new Thread in current channel
-  //   const announcement = await globalState.roomy.create(Announcement);
-  //   announcement.kind = "threadCreated";
-  //   announcement.relatedThreads.push(thread);
-  //   announcement.commit();
+    // // If this is a channel ( the alternative would be a thread )
+    // if (globalState.channel instanceof Channel) {
+    //   globalState.channel.threads.push(thread);
+    // }
 
-  //   globalState.channel.timeline.push(announcement);
+    // globalState.channel.commit();
 
-  //   // If this is a channel ( the alternative would be a thread )
-  //   if (globalState.channel instanceof Channel) {
-  //     globalState.channel.threads.push(thread);
-  //   }
+    // globalState.space.threads.push(thread);
+    // globalState.space.commit();
 
-  //   globalState.channel.commit();
-
-  //   globalState.space.threads.push(thread);
-  //   globalState.space.commit();
-
-  //   threadTitleInput = "";
-  //   isThreading.value = false;
-  //   toast.success("Thread created", { position: "bottom-end" });
-  // }
+    // threadTitleInput = "";
+    globalState.space.threads.push(thread);
+    isThreading.value = false;
+    toast.success("Thread created", { position: "bottom-end" });
+  }
 
   async function sendMessage() {
     if (!globalState.space || !globalState.channel || !user.agent) return;
@@ -344,13 +357,10 @@ import {co,z} from "jazz-tools"
   //     : [],
   // );
 
-  // const pages = derivePromise([], async () => {
-  //   return globalState.space && globalState.channel instanceof Channel
-  //     ? (await globalState.channel.wikipages.items()).filter(
-  //         (x) => !x.softDeleted,
-  //       )
-  //     : [];
-  // });
+  const pages = $derived(() => {
+    if(!globalState.channel.wikipages) return []
+    return globalState.channel.wikipages.filter(page => !page.softDeleted)
+  });
 </script>
 
 <header class="dz-navbar">
@@ -407,7 +417,7 @@ import {co,z} from "jazz-tools"
           <Icon icon="tabler:search" class="text-base-content" />
         </button>
       {/if}
-      <!-- <TimelineToolbar {createThread} bind:threadTitleInput /> -->
+      <TimelineToolbar {createThread} bind:threadTitleInput />
     </div>
   {/if}
 </header>

@@ -22,6 +22,8 @@ import {Space,Image} from "$lib/schema"
   let activeTooltip = $state("");
   let tooltipPosition = $state({ x: 0, y: 0 });
 
+  let isActive = $derived($page.url.pathname.includes(space?.id || ''));
+
   const spaceImage = derivePromise(null, async () => {
     if (space?.image) {
       return space.image;
@@ -64,7 +66,9 @@ import {Space,Image} from "$lib/schema"
     onblur={() => {
       activeTooltip = "";
     }}
-    class={`dz-btn dz-btn-ghost size-12 rounded-full relative group p-0.5`}
+    class={`dz-btn dz-btn-ghost size-12 rounded-full relative group p-0.5
+      ${isActive ? 'ring-0.5 ring-offset-0 ring-primary/30 border border-primary' : ''}
+      transition-all duration-200`}
   >
     <div class="flex items-center justify-center overflow-hidden">
       {#if spaceImage.value?.uri}

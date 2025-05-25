@@ -74,37 +74,35 @@ export type Messages = Loaded<typeof Messages>
 export const Channel = co.map({
     name: z.string(),
     softDeleted: z.boolean().optional(),
-    messages: z.optional(Messages)
+    messages: z.optional(co.list(Message)),
 })
-
+export const Thread = co.map({
+    name: z.string(),
+    softDeleted: z.boolean().optional(),
+    messages: z.optional(co.list(Message)),
+    channel: Channel,
+})
 export const Image = co.map({
     uri: z.string(),
 })
 export const Space = co.map({
     name: z.string(),
     channels: z.optional(co.list(Channel)),
+    threads: z.optional(co.list(Thread)),
     image: z.optional(Image),
-}).withHelpers((Self) => ({
-    sidebarItems(space: Loaded<typeof Self>) {
-        return space.channels
-    }
-
-}))
+})
 export const Spaces = co.list(Space);
 export type Spaces = Loaded<typeof Spaces>
 
 export const Channels = co.list(Channel);
 export type Channels = Loaded<typeof Channels>
 
-export const Thread = co.map({
-    name: z.string(),
-    softDeleted: z.boolean(),
-    messages: co.list(Message)
-})
+
 
 export const Category = co.map({
     name: z.string(),
-    channels: z.optional(co.list(Channel))
+    channels: z.optional(co.list(Channel)),
+    softDeleted: z.boolean().optional(),
 })
 
 export type Space = co.loaded<typeof Space>

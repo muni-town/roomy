@@ -22,7 +22,6 @@
     virtualizer?: Virtualizer<string>;
   } = $props();
 
- console.log("timeline", timeline)
 
   let viewport: HTMLDivElement = $state(null!);
   // let messagesLoaded = $state(false);
@@ -34,12 +33,7 @@
   // });
 
   const messages = $derived(globalState.channel?.messages?.filter((message) => message) || [])
-  $inspect(messages).with((kind,messages) => {
-    for(const message of messages){
-      console.log("inspect message", message.profile)
-    }
-    console.log("inspect messages", messages)
-  })
+
   $effect(() => {
     page.route; // Scroll-to-end when route changes
 
