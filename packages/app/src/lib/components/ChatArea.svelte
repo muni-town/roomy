@@ -43,34 +43,43 @@
     }
   });
 
-  // function shouldMergeWithPrevious(
-  //   message: Message,
-  //   previousMessage?: Message,
-  // ): boolean {
-  //   const areMessages =
-  //   !previousMessage?.softDeleted;
-  //   const authorsAreSame =
-  //     areMessages &&
-  //     message.authors((x) => x.get(0)) ==
-  //       previousMessage.authors((x) => x.get(0));
-  //   const messagesWithin5Minutes =
-  //     (message.createdDate?.getTime() || 0) -
-  //       (previousMessage?.createdDate?.getTime() || 0) <
-  //     60 * 1000 * 5;
-  //   const areAnnouncements =
-  //     previousMessage instanceof Announcement &&
-  //     message instanceof Announcement;
-  //   const isSequentialMovedAnnouncement =
-  //     areAnnouncements &&
-  //     previousMessage.kind == "messageMoved" &&
-  //     message.kind == "messageMoved" &&
-  //     previousMessage.relatedThreads.ids()[0] ==
-  //       message.relatedThreads.ids()[0];
-  //   const mergeWithPrevious =
-  //     (authorsAreSame && messagesWithin5Minutes) ||
-  //     isSequentialMovedAnnouncement;
-  //   return mergeWithPrevious;
-  // }
+  function shouldMergeWithPrevious(
+    message: Message,
+    previousMessage?: Message,
+  ): boolean {
+    if(!previousMessage){
+      return false;
+    }
+    console.log("previous",previousMessage)
+    const areMessages =
+    !previousMessage?.softDeleted;
+
+    const authorsAreSame =
+      areMessages &&
+      message.profile.handle ==
+        previousMessage.profile.handle;
+
+    const messagesWithin5Minutes =
+      (message.createdDate?.getTime() || 0) -
+        (previousMessage?.createdDate?.getTime() || 0) <
+      60 * 1000 * 5;
+
+    // const areAnnouncements =
+    //   previousMessage instanceof Announcement &&
+    //   message instanceof Announcement;
+
+    // const isSequentialMovedAnnouncement =
+    //   areAnnouncements &&
+    //   previousMessage.kind == "messageMoved" &&
+    //   message.kind == "messageMoved" &&
+    //   previousMessage.relatedThreads.ids()[0] ==
+    //     message.relatedThreads.ids()[0];
+
+    const mergeWithPrevious =
+      (authorsAreSame && messagesWithin5Minutes);
+      
+    return mergeWithPrevious;
+  }
 </script>
 
 <ScrollArea.Root type="scroll" class="h-full overflow-hidden">
@@ -117,7 +126,7 @@
                 {@const isLinkThread = globalState.channel?.name === "@links"}
                 <ChatMessage
                   {message}
-
+                  mergeWithPrevious={shouldMergeWithPrevious(message, messages[index - 1])}
                   type={isLinkThread ? "link" : "message"}
                 />
               {:else}
