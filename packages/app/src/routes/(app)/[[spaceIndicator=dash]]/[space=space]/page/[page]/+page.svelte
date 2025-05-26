@@ -3,20 +3,11 @@
   import PageEditor from "$lib/components/PageEditor.svelte";
   import { globalState } from "$lib/global.svelte";
   import { derivePromise } from "$lib/utils.svelte";
-  import { WikiPage, type IntoEntityId } from "@roomy-chat/sdk";
+  import { WikiPage } from "$lib/schema";
 
-  const pg = derivePromise(
-    null,
-    async () =>
-      await globalState.space?.wikipages.open(
-        WikiPage,
-        page.params.page as IntoEntityId,
-      ),
-  );
+
 </script>
 
-{#if pg.value}
-  <div class="w-full h-full flex flex-col">
-    <PageEditor page={pg.value} />
-  </div>
-{/if}
+<div class="w-full h-full flex flex-col">
+  <PageEditor  />
+</div>

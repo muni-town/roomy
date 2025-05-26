@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import type { NamedEntity } from "@roomy-chat/sdk";
+  import type { WikiPage } from "$lib/schema";
+  // import type { NamedEntity } from "@roomy-chat/sdk";
   import type { Snippet } from "svelte";
 
   let {
@@ -11,7 +12,7 @@
     header,
   }: {
     title: string;
-    items: NamedEntity[];
+    items: any[];
     route: string;
     selected?: boolean;
     children?: Snippet;

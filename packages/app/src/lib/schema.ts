@@ -71,10 +71,17 @@ export const Message = co.map({
 export const Messages = co.list(Message)
 export type Messages = Loaded<typeof Messages>
 
+export const WikiPage = co.map({
+    name: z.string(),
+    softDeleted: z.boolean().optional(),
+    body: z.string(),
+})
+export type WikiPage = co.loaded<typeof WikiPage>
 export const Channel = co.map({
     name: z.string(),
     softDeleted: z.boolean().optional(),
     messages: z.optional(co.list(Message)),
+    wikipages: z.optional(co.list(WikiPage)),
 })
 export const Thread = co.map({
     name: z.string(),
@@ -90,6 +97,7 @@ export const Space = co.map({
     channels: z.optional(co.list(Channel)),
     threads: z.optional(co.list(Thread)),
     image: z.optional(Image),
+    wikipages: z.optional(co.list(WikiPage)),
 })
 export const Spaces = co.list(Space);
 export type Spaces = Loaded<typeof Spaces>

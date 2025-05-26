@@ -30,7 +30,7 @@ const me = $derived(account.current);
 // (window as any).r = roomy;
 (window as any).page = page;
 
-function waitForValue<T>(getValue: () => T | null | undefined, interval = 100): Promise<T> {
+export function waitForValue<T>(getValue: () => T | null | undefined, interval = 100): Promise<T> {
   return new Promise((resolve) => {
     const checkValue = () => {
       const value = getValue();
@@ -113,9 +113,11 @@ $effect.root(() => {
       await waitForValue(() => user.agent)
       if (page.url.pathname === "/home") {
         globalState.currentCatalog = "home";
-      } else if (page.params.space) {
+        return
+      }
+      if (page.params.space) {
         if (page.params.space.includes(".")) {
-          resolveLeafId(page.params.space).then(async (id) => {
+          return resolveLeafId(page.params.space).then(async (id) => {
             if (!id) {
               console.error("Leaf ID not found for domain:", page.params.space);
               navigate("home");
@@ -131,15 +133,14 @@ $effect.root(() => {
               console.error(e);
             });
 
-        } else {
-          const space = await Space.load(page.params.space, { resolve: { channels: { $each: true } } })
-          globalState.loadedSpace = page.params.space!;
-          globalState.currentCatalog = page.params.space!;
-          globalState.space = space;
         }
+        const space = await Space.load(page.params.space, { resolve: { channels: { $each: true } } })
+        globalState.loadedSpace = page.params.space!;
+        globalState.currentCatalog = page.params.space!;
+        console.log("setting space", space?.toJSON())
+        globalState.space = space;
       }
-    }
-    );
+    });
   });
 
   $effect(() => {
@@ -154,10 +155,10 @@ $effect.root(() => {
 
     } else if (globalState.space && page.params.thread) {
       Thread.load(page.params.thread).then((thread) => (globalState.channel = thread))
-      .catch((e) => {
-        console.error("Error opening thread:", e);
-        navigate("home");
-      });
+        .catch((e) => {
+          console.error("Error opening thread:", e);
+          navigate("home");
+        });
     }
   });
 

@@ -357,10 +357,11 @@ import {co,z} from "jazz-tools"
   //     : [],
   // );
 
-  const pages = $derived(() => {
+  const pages = $derived((()=> {
     if(!globalState.channel.wikipages) return []
-    return globalState.channel.wikipages.filter(page => !page.softDeleted)
-  });
+    return globalState.channel.wikipages.filter(page => page !== null && !page.softDeleted)
+  })());
+  $inspect(pages, "pages")
 </script>
 
 <header class="dz-navbar">
@@ -424,7 +425,7 @@ import {co,z} from "jazz-tools"
 <div class="divider my-0"></div>
 
 {#if tab === "board"}
-  <BoardList items={pages.value} title="Pages" route="page">
+  <BoardList items={pages} title="Pages" route="page">
     {#snippet header()}
       <CreatePageDialog />
     {/snippet}

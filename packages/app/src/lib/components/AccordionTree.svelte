@@ -20,6 +20,7 @@
     active: string;
   } = $props();
   console.log("sections", sections)
+  console.log("page", page.params.space)
   let keys = $derived(sections.map((i) => i.key));
 
   async function deleteItem(item: Item) {

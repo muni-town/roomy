@@ -3,21 +3,28 @@
   import { codeToHtml } from "shiki";
   import { toast } from "svelte-french-toast";
   import { Button } from "bits-ui";
+  import { page } from "$app/state";
   import Icon from "@iconify/svelte";
   import Link from "@tiptap/extension-link";
   import { BlockNoteEditor } from "@blocknote/core";
   import "@blocknote/core/style.css";
+  import { CoState } from "jazz-tools";
+  import { WikiPage } from "$lib/schema";
 
-  import { WikiPage } from "@roomy-chat/sdk";
-
-  import { page } from "$app/state";
-  import { globalState } from "$lib/global.svelte";
+  // import { page } from "$app/state";
+  import { globalState, waitForValue } from "$lib/global.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import { outerWidth } from "svelte/reactivity/window";
+  import { derivePromise } from "$lib/utils.svelte";
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  let { page: pg }: { page: WikiPage } = $props();
+  console.log("page", page.params.page);
+  const pg = derivePromise([], async () =>{
+    return WikiPage.load(page.params.page)
+  })
+
+  // waitForValue(() => pg);
   let isEditingPage = $state(false);
 
   let pageRenderedHtml = $state("");
@@ -160,8 +167,8 @@
   }
 
   function confirmDeletePage() {
+    if (!pg) return;
     pg.softDeleted = true;
-    pg.commit();
 
     isEditingPage = false; // Close the editor to remove cached page
     isDeleteDialogOpen = false;
@@ -512,7 +519,7 @@
       });
       if (pg) {
         try {
-          const parsedContent = JSON.parse(pg.bodyJson);
+          const parsedContent = JSON.parse(pg.body);
           setTimeout(() => {
             if (editor && editor.document) {
               editor.replaceBlocks(editor.document, parsedContent);
@@ -632,12 +639,13 @@
   });
 
   $effect(() => {
-    if (pg.bodyJson == "{}") {
+    if (pg.body == "{}") {
       pageRenderedHtml = "";
       processedHtml = "";
       return;
     }
-    const json = JSON.parse(pg.bodyJson);
+    console.log("wiki body", pg);
+    const json = JSON.parse(pg.body);
     try {
       const rendererEditor = BlockNoteEditor.create();
       rendererEditor
@@ -657,8 +665,7 @@
     if (!editor || !globalState.space || !pg) return;
     try {
       const res = JSON.stringify(editor.document);
-      pg.bodyJson = res;
-      pg.commit();
+      pg.body = res;
 
       setEditingPage(false);
       toast.success("Page saved successfully", { position: "bottom-end" });
@@ -718,19 +725,18 @@
   });
 
   onMount(async () => {
-    const existingLink = document.querySelector(
-      'link[href*="@blocknote/core/style.css"]',
-    );
-    if (!existingLink) {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = "https://unpkg.com/@blocknote/core@latest/style.css";
-      document.head.appendChild(link);
-    }
-
-    if (pageRenderedHtml) {
-      await processCodeBlocks();
-    }
+    // const existingLink = document.querySelector(
+    //   'link[href*="@blocknote/core/style.css"]',
+    // );
+    // if (!existingLink) {
+    //   const link = document.createElement("link");
+    //   link.rel = "stylesheet";
+    //   link.href = "https://unpkg.com/@blocknote/core@latest/style.css";
+    //   document.head.appendChild(link);
+    // }
+    // if (pageRenderedHtml) {
+    //   await processCodeBlocks();
+    // }
   });
 </script>
 
