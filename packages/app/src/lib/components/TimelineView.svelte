@@ -13,7 +13,7 @@
 
   import { derivePromise } from "$lib/utils.svelte";
   import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
-  import { globalState } from "$lib/global.svelte";
+  import { globalState, indexMessageForActivity } from "$lib/global.svelte";
   import {
     Announcement,
     Channel,
@@ -184,6 +184,17 @@
 
             if (textContent) {
               searchIndex.add(message.id, textContent);
+            }
+
+            // Index for activity heatmap
+            if (globalState.space?.id && message.createdDate) {
+
+
+              // Remove duplicates that might have arisen from different ways of accessing the handle
+              // console.log('[TimelineView DEBUG] Unique author handles to be indexed:', uniqueAuthorHandles);
+
+              indexMessageForActivity(message, globalState.space.id);
+
             }
           }
         }

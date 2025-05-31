@@ -14,6 +14,7 @@
   import SidebarChannelList from "./SidebarChannelList.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { page } from "$app/state";
+  import UserProfile from "./UserProfile.svelte";
 
   export async function createLinkFeed() {
     if (!globalState.roomy || !globalState.space) return;
@@ -118,18 +119,28 @@
   style="scrollbar-width: thin;"
 >
   <!-- Header -->
-  <div
-    class="w-full pt-4 pb-1 px-2 h-fit grid grid-cols-[auto_1fr_auto] justify-center items-center"
-  >
-    <ToggleSidebarIcon class="pr-2" open={isSpacesVisible} />
-    <h1 class="text-sm font-bold text-base-content truncate">
-      {globalState.space?.name && globalState.space?.name !== "Unnamed"
-        ? globalState.space.name
-        : ""}
-    </h1>
+  <div class="w-full pt-4 pb-1 px-2">
+    <div class="grid grid-cols-[auto_1fr_auto] justify-center items-center mb-2">
+      <ToggleSidebarIcon class="pr-2" open={isSpacesVisible} />
+      <h1 class="text-sm font-bold text-base-content truncate">
+        {globalState.space?.name && globalState.space?.name !== "Unnamed"
+          ? globalState.space.name
+          : ""}
+      </h1>
 
-    {#if globalState.isAdmin}
-      <SpaceSettingsDialog />
+      <div class="flex items-center gap-1">
+        {#if globalState.isAdmin}
+          <SpaceSettingsDialog />
+        {/if}
+        <UserProfile />
+      </div>
+    </div>
+    
+    <!-- Space description -->
+    {#if globalState.space?.description}
+      <p class="text-xs text-base-content/70 line-clamp-2">
+        {globalState.space.description}
+      </p>
     {/if}
   </div>
 
