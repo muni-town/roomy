@@ -417,16 +417,30 @@
 
     <div class="flex gap-4 group">
       {#if !mergeWithPrevious}
-        <a
-          href={`https://bsky.app/profile/${authorProfile.handle}`}
-          title={authorProfile.handle}
-          target="_blank"
+        <button
+          title={`View ${authorProfile.handle}'s profile`}
+          class="flex-shrink-0 hover:opacity-90 transition-opacity"
+          on:click|stopPropagation={() => {
+            // Dispatch a custom event to show the user profile
+            const event = new CustomEvent('showUserProfile', {
+              detail: {
+                did: authorProfile.did,
+                handle: authorProfile.handle,
+                displayName: authorProfile.displayName || authorProfile.handle.split('.')[0],
+                avatar: authorProfile.avatarUrl
+              },
+              bubbles: true
+            });
+            document.dispatchEvent(event);
+          }}
         >
-          <AvatarImage
-            handle={authorProfile.handle}
-            avatarUrl={authorProfile.avatarUrl}
-          />
-        </a>
+          <Avatar.Root class="w-10 h-10">
+            <AvatarImage
+              handle={authorProfile.handle}
+              avatarUrl={authorProfile.avatarUrl}
+            />
+          </Avatar.Root>
+        </button>
       {:else}
         <div class="w-11">
           {#if message.createdDate}

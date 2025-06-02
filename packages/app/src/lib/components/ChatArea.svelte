@@ -1,8 +1,9 @@
 <script lang="ts">
   import { ScrollArea } from "bits-ui";
   import ChatMessage from "./ChatMessage.svelte";
+  import UserProfile from "./UserProfile.svelte";
   import { Virtualizer } from "virtua/svelte";
-  import { setContext } from "svelte";
+  import { setContext, onMount, onDestroy } from "svelte";
   import {
     Announcement,
     Message,
@@ -12,6 +13,30 @@
   import { derivePromise } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import { globalState } from "$lib/global.svelte";
+  
+  // State for user profile dialog
+  let showUserProfile = $state(false);
+  let currentProfile = $state(null);
+  
+  // Handle profile click events
+  function handleProfileClick(event) {
+    currentProfile = event.detail;
+    showUserProfile = true;
+  }
+  
+  // Set up event listener for profile clicks
+  onMount(() => {
+    document.addEventListener('showUserProfile', handleProfileClick);
+    return () => {
+      document.removeEventListener('showUserProfile', handleProfileClick);
+    };
+  });
+  
+  // Close profile dialog
+  function closeProfile() {
+    showUserProfile = false;
+    currentProfile = null;
+  }
 
   let {
     timeline,
@@ -78,8 +103,29 @@
   }
 </script>
 
-<ScrollArea.Root type="scroll" class="h-full overflow-hidden">
-  {#if !messagesLoaded}
+<div class="relative h-full">
+  <!-- User Profile Dialog -->
+  {#if showUserProfile && currentProfile}
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div 
+        class="absolute inset-0 bg-black/50"
+        on:click={closeProfile}
+      ></div>
+      <div 
+        class="relative bg-base-100 rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-hidden z-10"
+        on:click|stopPropagation
+      >
+        <UserProfile 
+          show={showUserProfile} 
+          onClose={closeProfile}
+          profileData={currentProfile}
+        />
+      </div>
+    </div>
+  {/if}
+  
+  <ScrollArea.Root type="scroll" class="h-full overflow-hidden">
+    {#if !messagesLoaded}
     <!-- Important: This area takes the place of the chat which pushes chat offscreen
        which allows it to load then pop into place once the spinner is gone. -->
     <div class="grid items-center justify-center h-full w-full bg-transparent">
@@ -147,3 +193,4 @@
   </ScrollArea.Scrollbar>
   <ScrollArea.Corner />
 </ScrollArea.Root>
+</div>

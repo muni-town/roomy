@@ -9,14 +9,18 @@ import {
 import { SveltePeer } from "@muni-town/leaf-svelte";
 import { indexedDBStorageAdapter } from "@muni-town/leaf-storage-indexeddb";
 import { webSocketSyncer } from "@muni-town/leaf-sync-ws";
+import { Charset, Document, Encoder, IndexedDB } from "flexsearch";
 
 import { user } from "./user.svelte";
-import type { Agent } from "@atproto/api";
+import { ComAtprotoIdentitySignPlcOperation, type Agent } from "@atproto/api";
 import { page } from "$app/state";
 import { untrack } from "svelte";
+import { Index } from "flexsearch";
+import { Message, type Timeline, type TimelineItem, type Space as RoomySpace, type Channel as RoomyChannel } from "@roomy-chat/sdk"; // Ensure Message type is available
 
 import * as roomy from "@roomy-chat/sdk";
 import { navigate, resolveLeafId } from "./utils.svelte";
+import { getProfile } from "./profile.svelte";
 (window as any).r = roomy;
 (window as any).page = page;
 
@@ -26,7 +30,13 @@ if (import.meta.hot) {
     window.location.reload();
   });
 }
-
+const encoder = new Encoder({
+  include: {
+      letter: true,
+      number: true,
+      punctuation: true 
+  }
+});
 export let globalState = $state({
   // Create an empty roomy instance by default, it will be updated when the user logs in.
   roomy: undefined as Roomy | undefined,
@@ -41,7 +51,41 @@ export let globalState = $state({
   isAdmin: false,
   isBanned: false,
   currentCatalog: "home",
+  activitySearchIndex: new Document({
+    // preset: "match",
+    // tokenize: "forward", // Handles arrays in 'authors' field appropriately for matching any author in the list
+    document: {
+      id: "id",
+      // index:[
+      //   {field: "author", tokenize: "forward",  encoder: Charset.LatinBalance},
+      //   {field: "spaceId", tokenize: "forward", encoder: Charset.LatinBalance},
+      //   // {field: "timestamp", tokenize: "forward", encoder: Charset.LatinBalance}
+      // ],
+      index: [
+        "author",
+        // "authors", // Array of author handles
+        "spaceId",
+        // "timestamp" // Numeric timestamp (message.createdDate.getTime())
+      ],
+      store: true // Store these fields to get them back in search results
+    }
+  }),
+  messageSearchIndex: new Document({
+    tokenize: "exact",
+    encoder: encoder,
+    document: {
+      id: "id",
+      index: [
+        "authorDid" // Author's handle
+      ],
+      store: ["id", "content", "authorDid", "spaceId", "channelId", "timestamp"],
+    },
+    // worker: true
+  }),
+  indexing: true
 });
+
+
 
 $effect.root(() => {
   // Redirect to the `/-/space.domain` or `/leaf:id` as appropriate.
@@ -66,7 +110,13 @@ $effect.root(() => {
   $effect(() => {
     if (user.agent && user.catalogId.value) {
       // Initialize new roomy instance
-      initRoomy(user.agent).then((roomy) => (globalState.roomy = roomy));
+      initRoomy(user.agent).then(async (roomy) => {
+        globalState.roomy = roomy;
+        // Once Roomy is initialized, start indexing all user messages
+        if (globalState.roomy) { // Ensure roomy is available before indexing
+          await indexAllUserMessages();
+        }
+      });
     }
   });
 
@@ -190,4 +240,145 @@ async function initRoomy(agent: Agent): Promise<Roomy> {
   );
 
   return await Roomy.init(peer, catalogId as EntityIdStr);
+}
+
+/**
+ * Indexes a message for the activity heatmap.
+ * @param message The message object from the SDK.
+ * @param spaceId The ID of the space this message belongs to.
+ * @param authorDids Extracted author handles for the message.
+ */
+export async function indexMessageForActivity(
+  message: Message,
+  spaceId: string,
+): Promise<void> {
+  if (!message.id || !message.createdDate) {
+    // console.warn("Skipping indexing for message due to missing data:", message.id);
+    return;
+  }
+  const authors = message.authors((x) => x.toArray())
+  const profile = await getProfile(authors[0])
+  const handle = profile?.handle
+  const doc = {
+    id: String(message.id), // Ensure primitive string
+    authors: authors, // Use the array of guaranteed primitive strings
+    author: handle,
+    spaceId: String(spaceId), // Ensure primitive string
+    timestamp: message.createdDate.getTime(), // Already a number (primitive)
+  };
+
+  // Use plainDoc for indexing
+  globalState.activitySearchIndex.add(doc);
+
+}
+
+export async function getMessageById(timeline: Timeline, messageId: string): Promise<Message | null> {
+  if (!timeline) {
+    console.error("Timeline is undefined. Cannot get message by ID.");
+    return null;
+  }
+
+  // Step 1: Retrieve all TimelineItems and find the one with the matching ID.
+  const allItems = await timeline.items(); // timeline.items() returns Promise<TimelineItem[]>
+  const timelineItem = allItems.find(item => item.id === messageId); // Assuming TimelineItem has an 'id' property
+
+  if (timelineItem) {
+    // Step 2: Try to cast the TimelineItem to a Message.
+    const message = timelineItem.tryCast(Message);
+    return message; // This will be the Message object or null if the cast fails.
+  }
+
+  return null; // TimelineItem not found for the given messageId.
+}
+
+/**
+ * Searches the activity index for messages by a specific author within a date range.
+ * @param authorDid The handle of the author to search for.
+ * @param minTimestamp The minimum timestamp for the search range.
+ * @param maxTimestamp The maximum timestamp for the search range.
+ * @returns A promise that resolves to an array of matching message data objects.
+ */
+export async function searchActivityByAuthor(
+  authorDid: string,
+) {
+  if (!globalState.messageSearchIndex) {
+    console.warn("messageSearchIndex not initialized. Cannot search activity.");
+    return [];
+  }
+  try {
+    const searchResults = await globalState.messageSearchIndex.searchAsync({
+      query: authorDid,
+      index: "authorDid", // Search in the 'authorDid' field
+      enrich: true,        // Return the full stored documents
+      // where: (doc: { timestamp: number }) =>
+      //   doc.timestamp >= minTimestamp && doc.timestamp <= maxTimestamp,
+      limit: 2000
+    });
+
+    const results = searchResults?.[0]?.result
+    if(!results) return [];
+    const uniqueResults = Array.from(new Set(results.map(item => item.id)))
+    .map(id => results.find(item => item.id === id));
+    return uniqueResults;
+  } catch (error) {
+    console.error("Error searching activity by author:", error);
+    return [];
+  }
+}
+
+/**
+ * Indexes all messages from all spaces and channels for the current user.
+ * This populates the `messageSearchIndex` for full-text search capabilities.
+ */
+export async function indexAllUserMessages(): Promise<void> {
+  if (!globalState.roomy || !globalState.messageSearchIndex) {
+    console.warn("Roomy SDK or messageSearchIndex not initialized. Skipping message indexing.");
+    return;
+  }
+  const db = new IndexedDB("roomy-store")
+  const searchIndex = globalState.messageSearchIndex;
+  // await searchIndex.mount(db)
+  console.log("Starting to index all user messages...");
+  const roomy = globalState.roomy;
+  let messagesIndexed = 0;
+
+  try {
+    const spaces = await roomy.spaces.items() as RoomySpace[];
+    for (const space of spaces) {
+      if (!space.channels) continue;
+      const channels = await space.channels.items() as RoomyChannel[];
+      for (const channel of channels) {
+        if (!channel.timeline) continue;
+        const timelineItems = await channel.timeline.items();
+        for (const item of timelineItems) {
+          const message = item.tryCast(Message);
+
+          if (
+            message
+          ) {
+            const authors = message.authors((x) => x.toArray());
+
+            const authorDid = authors[0]
+            const doc = {
+              id: String(message.id),
+              content: message.bodyJson,
+              authorDid: authorDid,
+              spaceId: String(space.id),
+              channelId: String(channel.id),
+              timestamp: message.createdDate.getTime(),
+            };
+            // Use addAsync if worker: true, otherwise add is synchronous
+            // For simplicity without worker initially, using 'add'. If worker is enabled, switch to addAsync.
+            // await searchIndex.addAsync(doc.id, doc); // if worker: true
+            searchIndex.add(doc.id, doc)
+            messagesIndexed++;
+          }
+        }
+      }
+    }
+    console.log(`Finished indexing all user messages. Total messages indexed: ${messagesIndexed}`);
+    globalState.indexing = false
+  } catch (error) {
+    console.error("Error indexing all user messages:", error);
+  }
 }
