@@ -15,34 +15,34 @@
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { page } from "$app/state";
 
-  // export async function createLinkFeed() {
-  //   if (!globalState.roomy || !globalState.space) return;
+  export async function createLinkFeed() {
+    if (!globalState.space) return;
 
-  //   try {
-  //     const thread = await globalState.roomy.create(Thread);
-  //     thread.name = "@links";
-  //     thread.commit();
-  //     globalState.space.threads.push(thread);
-  //     globalState.space.commit();
+    try {
+      const thread = await globalState.roomy.create(Thread);
+      thread.name = "@links";
+      thread.commit();
+      globalState.space.threads.push(thread);
+      globalState.space.commit();
 
-  //     navigate({ space: page.params.space!, thread: thread.id });
-  //   } catch (e) {
-  //     console.error(e);
-  //   }
-  // }
+      navigate({ space: page.params.space!, thread: thread.id });
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
-  // let allThreads = derivePromise([], async () =>
-  //   { let threads = await globalState.space?.threads.items()) || [])
-  //     .filter((x) => !x.softDeleted)
-  //     .map((x) => ({
-  //       target: {
-  //         space: page.params.space!,
-  //         thread: x.id,
-  //       },
-  //       name: x.name,
-  //       id: x.id,
-  //     })),
-  // );
+  let allThreads = derivePromise([], async () =>
+    { let threads = await globalState.space?.threads.items()) || [])
+      .filter((x) => !x.softDeleted)
+      .map((x) => ({
+        target: {
+          space: page.params.space!,
+          thread: x.id,
+        },
+        name: x.name,
+        id: x.id,
+      })),
+  );
 
   function allThreads() {
     let threads = globalState.space?.threads || [];

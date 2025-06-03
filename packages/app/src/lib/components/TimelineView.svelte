@@ -33,7 +33,7 @@ import {co,z} from "jazz-tools"
   import type { Virtualizer } from "virtua/svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { threads } from "$lib/thread.svelte";
-
+  console.log("timelineview")
   let selectedMessages = $derived(threads.selected);
 
   let messages = $derived(globalState.channel?.messages)
@@ -359,9 +359,13 @@ import {co,z} from "jazz-tools"
   // );
 
   const pages = $derived.by(()=> {
-    console.log("globalState.channel", globalState.channel?.toJSON())
-    if(!globalState.channel?.wikipages) return []
-    return globalState.channel.wikipages.filter(page => page !== null && !page.softDeleted)
+    if(!globalState.space?.wikipages) return []
+    return globalState.space.wikipages.filter(page => page !== null && !page.softDeleted)
+  });
+
+  const relatedThreads = $derived.by(()=> {
+    if(!globalState.space?.threads) return []
+    return globalState.space.threads.filter(thread => thread !== null && !thread.softDeleted)
   });
 </script>
 
@@ -432,9 +436,9 @@ import {co,z} from "jazz-tools"
     {/snippet}
     No pages for this channel.
   </BoardList>
-  <!-- <BoardList items={relatedThreads.value} title="Threads" route="thread">
+  <BoardList items={relatedThreads} title="Threads" route="thread">
     No threads for this channel.
-  </BoardList> -->
+  </BoardList>
 {:else if tab === "chat"}
   {#if globalState.space && globalState.channel}
     <div class="flex h-full flex-col">
