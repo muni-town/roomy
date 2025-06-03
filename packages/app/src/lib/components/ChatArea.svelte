@@ -50,7 +50,6 @@
     if(!previousMessage){
       return false;
     }
-    console.log("previous",previousMessage)
     const areMessages =
     !previousMessage?.softDeleted;
 

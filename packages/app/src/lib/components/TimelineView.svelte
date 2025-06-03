@@ -359,6 +359,7 @@ import {co,z} from "jazz-tools"
   // );
 
   const pages = $derived.by(()=> {
+    console.log("globalState.channel", globalState.channel?.toJSON())
     if(!globalState.channel?.wikipages) return []
     return globalState.channel.wikipages.filter(page => page !== null && !page.softDeleted)
   });

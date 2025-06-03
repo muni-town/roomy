@@ -8,7 +8,6 @@
   import Link from "@tiptap/extension-link";
   import { BlockNoteEditor } from "@blocknote/core";
   import "@blocknote/core/style.css";
-  import { CoState } from "jazz-tools";
   import { WikiPage } from "$lib/schema";
 
   // import { page } from "$app/state";
@@ -19,12 +18,18 @@
   import { derivePromise } from "$lib/utils.svelte";
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  console.log("page", page.params.page);
-  const pg = derivePromise([], async () =>{
-    return WikiPage.load(page.params.page)
-  })
+  // const pageId = page.params.page;
+  // const pages = globalState.channel?.wikiPages || [];
+  // const pg = pages.find((page) => page.id === pageId);
 
-  // waitForValue(() => pg);
+  const pg = derivePromise([], async () => {
+    return WikiPage.load(page.params.page);
+  });
+
+$inspect(pg).with((_,pg) => {
+  console.log("pg", pg)
+})
+
   let isEditingPage = $state(false);
 
   let pageRenderedHtml = $state("");
@@ -519,7 +524,7 @@
       });
       if (pg) {
         try {
-          const parsedContent = JSON.parse(pg.body);
+          const parsedContent = JSON.parse(pg.value.body);
           setTimeout(() => {
             if (editor && editor.document) {
               editor.replaceBlocks(editor.document, parsedContent);
@@ -639,13 +644,15 @@
   });
 
   $effect(() => {
-    if (pg.body == "{}") {
+    isEditingPage
+    if (!pg.value?.body) return;
+    if (pg.value.body == "{}") {
       pageRenderedHtml = "";
       processedHtml = "";
       return;
     }
-    console.log("wiki body", pg);
-    const json = JSON.parse(pg.body);
+    console.log("page body", pg.value.body )
+    const json = JSON.parse(pg.value.body);
     try {
       const rendererEditor = BlockNoteEditor.create();
       rendererEditor
@@ -665,7 +672,7 @@
     if (!editor || !globalState.space || !pg) return;
     try {
       const res = JSON.stringify(editor.document);
-      pg.body = res;
+      pg.value.body = res;
 
       setEditingPage(false);
       toast.success("Page saved successfully", { position: "bottom-end" });
@@ -760,12 +767,12 @@
         <h4
           class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold flex gap-2 items-center`}
         >
-          {pg.name}
+          {pg.value?.name}
         </h4>
       {:else}
         <input
           type="text"
-          bind:value={pg.name}
+          bind:value={pg.value.name}
           class="text-base-content text-lg font-bold p-0 flex-1 mr-2"
           placeholder="Page title"
           required
@@ -813,7 +820,7 @@
   <section class="page-content h-full overflow-y-auto">
     <div class="page-rendered p-4">
       <div class="page-html text-base-content">
-        {#if pg && !pg.softDeleted}
+        {#if pg && !pg.value.softDeleted}
           {@html processedHtml}
         {:else}
           <p class="text-base-content/70">No content available.</p>
