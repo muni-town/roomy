@@ -19,11 +19,10 @@
     if (!globalState.space) return;
 
     try {
-      const thread = await globalState.roomy.create(Thread);
-      thread.name = "@links";
-      thread.commit();
-      globalState.space.threads.push(thread);
-      globalState.space.commit();
+      const thread = Thread.create({
+        name: "@links",
+      });
+      globalState.space.links = thread;
 
       navigate({ space: page.params.space!, thread: thread.id });
     } catch (e) {
@@ -31,18 +30,18 @@
     }
   }
 
-  let allThreads = derivePromise([], async () =>
-    { let threads = await globalState.space?.threads.items()) || [])
-      .filter((x) => !x.softDeleted)
-      .map((x) => ({
-        target: {
-          space: page.params.space!,
-          thread: x.id,
-        },
-        name: x.name,
-        id: x.id,
-      })),
-  );
+  // let allThreads = derivePromise([], async () =>
+  //   { let threads = await globalState.space?.threads.items()) || [])
+  //     .filter((x) => !x.softDeleted)
+  //     .map((x) => ({
+  //       target: {
+  //         space: page.params.space!,
+  //         thread: x.id,
+  //       },
+  //       name: x.name,
+  //       id: x.id,
+  //     })),
+  // );
 
   function allThreads() {
     let threads = globalState.space?.threads || [];
@@ -59,21 +58,25 @@
         };
       });
   }
-  let threads = $derived(allThreads().filter((x) => x?.name !== "@links"));
+  let threads = $derived(allThreads());
   // let links = $derived(allThreads.value.find((x) => x.name === "@links"));
-
-  // const pages = derivePromise([], async () =>
-  //   ((await globalState.space?.wikipages.items()) || [])
-  //     .filter((x) => !x.softDeleted)
-  //     .map((x) => ({
-  //       target: {
-  //         space: page.params.space!,
-  //         page: x.id,
-  //       },
-  //       name: x.name,
-  //       id: x.id,
-  //     })),
-  // );
+  let links = $derived.by(() => {
+    return globalState.space?.links;
+  });
+  const pages = $derived.by(() => {
+    const pages = globalState.space?.wikipages;
+    if (!pages) return [];
+    return pages
+      .filter((page) => !page?.softDeleted)
+      .map((p) => ({
+        target: {
+          space: page.params.space,
+          page: p?.id,
+        },
+        name: p?.name,
+        id: p?.id,
+      }));
+  });
 
   // let categories = derivePromise([], async () => {
   //   if (!globalState.space) return [];
@@ -94,7 +97,7 @@
     if (globalState.space) {
       const me = Account.getMe();
       untrack(() => {
-        if (me.canAdmin(globalState.space)) {
+        if (globalState.space && me.canAdmin(globalState.space)) {
           globalState.isAdmin = true;
         }
       });
@@ -288,7 +291,7 @@
   </Tabs.Root>
   <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-clip mx-1">
     {#if tab === "board"}
-      <!-- {#if links}
+      {#if links}
         <div class="flex-flex-col gap-4 p-2">
           <Button.Root
             class="cursor-pointer px-2 flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
@@ -310,10 +313,10 @@
           </Button.Root>
           <div class="dz-divider my-0"></div>
         </div>
-      {/if} -->
+      {/if}
       <AccordionTree
         sections={[
-          // { key: "pages", items: pages.value },
+          { key: "pages", items: pages},
           { key: "threads", items: threads },
         ]}
         active={globalState.channel?.id ?? ""}

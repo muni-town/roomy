@@ -87,17 +87,19 @@ export const Thread = co.map({
     name: z.string(),
     softDeleted: z.boolean().optional(),
     messages: z.optional(co.list(Message)),
-    channel: Channel,
+    channel: z.optional(Channel),
 })
 export const Image = co.map({
     uri: z.string(),
 })
+
 export const Space = co.map({
     name: z.string(),
     channels: z.optional(co.list(Channel)),
     threads: z.optional(co.list(Thread)),
     image: z.optional(Image),
     wikipages: z.optional(co.list(WikiPage)),
+    links: z.optional(Thread)
 })
 export const Spaces = co.list(Space);
 export type Spaces = Loaded<typeof Spaces>
