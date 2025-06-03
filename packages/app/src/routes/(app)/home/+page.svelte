@@ -9,15 +9,12 @@
   import { AccountSchema } from "$lib/schema";
 
   const account = new AccountCoState(AccountSchema, {
-  resolve: {
-    profile: true,
-  },
-});
-const me = $derived(account.current);
-  const spaces = derivePromise(
-    undefined,
-    async () => await globalState.roomy?.spaces.items(),
-  );
+    resolve: {
+      profile: true,
+    },
+  });
+  const me = $derived(account.current);
+  let spaces = $derived(globalState.catalog?.spaces);
 </script>
 
 <div class="dz-hero bg-base-200 min-h-screen">
@@ -40,18 +37,18 @@ const me = $derived(account.current);
             Create Account or Log In
           </Button.Root>
         </div>
-      {:else if !spaces.value}
+      {:else if !spaces}
         <span class="dz-loading dz-loading-spinner mx-auto w-25"></span>
-      {:else if spaces.value.length > 0}
+      {:else if spaces.length > 0}
         <h2 class="text-3xl font-bold">Your Spaces</h2>
         <section class="flex flex-wrap justify-center gap-4 max-w-5xl">
-          {#each spaces.value as space}
+          {#each spaces as space}
             <a
-              href={`/${space.handles((x) => x.get(0)) || space.id}`}
+              href={`/${space?.id}`}
               class="dz-card border border-base-300 hover:border-primary bg-base-100 transition-colors cursor-pointer text-base-content w-full md:w-96"
             >
               <div class="dz-card-body flex-row items-center justify-between">
-                <h2 class="dz-card-title">{space.name}</h2>
+                <h2 class="dz-card-title">{space?.name}</h2>
                 <div class="dz-card-actions">
                   <Icon
                     icon="lucide:circle-arrow-right"
@@ -62,7 +59,7 @@ const me = $derived(account.current);
             </a>
           {/each}
         </section>
-      {:else if spaces.value.length === 0}
+      {:else if spaces?.length === 0}
         <p class="text-lg font-medium text-center">
           You don't have any spaces yet. Create one to get started!
         </p>
