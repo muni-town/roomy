@@ -1,10 +1,8 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
-  import { getProfile } from "$lib/profile.svelte";
   import { getContentHtml } from "$lib/tiptap/editor";
-  import type { Message } from "@roomy-chat/sdk";
-  import { formatDistanceToNow } from "date-fns";
+  import type { Message } from "$lib/schema"
 
   let {
     messages = [],
@@ -32,13 +30,14 @@
   // Format the message preview with highlighted search term
   function formatMessagePreview(message: Message): string {
     try {
-      const bodyContent = JSON.parse(message.bodyJson);
+      const bodyContent = JSON.parse(message.body);
       const htmlContent = getContentHtml(bodyContent);
       return highlightSearchTerm(htmlContent, query);
     } catch (error) {
       return "Unable to display message content";
     }
   }
+ 
 </script>
 
 <div
@@ -75,23 +74,22 @@
               onMessageClick(message.id);
             }}
           >
-            {#await getProfile(message.authors((x) => x.get(0))) then profile}
               <AvatarImage
-                handle={profile.handle || ""}
-                avatarUrl={profile.avatarUrl}
+                handle={message.profile?.handle || ""}
+                avatarUrl={message.profile?.avatarUrl}
                 className="w-8 h-8"
               />
               <div class="flex-1 min-w-0">
                 <div class="flex justify-between items-center mb-1">
                   <span class="font-medium text-base-content"
-                    >{profile.handle || "Unknown"}</span
+                    >{message.profile?.handle || "Unknown"}</span
                   >
                   <span class="text-xs text-base-content/60">
-                    {message.createdDate
-                      ? formatDistanceToNow(message.createdDate, {
+                    <!-- {message._edits?.createdDate
+                      ? formatDistanceToNow(message._edits.createdDate, {
                           addSuffix: true,
                         })
-                      : ""}
+                      : ""} -->
                   </span>
                 </div>
                 <div
@@ -100,7 +98,6 @@
                   {@html formatMessagePreview(message)}
                 </div>
               </div>
-            {/await}
           </button>
         </li>
       {/each}

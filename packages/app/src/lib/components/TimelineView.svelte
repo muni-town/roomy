@@ -150,6 +150,7 @@ import {co,z} from "jazz-tools"
 
   // Function to handle search result click
   function handleSearchResultClick(messageId: string) {
+    console.log("result clicked")
     // Hide search results
     showSearchResults = false;
 
@@ -158,13 +159,13 @@ import {co,z} from "jazz-tools"
       // Get the timeline IDs - this returns an array, not a Promise
       const ids = globalState.channel?.messages?.map((message) => message?.id);
 
-      if (!messageId.includes("co_  ")) {
+      if (!messageId.includes("co_")) {
         return;
       }
 
       const messageIndex = ids?.indexOf(messageId as `co_${string}`);
-
-      if (messageIndex && messageIndex !== -1) {
+      console.log("message index", messageIndex)
+      if (messageIndex !== -1) {
         virtualizer?.scrollToIndex(messageIndex);
       } else {
         console.error("Message not found in timeline:", messageId);
@@ -357,11 +358,10 @@ import {co,z} from "jazz-tools"
   //     : [],
   // );
 
-  const pages = $derived((()=> {
-    if(!globalState.channel.wikipages) return []
+  const pages = $derived.by(()=> {
+    if(!globalState.channel?.wikipages) return []
     return globalState.channel.wikipages.filter(page => page !== null && !page.softDeleted)
-  })());
-  $inspect(pages, "pages")
+  });
 </script>
 
 <header class="dz-navbar">
