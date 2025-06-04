@@ -1,136 +1,56 @@
 <script lang="ts">
-  import { globalState } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { navigate } from "$lib/utils.svelte";
   import { Button } from "bits-ui";
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import AvatarImage from "$lib/components/AvatarImage.svelte";
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import SidebarSpace from "$lib/components/SidebarSpace.svelte";
-  // import { Space } from "@roomy-chat/sdk";
-  import { Space, Spaces } from "$lib/schema.ts";
-  import { cleanHandle } from "$lib/utils.svelte";
-  import { atproto } from "$lib/atproto.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { env } from "$env/dynamic/public";
-  import {Group} from "jazz-tools"
-  import JSZip from "jszip";
-  import FileSaver from "file-saver";
+  import { co } from "jazz-tools";
+  import { createSpace, createSpaceList } from "$lib/jazz/utils";
+  import { RoomyAccount, SpaceList } from "$lib/jazz/schema";
+  import ZipExport from "./ZipExport.svelte";
 
   let {
     spaces,
     visible,
+    me,
   }: {
-    spaces: Spaces | undefined | null;
+    spaces: co.loaded<typeof SpaceList> | undefined | null;
     visible: boolean;
+    me: co.loaded<typeof RoomyAccount> | undefined | null;
   } = $props();
-  console.log("server bar spaces", spaces?.toJSON())
-  let handleInput = $state("");
-  let loginLoading = $state(false);
-  let signupLoading = $state(false);
-  const loadingAuth = $derived(signupLoading || loginLoading);
 
   let newSpaceName = $state("");
   let isNewSpaceDialogOpen = $state(false);
 
-  async function createSpace() {
-    // if (!newSpaceName || !user.agent || !globalState.roomy) return;
-    // const space = await globalState.roomy.create(Space);
-    const space = Space.create({ name: newSpaceName }, {owner: Group.create()});
-    // space.admins((x) => user.agent && x.push(user.agent.assertDid));
-    // space.commit();
-    console.log("spaces", globalState.catalog?.spaces);
-    if (globalState.catalog) {
-      if (!globalState.catalog?.spaces) {
-        console.log("creating new spaces list for catalog");
-        globalState.catalog.spaces = Spaces.create([space]);
-      } else {
-        console.log("pushing space to catalog");
-        globalState.catalog.spaces.push(space);
-      }
+  async function createSpaceSubmit() {
+    if (!newSpaceName) return;
+
+    if (me?.profile && me.profile.joinedSpaces === undefined) {
+      me.profile.joinedSpaces = createSpaceList();
     }
 
-    // globalState.roomy.spaces.push(space);
-    // globalState.roomy.commit();
+    const space = createSpace(newSpaceName);
+
+    me?.profile?.joinedSpaces?.push(space);
+
+    // if (globalState.catalog) {
+    //   if (!globalState.catalog?.spaces) {
+    //     console.log("creating new spaces list for catalog");
+    //     globalState.catalog.spaces = Spaces.create([space]);
+    //   } else {
+    //     console.log("pushing space to catalog");
+    //     globalState.catalog.spaces.push(space);
+    //   }
+    // }
+
     newSpaceName = "";
 
     isNewSpaceDialogOpen = false;
   }
-
-  let loginError = $state("");
-
-  async function login() {
-    loginLoading = true;
-
-    try {
-      handleInput = cleanHandle(handleInput);
-      await user.loginWithHandle(handleInput);
-    } catch (e: unknown) {
-      console.error(e);
-      loginError = e instanceof Error ? e.message.toString() : "Unknown error";
-    }
-
-    loginLoading = false;
-  }
-
-  async function signup() {
-    signupLoading = true;
-    try {
-      await atproto.oauth.signIn("https://bsky.social");
-    } catch (e: unknown) {
-      console.error(e);
-      loginError = e instanceof Error ? e.message.toString() : "Unknown error";
-    }
-    signupLoading = false;
-  }
-
-  async function addEntityToZip(zip: any, entity: any) {
-    var id = entity.entity.id.toString();
-    var doc = entity.entity.doc;
-
-    if (id in zip.files) return;
-
-    zip.file(id, doc.export({ mode: "snapshot" }));
-
-    if ("timeline" in entity) {
-      await addEntityListToZip(zip, entity.timeline);
-    }
-  }
-
-  async function addEntityListToZip(zip: any, entity_list: any) {
-    var items = await entity_list.items();
-    for (var i in items) {
-      await addEntityToZip(zip, items[i]);
-    }
-  }
-
-  // async function exportZip() {
-  //   var metadata: { Type: string; Version: string; [key: string]: any } = {
-  //     Type: "RoomyData",
-  //     Version: "0",
-  //   };
-
-  //   var zip = new JSZip();
-
-  //   // var space = globalState.space;
-  //   const space = null
-  //   if (!space) return;
-
-  //   metadata["space_id"] = space.entity.id.toString();
-
-  //   await addEntityToZip(zip, space);
-
-  //   await addEntityListToZip(zip, space.threads);
-  //   await addEntityListToZip(zip, space.channels);
-  //   await addEntityListToZip(zip, space.wikipages);
-
-  //   zip.file("meta.json", JSON.stringify(metadata));
-
-  //   zip.generateAsync({ type: "blob" }).then(function (content) {
-  //     FileSaver.saveAs(content, "roomy-data.zip");
-  //   });
-  // }
 </script>
 
 <!-- Width manually set for transition to w-0 -->
@@ -149,46 +69,44 @@
       <Icon icon="iconamoon:home-fill" font-size="1.75em" />
     </button>
 
-    {#if user.session}
-      <Dialog
-        title="Create Space"
-        description="Create a new public chat space"
-        bind:isDialogOpen={isNewSpaceDialogOpen}
-      >
-        {#snippet dialogTrigger()}
-          <Button.Root
-            title="Create Space"
-            class="p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
-          >
-            <Icon icon="basil:add-solid" font-size="2em" />
-          </Button.Root>
-        {/snippet}
-
-        <form
-          id="createSpace"
-          class="flex flex-col gap-4"
-          onsubmit={createSpace}
+    <Dialog
+      title="Create Space"
+      description="Create a new public chat space"
+      bind:isDialogOpen={isNewSpaceDialogOpen}
+    >
+      {#snippet dialogTrigger()}
+        <Button.Root
+          title="Create Space"
+          class="p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
         >
-          <input
-            bind:value={newSpaceName}
-            use:focusOnRender
-            placeholder="Name"
-            class="dz-input w-full"
-            type="text"
-            required
-          />
-          <Button.Root disabled={!newSpaceName} class="dz-btn dz-btn-primary">
-            <Icon icon="basil:add-outline" font-size="1.8em" />
-            Create Space
-          </Button.Root>
-        </form>
-      </Dialog>
-    {/if}
+          <Icon icon="basil:add-solid" font-size="2em" />
+        </Button.Root>
+      {/snippet}
+
+      <form
+        id="createSpace"
+        class="flex flex-col gap-4"
+        onsubmit={createSpaceSubmit}
+      >
+        <input
+          bind:value={newSpaceName}
+          use:focusOnRender
+          placeholder="Name"
+          class="dz-input w-full"
+          type="text"
+          required
+        />
+        <Button.Root disabled={!newSpaceName} class="dz-btn dz-btn-primary">
+          <Icon icon="basil:add-outline" font-size="1.8em" />
+          Create Space
+        </Button.Root>
+      </form>
+    </Dialog>
 
     <div class="divider my-0"></div>
     {#if spaces}
-      {#each spaces as space, i}
-        <SidebarSpace {space} {i} />
+      {#each spaces as space}
+        <SidebarSpace {space} />
       {/each}
     {/if}
   </div>
@@ -206,78 +124,8 @@
       </Button.Root>
     {/if}
 
-    <Button.Root
-      title="Export ZIP Archive"
-      class="p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
-      disabled={!user.session}
-    >
-      <Icon icon="mdi:folder-download-outline" font-size="1.8em" />
-    </Button.Root>
+    <ZipExport />
 
     <ThemeSelector />
-    <Dialog
-      title={user.session ? "Log Out" : "Create Account or Log In"}
-      description={user.session
-        ? `Logged in as ${user.profile.data?.handle}`
-        : `We use the AT Protocol to authenticate users <a href="https://atproto.com/guides/identity" class="text-primary hover:text-primary/75"> learn more </a>`}
-      bind:isDialogOpen={user.isLoginDialogOpen}
-    >
-      {#snippet dialogTrigger()}
-        <AvatarImage
-          className="p-1 w-full cursor-pointer"
-          handle={user.profile.data?.handle || ""}
-          avatarUrl={user.profile.data?.avatar}
-        />
-      {/snippet}
-
-      {#if user.session}
-        <section class="flex flex-col gap-4">
-          <Button.Root onclick={user.logout} class="dz-btn dz-btn-error">
-            Log Out
-          </Button.Root>
-        </section>
-      {:else}
-        <Button.Root
-          onclick={signup}
-          disabled={loadingAuth}
-          class="dz-btn dz-btn-primary"
-        >
-          {#if signupLoading}
-            <span class="dz-loading dz-loading-spinner"></span>
-          {/if}
-          <Icon
-            icon="simple-icons:bluesky"
-            width="16"
-            height="16"
-          />Authenticate with Bluesky
-        </Button.Root>
-        <p class="text-sm pt-4">Know your handle? Log in with it below.</p>
-        <form class="flex flex-col gap-4" onsubmit={login}>
-          {#if loginError}
-            <p class="text-error">{loginError}</p>
-          {/if}
-          <input
-            bind:value={handleInput}
-            placeholder="Handle (eg alice.bsky.social)"
-            class="dz-input w-full"
-            type="text"
-            required
-          />
-          <Button.Root
-            disabled={loadingAuth || !handleInput}
-            class="dz-btn dz-btn-primary"
-          >
-            {#if loginLoading}
-              <span class="dz-loading dz-loading-spinner"></span>
-            {/if}
-            Log in with bsky.social
-          </Button.Root>
-        </form>
-
-        <p class="text-sm text-center pt-4 text-base-content/50">
-          More options coming soon!
-        </p>
-      {/if}
-    </Dialog>
   </section>
 </aside>

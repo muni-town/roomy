@@ -25,7 +25,7 @@
         A digital gardening platform for communities. Flourish in Spaces,
         curating knowledge and conversations together.
       </p>
-      <div>Hi ma! ${me.profile.inbox} woo</div>
+      <div>Hello {me?.profile.name}!</div>
       <div class="divider"></div>
 
       {#if !user.session}

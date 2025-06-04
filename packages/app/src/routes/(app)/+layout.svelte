@@ -1,8 +1,7 @@
 <script lang="ts">
-  import "../../app.css";
   import { onMount, setContext } from "svelte";
   import { browser, dev } from "$app/environment";
-  import { JazzProvider } from "jazz-svelte";
+  import { AccountCoState } from "jazz-svelte";
   import posthog from "posthog-js";
   import { Toaster } from "svelte-french-toast";
 
@@ -11,28 +10,24 @@
 
   import { globalState } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
-  import { derivePromise, Toggle, setTheme } from "$lib/utils.svelte";
+  import { Toggle, setTheme } from "$lib/utils.svelte";
   import { type ThemeName } from "$lib/themes.ts";
   import ServerBar from "$lib/components/ServerBar.svelte";
   import SidebarMain from "$lib/components/SidebarMain.svelte";
   import { page } from "$app/state";
   import { afterNavigate } from "$app/navigation";
-  import { AccountSchema, Catalog } from "$lib/schema";
-  import "jazz-inspector-element"
-  const peerUrl = "wss://cloud.jazz.tools/?key=nandithebull@outlook.com";
-  // const peerUrl = "ws://127.0.0.1:4200"
-  let sync = { peer: peerUrl };
+  // import { AccountSchema, Catalog } from "$lib/schema";
+  import { RoomyAccount } from "$lib/jazz/schema";
+  import "jazz-inspector-element";
+
   const { children } = $props();
-  // const spaces = $derived(SpaceglobalState.catalog?.spaces)
-  // $inspect(spaces).with((kind,spaces) => console.log(kind,"inspect spaces", spaces?.toJSON()))
-  let spaces = $derived(globalState.catalog?.spaces)
-  $inspect(globalState.catalog?.spaces).with(()=>{
-    console.log("inspect spaces", globalState.catalog?.spaces?.toJSON())
-  })
 
-  // $effect(()=>{
-
-  // })
+  const me = new AccountCoState(RoomyAccount, {
+    resolve: {
+      profile: true,
+      root: true,
+    },
+  });
 
   // console.log("catalog", globalState.catalog)
   let themeColor = $state<ThemeName>("synthwave"); // defualt theme color
@@ -90,42 +85,40 @@
   <!-- <RenderScan /> -->
 {/if}
 
-<JazzProvider {sync} {AccountSchema}>
-  <jazz-inspector />
-  <!-- Container -->
-  <div class="flex w-screen h-screen max-h-screen overflow-clip gap-0">
-    <Toaster />
-    <div
-      class="{page.params.space &&
-        (isSidebarVisible.value
-          ? 'flex z-1 absolute w-full'
-          : 'hidden')} sm:w-auto sm:relative sm:flex h-full overflow-clip gap-0
+<!-- Container -->
+<div class="flex w-screen h-screen max-h-screen overflow-clip gap-0">
+  <Toaster />
+  <div
+    class="{page.params.space &&
+      (isSidebarVisible.value
+        ? 'flex z-1 absolute w-full'
+        : 'hidden')} sm:w-auto sm:relative sm:flex h-full overflow-clip gap-0
       "
-    >
-      <!-- Content -->
-      <div class="flex bg-base-100 h-full">
-        <ServerBar
-          {spaces}
-          visible={isSpacesVisible.value || !page.params.space}
-        />
-        {#if page.params.space}
-          <SidebarMain />
-        {/if}
-      </div>
-      <!-- Overlay -->
+  >
+    <!-- Content -->
+    <div class="flex bg-base-100 h-full">
+      <ServerBar
+        spaces={me.current?.profile.joinedSpaces}
+        visible={isSpacesVisible.value || !page.params.space}
+        me={me.current}
+      />
       {#if page.params.space}
-        <button
-          onclick={() => {
-            isSidebarVisible.toggle();
-          }}
-          aria-label="toggle navigation"
-          class="{!isSidebarVisible.value
-            ? 'hidden w-full'
-            : 'sm:hidden'} cursor-pointer grow-2 h-full bg-black/10"
-        ></button>
+        <SidebarMain />
       {/if}
     </div>
-
-    {@render children()}
+    <!-- Overlay -->
+    {#if page.params.space}
+      <button
+        onclick={() => {
+          isSidebarVisible.toggle();
+        }}
+        aria-label="toggle navigation"
+        class="{!isSidebarVisible.value
+          ? 'hidden w-full'
+          : 'sm:hidden'} cursor-pointer grow-2 h-full bg-black/10"
+      ></button>
+    {/if}
   </div>
-</JazzProvider>
+
+  {@render children()}
+</div>

@@ -1,6 +1,5 @@
 <script lang="ts">
   // import type { Space } from "@roomy-chat/sdk";
-import {Space,Image} from "$lib/schema"
   import ContextMenu from "./ContextMenu.svelte";
   import { AvatarMarble } from "svelte-boring-avatars";
 
@@ -8,21 +7,21 @@ import {Space,Image} from "$lib/schema"
   import { derivePromise } from "$lib/utils.svelte";
   // import { Image } from "@roomy-chat/sdk";
   import TooltipPortal from "./TooltipPortal.svelte";
-  import { globalState } from "$lib/global.svelte";
-  import { page } from "$app/stores";
+  import { page } from "$app/state";
+  import { co } from "jazz-tools";
+  import { Space } from "$lib/jazz/schema";
 
   type Props = {
-    space: Space | null | undefined;
-    i: number;
+    space: co.loaded<typeof Space> | null | undefined;
   };
 
-  const { space, i }: Props = $props();
+  const { space }: Props = $props();
 
   // Tooltip state
   let activeTooltip = $state("");
   let tooltipPosition = $state({ x: 0, y: 0 });
 
-  let isActive = $derived($page.url.pathname.includes(space?.id || ''));
+  let isActive = $derived(page.url.pathname.includes(space?.id || ""));
 
   const spaceImage = derivePromise(null, async () => {
     if (space?.image) {
@@ -52,8 +51,7 @@ import {Space,Image} from "$lib/schema"
 >
   <button
     type="button"
-    onclick={() =>
-      navigate({ space: space?.id || ""})}
+    onclick={() => navigate({ space: space?.id || "" })}
     value={space?.id}
     onmouseenter={(e: Event) => {
       activeTooltip = space?.name || "";
@@ -67,16 +65,16 @@ import {Space,Image} from "$lib/schema"
       activeTooltip = "";
     }}
     class={`dz-btn dz-btn-ghost size-12 rounded-full relative group p-0.5
-      ${isActive ? 'ring-0.5 ring-offset-0 ring-primary/30 border border-primary' : ''}
+      ${isActive ? "ring-0.5 ring-offset-0 ring-primary/30 border border-primary" : ""}
       transition-all duration-200`}
   >
     <div class="flex items-center justify-center overflow-hidden">
       {#if spaceImage.value?.uri}
-        <img
+        <!-- <img
           src={spaceImage.value?.uri}
           alt={space?.name || ""}
           class="w-10 h-10 object-cover rounded-full object-center"
-        />
+        /> -->
       {:else if space && space.id}
         <div class="w-10 h-10">
           <AvatarMarble name={space.id} />
