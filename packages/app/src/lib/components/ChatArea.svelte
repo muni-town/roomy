@@ -9,7 +9,7 @@
   //   type EntityIdStr,
   //   type Timeline,
   // } from "@roomy-chat/sdk";
-  import {Channel, Message} from "$lib/schema"
+  import { Channel, Message } from "$lib/schema";
   import { derivePromise } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import { globalState } from "$lib/global.svelte";
@@ -18,10 +18,9 @@
     timeline,
     virtualizer = $bindable(),
   }: {
-    timeline: Channel;
+    timeline: string[];
     virtualizer?: Virtualizer<string>;
   } = $props();
-
 
   let viewport: HTMLDivElement = $state(null!);
   // let messagesLoaded = $state(false);
@@ -32,65 +31,17 @@
   //   if (idx !== -1 && virtualizer) virtualizer.scrollToIndex(idx);
   // });
 
-  const messages = $derived(globalState.channel?.messages?.filter((message) => message) || [])
-
   $effect(() => {
     page.route; // Scroll-to-end when route changes
 
     if (!viewport || !virtualizer) return;
-    if(messages){
-      virtualizer.scrollToIndex(messages.length - 1, { align: "end" });
+    if (timeline) {
+      virtualizer.scrollToIndex(timeline.length - 1, { align: "end" });
     }
   });
-
-  function shouldMergeWithPrevious(
-    message: Message,
-    previousMessage?: Message,
-  ): boolean {
-    if(!previousMessage){
-      return false;
-    }
-    const areMessages =
-    !previousMessage?.softDeleted;
-
-    const authorsAreSame =
-      areMessages &&
-      message.profile.handle ==
-        previousMessage.profile.handle;
-
-    const messagesWithin5Minutes =
-      (message.createdDate?.getTime() || 0) -
-        (previousMessage?.createdDate?.getTime() || 0) <
-      60 * 1000 * 5;
-
-    // const areAnnouncements =
-    //   previousMessage instanceof Announcement &&
-    //   message instanceof Announcement;
-
-    // const isSequentialMovedAnnouncement =
-    //   areAnnouncements &&
-    //   previousMessage.kind == "messageMoved" &&
-    //   message.kind == "messageMoved" &&
-    //   previousMessage.relatedThreads.ids()[0] ==
-    //     message.relatedThreads.ids()[0];
-
-    const mergeWithPrevious =
-      (authorsAreSame && messagesWithin5Minutes);
-      
-    return mergeWithPrevious;
-  }
 </script>
 
 <ScrollArea.Root type="scroll" class="h-full overflow-hidden">
-  {#if !messagesLoaded}
-    <!-- Important: This area takes the place of the chat which pushes chat offscreen
-       which allows it to load then pop into place once the spinner is gone. -->
-    <div class="grid items-center justify-center h-full w-full bg-transparent">
-      <span class="dz-loading dz-loading-spinner"></span>
-      <div>is this the spinner?</div>
-    </div>
-  {/if}
-
   <ScrollArea.Viewport
     bind:ref={viewport}
     class="relative max-w-full w-full h-full"
@@ -115,24 +66,15 @@
         {#key viewport}
           <Virtualizer
             bind:this={virtualizer}
-            data={messages || []}
-            getKey={(message) => message.id}
+            data={timeline || []}
+            getKey={(messageId) => messageId}
             scrollRef={viewport}
           >
-            {#snippet children(message: Message, index: number)}
-
-              {#if !message.softDeleted && message.profile}
-                {@const isLinkThread = globalState.channel?.name === "@links"}
-                <ChatMessage
-                  {message}
-                  mergeWithPrevious={shouldMergeWithPrevious(message, messages[index - 1])}
-                  type={isLinkThread ? "link" : "message"}
-                />
-              {:else}
-                <p class="italic text-error text-sm">
-                  This message has been deleted
-                </p>
-              {/if}
+            {#snippet children(messageId: string, index: number)}
+              <ChatMessage
+                {messageId}
+                previousMessageId={timeline[index - 1]}
+              />
             {/snippet}
           </Virtualizer>
         {/key}

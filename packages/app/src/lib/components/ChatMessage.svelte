@@ -3,7 +3,6 @@
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
   import { getContext } from "svelte";
-  import { getProfile } from "$lib/profile.svelte";
   import Icon from "@iconify/svelte";
   import { user } from "$lib/user.svelte";
   import "emoji-picker-element";
@@ -12,7 +11,6 @@
   import AvatarImage from "./AvatarImage.svelte";
   import { getContentHtml, type Item } from "$lib/tiptap/editor";
   // import { Announcement, Message, type EntityIdStr } from "$lib/schema"
-  import { Message, Profile } from "$lib/schema";
   // import type {CoValue} from "jazz-tools"
   import { globalState } from "$lib/global.svelte";
   // import { derivePromise } from "$lib/utils.svelte";
@@ -20,23 +18,18 @@
   import ChatInput from "./ChatInput.svelte";
   import toast from "svelte-french-toast";
   import { selectMessage } from "$lib/thread.svelte";
+  import { CoState } from "jazz-svelte";
+  import { Message, RoomyProfile } from "$lib/jazz/schema";
+  import { co, Profile } from "jazz-tools";
   // import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
 
   type Props = {
-    mergeWithPrevious?: boolean;
-  } & {
-    message: Message;
-    type: "message" | "link";
+    messageId: string;
+    previousMessageId?: string;
   };
 
-  let {
-    message,
-    mergeWithPrevious = false,
-    type = "message",
-  }: Props = $props();
+  let { messageId, previousMessageId }: Props = $props();
 
-
-  const isReplyable = type === "message";
   // const links =
   //   type === "link" &&
   //   (collectLinks(tiptapJsontoString((message as Message).bodyJson)) || []).map(
@@ -61,6 +54,46 @@
   //   }
   //   return [];
   // });
+
+  let message = $derived(
+    new CoState(Message, messageId, {
+      resolve: {
+        content: true,
+        reactions: true,
+      },
+    }),
+  );
+
+  let previousMessage = $derived(new CoState(Message, previousMessageId));
+
+  let profile = $derived(
+    new CoState(
+      RoomyProfile,
+      message.current?._edits.content?.by?.profile?.id,
+      {
+        resolve: {
+          image: true,
+        },
+      },
+    ),
+  );
+
+  // if the same user and the message was created in the last 5 minutes, don't show the border, username or avatar
+  let mergeWithPrevious = $derived.by(() => {
+    if (!previousMessage) return false;
+    if (previousMessage.current?.softDeleted) return false;
+    if (
+      previousMessage.current?._edits.content?.by?.profile?.id !==
+      message.current?._edits.content?.by?.profile?.id
+    )
+      return false;
+    if (message.current?.replyTo) return false;
+    return (
+      (message.current?.createdAt.getTime() ?? 0) -
+        (previousMessage?.current?.createdAt.getTime() ?? 0) <
+      1000 * 60 * 5
+    );
+  });
 
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
   let isDrawerOpen = $state(false);
@@ -101,17 +134,19 @@
 
   // const selectMessage = getContext("selectMessage") as (message: Message) => void;
   const removeSelectedMessage = getContext("removeSelectedMessage") as (
-    message: Message,
+    message: co.loaded<typeof Message>,
   ) => void;
 
-
-  const setReplyTo = getContext("setReplyTo") as (message: Message) => void;
+  const setReplyTo = getContext("setReplyTo") as (
+    message: co.loaded<typeof Message>,
+  ) => void;
   // const scrollToMessage = getContext("scrollToMessage") as (
   //   id: EntityIdStr,
   // ) => void;
 
   function deleteMessage() {
-    message.softDeleted = true;
+    if (!message.current) return;
+    message.current.softDeleted = true;
   }
 
   function startEditing() {
@@ -187,11 +222,11 @@
 
   function updateSelect() {
     console.log("updateSelect", isSelected, message.toJSON());
-    if(!message) return
+    if (!message) return;
     if (isSelected) {
-      console.log("selecting?")
+      console.log("selecting?");
       selectMessage(message);
-      } else {
+    } else {
       removeSelectedMessage(message);
     }
   }
@@ -325,11 +360,16 @@
   }
 </script>
 
-<div id={message.id} class={`flex flex-col ${isMobile && "max-w-screen"}`}>
+<div
+  id={message.current?.id}
+  class={`flex flex-col w-full ${isMobile && "max-w-screen"}`}
+>
   <div
     class={`relative group w-full h-fit flex flex-col gap-2 px-2 py-2 hover:bg-white/5`}
   >
-    {@render messageView(message)}
+  <AvatarBeam name={crypto.randomUUID()} />
+ {message.current?.content}
+    <!-- {@render messageView(message)} -->
     <!-- {#if message instanceof Announcement}
       {@render announcementView(message)}
     {:else if message instanceof Message}
@@ -409,37 +449,34 @@
   </div>
 {/snippet} -->
 
-{#snippet messageView(msg: Message)}
-  {@const authorProfile:Profile  = msg.profile!}
+{#snippet messageView(msg: co.loaded<typeof Message>)}
+  <!-- {@const authorProfile:Profile  = msg.profile!} -->
 
-  {@render toolbar(authorProfile)}
+  <!-- {@render toolbar(authorProfile)} -->
 
   <div class="flex gap-4 group">
     {#if !mergeWithPrevious}
-      <a
+      <!-- <a
         href={`https://bsky.app/profile/${authorProfile.handle}`}
         title={authorProfile.handle}
         target="_blank"
-      >
-        <AvatarImage
-          handle={authorProfile.handle}
-          avatarUrl={authorProfile.avatarUrl}
-        />
-      </a>
+      > -->
+        <AvatarBeam />
+      <!-- </a> -->
     {:else}
       <div class="w-11">
-        {#if message.createdDate}
+        {#if message.current?.createdAt}
           <span
             class="opacity-0 text-[8px] text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100"
           >
-            {format(message.createdDate, "pp")}
+            {format(message.current?.createdAt, "pp")}
           </span>
         {/if}
       </div>
     {/if}
 
-    {#if isEditing && message === msg}
-      <div class="flex flex-col w-full gap-2">
+    {#if isEditing}
+      <!-- <div class="flex flex-col w-full gap-2">
         {#if !mergeWithPrevious}
           <section class="flex items-center gap-2 flex-wrap w-fit">
             <a
@@ -461,7 +498,6 @@
             users={users.value || []}
             context={contextItems.value || []}
             onEnter={saveEditedMessage}
-
             editMode={true}
           />
         </div>
@@ -477,7 +513,7 @@
             Save
           </Button.Root>
         </div>
-      </div>
+      </div> -->
     {:else}
       <Button.Root
         onclick={() => {
@@ -489,27 +525,27 @@
       >
         {#if !mergeWithPrevious}
           <section class="flex items-center gap-2 flex-wrap w-fit">
-            <a
+            <!-- <a
               href={`https://bsky.app/profile/${authorProfile.handle}`}
               target="_blank"
               class="text-primary hover:underline"
-            >
-              <h5 class="font-bold" title={authorProfile.handle}>
-                {authorProfile.displayName || authorProfile.handle}
+            > -->
+              <h5 class="font-bold text-primary" title={profile.current?.name}>
+                {profile.current?.name}
               </h5>
-            </a>
-            {@render timestamp(message.createdDate || new Date())}
+            <!-- </a> -->
+            {@render timestamp(message.current?.createdAt || new Date())}
           </section>
         {/if}
 
-        {#if type === "message"}
+        {#if message.current?.content}
           <!-- Using a fancy Tailwind trick to target all href elements inside of this parent -->
           <span
             class="dz-prose select-text [&_a]:text-primary [&_a]:hover:underline"
           >
-            {@html getContentHtml(JSON.parse(msg.body))}
+            {@html getContentHtml(JSON.parse(message.current?.content || ""))}
           </span>
-        <!-- {:else if links && type === "link"}
+          <!-- {:else if links && type === "link"}
           {#each links as url}
             <p>
               <a
@@ -537,9 +573,9 @@
               <div class="flex flex-col gap-1">
                 <p class="font-semibold">Message edited</p>
                 <p>
-                  Original: {format(msg.createdDate || new Date(), "PPpp")}
+                  Original: {format(message.current?.createdAt || new Date(), "PPpp")}
                 </p>
-                <p>Edited: {getEditedTime(msg)}</p>
+                <p>Edited: {getEditedTime(message.current)}</p>
               </div>
 
               <!-- Arrow pointing down -->
@@ -681,7 +717,7 @@
           </Toolbar.Button>
         {/if} -->
 
-        {#if authorProfile && isReplyable}
+        {#if authorProfile}
           <Toolbar.Button
             onclick={() => setReplyTo(message)}
             class="dz-btn dz-btn-ghost dz-btn-square"

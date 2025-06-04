@@ -110,16 +110,11 @@ export function createPublicSpacesList() {
   return spaces;
 }
 
-export function createMessage(
-  input: string,
-  images: string[],
-  admin: Account,
-  replyTo?: string,
-) {
-  const adminGroup = Group.create();
-  adminGroup.addMember(admin, "admin");
+export function createMessage(input: string, replyTo?: string) {
+  // const adminGroup = Group.create();
+  // adminGroup.addMember(admin, "admin");
   const readingGroup = publicGroup("reader");
-  readingGroup.extend(adminGroup);
+  // readingGroup.extend(adminGroup);
 
   const content = new CoRichText({
     text: input,
@@ -131,7 +126,6 @@ export function createMessage(
       content,
       createdAt: new Date(),
       updatedAt: new Date(),
-      images: co.list(z.string()).create([...images], readingGroup),
       reactions: co.list(Reaction).create([], publicGroup()),
       replyTo: replyTo,
       type: "message",

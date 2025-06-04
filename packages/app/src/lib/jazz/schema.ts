@@ -1,4 +1,4 @@
-import { co, Group, z } from "jazz-tools";
+import { co, z } from "jazz-tools";
 import { getRandomUsername } from "./username.ts";
 import { createSpaceList, publicGroup } from "./utils.ts";
 
@@ -6,13 +6,8 @@ export const Reaction = co.map({
   emoji: z.string(),
 });
 
-export const ImageList = co.list(z.string());
-
-export const Image = co.image();
-
 export const Message = co.map({
   content: co.richText(),
-  images: ImageList,
 
   createdAt: z.date(),
   updatedAt: z.date(),

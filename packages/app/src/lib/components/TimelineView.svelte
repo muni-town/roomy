@@ -1,21 +1,19 @@
 <script lang="ts">
-  import { setContext } from "svelte";
+  import { onMount, setContext } from "svelte";
   import toast from "svelte-french-toast";
-  import { user } from "$lib/user.svelte";
-  import { getContentHtml, type Item } from "$lib/tiptap/editor";
+  import { getContentHtml } from "$lib/tiptap/editor";
   import { outerWidth } from "svelte/reactivity/window";
 
   import Icon from "@iconify/svelte";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import { Button, Tabs } from "bits-ui";
-  import { co, z } from "jazz-tools";
+  import { Account, co } from "jazz-tools";
   import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
   import { globalState } from "$lib/global.svelte";
 
-  import { Channel, Message, Messages, Profile, Thread } from "$lib/schema";
+  import { Message, Thread } from "$lib/schema";
   import type { JSONContent } from "@tiptap/core";
-  import { getProfile } from "$lib/profile.svelte";
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
   import CreatePageDialog from "$lib/components/CreatePageDialog.svelte";
   import BoardList from "./BoardList.svelte";
@@ -26,61 +24,59 @@
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { threads } from "$lib/thread.svelte";
   import { CoState } from "jazz-svelte";
-  import { Space } from "$lib/jazz/schema";
+  import { Channel, Space } from "$lib/jazz/schema";
   import { page } from "$app/state";
+  import { createMessage } from "$lib/jazz/utils";
+  import { extractTextContent } from "$lib/utils/extractText";
 
   let selectedMessages = $derived(threads.selected);
-
-  // Helper function to extract text content from TipTap JSON content
-  function extractTextContent(parsedBody: Record<string, unknown>): string {
-    if (
-      !parsedBody ||
-      typeof parsedBody !== "object" ||
-      !("content" in parsedBody)
-    )
-      return "";
-
-    let text = "";
-
-    // Process the content recursively to extract text
-    function processNode(node: Record<string, unknown>): void {
-      if ("text" in node && typeof node.text === "string") {
-        text = `${text}${node.text} `;
-      }
-
-      if ("content" in node && Array.isArray(node.content)) {
-        for (const item of node.content) {
-          if (typeof item === "object" && item !== null) {
-            processNode(item as Record<string, unknown>);
-          }
-        }
-      }
-    }
-
-    // Start processing from the root content
-    if ("content" in parsedBody && Array.isArray(parsedBody.content)) {
-      for (const node of parsedBody.content) {
-        if (typeof node === "object" && node !== null) {
-          processNode(node as Record<string, unknown>);
-        }
-      }
-    }
-
-    return text.trim();
-  }
 
   // const links = derivePromise(null, async () =>
   //   (await globalState.space?.threads.items())?.find(
   //     (x) => x.name === "@links",
   //   ),
   // );
-  const readonly = $derived(globalState.channel?.name === "@links");
+
+  let space = $derived(
+    new CoState(Space, page.params.space, {
+      resolve: {
+        channels: {
+          $each: true,
+          $onError: null,
+        },
+      },
+    }),
+  );
+
+  let admin = $derived(new CoState(Account, space.current?.adminId));
+
+  let channel = $derived(
+    new CoState(Channel, page.params.channel, {
+      resolve: {
+        mainThread: {
+          timeline: true,
+        },
+        subThreads: true,
+      },
+    }),
+  );
+
+  let timeline = $derived(
+    Object.values(channel.current?.mainThread?.timeline.perAccount ?? {})
+      .map((accountFeed) => new Array(...accountFeed.all))
+      .flat()
+      .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
+      .map((a) => a.value),
+  );
+
+  const readonly = $derived(channel.current?.name === "@links");
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let tab = $state<"chat" | "board">("chat");
 
   // Initialize tab based on hash if present
-  // TODO: move this functionality to somewhere else (and not hash based, so we can actually )
+  // TODO: move this functionality to somewhere else
+  // (not hash based, so we can actually move backwards with browser back button)
   // function updateTabFromHash() {
   //   const hash = window.location.hash.replace("#", "");
   //   if (hash === "chat" || hash === "board") {
@@ -105,11 +101,7 @@
   let isThreading = $state({ value: false });
   let threadTitleInput = $state("");
   // let selectedMessages: Message[] = $state([]);
-  
-  
- 
 
- 
   setContext("isThreading", isThreading);
   // setContext("selectMessage", (message) => {
   //   console.log("attempting push")
@@ -196,8 +188,7 @@
 
   async function createThread(e: SubmitEvent) {
     e.preventDefault();
-    if (!globalState.space || !globalState.channel)
-      return;
+    if (!globalState.space || !globalState.channel) return;
     let thread = Thread.create({
       name: threadTitleInput,
       channel: globalState.channel,
@@ -205,14 +196,16 @@
     thread.messages = co.list(Message).create([]);
     // messages can be selected in any order
     // sort them on create based on their position from the channel
-    let channelMessageIds = globalState.channel.messages?.filter((message) => message !== null).map((message) => message.id) || [];
+    let channelMessageIds =
+      globalState.channel.messages
+        ?.filter((message) => message !== null)
+        .map((message) => message.id) || [];
     selectedMessages.sort((a, b) => {
       return channelMessageIds.indexOf(a.id) - channelMessageIds.indexOf(b.id);
     });
-      if (!globalState.space.threads) {
-        globalState.space.threads = co.list(Thread).create([]);
-      } 
-    
+    if (!globalState.space.threads) {
+      globalState.space.threads = co.list(Thread).create([]);
+    }
 
     for (const message of selectedMessages) {
       // move selected message ID from channel to thread timeline
@@ -258,43 +251,20 @@
     toast.success("Thread created", { position: "bottom-end" });
   }
 
-
-	let space = $derived(
-		new CoState(Space, page.params.space, {
-			resolve: {
-				channels: {
-					$each: true,
-					$onError: null
-				}
-			}
-		})
-	);
-  
   async function sendMessage() {
-    if (!globalState.space || !globalState.channel || !user.agent) return;
+    console.log("sending message", space.current, channel.current);
+    if (!space.current || !channel.current) return;
+
+    // maybe add back in later (if we only want to allow people signed in with bluesky to send messages)
+    //if (!user.agent) return;
 
     // Image upload is now handled in ChatInput.svelte
     console.log("creating message", JSON.stringify(messageInput));
-    const did = user.agent.did;
-    if (!did) {
-      throw "missing did from agent";
-    }
-    const profileMeta = await getProfile(did);
-    // const profileMeta = {
-    //   handle: "",
-    //   displayName: "",
-    //   avatarUrl: "",
-    // }
-    const profile = Profile.create({
-      handle: profileMeta.handle,
-      displayName: profileMeta.displayName || "",
-      avatarUrl: profileMeta.avatarUrl,
-    });
-    const message = Message.create({
-      body: JSON.stringify(messageInput),
-      profile,
-    });
-    console.log("ACCOUNT", globalState.account.current);
+
+    const message = createMessage(JSON.stringify(messageInput));
+
+    channel.current.mainThread.timeline.push(message.id);
+
     // console.log(message.toJSON())
     // if (replyingTo) message.replyTo = replyingTo;
 
@@ -318,18 +288,6 @@
       //   links.value.commit();
       // }
     }
-    const messages =
-      globalState.channel.messages || co.list(Message).create([]);
-    console.log("messs", messages.toJSON());
-    messages.push(message);
-    globalState.channel.messages = messages;
-    // const holder = globalState.channel.messages;
-    // globalState.channel.messages = co.list(z.string()).create([]);
-    const channel = await Channel.load(globalState.channel.id, {
-      resolve: { messages: { $each: true } },
-    });
-    console.log("channel?", channel.toJSON());
-    globalState.channel = channel;
     messageInput = {};
     replyingTo = undefined;
   }
@@ -380,11 +338,13 @@
       (thread) => thread !== null && !thread.softDeleted,
     );
   });
+
+  $inspect(channel.current);
 </script>
 
 <header class="dz-navbar">
   <div class="dz-navbar-start flex gap-4">
-    {#if globalState.channel}
+    {#if channel.current}
       <ToggleNavigation />
 
       <h4
@@ -393,13 +353,13 @@
       >
         <span class="flex gap-2 items-center">
           <Icon icon={"basil:comment-solid"} />
-          {globalState.channel.name}
+          {channel.current.name}
         </span>
       </h4>
     {/if}
   </div>
 
-  {#if globalState.channel}
+  {#if channel.current}
     <Tabs.Root
       bind:value={tab}
       class={isMobile ? "dz-navbar-end" : "dz-navbar-center"}
@@ -451,7 +411,7 @@
     No threads for this channel.
   </BoardList>
 {:else if tab === "chat"}
-  {#if globalState.space && globalState.channel}
+  {#if space.current && channel.current}
     <div class="flex h-full flex-col">
       {#if showSearchInput}
         <div
@@ -497,7 +457,7 @@
         class="flex-grow overflow-auto relative"
         style="max-height: calc(100vh - 180px);"
       >
-        <ChatArea timeline={messages} bind:virtualizer />
+        <ChatArea timeline={timeline} bind:virtualizer />
 
         {#if replyingTo}
           <div
