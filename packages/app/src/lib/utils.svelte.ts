@@ -83,7 +83,7 @@ export async function resolvePublicKey(did: string): Promise<Uint8Array> {
 
 export async function resolveLeafId(
   handle: string,
-): Promise<EntityIdStr | undefined> {
+): Promise<string | undefined> {
   const resp = await fetch(
     `https://leaf-resolver.roomy.chat/xrpc/town.muni.01JQ1SV7YGYKTZ9JFG5ZZEFDNK.resolve-leaf-id?domain=${encodeURIComponent(handle)}`,
     {

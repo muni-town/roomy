@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getContext, setContext } from "svelte";
+  import { setContext } from "svelte";
   import toast from "svelte-french-toast";
   import { user } from "$lib/user.svelte";
   import { getContentHtml, type Item } from "$lib/tiptap/editor";
@@ -8,19 +8,11 @@
   import Icon from "@iconify/svelte";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
-  import AvatarImage from "$lib/components/AvatarImage.svelte";
   import { Button, Tabs } from "bits-ui";
-import {co,z} from "jazz-tools"
-  import { derivePromise } from "$lib/utils.svelte";
+  import { co, z } from "jazz-tools";
   import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
   import { globalState } from "$lib/global.svelte";
-  // import {
-  //   Announcement,
-  //   Channel,
-  //   Message,
-  //   Thread,
-  //   Timeline,
-  // } from "@roomy-chat/sdk";
+
   import { Channel, Message, Messages, Profile, Thread } from "$lib/schema";
   import type { JSONContent } from "@tiptap/core";
   import { getProfile } from "$lib/profile.svelte";
@@ -33,10 +25,11 @@ import {co,z} from "jazz-tools"
   import type { Virtualizer } from "virtua/svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { threads } from "$lib/thread.svelte";
-  console.log("timelineview")
-  let selectedMessages = $derived(threads.selected);
+  import { CoState } from "jazz-svelte";
+  import { Space } from "$lib/jazz/schema";
+  import { page } from "$app/state";
 
-  let messages = $derived(globalState.channel?.messages)
+  let selectedMessages = $derived(threads.selected);
 
   // Helper function to extract text content from TipTap JSON content
   function extractTextContent(parsedBody: Record<string, unknown>): string {
@@ -84,29 +77,27 @@ import {co,z} from "jazz-tools"
   const readonly = $derived(globalState.channel?.name === "@links");
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  let users: { value: Item[] } = getContext("users");
-  let contextItems: { value: Item[] } = getContext("contextItems");
-
   let tab = $state<"chat" | "board">("chat");
 
   // Initialize tab based on hash if present
-  function updateTabFromHash() {
-    const hash = window.location.hash.replace("#", "");
-    if (hash === "chat" || hash === "board") {
-      tab = hash as "chat" | "board";
-    }
-  }
+  // TODO: move this functionality to somewhere else (and not hash based, so we can actually )
+  // function updateTabFromHash() {
+  //   const hash = window.location.hash.replace("#", "");
+  //   if (hash === "chat" || hash === "board") {
+  //     tab = hash as "chat" | "board";
+  //   }
+  // }
 
-  $effect(() => {
-    updateTabFromHash();
-  });
+  // $effect(() => {
+  //   updateTabFromHash();
+  // });
 
-  // Update the hash when tab changes
-  $effect(() => {
-    if (tab) {
-      window.location.hash = tab;
-    }
-  });
+  // // Update the hash when tab changes
+  // $effect(() => {
+  //   if (tab) {
+  //     window.location.hash = tab;
+  //   }
+  // });
 
   let messageInput: JSONContent = $state({});
 
@@ -115,6 +106,9 @@ import {co,z} from "jazz-tools"
   let threadTitleInput = $state("");
   // let selectedMessages: Message[] = $state([]);
   
+  
+ 
+
  
   setContext("isThreading", isThreading);
   // setContext("selectMessage", (message) => {
@@ -150,7 +144,7 @@ import {co,z} from "jazz-tools"
 
   // Function to handle search result click
   function handleSearchResultClick(messageId: string) {
-    console.log("result clicked")
+    console.log("result clicked");
     // Hide search results
     showSearchResults = false;
 
@@ -164,7 +158,7 @@ import {co,z} from "jazz-tools"
       }
 
       const messageIndex = ids?.indexOf(messageId as `co_${string}`);
-      console.log("message index", messageIndex)
+      console.log("message index", messageIndex);
       if (messageIndex !== -1) {
         virtualizer?.scrollToIndex(messageIndex);
       } else {
@@ -215,9 +209,9 @@ import {co,z} from "jazz-tools"
     selectedMessages.sort((a, b) => {
       return channelMessageIds.indexOf(a.id) - channelMessageIds.indexOf(b.id);
     });
-    if(!globalState.space.threads){
-      globalState.space.threads = co.list(Thread).create([]);
-    } 
+      if (!globalState.space.threads) {
+        globalState.space.threads = co.list(Thread).create([]);
+      } 
     
 
     for (const message of selectedMessages) {
@@ -264,14 +258,26 @@ import {co,z} from "jazz-tools"
     toast.success("Thread created", { position: "bottom-end" });
   }
 
+
+	let space = $derived(
+		new CoState(Space, page.params.space, {
+			resolve: {
+				channels: {
+					$each: true,
+					$onError: null
+				}
+			}
+		})
+	);
+  
   async function sendMessage() {
     if (!globalState.space || !globalState.channel || !user.agent) return;
 
     // Image upload is now handled in ChatInput.svelte
-    console.log("creating message", JSON.stringify(messageInput))
+    console.log("creating message", JSON.stringify(messageInput));
     const did = user.agent.did;
-    if(!did){
-      throw "missing did from agent"
+    if (!did) {
+      throw "missing did from agent";
     }
     const profileMeta = await getProfile(did);
     // const profileMeta = {
@@ -283,12 +289,12 @@ import {co,z} from "jazz-tools"
       handle: profileMeta.handle,
       displayName: profileMeta.displayName || "",
       avatarUrl: profileMeta.avatarUrl,
-    })
+    });
     const message = Message.create({
       body: JSON.stringify(messageInput),
       profile,
     });
-    console.log("ACCOUNT", globalState.account.current)
+    console.log("ACCOUNT", globalState.account.current);
     // console.log(message.toJSON())
     // if (replyingTo) message.replyTo = replyingTo;
 
@@ -312,15 +318,18 @@ import {co,z} from "jazz-tools"
       //   links.value.commit();
       // }
     }
-    const messages = globalState.channel.messages || co.list(Message).create([])
-    console.log("messs", messages.toJSON())
-    messages.push(message)
-    globalState.channel.messages = messages
+    const messages =
+      globalState.channel.messages || co.list(Message).create([]);
+    console.log("messs", messages.toJSON());
+    messages.push(message);
+    globalState.channel.messages = messages;
     // const holder = globalState.channel.messages;
     // globalState.channel.messages = co.list(z.string()).create([]);
-    const channel = await Channel.load(globalState.channel.id, {resolve: {messages: {$each: true}}})
-    console.log("channel?", channel.toJSON())
-    globalState.channel = channel
+    const channel = await Channel.load(globalState.channel.id, {
+      resolve: { messages: { $each: true } },
+    });
+    console.log("channel?", channel.toJSON());
+    globalState.channel = channel;
     messageInput = {};
     replyingTo = undefined;
   }
@@ -358,14 +367,18 @@ import {co,z} from "jazz-tools"
   //     : [],
   // );
 
-  const pages = $derived.by(()=> {
-    if(!globalState.space?.wikipages) return []
-    return globalState.space.wikipages.filter(page => page !== null && !page.softDeleted)
+  const pages = $derived.by(() => {
+    if (!globalState.space?.wikipages) return [];
+    return globalState.space.wikipages.filter(
+      (page) => page !== null && !page.softDeleted,
+    );
   });
 
-  const relatedThreads = $derived.by(()=> {
-    if(!globalState.space?.threads) return []
-    return globalState.space.threads.filter(thread => thread !== null && !thread.softDeleted)
+  const relatedThreads = $derived.by(() => {
+    if (!globalState.space?.threads) return [];
+    return globalState.space.threads.filter(
+      (thread) => thread !== null && !thread.softDeleted,
+    );
   });
 </script>
 
@@ -379,9 +392,7 @@ import {co,z} from "jazz-tools"
         title={"Channel"}
       >
         <span class="flex gap-2 items-center">
-          <Icon
-            icon={"basil:comment-solid"}
-          />
+          <Icon icon={"basil:comment-solid"} />
           {globalState.channel.name}
         </span>
       </h4>
@@ -486,10 +497,7 @@ import {co,z} from "jazz-tools"
         class="flex-grow overflow-auto relative"
         style="max-height: calc(100vh - 180px);"
       >
-        <ChatArea
-          timeline={messages}
-          bind:virtualizer
-        />
+        <ChatArea timeline={messages} bind:virtualizer />
 
         {#if replyingTo}
           <div

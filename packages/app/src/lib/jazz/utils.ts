@@ -1,4 +1,4 @@
-import { Account, co, CoRichText, Group, z, type Loaded } from "jazz-tools";
+import { Account, co, CoRichText, Group, z } from "jazz-tools";
 import {
   Channel,
   Message,
@@ -80,11 +80,15 @@ export function createSpace(
   return space;
 }
 
-export function joinSpace(space: Loaded<typeof Space>) {
+export function joinSpace(space: co.loaded<typeof Space>) {
   space.members?.push(Account.getMe());
 }
 
-export function isSpaceAdmin(space: Loaded<typeof Space>) {
+export function isSpaceAdmin(
+  space: co.loaded<typeof Space> | undefined | null,
+) {
+  if (!space) return false;
+
   try {
     const me = Account.getMe();
     return me.canAdmin(space);
@@ -93,10 +97,7 @@ export function isSpaceAdmin(space: Loaded<typeof Space>) {
   }
 }
 
-export function messageHasAdmin(
-  message: Loaded<typeof Message>,
-  admin: Account,
-) {
+export function messageHasAdmin(message: co.loaded<typeof Message>, admin: Account) {
   console.log("messageHasAdmin", message, admin);
   return admin.canAdmin(message);
 }

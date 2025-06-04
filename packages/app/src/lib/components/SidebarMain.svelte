@@ -2,7 +2,7 @@
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import { Button, Tabs } from "bits-ui";
-  import { Category, Channel, Channels, Space, Thread } from "$lib/schema.ts";
+  import { Category, Channel, Channels, Thread } from "$lib/schema.ts";
   import { globalState } from "$lib/global.svelte";
   import { Group, Account, CoList } from "jazz-tools";
   import { derivePromise, navigate, Toggle } from "$lib/utils.svelte";
@@ -14,6 +14,20 @@
   import SidebarChannelList from "./SidebarChannelList.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { page } from "$app/state";
+  import { CoState } from "jazz-svelte";
+  import { createChannel, isSpaceAdmin } from "$lib/jazz/utils";
+  import { Space } from "$lib/jazz/schema";
+
+	let space = $derived(
+		new CoState(Space, page.params.space, {
+			resolve: {
+				channels: {
+					$each: true,
+					$onError: null
+				}
+			}
+		})
+	);
 
   export async function createLinkFeed() {
     if (!globalState.space) return;
@@ -44,7 +58,7 @@
   // );
 
   function allThreads() {
-    let threads = globalState.space?.threads || [];
+    let threads = space?.current?.threads || [];
     return threads
       .filter((thread) => thread !== null && !thread.softDeleted)
       .map((thread) => {
@@ -61,10 +75,10 @@
   let threads = $derived(allThreads());
   // let links = $derived(allThreads.value.find((x) => x.name === "@links"));
   let links = $derived.by(() => {
-    return globalState.space?.links;
+    return space?.current?.links;
   });
   const pages = $derived.by(() => {
-    const pages = globalState.space?.wikipages;
+    const pages = space?.current?.wikipages;
     if (!pages) return [];
     return pages
       .filter((page) => !page?.softDeleted)
@@ -84,45 +98,20 @@
   //     .map((x) => x.tryCast(Category) as Category)
   //     .filter((x) => !!x);
   // });
+
+
+  $inspect(page.params);
+
   function getSidebarItems() {
-    const space = globalState.space;
-    if (!space) return [];
-    const threads = space.threads || [];
-    const channels = space.channels || [];
+    if (!space?.current) return [];
+    const threads = space?.current?.threads || [];
+    const channels = space?.current?.channels || [];
 
     return [...channels];
   }
 
-  $effect(() => {
-    if (globalState.space) {
-      const me = Account.getMe();
-      untrack(() => {
-        if (globalState.space && me.canAdmin(globalState.space)) {
-          globalState.isAdmin = true;
-        }
-      });
-    }
-  });
-  let sidebarItems = $state(getSidebarItems());
-  // let initial = true;
-  // $inspect(globalState.space).with((kind, space) => {
-  //   console.log("space", space);
-  //   // const group = globalState.space?._owner.castAs(Group)
-  //   // console.log("owner", globalState.space?._owner.toJSON())
-  //   if (space && globalState.space) {
-  //     if(me.canAdmin(globalState.space)){
-  //       globalState.isAdmin = true;
-  //     }
-  //     let items = Space.sidebarItems(space);
-  //     console.log("sidebar items", items);
-  //     if(initial){
-  //       initial = false;
-  //       console.log("setting sidebar items")
-  //       sidebarItems = items;
-  //     }
-
-  //   }
-  // });
+  let sidebarItems = $derived(getSidebarItems());
+  
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
   async function createCategory() {
@@ -142,24 +131,19 @@
   let showNewChannelDialog = $state(false);
   let newChannelName = $state("");
   let newChannelCategory = $state(undefined) as undefined | Category;
-  async function createChannel() {
-    if (!globalState.space) return;
-    const space = globalState.space;
-    const channel = Channel.create({ name: newChannelName });
-    // channel.appendAdminsFrom(globalState.space);
-    // channel.name = newChannelName;
-    // channel.commit();
-    if (!space.channels) {
-      space.channels = Channels.create([channel]);
-    } else {
-      space.channels.push(channel);
-    }
-    if (newChannelCategory) {
-      newChannelCategory.channels?.push(channel);
-      // newChannelCategory.commit();
-    } else {
-      // globalState.space.sidebarItems?.push(channel);
-    }
+  async function createChannelSubmit() {
+    if (!space?.current) return;
+
+    const channel = createChannel(newChannelName);
+
+    space.current?.channels?.push(channel);
+
+    // if (newChannelCategory) {
+    //   newChannelCategory.channels?.push(channel);
+    //   // newChannelCategory.commit();
+    // } else {
+    //   // globalState.space.sidebarItems?.push(channel);
+    // }
     // globalState.space.commit();
 
     newChannelCategory = undefined;
@@ -181,17 +165,17 @@
   >
     <ToggleSidebarIcon class="pr-2" open={isSpacesVisible} />
     <h1 class="text-sm font-bold text-base-content truncate">
-      {globalState.space?.name && globalState.space?.name !== "Unnamed"
-        ? globalState.space.name
+      {space?.current?.name && space?.current?.name !== "Unnamed"
+        ? space.current?.name
         : ""}
     </h1>
 
-    {#if globalState.isAdmin}
+    {#if isSpaceAdmin(space.current)}
       <SpaceSettingsDialog />
     {/if}
   </div>
 
-  {#if globalState.isAdmin}
+  {#if isSpaceAdmin(space.current)}
     <menu
       class="dz-menu p-0 w-full justify-between px-2 dz-join dz-join-vertical"
     >
@@ -209,7 +193,7 @@
         <form
           id="createChannel"
           class="flex flex-col gap-4"
-          onsubmit={createChannel}
+          onsubmit={createChannelSubmit}
         >
           <label class="dz-input w-full">
             <span class="dz-label">Name</span>
@@ -316,7 +300,7 @@
       {/if}
       <AccordionTree
         sections={[
-          { key: "pages", items: pages},
+          { key: "pages", items: pages },
           { key: "threads", items: threads },
         ]}
         active={globalState.channel?.id ?? ""}
