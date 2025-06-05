@@ -1,14 +1,14 @@
 <script lang="ts">
   import { globalState } from "$lib/global.svelte";
   import * as zip from "@zip-js/zip-js";
-  import {
-    Channel,
-    Message as RoomyMessage,
-    Space,
-    Thread,
-    Category,
-    type EntityIdStr,
-  } from "@roomy-chat/sdk";
+  // import {
+  //   Channel,
+  //   Message as RoomyMessage,
+  //   Space,
+  //   Thread,
+  //   Category,
+  //   type EntityIdStr,
+  // } from "@roomy-chat/sdk";
   import { marked } from "marked";
   import { navigate } from "$lib/utils.svelte";
   import toast from "svelte-french-toast";
