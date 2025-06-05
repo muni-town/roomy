@@ -28,11 +28,18 @@ export const Thread = co.map({
   timeline: Timeline,
 });
 
+export const Page = co.map({
+  name: z.string(),
+  softDeleted: z.boolean().optional(),
+  body: z.string(),
+})
+
 export const Channel = co.map({
   name: z.string(),
 
   mainThread: Thread,
   subThreads: co.list(Thread),
+  pages: z.optional(co.list(Page)),
 });
 
 export const Space = co.map({
@@ -45,6 +52,8 @@ export const Space = co.map({
   version: z.number().optional(),
   adminId: z.string(),
 });
+
+
 
 export const SpaceList = co.list(Space);
 

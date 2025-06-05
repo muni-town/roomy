@@ -4,8 +4,32 @@
   import { globalState} from "$lib/global.svelte";
   import Dialog from "./Dialog.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
-  import { WikiPage } from "$lib/schema";
+  import { Channel, Page } from "$lib/jazz/schema";
   import { co } from "jazz-tools";
+  import { createPage } from "$lib/jazz/utils";
+  import { CoState } from "jazz-svelte";
+  import { page } from "$app/state";
+
+  let channel = $derived.by(() => {
+    try {
+      const channel = new CoState(Channel, page.params.channel, {
+        resolve: {
+          pages: true
+        },
+      })
+      console.log(channel.current)
+      return channel
+    } catch (e) {
+      console.error(e)
+      return null
+    }
+  })
+    
+    
+
+  $inspect(channel).with(()=>{
+    console.log(channel?.id)
+  })
 
   let {
     triggerStyle = "dz-btn dz-btn-primary dz-btn-sm text-lg",
@@ -16,7 +40,7 @@
   let isPageTitleDialogOpen = $state(false);
   let newPageTitleElement: HTMLInputElement | null = $state(null);
 
-  export function createPage() {
+  export function createPageDialog() {
     if (newPageTitleElement) {
       newPageTitleElement.value = "";
     }
@@ -24,31 +48,22 @@
   }
 
   async function submitPageTitle() {
-    if (
-      !globalState.space ||
-      !globalState.channel
-    )
-      return;
+    if(!channel?.current) return
+    if(!channel.current.pages){
+      channel.current.pages = co.list(Page).create([])
+    }
     if (!newPageTitleElement) {
       toast.error("Title cannot be empty", { position: "bottom-end" });
       return;
     }
     const newPageTitle = newPageTitleElement.value; // Retrieve the title from the input element
     // Create a temporary page with the provided title
-    const pg = WikiPage.create({
-      name: newPageTitle,
-    });
-    if(!globalState.channel.wikipages){
-      globalState.channel.wikipages = co.list(WikiPage).create([]);
-    }
-    if(!globalState.space.wikipages){
-      globalState.space.wikipages = co.list(WikiPage).create([]);
-    }
+    const pg = createPage(newPageTitle)
+
     isPageTitleDialogOpen = false;
 
     try {
-      globalState.channel.wikipages.push(pg);
-      globalState.space.wikipages.push(pg);
+      channel.current.pages?.push(pg)
     } catch (e) {
       console.error("Error creating page", e);
       toast.error("Failed to create page", { position: "bottom-end" });
@@ -56,7 +71,7 @@
   }
 </script>
 
-<button class={triggerStyle} onclick={createPage}> + </button>
+<button class={triggerStyle} onclick={createPageDialog}> + </button>
 <Dialog
   title="New Page"
   description="Give your new page a title"

@@ -52,21 +52,23 @@
   let channel = $derived(
     new CoState(Channel, page.params.channel, {
       resolve: {
-        mainThread: {
-          timeline: true,
-        },
+        mainThread: true,
         subThreads: true,
+        pages: true,
       },
     }),
   );
 
   let timeline = $derived(
-    Object.values(channel.current?.mainThread?.timeline.perAccount ?? {})
+    Object.values(channel.current?.mainThread?.timeline?.perAccount ?? {})
       .map((accountFeed) => new Array(...accountFeed.all))
       .flat()
       .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
       .map((a) => a.value),
   );
+  $inspect(timeline).with(()=>{
+    console.log("timeline", timeline)
+  })
 
   const readonly = $derived(channel.current?.name === "@links");
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
@@ -324,12 +326,10 @@
   //     : [],
   // );
 
-  const pages = $derived.by(() => {
-    if (!globalState.space?.wikipages) return [];
-    return globalState.space.wikipages.filter(
-      (page) => page !== null && !page.softDeleted,
-    );
-  });
+  const pages = $derived(channel.current?.pages || [])
+  $inspect(pages).with(() => {
+    console.log("pages", pages)
+  })
 
   const relatedThreads = $derived.by(() => {
     if (!globalState.space?.threads) return [];

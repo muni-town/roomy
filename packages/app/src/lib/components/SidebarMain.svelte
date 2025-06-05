@@ -15,7 +15,7 @@
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { page } from "$app/state";
   import { CoState } from "jazz-svelte";
-  import { createChannel, isSpaceAdmin } from "$lib/jazz/utils";
+  import { createChannel, isSpaceAdmin, spacePages } from "$lib/jazz/utils";
   import { Space } from "$lib/jazz/schema";
 
 	let space = $derived(
@@ -28,6 +28,7 @@
 			}
 		})
 	);
+  let links = undefined
 
   export async function createLinkFeed() {
     if (!globalState.space) return;
@@ -74,12 +75,12 @@
   }
   let threads = $derived(allThreads());
   // let links = $derived(allThreads.value.find((x) => x.name === "@links"));
-  let links = $derived.by(() => {
-    return space?.current?.links;
-  });
+  // let links = $derived.by(() => {
+  //   return space?.current?.threads.find((x) => x?.name === "@links");
+  // });
   const pages = $derived.by(() => {
-    const pages = space?.current?.wikipages;
-    if (!pages) return [];
+    if (!space?.current) return [];
+    const pages = spacePages(space.current)
     return pages
       .filter((page) => !page?.softDeleted)
       .map((p) => ({
@@ -91,6 +92,10 @@
         id: p?.id,
       }));
   });
+
+$inspect(pages).with(()=>{
+  console.log("pages", pages)
+})
 
   // let categories = derivePromise([], async () => {
   //   if (!globalState.space) return [];

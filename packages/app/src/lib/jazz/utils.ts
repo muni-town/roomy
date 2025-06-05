@@ -2,6 +2,7 @@ import { Account, co, CoRichText, Group, z } from "jazz-tools";
 import {
   Channel,
   Message,
+  Page,
   Reaction,
   Space,
   SpaceList,
@@ -136,6 +137,20 @@ export function createMessage(input: string, replyTo?: string) {
   return message;
 }
 
+export function createPage(name: string){
+  const readingGroup = publicGroup("reader");
+
+  const page = Page.create(
+    {
+      name,
+      body: "",
+    },
+    readingGroup,
+  );
+
+  return page;  
+}
+
 export function createThread(messagesIds: string[], name?: string) {
   const thread = Thread.create(
     {
@@ -152,4 +167,18 @@ export function createSpaceList() {
   const spaces = SpaceList.create([], publicGroup("reader"));
 
   return spaces;
+}
+
+
+export function spacePages(space: co.loaded<typeof Space>){
+  const pages = []
+  const channels = space.channels
+  if(!channels) return pages
+  for(const channel of channels){
+    if(!channel || !channel.pages) continue;
+    for(const page of channel.pages){
+      pages.push(page)
+    }
+  }
+  return pages
 }
