@@ -102,9 +102,9 @@ export function isSpaceAdmin(
 
 export function messageHasAdmin(
   message: co.loaded<typeof Message>,
-  admin: Account,
+  admin: co.loaded<typeof Account>,
 ) {
-  console.log("messageHasAdmin", message, admin);
+  if (!admin) return false;
   return admin.canAdmin(message);
 }
 
@@ -116,11 +116,18 @@ export function createPublicSpacesList() {
   return spaces;
 }
 
-export function createMessage(input: string, replyTo?: string) {
-  // const adminGroup = Group.create();
-  // adminGroup.addMember(admin, "admin");
+export function createMessage(
+  input: string,
+  replyTo?: string,
+  admin?: Account,
+) {
   const readingGroup = publicGroup("reader");
-  // readingGroup.extend(adminGroup);
+
+  if (admin) {
+    const adminGroup = Group.create();
+    adminGroup.addMember(admin, "admin");
+    readingGroup.extend(adminGroup);
+  }
 
   const content = new CoRichText({
     text: input,

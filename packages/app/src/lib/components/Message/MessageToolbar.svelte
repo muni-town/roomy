@@ -1,25 +1,25 @@
 <script lang="ts">
   import { Button, Toolbar, Popover } from "bits-ui";
-  import Drawer from "./Drawer.svelte";
+  import Drawer from "../Drawer.svelte";
   import Icon from "@iconify/svelte";
-  import EmojiPicker from "./EmojiPicker.svelte";
+  import EmojiPicker from "../EmojiPicker.svelte";
 
   function setReplyTo() {
     console.log("setReplyTo");
   }
 
   let {
-    mayEdit = true,
-    mayDelete = true,
-    startEditing,
+    canEdit = true,
+    canDelete = true,
+    editMessage,
     deleteMessage,
     isDrawerOpen = $bindable(false),
     toggleReaction,
   }: {
-    mayEdit?: boolean;
-    mayDelete?: boolean;
-    startEditing?: () => void;
-    deleteMessage?: () => void;
+    canEdit?: boolean;
+    canDelete?: boolean;
+    editMessage: () => void;
+    deleteMessage: () => void;
     toggleReaction: (reaction: string) => void;
     isDrawerOpen?: boolean;
   } = $props();
@@ -77,10 +77,10 @@
       <Icon icon="fa6-solid:reply" />
       Reply
     </Button.Root>
-    {#if mayEdit}
+    {#if canEdit}
       <Button.Root
         onclick={() => {
-          startEditing();
+          editMessage();
           isDrawerOpen = false;
         }}
         class="dz-join-item dz-btn w-full"
@@ -89,7 +89,7 @@
         Edit
       </Button.Root>
     {/if}
-    {#if mayDelete}
+    {#if canDelete}
       <Button.Root
         onclick={() => deleteMessage()}
         class="dz-join-item dz-btn dz-btn-error w-full"
@@ -124,16 +124,16 @@
       <EmojiPicker onEmojiPick={onEmojiPick} />
     </Popover.Content>
   </Popover.Root>
-  {#if mayEdit}
+  {#if canEdit}
     <Toolbar.Button
-      onclick={() => startEditing()}
+      onclick={() => editMessage()}
       class="dz-btn dz-btn-ghost dz-btn-square"
     >
       <Icon icon="tabler:edit" />
     </Toolbar.Button>
   {/if}
 
-  {#if mayDelete}
+  {#if canDelete}
     <Toolbar.Button
       onclick={() => deleteMessage()}
       class="dz-btn dz-btn-ghost dz-btn-square"

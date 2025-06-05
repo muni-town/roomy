@@ -2,34 +2,28 @@
   import { ScrollArea } from "bits-ui";
   import ChatMessage from "./ChatMessage.svelte";
   import { Virtualizer } from "virtua/svelte";
-  import { setContext } from "svelte";
-  // import {
-  //   Announcement,
-  //   Message,
-  //   type EntityIdStr,
-  //   type Timeline,
-  // } from "@roomy-chat/sdk";
-  import { Channel, Message } from "$lib/schema";
-  import { derivePromise } from "$lib/utils.svelte";
   import { page } from "$app/state";
-  import { globalState } from "$lib/global.svelte";
+  import { setContext } from "svelte";
 
   let {
     timeline,
     virtualizer = $bindable(),
+    isAdmin = false,
+    admin,
   }: {
     timeline: string[];
     virtualizer?: Virtualizer<string>;
+    isAdmin?: boolean;
+    admin: co.loaded<typeof Account>;
   } = $props();
+
   console.log("timeline", timeline)
   let viewport: HTMLDivElement = $state(null!);
-  // let messagesLoaded = $state(false);
-  let messagesLoaded = $state(true);
 
-  // setContext("scrollToMessage", (id: string) => {
-  //   const idx = timeline.timeline.ids().indexOf(id);
-  //   if (idx !== -1 && virtualizer) virtualizer.scrollToIndex(idx);
-  // });
+  setContext("scrollToMessage", (id: string) => {
+    const idx = timeline.indexOf(id);
+    if (idx !== -1 && virtualizer) virtualizer.scrollToIndex(idx);
+  });
 
   $effect(() => {
     page.route; // Scroll-to-end when route changes
@@ -74,6 +68,8 @@
               <ChatMessage
                 {messageId}
                 previousMessageId={timeline[index - 1]}
+                {isAdmin}
+                {admin}
               />
             {/snippet}
           </Virtualizer>

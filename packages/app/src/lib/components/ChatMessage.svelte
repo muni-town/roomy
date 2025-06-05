@@ -17,14 +17,16 @@
     RoomyAccount,
     RoomyProfile,
   } from "$lib/jazz/schema";
-  import { co, type Loaded } from "jazz-tools";
-  import MessageToolbar from "./MessageToolbar.svelte";
-  import { publicGroup } from "$lib/jazz/utils";
-  import MessageReactions from "./MessageReactions.svelte";
+  import { Account, co, type Loaded } from "jazz-tools";
+  import MessageToolbar from "./Message/MessageToolbar.svelte";
+  import { messageHasAdmin, publicGroup } from "$lib/jazz/utils";
+  import MessageReactions from "./Message/MessageReactions.svelte";
 
   type Props = {
     messageId: string;
     previousMessageId?: string;
+    isAdmin?: boolean;
+    admin: co.loaded<typeof Account>;
   };
 
   const me = new AccountCoState(RoomyAccount, {
@@ -34,7 +36,7 @@
     },
   });
 
-  let { messageId, previousMessageId }: Props = $props();
+  let { messageId, previousMessageId, isAdmin, admin }: Props = $props();
 
   let message = $derived(
     new CoState(Message, messageId, {
@@ -44,6 +46,12 @@
       },
     }),
   );
+
+  let canEdit = $derived(
+    message.current?._edits.content?.by?.profile?.id ===
+      me.current?.profile?.id,
+  );
+  let canDelete = $derived(isAdmin || canEdit);
 
   // $inspect(message).with(()=>{
   //   console.log("message content", message.current?.content.toString())
@@ -72,7 +80,6 @@
     );
   });
 
-  let isMobile = $derived((outerWidth.current ?? 0) < 640);
   let isDrawerOpen = $state(false);
 
   let isSelected = $state(false);
@@ -109,11 +116,12 @@
   ) => void;
 
   function deleteMessage() {
+    console.log("deleting message", message.current);
     if (!message.current) return;
     message.current.softDeleted = true;
   }
 
-  function startEditing() {
+  function editMessage() {
     try {
       // Parse the message body JSON to get a plain object
       const parsedContent = JSON.parse(message.body) as JSONContent;
@@ -260,76 +268,85 @@
   }
 </script>
 
-<div
-  id={message.current?.id}
-  class={`flex flex-col w-full relative ${isMobile && "max-w-screen"}`}
->
-  {#if isThreading.value}
-    <Checkbox.Root
-      onCheckedChange={updateSelect}
-      bind:checked={isSelected}
-      class="absolute right-4 inset-y-0"
-    >
-      <div
-        class="border border-primary bg-base-100 text-primary-content size-4 rounded items-center cursor-pointer"
-      >
-        {#if isSelected}
-          <Icon
-            icon="material-symbols:check-rounded"
-            class="bg-primary size-3.5"
-          />
-        {/if}
-      </div>
-    </Checkbox.Root>
-  {/if}
+{#if message.current && !message.current.softDeleted &&  messageHasAdmin(message.current, admin)}
   <div
-    class={`relative group w-full h-fit flex flex-col gap-2 px-2 py-1 hover:bg-white/5`}
+    id={message.current?.id}
+    class={`flex flex-col w-full relative max-w-screen`}
   >
-    <div class={"group relative flex w-full justify-start gap-5"}>
-      {#if !mergeWithPrevious && message.current}
-        <div class="size-8 sm:size-10">
-          {#if profile.current?.imageUrl}
-            <AvatarImage
-              handle={profile.current?.name}
-              avatarUrl={profile.current?.imageUrl}
+    {#if isThreading.value}
+      <Checkbox.Root
+        onCheckedChange={updateSelect}
+        bind:checked={isSelected}
+        class="absolute right-4 inset-y-0"
+      >
+        <div
+          class="border border-primary bg-base-100 text-primary-content size-4 rounded items-center cursor-pointer"
+        >
+          {#if isSelected}
+            <Icon
+              icon="material-symbols:check-rounded"
+              class="bg-primary size-3.5"
             />
-          {:else}
-            <AvatarBeam name={profile.current?.id} />
           {/if}
         </div>
-      {:else}
-        <div class="w-8 shrink-0 sm:w-10"></div>
-      {/if}
-
-      <div class="flex flex-col gap-1">
-        {#if !mergeWithPrevious || !message.current}
-          <span class=" flex items-center gap-2 text-sm">
-            <span class="font-bold text-primary"
-              >{profile?.current?.name ?? ""}</span
-            >
-            {#if message.current?.createdAt}
-              {@render timestamp(message.current?.createdAt)}
+      </Checkbox.Root>
+    {/if}
+    <div
+      class={`relative group w-full h-fit flex flex-col gap-2 px-2 py-1 hover:bg-white/5`}
+    >
+      <div class={"group relative flex w-full justify-start gap-5"}>
+        {#if !mergeWithPrevious && message.current}
+          <div class="size-8 sm:size-10">
+            {#if profile.current?.imageUrl}
+              <AvatarImage
+                handle={profile.current?.name}
+                avatarUrl={profile.current?.imageUrl}
+              />
+            {:else}
+              <AvatarBeam name={profile.current?.id} />
             {/if}
-          </span>
+          </div>
+        {:else}
+          <div class="w-8 shrink-0 sm:w-10"></div>
         {/if}
-        <div class="dz-prose prose-a:text-primary prose-a:hover:underline">
-          {@html message.current?.content ?? ""}
+
+        <div class="flex flex-col gap-1">
+          {#if !mergeWithPrevious || !message.current}
+            <span class=" flex items-center gap-2 text-sm">
+              <span class="font-bold text-primary"
+                >{profile?.current?.name ?? ""}</span
+              >
+              {#if message.current?.createdAt}
+                {@render timestamp(message.current?.createdAt)}
+              {/if}
+            </span>
+          {/if}
+          <div class="dz-prose prose-a:text-primary prose-a:hover:underline">
+            {@html message.current?.content ?? ""}
+          </div>
         </div>
       </div>
+
+      <MessageToolbar
+        bind:isDrawerOpen
+        {toggleReaction}
+        {canEdit}
+        {canDelete}
+        {deleteMessage}
+        {editMessage}
+      />
+
+      <button
+        onclick={() => (isDrawerOpen = true)}
+        class="block pointer-fine:hidden absolute inset-0 w-full h-full"
+      >
+        <span class="sr-only">Open toolbar</span>
+      </button>
+
+      <MessageReactions {reactions} {toggleReaction} />
     </div>
-
-    <MessageToolbar bind:isDrawerOpen {toggleReaction} />
-
-    <button
-      onclick={() => (isDrawerOpen = true)}
-      class="block pointer-fine:hidden absolute inset-0 w-full h-full"
-    >
-      <span class="sr-only">Open toolbar</span>
-    </button>
-
-    <MessageReactions {reactions} {toggleReaction} />
   </div>
-</div>
+{/if}
 
 {#snippet timestamp(date: Date)}
   {@const formattedDate = isToday(date) ? "Today" : format(date, "P")}

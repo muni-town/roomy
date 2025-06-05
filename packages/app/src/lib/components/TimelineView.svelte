@@ -23,7 +23,7 @@
   import { CoState } from "jazz-svelte";
   import { Channel, Space } from "$lib/jazz/schema";
   import { page } from "$app/state";
-  import { createMessage, createThread } from "$lib/jazz/utils";
+  import { createMessage, createThread, isSpaceAdmin } from "$lib/jazz/utils";
   import { extractTextContent } from "$lib/utils/extractText";
   import { user } from "$lib/user.svelte";
 
@@ -121,8 +121,8 @@
   // });
 
   // Reply Utils
-  let replyingTo = $state<Message>();
-  setContext("setReplyTo", (message: Message) => {
+  let replyingTo = $state<string>();
+  setContext("setReplyTo", (message: string) => {
     replyingTo = message;
   });
 
@@ -244,9 +244,9 @@
     //if (!user.agent) return;
 
     // Image upload is now handled in ChatInput.svelte
-    console.log("creating message", messageInput);
+    console.log("creating message", messageInput, admin.current);
 
-    const message = createMessage(messageInput);
+    const message = createMessage(messageInput, undefined, admin.current || undefined);
     if (channel.current?.mainThread.timeline) {
       channel.current.mainThread.timeline.push(message.id);
     }
@@ -323,6 +323,11 @@
     ) || [],
   );
 </script>
+
+{#if admin.current}
+  <div class="absolute top-0 left-0">
+  </div>
+{/if}
 
 <header class="dz-navbar">
   <div class="dz-navbar-start flex gap-4">
@@ -439,7 +444,7 @@
         class="flex-grow overflow-auto relative"
         style="max-height: calc(100vh - 180px);"
       >
-        <ChatArea {timeline} bind:virtualizer />
+        <ChatArea {timeline} bind:virtualizer isAdmin={isSpaceAdmin(space.current)} admin={admin.current} />
 
         {#if replyingTo}
           <div
