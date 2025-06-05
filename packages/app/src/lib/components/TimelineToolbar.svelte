@@ -99,7 +99,7 @@
 <menu class="relative flex items-center gap-3 px-2 w-fit justify-end">
   <Popover.Root bind:open={isThreading.value}>
     <Popover.Trigger>
-      <Icon icon="tabler:needle-thread" class="text-2xl" />
+      <Icon icon="tabler:needle-thread" class="text-2xl"  />
     </Popover.Trigger>
     <Popover.Portal>
       <Popover.Content
