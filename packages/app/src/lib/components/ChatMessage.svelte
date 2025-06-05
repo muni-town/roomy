@@ -1,5 +1,7 @@
 <script lang="ts" module>
   export let editingMessage = $state({ id: "" });
+
+  export let replyTo = $state({ id: "" });
 </script>
 
 <script lang="ts">
@@ -14,6 +16,7 @@
   import {
     Message,
     Reaction,
+    ReactionList,
     RoomyAccount,
     RoomyProfile,
   } from "$lib/jazz/schema";
@@ -54,10 +57,6 @@
   );
   let canDelete = $derived(isAdmin || canEdit);
 
-  // $inspect(message).with(()=>{
-  //   console.log("message content", message.current?.content.toString())
-  // })
-
   let previousMessage = $derived(new CoState(Message, previousMessageId));
 
   let profile = $derived(
@@ -87,10 +86,6 @@
   let isThreading: { value: boolean } = getContext("isThreading");
 
   const removeSelectedMessage = getContext("removeSelectedMessage") as (
-    message: co.loaded<typeof Message>,
-  ) => void;
-
-  const setReplyTo = getContext("setReplyTo") as (
     message: co.loaded<typeof Message>,
   ) => void;
 
@@ -144,13 +139,9 @@
     }
   }
 
-  $effect(() => {
-    if (!isThreading.value) {
-      isSelected = false;
-    }
-  });
-
-  function convertReactionsToEmojis(reactions: Loaded<typeof Reaction>[]) {
+  function convertReactionsToEmojis(
+    reactions: Loaded<typeof ReactionList> | undefined | null,
+  ) {
     if (!reactions) return [];
 
     // convert to [emoji, count, user (if current user has reacted with that emoji)]
@@ -307,6 +298,7 @@
         </div>
       </div>
 
+      {#if editingMessage.id !== messageId}
       <MessageToolbar
         bind:isDrawerOpen
         {toggleReaction}
@@ -315,6 +307,7 @@
         {deleteMessage}
         {editMessage}
       />
+      {/if}
 
       <button
         onclick={() => (isDrawerOpen = true)}

@@ -6,6 +6,8 @@ export const Reaction = co.map({
   emoji: z.string(),
 });
 
+export const ReactionList = co.list(Reaction);
+
 export const MovedTo = co.map({
   thread: z.string(),
 });
@@ -18,7 +20,7 @@ export const Message = co.map({
 
   replyTo: z.string().optional(),
   movedTo: z.optional(MovedTo),
-  reactions: co.list(Reaction),
+  reactions: ReactionList,
   type: z.enum(["message", "announcement"]),
 
   softDeleted: z.boolean().optional(),

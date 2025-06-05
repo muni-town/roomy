@@ -11,7 +11,7 @@
   import { Account } from "jazz-tools";
   import { globalState } from "$lib/global.svelte";
 
-  import { Thread } from "$lib/jazz/schema";
+  import { RoomyAccount, Thread } from "$lib/jazz/schema";
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
   import CreatePageDialog from "$lib/components/CreatePageDialog.svelte";
   import BoardList from "./BoardList.svelte";
@@ -20,7 +20,7 @@
   import SearchResults from "./SearchResults.svelte";
   import type { Virtualizer } from "virtua/svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
-  import { CoState } from "jazz-svelte";
+  import { AccountCoState, CoState } from "jazz-svelte";
   import { Channel, Space } from "$lib/jazz/schema";
   import { page } from "$app/state";
   import { createMessage, createThread, isSpaceAdmin } from "$lib/jazz/utils";
@@ -76,6 +76,14 @@
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let tab = $state<"chat" | "board">("chat");
+
+  const me = new AccountCoState(RoomyAccount, {
+    resolve: {
+      profile: {
+        joinedSpaces: true,
+      },
+    },
+  });
 
   // Initialize tab based on hash if present
   // TODO: move this functionality to somewhere else
@@ -246,7 +254,11 @@
     // Image upload is now handled in ChatInput.svelte
     console.log("creating message", messageInput, admin.current);
 
-    const message = createMessage(messageInput, undefined, admin.current || undefined);
+    const message = createMessage(
+      messageInput,
+      undefined,
+      admin.current || undefined,
+    );
     if (channel.current?.mainThread.timeline) {
       channel.current.mainThread.timeline.push(message.id);
     }
@@ -322,11 +334,24 @@
       (thread) => thread && !thread.softDeleted,
     ) || [],
   );
+
+  function joinSpace() {
+    if(!space.current || !me.current) return;
+
+    // add to my list of joined spaces
+    me.current?.profile?.joinedSpaces?.push(space.current);
+
+    // add to space.current.members
+    space.current?.members?.push(me.current);
+  }
+
+  $inspect(me.current?.profile?.joinedSpaces).with(() => {
+    console.log("me", me.current?.profile?.joinedSpaces.toJSON());
+  });
 </script>
 
 {#if admin.current}
-  <div class="absolute top-0 left-0">
-  </div>
+  <div class="absolute top-0 left-0"></div>
 {/if}
 
 <header class="dz-navbar">
@@ -444,7 +469,12 @@
         class="flex-grow overflow-auto relative"
         style="max-height: calc(100vh - 180px);"
       >
-        <ChatArea {timeline} bind:virtualizer isAdmin={isSpaceAdmin(space.current)} admin={admin.current} />
+        <ChatArea
+          {timeline}
+          bind:virtualizer
+          isAdmin={isSpaceAdmin(space.current)}
+          admin={admin.current}
+        />
 
         {#if replyingTo}
           <div
@@ -481,17 +511,27 @@
         {#if !isMobile || !isThreading.value}
           <div class="chat-input-container">
             {#if user.session}
-              {#if !readonly}
-                <ChatInput
-                  bind:content={messageInput}
-                  users={[]}
-                  context={[]}
-                  onEnter={sendMessage}
-                />
+              {#if me?.current?.profile?.joinedSpaces?.some((joinedSpace) => joinedSpace?.id === space.current?.id)}
+                {#if !readonly}
+                  <ChatInput
+                    bind:content={messageInput}
+                    users={[]}
+                    context={[]}
+                    onEnter={sendMessage}
+                  />
+                {:else}
+                  <div class="flex items-center grow flex-col">
+                    <Button.Root onclick={() => {
+                      user.isLoginDialogOpen = true;
+                    }} class="w-full dz-btn"
+                      >Automatted Thread</Button.Root
+                    >
+                  </div>
+                {/if}
               {:else}
                 <div class="flex items-center grow flex-col">
-                  <Button.Root disabled class="w-full dz-btn"
-                    >Automatted Thread</Button.Root
+                  <Button.Root onclick={joinSpace} class="w-full dz-btn"
+                    >Join this space to chat</Button.Root
                   >
                 </div>
               {/if}
