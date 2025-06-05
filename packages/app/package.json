@@ -69,6 +69,7 @@
     "date-fns": "^4.1.0",
     "emoji-picker-element": "^1.26.1",
     "file-saver": "^2.0.5",
+    "jazz-inspector-element": "^0.14.21",
     "js-base64": "^3.7.7",
     "jszip": "^3.10.1",
     "linkify-it": "^5.0.0",
@@ -96,7 +97,10 @@
     "vite-plugin-arraybuffer": "^0.1.0",
     "vite-plugin-top-level-await": "^1.4.4",
     "vite-plugin-wasm": "^3.4.1",
-    "vitest": "^3.0.9"
+    "vitest": "^3.0.9",
+    "jazz-svelte": "^0.14.21",
+    "jazz-tools": "^0.14.21",
+    "flexsearch": "^0.8.164"
   },
   "lint-staged": {
     "*.{svelte,svelte.ts}": [
