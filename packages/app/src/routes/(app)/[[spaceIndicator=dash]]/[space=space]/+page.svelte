@@ -1,30 +1,29 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { globalState } from "$lib/global.svelte";
+  import { Space } from "$lib/jazz/schema";
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  // import { Category, Channel } from "@roomy-chat/sdk";
-  import { untrack } from "svelte";
+  import { CoState } from "jazz-svelte";
+
+  let space = $derived(
+    new CoState(Space, page.params.space, {
+      resolve: {
+        channels: {
+          $each: true,
+          $onError: null,
+        },
+      },
+    }),
+  );
 
   // Automatically navigate to the first channel in the space if we come to this empty space index
   // page. We might have useful features on this index page eventually.
   $effect(() => {
-    const channelId = globalState.space?.channels?.[0]?.id
-    const spaceId = page.params.space
-    console.log("spaces",globalState.catalog?.spaces, "space params", page.params.space, "loaded", globalState.loadedSpace)
-    if (!globalState.catalog?.spaces || globalState.loadedSpace !== spaceId || !spaceId)
-      return;
+    if (!space.current || !space.current.channels || space.current.channels.length === 0) return;
 
-    console.log("continue")
-    untrack(async () => {
-      for (const space of globalState.catalog?.spaces || []) {
-        if (space?.id === spaceId) {
-          console.log("nav")
-          return navigate({
-            space: spaceId, channel: channelId
-          });
-        }
-      }
+    return navigate({
+      space: space.current.id,
+      channel: space.current.channels[0]?.id,
     });
   });
 </script>

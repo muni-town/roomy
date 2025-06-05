@@ -12,6 +12,7 @@
   import { createSpace, createSpaceList } from "$lib/jazz/utils";
   import { RoomyAccount, SpaceList } from "$lib/jazz/schema";
   import ZipExport from "./ZipExport.svelte";
+  import Login from "./Login.svelte";
 
   let {
     spaces,
@@ -127,5 +128,7 @@
     <ZipExport />
 
     <ThemeSelector />
+
+    <Login />
   </section>
 </aside>

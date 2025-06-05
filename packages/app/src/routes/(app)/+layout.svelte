@@ -29,6 +29,22 @@
     },
   });
 
+  $effect(() => {
+    if(!user.profile.data?.handle || !me.current) return;
+
+    if(me.current.profile.name !== user.profile.data?.handle) {
+      me.current.profile.name = user.profile.data?.handle;
+    }
+
+    if(me.current.profile.imageUrl !== user.profile.data?.avatar) {
+      me.current.profile.imageUrl = user.profile.data?.avatar;
+    }
+
+    if(me.current.profile.blueskyHandle !== user.profile.data?.handle) {
+      me.current.profile.blueskyHandle = user.profile.data?.handle;
+    }
+  });
+
   // console.log("catalog", globalState.catalog)
   let themeColor = $state<ThemeName>("synthwave"); // defualt theme color
   onMount(async () => {

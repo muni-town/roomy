@@ -50,7 +50,6 @@ export const SpaceList = co.list(Space);
 
 export const RoomyProfile = co.profile({
   name: z.string(),
-  image: co.image().optional(),
   imageUrl: z.string().optional(),
   blueskyHandle: z.string().optional(),
   joinedSpaces: SpaceList,

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, setContext } from "svelte";
+  import { setContext } from "svelte";
   import toast from "svelte-french-toast";
   import { getContentHtml } from "$lib/tiptap/editor";
   import { outerWidth } from "svelte/reactivity/window";
@@ -9,11 +9,9 @@
   import ChatInput from "$lib/components/ChatInput.svelte";
   import { Button, Tabs } from "bits-ui";
   import { Account, co } from "jazz-tools";
-  import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
   import { globalState } from "$lib/global.svelte";
 
   import { Message, Thread } from "$lib/schema";
-  import type { JSONContent } from "@tiptap/core";
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
   import CreatePageDialog from "$lib/components/CreatePageDialog.svelte";
   import BoardList from "./BoardList.svelte";
@@ -28,6 +26,7 @@
   import { page } from "$app/state";
   import { createMessage } from "$lib/jazz/utils";
   import { extractTextContent } from "$lib/utils/extractText";
+  import { user } from "$lib/user.svelte";
 
   let selectedMessages = $derived(threads.selected);
 
@@ -338,8 +337,6 @@
       (thread) => thread !== null && !thread.softDeleted,
     );
   });
-
-  $inspect(channel.current);
 </script>
 
 <header class="dz-navbar">
@@ -493,7 +490,7 @@
       <div>
         {#if !isMobile || !isThreading.value}
           <div class="chat-input-container">
-            {#if true}
+            {#if user.session}
               {#if !readonly}
                 <ChatInput
                   bind:content={messageInput}
@@ -512,11 +509,8 @@
               <Button.Root
                 class="w-full dz-btn"
                 onclick={() => {
-                  // if (globalState.space && globalState.roomy) {
-                  //   globalState.roomy.spaces.push(globalState.space);
-                  //   globalState.roomy.commit();
-                  // }
-                }}>Join Space To Chat</Button.Root
+                  user.isLoginDialogOpen = true;
+                }}>Login to Chat</Button.Root
               >
             {/if}
           </div>

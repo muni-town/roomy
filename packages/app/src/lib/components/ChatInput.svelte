@@ -7,7 +7,6 @@
   import { initUserMention, initSpaceContextMention } from "$lib/tiptap/editor";
   import { type Item, initKeyboardShortcutHandler } from "$lib/tiptap/editor";
   import { globalState } from "$lib/global.svelte";
-  
 
   type Props = {
     content: string;
@@ -31,7 +30,7 @@
   let tiptap: Editor | undefined = $state();
 
   async function wrappedOnEnter() {
-    onEnter()
+    onEnter();
   }
 
   // We'll use the extensions created in the effect instead of these initial ones
@@ -66,15 +65,15 @@
   });
 </script>
 
-  <div class="flex items-center gap-2">
-    <!-- Tiptap editor -->
-    <div
-      bind:this={element}
-      class="flex-1 relative"
-      role="region"
-      aria-label="Chat editor and image drop area"
-    ></div>
-  </div>
+<div class="flex items-center gap-2">
+  <!-- Tiptap editor -->
+  <div
+    bind:this={element}
+    class="flex-1 relative"
+    role="region"
+    aria-label="Chat editor and image drop area"
+  ></div>
+</div>
 
 <style>
   /* Style for local image previews */

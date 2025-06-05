@@ -67,15 +67,7 @@
   let previousMessage = $derived(new CoState(Message, previousMessageId));
 
   let profile = $derived(
-    new CoState(
-      RoomyProfile,
-      message.current?._edits.content?.by?.profile?.id,
-      {
-        resolve: {
-          image: true,
-        },
-      },
-    ),
+    new CoState(RoomyProfile, message.current?._edits.content?.by?.profile?.id),
   );
 
   // if the same user and the message was created in the last 5 minutes, don't show the border, username or avatar
@@ -365,23 +357,30 @@
   class={`flex flex-col w-full ${isMobile && "max-w-screen"}`}
 >
   <div
-    class={`relative group w-full h-fit flex flex-col gap-2 px-2 py-2 hover:bg-white/5`}
+    class={`relative group w-full h-fit flex flex-col gap-2 px-2 py-1 hover:bg-white/5`}
   >
     <div class={"group relative flex w-full justify-start gap-3"}>
       {#if !mergeWithPrevious || !message.current}
         <div class="size-8 sm:size-10">
-          <AvatarBeam name={crypto.randomUUID()} />
+          {#if profile.current?.imageUrl}
+            <AvatarImage
+              handle={profile.current?.name}
+              avatarUrl={profile.current?.imageUrl}
+            />
+          {:else}
+            <AvatarBeam name={profile.current?.id} />
+          {/if}
         </div>
       {:else}
-        <div class="size-8 shrink-0 sm:size-10"></div>
+        <div class="w-8 shrink-0 sm:w-10"></div>
       {/if}
 
       <div class="flex flex-col gap-1">
         {#if !mergeWithPrevious || !message.current}
-          <span
-            class=" flex items-center gap-2 text-sm"
-          >
-            <span class="font-bold text-primary">{profile?.current?.name ?? ""}</span>
+          <span class=" flex items-center gap-2 text-sm">
+            <span class="font-bold text-primary"
+              >{profile?.current?.name ?? ""}</span
+            >
             {#if message.current?.createdAt}
               {@render timestamp(message.current?.createdAt)}
             {/if}
