@@ -21,7 +21,7 @@
     timeline: string[];
     virtualizer?: Virtualizer<string>;
   } = $props();
-
+  console.log("timeline", timeline)
   let viewport: HTMLDivElement = $state(null!);
   // let messagesLoaded = $state(false);
   let messagesLoaded = $state(true);

@@ -8,10 +8,10 @@
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import { Button, Tabs } from "bits-ui";
-  import { Account, co } from "jazz-tools";
+  import { Account } from "jazz-tools";
   import { globalState } from "$lib/global.svelte";
 
-  import { Message, Thread } from "$lib/schema";
+  import { Thread } from "$lib/jazz/schema";
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
   import CreatePageDialog from "$lib/components/CreatePageDialog.svelte";
   import BoardList from "./BoardList.svelte";
@@ -24,7 +24,7 @@
   import { CoState } from "jazz-svelte";
   import { Channel, Space } from "$lib/jazz/schema";
   import { page } from "$app/state";
-  import { createMessage } from "$lib/jazz/utils";
+  import { createMessage, createThread } from "$lib/jazz/utils";
   import { extractTextContent } from "$lib/utils/extractText";
   import { user } from "$lib/user.svelte";
 
@@ -52,21 +52,47 @@
   let channel = $derived(
     new CoState(Channel, page.params.channel, {
       resolve: {
-        mainThread: {
-          timeline: true,
-        },
+        mainThread: true,
         subThreads: true,
+        pages: true,
       },
     }),
   );
 
-  let timeline = $derived(
-    Object.values(channel.current?.mainThread?.timeline.perAccount ?? {})
-      .map((accountFeed) => new Array(...accountFeed.all))
-      .flat()
-      .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
-      .map((a) => a.value),
-  );
+  let thread = $derived(new CoState(Thread, page.params.thread))
+
+  let timeline = $derived.by(() => {
+    console.log("page", page.params)
+    if (page.params.channel) {
+      return Object.values(
+        channel.current?.mainThread?.timeline?.perAccount ?? {},
+      )
+        .map((accountFeed) => new Array(...accountFeed.all))
+        .flat()
+        .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
+        .map((a) => a.value);
+    }
+    if(page.params.thread){
+      console.log("got thread", thread.current)
+      const vals = Object.values(
+        thread.current?.timeline?.perAccount ?? {},
+      )
+      console.log("vals", vals)
+      const ids = vals
+        .map((accountFeed) => new Array(...accountFeed.all))
+        .flat()
+        .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
+        .map((a) => a.value);
+
+      const uniq = Array.from(new Set(ids));
+      console.log(uniq)
+      return uniq;
+    }
+    return [];
+  });
+  $inspect(timeline).with(() => {
+    console.log("timeline", timeline);
+  });
 
   const readonly = $derived(channel.current?.name === "@links");
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
@@ -185,30 +211,28 @@
     }
   });
 
-  async function createThread(e: SubmitEvent) {
+  async function addThread(e: SubmitEvent) {
     e.preventDefault();
-    if (!globalState.space || !globalState.channel) return;
-    let thread = Thread.create({
-      name: threadTitleInput,
-      channel: globalState.channel,
-    });
-    thread.messages = co.list(Message).create([]);
+    console.log("creating thread");
+    // if (!globalState.space || !globalState.channel) return;
+    // thread.messages = co.list(Message).create([]);
     // messages can be selected in any order
     // sort them on create based on their position from the channel
-    let channelMessageIds =
-      globalState.channel.messages
-        ?.filter((message) => message !== null)
-        .map((message) => message.id) || [];
-    selectedMessages.sort((a, b) => {
-      return channelMessageIds.indexOf(a.id) - channelMessageIds.indexOf(b.id);
-    });
-    if (!globalState.space.threads) {
-      globalState.space.threads = co.list(Thread).create([]);
-    }
-
+    // let channelMessageIds =
+    //   globalState.channel.messages
+    //     ?.filter((message) => message !== null)
+    //     .map((message) => message.id) || [];
+    // selectedMessages.sort((a, b) => {
+    //   return channelMessageIds.indexOf(a.id) - channelMessageIds.indexOf(b.id);
+    // });
+    // if (!globalState.space.threads) {
+    //   globalState.space.threads = co.list(Thread).create([]);
+    // }
+    const messageIds = <string[]>[];
     for (const message of selectedMessages) {
       // move selected message ID from channel to thread timeline
-      thread.messages.push(message);
+      messageIds.push(message.id);
+      // thread.timeline.push(message.id);
       // const index = globalState.channel.messages.ids().indexOf(message.id);
       // globalState.channel.messages.remove(index);
 
@@ -220,6 +244,7 @@
       // announcement.commit();
       // globalState.channel.timeline.insert(index, announcement);
     }
+    let thread = createThread(messageIds, threadTitleInput);
 
     // TODO: decide whether the thread needs a reference to it's original channel. That might be
     // // confusing because it's messages could have come from multiple channels?
@@ -245,14 +270,15 @@
     // globalState.space.commit();
 
     // threadTitleInput = "";
-    globalState.space.threads.push(thread);
+    // globalState.space.threads.push(thread);
+    channel.current?.subThreads.push(thread);
     isThreading.value = false;
     toast.success("Thread created", { position: "bottom-end" });
   }
 
   async function sendMessage() {
     console.log("sending message", space.current, channel.current);
-    if (!space.current || !channel.current) return;
+   
 
     // maybe add back in later (if we only want to allow people signed in with bluesky to send messages)
     //if (!user.agent) return;
@@ -261,8 +287,13 @@
     console.log("creating message", messageInput);
 
     const message = createMessage(messageInput);
-
-    channel.current.mainThread.timeline.push(message.id);
+    if(channel.current?.mainThread.timeline){
+      channel.current.mainThread.timeline.push(message.id);
+    }
+    if(thread.current?.timeline){
+      thread.current.timeline.push(message.id);
+    }
+      
 
     // console.log(message.toJSON())
     // if (replyingTo) message.replyTo = replyingTo;
@@ -282,10 +313,10 @@
     // Images are now handled by TipTap in the message content
     // Limit image size in message input to 300x300
     // if (collectLinks(tiptapJsontoString(messageInput))) {
-      // if (links.value) {
-      //   links.value.timeline.push(message);
-      //   links.value.commit();
-      // }
+    // if (links.value) {
+    //   links.value.timeline.push(message);
+    //   links.value.commit();
+    // }
     // }
     messageInput = "";
     replyingTo = undefined;
@@ -299,10 +330,9 @@
 
       if (results.length > 0) {
         showSearchResults = true;
-
         // Get the actual Message objects for the search results
-        if (globalState.channel.messages) {
-          const messages = globalState.channel.messages;
+        if (timeline) {
+          const messages = timeline.items();
           searchResults = messages.filter(
             (msg): msg is Message =>
               msg !== null && msg !== undefined && results.includes(msg.id),
@@ -324,18 +354,14 @@
   //     : [],
   // );
 
-  const pages = $derived.by(() => {
-    if (!globalState.space?.wikipages) return [];
-    return globalState.space.wikipages.filter(
-      (page) => page !== null && !page.softDeleted,
-    );
+  const pages = $derived(channel.current?.pages || []);
+  $inspect(pages).with(() => {
+    console.log("pages", pages);
   });
 
   const relatedThreads = $derived.by(() => {
-    if (!globalState.space?.threads) return [];
-    return globalState.space.threads.filter(
-      (thread) => thread !== null && !thread.softDeleted,
-    );
+    if (!channel.current) return [];
+    return channel.current.subThreads;
   });
 </script>
 
@@ -391,7 +417,7 @@
           <Icon icon="tabler:search" class="text-base-content" />
         </button>
       {/if}
-      <TimelineToolbar {createThread} bind:threadTitleInput />
+      <TimelineToolbar createThread={addThread} bind:threadTitleInput />
     </div>
   {/if}
 </header>
@@ -408,7 +434,7 @@
     No threads for this channel.
   </BoardList>
 {:else if tab === "chat"}
-  {#if space.current && channel.current}
+  {#if space.current}
     <div class="flex h-full flex-col">
       {#if showSearchInput}
         <div

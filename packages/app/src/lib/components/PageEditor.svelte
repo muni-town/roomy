@@ -16,15 +16,15 @@
   import Dialog from "$lib/components/Dialog.svelte";
   import { outerWidth } from "svelte/reactivity/window";
   import { derivePromise } from "$lib/utils.svelte";
+  import { CoState } from "jazz-svelte";
+  import { Page } from "$lib/jazz/schema";
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   // const pageId = page.params.page;
   // const pages = globalState.channel?.wikiPages || [];
   // const pg = pages.find((page) => page.id === pageId);
 
-  const pg = derivePromise([], async () => {
-    return WikiPage.load(page.params.page);
-  });
+  const pg = $derived(new CoState(Page, page.params.page))
 
 $inspect(pg).with((_,pg) => {
   console.log("pg", pg)
@@ -522,9 +522,10 @@ $inspect(pg).with((_,pg) => {
           }
         }
       });
-      if (pg) {
+      if (pg.current.body) {
         try {
-          const parsedContent = JSON.parse(pg.value.body);
+          console.log("wat",pg.current.body)
+          const parsedContent = JSON.parse(pg.current.body);
           setTimeout(() => {
             if (editor && editor.document) {
               editor.replaceBlocks(editor.document, parsedContent);
@@ -645,14 +646,14 @@ $inspect(pg).with((_,pg) => {
 
   $effect(() => {
     isEditingPage
-    if (!pg.value?.body) return;
-    if (pg.value.body == "{}") {
+    if (!pg.current?.body) return;
+    if (pg.current.body == "{}") {
       pageRenderedHtml = "";
       processedHtml = "";
       return;
     }
-    console.log("page body", pg.value.body )
-    const json = JSON.parse(pg.value.body);
+    console.log("page body", pg.current.body )
+    const json = JSON.parse(pg.current.body);
     try {
       const rendererEditor = BlockNoteEditor.create();
       rendererEditor
@@ -669,10 +670,10 @@ $inspect(pg).with((_,pg) => {
   });
 
   async function savePageContent() {
-    if (!editor || !globalState.space || !pg) return;
+    if (!editor || !pg.current) return;
     try {
       const res = JSON.stringify(editor.document);
-      pg.value.body = res;
+      pg.current.body = res;
 
       setEditingPage(false);
       toast.success("Page saved successfully", { position: "bottom-end" });
@@ -767,12 +768,12 @@ $inspect(pg).with((_,pg) => {
         <h4
           class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold flex gap-2 items-center`}
         >
-          {pg.value?.name}
+          {pg.current?.name}
         </h4>
       {:else}
         <input
           type="text"
-          bind:value={pg.value.name}
+          bind:value={pg.current.name}
           class="text-base-content text-lg font-bold p-0 flex-1 mr-2"
           placeholder="Page title"
           required
@@ -820,7 +821,7 @@ $inspect(pg).with((_,pg) => {
   <section class="page-content h-full overflow-y-auto">
     <div class="page-rendered p-4">
       <div class="page-html text-base-content">
-        {#if pg && !pg.value.softDeleted}
+        {#if pg.current && !pg.current.softDeleted}
           {@html processedHtml}
         {:else}
           <p class="text-base-content/70">No content available.</p>
