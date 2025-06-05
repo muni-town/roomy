@@ -350,6 +350,7 @@
       return "Edit message...";
     }
   }
+
 </script>
 
 <div
@@ -359,8 +360,8 @@
   <div
     class={`relative group w-full h-fit flex flex-col gap-2 px-2 py-1 hover:bg-white/5`}
   >
-    <div class={"group relative flex w-full justify-start gap-3"}>
-      {#if !mergeWithPrevious || !message.current}
+    <div class={"group relative flex w-full justify-start gap-5"}>
+      {#if !mergeWithPrevious && message.current}
         <div class="size-8 sm:size-10">
           {#if profile.current?.imageUrl}
             <AvatarImage
@@ -387,7 +388,7 @@
           </span>
         {/if}
         <div class="dz-prose prose-a:text-primary prose-a:hover:underline">
-          {@html message.current?.content ?? "Loading..."}
+          {@html message.current?.content ?? ""}
         </div>
       </div>
     </div>
