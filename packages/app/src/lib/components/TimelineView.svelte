@@ -112,28 +112,8 @@
   // thread maker
   let isThreading = $state({ value: false });
   let threadTitleInput = $state("");
-  // let selectedMessages: Message[] = $state([]);
 
   setContext("isThreading", isThreading);
-  // setContext("selectMessage", (message) => {
-  //   console.log("attempting push")
-  //   selectedMessages.push(message);
-  // });
-  // setContext("removeSelectedMessage", (msg: Message) => {
-  //   selectedMessages = selectedMessages.filter((m) => m !== msg);
-  // });
-
-  // $effect(() => {
-  //   if (!isThreading.value && selectedMessages.length > 0) {
-  //     selectedMessages = [];
-  //   }
-  // });
-
-  // Reply Utils
-  let replyingTo = $state<string>();
-  setContext("setReplyTo", (message: string) => {
-    replyingTo = message;
-  });
 
   // Initialize FlexSearch with appropriate options for message content
   let searchIndex = new Index({
@@ -291,7 +271,6 @@
     // }
     // }
     messageInput = "";
-    replyingTo = undefined;
   }
 
   // Handle search input
@@ -320,12 +299,6 @@
     }
   });
 
-  // let relatedThreads = derivePromise([], async () =>
-  //   globalState.channel && globalState.channel instanceof Channel
-  //     ? await globalState.channel.threads.items()
-  //     : [],
-  // );
-
   const pages = $derived(
     channel.current?.pages?.filter((page) => page && !page.softDeleted) || [],
   );
@@ -337,7 +310,7 @@
   );
 
   function joinSpace() {
-    if(!space.current || !me.current) return;
+    if (!space.current || !me.current) return;
 
     // add to my list of joined spaces
     me.current?.profile?.joinedSpaces?.push(space.current);
@@ -345,10 +318,6 @@
     // add to space.current.members
     space.current?.members?.push(me.current);
   }
-
-  $inspect(me.current?.profile?.joinedSpaces).with(() => {
-    console.log("me", me.current?.profile?.joinedSpaces.toJSON());
-  });
 </script>
 
 {#if admin.current}
@@ -498,22 +467,25 @@
 
       <div>
         {#if !isMobile || !isThreading.value}
-          <div class="chat-input-container">
+          <div>
             {#if user.session}
               {#if me?.current?.profile?.joinedSpaces?.some((joinedSpace) => joinedSpace?.id === space.current?.id)}
                 {#if !readonly}
-                  <ChatInput
-                    bind:content={messageInput}
-                    users={[]}
-                    context={[]}
-                    onEnter={sendMessage}
-                  />
+                  <div class="dz-prose prose-a:text-primary prose-a:underline">
+                    <ChatInput
+                      bind:content={messageInput}
+                      users={[]}
+                      context={[]}
+                      onEnter={sendMessage}
+                    />
+                  </div>
                 {:else}
                   <div class="flex items-center grow flex-col">
-                    <Button.Root onclick={() => {
-                      user.isLoginDialogOpen = true;
-                    }} class="w-full dz-btn"
-                      >Automatted Thread</Button.Root
+                    <Button.Root
+                      onclick={() => {
+                        user.isLoginDialogOpen = true;
+                      }}
+                      class="w-full dz-btn">Automated Thread</Button.Root
                     >
                   </div>
                 {/if}

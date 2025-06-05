@@ -7,6 +7,7 @@
   import { initUserMention, initSpaceContextMention } from "$lib/tiptap/editor";
   import { type Item, initKeyboardShortcutHandler } from "$lib/tiptap/editor";
   import { globalState } from "$lib/global.svelte";
+  import { RichTextLink } from "$lib/tiptap/RichTextLink";
 
   type Props = {
     content: string;
@@ -40,6 +41,11 @@
       extensions: [
         StarterKit.configure({ heading: false }),
         Placeholder.configure({ placeholder }),
+        RichTextLink.configure({
+          openOnClick: false,
+          autolink: true,
+          defaultProtocol: "https",
+        }),
         initKeyboardShortcutHandler({ onEnter: wrappedOnEnter }),
         initUserMention({ users }),
         initSpaceContextMention({ context }),

@@ -51,10 +51,20 @@ export const Channel = co.map({
   pages: z.optional(co.list(Page)),
 });
 
+
+export const Category = co.map({
+  name: z.string(),
+  channels: z.optional(co.list(Channel)),
+  softDeleted: z.boolean().optional(),
+});
+
 export const Space = co.map({
   name: z.string(),
   image: co.image().optional(),
   channels: co.list(Channel),
+
+  categories: co.list(Category),
+
   description: z.string().optional(),
   emoji: z.string().optional(),
 

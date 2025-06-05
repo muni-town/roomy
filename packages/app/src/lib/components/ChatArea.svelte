@@ -4,6 +4,7 @@
   import { Virtualizer } from "virtua/svelte";
   import { page } from "$app/state";
   import { setContext } from "svelte";
+  import { Account, co } from "jazz-tools";
 
   let {
     timeline,
@@ -14,10 +15,9 @@
     timeline: string[];
     virtualizer?: Virtualizer<string>;
     isAdmin?: boolean;
-    admin: co.loaded<typeof Account>;
+    admin: co.loaded<typeof Account> | undefined | null;
   } = $props();
 
-  console.log("timeline", timeline)
   let viewport: HTMLDivElement = $state(null!);
 
   setContext("scrollToMessage", (id: string) => {
@@ -30,7 +30,7 @@
 
     if (!viewport || !virtualizer) return;
     if (timeline) {
-      virtualizer.scrollToIndex(timeline.length - 1, { align: "end" });
+      virtualizer.scrollToIndex(timeline.length - 1, { align: "start" });
     }
   });
 </script>

@@ -30,7 +30,7 @@
     messageId: string;
     previousMessageId?: string;
     isAdmin?: boolean;
-    admin: co.loaded<typeof Account>;
+    admin: co.loaded<typeof Account> | undefined | null;
   };
 
   const me = new AccountCoState(RoomyAccount, {
@@ -215,7 +215,7 @@
   }
 </script>
 
-{#if message.current && !message.current.softDeleted && messageHasAdmin(message.current, admin)}
+{#if message.current && !message.current.softDeleted && admin && messageHasAdmin(message.current, admin)}
   <div
     id={message.current?.id}
     class={`flex flex-col w-full relative max-w-screen`}
