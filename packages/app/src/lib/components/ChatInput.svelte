@@ -32,6 +32,11 @@
   let tiptap: Editor | undefined = $state();
 
   async function wrappedOnEnter() {
+    // add one space at the end to the editor
+    tiptap?.commands.insertContent(" ");
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
     onEnter(content);
   }
 

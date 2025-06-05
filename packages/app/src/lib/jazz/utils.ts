@@ -1,5 +1,6 @@
 import { Account, co, CoRichText, Group, z } from "jazz-tools";
 import {
+  Category,
   Channel,
   Message,
   Page,
@@ -76,11 +77,23 @@ export function createSpace(
       adminId: me.id,
       threads: co.list(Thread).create([], publicGroup()),
       pages: co.list(Page).create([], publicGroup()),
+      categories: co.list(Category).create([], readerGroup),
     },
     readerGroup,
   );
 
   return space;
+}
+
+export function createCategory(name: string) {
+  const category = Category.create(
+    {
+      name,
+      channels: co.list(Channel).create([], publicGroup("reader")),
+    },
+    publicGroup("reader"),
+  );
+  return category;
 }
 
 export function joinSpace(space: co.loaded<typeof Space>) {

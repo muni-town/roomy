@@ -27,6 +27,7 @@
   import { user } from "$lib/user.svelte";
   import { replyTo } from "./ChatMessage.svelte";
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
+  import { extractLinks } from "$lib/utils/collectLinks";
 
   // const links = derivePromise(null, async () =>
   //   (await globalState.space?.threads.items())?.find(
@@ -43,6 +44,10 @@
         },
       },
     }),
+  );
+
+  const links = $derived(
+    space.current?.threads?.find((x) => x?.name === "@links"),
   );
 
   let admin = $derived(new CoState(Account, space.current?.adminId));
@@ -73,7 +78,7 @@
     console.log("timeline", timeline);
   });
 
-  const readonly = $derived(channel.current?.name === "@links");
+  const readonly = $derived(thread.current?.name === "@links");
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let tab = $state<"chat" | "board">("chat");
@@ -249,6 +254,18 @@
     if (replyTo.id) message.replyTo = replyTo.id;
 
     replyTo.id = "";
+
+    if (links?.timeline) {
+      const allLinks = extractLinks(messageInput);
+      for (const link of allLinks) {
+        const message = createMessage(
+          `<a href="${link}">${link}</a>`,
+          undefined,
+          admin.current || undefined,
+        );
+        links.timeline.push(message.id);
+      }
+    }
 
     // Add new message to search index
     // if (searchIndex) {
@@ -481,11 +498,8 @@
                   </div>
                 {:else}
                   <div class="flex items-center grow flex-col">
-                    <Button.Root
-                      onclick={() => {
-                        user.isLoginDialogOpen = true;
-                      }}
-                      class="w-full dz-btn">Automated Thread</Button.Root
+                    <Button.Root disabled class="w-full dz-btn"
+                      >Automated Thread</Button.Root
                     >
                   </div>
                 {/if}
