@@ -367,8 +367,32 @@
   <div
     class={`relative group w-full h-fit flex flex-col gap-2 px-2 py-2 hover:bg-white/5`}
   >
-  <AvatarBeam name={crypto.randomUUID()} />
- {message.current?.content}
+    <div class={"group relative flex w-full justify-start gap-3"}>
+      {#if !mergeWithPrevious || !message.current}
+        <div class="size-8 sm:size-10">
+          <AvatarBeam name={crypto.randomUUID()} />
+        </div>
+      {:else}
+        <div class="size-8 shrink-0 sm:size-10"></div>
+      {/if}
+
+      <div class="flex flex-col gap-1">
+        {#if !mergeWithPrevious || !message.current}
+          <span
+            class=" flex items-center gap-2 text-sm"
+          >
+            <span class="font-bold text-primary">{profile?.current?.name ?? ""}</span>
+            {#if message.current?.createdAt}
+              {@render timestamp(message.current?.createdAt)}
+            {/if}
+          </span>
+        {/if}
+        <div class="dz-prose prose-a:text-primary prose-a:hover:underline">
+          {@html message.current?.content ?? "Loading..."}
+        </div>
+      </div>
+    </div>
+
     <!-- {@render messageView(message)} -->
     <!-- {#if message instanceof Announcement}
       {@render announcementView(message)}
@@ -461,7 +485,7 @@
         title={authorProfile.handle}
         target="_blank"
       > -->
-        <AvatarBeam />
+      <AvatarBeam />
       <!-- </a> -->
     {:else}
       <div class="w-11">
@@ -530,9 +554,9 @@
               target="_blank"
               class="text-primary hover:underline"
             > -->
-              <h5 class="font-bold text-primary" title={profile.current?.name}>
-                {profile.current?.name}
-              </h5>
+            <h5 class="font-bold text-primary" title={profile.current?.name}>
+              {profile.current?.name}
+            </h5>
             <!-- </a> -->
             {@render timestamp(message.current?.createdAt || new Date())}
           </section>
@@ -573,7 +597,10 @@
               <div class="flex flex-col gap-1">
                 <p class="font-semibold">Message edited</p>
                 <p>
-                  Original: {format(message.current?.createdAt || new Date(), "PPpp")}
+                  Original: {format(
+                    message.current?.createdAt || new Date(),
+                    "PPpp",
+                  )}
                 </p>
                 <p>Edited: {getEditedTime(message.current)}</p>
               </div>

@@ -95,7 +95,7 @@
   //   }
   // });
 
-  let messageInput: JSONContent = $state({});
+  let messageInput: string = $state("");
 
   // thread maker
   let isThreading = $state({ value: false });
@@ -259,9 +259,9 @@
     //if (!user.agent) return;
 
     // Image upload is now handled in ChatInput.svelte
-    console.log("creating message", JSON.stringify(messageInput));
+    console.log("creating message", messageInput);
 
-    const message = createMessage(JSON.stringify(messageInput));
+    const message = createMessage(messageInput);
 
     channel.current.mainThread.timeline.push(message.id);
 
@@ -282,13 +282,13 @@
 
     // Images are now handled by TipTap in the message content
     // Limit image size in message input to 300x300
-    if (collectLinks(tiptapJsontoString(messageInput))) {
+    // if (collectLinks(tiptapJsontoString(messageInput))) {
       // if (links.value) {
       //   links.value.timeline.push(message);
       //   links.value.commit();
       // }
-    }
-    messageInput = {};
+    // }
+    messageInput = "";
     replyingTo = undefined;
   }
 
@@ -457,7 +457,7 @@
         class="flex-grow overflow-auto relative"
         style="max-height: calc(100vh - 180px);"
       >
-        <ChatArea timeline={timeline} bind:virtualizer />
+        <ChatArea {timeline} bind:virtualizer />
 
         {#if replyingTo}
           <div
