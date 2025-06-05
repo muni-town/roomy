@@ -1,20 +1,22 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import { Button } from "bits-ui";
-
-  import { globalState } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
-  import { derivePromise } from "$lib/utils.svelte";
   import { AccountCoState } from "jazz-svelte";
-  import { AccountSchema } from "$lib/schema";
+  import { RoomyAccount } from "$lib/jazz/schema";
 
-  const account = new AccountCoState(AccountSchema, {
+  const account = new AccountCoState(RoomyAccount, {
     resolve: {
-      profile: true,
+      profile: {
+        joinedSpaces: {
+          $each: true,
+          $onError: null,
+        },
+      },
     },
   });
   const me = $derived(account.current);
-  let spaces = $derived(globalState.catalog?.spaces);
+  let spaces = $derived(me?.profile?.joinedSpaces);
 </script>
 
 <div class="dz-hero bg-base-200 min-h-screen">

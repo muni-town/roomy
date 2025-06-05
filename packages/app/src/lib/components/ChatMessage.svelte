@@ -27,14 +27,6 @@
   import ChatInput from "./ChatInput.svelte";
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
 
-  type Props = {
-    messageId: string;
-    previousMessageId?: string;
-    isAdmin?: boolean;
-    admin: co.loaded<typeof Account> | undefined | null;
-    space: co.loaded<typeof Space> | undefined | null;
-  };
-
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
       profile: true,
@@ -42,7 +34,21 @@
     },
   });
 
-  let { messageId, previousMessageId, isAdmin, admin, space }: Props = $props();
+  let {
+    messageId,
+    previousMessageId,
+    isAdmin,
+    admin,
+    space,
+    threadId,
+  }: {
+    messageId: string;
+    previousMessageId?: string;
+    isAdmin?: boolean;
+    admin: co.loaded<typeof Account> | undefined | null;
+    space: co.loaded<typeof Space> | undefined | null;
+    threadId?: string;
+  } = $props();
 
   let message = $derived(
     new CoState(Message, messageId, {
@@ -217,9 +223,19 @@
   }
 
   let bannedHandles = $derived(new Set(space?.bans ?? []));
+  let hiddenIn = $derived(new Set(message.current?.hiddenIn ?? []));
+
+  let shouldShow = $derived.by(() => {
+    if (!message.current) return false;
+    if (message.current.softDeleted) return false;
+    if (admin && messageHasAdmin(message.current, admin)) return true;
+    if (bannedHandles.has(profile?.current?.blueskyHandle ?? "")) return false;
+    if (hiddenIn.has(threadId ?? "")) return false;
+    return true;
+  });
 </script>
 
-{#if message.current && !message.current.softDeleted && admin && messageHasAdmin(message.current, admin) && !bannedHandles.has(profile?.current?.blueskyHandle ?? "")}
+{#if shouldShow}
   <div
     id={message.current?.id}
     class={`flex flex-col w-full relative max-w-screen`}

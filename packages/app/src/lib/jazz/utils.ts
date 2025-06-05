@@ -156,6 +156,7 @@ export function createMessage(
       reactions: co.list(Reaction).create([], publicGroup()),
       replyTo: replyTo,
       type: "message",
+      hiddenIn: co.list(z.string()).create([], readingGroup),
     },
     readingGroup,
   );

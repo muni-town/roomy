@@ -18,6 +18,8 @@ export const Message = co.map({
   createdAt: z.date(),
   updatedAt: z.date(),
 
+  hiddenIn: co.list(z.string()),
+
   replyTo: z.string().optional(),
   movedTo: z.optional(MovedTo),
   reactions: ReactionList,

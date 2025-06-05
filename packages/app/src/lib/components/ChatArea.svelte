@@ -12,13 +12,15 @@
     virtualizer = $bindable(),
     isAdmin = false,
     admin,
-    space
+    space,
+    threadId,
   }: {
     timeline: string[];
     virtualizer?: Virtualizer<string>;
     isAdmin?: boolean;
     admin: co.loaded<typeof Account> | undefined | null;
     space: co.loaded<typeof Space> | undefined | null;
+    threadId?: string;
   } = $props();
 
   let viewport: HTMLDivElement = $state(null!);
@@ -74,6 +76,7 @@
                 {isAdmin}
                 {admin}
                 {space}
+                {threadId}
               />
             {/snippet}
           </Virtualizer>

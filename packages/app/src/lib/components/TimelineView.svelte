@@ -78,6 +78,9 @@
       .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
       .map((a) => a.value);
   });
+
+  let threadId = $derived(thread.current?.id ?? channel.current?.id);
+
   $inspect(timeline).with(() => {
     console.log("timeline", timeline);
   });
@@ -468,6 +471,7 @@
           bind:virtualizer
           isAdmin={isSpaceAdmin(space.current)}
           admin={admin.current}
+          {threadId}
         />
 
         {#if replyTo.id}
