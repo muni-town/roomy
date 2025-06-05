@@ -20,12 +20,7 @@
     "beachball": "^2.54.0",
     "flexsearch": "^0.8.164",
     "husky": "^9.1.7",
-    "jazz-tools": "^0.14.21",
     "pkgroll": "^2.12.2",
     "turbo": "^2.5.3"
-  },
-  "dependencies": {
-    "jazz-inspector-element": "^0.14.13",
-    "jazz-svelte": "^0.14.21"
   }
 }

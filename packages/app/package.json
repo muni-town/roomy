@@ -122,5 +122,10 @@
     "url": "https://opencollective.com/weird-inc",
     "logo": "https://opencollective.com/opencollective/logo.txt"
   },
-  "license": "https://blueoakcouncil.org/license/1.0.0"
+  "license": "https://blueoakcouncil.org/license/1.0.0",
+  "dependencies": {
+    "jazz-inspector-element": "^0.14.21",
+    "jazz-svelte": "0.14.21",
+    "jazz-tools": "0.14.21"
+  }
 }

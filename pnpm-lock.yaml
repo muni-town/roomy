@@ -7,13 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      jazz-inspector-element:
-        specifier: ^0.14.13
-        version: 0.14.13(csstype@3.1.3)
-      jazz-svelte:
-        specifier: ^0.14.21
-        version: 0.14.21(svelte@5.33.1)
     devDependencies:
       '@repo/tsconfig':
         specifier: workspace:*
@@ -27,9 +20,6 @@ importers:
       husky:
         specifier: ^9.1.7
         version: 9.1.7
-      jazz-tools:
-        specifier: ^0.14.21
-        version: 0.14.21
       pkgroll:
         specifier: ^2.12.2
         version: 2.12.2(typescript@5.8.3)
@@ -38,6 +28,16 @@ importers:
         version: 2.5.3
 
   packages/app:
+    dependencies:
+      jazz-inspector-element:
+        specifier: ^0.14.21
+        version: 0.14.21(csstype@3.1.3)
+      jazz-svelte:
+        specifier: 0.14.21
+        version: 0.14.21(svelte@5.33.1)
+      jazz-tools:
+        specifier: 0.14.21
+        version: 0.14.21
     devDependencies:
       '@atproto/api':
         specifier: ^0.14.9
@@ -56,7 +56,7 @@ importers:
         version: 0.25.2(@types/hast@3.0.4)
       '@blocknote/react':
         specifier: ^0.25.0
-        version: 0.25.2(@types/hast@3.0.4)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        version: 0.25.2(@types/hast@3.0.4)(react-dom@19.1.0(react@19.0.0))(react@19.0.0)
       '@iconify/svelte':
         specifier: ^4.2.0
         version: 4.2.0(svelte@5.33.1)
@@ -242,7 +242,7 @@ importers:
         version: 0.3.2(svelte@5.33.1)
       virtua:
         specifier: ^0.41.0
-        version: 0.41.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(svelte@5.33.1)
+        version: 0.41.2(react-dom@19.1.0(react@19.0.0))(react@19.0.0)(svelte@5.33.1)
       vite:
         specifier: ^6.2.2
         version: 6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)
@@ -1724,9 +1724,6 @@ packages:
   cojson-transport-ws@0.14.21:
     resolution: {integrity: sha512-U33xOa+RUzg0EmT3xp4KeVZ9GPmFLXnvo0jlPWAR48q5NcUpUv/wQQsyRq/0vV9VqeKAgrDdG85E/0NcO92Zgg==, tarball: https://registry.npmjs.org/cojson-transport-ws/-/cojson-transport-ws-0.14.21.tgz}
 
-  cojson@0.14.1:
-    resolution: {integrity: sha512-U3VhymNJqx56mt61UZT6ey6dDp53Qjq2390//ARBg5FW9qpebg03AqvWQjAZoadmO4QVgfLXAzkZzc5NoEFUMg==, tarball: https://registry.npmjs.org/cojson/-/cojson-0.14.1.tgz}
-
   cojson@0.14.21:
     resolution: {integrity: sha512-70moXht50pz8+Zce7xw7fAfpH8A1MmpwIzlm0o9K5kDBu/2REFJ/1tfePVId3WPa/52C4HKDRb+DIwC/DhdSdg==, tarball: https://registry.npmjs.org/cojson/-/cojson-0.14.21.tgz}
 
@@ -2214,16 +2211,16 @@ packages:
   jazz-crypto-rs@0.0.7:
     resolution: {integrity: sha512-Pzs8Zu1zgKVURkBVvqqF1B2r78FaSZdwPbmeCWx0Nb3nibzPuB/kSKEO7LJsKnb3P5HO0v+lTIJ53mGC5H1urQ==, tarball: https://registry.npmjs.org/jazz-crypto-rs/-/jazz-crypto-rs-0.0.7.tgz}
 
-  jazz-inspector-element@0.14.13:
-    resolution: {integrity: sha512-IrSu6UguzXqpblVHJJSD7Kj+oqKnB+l1co5S4FNIi48HS+bme9luFiZ781qMxFjg6nNRiLkuOXOPNLiz9jybOg==, tarball: https://registry.npmjs.org/jazz-inspector-element/-/jazz-inspector-element-0.14.13.tgz}
+  jazz-inspector-element@0.14.21:
+    resolution: {integrity: sha512-tpR5DAduqHC3dTrwW86BPFxJdPBr9OLf5zNEyuH/unJfVc7pLPONCxwFN5KmySPK/UsgHIHNvLp62k7i4zM05Q==, tarball: https://registry.npmjs.org/jazz-inspector-element/-/jazz-inspector-element-0.14.21.tgz}
 
-  jazz-inspector@0.14.13:
-    resolution: {integrity: sha512-xP+f7LQbhYBCyA8klb5WevW84wK9SM0+/wLTRYe0rmUchBdAyk3syYrMtnw+t9LchtbA4Uila3kQOkINnXnWog==, tarball: https://registry.npmjs.org/jazz-inspector/-/jazz-inspector-0.14.13.tgz}
+  jazz-inspector@0.14.21:
+    resolution: {integrity: sha512-uTgNrGwad95VwSpGX01tic6dkD6cd6WYE3y0y9CLC4KT3aGqJ8EBY4qFd34VHy4B/ga2DbSVxh+LFPnM21cxfA==, tarball: https://registry.npmjs.org/jazz-inspector/-/jazz-inspector-0.14.21.tgz}
     peerDependencies:
       react: '*'
 
-  jazz-react-core@0.14.13:
-    resolution: {integrity: sha512-HwGPtMJQpcO88NnX/5uBp2ll6GTWJd1MJJHLvIQlru/axVqJVV6mTzTYqPrB4vr+zo8F4D7NRtqNIK2mvbi3zA==, tarball: https://registry.npmjs.org/jazz-react-core/-/jazz-react-core-0.14.13.tgz}
+  jazz-react-core@0.14.21:
+    resolution: {integrity: sha512-eGu0bmSDd37aNis7qZW12NZhzl1WDC0UduUpP1q6l1CXAcq0ktpLOYKEDsf3cFBvDTfvO+TgTymoLja+ODHUww==, tarball: https://registry.npmjs.org/jazz-react-core/-/jazz-react-core-0.14.21.tgz}
     peerDependencies:
       react: '*'
 
@@ -2231,9 +2228,6 @@ packages:
     resolution: {integrity: sha512-Wik3IXVmDyOv5Z+MDTmQtpFep/z/c62NG9TieljcKBasGr2kWDNNXnZGzdQxul18jgSXK3cNaq5r0L0gJWWIaQ==, tarball: https://registry.npmjs.org/jazz-svelte/-/jazz-svelte-0.14.21.tgz}
     peerDependencies:
       svelte: ^5.0.0
-
-  jazz-tools@0.14.10:
-    resolution: {integrity: sha512-tN+kJdebNUxjAzleiftaPaNh5Cypbola7t1vcqRZ9WoEhuA1nhP5bAShTerb8/0reR8T+fus44plri8YSpqU5A==, tarball: https://registry.npmjs.org/jazz-tools/-/jazz-tools-0.14.10.tgz}
 
   jazz-tools@0.14.21:
     resolution: {integrity: sha512-KD/gEUc0qG2lcYctoM42ko11/pTvKin1xFzwaTVZTOwCcf9pHYszkZvE837ABA2cv0GfJdJ4tkDbDMkFhDN2zw==, tarball: https://registry.npmjs.org/jazz-tools/-/jazz-tools-0.14.21.tgz}
@@ -2923,10 +2917,6 @@ packages:
     resolution: {integrity: sha512-V8AVnmPIICiWpGfm6GLzCR/W5FXLchHop40W4nXBmdlEceh16rCN8O8LNWm5bh5XUX91fh7KpA+W0TgMKmgTpQ==, tarball: https://registry.npmjs.org/react/-/react-19.0.0.tgz}
     engines: {node: '>=0.10.0'}
 
-  react@19.1.0:
-    resolution: {integrity: sha512-FS+XFBNvn3GTAWq26joslQgWNoFu08F4kl0J4CgdNKADkdSGXQyTCnKteIAJy96Br6YbpEU1LSzV5dYtjMkMDg==, tarball: https://registry.npmjs.org/react/-/react-19.1.0.tgz}
-    engines: {node: '>=0.10.0'}
-
   readable-stream@2.3.8:
     resolution: {integrity: sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA==, tarball: https://registry.npmjs.org/readable-stream/-/readable-stream-2.3.8.tgz}
 
@@ -3611,9 +3601,6 @@ packages:
   zod@3.25.23:
     resolution: {integrity: sha512-Od2bdMosahjSrSgJtakrwjMDb1zM1A3VIHCPGveZt/3/wlrTWBya2lmEh2OYe4OIu8mPTmmr0gnLHIWQXdtWBg==, tarball: https://registry.npmjs.org/zod/-/zod-3.25.23.tgz}
 
-  zod@3.25.24-beta.0:
-    resolution: {integrity: sha512-ywo5CJEuW+SrziC3uRmtRPADjlNyIFuWjT7Jlbrn6Yu9O4HnRsVQ+LbHpb8Rp/b6GlsA54FcAelE1wga+1LtKA==, tarball: https://registry.npmjs.org/zod/-/zod-3.25.24-beta.0.tgz}
-
   zod@3.25.28:
     resolution: {integrity: sha512-/nt/67WYKnr5by3YS7LroZJbtcCBurDKKPBPWWzaxvVCGuG/NOsiKkrjoOhI8mJ+SQUXEbUzeB3S+6XDUEEj7Q==, tarball: https://registry.npmjs.org/zod/-/zod-3.25.28.tgz}
 
@@ -3884,19 +3871,19 @@ snapshots:
       - sugar-high
       - supports-color
 
-  '@blocknote/react@0.25.2(@types/hast@3.0.4)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@blocknote/react@0.25.2(@types/hast@3.0.4)(react-dom@19.1.0(react@19.0.0))(react@19.0.0)':
     dependencies:
       '@blocknote/core': 0.25.2(@types/hast@3.0.4)
       '@emoji-mart/data': 1.2.1
-      '@floating-ui/react': 0.26.28(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@floating-ui/react': 0.26.28(react-dom@19.1.0(react@19.0.0))(react@19.0.0)
       '@tiptap/core': 2.12.0(@tiptap/pm@2.12.0)
       '@tiptap/pm': 2.12.0
-      '@tiptap/react': 2.12.0(@tiptap/core@2.12.0(@tiptap/pm@2.12.0))(@tiptap/pm@2.12.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@tiptap/react': 2.12.0(@tiptap/core@2.12.0(@tiptap/pm@2.12.0))(@tiptap/pm@2.12.0)(react-dom@19.1.0(react@19.0.0))(react@19.0.0)
       emoji-mart: 5.6.0
       lodash.merge: 4.6.2
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
-      react-icons: 5.5.0(react@19.1.0)
+      react: 19.0.0
+      react-dom: 19.1.0(react@19.0.0)
+      react-icons: 5.5.0(react@19.0.0)
     transitivePeerDependencies:
       - '@hocuspocus/provider'
       - '@types/hast'
@@ -4014,18 +4001,18 @@ snapshots:
       '@floating-ui/core': 1.7.0
       '@floating-ui/utils': 0.2.9
 
-  '@floating-ui/react-dom@2.1.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@floating-ui/react-dom@2.1.2(react-dom@19.1.0(react@19.0.0))(react@19.0.0)':
     dependencies:
       '@floating-ui/dom': 1.7.0
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      react: 19.0.0
+      react-dom: 19.1.0(react@19.0.0)
 
-  '@floating-ui/react@0.26.28(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@floating-ui/react@0.26.28(react-dom@19.1.0(react@19.0.0))(react@19.0.0)':
     dependencies:
-      '@floating-ui/react-dom': 2.1.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@floating-ui/react-dom': 2.1.2(react-dom@19.1.0(react@19.0.0))(react@19.0.0)
       '@floating-ui/utils': 0.2.9
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      react: 19.0.0
+      react-dom: 19.1.0(react@19.0.0)
       tabbable: 6.2.0
 
   '@floating-ui/utils@0.2.9': {}
@@ -4800,7 +4787,7 @@ snapshots:
       prosemirror-transform: 1.10.4
       prosemirror-view: 1.39.3
 
-  '@tiptap/react@2.12.0(@tiptap/core@2.12.0(@tiptap/pm@2.12.0))(@tiptap/pm@2.12.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@tiptap/react@2.12.0(@tiptap/core@2.12.0(@tiptap/pm@2.12.0))(@tiptap/pm@2.12.0)(react-dom@19.1.0(react@19.0.0))(react@19.0.0)':
     dependencies:
       '@tiptap/core': 2.12.0(@tiptap/pm@2.12.0)
       '@tiptap/extension-bubble-menu': 2.12.0(@tiptap/core@2.12.0(@tiptap/pm@2.12.0))(@tiptap/pm@2.12.0)
@@ -4808,9 +4795,9 @@ snapshots:
       '@tiptap/pm': 2.12.0
       '@types/use-sync-external-store': 0.0.6
       fast-deep-equal: 3.1.3
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
-      use-sync-external-store: 1.5.0(react@19.1.0)
+      react: 19.0.0
+      react-dom: 19.1.0(react@19.0.0)
+      use-sync-external-store: 1.5.0(react@19.0.0)
 
   '@tiptap/starter-kit@2.12.0':
     dependencies:
@@ -5132,18 +5119,6 @@ snapshots:
   cojson-transport-ws@0.14.21:
     dependencies:
       cojson: 0.14.21
-
-  cojson@0.14.1:
-    dependencies:
-      '@noble/ciphers': 1.3.0
-      '@noble/curves': 1.9.1
-      '@noble/hashes': 1.8.0
-      '@opentelemetry/api': 1.9.0
-      '@scure/base': 1.2.1
-      jazz-crypto-rs: 0.0.7
-      neverthrow: 7.2.0
-      queueueue: 4.1.2
-      unicode-segmenter: 0.12.0
 
   cojson@0.14.21:
     dependencies:
@@ -5708,30 +5683,30 @@ snapshots:
 
   jazz-crypto-rs@0.0.7: {}
 
-  jazz-inspector-element@0.14.13(csstype@3.1.3):
+  jazz-inspector-element@0.14.21(csstype@3.1.3):
     dependencies:
-      jazz-inspector: 0.14.13(csstype@3.1.3)(react@19.0.0)
-      jazz-tools: 0.14.10
+      jazz-inspector: 0.14.21(csstype@3.1.3)(react@19.0.0)
+      jazz-tools: 0.14.21
       react: 19.0.0
       react-dom: 19.0.0(react@19.0.0)
     transitivePeerDependencies:
       - csstype
 
-  jazz-inspector@0.14.13(csstype@3.1.3)(react@19.0.0):
+  jazz-inspector@0.14.21(csstype@3.1.3)(react@19.0.0):
     dependencies:
       clsx: 2.1.1
-      cojson: 0.14.1
+      cojson: 0.14.21
       goober: 2.1.16(csstype@3.1.3)
-      jazz-react-core: 0.14.13(react@19.0.0)
-      jazz-tools: 0.14.10
+      jazz-react-core: 0.14.21(react@19.0.0)
+      jazz-tools: 0.14.21
       react: 19.0.0
     transitivePeerDependencies:
       - csstype
 
-  jazz-react-core@0.14.13(react@19.0.0):
+  jazz-react-core@0.14.21(react@19.0.0):
     dependencies:
-      cojson: 0.14.1
-      jazz-tools: 0.14.10
+      cojson: 0.14.21
+      jazz-tools: 0.14.21
       react: 19.0.0
 
   jazz-svelte@0.14.21(svelte@5.33.1):
@@ -5740,13 +5715,6 @@ snapshots:
       jazz-browser: 0.14.21
       jazz-tools: 0.14.21
       svelte: 5.33.1
-
-  jazz-tools@0.14.10:
-    dependencies:
-      '@scure/bip39': 1.6.0
-      cojson: 0.14.1
-      fast-myers-diff: 3.2.0
-      zod: 3.25.24-beta.0
 
   jazz-tools@0.14.21:
     dependencies:
@@ -6568,18 +6536,16 @@ snapshots:
       react: 19.0.0
       scheduler: 0.25.0
 
-  react-dom@19.1.0(react@19.1.0):
+  react-dom@19.1.0(react@19.0.0):
     dependencies:
-      react: 19.1.0
+      react: 19.0.0
       scheduler: 0.26.0
 
-  react-icons@5.5.0(react@19.1.0):
+  react-icons@5.5.0(react@19.0.0):
     dependencies:
-      react: 19.1.0
+      react: 19.0.0
 
   react@19.0.0: {}
-
-  react@19.1.0: {}
 
   readable-stream@2.3.8:
     dependencies:
@@ -7106,9 +7072,9 @@ snapshots:
 
   universalify@2.0.1: {}
 
-  use-sync-external-store@1.5.0(react@19.1.0):
+  use-sync-external-store@1.5.0(react@19.0.0):
     dependencies:
-      react: 19.1.0
+      react: 19.0.0
 
   util-deprecate@1.0.2: {}
 
@@ -7159,10 +7125,10 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.2
 
-  virtua@0.41.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(svelte@5.33.1):
+  virtua@0.41.2(react-dom@19.1.0(react@19.0.0))(react@19.0.0)(svelte@5.33.1):
     optionalDependencies:
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      react: 19.0.0
+      react-dom: 19.1.0(react@19.0.0)
       svelte: 5.33.1
 
   vite-node@3.1.4(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0):
@@ -7325,8 +7291,6 @@ snapshots:
   zimmerframe@1.1.2: {}
 
   zod@3.25.23: {}
-
-  zod@3.25.24-beta.0: {}
 
   zod@3.25.28: {}
 
