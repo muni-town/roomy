@@ -5,17 +5,20 @@
   import { page } from "$app/state";
   import { setContext } from "svelte";
   import { Account, co } from "jazz-tools";
+  import type { Space } from "$lib/jazz/schema";
 
   let {
     timeline,
     virtualizer = $bindable(),
     isAdmin = false,
     admin,
+    space
   }: {
     timeline: string[];
     virtualizer?: Virtualizer<string>;
     isAdmin?: boolean;
     admin: co.loaded<typeof Account> | undefined | null;
+    space: co.loaded<typeof Space> | undefined | null;
   } = $props();
 
   let viewport: HTMLDivElement = $state(null!);
@@ -70,6 +73,7 @@
                 previousMessageId={timeline[index - 1]}
                 {isAdmin}
                 {admin}
+                {space}
               />
             {/snippet}
           </Virtualizer>

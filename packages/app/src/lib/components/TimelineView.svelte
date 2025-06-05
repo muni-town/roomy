@@ -42,6 +42,10 @@
           $each: true,
           $onError: null,
         },
+        bans: {
+          $each: true,
+          $onError: null,
+        },
       },
     }),
   );
@@ -335,6 +339,8 @@
     // add to space.current.members
     space.current?.members?.push(me.current);
   }
+
+  let bannedHandles = $derived(new Set(space.current?.bans ?? []));
 </script>
 
 {#if admin.current}
@@ -457,6 +463,7 @@
         style="max-height: calc(100vh - 180px);"
       >
         <ChatArea
+          space={space.current}
           {timeline}
           bind:virtualizer
           isAdmin={isSpaceAdmin(space.current)}
@@ -487,7 +494,13 @@
           <div>
             {#if user.session}
               {#if me?.current?.profile?.joinedSpaces?.some((joinedSpace) => joinedSpace?.id === space.current?.id)}
-                {#if !readonly}
+                {#if readonly}
+                  <div class="flex items-center grow flex-col">
+                    <Button.Root disabled class="w-full dz-btn"
+                      >Automated Thread</Button.Root
+                    >
+                  </div>
+                {:else if !bannedHandles.has(me?.current?.profile?.blueskyHandle ?? "")}
                   <div class="dz-prose prose-a:text-primary prose-a:underline">
                     <ChatInput
                       bind:content={messageInput}
@@ -499,7 +512,7 @@
                 {:else}
                   <div class="flex items-center grow flex-col">
                     <Button.Root disabled class="w-full dz-btn"
-                      >Automated Thread</Button.Root
+                      >You are banned from this space</Button.Root
                     >
                   </div>
                 {/if}

@@ -61,6 +61,9 @@ export const Category = co.map({
 export const Space = co.map({
   name: z.string(),
   image: co.image().optional(),
+
+  imageUrl: z.string().optional(),
+
   channels: co.list(Channel),
 
   categories: co.list(Category),
@@ -75,6 +78,8 @@ export const Space = co.map({
 
   threads: co.list(Thread),
   pages: co.list(Page),
+
+  bans: co.list(z.string()),
 });
 
 export const SpaceList = co.list(Space);

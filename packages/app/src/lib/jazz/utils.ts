@@ -78,6 +78,7 @@ export function createSpace(
       threads: co.list(Thread).create([], publicGroup()),
       pages: co.list(Page).create([], publicGroup()),
       categories: co.list(Category).create([], readerGroup),
+      bans: co.list(z.string()).create([], readerGroup),
     },
     readerGroup,
   );

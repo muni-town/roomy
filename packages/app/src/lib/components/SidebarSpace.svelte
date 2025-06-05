@@ -22,12 +22,6 @@
   let tooltipPosition = $state({ x: 0, y: 0 });
 
   let isActive = $derived(page.url.pathname.includes(space?.id || ""));
-
-  const spaceImage = derivePromise(null, async () => {
-    if (space?.image) {
-      return space.image;
-    }
-  });
 </script>
 
 <TooltipPortal
@@ -69,12 +63,12 @@
       transition-all duration-200`}
   >
     <div class="flex items-center justify-center overflow-hidden">
-      {#if spaceImage.value?.uri}
-        <!-- <img
-          src={spaceImage.value?.uri}
+      {#if space?.imageUrl}
+        <img
+          src={space?.imageUrl}
           alt={space?.name || ""}
           class="w-10 h-10 object-cover rounded-full object-center"
-        /> -->
+        />
       {:else if space && space.id}
         <div class="w-10 h-10">
           <AvatarMarble name={space.id} />

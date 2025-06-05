@@ -50,7 +50,7 @@
 <div transition:slide={{ duration: 100 }} class="flex flex-col gap-2 px-2">
   <!-- Category and Channels -->
   {#if sidebarItems}
-    {#each sidebarItems.filter((item) => !item.data.softDeleted) as item}
+    {#each sidebarItems.filter((item) => !item.data?.softDeleted) as item}
       {#if item.type === "category"}
         <Accordion.Root type="single" value={item.data.name}>
           <Accordion.Item value={item.data.name}>
@@ -155,7 +155,7 @@
                             <Button.Root
                               title="Delete"
                               class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer dz-btn dz-btn-ghost dz-btn-circle text-error hover:bg-error/10"
-                              onclick={() => channel && deleteItem(channel)}
+                              onclick={() => deleteItem(channel)}
                             >
                               <Icon icon="lucide:x" class="size-4" />
                             </Button.Root>

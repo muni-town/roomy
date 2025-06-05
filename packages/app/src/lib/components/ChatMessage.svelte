@@ -18,6 +18,7 @@
     ReactionList,
     RoomyAccount,
     RoomyProfile,
+    Space,
   } from "$lib/jazz/schema";
   import { Account, co, CoRichText, type Loaded } from "jazz-tools";
   import MessageToolbar from "./Message/MessageToolbar.svelte";
@@ -31,6 +32,7 @@
     previousMessageId?: string;
     isAdmin?: boolean;
     admin: co.loaded<typeof Account> | undefined | null;
+    space: co.loaded<typeof Space> | undefined | null;
   };
 
   const me = new AccountCoState(RoomyAccount, {
@@ -40,7 +42,7 @@
     },
   });
 
-  let { messageId, previousMessageId, isAdmin, admin }: Props = $props();
+  let { messageId, previousMessageId, isAdmin, admin, space }: Props = $props();
 
   let message = $derived(
     new CoState(Message, messageId, {
@@ -213,9 +215,11 @@
       removeReaction(emoji);
     }
   }
+
+  let bannedHandles = $derived(new Set(space?.bans ?? []));
 </script>
 
-{#if message.current && !message.current.softDeleted && admin && messageHasAdmin(message.current, admin)}
+{#if message.current && !message.current.softDeleted && admin && messageHasAdmin(message.current, admin) && !bannedHandles.has(profile?.current?.blueskyHandle ?? "")}
   <div
     id={message.current?.id}
     class={`flex flex-col w-full relative max-w-screen`}
