@@ -28,12 +28,12 @@ import {
 import { navigate, resolveLeafId } from "./utils.svelte";
 import { CoState, AccountCoState } from "jazz-svelte";
 
-const account = new AccountCoState(AccountSchema, {
-  resolve: {
-    profile: true,
-  },
-});
-const me = $derived(account.current);
+// const account = new AccountCoState(AccountSchema, {
+//   resolve: {
+//     profile: true,
+//   },
+// });
+// const me = $derived(account.current);
 // (window as any).r = roomy;
 (window as any).page = page;
 
@@ -76,7 +76,7 @@ export let globalState = $state({
   isAdmin: false,
   isBanned: false,
   currentCatalog: "home",
-  account,
+  // account,
 });
 
 $effect.root(() => {
