@@ -111,9 +111,20 @@
 
   $inspect(page.params);
 
+  function getUsedCategories() {
+    return (
+      space?.current?.categories?.filter(
+        (category) =>
+          !category.softDeleted &&
+          category?.channels?.filter((channel) => !channel?.softDeleted)
+            ?.length,
+      ) ?? []
+    );
+  }
+
   let sidebarItems = $derived.by(() => {
     if (!space?.current) return [];
-    const categories = (space?.current?.categories || []).map((channel) => ({
+    const categories = getUsedCategories().map((channel) => ({
       type: "category",
       data: channel,
     }));
@@ -225,7 +236,7 @@
             <span class="dz-label">Category</span>
             <select bind:value={newChannelCategory}>
               <option value={undefined}>None</option>
-              {#each space.current?.categories ?? [] as category}
+              {#each space.current?.categories?.filter((category) => !category.softDeleted) ?? [] as category}
                 <option value={category}>{category.name}</option>
               {/each}
             </select>

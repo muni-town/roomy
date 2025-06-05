@@ -28,12 +28,8 @@
   ) {
     if (!confirm(`Are you sure you want to delete "${item.name}"?`)) return;
     item.softDeleted = true;
-    // item.commit();
   }
 
-  //
-  // Category Edit Dialog
-  //
   let showCategoryDialog = $state(false);
   let editingCategory = $state(undefined) as
     | undefined
@@ -54,7 +50,7 @@
       {#if item.type === "category"}
         <Accordion.Root type="single" value={item.data.name}>
           <Accordion.Item value={item.data.name}>
-            <Accordion.Header class="flex w-full justify-between">
+            <Accordion.Header class="flex w-full justify-between group">
               <Accordion.Trigger
                 class="flex text-sm max-w-full uppercase truncate gap-2 my-2 w-full items-center justify-start cursor-pointer"
               >
@@ -66,7 +62,7 @@
                 {#if isSpaceAdmin(space)}
                   <Button.Root
                     title="Delete"
-                    class="cursor-pointer dz-btn dz-btn-ghost dz-btn-circle text-error hover:bg-error/10"
+                    class="cursor-pointer dz-btn dz-btn-ghost dz-btn-circle text-error hover:bg-error/10 opacity-0 group-hover:opacity-100 transition-opacity"
                     onclick={() => deleteItem(item.data)}
                   >
                     <Icon icon="lucide:x" class="size-4" />

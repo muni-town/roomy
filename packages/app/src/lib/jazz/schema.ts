@@ -49,6 +49,8 @@ export const Channel = co.map({
   subThreads: co.list(Thread),
 
   pages: z.optional(co.list(Page)),
+
+  softDeleted: z.boolean().optional(),
 });
 
 
