@@ -1,59 +1,40 @@
 <script lang="ts">
-  import { Avatar, Button, Checkbox, Popover, Toolbar } from "bits-ui";
+  import { Checkbox } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
   import { getContext } from "svelte";
   import Icon from "@iconify/svelte";
-  import { user } from "$lib/user.svelte";
-  import "emoji-picker-element";
   import { outerWidth } from "svelte/reactivity/window";
-  import Drawer from "./Drawer.svelte";
   import AvatarImage from "./AvatarImage.svelte";
-  import { getContentHtml, type Item } from "$lib/tiptap/editor";
-  // import { Announcement, Message, type EntityIdStr } from "$lib/schema"
-  // import type {CoValue} from "jazz-tools"
-  import { globalState } from "$lib/global.svelte";
-  // import { derivePromise } from "$lib/utils.svelte";
+  import { type Item } from "$lib/tiptap/editor";
   import type { JSONContent } from "@tiptap/core";
-  import ChatInput from "./ChatInput.svelte";
   import toast from "svelte-french-toast";
   import { selectMessage } from "$lib/thread.svelte";
-  import { CoState } from "jazz-svelte";
-  import { Message, RoomyProfile } from "$lib/jazz/schema";
-  import { co, Profile } from "jazz-tools";
-  // import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
+  import { AccountCoState, CoState } from "jazz-svelte";
+  import {
+    Message,
+    Reaction,
+    RoomyAccount,
+    RoomyProfile,
+  } from "$lib/jazz/schema";
+  import { co, type Loaded } from "jazz-tools";
+  import MessageToolbar from "./MessageToolbar.svelte";
+  import { publicGroup } from "$lib/jazz/utils";
+  import MessageReactions from "./MessageReactions.svelte";
 
   type Props = {
     messageId: string;
     previousMessageId?: string;
   };
 
+  const me = new AccountCoState(RoomyAccount, {
+    resolve: {
+      profile: true,
+      root: true,
+    },
+  });
+
   let { messageId, previousMessageId }: Props = $props();
-
-  // const links =
-  //   type === "link" &&
-  //   (collectLinks(tiptapJsontoString((message as Message).bodyJson)) || []).map(
-  //     (url) => url.replace("http:", "https:"),
-  //   );
-
-  // let messageRepliedTo = derivePromise(undefined, async () => {
-  //   if (globalState.roomy && message.replyTo) {
-  //     return await globalState.roomy.open(Message, message.replyTo);
-  //   }
-  // });
-
-  // let relatedThreads = derivePromise([], async () => {
-  //   if (message instanceof Announcement) {
-  //     return await message.relatedThreads.items();
-  //   }
-  //   return [];
-  // });
-  // let relatedMessages = derivePromise([], async () => {
-  //   if (message instanceof Announcement) {
-  //     return await message.relatedMessages.items();
-  //   }
-  //   return [];
-  // });
 
   let message = $derived(
     new CoState(Message, messageId, {
@@ -96,15 +77,6 @@
 
   let isSelected = $state(false);
   let isThreading: { value: boolean } = getContext("isThreading");
-  let users: { value: Item[] } = getContext("users");
-  let contextItems: { value: Item[] } = getContext("contextItems");
-
-  let emojiDrawerPicker: (HTMLElement & any) | undefined = $state();
-  let emojiToolbarPicker: (HTMLElement & any) | undefined = $state();
-  let emojiRowPicker: (HTMLElement & any) | undefined = $state();
-  let isEmojiDrawerPickerOpen = $state(false);
-  let isEmojiToolbarPickerOpen = $state(false);
-  let isEmojiRowPickerOpen = $state(false);
 
   // Editing state
   let isEditing = $state(false);
@@ -128,7 +100,6 @@
   //       .includes(user.agent?.assertDid),
   // );
 
-  // const selectMessage = getContext("selectMessage") as (message: Message) => void;
   const removeSelectedMessage = getContext("removeSelectedMessage") as (
     message: co.loaded<typeof Message>,
   ) => void;
@@ -136,9 +107,6 @@
   const setReplyTo = getContext("setReplyTo") as (
     message: co.loaded<typeof Message>,
   ) => void;
-  // const scrollToMessage = getContext("scrollToMessage") as (
-  //   id: EntityIdStr,
-  // ) => void;
 
   function deleteMessage() {
     if (!message.current) return;
@@ -146,8 +114,6 @@
   }
 
   function startEditing() {
-    isEmojiToolbarPickerOpen = false;
-
     try {
       // Parse the message body JSON to get a plain object
       const parsedContent = JSON.parse(message.body) as JSONContent;
@@ -209,14 +175,6 @@
     return "";
   }
 
-  function onEmojiPick(event: Event & { detail: { unicode: string } }) {
-    if (!user.agent) return;
-    // message.reactions.toggle(event.detail.unicode, user.agent.assertDid);
-    // message.commit();
-    isEmojiToolbarPickerOpen = false;
-    isEmojiRowPickerOpen = false;
-  }
-
   function updateSelect() {
     if (!message.current) return;
     if (isSelected) {
@@ -226,48 +184,85 @@
     }
   }
 
-  // function toggleReaction(reaction: string) {
-  //   if (!user.agent) return;
-  //   message.reactions.toggle(reaction, user.agent.assertDid);
-  //   message.commit();
-  // }
-
-  // function scrollToReply() {
-  //   if (message.matches(Announcement) || !message.replyTo) {
-  //     return;
-  //   }
-  //   scrollToMessage(message.replyTo);
-  // }
-
   $effect(() => {
     if (!isThreading.value) {
       isSelected = false;
     }
   });
 
-  $effect(() => {
-    if (emojiToolbarPicker) {
-      emojiToolbarPicker.addEventListener("emoji-click", onEmojiPick);
+  function convertReactionsToEmojis(reactions: Loaded<typeof Reaction>[]) {
+    if (!reactions) return [];
+
+    // convert to [emoji, count, user (if current user has reacted with that emoji)]
+    const emojiMap = new Map<string, { count: number; user: boolean }>();
+    for (const reaction of reactions) {
+      if (!reaction || !reaction.emoji) continue;
+      let emoji = reaction.emoji;
+      let obj = emojiMap.get(emoji);
+      if (obj) {
+        obj.count++;
+      } else {
+        obj = { count: 1, user: false };
+        emojiMap.set(emoji, obj);
+      }
+
+      if (reaction._edits.emoji?.by?.profile?.id === me.current?.profile?.id) {
+        obj.user = true;
+      }
     }
-    if (emojiDrawerPicker) {
-      emojiDrawerPicker.addEventListener(
-        "emoji-click",
-        (e: Event & { detail: { unicode: string } }) => {
-          onEmojiPick(e);
-          isEmojiDrawerPickerOpen = false;
-          isDrawerOpen = false;
+    let array = Array.from(emojiMap.entries())
+      .map(([emoji, obj]) => ({
+        emoji,
+        count: obj.count,
+        user: obj.user,
+      }))
+      .sort((a, b) => b.emoji.localeCompare(a.emoji));
+    return array;
+  }
+
+  function removeReaction(emoji: string) {
+    let index = message.current?.reactions?.findIndex(
+      (reaction) =>
+        reaction?.emoji === emoji &&
+        reaction?._edits.emoji?.by?.profile?.id === me.current?.profile?.id,
+    );
+    if (index === undefined || index < 0) return;
+    message.current?.reactions?.splice(index, 1);
+  }
+
+  function addReaction(emoji: string) {
+    message.current?.reactions?.push(
+      Reaction.create(
+        {
+          emoji: emoji,
         },
-      );
+        {
+          owner: publicGroup(),
+        },
+      ),
+    );
+  }
+  let reactions = $derived(
+    convertReactionsToEmojis(message.current?.reactions),
+  );
+
+  function toggleReaction(emoji: string) {
+    // check if the emoji is already in the reactions array with the current user
+    let index = reactions?.findIndex(
+      (reaction) => reaction.emoji === emoji && reaction.user,
+    );
+
+    if (index === undefined || index < 0) {
+      addReaction(emoji);
+    } else {
+      removeReaction(emoji);
     }
-    if (emojiRowPicker) {
-      emojiRowPicker.addEventListener("emoji-click", onEmojiPick);
-    }
-  });
+  }
 </script>
 
 <div
   id={message.current?.id}
-  class={`flex flex-col w-full ${isMobile && "max-w-screen"}`}
+  class={`flex flex-col w-full relative ${isMobile && "max-w-screen"}`}
 >
   {#if isThreading.value}
     <Checkbox.Root
@@ -323,260 +318,18 @@
       </div>
     </div>
 
-    <!-- {@render messageView(message.current)} -->
-    <!-- {#if message instanceof Announcement}
-      {@render announcementView(message)}
-    {:else if message instanceof Message}
-      {@render replyBanner()}
-    {/if} -->
+    <MessageToolbar bind:isDrawerOpen {toggleReaction} />
 
-    <!-- {#if Object.keys(message.reactions.all()).length > 0}
-      <div class="flex gap-2 flex-wrap pl-14">
-        {#each Object.keys(message.reactions.all()) as reaction}
-          {@render reactionToggle(reaction)}
-        {/each}
-        <Popover.Root bind:open={isEmojiRowPickerOpen}>
-          <Popover.Trigger class="p-2 hover:bg-white/5 rounded cursor-pointer">
-            <Icon icon="lucide:smile-plus" class="text-primary" />
-          </Popover.Trigger>
-          <Popover.Content class="z-10">
-            <emoji-picker bind:this={emojiRowPicker}></emoji-picker>
-          </Popover.Content>
-        </Popover.Root>
-      </div>
-    {/if} -->
+    <button
+      onclick={() => (isDrawerOpen = true)}
+      class="block pointer-fine:hidden absolute inset-0 w-full h-full"
+    >
+      <span class="sr-only">Open toolbar</span>
+    </button>
+
+    <MessageReactions {reactions} {toggleReaction} />
   </div>
 </div>
-
-<!-- {#snippet announcementView(announcement: Announcement)}
-  {@const relatedMessage = relatedMessages.value[0]}
-  {@render toolbar()}
-  <div class="flex flex-col gap-4 pl-14">
-    {#if announcement.kind === "threadCreated"}
-      <Button.Root
-        onclick={() => {
-          if (isMobile) {
-            isDrawerOpen = true;
-          }
-        }}
-        class="flex flex-col text-start gap-2 w-full min-w-0"
-      >
-        <section class="flex items-center gap-2 flex-wrap w-fit">
-          {#if message.createdDate}
-            {@render timestamp(message.createdDate)}
-          {/if}
-        </section>
-
-        <p
-          class="text-sm italic dz-prose dz-prose-invert min-w-0 max-w-full overflow-hidden text-ellipsis"
-        >
-          {@html getAnnouncementHtml(announcement)}
-        </p>
-      </Button.Root>
-    {:else if announcement.kind === "messageMoved"}
-      {#if !mergeWithPrevious}
-        <Button.Root
-          onclick={() => {
-            if (isMobile) {
-              isDrawerOpen = true;
-            }
-          }}
-          class="cursor-pointer flex gap-2 text-start w-full items-center text-info-content px-4 py-1 bg-info rounded-t"
-        >
-          <Icon icon="prime:reply" width="12px" height="12px" />
-          <p
-            class="text-sm italic dz-prose-invert chat min-w-0 max-w-full overflow-hidden text-ellipsis"
-          >
-            {@html getAnnouncementHtml(announcement)}
-          </p>
-          {#if message.createdDate}
-            {@render timestamp(message.createdDate)}
-          {/if}
-        </Button.Root>
-      {/if}
-      <div class="ml-0 border-l-2 border-info pt-0.5 pl-2">
-        {#if relatedMessage}
-          {@render messageView(relatedMessage)}
-        {/if}
-      </div>
-    {/if}
-  </div>
-{/snippet} -->
-
-{#snippet messageView(msg: co.loaded<typeof Message>)}
-  <!-- {@const authorProfile:Profile  = msg.profile!} -->
-
-  <!-- {@render toolbar(msg.profile)} -->
-  {#if isThreading.value}
-    <Checkbox.Root
-      onCheckedChange={updateSelect}
-      bind:checked={isSelected}
-      class="absolute right-4 inset-y-0"
-    >
-      <div
-        class="border border-primary bg-base-100 text-primary-content size-4 rounded items-center cursor-pointer"
-      >
-        {#if isSelected}
-          <Icon
-            icon="material-symbols:check-rounded"
-            class="bg-primary size-3.5"
-          />
-        {/if}
-      </div>
-    </Checkbox.Root>
-  {/if}
-
-  <div class="flex gap-4 group">
-    {#if !mergeWithPrevious}
-      <!-- <a
-        href={`https://bsky.app/profile/${authorProfile.handle}`}
-        title={authorProfile.handle}
-        target="_blank"
-      > -->
-      <AvatarBeam />
-      <!-- </a> -->
-    {:else}
-      <div class="w-11">
-        {#if message.current?.createdAt}
-          <span
-            class="opacity-0 text-[8px] text-gray-300 transition-opacity duration-200 whitespace-nowrap group-hover:opacity-100"
-          >
-            {format(message.current?.createdAt, "pp")}
-          </span>
-        {/if}
-      </div>
-    {/if}
-
-    {#if isEditing}
-      <!-- <div class="flex flex-col w-full gap-2">
-        {#if !mergeWithPrevious}
-          <section class="flex items-center gap-2 flex-wrap w-fit">
-            <a
-              href={`https://bsky.app/profile/${authorProfile.handle}`}
-              target="_blank"
-              class="text-primary hover:underline"
-            >
-              <h5 class="font-bold" title={authorProfile.handle}>
-                {authorProfile.displayName || authorProfile.handle}
-              </h5>
-            </a>
-            {@render timestamp(message.createdDate || new Date())}
-          </section>
-        {/if}
-
-        <div class="w-full">
-          <ChatInput
-            bind:content={editMessageContent}
-            users={users.value || []}
-            context={contextItems.value || []}
-            onEnter={saveEditedMessage}
-            editMode={true}
-          />
-        </div>
-
-        <div class="flex justify-end gap-2 mt-2">
-          <Button.Root onclick={cancelEditing} class="btn btn-sm btn-ghost">
-            Cancel
-          </Button.Root>
-          <Button.Root
-            onclick={saveEditedMessage}
-            class="btn btn-sm btn-primary"
-          >
-            Save
-          </Button.Root>
-        </div>
-      </div> -->
-    {:else}
-      <Button.Root
-        onclick={() => {
-          if (isMobile) {
-            isDrawerOpen = true;
-          }
-        }}
-        class="flex flex-col text-start gap-2 w-full min-w-0 cursor-default!"
-      >
-        {#if !mergeWithPrevious}
-          <section class="flex items-center gap-2 flex-wrap w-fit">
-            <!-- <a
-              href={`https://bsky.app/profile/${authorProfile.handle}`}
-              target="_blank"
-              class="text-primary hover:underline"
-            > -->
-            <h5 class="font-bold text-primary" title={profile.current?.name}>
-              {profile.current?.name}
-            </h5>
-            <!-- </a> -->
-            {@render timestamp(message.current?.createdAt || new Date())}
-          </section>
-        {/if}
-
-        {#if message.current?.content}
-          <!-- Using a fancy Tailwind trick to target all href elements inside of this parent -->
-          <!-- <span
-            class="dz-prose select-text [&_a]:text-primary [&_a]:hover:underline"
-          >
-            {@html getContentHtml(JSON.parse(message.current?.content || ""))}
-          </span> -->
-          <!-- {:else if links && type === "link"}
-          {#each links as url}
-            <p>
-              <a
-                href={url}
-                target="_blank"
-                class="text-primary hover:underline inline-block">{url}</a
-              >
-            </p>
-          {/each} -->
-        {/if}
-
-        {#if isMessageEdited(msg)}
-          <div class="relative group/edit">
-            <span
-              class="text-xs text-gray-400 italic flex items-center gap-1 hover:text-gray-300 cursor-default"
-            >
-              <Icon icon="mdi:pencil" width="12px" height="12px" />
-              <span>edited</span>
-            </span>
-
-            <!-- Tooltip that appears on hover -->
-            <div
-              class="absolute bottom-full left-0 mb-2 opacity-0 group-hover/edit:opacity-100 transition-opacity duration-200 bg-base-300 p-3 rounded shadow-lg text-xs z-10 min-w-[200px]"
-            >
-              <div class="flex flex-col gap-1">
-                <p class="font-semibold">Message edited</p>
-                <p>
-                  Original: {format(
-                    message.current?.createdAt || new Date(),
-                    "PPpp",
-                  )}
-                </p>
-                <p>Edited: {getEditedTime(message.current)}</p>
-              </div>
-
-              <!-- Arrow pointing down -->
-              <div
-                class="absolute -bottom-1 left-3 w-2 h-2 bg-base-300 rotate-45"
-              ></div>
-            </div>
-          </div>
-        {/if}
-        <!-- TODO: images. -->
-        <!-- {#if msg.images?.length}
-          <div class="flex flex-wrap gap-2 mt-2">
-            {#each msg.images as image}
-              <img
-                src={image.source}
-                alt={image.alt || ""}
-                class="max-w-md max-h-64 rounded-lg object-cover"
-                loading="lazy"
-              />
-            {/each}
-          </div>
-        {/if} -->
-      </Button.Root>
-    {/if}
-  </div>
-{/snippet}
 
 {#snippet timestamp(date: Date)}
   {@const formattedDate = isToday(date) ? "Today" : format(date, "P")}
@@ -584,27 +337,6 @@
     {formattedDate}, {format(date, "pp")}
   </time>
 {/snippet}
-
-<!-- {#snippet reactionToggle(reaction: string)}
-  {@const reactions = message.reactions.all()[reaction]}
-  {#if reactions}
-    {#await Promise.all([...reactions.values()].map( (x) => getProfile(x), )) then profilesThatReacted}
-      <Button.Root
-        onclick={() => toggleReaction(reaction)}
-        class={`
-      dz-btn
-      ${user.agent && reactions.has(user.agent.assertDid) ? "bg-secondary text-secondary-content" : "bg-secondary/30 hover:bg-secondary/50 text-base-content"}
-    `}
-        title={profilesThatReacted
-          .map((x) => x.displayName || x.handle)
-          .join(", ")}
-      >
-        {reaction}
-        {message.reactions.all()[reaction]?.size}
-      </Button.Root>
-    {/await}
-  {/if}
-{/snippet} -->
 
 <!-- {#snippet replyBanner()}
   {@const profileRepliedTo =

@@ -59,31 +59,14 @@
   let thread = $derived(new CoState(Thread, page.params.thread));
 
   let timeline = $derived.by(() => {
-    console.log("page", page.params);
-    if (page.params.channel) {
-      return Object.values(
-        channel.current?.mainThread?.timeline?.perAccount ?? {},
-      )
-        .map((accountFeed) => new Array(...accountFeed.all))
-        .flat()
-        .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
-        .map((a) => a.value);
-    }
-    if (page.params.thread) {
-      console.log("got thread", thread.current);
-      const vals = Object.values(thread.current?.timeline?.perAccount ?? {});
-      console.log("vals", vals);
-      const ids = vals
-        .map((accountFeed) => new Array(...accountFeed.all))
-        .flat()
-        .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
-        .map((a) => a.value);
+    const currentTimeline =
+      thread.current?.timeline ?? channel.current?.mainThread?.timeline;
 
-      const uniq = Array.from(new Set(ids));
-      console.log(uniq);
-      return uniq;
-    }
-    return [];
+    return Object.values(currentTimeline?.perAccount ?? {})
+      .map((accountFeed) => new Array(...accountFeed.all))
+      .flat()
+      .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
+      .map((a) => a.value);
   });
   $inspect(timeline).with(() => {
     console.log("timeline", timeline);
