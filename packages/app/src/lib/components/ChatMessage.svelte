@@ -26,6 +26,8 @@
   import MessageReactions from "./Message/MessageReactions.svelte";
   import ChatInput from "./ChatInput.svelte";
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
+  import { threading } from "./TimelineView.svelte";
+  import toast from "svelte-french-toast";
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
@@ -90,12 +92,7 @@
 
   let isDrawerOpen = $state(false);
 
-  let isSelected = $state(false);
-  let isThreading: { value: boolean } = getContext("isThreading");
-
-  const removeSelectedMessage = getContext("removeSelectedMessage") as (
-    message: co.loaded<typeof Message>,
-  ) => void;
+  let isSelected = $derived(threading.selectedMessages.includes(messageId));
 
   function deleteMessage() {
     if (!message.current) return;
@@ -137,15 +134,6 @@
       1000 * 60
     );
   });
-
-  function updateSelect() {
-    if (!message.current) return;
-    if (isSelected) {
-      selectMessage(message.current);
-    } else {
-      removeSelectedMessage(message.current);
-    }
-  }
 
   function setReplyTo() {
     replyTo.id = message.current?.id ?? "";
@@ -228,7 +216,7 @@
   let shouldShow = $derived.by(() => {
     if (!message.current) return false;
     if (message.current.softDeleted) return false;
-    if (admin && messageHasAdmin(message.current, admin)) return true;
+    if (!admin || !messageHasAdmin(message.current, admin)) return false;
     if (bannedHandles.has(profile?.current?.blueskyHandle ?? "")) return false;
     if (hiddenIn.has(threadId ?? "")) return false;
     return true;
@@ -240,11 +228,29 @@
     id={message.current?.id}
     class={`flex flex-col w-full relative max-w-screen`}
   >
-    {#if isThreading.value}
+    {#if threading.active}
       <Checkbox.Root
-        onCheckedChange={updateSelect}
-        bind:checked={isSelected}
-        class="absolute right-4 inset-y-0"
+        bind:checked={
+          () => isSelected,
+          (value) => {
+            
+            if(value && message.current?._edits.content?.by?.profile?.id !== me.current?.profile?.id && !isAdmin) {
+              toast.error("You cannot move someone else's message");
+              return;
+            }
+
+            if (value) {
+              threading.selectedMessages.push(messageId);
+              console.log("added", messageId);
+              console.log(threading.selectedMessages);
+            } else {
+              threading.selectedMessages.splice(threading.selectedMessages.indexOf(messageId), 1);
+              console.log("deleted", messageId);
+              console.log(threading.selectedMessages);
+            }
+          }
+        }
+        class="absolute right-4 inset-y-0 z-10"
       >
         <div
           class="border border-primary bg-base-100 text-primary-content size-4 rounded items-center cursor-pointer"
@@ -259,7 +265,10 @@
       </Checkbox.Root>
     {/if}
     <div
-      class={`relative group w-full h-fit flex flex-col gap-2 px-2 py-1 hover:bg-white/5`}
+      class={[
+        `relative group w-full h-fit flex flex-col gap-2 px-2 py-1 hover:bg-white/5`,
+        !mergeWithPrevious && "py-3",
+      ]}
     >
       {#if message.current?.replyTo}
         <MessageRepliedTo messageId={message.current?.replyTo} />
@@ -327,7 +336,7 @@
         </div>
       </div>
 
-      {#if editingMessage.id !== messageId}
+      {#if editingMessage.id !== messageId && !threading.active}
         <MessageToolbar
           bind:isDrawerOpen
           {toggleReaction}

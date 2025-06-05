@@ -3,15 +3,13 @@
   import { globalState } from "$lib/global.svelte";
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  // import { Channel, Category } from "@roomy-chat/sdk";
-  import {Channel, Category, Space} from "$lib/schema"
+  import { Channel } from "$lib/schema";
   import { Popover, Button } from "bits-ui";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { getContext, untrack } from "svelte";
   import { toast } from "svelte-french-toast";
+  import { threading } from "./TimelineView.svelte";
 
   let { createThread, threadTitleInput = $bindable() } = $props();
-  let isThreading: { value: false } = getContext("isThreading");
   let showSettingsDialog = $state(false);
   let channelNameInput = $state("");
   let channelCategoryInput = $state(undefined) as undefined | string;
@@ -97,9 +95,9 @@
 </script>
 
 <menu class="relative flex items-center gap-3 px-2 w-fit justify-end">
-  <Popover.Root bind:open={isThreading.value}>
+  <Popover.Root bind:open={threading.active}>
     <Popover.Trigger>
-      <Icon icon="tabler:needle-thread" class="text-2xl"  />
+      <Icon icon="tabler:needle-thread" class="text-2xl" />
     </Popover.Trigger>
     <Popover.Portal>
       <Popover.Content
@@ -155,7 +153,8 @@
     >
       {#snippet dialogTrigger()}
         <Button.Root
-          title={globalState.channel && globalState.channel.constructor.name === 'Channel'
+          title={globalState.channel &&
+          globalState.channel.constructor.name === "Channel"
             ? "Channel Settings"
             : "Thread Settings"}
           class="m-auto flex"
@@ -204,15 +203,11 @@
       >
         <h2 class="text-xl font-bold">Danger Zone</h2>
         <p>
-          Deleting a {globalState.channel
-            ? "channel"
-            : "thread"} doesn't delete the data permanently, it just hides the thread
-          from the UI.
+          Deleting a {globalState.channel ? "channel" : "thread"} doesn't delete
+          the data permanently, it just hides the thread from the UI.
         </p>
         <Button.Root class="dz-btn dz-btn-error"
-          >Delete {globalState.channel
-            ? "Channel"
-            : "Thread"}</Button.Root
+          >Delete {globalState.channel ? "Channel" : "Thread"}</Button.Root
         >
       </form>
     </Dialog>

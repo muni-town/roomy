@@ -1,5 +1,11 @@
+<script lang="ts" module>
+  export const threading = $state({
+    active: false,
+    selectedMessages: [] as string[],
+  });
+</script>
+
 <script lang="ts">
-  import { setContext } from "svelte";
   import toast from "svelte-french-toast";
   import { outerWidth } from "svelte/reactivity/window";
 
@@ -10,7 +16,7 @@
   import { Account } from "jazz-tools";
   import { globalState } from "$lib/global.svelte";
 
-  import { RoomyAccount, Thread } from "$lib/jazz/schema";
+  import { Message, RoomyAccount, Thread } from "$lib/jazz/schema";
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
   import CreatePageDialog from "$lib/components/CreatePageDialog.svelte";
   import BoardList from "./BoardList.svelte";
@@ -79,7 +85,11 @@
       .map((a) => a.value);
   });
 
-  let threadId = $derived(thread.current?.id ?? channel.current?.id);
+  let threadId = $derived(thread.current?.id ?? channel.current?.mainThread?.id);
+
+  $inspect(threadId).with(() => {
+    console.log("threadId", threadId);
+  });
 
   $inspect(timeline).with(() => {
     console.log("timeline", timeline);
@@ -122,10 +132,7 @@
   let messageInput: string = $state("");
 
   // thread maker
-  let isThreading = $state({ value: false });
   let threadTitleInput = $state("");
-
-  setContext("isThreading", isThreading);
 
   // Initialize FlexSearch with appropriate options for message content
   let searchIndex = new Index({
@@ -192,71 +199,57 @@
 
   async function addThread(e: SubmitEvent) {
     e.preventDefault();
-    console.log("creating thread");
-    // if (!globalState.space || !globalState.channel) return;
-    // thread.messages = co.list(Message).create([]);
-    // messages can be selected in any order
-    // sort them on create based on their position from the channel
-    // let channelMessageIds =
-    //   globalState.channel.messages
-    //     ?.filter((message) => message !== null)
-    //     .map((message) => message.id) || [];
-    // selectedMessages.sort((a, b) => {
-    //   return channelMessageIds.indexOf(a.id) - channelMessageIds.indexOf(b.id);
-    // });
-    // if (!globalState.space.threads) {
-    //   globalState.space.threads = co.list(Thread).create([]);
-    // }
     const messageIds = <string[]>[];
-    // for (const message of selectedMessages) {
-    //   // move selected message ID from channel to thread timeline
-    //   messageIds.push(message.id);
-    //   // thread.timeline.push(message.id);
-    //   // const index = globalState.channel.messages.ids().indexOf(message.id);
-    //   // globalState.channel.messages.remove(index);
 
-    //   // create an Announcement about the move for each message
-    //   // const announcement = await globalState.roomy.create(Announcement);
-    //   // announcement.kind = "messageMoved";
-    //   // announcement.relatedMessages.push(message);
-    //   // announcement.relatedThreads.push(thread);
-    //   // announcement.commit();
-    //   // globalState.channel.timeline.insert(index, announcement);
-    // }
-    let thread = createThread(messageIds, threadTitleInput);
+    // TODO: sort messages by their position/time created?
 
-    console.log("pushing thread", thread, space.current?.threads);
-    space.current?.threads?.push(thread);
+    for (const messageId of threading.selectedMessages) {
+      messageIds.push(messageId);
+      // remove from current thread timeline
+      // add to message.hiddenIn
+      const message = await Message.load(messageId, {
+        resolve: {
+          hiddenIn: true,
+        },
+      });
+      if (!message) {
+        console.error("Message not found", messageId);
+        continue;
+      }
+      console.log("hiding message", messageId, threadId);
+      if (threadId) {
+        message.hiddenIn.push(threadId);
+      }
+      console.log("message hiddenIn", message.hiddenIn.toJSON());
+    }
 
     // TODO: decide whether the thread needs a reference to it's original channel. That might be
-    // // confusing because it's messages could have come from multiple channels?
-    // thread.name = threadTitleInput;
-    // thread.commit();
+    // confusing because it's messages could have come from multiple channels?
 
-    channel.current?.subThreads.push(thread);
-    isThreading.value = false;
+    let newThread = createThread(messageIds, threadTitleInput);
+
+    console.log("pushing thread", newThread, space.current?.threads);
+    space.current?.threads?.push(newThread);
+
+    channel.current?.subThreads.push(newThread);
+    threading.active = false;
+    threading.selectedMessages = [];
     toast.success("Thread created", { position: "bottom-end" });
   }
 
   async function sendMessage() {
-    console.log("sending message", space.current, channel.current);
-
-    // maybe add back in later (if we only want to allow people signed in with bluesky to send messages)
-    //if (!user.agent) return;
-
-    // Image upload is now handled in ChatInput.svelte
-    console.log("creating message", messageInput, admin.current);
+    if (!user.agent || !space.current) return;
 
     const message = createMessage(
       messageInput,
       undefined,
       admin.current || undefined,
     );
-    if (channel.current?.mainThread.timeline) {
-      channel.current.mainThread.timeline.push(message.id);
-    }
-    if (thread.current?.timeline) {
-      thread.current.timeline.push(message.id);
+
+    let timeline =
+      channel.current?.mainThread.timeline ?? thread.current?.timeline;
+    if (timeline) {
+      timeline.push(message.id);
     }
     if (replyTo.id) message.replyTo = replyTo.id;
 
@@ -274,26 +267,6 @@
       }
     }
 
-    // Add new message to search index
-    // if (searchIndex) {
-    //   const parsedBody = JSON.parse(message.body);
-
-    //   // Extract text content from the parsed body
-    //   const textContent = extractTextContent(parsedBody);
-
-    //   if (textContent) {
-    //     searchIndex.add(message.id, textContent);
-    //   }
-    // }
-
-    // Images are now handled by TipTap in the message content
-    // Limit image size in message input to 300x300
-    // if (collectLinks(tiptapJsontoString(messageInput))) {
-    // if (links.value) {
-    //   links.value.timeline.push(message);
-    //   links.value.commit();
-    // }
-    // }
     messageInput = "";
   }
 
@@ -494,7 +467,7 @@
       </div>
 
       <div>
-        {#if !isMobile || !isThreading.value}
+        {#if !isMobile || !threading.active}
           <div>
             {#if user.session}
               {#if me?.current?.profile?.joinedSpaces?.some((joinedSpace) => joinedSpace?.id === space.current?.id)}
