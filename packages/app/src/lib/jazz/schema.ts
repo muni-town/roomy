@@ -6,6 +6,10 @@ export const Reaction = co.map({
   emoji: z.string(),
 });
 
+export const MovedTo = co.map({
+  thread: z.string(),
+});
+
 export const Message = co.map({
   content: co.richText(),
 
@@ -13,10 +17,9 @@ export const Message = co.map({
   updatedAt: z.date(),
 
   replyTo: z.string().optional(),
+  movedTo: z.optional(MovedTo),
   reactions: co.list(Reaction),
   type: z.enum(["message", "announcement"]),
-
-  thread: z.string().optional(),
 
   softDeleted: z.boolean().optional(),
 });
@@ -26,19 +29,23 @@ export const Timeline = co.feed(z.string());
 export const Thread = co.map({
   name: z.string(),
   timeline: Timeline,
+
+  softDeleted: z.boolean().optional(),
 });
 
 export const Page = co.map({
   name: z.string(),
   softDeleted: z.boolean().optional(),
   body: z.string(),
-})
+});
 
 export const Channel = co.map({
   name: z.string(),
 
   mainThread: Thread,
+
   subThreads: co.list(Thread),
+
   pages: z.optional(co.list(Page)),
 });
 
@@ -48,12 +55,15 @@ export const Space = co.map({
   channels: co.list(Channel),
   description: z.string().optional(),
   emoji: z.string().optional(),
+
   members: co.list(co.account()),
+
   version: z.number().optional(),
   adminId: z.string(),
+
+  threads: co.list(Thread),
+  pages: co.list(Page),
 });
-
-
 
 export const SpaceList = co.list(Space);
 

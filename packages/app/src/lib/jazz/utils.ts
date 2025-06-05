@@ -74,6 +74,8 @@ export function createSpace(
       members: co.list(co.account()).create([Account.getMe()], publicGroup()),
       version: 1,
       adminId: me.id,
+      threads: co.list(Thread).create([], publicGroup()),
+      pages: co.list(Page).create([], publicGroup()),
     },
     readerGroup,
   );
@@ -98,7 +100,10 @@ export function isSpaceAdmin(
   }
 }
 
-export function messageHasAdmin(message: co.loaded<typeof Message>, admin: Account) {
+export function messageHasAdmin(
+  message: co.loaded<typeof Message>,
+  admin: Account,
+) {
   console.log("messageHasAdmin", message, admin);
   return admin.canAdmin(message);
 }
@@ -137,8 +142,8 @@ export function createMessage(input: string, replyTo?: string) {
   return message;
 }
 
-export function createPage(name: string){
-  const readingGroup = publicGroup("reader");
+export function createPage(name: string) {
+  const readingGroup = publicGroup();
 
   const page = Page.create(
     {
@@ -148,7 +153,7 @@ export function createPage(name: string){
     readingGroup,
   );
 
-  return page;  
+  return page;
 }
 
 export function createThread(messagesIds: string[], name?: string) {
@@ -169,16 +174,21 @@ export function createSpaceList() {
   return spaces;
 }
 
+export function createPagesList() {
+  const pages = co.list(Page).create([], publicGroup());
 
-export function spacePages(space: co.loaded<typeof Space>){
-  const pages = []
-  const channels = space.channels
-  if(!channels) return pages
-  for(const channel of channels){
-    if(!channel || !channel.pages) continue;
-    for(const page of channel.pages){
-      pages.push(page)
+  return pages;
+}
+
+export function spacePages(space: co.loaded<typeof Space>) {
+  const pages: co.loaded<typeof Page>[] = [];
+  const channels = space.channels;
+  if (!channels) return pages;
+  for (const channel of channels) {
+    if (!channel || !channel.pages) continue;
+    for (const page of channel.pages) {
+      if (page) pages.push(page);
     }
   }
-  return pages
+  return pages;
 }

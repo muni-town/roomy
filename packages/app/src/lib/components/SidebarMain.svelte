@@ -18,17 +18,17 @@
   import { createChannel, isSpaceAdmin, spacePages } from "$lib/jazz/utils";
   import { Space } from "$lib/jazz/schema";
 
-	let space = $derived(
-		new CoState(Space, page.params.space, {
-			resolve: {
-				channels: {
-					$each: true,
-					$onError: null
-				}
-			}
-		})
-	);
-  let links = undefined
+  let space = $derived(
+    new CoState(Space, page.params.space, {
+      resolve: {
+        channels: {
+          $each: true,
+          $onError: null,
+        },
+      },
+    }),
+  );
+  let links = undefined;
 
   export async function createLinkFeed() {
     if (!globalState.space) return;
@@ -80,7 +80,7 @@
   // });
   const pages = $derived.by(() => {
     if (!space?.current) return [];
-    const pages = spacePages(space.current)
+    const pages = spacePages(space.current);
     return pages
       .filter((page) => !page?.softDeleted)
       .map((p) => ({
@@ -93,9 +93,13 @@
       }));
   });
 
-$inspect(pages).with(()=>{
-  console.log("pages", pages)
-})
+  $inspect(threads).with(() => {
+    console.log("threads", threads);
+  });
+
+  $inspect(pages).with(() => {
+    console.log("pages", pages);
+  });
 
   // let categories = derivePromise([], async () => {
   //   if (!globalState.space) return [];
@@ -104,19 +108,17 @@ $inspect(pages).with(()=>{
   //     .filter((x) => !!x);
   // });
 
-
   $inspect(page.params);
 
   function getSidebarItems() {
     if (!space?.current) return [];
-    const threads = space?.current?.threads || [];
     const channels = space?.current?.channels || [];
 
     return [...channels];
   }
 
   let sidebarItems = $derived(getSidebarItems());
-  
+
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
   async function createCategory() {

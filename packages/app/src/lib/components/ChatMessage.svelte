@@ -263,102 +263,30 @@
       emojiRowPicker.addEventListener("emoji-click", onEmojiPick);
     }
   });
-
-  // function getAnnouncementHtml(announcement: Announcement) {
-  //   if (!globalState.space) return "";
-  //   const schema = {
-  //     type: "doc",
-  //     content: [] as Record<string, unknown>[],
-  //   } satisfies JSONContent;
-
-  //   switch (announcement.kind) {
-  //     case "threadCreated": {
-  //       schema.content.push({
-  //         type: "paragraph",
-  //         content: [
-  //           { type: "text", text: "A new thread has been created: " },
-  //           {
-  //             type: "channelThreadMention",
-  //             attrs: {
-  //               id: JSON.stringify({
-  //                 id: relatedThreads.value[0]?.id,
-  //                 space: globalState.space.id,
-  //                 type: "thread",
-  //               }),
-  //               label: relatedThreads.value[0]?.name || "loading...",
-  //             },
-  //           },
-  //         ],
-  //       });
-  //       break;
-  //     }
-  //     case "messageMoved": {
-  //       schema.content.push({
-  //         type: "paragraph",
-  //         content: [
-  //           { type: "text", text: "Moved to: " },
-  //           {
-  //             type: "channelThreadMention",
-  //             attrs: {
-  //               id: JSON.stringify({
-  //                 id: relatedThreads.value[0]?.id,
-  //                 space: globalState.space.id,
-  //                 type: "thread",
-  //               }),
-  //               label: relatedThreads.value[0]?.name || "loading...",
-  //             },
-  //           },
-  //         ],
-  //       });
-  //       break;
-  //     }
-  //     case "messageDeleted": {
-  //       schema.content.push({
-  //         type: "paragraph",
-  //         content: [{ type: "text", text: "This message has been deleted" }],
-  //       });
-  //       break;
-  //     }
-  //   }
-
-  //   return getContentHtml(schema);
-  // }
-
-  function getPlainTextContent(content: JSONContent): string {
-    try {
-      if (!content) return "Edit message...";
-
-      // Extract text from content
-      let text = "";
-
-      // Handle direct text content
-      if (content.text) {
-        text += content.text;
-      }
-
-      // Recursively extract text from content array
-      if (content.content && Array.isArray(content.content)) {
-        for (const node of content.content) {
-          if (node.text) {
-            text += `${node.text} `;
-          } else if (node.content) {
-            text += `${getPlainTextContent(node)} `;
-          }
-        }
-      }
-
-      return text.trim() || "Edit message...";
-    } catch (error) {
-      console.error("Error extracting plain text:", error);
-      return "Edit message...";
-    }
-  }
 </script>
 
 <div
   id={message.current?.id}
   class={`flex flex-col w-full ${isMobile && "max-w-screen"}`}
 >
+  {#if isThreading.value}
+    <Checkbox.Root
+      onCheckedChange={updateSelect}
+      bind:checked={isSelected}
+      class="absolute right-4 inset-y-0"
+    >
+      <div
+        class="border border-primary bg-base-100 text-primary-content size-4 rounded items-center cursor-pointer"
+      >
+        {#if isSelected}
+          <Icon
+            icon="material-symbols:check-rounded"
+            class="bg-primary size-3.5"
+          />
+        {/if}
+      </div>
+    </Checkbox.Root>
+  {/if}
   <div
     class={`relative group w-full h-fit flex flex-col gap-2 px-2 py-1 hover:bg-white/5`}
   >
@@ -395,7 +323,7 @@
       </div>
     </div>
 
-    {@render messageView(message.current)}
+    <!-- {@render messageView(message.current)} -->
     <!-- {#if message instanceof Announcement}
       {@render announcementView(message)}
     {:else if message instanceof Message}

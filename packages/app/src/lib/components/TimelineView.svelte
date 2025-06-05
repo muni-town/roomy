@@ -20,15 +20,12 @@
   import SearchResults from "./SearchResults.svelte";
   import type { Virtualizer } from "virtua/svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
-  import { threads } from "$lib/thread.svelte";
   import { CoState } from "jazz-svelte";
   import { Channel, Space } from "$lib/jazz/schema";
   import { page } from "$app/state";
   import { createMessage, createThread } from "$lib/jazz/utils";
   import { extractTextContent } from "$lib/utils/extractText";
   import { user } from "$lib/user.svelte";
-
-  let selectedMessages = $derived(threads.selected);
 
   // const links = derivePromise(null, async () =>
   //   (await globalState.space?.threads.items())?.find(
@@ -59,10 +56,10 @@
     }),
   );
 
-  let thread = $derived(new CoState(Thread, page.params.thread))
+  let thread = $derived(new CoState(Thread, page.params.thread));
 
   let timeline = $derived.by(() => {
-    console.log("page", page.params)
+    console.log("page", page.params);
     if (page.params.channel) {
       return Object.values(
         channel.current?.mainThread?.timeline?.perAccount ?? {},
@@ -72,12 +69,10 @@
         .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
         .map((a) => a.value);
     }
-    if(page.params.thread){
-      console.log("got thread", thread.current)
-      const vals = Object.values(
-        thread.current?.timeline?.perAccount ?? {},
-      )
-      console.log("vals", vals)
+    if (page.params.thread) {
+      console.log("got thread", thread.current);
+      const vals = Object.values(thread.current?.timeline?.perAccount ?? {});
+      console.log("vals", vals);
       const ids = vals
         .map((accountFeed) => new Array(...accountFeed.all))
         .flat()
@@ -85,7 +80,7 @@
         .map((a) => a.value);
 
       const uniq = Array.from(new Set(ids));
-      console.log(uniq)
+      console.log(uniq);
       return uniq;
     }
     return [];
@@ -132,15 +127,15 @@
   //   console.log("attempting push")
   //   selectedMessages.push(message);
   // });
-  setContext("removeSelectedMessage", (msg: Message) => {
-    selectedMessages = selectedMessages.filter((m) => m !== msg);
-  });
+  // setContext("removeSelectedMessage", (msg: Message) => {
+  //   selectedMessages = selectedMessages.filter((m) => m !== msg);
+  // });
 
-  $effect(() => {
-    if (!isThreading.value && selectedMessages.length > 0) {
-      selectedMessages = [];
-    }
-  });
+  // $effect(() => {
+  //   if (!isThreading.value && selectedMessages.length > 0) {
+  //     selectedMessages = [];
+  //   }
+  // });
 
   // Reply Utils
   let replyingTo = $state<Message>();
@@ -229,48 +224,31 @@
     //   globalState.space.threads = co.list(Thread).create([]);
     // }
     const messageIds = <string[]>[];
-    for (const message of selectedMessages) {
-      // move selected message ID from channel to thread timeline
-      messageIds.push(message.id);
-      // thread.timeline.push(message.id);
-      // const index = globalState.channel.messages.ids().indexOf(message.id);
-      // globalState.channel.messages.remove(index);
+    // for (const message of selectedMessages) {
+    //   // move selected message ID from channel to thread timeline
+    //   messageIds.push(message.id);
+    //   // thread.timeline.push(message.id);
+    //   // const index = globalState.channel.messages.ids().indexOf(message.id);
+    //   // globalState.channel.messages.remove(index);
 
-      // create an Announcement about the move for each message
-      // const announcement = await globalState.roomy.create(Announcement);
-      // announcement.kind = "messageMoved";
-      // announcement.relatedMessages.push(message);
-      // announcement.relatedThreads.push(thread);
-      // announcement.commit();
-      // globalState.channel.timeline.insert(index, announcement);
-    }
+    //   // create an Announcement about the move for each message
+    //   // const announcement = await globalState.roomy.create(Announcement);
+    //   // announcement.kind = "messageMoved";
+    //   // announcement.relatedMessages.push(message);
+    //   // announcement.relatedThreads.push(thread);
+    //   // announcement.commit();
+    //   // globalState.channel.timeline.insert(index, announcement);
+    // }
     let thread = createThread(messageIds, threadTitleInput);
+
+    console.log("pushing thread", thread, space.current?.threads);
+    space.current?.threads?.push(thread);
 
     // TODO: decide whether the thread needs a reference to it's original channel. That might be
     // // confusing because it's messages could have come from multiple channels?
     // thread.name = threadTitleInput;
     // thread.commit();
 
-    // // create an Announcement about the new Thread in current channel
-    // const announcement = await globalState.roomy.create(Announcement);
-    // announcement.kind = "threadCreated";
-    // announcement.relatedThreads.push(thread);
-    // announcement.commit();
-
-    // globalState.channel.timeline.push(announcement);
-
-    // // If this is a channel ( the alternative would be a thread )
-    // if (globalState.channel instanceof Channel) {
-    //   globalState.channel.threads.push(thread);
-    // }
-
-    // globalState.channel.commit();
-
-    // globalState.space.threads.push(thread);
-    // globalState.space.commit();
-
-    // threadTitleInput = "";
-    // globalState.space.threads.push(thread);
     channel.current?.subThreads.push(thread);
     isThreading.value = false;
     toast.success("Thread created", { position: "bottom-end" });
@@ -278,7 +256,6 @@
 
   async function sendMessage() {
     console.log("sending message", space.current, channel.current);
-   
 
     // maybe add back in later (if we only want to allow people signed in with bluesky to send messages)
     //if (!user.agent) return;
@@ -287,13 +264,12 @@
     console.log("creating message", messageInput);
 
     const message = createMessage(messageInput);
-    if(channel.current?.mainThread.timeline){
+    if (channel.current?.mainThread.timeline) {
       channel.current.mainThread.timeline.push(message.id);
     }
-    if(thread.current?.timeline){
+    if (thread.current?.timeline) {
       thread.current.timeline.push(message.id);
     }
-      
 
     // console.log(message.toJSON())
     // if (replyingTo) message.replyTo = replyingTo;
@@ -354,15 +330,15 @@
   //     : [],
   // );
 
-  const pages = $derived(channel.current?.pages || []);
-  $inspect(pages).with(() => {
-    console.log("pages", pages);
-  });
+  const pages = $derived(
+    channel.current?.pages?.filter((page) => page && !page.softDeleted) || [],
+  );
 
-  const relatedThreads = $derived.by(() => {
-    if (!channel.current) return [];
-    return channel.current.subThreads;
-  });
+  const threads = $derived(
+    channel.current?.subThreads?.filter(
+      (thread) => thread && !thread.softDeleted,
+    ) || [],
+  );
 </script>
 
 <header class="dz-navbar">
@@ -430,7 +406,7 @@
     {/snippet}
     No pages for this channel.
   </BoardList>
-  <BoardList items={relatedThreads} title="Threads" route="thread">
+  <BoardList items={threads} title="Threads" route="thread">
     No threads for this channel.
   </BoardList>
 {:else if tab === "chat"}

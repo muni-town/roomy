@@ -18,7 +18,8 @@
     children?: Snippet;
     header?: Snippet;
   } = $props();
-  let itemLink = (item) => `${page.params.space?.includes(".") ? "/-" : ""}/${page.params.space}/${route}/${item.id}`
+  let itemLink = (item) =>
+    `${page.params.space?.includes(".") ? "/-" : ""}/${page.params.space}/${route}/${item.id}`;
 </script>
 
 <div class="flex justify-between items-center">
@@ -27,15 +28,15 @@
 </div>
 <ul class="dz-list w-full dz-join dz-join-vertical rounded">
   {#each items as item}
-    <a
-      href={itemLink(item)}
-    >
-      <li
-        class="dz-list-row dz-card-title dz-join-item bg-base-200 text-md group w-full"
-      >
-        {item.name}
-      </li>
-    </a>
+    {#if item}
+      <a href={itemLink(item)}>
+        <li
+          class="dz-list-row dz-card-title dz-join-item bg-base-200 text-md group w-full"
+        >
+          {item.name}
+        </li>
+      </a>
+    {/if}
   {:else}
     {@render children?.()}
   {/each}

@@ -4,14 +4,27 @@
   import { page } from "$app/state";
   import { navigateSync, type NavigationTarget } from "$lib/utils.svelte";
   import { slide } from "svelte/transition";
-  import { globalState } from "$lib/global.svelte";
-  import { Channel, Thread } from "$lib/schema.ts";
+  import { isSpaceAdmin } from "$lib/jazz/utils";
+  import { CoState } from "jazz-svelte";
+  import { Space } from "$lib/jazz/schema";
+
+  let space = $derived(
+    new CoState(Space, page.params.space, {
+      resolve: {
+        channels: {
+          $each: true,
+          $onError: null,
+        },
+      },
+    }),
+  );
 
   type Item = { target: NavigationTarget; name: string; id: string };
   type Section = {
     items: Item[];
     key: string;
   };
+
   let {
     sections,
     active = $bindable(),
@@ -19,19 +32,25 @@
     sections: Section[];
     active: string;
   } = $props();
-  console.log("sections", sections)
-  console.log("page", page.params.space)
+
+  console.log("sections", sections);
+  console.log("page", page.params.space);
   let keys = $derived(sections.map((i) => i.key));
 
-  async function deleteItem(item: Item) {
+  async function deleteItem(key: string, item: Item) {
+    if (!space.current) return;
     if (!confirm(`Are you sure you want to delete "${item.name}"?`)) return;
-    
-    // Find and mark the thread as softDeleted
-    if (globalState.space) {
-      const thread = globalState.space.threads.find(t => t?.id === item.id);
+
+    if (key === "threads") {
+      const thread = space.current.threads?.find((t) => t?.id === item.id);
       if (thread) {
         thread.softDeleted = true;
-        // thread.commit(); // Uncomment when ready to persist changes
+      }
+    } else if (key === "pages") {
+      const page = space.current.pages?.find((p) => p?.id === item.id);
+      console.log("page", page);
+      if (page) {
+        page.softDeleted = true;
       }
     }
   }
@@ -86,11 +105,11 @@
                       />
                       <span class="truncate">{item.name} </span>
                     </Button.Root>
-                    {#if globalState.isAdmin}
+                    {#if isSpaceAdmin(space.current)}
                       <Button.Root
                         title="Delete"
                         class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer dz-btn dz-btn-ghost dz-btn-circle text-error hover:bg-error/10"
-                        onclick={() => deleteItem(item)}
+                        onclick={() => deleteItem(key, item)}
                       >
                         <Icon icon="lucide:x" class="size-4" />
                       </Button.Root>
