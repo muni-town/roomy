@@ -1,14 +1,14 @@
+<script lang="ts" module>
+  export let editingMessage = $state({ id: "" });
+</script>
+
 <script lang="ts">
   import { Checkbox } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
   import { getContext } from "svelte";
   import Icon from "@iconify/svelte";
-  import { outerWidth } from "svelte/reactivity/window";
   import AvatarImage from "./AvatarImage.svelte";
-  import { type Item } from "$lib/tiptap/editor";
-  import type { JSONContent } from "@tiptap/core";
-  import toast from "svelte-french-toast";
   import { selectMessage } from "$lib/thread.svelte";
   import { AccountCoState, CoState } from "jazz-svelte";
   import {
@@ -17,10 +17,11 @@
     RoomyAccount,
     RoomyProfile,
   } from "$lib/jazz/schema";
-  import { Account, co, type Loaded } from "jazz-tools";
+  import { Account, co, CoRichText, type Loaded } from "jazz-tools";
   import MessageToolbar from "./Message/MessageToolbar.svelte";
   import { messageHasAdmin, publicGroup } from "$lib/jazz/utils";
   import MessageReactions from "./Message/MessageReactions.svelte";
+  import ChatInput from "./ChatInput.svelte";
 
   type Props = {
     messageId: string;
@@ -85,28 +86,6 @@
   let isSelected = $state(false);
   let isThreading: { value: boolean } = getContext("isThreading");
 
-  // Editing state
-  let isEditing = $state(false);
-  let editMessageContent: JSONContent = $state({});
-
-  // let mayDelete = $derived(
-  //   message.matches(Message) &&
-  //     (globalState.isAdmin ||
-  //       (user.agent &&
-  //         message
-  //           .forceCast(Message)
-  //           .authors((x) => x.toArray().includes(user.agent!.assertDid)))),
-  // );
-
-  // let mayEdit = $derived(
-  //   message.matches(Message) &&
-  //     user.agent &&
-  //     message
-  //       .forceCast(Message)
-  //       .authors((x) => x.toArray())
-  //       .includes(user.agent?.assertDid),
-  // );
-
   const removeSelectedMessage = getContext("removeSelectedMessage") as (
     message: co.loaded<typeof Message>,
   ) => void;
@@ -116,72 +95,45 @@
   ) => void;
 
   function deleteMessage() {
-    console.log("deleting message", message.current);
     if (!message.current) return;
     message.current.softDeleted = true;
   }
 
   function editMessage() {
-    try {
-      // Parse the message body JSON to get a plain object
-      const parsedContent = JSON.parse(message.body) as JSONContent;
-
-      // Create a deep copy to ensure we're not working with a Proxy object
-      // This keeps all content including images intact
-      editMessageContent = JSON.parse(
-        JSON.stringify(parsedContent),
-      ) as JSONContent;
-
-      isEditing = true;
-    } catch (error) {
-      console.error("Error starting message edit:", error);
-      toast.error("Failed to edit message", { position: "bottom-end" });
-    }
+    editingMessage.id = messageId;
   }
 
-  function saveEditedMessage() {
-    if (Object.keys(editMessageContent).length > 0) {
-      try {
-        // Ensure we're working with a plain object, not a Proxy
-        const plainContent = JSON.parse(
-          JSON.stringify(editMessageContent),
-        ) as JSONContent;
+  function saveEditedMessage(content: string) {
+    if (!message.current) return;
 
-        // Update the message
-        message.body = JSON.stringify(plainContent);
-
-        // Add an updatedDate field to track edits
-        // @ts-ignore - Adding custom property for edit tracking
-        message.updatedDate = new Date();
-
-        isEditing = false;
-        toast.success("Message updated", { position: "bottom-end" });
-      } catch (error) {
-        console.error("Error saving edited message:", error);
-        toast.error("Failed to save message", { position: "bottom-end" });
-      }
+    // if the content is the same, dont save
+    if (message.current.content.toString() === content) {
+      editingMessage.id = "";
+      return;
     }
+
+    message.current.content = new CoRichText({
+      text: content,
+      owner: publicGroup("reader"),
+    });
+    message.current.updatedAt = new Date();
+    editingMessage.id = "";
   }
 
   function cancelEditing() {
-    isEditing = false;
-    editMessageContent = {};
+    editingMessage.id = "";
   }
 
-  function isMessageEdited(msg: Message): boolean {
-    // @ts-ignore - Check for custom property
-    // return !!msg.updatedDate;
-    return false;
-  }
-
-  function getEditedTime(msg: Message): string {
-    // @ts-ignore - Access custom property
-    if (msg.updatedDate) {
-      // @ts-ignore - Access custom property
-      return format(msg.updatedDate, "PPpp");
-    }
-    return "";
-  }
+  let isMessageEdited = $derived.by(() => {
+    if (!message.current) return false;
+    if (!message.current.createdAt || !message.current.updatedAt) return false;
+    // if time between createdAt and updatedAt is less than 1 minute, we dont consider it edited
+    return (
+      message.current?.updatedAt.getTime() -
+        message.current?.createdAt.getTime() >
+      1000 * 60
+    );
+  });
 
   function updateSelect() {
     if (!message.current) return;
@@ -268,7 +220,7 @@
   }
 </script>
 
-{#if message.current && !message.current.softDeleted &&  messageHasAdmin(message.current, admin)}
+{#if message.current && !message.current.softDeleted && messageHasAdmin(message.current, admin)}
   <div
     id={message.current?.id}
     class={`flex flex-col w-full relative max-w-screen`}
@@ -322,7 +274,35 @@
             </span>
           {/if}
           <div class="dz-prose prose-a:text-primary prose-a:hover:underline">
-            {@html message.current?.content ?? ""}
+            {#if editingMessage.id === messageId}
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div
+                onkeydown={(e) => {
+                  if (e.key === "Escape") {
+                    cancelEditing();
+                  }
+                }}
+              >
+                <ChatInput
+                  content={message.current?.content.toString() ?? ""}
+                  onEnter={saveEditedMessage}
+                  setFocus={true}
+                />
+
+                <div class="text-xs text-base-content mt-1">
+                  Press <kbd class="text-primary">Enter</kbd> to save,
+                  <kbd class="text-primary font-medium">Escape</kbd> to cancel
+                </div>
+              </div>
+            {:else}
+              {@html message.current?.content ?? ""}
+
+              {#if isMessageEdited}
+                <div class="text-xs text-secondary">
+                  Edited {@render timestamp(message.current?.updatedAt)}
+                </div>
+              {/if}
+            {/if}
           </div>
         </div>
       </div>

@@ -12,9 +12,10 @@
     content: string;
     users: Item[];
     context: Item[];
-    onEnter: () => void;
+    onEnter: (content: string) => void;
     placeholder?: string;
     editMode?: boolean; // Add this to indicate if the component is being used for editing
+    setFocus?: boolean;
   };
 
   let {
@@ -23,30 +24,26 @@
     context,
     onEnter,
     placeholder = "Write something ...",
-    editMode = false,
+    setFocus = false,
   }: Props = $props();
   let element: HTMLDivElement | undefined = $state();
 
   let tiptap: Editor | undefined = $state();
 
   async function wrappedOnEnter() {
-    onEnter();
+    onEnter(content);
   }
-
-  // We'll use the extensions created in the effect instead of these initial ones
-  // This avoids potential duplicate extensions
-  let extensions = $derived([
-    StarterKit.configure({ heading: false }),
-    Placeholder.configure({ placeholder }),
-    initKeyboardShortcutHandler({ onEnter: wrappedOnEnter }),
-    initUserMention({ users }),
-    initSpaceContextMention({ context }),
-  ]);
 
   onMount(() => {
     tiptap = new Editor({
       element,
-      extensions,
+      extensions: [
+        StarterKit.configure({ heading: false }),
+        Placeholder.configure({ placeholder }),
+        initKeyboardShortcutHandler({ onEnter: wrappedOnEnter }),
+        initUserMention({ users }),
+        initSpaceContextMention({ context }),
+      ],
       content,
       editorProps: {
         attributes: {
@@ -58,6 +55,14 @@
         content = ctx.editor.getHTML();
       },
     });
+    if (setFocus) {
+      // focus at the end of the content
+      tiptap?.commands.focus();
+      tiptap?.commands.setTextSelection({
+        from: content.length,
+        to: content.length,
+      });
+    }
   });
 
   onDestroy(() => {
