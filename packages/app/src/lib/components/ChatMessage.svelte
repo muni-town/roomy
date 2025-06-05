@@ -5,12 +5,11 @@
 </script>
 
 <script lang="ts">
-  import { Checkbox } from "bits-ui";
+  import { Avatar, Checkbox } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
   import { getContext } from "svelte";
   import Icon from "@iconify/svelte";
-  import AvatarImage from "./AvatarImage.svelte";
   import { selectMessage } from "$lib/thread.svelte";
   import { AccountCoState, CoState } from "jazz-svelte";
   import {
@@ -25,6 +24,7 @@
   import { messageHasAdmin, publicGroup } from "$lib/jazz/utils";
   import MessageReactions from "./Message/MessageReactions.svelte";
   import ChatInput from "./ChatInput.svelte";
+  import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
 
   type Props = {
     messageId: string;
@@ -139,6 +139,10 @@
     }
   }
 
+  function setReplyTo() {
+    replyTo.id = message.current?.id ?? "";
+  }
+
   function convertReactionsToEmojis(
     reactions: Loaded<typeof ReactionList> | undefined | null,
   ) {
@@ -237,17 +241,22 @@
     <div
       class={`relative group w-full h-fit flex flex-col gap-2 px-2 py-1 hover:bg-white/5`}
     >
-      <div class={"group relative flex w-full justify-start gap-5"}>
+      {#if message.current?.replyTo}
+        <MessageRepliedTo messageId={message.current?.replyTo} />
+      {/if}
+
+      <div class={"group relative flex w-full justify-start gap-3"}>
         {#if !mergeWithPrevious && message.current}
           <div class="size-8 sm:size-10">
-            {#if profile.current?.imageUrl}
-              <AvatarImage
-                handle={profile.current?.name}
-                avatarUrl={profile.current?.imageUrl}
+            <Avatar.Root class="size-8 sm:size-10">
+              <Avatar.Image
+                src={profile.current?.imageUrl}
+                class="rounded-full"
               />
-            {:else}
-              <AvatarBeam name={profile.current?.id} />
-            {/if}
+              <Avatar.Fallback>
+                <AvatarBeam name={profile.current?.id} />
+              </Avatar.Fallback>
+            </Avatar.Root>
           </div>
         {:else}
           <div class="w-8 shrink-0 sm:w-10"></div>
@@ -299,14 +308,15 @@
       </div>
 
       {#if editingMessage.id !== messageId}
-      <MessageToolbar
-        bind:isDrawerOpen
-        {toggleReaction}
-        {canEdit}
-        {canDelete}
-        {deleteMessage}
-        {editMessage}
-      />
+        <MessageToolbar
+          bind:isDrawerOpen
+          {toggleReaction}
+          {canEdit}
+          {canDelete}
+          {deleteMessage}
+          {editMessage}
+          {setReplyTo}
+        />
       {/if}
 
       <button
@@ -327,38 +337,3 @@
     {formattedDate}, {format(date, "pp")}
   </time>
 {/snippet}
-
-<!-- {#snippet replyBanner()}
-  {@const profileRepliedTo =
-    messageRepliedTo.value &&
-    getProfile(messageRepliedTo.value.authors((x) => x.get(0)))}
-  {#await profileRepliedTo then profileRepliedTo}
-    {#if messageRepliedTo.value && profileRepliedTo}
-      <Button.Root
-        onclick={scrollToReply}
-        class="cursor-pointer flex gap-2 text-sm text-start w-full items-center text-base-content px-4 py-1"
-      >
-        <div class="flex basis-1/2 md:basis-auto gap-2 items-center">
-          <Icon icon="prime:reply" width="12px" height="12px" />
-          <Avatar.Root class="w-4">
-            <Avatar.Image
-              src={profileRepliedTo.avatarUrl}
-              class="rounded-full"
-            />
-            <Avatar.Fallback>
-              <AvatarBeam name={profileRepliedTo.handle} />
-            </Avatar.Fallback>
-          </Avatar.Root>
-          <h5 class="text-base-content font-medium text-ellipsis">
-            {profileRepliedTo.handle}
-          </h5>
-        </div>
-        <div
-          class="line-clamp-1 basis-1/2 md:basis-auto overflow-hidden italic"
-        >
-          {@html getContentHtml(JSON.parse(messageRepliedTo.value.bodyJson))}
-        </div>
-      </Button.Root>
-    {/if}
-  {/await}
-{/snippet} -->

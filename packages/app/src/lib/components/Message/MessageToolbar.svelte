@@ -4,10 +4,6 @@
   import Icon from "@iconify/svelte";
   import EmojiPicker from "../EmojiPicker.svelte";
 
-  function setReplyTo() {
-    console.log("setReplyTo");
-  }
-
   let {
     canEdit = true,
     canDelete = true,
@@ -15,6 +11,7 @@
     deleteMessage,
     isDrawerOpen = $bindable(false),
     toggleReaction,
+    setReplyTo
   }: {
     canEdit?: boolean;
     canDelete?: boolean;
@@ -22,6 +19,7 @@
     deleteMessage: () => void;
     toggleReaction: (reaction: string) => void;
     isDrawerOpen?: boolean;
+    setReplyTo: () => void;
   } = $props();
 
   let isEmojiDrawerPickerOpen = $state(false);

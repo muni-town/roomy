@@ -1,7 +1,6 @@
 <script lang="ts">
   import { setContext } from "svelte";
   import toast from "svelte-french-toast";
-  import { getContentHtml } from "$lib/tiptap/editor";
   import { outerWidth } from "svelte/reactivity/window";
 
   import Icon from "@iconify/svelte";
@@ -26,6 +25,8 @@
   import { createMessage, createThread, isSpaceAdmin } from "$lib/jazz/utils";
   import { extractTextContent } from "$lib/utils/extractText";
   import { user } from "$lib/user.svelte";
+  import { replyTo } from "./ChatMessage.svelte";
+  import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
 
   // const links = derivePromise(null, async () =>
   //   (await globalState.space?.threads.items())?.find(
@@ -265,9 +266,9 @@
     if (thread.current?.timeline) {
       thread.current.timeline.push(message.id);
     }
+    if (replyTo.id) message.replyTo = replyTo.id;
 
-    // console.log(message.toJSON())
-    // if (replyingTo) message.replyTo = replyingTo;
+    replyTo.id = "";
 
     // Add new message to search index
     // if (searchIndex) {
@@ -476,29 +477,17 @@
           admin={admin.current}
         />
 
-        {#if replyingTo}
+        {#if replyTo.id}
           <div
             class="reply-container flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2 absolute bottom-0 left-0 right-0"
           >
-            <div class="flex items-center gap-2 overflow-hidden">
-              <span>Replying to</span>
-              <!-- {#await getProfile(replyingTo.authors( (x) => x.get(0), )) then profile}
-                <AvatarImage
-                  handle={profile.handle || ""}
-                  avatarUrl={profile.avatarUrl}
-                  className="!w-4"
-                />
-                <strong>{profile.handle}</strong>
-              {/await} -->
-              <p
-                class="text-primary-content text-ellipsis italic max-h-12 overflow-hidden ml-2 contain-images-within"
-              >
-                {@html getContentHtml(JSON.parse(replyingTo.body))}
-              </p>
+            <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
+              <span class="shrink-0">Replying to</span>
+              <MessageRepliedTo messageId={replyTo.id} />
             </div>
             <Button.Root
               type="button"
-              onclick={() => (replyingTo = undefined)}
+              onclick={() => (replyTo.id = "")}
               class="dz-btn dz-btn-circle dz-btn-ghost flex-shrink-0"
             >
               <Icon icon="zondicons:close-solid" />

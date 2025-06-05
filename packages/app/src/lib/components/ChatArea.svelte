@@ -40,7 +40,7 @@
     bind:ref={viewport}
     class="relative max-w-full w-full h-full"
   >
-    <div class="flex flex-col-reverse w-full h-full">
+    <div class="flex flex-col-reverse w-full h-full pb-16">
       <ol class="flex flex-col gap-2 max-w-ful">
         <!--
         This use of `key` needs explaining. `key` causes the components below
