@@ -8,6 +8,7 @@
   import { Avatar, Checkbox } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
+  import { getContext, untrack } from "svelte";
   import Icon from "@iconify/svelte";
   import { AccountCoState, CoState } from "jazz-svelte";
   import {
@@ -26,6 +27,7 @@
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
   import { threading } from "./TimelineView.svelte";
   import toast from "svelte-french-toast";
+  import { addMessage } from "$lib/search.svelte";
   import ImageUrlEmbed from "./Message/embeds/ImageUrlEmbed.svelte";
 
   const me = new AccountCoState(RoomyAccount, {
@@ -63,6 +65,13 @@
       },
     }),
   );
+
+  $effect(()=>{
+    message.current;
+    untrack(()=>{
+      addMessage(threadId ?? "", messageId, message.current?.content?.toString() ?? "")
+    })
+  })
 
   let canEdit = $derived(
     message.current?._edits.content?.by?.profile?.id ===
