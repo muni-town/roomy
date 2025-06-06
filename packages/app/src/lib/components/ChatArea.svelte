@@ -6,7 +6,8 @@
   import { setContext } from "svelte";
   import { Account, co } from "jazz-tools";
   import type { Space } from "$lib/jazz/schema";
-
+  import { loadSeen } from "$lib/seen.svelte";
+  loadSeen()
   let {
     timeline,
     virtualizer = $bindable(),

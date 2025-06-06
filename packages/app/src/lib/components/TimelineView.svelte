@@ -225,7 +225,6 @@
 
   async function sendMessage() {
     if (!user.agent || !space.current) return;
-
     isSendingMessage = true;
 
     let filesUrls: ImageUrlEmbedCreate[] = [];
