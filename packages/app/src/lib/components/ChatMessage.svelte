@@ -29,6 +29,7 @@
   import toast from "svelte-french-toast";
   import { addMessage } from "$lib/search.svelte";
   import ImageUrlEmbed from "./Message/embeds/ImageUrlEmbed.svelte";
+  import { setInputFocus } from "./ChatInput.svelte";
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
@@ -153,6 +154,7 @@
 
   function setReplyTo() {
     replyTo.id = message.current?.id ?? "";
+    setInputFocus();
   }
 
   function convertReactionsToEmojis(
