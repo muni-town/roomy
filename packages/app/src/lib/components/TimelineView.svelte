@@ -161,7 +161,7 @@
     // Find the message in the timeline to get its index
     if (timeline) {
       // Get the timeline IDs - this returns an array, not a Promise
-      const ids = timeline
+      const ids = timeline;
 
       if (!messageId.includes("co_")) {
         return;
@@ -317,7 +317,7 @@
       if (results.length > 0) {
         showSearchResults = true;
         // Get the actual Message objects for the search results
-        searchResults = results
+        searchResults = results;
       } else {
         searchResults = [];
         showSearchResults = searchQuery.length > 0;
@@ -332,7 +332,7 @@
     channel.current?.pages?.filter((page) => page && !page.softDeleted) || [],
   );
 
-  const threads = $derived(
+  const channelThreads = $derived(
     channel.current?.subThreads?.filter(
       (thread) => thread && !thread.softDeleted,
     ) || [],
@@ -367,6 +367,50 @@
   }
 
   let bannedHandles = $derived(new Set(space.current?.bans ?? []));
+
+  $inspect(space.current?.members).with(() => {
+    console.log("space.current?.members", space.current?.members?.toJSON());
+  });
+  let users = $derived(
+    space.current?.members
+      ?.map((member) => ({
+        value: member?.id ?? "",
+        label: member?.profile?.name ?? "",
+      }))
+      .filter((user) => user.value && user.label) || [],
+  );
+
+  let channels = $derived(
+    space.current?.channels
+      ?.map((channel) => ({
+        value: JSON.stringify({
+          id: channel?.id ?? "",
+          space: space.current?.id ?? "",
+          type: "channel",
+        }),
+        label: channel?.name ?? "",
+        id: JSON.stringify({
+          id: channel?.id ?? "",
+          space: space.current?.id ?? "",
+          type: "channel",
+        }),
+      }))
+      .filter((channel) => channel.value && channel.label) || [],
+  );
+  let threads = $derived(
+    space.current?.threads
+      ?.map((thread) => ({
+        value: JSON.stringify({
+          id: thread?.id ?? "",
+          space: space.current?.id ?? "",
+          type: "thread",
+        }),
+        label: thread?.name ?? "",
+      }))
+      .filter((thread) => thread.value && thread.label) || [],
+  );
+
+  let context = $derived([...channels, ...threads]);
 </script>
 
 {#if admin.current}
@@ -438,7 +482,7 @@
     {/snippet}
     No pages for this channel.
   </BoardList>
-  <BoardList items={threads} title="Threads" route="thread">
+  <BoardList items={channelThreads} title="Threads" route="thread">
     No threads for this channel.
   </BoardList>
 {:else if tab === "chat"}
@@ -550,16 +594,18 @@
                     {/if}
 
                     <div class="flex gap-1 w-full">
-                    <UploadFileButton {processImageFile} />
+                      <UploadFileButton {processImageFile} />
 
-                    <ChatInput
-                      bind:content={messageInput}
-                      users={[]}
-                      context={[]}
-                      onEnter={sendMessage}
-                      {processImageFile}
-                    />
-                  </div>
+                      {#key users.length + context.length}
+                        <ChatInput
+                          bind:content={messageInput}
+                          {users}
+                          {context}
+                          onEnter={sendMessage}
+                          {processImageFile}
+                        />
+                      {/key}
+                    </div>
                     <FullscreenImageDropper {processImageFile} />
 
                     {#if isSendingMessage}

@@ -66,12 +66,16 @@
     }),
   );
 
-  $effect(()=>{
+  $effect(() => {
     message.current;
-    untrack(()=>{
-      addMessage(threadId ?? "", messageId, message.current?.content?.toString() ?? "")
-    })
-  })
+    untrack(() => {
+      addMessage(
+        threadId ?? "",
+        messageId,
+        message.current?.content?.toString() ?? "",
+      );
+    });
+  });
 
   let canEdit = $derived(
     message.current?._edits.content?.by?.profile?.id ===
@@ -285,8 +289,8 @@
     {/if}
     <div
       class={[
-        `relative group w-full h-fit flex flex-col gap-2 px-2 py-1 hover:bg-white/5`,
-        !mergeWithPrevious && "py-3",
+        `relative group w-full h-fit flex flex-col gap-2 px-2 pt-2 pb-1 hover:bg-white/5`,
+        !mergeWithPrevious && "pt-3",
       ]}
     >
       {#if message.current?.replyTo}
@@ -312,7 +316,7 @@
 
         <div class="flex flex-col gap-1">
           {#if !mergeWithPrevious || !message.current}
-            <span class=" flex items-center gap-2 text-sm">
+            <span class="flex items-center gap-2 text-sm">
               <span class="font-bold text-primary"
                 >{profile?.current?.name ?? ""}</span
               >
