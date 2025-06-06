@@ -2,6 +2,12 @@
   import "../app.css";
   import { Button } from "bits-ui";
   import { goto } from "$app/navigation";
+  import { onMount } from "svelte";
+  import { page } from "$app/state";
+
+  onMount(() => {
+    console.error(page.status, page.error, page.error?.message);
+  });
 </script>
 
 <div class="dz-hero bg-base-200 min-h-screen">
