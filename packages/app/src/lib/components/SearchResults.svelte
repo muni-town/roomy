@@ -2,7 +2,8 @@
   import Icon from "@iconify/svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
   import { getContentHtml } from "$lib/tiptap/editor";
-  import type { Message } from "$lib/schema"
+  import type { Message } from "$lib/jazz/schema";
+  import SearchResult from "./search/SearchResult.svelte";
 
   let {
     messages = [],
@@ -10,7 +11,7 @@
     onMessageClick,
     onClose,
   }: {
-    messages: Message[];
+    messages: (typeof Message)[];
     query: string;
     onMessageClick: (messageId: string) => void;
     onClose: () => void;
@@ -28,17 +29,21 @@
   }
 
   // Format the message preview with highlighted search term
-  function formatMessagePreview(message: Message): string {
+  function formatMessagePreview(message: typeof Message): string {
     try {
-      const bodyContent = JSON.parse(message.body);
-      const htmlContent = getContentHtml(bodyContent);
+      // const bodyContent = JSON.parse(message.body);
+      // const htmlContent = getContentHtml(bodyContent);\
+      const htmlContent = message.content;
+      console.log(message.content);
       return highlightSearchTerm(htmlContent, query);
     } catch (error) {
+      console.error(error);
       return "Unable to display message content";
     }
   }
- 
 </script>
+
+
 
 <div
   class="search-results bg-base-100 border border-base-300 rounded-lg shadow-lg w-full max-h-[60vh] overflow-auto"
@@ -64,42 +69,7 @@
   {:else}
     <ul class="divide-y divide-base-300">
       {#each messages as message}
-        <li class="hover:bg-base-200 transition-colors">
-          <button
-            type="button"
-            class="p-3 flex items-start gap-2"
-            onclick={() => {
-              // Just call onMessageClick and don't try to scroll directly from here
-              // This will avoid the postMessage error
-              onMessageClick(message.id);
-            }}
-          >
-              <AvatarImage
-                handle={message.profile?.handle || ""}
-                avatarUrl={message.profile?.avatarUrl}
-                className="w-8 h-8"
-              />
-              <div class="flex-1 min-w-0">
-                <div class="flex justify-between items-center mb-1">
-                  <span class="font-medium text-base-content"
-                    >{message.profile?.handle || "Unknown"}</span
-                  >
-                  <span class="text-xs text-base-content/60">
-                    <!-- {message._edits?.createdDate
-                      ? formatDistanceToNow(message._edits.createdDate, {
-                          addSuffix: true,
-                        })
-                      : ""} -->
-                  </span>
-                </div>
-                <div
-                  class="text-sm text-base-content/80 line-clamp-2 break-words"
-                >
-                  {@html formatMessagePreview(message)}
-                </div>
-              </div>
-          </button>
-        </li>
+        <SearchResult message={message} onMessageClick={onMessageClick} formatMessagePreview={formatMessagePreview} />
       {/each}
     </ul>
   {/if}

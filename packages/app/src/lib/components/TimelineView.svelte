@@ -34,6 +34,8 @@
   import { replyTo } from "./ChatMessage.svelte";
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
   import { extractLinks } from "$lib/utils/collectLinks";
+  import { untrack } from "svelte";
+  import { addMessage, findMessages } from "$lib/search.svelte";
 
   // const links = derivePromise(null, async () =>
   //   (await globalState.space?.threads.items())?.find(
@@ -85,15 +87,17 @@
       .map((a) => a.value);
   });
 
-  let threadId = $derived(thread.current?.id ?? channel.current?.mainThread?.id);
+  let threadId = $derived(
+    thread.current?.id ?? channel.current?.mainThread?.id,
+  );
 
   $inspect(threadId).with(() => {
     console.log("threadId", threadId);
   });
 
-  $inspect(timeline).with(() => {
-    console.log("timeline", timeline);
-  });
+  // $inspect(timeline).with(() => {
+  //   console.log("timeline", timeline);
+  // });
 
   const readonly = $derived(thread.current?.name === "@links");
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
@@ -141,7 +145,7 @@
   });
   let searchQuery = $state("");
   let showSearchInput = $state(false);
-  let searchResults = $state<Message[]>([]);
+  let searchResults = $state([]);
   let showSearchResults = $state(false);
   let virtualizer = $state<Virtualizer<string> | undefined>(undefined);
 
@@ -152,9 +156,9 @@
     showSearchResults = false;
 
     // Find the message in the timeline to get its index
-    if (globalState.channel?.messages) {
+    if (timeline) {
       // Get the timeline IDs - this returns an array, not a Promise
-      const ids = globalState.channel?.messages?.map((message) => message?.id);
+      const ids = timeline
 
       if (!messageId.includes("co_")) {
         return;
@@ -195,6 +199,14 @@
         }
       }
     }
+  });
+
+  $effect(() => {
+    timeline;
+    // const timeline = channel.current?.mainThread?.timeline;
+    untrack(() => {
+      console.log("timeline", timeline);
+    });
   });
 
   async function addThread(e: SubmitEvent) {
@@ -252,7 +264,7 @@
       timeline.push(message.id);
     }
     if (replyTo.id) message.replyTo = replyTo.id;
-
+    // addMessage(timeline?.id ?? "", message.id, messageInput);
     replyTo.id = "";
 
     if (links?.timeline) {
@@ -274,18 +286,13 @@
   $effect(() => {
     if (searchIndex && searchQuery) {
       // Perform synchronous search
-      const results = searchIndex.search(searchQuery);
-
+      // const results = searchIndex.search(searchQuery);
+      const results = findMessages(threadId ?? "", searchQuery);
+      console.log("results", results, searchQuery);
       if (results.length > 0) {
         showSearchResults = true;
         // Get the actual Message objects for the search results
-        if (timeline) {
-          const messages = timeline.items();
-          searchResults = messages.filter(
-            (msg): msg is Message =>
-              msg !== null && msg !== undefined && results.includes(msg.id),
-          );
-        }
+        searchResults = results
       } else {
         searchResults = [];
         showSearchResults = searchQuery.length > 0;
