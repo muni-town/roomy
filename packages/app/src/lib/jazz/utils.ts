@@ -2,6 +2,8 @@ import { Account, co, CoRichText, Group, z } from "jazz-tools";
 import {
   Category,
   Channel,
+  Embed,
+  ImageUrlEmbed,
   Message,
   Page,
   Reaction,
@@ -130,10 +132,18 @@ export function createPublicSpacesList() {
   return spaces;
 }
 
+export type ImageUrlEmbedCreate = {
+  type: "imageUrl";
+  data: {
+    url: string;
+  };
+};
+
 export function createMessage(
   input: string,
   replyTo?: string,
   admin?: Account,
+  embeds?: ImageUrlEmbedCreate[],
 ) {
   const readingGroup = publicGroup("reader");
 
@@ -148,6 +158,24 @@ export function createMessage(
     owner: readingGroup,
   });
 
+  let embedsList;
+  if (embeds && embeds.length > 0) {
+    embedsList = co.list(Embed).create([], readingGroup);
+    for (const embed of embeds) {
+      const imageUrlEmbed = ImageUrlEmbed.create(
+        { url: embed.data.url },
+        readingGroup,
+      );
+
+      embedsList.push(
+        Embed.create(
+          { type: "imageUrl", embedId: imageUrlEmbed.id },
+          readingGroup,
+        ),
+      );
+    }
+  }
+
   const message = Message.create(
     {
       content,
@@ -155,8 +183,8 @@ export function createMessage(
       updatedAt: new Date(),
       reactions: co.list(Reaction).create([], publicGroup()),
       replyTo: replyTo,
-      type: "message",
       hiddenIn: co.list(z.string()).create([], readingGroup),
+      embeds: embedsList,
     },
     readingGroup,
   );

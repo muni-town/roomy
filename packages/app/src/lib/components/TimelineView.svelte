@@ -28,18 +28,18 @@
   import { AccountCoState, CoState } from "jazz-svelte";
   import { Channel, Space } from "$lib/jazz/schema";
   import { page } from "$app/state";
-  import { createMessage, createThread, isSpaceAdmin } from "$lib/jazz/utils";
+  import {
+    createMessage,
+    createThread,
+    isSpaceAdmin,
+    type ImageUrlEmbedCreate,
+  } from "$lib/jazz/utils";
   import { extractTextContent } from "$lib/utils/extractText";
   import { user } from "$lib/user.svelte";
   import { replyTo } from "./ChatMessage.svelte";
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
   import { extractLinks } from "$lib/utils/collectLinks";
-
-  // const links = derivePromise(null, async () =>
-  //   (await globalState.space?.threads.items())?.find(
-  //     (x) => x.name === "@links",
-  //   ),
-  // );
+  import FullscreenImageDropper from "./FullscreenImageDropper.svelte";
 
   let space = $derived(
     new CoState(Space, page.params.space, {
@@ -85,7 +85,9 @@
       .map((a) => a.value);
   });
 
-  let threadId = $derived(thread.current?.id ?? channel.current?.mainThread?.id);
+  let threadId = $derived(
+    thread.current?.id ?? channel.current?.mainThread?.id,
+  );
 
   $inspect(threadId).with(() => {
     console.log("threadId", threadId);
@@ -144,6 +146,8 @@
   let searchResults = $state<Message[]>([]);
   let showSearchResults = $state(false);
   let virtualizer = $state<Virtualizer<string> | undefined>(undefined);
+
+  let filesInMessage: File[] = $state([]);
 
   // Function to handle search result click
   function handleSearchResultClick(messageId: string) {
@@ -237,13 +241,31 @@
     toast.success("Thread created", { position: "bottom-end" });
   }
 
+  let isSendingMessage = $state(false);
+
   async function sendMessage() {
     if (!user.agent || !space.current) return;
+
+    isSendingMessage = true;
+
+    let filesUrls: ImageUrlEmbedCreate[] = [];
+    // upload files
+    for (const file of filesInMessage) {
+      const uploadedFile = await user.uploadBlob(file);
+
+      filesUrls.push({
+        type: "imageUrl",
+        data: {
+          url: uploadedFile.url,
+        },
+      });
+    }
 
     const message = createMessage(
       messageInput,
       undefined,
       admin.current || undefined,
+      filesUrls,
     );
 
     let timeline =
@@ -268,6 +290,10 @@
     }
 
     messageInput = "";
+    for (let i = filesInMessage.length - 1; i >= 0; i--) {
+      removeImageFile(i);
+    }
+    isSendingMessage = false;
   }
 
   // Handle search input
@@ -314,6 +340,24 @@
 
     // add to space.current.members
     space.current?.members?.push(me.current);
+  }
+
+  let previewImages: string[] = $state([]);
+
+  function processImageFile(file: File) {
+    console.log("processing image file", file);
+    filesInMessage.push(file);
+    previewImages.push(URL.createObjectURL(file));
+  }
+
+  function removeImageFile(index: number) {
+    let previewImage = previewImages[index];
+    filesInMessage = filesInMessage.filter((_, i) => i !== index);
+    previewImages = previewImages.filter((_, i) => i !== index);
+
+    if (previewImage) {
+      URL.revokeObjectURL(previewImage);
+    }
   }
 
   let bannedHandles = $derived(new Set(space.current?.bans ?? []));
@@ -393,7 +437,7 @@
   </BoardList>
 {:else if tab === "chat"}
   {#if space.current}
-    <div class="flex h-full flex-col">
+    <div class="flex flex-col h-[calc(100vh-124px)]">
       {#if showSearchInput}
         <div
           class="flex items-center border-b border-gray-200 dark:border-gray-700 px-2 py-1"
@@ -434,10 +478,7 @@
           </div>
         {/if}
       {/if}
-      <div
-        class="flex-grow overflow-auto relative"
-        style="max-height: calc(100vh - 180px);"
-      >
+      <div class="flex-grow overflow-auto relative h-full">
         <ChatArea
           space={space.current}
           {timeline}
@@ -478,13 +519,52 @@
                     >
                   </div>
                 {:else if !bannedHandles.has(me?.current?.profile?.blueskyHandle ?? "")}
-                  <div class="dz-prose prose-a:text-primary prose-a:underline">
+                  <div
+                    class="dz-prose prose-a:text-primary prose-a:underline relative isolate"
+                  >
+                    {#if previewImages.length > 0}
+                      <div class="flex gap-2 my-2 overflow-x-auto w-full">
+                        {#each previewImages as previewImage, index (previewImage)}
+                          <div class="size-24 relative shrink-0">
+                            <img
+                              src={previewImage}
+                              alt="Preview"
+                              class="absolute inset-0 w-full h-full object-cover"
+                            />
+
+                            <button
+                              class="btn btn-ghost btn-sm btn-circle absolute p-0.5 top-1 right-1 bg-base-100 rounded-full"
+                              onclick={() => removeImageFile(index)}
+                            >
+                              <Icon icon="tabler:x" class="size-4" />
+                            </button>
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
+
                     <ChatInput
                       bind:content={messageInput}
                       users={[]}
                       context={[]}
                       onEnter={sendMessage}
+                      {processImageFile}
                     />
+
+                    <FullscreenImageDropper {processImageFile} />
+
+                    {#if isSendingMessage}
+                      <div
+                        class="absolute inset-0 flex items-center text-primary justify-center z-20 bg-base-100/80"
+                      >
+                        <div class="text-xl font-bold flex items-center gap-4">
+                          Sending message...
+                          <span
+                            class="dz-loading dz-loading-spinner mx-auto w-8"
+                          ></span>
+                        </div>
+                      </div>
+                    {/if}
                   </div>
                 {:else}
                   <div class="flex items-center grow flex-col">
