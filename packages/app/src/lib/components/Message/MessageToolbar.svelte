@@ -2,7 +2,7 @@
   import { Button, Toolbar, Popover } from "bits-ui";
   import Drawer from "../Drawer.svelte";
   import Icon from "@iconify/svelte";
-  import EmojiPicker from "../EmojiPicker.svelte";
+  import EmojiPicker from "../helper/EmojiPicker.svelte";
 
   let {
     canEdit = true,

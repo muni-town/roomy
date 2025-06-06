@@ -39,7 +39,8 @@
   import { replyTo } from "./ChatMessage.svelte";
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
   import { extractLinks } from "$lib/utils/collectLinks";
-  import FullscreenImageDropper from "./FullscreenImageDropper.svelte";
+  import FullscreenImageDropper from "./helper/FullscreenImageDropper.svelte";
+  import UploadFileButton from "./helper/UploadFileButton.svelte";
 
   let space = $derived(
     new CoState(Space, page.params.space, {
@@ -543,6 +544,9 @@
                       </div>
                     {/if}
 
+                    <div class="flex gap-1 w-full">
+                    <UploadFileButton {processImageFile} />
+
                     <ChatInput
                       bind:content={messageInput}
                       users={[]}
@@ -550,7 +554,7 @@
                       onEnter={sendMessage}
                       {processImageFile}
                     />
-
+                  </div>
                     <FullscreenImageDropper {processImageFile} />
 
                     {#if isSendingMessage}

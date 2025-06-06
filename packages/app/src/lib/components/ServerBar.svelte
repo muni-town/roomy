@@ -10,9 +10,11 @@
   import { env } from "$env/dynamic/public";
   import { co } from "jazz-tools";
   import { createSpace, createSpaceList } from "$lib/jazz/utils";
-  import { RoomyAccount, SpaceList } from "$lib/jazz/schema";
+  import { RoomyAccount, Space, SpaceList } from "$lib/jazz/schema";
   import ZipExport from "./ZipExport.svelte";
   import Login from "./Login.svelte";
+  import { CoState } from "jazz-svelte";
+  import { page } from "$app/state";
 
   let {
     spaces,
@@ -26,6 +28,12 @@
 
   let newSpaceName = $state("");
   let isNewSpaceDialogOpen = $state(false);
+
+  let openSpace = $derived(new CoState(Space, page.params.space));
+
+  let isOpenSpaceJoined = $derived(
+    me?.profile?.joinedSpaces?.some((x) => x?.id === openSpace.current?.id),
+  );
 
   async function createSpaceSubmit() {
     if (!newSpaceName) return;
@@ -105,6 +113,9 @@
     </Dialog>
 
     <div class="divider my-0"></div>
+    {#if !isOpenSpaceJoined && openSpace.current}
+      <SidebarSpace space={openSpace.current} hasJoined={false} />
+    {/if}
     {#if spaces}
       {#each spaces as space}
         <SidebarSpace {space} />

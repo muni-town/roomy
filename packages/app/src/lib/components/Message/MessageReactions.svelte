@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Toggle, Popover } from "bits-ui";
   import Icon from "@iconify/svelte";
-  import EmojiPicker from "../EmojiPicker.svelte";
+  import EmojiPicker from "../helper/EmojiPicker.svelte";
 
   let {
     reactions,

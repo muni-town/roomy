@@ -1,11 +1,7 @@
 <script lang="ts">
-  // import type { Space } from "@roomy-chat/sdk";
   import ContextMenu from "./ContextMenu.svelte";
   import { AvatarMarble } from "svelte-boring-avatars";
-
   import { navigate } from "$lib/utils.svelte";
-  import { derivePromise } from "$lib/utils.svelte";
-  // import { Image } from "@roomy-chat/sdk";
   import TooltipPortal from "./TooltipPortal.svelte";
   import { page } from "$app/state";
   import { co } from "jazz-tools";
@@ -13,9 +9,10 @@
 
   type Props = {
     space: co.loaded<typeof Space> | null | undefined;
+    hasJoined?: boolean;
   };
 
-  const { space }: Props = $props();
+  const { space, hasJoined = true }: Props = $props();
 
   // Tooltip state
   let activeTooltip = $state("");
@@ -62,7 +59,7 @@
       ${isActive ? "ring-0.5 ring-offset-0 ring-primary/30 border border-primary" : ""}
       transition-all duration-200`}
   >
-    <div class="flex items-center justify-center overflow-hidden">
+    <div class={["flex items-center justify-center overflow-hidden", !hasJoined && "opacity-50"]}>
       {#if space?.imageUrl}
         <img
           src={space?.imageUrl}

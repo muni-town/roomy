@@ -8,9 +8,7 @@
   import { Avatar, Checkbox } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
-  import { getContext } from "svelte";
   import Icon from "@iconify/svelte";
-  import { selectMessage } from "$lib/thread.svelte";
   import { AccountCoState, CoState } from "jazz-svelte";
   import {
     Message,
@@ -28,7 +26,7 @@
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
   import { threading } from "./TimelineView.svelte";
   import toast from "svelte-french-toast";
-  import ImageUrlEmbed from "./Message/ImageUrlEmbed.svelte";
+  import ImageUrlEmbed from "./Message/embeds/ImageUrlEmbed.svelte";
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
