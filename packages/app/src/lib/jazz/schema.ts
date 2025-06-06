@@ -8,8 +8,13 @@ export const Reaction = co.map({
 
 export const ReactionList = co.list(Reaction);
 
-export const MovedTo = co.map({
-  thread: z.string(),
+export const ImageUrlEmbed = co.map({
+  url: z.string(),
+});
+
+export const Embed = co.map({
+  type: z.enum(["imageUrl"]),
+  embedId: z.string(),
 });
 
 export const Message = co.map({
@@ -21,11 +26,11 @@ export const Message = co.map({
   hiddenIn: co.list(z.string()),
 
   replyTo: z.string().optional(),
-  movedTo: z.optional(MovedTo),
   reactions: ReactionList,
-  type: z.enum(["message", "announcement"]),
 
   softDeleted: z.boolean().optional(),
+
+  embeds: z.optional(co.list(Embed)),
 });
 
 export const Timeline = co.feed(z.string());
@@ -54,7 +59,6 @@ export const Channel = co.map({
 
   softDeleted: z.boolean().optional(),
 });
-
 
 export const Category = co.map({
   name: z.string(),

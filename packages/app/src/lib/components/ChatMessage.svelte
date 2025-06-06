@@ -10,7 +10,6 @@
   import { format, isToday } from "date-fns";
   import { getContext, untrack } from "svelte";
   import Icon from "@iconify/svelte";
-  import { selectMessage } from "$lib/thread.svelte";
   import { AccountCoState, CoState } from "jazz-svelte";
   import {
     Message,
@@ -29,6 +28,7 @@
   import { threading } from "./TimelineView.svelte";
   import toast from "svelte-french-toast";
   import { addMessage } from "$lib/search.svelte";
+  import ImageUrlEmbed from "./Message/embeds/ImageUrlEmbed.svelte";
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
@@ -58,6 +58,10 @@
       resolve: {
         content: true,
         reactions: true,
+        embeds: {
+          $each: true,
+          $onError: null,
+        },
       },
     }),
   );
@@ -241,8 +245,12 @@
         bind:checked={
           () => isSelected,
           (value) => {
-            
-            if(value && message.current?._edits.content?.by?.profile?.id !== me.current?.profile?.id && !isAdmin) {
+            if (
+              value &&
+              message.current?._edits.content?.by?.profile?.id !==
+                me.current?.profile?.id &&
+              !isAdmin
+            ) {
               toast.error("You cannot move someone else's message");
               return;
             }
@@ -252,7 +260,10 @@
               console.log("added", messageId);
               console.log(threading.selectedMessages);
             } else {
-              threading.selectedMessages.splice(threading.selectedMessages.indexOf(messageId), 1);
+              threading.selectedMessages.splice(
+                threading.selectedMessages.indexOf(messageId),
+                1,
+              );
               console.log("deleted", messageId);
               console.log(threading.selectedMessages);
             }
@@ -334,7 +345,7 @@
             {:else}
               {@html message.current?.content ?? ""}
 
-              {#if isMessageEdited}
+              {#if isMessageEdited && message.current?.updatedAt}
                 <div class="text-xs text-secondary">
                   Edited {@render timestamp(message.current?.updatedAt)}
                 </div>
@@ -362,6 +373,14 @@
       >
         <span class="sr-only">Open toolbar</span>
       </button>
+
+      <div class="pl-11 md:pl-13 max-w-full flex flex-wrap gap-2">
+        {#each message.current?.embeds ?? [] as embed}
+          {#if embed?.type === "imageUrl"}
+            <ImageUrlEmbed embedId={embed.embedId} />
+          {/if}
+        {/each}
+      </div>
 
       <MessageReactions {reactions} {toggleReaction} />
     </div>
