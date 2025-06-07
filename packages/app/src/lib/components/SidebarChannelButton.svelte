@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import type { Channel, Space } from "$lib/jazz/schema";
+  import type { Channel, RoomyAccount, Space } from "$lib/jazz/schema";
   import { isSpaceAdmin } from "$lib/jazz/utils";
   import { navigateSync } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
@@ -12,11 +12,13 @@
     deleteItem,
     space,
     lastReadDate,
+    me,
   }: {
     channel: co.loaded<typeof Channel> | undefined | null;
     deleteItem: (channel: co.loaded<typeof Channel>) => void;
     space: co.loaded<typeof Space> | undefined | null;
     lastReadDate: Date | undefined | null;
+    me: co.loaded<typeof RoomyAccount> | undefined | null;
   } = $props();
 
   const latestEntriesByAccount = $derived(
@@ -33,6 +35,16 @@
 
     return new Date(lastReadDate) < date;
   });
+
+  const channelNotifications = $derived(
+    me?.profile?.roomyInbox?.filter(
+      (x) => x?.channelId === channel?.id && !x?.read,
+    ).length,
+  );
+
+  $inspect(me?.profile?.roomyInbox);
+
+  $inspect(channelNotifications);
 </script>
 
 {#if channel && !channel.softDeleted}
@@ -50,14 +62,19 @@
       <h3 class="flex justify-start items-center w-full gap-2 px-2">
         <Icon icon="basil:comment-solid" class="shrink-0" />
         <span class="truncate">{channel?.name || "..."}</span>
+
+        {#if channelNotifications}
+          <span
+            class="inline-flex items-center justify-center bg-primary font-bold text-base-100 rounded-full size-6"
+          >
+            {channelNotifications}
+          </span>
+        {/if}
       </h3>
     </Button.Root>
 
     {#if isNew}
-      <div
-        class="absolute top-1 left-1 size-2 bg-primary rounded-full"
-      >
-      </div>
+      <div class="absolute top-1 left-1 size-2 bg-primary rounded-full"></div>
     {/if}
     {#if isSpaceAdmin(space)}
       <Button.Root

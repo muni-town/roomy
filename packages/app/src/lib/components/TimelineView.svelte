@@ -30,6 +30,7 @@
   import { Channel, Space } from "$lib/jazz/schema";
   import { page } from "$app/state";
   import {
+    addToInbox,
     createMessage,
     createThread,
     isSpaceAdmin,
@@ -42,7 +43,7 @@
   import { findMessages } from "$lib/search.svelte";
   import FullscreenImageDropper from "./helper/FullscreenImageDropper.svelte";
   import UploadFileButton from "./helper/UploadFileButton.svelte";
-  import { afterNavigate, onNavigate } from "$app/navigation";
+  import { afterNavigate } from "$app/navigation";
 
   let space = $derived(
     new CoState(Space, page.params.space, {
@@ -223,6 +224,37 @@
 
   let isSendingMessage = $state(false);
 
+  const notifications = $derived(
+    me.current?.profile?.roomyInbox?.filter(
+      (x) =>
+        x &&
+        (x.channelId === channel.current?.id ||
+          x.threadId === thread.current?.id) &&
+        !x.read,
+    ),
+  );
+
+  $effect(() => {
+    if (notifications && notifications.length > 0) {
+      // remove those from the inbox
+      for (
+        let i = (me.current?.profile?.roomyInbox?.length ?? 0) - 1;
+        i >= 0;
+        i--
+      ) {
+        const item = me.current?.profile?.roomyInbox?.[i];
+        if (
+          item &&
+          (item.channelId === channel.current?.id ||
+            item.threadId === thread.current?.id) &&
+          !item.read
+        ) {
+          item.read = true;
+        }
+      }
+    }
+  });
+
   async function sendMessage() {
     if (!user.agent || !space.current) return;
 
@@ -253,12 +285,45 @@
     if (timeline) {
       timeline.push(message.id);
     }
-    if (replyTo.id) message.replyTo = replyTo.id;
+    if (replyTo.id) {
+      message.replyTo = replyTo.id;
+      const replyToMessage = await Message.load(replyTo.id);
+      const userId = replyToMessage?._edits?.content?.by?.id;
+      if (userId) {
+        console.log("adding to inbox", userId, message.id);
+        addToInbox(
+          userId,
+          "reply",
+          message.id,
+          space.current?.id ?? "",
+          channel.current?.id ?? "",
+          thread.current?.id ?? "",
+        );
+      }
+    }
     // addMessage(timeline?.id ?? "", message.id, messageInput);
     replyTo.id = "";
 
+    // see if we mentioned anyone (all links that start with /user/)
+    const allLinks = extractLinks(messageInput);
+    for (const link of allLinks) {
+      if (link.startsWith("/user/")) {
+        const userId = link.split("/")[2];
+        console.log("mentioned user", userId);
+        if (!userId) continue;
+
+        addToInbox(
+          userId,
+          "mention",
+          message.id,
+          space.current?.id ?? "",
+          channel.current?.id ?? "",
+          thread.current?.id ?? "",
+        );
+      }
+    }
+
     if (links?.timeline) {
-      const allLinks = extractLinks(messageInput);
       for (const link of allLinks) {
         if (!link.startsWith("http")) continue;
 

@@ -17,6 +17,7 @@
   import { afterNavigate } from "$app/navigation";
   import { LastReadList, RoomyAccount } from "$lib/jazz/schema";
   import "jazz-inspector-element";
+  import { createInbox } from "$lib/jazz/utils";
 
   const { children } = $props();
 
@@ -40,6 +41,17 @@
 
     if(me.current.profile.blueskyHandle !== user.profile.data?.handle) {
       me.current.profile.blueskyHandle = user.profile.data?.handle;
+    }
+  });
+
+  $effect(() => {
+    if(!me.current) return;
+
+    if(!me.current.profile.roomyInbox) {
+      console.log("creating inbox");
+      me.current.profile.roomyInbox = createInbox();
+    } else {
+      console.log("inbox already exists");
     }
   });
 
@@ -85,7 +97,6 @@
     )
       isSidebarVisible.toggle();
   });
-
 
 	function setLastRead() {
 		if (!me?.current?.root) return;

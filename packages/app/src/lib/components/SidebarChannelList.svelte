@@ -131,6 +131,7 @@
                         {deleteItem}
                         {space}
                         lastReadDate={me?.root?.lastRead?.[channel.id]}
+                        {me}
                       />
                     {/each}
                   </div>
@@ -145,6 +146,7 @@
           {deleteItem}
           {space}
           lastReadDate={me?.root?.lastRead?.[item.data.id]}
+          {me}
         />
       {/if}
     {/each}

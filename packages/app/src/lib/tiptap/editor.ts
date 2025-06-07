@@ -112,11 +112,12 @@ const UserMentionExtension = Mention.extend({
   name: "userMention",
   // Used by `generateHTML`
   renderHTML({ HTMLAttributes, node }) {
+    console.log("attrs", node.attrs);
     return [
       "a",
       mergeAttributes(
         {
-          href: `https://${node.attrs.label}`,
+          href: `/user/${node.attrs.id}`,
           class: "mention !no-underline",
         },
         HTMLAttributes,

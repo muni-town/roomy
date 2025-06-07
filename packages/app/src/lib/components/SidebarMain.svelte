@@ -43,13 +43,18 @@
   let links = $derived(
     space?.current?.threads?.find((x) => x?.name === "@links"),
   );
-  
-  
+
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
       root: {
-        lastRead: true
-      }
+        lastRead: true,
+      },
+      profile: {
+        roomyInbox: {
+          $each: true,
+          $onError: null,
+        },
+      },
     },
   });
 
@@ -85,7 +90,7 @@
       });
   }
   let threads = $derived(allThreads());
-  
+
   const pages = $derived.by(() => {
     if (!space?.current) return [];
     const pages = spacePages(space.current);
@@ -323,7 +328,11 @@
         active={page.params.channel ?? ""}
       />
     {:else}
-      <SidebarChannelList {sidebarItems} space={space.current} me={me.current} />
+      <SidebarChannelList
+        {sidebarItems}
+        space={space.current}
+        me={me.current}
+      />
     {/if}
   </div>
 </nav>

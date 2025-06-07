@@ -4,9 +4,11 @@ import {
   Channel,
   Embed,
   ImageUrlEmbed,
+  InboxItem,
   Message,
   Page,
   Reaction,
+  RoomyAccount,
   Space,
   SpaceList,
   Thread,
@@ -241,4 +243,52 @@ export function spacePages(space: co.loaded<typeof Space>) {
     }
   }
   return pages;
+}
+
+export async function addToInbox(
+  accountId: string,
+  type: "reply" | "mention",
+  messageId: string,
+  spaceId: string,
+  channelId?: string,
+  threadId?: string,
+) {
+  const account = await RoomyAccount.load(accountId, {
+    resolve: {
+      profile: {
+        roomyInbox: true,
+      },
+    },
+  });
+  if (!account?.profile.roomyInbox) {
+    console.error("Account has no inbox");
+    return;
+  }
+
+  const group = Group.create();
+  group.addMember(account, "admin");
+
+  const inbox = account.profile.roomyInbox;
+  inbox.push(
+    InboxItem.create(
+      {
+        type,
+        messageId,
+        spaceId,
+        channelId,
+        threadId,
+        read: false,
+      },
+      group,
+    ),
+  );
+}
+
+export function createInbox() {
+  const group = Group.create();
+  group.addMember("everyone", "writeOnly");
+
+  const inbox = co.list(InboxItem).create([], group);
+
+  return inbox;
 }

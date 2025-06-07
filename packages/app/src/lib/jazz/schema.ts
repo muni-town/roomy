@@ -1,6 +1,6 @@
-import { co, z } from "jazz-tools";
+import { co, Group, z } from "jazz-tools";
 import { getRandomUsername } from "./username.ts";
-import { createSpaceList, publicGroup } from "./utils.ts";
+import { createInbox, createSpaceList, publicGroup } from "./utils.ts";
 
 export const Reaction = co.map({
   emoji: z.string(),
@@ -92,14 +92,27 @@ export const Space = co.map({
 
 export const SpaceList = co.list(Space);
 
+export const LastReadList = co.record(z.string(), z.date());
+
+export const InboxItem = co.map({
+  spaceId: z.string(),
+  channelId: z.string().optional(),
+  threadId: z.string().optional(),
+
+  messageId: z.string(),
+
+  read: z.boolean().optional(),
+
+  type: z.enum(["reply", "mention"]),
+});
+
 export const RoomyProfile = co.profile({
   name: z.string(),
   imageUrl: z.string().optional(),
   blueskyHandle: z.string().optional(),
   joinedSpaces: SpaceList,
+  roomyInbox: co.list(InboxItem),
 });
-
-export const LastReadList = co.record(z.string(), z.date());
 
 export const RoomyRoot = co.map({
   lastRead: LastReadList,
@@ -122,6 +135,7 @@ export const RoomyAccount = co
         {
           name: creationProps?.name ?? getRandomUsername(),
           joinedSpaces: createSpaceList(),
+          roomyInbox: createInbox(),
         },
         publicGroup("reader"),
       );
