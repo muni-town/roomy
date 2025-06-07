@@ -19,7 +19,7 @@
   let spaces = $derived(me?.profile?.joinedSpaces);
 </script>
 
-<div class="dz-hero bg-base-200 min-h-screen">
+<div class="dz-hero bg-base-200 min-h-screen overflow-y-scroll">
   <div class="dz-hero-content">
     <div class="flex flex-col gap-8 items-center">
       <h1 class="text-5xl font-bold text-center">Hi Roomy 👋</h1>

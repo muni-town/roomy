@@ -66,7 +66,7 @@
     >
       <Icon icon="iconamoon:home-fill" font-size="1.75em" />
     </button>
-    
+
     {#if me?.profile?.blueskyHandle}
       <Dialog
         title="Create Space"

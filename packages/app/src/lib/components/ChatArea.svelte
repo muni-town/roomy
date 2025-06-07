@@ -14,7 +14,7 @@
     admin,
     space,
     threadId,
-    allowedToInteract
+    allowedToInteract,
   }: {
     timeline: string[];
     virtualizer?: Virtualizer<string>;
@@ -24,6 +24,10 @@
     threadId?: string;
     allowedToInteract?: boolean;
   } = $props();
+
+  let showLastN = $state(50);
+
+  let slicedTimeline = $derived(timeline.slice(-showLastN));
 
   let viewport: HTMLDivElement = $state(null!);
 
@@ -47,8 +51,11 @@
     bind:ref={viewport}
     class="relative max-w-full w-full h-full"
   >
-    <div class="flex flex-col-reverse w-full h-full pb-16">
-      <ol class="flex flex-col gap-2 max-w-ful">
+    <div class="flex flex-col w-full h-full pb-16">
+      {#if slicedTimeline.length < timeline.length}
+        <button class="btn btn-sm btn-outline" onclick={() => showLastN += 50}>Load More</button>
+      {/if}
+      <ol class="flex flex-col gap-2 max-w-full">
         <!--
         This use of `key` needs explaining. `key` causes the components below
         it to be deleted and re-created when the expression passed to it is changed.
@@ -67,14 +74,16 @@
         {#key viewport}
           <Virtualizer
             bind:this={virtualizer}
-            data={timeline || []}
+            data={slicedTimeline || []}
             getKey={(messageId) => messageId}
             scrollRef={viewport}
+            overscan={50}
+            shift
           >
             {#snippet children(messageId: string, index: number)}
               <ChatMessage
                 {messageId}
-                previousMessageId={timeline[index - 1]}
+                previousMessageId={slicedTimeline[index - 1]}
                 {isAdmin}
                 {admin}
                 {space}

@@ -302,7 +302,6 @@
   let previewImages: string[] = $state([]);
 
   function processImageFile(file: File) {
-    console.log("processing image file", file);
     filesInMessage.push(file);
     previewImages.push(URL.createObjectURL(file));
   }
@@ -327,7 +326,6 @@
       }))
       .filter((user) => user.value && user.label) || [],
   );
-
   let channels = $derived(
     space.current?.channels
       ?.map((channel) => ({
