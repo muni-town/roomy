@@ -14,6 +14,7 @@
     admin,
     space,
     threadId,
+    allowedToInteract
   }: {
     timeline: string[];
     virtualizer?: Virtualizer<string>;
@@ -21,6 +22,7 @@
     admin: co.loaded<typeof Account> | undefined | null;
     space: co.loaded<typeof Space> | undefined | null;
     threadId?: string;
+    allowedToInteract?: boolean;
   } = $props();
 
   let viewport: HTMLDivElement = $state(null!);
@@ -77,6 +79,7 @@
                 {admin}
                 {space}
                 {threadId}
+                {allowedToInteract}
               />
             {/snippet}
           </Virtualizer>

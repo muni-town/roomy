@@ -38,6 +38,7 @@
     admin,
     space,
     threadId,
+    allowedToInteract
   }: {
     messageId: string;
     previousMessageId?: string;
@@ -45,6 +46,7 @@
     admin: co.loaded<typeof Account> | undefined | null;
     space: co.loaded<typeof Space> | undefined | null;
     threadId?: string;
+    allowedToInteract?: boolean;
   } = $props();
 
   const me = new AccountCoState(RoomyAccount, {
@@ -321,7 +323,7 @@
         </div>
       </div>
 
-      {#if editingMessage.id !== messageId && !threading.active}
+      {#if editingMessage.id !== messageId && !threading.active && allowedToInteract}
         <MessageToolbar
           bind:isDrawerOpen
           {toggleReaction}

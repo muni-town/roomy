@@ -66,40 +66,42 @@
     >
       <Icon icon="iconamoon:home-fill" font-size="1.75em" />
     </button>
-
-    <Dialog
-      title="Create Space"
-      description="Create a new public chat space"
-      bind:isDialogOpen={isNewSpaceDialogOpen}
-    >
-      {#snippet dialogTrigger()}
-        <Button.Root
-          title="Create Space"
-          class="p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
-        >
-          <Icon icon="basil:add-solid" font-size="2em" />
-        </Button.Root>
-      {/snippet}
-
-      <form
-        id="createSpace"
-        class="flex flex-col gap-4"
-        onsubmit={createSpaceSubmit}
+    
+    {#if me?.profile?.blueskyHandle}
+      <Dialog
+        title="Create Space"
+        description="Create a new public chat space"
+        bind:isDialogOpen={isNewSpaceDialogOpen}
       >
-        <input
-          bind:value={newSpaceName}
-          use:focusOnRender
-          placeholder="Name"
-          class="dz-input w-full"
-          type="text"
-          required
-        />
-        <Button.Root disabled={!newSpaceName} class="dz-btn dz-btn-primary">
-          <Icon icon="basil:add-outline" font-size="1.8em" />
-          Create Space
-        </Button.Root>
-      </form>
-    </Dialog>
+        {#snippet dialogTrigger()}
+          <Button.Root
+            title="Create Space"
+            class="p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
+          >
+            <Icon icon="basil:add-solid" font-size="2em" />
+          </Button.Root>
+        {/snippet}
+
+        <form
+          id="createSpace"
+          class="flex flex-col gap-4"
+          onsubmit={createSpaceSubmit}
+        >
+          <input
+            bind:value={newSpaceName}
+            use:focusOnRender
+            placeholder="Name"
+            class="dz-input w-full"
+            type="text"
+            required
+          />
+          <Button.Root disabled={!newSpaceName} class="dz-btn dz-btn-primary">
+            <Icon icon="basil:add-outline" font-size="1.8em" />
+            Create Space
+          </Button.Root>
+        </form>
+      </Dialog>
+    {/if}
 
     <div class="divider my-0"></div>
     {#if !isOpenSpaceJoined && openSpace.current}

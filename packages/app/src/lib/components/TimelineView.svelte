@@ -337,11 +337,6 @@
           type: "channel",
         }),
         label: channel?.name ?? "",
-        id: JSON.stringify({
-          id: channel?.id ?? "",
-          space: space.current?.id ?? "",
-          type: "channel",
-        }),
       }))
       .filter((channel) => channel.value && channel.label) || [],
   );
@@ -357,10 +352,14 @@
       }))
       .filter((thread) => thread.value && thread.label) || [],
   );
-
   let context = $derived([...channels, ...threads]);
+
+  let hasJoinedSpace = $derived(me.current?.profile?.joinedSpaces?.some((joinedSpace) => joinedSpace?.id === space.current?.id));
+
+  let isBanned = $derived(bannedHandles.has(me.current?.profile?.blueskyHandle ?? ""));
 </script>
 
+<!-- hack to get the admin to load ^^ it has to be used somewhere in this file -->
 {#if admin.current}
   <div class="absolute top-0 left-0"></div>
 {/if}
@@ -484,6 +483,7 @@
           isAdmin={isSpaceAdmin(space.current)}
           admin={admin.current}
           {threadId}
+          allowedToInteract={hasJoinedSpace && !isBanned}
         />
 
         {#if replyTo.id}
@@ -509,14 +509,14 @@
         {#if !isMobile || !threading.active}
           <div>
             {#if user.session}
-              {#if me?.current?.profile?.joinedSpaces?.some((joinedSpace) => joinedSpace?.id === space.current?.id)}
+              {#if hasJoinedSpace}
                 {#if readonly}
                   <div class="flex items-center grow flex-col">
                     <Button.Root disabled class="w-full dz-btn"
                       >Automated Thread</Button.Root
                     >
                   </div>
-                {:else if !bannedHandles.has(me?.current?.profile?.blueskyHandle ?? "")}
+                {:else if !isBanned}
                   <div
                     class="dz-prose prose-a:text-primary prose-a:underline relative isolate"
                   >
