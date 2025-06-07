@@ -42,16 +42,13 @@
     if(me.current.profile.blueskyHandle !== user.profile.data?.handle) {
       me.current.profile.blueskyHandle = user.profile.data?.handle;
     }
-  });
 
-  $effect(() => {
-    if(!me.current) return;
+    if(me.current.profile.bannerUrl !== user.profile.data?.banner) {
+      me.current.profile.bannerUrl = user.profile.data?.banner;
+    }
 
-    if(!me.current.profile.roomyInbox) {
-      console.log("creating inbox");
-      me.current.profile.roomyInbox = createInbox();
-    } else {
-      console.log("inbox already exists");
+    if(me.current.profile.description !== user.profile.data?.description) {
+      me.current.profile.description = user.profile.data?.description;
     }
   });
 

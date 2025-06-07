@@ -112,6 +112,8 @@ export const RoomyProfile = co.profile({
   blueskyHandle: z.string().optional(),
   joinedSpaces: SpaceList,
   roomyInbox: co.list(InboxItem),
+  bannerUrl: z.string().optional(),
+  description: z.string().optional(),
 });
 
 export const RoomyRoot = co.map({

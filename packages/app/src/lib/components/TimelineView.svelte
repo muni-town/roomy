@@ -56,6 +56,10 @@
           $each: true,
           $onError: null,
         },
+        members: {
+          $each: true,
+          $onError: null,
+        },
       },
     }),
   );
