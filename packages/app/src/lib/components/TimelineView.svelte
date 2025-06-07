@@ -8,14 +8,11 @@
 <script lang="ts">
   import toast from "svelte-french-toast";
   import { outerWidth } from "svelte/reactivity/window";
-
   import Icon from "@iconify/svelte";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import { Button, Tabs } from "bits-ui";
   import { Account } from "jazz-tools";
-  import { globalState } from "$lib/global.svelte";
-
   import { Message, RoomyAccount, Thread } from "$lib/jazz/schema";
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
   import CreatePageDialog from "$lib/components/CreatePageDialog.svelte";
@@ -34,13 +31,11 @@
     isSpaceAdmin,
     type ImageUrlEmbedCreate,
   } from "$lib/jazz/utils";
-  import { extractTextContent } from "$lib/utils/extractText";
   import { user } from "$lib/user.svelte";
   import { replyTo } from "./ChatMessage.svelte";
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
   import { extractLinks } from "$lib/utils/collectLinks";
-  import { untrack } from "svelte";
-  import { addMessage, findMessages } from "$lib/search.svelte";
+  import { findMessages } from "$lib/search.svelte";
   import FullscreenImageDropper from "./helper/FullscreenImageDropper.svelte";
   import UploadFileButton from "./helper/UploadFileButton.svelte";
 
@@ -91,14 +86,6 @@
   let threadId = $derived(
     thread.current?.id ?? channel.current?.mainThread?.id,
   );
-
-  $inspect(threadId).with(() => {
-    console.log("threadId", threadId);
-  });
-
-  // $inspect(timeline).with(() => {
-  //   console.log("timeline", timeline);
-  // });
 
   const readonly = $derived(thread.current?.name === "@links");
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
@@ -179,45 +166,11 @@
     }
   }
 
-  // Index existing messages when timeline items are loaded
-  $effect(() => {
-    if (searchIndex && globalState.channel?.messages) {
-      const messages = globalState.channel?.messages;
-      // items() returns a Promise, unlike ids() which returns an array directly
-      // Clear index before re-indexing to avoid duplicates
-      searchIndex.clear();
-      if (messages) {
-        for (const message of messages) {
-          if (message) {
-            // Try parsing the message body
-            const parsedBody = JSON.parse(message.body);
-
-            // Extract text content from the parsed body
-            const textContent = extractTextContent(parsedBody);
-
-            if (textContent) {
-              searchIndex.add(message.id, textContent);
-            }
-          }
-        }
-      }
-    }
-  });
-
-  $effect(() => {
-    timeline;
-    // const timeline = channel.current?.mainThread?.timeline;
-    untrack(() => {
-      console.log("timeline", timeline);
-    });
-  });
-
   async function addThread(e: SubmitEvent) {
     e.preventDefault();
     const messageIds = <string[]>[];
 
     // TODO: sort messages by their position/time created?
-
     for (const messageId of threading.selectedMessages) {
       messageIds.push(messageId);
       // remove from current thread timeline
@@ -228,22 +181,18 @@
         },
       });
       if (!message) {
-        console.error("Message not found", messageId);
+        console.error("Message not found when creating thread", messageId);
         continue;
       }
-      console.log("hiding message", messageId, threadId);
       if (threadId) {
         message.hiddenIn.push(threadId);
       }
-      console.log("message hiddenIn", message.hiddenIn.toJSON());
     }
 
     // TODO: decide whether the thread needs a reference to it's original channel. That might be
     // confusing because it's messages could have come from multiple channels?
-
     let newThread = createThread(messageIds, threadTitleInput);
 
-    console.log("pushing thread", newThread, space.current?.threads);
     space.current?.threads?.push(newThread);
 
     channel.current?.subThreads.push(newThread);
@@ -291,6 +240,8 @@
     if (links?.timeline) {
       const allLinks = extractLinks(messageInput);
       for (const link of allLinks) {
+        if (!link.startsWith("http")) continue;
+
         const message = createMessage(
           `<a href="${link}">${link}</a>`,
           undefined,
@@ -368,9 +319,6 @@
 
   let bannedHandles = $derived(new Set(space.current?.bans ?? []));
 
-  $inspect(space.current?.members).with(() => {
-    console.log("space.current?.members", space.current?.members?.toJSON());
-  });
   let users = $derived(
     space.current?.members
       ?.map((member) => ({

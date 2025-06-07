@@ -7,7 +7,7 @@
 </script>
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { Editor } from "@tiptap/core";
+  import { Editor, Extension } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
   import Placeholder from "@tiptap/extension-placeholder";
   import { initUserMention, initSpaceContextMention } from "$lib/tiptap/editor";
@@ -16,8 +16,8 @@
 
   type Props = {
     content: string;
-    users: Item[];
-    context: Item[];
+    users?: Item[];
+    context?: Item[];
     onEnter: (content: string) => void;
     placeholder?: string;
     setFocus?: boolean;
@@ -47,20 +47,27 @@
   }
 
   onMount(() => {
+    const extensions = [
+      StarterKit.configure({ heading: false }),
+      Placeholder.configure({ placeholder }),
+      RichTextLink.configure({
+        openOnClick: false,
+        autolink: true,
+        defaultProtocol: "https",
+      }),
+      initKeyboardShortcutHandler({ onEnter: wrappedOnEnter }),
+    ]
+
+    if (users) {
+      extensions.push(initUserMention({ users }) as Extension);
+    }
+    if (context) {
+      extensions.push(initSpaceContextMention({ context }) as Extension);
+    }
+    
     tiptap = new Editor({
       element,
-      extensions: [
-        StarterKit.configure({ heading: false }),
-        Placeholder.configure({ placeholder }),
-        RichTextLink.configure({
-          openOnClick: false,
-          autolink: true,
-          defaultProtocol: "https",
-        }),
-        initKeyboardShortcutHandler({ onEnter: wrappedOnEnter }),
-        initUserMention({ users }),
-        initSpaceContextMention({ context }),
-      ],
+      extensions,
       content,
       editorProps: {
         attributes: {

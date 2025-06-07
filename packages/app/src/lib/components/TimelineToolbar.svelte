@@ -1,97 +1,28 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { globalState } from "$lib/global.svelte";
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  import { Channel } from "$lib/schema";
   import { Popover, Button } from "bits-ui";
   import Dialog from "$lib/components/Dialog.svelte";
   import { toast } from "svelte-french-toast";
   import { threading } from "./TimelineView.svelte";
+  import { isSpaceAdmin } from "$lib/jazz/utils";
+  import { CoState } from "jazz-svelte";
+  import { Channel, Space, Thread } from "$lib/jazz/schema";
 
   let { createThread, threadTitleInput = $bindable() } = $props();
   let showSettingsDialog = $state(false);
   let channelNameInput = $state("");
   let channelCategoryInput = $state(undefined) as undefined | string;
 
-  // $effect(() => {
-  //   if (!globalState.space) return;
+  let space = $derived(new CoState(Space, page.params.space))
 
-  //   untrack(() => {
-  //     channelNameInput = globalState.channel?.name || "";
-  //     channelCategoryInput = undefined;
-  //     globalState.space &&
-  //       globalState.space.sidebarItems.items().then((items) => {
-  //         for (const item of items) {
-  //           const category = item.tryCast(Category);
-  //           if (
-  //             category &&
-  //             globalState.channel &&
-  //             category.channels.ids().includes(globalState.channel.id)
-  //           ) {
-  //             channelCategoryInput = category.id;
-  //             return;
-  //           }
-  //         }
-  //       });
-  //   });
-  // });
+  let channel = $derived(new CoState(Channel, page.params.channel))
 
-  // async function saveSettings() {
-  //   if (!globalState.space || !globalState.channel) return;
-  //   if (channelNameInput) {
-  //     globalState.channel.name = channelNameInput;
-  //     // globalState.channel.commit();
-  //   }
+  let thread = $derived(new CoState(Thread, page.params.thread))
 
-  //   if (globalState.channel) {
-  //     let foundChannelInSidebar = false;
-  //     for (const [
-  //       cursor,
-  //       unknownItem,
-  //     ] of await globalState.space.sidebarItems.itemCursors()) {
-  //       const item =
-  //         unknownItem.tryCast(Category) || unknownItem.tryCast(Channel);
-
-  //       if (item instanceof Channel && item.id == globalState.channel.id) {
-  //         foundChannelInSidebar = true;
-  //       }
-
-  //       if (item instanceof Category) {
-  //         const categoryItems = item.channels.ids();
-  //         if (item.id !== channelCategoryInput) {
-  //           const thisChannelIdx = categoryItems.indexOf(
-  //             globalState.channel.id,
-  //           );
-  //           if (thisChannelIdx != -1) {
-  //             item.channels.remove(thisChannelIdx);
-  //             item.commit();
-  //           }
-  //         } else if (
-  //           item.id == channelCategoryInput &&
-  //           !categoryItems.includes(globalState.channel.id)
-  //         ) {
-  //           item.channels.push(globalState.channel);
-  //           item.commit();
-  //         }
-  //       } else if (
-  //         item instanceof Channel &&
-  //         channelCategoryInput &&
-  //         item.id == globalState.channel.id
-  //       ) {
-  //         const { offset } = globalState.space.entity.doc.getCursorPos(cursor);
-  //         // globalState.space.sidebarItems.remove(offset);
-  //       }
-  //     }
-
-  //     if (!channelCategoryInput && !foundChannelInSidebar) {
-  //       // globalState.space.sidebarItems.push(globalState.channel);
-  //     }
-  //     // globalState.space.commit();
-  //   }
-
-  //   showSettingsDialog = false;
-  // }
+  function saveSettings() {
+  }
 </script>
 
 <menu class="relative flex items-center gap-3 px-2 w-fit justify-end">
@@ -144,19 +75,18 @@
     <Icon icon="icon-park-outline:people-plus" class="text-2xl" />
   </Button.Root>
 
-  {#if globalState.isAdmin}
+  {#if isSpaceAdmin(space.current)}
     <Dialog
-      title={globalState.channel instanceof Channel
-        ? "Channel Settings"
-        : "Thread Settings"}
+      title={thread.current
+        ? "Thread Settings"
+        : "Channel Settings"}
       bind:isDialogOpen={showSettingsDialog}
     >
       {#snippet dialogTrigger()}
         <Button.Root
-          title={globalState.channel &&
-          globalState.channel.constructor.name === "Channel"
-            ? "Channel Settings"
-            : "Thread Settings"}
+          title={thread.current
+          ? "Thread Settings"
+          : "Channel Settings"}
           class="m-auto flex"
         >
           <Icon icon="lucide:settings" class="text-2xl" />
@@ -173,7 +103,7 @@
             required
           />
         </label>
-        {#if globalState.space && globalState.channel}
+        {#if space.current && channel.current}
           <select bind:value={channelCategoryInput} class="select">
             <option value={undefined}>None</option>
             <!-- {#await Space.sidebarItems(globalState.space) then sidebarItems}
@@ -193,8 +123,8 @@
       <form
         onsubmit={(e) => {
           e.preventDefault();
-          if (!globalState.channel) return;
-          globalState.channel.softDeleted = true;
+          if (!channel.current) return;
+          channel.current.softDeleted = true;
           // globalState.channel.commit();
           showSettingsDialog = false;
           navigate({ space: page.params.space! });
@@ -203,11 +133,11 @@
       >
         <h2 class="text-xl font-bold">Danger Zone</h2>
         <p>
-          Deleting a {globalState.channel ? "channel" : "thread"} doesn't delete
+          Deleting a {channel.current ? "channel" : "thread"} doesn't delete
           the data permanently, it just hides the thread from the UI.
         </p>
         <Button.Root class="dz-btn dz-btn-error"
-          >Delete {globalState.channel ? "Channel" : "Thread"}</Button.Root
+          >Delete {channel.current ? "Channel" : "Thread"}</Button.Root
         >
       </form>
     </Dialog>

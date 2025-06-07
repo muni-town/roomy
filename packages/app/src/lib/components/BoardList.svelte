@@ -1,6 +1,5 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import type { WikiPage } from "$lib/schema";
   // import type { NamedEntity } from "@roomy-chat/sdk";
   import type { Snippet } from "svelte";
 

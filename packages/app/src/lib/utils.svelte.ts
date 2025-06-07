@@ -1,6 +1,5 @@
 import type { DidDocument } from "@atproto/oauth-client-browser";
-import { decodeBase32 } from "./base32";
-import type { EntityIdStr } from "@muni-town/leaf";
+import { decodeBase32 } from "./utils/base32";
 import { goto } from "$app/navigation";
 import type { JSONContent } from "@tiptap/core";
 import { type ThemeName } from "./themes";

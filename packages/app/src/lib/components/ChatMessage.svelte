@@ -8,18 +8,17 @@
   import { Avatar, Checkbox } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
-  import { getContext, untrack } from "svelte";
+  import { untrack } from "svelte";
   import Icon from "@iconify/svelte";
   import { AccountCoState, CoState } from "jazz-svelte";
   import {
     Message,
     Reaction,
-    ReactionList,
     RoomyAccount,
     RoomyProfile,
     Space,
   } from "$lib/jazz/schema";
-  import { Account, co, CoRichText, type Loaded } from "jazz-tools";
+  import { Account, co, CoRichText } from "jazz-tools";
   import MessageToolbar from "./Message/MessageToolbar.svelte";
   import { messageHasAdmin, publicGroup } from "$lib/jazz/utils";
   import MessageReactions from "./Message/MessageReactions.svelte";
@@ -30,13 +29,7 @@
   import { addMessage } from "$lib/search.svelte";
   import ImageUrlEmbed from "./Message/embeds/ImageUrlEmbed.svelte";
   import { setInputFocus } from "./ChatInput.svelte";
-
-  const me = new AccountCoState(RoomyAccount, {
-    resolve: {
-      profile: true,
-      root: true,
-    },
-  });
+  import { convertReactionsToEmojis } from "$lib/utils/reactions";
 
   let {
     messageId,
@@ -53,6 +46,13 @@
     space: co.loaded<typeof Space> | undefined | null;
     threadId?: string;
   } = $props();
+
+  const me = new AccountCoState(RoomyAccount, {
+    resolve: {
+      profile: true,
+      root: true,
+    },
+  });
 
   let message = $derived(
     new CoState(Message, messageId, {
@@ -78,11 +78,11 @@
     });
   });
 
-  let canEdit = $derived(
+  let messageByMe = $derived(
     message.current?._edits.content?.by?.profile?.id ===
       me.current?.profile?.id,
   );
-  let canDelete = $derived(isAdmin || canEdit);
+  let canDelete = $derived(isAdmin || messageByMe);
 
   let previousMessage = $derived(new CoState(Message, previousMessageId));
 
@@ -157,55 +157,6 @@
     setInputFocus();
   }
 
-  function convertReactionsToEmojis(
-    reactions: Loaded<typeof ReactionList> | undefined | null,
-  ) {
-    if (!reactions) return [];
-
-    // convert to [emoji, count, user (if current user has reacted with that emoji), users array]
-    const emojiMap = new Map<string, { 
-      count: number; 
-      user: boolean; 
-      users: { id: string; name: string }[] 
-    }>();
-    
-    for (const reaction of reactions) {
-      if (!reaction || !reaction.emoji) continue;
-      let emoji = reaction.emoji;
-      let obj = emojiMap.get(emoji);
-      const reactorName = reaction._edits.emoji?.by?.profile?.name || 'Unknown';
-      const reactorId = reaction._edits.emoji?.by?.profile?.id;
-      
-      if (obj) {
-        obj.count++;
-        if (reactorId) {
-          obj.users.push({ id: reactorId, name: reactorName });
-        }
-      } else {
-        obj = { 
-          count: 1, 
-          user: false, 
-          users: reactorId ? [{ id: reactorId, name: reactorName }] : [] 
-        };
-        emojiMap.set(emoji, obj);
-      }
-
-      if (reactorId === me.current?.profile?.id) {
-        obj.user = true;
-      }
-    }
-    
-    let array = Array.from(emojiMap.entries())
-      .map(([emoji, obj]) => ({
-        emoji,
-        count: obj.count,
-        user: obj.user,
-        users: obj.users
-      }))
-      .sort((a, b) => b.emoji.localeCompare(a.emoji));
-    return array;
-  }
-
   function removeReaction(emoji: string) {
     let index = message.current?.reactions?.findIndex(
       (reaction) =>
@@ -229,7 +180,7 @@
     );
   }
   let reactions = $derived(
-    convertReactionsToEmojis(message.current?.reactions),
+    convertReactionsToEmojis(message.current?.reactions, me.current),
   );
 
   function toggleReaction(emoji: string) {
@@ -268,28 +219,20 @@
         bind:checked={
           () => isSelected,
           (value) => {
-            if (
-              value &&
-              message.current?._edits.content?.by?.profile?.id !==
-                me.current?.profile?.id &&
-              !isAdmin
-            ) {
+            if (value && !messageByMe && !isAdmin) {
               toast.error("You cannot move someone else's message");
               return;
             }
 
             if (value) {
               threading.selectedMessages.push(messageId);
-              console.log("added", messageId);
-              console.log(threading.selectedMessages);
-            } else {
-              threading.selectedMessages.splice(
-                threading.selectedMessages.indexOf(messageId),
-                1,
-              );
-              console.log("deleted", messageId);
-              console.log(threading.selectedMessages);
+              return;
             }
+
+            threading.selectedMessages.splice(
+              threading.selectedMessages.indexOf(messageId),
+              1,
+            );
           }
         }
         class="absolute right-4 inset-y-0 z-10"
@@ -313,11 +256,11 @@
       ]}
     >
       {#if message.current?.replyTo}
-        <MessageRepliedTo messageId={message.current?.replyTo} />
+        <MessageRepliedTo messageId={message.current.replyTo} />
       {/if}
 
       <div class={"group relative flex w-full justify-start gap-3"}>
-        {#if !mergeWithPrevious && message.current}
+        {#if !mergeWithPrevious}
           <div class="size-8 sm:size-10">
             <Avatar.Root class="size-8 sm:size-10">
               <Avatar.Image
@@ -382,7 +325,7 @@
         <MessageToolbar
           bind:isDrawerOpen
           {toggleReaction}
-          {canEdit}
+          canEdit={messageByMe}
           {canDelete}
           {deleteMessage}
           {editMessage}

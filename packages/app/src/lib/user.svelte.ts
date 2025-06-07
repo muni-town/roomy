@@ -4,16 +4,12 @@ import { Agent } from "@atproto/api";
 import toast from "svelte-french-toast";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
-
-import { EntityId } from "@muni-town/leaf";
-
 import { atproto } from "./atproto.svelte";
 import { lexicons } from "./lexicons";
-import { decodeBase32 } from "./base32";
+import { decodeBase32 } from "./utils/base32";
 import { isTauri } from "@tauri-apps/api/core";
 import { navigate } from "$lib/utils.svelte";
 import { handleOauthCallback } from "./handleOauthCallback";
-import { Catalog } from "./schema";
 
 // Reload app when this module changes to prevent accumulated connections
 if (import.meta.hot) {
@@ -34,18 +30,14 @@ let agent: Agent | undefined = $state();
 let profile: { data: ProfileViewDetailed | undefined } = $derived.by(() => {
   let data: ProfileViewDetailed | undefined = $state();
   if (session && agent) {
-    try {
-      agent
-        .getProfile({ actor: agent.assertDid })
-        .then((res) => {
-          data = res.data;
-        })
-        .catch((error) => {
-          console.error("Failed to fetch profile:", error);
-        });
-    } catch (error) {
-      console.error("Error in profile fetch:", error);
-    }
+    agent
+      .getProfile({ actor: agent.assertDid })
+      .then((res) => {
+        data = res.data;
+      })
+      .catch((error) => {
+        console.error("Failed to fetch profile:", error);
+      });
   }
   return {
     get data() {
@@ -81,41 +73,6 @@ let keypair: {
   };
 });
 
-/** The user's Roomy keypair. */
-let catalogId: {
-  value: string | undefined;
-} = $derived.by(() => {
-  let value: string | undefined = $state();
-
-  if (session && agent) {
-    agent.com.atproto.repo
-      .getRecord({
-        repo: agent.assertDid,
-        collection: "chat.roomy.jazz.catalog",
-        rkey: "self",
-      })
-      .then((resp) => {
-        value = (resp.data.value as { id: string }).id;
-      })
-      .catch(async () => {
-        const catalog = Catalog.create({});
-        const newCatalogId = catalog.id;
-        await agent?.com.atproto.repo.createRecord({
-          collection: "chat.roomy.jazz.catalog",
-          record: { id: newCatalogId },
-          repo: agent.assertDid,
-          rkey: "self",
-        });
-        value = newCatalogId;
-      });
-  }
-  return {
-    get value() {
-      return value;
-    },
-  };
-});
-
 let isLoginDialogOpen = $state(false);
 
 /** The user store. */
@@ -133,10 +90,6 @@ export const user = {
    * */
   get agent() {
     return agent;
-  },
-
-  get catalogId() {
-    return catalogId;
   },
 
   /**

@@ -11,7 +11,6 @@
   import { co } from "jazz-tools";
   import { createSpace, createSpaceList } from "$lib/jazz/utils";
   import { RoomyAccount, Space, SpaceList } from "$lib/jazz/schema";
-  import ZipExport from "./ZipExport.svelte";
   import Login from "./Login.svelte";
   import { CoState } from "jazz-svelte";
   import { page } from "$app/state";
@@ -46,16 +45,6 @@
 
     me?.profile?.joinedSpaces?.push(space);
 
-    // if (globalState.catalog) {
-    //   if (!globalState.catalog?.spaces) {
-    //     console.log("creating new spaces list for catalog");
-    //     globalState.catalog.spaces = Spaces.create([space]);
-    //   } else {
-    //     console.log("pushing space to catalog");
-    //     globalState.catalog.spaces.push(space);
-    //   }
-    // }
-
     newSpaceName = "";
 
     isNewSpaceDialogOpen = false;
@@ -64,7 +53,7 @@
 
 <!-- Width manually set for transition to w-0 -->
 <aside
-  class="flex flex-col justify-between align-center h-full {visible
+  class="flex flex-col justify-between align-center h-screen {visible
     ? 'w-[60px] px-1 border-r-2'
     : 'w-[0]'} py-2 border-base-200 bg-base-300 transition-[width] duration-100 ease-out"
   class:opacity-0={!visible}
@@ -116,6 +105,8 @@
     {#if !isOpenSpaceJoined && openSpace.current}
       <SidebarSpace space={openSpace.current} hasJoined={false} />
     {/if}
+  </div>
+  <div class="flex flex-col gap-1 items-center flex-grow overflow-y-scroll">
     {#if spaces}
       {#each spaces as space}
         <SidebarSpace {space} />
@@ -135,8 +126,6 @@
         <Icon icon="mdi:folder-upload-outline" font-size="1.8em" />
       </Button.Root>
     {/if}
-
-    <ZipExport />
 
     <ThemeSelector />
 

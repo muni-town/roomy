@@ -25,11 +25,11 @@
 </script>
 
 {#if reactions.length > 0}
-  <div class="flex gap-2 flex-wrap pl-14">
+  <div class="flex gap-2 flex-wrap pl-14 z-10">
     <Tooltip.Provider>
       {#each reactions as reaction}
         <Tooltip.Root>
-          <Tooltip.Trigger asChild>
+          <Tooltip.Trigger>
             <Toggle.Root
               bind:pressed={
                 () => {

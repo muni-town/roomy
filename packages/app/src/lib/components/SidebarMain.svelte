@@ -2,7 +2,6 @@
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import { Button, Tabs } from "bits-ui";
-  import { globalState } from "$lib/global.svelte";
   import { navigate, Toggle } from "$lib/utils.svelte";
   import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
   import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
@@ -58,19 +57,6 @@
     }
   }
 
-  // let allThreads = derivePromise([], async () =>
-  //   { let threads = await globalState.space?.threads.items()) || [])
-  //     .filter((x) => !x.softDeleted)
-  //     .map((x) => ({
-  //       target: {
-  //         space: page.params.space!,
-  //         thread: x.id,
-  //       },
-  //       name: x.name,
-  //       id: x.id,
-  //     })),
-  // );
-
   function allThreads() {
     let threads = space?.current?.threads || [];
     return threads
@@ -90,10 +76,7 @@
       });
   }
   let threads = $derived(allThreads());
-  // let links = $derived(allThreads.value.find((x) => x.name === "@links"));
-  // let links = $derived.by(() => {
-  //   return space?.current?.threads.find((x) => x?.name === "@links");
-  // });
+  
   const pages = $derived.by(() => {
     if (!space?.current) return [];
     const pages = spacePages(space.current);
@@ -108,9 +91,7 @@
         id: p?.id,
       }));
   });
-
-  $inspect(page.params);
-
+  
   function getUsedCategories() {
     return (
       space?.current?.categories?.filter(
@@ -330,7 +311,7 @@
           { key: "pages", items: pages },
           { key: "threads", items: threads },
         ]}
-        active={globalState.channel?.id ?? ""}
+        active={page.params.channel ?? ""}
       />
     {:else}
       <SidebarChannelList {sidebarItems} space={space.current} />

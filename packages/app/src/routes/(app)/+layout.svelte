@@ -8,7 +8,6 @@
   // @ts-ignore used for debugging
   import { RenderScan } from "svelte-render-scan";
 
-  import { globalState } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { Toggle, setTheme } from "$lib/utils.svelte";
   import { type ThemeName } from "$lib/themes.ts";
@@ -16,7 +15,6 @@
   import SidebarMain from "$lib/components/SidebarMain.svelte";
   import { page } from "$app/state";
   import { afterNavigate } from "$app/navigation";
-  // import { AccountSchema, Catalog } from "$lib/schema";
   import { RoomyAccount } from "$lib/jazz/schema";
   import "jazz-inspector-element";
 
@@ -45,7 +43,6 @@
     }
   });
 
-  // console.log("catalog", globalState.catalog)
   let themeColor = $state<ThemeName>("synthwave"); // defualt theme color
   onMount(async () => {
     await user.init();

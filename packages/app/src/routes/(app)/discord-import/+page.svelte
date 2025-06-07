@@ -1,14 +1,5 @@
-<script lang="ts">
-  import { globalState } from "$lib/global.svelte";
+<!-- <script lang="ts">
   import * as zip from "@zip-js/zip-js";
-  // import {
-  //   Channel,
-  //   Message as RoomyMessage,
-  //   Space,
-  //   Thread,
-  //   Category,
-  //   type EntityIdStr,
-  // } from "@roomy-chat/sdk";
   import { marked } from "marked";
   import { navigate } from "$lib/utils.svelte";
   import toast from "svelte-french-toast";
@@ -28,6 +19,7 @@
 
   import { user } from "$lib/user.svelte";
   import { onMount } from "svelte";
+  import { createCategory, createChannel, createMessage, createSpace, createThread } from "$lib/jazz/utils";
 
   type DiscordMessage<
     MessageType extends "Default" | "Reply" | string = "Default",
@@ -224,8 +216,6 @@
   }
 
   async function importArchive() {
-    if (!globalState.roomy) return;
-
     importComplete = false;
     importedSpaceId = "";
     importedSpaceName = "";
@@ -241,16 +231,12 @@
 
     console.log("Starting import");
 
-    const space = await globalState.roomy.create(Space);
-    space.admins((x) => user.agent && x.push(user.agent.assertDid));
-
-    globalState.roomy.spaces.push(space);
-    globalState.roomy.commit();
+    const space = createSpace("Imported Space")
 
     importedSpaceId = space.id;
 
     let channelNum = 0;
-    const existingCategories: Category[] = [];
+    const existingCategories: Set<string> = new Set();
     for await (const entry of reader.getEntriesGenerator()) {
       if (!entry.getData) continue;
       channelNum += 1;
@@ -269,39 +255,31 @@
       processedMessages = 0;
 
       if (
-        existingCategories.filter((x) => x.name == parsed.channel.category)
-          .length == 0 &&
+        existingCategories.has(parsed.channel.category) &&
         parsed.channel.type === "GuildTextChat"
       ) {
-        const category = await globalState.roomy.create(Category);
+        const category = createCategory(parsed.channel.category);
+        existingCategories.add(parsed.channel.category);
+
         category.name = parsed.channel.category;
-        category.appendAdminsFrom(space);
-        space.sidebarItems.push(category);
-        existingCategories.push(category);
-        category.commit();
-        space.commit();
       }
 
-      let messages: { [id: string]: EntityIdStr } = {};
+      let messages: { [id: string]: string } = {};
 
       if (!importedSpaceName && parsed.guild && parsed.guild.name) {
         importedSpaceName = parsed.guild.name;
         space.name = importedSpaceName;
-        space.commit();
       }
 
       switch (parsed.channel.type) {
         case "GuildPublicThread":
-          const thread = await globalState.roomy.create(Thread);
-
+          const thread = createThread([], parsed.channel.name);
           space.threads.push(thread);
-          space.sidebarItems.push(thread);
-          space.commit();
 
           console.log("Importing thread: ", parsed.channel.name);
 
           thread.name = parsed.channel.name;
-          thread.description = parsed.channel.topic;
+          // thread.description = parsed.channel.topic;
 
           for (const [i, parsedMessage] of Array.from(
             { length: parsed.messages.length },
@@ -313,16 +291,15 @@
                 `importing thread: ${thread.name} ( ${channelNum} )
                 importing message number: ${i} / ${parsed.messageCount}`,
               );
-              thread.commit();
             }
 
-            const message = await globalState.roomy.create(RoomyMessage);
-            thread.timeline.push(message);
+            const message = createMessage(parsedMessage.content || "");
+            thread.timeline.push(message.id);
 
             // Process markdown content into TipTap JSON format
-            message.bodyJson = JSON.stringify(
-              markdownToTipTap(parsedMessage.content || ""),
-            );
+            // message.bodyJson = JSON.stringify(
+            //   markdownToTipTap(parsedMessage.content || ""),
+            // );
 
             // Handle reply messages
             if (parsedMessage.type === "Reply" && parsedMessage.reference) {
@@ -332,24 +309,21 @@
               }
             }
 
-            message.authors((x) =>
-              x.push(
-                `discord:${parsedMessage.author.nickname}:${encodeURIComponent(parsedMessage.author.avatarUrl)}`,
-              ),
-            );
-            message.commit();
+            // message.authors((x) =>
+            //   x.push(
+            //     `discord:${parsedMessage.author.nickname}:${encodeURIComponent(parsedMessage.author.avatarUrl)}`,
+            //   ),
+            // );
+            // message.commit();
             // Store message reference
             messages[parsedMessage.id] = message.id;
-            await globalState.roomy.peer.close(message.id);
           }
           console.log("committing thread");
-          thread.commit();
-          await globalState.roomy.peer.close(thread.id);
           break;
 
         case "GuildTextChat":
         default:
-          const channel = await globalState.roomy.create(Channel);
+          const channel = createChannel(parsed.channel.name);
 
           space.name = parsed.guild.name;
           space.channels.push(channel);
@@ -520,4 +494,4 @@
     disabled={loading || !archiveInput || importComplete}
     >{loading ? "Importing..." : "Import Space"}</button
   >
-</form>
+</form> -->

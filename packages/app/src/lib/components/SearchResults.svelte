@@ -1,9 +1,8 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
-  import AvatarImage from "$lib/components/AvatarImage.svelte";
-  import { getContentHtml } from "$lib/tiptap/editor";
   import type { Message } from "$lib/jazz/schema";
   import SearchResult from "./search/SearchResult.svelte";
+  import { co } from "jazz-tools";
 
   let {
     messages = [],
@@ -11,7 +10,7 @@
     onMessageClick,
     onClose,
   }: {
-    messages: (typeof Message)[];
+    messages: co.loaded<typeof Message>[];
     query: string;
     onMessageClick: (messageId: string) => void;
     onClose: () => void;
@@ -29,12 +28,9 @@
   }
 
   // Format the message preview with highlighted search term
-  function formatMessagePreview(message: typeof Message): string {
+  function formatMessagePreview(message: co.loaded<typeof Message>): string {
     try {
-      // const bodyContent = JSON.parse(message.body);
-      // const htmlContent = getContentHtml(bodyContent);\
-      const htmlContent = message.content;
-      console.log(message.content);
+      const htmlContent = message.content?.toString() ?? "";
       return highlightSearchTerm(htmlContent, query);
     } catch (error) {
       console.error(error);
@@ -46,7 +42,7 @@
 
 
 <div
-  class="search-results bg-base-100 border border-base-300 rounded-lg shadow-lg w-full max-h-[60vh] overflow-auto"
+  class="search-results max-w-full bg-base-100 border border-base-300 rounded-lg shadow-lg w-full max-h-[60vh] overflow-auto"
 >
   <div
     class="sticky top-0 bg-base-100 p-3 border-b border-base-300 flex justify-between items-center z-10"
@@ -69,19 +65,8 @@
   {:else}
     <ul class="divide-y divide-base-300">
       {#each messages as message}
-        <SearchResult message={message} onMessageClick={onMessageClick} formatMessagePreview={formatMessagePreview} />
+        <SearchResult message={message.current} onMessageClick={onMessageClick} formatMessagePreview={formatMessagePreview} />
       {/each}
     </ul>
   {/if}
 </div>
-
-<style>
-  .search-results {
-    max-width: 100%;
-  }
-
-  :global(.search-results mark) {
-    padding: 0 2px;
-    border-radius: 2px;
-  }
-</style>

@@ -8,27 +8,18 @@
   import Link from "@tiptap/extension-link";
   import { BlockNoteEditor } from "@blocknote/core";
   import "@blocknote/core/style.css";
-  import { WikiPage } from "$lib/schema";
-
   // import { page } from "$app/state";
-  import { globalState, waitForValue } from "$lib/global.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import { outerWidth } from "svelte/reactivity/window";
-  import { derivePromise } from "$lib/utils.svelte";
   import { CoState } from "jazz-svelte";
-  import { Page } from "$lib/jazz/schema";
+  import { Page, Space } from "$lib/jazz/schema";
+  import { isSpaceAdmin } from "$lib/jazz/utils";
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
-
-  // const pageId = page.params.page;
-  // const pages = globalState.channel?.wikiPages || [];
-  // const pg = pages.find((page) => page.id === pageId);
 
   const pg = $derived(new CoState(Page, page.params.page))
 
-$inspect(pg).with((_,pg) => {
-  console.log("pg", pg)
-})
+  const space = $derived(new CoState(Space, page.params.space))
 
   let isEditingPage = $state(false);
 
@@ -172,8 +163,8 @@ $inspect(pg).with((_,pg) => {
   }
 
   function confirmDeletePage() {
-    if (!pg) return;
-    pg.softDeleted = true;
+    if (!pg.current) return;
+    pg.current.softDeleted = true;
 
     isEditingPage = false; // Close the editor to remove cached page
     isDeleteDialogOpen = false;
@@ -236,7 +227,6 @@ $inspect(pg).with((_,pg) => {
             ? Math.max(scrollY, top - menuHeight - 10)
             : top + 20;
           hashMenuPosition = { x: left, y: yPosition };
-          updateFilteredItems();
           slashMenuVisible = false;
           mentionMenuVisible = false;
         }
@@ -247,7 +237,6 @@ $inspect(pg).with((_,pg) => {
 
           if (atIndex !== -1) {
             mentionQuery = text.substring(atIndex + 1);
-            updateFilteredUsers();
           } else {
             mentionMenuVisible = false;
           }
@@ -259,7 +248,6 @@ $inspect(pg).with((_,pg) => {
 
           if (hashIndex !== -1) {
             hashQuery = text.substring(hashIndex + 1);
-            updateFilteredItems();
           } else {
             hashMenuVisible = false;
           }
@@ -335,43 +323,6 @@ $inspect(pg).with((_,pg) => {
     filteredUsers = users.value
       .filter((user) => user.label?.toLowerCase().includes(query))
       .slice(0, 10); // Limit to 10 results
-  }
-
-  // Filter channels and threads based on hash query
-  async function updateFilteredItems() {
-    if (!globalState.space) {
-      filteredItems = [];
-      return;
-    }
-
-    const query = hashQuery.toLowerCase();
-    const items: { id: string; name: string; type: "thread" | "channel" }[] =
-      [];
-
-    // Add channels
-
-    for (const channel of await globalState.space.channels.items()) {
-      if (channel.name && channel.name.toLowerCase().includes(query)) {
-        items.push({
-          id: channel.id,
-          name: channel.name,
-          type: "channel",
-        });
-      }
-    }
-
-    for (const thread of await globalState.space.threads.items()) {
-      if (thread.name.toLowerCase().includes(query)) {
-        items.push({
-          id: thread.id,
-          name: thread.name,
-          type: "thread",
-        });
-      }
-    }
-
-    // Limit to 10 results
-    filteredItems = items.slice(0, 10);
   }
 
   // Insert user mention
@@ -522,7 +473,7 @@ $inspect(pg).with((_,pg) => {
           }
         }
       });
-      if (pg.current.body) {
+      if (pg.current?.body) {
         try {
           console.log("wat",pg.current.body)
           const parsedContent = JSON.parse(pg.current.body);
@@ -770,7 +721,7 @@ $inspect(pg).with((_,pg) => {
         >
           {pg.current?.name}
         </h4>
-      {:else}
+      {:else if pg.current?.name}
         <input
           type="text"
           bind:value={pg.current.name}
@@ -804,7 +755,7 @@ $inspect(pg).with((_,pg) => {
       </div>
     {/if}
 
-    {#if globalState.isAdmin}
+    {#if isSpaceAdmin(space.current)}
       <button
         class="dz-btn dz-btn-error dz-delete-btn group-hover:block"
         onclick={showDeleteDialog}
@@ -1004,7 +955,7 @@ $inspect(pg).with((_,pg) => {
 
 <Dialog
   title="Confirm Page Deletion"
-  description="Are you sure you want to delete <b>{pg?.name}</b>?</br></br><b>Note:</b> Deletes are not permanent and only hide the data from view. The data is still publicly accessible."
+  description="Are you sure you want to delete <b>{pg.current?.name}</b>?</br></br><b>Note:</b> Deletes are not permanent and only hide the data from view. The data is still publicly accessible."
   bind:isDialogOpen={isDeleteDialogOpen}
 >
   <div class="flex justify-end gap-3">
