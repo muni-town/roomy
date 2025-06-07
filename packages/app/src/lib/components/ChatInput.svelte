@@ -1,3 +1,10 @@
+<script module>
+  let editor: Editor;
+  export function setInputFocus() {
+    if (!editor) return;
+    editor.commands.focus();
+  }
+</script>
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { Editor } from "@tiptap/core";
@@ -65,6 +72,7 @@
         content = ctx.editor.getHTML();
       },
     });
+    editor = tiptap
     if (setFocus) {
       // focus at the end of the content
       tiptap?.commands.focus();
