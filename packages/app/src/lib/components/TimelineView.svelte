@@ -7,13 +7,17 @@
 
 <script lang="ts">
   import toast from "svelte-french-toast";
-  import { outerWidth } from "svelte/reactivity/window";
   import Icon from "@iconify/svelte";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import { Button, Tabs } from "bits-ui";
   import { Account } from "jazz-tools";
-  import { Message, RoomyAccount, Thread } from "$lib/jazz/schema";
+  import {
+    LastReadList,
+    Message,
+    RoomyAccount,
+    Thread,
+  } from "$lib/jazz/schema";
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
   import CreatePageDialog from "$lib/components/CreatePageDialog.svelte";
   import BoardList from "./BoardList.svelte";
@@ -38,6 +42,7 @@
   import { findMessages } from "$lib/search.svelte";
   import FullscreenImageDropper from "./helper/FullscreenImageDropper.svelte";
   import UploadFileButton from "./helper/UploadFileButton.svelte";
+  import { afterNavigate, onNavigate } from "$app/navigation";
 
   let space = $derived(
     new CoState(Space, page.params.space, {
@@ -88,7 +93,6 @@
   );
 
   const readonly = $derived(thread.current?.name === "@links");
-  let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   let tab = $state<"chat" | "board">("chat");
 
@@ -99,6 +103,22 @@
       },
     },
   });
+
+  function setLastRead() {
+    if (!me?.current?.root) return;
+
+    if (!me?.current?.root?.lastRead) {
+      me.current.root.lastRead = LastReadList.create({});
+    }
+
+    if (page.params.channel) {
+      me.current.root.lastRead[page.params.channel] = new Date();
+    }
+
+    if (page.params.thread) {
+      me.current.root.lastRead[page.params.thread] = new Date();
+    }
+  }
 
   // Initialize tab based on hash if present
   // TODO: move this functionality to somewhere else
@@ -258,6 +278,21 @@
     isSendingMessage = false;
   }
 
+  afterNavigate(() => {
+    count = timeline.length ?? 0;
+  });
+
+  // svelte-ignore state_referenced_locally
+  let count = $state(timeline.length ?? 0);
+
+  $effect(() => {
+    let newCount = timeline?.length ?? 0;
+    if (count < newCount) {
+      count = newCount;
+      setLastRead();
+    }
+  });
+
   // Handle search input
   $effect(() => {
     if (searchIndex && searchQuery) {
@@ -352,9 +387,15 @@
   );
   let context = $derived([...channels, ...threads]);
 
-  let hasJoinedSpace = $derived(me.current?.profile?.joinedSpaces?.some((joinedSpace) => joinedSpace?.id === space.current?.id));
+  let hasJoinedSpace = $derived(
+    me.current?.profile?.joinedSpaces?.some(
+      (joinedSpace) => joinedSpace?.id === space.current?.id,
+    ),
+  );
 
-  let isBanned = $derived(bannedHandles.has(me.current?.profile?.blueskyHandle ?? ""));
+  let isBanned = $derived(
+    bannedHandles.has(me.current?.profile?.blueskyHandle ?? ""),
+  );
 </script>
 
 <!-- hack to get the admin to load ^^ it has to be used somewhere in this file -->
@@ -368,7 +409,7 @@
       <ToggleNavigation />
 
       <h4
-        class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}
+        class="sm:line-clamp-1 sm:overflow-hidden sm:text-ellipsis text-base-content text-lg font-bold"
         title={"Channel"}
       >
         <span class="flex gap-2 items-center">
@@ -382,7 +423,7 @@
   {#if channel.current}
     <Tabs.Root
       bind:value={tab}
-      class={isMobile ? "dz-navbar-end" : "dz-navbar-center"}
+      class="w-full inline-flex items-center justify-end sm:justify-center"
     >
       <Tabs.List class="dz-tabs dz-tabs-box">
         <Tabs.Trigger value="board" class="dz-tab flex gap-2">
@@ -403,20 +444,18 @@
     </Tabs.Root>
   {/if}
 
-  {#if !isMobile}
-    <div class="dz-navbar-end flex items-center gap-2">
-      {#if tab === "chat"}
-        <button
-          class="btn btn-ghost btn-sm btn-circle"
-          onclick={() => (showSearchInput = !showSearchInput)}
-          title="Toggle search"
-        >
-          <Icon icon="tabler:search" class="text-base-content" />
-        </button>
-      {/if}
-      <TimelineToolbar createThread={addThread} bind:threadTitleInput />
-    </div>
-  {/if}
+  <div class="hidden sm:flex dz-navbar-end items-center gap-2">
+    {#if tab === "chat"}
+      <button
+        class="btn btn-ghost btn-sm btn-circle"
+        onclick={() => (showSearchInput = !showSearchInput)}
+        title="Toggle search"
+      >
+        <Icon icon="tabler:search" class="text-base-content" />
+      </button>
+    {/if}
+    <TimelineToolbar createThread={addThread} bind:threadTitleInput />
+  </div>
 </header>
 <div class="divider my-0"></div>
 
@@ -504,124 +543,95 @@
       </div>
 
       <div>
-        {#if !isMobile || !threading.active}
-          <div>
-            {#if user.session}
-              {#if hasJoinedSpace}
-                {#if readonly}
-                  <div class="flex items-center grow flex-col">
-                    <Button.Root disabled class="w-full dz-btn"
-                      >Automated Thread</Button.Root
-                    >
-                  </div>
-                {:else if !isBanned}
-                  <div
-                    class="dz-prose prose-a:text-primary prose-a:underline relative isolate"
+        <div class="">
+          {#if user.session}
+            {#if hasJoinedSpace}
+              {#if readonly}
+                <div class="flex items-center grow flex-col">
+                  <Button.Root disabled class="w-full dz-btn"
+                    >Automated Thread</Button.Root
                   >
-                    {#if previewImages.length > 0}
-                      <div class="flex gap-2 my-2 overflow-x-auto w-full">
-                        {#each previewImages as previewImage, index (previewImage)}
-                          <div class="size-24 relative shrink-0">
-                            <img
-                              src={previewImage}
-                              alt="Preview"
-                              class="absolute inset-0 w-full h-full object-cover"
-                            />
+                </div>
+              {:else if !isBanned}
+                <div
+                  class="dz-prose prose-a:text-primary prose-a:underline relative isolate"
+                >
+                  {#if previewImages.length > 0}
+                    <div class="flex gap-2 my-2 overflow-x-auto w-full">
+                      {#each previewImages as previewImage, index (previewImage)}
+                        <div class="size-24 relative shrink-0">
+                          <img
+                            src={previewImage}
+                            alt="Preview"
+                            class="absolute inset-0 w-full h-full object-cover"
+                          />
 
-                            <button
-                              class="btn btn-ghost btn-sm btn-circle absolute p-0.5 top-1 right-1 bg-base-100 rounded-full"
-                              onclick={() => removeImageFile(index)}
-                            >
-                              <Icon icon="tabler:x" class="size-4" />
-                            </button>
-                          </div>
-                        {/each}
-                      </div>
-                    {/if}
-
-                    <div class="flex gap-1 w-full">
-                      <UploadFileButton {processImageFile} />
-
-                      {#key users.length + context.length}
-                        <ChatInput
-                          bind:content={messageInput}
-                          {users}
-                          {context}
-                          onEnter={sendMessage}
-                          {processImageFile}
-                        />
-                      {/key}
-                    </div>
-                    <FullscreenImageDropper {processImageFile} />
-
-                    {#if isSendingMessage}
-                      <div
-                        class="absolute inset-0 flex items-center text-primary justify-center z-20 bg-base-100/80"
-                      >
-                        <div class="text-xl font-bold flex items-center gap-4">
-                          Sending message...
-                          <span
-                            class="dz-loading dz-loading-spinner mx-auto w-8"
-                          ></span>
+                          <button
+                            class="btn btn-ghost btn-sm btn-circle absolute p-0.5 top-1 right-1 bg-base-100 rounded-full"
+                            onclick={() => removeImageFile(index)}
+                          >
+                            <Icon icon="tabler:x" class="size-4" />
+                          </button>
                         </div>
-                      </div>
-                    {/if}
+                      {/each}
+                    </div>
+                  {/if}
+
+                  <div class="flex gap-1 w-full">
+                    <UploadFileButton {processImageFile} />
+
+                    {#key users.length + context.length}
+                      <ChatInput
+                        bind:content={messageInput}
+                        {users}
+                        {context}
+                        onEnter={sendMessage}
+                        {processImageFile}
+                      />
+                    {/key}
                   </div>
-                {:else}
-                  <div class="flex items-center grow flex-col">
-                    <Button.Root disabled class="w-full dz-btn"
-                      >You are banned from this space</Button.Root
+                  <FullscreenImageDropper {processImageFile} />
+
+                  {#if isSendingMessage}
+                    <div
+                      class="absolute inset-0 flex items-center text-primary justify-center z-20 bg-base-100/80"
                     >
-                  </div>
-                {/if}
+                      <div class="text-xl font-bold flex items-center gap-4">
+                        Sending message...
+                        <span class="dz-loading dz-loading-spinner mx-auto w-8"
+                        ></span>
+                      </div>
+                    </div>
+                  {/if}
+                </div>
               {:else}
                 <div class="flex items-center grow flex-col">
-                  <Button.Root onclick={joinSpace} class="w-full dz-btn"
-                    >Join this space to chat</Button.Root
+                  <Button.Root disabled class="w-full dz-btn"
+                    >You are banned from this space</Button.Root
                   >
                 </div>
               {/if}
             {:else}
-              <Button.Root
-                class="w-full dz-btn"
-                onclick={() => {
-                  user.isLoginDialogOpen = true;
-                }}>Login to Chat</Button.Root
-              >
+              <div class="flex items-center grow flex-col">
+                <Button.Root onclick={joinSpace} class="w-full dz-btn"
+                  >Join this space to chat</Button.Root
+                >
+              </div>
             {/if}
-          </div>
-        {/if}
+          {:else}
+            <Button.Root
+              class="w-full dz-btn"
+              onclick={() => {
+                user.isLoginDialogOpen = true;
+              }}>Login to Chat</Button.Root
+            >
+          {/if}
+        </div>
 
-        {#if isMobile}
-          <!-- <TimelineToolbar {createThread} bind:threadTitleInput /> -->
-        {/if}
+        <!-- {#if isMobile}
+          <TimelineToolbar {createThread} bind:threadTitleInput />
+        {/if} -->
       </div>
     </div>
   {/if}
 {/if}
-
-<style>
-  .reply-highlight {
-    animation: pulse-highlight 2s ease-in-out;
-  }
-
-  @keyframes pulse-highlight {
-    0% {
-      background-color: rgba(59, 130, 246, 0.1);
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-    }
-    50% {
-      background-color: rgba(59, 130, 246, 0.2);
-      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3);
-    }
-    100% {
-      background-color: transparent;
-      box-shadow: none;
-    }
-  }
-
-  /* Same style for search result highlight for consistency */
-  .search-result-highlight {
-    animation: pulse-highlight 2s ease-in-out;
-  }
-</style>

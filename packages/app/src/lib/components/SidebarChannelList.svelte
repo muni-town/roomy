@@ -1,23 +1,24 @@
 <script lang="ts">
-  import { page } from "$app/state";
-  import { navigateSync } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  import { Category, Channel, Space } from "$lib/jazz/schema";
+  import { Category, Channel, RoomyAccount, Space } from "$lib/jazz/schema";
   import { Accordion, Button } from "bits-ui";
   import { slide } from "svelte/transition";
   import Dialog from "./Dialog.svelte";
   import { co } from "jazz-tools";
   import { isSpaceAdmin } from "$lib/jazz/utils";
+  import SidebarChannelButton from "./SidebarChannelButton.svelte";
 
   let {
     sidebarItems,
     space,
+    me,
   }: {
     sidebarItems: {
       type: "channel" | "category";
       data: co.loaded<typeof Channel> | co.loaded<typeof Category>;
     }[];
     space: co.loaded<typeof Space> | undefined | null;
+    me: co.loaded<typeof RoomyAccount> | undefined | null;
   } = $props();
 
   //
@@ -76,7 +77,9 @@
                         title="Channel Settings"
                         class="cursor-pointer dz-btn dz-btn-ghost dz-btn-circle"
                         onclick={() => {
-                          editingCategory = item.data as co.loaded<typeof Category>;
+                          editingCategory = item.data as co.loaded<
+                            typeof Category
+                          >;
                           categoryNameInput = item.data.name;
                         }}
                       >
@@ -123,41 +126,12 @@
                     class="flex flex-col gap-2"
                   >
                     {#each item.data.channels as channel}
-                      {#if !channel?.softDeleted}
-                        <div class="group flex items-center gap-1">
-                          <Button.Root
-                            href={navigateSync({
-                              space: page.params.space!,
-                              channel: channel.id,
-                            })}
-                            class="flex-1 cursor-pointer px-1 dz-btn dz-btn-ghost justify-start border page.params.channel && {channel.id ===
-                            page.params.channel
-                              ? 'border-primary text-primary'
-                              : ' border-transparent'}"
-                          >
-                            <h3
-                              class="flex justify-start items-center w-full gap-2 px-2"
-                            >
-                              <Icon
-                                icon="basil:comment-solid"
-                                class="shrink-0"
-                              />
-                              <span class="truncate"
-                                >{channel?.name || "..."}</span
-                              >
-                            </h3>
-                          </Button.Root>
-                          {#if isSpaceAdmin(space)}
-                            <Button.Root
-                              title="Delete"
-                              class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer dz-btn dz-btn-ghost dz-btn-circle text-error hover:bg-error/10"
-                              onclick={() => deleteItem(channel)}
-                            >
-                              <Icon icon="lucide:x" class="size-4" />
-                            </Button.Root>
-                          {/if}
-                        </div>
-                      {/if}
+                      <SidebarChannelButton
+                        {channel}
+                        {deleteItem}
+                        {space}
+                        lastReadDate={me?.root?.lastRead?.[channel.id]}
+                      />
                     {/each}
                   </div>
                 {/if}
@@ -166,32 +140,12 @@
           </Accordion.Item>
         </Accordion.Root>
       {:else}
-        <div class="group flex items-center gap-1">
-          <Button.Root
-            href={navigateSync({
-              space: page.params.space!,
-              channel: item.data.id,
-            })}
-            class="flex-1 cursor-pointer px-1 dz-btn dz-btn-ghost justify-start border page.params.channel && {item
-              .data.id === page.params.channel
-              ? 'border-primary text-primary'
-              : ' border-transparent'}"
-          >
-            <h3 class="flex justify-start items-center w-full gap-2">
-              <Icon icon="basil:comment-solid" class="shrink-0" />
-              <span class="truncate"> {item.data.name} </span>
-            </h3>
-          </Button.Root>
-          {#if isSpaceAdmin(space)}
-            <Button.Root
-              title="Delete"
-              class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer dz-btn dz-btn-ghost dz-btn-circle text-error hover:bg-error/10"
-              onclick={() => deleteItem(item.data)}
-            >
-              <Icon icon="lucide:x" class="size-4" />
-            </Button.Root>
-          {/if}
-        </div>
+        <SidebarChannelButton
+          channel={item.data}
+          {deleteItem}
+          {space}
+          lastReadDate={me?.root?.lastRead?.[item.data.id]}
+        />
       {/if}
     {/each}
   {/if}

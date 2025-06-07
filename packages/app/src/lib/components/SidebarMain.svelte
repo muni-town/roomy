@@ -10,7 +10,7 @@
   import SidebarChannelList from "./SidebarChannelList.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { page } from "$app/state";
-  import { CoState } from "jazz-svelte";
+  import { AccountCoState, CoState } from "jazz-svelte";
   import {
     createCategory,
     createChannel,
@@ -18,7 +18,7 @@
     isSpaceAdmin,
     spacePages,
   } from "$lib/jazz/utils";
-  import { Category, Space } from "$lib/jazz/schema";
+  import { Category, RoomyAccount, Space } from "$lib/jazz/schema";
   import { co } from "jazz-tools";
 
   let space = $derived(
@@ -43,6 +43,15 @@
   let links = $derived(
     space?.current?.threads?.find((x) => x?.name === "@links"),
   );
+  
+  
+  const me = new AccountCoState(RoomyAccount, {
+    resolve: {
+      root: {
+        lastRead: true
+      }
+    },
+  });
 
   export async function createLinkFeed() {
     if (!space?.current) return;
@@ -91,7 +100,7 @@
         id: p?.id,
       }));
   });
-  
+
   function getUsedCategories() {
     return (
       space?.current?.categories?.filter(
@@ -314,7 +323,7 @@
         active={page.params.channel ?? ""}
       />
     {:else}
-      <SidebarChannelList {sidebarItems} space={space.current} />
+      <SidebarChannelList {sidebarItems} space={space.current} me={me.current} />
     {/if}
   </div>
 </nav>

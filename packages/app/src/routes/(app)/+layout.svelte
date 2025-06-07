@@ -15,7 +15,7 @@
   import SidebarMain from "$lib/components/SidebarMain.svelte";
   import { page } from "$app/state";
   import { afterNavigate } from "$app/navigation";
-  import { RoomyAccount } from "$lib/jazz/schema";
+  import { LastReadList, RoomyAccount } from "$lib/jazz/schema";
   import "jazz-inspector-element";
 
   const { children } = $props();
@@ -76,6 +76,8 @@
   setContext("isSidebarVisible", isSidebarVisible);
   // hide on navigation
   afterNavigate(() => {
+    setLastRead();
+
     if (
       page.params.space &&
       (page.params.channel || page.params.thread) &&
@@ -83,6 +85,23 @@
     )
       isSidebarVisible.toggle();
   });
+
+
+	function setLastRead() {
+		if (!me?.current?.root) return;
+
+		if (!me?.current?.root?.lastRead) {
+			me.current.root.lastRead = LastReadList.create({});
+		}
+
+    if(page.params.channel) {
+      me.current.root.lastRead[page.params.channel] = new Date();
+    }
+
+    if(page.params.thread) {
+      me.current.root.lastRead[page.params.thread] = new Date();
+    }
+  }
 </script>
 
 <svelte:head>

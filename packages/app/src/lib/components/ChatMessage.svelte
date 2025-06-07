@@ -214,7 +214,7 @@
 {#if shouldShow}
   <div
     id={message.current?.id}
-    class={`flex flex-col w-full relative max-w-screen`}
+    class={`flex flex-col w-full relative max-w-screen isolate`}
   >
     {#if threading.active}
       <Checkbox.Root

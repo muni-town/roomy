@@ -44,6 +44,8 @@
       virtualizer.scrollToIndex(timeline.length - 1, { align: "start" });
     }
   });
+
+  let isShifting = $state(false);
 </script>
 
 <ScrollArea.Root type="scroll" class="h-full overflow-hidden">
@@ -53,7 +55,16 @@
   >
     <div class="flex flex-col w-full h-full pb-16">
       {#if slicedTimeline.length < timeline.length}
-        <button class="btn btn-sm btn-outline" onclick={() => showLastN += 50}>Load More</button>
+        <button
+          class="btn btn-sm btn-outline"
+          onclick={() => {
+            isShifting = true;
+            showLastN += 50;
+            setTimeout(() => {
+              isShifting = false;
+            }, 1000);
+          }}>Load More</button
+        >
       {/if}
       <ol class="flex flex-col gap-2 max-w-full">
         <!--
@@ -78,7 +89,7 @@
             getKey={(messageId) => messageId}
             scrollRef={viewport}
             overscan={50}
-            shift
+            shift={isShifting}
           >
             {#snippet children(messageId: string, index: number)}
               <ChatMessage
