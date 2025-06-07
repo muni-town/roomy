@@ -28,8 +28,9 @@
   import toast from "svelte-french-toast";
   import { addMessage } from "$lib/search.svelte";
   import ImageUrlEmbed from "./Message/embeds/ImageUrlEmbed.svelte";
-  import { setInputFocus } from "./ChatInput.svelte";
-  import { convertReactionsToEmojis } from "$lib/utils/reactions";
+  import { extractTextContent } from "$lib/utils/extractText";
+  import { hasSeen, markSeen } from "$lib/seen.svelte";
+
 
   let {
     messageId,
@@ -69,9 +70,63 @@
     }),
   );
 
+  function notifyMe(messageText: string) {
+    if (hasSeen(messageId)) return;
+    let notified = false;
+    if (!("Notification" in window)) {
+      // Check if the browser supports notifications
+      alert("This browser does not support desktop notification");
+    } else if (Notification.permission === "granted") {
+      // Check whether notification permissions have already been granted;
+      // if so, create a notification
+      const notification = new Notification(messageText);
+      notified = true;
+      // …
+    } else if (Notification.permission !== "denied") {
+      // We need to ask the user for permission
+      Notification.requestPermission().then((permission) => {
+        // If the user accepts, let's create a notification
+        if (permission === "granted") {
+          const notification = new Notification(messageText);
+          notified = true;
+          // …
+        }
+      });
+    }
+    if (notified) {
+      markSeen(messageId);
+    }
+    // At last, if the user has denied notifications, and you
+    // want to be respectful there is no need to bother them anymore.
+    return notified;
+  }
+
+  function extractTextFromHtml(html: string): string {
+    if (!html) return '';
+    
+    // Create a temporary div element
+    const temp = document.createElement('div');
+    // Set the HTML content
+  temp.innerHTML = html;
+  // Get the text content (automatically strips HTML tags)
+  return temp.textContent?.trim() || temp.innerText?.trim() || '';
+}
+
   $effect(() => {
     message.current;
     untrack(() => {
+      const messageBody = message.current?.content?.toString() ?? "";
+      const messageText = extractTextFromHtml(messageBody);
+      const myName = me.current?.profile?.name;
+
+      // Only notify if message contains @ and user's name
+      if (
+        myName &&
+        messageText.includes("@") &&
+        messageText.toLowerCase().includes(myName.toLowerCase())
+      ) {
+        notifyMe(messageText);
+      }
       addMessage(
         threadId ?? "",
         messageId,
