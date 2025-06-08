@@ -22,6 +22,20 @@
     new CoState(RoomyProfile, message.current?._edits.content?.by?.profile?.id),
   );
 
+
+  const authorData = $derived.by(() => {
+    // if the message has an author in the format of discord:username:avatarUrl,
+    // and the message is made by the adming, return the profile data otherwise return profile data
+    if(message.current?.author?.includes("discord:")) {
+      return {
+        name: message.current?.author?.split(":")[1],
+        imageUrl: decodeURIComponent(message.current?.author?.split(":")[2] ?? ''),
+        id: undefined,
+      }
+    }
+    return profile.current;
+  })
+
   const scrollToMessage = getContext("scrollToMessage") as (
     id: string,
   ) => void;
@@ -34,13 +48,13 @@
   <div class="flex md:basis-auto gap-2 items-center shrink-0">
     <Icon icon="prime:reply" width="12px" height="12px" />
     <Avatar.Root class="w-4">
-      <Avatar.Image src={profile.current?.imageUrl} class="rounded-full" />
+      <Avatar.Image src={authorData?.imageUrl} class="rounded-full" />
       <Avatar.Fallback>
-        <AvatarBeam name={profile.current?.id} />
+        <AvatarBeam name={authorData?.id ?? authorData?.name ?? ""} />
       </Avatar.Fallback>
     </Avatar.Root>
     <h5 class="font-medium text-ellipsis">
-      {profile.current?.name}
+      {authorData?.name ?? ""}
     </h5>
   </div>
   <div class="line-clamp-1 md:basis-auto overflow-hidden italic">

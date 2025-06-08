@@ -57,8 +57,9 @@ export function createSpace(
   name: string,
   description?: string,
   emoji?: string,
+  defaultChannelName?: string,
 ) {
-  const channel = createChannel("general");
+  const channel = createChannel(defaultChannelName || "general");
 
   // user is already admin
   const adminGroup = Group.create();

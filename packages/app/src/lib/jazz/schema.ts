@@ -31,6 +31,8 @@ export const Message = co.map({
   softDeleted: z.boolean().optional(),
 
   embeds: z.optional(co.list(Embed)),
+
+  author: z.string().optional(),
 });
 
 export const Timeline = co.feed(z.string());

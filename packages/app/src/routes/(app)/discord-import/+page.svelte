@@ -1,4 +1,4 @@
-<!-- <script lang="ts">
+<script lang="ts">
   import * as zip from "@zip-js/zip-js";
   import { marked } from "marked";
   import { navigate } from "$lib/utils.svelte";
@@ -19,7 +19,15 @@
 
   import { user } from "$lib/user.svelte";
   import { onMount } from "svelte";
-  import { createCategory, createChannel, createMessage, createSpace, createThread } from "$lib/jazz/utils";
+  import {
+    createCategory,
+    createChannel,
+    createMessage,
+    createSpace,
+    createThread,
+  } from "$lib/jazz/utils";
+  import { AccountCoState } from "jazz-svelte";
+  import { RoomyAccount } from "$lib/jazz/schema";
 
   type DiscordMessage<
     MessageType extends "Default" | "Reply" | string = "Default",
@@ -106,116 +114,23 @@
     user.init();
   });
 
-  // Helper function to convert markdown to TipTap JSON format
-  function markdownToTipTap(markdown: string): any {
-    if (!markdown || markdown.trim() === "") {
-      return {
-        type: "doc",
-        content: [{ type: "paragraph" }],
-      };
-    }
+  const me = new AccountCoState(RoomyAccount, {
+    resolve: {
+      profile: true,
+      root: true,
+    },
+  });
 
-    // Parse the markdown
-    const tokens = marked.lexer(markdown);
-    const content: any[] = [];
-
-    // Process tokens and convert to TipTap format
-    for (const token of tokens) {
-      if (token.type === "paragraph") {
-        content.push({
-          type: "paragraph",
-          content: processInlineTokens(token.tokens || []),
-        });
-      } else if (token.type === "heading") {
-        content.push({
-          type: "heading",
-          attrs: { level: token.depth },
-          content: processInlineTokens(token.tokens || []),
-        });
-      } else if (token.type === "code") {
-        content.push({
-          type: "codeBlock",
-          attrs: { language: token.lang || "text" },
-          content: [{ type: "text", text: token.text }],
-        });
-      } else if (token.type === "blockquote") {
-        content.push({
-          type: "blockquote",
-          content: [
-            {
-              type: "paragraph",
-              content: processInlineTokens(token.tokens || []),
-            },
-          ],
-        });
-      } else if (token.type === "list") {
-        content.push({
-          type: token.ordered ? "orderedList" : "bulletList",
-          content: token.items.map((item: any) => ({
-            type: "listItem",
-            content: [
-              {
-                type: "paragraph",
-                content: processInlineTokens(item.tokens || []),
-              },
-            ],
-          })),
-        });
-      } else if (token.type === "hr") {
-        content.push({ type: "horizontalRule" });
-      }
-    }
-
-    return {
-      type: "doc",
-      content: content.length ? content : [{ type: "paragraph" }],
-    };
-  }
-
-  function processInlineTokens(tokens: any[]): any[] {
-    if (!tokens || !tokens.length) {
-      return [{ type: "text", text: "" }];
-    }
-
-    const result: any[] = [];
-
-    for (const token of tokens) {
-      if (token.type === "text") {
-        result.push({ type: "text", text: token.text });
-      } else if (token.type === "strong") {
-        result.push({
-          type: "bold",
-          content: processInlineTokens(token.tokens || []),
-        });
-      } else if (token.type === "em") {
-        result.push({
-          type: "italic",
-          content: processInlineTokens(token.tokens || []),
-        });
-      } else if (token.type === "codespan") {
-        result.push({
-          type: "code",
-          content: [{ type: "text", text: token.text }],
-        });
-      } else if (token.type === "link") {
-        result.push({
-          type: "link",
-          attrs: { href: token.href },
-          content: [{ type: "text", text: token.text }],
-        });
-      } else if (token.tokens) {
-        // Process any nested tokens
-        result.push(...processInlineTokens(token.tokens));
-      } else {
-        // Fallback for any other token types
-        result.push({ type: "text", text: token.raw || "" });
-      }
-    }
-
-    return result;
+  async function markdownToHTML(markdown: string): Promise<any> {
+    let html = await marked.parse(markdown);
+    return html;
   }
 
   async function importArchive() {
+    if (!me.current?.profile.joinedSpaces) {
+      console.error("No joined spaces");
+      return;
+    }
     importComplete = false;
     importedSpaceId = "";
     importedSpaceName = "";
@@ -231,12 +146,14 @@
 
     console.log("Starting import");
 
-    const space = createSpace("Imported Space")
+    const space = createSpace("Imported Space", undefined, undefined, "test");
+
+    me.current.profile.joinedSpaces.push(space);
 
     importedSpaceId = space.id;
 
     let channelNum = 0;
-    const existingCategories: Set<string> = new Set();
+    const existingCategories: Record<string, any> = {};
     for await (const entry of reader.getEntriesGenerator()) {
       if (!entry.getData) continue;
       channelNum += 1;
@@ -249,28 +166,40 @@
       );
       if (data.length == 0) continue;
 
-      const parsed: ImportChannel = JSON.parse(new TextDecoder().decode(data));
+      let parsed: ImportChannel;
+      try {
+        parsed = JSON.parse(new TextDecoder().decode(data));
+      } catch (e) {
+        console.error("Error parsing JSON: ", e);
+        continue;
+      }
+
       currentEntityName = parsed.channel.name;
       messageCount = parsed.messageCount;
       processedMessages = 0;
 
       if (
-        existingCategories.has(parsed.channel.category) &&
-        parsed.channel.type === "GuildTextChat"
+        parsed.channel.type === "GuildTextChat" &&
+        !existingCategories[parsed.channel.category]
       ) {
         const category = createCategory(parsed.channel.category);
-        existingCategories.add(parsed.channel.category);
+        existingCategories[parsed.channel.category] = category;
 
-        category.name = parsed.channel.category;
+        space.categories.push(category);
       }
 
       let messages: { [id: string]: string } = {};
 
-      if (!importedSpaceName && parsed.guild && parsed.guild.name) {
+      if (!importedSpaceName && parsed.guild?.name) {
         importedSpaceName = parsed.guild.name;
         space.name = importedSpaceName;
       }
 
+      let timeline = null;
+      let name = null;
+      let type = null;
+
+      console.log("Importing: ", parsed.channel.type, parsed.channel.name);
       switch (parsed.channel.type) {
         case "GuildPublicThread":
           const thread = createThread([], parsed.channel.name);
@@ -280,113 +209,67 @@
 
           thread.name = parsed.channel.name;
           // thread.description = parsed.channel.topic;
-
-          for (const [i, parsedMessage] of Array.from(
-            { length: parsed.messages.length },
-            (_, i) => [i, parsed.messages[i] as DiscordMessage<any>] as const,
-          )) {
-            processedMessages = i + 1;
-            if (i % 100 == 0) {
-              console.log(
-                `importing thread: ${thread.name} ( ${channelNum} )
-                importing message number: ${i} / ${parsed.messageCount}`,
-              );
-            }
-
-            const message = createMessage(parsedMessage.content || "");
-            thread.timeline.push(message.id);
-
-            // Process markdown content into TipTap JSON format
-            // message.bodyJson = JSON.stringify(
-            //   markdownToTipTap(parsedMessage.content || ""),
-            // );
-
-            // Handle reply messages
-            if (parsedMessage.type === "Reply" && parsedMessage.reference) {
-              const replyingToMessageId = parsedMessage.reference.messageId;
-              if (messages[replyingToMessageId]) {
-                message.replyTo = messages[replyingToMessageId];
-              }
-            }
-
-            // message.authors((x) =>
-            //   x.push(
-            //     `discord:${parsedMessage.author.nickname}:${encodeURIComponent(parsedMessage.author.avatarUrl)}`,
-            //   ),
-            // );
-            // message.commit();
-            // Store message reference
-            messages[parsedMessage.id] = message.id;
-          }
-          console.log("committing thread");
+          timeline = thread.timeline;
+          type = "thread";
+          name = thread.name;
           break;
 
         case "GuildTextChat":
-        default:
           const channel = createChannel(parsed.channel.name);
 
           space.name = parsed.guild.name;
           space.channels.push(channel);
 
-          existingCategories
-            .filter((x) => x.name == parsed.channel.category)[0]
-            ?.channels.push(channel);
-          existingCategories
-            .filter((x) => x.name == parsed.channel.category)[0]
-            ?.commit();
-          space.commit();
+          existingCategories[parsed.channel.category]?.channels.push(channel);
 
           console.log("Importing channel: ", parsed.channel.name);
 
           channel.name = parsed.channel.name;
-          channel.description = parsed.channel.topic;
 
-          for (const [i, parsedMessage] of Array.from(
-            { length: parsed.messages.length },
-            (_, i) => [i, parsed.messages[i] as DiscordMessage<any>] as const,
-          )) {
-            processedMessages = i + 1;
-            if (i % 100 == 0) {
-              console.log(
-                `importing channel: ${channel.name} ( ${channelNum} )
-    importing message number: ${i} / ${parsed.messageCount}`,
-              );
-              channel.commit();
-            }
-
-            const message = await globalState.roomy.create(RoomyMessage);
-            channel.timeline.push(message);
-
-            // Process markdown content into TipTap JSON format
-            message.bodyJson = JSON.stringify(
-              markdownToTipTap(parsedMessage.content || ""),
-            );
-
-            // Handle reply messages
-            if (parsedMessage.type === "Reply" && parsedMessage.reference) {
-              const replyingToMessageId = parsedMessage.reference.messageId;
-              if (messages[replyingToMessageId]) {
-                message.replyTo = messages[replyingToMessageId];
-              }
-            }
-
-            message.authors((x) =>
-              x.push(
-                `discord:${parsedMessage.author.nickname}:${encodeURIComponent(parsedMessage.author.avatarUrl)}`,
-              ),
-            );
-
-            message.commit();
-            messages[parsedMessage.id] = message.id;
-            await globalState.roomy.peer.close(message.id);
-          }
-
-          console.log("committing channel");
-          channel.commit();
-          await globalState.roomy.peer.close(channel.id);
+          timeline = channel.mainThread.timeline;
+          // channel.description = parsed.channel.topic;
+          type = "channel";
+          name = channel.name;
           break;
       }
-      space.commit();
+
+      console.log("Timeline: ", timeline);
+      if (timeline) {
+        for (const [i, parsedMessage] of Array.from(
+          { length: parsed.messages.length },
+          (_, i) => [i, parsed.messages[i] as DiscordMessage<any>] as const,
+        )) {
+          processedMessages = i + 1;
+          if (i % 100 == 0) {
+            console.log(
+              `importing ${type}: ${name} ( ${channelNum} )
+    importing message number: ${i} / ${parsed.messageCount}`,
+            );
+          }
+
+          const html = await markdownToHTML(parsedMessage.content || "");
+
+          const message = createMessage(html);
+          timeline.push(message.id);
+
+          // Handle reply messages
+          if (parsedMessage.type === "Reply" && parsedMessage.reference) {
+            const replyingToMessageId = parsedMessage.reference.messageId;
+            if (messages[replyingToMessageId]) {
+              message.replyTo = messages[replyingToMessageId];
+            }
+          }
+          message.createdAt = new Date(parsedMessage.timestamp);
+          if (parsedMessage.timestampEdited) {
+            message.updatedAt = new Date(parsedMessage.timestampEdited);
+          } else {
+            message.updatedAt = message.createdAt;
+          }
+
+          message.author = `discord:${parsedMessage.author.nickname}:${encodeURIComponent(parsedMessage.author.avatarUrl)}`;
+          messages[parsedMessage.id] = message.id;
+        }
+      }
     }
 
     loading = false;
@@ -494,4 +377,4 @@
     disabled={loading || !archiveInput || importComplete}
     >{loading ? "Importing..." : "Import Space"}</button
   >
-</form> -->
+</form>

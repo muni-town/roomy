@@ -38,7 +38,7 @@
     admin,
     space,
     threadId,
-    allowedToInteract
+    allowedToInteract,
   }: {
     messageId: string;
     previousMessageId?: string;
@@ -92,13 +92,46 @@
     new CoState(RoomyProfile, message.current?._edits.content?.by?.profile?.id),
   );
 
+  const authorData = $derived.by(() => {
+    // if the message has an author in the format of discord:username:avatarUrl,
+    // and the message is made by the adming, return the profile data otherwise return profile data
+    if (message.current?.author?.includes("discord:")) {
+      return {
+        name: message.current?.author?.split(":")[1],
+        imageUrl: decodeURIComponent(
+          message.current?.author?.split(":")[2] ?? "",
+        ),
+        id: undefined,
+      };
+    }
+    return profile.current;
+  });
+
   // if the same user and the message was created in the last 5 minutes, don't show the border, username or avatar
   let mergeWithPrevious = $derived.by(() => {
     if (!previousMessage) return false;
     if (previousMessage.current?.softDeleted) return false;
+
+    if (message.current?.author?.includes("discord:")) {
+      const previousAuthor = previousMessage.current?.author?.split(":");
+      const currentAuthor = message.current?.author?.split(":");
+      if (
+        previousAuthor?.[1] === currentAuthor?.[1] &&
+        previousAuthor?.[2] === currentAuthor?.[2]
+      ) {
+        return (
+          (message.current?.createdAt.getTime() ?? 0) -
+            (previousMessage?.current?.createdAt.getTime() ?? 0) <
+          1000 * 60 * 5
+        );
+      } else {
+        return false;
+      }
+    }
     if (
+      authorData?.id === profile.current?.id &&
       previousMessage.current?._edits.content?.by?.profile?.id !==
-      message.current?._edits.content?.by?.profile?.id
+        message.current?._edits.content?.by?.profile?.id
     )
       return false;
     if (message.current?.replyTo) return false;
@@ -265,12 +298,9 @@
         {#if !mergeWithPrevious}
           <div class="size-8 sm:size-10">
             <Avatar.Root class="size-8 sm:size-10">
-              <Avatar.Image
-                src={profile.current?.imageUrl}
-                class="rounded-full"
-              />
+              <Avatar.Image src={authorData?.imageUrl} class="rounded-full" />
               <Avatar.Fallback>
-                <AvatarBeam name={profile.current?.id} />
+                <AvatarBeam name={authorData?.id ?? authorData?.name ?? ""} />
               </Avatar.Fallback>
             </Avatar.Root>
           </div>
@@ -282,7 +312,7 @@
           {#if !mergeWithPrevious || !message.current}
             <span class="flex items-center gap-2 text-sm">
               <span class="font-bold text-primary"
-                >{profile?.current?.name ?? ""}</span
+                >{authorData?.name ?? ""}</span
               >
               {#if message.current?.createdAt}
                 {@render timestamp(message.current?.createdAt)}
