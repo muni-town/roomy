@@ -146,13 +146,15 @@
 
     console.log("Starting import");
 
-    const space = createSpace("Imported Space", undefined, undefined, "test");
+    const space = createSpace("Imported Space", undefined, undefined, false);
 
     me.current.profile.joinedSpaces.push(space);
 
     importedSpaceId = space.id;
 
     let channelNum = 0;
+
+    let totalMessages = 0;
     const existingCategories: Record<string, any> = {};
     for await (const entry of reader.getEntriesGenerator()) {
       if (!entry.getData) continue;
@@ -180,6 +182,7 @@
 
       if (
         parsed.channel.type === "GuildTextChat" &&
+        parsed.channel.category &&
         !existingCategories[parsed.channel.category]
       ) {
         const category = createCategory(parsed.channel.category);
@@ -240,12 +243,17 @@
           (_, i) => [i, parsed.messages[i] as DiscordMessage<any>] as const,
         )) {
           processedMessages = i + 1;
+          totalMessages += 1;
           if (i % 100 == 0) {
             console.log(
               `importing ${type}: ${name} ( ${channelNum} )
     importing message number: ${i} / ${parsed.messageCount}`,
             );
+
+            console.log("Total messages: ", totalMessages);
           }
+
+          await new Promise((resolve) => setTimeout(resolve, 20));
 
           const html = await markdownToHTML(parsedMessage.content || "");
 

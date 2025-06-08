@@ -18,7 +18,7 @@
     RoomyProfile,
     Space,
   } from "$lib/jazz/schema";
-  import { Account, co, CoRichText } from "jazz-tools";
+  import { Account, co } from "jazz-tools";
   import MessageToolbar from "./Message/MessageToolbar.svelte";
   import { messageHasAdmin, publicGroup } from "$lib/jazz/utils";
   import MessageReactions from "./Message/MessageReactions.svelte";
@@ -59,7 +59,6 @@
   let message = $derived(
     new CoState(Message, messageId, {
       resolve: {
-        content: true,
         reactions: true,
         embeds: {
           $each: true,
@@ -159,15 +158,12 @@
     if (!message.current) return;
 
     // if the content is the same, dont save
-    if (message.current.content.toString() === content) {
+    if (message.current.content === content) {
       editingMessage.id = "";
       return;
     }
 
-    message.current.content = new CoRichText({
-      text: content,
-      owner: publicGroup("reader"),
-    });
+    message.current.content = content;
     message.current.updatedAt = new Date();
     editingMessage.id = "";
   }

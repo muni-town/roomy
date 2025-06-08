@@ -18,7 +18,7 @@ export const Embed = co.map({
 });
 
 export const Message = co.map({
-  content: co.richText(),
+  content: z.string(),
 
   createdAt: z.date(),
   updatedAt: z.date(),

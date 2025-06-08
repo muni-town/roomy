@@ -1,4 +1,4 @@
-import { Account, co, CoRichText, Group, z } from "jazz-tools";
+import { Account, co, Group, z } from "jazz-tools";
 import {
   Category,
   Channel,
@@ -57,9 +57,9 @@ export function createSpace(
   name: string,
   description?: string,
   emoji?: string,
-  defaultChannelName?: string,
+  createDefaultChannel: boolean = true,
 ) {
-  const channel = createChannel(defaultChannelName || "general");
+  const channel = createDefaultChannel ? createChannel("general") : undefined;
 
   // user is already admin
   const adminGroup = Group.create();
@@ -74,7 +74,7 @@ export function createSpace(
   const space = Space.create(
     {
       name,
-      channels: co.list(Channel).create([channel], readerGroup),
+      channels: co.list(Channel).create(channel ? [channel] : [], readerGroup),
       description,
       emoji,
       members: co.list(co.account()).create([Account.getMe()], publicGroup()),
@@ -156,11 +156,6 @@ export function createMessage(
     readingGroup.extend(adminGroup);
   }
 
-  const content = new CoRichText({
-    text: input,
-    owner: readingGroup,
-  });
-
   let embedsList;
   if (embeds && embeds.length > 0) {
     embedsList = co.list(Embed).create([], readingGroup);
@@ -181,7 +176,7 @@ export function createMessage(
 
   const message = Message.create(
     {
-      content,
+      content: input,
       createdAt: new Date(),
       updatedAt: new Date(),
       reactions: co.list(Reaction).create([], publicGroup()),
