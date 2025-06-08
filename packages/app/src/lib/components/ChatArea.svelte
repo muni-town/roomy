@@ -6,6 +6,7 @@
   import { setContext } from "svelte";
   import { Account, co } from "jazz-tools";
   import type { Space } from "$lib/jazz/schema";
+  import Icon from "@iconify/svelte";
 
   let {
     timeline,
@@ -26,10 +27,29 @@
   } = $props();
 
   let showLastN = $state(50);
+  let isAtBottom = $state(true);
+  let showJumpToPresent = $derived(!isAtBottom && timeline.length > 0);
+  let scrollDebounce: NodeJS.Timeout;
 
   let slicedTimeline = $derived(timeline.slice(-showLastN));
-
   let viewport: HTMLDivElement = $state(null!);
+
+  function scrollToBottom() {
+    if (!virtualizer) return;
+    virtualizer.scrollToIndex(timeline.length - 1, { align: "start" });
+    isAtBottom = true;
+  }
+
+  function handleScroll() {
+    if (!viewport || !virtualizer) return;
+    
+    clearTimeout(scrollDebounce);
+    scrollDebounce = setTimeout(() => {
+      const { scrollTop, scrollHeight, clientHeight } = viewport;
+      const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 100;
+      isAtBottom = isNearBottom;
+    }, 100);
+  }
 
   setContext("scrollToMessage", (id: string) => {
     const idx = timeline.indexOf(id);
@@ -38,7 +58,6 @@
 
   $effect(() => {
     page.route; // Scroll-to-end when route changes
-
     if (!viewport || !virtualizer) return;
     if (timeline) {
       virtualizer.scrollToIndex(timeline.length - 1, { align: "start" });
@@ -52,8 +71,21 @@
   <ScrollArea.Viewport
     bind:ref={viewport}
     class="relative max-w-full w-full h-full"
+    onscroll={handleScroll}
   >
     <div class="flex flex-col w-full h-full pb-16">
+      {#if showJumpToPresent}
+        <button
+          class="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-primary text-primary-content 
+                 px-4 py-2 rounded-full shadow-lg hover:bg-primary-focus transition-colors 
+                 flex items-center gap-2 text-sm font-medium"
+          onclick={scrollToBottom}
+        >
+          <Icon icon="tabler:arrow-down" class="w-4 h-4" />
+          Jump to present
+        </button>
+      {/if}
+
       {#if slicedTimeline.length < timeline.length}
         <button
           class="btn btn-sm btn-outline"
@@ -63,8 +95,7 @@
             setTimeout(() => {
               isShifting = false;
             }, 1000);
-          }}>Load More</button
-        >
+          }}>Load More</button>
       {/if}
       <ol class="flex flex-col gap-2 max-w-full">
         <!--
