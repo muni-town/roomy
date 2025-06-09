@@ -1,4 +1,4 @@
-import { co, Group, z } from "jazz-tools";
+import { co, z } from "jazz-tools";
 import { getRandomUsername } from "./username.ts";
 import { createInbox, createSpaceList, publicGroup } from "./utils.ts";
 

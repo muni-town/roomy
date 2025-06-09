@@ -27,7 +27,6 @@
 
   let {
     sections,
-    active = $bindable(),
   }: {
     sections: Section[];
     active: string;

@@ -13,10 +13,16 @@
     space,
     me,
   }: {
-    sidebarItems: {
-      type: "channel" | "category";
-      data: co.loaded<typeof Channel> | co.loaded<typeof Category>;
-    }[];
+    sidebarItems: (
+      | {
+          type: "channel";
+          data: co.loaded<typeof Channel>;
+        }
+      | {
+          type: "category";
+          data: co.loaded<typeof Category>;
+        }
+    )[];
     space: co.loaded<typeof Space> | undefined | null;
     me: co.loaded<typeof RoomyAccount> | undefined | null;
   } = $props();
@@ -125,14 +131,16 @@
                     transition:slide={{ duration: 100 }}
                     class="flex flex-col gap-2"
                   >
-                    {#each item.data.channels as channel}
-                      <SidebarChannelButton
-                        {channel}
-                        {deleteItem}
-                        {space}
-                        lastReadDate={me?.root?.lastRead?.[channel.id]}
-                        {me}
-                      />
+                    {#each item.data.channels?.values() || [] as channel}
+                      {#if channel}
+                        <SidebarChannelButton
+                          {channel}
+                          {deleteItem}
+                          {space}
+                          lastReadDate={me?.root?.lastRead?.[channel.id]}
+                          {me}
+                        />
+                      {/if}
                     {/each}
                   </div>
                 {/if}

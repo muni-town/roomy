@@ -6,7 +6,6 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { atproto } from "./atproto.svelte";
 import { lexicons } from "./lexicons";
-import { decodeBase32 } from "./utils/base32";
 import { isTauri } from "@tauri-apps/api/core";
 import { navigate } from "$lib/utils.svelte";
 import { handleOauthCallback } from "./handleOauthCallback";
@@ -17,11 +16,6 @@ if (import.meta.hot) {
     window.location.reload();
   });
 }
-
-type Keypair = {
-  publicKey: Uint8Array;
-  privateKey: Uint8Array;
-};
 
 let session: OAuthSession | undefined = $state();
 let agent: Agent | undefined = $state();
@@ -46,29 +40,26 @@ let profile: { data: ProfileViewDetailed | undefined } = $derived.by(() => {
   };
 });
 
-/** The user's Roomy keypair. */
-let keypair: {
-  value: Keypair | undefined;
+/** The user's Jazz passphrase from our Jazz keyserver. */
+let passphrase: {
+  value: string | undefined;
 } = $derived.by(() => {
-  let value: Keypair | undefined = $state();
+  let passphrase: string | undefined = $state();
 
   if (session && agent) {
     agent
-      .call("chat.roomy.v0.key", undefined, undefined, {
+      .call("chat.roomy.v1.passphrase", undefined, undefined, {
         headers: {
-          "atproto-proxy": "did:web:keyserver.roomy.chat#roomy_keyserver",
+          "atproto-proxy": "did:web:jazz.keyserver.roomy.chat#roomy_keyserver",
         },
       })
       .then((resp) => {
-        value = {
-          publicKey: new Uint8Array(decodeBase32(resp.data.publicKey)),
-          privateKey: new Uint8Array(decodeBase32(resp.data.privateKey)),
-        };
+        passphrase = resp.data;
       });
   }
   return {
     get value() {
-      return value;
+      return passphrase;
     },
   };
 });
@@ -117,8 +108,8 @@ export const user = {
     return profile;
   },
 
-  get keypair() {
-    return keypair;
+  get passphrase() {
+    return passphrase;
   },
 
   /**

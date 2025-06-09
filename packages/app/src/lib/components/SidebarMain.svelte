@@ -84,8 +84,8 @@
             space: page.params.space!,
             thread: thread?.id,
           },
-          name: thread?.name,
-          id: thread?.id,
+          name: thread?.name || "",
+          id: thread?.id || "",
         };
       });
   }
@@ -101,8 +101,8 @@
           space: page.params.space,
           page: p?.id,
         },
-        name: p?.name,
-        id: p?.id,
+        name: p?.name || "",
+        id: p?.id || "",
       }));
   });
 
@@ -120,7 +120,7 @@
   let sidebarItems = $derived.by(() => {
     if (!space?.current) return [];
     const categories = getUsedCategories().map((channel) => ({
-      type: "category",
+      type: "category" as const,
       data: channel,
     }));
     const channels = space?.current?.channels || [];
@@ -134,7 +134,7 @@
           ),
       )
       .map((channel) => ({
-        type: "channel",
+        type: "channel" as const,
         data: channel,
       }));
 

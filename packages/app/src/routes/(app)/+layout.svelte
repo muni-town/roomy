@@ -1,13 +1,9 @@
 <script lang="ts">
   import { onMount, setContext } from "svelte";
   import { browser, dev } from "$app/environment";
-  import {
-    AccountCoState,
-    useIsAuthenticated,
-    usePassphraseAuth,
-  } from "jazz-svelte";
+  import { AccountCoState, usePassphraseAuth } from "jazz-svelte";
   import posthog from "posthog-js";
-  import toast, { Toaster } from "svelte-french-toast";
+  import { Toaster } from "svelte-french-toast";
 
   // @ts-ignore used for debugging
   import { RenderScan } from "svelte-render-scan";
@@ -21,10 +17,26 @@
   import { afterNavigate } from "$app/navigation";
   import { LastReadList, RoomyAccount } from "$lib/jazz/schema";
   import "jazz-inspector-element";
-  import { createInbox } from "$lib/jazz/utils";
   import { wordlist } from "$lib/jazz/wordlist";
 
   const { children } = $props();
+
+  const auth = usePassphraseAuth({ wordlist });
+  $effect(() => {
+    if (user.passphrase.value && user.profile.data) {
+      try {
+        auth.logIn(user.passphrase.value);
+      } catch (e) {
+        console.error(
+          "Error logging in, trying to register new account instead.",
+        );
+        auth.registerNewAccount(
+          user.passphrase.value,
+          user.profile.data.handle,
+        );
+      }
+    }
+  });
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
@@ -115,11 +127,6 @@
       me.current.root.lastRead[page.params.thread] = new Date();
     }
   }
-
-  const auth = usePassphraseAuth({
-    wordlist,
-  });
-  let passphrase = $state("");
 </script>
 
 <svelte:head>
@@ -128,37 +135,6 @@
   <meta name="msapplication-TileColor" content={themeColor} />
   <title>Roomy</title>
 </svelte:head>
-
-{#if auth.state === "anonymous"}
-  <div class="fixed top-0 left-0 w-full h-full bg-black/50 z-50">
-    <div class="flex flex-col items-center justify-center h-full gap-2">
-      <h1 class="text-2xl font-bold text-primary text-center">Passphrase Login</h1>
-      <button
-        class="dz-btn dz-btn-secondary"
-        onclick={() => {
-          const passphrase = auth.generateRandomPassphrase();
-
-          auth.registerNewAccount(passphrase, "New Account");
-
-          // copy passphrase to clipboard
-          navigator.clipboard.writeText(passphrase);
-
-          toast.success("Passphrase copied to clipboard");
-        }}>New account with random passphrase</button
-      >
-      <input type="text" bind:value={passphrase} class="dz-input dz-input-bordered" />
-      <button
-        class="dz-btn dz-btn-primary"
-        onclick={async () => {
-          await auth.logIn(passphrase);
-
-          // reload page
-          location.reload();
-        }}>Login</button
-      >
-    </div>
-  </div>
-{/if}
 
 {#if dev}
   <!-- Displays rendering scanner for debugging.

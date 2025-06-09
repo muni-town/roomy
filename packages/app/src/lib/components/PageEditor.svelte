@@ -17,9 +17,9 @@
   import { isSpaceAdmin } from "$lib/jazz/utils";
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  const pg = $derived(new CoState(Page, page.params.page))
+  const pg = $derived(new CoState(Page, page.params.page));
 
-  const space = $derived(new CoState(Space, page.params.space))
+  const space = $derived(new CoState(Space, page.params.space));
 
   let isEditingPage = $state(false);
 
@@ -110,7 +110,8 @@
   let filteredItems = $state<
     { id: string; name: string; type: "thread" | "channel" }[]
   >([]);
-  let hashQuery = $state("");
+  // Commenting out for now because it is unused, but we might want to use it somewhere later.
+  // let hashQuery = $state("");
 
   let selectionTooltipVisible = $state(false);
   let selectionTooltipPosition = $state({ x: 0, y: 0 });
@@ -216,7 +217,7 @@
         // Handle hashtags
         else if (content.text.endsWith("#")) {
           hashMenuVisible = true;
-          hashQuery = "";
+          // hashQuery = "";
           const { top, left } = editor.getSelectionBoundingBox()?.toJSON();
           const menuHeight = 300;
           const viewportHeight = window.innerHeight;
@@ -247,7 +248,7 @@
           const hashIndex = text.lastIndexOf("#");
 
           if (hashIndex !== -1) {
-            hashQuery = text.substring(hashIndex + 1);
+            // hashQuery = text.substring(hashIndex + 1);
           } else {
             hashMenuVisible = false;
           }
@@ -475,7 +476,7 @@
       });
       if (pg.current?.body) {
         try {
-          console.log("wat",pg.current.body)
+          console.log("wat", pg.current.body);
           const parsedContent = JSON.parse(pg.current.body);
           setTimeout(() => {
             if (editor && editor.document) {
@@ -596,14 +597,14 @@
   });
 
   $effect(() => {
-    isEditingPage
+    isEditingPage;
     if (!pg.current?.body) return;
     if (pg.current.body == "{}") {
       pageRenderedHtml = "";
       processedHtml = "";
       return;
     }
-    console.log("page body", pg.current.body )
+    console.log("page body", pg.current.body);
     const json = JSON.parse(pg.current.body);
     try {
       const rendererEditor = BlockNoteEditor.create();
@@ -955,7 +956,8 @@
 
 <Dialog
   title="Confirm Page Deletion"
-  description="Are you sure you want to delete <b>{pg.current?.name}</b>?</br></br><b>Note:</b> Deletes are not permanent and only hide the data from view. The data is still publicly accessible."
+  description="Are you sure you want to delete <b>{pg.current
+    ?.name}</b>?</br></br><b>Note:</b> Deletes are not permanent and only hide the data from view. The data is still publicly accessible."
   bind:isDialogOpen={isDeleteDialogOpen}
 >
   <div class="flex justify-end gap-3">

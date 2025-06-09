@@ -17,7 +17,7 @@
     children?: Snippet;
     header?: Snippet;
   } = $props();
-  let itemLink = (item) =>
+  let itemLink = (item: { id: string }) =>
     `${page.params.space?.includes(".") ? "/-" : ""}/${page.params.space}/${route}/${item.id}`;
 </script>
 

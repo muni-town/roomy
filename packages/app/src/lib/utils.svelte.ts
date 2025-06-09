@@ -11,13 +11,13 @@ export function cleanHandle(handle: string): string {
 
 export type NavigationTarget =
   | "home"
-  | { space: string; channel?: string; thread?: string; page?: string };
+  | { space?: string; channel?: string; thread?: string; page?: string };
 
 /** A helper function to navigate to a specific roomy object, like a space, channel, or thread */
 export function navigate(target: NavigationTarget) {
   if (target == "home") {
     goto("/home");
-  } else if ("space" in target) {
+  } else if (target.space) {
     let url = ``;
     if (target.space.includes(".")) {
       url += "/-";
@@ -38,7 +38,7 @@ export function navigate(target: NavigationTarget) {
 export function navigateSync(target: NavigationTarget) {
   if (target == "home") {
     return "/home";
-  } else if ("space" in target) {
+  } else if (target.space) {
     let url = ``;
     if (target.space.includes(".")) {
       url += "/-";
