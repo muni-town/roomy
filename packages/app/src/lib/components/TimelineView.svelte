@@ -149,7 +149,6 @@
 
   let filesInMessage: File[] = $state([]);
 
-
   async function addThread(e: SubmitEvent) {
     e.preventDefault();
     const messageIds = <string[]>[];
@@ -320,7 +319,6 @@
       setLastRead();
     }
   });
-
 
   const pages = $derived(
     channel.current?.pages?.filter((page) => page && !page.softDeleted) || [],
@@ -494,10 +492,12 @@
           {threadId}
           allowedToInteract={hasJoinedSpace && !isBanned}
         />
+      </div>
 
+      <div class="shrink-0 pt-1">
         {#if replyTo.id}
           <div
-            class="reply-container flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2 absolute bottom-0 left-0 right-0"
+            class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
           >
             <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
               <span class="shrink-0">Replying to</span>
@@ -512,9 +512,6 @@
             </Button.Root>
           </div>
         {/if}
-      </div>
-
-      <div>
         <div class="">
           {#if user.session}
             {#if hasJoinedSpace}

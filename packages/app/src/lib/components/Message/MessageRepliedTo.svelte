@@ -12,7 +12,6 @@
   let message = $derived(
     new CoState(Message, messageId, {
       resolve: {
-        content: true,
         reactions: true,
       },
     }),
@@ -47,10 +46,10 @@
 >
   <div class="flex md:basis-auto gap-2 items-center shrink-0">
     <Icon icon="prime:reply" width="12px" height="12px" />
-    <Avatar.Root class="w-4">
+    <Avatar.Root class="w-4 h-4">
       <Avatar.Image src={authorData?.imageUrl} class="rounded-full" />
       <Avatar.Fallback>
-        <AvatarBeam name={authorData?.id ?? authorData?.name ?? ""} />
+        <AvatarBeam size={16} name={authorData?.id ?? authorData?.name ?? ""} />
       </Avatar.Fallback>
     </Avatar.Root>
     <h5 class="font-medium text-ellipsis">

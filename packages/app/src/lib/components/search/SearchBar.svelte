@@ -3,6 +3,7 @@
   import SearchResults from "./SearchResults.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { findMessages } from "./search.svelte";
+  import { chatArea } from "../ChatArea.svelte";
 
   let {
     spaceId,
@@ -18,30 +19,10 @@
 
   // Function to handle search result click
   function handleSearchResultClick(messageId: string) {
-    console.log("result clicked", messageId);
     // Hide search results
     // TODO: scroll to message
     showSearchResults = false;
-
-    // // Find the message in the timeline to get its index
-    // if (timeline) {
-    //   // Get the timeline IDs - this returns an array, not a Promise
-    //   const ids = timeline;
-
-    //   if (!messageId.includes("co_")) {
-    //     return;
-    //   }
-
-    //   const messageIndex = ids?.indexOf(messageId as `co_${string}`);
-    //   console.log("message index", messageIndex);
-    //   if (messageIndex !== -1) {
-    //     virtualizer?.scrollToIndex(messageIndex);
-    //   } else {
-    //     console.error("Message not found in timeline:", messageId);
-    //   }
-    // } else {
-    //   console.error("No active channel");
-    // }
+    chatArea.scrollToMessage?.(messageId);
   }
 
   async function updateSearchResults(query: string) {

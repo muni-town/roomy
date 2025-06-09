@@ -1,9 +1,13 @@
 <script lang="ts">
   import { onMount, setContext } from "svelte";
   import { browser, dev } from "$app/environment";
-  import { AccountCoState } from "jazz-svelte";
+  import {
+    AccountCoState,
+    useIsAuthenticated,
+    usePassphraseAuth,
+  } from "jazz-svelte";
   import posthog from "posthog-js";
-  import { Toaster } from "svelte-french-toast";
+  import toast, { Toaster } from "svelte-french-toast";
 
   // @ts-ignore used for debugging
   import { RenderScan } from "svelte-render-scan";
@@ -18,6 +22,7 @@
   import { LastReadList, RoomyAccount } from "$lib/jazz/schema";
   import "jazz-inspector-element";
   import { createInbox } from "$lib/jazz/utils";
+  import { wordlist } from "$lib/jazz/wordlist";
 
   const { children } = $props();
 
@@ -29,25 +34,25 @@
   });
 
   $effect(() => {
-    if(!user.profile.data?.handle || !me.current) return;
+    if (!user.profile.data?.handle || !me.current) return;
 
-    if(me.current.profile.name !== user.profile.data?.handle) {
+    if (me.current.profile.name !== user.profile.data?.handle) {
       me.current.profile.name = user.profile.data?.handle;
     }
 
-    if(me.current.profile.imageUrl !== user.profile.data?.avatar) {
+    if (me.current.profile.imageUrl !== user.profile.data?.avatar) {
       me.current.profile.imageUrl = user.profile.data?.avatar;
     }
 
-    if(me.current.profile.blueskyHandle !== user.profile.data?.handle) {
+    if (me.current.profile.blueskyHandle !== user.profile.data?.handle) {
       me.current.profile.blueskyHandle = user.profile.data?.handle;
     }
 
-    if(me.current.profile.bannerUrl !== user.profile.data?.banner) {
+    if (me.current.profile.bannerUrl !== user.profile.data?.banner) {
       me.current.profile.bannerUrl = user.profile.data?.banner;
     }
 
-    if(me.current.profile.description !== user.profile.data?.description) {
+    if (me.current.profile.description !== user.profile.data?.description) {
       me.current.profile.description = user.profile.data?.description;
     }
   });
@@ -95,21 +100,26 @@
       isSidebarVisible.toggle();
   });
 
-	function setLastRead() {
-		if (!me?.current?.root) return;
+  function setLastRead() {
+    if (!me?.current?.root) return;
 
-		if (!me?.current?.root?.lastRead) {
-			me.current.root.lastRead = LastReadList.create({});
-		}
+    if (!me?.current?.root?.lastRead) {
+      me.current.root.lastRead = LastReadList.create({});
+    }
 
-    if(page.params.channel) {
+    if (page.params.channel) {
       me.current.root.lastRead[page.params.channel] = new Date();
     }
 
-    if(page.params.thread) {
+    if (page.params.thread) {
       me.current.root.lastRead[page.params.thread] = new Date();
     }
   }
+
+  const auth = usePassphraseAuth({
+    wordlist,
+  });
+  let passphrase = $state("");
 </script>
 
 <svelte:head>
@@ -118,6 +128,37 @@
   <meta name="msapplication-TileColor" content={themeColor} />
   <title>Roomy</title>
 </svelte:head>
+
+{#if auth.state === "anonymous"}
+  <div class="fixed top-0 left-0 w-full h-full bg-black/50 z-50">
+    <div class="flex flex-col items-center justify-center h-full gap-2">
+      <h1 class="text-2xl font-bold text-primary text-center">Passphrase Login</h1>
+      <button
+        class="dz-btn dz-btn-secondary"
+        onclick={() => {
+          const passphrase = auth.generateRandomPassphrase();
+
+          auth.registerNewAccount(passphrase, "New Account");
+
+          // copy passphrase to clipboard
+          navigator.clipboard.writeText(passphrase);
+
+          toast.success("Passphrase copied to clipboard");
+        }}>New account with random passphrase</button
+      >
+      <input type="text" bind:value={passphrase} class="dz-input dz-input-bordered" />
+      <button
+        class="dz-btn dz-btn-primary"
+        onclick={async () => {
+          await auth.logIn(passphrase);
+
+          // reload page
+          location.reload();
+        }}>Login</button
+      >
+    </div>
+  </div>
+{/if}
 
 {#if dev}
   <!-- Displays rendering scanner for debugging.

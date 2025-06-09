@@ -41,10 +41,6 @@
       (x) => x?.channelId === channel?.id && !x?.read,
     ).length,
   );
-
-  $inspect(me?.profile?.roomyInbox);
-
-  $inspect(channelNotifications);
 </script>
 
 {#if channel && !channel.softDeleted}

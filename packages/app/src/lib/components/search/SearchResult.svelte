@@ -20,7 +20,6 @@
     new CoState(RoomyProfile, message.current?._edits.content?.by?.profile?.id),
   );
 
-
   const authorData = $derived.by(() => {
     // if the message has an author in the format of discord:username:avatarUrl,
     // and the message is made by the admin, return the profile data otherwise return profile data
@@ -38,16 +37,8 @@
 </script>
 
 {#if message.current && authorData}
-  <li class="hover:bg-base-200 transition-colors">
-    <button
-      type="button"
-      class="p-3 flex items-start gap-2"
-      onclick={() => {
-        // Just call onMessageClick and don't try to scroll directly from here
-        // This will avoid the postMessage error
-        onMessageClick(message.current!.id);
-      }}
-    >
+  <li class="hover:bg-base-200 transition-colors relative isolate">
+    <div class="p-3 flex items-start gap-2">
       <AvatarImage
         handle={authorData.name || ""}
         avatarUrl={authorData.imageUrl}
@@ -67,9 +58,16 @@
           </span>
         </div>
         <div class="text-sm text-base-content/80 line-clamp-2 break-words">
-          {@html formatMessagePreview(message.current)}
+          <button
+            onclick={() => {
+              onMessageClick(message.current!.id);
+            }}
+          >
+            {@html formatMessagePreview(message.current)}
+            <span class="absolute inset-0"></span>
+          </button>
         </div>
       </div>
-    </button>
+    </div>
   </li>
 {/if}

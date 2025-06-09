@@ -1,3 +1,9 @@
+<script lang="ts" module>
+  export const chatArea = $state({
+    scrollToMessage: null as ((id: string) => void) | null,
+  });
+</script>
+
 <script lang="ts">
   import { ScrollArea } from "bits-ui";
   import ChatMessage from "./ChatMessage.svelte";
@@ -7,6 +13,7 @@
   import { Account, co } from "jazz-tools";
   import type { Space } from "$lib/jazz/schema";
   import Icon from "@iconify/svelte";
+  import toast from "svelte-french-toast";
 
   let {
     timeline,
@@ -29,7 +36,6 @@
   let showLastN = $state(50);
   let isAtBottom = $state(true);
   let showJumpToPresent = $derived(!isAtBottom && timeline.length > 0);
-  let scrollDebounce: NodeJS.Timeout;
 
   let slicedTimeline = $derived(timeline.slice(-showLastN));
   let viewport: HTMLDivElement = $state(null!);
@@ -42,30 +48,46 @@
 
   function handleScroll() {
     if (!viewport || !virtualizer) return;
-    
-    clearTimeout(scrollDebounce);
-    scrollDebounce = setTimeout(() => {
-      const { scrollTop, scrollHeight, clientHeight } = viewport;
-      const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 100;
-      isAtBottom = isNearBottom;
-    }, 100);
+
+    const { scrollTop, scrollHeight, clientHeight } = viewport;
+    const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 500;
+    isAtBottom = isNearBottom;
   }
 
-  setContext("scrollToMessage", (id: string) => {
-    const idx = timeline.indexOf(id);
-    if (idx !== -1 && virtualizer) virtualizer.scrollToIndex(idx);
-  });
+  function scrollToMessage(id: string) {
+    const idx = slicedTimeline.indexOf(id);
+    if (idx >= 0) virtualizer?.scrollToIndex(idx);
+    else {
+      toast.error("Message not found");
+    }
+  }
+
+  setContext("scrollToMessage", scrollToMessage);
 
   $effect(() => {
     page.route; // Scroll-to-end when route changes
     if (!viewport || !virtualizer) return;
     if (timeline) {
       virtualizer.scrollToIndex(timeline.length - 1, { align: "start" });
+
+      chatArea.scrollToMessage = scrollToMessage;
     }
   });
 
   let isShifting = $state(false);
 </script>
+
+{#if showJumpToPresent}
+  <button
+    class="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 bg-primary text-primary-content
+         px-4 py-2 rounded-full shadow-lg hover:bg-primary-focus transition-colors
+         flex items-center gap-2 text-sm font-medium"
+    onclick={scrollToBottom}
+  >
+    <Icon icon="tabler:arrow-down" class="w-4 h-4" />
+    Jump to present
+  </button>
+{/if}
 
 <ScrollArea.Root type="scroll" class="h-full overflow-hidden">
   <ScrollArea.Viewport
@@ -74,28 +96,17 @@
     onscroll={handleScroll}
   >
     <div class="flex flex-col w-full h-full pb-16">
-      {#if showJumpToPresent}
-        <button
-          class="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-primary text-primary-content 
-                 px-4 py-2 rounded-full shadow-lg hover:bg-primary-focus transition-colors 
-                 flex items-center gap-2 text-sm font-medium"
-          onclick={scrollToBottom}
-        >
-          <Icon icon="tabler:arrow-down" class="w-4 h-4" />
-          Jump to present
-        </button>
-      {/if}
-
       {#if slicedTimeline.length < timeline.length}
         <button
           class="btn btn-sm btn-outline"
           onclick={() => {
             isShifting = true;
-            showLastN += 50;
+            showLastN += 100;
             setTimeout(() => {
               isShifting = false;
             }, 1000);
-          }}>Load More</button>
+          }}>Load More</button
+        >
       {/if}
       <ol class="flex flex-col gap-2 max-w-full">
         <!--
