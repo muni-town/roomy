@@ -1,7 +1,7 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import type { Message } from "$lib/jazz/schema";
-  import SearchResult from "./search/SearchResult.svelte";
+  import SearchResult from "./SearchResult.svelte";
   import { co } from "jazz-tools";
 
   let {
@@ -10,7 +10,7 @@
     onMessageClick,
     onClose,
   }: {
-    messages: co.loaded<typeof Message>[];
+    messages: string[];
     query: string;
     onMessageClick: (messageId: string) => void;
     onClose: () => void;
@@ -20,17 +20,16 @@
   function highlightSearchTerm(content: string, searchTerm: string): string {
     if (!searchTerm) return content;
 
-    const regex = new RegExp(`(${searchTerm})`, "gi");
-    return content.replace(
-      regex,
-      '<mark class="bg-primary/30 text-base-content">$1</mark>',
+    return content.replaceAll(
+      searchTerm,
+      `<mark class="bg-primary/30 text-base-content">${searchTerm}</mark>`,
     );
   }
 
   // Format the message preview with highlighted search term
   function formatMessagePreview(message: co.loaded<typeof Message>): string {
     try {
-      const htmlContent = message.content?.toString() ?? "";
+      const htmlContent = message.content ?? "";
       return highlightSearchTerm(htmlContent, query);
     } catch (error) {
       console.error(error);
@@ -38,8 +37,6 @@
     }
   }
 </script>
-
-
 
 <div
   class="search-results max-w-full bg-base-100 border border-base-300 rounded-lg shadow-lg w-full max-h-[60vh] overflow-auto"
@@ -65,7 +62,11 @@
   {:else}
     <ul class="divide-y divide-base-300">
       {#each messages as message}
-        <SearchResult message={message.current} onMessageClick={onMessageClick} formatMessagePreview={formatMessagePreview} />
+        <SearchResult
+          messageId={message}
+          {onMessageClick}
+          {formatMessagePreview}
+        />
       {/each}
     </ul>
   {/if}

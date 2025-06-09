@@ -22,10 +22,6 @@
   import CreatePageDialog from "$lib/components/CreatePageDialog.svelte";
   import BoardList from "./BoardList.svelte";
   import ToggleNavigation from "./ToggleNavigation.svelte";
-  import { Index } from "flexsearch";
-  import SearchResults from "./SearchResults.svelte";
-  import type { Virtualizer } from "virtua/svelte";
-  import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { AccountCoState, CoState } from "jazz-svelte";
   import { Channel, Space } from "$lib/jazz/schema";
   import { page } from "$app/state";
@@ -40,10 +36,10 @@
   import { replyTo } from "./ChatMessage.svelte";
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
   import { extractLinks } from "$lib/utils/collectLinks";
-  import { findMessages } from "$lib/search.svelte";
   import FullscreenImageDropper from "./helper/FullscreenImageDropper.svelte";
   import UploadFileButton from "./helper/UploadFileButton.svelte";
   import { afterNavigate } from "$app/navigation";
+  import SearchBar from "./search/SearchBar.svelte";
 
   let space = $derived(
     new CoState(Space, page.params.space, {
@@ -151,45 +147,8 @@
   // thread maker
   let threadTitleInput = $state("");
 
-  // Initialize FlexSearch with appropriate options for message content
-  let searchIndex = new Index({
-    tokenize: "forward",
-    preset: "performance",
-  });
-  let searchQuery = $state("");
-  let showSearchInput = $state(false);
-  let searchResults = $state([]);
-  let showSearchResults = $state(false);
-  let virtualizer = $state<Virtualizer<string> | undefined>(undefined);
-
   let filesInMessage: File[] = $state([]);
 
-  // Function to handle search result click
-  function handleSearchResultClick(messageId: string) {
-    console.log("result clicked");
-    // Hide search results
-    showSearchResults = false;
-
-    // Find the message in the timeline to get its index
-    if (timeline) {
-      // Get the timeline IDs - this returns an array, not a Promise
-      const ids = timeline;
-
-      if (!messageId.includes("co_")) {
-        return;
-      }
-
-      const messageIndex = ids?.indexOf(messageId as `co_${string}`);
-      console.log("message index", messageIndex);
-      if (messageIndex !== -1) {
-        virtualizer?.scrollToIndex(messageIndex);
-      } else {
-        console.error("Message not found in timeline:", messageId);
-      }
-    } else {
-      console.error("No active channel");
-    }
-  }
 
   async function addThread(e: SubmitEvent) {
     e.preventDefault();
@@ -362,26 +321,6 @@
     }
   });
 
-  // Handle search input
-  $effect(() => {
-    if (searchIndex && searchQuery) {
-      // Perform synchronous search
-      // const results = searchIndex.search(searchQuery);
-      const results = findMessages(threadId ?? "", searchQuery);
-      console.log("results", results, searchQuery);
-      if (results.length > 0) {
-        showSearchResults = true;
-        // Get the actual Message objects for the search results
-        searchResults = results;
-      } else {
-        searchResults = [];
-        showSearchResults = searchQuery.length > 0;
-      }
-    } else {
-      searchResults = [];
-      showSearchResults = false;
-    }
-  });
 
   const pages = $derived(
     channel.current?.pages?.filter((page) => page && !page.softDeleted) || [],
@@ -465,6 +404,8 @@
   let isBanned = $derived(
     bannedHandles.has(me.current?.profile?.blueskyHandle ?? ""),
   );
+
+  let showSearch = $state(false);
 </script>
 
 <!-- hack to get the admin to load ^^ it has to be used somewhere in this file -->
@@ -517,7 +458,7 @@
     {#if tab === "chat"}
       <button
         class="btn btn-ghost btn-sm btn-circle"
-        onclick={() => (showSearchInput = !showSearchInput)}
+        onclick={() => (showSearch = !showSearch)}
         title="Toggle search"
       >
         <Icon icon="tabler:search" class="text-base-content" />
@@ -541,51 +482,13 @@
 {:else if tab === "chat"}
   {#if space.current}
     <div class="flex flex-col h-[calc(100vh-124px)]">
-      {#if showSearchInput}
-        <div
-          class="flex items-center border-b border-gray-200 dark:border-gray-700 px-2 py-1"
-        >
-          <Icon icon="tabler:search" class="text-base-content/50 mr-2" />
-          <input
-            type="text"
-            placeholder="Search messages..."
-            bind:value={searchQuery}
-            use:focusOnRender
-            class="input input-sm input-ghost w-full focus:outline-none"
-            autoComplete="off"
-          />
-          <button
-            class="btn btn-ghost btn-sm btn-circle"
-            onclick={() => {
-              searchQuery = "";
-              showSearchInput = false;
-              showSearchResults = false;
-            }}
-          >
-            <Icon icon="tabler:x" class="text-base-content/50" />
-          </button>
-        </div>
-
-        {#if showSearchResults}
-          <div class="relative">
-            <div class="absolute z-20 w-full">
-              <SearchResults
-                messages={searchResults}
-                query={searchQuery}
-                onMessageClick={handleSearchResultClick}
-                onClose={() => {
-                  showSearchResults = false;
-                }}
-              />
-            </div>
-          </div>
-        {/if}
+      {#if showSearch && space.current}
+        <SearchBar spaceId={space.current.id} bind:showSearch />
       {/if}
       <div class="flex-grow overflow-auto relative h-full">
         <ChatArea
           space={space.current}
           {timeline}
-          bind:virtualizer
           isAdmin={isSpaceAdmin(space.current)}
           admin={admin.current}
           {threadId}

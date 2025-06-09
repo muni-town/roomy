@@ -5,51 +5,71 @@
   import { co } from "jazz-tools";
 
   let {
-    message,
+    messageId,
     onMessageClick,
     formatMessagePreview,
   }: {
-    message: co.loaded<typeof Message>;
+    messageId: string;
     onMessageClick: (messageId: string) => void;
     formatMessagePreview: (message: co.loaded<typeof Message>) => string;
   } = $props();
 
+  const message = $derived(new CoState(Message, messageId));
+
   let profile = $derived(
-    new CoState(RoomyProfile, message?._edits.content?.by?.profile?.id),
+    new CoState(RoomyProfile, message.current?._edits.content?.by?.profile?.id),
   );
+
+
+  const authorData = $derived.by(() => {
+    // if the message has an author in the format of discord:username:avatarUrl,
+    // and the message is made by the admin, return the profile data otherwise return profile data
+    if (message.current?.author?.includes("discord:")) {
+      return {
+        name: message.current?.author?.split(":")[1],
+        imageUrl: decodeURIComponent(
+          message.current?.author?.split(":")[2] ?? "",
+        ),
+        id: undefined,
+      };
+    }
+    return profile.current;
+  });
 </script>
 
-<li class="hover:bg-base-200 transition-colors">
-  <button
-    type="button"
-    class="p-3 flex items-start gap-2"
-    onclick={() => {
-      // Just call onMessageClick and don't try to scroll directly from here
-      // This will avoid the postMessage error
-      onMessageClick(message.id);
-    }}
-  >
-    <AvatarImage
-      handle={profile.current?.blueskyHandle || ""}
-      avatarUrl={profile.current?.imageUrl}
-      className="w-8 h-8"
-    />
-    <div class="flex-1 min-w-0">
-      <div class="flex justify-between items-center mb-1">
-        <span class="font-medium text-base-content"
-          >{profile.current?.blueskyHandle || "Unknown"}</span
-        >
-        <span class="text-xs text-base-content/60">
-          <!-- {message._edits?.createdDate
+{#if message.current && authorData}
+  <li class="hover:bg-base-200 transition-colors">
+    <button
+      type="button"
+      class="p-3 flex items-start gap-2"
+      onclick={() => {
+        // Just call onMessageClick and don't try to scroll directly from here
+        // This will avoid the postMessage error
+        onMessageClick(message.current!.id);
+      }}
+    >
+      <AvatarImage
+        handle={authorData.name || ""}
+        avatarUrl={authorData.imageUrl}
+        className="w-8 h-8"
+      />
+      <div class="flex-1 min-w-0">
+        <div class="flex justify-between items-center mb-1">
+          <span class="font-medium text-base-content"
+            >{authorData.name || "Unknown"}</span
+          >
+          <span class="text-xs text-base-content/60">
+            <!-- {message._edits?.createdDate
               ? formatDistanceToNow(message._edits.createdDate, {
                   addSuffix: true,
                 })
               : ""} -->
-        </span>
+          </span>
+        </div>
+        <div class="text-sm text-base-content/80 line-clamp-2 break-words">
+          {@html formatMessagePreview(message.current)}
+        </div>
       </div>
-      <div class="text-sm text-base-content/80 line-clamp-2 break-words">
-        {@html formatMessagePreview(message)}
-      </div>
-    </div>
-  </button>
-</li>
+    </button>
+  </li>
+{/if}
