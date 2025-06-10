@@ -9,6 +9,7 @@
   import { getProfile } from "$lib/profile.svelte";
   import { resolveLeafId } from "$lib/utils.svelte";
   import toast from "svelte-french-toast";
+  import { export_space } from "$lib/utils/exportRoomyLeaf";
 
   let saveSpaceLoading = $state(false);
   let verificationFailed = $state(false);
@@ -192,6 +193,11 @@
   {/snippet}
 
   <div class="max-h-[80vh] overflow-y-auto pr-2">
+
+
+    <Button.Root class="dz-btn dz-btn-primary w-full mb-8 dz-btn-lg" onclick={export_space}>Export Space</Button.Root>
+
+
     <form onsubmit={saveSpaceName} class="flex flex-col gap-3 mb-8">
       <label class="dz-input w-full">
         <span class="label">Name</span>
