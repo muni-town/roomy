@@ -108,7 +108,7 @@
       <SidebarSpace space={openSpace.current} hasJoined={false} />
     {/if}
   </div>
-  <div class="flex flex-col gap-1 items-center flex-grow overflow-y-scroll">
+  <div class="flex flex-col gap-1 items-center flex-grow overflow-y-auto">
     {#if spaces}
       {#each spaces as space}
         <SidebarSpace {space} />
