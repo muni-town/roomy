@@ -9,7 +9,7 @@
   import ChatMessage from "./ChatMessage.svelte";
   import { Virtualizer } from "virtua/svelte";
   import { page } from "$app/state";
-  import { setContext } from "svelte";
+  import { onMount, setContext } from "svelte";
   import { Account, co } from "jazz-tools";
   import type { Space } from "$lib/jazz/schema";
   import Icon from "@iconify/svelte";
@@ -39,6 +39,11 @@
 
   let slicedTimeline = $derived(timeline.slice(-showLastN));
   let viewport: HTMLDivElement = $state(null!);
+
+
+  onMount(()=>{
+    setTimeout(scrollToBottom,2000)
+  })
 
   function scrollToBottom() {
     if (!virtualizer) return;
