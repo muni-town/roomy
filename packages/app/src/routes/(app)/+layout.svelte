@@ -121,9 +121,11 @@
   function setLastRead() {
     if (!me?.current?.root) return;
 
-    if (!me?.current?.root?.lastRead) {
+    if (!me?.current?.root?.lastRead === null) {
       me.current.root.lastRead = LastReadList.create({});
     }
+
+    if(!me.current.root.lastRead) return;
 
     if (page.params.channel) {
       me.current.root.lastRead[page.params.channel] = new Date();
