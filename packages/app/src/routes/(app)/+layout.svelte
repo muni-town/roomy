@@ -16,25 +16,31 @@
   import { page } from "$app/state";
   import { afterNavigate } from "$app/navigation";
   import { LastReadList, RoomyAccount } from "$lib/jazz/schema";
-  import "jazz-inspector-element";
   import { wordlist } from "$lib/jazz/wordlist";
+  import "jazz-inspector-element";
 
   const { children } = $props();
 
   const auth = usePassphraseAuth({ wordlist });
+
+  async function logIn(passphrase: string, handle: string) {
+    try {
+      await auth.logIn(passphrase);
+    } catch (e) {
+      console.error(
+        "Error logging in, trying to register new account instead.",
+      );
+      auth.registerNewAccount(passphrase, handle);
+    }
+  }
+
   $effect(() => {
-    if (user.passphrase.value && user.profile.data) {
-      try {
-        auth.logIn(user.passphrase.value);
-      } catch (e) {
-        console.error(
-          "Error logging in, trying to register new account instead.",
-        );
-        auth.registerNewAccount(
-          user.passphrase.value,
-          user.profile.data.handle,
-        );
-      }
+    if (
+      user.passphrase.value &&
+      user.profile.data &&
+      auth.state === "anonymous"
+    ) {
+      logIn(user.passphrase.value, user.profile.data.handle);
     }
   });
 
