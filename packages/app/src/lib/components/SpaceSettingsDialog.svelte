@@ -180,6 +180,13 @@
       console.error(e);
     }
   }
+
+  let loadingExport = $state(false);
+  async function exportSpace() {
+    loadingExport = true;
+    await export_space();
+    loadingExport = false;
+  }
 </script>
 
 <Dialog title="Space Settings" bind:isDialogOpen={showSpaceSettings}>
@@ -193,10 +200,19 @@
   {/snippet}
 
   <div class="max-h-[80vh] overflow-y-auto pr-2">
-
-
-    <Button.Root class="dz-btn dz-btn-primary w-full mb-8 dz-btn-lg" onclick={export_space}>Export Space</Button.Root>
-
+    <Button.Root
+      class="dz-btn dz-btn-primary w-full mb-8 dz-btn-lg"
+      onclick={exportSpace}
+    >
+      {#if loadingExport}
+        <span class="dz-loading dz-loading-spinner"></span>
+      {/if}
+      {#if loadingExport}
+        Exporting...
+      {:else}
+        Export Space
+      {/if}
+    </Button.Root>
 
     <form onsubmit={saveSpaceName} class="flex flex-col gap-3 mb-8">
       <label class="dz-input w-full">
