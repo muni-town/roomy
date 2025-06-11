@@ -31,8 +31,7 @@
     // save last indexed message id for each channel and thread in local storage
 
     initSearch(space.current);
-  })
-
+  });
 </script>
 
 <main

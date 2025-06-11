@@ -145,3 +145,5 @@ export const RoomyAccount = co
       );
     }
   });
+
+export const SpaceMigrationReference = co.record(z.string(), z.string());

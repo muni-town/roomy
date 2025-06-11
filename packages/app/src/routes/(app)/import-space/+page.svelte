@@ -27,7 +27,8 @@
     createThread,
   } from "$lib/jazz/utils";
   import { AccountCoState } from "jazz-svelte";
-  import { RoomyAccount } from "$lib/jazz/schema";
+  import { RoomyAccount, SpaceMigrationReference } from "$lib/jazz/schema";
+  import { spaceMigrationReferenceId } from "$lib/jazz/ids";
 
   type DiscordMessage<
     MessageType extends "Default" | "Reply" | string = "Default",
@@ -154,6 +155,8 @@
 
     let channelNum = 0;
 
+    let oldSpaceId = "";
+
     let totalMessages = 0;
     const existingCategories: Record<string, any> = {};
     for await (const entry of reader.getEntriesGenerator()) {
@@ -179,6 +182,10 @@
       currentEntityName = parsed.channel.name;
       messageCount = parsed.messageCount;
       processedMessages = 0;
+
+      if (!oldSpaceId) {
+        oldSpaceId = parsed.guild.id;
+      }
 
       if (
         parsed.channel.type === "GuildTextChat" &&
@@ -284,6 +291,21 @@
     importComplete = true;
     archiveInput = undefined;
 
+    console.log("importedSpaceId", importedSpaceId);
+    // load reference
+    if (oldSpaceId.startsWith("leaf:")) {
+      console.log("loading reference", oldSpaceId, space.id);
+      const reference = await SpaceMigrationReference.load(
+        spaceMigrationReferenceId,
+      );
+      console.log("loaded reference", reference);
+      if (reference) {
+        reference[oldSpaceId] = space.id;
+        console.log("set reference", reference);
+      }
+
+    }
+
     toast.success(
       `Successfully imported ${importedSpaceName || "Discord data"}!`,
       {
@@ -302,12 +324,11 @@
   class="m-auto flex flex-col gap-6 p-4 text-center"
   onsubmit={importArchive}
 >
-  <h1 class="text-3xl font-bold">Discord Import</h1>
+  <h1 class="text-3xl font-bold">Import Space</h1>
 
   <p>
-    Select a <a href="https://github.com/Tyrrrz/DiscordChatExporter"
-      >Discord Chat Exporter</a
-    > zip archive to import it to a Roomy space.
+    Select the exported zip archive of an old Roomy space to import it to a new
+    Roomy space.
   </p>
 
   <input
@@ -371,7 +392,7 @@
         >
         <button
           type="button"
-          class="dz-btn dz-btn-sm dz-btn-primary mt-2"
+          class="dz-btn dz-btn-primary dz-btn-lg mt-2"
           onclick={goToImportedSpace}
         >
           Go to Space

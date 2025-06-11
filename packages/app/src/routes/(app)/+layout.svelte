@@ -119,6 +119,8 @@
   });
 
   function setLastRead() {
+    if(!page.params.space) return;
+    
     if (!me?.current?.root) return;
 
     if (!me?.current?.root?.lastRead === null) {
