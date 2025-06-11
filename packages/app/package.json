@@ -97,7 +97,9 @@
     "vite-plugin-arraybuffer": "^0.1.0",
     "vite-plugin-top-level-await": "^1.4.4",
     "vite-plugin-wasm": "^3.4.1",
-    "vitest": "^3.0.9"
+    "vitest": "^3.0.9",
+    "@tiptap/html": "^2.14.0",
+    "turndown": "^7.2.0"
   },
   "lint-staged": {
     "*.{svelte,svelte.ts}": [
@@ -123,9 +125,5 @@
     "url": "https://opencollective.com/weird-inc",
     "logo": "https://opencollective.com/opencollective/logo.txt"
   },
-  "license": "https://blueoakcouncil.org/license/1.0.0",
-  "dependencies": {
-    "@tiptap/html": "^2.14.0",
-    "turndown": "^7.2.0"
-  }
+  "license": "https://blueoakcouncil.org/license/1.0.0"
 }
