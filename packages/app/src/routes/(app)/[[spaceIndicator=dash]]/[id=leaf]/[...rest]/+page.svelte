@@ -63,7 +63,7 @@
           {/if}
 
           {#if user.session && !moved}
-            <Button.Root href="/import-space" class="dz-btn dz-btn-outline"
+            <Button.Root href="/import-space" target="_blank" class="dz-btn dz-btn-outline"
               >Import space</Button.Root
             >
           {:else if !moved}

@@ -15,22 +15,9 @@ export type NavigationTarget =
 
 /** A helper function to navigate to a specific roomy object, like a space, channel, or thread */
 export function navigate(target: NavigationTarget) {
-  if (target == "home") {
-    goto("/home");
-  } else if (target.space) {
-    let url = ``;
-    if (target.space.includes(".")) {
-      url += "/-";
-    }
-    url += `/${target.space}`;
-    if (target.channel) {
-      url += `/${target.channel}`;
-    } else if (target.thread) {
-      url += `/thread/${target.thread}`;
-    } else if (target.page) {
-      url += `/page/${target.page}`;
-    }
-    goto(url);
+  const targetUrl = navigateSync(target);
+  if (targetUrl) {
+    goto(targetUrl);
   }
 }
 
