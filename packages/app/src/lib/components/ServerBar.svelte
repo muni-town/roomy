@@ -2,7 +2,7 @@
   import { globalState } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { navigate } from "$lib/utils.svelte";
-  import { Button } from "bits-ui";
+  import { Button, Portal } from "bits-ui";
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import AvatarImage from "$lib/components/AvatarImage.svelte";
@@ -15,6 +15,8 @@
   import { env } from "$env/dynamic/public";
   import JSZip from "jszip";
   import FileSaver from "file-saver";
+  import { page } from "$app/state";
+  import { export_space } from "$lib/utils/exportRoomyLeaf";
 
   let {
     spaces,
@@ -93,30 +95,12 @@
     }
   }
 
-  async function exportZip() {
-    var metadata: { Type: string; Version: string; [key: string]: any } = {
-      Type: "RoomyData",
-      Version: "0",
-    };
+  let exportLoading = $state(false);
 
-    var zip = new JSZip();
-
-    var space = globalState.space;
-    if (!space) return;
-
-    metadata["space_id"] = space.entity.id.toString();
-
-    await addEntityToZip(zip, space);
-
-    await addEntityListToZip(zip, space.threads);
-    await addEntityListToZip(zip, space.channels);
-    await addEntityListToZip(zip, space.wikipages);
-
-    zip.file("meta.json", JSON.stringify(metadata));
-
-    zip.generateAsync({ type: "blob" }).then(function (content) {
-      FileSaver.saveAs(content, "roomy-data.zip");
-    });
+  async function exportSpace() {
+    exportLoading = true;
+    await export_space();
+    exportLoading = false;
   }
 </script>
 
@@ -192,14 +176,25 @@
       </Button.Root>
     {/if}
 
-    <Button.Root
-      title="Export ZIP Archive"
-      class="p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
-      disabled={!user.session}
-      onclick={exportZip}
-    >
-      <Icon icon="mdi:folder-download-outline" font-size="1.8em" />
-    </Button.Root>
+    {#if page.params.space && globalState.isAdmin}
+      <Button.Root
+        title="Export space as a ZIP archive"
+        class="p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
+        disabled={!user.session}
+        onclick={exportSpace}
+      >
+        <Icon icon="mdi:folder-download-outline" font-size="1.8em" />
+      </Button.Root>
+
+      {#if exportLoading}
+        <Portal>
+          <div class="fixed inset-0 bg-base-300/50 backdrop-blur-md z-50 flex gap-4 items-center justify-center">
+            <span class="dz-loading dz-loading-spinner dz-loading-lg"></span>
+            <p class="text-base-content text-3xl font-bold">Exporting...</p>
+          </div>
+        </Portal>
+      {/if}
+    {/if}
 
     <ThemeSelector />
     <Dialog
