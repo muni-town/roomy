@@ -19,6 +19,12 @@
   import { wordlist } from "$lib/jazz/wordlist";
   import "jazz-inspector-element";
 
+  const me = new AccountCoState(RoomyAccount, {
+    resolve: {
+      profile: true,
+      root: true,
+    },
+  });
   const { children } = $props();
 
   const auth = usePassphraseAuth({ wordlist });
@@ -34,6 +40,44 @@
     }
   }
 
+  async function setProfileRecord(accountId?: string, profileId?: string) {
+    if (!accountId || !profileId) return false;;
+
+    console.log("setting record", accountId, profileId);
+    await user.agent?.com.atproto.repo.createRecord({
+      collection: "chat.roomy.profile",
+      record: { accountId, profileId },
+      repo: user.agent.assertDid,
+      rkey: "self",
+    });
+    return true;
+  }
+
+  async function checkProfileRecord() {
+    try {
+      await user.agent?.com.atproto.repo.getRecord({
+        collection: "chat.roomy.profile",
+        repo: user.agent.assertDid,
+        rkey: "self",
+      });
+
+      console.log("record found");
+
+      recordChecked = true;
+    } catch (e) {
+      recordChecked = await setProfileRecord(me.current?.id, me.current?.profile.id);
+    }
+  }
+
+  let recordChecked = $state(false);
+
+  $effect(() => {
+    if (user.agent && !recordChecked && auth.state === "signedIn") {
+      console.log("checking record");
+      checkProfileRecord();
+    }
+  });
+
   $effect(() => {
     if (
       user.passphrase.value &&
@@ -42,13 +86,6 @@
     ) {
       logIn(user.passphrase.value, user.profile.data.handle);
     }
-  });
-
-  const me = new AccountCoState(RoomyAccount, {
-    resolve: {
-      profile: true,
-      root: true,
-    },
   });
 
   $effect(() => {
@@ -119,15 +156,15 @@
   });
 
   function setLastRead() {
-    if(!page.params.space) return;
-    
+    if (!page.params.space) return;
+
     if (!me?.current?.root) return;
 
     if (!me?.current?.root?.lastRead === null) {
       me.current.root.lastRead = LastReadList.create({});
     }
 
-    if(!me.current.root.lastRead) return;
+    if (!me.current.root.lastRead) return;
 
     if (page.params.channel) {
       me.current.root.lastRead[page.params.channel] = new Date();
