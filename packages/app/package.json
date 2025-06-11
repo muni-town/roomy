@@ -97,7 +97,9 @@
     "vite-plugin-arraybuffer": "^0.1.0",
     "vite-plugin-top-level-await": "^1.4.4",
     "vite-plugin-wasm": "^3.4.1",
-    "vitest": "^3.0.9"
+    "vitest": "^3.0.9",
+    "@tiptap/html": "^2.14.0",
+    "turndown": "^7.2.0"
   },
   "lint-staged": {
     "*.{svelte,svelte.ts}": [
