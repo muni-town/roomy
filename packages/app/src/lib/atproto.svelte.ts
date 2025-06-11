@@ -10,7 +10,7 @@ import { type } from "@tauri-apps/plugin-os";
 
 const scope = "atproto transition:generic transition:chat.bsky";
 
-let oauth = $state() as BrowserOAuthClient | undefined;
+let oauth: BrowserOAuthClient | undefined = $state();
 
 /** The AtProto store. */
 export const atproto = {

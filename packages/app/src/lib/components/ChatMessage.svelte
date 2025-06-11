@@ -193,7 +193,7 @@
           emoji: emoji,
         },
         {
-          owner: publicGroup(),
+          owner: publicGroup("reader"),
         },
       ),
     );

@@ -15,7 +15,7 @@ import {
   Timeline,
 } from "./schema";
 
-export function publicGroup(readWrite: "reader" | "writer" = "writer") {
+export function publicGroup(readWrite: "reader" | "writer" = "reader") {
   const group = Group.create();
   group.addMember("everyone", readWrite);
 
@@ -23,31 +23,24 @@ export function publicGroup(readWrite: "reader" | "writer" = "writer") {
 }
 
 export function createChannel(name: string) {
-  const group = publicGroup();
+  const publicWriteGroup = publicGroup("writer");
+  const publicReadGroup = publicGroup("reader");
 
   const thread = Thread.create(
     {
       name: "main",
-      timeline: Timeline.create([], {
-        owner: group,
-      }),
+      timeline: Timeline.create([], publicWriteGroup),
     },
-    {
-      owner: group,
-    },
+    publicReadGroup,
   );
 
   const channel = Channel.create(
     {
       name,
       mainThread: thread,
-      subThreads: co.list(Thread).create([], {
-        owner: group,
-      }),
+      subThreads: co.list(Thread).create([], publicWriteGroup),
     },
-    {
-      owner: group,
-    },
+    publicReadGroup,
   );
 
   return channel;
@@ -71,17 +64,21 @@ export function createSpace(
 
   const me = Account.getMe();
 
+  const publicWriteGroup = publicGroup("writer");
+
   const space = Space.create(
     {
       name,
       channels: co.list(Channel).create(channel ? [channel] : [], readerGroup),
       description,
       emoji,
-      members: co.list(co.account()).create([Account.getMe()], publicGroup()),
+      members: co
+        .list(co.account())
+        .create([Account.getMe()], publicWriteGroup),
       version: 1,
       adminId: me.id,
-      threads: co.list(Thread).create([], publicGroup()),
-      pages: co.list(Page).create([], publicGroup()),
+      threads: co.list(Thread).create([], publicWriteGroup),
+      pages: co.list(Page).create([], publicWriteGroup),
       categories: co.list(Category).create([], readerGroup),
       bans: co.list(z.string()).create([], readerGroup),
     },
@@ -127,14 +124,6 @@ export function messageHasAdmin(
   return admin.canAdmin(message);
 }
 
-export function createPublicSpacesList() {
-  const spaces = SpaceList.create([], {
-    owner: publicGroup(),
-  });
-
-  return spaces;
-}
-
 export type ImageUrlEmbedCreate = {
   type: "imageUrl";
   data: {
@@ -173,13 +162,14 @@ export function createMessage(
       );
     }
   }
+  const publicWriteGroup = publicGroup("writer");
 
   const message = Message.create(
     {
       content: input,
       createdAt: new Date(),
       updatedAt: new Date(),
-      reactions: co.list(Reaction).create([], publicGroup()),
+      reactions: co.list(Reaction).create([], publicWriteGroup),
       replyTo: replyTo,
       hiddenIn: co.list(z.string()).create([], readingGroup),
       embeds: embedsList,
@@ -205,12 +195,15 @@ export function createPage(name: string) {
 }
 
 export function createThread(messagesIds: string[], name?: string) {
+  const publicWriteGroup = publicGroup("writer");
+  const publicReadGroup = publicGroup("reader");
+
   const thread = Thread.create(
     {
       name: name || "New Thread",
-      timeline: Timeline.create([...messagesIds], publicGroup()),
+      timeline: Timeline.create([...messagesIds], publicWriteGroup),
     },
-    publicGroup(),
+    publicReadGroup,
   );
 
   return thread;

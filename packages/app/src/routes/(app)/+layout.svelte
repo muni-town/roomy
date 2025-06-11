@@ -43,7 +43,6 @@
   async function setProfileRecord(accountId?: string, profileId?: string) {
     if (!accountId || !profileId) return false;;
 
-    console.log("setting record", accountId, profileId);
     await user.agent?.com.atproto.repo.createRecord({
       collection: "chat.roomy.profile",
       record: { accountId, profileId },
@@ -61,8 +60,6 @@
         rkey: "self",
       });
 
-      console.log("record found");
-
       recordChecked = true;
     } catch (e) {
       recordChecked = await setProfileRecord(me.current?.id, me.current?.profile.id);
@@ -73,7 +70,6 @@
 
   $effect(() => {
     if (user.agent && !recordChecked && auth.state === "signedIn") {
-      console.log("checking record");
       checkProfileRecord();
     }
   });
