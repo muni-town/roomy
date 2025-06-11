@@ -78,15 +78,16 @@
     new CoState(RoomyProfile, message.current?._edits.content?.by?.profile?.id),
   );
 
+  let isImportedMessage = $derived(message.current?.author?.startsWith("discord:") || message.current?.author?.startsWith("app:"));
+
   const authorData = $derived.by(() => {
     // if the message has an author in the format of discord:username:avatarUrl,
     // and the message is made by the adming, return the profile data otherwise return profile data
-    if (message.current?.author?.includes("discord:")) {
+    if (isImportedMessage) {
+      const author = message.current?.author?.split(":");
       return {
-        name: message.current?.author?.split(":")[1],
-        imageUrl: decodeURIComponent(
-          message.current?.author?.split(":")[2] ?? "",
-        ),
+        name: author?.[1] ?? "Unknown",
+        imageUrl: decodeURIComponent(author?.[2] ?? ""),
         id: undefined,
       };
     }
@@ -98,7 +99,7 @@
     if (!previousMessage) return false;
     if (previousMessage.current?.softDeleted) return false;
 
-    if (message.current?.author?.includes("discord:")) {
+    if (isImportedMessage) {
       const previousAuthor = previousMessage.current?.author?.split(":");
       const currentAuthor = message.current?.author?.split(":");
       if (
@@ -297,6 +298,9 @@
               <span class="font-bold text-primary"
                 >{authorData?.name ?? ""}</span
               >
+              {#if isImportedMessage}
+                <span class="dz-badge dz-badge-info dz-badge-xs">App</span>
+              {/if}
               {#if message.current?.createdAt}
                 {@render timestamp(message.current?.createdAt)}
               {/if}
