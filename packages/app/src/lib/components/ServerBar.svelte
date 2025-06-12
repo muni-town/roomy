@@ -1,7 +1,7 @@
 <script lang="ts">
   import { user } from "$lib/user.svelte";
   import { navigate } from "$lib/utils.svelte";
-  import { Button } from "bits-ui";
+  import { Button, Portal } from "bits-ui";
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";

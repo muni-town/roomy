@@ -98,6 +98,8 @@
     "vite-plugin-top-level-await": "^1.4.4",
     "vite-plugin-wasm": "^3.4.1",
     "vitest": "^3.0.9",
+    "@tiptap/html": "^2.14.0",
+    "turndown": "^7.2.0",
     "jazz-svelte": "^0.14.21",
     "jazz-tools": "^0.14.21",
     "flexsearch": "^0.8.164"

@@ -116,6 +116,9 @@ importers:
       '@tiptap/extension-placeholder':
         specifier: ^2.11.5
         version: 2.12.0(@tiptap/core@2.12.0(@tiptap/pm@2.12.0))(@tiptap/pm@2.12.0)
+      '@tiptap/html':
+        specifier: ^2.14.0
+        version: 2.14.0(@tiptap/core@2.12.0(@tiptap/pm@2.12.0))(@tiptap/pm@2.12.0)
       '@tiptap/pm':
         specifier: ^2.11.5
         version: 2.12.0
@@ -224,6 +227,9 @@ importers:
       tailwindcss:
         specifier: ^4.0.0
         version: 4.1.7
+      turndown:
+        specifier: ^7.2.0
+        version: 7.2.0
       tweetnacl:
         specifier: ^1.0.3
         version: 1.0.3
@@ -668,6 +674,9 @@ packages:
     resolution: {integrity: sha512-7SbOa11tXUS95T3fReL+dwDs5FyJtCEqrqG3inRziDws346SYLsxOQ6HmX+4BkIsQh1R8U3XNa+EMmdMt38lMA==, tarball: https://registry.npmjs.org/@melt-ui/svelte/-/svelte-0.76.2.tgz}
     peerDependencies:
       svelte: '>=3 <5'
+
+  '@mixmark-io/domino@2.2.0':
+    resolution: {integrity: sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw==, tarball: https://registry.npmjs.org/@mixmark-io/domino/-/domino-2.2.0.tgz}
 
   '@msgpack/msgpack@3.1.1':
     resolution: {integrity: sha512-DnBpqkMOUGayNVKyTLlkM6ILmU/m/+VUxGkuQlPQVAcvreLz5jn1OlQnWd8uHKL/ZSiljpM12rjRhr51VtvJUQ==, tarball: https://registry.npmjs.org/@msgpack/msgpack/-/msgpack-3.1.1.tgz}
@@ -1417,6 +1426,12 @@ packages:
     peerDependencies:
       '@tiptap/core': ^2.7.0
 
+  '@tiptap/html@2.14.0':
+    resolution: {integrity: sha512-Lw6mb3yJTsGd+q23KLKVJRpsT/0BEcKsUxzaEKimunKrZknZLsHVbZNa2hxS0IzaJqDogG2+NRutpD/E2NJGDg==, tarball: https://registry.npmjs.org/@tiptap/html/-/html-2.14.0.tgz}
+    peerDependencies:
+      '@tiptap/core': ^2.7.0
+      '@tiptap/pm': ^2.7.0
+
   '@tiptap/pm@2.12.0':
     resolution: {integrity: sha512-TNzVwpeNzFfHAcYTOKqX9iU4fRxliyoZrCnERR+RRzeg7gWrXrCLubQt1WEx0sojMAfznshSL3M5HGsYjEbYwA==, tarball: https://registry.npmjs.org/@tiptap/pm/-/pm-2.12.0.tgz}
 
@@ -1771,6 +1786,10 @@ packages:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==, tarball: https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz}
     engines: {node: '>= 8'}
 
+  css-what@6.1.0:
+    resolution: {integrity: sha512-HTUrgRJ7r4dsZKU6GjmpfRK1O76h97Z8MfS1G0FozR+oF2kG6Vfe8JE6zwrkbxigziPHinCJ+gCPjA9EaBDtRw==, tarball: https://registry.npmjs.org/css-what/-/css-what-6.1.0.tgz}
+    engines: {node: '>= 6'}
+
   css.escape@1.5.1:
     resolution: {integrity: sha512-YUifsXXuknHlUsmlgyY0PKzgPOr7/FjCePfHNt0jxm83wHZi44VDMQ7/fGNkjY3/jV1MC+1CmZbaHzugyeRtpg==, tarball: https://registry.npmjs.org/css.escape/-/css.escape-1.5.1.tgz}
 
@@ -1865,6 +1884,10 @@ packages:
 
   entities@4.5.0:
     resolution: {integrity: sha512-V0hjH4dGPh9Ao5p0MoRY6BVqtwCjhz6vI5LT8AJ55H+4g9/4vbHx1I54fS0XuclLhDHArPQCiMjDxjaL8fPxhw==, tarball: https://registry.npmjs.org/entities/-/entities-4.5.0.tgz}
+    engines: {node: '>=0.12'}
+
+  entities@5.0.0:
+    resolution: {integrity: sha512-BeJFvFRJddxobhvEdm5GqHzRV/X+ACeuw0/BuuxsCh1EUZcAIz8+kYmBp/LrQuloy6K1f3a0M7+IhmZ7QnkISA==, tarball: https://registry.npmjs.org/entities/-/entities-5.0.0.tgz}
     engines: {node: '>=0.12'}
 
   environment@1.1.0:
@@ -3286,6 +3309,9 @@ packages:
     resolution: {integrity: sha512-iHuaNcq5GZZnr3XDZNuu2LSyCzAOPwDuo5Qt+q64DfsTP1i3T2bKfxJhni2ZQxsvAoxRbuUK5QetJki4qc5aYA==, tarball: https://registry.npmjs.org/turbo/-/turbo-2.5.3.tgz}
     hasBin: true
 
+  turndown@7.2.0:
+    resolution: {integrity: sha512-eCZGBN4nNNqM9Owkv9HAtWRYfLA4h909E/WGAWWBpmB275ehNhZyk87/Tpvjbp0jjNl9XwCsbe6bm6CqFsgD+A==, tarball: https://registry.npmjs.org/turndown/-/turndown-7.2.0.tgz}
+
   tweetnacl@1.0.3:
     resolution: {integrity: sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw==, tarball: https://registry.npmjs.org/tweetnacl/-/tweetnacl-1.0.3.tgz}
 
@@ -3593,6 +3619,10 @@ packages:
   yocto-queue@0.1.0:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==, tarball: https://registry.npmjs.org/yocto-queue/-/yocto-queue-0.1.0.tgz}
     engines: {node: '>=10'}
+
+  zeed-dom@0.15.1:
+    resolution: {integrity: sha512-dtZ0aQSFyZmoJS0m06/xBN1SazUBPL5HpzlAcs/KcRW0rzadYw12deQBjeMhGKMMeGEp7bA9vmikMLaO4exBcg==, tarball: https://registry.npmjs.org/zeed-dom/-/zeed-dom-0.15.1.tgz}
+    engines: {node: '>=14.13.1'}
 
   zimmerframe@1.1.2:
     resolution: {integrity: sha512-rAbqEGa8ovJy4pyBxZM70hg4pE6gDgaQ0Sl9M3enG3I0d6H4XSAM3GeNGLKnsBpuijUow064sf7ww1nutC5/3w==, tarball: https://registry.npmjs.org/zimmerframe/-/zimmerframe-1.1.2.tgz}
@@ -4102,6 +4132,8 @@ snapshots:
       focus-trap: 7.6.4
       nanoid: 5.1.5
       svelte: 5.33.1
+
+  '@mixmark-io/domino@2.2.0': {}
 
   '@msgpack/msgpack@3.1.1': {}
 
@@ -4765,6 +4797,12 @@ snapshots:
     dependencies:
       '@tiptap/core': 2.12.0(@tiptap/pm@2.12.0)
 
+  '@tiptap/html@2.14.0(@tiptap/core@2.12.0(@tiptap/pm@2.12.0))(@tiptap/pm@2.12.0)':
+    dependencies:
+      '@tiptap/core': 2.12.0(@tiptap/pm@2.12.0)
+      '@tiptap/pm': 2.12.0
+      zeed-dom: 0.15.1
+
   '@tiptap/pm@2.12.0':
     dependencies:
       prosemirror-changeset: 2.3.0
@@ -5166,6 +5204,8 @@ snapshots:
       shebang-command: 2.0.0
       which: 2.0.2
 
+  css-what@6.1.0: {}
+
   css.escape@1.5.1: {}
 
   cssesc@3.0.0: {}
@@ -5238,6 +5278,8 @@ snapshots:
       tapable: 2.2.2
 
   entities@4.5.0: {}
+
+  entities@5.0.0: {}
 
   environment@1.1.0: {}
 
@@ -6979,6 +7021,10 @@ snapshots:
       turbo-windows-64: 2.5.3
       turbo-windows-arm64: 2.5.3
 
+  turndown@7.2.0:
+    dependencies:
+      '@mixmark-io/domino': 2.2.0
+
   tweetnacl@1.0.3: {}
 
   typedoc@0.28.4(typescript@5.8.3):
@@ -7286,6 +7332,11 @@ snapshots:
   yn@3.1.1: {}
 
   yocto-queue@0.1.0: {}
+
+  zeed-dom@0.15.1:
+    dependencies:
+      css-what: 6.1.0
+      entities: 5.0.0
 
   zimmerframe@1.1.2: {}
 
