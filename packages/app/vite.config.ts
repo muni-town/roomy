@@ -5,6 +5,7 @@ import wasm from "vite-plugin-wasm";
 import topLevelAwait from "vite-plugin-top-level-await";
 import arraybuffer from "vite-plugin-arraybuffer";
 
+const allowDir = `/var/${process.env.HOME}/.local/share/pnpm`;
 export default defineConfig({
   plugins: [
     arraybuffer(),
@@ -17,5 +18,10 @@ export default defineConfig({
     target: "es2022",
     chunkSizeWarningLimit: 2048,
     sourcemap: true,
+  },
+  server: {
+    fs: {
+      allow: [allowDir],
+    },
   },
 });
