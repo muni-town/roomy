@@ -2,9 +2,11 @@
   import { page } from '$app/state';
   import { initSearch } from '$lib/components/search/search.svelte';
   import { Space } from '$lib/jazz/schema';
-  import { CoState } from 'jazz-svelte';
+  import { wordlist } from '$lib/jazz/wordlist';
+  import { CoState, usePassphraseAuth } from 'jazz-svelte';
 
   let { children } = $props();
+  const auth = usePassphraseAuth({ wordlist });
 
   let space = $derived(
     new CoState(Space, page.params.space, {
@@ -24,6 +26,7 @@
   $effect(() => {
     if (!space.current) return;
     if (hasStartedIndexing) return;
+    if (auth.state !== "signedIn") return;
 
     hasStartedIndexing = true;
 

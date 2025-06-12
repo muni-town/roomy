@@ -141,9 +141,9 @@ export const user = {
 
     // When user session is removed, clean up user
     // and redirect using logout function
-    if (!session) {
-      this.logout();
-    }
+    // if (!session) {
+    //   //this.logout();
+    // }
   },
 
   /** Login a user using their handle, replacing the existing session if any. */
