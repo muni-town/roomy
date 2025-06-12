@@ -147,7 +147,7 @@
 
     console.log("Starting import");
 
-    const space = createSpace("Imported Space", undefined, undefined, false);
+    const space = createSpace("Imported Space", undefined, false);
 
     me.current.profile.joinedSpaces.push(space);
 

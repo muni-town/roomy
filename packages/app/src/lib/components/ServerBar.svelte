@@ -34,7 +34,8 @@
     me?.profile?.joinedSpaces?.some((x) => x?.id === openSpace.current?.id),
   );
 
-  async function createSpaceSubmit() {
+  async function createSpaceSubmit(evt: Event) {
+    evt.preventDefault();
     if (!newSpaceName) return;
 
     if (me?.profile && me.profile.joinedSpaces === undefined) {
@@ -48,6 +49,9 @@
     newSpaceName = "";
 
     isNewSpaceDialogOpen = false;
+
+    console.log("navigating to space", space.id);
+    navigate({ space: space.id });
   }
 </script>
 

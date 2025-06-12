@@ -11,7 +11,7 @@
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import { Button, Tabs } from "bits-ui";
-  import { Account, Group } from "jazz-tools";
+  import { Account, co, Group } from "jazz-tools";
   import {
     LastReadList,
     Message,
@@ -154,11 +154,20 @@
     e.preventDefault();
     const messageIds = <string[]>[];
 
-    // TODO: sort messages by their position/time created?
-    for (const messageId of threading.selectedMessages) {
+    const sortedMessages = threading.selectedMessages
+      .map((messageId) => {
+        const messageIndex = timeline.findIndex(
+          (message) => message === messageId,
+        );
+        return [messageId, messageIndex] as [string, number];
+      })
+      .sort((a, b) => a[1] - b[1]);
+
+    let firstMessage: co.loaded<typeof Message> | undefined = undefined;
+
+    for (const [messageId, _] of sortedMessages) {
       messageIds.push(messageId);
-      // remove from current thread timeline
-      // add to message.hiddenIn
+
       const message = await Message.load(messageId, {
         resolve: {
           hiddenIn: true,
@@ -168,14 +177,21 @@
         console.error("Message not found when creating thread", messageId);
         continue;
       }
-      if (threadId) {
-        message.hiddenIn.push(threadId);
+      // hide all messages except the first message in original thread
+      if (firstMessage) {
+        if (threadId) message.hiddenIn.push(threadId);
+      } else {
+        firstMessage = message;
       }
     }
 
-    // TODO: decide whether the thread needs a reference to it's original channel. That might be
-    // confusing because it's messages could have come from multiple channels?
-    let newThread = createThread(messageIds, threadTitleInput);
+    const channelId = channel.current?.id ?? thread.current?.channelId ?? "";
+
+    let newThread = createThread(messageIds, channelId, threadTitleInput);
+
+    if (firstMessage) {
+      firstMessage.threadId = newThread.id;
+    }
 
     space.current?.threads?.push(newThread);
 

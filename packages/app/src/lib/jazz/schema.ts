@@ -33,6 +33,8 @@ export const Message = co.map({
   embeds: z.optional(co.list(Embed)),
 
   author: z.string().optional(),
+
+  threadId: z.string().optional(),
 });
 
 export const Timeline = co.feed(z.string());
@@ -42,6 +44,8 @@ export const Thread = co.map({
   timeline: Timeline,
 
   softDeleted: z.boolean().optional(),
+
+  channelId: z.string(),
 });
 
 export const Page = co.map({
@@ -70,7 +74,6 @@ export const Category = co.map({
 
 export const Space = co.map({
   name: z.string(),
-  image: co.image().optional(),
 
   imageUrl: z.string().optional(),
 
@@ -79,7 +82,6 @@ export const Space = co.map({
   categories: co.list(Category),
 
   description: z.string().optional(),
-  emoji: z.string().optional(),
 
   members: co.list(co.account()),
 
@@ -149,3 +151,4 @@ export const RoomyAccount = co
   });
 
 export const SpaceMigrationReference = co.record(z.string(), z.string());
+export const IDList = co.list(z.string());

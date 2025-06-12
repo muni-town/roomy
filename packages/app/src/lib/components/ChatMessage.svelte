@@ -29,6 +29,7 @@
   import { setInputFocus } from "./ChatInput.svelte";
   import { convertReactionsToEmojis } from "$lib/utils/reactions";
   import { dev } from "$app/environment";
+  import MessageThreadBadge from "./Message/MessageThreadBadge.svelte";
 
   let {
     messageId,
@@ -374,6 +375,10 @@
           {/if}
         {/each}
       </div>
+
+      {#if message.current?.threadId && message.current.threadId !== threadId}
+        <MessageThreadBadge threadId={message.current.threadId} spaceId={space?.id ?? ""} />
+      {/if}
 
       <MessageReactions {reactions} {toggleReaction} />
     </div>

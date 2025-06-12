@@ -3,7 +3,6 @@
   import Drawer from "../Drawer.svelte";
   import Icon from "@iconify/svelte";
   import EmojiPicker from "../helper/EmojiPicker.svelte";
-  import { makeSpaceAdmin } from "$lib/jazz/utils";
 
   let {
     canEdit = true,

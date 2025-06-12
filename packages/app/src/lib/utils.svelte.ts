@@ -29,8 +29,10 @@ export function navigateSync(target: NavigationTarget) {
     let url = ``;
     if (target.space.includes(".")) {
       url += "/-";
+    } else {
+      url += `/${target.space}`;
     }
-    url += `/${target.space}`;
+    
     if (target.channel) {
       url += `/${target.channel}`;
     } else if (target.thread) {

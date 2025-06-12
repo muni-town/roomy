@@ -17,6 +17,7 @@
   import { afterNavigate } from "$app/navigation";
   import { LastReadList, RoomyAccount } from "$lib/jazz/schema";
   import { wordlist } from "$lib/jazz/wordlist";
+  import { addToAllAccountsList } from "$lib/jazz/utils";
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
@@ -48,7 +49,18 @@
       repo: user.agent.assertDid,
       rkey: "self",
     });
+
+    addToAllAccountsList(accountId);
+
     return true;
+  }
+
+  async function removeProfileRecord() {
+    await user.agent?.com.atproto.repo.deleteRecord({
+      collection: "chat.roomy.profile",
+      repo: user.agent.assertDid,
+      rkey: "self",
+    });
   }
 
   async function checkProfileRecord() {

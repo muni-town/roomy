@@ -3,6 +3,7 @@ import {
   Category,
   Channel,
   Embed,
+  IDList,
   ImageUrlEmbed,
   InboxItem,
   Message,
@@ -14,6 +15,7 @@ import {
   Thread,
   Timeline,
 } from "./schema";
+import { allAccountsListId, allSpacesListId } from "./ids";
 
 export function publicGroup(readWrite: "reader" | "writer" = "reader") {
   const group = Group.create();
@@ -30,6 +32,7 @@ export function createChannel(name: string) {
     {
       name: "main",
       timeline: Timeline.create([], publicWriteGroup),
+      channelId: "",
     },
     publicReadGroup,
   );
@@ -43,13 +46,14 @@ export function createChannel(name: string) {
     publicReadGroup,
   );
 
+  thread.channelId = channel.id;
+
   return channel;
 }
 
 export function createSpace(
   name: string,
   description?: string,
-  emoji?: string,
   createDefaultChannel: boolean = true,
 ) {
   const channel = createDefaultChannel ? createChannel("general") : undefined;
@@ -69,7 +73,6 @@ export function createSpace(
       name,
       channels: co.list(Channel).create(channel ? [channel] : [], readerGroup),
       description,
-      emoji,
       members: co
         .list(co.account())
         .create([Account.getMe()], publicWriteGroup),
@@ -83,6 +86,8 @@ export function createSpace(
     },
     readerGroup,
   );
+
+  addToAllSpacesList(space.id);
 
   return space;
 }
@@ -205,7 +210,11 @@ export function createPage(name: string) {
   return page;
 }
 
-export function createThread(messagesIds: string[], name?: string) {
+export function createThread(
+  messagesIds: string[],
+  channelId: string,
+  name?: string,
+) {
   const publicWriteGroup = publicGroup("writer");
   const publicReadGroup = publicGroup("reader");
 
@@ -213,6 +222,7 @@ export function createThread(messagesIds: string[], name?: string) {
     {
       name: name || "New Thread",
       timeline: Timeline.create([...messagesIds], publicWriteGroup),
+      channelId,
     },
     publicReadGroup,
   );
@@ -291,4 +301,16 @@ export function createInbox() {
   const inbox = co.list(InboxItem).create([], group);
 
   return inbox;
+}
+
+export async function addToAllSpacesList(spaceId: string) {
+  const allSpacesList = await IDList.load(allSpacesListId);
+  if (!allSpacesList) return;
+  allSpacesList.push(spaceId);
+}
+
+export async function addToAllAccountsList(accountId: string) {
+  const allAccountsList = await IDList.load(allAccountsListId);
+  if (!allAccountsList) return;
+  allAccountsList.push(accountId);
 }
