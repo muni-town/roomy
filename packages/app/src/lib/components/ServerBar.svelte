@@ -74,6 +74,16 @@
       <Icon icon="iconamoon:home-fill" font-size="1.75em" />
     </button>
 
+    <!-- Messages Button -->
+    <a
+      href="/messages"
+      class={`p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer relative transition-all duration-200
+        ${page.url.pathname.startsWith('/messages') ? 'ring-0.5 ring-offset-0 ring-primary/30 border border-primary' : ''}`}
+      title="Direct Messages"
+    >
+      <Icon icon="tabler:mail" font-size="1.75em" />
+    </a>
+
     {#if me?.profile?.blueskyHandle}
       <Dialog
         title="Create Space"

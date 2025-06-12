@@ -188,14 +188,14 @@
       "
   >
     <!-- Content -->
-      <ServerBar
-        spaces={me.current?.profile.joinedSpaces}
-        visible={isSpacesVisible.value || !page.params.space}
-        me={me.current}
-      />
-      {#if page.params.space}
-        <SidebarMain />
-      {/if}
+    <ServerBar
+      spaces={me.current?.profile.joinedSpaces}
+      visible={isSpacesVisible.value || !page.params.space}
+      me={me.current}
+    />
+    {#if page.params.space}
+      <SidebarMain />
+    {/if}
     <!-- Overlay -->
     {#if page.params.space}
       <button
@@ -210,5 +210,7 @@
     {/if}
   </div>
 
-  {@render children()}
+  <div class={page.url.pathname === "/messages" ? "ml-20" : ""}>
+    {@render children()}
+  </div>
 </div>

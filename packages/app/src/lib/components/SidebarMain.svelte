@@ -22,7 +22,7 @@
   import SpaceSidebar from "./ui/SpaceSidebar.svelte";
 
   let space = $derived(
-    new CoState(Space, page.params.space, {
+    page.params?.space ? new CoState(Space, page.params.space, {
       resolve: {
         channels: {
           $each: {
@@ -56,10 +56,11 @@
           $onError: null,
         },
       },
-    }),
+    }) : null
   );
+  
   let links = $derived(
-    space?.current?.threads?.find((x) => x?.name === "@links"),
+    space?.current?.threads?.find((x) => x?.name === "@links")
   );
 
   const me = new AccountCoState(RoomyAccount, {
@@ -83,7 +84,14 @@
       const thread = createThread([], "@links");
       space.current?.threads?.push(thread);
 
-      navigate({ space: page.params.space!, thread: thread.id });
+      // Use $page store with .subscribe to get the current value
+      const unsubscribe = page.subscribe(($page) => {
+        if ($page?.params?.space) {
+          navigate({ space: $page.params.space, thread: thread.id });
+        }
+      });
+      // Immediately unsubscribe to avoid memory leaks
+      unsubscribe();
     } catch (e) {
       console.error(e);
     }
@@ -91,6 +99,8 @@
 
   function allThreads() {
     let threads = space?.current?.threads || [];
+    // Use $page store with .get() to get the current value
+    const currentSpace = $page?.params?.space || '';
     return threads
       .filter(
         (thread) =>
@@ -99,7 +109,7 @@
       .map((thread) => {
         return {
           target: {
-            space: page.params.space!,
+            space: currentSpace,
             thread: thread?.id,
           },
           name: thread?.name || "",
@@ -194,11 +204,7 @@
     getContext("isSpacesVisible");
 </script>
 
-<!-- <nav
-  class="w-[min(70vw,16rem)] bg-base-300 flex h-full flex-col gap-1 border-r-2 border-base-300"
-  style="scrollbar-width: thin;"
-> -->
-<SpaceSidebar>
+ <SpaceSidebar>
   <!-- Header -->
   <div
     class="w-full pt-4 pb-1 px-2 h-fit grid grid-cols-[auto_1fr_auto] justify-center items-center"
