@@ -62,8 +62,6 @@ export function createSpace(
   readerGroup.addMember("everyone", "reader");
   readerGroup.extend(adminGroup);
 
-  const me = Account.getMe();
-
   const publicWriteGroup = publicGroup("writer");
 
   const space = Space.create(
@@ -76,7 +74,8 @@ export function createSpace(
         .list(co.account())
         .create([Account.getMe()], publicWriteGroup),
       version: 1,
-      adminId: me.id,
+      creatorId: Account.getMe().id,
+      adminGroupId: adminGroup.id,
       threads: co.list(Thread).create([], publicWriteGroup),
       pages: co.list(Page).create([], publicWriteGroup),
       categories: co.list(Category).create([], readerGroup),
@@ -131,18 +130,30 @@ export type ImageUrlEmbedCreate = {
   };
 };
 
+export async function makeSpaceAdmin(spaceId: string, accountId: string) {
+  const space = await Space.load(spaceId);
+  if (!space) return;
+  const adminGroup = await Group.load(space.adminGroupId);
+  if (!adminGroup) return;
+  const account = await Account.load(accountId);
+  console.log("account", account);
+  if (!account) return;
+  adminGroup.addMember(account, "admin");
+  space.adminGroupId = adminGroup.id;
+
+  return space;
+}
+
 export function createMessage(
   input: string,
   replyTo?: string,
-  admin?: Account,
+  admin?: co.loaded<typeof Group>,
   embeds?: ImageUrlEmbedCreate[],
 ) {
   const readingGroup = publicGroup("reader");
 
   if (admin) {
-    const adminGroup = Group.create();
-    adminGroup.addMember(admin, "admin");
-    readingGroup.extend(adminGroup);
+    readingGroup.extend(admin);
   }
 
   let embedsList;

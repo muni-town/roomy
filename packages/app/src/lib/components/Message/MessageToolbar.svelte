@@ -3,6 +3,7 @@
   import Drawer from "../Drawer.svelte";
   import Icon from "@iconify/svelte";
   import EmojiPicker from "../helper/EmojiPicker.svelte";
+  import { makeSpaceAdmin } from "$lib/jazz/utils";
 
   let {
     canEdit = true,
@@ -11,7 +12,9 @@
     deleteMessage,
     isDrawerOpen = $bindable(false),
     toggleReaction,
-    setReplyTo
+    setReplyTo,
+    isAdmin,
+    makeAdmin,
   }: {
     canEdit?: boolean;
     canDelete?: boolean;
@@ -20,6 +23,8 @@
     toggleReaction: (reaction: string) => void;
     isDrawerOpen?: boolean;
     setReplyTo: () => void;
+    isAdmin: boolean;
+    makeAdmin: () => void;
   } = $props();
 
   let isEmojiDrawerPickerOpen = $state(false);
@@ -137,6 +142,15 @@
       class="dz-btn dz-btn-ghost dz-btn-square"
     >
       <Icon icon="tabler:trash" class="text-warning" />
+    </Toolbar.Button>
+  {/if}
+
+  {#if isAdmin}
+    <Toolbar.Button
+      onclick={() => makeAdmin()}
+      class="dz-btn dz-btn-ghost dz-btn-square"
+    >
+      <Icon icon="tabler:user-plus" />
     </Toolbar.Button>
   {/if}
 

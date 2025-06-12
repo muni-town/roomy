@@ -19,7 +19,7 @@
   } from "$lib/jazz/schema";
   import { Account, co } from "jazz-tools";
   import MessageToolbar from "./Message/MessageToolbar.svelte";
-  import { messageHasAdmin, publicGroup } from "$lib/jazz/utils";
+  import { makeSpaceAdmin, messageHasAdmin, publicGroup } from "$lib/jazz/utils";
   import MessageReactions from "./Message/MessageReactions.svelte";
   import ChatInput from "./ChatInput.svelte";
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
@@ -28,6 +28,7 @@
   import ImageUrlEmbed from "./Message/embeds/ImageUrlEmbed.svelte";
   import { setInputFocus } from "./ChatInput.svelte";
   import { convertReactionsToEmojis } from "$lib/utils/reactions";
+  import { dev } from "$app/environment";
 
   let {
     messageId,
@@ -82,7 +83,7 @@
 
   const authorData = $derived.by(() => {
     // if the message has an author in the format of discord:username:avatarUrl,
-    // and the message is made by the adming, return the profile data otherwise return profile data
+    // and the message is made by the admin, return the profile data otherwise return profile data
     if (isImportedMessage) {
       const author = message.current?.author?.split(":");
       return {
@@ -228,6 +229,7 @@
   });
 </script>
 
+
 {#if shouldShow}
   <div
     id={message.current?.id}
@@ -349,6 +351,12 @@
           {deleteMessage}
           {editMessage}
           {setReplyTo}
+          isAdmin={dev && (isAdmin ?? false)}
+          makeAdmin={() => {
+            if(space?.id && message.current?._edits.content?.by?.id) {
+              makeSpaceAdmin(space.id, message.current._edits.content.by.id);
+            }
+          }}
         />
       {/if}
 

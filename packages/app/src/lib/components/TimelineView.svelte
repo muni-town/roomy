@@ -11,7 +11,7 @@
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import { Button, Tabs } from "bits-ui";
-  import { Account } from "jazz-tools";
+  import { Account, Group } from "jazz-tools";
   import {
     LastReadList,
     Message,
@@ -64,7 +64,8 @@
     space.current?.threads?.find((x) => x?.name === "@links"),
   );
 
-  let admin = $derived(new CoState(Account, space.current?.adminId));
+  let creator = $derived(new CoState(Account, space.current?.creatorId));
+  let adminGroup = $derived(new CoState(Group, space.current?.adminGroupId));
 
   let channel = $derived(
     new CoState(Channel, page.params.channel, {
@@ -238,7 +239,7 @@
     const message = createMessage(
       messageInput,
       undefined,
-      admin.current || undefined,
+      adminGroup.current || undefined,
       filesUrls,
     );
 
@@ -292,7 +293,7 @@
         const message = createMessage(
           `<a href="${link}">${link}</a>`,
           undefined,
-          admin.current || undefined,
+          adminGroup.current || undefined,
         );
         links.timeline.push(message.id);
       }
@@ -407,7 +408,7 @@
 </script>
 
 <!-- hack to get the admin to load ^^ it has to be used somewhere in this file -->
-{#if admin.current}
+{#if creator.current}
   <div class="absolute top-0 left-0"></div>
 {/if}
 
@@ -488,7 +489,7 @@
           space={space.current}
           {timeline}
           isAdmin={isSpaceAdmin(space.current)}
-          admin={admin.current}
+          admin={creator.current}
           {threadId}
           allowedToInteract={hasJoinedSpace && !isBanned}
         />

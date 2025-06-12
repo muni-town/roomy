@@ -84,7 +84,9 @@ export const Space = co.map({
   members: co.list(co.account()),
 
   version: z.number().optional(),
-  adminId: z.string(),
+  creatorId: z.string(),
+
+  adminGroupId: z.string(),
 
   threads: co.list(Thread),
   pages: co.list(Page),

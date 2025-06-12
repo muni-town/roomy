@@ -17,7 +17,6 @@
   import { afterNavigate } from "$app/navigation";
   import { LastReadList, RoomyAccount } from "$lib/jazz/schema";
   import { wordlist } from "$lib/jazz/wordlist";
-  import "jazz-inspector-element";
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
