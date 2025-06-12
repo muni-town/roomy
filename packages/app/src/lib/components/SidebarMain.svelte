@@ -9,7 +9,7 @@
   import AccordionTree from "./AccordionTree.svelte";
   import SidebarChannelList from "./SidebarChannelList.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
-  import { page } from "$app/state";
+  import { page } from "$app/stores";
   import { AccountCoState, CoState } from "jazz-svelte";
   import {
     createCategory,
@@ -22,7 +22,7 @@
   import { co } from "jazz-tools";
 
   let space = $derived(
-    new CoState(Space, page.params.space, {
+    $page?.params?.space ? new CoState(Space, $page.params.space, {
       resolve: {
         channels: {
           $each: true,
@@ -38,10 +38,11 @@
           $onError: null,
         },
       },
-    }),
+    }) : null
   );
+  
   let links = $derived(
-    space?.current?.threads?.find((x) => x?.name === "@links"),
+    space?.current?.threads?.find((x) => x?.name === "@links")
   );
 
   const me = new AccountCoState(RoomyAccount, {
@@ -65,7 +66,14 @@
       const thread = createThread([], "@links");
       space.current?.threads?.push(thread);
 
-      navigate({ space: page.params.space!, thread: thread.id });
+      // Use $page store with .subscribe to get the current value
+      const unsubscribe = page.subscribe(($page) => {
+        if ($page?.params?.space) {
+          navigate({ space: $page.params.space, thread: thread.id });
+        }
+      });
+      // Immediately unsubscribe to avoid memory leaks
+      unsubscribe();
     } catch (e) {
       console.error(e);
     }
@@ -73,6 +81,8 @@
 
   function allThreads() {
     let threads = space?.current?.threads || [];
+    // Use $page store with .get() to get the current value
+    const currentSpace = $page?.params?.space || '';
     return threads
       .filter(
         (thread) =>
@@ -81,7 +91,7 @@
       .map((thread) => {
         return {
           target: {
-            space: page.params.space!,
+            space: currentSpace,
             thread: thread?.id,
           },
           name: thread?.name || "",
@@ -278,23 +288,25 @@
     </menu>
   {/if}
 
-  <!-- Index Chat Toggle -->
-  <Tabs.Root bind:value={tab} class="py-1 px-2">
-    <Tabs.List class="flex w-full rounded-lg dz-tabs-box">
-      <Tabs.Trigger value="board" class="grow dz-tab flex gap-2">
-        <Icon
-          icon="tabler:clipboard-text{tab === 'board' ? '-filled' : ''}"
-          class="text-2xl"
-        />
-      </Tabs.Trigger>
-      <Tabs.Trigger value="chat" class="grow dz-tab flex gap-2">
-        <Icon
-          icon="tabler:message{tab === 'chat' ? '-filled' : ''}"
-          class="text-2xl"
-        />
-      </Tabs.Trigger>
-    </Tabs.List>
-  </Tabs.Root>
+  <!-- Navigation Tabs -->
+  <div class="flex flex-col gap-1 px-2">
+    <Tabs.Root bind:value={tab} class="mb-1">
+      <Tabs.List class="flex w-full rounded-lg dz-tabs-box">
+        <Tabs.Trigger value="board" class="grow dz-tab flex gap-2">
+          <Icon
+            icon="tabler:clipboard-text{tab === 'board' ? '-filled' : ''}"
+            class="text-2xl"
+          />
+        </Tabs.Trigger>
+        <Tabs.Trigger value="chat" class="grow dz-tab flex gap-2">
+          <Icon
+            icon="tabler:message{tab === 'chat' ? '-filled' : ''}"
+            class="text-2xl"
+          />
+        </Tabs.Trigger>
+      </Tabs.List>
+    </Tabs.Root>
+  </div>
   <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-clip mx-1">
     {#if tab === "board"}
       {#if links}
