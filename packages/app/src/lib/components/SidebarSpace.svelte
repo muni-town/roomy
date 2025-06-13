@@ -5,20 +5,43 @@
   import TooltipPortal from "./TooltipPortal.svelte";
   import { page } from "$app/state";
   import { co } from "jazz-tools";
-  import { Space } from "$lib/jazz/schema";
+  import { Space, RoomyAccount } from "$lib/jazz/schema";
 
   type Props = {
     space: co.loaded<typeof Space> | null | undefined;
     hasJoined?: boolean;
+    me: co.loaded<typeof RoomyAccount> | null | undefined;
   };
 
-  const { space, hasJoined = true }: Props = $props();
+  const { space, hasJoined = true, me }: Props = $props();
 
   // Tooltip state
   let activeTooltip = $state("");
   let tooltipPosition = $state({ x: 0, y: 0 });
 
   let isActive = $derived(page.url.pathname.includes(space?.id || ""));
+
+  function leaveSpace() {
+    if (!space?.id || !me?.profile?.joinedSpaces || !space.members) return;
+
+    // Remove the space from the user's joined spaces
+    const spaceIndex = me.profile.joinedSpaces.findIndex(
+      (s) => s?.id === space.id,
+    );
+    if (spaceIndex !== -1) {
+      me.profile.joinedSpaces.splice(spaceIndex, 1);
+    }
+
+    const memberIndex = space.members.findIndex((m) => m?.id === me.id);
+    if (memberIndex !== -1) {
+      space.members.splice(memberIndex, 1);
+    }
+
+    // If the user is currently viewing this space, navigate to home
+    if (isActive) {
+      navigate("home");
+    }
+  }
 </script>
 
 <TooltipPortal
@@ -33,10 +56,7 @@
     {
       label: "Leave Space",
       icon: "mdi:exit-to-app",
-      onselect: () => {
-        // globalState.roomy?.spaces.remove(i);
-        // globalState.roomy?.commit();
-      },
+      onselect: leaveSpace,
     },
   ]}
 >
@@ -59,7 +79,12 @@
       ${isActive ? "ring-0.5 ring-offset-0 ring-primary/30 border border-primary" : ""}
       transition-all duration-200`}
   >
-    <div class={["flex items-center justify-center overflow-hidden", !hasJoined && "opacity-50"]}>
+    <div
+      class={[
+        "flex items-center justify-center overflow-hidden",
+        !hasJoined && "opacity-50",
+      ]}
+    >
       {#if space?.imageUrl}
         <img
           src={space?.imageUrl}
