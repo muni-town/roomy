@@ -157,6 +157,7 @@
   let newChannelCategory = $state(undefined) as
     | undefined
     | co.loaded<typeof Category>;
+
   async function createChannelSubmit() {
     if (!space?.current) return;
 
@@ -172,6 +173,7 @@
     newChannelName = "";
     showNewChannelDialog = false;
   }
+
   let isSpacesVisible: ReturnType<typeof Toggle> =
     getContext("isSpacesVisible");
   let tab: "board" | "chat" = $state("chat");
@@ -275,6 +277,7 @@
           </Button.Root>
         </form>
       </Dialog>
+
     </menu>
   {/if}
 
