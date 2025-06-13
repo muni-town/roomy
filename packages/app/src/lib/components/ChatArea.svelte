@@ -40,10 +40,9 @@
   let slicedTimeline = $derived(timeline.slice(-showLastN));
   let viewport: HTMLDivElement = $state(null!);
 
-
-  onMount(()=>{
-    setTimeout(scrollToBottom,2000)
-  })
+  // Track initial load for auto-scroll
+  let hasInitiallyScrolled = $state(false);
+  let lastTimelineLength = $state(0);
 
   function scrollToBottom() {
     if (!virtualizer) return;
@@ -69,14 +68,31 @@
 
   setContext("scrollToMessage", scrollToMessage);
 
+  // Handle route changes and initial load - scroll to bottom once
   $effect(() => {
-    page.route; // Scroll-to-end when route changes
-    if (!viewport || !virtualizer) return;
-    if (timeline) {
-      virtualizer.scrollToIndex(timeline.length - 1, { align: "start" });
+    page.route; // Trigger on route changes
+    hasInitiallyScrolled = false; // Reset for new route
+  });
 
-      chatArea.scrollToMessage = scrollToMessage;
+  // Simple initial scroll to bottom when timeline first loads
+  $effect(() => {
+    if (!hasInitiallyScrolled && timeline.length > 0 && virtualizer) {
+      setTimeout(() => {
+        scrollToBottom();
+        hasInitiallyScrolled = true;
+      }, 200);
     }
+    chatArea.scrollToMessage = scrollToMessage;
+  });
+
+  // Handle new messages - only auto-scroll if user is at bottom
+  $effect(() => {
+    if (timeline.length > lastTimelineLength && lastTimelineLength > 0) {
+      if (isAtBottom && virtualizer) {
+        setTimeout(() => scrollToBottom(), 50);
+      }
+    }
+    lastTimelineLength = timeline.length;
   });
 
   let isShifting = $state(false);
