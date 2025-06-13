@@ -1,11 +1,11 @@
 <script lang="ts">
   import { page } from "$app/state";
   import type { Channel, RoomyAccount, Space } from "$lib/jazz/schema";
-  import { isSpaceAdmin } from "$lib/jazz/utils";
+  import { isSpaceAdmin, publicGroup } from "$lib/jazz/utils";
   import { navigate, navigateSync } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
   import { Button } from "@fuxui/base";
-  import { co } from "jazz-tools";
+  import { co, z } from "jazz-tools";
 
   let {
     channel,
@@ -47,7 +47,15 @@
 
     return channel.subThreads.filter((thread) => {
       if (!thread || thread.softDeleted) return false;
-
+      
+      // Check if explicitly unsubscribed
+      try {
+        const isUnsubscribed = me?.profile?.threadSubscriptions?.some?.(subId => subId === `unsubscribe:${thread.id}`);
+        if (isUnsubscribed) return false;
+      } catch (e) {
+        // Ignore subscription check errors to prevent breaking the channel list
+      }
+      
       // Check if I created the thread
       if (thread._edits?.name?.by?.id === me.id) return true;
 
@@ -67,6 +75,19 @@
       return false;
     });
   });
+
+  function unsubscribeFromThread(threadId: string) {
+    try {
+      if (!me?.profile) return;
+      
+      if (!me.profile.threadSubscriptions) {
+        me.profile.threadSubscriptions = co.list(z.string()).create([], publicGroup("writer"));
+      }
+      me.profile.threadSubscriptions.push(`unsubscribe:${threadId}`);
+    } catch (e) {
+      console.error('Failed to unsubscribe from thread:', e);
+    }
+  }
 
   const threadNotifications = $derived.by(() => {
     if (!channelThreads) return 0;
@@ -150,17 +171,20 @@
             const latestDate = latestEntries.at(-1)?.madeAt;
             return latestDate ? new Date(lastRead) < latestDate : false;
           })()}
-
           <div class="group flex items-center gap-1 relative">
             <Button
               variant="ghost"
               data-current={thread.id === page.params.thread}
+              title={thread.name}
               onclick={() => {
                 navigate({
                   space: page.params.space!,
                   thread: thread.id,
                 });
               }}
+               class="flex-1 cursor-pointer px-1 dz-btn dz-btn-ghost justify-start border {thread.id === page.params.thread
+                 ? 'border-primary text-primary'
+                : 'border-transparent'} group-hover:pr-7"
             >
               <h4
                 class="flex justify-start items-center w-full gap-2 px-2 text-sm"
@@ -170,12 +194,23 @@
 
                 {#if threadNotifs}
                   <span
-                    class="inline-flex items-center justify-center bg-primary font-bold text-base-100 rounded-full size-5 text-xs"
+                    class="inline-flex items-center justify-center bg-primary font-bold text-base-100 rounded-full size-5 text-xs shrink-0 ml-auto"
                   >
                     {threadNotifs}
                   </span>
                 {/if}
               </h4>
+            </Button>
+
+            <Button
+              title="Unsubscribe from thread"
+              class="absolute right-0 top-0 bottom-0 w-6 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center text-error hover:bg-error/10 rounded"
+              onclick={(e) => {
+                e.stopPropagation();
+                unsubscribeFromThread(thread.id);
+              }}
+            >
+              <Icon icon="tabler:x" class="size-3" />
             </Button>
 
             {#if isThreadNew}

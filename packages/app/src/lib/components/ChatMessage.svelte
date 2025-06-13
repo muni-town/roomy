@@ -19,7 +19,11 @@
   } from "$lib/jazz/schema";
   import { Account, co } from "jazz-tools";
   import MessageToolbar from "./Message/MessageToolbar.svelte";
-  import { makeSpaceAdmin, messageHasAdmin, publicGroup } from "$lib/jazz/utils";
+  import {
+    makeSpaceAdmin,
+    messageHasAdmin,
+    publicGroup,
+  } from "$lib/jazz/utils";
   import MessageReactions from "./Message/MessageReactions.svelte";
   import ChatInput from "./ChatInput.svelte";
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
@@ -80,18 +84,35 @@
     new CoState(RoomyProfile, message.current?._edits.content?.by?.profile?.id),
   );
 
-  let isImportedMessage = $derived(message.current?.author?.startsWith("discord:") || message.current?.author?.startsWith("app:"));
+  let isImportedMessage = $derived(
+    message.current?.author?.startsWith("discord:") ||
+      message.current?.author?.startsWith("app:") ||
+      message.current?.author?.startsWith("atproto"),
+  );
 
   const authorData = $derived.by(() => {
-    // if the message has an author in the format of discord:username:avatarUrl,
+    // if the message has an author in the format of discord:username:avatarUrl or atproto||handle||displayName||did||uri||avatar,
     // and the message is made by the admin, return the profile data otherwise return profile data
     if (isImportedMessage) {
-      const author = message.current?.author?.split(":");
-      return {
-        name: author?.[1] ?? "Unknown",
-        imageUrl: decodeURIComponent(author?.[2] ?? ""),
-        id: undefined,
-      };
+      if (message.current?.author?.startsWith("atproto")) {
+        // ATProto format: atproto||handle||displayName||did||uri||avatar
+        const author = message.current.author.split("||");
+        const avatarUrl = author?.[5] ? decodeURIComponent(author[5]) : "";
+        console.log(`👤 ATProto author data - Handle: ${author?.[1]}, Display: ${author?.[2]}, Avatar: ${avatarUrl}`);
+        return {
+          name: `${author?.[2] ?? author?.[1] ?? "Unknown"} (@${author?.[1] ?? "unknown"})`,
+          imageUrl: avatarUrl,
+          id: undefined,
+        };
+      } else {
+        // Discord format: discord:username:avatarUrl
+        const author = message.current?.author?.split(":");
+        return {
+          name: author?.[1] ?? "Unknown",
+          imageUrl: decodeURIComponent(author?.[2] ?? ""),
+          id: undefined,
+        };
+      }
     }
     return profile.current;
   });
@@ -102,19 +123,42 @@
     if (previousMessage.current?.softDeleted) return false;
 
     if (isImportedMessage) {
-      const previousAuthor = previousMessage.current?.author?.split(":");
-      const currentAuthor = message.current?.author?.split(":");
-      if (
-        previousAuthor?.[1] === currentAuthor?.[1] &&
-        previousAuthor?.[2] === currentAuthor?.[2]
-      ) {
-        return (
-          (message.current?.createdAt.getTime() ?? 0) -
-            (previousMessage?.current?.createdAt.getTime() ?? 0) <
-          1000 * 60 * 5
-        );
-      } else {
-        return false;
+      // Handle ATProto with || delimiter
+      if (message.current?.author?.startsWith("atproto") && previousMessage.current?.author?.startsWith("atproto")) {
+        const previousAuthor = previousMessage.current.author.split("||");
+        const currentAuthor = message.current.author.split("||");
+        
+        // Compare by handle (index 1) and DID (index 3)
+        if (
+          previousAuthor?.[1] === currentAuthor?.[1] &&
+          previousAuthor?.[3] === currentAuthor?.[3]
+        ) {
+          return (
+            (message.current?.createdAt.getTime() ?? 0) -
+              (previousMessage?.current?.createdAt.getTime() ?? 0) <
+            1000 * 60 * 5
+          );
+        } else {
+          return false;
+        }
+      }
+      // Handle Discord with : delimiter
+      else {
+        const previousAuthor = previousMessage.current?.author?.split(":");
+        const currentAuthor = message.current?.author?.split(":");
+        
+        if (
+          previousAuthor?.[1] === currentAuthor?.[1] &&
+          previousAuthor?.[2] === currentAuthor?.[2]
+        ) {
+          return (
+            (message.current?.createdAt.getTime() ?? 0) -
+              (previousMessage?.current?.createdAt.getTime() ?? 0) <
+            1000 * 60 * 5
+          );
+        } else {
+          return false;
+        }
       }
     }
     if (
@@ -229,7 +273,6 @@
     return true;
   });
 </script>
-
 
 {#if shouldShow}
   <div
@@ -354,7 +397,7 @@
           {setReplyTo}
           isAdmin={dev && (isAdmin ?? false)}
           makeAdmin={() => {
-            if(space?.id && message.current?._edits.content?.by?.id) {
+            if (space?.id && message.current?._edits.content?.by?.id) {
               makeSpaceAdmin(space.id, message.current._edits.content.by.id);
             }
           }}
@@ -377,7 +420,10 @@
       </div>
 
       {#if message.current?.threadId && message.current.threadId !== threadId}
-        <MessageThreadBadge threadId={message.current.threadId} spaceId={space?.id ?? ""} />
+        <MessageThreadBadge
+          threadId={message.current.threadId}
+          spaceId={space?.id ?? ""}
+        />
       {/if}
 
       <MessageReactions {reactions} {toggleReaction} />

@@ -69,6 +69,9 @@
           $each: true,
           $onError: null,
         },
+        threadSubscriptions: {
+          $onError: null,
+        },
       },
       root: {
         lastRead: true,
@@ -175,6 +178,7 @@
   let newChannelCategory = $state(undefined) as
     | undefined
     | co.loaded<typeof Category>;
+
   async function createChannelSubmit() {
     if (!space?.current) return;
 
@@ -190,15 +194,12 @@
     newChannelName = "";
     showNewChannelDialog = false;
   }
+
   let isSpacesVisible: ReturnType<typeof Toggle> =
     getContext("isSpacesVisible");
 </script>
 
-<!-- <nav
-  class="w-[min(70vw,16rem)] bg-base-300 flex h-full flex-col gap-1 border-r-2 border-base-300"
-  style="scrollbar-width: thin;"
-> -->
-<SpaceSidebar>
+ <SpaceSidebar>
   <!-- Header -->
   <div
     class="w-full pt-4 pb-1 px-2 h-fit grid grid-cols-[auto_1fr_auto] justify-center items-center"
@@ -293,6 +294,7 @@
           </Button.Root>
         </form>
       </Dialog>
+
     </menu>
   {/if}
 
