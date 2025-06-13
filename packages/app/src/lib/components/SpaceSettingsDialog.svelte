@@ -4,7 +4,6 @@
   import Icon from "@iconify/svelte";
   import { AvatarMarble } from "svelte-boring-avatars";
   import { user } from "$lib/user.svelte";
-  import { resolveLeafId } from "$lib/utils.svelte";
   import toast from "svelte-french-toast";
   import { CoState } from "jazz-svelte";
   import { Space } from "$lib/jazz/schema";
@@ -15,10 +14,8 @@
   let space = $derived(new CoState(Space, page.params.space));
 
   let saveSpaceLoading = $state(false);
-  let verificationFailed = $state(false);
   let avatarPreviewUrl = $derived(space.current?.imageUrl ?? "");
   let uploadingAvatar = $state(false);
-  let newSpaceHandle = $state("");
   let spaceNameInput = $derived(space.current?.name ?? "");
   let bannedHandlesInput = $derived(space.current?.bans?.join(",") ?? "");
   let avatarFile = $state<File | null>(null);
@@ -82,51 +79,6 @@
       avatarFile = null;
     }
   }
-  async function saveSpaceHandle() {
-    if (!space.current) return;
-    saveSpaceLoading = true;
-
-    if (!newSpaceHandle) {
-      // globalState.space.handles((h) => h.clear());
-      // globalState.space.commit();
-      saveSpaceLoading = false;
-      showSpaceSettings = false;
-      toast.success("Saved space without handle.", {
-        position: "bottom-right",
-      });
-      return;
-    }
-
-    try {
-      const id = await resolveLeafId(newSpaceHandle);
-      if (!id) {
-        verificationFailed = true;
-        saveSpaceLoading = false;
-        return;
-      }
-      // globalState.space.handles((h) => {
-      //   h.clear();
-      //   h.push(newSpaceHandle);
-      // });
-      // globalState.space.commit();
-      saveSpaceLoading = false;
-      showSpaceSettings = false;
-      toast.success("Space handle successfully verified & saved!", {
-        position: "bottom-right",
-      });
-    } catch (e) {
-      saveSpaceLoading = false;
-      verificationFailed = true;
-      console.error(e);
-    }
-  }
-
-  let loadingExport = $state(false);
-  async function exportSpace() {
-    loadingExport = true;
-    await export_space();
-    loadingExport = false;
-  }
 </script>
 
 <Dialog title="Space Settings" bind:isDialogOpen={showSpaceSettings}>
@@ -140,19 +92,6 @@
   {/snippet}
 
   <div class="max-h-[80vh] overflow-y-auto pr-2">
-    <Button.Root
-      class="dz-btn dz-btn-primary w-full mb-8 dz-btn-lg"
-      onclick={exportSpace}
-    >
-      {#if loadingExport}
-        <span class="dz-loading dz-loading-spinner"></span>
-      {/if}
-      {#if loadingExport}
-        Exporting...
-      {:else}
-        Export Space
-      {/if}
-    </Button.Root>
 
     <form onsubmit={saveSpaceName} class="flex flex-col gap-3 mb-8">
       <label class="dz-input w-full">
