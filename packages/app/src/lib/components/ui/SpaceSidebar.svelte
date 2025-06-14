@@ -24,8 +24,8 @@
   <div
     class={cn(
       borderClasses,
-      "fixed my-6 ml-0.5 overflow-y-hidden rounded-r-3xl",
-      "inset-auto left-16 top-0 z-40 block h-[calc(100dvh-3rem)] w-64",
+      "fixed ml-0.5 overflow-y-hidden",
+      "inset-auto left-14 top-0 bottom-0 z-40 block h-[100dvh] w-64",
       className,
     )}
     {...restProps}

@@ -61,7 +61,7 @@
 </script>
 
 <main
-  class="flex flex-col gap-4 p-4 grow min-w-0 h-full overflow-clip bg-base-100"
+  class="flex flex-col gap-4 p-4 grow min-w-0 h-full w-screen overflow-clip"
 >
   {@render children()}
 </main>
