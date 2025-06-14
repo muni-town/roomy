@@ -51,6 +51,15 @@ export function createChannel(name: string) {
   return channel;
 }
 
+export function enableAtprotoFeeds(channel: co.loaded<typeof Channel>, feedUris: string[], threadsOnly = false) {
+  channel.showAtprotoFeeds = true;
+  channel.atprotoFeedsConfig = {
+    feeds: feedUris,
+    threadsOnly: threadsOnly,
+  };
+  return channel;
+}
+
 export function createSpace(
   name: string,
   description?: string,

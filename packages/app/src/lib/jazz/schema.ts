@@ -64,6 +64,13 @@ export const Channel = co.map({
   pages: z.optional(co.list(Page)),
 
   softDeleted: z.boolean().optional(),
+  
+  // ATProto feed integration for board view
+  showAtprotoFeeds: z.boolean().optional(), // Show feeds in board view
+  atprotoFeedsConfig: z.optional(z.object({
+    feeds: z.array(z.string()), // Which feeds to show
+    threadsOnly: z.boolean(), // Only show thread posts
+  })),
 });
 
 export const Category = co.map({
@@ -120,6 +127,7 @@ export const RoomyProfile = co.profile({
   roomyInbox: co.list(InboxItem),
   bannerUrl: z.string().optional(),
   description: z.string().optional(),
+  threadSubscriptions: z.optional(co.list(z.string())), // List of thread IDs user is subscribed to
 });
 
 export const RoomyRoot = co.map({

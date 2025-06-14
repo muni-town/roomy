@@ -21,6 +21,7 @@
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
   import CreatePageDialog from "$lib/components/CreatePageDialog.svelte";
   import BoardList from "./BoardList.svelte";
+  import ChannelFeedsBoard from "./ChannelFeedsBoard.svelte";
   import ToggleNavigation from "./ToggleNavigation.svelte";
   import { AccountCoState, CoState } from "jazz-svelte";
   import { Channel, Space } from "$lib/jazz/schema";
@@ -98,7 +99,28 @@
 
   const readonly = $derived(thread.current?.name === "@links");
 
-  let tab = $state<"chat" | "board">("chat");
+  let tab = $state<"chat" | "board">(
+    typeof window !== 'undefined' && window.location.hash === '#board' ? 'board' : 'chat'
+  );
+
+  // Update tab when hash changes
+  $effect(() => {
+    const handleHashChange = () => {
+      if (window.location.hash === '#board') {
+        tab = 'board';
+      } else if (window.location.hash === '#chat') {
+        tab = 'chat';
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      // Check hash on mount
+      handleHashChange();
+      
+      window.addEventListener('hashchange', handleHashChange);
+      return () => window.removeEventListener('hashchange', handleHashChange);
+    }
+  });
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
@@ -345,7 +367,7 @@
 
   const channelThreads = $derived(
     channel.current?.subThreads?.filter(
-      (thread) => thread && !thread.softDeleted,
+      (thread) => thread && !thread.softDeleted && !thread.name?.startsWith('💬'),
     ) || [],
   );
 
@@ -470,15 +492,19 @@
 <div class="divider my-0"></div>
 
 {#if tab === "board"}
-  <BoardList items={pages} title="Pages" route="page">
-    {#snippet header()}
-      <CreatePageDialog />
-    {/snippet}
-    No pages for this channel.
-  </BoardList>
-  <BoardList items={channelThreads} title="Threads" route="thread">
-    No threads for this channel.
-  </BoardList>
+  <div class="p-4 space-y-6 h-[calc(100vh-124px)] overflow-y-auto ml-24 sm:ml-80">
+    <BoardList items={pages} title="Pages" route="page">
+      {#snippet header()}
+        <CreatePageDialog />
+      {/snippet}
+      No pages for this channel.
+    </BoardList>
+    <BoardList items={channelThreads} title="Threads" route="thread">
+      No threads for this channel.
+    </BoardList>
+    
+    <ChannelFeedsBoard channel={channel.current} />
+  </div>
 {:else if tab === "chat"}
   {#if space.current}
     <div class="flex flex-col h-[calc(100vh-124px)] pt-16 sm:ml-84">
