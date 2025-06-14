@@ -73,7 +73,10 @@
 
       recordChecked = true;
     } catch (e) {
-      recordChecked = await setProfileRecord(me.current?.id, me.current?.profile.id);
+      recordChecked = await setProfileRecord(
+        me.current?.id,
+        me.current?.profile.id,
+      );
     }
   }
 
@@ -139,7 +142,7 @@
     // Initialize PostHog for analytics
     if (!dev && browser) {
       posthog.init("phc_j80ksIuoxjfjRI7rPBmTLWx79rntg4Njz6Dixc3I3ik", {
-        api_host: "https://roomy.space/ingest",
+        api_host: "https://hog.roomy.space/",
         person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well
       });
     }
