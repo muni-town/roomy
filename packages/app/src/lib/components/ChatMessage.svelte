@@ -34,6 +34,8 @@
   import { convertReactionsToEmojis } from "$lib/utils/reactions";
   import { dev } from "$app/environment";
   import MessageThreadBadge from "./Message/MessageThreadBadge.svelte";
+  import { goto } from "$app/navigation";
+  import { dmClient } from "$lib/dm.svelte";
 
   let {
     messageId,
@@ -272,6 +274,32 @@
     if (hiddenIn.has(threadId ?? "")) return false;
     return true;
   });
+
+  async function handleOpenDM() {
+    try {
+      // Get the user's handle - try blueskyHandle first, then name as fallback
+      const userHandle = profile?.current?.blueskyHandle || authorData?.name;
+      
+      if (!userHandle) {
+        toast.error("Unable to find user handle for messaging");
+        return;
+      }
+
+      // Initialize DM client if needed
+      const initialized = await dmClient.init();
+      if (!initialized) {
+        toast.error("Please log in to use direct messaging");
+        return;
+      }
+
+      // Navigate to messages with user parameter for new/existing conversations
+      await goto(`/messages?user=${encodeURIComponent(userHandle)}`);
+      
+    } catch (error) {
+      console.error("Failed to open DM:", error);
+      toast.error("Failed to open direct message");
+    }
+  }
 </script>
 
 {#if shouldShow}
@@ -327,12 +355,23 @@
       <div class={"group relative flex w-full justify-start gap-3"}>
         {#if !mergeWithPrevious}
           <div class="size-8 sm:size-10">
-            <Avatar.Root class="size-8 sm:size-10">
-              <Avatar.Image src={authorData?.imageUrl} class="rounded-full" />
-              <Avatar.Fallback>
-                <AvatarBeam name={authorData?.id ?? authorData?.name ?? ""} />
-              </Avatar.Fallback>
-            </Avatar.Root>
+            <button 
+              onclick={async (e) => {
+                e.stopPropagation();
+                if (authorData?.id !== me.current?.id) {
+                  await handleOpenDM();
+                }
+              }}
+              class="rounded-full hover:ring-2 hover:ring-blue-500 transition-all"
+              title={authorData?.id === me.current?.id ? 'Your profile' : `Message ${authorData?.name}`}
+            >
+              <Avatar.Root class="size-8 sm:size-10">
+                <Avatar.Image src={authorData?.imageUrl} class="rounded-full" />
+                <Avatar.Fallback>
+                  <AvatarBeam name={authorData?.id ?? authorData?.name ?? ""} />
+                </Avatar.Fallback>
+              </Avatar.Root>
+            </button>
           </div>
         {:else}
           <div class="w-8 shrink-0 sm:w-10"></div>
