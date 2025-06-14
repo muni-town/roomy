@@ -1,7 +1,7 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { Button, Tabs } from "bits-ui";
+  import { Button } from "bits-ui";
   import { navigate, Toggle } from "$lib/utils.svelte";
   import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
   import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
@@ -25,13 +25,31 @@
     new CoState(Space, page.params.space, {
       resolve: {
         channels: {
-          $each: true,
+          $each: {
+            subThreads: {
+              $each: {
+                timeline: {
+                  perAccount: true,
+                },
+              },
+              $onError: null,
+            },
+          },
           $onError: null,
         },
         categories: {
           $each: {
             channels: {
-              $each: true,
+              $each: {
+                subThreads: {
+                  $each: {
+                    timeline: {
+                      perAccount: true,
+                    },
+                  },
+                  $onError: null,
+                },
+              },
               $onError: null,
             },
           },
@@ -46,14 +64,14 @@
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
-      root: {
-        lastRead: true,
-      },
       profile: {
         roomyInbox: {
           $each: true,
           $onError: null,
         },
+      },
+      root: {
+        lastRead: true,
       },
     },
   });
@@ -174,7 +192,6 @@
   }
   let isSpacesVisible: ReturnType<typeof Toggle> =
     getContext("isSpacesVisible");
-  let tab: "board" | "chat" = $state("chat");
 </script>
 
 <nav
@@ -278,61 +295,11 @@
     </menu>
   {/if}
 
-  <!-- Index Chat Toggle -->
-  <Tabs.Root bind:value={tab} class="py-1 px-2">
-    <Tabs.List class="flex w-full rounded-lg dz-tabs-box">
-      <Tabs.Trigger value="board" class="grow dz-tab flex gap-2">
-        <Icon
-          icon="tabler:clipboard-text{tab === 'board' ? '-filled' : ''}"
-          class="text-2xl"
-        />
-      </Tabs.Trigger>
-      <Tabs.Trigger value="chat" class="grow dz-tab flex gap-2">
-        <Icon
-          icon="tabler:message{tab === 'chat' ? '-filled' : ''}"
-          class="text-2xl"
-        />
-      </Tabs.Trigger>
-    </Tabs.List>
-  </Tabs.Root>
   <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-clip mx-1">
-    {#if tab === "board"}
-      {#if links}
-        <div class="flex-flex-col gap-4 p-2">
-          <Button.Root
-            class="cursor-pointer px-2 flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
-            onclick={() => {
-              navigate({ space: page.params.space!, thread: links.id });
-            }}
-          >
-            Links
-          </Button.Root>
-          <div class="dz-divider my-0"></div>
-        </div>
-      {:else}
-        <div class="flex-flex-col gap-4 p-2">
-          <Button.Root
-            class="cursor-pointer px-2 flex w-full items-center justify-between mb-2 uppercase text-xs font-medium text-base-content"
-            onclick={createLinkFeed}
-          >
-            Create Links Feed
-          </Button.Root>
-          <div class="dz-divider my-0"></div>
-        </div>
-      {/if}
-      <AccordionTree
-        sections={[
-          { key: "pages", items: pages },
-          { key: "threads", items: threads },
-        ]}
-        active={page.params.channel ?? ""}
-      />
-    {:else}
-      <SidebarChannelList
-        {sidebarItems}
-        space={space.current}
-        me={me.current}
-      />
-    {/if}
+    <SidebarChannelList
+      {sidebarItems}
+      space={space.current}
+      me={me.current}
+    />
   </div>
 </nav>
