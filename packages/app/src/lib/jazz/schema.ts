@@ -65,7 +65,11 @@ export const Channel = co.map({
 
   softDeleted: z.boolean().optional(),
   
-  // ATProto feed integration for board view
+  // Channel type - determines how the channel behaves
+  channelType: z.enum(["chat", "feeds"]).optional().default("chat"),
+  
+  // ATProto feed integration - now used for feeds channels
+  isAtprotoFeed: z.boolean().optional(), // For backwards compatibility
   showAtprotoFeeds: z.boolean().optional(), // Show feeds in board view
   atprotoFeedsConfig: z.optional(z.object({
     feeds: z.array(z.string()), // Which feeds to show

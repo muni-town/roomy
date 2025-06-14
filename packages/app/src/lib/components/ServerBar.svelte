@@ -40,7 +40,8 @@
   class:opacity-0={!visible}
 > -->
 <Sidebar>
-  <div class="flex flex-col gap-1 items-center justify-center py-2">
+  <TooltipProvider>
+    <div class="flex flex-col gap-1 items-center justify-center py-2">
     <Button
       variant="link"
       type="button"
@@ -81,21 +82,20 @@
     {/if}
   </div>
   <ScrollArea class="flex-grow">
-    <TooltipProvider>
-      <div
-        class="flex flex-col px-2 items-center gap-1 flex-grow h-full overflow-y-auto"
-      >
-        {#if spaces}
-          {#each spaces as space}
-            <SidebarSpace {space} {me} />
-          {/each}
-        {/if}
-      </div>
-    </TooltipProvider>
+    <div
+      class="flex flex-col px-2 items-center gap-1 flex-grow h-full overflow-y-auto"
+    >
+      {#if spaces}
+        {#each spaces as space}
+          <SidebarSpace {space} {me} />
+        {/each}
+      {/if}
+    </div>
   </ScrollArea>
 
-  <section class="flex flex-col items-center gap-2 p-0">
-    <User />
-  </section>
+    <section class="flex flex-col items-center gap-2 p-0">
+      <User />
+    </section>
+  </TooltipProvider>
 </Sidebar>
 <!-- </aside> -->

@@ -26,6 +26,83 @@ export const FEED_NAMES: Record<string, string> = Object.fromEntries(
   Object.entries(ATPROTO_FEED_CONFIG).map(([uri, config]) => [uri, config.name])
 );
 
+// Reusable function to add feeds from either URLs or URIs
+export function addFeedToList(
+  input: string, 
+  currentFeeds: string[], 
+  onSuccess?: (uri: string) => void,
+  onError?: (message: string) => void
+): string[] {
+  if (!input.trim()) return currentFeeds;
+  
+  let feedUri: string;
+  
+  // Check if it's already an AT:// URI
+  if (input.startsWith('at://')) {
+    feedUri = input;
+  } else if (input.startsWith('http')) {
+    // Try to convert URL to URI
+    const result = convertBlueskyFeedUrlToUri(input);
+    if (result) {
+      feedUri = result.uri;
+    } else {
+      onError?.("Invalid feed URL. Please use a URL like: https://any.domain/profile/did:plc:example/feed/feedname");
+      return currentFeeds;
+    }
+  } else {
+    onError?.("Please enter either an AT:// URI or a valid feed URL");
+    return currentFeeds;
+  }
+  
+  // Add the feed if it's not already in the list
+  if (!currentFeeds.includes(feedUri)) {
+    onSuccess?.(feedUri);
+    return [...currentFeeds, feedUri];
+  }
+  
+  return currentFeeds;
+}
+
+// Convert AT Proto feed URL to AT Proto URI (works with any domain)
+export function convertBlueskyFeedUrlToUri(url: string): { uri: string; name: string } | null {
+  try {
+    // Handle AT Proto feed URL format from any domain:
+    // https://any.domain/profile/did:plc:example/feed/feedname
+    // https://any.domain/profile/handle.bsky.social/feed/feedname
+    
+    const urlObj = new URL(url);
+    
+    const pathMatch = urlObj.pathname.match(/^\/profile\/([^\/]+)\/feed\/([^\/]+)$/);
+    if (!pathMatch) {
+      return null;
+    }
+    
+    const [, profile, feedName] = pathMatch;
+    
+    // If the profile looks like a DID, use it directly
+    if (profile.startsWith('did:')) {
+      const uri = `at://${profile}/app.bsky.feed.generator/${feedName}`;
+      
+      // Generate a human-readable name from the feed name
+      const displayName = feedName
+        .split('-')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+      
+      return {
+        uri,
+        name: `📡 ${displayName}`
+      };
+    }
+    
+    // For handles, we'll need to resolve the DID (for now, return null and ask user for URI)
+    // In a full implementation, we'd resolve the handle to a DID via AT Proto API
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export interface AtprotoFeedPost {
   uri: string;
   cid: string;
@@ -43,6 +120,7 @@ export interface AtprotoFeedPost {
       parent: { uri: string; cid: string };
     };
   };
+  images?: string[]; // Array of image URLs from embeds
   replyCount?: number;
   repostCount?: number;
   likeCount?: number;
@@ -60,10 +138,73 @@ export class AtprotoFeedAggregator {
   private agent: Agent;
   private cache: Map<string, AtprotoFeedPost[]> = new Map();
   private lastFetch: Map<string, number> = new Map();
+  private feedNames: Map<string, string> = new Map(); // Cache feed names from responses
+  private feedNameCallbacks: Map<string, (() => void)[]> = new Map(); // Callbacks for when names are updated
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
   constructor(agent: Agent) {
     this.agent = agent;
+  }
+
+  // Get cached feed name or return a fallback
+  getCachedFeedName(feedUri: string): string {
+    if (this.feedNames.has(feedUri)) {
+      return this.feedNames.get(feedUri)!;
+    }
+    
+    // Check predefined feeds
+    if (ATPROTO_FEED_CONFIG[feedUri]) {
+      return ATPROTO_FEED_CONFIG[feedUri].name;
+    }
+    
+    return "📡 Custom Feed";
+  }
+
+  // Register a callback to be called when a feed name is updated
+  onFeedNameUpdate(feedUri: string, callback: () => void): void {
+    if (!this.feedNameCallbacks.has(feedUri)) {
+      this.feedNameCallbacks.set(feedUri, []);
+    }
+    this.feedNameCallbacks.get(feedUri)!.push(callback);
+  }
+
+  // Trigger callbacks when a feed name is updated
+  private triggerFeedNameCallbacks(feedUri: string): void {
+    const callbacks = this.feedNameCallbacks.get(feedUri);
+    if (callbacks) {
+      callbacks.forEach(callback => callback());
+    }
+  }
+
+  // Fetch feed name from AT Proto
+  async fetchFeedName(feedUri: string): Promise<string> {
+    try {
+      const response = await this.agent.app.bsky.feed.getFeedGenerator({ feed: feedUri });
+      const name = response.data.view.displayName || this.extractFeedNameFromUri(feedUri);
+      this.feedNames.set(feedUri, `📡 ${name}`);
+      this.triggerFeedNameCallbacks(feedUri);
+      console.log(`Successfully fetched feed name for ${feedUri}: ${name}`);
+      return name;
+    } catch (error) {
+      console.warn(`Failed to fetch feed name for ${feedUri}:`, error);
+      const fallback = this.extractFeedNameFromUri(feedUri);
+      this.feedNames.set(feedUri, `📡 ${fallback}`);
+      this.triggerFeedNameCallbacks(feedUri);
+      return fallback;
+    }
+  }
+
+  // Extract feed name from URI as fallback
+  private extractFeedNameFromUri(feedUri: string): string {
+    const match = feedUri.match(/\/([^\/]+)$/);
+    if (match) {
+      const feedName = match[1];
+      return feedName
+        .split('-')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+    return 'Custom Feed';
   }
 
   private async fetchSingleFeed(feedUri: string, limit = 50): Promise<AtprotoFeedPost[]> {
@@ -72,6 +213,14 @@ export class AtprotoFeedAggregator {
         feed: feedUri,
         limit,
       });
+      
+      // The getFeed response doesn't include generator info, so we need to fetch it separately
+      // Check if we already have the name cached, if not, fetch it asynchronously
+      if (!this.feedNames.has(feedUri) && !ATPROTO_FEED_CONFIG[feedUri]) {
+        this.fetchFeedName(feedUri).catch(e => {
+          console.warn(`Failed to fetch feed name for ${feedUri}:`, e);
+        });
+      }
       
       return response.data.feed.map((item: FeedViewPost) => ({
         uri: item.post.uri,
@@ -111,6 +260,39 @@ export class AtprotoFeedAggregator {
           createdAt: (item.post.record as any).createdAt || item.post.indexedAt,
           reply: (item.post.record as any).reply,
         },
+        images: (() => {
+          // Extract images from post embeds
+          const embed = item.post.embed;
+          if (!embed) return undefined;
+          
+          const images: string[] = [];
+          
+          // Handle different embed types
+          if (embed.$type === 'app.bsky.embed.images#view') {
+            // Direct image embed
+            embed.images?.forEach((img: any) => {
+              if (img.fullsize) {
+                images.push(img.fullsize);
+              } else if (img.thumb) {
+                images.push(img.thumb);
+              }
+            });
+          } else if (embed.$type === 'app.bsky.embed.recordWithMedia#view') {
+            // Record with media (e.g., quote post with images)
+            const media = embed.media;
+            if (media && media.$type === 'app.bsky.embed.images#view') {
+              media.images?.forEach((img: any) => {
+                if (img.fullsize) {
+                  images.push(img.fullsize);
+                } else if (img.thumb) {
+                  images.push(img.thumb);
+                }
+              });
+            }
+          }
+          
+          return images.length > 0 ? images : undefined;
+        })(),
         replyCount: item.post.replyCount,
         repostCount: item.post.repostCount, 
         likeCount: item.post.likeCount,
@@ -123,9 +305,10 @@ export class AtprotoFeedAggregator {
     }
   }
 
-  async fetchAggregatedFeed(limit = 50): Promise<AtprotoFeedPost[]> {
+  async fetchAggregatedFeed(limit = 50, feedUris?: string[]): Promise<AtprotoFeedPost[]> {
+    const feedsToFetch = feedUris || ATPROTO_FEEDS;
+    const cacheKey = feedsToFetch.join(',');
     const now = Date.now();
-    const cacheKey = "aggregated";
     
     // Check cache
     if (this.cache.has(cacheKey) && 
@@ -134,8 +317,8 @@ export class AtprotoFeedAggregator {
       return this.cache.get(cacheKey)!;
     }
 
-    // Fetch all feeds in parallel
-    const feedPromises = ATPROTO_FEEDS.map(feedUri => this.fetchSingleFeed(feedUri, 30));
+    // Fetch specified feeds in parallel
+    const feedPromises = feedsToFetch.map(feedUri => this.fetchSingleFeed(feedUri, 30));
     const feedResults = await Promise.all(feedPromises);
     
     // Combine and sort by creation time
@@ -163,8 +346,8 @@ export class AtprotoFeedAggregator {
   }
 
   // Get only thread posts (for threads-only channel)
-  async fetchThreadsOnly(limit = 50): Promise<AtprotoFeedPost[]> {
-    const allPosts = await this.fetchAggregatedFeed(limit * 2); // Fetch more to filter
+  async fetchThreadsOnly(limit = 50, feedUris?: string[]): Promise<AtprotoFeedPost[]> {
+    const allPosts = await this.fetchAggregatedFeed(limit * 2, feedUris); // Fetch more to filter
     return allPosts.filter(post => this.isThreadPost(post)).slice(0, limit);
   }
 
@@ -215,6 +398,39 @@ export class AtprotoFeedAggregator {
             createdAt: (post.record as any).createdAt || post.indexedAt,
             reply: (post.record as any).reply,
           },
+          images: (() => {
+            // Extract images from post embeds
+            const embed = post.embed;
+            if (!embed) return undefined;
+            
+            const images: string[] = [];
+            
+            // Handle different embed types
+            if (embed.$type === 'app.bsky.embed.images#view') {
+              // Direct image embed
+              embed.images?.forEach((img: any) => {
+                if (img.fullsize) {
+                  images.push(img.fullsize);
+                } else if (img.thumb) {
+                  images.push(img.thumb);
+                }
+              });
+            } else if (embed.$type === 'app.bsky.embed.recordWithMedia#view') {
+              // Record with media (e.g., quote post with images)
+              const media = embed.media;
+              if (media && media.$type === 'app.bsky.embed.images#view') {
+                media.images?.forEach((img: any) => {
+                  if (img.fullsize) {
+                    images.push(img.fullsize);
+                  } else if (img.thumb) {
+                    images.push(img.thumb);
+                  }
+                });
+              }
+            }
+            
+            return images.length > 0 ? images : undefined;
+          })(),
           replyCount: post.replyCount,
           repostCount: post.repostCount,
           likeCount: post.likeCount,
@@ -247,8 +463,14 @@ export class AtprotoFeedAggregator {
   // Like a post
   async likePost(postUri: string, postCid: string): Promise<boolean> {
     try {
+      const did = this.agent.session?.did;
+      if (!did) {
+        console.error('No authenticated session available for liking post');
+        return false;
+      }
+
       await this.agent.api.com.atproto.repo.createRecord({
-        repo: this.agent.session?.did ?? '',
+        repo: did,
         collection: 'app.bsky.feed.like',
         record: {
           subject: {
@@ -268,8 +490,14 @@ export class AtprotoFeedAggregator {
   // Repost a post
   async repostPost(postUri: string, postCid: string): Promise<boolean> {
     try {
+      const did = this.agent.session?.did;
+      if (!did) {
+        console.error('No authenticated session available for reposting post');
+        return false;
+      }
+
       await this.agent.api.com.atproto.repo.createRecord({
-        repo: this.agent.session?.did ?? '',
+        repo: did,
         collection: 'app.bsky.feed.repost',
         record: {
           subject: {
@@ -289,8 +517,14 @@ export class AtprotoFeedAggregator {
   // Reply to a post
   async replyToPost(postUri: string, postCid: string, text: string, rootUri?: string, rootCid?: string): Promise<boolean> {
     try {
+      const did = this.agent.session?.did;
+      if (!did) {
+        console.error('No authenticated session available for replying to post');
+        return false;
+      }
+
       await this.agent.api.com.atproto.repo.createRecord({
-        repo: this.agent.session?.did ?? '',
+        repo: did,
         collection: 'app.bsky.feed.post',
         record: {
           text: text,
