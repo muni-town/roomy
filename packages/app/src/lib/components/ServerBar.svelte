@@ -126,9 +126,7 @@
     {/if}
   </div>
   <ScrollArea class="flex-grow">
-    <div
-      class="flex flex-col px-2 items-center flex-grow h-full overflow-y-auto"
-    >
+    <div class="flex flex-col px-2 items-center gap-1">
       {#if spaces}
         {#each spaces as space}
           <SidebarSpace {space} {me} />
