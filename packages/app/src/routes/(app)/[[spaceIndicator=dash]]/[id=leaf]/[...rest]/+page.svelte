@@ -55,7 +55,7 @@
           {:else}
             <Button.Root
               target="_blank"
-              href={`https://roomy.chat/${page.params.id}`}
+              href={`https://alpha2.roomy.chat/${page.params.id}`}
               class="dz-btn dz-btn-primary dz-btn-lg"
             >
               Go to old space version!

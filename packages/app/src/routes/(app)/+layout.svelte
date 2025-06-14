@@ -41,7 +41,7 @@
   }
 
   async function setProfileRecord(accountId?: string, profileId?: string) {
-    if (!accountId || !profileId) return false;;
+    if (!accountId || !profileId) return false;
 
     await user.agent?.com.atproto.repo.createRecord({
       collection: "chat.roomy.profile",
@@ -139,7 +139,7 @@
     // Initialize PostHog for analytics
     if (!dev && browser) {
       posthog.init("phc_j80ksIuoxjfjRI7rPBmTLWx79rntg4Njz6Dixc3I3ik", {
-        api_host: "https://roomy.chat/ingest",
+        api_host: "https://roomy.space/ingest",
         person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well
       });
     }

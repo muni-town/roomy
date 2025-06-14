@@ -1,13 +1,13 @@
 {
-  "client_id": "https://roomy.chat/oauth-client-native.json",
+  "client_id": "https://roomy.space/oauth-client-native.json",
   "client_name": "Roomy",
-  "client_uri": "https://roomy.chat",
-  "logo_uri": "https://roomy.chat/favicon.png",
-  "tos_uri": "https://roomy.chat",
-  "policy_uri": "https://roomy.chat",
+  "client_uri": "https://roomy.space",
+  "logo_uri": "https://roomy.space/favicon.png",
+  "tos_uri": "https://roomy.space",
+  "policy_uri": "https://roomy.space",
   "redirect_uris": [
-    "chat.roomy:/oauth/callback",
-    "https://roomy.chat/oauth/callback"
+    "space.roomy:/oauth/callback",
+    "https://roomy.space/oauth/callback"
   ],
   "scope": "atproto transition:generic transition:chat.bsky",
   "grant_types": ["authorization_code", "refresh_token"],
