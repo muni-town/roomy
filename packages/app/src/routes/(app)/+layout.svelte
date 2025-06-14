@@ -211,9 +211,9 @@
 
 <div
   class={[
-    page.url.pathname === "/messages" ? "ml-20" : "",
+    page.url.pathname === "/messages" ? "ml-24" : "",
     isSidebarVisible.value || true
-      ? "sm:ml-79 z-[100] bg-white shadow-lg border-l border-base-800/20 relative"
+      ? "sm:ml-84 z-[100] bg-white shadow-lg border-l border-base-800/20 relative"
       : "",
       "relative"
   ]}

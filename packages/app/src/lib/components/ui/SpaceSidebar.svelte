@@ -22,7 +22,7 @@
     class={cn(
       borderClasses,
       "fixed ml-0.5 overflow-y-hidden",
-      "inset-auto left-15 top-0 bottom-0 z-50 block h-[100dvh] w-64",
+      "inset-auto left-20 top-0 bottom-0 z-50 block h-[100dvh] w-64",
       className,
     )}
     {...restProps}
