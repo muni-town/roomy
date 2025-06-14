@@ -309,7 +309,7 @@
     </menu>
   {/if}
 
-  <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-clip mx-1">
+  <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-hidden px-2">
     <SidebarChannelList {sidebarItems} space={space.current} me={me.current} />
   </div>
 </SpaceSidebar>

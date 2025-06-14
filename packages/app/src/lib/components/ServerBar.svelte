@@ -83,7 +83,7 @@
   <ScrollArea class="flex-grow">
     <TooltipProvider>
       <div
-        class="flex flex-col px-2 items-center flex-grow h-full overflow-y-auto"
+        class="flex flex-col px-2 items-center gap-1 flex-grow h-full overflow-y-auto"
       >
         {#if spaces}
           {#each spaces as space}
