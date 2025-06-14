@@ -13,8 +13,6 @@ let search: { [spaceId: string]: Document | null } = $state({});
 export async function initSearch(space: co.loaded<typeof Space>) {
   if (!space) return;
 
-  return;
-
   const db = new IndexedDB("roomy-search-index-" + space.id);
 
   search[space.id] = new Document({
