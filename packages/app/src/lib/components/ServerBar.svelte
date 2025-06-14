@@ -1,13 +1,9 @@
 <script lang="ts">
-  import { user } from "$lib/user.svelte";
   import { navigate } from "$lib/utils.svelte";
-  import { Button } from "bits-ui";
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import SidebarSpace from "$lib/components/SidebarSpace.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
-  import { env } from "$env/dynamic/public";
   import { co } from "jazz-tools";
   import { createSpace, createSpaceList } from "$lib/jazz/utils";
   import { RoomyAccount, Space, SpaceList } from "$lib/jazz/schema";
@@ -16,6 +12,7 @@
   import { page } from "$app/state";
   import Sidebar from "./ui/Sidebar.svelte";
   import { ScrollArea } from "@fuxui/base";
+  import { Button } from "@fuxui/base";
 
   let {
     spaces,
@@ -66,23 +63,26 @@
 > -->
 <Sidebar>
   <div class="flex flex-col gap-1 items-center justify-center py-2">
-    <button
+    <Button
+    variant="link"
       type="button"
       onclick={() => navigate("home")}
-      class="px-1 aspect-square"
+      class="px-1 aspect-square [&_svg]:size-8"
+      data-current={page.url.pathname.startsWith('/home')}
     >
       <Icon icon="iconamoon:home-fill" font-size="1.75em" />
-    </button>
+  </Button>
 
     <!-- Messages Button -->
-    <a
+    <Button
       href="/messages"
-      class={`p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer relative transition-all duration-200
-        ${page.url.pathname.startsWith('/messages') ? 'ring-0.5 ring-offset-0 ring-primary/30 border border-primary' : ''}`}
+      variant="link"
+      data-current={page.url.pathname.startsWith('/messages')}
+      class="px-1 aspect-square [&_svg]:size-8"
       title="Direct Messages"
     >
       <Icon icon="tabler:mail" font-size="1.75em" />
-    </a>
+      </Button>
 
     {#if me?.profile?.blueskyHandle}
       <Dialog

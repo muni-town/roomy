@@ -452,13 +452,13 @@
   <div class="absolute top-0 left-0"></div>
 {/if}
 
-<Navbar hasSidebar>
-  <div class="flex gap-4">
+<Navbar>
+  <div class="flex gap-4 items-center ml-4">
     {#if channel.current}
       <ToggleNavigation />
 
       <h4
-        class="sm:line-clamp-1 sm:overflow-hidden sm:text-ellipsis text-base-content text-lg font-bold"
+        class="sm:line-clamp-1 sm:overflow-hidden sm:text-ellipsis text-lg font-bold"
         title={"Channel"}
       >
         <span class="flex gap-2 items-center">
@@ -489,10 +489,9 @@
     <TimelineToolbar createThread={addThread} bind:threadTitleInput />
   </div>
 </Navbar>
-<div class="divider my-0"></div>
 
 {#if tab === "board"}
-  <div class="p-4 space-y-6 h-[calc(100vh-124px)] overflow-y-auto ml-24 sm:ml-80">
+  <div class="p-4 space-y-6 h-[calc(100dvh)] overflow-y-auto">
     <BoardList items={pages} title="Pages" route="page">
       {#snippet header()}
         <CreatePageDialog />
@@ -507,7 +506,7 @@
   </div>
 {:else if tab === "chat"}
   {#if space.current}
-    <div class="flex flex-col h-[calc(100vh-124px)] pt-16 sm:ml-84 w-full">
+    <div class="flex flex-col h-[calc(100dvh)] py-16 w-full px-4">
       {#if showSearch && space.current}
         <SearchBar spaceId={space.current.id} bind:showSearch />
       {/if}

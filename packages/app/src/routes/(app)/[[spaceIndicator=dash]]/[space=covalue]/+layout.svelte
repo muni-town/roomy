@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { page } from '$app/state';
-  import { initSearch } from '$lib/components/search/search.svelte';
-  import { Space } from '$lib/jazz/schema';
-  import { wordlist } from '$lib/jazz/wordlist';
-  import { CoState, usePassphraseAuth } from 'jazz-svelte';
-  import { atprotoFeedService } from '$lib/services/atprotoFeedService';
+  import { page } from "$app/state";
+  import { initSearch } from "$lib/components/search/search.svelte";
+  import { Space } from "$lib/jazz/schema";
+  import { wordlist } from "$lib/jazz/wordlist";
+  import { CoState, usePassphraseAuth } from "jazz-svelte";
+  import { atprotoFeedService } from "$lib/services/atprotoFeedService";
 
   let { children } = $props();
   const auth = usePassphraseAuth({ wordlist });
@@ -47,8 +47,10 @@
     hasStartedAtprotoFeeds = true;
 
     // Find ATProto feed channels
-    const atprotoChannels = space.current.channels.filter(channel => channel?.isAtprotoFeed);
-    
+    const atprotoChannels = space.current.channels.filter(
+      (channel) => channel?.isAtprotoFeed,
+    );
+
     if (atprotoChannels.length > 0) {
       atprotoFeedService.startAutoUpdate(atprotoChannels);
     }
@@ -60,8 +62,4 @@
   });
 </script>
 
-<main
-  class="flex flex-col gap-4 p-4 grow min-w-0 h-full w-screen overflow-clip"
->
-  {@render children()}
-</main>
+{@render children()}

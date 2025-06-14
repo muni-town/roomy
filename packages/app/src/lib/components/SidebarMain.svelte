@@ -1,7 +1,7 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { Button } from "bits-ui";
+  import { Button } from "@fuxui/base";
   import { navigate, Toggle } from "$lib/utils.svelte";
   import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
   import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
@@ -22,23 +22,9 @@
   import SpaceSidebar from "./ui/SpaceSidebar.svelte";
 
   let space = $derived(
-    page.params?.space ? new CoState(Space, page.params.space, {
-      resolve: {
-        channels: {
-          $each: {
-            subThreads: {
-              $each: {
-                timeline: {
-                  perAccount: true,
-                },
-              },
-              $onError: null,
-            },
-          },
-          $onError: null,
-        },
-        categories: {
-          $each: {
+    page.params?.space
+      ? new CoState(Space, page.params.space, {
+          resolve: {
             channels: {
               $each: {
                 subThreads: {
@@ -52,15 +38,31 @@
               },
               $onError: null,
             },
+            categories: {
+              $each: {
+                channels: {
+                  $each: {
+                    subThreads: {
+                      $each: {
+                        timeline: {
+                          perAccount: true,
+                        },
+                      },
+                      $onError: null,
+                    },
+                  },
+                  $onError: null,
+                },
+              },
+              $onError: null,
+            },
           },
-          $onError: null,
-        },
-      },
-    }) : null
+        })
+      : null,
   );
-  
+
   let links = $derived(
-    space?.current?.threads?.find((x) => x?.name === "@links")
+    space?.current?.threads?.find((x) => x?.name === "@links"),
   );
 
   const me = new AccountCoState(RoomyAccount, {
@@ -103,7 +105,7 @@
   function allThreads() {
     let threads = space?.current?.threads || [];
     // Use $page store with .get() to get the current value
-    const currentSpace = $page?.params?.space || '';
+    const currentSpace = $page?.params?.space || "";
     return threads
       .filter(
         (thread) =>
@@ -209,13 +211,13 @@
     getContext("isSpacesVisible");
 </script>
 
- <SpaceSidebar>
+<SpaceSidebar>
   <!-- Header -->
   <div
-    class="w-full pt-4 pb-1 px-2 h-fit grid grid-cols-[auto_1fr_auto] justify-center items-center"
+    class="w-full pt-4 pb-1 px-2 h-fit flex mb-4 justify-between items-center"
   >
     <ToggleSidebarIcon class="pr-2" open={isSpacesVisible} />
-    <h1 class="text-sm font-bold text-base-content truncate">
+    <h1 class="text-sm font-bold text-base-content truncate flex-grow">
       {space?.current?.name && space?.current?.name !== "Unnamed"
         ? space.current?.name
         : ""}
@@ -227,18 +229,17 @@
   </div>
 
   {#if isSpaceAdmin(space.current)}
-    <menu
-      class="dz-menu p-0 w-full justify-between px-2 dz-join dz-join-vertical"
-    >
+    <menu class="p-0 w-full justify-between px-2 flex flex-col gap-2 mb-4">
       <Dialog title="Create Channel" bind:isDialogOpen={showNewChannelDialog}>
         {#snippet dialogTrigger()}
-          <Button.Root
+          <Button
+            variant="secondary"
             title="Create Channel"
-            class="dz-btn w-full justify-start dz-join-item text-base-content"
+            class="w-full justify-start"
           >
             <Icon icon="basil:comment-plus-solid" class="size-6" />
             Create Channel
-          </Button.Root>
+          </Button>
         {/snippet}
 
         <form
@@ -260,27 +261,28 @@
             <span class="dz-label">Category</span>
             <select bind:value={newChannelCategory}>
               <option value={undefined}>None</option>
-              {#each space.current?.categories?.filter((category) => !category.softDeleted) ?? [] as category}
-                <option value={category}>{category.name}</option>
+              {#each space?.current?.categories?.filter((category) => !category?.softDeleted) ?? [] as category}
+                <option value={category}>{category?.name}</option>
               {/each}
             </select>
           </label>
-          <Button.Root class="dz-btn dz-btn-primary">
+          <Button class="w-full justify-start">
             <Icon icon="basil:add-outline" font-size="1.8em" />
             Create Channel
-          </Button.Root>
+          </Button>
         </form>
       </Dialog>
 
       <Dialog title="Create Category" bind:isDialogOpen={showNewCategoryDialog}>
         {#snippet dialogTrigger()}
-          <Button.Root
-            class="dz-btn w-full justify-start dz-join-item text-base-content"
+          <Button
+            variant="secondary"
+            class="w-full justify-start"
             title="Create Category"
           >
             <Icon icon="basil:folder-plus-solid" class="size-6" />
             Create Category
-          </Button.Root>
+          </Button>
         {/snippet}
 
         <form
@@ -304,15 +306,10 @@
           </Button.Root>
         </form>
       </Dialog>
-
     </menu>
   {/if}
 
   <div class="py-2 w-full max-h-full overflow-y-auto overflow-x-clip mx-1">
-    <SidebarChannelList
-      {sidebarItems}
-      space={space.current}
-      me={me.current}
-    />
+    <SidebarChannelList {sidebarItems} space={space.current} me={me.current} />
   </div>
 </SpaceSidebar>

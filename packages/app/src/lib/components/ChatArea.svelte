@@ -14,6 +14,7 @@
   import type { Space } from "$lib/jazz/schema";
   import Icon from "@iconify/svelte";
   import toast from "svelte-french-toast";
+  import { Button } from "@fuxui/base";
 
   let {
     timeline,
@@ -99,15 +100,13 @@
 </script>
 
 {#if showJumpToPresent}
-  <button
-    class="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 bg-primary text-primary-content
-         px-4 py-2 rounded-full shadow-lg hover:bg-primary-focus transition-colors
-         flex items-center gap-2 text-sm font-medium"
+  <Button
+    class="absolute bottom-16 left-1/2 -translate-x-1/2 z-50"
     onclick={scrollToBottom}
   >
     <Icon icon="tabler:arrow-down" class="w-4 h-4" />
     Jump to present
-  </button>
+  </Button>
 {/if}
 
 <ScrollArea.Root type="scroll" class="h-full overflow-hidden">

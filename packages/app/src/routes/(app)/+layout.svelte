@@ -178,39 +178,45 @@
 {/if}
 
 <!-- Container -->
-<div class="flex w-screen h-screen max-h-screen overflow-clip gap-0">
-  <Toaster />
-  <div
-    class="{page.params.space &&
-      (isSidebarVisible.value
-        ? 'flex z-1 absolute w-full'
-        : 'hidden')} sm:w-auto sm:relative sm:flex h-full overflow-clip gap-0 isolate z-50
+<Toaster />
+<div
+  class="{page.params.space &&
+    (isSidebarVisible.value
+      ? 'flex z-1 absolute w-full'
+      : 'hidden')} sm:w-auto sm:relative sm:flex h-full overflow-clip gap-0 isolate z-50
       "
-  >
-    <!-- Content -->
-    <ServerBar
-      spaces={me.current?.profile.joinedSpaces}
-      visible={isSpacesVisible.value || !page.params.space}
-      me={me.current}
-    />
-    {#if page.params.space}
-      <SidebarMain />
-    {/if}
-    <!-- Overlay -->
-    {#if page.params.space}
-      <button
-        onclick={() => {
-          isSidebarVisible.toggle();
-        }}
-        aria-label="toggle navigation"
-        class="{!isSidebarVisible.value
-          ? 'hidden w-full'
-          : 'sm:hidden'} cursor-pointer backdrop-blur-sm grow-2 h-full bg-black/10"
-      ></button>
-    {/if}
-  </div>
+>
+  <!-- Content -->
+  <ServerBar
+    spaces={me.current?.profile.joinedSpaces}
+    visible={isSpacesVisible.value || !page.params.space}
+    me={me.current}
+  />
+  {#if page.params.space}
+    <SidebarMain />
+  {/if}
+  <!-- Overlay -->
+  {#if page.params.space}
+    <button
+      onclick={() => {
+        isSidebarVisible.toggle();
+      }}
+      aria-label="toggle navigation"
+      class="{!isSidebarVisible.value
+        ? 'hidden w-full'
+        : 'sm:hidden'} cursor-pointer backdrop-blur-sm grow-2 h-full bg-black/10"
+    ></button>
+  {/if}
+</div>
 
-  <div class={page.url.pathname === "/messages" ? "ml-20" : ""}>
-    {@render children()}
-  </div>
+<div
+  class={[
+    page.url.pathname === "/messages" ? "ml-20" : "",
+    isSidebarVisible.value || true
+      ? "sm:ml-79 z-[100] bg-white shadow-lg border-l border-base-800/20 relative"
+      : "",
+      "relative"
+  ]}
+>
+  {@render children()}
 </div>

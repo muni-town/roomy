@@ -124,6 +124,7 @@
         channel: channel.id,
       })}
       variant="ghost"
+      class="w-full justify-start"
       data-current={channel.id === page.params.channel}
     >
       <Icon icon="basil:comment-solid" class="shrink-0" />
