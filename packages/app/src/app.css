@@ -1,94 +1,33 @@
 @import "tailwindcss";
 
 @plugin "@tailwindcss/typography";
-@plugin "daisyui" {
-  themes: all;
-  prefix: "dz-";
-  logs: false;
-}
 
-/*
-  The default border color has changed to `currentColor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
+@source "../node_modules/@fuxui";
 
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
-*/
-@layer base {
-  *,
-  ::after,
-  ::before,
-  ::backdrop,
-  ::file-selector-button {
-    border-color: var(--color-gray-200, currentColor);
-  }
-}
+@custom-variant dark (&:is(.dark *));
 
-/* Increase font size of inputs so mobile devices don't zoom on focus */
-input {
-  font-size: 16px;
-}
+@theme {
+	--color-base-50: var(--color-zinc-50);
+	--color-base-100: var(--color-zinc-100);
+	--color-base-200: var(--color-zinc-200);
+	--color-base-300: var(--color-zinc-300);
+	--color-base-400: var(--color-zinc-400);
+	--color-base-500: var(--color-zinc-500);
+	--color-base-600: var(--color-zinc-600);
+	--color-base-700: var(--color-zinc-700);
+	--color-base-800: var(--color-zinc-800);
+	--color-base-900: var(--color-zinc-900);
+	--color-base-950: var(--color-zinc-950);
 
-html {
-  min-height: calc(100% + env(safe-area-inset-top));
-  padding: env(safe-area-inset-top) env(safe-area-inset-right)
-    env(safe-area-inset-bottom) env(safe-area-inset-left);
-}
-
-emoji-picker {
-  --background: var(--color-neutral);
-  --border-color: var(--color-accent-content);
-  --border-radius: 8px;
-  --button-hover-background: --alpha(var(--color-white) / 10%);
-  --input-border-color: --alpha(var(--color-neutral-content) / 50%);
-  --outline-color: --alpha(var(--color-neutral-content) / 80%);
-  --outline-size: 1px;
-}
-
-/* Universal */
-
-button {
-  @apply cursor-pointer;
-}
-
-/* TipTap Nodes */
-
-.mention {
-  background-color: var(--color-accent);
-  color: var(--color-accent-content);
-  padding-top: 0.125rem;
-  padding-bottom: 0.125rem;
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
-  border-radius: 0.25rem;
-  font-style: normal !important;
-  z-index: 10;
-}
-
-.thread-mention::before {
-  content: "🧵";
-  padding-right: 0.25rem;
-}
-
-.channel-mention::before {
-  content: "💬";
-  padding-right: 0.25rem;
-}
-
-.tiptap p.is-editor-empty:first-child::before {
-  color: var(--color-base-content);
-  opacity: 0.5;
-  content: attr(data-placeholder);
-  float: left;
-  height: 0;
-  pointer-events: none;
-}
-
-.dz-prose img {
-  @apply max-w-[300px] max-h-[300px];
-}
-
-.contain-images-within img {
-  max-width: 100px;
+	--color-accent-50: var(--color-emerald-50);
+	--color-accent-100: var(--color-emerald-100);
+	--color-accent-200: var(--color-emerald-200);
+	--color-accent-300: var(--color-emerald-300);
+	--color-accent-400: var(--color-emerald-400);
+	--color-accent-500: var(--color-emerald-500);
+	--color-accent-600: var(--color-emerald-600);
+	--color-accent-700: var(--color-emerald-700);
+	--color-accent-800: var(--color-emerald-800);
+	--color-accent-900: var(--color-emerald-900);
+	--color-accent-950: var(--color-emerald-950);
 }

@@ -10,7 +10,7 @@
   import Icon from "@iconify/svelte";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
-  import { Button, Tabs } from "bits-ui";
+  import { Button } from "bits-ui";
   import { Account, co, Group } from "jazz-tools";
   import {
     LastReadList,
@@ -40,6 +40,8 @@
   import UploadFileButton from "./helper/UploadFileButton.svelte";
   import { afterNavigate } from "$app/navigation";
   import SearchBar from "./search/SearchBar.svelte";
+  import Navbar from "./ui/Navbar.svelte";
+  import { Tabs } from "@fuxui/base";
 
   let space = $derived(
     new CoState(Space, page.params.space, {
@@ -97,7 +99,6 @@
   const readonly = $derived(thread.current?.name === "@links");
 
   let tab = $state<"chat" | "board">("chat");
-
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
@@ -429,8 +430,8 @@
   <div class="absolute top-0 left-0"></div>
 {/if}
 
-<header class="dz-navbar">
-  <div class="dz-navbar-start flex gap-4">
+<Navbar hasSidebar>
+  <div class="flex gap-4">
     {#if channel.current}
       <ToggleNavigation />
 
@@ -443,32 +444,15 @@
           {channel.current.name}
         </span>
       </h4>
+      <Tabs
+        items={[
+          { name: "chat", onclick: () => (tab = "chat") },
+          { name: "board", onclick: () => (tab = "board") },
+        ]}
+        active={tab}
+      ></Tabs>
     {/if}
   </div>
-
-  {#if channel.current}
-    <Tabs.Root
-      bind:value={tab}
-      class="w-full inline-flex items-center justify-end sm:justify-center"
-    >
-      <Tabs.List class="dz-tabs dz-tabs-box">
-        <Tabs.Trigger value="board" class="dz-tab flex gap-2">
-          <Icon
-            icon="tabler:clipboard-text{tab === 'board' ? '-filled' : ''}"
-            class="text-2xl"
-          />
-          <p class="hidden sm:block">Board</p>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="chat" class="dz-tab flex gap-2">
-          <Icon
-            icon="tabler:message{tab === 'chat' ? '-filled' : ''}"
-            class="text-2xl"
-          />
-          <p class="hidden sm:block">Chat</p>
-        </Tabs.Trigger>
-      </Tabs.List>
-    </Tabs.Root>
-  {/if}
 
   <div class="hidden sm:flex dz-navbar-end items-center gap-2">
     {#if tab === "chat"}
@@ -482,7 +466,7 @@
     {/if}
     <TimelineToolbar createThread={addThread} bind:threadTitleInput />
   </div>
-</header>
+</Navbar>
 <div class="divider my-0"></div>
 
 {#if tab === "board"}
@@ -497,7 +481,7 @@
   </BoardList>
 {:else if tab === "chat"}
   {#if space.current}
-    <div class="flex flex-col h-[calc(100vh-124px)]">
+    <div class="flex flex-col h-[calc(100vh-124px)] pt-16 sm:ml-84">
       {#if showSearch && space.current}
         <SearchBar spaceId={space.current.id} bind:showSearch />
       {/if}
@@ -512,7 +496,7 @@
         />
       </div>
 
-      <div class="shrink-0 pt-1">
+      <div class="fixed bottom-2 left-2 sm:left-84 right-2">
         {#if replyTo.id}
           <div
             class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"

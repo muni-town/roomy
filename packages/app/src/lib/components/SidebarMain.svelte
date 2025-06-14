@@ -6,7 +6,6 @@
   import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
   import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
   import { getContext } from "svelte";
-  import AccordionTree from "./AccordionTree.svelte";
   import SidebarChannelList from "./SidebarChannelList.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { page } from "$app/state";
@@ -20,6 +19,7 @@
   } from "$lib/jazz/utils";
   import { Category, RoomyAccount, Space } from "$lib/jazz/schema";
   import { co } from "jazz-tools";
+  import SpaceSidebar from "./ui/SpaceSidebar.svelte";
 
   let space = $derived(
     new CoState(Space, page.params.space, {
@@ -194,10 +194,11 @@
     getContext("isSpacesVisible");
 </script>
 
-<nav
+<!-- <nav
   class="w-[min(70vw,16rem)] bg-base-300 flex h-full flex-col gap-1 border-r-2 border-base-300"
   style="scrollbar-width: thin;"
->
+> -->
+<SpaceSidebar>
   <!-- Header -->
   <div
     class="w-full pt-4 pb-1 px-2 h-fit grid grid-cols-[auto_1fr_auto] justify-center items-center"
@@ -302,4 +303,4 @@
       me={me.current}
     />
   </div>
-</nav>
+</SpaceSidebar>

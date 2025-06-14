@@ -9,8 +9,7 @@
   import { RenderScan } from "svelte-render-scan";
 
   import { user } from "$lib/user.svelte";
-  import { Toggle, setTheme } from "$lib/utils.svelte";
-  import { type ThemeName } from "$lib/themes.ts";
+  import { Toggle } from "$lib/utils.svelte";
   import ServerBar from "$lib/components/ServerBar.svelte";
   import SidebarMain from "$lib/components/SidebarMain.svelte";
   import { page } from "$app/state";
@@ -122,22 +121,8 @@
     }
   });
 
-  let themeColor = $state<ThemeName>("synthwave"); // defualt theme color
   onMount(async () => {
     await user.init();
-
-    // Set the theme color based on local storage
-    const storedColor = window.localStorage.getItem("theme") as ThemeName;
-    if (storedColor) {
-      themeColor = storedColor;
-    }
-
-    setTheme(themeColor);
-    // set color on data-theme for DaisyUI and theme-color meta tag for mobile
-    document.documentElement.setAttribute("data-theme", themeColor);
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", themeColor);
 
     // Initialize PostHog for analytics
     if (!dev && browser) {
@@ -186,13 +171,6 @@
   }
 </script>
 
-<svelte:head>
-  <meta name="theme-color" content={themeColor} />
-  <meta name="msapplication-navbutton-color" content={themeColor} />
-  <meta name="msapplication-TileColor" content={themeColor} />
-  <title>Roomy</title>
-</svelte:head>
-
 {#if dev}
   <!-- Displays rendering scanner for debugging.
        Uncomment then recomment before committing. -->
@@ -206,11 +184,10 @@
     class="{page.params.space &&
       (isSidebarVisible.value
         ? 'flex z-1 absolute w-full'
-        : 'hidden')} sm:w-auto sm:relative sm:flex h-full overflow-clip gap-0
+        : 'hidden')} sm:w-auto sm:relative sm:flex h-full overflow-clip gap-0 isolate z-50
       "
   >
     <!-- Content -->
-    <div class="flex bg-base-100 h-full">
       <ServerBar
         spaces={me.current?.profile.joinedSpaces}
         visible={isSpacesVisible.value || !page.params.space}
@@ -219,7 +196,6 @@
       {#if page.params.space}
         <SidebarMain />
       {/if}
-    </div>
     <!-- Overlay -->
     {#if page.params.space}
       <button
@@ -229,7 +205,7 @@
         aria-label="toggle navigation"
         class="{!isSidebarVisible.value
           ? 'hidden w-full'
-          : 'sm:hidden'} cursor-pointer grow-2 h-full bg-black/10"
+          : 'sm:hidden'} cursor-pointer backdrop-blur-sm grow-2 h-full bg-black/10"
       ></button>
     {/if}
   </div>

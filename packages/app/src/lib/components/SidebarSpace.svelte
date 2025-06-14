@@ -61,7 +61,6 @@
   ]}
 >
   <button
-    type="button"
     onclick={() => navigate({ space: space?.id || "" })}
     value={space?.id}
     onmouseenter={(e: Event) => {
@@ -75,9 +74,12 @@
     onblur={() => {
       activeTooltip = "";
     }}
-    class={`dz-btn dz-btn-ghost size-12 rounded-full relative group p-0.5
-      ${isActive ? "ring-0.5 ring-offset-0 ring-primary/30 border border-primary" : ""}
-      transition-all duration-200`}
+    class={[
+      "size-12 rounded-full relative group p-0.5",
+      isActive &&
+        "ring-0.5 ring-offset-0 ring-primary/30 border border-primary",
+      "transition-all duration-200",
+    ]}
   >
     <div
       class={[
