@@ -1,9 +1,10 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
-  import { Button } from "bits-ui";
   import { user } from "$lib/user.svelte";
   import { AccountCoState } from "jazz-svelte";
   import { RoomyAccount } from "$lib/jazz/schema";
+  import { Button } from "@fuxui/base";
+  import { blueskyLoginModalState } from "@fuxui/social";
 
   const account = new AccountCoState(RoomyAccount, {
     resolve: {
@@ -19,7 +20,7 @@
   let spaces = $derived(me?.profile?.joinedSpaces);
 </script>
 
-<div class="dz-hero bg-base-200 min-h-screen overflow-y-scroll">
+<div class="min-h-screen flex flex-col items-center justify-center">
   <div class="dz-hero-content">
     <div class="flex flex-col gap-8 items-center">
       <h1 class="text-5xl font-bold text-center">Hi Roomy 👋</h1>
@@ -32,12 +33,12 @@
 
       {#if !user.session}
         <div class="flex gap-4">
-          <Button.Root
-            onclick={() => (user.isLoginDialogOpen = true)}
+          <Button
+            onclick={() => (blueskyLoginModalState.open = true)}
             class="dz-btn dz-btn-primary"
           >
             Create Account or Log In
-          </Button.Root>
+          </Button>
         </div>
       {:else if !spaces}
         <span class="dz-loading dz-loading-spinner mx-auto w-25"></span>
@@ -45,20 +46,17 @@
         <h2 class="text-3xl font-bold">Your Spaces</h2>
         <section class="flex flex-wrap justify-center gap-4 max-w-5xl">
           {#each spaces as space}
-            <a
+            <Button
+              size="lg"
               href={`/${space?.id}`}
-              class="dz-card border border-base-300 hover:border-primary bg-base-100 transition-colors cursor-pointer text-base-content w-full md:w-96"
+              class="max-w-full w-96 justify-between"
             >
-              <div class="dz-card-body flex-row items-center justify-between">
-                <h2 class="dz-card-title">{space?.name}</h2>
-                <div class="dz-card-actions">
-                  <Icon
-                    icon="lucide:circle-arrow-right"
-                    class="text-2xl text-primary"
-                  />
-                </div>
-              </div>
-            </a>
+              <h2 class="dz-card-title">{space?.name}</h2>
+              <Icon
+                icon="lucide:circle-arrow-right"
+                class="text-2xl text-primary"
+              />
+            </Button>
           {/each}
         </section>
       {:else if spaces?.length === 0}

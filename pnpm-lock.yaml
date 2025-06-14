@@ -45,8 +45,11 @@ importers:
         specifier: ^0.25.0
         version: 0.25.2(@types/hast@3.0.4)(react-dom@19.1.0(react@19.0.0))(react@19.0.0)
       '@fuxui/base':
-        specifier: ^0.2.1
-        version: 0.2.1(svelte@5.33.1)(tailwindcss@4.1.7)
+        specifier: ^0.2.2
+        version: 0.2.2(svelte@5.33.1)(tailwindcss@4.1.7)
+      '@fuxui/social':
+        specifier: ^0.2.2
+        version: 0.2.2(svelte@5.33.1)(tailwindcss@4.1.7)
       '@iconify/svelte':
         specifier: ^4.2.0
         version: 4.2.0(svelte@5.33.1)
@@ -77,6 +80,9 @@ importers:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^5.0.3
         version: 5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))
+      '@tailwindcss/forms':
+        specifier: ^0.5.10
+        version: 0.5.10(tailwindcss@4.1.7)
       '@tailwindcss/typography':
         specifier: ^0.5.16
         version: 0.5.16(tailwindcss@4.1.7)
@@ -314,6 +320,9 @@ packages:
 
   '@atproto/api@0.14.22':
     resolution: {integrity: sha512-ziXPau+sUdFovObSnsoN7JbOmUw1C5e5L28/yXf3P8vbEnSS3HVVGD1jYcscBYY34xQqi4bVDpwMYx/4yRsTuQ==, tarball: https://registry.npmjs.org/@atproto/api/-/api-0.14.22.tgz}
+
+  '@atproto/api@0.15.15':
+    resolution: {integrity: sha512-Wn8jv76pCvffnkNj68w0CGZ3PT4DJGM8DUZnYq9kEW2im6jbRBYI0yYrHNhSiE92A5Ox0HjL2jMhalsI2p9VlQ==, tarball: https://registry.npmjs.org/@atproto/api/-/api-0.15.15.tgz}
 
   '@atproto/common-web@0.4.2':
     resolution: {integrity: sha512-vrXwGNoFGogodjQvJDxAeP3QbGtawgZute2ed1XdRO0wMixLk3qewtikZm06H259QDJVu6voKC5mubml+WgQUw==, tarball: https://registry.npmjs.org/@atproto/common-web/-/common-web-0.4.2.tgz}
@@ -601,8 +610,14 @@ packages:
   '@floating-ui/utils@0.2.9':
     resolution: {integrity: sha512-MDWhGtE+eHw5JW7lq4qhc5yRLS11ERl1c7Z6Xd0a58DozHES6EnNNwUWbMiG4J9Cgj053Bhk8zvlhFYKVhULwg==, tarball: https://registry.npmjs.org/@floating-ui/utils/-/utils-0.2.9.tgz}
 
-  '@fuxui/base@0.2.1':
-    resolution: {integrity: sha512-lPHqk4yG5NG6CfZ0QvlHra5lx6CX6vVpotmEYn5bgwhbw/3lc9JAiEV1GNiL+1io521Sj5LzakV0zfvCfkpgOA==, tarball: https://registry.npmjs.org/@fuxui/base/-/base-0.2.1.tgz}
+  '@fuxui/base@0.2.2':
+    resolution: {integrity: sha512-BITdKSsQpDRq9HoZAf+e88OunUPeKnc3OhNowsQ8ZeYjZKkNWT+ZLX9q8galPiiuqS/WuK0oyy52mHqYuibUlw==, tarball: https://registry.npmjs.org/@fuxui/base/-/base-0.2.2.tgz}
+    peerDependencies:
+      svelte: '>=5'
+      tailwindcss: '>=3'
+
+  '@fuxui/social@0.2.2':
+    resolution: {integrity: sha512-kYlgGooraSmRMKAlVmYUGLiTeScOniMTmrfKDFaUB6NAC4poeLAMT+wrBoffz/JXS4bzjXQDFxNuz3ED43qIsg==, tarball: https://registry.npmjs.org/@fuxui/social/-/social-0.2.2.tgz}
     peerDependencies:
       svelte: '>=5'
       tailwindcss: '>=3'
@@ -1074,6 +1089,11 @@ packages:
   '@swc/types@0.1.21':
     resolution: {integrity: sha512-2YEtj5HJVbKivud9N4bpPBAyZhj4S2Ipe5LkUG94alTpr7in/GU/EARgPAd3BwU+YOmFVJC2+kjqhGRi3r0ZpQ==, tarball: https://registry.npmjs.org/@swc/types/-/types-0.1.21.tgz}
 
+  '@tailwindcss/forms@0.5.10':
+    resolution: {integrity: sha512-utI1ONF6uf/pPNO68kmN1b8rEwNXv3czukalo8VtJH8ksIkZXr3Q3VYudZLkCsDd4Wku120uF02hYK25XGPorw==, tarball: https://registry.npmjs.org/@tailwindcss/forms/-/forms-0.5.10.tgz}
+    peerDependencies:
+      tailwindcss: '>=3.0.0 || >= 3.0.0-alpha.1 || >= 4.0.0-alpha.20 || >= 4.0.0-beta.1'
+
   '@tailwindcss/node@4.1.7':
     resolution: {integrity: sha512-9rsOpdY9idRI2NH6CL4wORFY0+Q6fnx9XP9Ju+iq/0wJwGD5IByIgFmwVbyy4ymuyprj8Qh4ErxMKTUL4uNh3g==, tarball: https://registry.npmjs.org/@tailwindcss/node/-/node-4.1.7.tgz}
 
@@ -1540,6 +1560,12 @@ packages:
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==, tarball: https://registry.npmjs.org/@ungap/structured-clone/-/structured-clone-1.3.0.tgz}
 
+  '@use-gesture/core@10.3.1':
+    resolution: {integrity: sha512-WcINiDt8WjqBdUXye25anHiNxPc0VOrlT8F6LLkU6cycrOGUDyY/yyFmsg3k8i5OLvv25llc0QC45GhR/C8llw==, tarball: https://registry.npmjs.org/@use-gesture/core/-/core-10.3.1.tgz}
+
+  '@use-gesture/vanilla@10.3.1':
+    resolution: {integrity: sha512-lT4scGLu59ovA3zmtUonukAGcA0AdOOh+iwNDS05Bsu7Lq9aZToDHhI6D8Q2qvsVraovtsLLYwPrWdG/noMAKw==, tarball: https://registry.npmjs.org/@use-gesture/vanilla/-/vanilla-10.3.1.tgz}
+
   '@vitest/expect@3.1.4':
     resolution: {integrity: sha512-xkD/ljeliyaClDYqHPNCiJ0plY5YIcM0OlRiZizLhlPmpXWpxnGMyTZXOHFhFeG7w9P5PBeL4IdtJ/HeQwTbQA==, tarball: https://registry.npmjs.org/@vitest/expect/-/expect-3.1.4.tgz}
 
@@ -1803,6 +1829,9 @@ packages:
 
   csstype@3.1.3:
     resolution: {integrity: sha512-M1uQkMl8rQK/szD0LNhtqxIPLpimGm8sOBwU7lLnCpSbTyY3yeU1Vc7l4KT5zT4s/yOxHH5O7tIuuLOCnLADRw==, tarball: https://registry.npmjs.org/csstype/-/csstype-3.1.3.tgz}
+
+  custom-event-polyfill@1.0.7:
+    resolution: {integrity: sha512-TDDkd5DkaZxZFM8p+1I3yAlvM3rSr1wbrOliG4yJiwinMZN8z/iGL7BTlDkrJcYTmgUSb4ywVCc3ZaUtOtC76w==, tarball: https://registry.npmjs.org/custom-event-polyfill/-/custom-event-polyfill-1.0.7.tgz}
 
   daisyui@5.0.37:
     resolution: {integrity: sha512-PLc+MhWAqTwolygEGPDi+ac+OsFqIt9nZylTIiyVlEx8loYL7Pt7hNWb8cp5pQQ9dhjYnda1ERiuM6OsJmvPGw==, tarball: https://registry.npmjs.org/daisyui/-/daisyui-5.0.37.tgz}
@@ -2117,6 +2146,9 @@ packages:
   hastscript@7.2.0:
     resolution: {integrity: sha512-TtYPq24IldU8iKoJQqvZOuhi5CyCQRAbvDOX0x1eW6rsHSxa/1i2CCiptNTotGHJ3VoHRGmqiv6/D3q113ikkw==, tarball: https://registry.npmjs.org/hastscript/-/hastscript-7.2.0.tgz}
 
+  hls.js@1.6.5:
+    resolution: {integrity: sha512-KMn5n7JBK+olC342740hDPHnGWfE8FiHtGMOdJPfUjRdARTWj9OB+8c13fnsf9sk1VtpuU2fKSgUjHvg4rNbzQ==, tarball: https://registry.npmjs.org/hls.js/-/hls.js-1.6.5.tgz}
+
   html-void-elements@2.0.1:
     resolution: {integrity: sha512-0quDb7s97CfemeJAnW9wC0hw78MtW7NU3hqtCD75g2vFlDLt36llsYD7uB7SUzojLMP24N5IatXf7ylGXiGG9A==, tarball: https://registry.npmjs.org/html-void-elements/-/html-void-elements-2.0.1.tgz}
 
@@ -2169,6 +2201,9 @@ packages:
   is-core-module@2.16.1:
     resolution: {integrity: sha512-UfoeMA6fIJ8wTYFEUjelnaGI67v6+N7qXJEvQuIGa99l4xsCruSYOVSQ0uPANn4dAzm8lkYPaKLrrijLq7x23w==, tarball: https://registry.npmjs.org/is-core-module/-/is-core-module-2.16.1.tgz}
     engines: {node: '>= 0.4'}
+
+  is-emoji-supported@0.0.5:
+    resolution: {integrity: sha512-WOlXUhDDHxYqcSmFZis+xWhhqXiK2SU0iYiqmth5Ip0FHLZQAt9rKL5ahnilE8/86WH8tZ3bmNNNC+bTzamqlw==, tarball: https://registry.npmjs.org/is-emoji-supported/-/is-emoji-supported-0.0.5.tgz}
 
   is-extglob@2.1.1:
     resolution: {integrity: sha512-SbKbANkN603Vi4jEZv49LeVJMn4yGwsbzZworEoyEiutsN3nJYdbO36zfhGJ6QEDpOZIFkDtnq5JRxmvl3jsoQ==, tarball: https://registry.npmjs.org/is-extglob/-/is-extglob-2.1.1.tgz}
@@ -2387,6 +2422,9 @@ packages:
   listr2@8.3.3:
     resolution: {integrity: sha512-LWzX2KsqcB1wqQ4AHgYb4RsDXauQiqhjLk+6hjbaeHG4zpjjVAB6wC/gz6X0l+Du1cN3pUB5ZlrvTbhGSNnUQQ==, tarball: https://registry.npmjs.org/listr2/-/listr2-8.3.3.tgz}
     engines: {node: '>=18.0.0'}
+
+  loadjs@4.3.0:
+    resolution: {integrity: sha512-vNX4ZZLJBeDEOBvdr2v/F+0aN5oMuPu7JTqrMwp+DtgK+AryOlpy6Xtm2/HpNr+azEa828oQjOtWsB6iDtSfSQ==, tarball: https://registry.npmjs.org/loadjs/-/loadjs-4.3.0.tgz}
 
   locate-character@3.0.0:
     resolution: {integrity: sha512-SW13ws7BjaeJ6p7Q6CO2nchbYEc3X3J6WrmTTDto7yMPqVSZTUyY5Tjbid+Ab8gLnATtygYtiDIJGQRRn2ZOiA==, tarball: https://registry.npmjs.org/locate-character/-/locate-character-3.0.0.tgz}
@@ -2607,6 +2645,10 @@ packages:
     resolution: {integrity: sha512-VP79XUPxV2CigYP3jWwAUFSku2aKqBH7uTAapFWCBqutsbmDo96KY5o8uh6U+/YSIn5OxJnXp73beVkpqMIGhA==, tarball: https://registry.npmjs.org/mimic-function/-/mimic-function-5.0.1.tgz}
     engines: {node: '>=18'}
 
+  mini-svg-data-uri@1.4.4:
+    resolution: {integrity: sha512-r9deDe9p5FJUPZAk3A59wGH7Ii9YrjjWw0jmw/liSbHl2CHiyXj6FcDXDu2K3TjVAXqiJdaw3xxwlZZr9E6nHg==, tarball: https://registry.npmjs.org/mini-svg-data-uri/-/mini-svg-data-uri-1.4.4.tgz}
+    hasBin: true
+
   minimatch@3.1.2:
     resolution: {integrity: sha512-J7p63hRiAjw1NDEww1W7i37+ByIrOWO5XQQAzZ3VOcL0PNybwpfmV/N05zFAzwQ9USyEcX6t3UO+K5aqBQOIHw==, tarball: https://registry.npmjs.org/minimatch/-/minimatch-3.1.2.tgz}
 
@@ -2773,6 +2815,9 @@ packages:
       typescript:
         optional: true
 
+  plyr@3.7.8:
+    resolution: {integrity: sha512-yG/EHDobwbB/uP+4Bm6eUpJ93f8xxHjjk2dYcD1Oqpe1EcuQl5tzzw9Oq+uVAzd2lkM11qZfydSiyIpiB8pgdA==, tarball: https://registry.npmjs.org/plyr/-/plyr-3.7.8.tgz}
+
   postcss-selector-parser@6.0.10:
     resolution: {integrity: sha512-IQ7TZdoaqbT+LCpShg46jnZVlhWD2w6iQYAcYXfHARZ7X1t/UGhhceQDs5X0cGqKvYlHNOuv7Oa1xmb0oQuA3w==, tarball: https://registry.npmjs.org/postcss-selector-parser/-/postcss-selector-parser-6.0.10.tgz}
     engines: {node: '>=4'}
@@ -2925,6 +2970,9 @@ packages:
   queueueue@4.1.2:
     resolution: {integrity: sha512-YNOihQyk72FRrGQP+fVjUDVCSgxtHS5EdfgXjCYwPCTyhVWXriHfUt0XK0eT7vcBX0m91g0e0KVO8CxoNLh60g==, tarball: https://registry.npmjs.org/queueueue/-/queueueue-4.1.2.tgz}
     engines: {node: '>=18'}
+
+  rangetouch@2.0.1:
+    resolution: {integrity: sha512-sln+pNSc8NGaHoLzwNBssFSf/rSYkqeBXzX1AtJlkJiUaVSJSbRAWJk+4omsXkN+EJalzkZhWQ3th1m0FpR5xA==, tarball: https://registry.npmjs.org/rangetouch/-/rangetouch-2.0.1.tgz}
 
   react-dom@19.0.0:
     resolution: {integrity: sha512-4GV5sHFG0e/0AD4X+ySy6UJd3jVl1iNsNHdpad0qhABJ11twS3TTBnseqsKurKcsNqCEFeGL3uLpVChpIO3QfQ==, tarball: https://registry.npmjs.org/react-dom/-/react-dom-19.0.0.tgz}
@@ -3411,6 +3459,9 @@ packages:
     resolution: {integrity: sha512-gptHNQghINnc/vTGIk0SOFGFNXw7JVrlRUtConJRlvaw6DuX0wO5Jeko9sWrMBhh+PsYAZ7oXAiOnf/UKogyiw==, tarball: https://registry.npmjs.org/universalify/-/universalify-2.0.1.tgz}
     engines: {node: '>= 10.0.0'}
 
+  url-polyfill@1.1.13:
+    resolution: {integrity: sha512-tXzkojrv2SujumYthZ/WjF7jaSfNhSXlYMpE5AYdL2I3D7DCeo+mch8KtW2rUuKjDg+3VXODXHVgipt8yGY/eQ==, tarball: https://registry.npmjs.org/url-polyfill/-/url-polyfill-1.1.13.tgz}
+
   use-sync-external-store@1.5.0:
     resolution: {integrity: sha512-Rb46I4cGGVBmjamjphe8L/UnvJD+uPPtTkNvX5mZgqdbavhI4EbgIWJiIHXJ8bc/i9EQGPRh4DwEURJ552Do0A==, tarball: https://registry.npmjs.org/use-sync-external-store/-/use-sync-external-store-1.5.0.tgz}
     peerDependencies:
@@ -3717,6 +3768,17 @@ snapshots:
       multiformats: 9.9.0
       tlds: 1.259.0
       zod: 3.25.23
+
+  '@atproto/api@0.15.15':
+    dependencies:
+      '@atproto/common-web': 0.4.2
+      '@atproto/lexicon': 0.4.11
+      '@atproto/syntax': 0.4.0
+      '@atproto/xrpc': 0.7.0
+      await-lock: 2.2.2
+      multiformats: 9.9.0
+      tlds: 1.259.0
+      zod: 3.25.28
 
   '@atproto/common-web@0.4.2':
     dependencies:
@@ -4069,7 +4131,7 @@ snapshots:
 
   '@floating-ui/utils@0.2.9': {}
 
-  '@fuxui/base@0.2.1(svelte@5.33.1)(tailwindcss@4.1.7)':
+  '@fuxui/base@0.2.2(svelte@5.33.1)(tailwindcss@4.1.7)':
     dependencies:
       '@number-flow/svelte': 0.3.9(svelte@5.33.1)
       bits-ui: 1.7.0(svelte@5.33.1)
@@ -4078,6 +4140,19 @@ snapshots:
       svelte-sonner: 0.3.28(svelte@5.33.1)
       tailwind-merge: 3.3.1
       tailwind-variants: 1.0.0(tailwindcss@4.1.7)
+      tailwindcss: 4.1.7
+
+  '@fuxui/social@0.2.2(svelte@5.33.1)(tailwindcss@4.1.7)':
+    dependencies:
+      '@atproto/api': 0.15.15
+      '@fuxui/base': 0.2.2(svelte@5.33.1)(tailwindcss@4.1.7)
+      '@use-gesture/vanilla': 10.3.1
+      bits-ui: 1.7.0(svelte@5.33.1)
+      emoji-picker-element: 1.26.3
+      hls.js: 1.6.5
+      is-emoji-supported: 0.0.5
+      plyr: 3.7.8
+      svelte: 5.33.1
       tailwindcss: 4.1.7
 
   '@gerrit0/mini-shiki@3.4.2':
@@ -4539,6 +4614,11 @@ snapshots:
     dependencies:
       '@swc/counter': 0.1.3
 
+  '@tailwindcss/forms@0.5.10(tailwindcss@4.1.7)':
+    dependencies:
+      mini-svg-data-uri: 1.4.4
+      tailwindcss: 4.1.7
+
   '@tailwindcss/node@4.1.7':
     dependencies:
       '@ampproject/remapping': 2.3.0
@@ -4971,6 +5051,12 @@ snapshots:
 
   '@ungap/structured-clone@1.3.0': {}
 
+  '@use-gesture/core@10.3.1': {}
+
+  '@use-gesture/vanilla@10.3.1':
+    dependencies:
+      '@use-gesture/core': 10.3.1
+
   '@vitest/expect@3.1.4':
     dependencies:
       '@vitest/spy': 3.1.4
@@ -5242,6 +5328,8 @@ snapshots:
   cssesc@3.0.0: {}
 
   csstype@3.1.3: {}
+
+  custom-event-polyfill@1.0.7: {}
 
   daisyui@5.0.37: {}
 
@@ -5662,6 +5750,8 @@ snapshots:
       property-information: 6.5.0
       space-separated-tokens: 2.0.2
 
+  hls.js@1.6.5: {}
+
   html-void-elements@2.0.1: {}
 
   html-void-elements@3.0.0: {}
@@ -5701,6 +5791,8 @@ snapshots:
   is-core-module@2.16.1:
     dependencies:
       hasown: 2.0.2
+
+  is-emoji-supported@0.0.5: {}
 
   is-extglob@2.1.1: {}
 
@@ -5914,6 +6006,8 @@ snapshots:
       log-update: 6.1.0
       rfdc: 1.4.1
       wrap-ansi: 9.0.0
+
+  loadjs@4.3.0: {}
 
   locate-character@3.0.0: {}
 
@@ -6304,6 +6398,8 @@ snapshots:
 
   mimic-function@5.0.1: {}
 
+  mini-svg-data-uri@1.4.4: {}
+
   minimatch@3.1.2:
     dependencies:
       brace-expansion: 1.1.11
@@ -6446,6 +6542,14 @@ snapshots:
       rollup-pluginutils: 2.8.2
     optionalDependencies:
       typescript: 5.8.3
+
+  plyr@3.7.8:
+    dependencies:
+      core-js: 3.42.0
+      custom-event-polyfill: 1.0.7
+      loadjs: 4.3.0
+      rangetouch: 2.0.1
+      url-polyfill: 1.1.13
 
   postcss-selector-parser@6.0.10:
     dependencies:
@@ -6606,6 +6710,8 @@ snapshots:
   queueueue@4.1.2:
     dependencies:
       fast-list: 1.0.3
+
+  rangetouch@2.0.1: {}
 
   react-dom@19.0.0(react@19.0.0):
     dependencies:
@@ -7164,6 +7270,8 @@ snapshots:
       unist-util-visit-parents: 6.0.1
 
   universalify@2.0.1: {}
+
+  url-polyfill@1.1.13: {}
 
   use-sync-external-store@1.5.0(react@19.0.0):
     dependencies:

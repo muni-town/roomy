@@ -4,6 +4,8 @@
   import { RoomyAccount } from "$lib/jazz/schema";
   import "jazz-inspector-element";
   import { dev } from "$app/environment";
+  import { BlueskyLoginModal } from "@fuxui/social";
+  import { user } from "$lib/user.svelte";
 
   const peerUrl = "wss://cloud.jazz.tools/?key=flo.bit.dev@gmail.com" as `wss://${string}`;
   let sync = { peer: peerUrl, when: "always" as const };
@@ -24,3 +26,10 @@
   <jazz-inspector></jazz-inspector>
   {@render children?.()}
 </JazzProvider>
+
+<BlueskyLoginModal
+  login={async (handle: string) => {
+    await user.loginWithHandle(handle);
+    return true;
+  }}
+/>

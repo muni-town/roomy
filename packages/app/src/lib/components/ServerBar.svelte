@@ -1,9 +1,7 @@
 <script lang="ts">
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  import Dialog from "$lib/components/Dialog.svelte";
   import SidebarSpace from "$lib/components/SidebarSpace.svelte";
-  import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { co } from "jazz-tools";
   import { createSpace, createSpaceList } from "$lib/jazz/utils";
   import { RoomyAccount, Space, SpaceList } from "$lib/jazz/schema";
@@ -11,8 +9,9 @@
   import { CoState } from "jazz-svelte";
   import { page } from "$app/state";
   import Sidebar from "./ui/Sidebar.svelte";
-  import { ScrollArea } from "@fuxui/base";
-  import { Button } from "@fuxui/base";
+  import { ScrollArea, TooltipProvider, Button } from "@fuxui/base";
+  import CreateSpaceModal from "./modals/CreateSpaceModal.svelte";
+  import User from "./User.svelte";
 
   let {
     spaces,
@@ -24,7 +23,6 @@
     me: co.loaded<typeof RoomyAccount> | undefined | null;
   } = $props();
 
-  let newSpaceName = $state("");
   let isNewSpaceDialogOpen = $state(false);
 
   let openSpace = $derived(new CoState(Space, page.params.space));
@@ -32,26 +30,6 @@
   let isOpenSpaceJoined = $derived(
     me?.profile?.joinedSpaces?.some((x) => x?.id === openSpace.current?.id),
   );
-
-  async function createSpaceSubmit(evt: Event) {
-    evt.preventDefault();
-    if (!newSpaceName) return;
-
-    if (me?.profile && me.profile.joinedSpaces === undefined) {
-      me.profile.joinedSpaces = createSpaceList();
-    }
-
-    const space = createSpace(newSpaceName);
-
-    me?.profile?.joinedSpaces?.push(space);
-
-    newSpaceName = "";
-
-    isNewSpaceDialogOpen = false;
-
-    console.log("navigating to space", space.id);
-    navigate({ space: space.id });
-  }
 </script>
 
 <!-- Width manually set for transition to w-0 -->
@@ -64,60 +42,37 @@
 <Sidebar>
   <div class="flex flex-col gap-1 items-center justify-center py-2">
     <Button
-    variant="link"
+      variant="link"
       type="button"
       onclick={() => navigate("home")}
       class="px-1 aspect-square [&_svg]:size-8"
-      data-current={page.url.pathname.startsWith('/home')}
+      data-current={page.url.pathname.startsWith("/home")}
     >
       <Icon icon="iconamoon:home-fill" font-size="1.75em" />
-  </Button>
+    </Button>
 
     <!-- Messages Button -->
-    <Button
+    <!-- <Button
       href="/messages"
       variant="link"
-      data-current={page.url.pathname.startsWith('/messages')}
+      data-current={page.url.pathname.startsWith("/messages")}
       class="px-1 aspect-square [&_svg]:size-8"
       title="Direct Messages"
     >
       <Icon icon="tabler:mail" font-size="1.75em" />
-      </Button>
+    </Button> -->
 
     {#if me?.profile?.blueskyHandle}
-      <Dialog
-        title="Create Space"
-        description="Create a new public chat space"
-        bind:isDialogOpen={isNewSpaceDialogOpen}
-      >
-        {#snippet dialogTrigger()}
-          <Button.Root
-            title="Create Space"
-            class="p-2 aspect-square rounded-lg hover:bg-base-200 cursor-pointer"
-          >
-            <Icon icon="basil:add-solid" font-size="2em" />
-          </Button.Root>
-        {/snippet}
+      <CreateSpaceModal {me} bind:open={isNewSpaceDialogOpen} />
 
-        <form
-          id="createSpace"
-          class="flex flex-col gap-4"
-          onsubmit={createSpaceSubmit}
-        >
-          <input
-            bind:value={newSpaceName}
-            use:focusOnRender
-            placeholder="Name"
-            class="dz-input w-full"
-            type="text"
-            required
-          />
-          <Button.Root disabled={!newSpaceName} class="dz-btn dz-btn-primary">
-            <Icon icon="basil:add-outline" font-size="1.8em" />
-            Create Space
-          </Button.Root>
-        </form>
-      </Dialog>
+      <Button
+        variant="link"
+        title="Create Space"
+        class="p-2 aspect-square rounded-lg cursor-pointer [&_svg]:size-8"
+        onclick={() => (isNewSpaceDialogOpen = true)}
+      >
+        <Icon icon="basil:add-solid" font-size="2em" />
+      </Button>
     {/if}
 
     <div class="divider my-0"></div>
@@ -126,19 +81,21 @@
     {/if}
   </div>
   <ScrollArea class="flex-grow">
-    <div
-      class="flex flex-col px-2 items-center flex-grow h-full overflow-y-auto"
-    >
-      {#if spaces}
-        {#each spaces as space}
-          <SidebarSpace {space} {me} />
-        {/each}
-      {/if}
-    </div>
+    <TooltipProvider>
+      <div
+        class="flex flex-col px-2 items-center flex-grow h-full overflow-y-auto"
+      >
+        {#if spaces}
+          {#each spaces as space}
+            <SidebarSpace {space} {me} />
+          {/each}
+        {/if}
+      </div>
+    </TooltipProvider>
   </ScrollArea>
 
   <section class="flex flex-col items-center gap-2 p-0">
-    <Login />
+    <User />
   </section>
 </Sidebar>
 <!-- </aside> -->

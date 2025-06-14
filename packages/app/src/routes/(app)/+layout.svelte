@@ -183,7 +183,7 @@
   class="{page.params.space &&
     (isSidebarVisible.value
       ? 'flex z-1 absolute w-full'
-      : 'hidden')} sm:w-auto sm:relative sm:flex h-full overflow-clip gap-0 isolate z-50
+      : 'hidden')} sm:w-auto sm:relative sm:flex h-full overflow-clip gap-0 z-50
       "
 >
   <!-- Content -->
@@ -212,10 +212,10 @@
 <div
   class={[
     page.url.pathname === "/messages" ? "ml-20" : "",
-    isSidebarVisible.value || true
-      ? "sm:ml-79 z-[100] bg-white shadow-lg border-l border-base-800/20 relative"
+    isSidebarVisible.value || page.params.space
+      ? "sm:ml-79 z-40 bg-white shadow-lg border-l border-base-800/20 relative"
       : "",
-      "relative"
+    "relative",
   ]}
 >
   {@render children()}

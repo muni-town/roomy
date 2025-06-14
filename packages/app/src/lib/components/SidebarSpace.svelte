@@ -6,6 +6,7 @@
   import { page } from "$app/state";
   import { co } from "jazz-tools";
   import { Space, RoomyAccount } from "$lib/jazz/schema";
+  import { Popover, Tooltip } from "@fuxui/base";
 
   type Props = {
     space: co.loaded<typeof Space> | null | undefined;
@@ -15,12 +16,9 @@
 
   const { space, hasJoined = true, me }: Props = $props();
 
-  // Tooltip state
-  let activeTooltip = $state("");
-  let tooltipPosition = $state({ x: 0, y: 0 });
-
   let isActive = $derived(page.url.pathname.includes(space?.id || ""));
 
+  // TODO: add leave space back in somewhere
   function leaveSpace() {
     if (!space?.id || !me?.profile?.joinedSpaces || !space.members) return;
 
@@ -44,62 +42,39 @@
   }
 </script>
 
-<TooltipPortal
-  text={activeTooltip}
-  visible={!!activeTooltip}
-  x={tooltipPosition.x}
-  y={tooltipPosition.y}
-/>
-<ContextMenu
-  menuTitle={space?.name}
-  items={[
-    {
-      label: "Leave Space",
-      icon: "mdi:exit-to-app",
-      onselect: leaveSpace,
-    },
-  ]}
->
-  <button
-    onclick={() => navigate({ space: space?.id || "" })}
-    value={space?.id}
-    onmouseenter={(e: Event) => {
-      activeTooltip = space?.name || "";
-      const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-      tooltipPosition = { x: rect.right + 8, y: rect.top + rect.height / 2 };
-    }}
-    onmouseleave={() => {
-      activeTooltip = "";
-    }}
-    onblur={() => {
-      activeTooltip = "";
-    }}
-    class={[
-      "size-12 rounded-full relative group p-0.5",
-      isActive &&
-        "ring-0.5 ring-offset-0 ring-primary/30 border border-primary",
-      "transition-all duration-200",
-    ]}
-  >
-    <div
+<Tooltip text={space?.name} delayDuration={0} contentProps={{ side: "right", sideOffset: 2 }}>
+  {#snippet child({ props })}
+    <button
+      {...props}
+      onclick={() => navigate({ space: space?.id || "" })}
+      value={space?.id}
       class={[
-        "flex items-center justify-center overflow-hidden",
-        !hasJoined && "opacity-50",
+        "size-12 rounded-full relative group",
+        isActive &&
+          "outline-4 outline-accent-500 -outline-offset-4",
+        "transition-all duration-200",
       ]}
     >
-      {#if space?.imageUrl}
-        <img
-          src={space?.imageUrl}
-          alt={space?.name || ""}
-          class="w-10 h-10 object-cover rounded-full object-center"
-        />
-      {:else if space && space.id}
-        <div class="w-10 h-10">
-          <AvatarMarble name={space.id} />
-        </div>
-      {:else}
-        <div class="w-10 h-10 bg-base-300 rounded-full"></div>
-      {/if}
-    </div>
-  </button>
-</ContextMenu>
+      <div
+        class={[
+          "flex items-center justify-center overflow-hidden",
+          !hasJoined && "opacity-50",
+        ]}
+      >
+        {#if space?.imageUrl}
+          <img
+            src={space?.imageUrl}
+            alt={space?.name || ""}
+            class="w-10 h-10 object-cover rounded-full object-center"
+          />
+        {:else if space && space.id}
+          <div class="w-10 h-10">
+            <AvatarMarble name={space.id} />
+          </div>
+        {:else}
+          <div class="w-10 h-10 bg-base-300 rounded-full"></div>
+        {/if}
+      </div>
+    </button>
+  {/snippet}
+</Tooltip>
