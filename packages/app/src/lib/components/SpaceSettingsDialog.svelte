@@ -79,6 +79,13 @@
       avatarFile = null;
     }
   }
+
+  let loadingExport = $state(false);
+  async function exportSpace() {
+    loadingExport = true;
+    await export_space();
+    loadingExport = false;
+  }
 </script>
 
 <Dialog title="Space Settings" bind:isDialogOpen={showSpaceSettings}>

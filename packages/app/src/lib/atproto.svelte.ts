@@ -1,85 +1,98 @@
 import { dev } from "$app/environment";
 import {
-  atprotoLoopbackClientMetadata,
   BrowserOAuthClient,
-  buildLoopbackClientId,
   type OAuthClientMetadataInput,
 } from "@atproto/oauth-client-browser";
 import { isTauri } from "@tauri-apps/api/core";
 import { type } from "@tauri-apps/plugin-os";
 
 const scope = "atproto transition:generic transition:chat.bsky";
+const oatProxyUrl = "https://commonly-proper-amoeba.ngrok-free.app";
 
-let oauth: BrowserOAuthClient | undefined = $state();
+let oauth = $state() as BrowserOAuthClient | undefined;
 
-/** The AtProto store. */
+const fetchWithLies = async (input: RequestInfo | URL, init?: RequestInit) => {
+  let request: Request;
+  if (typeof input === "string" || input instanceof URL) {
+    request = new Request(input, init);
+  } else {
+    request = input;
+  }
+
+  // Always intercept DID resolution to point to OATProxy
+  if (
+    request.url.includes("plc.directory") ||
+    request.url.endsWith("did.json")
+  ) {
+    const res = await fetch(request, init);
+    if (!res.ok) return res;
+    const data = await res.json();
+    const service = data.service?.find((s: any) => s.id === "#atproto_pds");
+    if (service) {
+      service.serviceEndpoint = oatProxyUrl;
+    }
+    return new Response(JSON.stringify(data), {
+      status: res.status,
+      headers: res.headers,
+    });
+  }
+
+  // Route all XRPC requests through OATProxy
+  if (request.url.includes("/xrpc/")) {
+    const url = new URL(request.url);
+    return fetch(`${oatProxyUrl}/xrpc${url.pathname}${url.search}`, {
+      ...init,
+      headers: {
+        ...init?.headers,
+        Authorization: request.headers.get("Authorization") || "",
+      },
+    });
+  }
+
+  return fetch(request, init);
+};
+
 export const atproto = {
-  /** The scope required by the app when logging in. */
   scope,
 
-  /**
-   * The AtProto oauth client.
-   *
-   * `init()` must be called before use
-   */
   get oauth() {
-    // Here we lie about the type with a non-null assertion because we
-    // are going to need it constantly throughout the codebase and errors
-    // about an undefined oauth will be very obviously a failure to await on
-    // init() first.
     return oauth!;
   },
 
-  /** Init function must be called before accessing the oauth client. */
   async init() {
-    // Skip initialization if already initialized.
     if (this.oauth) return;
 
-    // Build the client metadata
-    let clientMetadata: OAuthClientMetadataInput;
-    if (dev && !isTauri()) {
-      // Get the base URL and redirect URL for this deployment
-      const baseUrl = new URL(
-        dev ? "http://127.0.0.1:5173" : globalThis.location.href,
-      );
-      baseUrl.hash = "";
-      baseUrl.pathname = "/";
-      const redirectUri = baseUrl.href + "oauth/callback";
-      // In dev, we build a development metadata
-      clientMetadata = {
-        ...atprotoLoopbackClientMetadata(buildLoopbackClientId(baseUrl)),
-        redirect_uris: [redirectUri],
-        scope,
-        client_id: `http://localhost?redirect_uri=${encodeURIComponent(
-          redirectUri,
-        )}&scope=${encodeURIComponent(scope)}`,
-      };
+    // Always use OATProxy callback URL since that's what's registered
+    // OATProxy will handle the redirect back to the appropriate location
+    let redirectUris: [string, ...string[]];
+
+    if (isTauri()) {
+      // For Tauri (desktop/mobile apps)
+      redirectUris =
+        type() === "android" || type() === "ios"
+          ? ["https://roomy.chat/oauth/callback"]
+          : ["chat.roomy:/oauth/callback"];
     } else {
-      // In prod, we fetch the `/oauth-client.json` which is expected to be deployed alongside the
-      // static build.
-      // native client metadata is not reuqired to be on the same domin as client_id,
-      // so it can always use the deployed metadata
-      const resp = await fetch(
-        `/oauth-client${isTauri() ? "-native" : ""}.json`,
-        {
-          headers: [["accept", "application/json"]],
-        },
-      );
-      clientMetadata = await resp.json();
-      if (isTauri()) {
-        // only include redirect uri for current platform
-        clientMetadata.redirect_uris =
-          type() === "android" || type() === "ios"
-            ? ["https://roomy.chat/oauth/callback"]
-            : ["chat.roomy:/oauth/callback"];
-      }
+      // For both dev and production web - always use OATProxy callback
+      // OATProxy will handle redirecting back to the correct location
+      redirectUris = [`${oatProxyUrl}/oauth/callback`];
     }
 
-    // Build the oauth client
+    const clientMetadata: OAuthClientMetadataInput = {
+      client_id: `${oatProxyUrl}/oauth/downstream/client-metadata.json`,
+      redirect_uris: redirectUris,
+      scope,
+      response_types: ["code"],
+      grant_types: ["authorization_code", "refresh_token"],
+      token_endpoint_auth_method: "none",
+      application_type: isTauri() ? "native" : "web",
+    };
+
     oauth = new BrowserOAuthClient({
       responseMode: "query",
-      handleResolver: "https://resolver.roomy.chat",
+      handleResolver: oatProxyUrl,
       clientMetadata,
+      fetch: (input, init) => fetchWithLies(input, init),
     });
   },
 };
