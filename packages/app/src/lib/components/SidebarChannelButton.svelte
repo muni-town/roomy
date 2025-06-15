@@ -6,6 +6,7 @@
   import Icon from "@iconify/svelte";
   import { Button } from "@fuxui/base";
   import { co, z } from "jazz-tools";
+  import { slide } from "svelte/transition";
 
   let {
     channel,
@@ -42,38 +43,55 @@
     ).length,
   );
 
+  // Cache the user ID to prevent excessive reactivity
+  const myUserId = $derived(me?.id);
+  const mySubscriptions = $derived(me?.profile?.threadSubscriptions);
+  
   const channelThreads = $derived.by(() => {
-    if (!me?.id || !channel?.subThreads) return [];
+    if (!myUserId || !channel?.subThreads) return [];
 
-    return channel.subThreads.filter((thread) => {
-      if (!thread || thread.softDeleted) return false;
+    // Use a stable filter to prevent layout shifts
+    const filteredThreads = [];
+    const subThreadsArray = Array.from(channel.subThreads); // Create stable array reference
+    
+    for (const thread of subThreadsArray) {
+      if (!thread || thread.softDeleted) continue;
       
       // Check if explicitly unsubscribed
       try {
-        const isUnsubscribed = me?.profile?.threadSubscriptions?.some?.(subId => subId === `unsubscribe:${thread.id}`);
-        if (isUnsubscribed) return false;
+        const isUnsubscribed = mySubscriptions?.some?.(subId => subId === `unsubscribe:${thread.id}`);
+        if (isUnsubscribed) continue;
       } catch (e) {
         // Ignore subscription check errors to prevent breaking the channel list
       }
       
       // Check if I created the thread
-      if (thread._edits?.name?.by?.id === me.id) return true;
+      if (thread._edits?.name?.by?.id === myUserId) {
+        filteredThreads.push(thread);
+        continue;
+      }
 
       // Check if I sent any messages in this thread
       const threadTimeline = thread.timeline;
-      if (!threadTimeline?.perAccount) return false;
+      if (!threadTimeline?.perAccount) continue;
 
-      const myMessages = threadTimeline.perAccount[me.id];
-      if (myMessages && myMessages.length > 0) return true;
+      const myMessages = threadTimeline.perAccount[myUserId];
+      if (myMessages && myMessages.length > 0) {
+        filteredThreads.push(thread);
+        continue;
+      }
 
       // Also check all timeline entries for my account ID
       const allEntries = Object.values(threadTimeline.perAccount);
       for (const accountEntries of allEntries) {
-        if (accountEntries.by?.id === me.id) return true;
+        if (accountEntries.by?.id === myUserId) {
+          filteredThreads.push(thread);
+          break;
+        }
       }
-
-      return false;
-    });
+    }
+    
+    return filteredThreads;
   });
 
   function unsubscribeFromThread(threadId: string) {
@@ -127,8 +145,11 @@
       class="w-full justify-start"
       data-current={channel.id === page.params.channel}
     >
-      <Icon icon="basil:comment-solid" class="shrink-0" />
+      <Icon icon={channel.channelType === "feeds" ? "basil:feed-outline" : "basil:comment-solid"} class="shrink-0" />
       <span class="truncate">{channel?.name || "..."}</span>
+      {#if channel.channelType === "feeds"}
+        <span class="text-xs bg-primary/20 text-primary px-1 py-0.5 rounded shrink-0">FEEDS</span>
+      {/if}
 
       {#if totalNotifications}
         <span
@@ -155,8 +176,9 @@
   </div>
 
   <!-- Threads under channel -->
-  {#if channelThreads.length > 0}
-    <div class="flex flex-col gap-1 ml-6">
+  <div class="ml-6 overflow-hidden" style="min-height: 0; max-height: {channelThreads.length > 0 ? 'none' : '0'}; transition: max-height 200ms ease-in-out;">
+    {#if channelThreads.length > 0}
+      <div class="flex flex-col gap-1">
       {#each channelThreads as thread}
         {#if thread}
           {@const threadNotifs = me?.profile?.roomyInbox?.filter(
@@ -191,7 +213,7 @@
                 class="flex justify-start items-center w-full gap-2 px-2 text-sm"
               >
                 <Icon icon="tabler:hash" class="shrink-0" />
-                <span class="truncate">{thread.name || "..."}</span>
+                <span class="truncate">{thread.name?.replace(/^💬\s*/, "") || "..."}</span>
 
                 {#if threadNotifs}
                   <span
@@ -222,6 +244,7 @@
           </div>
         {/if}
       {/each}
-    </div>
-  {/if}
+      </div>
+    {/if}
+  </div>
 {/if}

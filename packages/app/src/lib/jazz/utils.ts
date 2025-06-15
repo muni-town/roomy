@@ -24,7 +24,7 @@ export function publicGroup(readWrite: "reader" | "writer" = "reader") {
   return group;
 }
 
-export function createChannel(name: string) {
+export function createChannel(name: string, channelType: "chat" | "feeds" = "chat") {
   const publicWriteGroup = publicGroup("writer");
   const publicReadGroup = publicGroup("reader");
 
@@ -42,12 +42,27 @@ export function createChannel(name: string) {
       name,
       mainThread: thread,
       subThreads: co.list(Thread).create([], publicWriteGroup),
+      channelType,
     },
     publicReadGroup,
   );
 
   thread.channelId = channel.id;
 
+  return channel;
+}
+
+export function createFeedsChannel(name: string, feedUris?: string[], threadsOnly = false) {
+  const channel = createChannel(name, "feeds");
+  
+  // Set up ATProto feeds configuration
+  channel.isAtprotoFeed = true;
+  channel.showAtprotoFeeds = true;
+  channel.atprotoFeedsConfig = {
+    feeds: feedUris || [], // Start with empty feeds array
+    threadsOnly,
+  };
+  
   return channel;
 }
 
