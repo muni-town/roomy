@@ -42,13 +42,7 @@ importers:
         version: 0.3.17
       '@automerge/automerge-repo-storage-indexeddb':
         specifier: 2.0.0-collectionsync-alpha.1
-<<<<<<< HEAD
         version: 2.0.0-collectionsync-alpha.1(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-        version: 2.0.0-collectionsync-alpha.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)
-=======
-        version: 2.0.0-collectionsync-alpha.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       '@blocknote/core':
         specifier: ^0.25.0
         version: 0.25.2(@types/hast@3.0.4)
@@ -62,22 +56,6 @@ importers:
         specifier: ^0.2.0-preview.22
         version: 0.2.0-preview.22
       '@muni-town/leaf-storage-indexeddb':
-<<<<<<< HEAD
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-        specifier: ^0.1.0-preview.5
-        version: 0.1.0-preview.5(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)
-      '@muni-town/leaf-svelte':
-        specifier: ^0.1.0-preview.5
-        version: 0.1.0-preview.5
-      '@muni-town/leaf-sync-ws':
-=======
-        specifier: ^0.1.0-preview.5
-        version: 0.1.0-preview.5(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)
-      '@muni-town/leaf-svelte':
-        specifier: ^0.1.0-preview.5
-        version: 0.1.0-preview.5
-      '@muni-town/leaf-sync-ws':
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
         specifier: ^0.1.0-preview.6
         version: 0.1.0-preview.7(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)
       '@muni-town/leaf-svelte':
@@ -92,55 +70,20 @@ importers:
       '@repo/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
-<<<<<<< HEAD
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      '@roomy-chat/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-      '@sveltejs/adapter-netlify':
-        specifier: ^5.0.0
-        version: 5.0.2(@sveltejs/kit@2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))
-=======
-      '@roomy-chat/sdk':
-        specifier: workspace:*
-        version: link:../sdk
-      '@sveltejs/adapter-netlify':
-        specifier: ^5.0.0
-        version: 5.0.2(@sveltejs/kit@2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       '@sveltejs/adapter-static':
         specifier: ^3.0.8
-<<<<<<< HEAD
         version: 3.0.8(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)))(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)))
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-        version: 3.0.8(@sveltejs/kit@2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))
-=======
-        version: 3.0.8(@sveltejs/kit@2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       '@sveltejs/kit':
         specifier: ^2.20.7
-<<<<<<< HEAD
         version: 2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)))(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-        version: 2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-=======
-        version: 2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       '@sveltejs/vite-plugin-svelte':
         specifier: ^5.0.3
-<<<<<<< HEAD
         version: 5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-        version: 5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-=======
-        version: 5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       '@tailwindcss/typography':
         specifier: ^0.5.16
         version: 0.5.16(tailwindcss@4.1.7)
       '@tailwindcss/vite':
         specifier: ^4.1.4
-<<<<<<< HEAD
         version: 4.1.7(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))
       '@tauri-apps/api':
         specifier: ^2.5.0
@@ -160,11 +103,6 @@ importers:
       '@tauri-apps/plugin-os':
         specifier: ^2.2.1
         version: 2.2.1
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-        version: 4.1.5(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-=======
-        version: 4.1.5(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       '@tiptap/core':
         specifier: ^2.11.5
         version: 2.12.0(@tiptap/pm@2.12.0)
@@ -269,16 +207,7 @@ importers:
         version: 2.17.0
       shiki:
         specifier: ^3.2.1
-<<<<<<< HEAD
         version: 3.4.2
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-        version: 3.4.0
-=======
-        version: 3.4.0
-      socket.io-client:
-        specifier: ^4.8.1
-        version: 4.8.1
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       svelte:
         specifier: ^5.23.1
         version: 5.33.1
@@ -323,61 +252,19 @@ importers:
         version: 0.41.2(react-dom@19.1.0(react@19.0.0))(react@19.0.0)(svelte@5.33.1)
       vite:
         specifier: ^6.2.2
-<<<<<<< HEAD
         version: 6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-        version: 6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
-=======
-        version: 6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       vite-plugin-arraybuffer:
         specifier: ^0.1.0
         version: 0.1.0
       vite-plugin-top-level-await:
         specifier: ^1.4.4
-<<<<<<< HEAD
         version: 1.5.0(@swc/helpers@0.5.17)(rollup@4.41.0)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-        version: 1.5.0(@swc/helpers@0.5.17)(rollup@4.40.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-=======
-        version: 1.5.0(@swc/helpers@0.5.17)(rollup@4.40.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       vite-plugin-wasm:
         specifier: ^3.4.1
-<<<<<<< HEAD
         version: 3.4.1(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-        version: 3.4.1(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-=======
-        version: 3.4.1(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       vitest:
         specifier: ^3.0.9
-<<<<<<< HEAD
         version: 3.1.4(@types/debug@4.1.12)(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-        version: 3.1.3(@types/debug@4.1.12)(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
-
-  packages/sdk:
-    dependencies:
-      '@muni-town/leaf':
-        specifier: 0.2.0-preview.20
-        version: 0.2.0-preview.20
-    devDependencies:
-      beachball:
-        specifier: ^2.54.0
-        version: 2.54.0(typescript@5.8.3)
-      pkgroll:
-        specifier: ^2.12.2
-        version: 2.12.2(typescript@5.8.3)
-      turbo:
-        specifier: ^2.5.2
-        version: 2.5.3
-      typescript:
-        specifier: ^5.8.3
-        version: 5.8.3
-=======
-        version: 3.1.3(@types/debug@4.1.12)(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
 
   packages/discord-bridge:
     dependencies:
@@ -386,19 +273,16 @@ importers:
         version: 0.14.22
       '@muni-town/leaf':
         specifier: ^0.2.0-preview.20
-        version: 0.2.0-preview.20
+        version: 0.2.0-preview.22
       '@muni-town/leaf-storage-indexeddb':
         specifier: ^0.1.0-preview.5
-        version: 0.1.0-preview.5(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)
+        version: 0.1.0-preview.7(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)
       '@muni-town/leaf-svelte':
         specifier: ^0.1.0-preview.5
-        version: 0.1.0-preview.5
+        version: 0.1.0-preview.7
       '@muni-town/leaf-sync-ws':
         specifier: ^0.1.0-preview.6
-        version: 0.1.0-preview.6
-      '@roomy-chat/sdk':
-        specifier: workspace:*
-        version: link:../sdk
+        version: 0.1.0-preview.8
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -423,51 +307,31 @@ importers:
     devDependencies:
       '@types/cors':
         specifier: ^2.8.18
-        version: 2.8.18
+        version: 2.8.19
       '@types/express':
         specifier: ^5.0.1
-        version: 5.0.1
+        version: 5.0.3
       '@types/node':
         specifier: ^22.15.17
-        version: 22.15.17
+        version: 22.15.21
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
       node:
         specifier: ^24.0.1
-        version: 24.0.1
+        version: 24.2.0
       nodemon:
         specifier: ^3.1.10
         version: 3.1.10
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)
+        version: 10.9.2(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)
       ts-node-dev:
         specifier: ^2.0.0
-        version: 2.0.0(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)
+        version: 2.0.0(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)
       typescript:
         specifier: ^5.8.3
         version: 5.8.3
-
-  packages/sdk:
-    dependencies:
-      '@muni-town/leaf':
-        specifier: 0.2.0-preview.20
-        version: 0.2.0-preview.20
-    devDependencies:
-      beachball:
-        specifier: ^2.54.0
-        version: 2.54.0(typescript@5.8.3)
-      pkgroll:
-        specifier: ^2.12.2
-        version: 2.12.2(typescript@5.8.3)
-      turbo:
-        specifier: ^2.5.2
-        version: 2.5.3
-      typescript:
-        specifier: ^5.8.3
-        version: 5.8.3
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
 
   packages/sdk-docs:
     dependencies:
@@ -1136,15 +1000,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@scure/base@1.2.1':
-    resolution: {integrity: sha512-DGmGtC8Tt63J5GfHgfl5CuAXh96VF/LD8K9Hr/Gv0J2lAoRGlPOMpqMpMbCTOoOJMZCk2Xt+DskdDyn6dEFdzQ==}
-
-  '@scure/base@1.2.5':
-    resolution: {integrity: sha512-9rE6EOVeIQzt5TSu4v+K523F8u6DhBsoZWPGKlnCshhlDhy0kJzUX4V+tr2dWmzF1GdekvThABoEQBGBQI7xZw==}
-
-  '@scure/bip39@1.6.0':
-    resolution: {integrity: sha512-+lF0BbLiJNwVlev4eKelw1WWLaiKXw7sSl8T6FvBlWkdX+94aGJ4o8XjUdlyhTCjd8c+B3KT3JfS8P0bLRNU6A==}
-
   '@sapphire/async-queue@1.5.5':
     resolution: {integrity: sha512-cvGzxbba6sav2zZkH8GPf2oGk9yYoD5qrNWdu9fRehifgnFZJMV+nuy2nON2roRO4yQQ+v7MK/Pktl/HgfsUXg==}
     engines: {node: '>=v14.0.0', npm: '>=7.0.0'}
@@ -1156,6 +1011,15 @@ packages:
   '@sapphire/snowflake@3.5.3':
     resolution: {integrity: sha512-jjmJywLAFoWeBi1W7994zZyiNWPIiqRRNAmSERxyg93xRGzNYvGjlZ0gR6x0F4gPRi2+0O6S71kOZYyr3cxaIQ==}
     engines: {node: '>=v14.0.0', npm: '>=7.0.0'}
+
+  '@scure/base@1.2.1':
+    resolution: {integrity: sha512-DGmGtC8Tt63J5GfHgfl5CuAXh96VF/LD8K9Hr/Gv0J2lAoRGlPOMpqMpMbCTOoOJMZCk2Xt+DskdDyn6dEFdzQ==}
+
+  '@scure/base@1.2.5':
+    resolution: {integrity: sha512-9rE6EOVeIQzt5TSu4v+K523F8u6DhBsoZWPGKlnCshhlDhy0kJzUX4V+tr2dWmzF1GdekvThABoEQBGBQI7xZw==}
+
+  '@scure/bip39@1.6.0':
+    resolution: {integrity: sha512-+lF0BbLiJNwVlev4eKelw1WWLaiKXw7sSl8T6FvBlWkdX+94aGJ4o8XjUdlyhTCjd8c+B3KT3JfS8P0bLRNU6A==}
 
   '@shikijs/core@1.29.2':
     resolution: {integrity: sha512-vju0lY9r27jJfOY4Z7+Rt/nIOjzJpZ3y+nYpqtUZInVoXQ/TJZcfGnNOGnKjFdVZb8qexiCuSlZRKcGfhhTTZQ==}
@@ -1704,8 +1568,8 @@ packages:
   '@tsconfig/node16@1.0.4':
     resolution: {integrity: sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==}
 
-  '@types/body-parser@1.19.5':
-    resolution: {integrity: sha512-fB3Zu92ucau0iQ0JMCFQE7b/dv8Ot07NI3KaZIkIUNXq82k4eBAqUaneXfleGY9JWskeS9y+u0nXMyspcuQrCg==}
+  '@types/body-parser@1.19.6':
+    resolution: {integrity: sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g==}
 
   '@types/connect@3.4.38':
     resolution: {integrity: sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug==}
@@ -1713,8 +1577,8 @@ packages:
   '@types/cookie@0.6.0':
     resolution: {integrity: sha512-4Kh9a6B2bQciAhf7FSuMRRkUWecJgJu9nPnx3yzpsfXX/c50REIqpHY4C82bXP90qrLtXtkDxTZosYO3UpOwlA==}
 
-  '@types/cors@2.8.18':
-    resolution: {integrity: sha512-nX3d0sxJW41CqQvfOzVG1NCTXfFDrDWIghCZncpHeWlVFd81zxB/DLhg7avFg6eHLCRX7ckBmoIIcqa++upvJA==}
+  '@types/cors@2.8.19':
+    resolution: {integrity: sha512-mFNylyeyqN93lfe/9CSxOGREz8cpzAhH+E93xJ4xWQf62V8sQ/24reV2nyzUWM6H6Xji+GGHpkbLe7pVoUEskg==}
 
   '@types/debug@4.1.12':
     resolution: {integrity: sha512-vIChWdVG3LG1SMxEvI/AK+FWJthlrqlTu7fbrlywTkkaONwk/UAGaULXRlf8vkzFBLVm0zkMdCquhL5aOjhXPQ==}
@@ -1728,8 +1592,8 @@ packages:
   '@types/express-serve-static-core@5.0.6':
     resolution: {integrity: sha512-3xhRnjJPkULekpSzgtoNYYcTWgEZkp4myc+Saevii5JPnHNvHMRlBSHDbs7Bh1iPPoVTERHEZXyhyLbMEsExsA==}
 
-  '@types/express@5.0.1':
-    resolution: {integrity: sha512-UZUw8vjpWFXuDnjFTh7/5c2TWDlQqeXHi6hcN7F2XSVT5P+WmUnnbFS3KA6Jnc6IsEqI2qCVu2bK0R0J4A8ZQQ==}
+  '@types/express@5.0.3':
+    resolution: {integrity: sha512-wGA0NX93b19/dZC1J18tKWVIYWyyF2ZjT9vin/NRu0qzzvfVzWjs04iq2rQ3H65vCTQYlRqs3YHfY7zjdV+9Kw==}
 
   '@types/extend@3.0.4':
     resolution: {integrity: sha512-ArMouDUTJEz1SQRpFsT2rIw7DeqICFv5aaVzLSIYMYQSLcwcGOfT3VyglQs/p7K3F7fT4zxr0NWxYZIdifD6dA==}
@@ -1743,8 +1607,8 @@ packages:
   '@types/hast@3.0.4':
     resolution: {integrity: sha512-WPs+bbQw5aCj+x6laNGWLH3wviHtoCv/P3+otBhbOhJgG8qtpdAMlTCxLtsTWA7LH1Oh/bFCHsBn0TPS5m30EQ==}
 
-  '@types/http-errors@2.0.4':
-    resolution: {integrity: sha512-D0CFMMtydbJAegzOyHjtiKPLlvnm3iTZyZRSZoLq2mRhDdmLfIWOCYPfQJ4cu2erKghU++QvjcUjp/5h7hESpA==}
+  '@types/http-errors@2.0.5':
+    resolution: {integrity: sha512-r8Tayk8HJnX0FztbZN7oVqGccWgw98T/0neJphO91KkmOzug1KkofZURD4UaD5uH8AqcFLfdPErnBod0u71/qg==}
 
   '@types/linkify-it@5.0.0':
     resolution: {integrity: sha512-sVDA58zAw4eWAffKOaQH5/5j3XeayukzDk+ewSsnv3p4yJEZHCCzMDiZM8e0OUrRvmpGZ85jf4yDHkHsgBNr9Q==}
@@ -1767,16 +1631,8 @@ packages:
   '@types/ms@2.1.0':
     resolution: {integrity: sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==}
 
-<<<<<<< HEAD
   '@types/node@22.15.21':
     resolution: {integrity: sha512-EV/37Td6c+MgKAbkcLG6vqZ2zEYHD7bvSrzqqs2RIhbA6w3x+Dqz8MZM3sP6kGTeLrdoOgKZe+Xja7tUB2DNkQ==}
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  '@types/node@22.15.3':
-    resolution: {integrity: sha512-lX7HFZeHf4QG/J7tBZqrCAXwz9J5RD56Y6MpP0eJkka8p+K0RY/yBTW7CYFJ4VGCclxqOLKmiGP5juQc6MKgcw==}
-=======
-  '@types/node@22.15.17':
-    resolution: {integrity: sha512-wIX2aSZL5FE+MR0JlvF87BNVrtFWf6AE6rxSE9X7OwnVvoyCQjpzSRJ+M87se/4QCkCiebQAqrJ0y6fwIyi7nw==}
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
 
   '@types/parse-path@7.1.0':
     resolution: {integrity: sha512-EULJ8LApcVEPbrfND0cRQqutIOdiIgJ1Mgrhpy755r14xMohPTEpkV/k28SJvuOs9bHRFW8x+KeDAEPiGQPB9Q==}
@@ -1785,8 +1641,8 @@ packages:
   '@types/parse5@6.0.3':
     resolution: {integrity: sha512-SuT16Q1K51EAVPz1K29DJ/sXjhSQ0zjvsypYJ6tlwVsRV9jwW5Adq2ch8Dq8kDBCkYnELS7N7VNCSB5nC56t/g==}
 
-  '@types/qs@6.9.18':
-    resolution: {integrity: sha512-kK7dgTYDyGqS+e2Q4aK9X3D7q234CIZ1Bv0q/7Z5IwRDoADNU81xXJK/YVyLbLTZCoIwUoDoffFeF+p/eIklAA==}
+  '@types/qs@6.14.0':
+    resolution: {integrity: sha512-eOunJqu0K1923aExK6y8p6fsihYEn/BYuQ4g0CxAAgFc4b/ZLN4CrsRZ55srTdqoiLzU2B2evC+apEIxprEzkQ==}
 
   '@types/range-parser@1.2.7':
     resolution: {integrity: sha512-hKormJbkJqzQGhziax5PItDUTMAM9uE2XXQmM37dyd4hVM+5aVl7oVxMVUiVQn2oCQFN/LKCZdvSM0pFRqbSmQ==}
@@ -1797,11 +1653,11 @@ packages:
   '@types/sanitize-html@2.16.0':
     resolution: {integrity: sha512-l6rX1MUXje5ztPT0cAFtUayXF06DqPhRyfVXareEN5gGCFaP/iwsxIyKODr9XDhfxPpN6vXUFNfo5kZMXCxBtw==}
 
-  '@types/send@0.17.4':
-    resolution: {integrity: sha512-x2EM6TJOybec7c52BX0ZspPodMsQUd5L6PRwOunVyVUhXiBSKf3AezDL8Dgvgt5o0UfKNfuA0eMLr2wLT4AiBA==}
+  '@types/send@0.17.5':
+    resolution: {integrity: sha512-z6F2D3cOStZvuk2SaP6YrwkNO65iTZcwA2ZkSABegdkAh/lf+Aa/YQndZVfmEXT5vgAp6zv06VQ3ejSVjAny4w==}
 
-  '@types/serve-static@1.15.7':
-    resolution: {integrity: sha512-W8Ym+h8nhuRwaKPaDw34QUkwsGi6Rc4yYqvKFo5rm2FUEhCFbzVWrxXUxuKK8TASjWsysJY0nsmNCGhCOIsrOw==}
+  '@types/serve-static@1.15.8':
+    resolution: {integrity: sha512-roei0UY3LhpOJvjbIP6ZZFngyLKl5dskOtDhxY5THRSpO+ZI+nzJ+m5yUMzGrp89YRa7lvknKkMYjqQFGwA7Sg==}
 
   '@types/strip-bom@3.0.0':
     resolution: {integrity: sha512-xevGOReSYGM7g/kUBZzPqCrR/KYAo+F0yiPc85WFTJa0MSLtyFTVTU6cJu/aV4mid7IffDIWqo69THF2o4JiEQ==}
@@ -2117,17 +1973,13 @@ packages:
   core-js@3.42.0:
     resolution: {integrity: sha512-Sz4PP4ZA+Rq4II21qkNqOEDTDrCvcANId3xpIgB34NDkWc3UduWj2dqEtN9yZIq8Dk3HyPI33x9sqqU5C8sr0g==}
 
-<<<<<<< HEAD
   core-util-is@1.0.3:
     resolution: {integrity: sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==}
 
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
   cors@2.8.5:
     resolution: {integrity: sha512-KIHbLJqu73RGr/hnbrO9uBeixNGuvSQjul/jdFvS/KFSIH1hWVd1ng7zOHx+YrEfInLG7q4n6GHQ9cDtxv/P6g==}
     engines: {node: '>= 0.10'}
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
   cosmiconfig@8.3.6:
     resolution: {integrity: sha512-kcZ6+W5QzcJ3P1Mt+83OUv/oHFqZHIx8DuxG6eZ5RGMERoLqp4BuGjhHLYGK+Kf5XVkQvqBSmAy/nGWN3qDgEA==}
     engines: {node: '>=14'}
@@ -2168,13 +2020,6 @@ packages:
   date-fns@4.1.0:
     resolution: {integrity: sha512-Ukq0owbQXxa/U3EGtsdVBkR1w7KOQ5gIBqdH2hkvknzZPYvBxb/aa6E8L7tmjFtkwZBu3UXBbjIgPo/Ez4xaNg==}
 
-<<<<<<< HEAD
-  debug@4.4.1:
-    resolution: {integrity: sha512-KcKCqiftBJcZr++7ykoDIEwSa3XWowTfNPo92BYxjXiyYEVrUQh2aLyhxBCwww+heortUFxEJYcRzosstTEBYQ==}
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  debug@4.4.0:
-    resolution: {integrity: sha512-6WTZ/IxCY/T6BALoZHaE4ctp9xm+Z5kY/pzYaCHRFeyVhojxlrm+46y68HA6hr0TcwEssoxNiDEUJQjfPZ/RYA==}
-=======
   debug@4.3.7:
     resolution: {integrity: sha512-Er2nc/H7RrMXZBFCEim6TCmMk02Z8vLC2Rbi1KEBggpo0fS6l0S1nnapwmIi3yW/+GOJap1Krg4w0Hg80oCqgQ==}
     engines: {node: '>=6.0'}
@@ -2184,9 +2029,8 @@ packages:
       supports-color:
         optional: true
 
-  debug@4.4.0:
-    resolution: {integrity: sha512-6WTZ/IxCY/T6BALoZHaE4ctp9xm+Z5kY/pzYaCHRFeyVhojxlrm+46y68HA6hr0TcwEssoxNiDEUJQjfPZ/RYA==}
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  debug@4.4.1:
+    resolution: {integrity: sha512-KcKCqiftBJcZr++7ykoDIEwSa3XWowTfNPo92BYxjXiyYEVrUQh2aLyhxBCwww+heortUFxEJYcRzosstTEBYQ==}
     engines: {node: '>=6.0'}
     peerDependencies:
       supports-color: '*'
@@ -2235,8 +2079,8 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  discord-api-types@0.38.5:
-    resolution: {integrity: sha512-2sRkDRid39myMMeRzVTWLc2PyafSxu6k3LHpkB1Lx6IVzqycRnIhOedCbXg3IYpbJhKvA7ErNAh0DA/nXG/1Uw==}
+  discord-api-types@0.38.11:
+    resolution: {integrity: sha512-XN0qhcQpetkyb/49hcDHuoeUPsQqOkb17wbV/t48gUkoEDi4ajhsxqugGcxvcN17BBtI9FPPWEgzv6IhQmCwyw==}
 
   discord.js@14.19.3:
     resolution: {integrity: sha512-lncTRk0k+8Q5D3nThnODBR8fR8x2fM798o8Vsr40Krx0DjPwpZCuxxTcFMrXMQVOqM1QB9wqWgaXPg3TbmlHqA==}
@@ -2285,9 +2129,6 @@ packages:
     resolution: {integrity: sha512-Q0n9HRi4m6JuGIV1eFlmvJB7ZEVxu93IrMyiMsGC0lrMJMWzRgx6WGquyfQgZVb31vhGgXnfmPNNXmxnOkRBrg==}
     engines: {node: '>= 0.8'}
 
-  engine.io-client@6.6.3:
-    resolution: {integrity: sha512-T0iLjnyNWahNyv/lcjS2y4oE358tVS/SYQNxYXGAJ9/GLgH4VCvOQ/mhTjqU88mLZCQgiG8RIegFHYCdVC+j5w==}
-
   engine.io-parser@5.2.3:
     resolution: {integrity: sha512-HqD3yTBfnBxIrbnM1DoD6Pcq8NECnh8d4As1Qgh0z5Gg3jRRIqijury0CL3ghu/edArpUYiYqQiDUQBIs4np3Q==}
     engines: {node: '>=10.0.0'}
@@ -2326,24 +2167,10 @@ packages:
   es-module-lexer@1.7.0:
     resolution: {integrity: sha512-jEQoCwk8hyb2AZziIOLhDqpm5+2ww5uIE6lkO/6jcOCusfk6LhMHpXXfBLXTZ7Ydyt0j4VoUQv6uGNYbdW+kBA==}
 
-<<<<<<< HEAD
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  esbuild@0.25.3:
-    resolution: {integrity: sha512-qKA6Pvai73+M2FtftpNKRxJ78GIjmFXFxd/1DVBqGo/qNhLSfv+G12n9pNoWdytJC8U00TrViOwpjT0zgqQS8Q==}
-    engines: {node: '>=18'}
-    hasBin: true
-
-=======
   es-object-atoms@1.1.1:
     resolution: {integrity: sha512-FGgH2h8zKNim9ljj7dankFPcICIK9Cp5bm+c2gQSYePhpaG5+esrLODihIorn+Pe6FGJzWhXQotPv73jTaldXA==}
     engines: {node: '>= 0.4'}
 
-  esbuild@0.25.3:
-    resolution: {integrity: sha512-qKA6Pvai73+M2FtftpNKRxJ78GIjmFXFxd/1DVBqGo/qNhLSfv+G12n9pNoWdytJC8U00TrViOwpjT0zgqQS8Q==}
-    engines: {node: '>=18'}
-    hasBin: true
-
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
   esbuild@0.25.4:
     resolution: {integrity: sha512-8pgjLUcUjcgDg+2Q4NYXnPbo/vncAY4UmyaCm0jZevERqCHZIaWwdJHkf8XQtu4AxSKCdvrUbT0XUr1IdZzI8Q==}
     engines: {node: '>=18'}
@@ -2438,17 +2265,13 @@ packages:
     resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
     engines: {node: '>=8'}
 
-<<<<<<< HEAD
-  flexsearch@0.8.203:
-    resolution: {integrity: sha512-2R82aq/MGKA5zV6Octvrl3Bq4dFw7LHFtmoF5qvjQPuIHUgecqzjFWm2/Vn4KsORbaHUfSj+cB6W6WvlaggdmA==}
-
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
   finalhandler@2.1.0:
     resolution: {integrity: sha512-/t88Ty3d5JWQbWYgaOGCCYfXRwV1+be02WqYYlL6h0lEiUAMPM8o8qKGO01YIkOHzka2up08wvgYD0mDiI+q3Q==}
     engines: {node: '>= 0.8'}
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  flexsearch@0.8.203:
+    resolution: {integrity: sha512-2R82aq/MGKA5zV6Octvrl3Bq4dFw7LHFtmoF5qvjQPuIHUgecqzjFWm2/Vn4KsORbaHUfSj+cB6W6WvlaggdmA==}
+
   focus-trap@7.6.4:
     resolution: {integrity: sha512-xx560wGBk7seZ6y933idtjJQc1l+ck+pI3sKvhKozdBV1dRZoKhkW5xoCaFv9tQiX5RH1xfSxjuNu6g+lmN/gw==}
 
@@ -2513,19 +2336,15 @@ packages:
     resolution: {integrity: sha512-jhIXaOzy1sb8IyocaruWSn1TjmnBVs8Ayhcy83rmxNJ8q2uWKCAj3CnJY+KpGSXCueAPc0i05kVvVKtP1t9S3g==}
     engines: {node: '>=10'}
 
-<<<<<<< HEAD
   goober@2.1.16:
     resolution: {integrity: sha512-erjk19y1U33+XAMe1VTvIONHYoSqE4iS7BYUZfHaqeohLmnC0FdxEh7rQU+6MZ4OajItzjZFSRtVANrQwNq6/g==}
     peerDependencies:
       csstype: ^3.0.10
 
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
   gopd@1.2.0:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
     engines: {node: '>= 0.4'}
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
 
@@ -2662,9 +2481,6 @@ packages:
   import-fresh@3.3.1:
     resolution: {integrity: sha512-TR3KfrTZTYLPB6jUjfx6MF9WcWrHL9su5TObK4ZkYgBdWKPOFoSoQIdEuTuR82pmtxH2spWG9h6etwfr1pLBqQ==}
     engines: {node: '>=6'}
-
-  inherits@2.0.4:
-    resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
 
   inflight@1.0.6:
     resolution: {integrity: sha512-k92I/b08q4wvFscXCLvqfsHCrjrF7yiXsQuIVvVE7N82W3+aqpzuUdBbfhWcy/FZR3/4IgflMgKLOsvPDrGCJA==}
@@ -3176,7 +2992,9 @@ packages:
     resolution: {integrity: sha512-G6T0ZX48xgozx7587koeX9Ys2NYy6Gmv//P89sEte9V9whIapMNF4idKxnW2QtCcLiTWlb/wfCabAtAFWhhBow==}
     engines: {node: '>=16 || 14 >=14.17'}
 
-<<<<<<< HEAD
+  minimist@1.2.8:
+    resolution: {integrity: sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==}
+
   minipass@7.1.2:
     resolution: {integrity: sha512-qOOzS1cBTWYF4BH8fVePDBOO9iptMnGUEZwNc/cMWnTV2nVLZ7VoNWEPHkYczZA0pdoA7dl6e7FL659nX9S2aw==}
     engines: {node: '>=16 || 14 >=14.17'}
@@ -3185,22 +3003,16 @@ packages:
     resolution: {integrity: sha512-oG62iEk+CYt5Xj2YqI5Xi9xWUeZhDI8jjQmC5oThVH5JGCTgIjr7ciJDzC7MBzYd//WvR1OTmP5Q38Q8ShQtVA==}
     engines: {node: '>= 18'}
 
-  mkdirp@3.0.1:
-    resolution: {integrity: sha512-+NsyUUAZDmo6YVHzL/stxSu3t9YS1iljliy3BSDrXJ/dkn1KYdmtZODGGjLcc9XLgVVpH4KshHB8XmZgMhaBXg==}
-    engines: {node: '>=10'}
-    hasBin: true
-
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
-  minimist@1.2.8:
-    resolution: {integrity: sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==}
-
   mkdirp@1.0.4:
     resolution: {integrity: sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==}
     engines: {node: '>=10'}
     hasBin: true
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  mkdirp@3.0.1:
+    resolution: {integrity: sha512-+NsyUUAZDmo6YVHzL/stxSu3t9YS1iljliy3BSDrXJ/dkn1KYdmtZODGGjLcc9XLgVVpH4KshHB8XmZgMhaBXg==}
+    engines: {node: '>=10'}
+    hasBin: true
+
   mri@1.2.0:
     resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}
     engines: {node: '>=4'}
@@ -3225,13 +3037,6 @@ packages:
     engines: {node: ^18 || >=20}
     hasBin: true
 
-<<<<<<< HEAD
-  neverthrow@7.2.0:
-    resolution: {integrity: sha512-iGBUfFB7yPczHHtA8dksKTJ9E8TESNTAx1UQWW6TzMF280vo9jdPYpLUXrMN1BCkPdHFdNG3fxOt2CUad8KhAw==}
-    engines: {node: '>=18'}
-
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
   negotiator@0.6.3:
     resolution: {integrity: sha512-+EUsqGPLsM+j/zdChZjsnX51g4XrHFOIXwfnCVPGlQk/k5giakcKsuxCObBRu6DSm9opw/O6slWbJdghQM4bBg==}
     engines: {node: '>= 0.6'}
@@ -3240,16 +3045,19 @@ packages:
     resolution: {integrity: sha512-8Ofs/AUQh8MaEcrlq5xOX0CQ9ypTF5dl78mjlMNfOK08fzpgTHQRQPBxcPlEtIw0yRpws+Zo/3r+5WRby7u3Gg==}
     engines: {node: '>= 0.6'}
 
-  node-bin-setup@1.1.3:
-    resolution: {integrity: sha512-opgw9iSCAzT2+6wJOETCpeRYAQxSopqQ2z+N6BXwIMsQQ7Zj5M8MaafQY8JMlolRR6R1UXg2WmhKp0p9lSOivg==}
+  neverthrow@7.2.0:
+    resolution: {integrity: sha512-iGBUfFB7yPczHHtA8dksKTJ9E8TESNTAx1UQWW6TzMF280vo9jdPYpLUXrMN1BCkPdHFdNG3fxOt2CUad8KhAw==}
+    engines: {node: '>=18'}
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  node-bin-setup@1.1.4:
+    resolution: {integrity: sha512-vWNHOne0ZUavArqPP5LJta50+S8R261Fr5SvGul37HbEDcowvLjwdvd0ZeSr0r2lTSrPxl6okq9QUw8BFGiAxA==}
+
   node-gyp-build-optional-packages@5.1.1:
     resolution: {integrity: sha512-+P72GAjVAbTxjjwUmwjVrqrdZROD4nf8KgpBoDxqXXTiYZZt/ud60dE5yvCSr9lRO8e8yv6kgJIC0K0PfZFVQw==}
     hasBin: true
 
-  node@24.0.1:
-    resolution: {integrity: sha512-TPFY97KGEdn3EwyABqisWVnL795H0pIF6gdOvfCbTEeyT9Jd/uHq4vepNGFjADby7NMsssqJep7Qq61Efk/tAA==}
+  node@24.2.0:
+    resolution: {integrity: sha512-+LxcguHN48uLeFUdC8w9SGbJhuOklUrCgl0K3dmqhXdokzwd83HKXUbeA8JLd41G+77W9Ovq7FXGCij74Ff/tw==}
     engines: {npm: '>=5.0.0'}
     hasBin: true
 
@@ -3560,18 +3368,10 @@ packages:
   queue-microtask@1.2.3:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
 
-<<<<<<< HEAD
   queueueue@4.1.2:
     resolution: {integrity: sha512-YNOihQyk72FRrGQP+fVjUDVCSgxtHS5EdfgXjCYwPCTyhVWXriHfUt0XK0eT7vcBX0m91g0e0KVO8CxoNLh60g==}
     engines: {node: '>=18'}
 
-  react-dom@19.0.0:
-    resolution: {integrity: sha512-4GV5sHFG0e/0AD4X+ySy6UJd3jVl1iNsNHdpad0qhABJ11twS3TTBnseqsKurKcsNqCEFeGL3uLpVChpIO3QfQ==}
-    peerDependencies:
-      react: ^19.0.0
-
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
   range-parser@1.2.1:
     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
     engines: {node: '>= 0.6'}
@@ -3580,7 +3380,11 @@ packages:
     resolution: {integrity: sha512-RmkhL8CAyCRPXCE28MMH0z2PNWQBNk2Q09ZdxM9IOOXwxwZbN+qbWaatPkdkWIKL2ZVDImrN/pK5HTRz2PcS4g==}
     engines: {node: '>= 0.8'}
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  react-dom@19.0.0:
+    resolution: {integrity: sha512-4GV5sHFG0e/0AD4X+ySy6UJd3jVl1iNsNHdpad0qhABJ11twS3TTBnseqsKurKcsNqCEFeGL3uLpVChpIO3QfQ==}
+    peerDependencies:
+      react: ^19.0.0
+
   react-dom@19.1.0:
     resolution: {integrity: sha512-Xs1hdnE+DyKgeHJeJznQmYMIBG3TKIHJJT95Q58nHLSrElKlGQqDTR2HQ9fx5CN/Gk6Vh/kupBTDLU11/nDk/g==}
     peerDependencies:
@@ -3595,17 +3399,13 @@ packages:
     resolution: {integrity: sha512-V8AVnmPIICiWpGfm6GLzCR/W5FXLchHop40W4nXBmdlEceh16rCN8O8LNWm5bh5XUX91fh7KpA+W0TgMKmgTpQ==}
     engines: {node: '>=0.10.0'}
 
-<<<<<<< HEAD
   readable-stream@2.3.8:
     resolution: {integrity: sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA==}
 
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
   readdirp@3.6.0:
     resolution: {integrity: sha512-hOS089on8RduqdbhvQ5Z37A0ESjsqz6qnRcffsMU3495FuTdqSm+7bhJ29JvIOsBDEEnan5DPu9t3To9VRlMzA==}
     engines: {node: '>=8.10.0'}
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
   readdirp@4.1.2:
     resolution: {integrity: sha512-GDhwkLfywWL2s6vEjyhri+eXmfH6j1L7JE27WhqLeYzoh/A3DBaYGEj2H/HFZCn/kMfim73FXxEJTw06WtxQwg==}
     engines: {node: '>= 14.18.0'}
@@ -3704,28 +3504,20 @@ packages:
     resolution: {integrity: sha512-xal3CZX1Xlo/k4ApwCFrHVACi9fBqJ7V+mwhBsuf/1IOKbBy098Fex+Wa/5QMubw09pSZ/u8EY8PWgevJsXp1A==}
     engines: {node: '>=6'}
 
-<<<<<<< HEAD
   safe-buffer@5.1.2:
     resolution: {integrity: sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g==}
 
-  sanitize-html@2.17.0:
-    resolution: {integrity: sha512-dLAADUSS8rBwhaevT12yCezvioCA+bmUTPH/u57xKPT8d++voeYE6HeluA/bPbQ15TwDBG2ii+QZIEmYx8VdxA==}
-
-  scheduler@0.25.0:
-    resolution: {integrity: sha512-xFVuu11jh+xcO7JOAGJNOXld8/TcEHK/4CituBUeUb5hqxJLj9YuemAEuvm9gQ/+pgXYfbQuqAkiYu+u7YEsNA==}
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  sanitize-html@2.16.0:
-    resolution: {integrity: sha512-0s4caLuHHaZFVxFTG74oW91+j6vW7gKbGD6CD2+miP73CE6z6YtOBN0ArtLd2UGyi4IC7K47v3ENUbQX4jV3Mg==}
-=======
   safe-buffer@5.2.1:
     resolution: {integrity: sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==}
 
   safer-buffer@2.1.2:
     resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
 
-  sanitize-html@2.16.0:
-    resolution: {integrity: sha512-0s4caLuHHaZFVxFTG74oW91+j6vW7gKbGD6CD2+miP73CE6z6YtOBN0ArtLd2UGyi4IC7K47v3ENUbQX4jV3Mg==}
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  sanitize-html@2.17.0:
+    resolution: {integrity: sha512-dLAADUSS8rBwhaevT12yCezvioCA+bmUTPH/u57xKPT8d++voeYE6HeluA/bPbQ15TwDBG2ii+QZIEmYx8VdxA==}
+
+  scheduler@0.25.0:
+    resolution: {integrity: sha512-xFVuu11jh+xcO7JOAGJNOXld8/TcEHK/4CituBUeUb5hqxJLj9YuemAEuvm9gQ/+pgXYfbQuqAkiYu+u7YEsNA==}
 
   scheduler@0.26.0:
     resolution: {integrity: sha512-NlHwttCI/l5gCPR3D1nNXtWABUmBwvZpEQiD4IXSbIDq8BzLIK/7Ir5gTFSGZDUu37K5cMNp0hFtzO38sC7gWA==}
@@ -3746,16 +3538,12 @@ packages:
   set-cookie-parser@2.7.1:
     resolution: {integrity: sha512-IOc8uWeOZgnb3ptbCURJWNjWUPcO3ZnTTdzsurqERrP6nPyv+paC55vJM0LpOlT2ne+Ix+9+CRG1MNLlyZ4GjQ==}
 
-<<<<<<< HEAD
   setimmediate@1.0.5:
     resolution: {integrity: sha512-MATJdZp8sLqDl/68LfQmbP8zKPLQNV6BIZoIgrscFDQ+RsvK/BxeDQOgyxKKoh0y/8h3BqVFnCqQ/gd+reiIXA==}
 
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
   setprototypeof@1.2.0:
     resolution: {integrity: sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw==}
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
   shebang-command@2.0.0:
     resolution: {integrity: sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==}
     engines: {node: '>=8'}
@@ -3822,10 +3610,6 @@ packages:
   socket.io-adapter@2.5.5:
     resolution: {integrity: sha512-eLDQas5dzPgOWCk9GuuJC2lBqItuhKI4uxGgo9aIV7MYbk2h9Q6uULEh8WBzThoI7l+qU9Ast9fVUmkqPP9wYg==}
 
-  socket.io-client@4.8.1:
-    resolution: {integrity: sha512-hJVXfu3E28NmzGk8o1sHhN3om52tRvwYeidbj7xKy2eIIse5IoKX3USlS6Tqt3BHAtflLIkCQBkzVrEEfWUyYQ==}
-    engines: {node: '>=10.0.0'}
-
   socket.io-parser@4.2.4:
     resolution: {integrity: sha512-/GbIKmo8ioc+NIWIhwdecY0ge+qVBSMdgxGygevmdHj24bsfgtCmcUUcQ5ZzcylGFHsN3k4HB4Cgkl96KVnuew==}
     engines: {node: '>=10.0.0'}
@@ -3853,6 +3637,10 @@ packages:
 
   statuses@2.0.1:
     resolution: {integrity: sha512-RwNA9Z/7PrK06rYLIzFMlaF+l73iwpzsqRIFgbMLbTcLD6cOao82TaWefPXQvB2fOC4AjuYSEndS7N/mTCbkdQ==}
+    engines: {node: '>= 0.8'}
+
+  statuses@2.0.2:
+    resolution: {integrity: sha512-DvEy55V3DB7uknRo+4iOGT5fP1slR8wQohVdknigZPMpMstaKJQWhwiYBACJE3Ul2pTnATihhBYnRhZQHGBiRw==}
     engines: {node: '>= 0.8'}
 
   std-env@3.9.0:
@@ -4138,17 +3926,13 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-<<<<<<< HEAD
-  unicode-segmenter@0.12.0:
-    resolution: {integrity: sha512-PK6M1A1tt3ky6cFAJW/JOO9ml/sbEvim+SL75FM8slck08ACbF0TZj+tdUd3Mh8Tk5XieqUDPwmLjiyRQvb4pw==}
-
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
   undici@6.21.1:
     resolution: {integrity: sha512-q/1rj5D0/zayJB2FraXdaWxbhWiNKDvu8naDT2dl1yTlvJp4BLtOcp2a5BvgGNQpYYJzau7tf1WgKv3b+7mqpQ==}
     engines: {node: '>=18.17'}
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  unicode-segmenter@0.12.0:
+    resolution: {integrity: sha512-PK6M1A1tt3ky6cFAJW/JOO9ml/sbEvim+SL75FM8slck08ACbF0TZj+tdUd3Mh8Tk5XieqUDPwmLjiyRQvb4pw==}
+
   unified@10.1.2:
     resolution: {integrity: sha512-pUSWAi/RAnVy1Pif2kAoeWNBa3JVrx0MId2LASj8G+7AiHWoKZNTomq6LG326T68U7/e263X6fTdcXIy7XnF7Q==}
 
@@ -4388,13 +4172,6 @@ packages:
     resolution: {integrity: sha512-G8ura3S+3Z2G+mkgNRq8dqaFZAuxfsxpBB8OCTGRTCtp+l/v9nbFNmCUP1BZMts3G1142MsZfn6eeUKrr4PD1Q==}
     engines: {node: '>=18'}
 
-<<<<<<< HEAD
-  xstate@5.19.3:
-    resolution: {integrity: sha512-q6sqD7LuontFVxQoGB7D6NkQRDLzs87qzQhUKvI0osKKK8xxktZBT7uwfisjh7Yi5VB2cN9NOpCSxJNpUPQCeg==}
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  xstate@5.19.2:
-    resolution: {integrity: sha512-B8fL2aP0ogn5aviAXFzI5oZseAMqN00fg/TeDa3ZtatyDcViYLIfuQl4y8qmHCiKZgGEzmnTyNtNQL9oeJE2gw==}
-=======
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
@@ -4422,13 +4199,8 @@ packages:
       utf-8-validate:
         optional: true
 
-  xmlhttprequest-ssl@2.1.2:
-    resolution: {integrity: sha512-TEU+nJVUUnA4CYJFLvK5X9AOeH4KvDvhIfm0vV1GaQRtchnG0hgK5p8hw/xjv8cunWYCsiPCSDzObPyhEwq3KQ==}
-    engines: {node: '>=0.4.0'}
-
-  xstate@5.19.2:
-    resolution: {integrity: sha512-B8fL2aP0ogn5aviAXFzI5oZseAMqN00fg/TeDa3ZtatyDcViYLIfuQl4y8qmHCiKZgGEzmnTyNtNQL9oeJE2gw==}
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  xstate@5.19.3:
+    resolution: {integrity: sha512-q6sqD7LuontFVxQoGB7D6NkQRDLzs87qzQhUKvI0osKKK8xxktZBT7uwfisjh7Yi5VB2cN9NOpCSxJNpUPQCeg==}
 
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
@@ -4628,21 +4400,9 @@ snapshots:
       '@atproto/lexicon': 0.4.11
       zod: 3.25.23
 
-<<<<<<< HEAD
   '@automerge/automerge-repo-storage-indexeddb@1.2.1(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)':
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  '@automerge/automerge-repo-storage-indexeddb@1.2.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)':
-=======
-  '@automerge/automerge-repo-storage-indexeddb@1.2.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)':
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
-<<<<<<< HEAD
       '@automerge/automerge-repo': 1.2.1(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      '@automerge/automerge-repo': 1.2.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)
-=======
-      '@automerge/automerge-repo': 1.2.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     transitivePeerDependencies:
       - '@swc/core'
       - '@swc/wasm'
@@ -4650,21 +4410,9 @@ snapshots:
       - supports-color
       - typescript
 
-<<<<<<< HEAD
   '@automerge/automerge-repo-storage-indexeddb@2.0.0-collectionsync-alpha.1(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)':
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  '@automerge/automerge-repo-storage-indexeddb@2.0.0-collectionsync-alpha.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)':
-=======
-  '@automerge/automerge-repo-storage-indexeddb@2.0.0-collectionsync-alpha.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)':
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
-<<<<<<< HEAD
       '@automerge/automerge-repo': 2.0.0-collectionsync-alpha.1(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      '@automerge/automerge-repo': 2.0.0-collectionsync-alpha.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)
-=======
-      '@automerge/automerge-repo': 2.0.0-collectionsync-alpha.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     transitivePeerDependencies:
       - '@swc/core'
       - '@swc/wasm'
@@ -4672,34 +4420,16 @@ snapshots:
       - supports-color
       - typescript
 
-<<<<<<< HEAD
   '@automerge/automerge-repo@1.2.1(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)':
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  '@automerge/automerge-repo@1.2.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)':
-=======
-  '@automerge/automerge-repo@1.2.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)':
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
       '@automerge/automerge': 2.2.9
       bs58check: 3.0.1
       cbor-x: 1.6.0
-<<<<<<< HEAD
-      debug: 4.4.1
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      debug: 4.4.0
-=======
-      debug: 4.4.0(supports-color@5.5.0)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+      debug: 4.4.1(supports-color@5.5.0)
       eventemitter3: 5.0.1
       fast-sha256: 1.3.0
       tiny-typed-emitter: 2.1.0
-<<<<<<< HEAD
       ts-node: 10.9.2(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      ts-node: 10.9.2(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)
-=======
-      ts-node: 10.9.2(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       uuid: 9.0.1
       xstate: 5.19.3
     transitivePeerDependencies:
@@ -4709,34 +4439,16 @@ snapshots:
       - supports-color
       - typescript
 
-<<<<<<< HEAD
   '@automerge/automerge-repo@2.0.0-collectionsync-alpha.1(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)':
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  '@automerge/automerge-repo@2.0.0-collectionsync-alpha.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)':
-=======
-  '@automerge/automerge-repo@2.0.0-collectionsync-alpha.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)':
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
       '@automerge/automerge': 3.0.0-collectionsync-alpha.1
       bs58check: 3.0.1
       cbor-x: 1.6.0
-<<<<<<< HEAD
-      debug: 4.4.1
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      debug: 4.4.0
-=======
-      debug: 4.4.0(supports-color@5.5.0)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+      debug: 4.4.1(supports-color@5.5.0)
       eventemitter3: 5.0.1
       fast-sha256: 1.3.0
       tiny-typed-emitter: 2.1.0
-<<<<<<< HEAD
       ts-node: 10.9.2(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      ts-node: 10.9.2(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)
-=======
-      ts-node: 10.9.2(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       uuid: 9.0.1
       xstate: 5.19.3
     transitivePeerDependencies:
@@ -4864,7 +4576,7 @@ snapshots:
       '@discordjs/formatters': 0.6.1
       '@discordjs/util': 1.1.1(patch_hash=95f4a2f23b5731bfd3234986d1975cbefa46ce2e0283d17a079f24c437ceb772)
       '@sapphire/shapeshift': 4.0.0
-      discord-api-types: 0.38.5
+      discord-api-types: 0.38.11
       fast-deep-equal: 3.1.3
       ts-mixer: 6.0.4
       tslib: 2.8.1
@@ -4875,7 +4587,7 @@ snapshots:
 
   '@discordjs/formatters@0.6.1':
     dependencies:
-      discord-api-types: 0.38.5
+      discord-api-types: 0.38.11
 
   '@discordjs/rest@2.5.0':
     dependencies:
@@ -4884,7 +4596,7 @@ snapshots:
       '@sapphire/async-queue': 1.5.5
       '@sapphire/snowflake': 3.5.3
       '@vladfrangu/async_event_emitter': 2.4.6
-      discord-api-types: 0.38.5
+      discord-api-types: 0.38.11
       magic-bytes.js: 1.12.1
       tslib: 2.8.1
       undici: 6.21.1
@@ -4899,7 +4611,7 @@ snapshots:
       '@sapphire/async-queue': 1.5.5
       '@types/ws': 8.18.1
       '@vladfrangu/async_event_emitter': 2.4.6
-      discord-api-types: 0.38.5
+      discord-api-types: 0.38.11
       tslib: 2.8.1
       ws: 8.18.2
     transitivePeerDependencies:
@@ -5102,24 +4814,10 @@ snapshots:
       '@kitsonk/kv-toolbox': '@jsr/kitsonk__kv-toolbox@0.27.4'
       '@muni-town/leaf': 0.2.0-preview.22
 
-<<<<<<< HEAD
   '@muni-town/leaf-storage-indexeddb@0.1.0-preview.7(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)':
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  '@muni-town/leaf-storage-indexeddb@0.1.0-preview.5(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)':
-=======
-  '@muni-town/leaf-storage-indexeddb@0.1.0-preview.5(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)':
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
-<<<<<<< HEAD
       '@automerge/automerge-repo-storage-indexeddb': 1.2.1(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)
       '@muni-town/leaf': 0.2.0-preview.22
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      '@automerge/automerge-repo-storage-indexeddb': 1.2.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3)
-      '@muni-town/leaf': 0.2.0-preview.20
-=======
-      '@automerge/automerge-repo-storage-indexeddb': 1.2.1(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)
-      '@muni-town/leaf': 0.2.0-preview.20
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     transitivePeerDependencies:
       - '@swc/core'
       - '@swc/wasm'
@@ -5295,15 +4993,6 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.41.0':
     optional: true
 
-  '@scure/base@1.2.1': {}
-
-  '@scure/base@1.2.5': {}
-
-  '@scure/bip39@1.6.0':
-    dependencies:
-      '@noble/hashes': 1.8.0
-      '@scure/base': 1.2.5
-
   '@sapphire/async-queue@1.5.5': {}
 
   '@sapphire/shapeshift@4.0.0':
@@ -5312,6 +5001,15 @@ snapshots:
       lodash: 4.17.21
 
   '@sapphire/snowflake@3.5.3': {}
+
+  '@scure/base@1.2.1': {}
+
+  '@scure/base@1.2.5': {}
+
+  '@scure/bip39@1.6.0':
+    dependencies:
+      '@noble/hashes': 1.8.0
+      '@scure/base': 1.2.5
 
   '@shikijs/core@1.29.2':
     dependencies:
@@ -5385,52 +5083,14 @@ snapshots:
     dependencies:
       acorn: 8.14.1
 
-<<<<<<< HEAD
   '@sveltejs/adapter-static@3.0.8(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)))(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)))':
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  '@sveltejs/adapter-netlify@5.0.2(@sveltejs/kit@2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))':
-=======
-  '@sveltejs/adapter-netlify@5.0.2(@sveltejs/kit@2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))':
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
-<<<<<<< HEAD
       '@sveltejs/kit': 2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)))(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      '@iarna/toml': 2.2.5
-      '@sveltejs/kit': 2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-      esbuild: 0.25.4
-      set-cookie-parser: 2.7.1
-=======
-      '@iarna/toml': 2.2.5
-      '@sveltejs/kit': 2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-      esbuild: 0.25.4
-      set-cookie-parser: 2.7.1
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
 
-<<<<<<< HEAD
   '@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)))(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))':
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  '@sveltejs/adapter-static@3.0.8(@sveltejs/kit@2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))':
-=======
-  '@sveltejs/adapter-static@3.0.8(@sveltejs/kit@2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))':
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
-<<<<<<< HEAD
       '@sveltejs/acorn-typescript': 1.0.5(acorn@8.14.1)
       '@sveltejs/vite-plugin-svelte': 5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      '@sveltejs/kit': 2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-
-  '@sveltejs/kit@2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))':
-    dependencies:
-      '@sveltejs/vite-plugin-svelte': 5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-=======
-      '@sveltejs/kit': 2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-
-  '@sveltejs/kit@2.20.8(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))':
-    dependencies:
-      '@sveltejs/vite-plugin-svelte': 5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       '@types/cookie': 0.6.0
       acorn: 8.14.1
       cookie: 0.6.0
@@ -5442,78 +5102,28 @@ snapshots:
       sade: 1.8.1
       set-cookie-parser: 2.7.1
       sirv: 3.0.1
-<<<<<<< HEAD
       svelte: 5.33.1
       vite: 6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      svelte: 5.28.2
-      vite: 6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
-=======
-      svelte: 5.28.2
-      vite: 6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
 
-<<<<<<< HEAD
   '@sveltejs/vite-plugin-svelte-inspector@4.0.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)))(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))':
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  '@sveltejs/vite-plugin-svelte-inspector@4.0.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))':
-=======
-  '@sveltejs/vite-plugin-svelte-inspector@4.0.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))':
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
-<<<<<<< HEAD
       '@sveltejs/vite-plugin-svelte': 5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))
-      debug: 4.4.1
+      debug: 4.4.1(supports-color@5.5.0)
       svelte: 5.33.1
       vite: 6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      '@sveltejs/vite-plugin-svelte': 5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-      debug: 4.4.0
-      svelte: 5.28.2
-      vite: 6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
-=======
-      '@sveltejs/vite-plugin-svelte': 5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-      debug: 4.4.0(supports-color@5.5.0)
-      svelte: 5.28.2
-      vite: 6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     transitivePeerDependencies:
       - supports-color
 
-<<<<<<< HEAD
   '@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))':
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  '@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))':
-=======
-  '@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))':
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
-<<<<<<< HEAD
       '@sveltejs/vite-plugin-svelte-inspector': 4.0.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)))(svelte@5.33.1)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))
-      debug: 4.4.1
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      '@sveltejs/vite-plugin-svelte-inspector': 4.0.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-      debug: 4.4.0
-=======
-      '@sveltejs/vite-plugin-svelte-inspector': 4.0.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)))(svelte@5.28.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-      debug: 4.4.0(supports-color@5.5.0)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+      debug: 4.4.1(supports-color@5.5.0)
       deepmerge: 4.3.1
       kleur: 4.1.5
       magic-string: 0.30.17
-<<<<<<< HEAD
       svelte: 5.33.1
       vite: 6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)
       vitefu: 1.0.6(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      svelte: 5.28.2
-      vite: 6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
-      vitefu: 1.0.6(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-=======
-      svelte: 5.28.2
-      vite: 6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
-      vitefu: 1.0.6(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     transitivePeerDependencies:
       - supports-color
 
@@ -5646,15 +5256,8 @@ snapshots:
       postcss-selector-parser: 6.0.10
       tailwindcss: 4.1.7
 
-<<<<<<< HEAD
   '@tailwindcss/vite@4.1.7(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))':
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  '@tailwindcss/vite@4.1.5(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))':
-=======
-  '@tailwindcss/vite@4.1.5(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))':
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
-<<<<<<< HEAD
       '@tailwindcss/node': 4.1.7
       '@tailwindcss/oxide': 4.1.7
       tailwindcss: 4.1.7
@@ -5724,17 +5327,6 @@ snapshots:
   '@tauri-apps/plugin-os@2.2.1':
     dependencies:
       '@tauri-apps/api': 2.5.0
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      '@tailwindcss/node': 4.1.5
-      '@tailwindcss/oxide': 4.1.5
-      tailwindcss: 4.1.5
-      vite: 6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
-=======
-      '@tailwindcss/node': 4.1.5
-      '@tailwindcss/oxide': 4.1.5
-      tailwindcss: 4.1.5
-      vite: 6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
 
   '@tiptap/core@2.12.0(@tiptap/pm@2.12.0)':
     dependencies:
@@ -5957,20 +5549,20 @@ snapshots:
 
   '@tsconfig/node16@1.0.4': {}
 
-  '@types/body-parser@1.19.5':
+  '@types/body-parser@1.19.6':
     dependencies:
       '@types/connect': 3.4.38
-      '@types/node': 22.15.17
+      '@types/node': 22.15.21
 
   '@types/connect@3.4.38':
     dependencies:
-      '@types/node': 22.15.17
+      '@types/node': 22.15.21
 
   '@types/cookie@0.6.0': {}
 
-  '@types/cors@2.8.18':
+  '@types/cors@2.8.19':
     dependencies:
-      '@types/node': 22.15.17
+      '@types/node': 22.15.21
 
   '@types/debug@4.1.12':
     dependencies:
@@ -5982,16 +5574,16 @@ snapshots:
 
   '@types/express-serve-static-core@5.0.6':
     dependencies:
-      '@types/node': 22.15.17
-      '@types/qs': 6.9.18
+      '@types/node': 22.15.21
+      '@types/qs': 6.14.0
       '@types/range-parser': 1.2.7
-      '@types/send': 0.17.4
+      '@types/send': 0.17.5
 
-  '@types/express@5.0.1':
+  '@types/express@5.0.3':
     dependencies:
-      '@types/body-parser': 1.19.5
+      '@types/body-parser': 1.19.6
       '@types/express-serve-static-core': 5.0.6
-      '@types/serve-static': 1.15.7
+      '@types/serve-static': 1.15.8
 
   '@types/extend@3.0.4': {}
 
@@ -6005,7 +5597,7 @@ snapshots:
     dependencies:
       '@types/unist': 3.0.3
 
-  '@types/http-errors@2.0.4': {}
+  '@types/http-errors@2.0.5': {}
 
   '@types/linkify-it@5.0.0': {}
 
@@ -6028,13 +5620,7 @@ snapshots:
 
   '@types/ms@2.1.0': {}
 
-<<<<<<< HEAD
   '@types/node@22.15.21':
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  '@types/node@22.15.3':
-=======
-  '@types/node@22.15.17':
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
       undici-types: 6.21.0
 
@@ -6044,7 +5630,7 @@ snapshots:
 
   '@types/parse5@6.0.3': {}
 
-  '@types/qs@6.9.18': {}
+  '@types/qs@6.14.0': {}
 
   '@types/range-parser@1.2.7': {}
 
@@ -6054,16 +5640,16 @@ snapshots:
     dependencies:
       htmlparser2: 8.0.2
 
-  '@types/send@0.17.4':
+  '@types/send@0.17.5':
     dependencies:
       '@types/mime': 1.3.5
-      '@types/node': 22.15.17
+      '@types/node': 22.15.21
 
-  '@types/serve-static@1.15.7':
+  '@types/serve-static@1.15.8':
     dependencies:
-      '@types/http-errors': 2.0.4
-      '@types/node': 22.15.17
-      '@types/send': 0.17.4
+      '@types/http-errors': 2.0.5
+      '@types/node': 22.15.21
+      '@types/send': 0.17.5
 
   '@types/strip-bom@3.0.0': {}
 
@@ -6079,7 +5665,7 @@ snapshots:
 
   '@types/ws@8.18.1':
     dependencies:
-      '@types/node': 22.15.17
+      '@types/node': 22.15.21
 
   '@ungap/structured-clone@1.3.0': {}
 
@@ -6090,25 +5676,13 @@ snapshots:
       chai: 5.2.0
       tinyrainbow: 2.0.0
 
-<<<<<<< HEAD
   '@vitest/mocker@3.1.4(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))':
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  '@vitest/mocker@3.1.3(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))':
-=======
-  '@vitest/mocker@3.1.3(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))':
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
       '@vitest/spy': 3.1.4
       estree-walker: 3.0.3
       magic-string: 0.30.17
     optionalDependencies:
-<<<<<<< HEAD
       vite: 6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      vite: 6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
-=======
-      vite: 6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
 
   '@vitest/pretty-format@3.1.4':
     dependencies:
@@ -6220,15 +5794,9 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-<<<<<<< HEAD
-  bits-ui@0.21.16(svelte@5.33.1):
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  bits-ui@0.21.16(svelte@5.28.2):
-=======
   binary-extensions@2.3.0: {}
 
-  bits-ui@0.21.16(svelte@5.28.2):
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  bits-ui@0.21.16(svelte@5.33.1):
     dependencies:
       '@internationalized/date': 3.8.1
       '@melt-ui/svelte': 0.76.2(svelte@5.33.1)
@@ -6251,7 +5819,7 @@ snapshots:
     dependencies:
       bytes: 3.1.2
       content-type: 1.0.5
-      debug: 4.4.0(supports-color@5.5.0)
+      debug: 4.4.1(supports-color@5.5.0)
       http-errors: 2.0.0
       iconv-lite: 0.6.3
       on-finished: 2.4.1
@@ -6415,17 +5983,13 @@ snapshots:
 
   core-js@3.42.0: {}
 
-<<<<<<< HEAD
   core-util-is@1.0.3: {}
 
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
   cors@2.8.5:
     dependencies:
       object-assign: 4.1.1
       vary: 1.1.2
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
   cosmiconfig@8.3.6(typescript@5.8.3):
     dependencies:
       import-fresh: 3.3.1
@@ -6457,17 +6021,11 @@ snapshots:
 
   date-fns@4.1.0: {}
 
-<<<<<<< HEAD
-  debug@4.4.1:
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  debug@4.4.0:
-=======
   debug@4.3.7:
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
       ms: 2.1.3
 
-  debug@4.4.0(supports-color@5.5.0):
+  debug@4.4.1(supports-color@5.5.0):
     dependencies:
       ms: 2.1.3
     optionalDependencies:
@@ -6501,7 +6059,7 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  discord-api-types@0.38.5: {}
+  discord-api-types@0.38.11: {}
 
   discord.js@14.19.3:
     dependencies:
@@ -6512,7 +6070,7 @@ snapshots:
       '@discordjs/util': 1.1.1(patch_hash=95f4a2f23b5731bfd3234986d1975cbefa46ce2e0283d17a079f24c437ceb772)
       '@discordjs/ws': 1.2.2
       '@sapphire/snowflake': 3.5.3
-      discord-api-types: 0.38.5
+      discord-api-types: 0.38.11
       fast-deep-equal: 3.1.3
       lodash.snakecase: 4.1.1
       magic-bytes.js: 1.12.1
@@ -6564,24 +6122,12 @@ snapshots:
 
   encodeurl@2.0.0: {}
 
-  engine.io-client@6.6.3:
-    dependencies:
-      '@socket.io/component-emitter': 3.1.2
-      debug: 4.3.7
-      engine.io-parser: 5.2.3
-      ws: 8.17.1
-      xmlhttprequest-ssl: 2.1.2
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-
   engine.io-parser@5.2.3: {}
 
   engine.io@6.6.4:
     dependencies:
-      '@types/cors': 2.8.18
-      '@types/node': 22.15.17
+      '@types/cors': 2.8.19
+      '@types/node': 22.15.21
       accepts: 1.3.8
       base64id: 2.0.0
       cookie: 0.7.2
@@ -6615,70 +6161,10 @@ snapshots:
 
   es-module-lexer@1.7.0: {}
 
-<<<<<<< HEAD
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  esbuild@0.25.3:
-    optionalDependencies:
-      '@esbuild/aix-ppc64': 0.25.3
-      '@esbuild/android-arm': 0.25.3
-      '@esbuild/android-arm64': 0.25.3
-      '@esbuild/android-x64': 0.25.3
-      '@esbuild/darwin-arm64': 0.25.3
-      '@esbuild/darwin-x64': 0.25.3
-      '@esbuild/freebsd-arm64': 0.25.3
-      '@esbuild/freebsd-x64': 0.25.3
-      '@esbuild/linux-arm': 0.25.3
-      '@esbuild/linux-arm64': 0.25.3
-      '@esbuild/linux-ia32': 0.25.3
-      '@esbuild/linux-loong64': 0.25.3
-      '@esbuild/linux-mips64el': 0.25.3
-      '@esbuild/linux-ppc64': 0.25.3
-      '@esbuild/linux-riscv64': 0.25.3
-      '@esbuild/linux-s390x': 0.25.3
-      '@esbuild/linux-x64': 0.25.3
-      '@esbuild/netbsd-arm64': 0.25.3
-      '@esbuild/netbsd-x64': 0.25.3
-      '@esbuild/openbsd-arm64': 0.25.3
-      '@esbuild/openbsd-x64': 0.25.3
-      '@esbuild/sunos-x64': 0.25.3
-      '@esbuild/win32-arm64': 0.25.3
-      '@esbuild/win32-ia32': 0.25.3
-      '@esbuild/win32-x64': 0.25.3
-
-=======
   es-object-atoms@1.1.1:
     dependencies:
       es-errors: 1.3.0
 
-  esbuild@0.25.3:
-    optionalDependencies:
-      '@esbuild/aix-ppc64': 0.25.3
-      '@esbuild/android-arm': 0.25.3
-      '@esbuild/android-arm64': 0.25.3
-      '@esbuild/android-x64': 0.25.3
-      '@esbuild/darwin-arm64': 0.25.3
-      '@esbuild/darwin-x64': 0.25.3
-      '@esbuild/freebsd-arm64': 0.25.3
-      '@esbuild/freebsd-x64': 0.25.3
-      '@esbuild/linux-arm': 0.25.3
-      '@esbuild/linux-arm64': 0.25.3
-      '@esbuild/linux-ia32': 0.25.3
-      '@esbuild/linux-loong64': 0.25.3
-      '@esbuild/linux-mips64el': 0.25.3
-      '@esbuild/linux-ppc64': 0.25.3
-      '@esbuild/linux-riscv64': 0.25.3
-      '@esbuild/linux-s390x': 0.25.3
-      '@esbuild/linux-x64': 0.25.3
-      '@esbuild/netbsd-arm64': 0.25.3
-      '@esbuild/netbsd-x64': 0.25.3
-      '@esbuild/openbsd-arm64': 0.25.3
-      '@esbuild/openbsd-x64': 0.25.3
-      '@esbuild/sunos-x64': 0.25.3
-      '@esbuild/win32-arm64': 0.25.3
-      '@esbuild/win32-ia32': 0.25.3
-      '@esbuild/win32-x64': 0.25.3
-
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
   esbuild@0.25.4:
     optionalDependencies:
       '@esbuild/aix-ppc64': 0.25.4
@@ -6765,7 +6251,7 @@ snapshots:
       content-type: 1.0.5
       cookie: 0.7.2
       cookie-signature: 1.2.2
-      debug: 4.4.0(supports-color@5.5.0)
+      debug: 4.4.1(supports-color@5.5.0)
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
@@ -6783,7 +6269,7 @@ snapshots:
       router: 2.2.0
       send: 1.2.0
       serve-static: 2.2.0
-      statuses: 2.0.1
+      statuses: 2.0.2
       type-is: 2.0.1
       vary: 1.1.2
     transitivePeerDependencies:
@@ -6823,23 +6309,19 @@ snapshots:
     dependencies:
       to-regex-range: 5.0.1
 
-<<<<<<< HEAD
-  flexsearch@0.8.203: {}
-
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
   finalhandler@2.1.0:
     dependencies:
-      debug: 4.4.0(supports-color@5.5.0)
+      debug: 4.4.1(supports-color@5.5.0)
       encodeurl: 2.0.0
       escape-html: 1.0.3
       on-finished: 2.4.1
       parseurl: 1.3.3
-      statuses: 2.0.1
+      statuses: 2.0.2
     transitivePeerDependencies:
       - supports-color
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  flexsearch@0.8.203: {}
+
   focus-trap@7.6.4:
     dependencies:
       tabbable: 6.2.0
@@ -6916,16 +6398,12 @@ snapshots:
       merge2: 1.4.1
       slash: 3.0.0
 
-<<<<<<< HEAD
   goober@2.1.16(csstype@3.1.3):
     dependencies:
       csstype: 3.1.3
 
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
   gopd@1.2.0: {}
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
   graceful-fs@4.2.11: {}
 
   graphemer@1.4.0: {}
@@ -7157,8 +6635,6 @@ snapshots:
       parent-module: 1.0.1
       resolve-from: 4.0.0
 
-  inherits@2.0.4: {}
-
   inflight@1.0.6:
     dependencies:
       once: 1.4.0
@@ -7377,13 +6853,7 @@ snapshots:
     dependencies:
       chalk: 5.4.1
       commander: 13.1.0
-<<<<<<< HEAD
-      debug: 4.4.1
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      debug: 4.4.0
-=======
-      debug: 4.4.0(supports-color@5.5.0)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+      debug: 4.4.1(supports-color@5.5.0)
       execa: 8.0.1
       lilconfig: 3.1.3
       listr2: 8.3.3
@@ -7772,13 +7242,7 @@ snapshots:
   micromark@3.2.0:
     dependencies:
       '@types/debug': 4.1.12
-<<<<<<< HEAD
-      debug: 4.4.1
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      debug: 4.4.0
-=======
-      debug: 4.4.0(supports-color@5.5.0)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+      debug: 4.4.1(supports-color@5.5.0)
       decode-named-character-reference: 1.1.0
       micromark-core-commonmark: 1.1.0
       micromark-factory-space: 1.1.0
@@ -7828,22 +7292,18 @@ snapshots:
     dependencies:
       brace-expansion: 2.0.1
 
-<<<<<<< HEAD
+  minimist@1.2.8: {}
+
   minipass@7.1.2: {}
 
   minizlib@3.0.2:
     dependencies:
       minipass: 7.1.2
 
-  mkdirp@3.0.1: {}
-
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
-  minimist@1.2.8: {}
-
   mkdirp@1.0.4: {}
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  mkdirp@3.0.1: {}
+
   mri@1.2.0: {}
 
   mrmime@2.0.1: {}
@@ -7856,35 +7316,31 @@ snapshots:
 
   nanoid@5.1.5: {}
 
-<<<<<<< HEAD
-  neverthrow@7.2.0: {}
-
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
   negotiator@0.6.3: {}
 
   negotiator@1.0.0: {}
 
-  node-bin-setup@1.1.3: {}
+  neverthrow@7.2.0: {}
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  node-bin-setup@1.1.4: {}
+
   node-gyp-build-optional-packages@5.1.1:
     dependencies:
       detect-libc: 2.0.4
     optional: true
 
-  node@24.0.1:
+  node@24.2.0:
     dependencies:
-      node-bin-setup: 1.1.3
+      node-bin-setup: 1.1.4
 
   nodemon@3.1.10:
     dependencies:
       chokidar: 3.6.0
-      debug: 4.4.0(supports-color@5.5.0)
+      debug: 4.4.1(supports-color@5.5.0)
       ignore-by-default: 1.0.1
       minimatch: 3.1.2
       pstree.remy: 1.1.8
-      semver: 7.7.1
+      semver: 7.7.2
       simple-update-notifier: 2.0.0
       supports-color: 5.5.0
       touch: 3.1.1
@@ -8181,11 +7637,10 @@ snapshots:
 
   queue-microtask@1.2.3: {}
 
-<<<<<<< HEAD
   queueueue@4.1.2:
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  react-dom@19.1.0(react@19.1.0):
-=======
+    dependencies:
+      fast-list: 1.0.3
+
   range-parser@1.2.1: {}
 
   raw-body@3.0.0:
@@ -8194,11 +7649,6 @@ snapshots:
       http-errors: 2.0.0
       iconv-lite: 0.6.3
       unpipe: 1.0.0
-
-  react-dom@19.1.0(react@19.1.0):
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-    dependencies:
-      fast-list: 1.0.3
 
   react-dom@19.0.0(react@19.0.0):
     dependencies:
@@ -8370,7 +7820,7 @@ snapshots:
 
   router@2.2.0:
     dependencies:
-      debug: 4.4.0(supports-color@5.5.0)
+      debug: 4.4.1(supports-color@5.5.0)
       depd: 2.0.0
       is-promise: 4.0.0
       parseurl: 1.3.3
@@ -8391,19 +7841,13 @@ snapshots:
     dependencies:
       mri: 1.2.0
 
-<<<<<<< HEAD
   safe-buffer@5.1.2: {}
 
-  sanitize-html@2.17.0:
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  sanitize-html@2.16.0:
-=======
   safe-buffer@5.2.1: {}
 
   safer-buffer@2.1.2: {}
 
-  sanitize-html@2.16.0:
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  sanitize-html@2.17.0:
     dependencies:
       deepmerge: 4.3.1
       escape-string-regexp: 4.0.0
@@ -8420,7 +7864,7 @@ snapshots:
 
   send@1.2.0:
     dependencies:
-      debug: 4.4.0(supports-color@5.5.0)
+      debug: 4.4.1(supports-color@5.5.0)
       encodeurl: 2.0.0
       escape-html: 1.0.3
       etag: 1.8.1
@@ -8430,7 +7874,7 @@ snapshots:
       ms: 2.1.3
       on-finished: 2.4.1
       range-parser: 1.2.1
-      statuses: 2.0.1
+      statuses: 2.0.2
     transitivePeerDependencies:
       - supports-color
 
@@ -8445,14 +7889,10 @@ snapshots:
 
   set-cookie-parser@2.7.1: {}
 
-<<<<<<< HEAD
   setimmediate@1.0.5: {}
 
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
   setprototypeof@1.2.0: {}
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
   shebang-command@2.0.0:
     dependencies:
       shebang-regex: 3.0.0
@@ -8517,7 +7957,7 @@ snapshots:
 
   simple-update-notifier@2.0.0:
     dependencies:
-      semver: 7.7.1
+      semver: 7.7.2
 
   sirv@3.0.1:
     dependencies:
@@ -8543,17 +7983,6 @@ snapshots:
     dependencies:
       debug: 4.3.7
       ws: 8.17.1
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-
-  socket.io-client@4.8.1:
-    dependencies:
-      '@socket.io/component-emitter': 3.1.2
-      debug: 4.3.7
-      engine.io-client: 6.6.3
-      socket.io-parser: 4.2.4
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -8594,6 +8023,8 @@ snapshots:
   stackback@0.0.2: {}
 
   statuses@2.0.1: {}
+
+  statuses@2.0.2: {}
 
   std-env@3.9.0: {}
 
@@ -8755,14 +8186,9 @@ snapshots:
 
   trough@2.2.0: {}
 
-<<<<<<< HEAD
-  ts-node@10.9.2(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3):
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  ts-node@10.9.2(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.3)(typescript@5.8.3):
-=======
   ts-mixer@6.0.4: {}
 
-  ts-node-dev@2.0.0(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3):
+  ts-node-dev@2.0.0(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3):
     dependencies:
       chokidar: 3.6.0
       dynamic-dedupe: 0.3.0
@@ -8772,7 +8198,7 @@ snapshots:
       rimraf: 2.7.1
       source-map-support: 0.5.21
       tree-kill: 1.2.2
-      ts-node: 10.9.2(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3)
+      ts-node: 10.9.2(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3)
       tsconfig: 7.0.0
       typescript: 5.8.3
     transitivePeerDependencies:
@@ -8780,21 +8206,14 @@ snapshots:
       - '@swc/wasm'
       - '@types/node'
 
-  ts-node@10.9.2(@swc/core@1.11.24(@swc/helpers@0.5.17))(@types/node@22.15.17)(typescript@5.8.3):
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  ts-node@10.9.2(@swc/core@1.11.29(@swc/helpers@0.5.17))(@types/node@22.15.21)(typescript@5.8.3):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       '@tsconfig/node10': 1.0.11
       '@tsconfig/node12': 1.0.11
       '@tsconfig/node14': 1.0.3
       '@tsconfig/node16': 1.0.4
-<<<<<<< HEAD
       '@types/node': 22.15.21
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      '@types/node': 22.15.3
-=======
-      '@types/node': 22.15.17
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       acorn: 8.14.1
       acorn-walk: 8.3.4
       arg: 4.1.3
@@ -8880,14 +8299,10 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-<<<<<<< HEAD
-  unicode-segmenter@0.12.0: {}
-
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-=======
   undici@6.21.1: {}
 
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  unicode-segmenter@0.12.0: {}
+
   unified@10.1.2:
     dependencies:
       '@types/unist': 2.0.11
@@ -8953,15 +8368,9 @@ snapshots:
 
   universalify@2.0.1: {}
 
-<<<<<<< HEAD
-  use-sync-external-store@1.5.0(react@19.0.0):
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  use-sync-external-store@1.5.0(react@19.1.0):
-=======
   unpipe@1.0.0: {}
 
-  use-sync-external-store@1.5.0(react@19.1.0):
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  use-sync-external-store@1.5.0(react@19.0.0):
     dependencies:
       react: 19.0.0
 
@@ -8982,15 +8391,9 @@ snapshots:
 
   v8-compile-cache-lib@3.0.1: {}
 
-<<<<<<< HEAD
-  vaul-svelte@0.3.2(svelte@5.33.1):
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  vaul-svelte@0.3.2(svelte@5.28.2):
-=======
   vary@1.1.2: {}
 
-  vaul-svelte@0.3.2(svelte@5.28.2):
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  vaul-svelte@0.3.2(svelte@5.33.1):
     dependencies:
       bits-ui: 0.21.16(svelte@5.33.1)
       svelte: 5.33.1
@@ -9028,31 +8431,13 @@ snapshots:
       react-dom: 19.1.0(react@19.0.0)
       svelte: 5.33.1
 
-<<<<<<< HEAD
   vite-node@3.1.4(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0):
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  vite-node@3.1.3(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1):
-=======
-  vite-node@3.1.3(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1):
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
       cac: 6.7.14
-<<<<<<< HEAD
-      debug: 4.4.1
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      debug: 4.4.0
-=======
-      debug: 4.4.0(supports-color@5.5.0)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+      debug: 4.4.1(supports-color@5.5.0)
       es-module-lexer: 1.7.0
       pathe: 2.0.3
-<<<<<<< HEAD
       vite: 6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      vite: 6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
-=======
-      vite: 6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     transitivePeerDependencies:
       - '@types/node'
       - jiti
@@ -9069,51 +8454,21 @@ snapshots:
 
   vite-plugin-arraybuffer@0.1.0: {}
 
-<<<<<<< HEAD
   vite-plugin-top-level-await@1.5.0(@swc/helpers@0.5.17)(rollup@4.41.0)(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)):
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  vite-plugin-top-level-await@1.5.0(@swc/helpers@0.5.17)(rollup@4.40.2)(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)):
-=======
-  vite-plugin-top-level-await@1.5.0(@swc/helpers@0.5.17)(rollup@4.40.2)(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)):
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
       '@rollup/plugin-virtual': 3.0.2(rollup@4.41.0)
       '@swc/core': 1.11.29(@swc/helpers@0.5.17)
       uuid: 10.0.0
-<<<<<<< HEAD
       vite: 6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      vite: 6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
-=======
-      vite: 6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     transitivePeerDependencies:
       - '@swc/helpers'
       - rollup
 
-<<<<<<< HEAD
   vite-plugin-wasm@3.4.1(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)):
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  vite-plugin-wasm@3.4.1(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)):
-=======
-  vite-plugin-wasm@3.4.1(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)):
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
-<<<<<<< HEAD
       vite: 6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      vite: 6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
-=======
-      vite: 6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
 
-<<<<<<< HEAD
   vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0):
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1):
-=======
-  vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1):
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
       esbuild: 0.25.4
       fdir: 6.4.4(picomatch@4.0.2)
@@ -9122,43 +8477,18 @@ snapshots:
       rollup: 4.41.0
       tinyglobby: 0.2.13
     optionalDependencies:
-<<<<<<< HEAD
       '@types/node': 22.15.21
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      '@types/node': 22.15.3
-=======
-      '@types/node': 22.15.17
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       fsevents: 2.3.3
       jiti: 2.4.2
       lightningcss: 1.30.1
       yaml: 2.8.0
 
-<<<<<<< HEAD
   vitefu@1.0.6(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)):
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  vitefu@1.0.6(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)):
-=======
-  vitefu@1.0.6(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)):
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     optionalDependencies:
-<<<<<<< HEAD
       vite: 6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      vite: 6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
-=======
-      vite: 6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
 
-<<<<<<< HEAD
   vitest@3.1.4(@types/debug@4.1.12)(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0):
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  vitest@3.1.3(@types/debug@4.1.12)(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1):
-=======
-  vitest@3.1.3(@types/debug@4.1.12)(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1):
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     dependencies:
-<<<<<<< HEAD
       '@vitest/expect': 3.1.4
       '@vitest/mocker': 3.1.4(vite@6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0))
       '@vitest/pretty-format': 3.1.4
@@ -9166,31 +8496,8 @@ snapshots:
       '@vitest/snapshot': 3.1.4
       '@vitest/spy': 3.1.4
       '@vitest/utils': 3.1.4
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      '@vitest/expect': 3.1.3
-      '@vitest/mocker': 3.1.3(vite@6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-      '@vitest/pretty-format': 3.1.3
-      '@vitest/runner': 3.1.3
-      '@vitest/snapshot': 3.1.3
-      '@vitest/spy': 3.1.3
-      '@vitest/utils': 3.1.3
-=======
-      '@vitest/expect': 3.1.3
-      '@vitest/mocker': 3.1.3(vite@6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1))
-      '@vitest/pretty-format': 3.1.3
-      '@vitest/runner': 3.1.3
-      '@vitest/snapshot': 3.1.3
-      '@vitest/spy': 3.1.3
-      '@vitest/utils': 3.1.3
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       chai: 5.2.0
-<<<<<<< HEAD
-      debug: 4.4.1
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      debug: 4.4.0
-=======
-      debug: 4.4.0(supports-color@5.5.0)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+      debug: 4.4.1(supports-color@5.5.0)
       expect-type: 1.2.1
       magic-string: 0.30.17
       pathe: 2.0.3
@@ -9200,26 +8507,12 @@ snapshots:
       tinyglobby: 0.2.13
       tinypool: 1.0.2
       tinyrainbow: 2.0.0
-<<<<<<< HEAD
       vite: 6.3.5(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)
       vite-node: 3.1.4(@types/node@22.15.21)(jiti@2.4.2)(lightningcss@1.30.1)(yaml@2.8.0)
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      vite: 6.3.5(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
-      vite-node: 3.1.3(@types/node@22.15.3)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
-=======
-      vite: 6.3.5(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
-      vite-node: 3.1.3(@types/node@22.15.17)(jiti@2.4.2)(lightningcss@1.29.2)(yaml@2.7.1)
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/debug': 4.1.12
-<<<<<<< HEAD
       '@types/node': 22.15.21
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-      '@types/node': 22.15.3
-=======
-      '@types/node': 22.15.17
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
     transitivePeerDependencies:
       - jiti
       - less
@@ -9265,31 +8558,17 @@ snapshots:
       string-width: 7.2.0
       strip-ansi: 7.1.0
 
-<<<<<<< HEAD
-  xstate@5.19.3: {}
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  xstate@5.19.2: {}
-=======
   wrappy@1.0.2: {}
 
   ws@8.17.1: {}
 
   ws@8.18.2: {}
 
-  xmlhttprequest-ssl@2.1.2: {}
+  xstate@5.19.3: {}
 
-  xstate@5.19.2: {}
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-
-<<<<<<< HEAD
-  y-prosemirror@1.2.17(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.39.3)(y-protocols@1.0.6(yjs@13.6.27))(yjs@13.6.27):
-||||||| parent of d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
-  y-prosemirror@1.2.17(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.39.2)(y-protocols@1.0.6(yjs@13.6.26))(yjs@13.6.26):
-=======
   xtend@4.0.2: {}
 
-  y-prosemirror@1.2.17(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.39.2)(y-protocols@1.0.6(yjs@13.6.26))(yjs@13.6.26):
->>>>>>> d963697 (fix: make discord bot work behind http proxies and add missing socket.io-client package to app.)
+  y-prosemirror@1.2.17(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.39.3)(y-protocols@1.0.6(yjs@13.6.27))(yjs@13.6.27):
     dependencies:
       lib0: 0.2.108
       prosemirror-model: 1.25.1

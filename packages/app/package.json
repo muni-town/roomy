@@ -80,7 +80,6 @@
     "prettier-plugin-svelte": "3.3.3",
     "sanitize-html": "^2.14.0",
     "shiki": "^3.2.1",
-    "socket.io-client": "^4.8.1",
     "svelte": "^5.23.1",
     "svelte-boring-avatars": "^1.2.6",
     "svelte-check": "^4.0.0",

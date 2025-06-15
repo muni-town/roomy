@@ -15,7 +15,6 @@
     "@muni-town/leaf-storage-indexeddb": "^0.1.0-preview.5",
     "@muni-town/leaf-svelte": "^0.1.0-preview.5",
     "@muni-town/leaf-sync-ws": "^0.1.0-preview.6",
-    "@roomy-chat/sdk": "workspace:*",
     "cors": "^2.8.5",
     "discord.js": "^14.19.3",
     "dotenv": "^16.5.0",
