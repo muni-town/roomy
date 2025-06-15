@@ -9,7 +9,7 @@
   type Props = ContextMenuRootProps & {
     menuTitle?: string;
     children: Snippet;
-    items: { label: string; icon?: string; onselect?: () => void }[];
+    items: { label: string; icon?: string; onselect?: () => void; destructive?: boolean }[];
     contentProps?: WithoutChild<ContextMenu.ContentProps>;
     // other component props if needed
   };
@@ -28,25 +28,25 @@
     {@render children()}
   </ContextMenu.Trigger>
   <ContextMenu.Portal>
-    <ContextMenu.Content {...contentProps} class="z-10">
-      <ContextMenu.Group class="dz-menu bg-base-200 rounded-box w-56 shadow-md">
+    <ContextMenu.Content {...contentProps} class="z-[60] bg-base-100 border border-base-300 rounded-lg shadow-lg min-w-48 p-1">
+      <ContextMenu.Group>
         {#if menuTitle}
-          <li class="dz-menu-title">
-            <ContextMenu.GroupHeading>{menuTitle}</ContextMenu.GroupHeading>
-          </li>
+          <ContextMenu.GroupHeading class="px-3 py-2 text-xs font-semibold text-base-content/60 uppercase tracking-wide">
+            {menuTitle}
+          </ContextMenu.GroupHeading>
         {/if}
-        <li>
-          {#each items as item}
-            <!-- TODO: for some reason onselect event doesn't work so we use onclick which is not good
-            for keyboard control. -->
-            <ContextMenu.Item textValue={item.label} onclick={item.onselect}>
-              {#if item.icon}
-                <Icon icon={item.icon} font-size="1.5em" />
-              {/if}
-              {item.label}
-            </ContextMenu.Item>
-          {/each}
-        </li>
+        {#each items as item}
+          <ContextMenu.Item 
+            textValue={item.label} 
+            onclick={item.onselect}
+            class="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-base-200 cursor-pointer transition-colors {item.destructive ? 'text-error hover:bg-error/10' : ''}"
+          >
+            {#if item.icon}
+              <Icon icon={item.icon} class="size-4" />
+            {/if}
+            {item.label}
+          </ContextMenu.Item>
+        {/each}
       </ContextMenu.Group>
     </ContextMenu.Content>
   </ContextMenu.Portal>
