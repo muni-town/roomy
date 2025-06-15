@@ -20,18 +20,7 @@ export function getProfile(did: string): Promise<ProfileMeta> {
   if (cached !== undefined) return cached;
   if (!user.agent) throw new Error("Must have user agent to getProfile()");
 
-  const promise: Promise<ProfileMeta> = new Promise((resolve) => {
-    if (did.startsWith("discord:")) {
-      const [_discord, nick, avatar] = did.split(":");
-      resolve({
-        did,
-        handle: nick!,
-        displayName: nick!,
-        avatarUrl: decodeURIComponent(avatar!),
-      });
-      return;
-    }
-
+  const promise: Promise<ProfileMeta> = new Promise((resolve) =>
     user.agent!.getProfile({ actor: did }).then((resp) => {
       if (!resp.success) return;
       resolve({
@@ -40,8 +29,8 @@ export function getProfile(did: string): Promise<ProfileMeta> {
         displayName: resp.data.displayName,
         avatarUrl: resp.data.avatar || "",
       });
-    });
-  });
+    }),
+  );
   cache.set(did, promise);
 
   return promise;

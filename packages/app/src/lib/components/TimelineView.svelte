@@ -163,50 +163,8 @@
     globalState.channel.timeline.push(message);
     globalState.channel.commit();
 
-    try {
-      const { getBridgeStatus, sendMessageToDiscord } = await import(
-        "$lib/discord-bridge/websocket-bridge"
-      );
-      const bridgeStatus = await getBridgeStatus();
-
-      if (bridgeStatus.active && globalState.channel) {
-        // NOTE: This is a simplified version of the message content extraction
-        const content = extractTextFromTipTap(messageInput);
-
-        const currentChannelId = globalState.channel.id;
-
-        const authorDid = user.agent.assertDid;
-        const authorProfile = await getProfile(authorDid);
-
-        // Send to Discord including the author's full profile info
-        await sendMessageToDiscord(
-          currentChannelId,
-          content,
-          authorProfile.handle ||
-            authorProfile.displayName ||
-            authorDid.substring(0, 10),
-          authorProfile.avatarUrl,
-        );
-      }
-    } catch (error) {
-      console.error("Error sending message to Discord bridge:", error);
-    }
-
     messageInput = {};
     replyingTo = undefined;
-  }
-
-  // TODO: make this discord-compatible
-  export function extractTextFromTipTap(node: any): string {
-    if (!node) return "";
-
-    if (node.text) return node.text;
-
-    if (node.content && Array.isArray(node.content)) {
-      return node.content.map(extractTextFromTipTap).join("");
-    }
-
-    return "";
   }
 
   //
