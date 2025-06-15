@@ -24,6 +24,7 @@
     space,
     threadId,
     allowedToInteract,
+    threading,
   }: {
     timeline: string[];
     virtualizer?: Virtualizer<string>;
@@ -32,6 +33,7 @@
     space: co.loaded<typeof Space> | undefined | null;
     threadId?: string;
     allowedToInteract?: boolean;
+    threading?: { active: boolean; selectedMessages: string[] };
   } = $props();
 
   let showLastN = $state(50);
@@ -162,6 +164,7 @@
                 {space}
                 {threadId}
                 {allowedToInteract}
+                {threading}
               />
             {/snippet}
           </Virtualizer>

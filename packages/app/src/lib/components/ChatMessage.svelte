@@ -27,7 +27,6 @@
   import MessageReactions from "./Message/MessageReactions.svelte";
   import ChatInput from "./ChatInput.svelte";
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
-  import { threading } from "./TimelineView.svelte";
   import toast from "svelte-french-toast";
   import ImageUrlEmbed from "./Message/embeds/ImageUrlEmbed.svelte";
   import { setInputFocus } from "./ChatInput.svelte";
@@ -45,6 +44,7 @@
     space,
     threadId,
     allowedToInteract,
+    threading,
   }: {
     messageId: string;
     previousMessageId?: string;
@@ -53,6 +53,7 @@
     space: co.loaded<typeof Space> | undefined | null;
     threadId?: string;
     allowedToInteract?: boolean;
+    threading?: { active: boolean; selectedMessages: string[] };
   } = $props();
 
   const me = new AccountCoState(RoomyAccount, {
@@ -179,7 +180,7 @@
 
   let isDrawerOpen = $state(false);
 
-  let isSelected = $derived(threading.selectedMessages.includes(messageId));
+  let isSelected = $derived(threading?.selectedMessages.includes(messageId) ?? false);
 
   function deleteMessage() {
     if (!message.current) return;
@@ -307,7 +308,7 @@
     id={message.current?.id}
     class={`flex flex-col w-full relative max-w-screen isolate`}
   >
-    {#if threading.active}
+    {#if threading?.active}
       <Checkbox.Root
         bind:checked={
           () => isSelected,
@@ -318,14 +319,14 @@
             }
 
             if (value) {
-              threading.selectedMessages.push(messageId);
+              threading?.selectedMessages.push(messageId);
               return;
             }
 
-            threading.selectedMessages.splice(
-              threading.selectedMessages.indexOf(messageId),
-              1,
-            );
+            const index = threading?.selectedMessages.indexOf(messageId) ?? -1;
+            if (index > -1) {
+              threading?.selectedMessages.splice(index, 1);
+            }
           }
         }
         class="absolute right-4 inset-y-0 z-10"
@@ -425,7 +426,7 @@
         </div>
       </div>
 
-      {#if editingMessage.id !== messageId && !threading.active && allowedToInteract}
+      {#if editingMessage.id !== messageId && !threading?.active && allowedToInteract}
         <MessageToolbar
           bind:isDrawerOpen
           {toggleReaction}

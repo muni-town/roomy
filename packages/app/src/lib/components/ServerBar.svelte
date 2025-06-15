@@ -40,7 +40,8 @@
   class:opacity-0={!visible}
 > -->
 <Sidebar>
-  <div class="flex flex-col gap-1 items-center justify-center py-2">
+  <TooltipProvider>
+    <div class="flex flex-col gap-1 items-center justify-center py-2">
     <Button
       variant="link"
       type="button"
@@ -76,12 +77,11 @@
     {/if}
 
     <div class="divider my-0"></div>
-    {#if !isOpenSpaceJoined && openSpace.current}
-      <SidebarSpace space={openSpace.current} hasJoined={false} {me} />
-    {/if}
-  </div>
-  <ScrollArea class="flex-grow">
-    <TooltipProvider>
+      {#if !isOpenSpaceJoined && openSpace.current}
+        <SidebarSpace space={openSpace.current} hasJoined={false} {me} />
+      {/if}
+    </div>
+    <ScrollArea class="flex-grow">
       <div
         class="flex flex-col px-2 items-center gap-1 flex-grow h-full overflow-y-auto"
       >
@@ -91,11 +91,11 @@
           {/each}
         {/if}
       </div>
-    </TooltipProvider>
-  </ScrollArea>
+    </ScrollArea>
 
-  <section class="flex flex-col items-center gap-2 p-0">
-    <User />
-  </section>
+    <section class="flex flex-col items-center gap-2 p-0">
+      <User />
+    </section>
+  </TooltipProvider>
 </Sidebar>
 <!-- </aside> -->

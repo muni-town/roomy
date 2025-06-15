@@ -2,70 +2,100 @@
   import { page } from "$app/state";
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  import { Popover, Button } from "bits-ui";
+  import { Button } from "@fuxui/base";
   import Dialog from "$lib/components/Dialog.svelte";
   import { toast } from "svelte-french-toast";
-  import { threading } from "./TimelineView.svelte";
   import { isSpaceAdmin } from "$lib/jazz/utils";
   import { CoState } from "jazz-svelte";
   import { Channel, Space, Thread } from "$lib/jazz/schema";
 
-  let { createThread, threadTitleInput = $bindable() } = $props();
+  let {
+    createThread,
+    threadTitleInput = $bindable(),
+    threading = $bindable(),
+  } = $props();
+
+  // Create reactive state for popover that syncs with threading
+  let popoverOpen = $state(false);
+
+  // Sync popover state with threading state
+  $effect(() => {
+    popoverOpen = threading?.active ?? false;
+  });
+
+  // Update threading when popover changes
+  $effect(() => {
+    if (threading) {
+      threading.active = popoverOpen;
+    }
+  });
   let showSettingsDialog = $state(false);
   let channelNameInput = $state("");
   let channelCategoryInput = $state(undefined) as undefined | string;
 
-  let space = $derived(new CoState(Space, page.params.space))
+  let space = $derived(new CoState(Space, page.params.space));
 
-  let channel = $derived(new CoState(Channel, page.params.channel))
+  let channel = $derived(new CoState(Channel, page.params.channel));
 
-  let thread = $derived(new CoState(Thread, page.params.thread))
+  let thread = $derived(new CoState(Thread, page.params.thread));
 
-  function saveSettings() {
-  }
+  function saveSettings() {}
 </script>
 
 <menu class="relative flex items-center gap-3 px-2 w-fit justify-end">
-  <Popover.Root bind:open={threading.active}>
-    <Popover.Trigger>
-      <Icon icon="tabler:needle-thread" class="text-2xl" />
-    </Popover.Trigger>
-    <Popover.Portal>
-      <Popover.Content
-        side="left"
-        sideOffset={16}
-        interactOutsideBehavior="ignore"
-        class="my-4 bg-base-300 rounded py-4 px-5 max-w-[300px] w-full"
-      >
-        <div class="flex flex-col gap-4">
-          <div class="flex justify-between items-center">
-            <h2 class="text-xl font-bold">Create Thread</h2>
-            <Popover.Close>
-              <Icon icon="lucide:x" class="text-2xl" />
-            </Popover.Close>
-          </div>
-          <p class="text-sm text-base-content">
-            Threads are a way to organize messages in a channel. Select as many
-            messages as you want and join them into a new thread.
-          </p>
-          <form onsubmit={createThread} class="flex flex-col gap-4">
-            <input
-              type="text"
-              bind:value={threadTitleInput}
-              class="dz-input"
-              placeholder="Thread Title"
-              required
-            />
-            <button type="submit" class="dz-btn dz-btn-primary">
-              Create Thread
-            </button>
-          </form>
-        </div>
-      </Popover.Content>
-    </Popover.Portal>
-  </Popover.Root>
+  <!-- Threading needle button -->
+  <button
+    type="button"
+    onclick={() => {
+      console.log("Needle clicked, current threading:", threading);
+      console.log("Current popoverOpen:", popoverOpen);
+      popoverOpen = !popoverOpen;
+      console.log("New popoverOpen:", popoverOpen);
+    }}
+    class="p-2 hover:bg-base-200 rounded-lg transition-colors {threading?.active
+      ? 'bg-primary text-primary-content'
+      : ''}"
+    title="Create Thread"
+  >
+    <Icon icon="tabler:needle-thread" class="text-2xl" />
+  </button>
 
-  <Button.Root
+  <!-- Threading dialog -->
+  {#if popoverOpen}
+    <div
+      class="fixed top-20 right-20 z-[100] bg-base-300 rounded-lg p-6 max-w-sm w-80 shadow-2xl border border-base-200"
+    >
+      <div class="flex flex-col gap-4">
+        <div class="flex justify-between items-center">
+          <h2 class="text-xl font-bold">Create Thread</h2>
+          <button
+            onclick={() => (popoverOpen = false)}
+            class="hover:bg-base-200 p-1 rounded"
+          >
+            <Icon icon="lucide:x" class="text-lg" />
+          </button>
+        </div>
+        <p class="text-sm text-base-content">
+          Select messages below by clicking their checkboxes, then create a
+          thread.
+        </p>
+        <form onsubmit={createThread} class="flex flex-col gap-4">
+          <input
+            type="text"
+            bind:value={threadTitleInput}
+            class="dz-input"
+            placeholder="Thread Title"
+            required
+          />
+          <button type="submit" class="dz-btn dz-btn-primary">
+            Create Thread ({threading?.selectedMessages.length || 0} messages)
+          </button>
+        </form>
+      </div>
+    </div>
+  {/if}
+
+  <Button
     title="Copy invite link"
     onclick={() => {
       navigator.clipboard.writeText(`${page.url.href}`);
@@ -73,24 +103,20 @@
     }}
   >
     <Icon icon="icon-park-outline:people-plus" class="text-2xl" />
-  </Button.Root>
+  </Button>
 
   {#if isSpaceAdmin(space.current)}
     <Dialog
-      title={thread.current
-        ? "Thread Settings"
-        : "Channel Settings"}
+      title={thread.current ? "Thread Settings" : "Channel Settings"}
       bind:isDialogOpen={showSettingsDialog}
     >
       {#snippet dialogTrigger()}
-        <Button.Root
-          title={thread.current
-          ? "Thread Settings"
-          : "Channel Settings"}
+        <Button
+          title={thread.current ? "Thread Settings" : "Channel Settings"}
           class="m-auto flex"
         >
           <Icon icon="lucide:settings" class="text-2xl" />
-        </Button.Root>
+        </Button>
       {/snippet}
 
       <form class="flex flex-col gap-4 w-full" onsubmit={saveSettings}>
@@ -117,7 +143,7 @@
             {/await} -->
           </select>
         {/if}
-        <Button.Root class="dz-btn dz-btn-primary">Save Settings</Button.Root>
+        <Button class="dz-btn dz-btn-primary">Save Settings</Button>
       </form>
 
       <form
@@ -133,11 +159,11 @@
       >
         <h2 class="text-xl font-bold">Danger Zone</h2>
         <p>
-          Deleting a {channel.current ? "channel" : "thread"} doesn't delete
-          the data permanently, it just hides the thread from the UI.
+          Deleting a {channel.current ? "channel" : "thread"} doesn't delete the
+          data permanently, it just hides the thread from the UI.
         </p>
-        <Button.Root class="dz-btn dz-btn-error"
-          >Delete {channel.current ? "Channel" : "Thread"}</Button.Root
+        <Button class="dz-btn dz-btn-error"
+          >Delete {channel.current ? "Channel" : "Thread"}</Button
         >
       </form>
     </Dialog>
