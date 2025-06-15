@@ -76,12 +76,14 @@
     {/if}
 
     <div class="divider my-0"></div>
-    {#if !isOpenSpaceJoined && openSpace.current}
-      <SidebarSpace space={openSpace.current} hasJoined={false} {me} />
-    {/if}
   </div>
   <ScrollArea class="flex-grow">
     <TooltipProvider>
+      {#if !isOpenSpaceJoined && openSpace.current}
+        <div class="flex justify-center p-2">
+          <SidebarSpace space={openSpace.current} hasJoined={false} {me} />
+        </div>
+      {/if}
       <div
         class="flex flex-col px-2 items-center gap-1 flex-grow h-full overflow-y-auto"
       >

@@ -7,6 +7,10 @@
   import { CoState } from "jazz-svelte";
   import { page } from "$app/state";
 
+  let {
+    triggerStyle = "dz-btn dz-btn-primary dz-btn-sm text-lg",
+  } = $props();
+
   let space = $derived(
     new CoState(Space, page.params.space, {
       resolve: {
@@ -30,12 +34,6 @@
       },
     }),
   );
-
-  let {
-    triggerStyle = "dz-btn dz-btn-primary dz-btn-sm text-lg",
-  }: {
-    triggerStyle?: string;
-  } = $props();
 
   let isPageTitleDialogOpen = $state(false);
   let newPageTitle: string = $state("");
@@ -68,9 +66,7 @@
   }
 </script>
 
-{#if channel.current && space.current}
-  <button class={triggerStyle} onclick={createPageDialog}> + </button>
-{/if}
+<button class="dz-btn dz-btn-primary dz-btn-sm relative z-50" onclick={createPageDialog} style="margin-left: 8px;"> + </button>
 <Dialog
   title="New Page"
   description="Give your new page a title"
