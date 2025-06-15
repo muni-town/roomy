@@ -1,10 +1,3 @@
-<script lang="ts" module>
-  export const threading = $state({
-    active: false,
-    selectedMessages: [] as string[],
-  });
-</script>
-
 <script lang="ts">
   import toast from "svelte-french-toast";
   import Icon from "@iconify/svelte";
@@ -43,6 +36,22 @@
   import SearchBar from "./search/SearchBar.svelte";
   import Navbar from "./ui/Navbar.svelte";
   import { Tabs } from "@fuxui/base";
+
+  // Component-level threading state - scoped per channel
+  let threading = $state({
+    active: false,
+    selectedMessages: [] as string[],
+  });
+
+  // Clean up threading state when channel changes
+  $effect(() => {
+    // When channel changes, reset threading state
+    const channelId = page.params.channel;
+    return () => {
+      threading.active = false;
+      threading.selectedMessages = [];
+    };
+  });
 
   let space = $derived(
     new CoState(Space, page.params.space, {
@@ -486,7 +495,7 @@
         <Icon icon="tabler:search" class="text-base-content" />
       </button>
     {/if}
-    <TimelineToolbar createThread={addThread} bind:threadTitleInput />
+    <TimelineToolbar createThread={addThread} bind:threadTitleInput bind:threading />
   </div>
 </Navbar>
 
@@ -518,6 +527,7 @@
           admin={creator.current}
           {threadId}
           allowedToInteract={hasJoinedSpace && !isBanned}
+          {threading}
         />
       </div>
 
