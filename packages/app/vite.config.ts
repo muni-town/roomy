@@ -23,5 +23,9 @@ export default defineConfig({
     fs: {
       allow: [allowDir],
     },
+     allowedHosts: [
+      "commonly-proper-amoeba.ngrok-free.app",
+      "localhost"
+    ],
   },
 });

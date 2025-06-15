@@ -9,7 +9,7 @@ import { type } from "@tauri-apps/plugin-os";
 const scope = "atproto transition:generic transition:chat.bsky";
 const oatProxyUrl = "https://commonly-proper-amoeba.ngrok-free.app";
 
-let oauth: BrowserOAuthClient | undefined = $state();
+let oauth = $state() as BrowserOAuthClient | undefined;
 
 const fetchWithLies = async (input: RequestInfo | URL, init?: RequestInit) => {
   let request: Request;
@@ -62,13 +62,25 @@ export const atproto = {
   async init() {
     if (this.oauth) return;
 
+    // Always use OATProxy callback URL since that's what's registered
+    // OATProxy will handle the redirect back to the appropriate location
+    let redirectUris: [string, ...string[]];
+
+    if (isTauri()) {
+      // For Tauri (desktop/mobile apps)
+      redirectUris =
+        type() === "android" || type() === "ios"
+          ? ["https://roomy.chat/oauth/callback"]
+          : ["chat.roomy:/oauth/callback"];
+    } else {
+      // For both dev and production web - always use OATProxy callback
+      // OATProxy will handle redirecting back to the correct location
+      redirectUris = [`${oatProxyUrl}/oauth/callback`];
+    }
+
     const clientMetadata: OAuthClientMetadataInput = {
       client_id: `${oatProxyUrl}/oauth/downstream/client-metadata.json`,
-      redirect_uris: isTauri()
-        ? type() === "android" || type() === "ios"
-          ? ["https://roomy.chat/oauth/callback"]
-          : ["chat.roomy:/oauth/callback"]
-        : [`${oatProxyUrl}/oauth/callback`],
+      redirect_uris: redirectUris,
       scope,
       response_types: ["code"],
       grant_types: ["authorization_code", "refresh_token"],
