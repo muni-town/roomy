@@ -9,7 +9,7 @@ import { type } from "@tauri-apps/plugin-os";
 const scope = "atproto transition:generic transition:chat.bsky";
 const oatProxyUrl = "https://commonly-proper-amoeba.ngrok-free.app";
 
-let oauth = $state() as BrowserOAuthClient | undefined;
+let oauth: BrowserOAuthClient | undefined = $state();
 
 const fetchWithLies = async (input: RequestInfo | URL, init?: RequestInit) => {
   let request: Request;

@@ -63,6 +63,7 @@ button {
   padding-right: 0.5rem;
   border-radius: 0.25rem;
   font-style: normal !important;
+  z-index: 10;
 }
 
 .thread-mention::before {

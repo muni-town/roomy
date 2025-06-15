@@ -2,11 +2,7 @@
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import { Button, Tabs } from "bits-ui";
-
-  import { globalState } from "$lib/global.svelte";
-
-  import { derivePromise, navigate, Toggle } from "$lib/utils.svelte";
-  import { Category, Channel, Thread } from "@roomy-chat/sdk";
+  import { navigate, Toggle } from "$lib/utils.svelte";
   import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
   import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
   import { getContext } from "svelte";
@@ -14,16 +10,60 @@
   import SidebarChannelList from "./SidebarChannelList.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { page } from "$app/state";
+  import { AccountCoState, CoState } from "jazz-svelte";
+  import {
+    createCategory,
+    createChannel,
+    createThread,
+    isSpaceAdmin,
+    spacePages,
+  } from "$lib/jazz/utils";
+  import { Category, RoomyAccount, Space } from "$lib/jazz/schema";
+  import { co } from "jazz-tools";
+
+  let space = $derived(
+    new CoState(Space, page.params.space, {
+      resolve: {
+        channels: {
+          $each: true,
+          $onError: null,
+        },
+        categories: {
+          $each: {
+            channels: {
+              $each: true,
+              $onError: null,
+            },
+          },
+          $onError: null,
+        },
+      },
+    }),
+  );
+  let links = $derived(
+    space?.current?.threads?.find((x) => x?.name === "@links"),
+  );
+
+  const me = new AccountCoState(RoomyAccount, {
+    resolve: {
+      root: {
+        lastRead: true,
+      },
+      profile: {
+        roomyInbox: {
+          $each: true,
+          $onError: null,
+        },
+      },
+    },
+  });
 
   export async function createLinkFeed() {
-    if (!globalState.roomy || !globalState.space) return;
+    if (!space?.current) return;
 
     try {
-      const thread = await globalState.roomy.create(Thread);
-      thread.name = "@links";
-      thread.commit();
-      globalState.space.threads.push(thread);
-      globalState.space.commit();
+      const thread = createThread([], "@links");
+      space.current?.threads?.push(thread);
 
       navigate({ space: page.params.space!, thread: thread.id });
     } catch (e) {
@@ -31,78 +71,102 @@
     }
   }
 
-  let allThreads = derivePromise([], async () =>
-    ((await globalState.space?.threads.items()) || [])
-      .filter((x) => !x.softDeleted)
-      .map((x) => ({
-        target: {
-          space: page.params.space!,
-          thread: x.id,
-        },
-        name: x.name,
-        id: x.id,
-      })),
-  );
-  let threads = $derived(allThreads.value.filter((x) => x.name !== "@links"));
-  let links = $derived(allThreads.value.find((x) => x.name === "@links"));
+  function allThreads() {
+    let threads = space?.current?.threads || [];
+    return threads
+      .filter(
+        (thread) =>
+          thread !== null && !thread.softDeleted && thread.name !== "@links",
+      )
+      .map((thread) => {
+        return {
+          target: {
+            space: page.params.space!,
+            thread: thread?.id,
+          },
+          name: thread?.name || "",
+          id: thread?.id || "",
+        };
+      });
+  }
+  let threads = $derived(allThreads());
 
-  const pages = derivePromise([], async () =>
-    ((await globalState.space?.wikipages.items()) || [])
-      .filter((x) => !x.softDeleted)
-      .map((x) => ({
+  const pages = $derived.by(() => {
+    if (!space?.current) return [];
+    const pages = spacePages(space.current);
+    return pages
+      .filter((page) => !page?.softDeleted)
+      .map((p) => ({
         target: {
-          space: page.params.space!,
-          page: x.id,
+          space: page.params.space,
+          page: p?.id,
         },
-        name: x.name,
-        id: x.id,
-      })),
-  );
-
-  let categories = derivePromise([], async () => {
-    if (!globalState.space) return [];
-    return (await globalState.space.sidebarItems.items())
-      .map((x) => x.tryCast(Category) as Category)
-      .filter((x) => !!x);
+        name: p?.name || "",
+        id: p?.id || "",
+      }));
   });
 
-  let sidebarItems = derivePromise([], async () => {
-    if (!globalState.space) return [];
-    return await globalState.space.sidebarItems.items();
+  function getUsedCategories() {
+    return (
+      space?.current?.categories?.filter(
+        (category) =>
+          !category.softDeleted &&
+          category?.channels?.filter((channel) => !channel?.softDeleted)
+            ?.length,
+      ) ?? []
+    );
+  }
+
+  let sidebarItems = $derived.by(() => {
+    if (!space?.current) return [];
+    const categories = getUsedCategories().map((channel) => ({
+      type: "category" as const,
+      data: channel,
+    }));
+    const channels = space?.current?.channels || [];
+
+    // only channels that are not in a category
+    const channelsNotInCategory = channels
+      .filter(
+        (channel) =>
+          !categories.some((category) =>
+            category.data.channels?.some((c) => c?.id === channel.id),
+          ),
+      )
+      .map((channel) => ({
+        type: "channel" as const,
+        data: channel,
+      }));
+
+    return [...channelsNotInCategory, ...categories];
   });
+
   let showNewCategoryDialog = $state(false);
   let newCategoryName = $state("");
-  async function createCategory() {
-    if (!globalState.roomy || !globalState.space) return;
+  async function createCategorySubmit() {
+    if (!space?.current) return;
 
-    const category = await globalState.roomy.create(Category);
-    category.name = newCategoryName;
-    category.appendAdminsFrom(globalState.space);
-    category.commit();
-    globalState.space.sidebarItems.push(category);
-    globalState.space.commit();
+    const category = createCategory(newCategoryName);
+    space.current?.categories?.push(category);
 
     showNewCategoryDialog = false;
   }
 
   let showNewChannelDialog = $state(false);
   let newChannelName = $state("");
-  let newChannelCategory = $state(undefined) as undefined | Category;
-  async function createChannel() {
-    if (!globalState.roomy || !globalState.space) return;
-    const channel = await globalState.roomy.create(Channel);
-    channel.appendAdminsFrom(globalState.space);
-    channel.name = newChannelName;
-    channel.commit();
+  let newChannelCategory = $state(undefined) as
+    | undefined
+    | co.loaded<typeof Category>;
+  async function createChannelSubmit() {
+    if (!space?.current) return;
 
-    globalState.space.channels.push(channel);
+    const channel = createChannel(newChannelName);
+
+    space.current?.channels?.push(channel);
+
     if (newChannelCategory) {
-      newChannelCategory.channels.push(channel);
-      newChannelCategory.commit();
-    } else {
-      globalState.space.sidebarItems.push(channel);
+      newChannelCategory.channels?.push(channel);
     }
-    globalState.space.commit();
 
     newChannelCategory = undefined;
     newChannelName = "";
@@ -123,17 +187,17 @@
   >
     <ToggleSidebarIcon class="pr-2" open={isSpacesVisible} />
     <h1 class="text-sm font-bold text-base-content truncate">
-      {globalState.space?.name && globalState.space?.name !== "Unnamed"
-        ? globalState.space.name
+      {space?.current?.name && space?.current?.name !== "Unnamed"
+        ? space.current?.name
         : ""}
     </h1>
 
-    {#if globalState.isAdmin}
+    {#if isSpaceAdmin(space.current)}
       <SpaceSettingsDialog />
     {/if}
   </div>
 
-  {#if globalState.isAdmin}
+  {#if isSpaceAdmin(space.current)}
     <menu
       class="dz-menu p-0 w-full justify-between px-2 dz-join dz-join-vertical"
     >
@@ -151,7 +215,7 @@
         <form
           id="createChannel"
           class="flex flex-col gap-4"
-          onsubmit={createChannel}
+          onsubmit={createChannelSubmit}
         >
           <label class="dz-input w-full">
             <span class="dz-label">Name</span>
@@ -167,7 +231,7 @@
             <span class="dz-label">Category</span>
             <select bind:value={newChannelCategory}>
               <option value={undefined}>None</option>
-              {#each categories.value as category}
+              {#each space.current?.categories?.filter((category) => !category.softDeleted) ?? [] as category}
                 <option value={category}>{category.name}</option>
               {/each}
             </select>
@@ -193,7 +257,7 @@
         <form
           id="createCategory"
           class="flex flex-col gap-4"
-          onsubmit={createCategory}
+          onsubmit={createCategorySubmit}
         >
           <label class="dz-input w-full">
             <span class="dz-label">Name</span>
@@ -223,11 +287,7 @@
           class="text-2xl"
         />
       </Tabs.Trigger>
-      <Tabs.Trigger
-        disabled={!globalState.roomy}
-        value="chat"
-        class="grow dz-tab flex gap-2"
-      >
+      <Tabs.Trigger value="chat" class="grow dz-tab flex gap-2">
         <Icon
           icon="tabler:message{tab === 'chat' ? '-filled' : ''}"
           class="text-2xl"
@@ -262,13 +322,17 @@
       {/if}
       <AccordionTree
         sections={[
-          { key: "pages", items: pages.value },
+          { key: "pages", items: pages },
           { key: "threads", items: threads },
         ]}
-        active={globalState.channel?.id ?? ""}
+        active={page.params.channel ?? ""}
       />
     {:else}
-      <SidebarChannelList {sidebarItems} />
+      <SidebarChannelList
+        {sidebarItems}
+        space={space.current}
+        me={me.current}
+      />
     {/if}
   </div>
 </nav>

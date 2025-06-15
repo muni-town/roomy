@@ -1,371 +1,454 @@
-<script lang="ts">
-  import { getContext, setContext } from "svelte";
-  import toast from "svelte-french-toast";
-  import { user } from "$lib/user.svelte";
-  import { getContentHtml, type Item } from "$lib/tiptap/editor";
-  import { outerWidth } from "svelte/reactivity/window";
+<script lang="ts" module>
+  export const threading = $state({
+    active: false,
+    selectedMessages: [] as string[],
+  });
+</script>
 
+<script lang="ts">
+  import toast from "svelte-french-toast";
   import Icon from "@iconify/svelte";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
-  import AvatarImage from "$lib/components/AvatarImage.svelte";
   import { Button, Tabs } from "bits-ui";
-
-  import { derivePromise } from "$lib/utils.svelte";
-  import { collectLinks, tiptapJsontoString } from "$lib/utils/collectLinks";
-  import { globalState } from "$lib/global.svelte";
+  import { Account, co, Group } from "jazz-tools";
   import {
-    Announcement,
-    Channel,
+    LastReadList,
     Message,
+    RoomyAccount,
     Thread,
-    Timeline,
-  } from "@roomy-chat/sdk";
-  import type { JSONContent } from "@tiptap/core";
-  import { getProfile } from "$lib/profile.svelte";
+  } from "$lib/jazz/schema";
   import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
   import CreatePageDialog from "$lib/components/CreatePageDialog.svelte";
   import BoardList from "./BoardList.svelte";
   import ToggleNavigation from "./ToggleNavigation.svelte";
-  import { Index } from "flexsearch";
-  import SearchResults from "./SearchResults.svelte";
-  import type { Virtualizer } from "virtua/svelte";
-  import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
+  import { AccountCoState, CoState } from "jazz-svelte";
+  import { Channel, Space } from "$lib/jazz/schema";
+  import { page } from "$app/state";
+  import {
+    addToInbox,
+    createMessage,
+    createThread,
+    isSpaceAdmin,
+    type ImageUrlEmbedCreate,
+  } from "$lib/jazz/utils";
+  import { user } from "$lib/user.svelte";
+  import { replyTo } from "./ChatMessage.svelte";
+  import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
+  import { extractLinks } from "$lib/utils/collectLinks";
+  import FullscreenImageDropper from "./helper/FullscreenImageDropper.svelte";
+  import UploadFileButton from "./helper/UploadFileButton.svelte";
+  import { afterNavigate } from "$app/navigation";
+  import SearchBar from "./search/SearchBar.svelte";
 
-  // Helper function to extract text content from TipTap JSON content
-  function extractTextContent(parsedBody: Record<string, unknown>): string {
-    if (
-      !parsedBody ||
-      typeof parsedBody !== "object" ||
-      !("content" in parsedBody)
-    )
-      return "";
-
-    let text = "";
-
-    // Process the content recursively to extract text
-    function processNode(node: Record<string, unknown>): void {
-      if ("text" in node && typeof node.text === "string") {
-        text = `${text}${node.text} `;
-      }
-
-      if ("content" in node && Array.isArray(node.content)) {
-        for (const item of node.content) {
-          if (typeof item === "object" && item !== null) {
-            processNode(item as Record<string, unknown>);
-          }
-        }
-      }
-    }
-
-    // Start processing from the root content
-    if ("content" in parsedBody && Array.isArray(parsedBody.content)) {
-      for (const node of parsedBody.content) {
-        if (typeof node === "object" && node !== null) {
-          processNode(node as Record<string, unknown>);
-        }
-      }
-    }
-
-    return text.trim();
-  }
-
-  const links = derivePromise(null, async () =>
-    (await globalState.space?.threads.items())?.find(
-      (x) => x.name === "@links",
-    ),
+  let space = $derived(
+    new CoState(Space, page.params.space, {
+      resolve: {
+        channels: {
+          $each: true,
+          $onError: null,
+        },
+        bans: {
+          $each: true,
+          $onError: null,
+        },
+        members: {
+          $each: true,
+          $onError: null,
+        },
+      },
+    }),
   );
-  const readonly = $derived(globalState.channel?.name === "@links");
-  let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  let users: { value: Item[] } = getContext("users");
-  let contextItems: { value: Item[] } = getContext("contextItems");
+  const links = $derived(
+    space.current?.threads?.find((x) => x?.name === "@links"),
+  );
+
+  let creator = $derived(new CoState(Account, space.current?.creatorId));
+  let adminGroup = $derived(new CoState(Group, space.current?.adminGroupId));
+
+  let channel = $derived(
+    new CoState(Channel, page.params.channel, {
+      resolve: {
+        mainThread: true,
+        subThreads: true,
+        pages: true,
+      },
+    }),
+  );
+
+  let thread = $derived(new CoState(Thread, page.params.thread));
+
+  let timeline = $derived.by(() => {
+    const currentTimeline =
+      thread.current?.timeline ?? channel.current?.mainThread?.timeline;
+
+    return Object.values(currentTimeline?.perAccount ?? {})
+      .map((accountFeed) => new Array(...accountFeed.all))
+      .flat()
+      .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
+      .map((a) => a.value);
+  });
+
+  let threadId = $derived(
+    thread.current?.id ?? channel.current?.mainThread?.id,
+  );
+
+  const readonly = $derived(thread.current?.name === "@links");
 
   let tab = $state<"chat" | "board">("chat");
 
-  // Initialize tab based on hash if present
-  function updateTabFromHash() {
-    const hash = window.location.hash.replace("#", "");
-    if (hash === "chat" || hash === "board") {
-      tab = hash as "chat" | "board";
+  const me = new AccountCoState(RoomyAccount, {
+    resolve: {
+      profile: {
+        joinedSpaces: true,
+      },
+    },
+  });
+
+  function setLastRead() {
+    if (!me?.current?.root) return;
+
+    if (!me?.current?.root?.lastRead) {
+      me.current.root.lastRead = LastReadList.create({});
+    }
+
+    if (page.params.channel) {
+      me.current.root.lastRead[page.params.channel] = new Date();
+    }
+
+    if (page.params.thread) {
+      me.current.root.lastRead[page.params.thread] = new Date();
     }
   }
 
-  $effect(() => {
-    updateTabFromHash();
-  });
+  // Initialize tab based on hash if present
+  // TODO: move this functionality to somewhere else
+  // (not hash based, so we can actually move backwards with browser back button)
+  // function updateTabFromHash() {
+  //   const hash = window.location.hash.replace("#", "");
+  //   if (hash === "chat" || hash === "board") {
+  //     tab = hash as "chat" | "board";
+  //   }
+  // }
 
-  // Update the hash when tab changes
-  $effect(() => {
-    if (tab) {
-      window.location.hash = tab;
-    }
-  });
+  // $effect(() => {
+  //   updateTabFromHash();
+  // });
 
-  let messageInput: JSONContent = $state({});
+  // // Update the hash when tab changes
+  // $effect(() => {
+  //   if (tab) {
+  //     window.location.hash = tab;
+  //   }
+  // });
+
+  let messageInput: string = $state("");
 
   // thread maker
-  let isThreading = $state({ value: false });
   let threadTitleInput = $state("");
-  let selectedMessages: Message[] = $state([]);
-  setContext("isThreading", isThreading);
-  setContext("selectMessage", (message: Message) => {
-    selectedMessages.push(message);
-  });
-  setContext("removeSelectedMessage", (msg: Message) => {
-    selectedMessages = selectedMessages.filter((m) => m !== msg);
-  });
 
-  $effect(() => {
-    if (!isThreading.value && selectedMessages.length > 0) {
-      selectedMessages = [];
-    }
-  });
+  let filesInMessage: File[] = $state([]);
 
-  // Reply Utils
-  let replyingTo = $state() as Message | undefined;
-  setContext("setReplyTo", (message: Message) => {
-    replyingTo = message;
-  });
-
-  // Initialize FlexSearch with appropriate options for message content
-  let searchIndex = new Index({
-    tokenize: "forward",
-    preset: "performance",
-  });
-  let searchQuery = $state("");
-  let showSearchInput = $state(false);
-  let searchResults = $state<Message[]>([]);
-  let showSearchResults = $state(false);
-  let virtualizer = $state<Virtualizer<string> | undefined>(undefined);
-
-  // Function to handle search result click
-  function handleSearchResultClick(messageId: string) {
-    // Hide search results
-    showSearchResults = false;
-
-    // Find the message in the timeline to get its index
-    if (globalState.channel) {
-      // Get the timeline IDs - this returns an array, not a Promise
-      const ids = globalState.channel.timeline.ids();
-
-      if (!messageId.includes("leaf:")) {
-        return;
-      }
-
-      const messageIndex = ids.indexOf(messageId as `leaf:${string}`);
-
-      if (messageIndex !== -1) {
-        virtualizer?.scrollToIndex(messageIndex);
-      } else {
-        console.error("Message not found in timeline:", messageId);
-      }
-    } else {
-      console.error("No active channel");
-    }
-  }
-
-  // Index existing messages when timeline items are loaded
-  $effect(() => {
-    if (searchIndex && globalState.channel?.timeline) {
-      // items() returns a Promise, unlike ids() which returns an array directly
-      globalState.channel.timeline.items().then((items) => {
-        // Clear index before re-indexing to avoid duplicates
-        searchIndex.clear();
-
-        for (const item of items) {
-          const message = item.tryCast(Message);
-          if (message) {
-            // Try parsing the message body
-            const parsedBody = JSON.parse(message.bodyJson);
-
-            // Extract text content from the parsed body
-            const textContent = extractTextContent(parsedBody);
-
-            if (textContent) {
-              searchIndex.add(message.id, textContent);
-            }
-          }
-        }
-      });
-    }
-  });
-
-  async function createThread(e: SubmitEvent) {
+  async function addThread(e: SubmitEvent) {
     e.preventDefault();
-    if (!globalState.roomy || !globalState.space || !globalState.channel)
-      return;
+    const messageIds = <string[]>[];
 
-    const thread = await globalState.roomy.create(Thread);
+    const sortedMessages = threading.selectedMessages
+      .map((messageId) => {
+        const messageIndex = timeline.findIndex(
+          (message) => message === messageId,
+        );
+        return [messageId, messageIndex] as [string, number];
+      })
+      .sort((a, b) => a[1] - b[1]);
 
-    // messages can be selected in any order
-    // sort them on create based on their position from the channel
-    let channelMessageIds = globalState.channel.timeline.ids();
-    selectedMessages.sort((a, b) => {
-      return channelMessageIds.indexOf(a.id) - channelMessageIds.indexOf(b.id);
-    });
+    let firstMessage: co.loaded<typeof Message> | undefined = undefined;
 
-    for (const message of selectedMessages) {
-      // move selected message ID from channel to thread timeline
-      thread.timeline.push(message);
-      const index = globalState.channel.timeline.ids().indexOf(message.id);
-      globalState.channel.timeline.remove(index);
+    for (const [messageId, _] of sortedMessages) {
+      messageIds.push(messageId);
 
-      // create an Announcement about the move for each message
-      const announcement = await globalState.roomy.create(Announcement);
-      announcement.kind = "messageMoved";
-      announcement.relatedMessages.push(message);
-      announcement.relatedThreads.push(thread);
-      announcement.commit();
-      globalState.channel.timeline.insert(index, announcement);
+      const message = await Message.load(messageId, {
+        resolve: {
+          hiddenIn: true,
+        },
+      });
+      if (!message) {
+        console.error("Message not found when creating thread", messageId);
+        continue;
+      }
+      // hide all messages except the first message in original thread
+      if (firstMessage) {
+        if (threadId) message.hiddenIn.push(threadId);
+      } else {
+        firstMessage = message;
+      }
     }
 
-    // TODO: decide whether the thread needs a reference to it's original channel. That might be
-    // confusing because it's messages could have come from multiple channels?
-    thread.name = threadTitleInput;
-    thread.commit();
+    const channelId = channel.current?.id ?? thread.current?.channelId ?? "";
 
-    // create an Announcement about the new Thread in current channel
-    const announcement = await globalState.roomy.create(Announcement);
-    announcement.kind = "threadCreated";
-    announcement.relatedThreads.push(thread);
-    announcement.commit();
+    let newThread = createThread(messageIds, channelId, threadTitleInput);
 
-    globalState.channel.timeline.push(announcement);
-
-    // If this is a channel ( the alternative would be a thread )
-    if (globalState.channel instanceof Channel) {
-      globalState.channel.threads.push(thread);
+    if (firstMessage) {
+      firstMessage.threadId = newThread.id;
     }
 
-    globalState.channel.commit();
+    space.current?.threads?.push(newThread);
 
-    globalState.space.threads.push(thread);
-    globalState.space.commit();
-
-    threadTitleInput = "";
-    isThreading.value = false;
+    channel.current?.subThreads.push(newThread);
+    threading.active = false;
+    threading.selectedMessages = [];
     toast.success("Thread created", { position: "bottom-end" });
   }
 
-  async function sendMessage() {
-    if (
-      !globalState.roomy ||
-      !globalState.space ||
-      !globalState.channel ||
-      !user.agent
-    )
-      return;
+  let isSendingMessage = $state(false);
 
-    // Image upload is now handled in ChatInput.svelte
-
-    const message = await globalState.roomy.create(Message);
-    message.authors(
-      (authors) => user.agent && authors.push(user.agent.assertDid),
-    );
-    message.bodyJson = JSON.stringify(messageInput);
-    message.createdDate = new Date();
-    message.commit();
-    if (replyingTo) message.replyTo = replyingTo;
-
-    // Add new message to search index
-    if (searchIndex) {
-      const parsedBody = JSON.parse(message.bodyJson);
-
-      // Extract text content from the parsed body
-      const textContent = extractTextContent(parsedBody);
-
-      if (textContent) {
-        searchIndex.add(message.id, textContent);
-      }
-    }
-
-    // Images are now handled by TipTap in the message content
-    // Limit image size in message input to 300x300
-    if (collectLinks(tiptapJsontoString(messageInput))) {
-      if (links.value) {
-        links.value.timeline.push(message);
-        links.value.commit();
-      }
-    }
-
-    globalState.channel.timeline.push(message);
-    globalState.channel.commit();
-
-    messageInput = {};
-    replyingTo = undefined;
-  }
-
-  // Handle search input
-  $effect(() => {
-    if (searchIndex && searchQuery) {
-      // Perform synchronous search
-      const results = searchIndex.search(searchQuery);
-
-      if (results.length > 0) {
-        showSearchResults = true;
-
-        // Get the actual Message objects for the search results
-        if (globalState.channel?.timeline) {
-          globalState.channel.timeline.items().then((items) => {
-            searchResults = items
-              .map((x) => x.tryCast(Message))
-              .filter(
-                (msg): msg is Message =>
-                  msg !== null && msg !== undefined && results.includes(msg.id),
-              );
-          });
-        }
-      } else {
-        searchResults = [];
-        showSearchResults = searchQuery.length > 0;
-      }
-    } else {
-      searchResults = [];
-      showSearchResults = false;
-    }
-  });
-
-  let relatedThreads = derivePromise([], async () =>
-    globalState.channel && globalState.channel instanceof Channel
-      ? await globalState.channel.threads.items()
-      : [],
+  const notifications = $derived(
+    me.current?.profile?.roomyInbox?.filter(
+      (x) =>
+        x &&
+        (x.channelId === channel.current?.id ||
+          x.threadId === thread.current?.id) &&
+        !x.read,
+    ),
   );
 
-  const pages = derivePromise([], async () => {
-    return globalState.space && globalState.channel instanceof Channel
-      ? (await globalState.channel.wikipages.items()).filter(
-          (x) => !x.softDeleted,
-        )
-      : [];
+  $effect(() => {
+    if (notifications && notifications.length > 0) {
+      // remove those from the inbox
+      for (
+        let i = (me.current?.profile?.roomyInbox?.length ?? 0) - 1;
+        i >= 0;
+        i--
+      ) {
+        const item = me.current?.profile?.roomyInbox?.[i];
+        if (
+          item &&
+          (item.channelId === channel.current?.id ||
+            item.threadId === thread.current?.id) &&
+          !item.read
+        ) {
+          item.read = true;
+        }
+      }
+    }
   });
+
+  async function sendMessage() {
+    if (!user.agent || !space.current) return;
+
+    isSendingMessage = true;
+
+    let filesUrls: ImageUrlEmbedCreate[] = [];
+    // upload files
+    for (const file of filesInMessage) {
+      const uploadedFile = await user.uploadBlob(file);
+
+      filesUrls.push({
+        type: "imageUrl",
+        data: {
+          url: uploadedFile.url,
+        },
+      });
+    }
+
+    const message = createMessage(
+      messageInput,
+      undefined,
+      adminGroup.current || undefined,
+      filesUrls,
+    );
+
+    let timeline =
+      channel.current?.mainThread.timeline ?? thread.current?.timeline;
+    if (timeline) {
+      timeline.push(message.id);
+    }
+    if (replyTo.id) {
+      message.replyTo = replyTo.id;
+      const replyToMessage = await Message.load(replyTo.id);
+      const userId = replyToMessage?._edits?.content?.by?.id;
+      if (userId) {
+        console.log("adding to inbox", userId, message.id);
+        addToInbox(
+          userId,
+          "reply",
+          message.id,
+          space.current?.id ?? "",
+          channel.current?.id ?? "",
+          thread.current?.id ?? "",
+        );
+      }
+    }
+    // addMessage(timeline?.id ?? "", message.id, messageInput);
+    replyTo.id = "";
+
+    // see if we mentioned anyone (all links that start with /user/)
+    const allLinks = extractLinks(messageInput);
+    for (const link of allLinks) {
+      if (link.startsWith("/user/")) {
+        const userId = link.split("/")[2];
+        console.log("mentioned user", userId);
+        if (!userId) continue;
+
+        addToInbox(
+          userId,
+          "mention",
+          message.id,
+          space.current?.id ?? "",
+          channel.current?.id ?? "",
+          thread.current?.id ?? "",
+        );
+      }
+    }
+
+    if (links?.timeline) {
+      for (const link of allLinks) {
+        if (!link.startsWith("http")) continue;
+
+        const message = createMessage(
+          `<a href="${link}">${link}</a>`,
+          undefined,
+          adminGroup.current || undefined,
+        );
+        links.timeline.push(message.id);
+      }
+    }
+
+    messageInput = "";
+    for (let i = filesInMessage.length - 1; i >= 0; i--) {
+      removeImageFile(i);
+    }
+    isSendingMessage = false;
+  }
+
+  afterNavigate(() => {
+    count = timeline.length ?? 0;
+  });
+
+  // svelte-ignore state_referenced_locally
+  let count = $state(timeline.length ?? 0);
+
+  $effect(() => {
+    let newCount = timeline?.length ?? 0;
+    if (count < newCount) {
+      count = newCount;
+      setLastRead();
+    }
+  });
+
+  const pages = $derived(
+    channel.current?.pages?.filter((page) => page && !page.softDeleted) || [],
+  );
+
+  const channelThreads = $derived(
+    channel.current?.subThreads?.filter(
+      (thread) => thread && !thread.softDeleted,
+    ) || [],
+  );
+
+  function joinSpace() {
+    if (!space.current || !me.current) return;
+
+    // add to my list of joined spaces
+    me.current?.profile?.joinedSpaces?.push(space.current);
+
+    // add to space.current.members
+    space.current?.members?.push(me.current);
+  }
+
+  let previewImages: string[] = $state([]);
+
+  function processImageFile(file: File) {
+    filesInMessage.push(file);
+    previewImages.push(URL.createObjectURL(file));
+  }
+
+  function removeImageFile(index: number) {
+    let previewImage = previewImages[index];
+    filesInMessage = filesInMessage.filter((_, i) => i !== index);
+    previewImages = previewImages.filter((_, i) => i !== index);
+
+    if (previewImage) {
+      URL.revokeObjectURL(previewImage);
+    }
+  }
+
+  let bannedHandles = $derived(new Set(space.current?.bans ?? []));
+
+  let users = $derived(
+    space.current?.members
+      ?.map((member) => ({
+        value: member?.id ?? "",
+        label: member?.profile?.name ?? "",
+      }))
+      .filter((user) => user.value && user.label) || [],
+  );
+  let channels = $derived(
+    space.current?.channels
+      ?.map((channel) => ({
+        value: JSON.stringify({
+          id: channel?.id ?? "",
+          space: space.current?.id ?? "",
+          type: "channel",
+        }),
+        label: channel?.name ?? "",
+      }))
+      .filter((channel) => channel.value && channel.label) || [],
+  );
+  let threads = $derived(
+    space.current?.threads
+      ?.map((thread) => ({
+        value: JSON.stringify({
+          id: thread?.id ?? "",
+          space: space.current?.id ?? "",
+          type: "thread",
+        }),
+        label: thread?.name ?? "",
+      }))
+      .filter((thread) => thread.value && thread.label) || [],
+  );
+  let context = $derived([...channels, ...threads]);
+
+  let hasJoinedSpace = $derived(
+    me.current?.profile?.joinedSpaces?.some(
+      (joinedSpace) => joinedSpace?.id === space.current?.id,
+    ),
+  );
+
+  let isBanned = $derived(
+    bannedHandles.has(me.current?.profile?.blueskyHandle ?? ""),
+  );
+
+  let showSearch = $state(false);
 </script>
+
+<!-- hack to get the admin to load ^^ it has to be used somewhere in this file -->
+{#if creator.current}
+  <div class="absolute top-0 left-0"></div>
+{/if}
 
 <header class="dz-navbar">
   <div class="dz-navbar-start flex gap-4">
-    {#if globalState.channel}
+    {#if channel.current}
       <ToggleNavigation />
 
       <h4
-        class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold`}
-        title={globalState.channel instanceof Channel ? "Channel" : "Thread"}
+        class="sm:line-clamp-1 sm:overflow-hidden sm:text-ellipsis text-base-content text-lg font-bold"
+        title={"Channel"}
       >
         <span class="flex gap-2 items-center">
-          <Icon
-            icon={globalState.channel instanceof Channel
-              ? "basil:comment-solid"
-              : "material-symbols:thread-unread-rounded"}
-          />
-          {globalState.channel.name}
+          <Icon icon={"basil:comment-solid"} />
+          {channel.current.name}
         </span>
       </h4>
     {/if}
   </div>
 
-  {#if globalState.channel instanceof Channel}
+  {#if channel.current}
     <Tabs.Root
       bind:value={tab}
-      class={isMobile ? "dz-navbar-end" : "dz-navbar-center"}
+      class="w-full inline-flex items-center justify-end sm:justify-center"
     >
       <Tabs.List class="dz-tabs dz-tabs-box">
         <Tabs.Trigger value="board" class="dz-tab flex gap-2">
@@ -386,180 +469,155 @@
     </Tabs.Root>
   {/if}
 
-  {#if !isMobile}
-    <div class="dz-navbar-end flex items-center gap-2">
-      {#if tab === "chat" || globalState.channel instanceof Thread}
-        <button
-          class="btn btn-ghost btn-sm btn-circle"
-          onclick={() => (showSearchInput = !showSearchInput)}
-          title="Toggle search"
-        >
-          <Icon icon="tabler:search" class="text-base-content" />
-        </button>
-      {/if}
-      <TimelineToolbar {createThread} bind:threadTitleInput />
-    </div>
-  {/if}
+  <div class="hidden sm:flex dz-navbar-end items-center gap-2">
+    {#if tab === "chat"}
+      <button
+        class="btn btn-ghost btn-sm btn-circle"
+        onclick={() => (showSearch = !showSearch)}
+        title="Toggle search"
+      >
+        <Icon icon="tabler:search" class="text-base-content" />
+      </button>
+    {/if}
+    <TimelineToolbar createThread={addThread} bind:threadTitleInput />
+  </div>
 </header>
 <div class="divider my-0"></div>
 
 {#if tab === "board"}
-  <BoardList items={pages.value} title="Pages" route="page">
+  <BoardList items={pages} title="Pages" route="page">
     {#snippet header()}
       <CreatePageDialog />
     {/snippet}
     No pages for this channel.
   </BoardList>
-  <BoardList items={relatedThreads.value} title="Threads" route="thread">
+  <BoardList items={channelThreads} title="Threads" route="thread">
     No threads for this channel.
   </BoardList>
-{:else if tab === "chat" || globalState.channel instanceof Thread}
-  {#if globalState.space && globalState.channel}
-    <div class="flex h-full flex-col">
-      {#if showSearchInput}
-        <div
-          class="flex items-center border-b border-gray-200 dark:border-gray-700 px-2 py-1"
-        >
-          <Icon icon="tabler:search" class="text-base-content/50 mr-2" />
-          <input
-            type="text"
-            placeholder="Search messages..."
-            bind:value={searchQuery}
-            use:focusOnRender
-            class="input input-sm input-ghost w-full focus:outline-none"
-            autoComplete="off"
-          />
-          <button
-            class="btn btn-ghost btn-sm btn-circle"
-            onclick={() => {
-              searchQuery = "";
-              showSearchInput = false;
-              showSearchResults = false;
-            }}
-          >
-            <Icon icon="tabler:x" class="text-base-content/50" />
-          </button>
-        </div>
-
-        {#if showSearchResults}
-          <div class="relative">
-            <div class="absolute z-20 w-full">
-              <SearchResults
-                messages={searchResults}
-                query={searchQuery}
-                onMessageClick={handleSearchResultClick}
-                onClose={() => {
-                  showSearchResults = false;
-                }}
-              />
-            </div>
-          </div>
-        {/if}
+{:else if tab === "chat"}
+  {#if space.current}
+    <div class="flex flex-col h-[calc(100vh-124px)]">
+      {#if showSearch && space.current}
+        <SearchBar spaceId={space.current.id} bind:showSearch />
       {/if}
-      <div
-        class="flex-grow overflow-auto relative"
-        style="max-height: calc(100vh - 180px);"
-      >
+      <div class="flex-grow overflow-auto relative h-full">
         <ChatArea
-          timeline={globalState.channel.forceCast(Timeline)}
-          bind:virtualizer
+          space={space.current}
+          {timeline}
+          isAdmin={isSpaceAdmin(space.current)}
+          admin={creator.current}
+          {threadId}
+          allowedToInteract={hasJoinedSpace && !isBanned}
         />
+      </div>
 
-        {#if replyingTo}
+      <div class="shrink-0 pt-1">
+        {#if replyTo.id}
           <div
-            class="reply-container flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2 absolute bottom-0 left-0 right-0"
+            class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
           >
-            <div class="flex items-center gap-2 overflow-hidden">
-              <span>Replying to</span>
-              {#await getProfile(replyingTo.authors( (x) => x.get(0), )) then profile}
-                <AvatarImage
-                  handle={profile.handle || ""}
-                  avatarUrl={profile.avatarUrl}
-                  className="!w-4"
-                />
-                <strong>{profile.handle}</strong>
-              {/await}
-              <p
-                class="text-primary-content text-ellipsis italic max-h-12 overflow-hidden ml-2 contain-images-within"
-              >
-                {@html getContentHtml(JSON.parse(replyingTo.bodyJson))}
-              </p>
+            <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
+              <span class="shrink-0">Replying to</span>
+              <MessageRepliedTo messageId={replyTo.id} />
             </div>
             <Button.Root
               type="button"
-              onclick={() => (replyingTo = undefined)}
+              onclick={() => (replyTo.id = "")}
               class="dz-btn dz-btn-circle dz-btn-ghost flex-shrink-0"
             >
               <Icon icon="zondicons:close-solid" />
             </Button.Root>
           </div>
         {/if}
-      </div>
+        <div class="">
+          {#if user.session}
+            {#if hasJoinedSpace}
+              {#if readonly}
+                <div class="flex items-center grow flex-col">
+                  <Button.Root disabled class="w-full dz-btn"
+                    >Automated Thread</Button.Root
+                  >
+                </div>
+              {:else if !isBanned}
+                <div
+                  class="dz-prose prose-a:text-primary prose-a:underline relative isolate"
+                >
+                  {#if previewImages.length > 0}
+                    <div class="flex gap-2 my-2 overflow-x-auto w-full">
+                      {#each previewImages as previewImage, index (previewImage)}
+                        <div class="size-24 relative shrink-0">
+                          <img
+                            src={previewImage}
+                            alt="Preview"
+                            class="absolute inset-0 w-full h-full object-cover"
+                          />
 
-      <div>
-        {#if !isMobile || !isThreading.value}
-          <div class="chat-input-container">
-            {#if globalState.roomy && globalState.roomy.spaces
-                .ids()
-                .includes(globalState.space.id)}
-              {#if !readonly}
-                <ChatInput
-                  bind:content={messageInput}
-                  users={users.value || []}
-                  context={contextItems.value || []}
-                  onEnter={sendMessage}
-                />
+                          <button
+                            class="btn btn-ghost btn-sm btn-circle absolute p-0.5 top-1 right-1 bg-base-100 rounded-full"
+                            onclick={() => removeImageFile(index)}
+                          >
+                            <Icon icon="tabler:x" class="size-4" />
+                          </button>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+
+                  <div class="flex gap-1 w-full">
+                    <UploadFileButton {processImageFile} />
+
+                    {#key users.length + context.length}
+                      <ChatInput
+                        bind:content={messageInput}
+                        {users}
+                        {context}
+                        onEnter={sendMessage}
+                        {processImageFile}
+                      />
+                    {/key}
+                  </div>
+                  <FullscreenImageDropper {processImageFile} />
+
+                  {#if isSendingMessage}
+                    <div
+                      class="absolute inset-0 flex items-center text-primary justify-center z-20 bg-base-100/80"
+                    >
+                      <div class="text-xl font-bold flex items-center gap-4">
+                        Sending message...
+                        <span class="dz-loading dz-loading-spinner mx-auto w-8"
+                        ></span>
+                      </div>
+                    </div>
+                  {/if}
+                </div>
               {:else}
                 <div class="flex items-center grow flex-col">
                   <Button.Root disabled class="w-full dz-btn"
-                    >Automatted Thread</Button.Root
+                    >You are banned from this space</Button.Root
                   >
                 </div>
               {/if}
             {:else}
-              <Button.Root
-                class="w-full dz-btn"
-                onclick={() => {
-                  if (globalState.space && globalState.roomy) {
-                    globalState.roomy.spaces.push(globalState.space);
-                    globalState.roomy.commit();
-                  }
-                }}>Join Space To Chat</Button.Root
-              >
+              <div class="flex items-center grow flex-col">
+                <Button.Root onclick={joinSpace} class="w-full dz-btn"
+                  >Join this space to chat</Button.Root
+                >
+              </div>
             {/if}
-          </div>
-        {/if}
+          {:else}
+            <Button.Root
+              class="w-full dz-btn"
+              onclick={() => {
+                user.isLoginDialogOpen = true;
+              }}>Login to Chat</Button.Root
+            >
+          {/if}
+        </div>
 
-        {#if isMobile}
+        <!-- {#if isMobile}
           <TimelineToolbar {createThread} bind:threadTitleInput />
-        {/if}
+        {/if} -->
       </div>
     </div>
   {/if}
 {/if}
-
-<style>
-  .reply-highlight {
-    animation: pulse-highlight 2s ease-in-out;
-  }
-
-  @keyframes pulse-highlight {
-    0% {
-      background-color: rgba(59, 130, 246, 0.1);
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
-    }
-    50% {
-      background-color: rgba(59, 130, 246, 0.2);
-      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3);
-    }
-    100% {
-      background-color: transparent;
-      box-shadow: none;
-    }
-  }
-
-  /* Same style for search result highlight for consistency */
-  .search-result-highlight {
-    animation: pulse-highlight 2s ease-in-out;
-  }
-</style>

@@ -1,102 +1,32 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { globalState } from "$lib/global.svelte";
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  import { Channel, Category } from "@roomy-chat/sdk";
   import { Popover, Button } from "bits-ui";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { getContext, untrack } from "svelte";
   import { toast } from "svelte-french-toast";
+  import { threading } from "./TimelineView.svelte";
+  import { isSpaceAdmin } from "$lib/jazz/utils";
+  import { CoState } from "jazz-svelte";
+  import { Channel, Space, Thread } from "$lib/jazz/schema";
 
   let { createThread, threadTitleInput = $bindable() } = $props();
-  let isThreading: { value: false } = getContext("isThreading");
   let showSettingsDialog = $state(false);
   let channelNameInput = $state("");
   let channelCategoryInput = $state(undefined) as undefined | string;
 
-  $effect(() => {
-    if (!globalState.space) return;
+  let space = $derived(new CoState(Space, page.params.space))
 
-    untrack(() => {
-      channelNameInput = globalState.channel?.name || "";
-      channelCategoryInput = undefined;
-      globalState.space &&
-        globalState.space.sidebarItems.items().then((items) => {
-          for (const item of items) {
-            const category = item.tryCast(Category);
-            if (
-              category &&
-              globalState.channel &&
-              category.channels.ids().includes(globalState.channel.id)
-            ) {
-              channelCategoryInput = category.id;
-              return;
-            }
-          }
-        });
-    });
-  });
+  let channel = $derived(new CoState(Channel, page.params.channel))
 
-  async function saveSettings() {
-    if (!globalState.space || !globalState.channel) return;
-    if (channelNameInput) {
-      globalState.channel.name = channelNameInput;
-      globalState.channel.commit();
-    }
+  let thread = $derived(new CoState(Thread, page.params.thread))
 
-    if (globalState.channel instanceof Channel) {
-      let foundChannelInSidebar = false;
-      for (const [
-        cursor,
-        unknownItem,
-      ] of await globalState.space.sidebarItems.itemCursors()) {
-        const item =
-          unknownItem.tryCast(Category) || unknownItem.tryCast(Channel);
-
-        if (item instanceof Channel && item.id == globalState.channel.id) {
-          foundChannelInSidebar = true;
-        }
-
-        if (item instanceof Category) {
-          const categoryItems = item.channels.ids();
-          if (item.id !== channelCategoryInput) {
-            const thisChannelIdx = categoryItems.indexOf(
-              globalState.channel.id,
-            );
-            if (thisChannelIdx != -1) {
-              item.channels.remove(thisChannelIdx);
-              item.commit();
-            }
-          } else if (
-            item.id == channelCategoryInput &&
-            !categoryItems.includes(globalState.channel.id)
-          ) {
-            item.channels.push(globalState.channel);
-            item.commit();
-          }
-        } else if (
-          item instanceof Channel &&
-          channelCategoryInput &&
-          item.id == globalState.channel.id
-        ) {
-          const { offset } = globalState.space.entity.doc.getCursorPos(cursor);
-          globalState.space.sidebarItems.remove(offset);
-        }
-      }
-
-      if (!channelCategoryInput && !foundChannelInSidebar) {
-        globalState.space.sidebarItems.push(globalState.channel);
-      }
-      globalState.space.commit();
-    }
-
-    showSettingsDialog = false;
+  function saveSettings() {
   }
 </script>
 
 <menu class="relative flex items-center gap-3 px-2 w-fit justify-end">
-  <Popover.Root bind:open={isThreading.value}>
+  <Popover.Root bind:open={threading.active}>
     <Popover.Trigger>
       <Icon icon="tabler:needle-thread" class="text-2xl" />
     </Popover.Trigger>
@@ -145,18 +75,18 @@
     <Icon icon="icon-park-outline:people-plus" class="text-2xl" />
   </Button.Root>
 
-  {#if globalState.isAdmin}
+  {#if isSpaceAdmin(space.current)}
     <Dialog
-      title={globalState.channel instanceof Channel
-        ? "Channel Settings"
-        : "Thread Settings"}
+      title={thread.current
+        ? "Thread Settings"
+        : "Channel Settings"}
       bind:isDialogOpen={showSettingsDialog}
     >
       {#snippet dialogTrigger()}
         <Button.Root
-          title={globalState.channel instanceof Channel
-            ? "Channel Settings"
-            : "Thread Settings"}
+          title={thread.current
+          ? "Thread Settings"
+          : "Channel Settings"}
           class="m-auto flex"
         >
           <Icon icon="lucide:settings" class="text-2xl" />
@@ -173,10 +103,10 @@
             required
           />
         </label>
-        {#if globalState.space && globalState.channel instanceof Channel}
+        {#if space.current && channel.current}
           <select bind:value={channelCategoryInput} class="select">
             <option value={undefined}>None</option>
-            {#await globalState.space.sidebarItems.items() then sidebarItems}
+            <!-- {#await Space.sidebarItems(globalState.space) then sidebarItems}
               {@const categories = sidebarItems
                 .map((x) => x.tryCast(Category))
                 .filter((x) => !!x)}
@@ -184,7 +114,7 @@
               {#each categories as category}
                 <option value={category.id}>{category.name}</option>
               {/each}
-            {/await}
+            {/await} -->
           </select>
         {/if}
         <Button.Root class="dz-btn dz-btn-primary">Save Settings</Button.Root>
@@ -193,9 +123,9 @@
       <form
         onsubmit={(e) => {
           e.preventDefault();
-          if (!globalState.channel) return;
-          globalState.channel.softDeleted = true;
-          globalState.channel.commit();
+          if (!channel.current) return;
+          channel.current.softDeleted = true;
+          // globalState.channel.commit();
           showSettingsDialog = false;
           navigate({ space: page.params.space! });
         }}
@@ -203,15 +133,11 @@
       >
         <h2 class="text-xl font-bold">Danger Zone</h2>
         <p>
-          Deleting a {globalState.channel instanceof Channel
-            ? "channel"
-            : "thread"} doesn't delete the data permanently, it just hides the thread
-          from the UI.
+          Deleting a {channel.current ? "channel" : "thread"} doesn't delete
+          the data permanently, it just hides the thread from the UI.
         </p>
         <Button.Root class="dz-btn dz-btn-error"
-          >Delete {globalState.channel instanceof Channel
-            ? "Channel"
-            : "Thread"}</Button.Root
+          >Delete {channel.current ? "Channel" : "Thread"}</Button.Root
         >
       </form>
     </Dialog>

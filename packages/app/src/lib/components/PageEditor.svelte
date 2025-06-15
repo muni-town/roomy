@@ -3,21 +3,24 @@
   import { codeToHtml } from "shiki";
   import { toast } from "svelte-french-toast";
   import { Button } from "bits-ui";
+  import { page } from "$app/state";
   import Icon from "@iconify/svelte";
   import Link from "@tiptap/extension-link";
   import { BlockNoteEditor } from "@blocknote/core";
   import "@blocknote/core/style.css";
-
-  import { WikiPage } from "@roomy-chat/sdk";
-
-  import { page } from "$app/state";
-  import { globalState } from "$lib/global.svelte";
+  // import { page } from "$app/state";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import { outerWidth } from "svelte/reactivity/window";
+  import { CoState } from "jazz-svelte";
+  import { Page, Space } from "$lib/jazz/schema";
+  import { isSpaceAdmin } from "$lib/jazz/utils";
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
-  let { page: pg }: { page: WikiPage } = $props();
+  const pg = $derived(new CoState(Page, page.params.page));
+
+  const space = $derived(new CoState(Space, page.params.space));
+
   let isEditingPage = $state(false);
 
   let pageRenderedHtml = $state("");
@@ -107,7 +110,8 @@
   let filteredItems = $state<
     { id: string; name: string; type: "thread" | "channel" }[]
   >([]);
-  let hashQuery = $state("");
+  // Commenting out for now because it is unused, but we might want to use it somewhere later.
+  // let hashQuery = $state("");
 
   let selectionTooltipVisible = $state(false);
   let selectionTooltipPosition = $state({ x: 0, y: 0 });
@@ -160,8 +164,8 @@
   }
 
   function confirmDeletePage() {
-    pg.softDeleted = true;
-    pg.commit();
+    if (!pg.current) return;
+    pg.current.softDeleted = true;
 
     isEditingPage = false; // Close the editor to remove cached page
     isDeleteDialogOpen = false;
@@ -213,7 +217,7 @@
         // Handle hashtags
         else if (content.text.endsWith("#")) {
           hashMenuVisible = true;
-          hashQuery = "";
+          // hashQuery = "";
           const { top, left } = editor.getSelectionBoundingBox()?.toJSON();
           const menuHeight = 300;
           const viewportHeight = window.innerHeight;
@@ -224,7 +228,6 @@
             ? Math.max(scrollY, top - menuHeight - 10)
             : top + 20;
           hashMenuPosition = { x: left, y: yPosition };
-          updateFilteredItems();
           slashMenuVisible = false;
           mentionMenuVisible = false;
         }
@@ -235,7 +238,6 @@
 
           if (atIndex !== -1) {
             mentionQuery = text.substring(atIndex + 1);
-            updateFilteredUsers();
           } else {
             mentionMenuVisible = false;
           }
@@ -246,8 +248,7 @@
           const hashIndex = text.lastIndexOf("#");
 
           if (hashIndex !== -1) {
-            hashQuery = text.substring(hashIndex + 1);
-            updateFilteredItems();
+            // hashQuery = text.substring(hashIndex + 1);
           } else {
             hashMenuVisible = false;
           }
@@ -323,43 +324,6 @@
     filteredUsers = users.value
       .filter((user) => user.label?.toLowerCase().includes(query))
       .slice(0, 10); // Limit to 10 results
-  }
-
-  // Filter channels and threads based on hash query
-  async function updateFilteredItems() {
-    if (!globalState.space) {
-      filteredItems = [];
-      return;
-    }
-
-    const query = hashQuery.toLowerCase();
-    const items: { id: string; name: string; type: "thread" | "channel" }[] =
-      [];
-
-    // Add channels
-
-    for (const channel of await globalState.space.channels.items()) {
-      if (channel.name && channel.name.toLowerCase().includes(query)) {
-        items.push({
-          id: channel.id,
-          name: channel.name,
-          type: "channel",
-        });
-      }
-    }
-
-    for (const thread of await globalState.space.threads.items()) {
-      if (thread.name.toLowerCase().includes(query)) {
-        items.push({
-          id: thread.id,
-          name: thread.name,
-          type: "thread",
-        });
-      }
-    }
-
-    // Limit to 10 results
-    filteredItems = items.slice(0, 10);
   }
 
   // Insert user mention
@@ -510,9 +474,10 @@
           }
         }
       });
-      if (pg) {
+      if (pg.current?.body) {
         try {
-          const parsedContent = JSON.parse(pg.bodyJson);
+          console.log("wat", pg.current.body);
+          const parsedContent = JSON.parse(pg.current.body);
           setTimeout(() => {
             if (editor && editor.document) {
               editor.replaceBlocks(editor.document, parsedContent);
@@ -632,12 +597,15 @@
   });
 
   $effect(() => {
-    if (pg.bodyJson == "{}") {
+    isEditingPage;
+    if (!pg.current?.body) return;
+    if (pg.current.body == "{}") {
       pageRenderedHtml = "";
       processedHtml = "";
       return;
     }
-    const json = JSON.parse(pg.bodyJson);
+    console.log("page body", pg.current.body);
+    const json = JSON.parse(pg.current.body);
     try {
       const rendererEditor = BlockNoteEditor.create();
       rendererEditor
@@ -654,11 +622,10 @@
   });
 
   async function savePageContent() {
-    if (!editor || !globalState.space || !pg) return;
+    if (!editor || !pg.current) return;
     try {
       const res = JSON.stringify(editor.document);
-      pg.bodyJson = res;
-      pg.commit();
+      pg.current.body = res;
 
       setEditingPage(false);
       toast.success("Page saved successfully", { position: "bottom-end" });
@@ -718,19 +685,18 @@
   });
 
   onMount(async () => {
-    const existingLink = document.querySelector(
-      'link[href*="@blocknote/core/style.css"]',
-    );
-    if (!existingLink) {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = "https://unpkg.com/@blocknote/core@latest/style.css";
-      document.head.appendChild(link);
-    }
-
-    if (pageRenderedHtml) {
-      await processCodeBlocks();
-    }
+    // const existingLink = document.querySelector(
+    //   'link[href*="@blocknote/core/style.css"]',
+    // );
+    // if (!existingLink) {
+    //   const link = document.createElement("link");
+    //   link.rel = "stylesheet";
+    //   link.href = "https://unpkg.com/@blocknote/core@latest/style.css";
+    //   document.head.appendChild(link);
+    // }
+    // if (pageRenderedHtml) {
+    //   await processCodeBlocks();
+    // }
   });
 </script>
 
@@ -754,12 +720,12 @@
         <h4
           class={`${isMobile && "line-clamp-1 overflow-hidden text-ellipsis"} text-base-content text-lg font-bold flex gap-2 items-center`}
         >
-          {pg.name}
+          {pg.current?.name}
         </h4>
-      {:else}
+      {:else if pg.current?.name}
         <input
           type="text"
-          bind:value={pg.name}
+          bind:value={pg.current.name}
           class="text-base-content text-lg font-bold p-0 flex-1 mr-2"
           placeholder="Page title"
           required
@@ -790,7 +756,7 @@
       </div>
     {/if}
 
-    {#if globalState.isAdmin}
+    {#if isSpaceAdmin(space.current)}
       <button
         class="dz-btn dz-btn-error dz-delete-btn group-hover:block"
         onclick={showDeleteDialog}
@@ -807,7 +773,7 @@
   <section class="page-content h-full overflow-y-auto">
     <div class="page-rendered p-4">
       <div class="page-html text-base-content">
-        {#if pg && !pg.softDeleted}
+        {#if pg.current && !pg.current.softDeleted}
           {@html processedHtml}
         {:else}
           <p class="text-base-content/70">No content available.</p>
@@ -990,7 +956,8 @@
 
 <Dialog
   title="Confirm Page Deletion"
-  description="Are you sure you want to delete <b>{pg?.name}</b>?</br></br><b>Note:</b> Deletes are not permanent and only hide the data from view. The data is still publicly accessible."
+  description="Are you sure you want to delete <b>{pg.current
+    ?.name}</b>?</br></br><b>Note:</b> Deletes are not permanent and only hide the data from view. The data is still publicly accessible."
   bind:isDialogOpen={isDeleteDialogOpen}
 >
   <div class="flex justify-end gap-3">

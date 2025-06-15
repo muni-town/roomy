@@ -1,9 +1,35 @@
 <script lang="ts">
   import { toast } from "svelte-french-toast";
-  import { Channel, WikiPage } from "@roomy-chat/sdk";
-  import { globalState } from "$lib/global.svelte";
   import Dialog from "./Dialog.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
+  import { Channel, Space } from "$lib/jazz/schema";
+  import { createPage, createPagesList } from "$lib/jazz/utils";
+  import { CoState } from "jazz-svelte";
+  import { page } from "$app/state";
+
+  let space = $derived(
+    new CoState(Space, page.params.space, {
+      resolve: {
+        pages: {
+          $each: true,
+          $onError: null,
+        },
+        $onError: null,
+      },
+    }),
+  );
+
+  let channel = $derived(
+    new CoState(Channel, page.params.channel, {
+      resolve: {
+        pages: {
+          $each: true,
+          $onError: null,
+        },
+        $onError: null,
+      },
+    }),
+  );
 
   let {
     triggerStyle = "dz-btn dz-btn-primary dz-btn-sm text-lg",
@@ -12,49 +38,39 @@
   } = $props();
 
   let isPageTitleDialogOpen = $state(false);
-  let newPageTitleElement: HTMLInputElement | null = $state(null);
+  let newPageTitle: string = $state("");
 
-  export function createPage() {
-    if (newPageTitleElement) {
-      newPageTitleElement.value = "";
-    }
+  export function createPageDialog() {
+    newPageTitle = "";
     isPageTitleDialogOpen = true;
   }
 
   async function submitPageTitle() {
-    if (
-      !globalState.space ||
-      !globalState.channel ||
-      !(globalState.channel instanceof Channel)
-    )
-      return;
-    if (!newPageTitleElement) {
+    console.log(channel.current);
+    if (!channel?.current) return;
+
+    if (!channel.current.pages) {
+      channel.current.pages = createPagesList();
+    }
+
+    if (!newPageTitle) {
       toast.error("Title cannot be empty", { position: "bottom-end" });
       return;
     }
-    const newPageTitle = newPageTitleElement.value; // Retrieve the title from the input element
-    // Create a temporary page with the provided title
-    const pg = await globalState.space.create(WikiPage);
+
+    const pg = createPage(newPageTitle);
 
     isPageTitleDialogOpen = false;
 
-    try {
-      pg.name = newPageTitle;
-
-      globalState.channel.wikipages.push(pg);
-      globalState.channel?.commit();
-
-      globalState.space.wikipages.push(pg);
-      globalState.space.commit();
-      pg.commit();
-    } catch (e) {
-      console.error("Error creating page", e);
-      toast.error("Failed to create page", { position: "bottom-end" });
-    }
+    space.current?.pages?.push(pg);
+    console.log("space", space.current, space.current?.pages);
+    channel.current?.pages?.push(pg);
   }
 </script>
 
-<button class={triggerStyle} onclick={createPage}> + </button>
+{#if channel.current && space.current}
+  <button class={triggerStyle} onclick={createPageDialog}> + </button>
+{/if}
 <Dialog
   title="New Page"
   description="Give your new page a title"
@@ -63,7 +79,7 @@
   <form onsubmit={submitPageTitle} class="flex flex-col gap-4">
     <input
       type="text"
-      bind:this={newPageTitleElement}
+      bind:value={newPageTitle}
       use:focusOnRender
       placeholder="Tips on moderation..."
       class="dz-input dz-input-bordered w-full"

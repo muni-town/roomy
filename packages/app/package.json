@@ -15,6 +15,7 @@
   "scripts": {
     "dev": "vite dev --host 127.0.0.1",
     "build-web-app": "vite build",
+    "build-web-app-prod": "./scripts/build-prod.sh",
     "build:t": "env MODE=tauri vite build --mode tauri",
     "test": "vitest",
     "preview": "vite preview",
@@ -37,8 +38,6 @@
     "@muni-town/leaf-sync-ws": "^0.1.0-preview.7",
     "@noble/curves": "^1.8.1",
     "@repo/tsconfig": "workspace:*",
-    "@roomy-chat/sdk": "workspace:*",
-    "@sveltejs/adapter-netlify": "^5.0.0",
     "@sveltejs/adapter-static": "^3.0.8",
     "@sveltejs/kit": "^2.20.7",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
@@ -70,6 +69,7 @@
     "date-fns": "^4.1.0",
     "emoji-picker-element": "^1.26.1",
     "file-saver": "^2.0.5",
+    "jazz-inspector-element": "^0.14.21",
     "js-base64": "^3.7.7",
     "jszip": "^3.10.1",
     "linkify-it": "^5.0.0",
@@ -99,7 +99,10 @@
     "vite-plugin-wasm": "^3.4.1",
     "vitest": "^3.0.9",
     "@tiptap/html": "^2.14.0",
-    "turndown": "^7.2.0"
+    "turndown": "^7.2.0",
+    "jazz-svelte": "^0.14.21",
+    "jazz-tools": "^0.14.21",
+    "flexsearch": "^0.8.164"
   },
   "lint-staged": {
     "*.{svelte,svelte.ts}": [

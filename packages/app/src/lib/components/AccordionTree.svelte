@@ -4,20 +4,55 @@
   import { page } from "$app/state";
   import { navigateSync, type NavigationTarget } from "$lib/utils.svelte";
   import { slide } from "svelte/transition";
+  import { isSpaceAdmin } from "$lib/jazz/utils";
+  import { CoState } from "jazz-svelte";
+  import { Space } from "$lib/jazz/schema";
+
+  let space = $derived(
+    new CoState(Space, page.params.space, {
+      resolve: {
+        channels: {
+          $each: true,
+          $onError: null,
+        },
+      },
+    }),
+  );
 
   type Item = { target: NavigationTarget; name: string; id: string };
   type Section = {
     items: Item[];
     key: string;
   };
+
   let {
     sections,
-    active = $bindable(),
   }: {
     sections: Section[];
     active: string;
   } = $props();
+
+  console.log("sections", sections);
+  console.log("page", page.params.space);
   let keys = $derived(sections.map((i) => i.key));
+
+  async function deleteItem(key: string, item: Item) {
+    if (!space.current) return;
+    if (!confirm(`Are you sure you want to delete "${item.name}"?`)) return;
+
+    if (key === "threads") {
+      const thread = space.current.threads?.find((t) => t?.id === item.id);
+      if (thread) {
+        thread.softDeleted = true;
+      }
+    } else if (key === "pages") {
+      const page = space.current.pages?.find((p) => p?.id === item.id);
+      console.log("page", page);
+      if (page) {
+        page.softDeleted = true;
+      }
+    }
+  }
 </script>
 
 <Accordion.Root
@@ -56,18 +91,29 @@
                     item.id === page.params.channel ||
                     item.id === page.params.thread ||
                     item.id === page.params.page}
-                  <Button.Root
-                    href={navigateSync(item.target)}
-                    class="flex cursor-pointer items-center gap-2 px-3 w-full dz-btn dz-btn-ghost justify-start border {active
-                      ? 'border-primary text-primary'
-                      : ' border-transparent'}"
-                  >
-                    <Icon
-                      icon="material-symbols:thread-unread-rounded"
-                      class="shrink-0"
-                    />
-                    <span class="truncate">{item.name} </span>
-                  </Button.Root>
+                  <div class="group flex items-center gap-1">
+                    <Button.Root
+                      href={navigateSync(item.target)}
+                      class="flex-1 cursor-pointer items-center gap-2 px-3 dz-btn dz-btn-ghost justify-start border {active
+                        ? 'border-primary text-primary'
+                        : ' border-transparent'}"
+                    >
+                      <Icon
+                        icon="material-symbols:thread-unread-rounded"
+                        class="shrink-0"
+                      />
+                      <span class="truncate">{item.name} </span>
+                    </Button.Root>
+                    {#if isSpaceAdmin(space.current)}
+                      <Button.Root
+                        title="Delete"
+                        class="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer dz-btn dz-btn-ghost dz-btn-circle text-error hover:bg-error/10"
+                        onclick={() => deleteItem(key, item)}
+                      >
+                        <Icon icon="lucide:x" class="size-4" />
+                      </Button.Root>
+                    {/if}
+                  </div>
                 {/each}
               </div>
             {/if}

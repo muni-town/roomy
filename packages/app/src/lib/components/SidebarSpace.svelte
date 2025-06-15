@@ -1,32 +1,47 @@
 <script lang="ts">
-  import type { Space } from "@roomy-chat/sdk";
-
   import ContextMenu from "./ContextMenu.svelte";
   import { AvatarMarble } from "svelte-boring-avatars";
-
   import { navigate } from "$lib/utils.svelte";
-  import { derivePromise } from "$lib/utils.svelte";
-  import { Image } from "@roomy-chat/sdk";
   import TooltipPortal from "./TooltipPortal.svelte";
-  import { globalState } from "$lib/global.svelte";
-  import { page } from "$app/stores";
+  import { page } from "$app/state";
+  import { co } from "jazz-tools";
+  import { Space, RoomyAccount } from "$lib/jazz/schema";
 
   type Props = {
-    space: Space;
-    i: number;
+    space: co.loaded<typeof Space> | null | undefined;
+    hasJoined?: boolean;
+    me: co.loaded<typeof RoomyAccount> | null | undefined;
   };
 
-  const { space, i }: Props = $props();
+  const { space, hasJoined = true, me }: Props = $props();
 
   // Tooltip state
   let activeTooltip = $state("");
   let tooltipPosition = $state({ x: 0, y: 0 });
 
-  const spaceImage = derivePromise(null, async () => {
-    if (space.image && globalState.roomy) {
-      return (await globalState.roomy.open(Image, space.image)) as Image;
+  let isActive = $derived(page.url.pathname.includes(space?.id || ""));
+
+  function leaveSpace() {
+    if (!space?.id || !me?.profile?.joinedSpaces || !space.members) return;
+
+    // Remove the space from the user's joined spaces
+    const spaceIndex = me.profile.joinedSpaces.findIndex(
+      (s) => s?.id === space.id,
+    );
+    if (spaceIndex !== -1) {
+      me.profile.joinedSpaces.splice(spaceIndex, 1);
     }
-  });
+
+    const memberIndex = space.members.findIndex((m) => m?.id === me.id);
+    if (memberIndex !== -1) {
+      space.members.splice(memberIndex, 1);
+    }
+
+    // If the user is currently viewing this space, navigate to home
+    if (isActive) {
+      navigate("home");
+    }
+  }
 </script>
 
 <TooltipPortal
@@ -36,25 +51,21 @@
   y={tooltipPosition.y}
 />
 <ContextMenu
-  menuTitle={space.name}
+  menuTitle={space?.name}
   items={[
     {
       label: "Leave Space",
       icon: "mdi:exit-to-app",
-      onselect: () => {
-        globalState.roomy?.spaces.remove(i);
-        globalState.roomy?.commit();
-      },
+      onselect: leaveSpace,
     },
   ]}
 >
   <button
     type="button"
-    onclick={() =>
-      navigate({ space: space.handles((x) => x.get(0)) || space.id })}
-    value={space.id}
+    onclick={() => navigate({ space: space?.id || "" })}
+    value={space?.id}
     onmouseenter={(e: Event) => {
-      activeTooltip = space.name;
+      activeTooltip = space?.name || "";
       const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
       tooltipPosition = { x: rect.right + 8, y: rect.top + rect.height / 2 };
     }}
@@ -64,13 +75,20 @@
     onblur={() => {
       activeTooltip = "";
     }}
-    class={`dz-btn dz-btn-ghost size-12 rounded-full ${$page.url.pathname.includes(`${space.handles((x) => x.get(0)) || space.id}`) && "border-accent"} relative group p-0.5`}
+    class={`dz-btn dz-btn-ghost size-12 rounded-full relative group p-0.5
+      ${isActive ? "ring-0.5 ring-offset-0 ring-primary/30 border border-primary" : ""}
+      transition-all duration-200`}
   >
-    <div class="flex items-center justify-center overflow-hidden">
-      {#if spaceImage.value?.uri}
+    <div
+      class={[
+        "flex items-center justify-center overflow-hidden",
+        !hasJoined && "opacity-50",
+      ]}
+    >
+      {#if space?.imageUrl}
         <img
-          src={spaceImage.value?.uri}
-          alt={space.name}
+          src={space?.imageUrl}
+          alt={space?.name || ""}
           class="w-10 h-10 object-cover rounded-full object-center"
         />
       {:else if space && space.id}

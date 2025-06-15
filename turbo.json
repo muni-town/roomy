@@ -15,7 +15,11 @@
     },
     "build-web-app": {
       "dependsOn": ["^build-web-app", "build-lib"],
-      "outputs": ["./dist/**"]
+      "outputs": ["./dist/**", "./build"]
+    },
+    "build-web-app-prod": {
+      "dependsOn": ["^build-web-app-prod", "build-lib"],
+      "outputs": ["./dist/**", "./build"]
     },
     "dev": {
       "dependsOn": ["build-lib"],

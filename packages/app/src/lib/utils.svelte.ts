@@ -1,6 +1,5 @@
 import type { DidDocument } from "@atproto/oauth-client-browser";
-import { decodeBase32 } from "./base32";
-import type { EntityIdStr } from "@muni-town/leaf";
+import { decodeBase32 } from "./utils/base32";
 import { goto } from "$app/navigation";
 import type { JSONContent } from "@tiptap/core";
 import { type ThemeName } from "./themes";
@@ -12,26 +11,13 @@ export function cleanHandle(handle: string): string {
 
 export type NavigationTarget =
   | "home"
-  | { space: string; channel?: string; thread?: string; page?: string };
+  | { space?: string; channel?: string; thread?: string; page?: string };
 
 /** A helper function to navigate to a specific roomy object, like a space, channel, or thread */
 export function navigate(target: NavigationTarget) {
-  if (target == "home") {
-    goto("/home");
-  } else if ("space" in target) {
-    let url = ``;
-    if (target.space.includes(".")) {
-      url += "/-";
-    }
-    url += `/${target.space}`;
-    if (target.channel) {
-      url += `/${target.channel}`;
-    } else if (target.thread) {
-      url += `/thread/${target.thread}`;
-    } else if (target.page) {
-      url += `/page/${target.page}`;
-    }
-    goto(url);
+  const targetUrl = navigateSync(target);
+  if (targetUrl) {
+    goto(targetUrl);
   }
 }
 
@@ -39,12 +25,14 @@ export function navigate(target: NavigationTarget) {
 export function navigateSync(target: NavigationTarget) {
   if (target == "home") {
     return "/home";
-  } else if ("space" in target) {
+  } else if (target.space) {
     let url = ``;
     if (target.space.includes(".")) {
       url += "/-";
+    } else {
+      url += `/${target.space}`;
     }
-    url += `/${target.space}`;
+    
     if (target.channel) {
       url += `/${target.channel}`;
     } else if (target.thread) {
@@ -83,7 +71,7 @@ export async function resolvePublicKey(did: string): Promise<Uint8Array> {
 
 export async function resolveLeafId(
   handle: string,
-): Promise<EntityIdStr | undefined> {
+): Promise<string | undefined> {
   const resp = await fetch(
     `https://leaf-resolver.roomy.chat/xrpc/town.muni.01JQ1SV7YGYKTZ9JFG5ZZEFDNK.resolve-leaf-id?domain=${encodeURIComponent(handle)}`,
     {
