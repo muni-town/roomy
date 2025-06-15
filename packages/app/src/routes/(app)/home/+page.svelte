@@ -1,18 +1,25 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import { Button } from "bits-ui";
-
-  import { globalState } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
-  import { derivePromise } from "$lib/utils.svelte";
+  import { AccountCoState } from "jazz-svelte";
+  import { RoomyAccount } from "$lib/jazz/schema";
 
-  const spaces = derivePromise(
-    undefined,
-    async () => await globalState.roomy?.spaces.items(),
-  );
+  const account = new AccountCoState(RoomyAccount, {
+    resolve: {
+      profile: {
+        joinedSpaces: {
+          $each: true,
+          $onError: null,
+        },
+      },
+    },
+  });
+  const me = $derived(account.current);
+  let spaces = $derived(me?.profile?.joinedSpaces);
 </script>
 
-<div class="dz-hero bg-base-200 min-h-screen">
+<div class="dz-hero bg-base-200 min-h-screen overflow-y-scroll">
   <div class="dz-hero-content">
     <div class="flex flex-col gap-8 items-center">
       <h1 class="text-5xl font-bold text-center">Hi Roomy 👋</h1>
@@ -20,6 +27,7 @@
         A digital gardening platform for communities. Flourish in Spaces,
         curating knowledge and conversations together.
       </p>
+      <div>Hello {me?.profile.name}!</div>
       <div class="divider"></div>
 
       {#if !user.session}
@@ -31,18 +39,18 @@
             Create Account or Log In
           </Button.Root>
         </div>
-      {:else if !spaces.value}
+      {:else if !spaces}
         <span class="dz-loading dz-loading-spinner mx-auto w-25"></span>
-      {:else if spaces.value.length > 0}
+      {:else if spaces.length > 0}
         <h2 class="text-3xl font-bold">Your Spaces</h2>
         <section class="flex flex-wrap justify-center gap-4 max-w-5xl">
-          {#each spaces.value as space}
+          {#each spaces as space}
             <a
-              href={`/${space.handles((x) => x.get(0)) || space.id}`}
+              href={`/${space?.id}`}
               class="dz-card border border-base-300 hover:border-primary bg-base-100 transition-colors cursor-pointer text-base-content w-full md:w-96"
             >
               <div class="dz-card-body flex-row items-center justify-between">
-                <h2 class="dz-card-title">{space.name}</h2>
+                <h2 class="dz-card-title">{space?.name}</h2>
                 <div class="dz-card-actions">
                   <Icon
                     icon="lucide:circle-arrow-right"
@@ -53,7 +61,7 @@
             </a>
           {/each}
         </section>
-      {:else if spaces.value.length === 0}
+      {:else if spaces?.length === 0}
         <p class="text-lg font-medium text-center">
           You don't have any spaces yet. Create one to get started!
         </p>

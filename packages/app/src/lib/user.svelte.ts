@@ -2,18 +2,13 @@ import type { OAuthSession } from "@atproto/oauth-client-browser";
 import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import { Agent } from "@atproto/api";
 import toast from "svelte-french-toast";
-
-import { EntityId } from "@muni-town/leaf";
-
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { atproto } from "./atproto.svelte";
 import { lexicons } from "./lexicons";
-import { decodeBase32 } from "./base32";
-import { IN_TAURI } from "./tauri";
-import { page } from "$app/state";
+import { isTauri } from "@tauri-apps/api/core";
 import { navigate } from "$lib/utils.svelte";
-
-// TODO: add proper Tauri type definitions.
-declare let window: Window & { __TAURI__: any };
+import { handleOauthCallback } from "./handleOauthCallback";
 
 // Reload app when this module changes to prevent accumulated connections
 if (import.meta.hot) {
@@ -22,11 +17,6 @@ if (import.meta.hot) {
   });
 }
 
-type Keypair = {
-  publicKey: Uint8Array;
-  privateKey: Uint8Array;
-};
-
 let session: OAuthSession | undefined = $state();
 let agent: Agent | undefined = $state();
 
@@ -34,18 +24,14 @@ let agent: Agent | undefined = $state();
 let profile: { data: ProfileViewDetailed | undefined } = $derived.by(() => {
   let data: ProfileViewDetailed | undefined = $state();
   if (session && agent) {
-    try {
-      agent
-        .getProfile({ actor: agent.assertDid })
-        .then((res) => {
-          data = res.data;
-        })
-        .catch((error) => {
-          console.error("Failed to fetch profile:", error);
-        });
-    } catch (error) {
-      console.error("Error in profile fetch:", error);
-    }
+    agent
+      .getProfile({ actor: agent.assertDid })
+      .then((res) => {
+        data = res.data;
+      })
+      .catch((error) => {
+        console.error("Failed to fetch profile:", error);
+      });
   }
   return {
     get data() {
@@ -54,63 +40,26 @@ let profile: { data: ProfileViewDetailed | undefined } = $derived.by(() => {
   };
 });
 
-/** The user's Roomy keypair. */
-let keypair: {
-  value: Keypair | undefined;
+/** The user's Jazz passphrase from our Jazz keyserver. */
+let passphrase: {
+  value: string | undefined;
 } = $derived.by(() => {
-  let value: Keypair | undefined = $state();
+  let passphrase: string | undefined = $state();
 
   if (session && agent) {
     agent
-      .call("chat.roomy.v0.key", undefined, undefined, {
+      .call("chat.roomy.v1.passphrase", undefined, undefined, {
         headers: {
-          "atproto-proxy": "did:web:keyserver.roomy.chat#roomy_keyserver",
+          "atproto-proxy": "did:web:jazz.keyserver.roomy.chat#roomy_keyserver",
         },
       })
       .then((resp) => {
-        value = {
-          publicKey: new Uint8Array(decodeBase32(resp.data.publicKey)),
-          privateKey: new Uint8Array(decodeBase32(resp.data.privateKey)),
-        };
+        passphrase = resp.data;
       });
   }
   return {
     get value() {
-      return value;
-    },
-  };
-});
-
-/** The user's Roomy keypair. */
-let catalogId: {
-  value: string | undefined;
-} = $derived.by(() => {
-  let value: string | undefined = $state();
-
-  if (session && agent) {
-    agent.com.atproto.repo
-      .getRecord({
-        repo: agent.assertDid,
-        collection: "chat.roomy.01JPNX7AA9BSM6TY2GWW1TR5V7.catalog",
-        rkey: "self",
-      })
-      .then((resp) => {
-        value = (resp.data.value as { id: string }).id;
-      })
-      .catch(async () => {
-        const newCatalogId = new EntityId().toString();
-        await agent?.com.atproto.repo.createRecord({
-          collection: "chat.roomy.01JPNX7AA9BSM6TY2GWW1TR5V7.catalog",
-          record: { id: newCatalogId },
-          repo: agent.assertDid,
-          rkey: "self",
-        });
-        value = newCatalogId;
-      });
-  }
-  return {
-    get value() {
-      return value;
+      return passphrase;
     },
   };
 });
@@ -132,10 +81,6 @@ export const user = {
    * */
   get agent() {
     return agent;
-  },
-
-  get catalogId() {
-    return catalogId;
   },
 
   /**
@@ -163,8 +108,8 @@ export const user = {
     return profile;
   },
 
-  get keypair() {
-    return keypair;
+  get passphrase() {
+    return passphrase;
   },
 
   /**
@@ -196,9 +141,9 @@ export const user = {
 
     // When user session is removed, clean up user
     // and redirect using logout function
-    if (!session) {
-      this.logout();
-    }
+    // if (!session) {
+    //   //this.logout();
+    // }
   },
 
   /** Login a user using their handle, replacing the existing session if any. */
@@ -207,19 +152,15 @@ export const user = {
     const url = await atproto.oauth.authorize(handle, {
       scope: atproto.scope,
     });
-    if (IN_TAURI) {
-      const { openUrl } = window.__TAURI__.opener;
-      const { onOpenUrl } = window.__TAURI__.deepLink;
-
-      openUrl(url);
+    if (isTauri()) {
+      openUrl(url.toString());
+      // runs on tauri desktop platforms
       await onOpenUrl((urls: string[]) => {
         if (!urls || urls.length < 1) return;
         const url = new URL(urls[0]!);
-        const path = page.url;
-
-        path.search = url.search;
-        path.pathname = url.pathname;
-        window.location.href = path.href;
+        // redirecting to "/oauth/callback" from here counts as opening the link twice.
+        // instead we handle the returned searchParams directly here
+        return handleOauthCallback(url.searchParams);
       });
     } else {
       window.location.href = url.href;

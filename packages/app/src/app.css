@@ -63,6 +63,7 @@ button {
   padding-right: 0.5rem;
   border-radius: 0.25rem;
   font-style: normal !important;
+  z-index: 10;
 }
 
 .thread-mention::before {
@@ -86,4 +87,8 @@ button {
 
 .dz-prose img {
   @apply max-w-[300px] max-h-[300px];
+}
+
+.contain-images-within img {
+  max-width: 100px;
 }

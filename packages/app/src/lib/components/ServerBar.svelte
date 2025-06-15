@@ -1,79 +1,63 @@
 <script lang="ts">
-  import { globalState } from "$lib/global.svelte";
   import { user } from "$lib/user.svelte";
   import { navigate } from "$lib/utils.svelte";
-  import { Button } from "bits-ui";
+  import { Button, Portal } from "bits-ui";
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import AvatarImage from "$lib/components/AvatarImage.svelte";
   import ThemeSelector from "$lib/components/ThemeSelector.svelte";
   import SidebarSpace from "$lib/components/SidebarSpace.svelte";
-  import { Space } from "@roomy-chat/sdk";
-  import { cleanHandle } from "$lib/utils.svelte";
-  import { atproto } from "$lib/atproto.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
+  import { env } from "$env/dynamic/public";
+  import { co } from "jazz-tools";
+  import { createSpace, createSpaceList } from "$lib/jazz/utils";
+  import { RoomyAccount, Space, SpaceList } from "$lib/jazz/schema";
+  import Login from "./Login.svelte";
+  import { CoState } from "jazz-svelte";
+  import { page } from "$app/state";
 
   let {
     spaces,
     visible,
+    me,
   }: {
-    spaces: { value: Space[] };
+    spaces: co.loaded<typeof SpaceList> | undefined | null;
     visible: boolean;
+    me: co.loaded<typeof RoomyAccount> | undefined | null;
   } = $props();
-
-  let handleInput = $state("");
-  let loginLoading = $state(false);
-  let signupLoading = $state(false);
-  const loadingAuth = $derived(signupLoading || loginLoading);
 
   let newSpaceName = $state("");
   let isNewSpaceDialogOpen = $state(false);
 
-  async function createSpace() {
-    if (!newSpaceName || !user.agent || !globalState.roomy) return;
-    const space = await globalState.roomy.create(Space);
-    space.name = newSpaceName;
-    space.admins((x) => user.agent && x.push(user.agent.assertDid));
-    space.commit();
+  let openSpace = $derived(new CoState(Space, page.params.space));
 
-    globalState.roomy.spaces.push(space);
-    globalState.roomy.commit();
+  let isOpenSpaceJoined = $derived(
+    me?.profile?.joinedSpaces?.some((x) => x?.id === openSpace.current?.id),
+  );
+
+  async function createSpaceSubmit(evt: Event) {
+    evt.preventDefault();
+    if (!newSpaceName) return;
+
+    if (me?.profile && me.profile.joinedSpaces === undefined) {
+      me.profile.joinedSpaces = createSpaceList();
+    }
+
+    const space = createSpace(newSpaceName);
+
+    me?.profile?.joinedSpaces?.push(space);
+
     newSpaceName = "";
 
     isNewSpaceDialogOpen = false;
-  }
 
-  let loginError = $state("");
-
-  async function login() {
-    loginLoading = true;
-
-    try {
-      handleInput = cleanHandle(handleInput);
-      await user.loginWithHandle(handleInput);
-    } catch (e: unknown) {
-      console.error(e);
-      loginError = e instanceof Error ? e.message.toString() : "Unknown error";
-    }
-
-    loginLoading = false;
-  }
-
-  async function signup() {
-    signupLoading = true;
-    try {
-      await atproto.oauth.signIn("https://bsky.social");
-    } catch (e: unknown) {
-      console.error(e);
-      loginError = e instanceof Error ? e.message.toString() : "Unknown error";
-    }
-    signupLoading = false;
+    console.log("navigating to space", space.id);
+    navigate({ space: space.id });
   }
 </script>
 
 <!-- Width manually set for transition to w-0 -->
 <aside
-  class="flex flex-col justify-between align-center h-full {visible
+  class="flex flex-col justify-between align-center h-screen {visible
     ? 'w-[60px] px-1 border-r-2'
     : 'w-[0]'} py-2 border-base-200 bg-base-300 transition-[width] duration-100 ease-out"
   class:opacity-0={!visible}
@@ -87,7 +71,7 @@
       <Icon icon="iconamoon:home-fill" font-size="1.75em" />
     </button>
 
-    {#if user.session}
+    {#if me?.profile?.blueskyHandle}
       <Dialog
         title="Create Space"
         description="Create a new public chat space"
@@ -105,7 +89,7 @@
         <form
           id="createSpace"
           class="flex flex-col gap-4"
-          onsubmit={createSpace}
+          onsubmit={createSpaceSubmit}
         >
           <input
             bind:value={newSpaceName}
@@ -124,77 +108,21 @@
     {/if}
 
     <div class="divider my-0"></div>
-
-    {#each spaces.value as space, i}
-      <SidebarSpace {space} {i} />
-    {/each}
+    {#if !isOpenSpaceJoined && openSpace.current}
+      <SidebarSpace space={openSpace.current} hasJoined={false} {me} />
+    {/if}
+  </div>
+  <div class="flex flex-col gap-1 items-center flex-grow overflow-y-auto">
+    {#if spaces}
+      {#each spaces as space}
+        <SidebarSpace {space} {me} />
+      {/each}
+    {/if}
   </div>
 
   <section class="flex flex-col items-center gap-2 p-0">
     <ThemeSelector />
-    <Dialog
-      title={user.session ? "Log Out" : "Create Account or Log In"}
-      description={user.session
-        ? `Logged in as ${user.profile.data?.handle}`
-        : `We use the AT Protocol to authenticate users <a href="https://atproto.com/guides/identity" class="text-primary hover:text-primary/75"> learn more </a>`}
-      bind:isDialogOpen={user.isLoginDialogOpen}
-    >
-      {#snippet dialogTrigger()}
-        <AvatarImage
-          className="p-1 w-full cursor-pointer"
-          handle={user.profile.data?.handle || ""}
-          avatarUrl={user.profile.data?.avatar}
-        />
-      {/snippet}
 
-      {#if user.session}
-        <section class="flex flex-col gap-4">
-          <Button.Root onclick={user.logout} class="dz-btn dz-btn-error">
-            Log Out
-          </Button.Root>
-        </section>
-      {:else}
-        <Button.Root
-          onclick={signup}
-          disabled={loadingAuth}
-          class="dz-btn dz-btn-primary"
-        >
-          {#if signupLoading}
-            <span class="dz-loading dz-loading-spinner"></span>
-          {/if}
-          <Icon
-            icon="simple-icons:bluesky"
-            width="16"
-            height="16"
-          />Authenticate with Bluesky
-        </Button.Root>
-        <p class="text-sm pt-4">Know your handle? Log in with it below.</p>
-        <form class="flex flex-col gap-4" onsubmit={login}>
-          {#if loginError}
-            <p class="text-error">{loginError}</p>
-          {/if}
-          <input
-            bind:value={handleInput}
-            placeholder="Handle (eg alice.bsky.social)"
-            class="dz-input w-full"
-            type="text"
-            required
-          />
-          <Button.Root
-            disabled={loadingAuth || !handleInput}
-            class="dz-btn dz-btn-primary"
-          >
-            {#if loginLoading}
-              <span class="dz-loading dz-loading-spinner"></span>
-            {/if}
-            Log in with bsky.social
-          </Button.Root>
-        </form>
-
-        <p class="text-sm text-center pt-4 text-base-content/50">
-          More options coming soon!
-        </p>
-      {/if}
-    </Dialog>
+    <Login />
   </section>
 </aside>
