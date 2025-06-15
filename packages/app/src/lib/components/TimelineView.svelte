@@ -100,25 +100,27 @@
   const readonly = $derived(thread.current?.name === "@links");
 
   let tab = $state<"chat" | "board">(
-    typeof window !== 'undefined' && window.location.hash === '#board' ? 'board' : 'chat'
+    typeof window !== "undefined" && window.location.hash === "#board"
+      ? "board"
+      : "chat",
   );
 
   // Update tab when hash changes
   $effect(() => {
     const handleHashChange = () => {
-      if (window.location.hash === '#board') {
-        tab = 'board';
-      } else if (window.location.hash === '#chat') {
-        tab = 'chat';
+      if (window.location.hash === "#board") {
+        tab = "board";
+      } else if (window.location.hash === "#chat") {
+        tab = "chat";
       }
     };
 
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       // Check hash on mount
       handleHashChange();
-      
-      window.addEventListener('hashchange', handleHashChange);
-      return () => window.removeEventListener('hashchange', handleHashChange);
+
+      window.addEventListener("hashchange", handleHashChange);
+      return () => window.removeEventListener("hashchange", handleHashChange);
     }
   });
 
@@ -367,7 +369,8 @@
 
   const channelThreads = $derived(
     channel.current?.subThreads?.filter(
-      (thread) => thread && !thread.softDeleted && !thread.name?.startsWith('💬'),
+      (thread) =>
+        thread && !thread.softDeleted && !thread.name?.startsWith("💬"),
     ) || [],
   );
 
@@ -491,7 +494,7 @@
 </Navbar>
 
 {#if tab === "board"}
-  <div class="p-4 space-y-6 h-[calc(100dvh)] overflow-y-auto">
+  <div class="p-4 space-y-6 h-[calc(100dvh)] overflow-y-auto py-20">
     <BoardList items={pages} title="Pages" route="page">
       {#snippet header()}
         <CreatePageDialog />
@@ -501,7 +504,7 @@
     <BoardList items={channelThreads} title="Threads" route="thread">
       No threads for this channel.
     </BoardList>
-    
+
     <ChannelFeedsBoard channel={channel.current} />
   </div>
 {:else if tab === "chat"}
