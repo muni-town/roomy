@@ -1,17 +1,13 @@
-<script lang="ts" module>
-  export const threading = $state({
-    active: false,
-    selectedMessages: [] as string[],
-  });
-</script>
-
 <script lang="ts">
   import toast from "svelte-french-toast";
   import Icon from "@iconify/svelte";
+  import { setContext } from "svelte";
+  import { Index } from "flexsearch";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import { Button } from "bits-ui";
   import { Account, co, Group } from "jazz-tools";
+  import { derivePromise } from "$lib/utils.svelte";
   import {
     LastReadList,
     Message,
@@ -22,6 +18,7 @@
   import CreatePageDialog from "$lib/components/CreatePageDialog.svelte";
   import BoardList from "./BoardList.svelte";
   import ChannelFeedsBoard from "./ChannelFeedsBoard.svelte";
+  import ChannelLinksBoard from "./ChannelLinksBoard.svelte";
   import ToggleNavigation from "./ToggleNavigation.svelte";
   import { AccountCoState, CoState } from "jazz-svelte";
   import { Channel, Space } from "$lib/jazz/schema";
@@ -41,8 +38,25 @@
   import UploadFileButton from "./helper/UploadFileButton.svelte";
   import { afterNavigate } from "$app/navigation";
   import SearchBar from "./search/SearchBar.svelte";
+  import { indexNewMessages } from "./search/search.svelte";
   import Navbar from "./ui/Navbar.svelte";
   import { Tabs } from "@fuxui/base";
+
+  // Component-level threading state - scoped per channel
+  let threading = $state({
+    active: false,
+    selectedMessages: [] as string[],
+  });
+
+  // Clean up threading state when channel changes
+  $effect(() => {
+    // When channel changes, reset threading state
+    const channelId = page.params.channel;
+    return () => {
+      threading.active = false;
+      threading.selectedMessages = [];
+    };
+  });
 
   let space = $derived(
     new CoState(Space, page.params.space, {
@@ -103,9 +117,35 @@
     typeof window !== 'undefined' && window.location.hash === '#board' ? 'board' : 'chat'
   );
 
+  // Index new messages when timeline changes
+  $effect(() => {
+    if (timeline && timeline.length > 0 && space.current) {
+      if (page.params.channel && channel.current) {
+        indexNewMessages(
+          space.current.id,
+          timeline,
+          channel.current.id,
+          channel.current.name
+        ).catch(error => console.error("Error indexing new messages:", error));
+      } else if (page.params.thread && thread.current) {
+        indexNewMessages(
+          space.current.id,
+          timeline,
+          undefined,
+          undefined,
+          thread.current.id,
+          thread.current.name
+        ).catch(error => console.error("Error indexing new messages:", error));
+      }
+    }
+  });
+
   // Update tab when hash changes
   $effect(() => {
     const handleHashChange = () => {
+      // For feeds channels, don't change tabs based on hash
+      if (channel.current?.channelType === "feeds") return;
+      
       if (window.location.hash === '#board') {
         tab = 'board';
       } else if (window.location.hash === '#chat') {
@@ -173,8 +213,71 @@
   let threadTitleInput = $state("");
 
   let filesInMessage: File[] = $state([]);
+  let selectedMessages: Message[] = $state([]);
+  
+  let isThreadingValue = $derived(threading.active);
+  let isThreading = { get value() { return isThreadingValue; } };
+  setContext("isThreading", isThreading);
+  setContext("selectMessage", (message: Message) => {
+    selectedMessages.push(message);
+  });
+  setContext("removeSelectedMessage", (msg: Message) => {
+    selectedMessages = selectedMessages.filter((m) => m !== msg);
+  });
 
-  async function addThread(e: SubmitEvent) {
+  $effect(() => {
+    if (!isThreading.value && selectedMessages.length > 0) {
+      selectedMessages = [];
+    }
+  });
+
+  // Reply Utils
+  let replyingTo = $state() as Message | undefined;
+  setContext("setReplyTo", (message: Message) => {
+    replyingTo = message;
+  });
+
+  // Initialize FlexSearch with appropriate options for message content
+  let searchIndex = new Index({
+    tokenize: "forward",
+    preset: "performance",
+  });
+  let searchQuery = $state("");
+  let showSearchInput = $state(false);
+  let searchResults = $state<Message[]>([]);
+  let showSearchResults = $state(false);
+  let virtualizer = $state<Virtualizer<string> | undefined>(undefined);
+
+  // Function to handle search result click
+  function handleSearchResultClick(messageId: string) {
+    // Hide search results
+    showSearchResults = false;
+
+    // Find the message in the timeline to get its index
+    if (channel.current) {
+      // Get the timeline IDs - this returns an array, not a Promise
+      const ids = channel.current.mainThread?.timeline?.perAccount ? 
+        Object.values(channel.current.mainThread.timeline.perAccount)
+          .flatMap(accountFeed => new Array(...accountFeed.all)) : [];
+
+      if (!messageId.includes("leaf:")) {
+        return;
+      }
+
+      const messageIndex = ids.indexOf(messageId);
+
+      if (messageIndex !== -1) {
+        virtualizer?.scrollToIndex(messageIndex);
+      } else {
+        console.error("Message not found in timeline:", messageId);
+      }
+    } else {
+      console.error("No active channel");
+    }
+  }
+
+
+  async function handleCreateThread(e: SubmitEvent) {
     e.preventDefault();
     const messageIds = <string[]>[];
 
@@ -452,76 +555,99 @@
   <div class="absolute top-0 left-0"></div>
 {/if}
 
-<Navbar>
-  <div class="flex gap-4 items-center ml-4">
-    {#if channel.current}
-      <ToggleNavigation />
+<div class="h-screen flex flex-col overflow-hidden">
+  <div class="flex-none bg-base-50 border-b border-base-400/30 dark:border-base-300/10">
+    <Navbar>
+      <div class="flex gap-4 items-center ml-4">
+        {#if channel.current}
+          <ToggleNavigation />
 
-      <h4
-        class="sm:line-clamp-1 sm:overflow-hidden sm:text-ellipsis text-lg font-bold"
-        title={"Channel"}
-      >
-        <span class="flex gap-2 items-center">
-          <Icon icon={"basil:comment-solid"} />
-          {channel.current.name}
-        </span>
-      </h4>
-      <Tabs
-        items={[
-          { name: "chat", onclick: () => (tab = "chat") },
-          { name: "board", onclick: () => (tab = "board") },
-        ]}
-        active={tab}
-      ></Tabs>
-    {/if}
-  </div>
-
-  <div class="hidden sm:flex dz-navbar-end items-center gap-2">
-    {#if tab === "chat"}
-      <button
-        class="btn btn-ghost btn-sm btn-circle"
-        onclick={() => (showSearch = !showSearch)}
-        title="Toggle search"
-      >
-        <Icon icon="tabler:search" class="text-base-content" />
-      </button>
-    {/if}
-    <TimelineToolbar createThread={addThread} bind:threadTitleInput />
-  </div>
-</Navbar>
-
-{#if tab === "board"}
-  <div class="p-4 space-y-6 h-[calc(100dvh)] overflow-y-auto">
-    <BoardList items={pages} title="Pages" route="page">
-      {#snippet header()}
-        <CreatePageDialog />
-      {/snippet}
-      No pages for this channel.
-    </BoardList>
-    <BoardList items={channelThreads} title="Threads" route="thread">
-      No threads for this channel.
-    </BoardList>
-    
-    <ChannelFeedsBoard channel={channel.current} />
-  </div>
-{:else if tab === "chat"}
-  {#if space.current}
-    <div class="flex flex-col h-[calc(100dvh)] py-16 w-full px-4">
-      {#if showSearch && space.current}
-        <SearchBar spaceId={space.current.id} bind:showSearch />
-      {/if}
-      <div class="flex-grow overflow-auto relative h-full">
-        <ChatArea
-          space={space.current}
-          {timeline}
-          isAdmin={isSpaceAdmin(space.current)}
-          admin={creator.current}
-          {threadId}
-          allowedToInteract={hasJoinedSpace && !isBanned}
-        />
+          <h4
+            class="sm:line-clamp-1 sm:overflow-hidden sm:text-ellipsis text-lg font-bold"
+            title={"Channel"}
+          >
+            <span class="flex gap-2 items-center">
+              <Icon icon={channel.current.channelType === "feeds" ? "basil:feed-outline" : channel.current.channelType === "links" ? "basil:link-outline" : "basil:comment-solid"} />
+              {channel.current.name}
+              {#if channel.current.channelType === "feeds"}
+                <span class="text-xs bg-primary/20 text-primary px-2 py-1 rounded">FEEDS</span>
+              {:else if channel.current.channelType === "links"}
+                <span class="text-xs bg-secondary/20 text-secondary px-2 py-1 rounded">LINKS</span>
+              {/if}
+            </span>
+          </h4>
+          {#if channel.current.channelType !== "feeds" && channel.current.channelType !== "links"}
+            <Tabs
+              items={[
+                { name: "chat", onclick: () => (tab = "chat") },
+                { name: "board", onclick: () => (tab = "board") },
+              ]}
+              active={tab}
+            ></Tabs>
+          {/if}
+        {/if}
       </div>
 
-      <div class="fixed bottom-2 left-2 sm:left-84 right-2">
+      <div class="hidden sm:flex dz-navbar-end items-center gap-2">
+        {#if tab === "chat"}
+          <button
+            class="btn btn-ghost btn-sm btn-circle"
+            onclick={() => (showSearch = !showSearch)}
+            title="Toggle search"
+          >
+            <Icon icon="tabler:search" class="text-base-content" />
+          </button>
+        {/if}
+        <TimelineToolbar createThread={handleCreateThread} bind:threadTitleInput bind:threading />
+      </div>
+    </Navbar>
+  </div>
+
+  {#if channel.current?.channelType === "feeds"}
+    <!-- Feeds Channel - Only show feeds -->
+    <div class="flex-1 overflow-y-auto p-4">
+      <ChannelFeedsBoard channel={channel.current} />
+    </div>
+  {:else if channel.current?.channelType === "links"}
+    <!-- Links Channel - Only show links -->
+    <div class="flex-1 overflow-y-auto p-4">
+      <ChannelLinksBoard space={space.current} />
+    </div>
+  {:else if tab === "board"}
+    <div class="flex-1 overflow-y-auto p-4 space-y-6">
+      <BoardList items={pages} title="Pages" route="page">
+        {#snippet header()}
+          <CreatePageDialog />
+        {/snippet}
+        No pages for this channel.
+      </BoardList>
+      <BoardList items={channelThreads} title="Threads" route="thread">
+        No threads for this channel.
+      </BoardList>
+      
+      <ChannelFeedsBoard channel={channel.current} />
+    </div>
+  {:else if tab === "chat"}
+    {#if space.current}
+      <div class="flex flex-col flex-1 overflow-hidden pr-4">
+        {#if showSearch && space.current}
+          <div class="flex-none">
+            <SearchBar spaceId={space.current.id} bind:showSearch />
+          </div>
+        {/if}
+        <div class="flex-1 overflow-y-auto overflow-x-hidden relative">
+          <ChatArea
+            space={space.current}
+            {timeline}
+            isAdmin={isSpaceAdmin(space.current)}
+            admin={creator.current}
+            {threadId}
+            allowedToInteract={hasJoinedSpace && !isBanned}
+            {threading}
+          />
+        </div>
+
+        <div class="flex-none bg-white pt-2 pb-2 pr-2">
         {#if replyTo.id}
           <div
             class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
@@ -539,7 +665,7 @@
             </Button.Root>
           </div>
         {/if}
-        <div class="">
+        <div class="w-full">
           {#if user.session}
             {#if hasJoinedSpace}
               {#if readonly}
@@ -550,7 +676,7 @@
                 </div>
               {:else if !isBanned}
                 <div
-                  class="dz-prose prose-a:text-primary prose-a:underline relative isolate"
+                  class="prose-a:text-primary prose-a:underline relative isolate"
                 >
                   {#if previewImages.length > 0}
                     <div class="flex gap-2 my-2 overflow-x-auto w-full">
@@ -573,7 +699,7 @@
                     </div>
                   {/if}
 
-                  <div class="flex gap-1 w-full">
+                  <div class="flex w-full pl-2 gap-2">
                     <UploadFileButton {processImageFile} />
 
                     {#key users.length + context.length}
@@ -625,9 +751,10 @@
         </div>
 
         <!-- {#if isMobile}
-          <TimelineToolbar {createThread} bind:threadTitleInput />
+          <TimelineToolbar createThread={handleCreateThread} bind:threadTitleInput />
         {/if} -->
       </div>
     </div>
   {/if}
 {/if}
+</div>

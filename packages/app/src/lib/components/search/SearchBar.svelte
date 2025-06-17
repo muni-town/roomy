@@ -26,15 +26,18 @@
   }
 
   async function updateSearchResults(query: string) {
+    console.log("updateSearchResults called with query:", query);
     if(!query.length) {
       searchResults = [];
       showSearchResults = false;
+      console.log("Empty query, hiding results");
       return;
     }
     const results = await findMessages(spaceId, query);
-    console.log("results", results);
+    console.log("Search results from findMessages:", results);
     searchResults = results as string[];
     showSearchResults = results.length > 0;
+    console.log("showSearchResults set to:", showSearchResults, "with", searchResults.length, "results");
   }
 </script>
 
@@ -67,15 +70,19 @@
 
 {#if showSearchResults}
   <div class="relative">
-    <div class="absolute z-20 w-full">
-      <SearchResults
-        messages={searchResults}
-        query={searchQuery}
-        onMessageClick={handleSearchResultClick}
-        onClose={() => {
-          showSearchResults = false;
-        }}
-      />
+    <div class="absolute z-50 w-full bg-red-500 p-2 border-2 border-blue-500">
+      <div class="bg-white">
+        <SearchResults
+          messages={searchResults}
+          query={searchQuery}
+          onMessageClick={handleSearchResultClick}
+          onClose={() => {
+            showSearchResults = false;
+          }}
+        />
+      </div>
     </div>
   </div>
+{:else}
+  <div class="text-xs text-gray-500">Search results hidden (showSearchResults: {showSearchResults})</div>
 {/if}

@@ -61,86 +61,76 @@
   }
 </script>
 
-<div class="dm-list h-full flex flex-col overflow-hidden">
-  
-  {#if isLoading}
-    <div class="text-center py-4">
-      <span class="dz-loading dz-loading-spinner dz-loading-md text-primary"></span>
-      <p class="mt-2 text-sm text-base-content/60">Loading conversations...</p>
+{#if isLoading}
+  <div class="text-center py-4">
+    <span class="loading loading-spinner loading-md text-primary"></span>
+    <p class="mt-2 text-sm text-base-content/60">Loading conversations...</p>
+  </div>
+{:else if error}
+  <div class="alert alert-error m-4">
+    <Icon icon="tabler:alert-circle" />
+    <div>
+      <div class="font-bold">Error</div>
+      <div class="text-xs">{error}</div>
     </div>
-  {:else if error}
-    <div class="dz-alert dz-alert-error m-4">
-      <Icon icon="tabler:alert-circle" />
-      <div>
-        <div class="font-bold">Error</div>
-        <div class="text-xs">{error}</div>
+    <button 
+      onclick={() => window.location.reload()}
+      class="btn btn-sm btn-outline"
+    >
+      Try again
+    </button>
+  </div>
+{:else if conversations.length === 0}
+  <div class="text-center py-8">
+    <Icon icon="tabler:message-circle-off" class="h-8 w-8 mx-auto text-base-content/40 mb-2" />
+    <p class="text-base-content/60">No conversations yet</p>
+    <button 
+      onclick={() => {
+        conversations = [{
+          id: 'test-1',
+          participants: [{did: 'test', handle: 'test.bsky.social', displayName: 'Test User'}],
+          lastMessage: {text: 'Test message', sentAt: new Date().toISOString()},
+          unreadCount: 1
+        }];
+      }}
+      class="btn btn-sm btn-primary mt-2"
+    >
+      Add Test Conversation
+    </button>
+  </div>
+{:else}
+  {#each conversations as conversation}
+    <button 
+      class="flex items-start justify-between w-full p-3 text-left transition-colors relative border-0 bg-transparent
+             {selectedConversationId === conversation.id 
+               ? 'bg-primary/10 border-r-2 border-primary text-primary' 
+               : 'hover:bg-base-200 text-base-content'}"
+      onclick={() => selectConversation(conversation.id)}
+    >
+      <div class="min-w-0 flex-1 pr-2">
+        <div class="text-sm font-medium truncate w-full
+                   {selectedConversationId === conversation.id ? 'text-primary' : 'text-base-content'}">
+          {#if conversation.participants.length === 1}
+            {conversation.participants[0].displayName || conversation.participants[0].handle}
+          {:else if conversation.participants.length === 2}
+            {conversation.participants[0].displayName || conversation.participants[0].handle}, {conversation.participants[1].displayName || conversation.participants[1].handle}
+          {:else}
+            {conversation.participants[0].displayName || conversation.participants[0].handle}, {conversation.participants[1].displayName || conversation.participants[1].handle}, +{conversation.participants.length - 2} more
+          {/if}
+        </div>
+        {#if conversation.lastMessage}
+          <p class="text-sm truncate mt-1 w-full
+                   {selectedConversationId === conversation.id ? 'text-primary/70' : 'text-base-content/60'}">
+            {conversation.lastMessage.text}
+          </p>
+        {/if}
       </div>
-      <button 
-        onclick={() => window.location.reload()}
-        class="dz-btn dz-btn-sm dz-btn-outline"
-      >
-        Try again
-      </button>
-    </div>
-  {:else if conversations.length === 0}
-    <div class="text-center py-8">
-      <Icon icon="tabler:message-circle-off" class="h-8 w-8 mx-auto text-base-content/40 mb-2" />
-      <p class="text-base-content/60">No conversations yet</p>
-      <button 
-        onclick={() => {
-          // Create a test conversation for debugging
-          conversations = [{
-            id: 'test-1',
-            participants: [{did: 'test', handle: 'test.bsky.social', displayName: 'Test User'}],
-            lastMessage: {text: 'Test message', sentAt: new Date().toISOString()},
-            unreadCount: 1
-          }];
-        }}
-        class="dz-btn dz-btn-sm dz-btn-primary mt-2"
-      >
-        Add Test Conversation
-      </button>
-    </div>
-  {:else}
-    <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-      <div class="dz-menu p-0 w-full">
-        {#each conversations as conversation}
-          <li class="w-full">
-            <button 
-              class="flex items-start justify-between w-full p-3 text-left transition-colors relative
-                     {selectedConversationId === conversation.id 
-                       ? 'bg-primary/10 border-r-2 border-primary text-primary' 
-                       : 'hover:bg-base-300 text-base-content'}"
-              onclick={() => selectConversation(conversation.id)}
-            >
-              <div class="min-w-0 flex-1 pr-2">
-                <div class="text-sm font-medium truncate w-full
-                           {selectedConversationId === conversation.id ? 'text-primary' : 'text-base-content'}">
-                  {#if conversation.participants.length === 1}
-                    {conversation.participants[0].displayName || conversation.participants[0].handle}
-                  {:else if conversation.participants.length === 2}
-                    {conversation.participants[0].displayName || conversation.participants[0].handle}, {conversation.participants[1].displayName || conversation.participants[1].handle}
-                  {:else}
-                    {conversation.participants[0].displayName || conversation.participants[0].handle}, {conversation.participants[1].displayName || conversation.participants[1].handle}, +{conversation.participants.length - 2} more
-                  {/if}
-                </div>
-                {#if conversation.lastMessage}
-                  <p class="text-sm truncate mt-1 w-full
-                           {selectedConversationId === conversation.id ? 'text-primary/70' : 'text-base-content/60'}">
-                    {conversation.lastMessage.text}
-                  </p>
-                {/if}
-              </div>
-              {#if conversation.unreadCount > 0}
-                <div class="dz-badge dz-badge-primary dz-badge-sm flex-shrink-0">
-                  {conversation.unreadCount}
-                </div>
-              {/if}
-            </button>
-          </li>
-        {/each}
-      </div>
-    </div>
-  {/if}
-</div>
+      {#if conversation.unreadCount > 0}
+        <div class="badge badge-primary badge-sm flex-shrink-0">
+          {conversation.unreadCount}
+        </div>
+      {/if}
+    </button>
+  {/each}
+{/if}
 

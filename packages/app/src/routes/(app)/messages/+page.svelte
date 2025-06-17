@@ -95,20 +95,20 @@
   }
 </script>
 
-<div class="h-full w-full flex-1 flex flex-col bg-base-100">
-  <!-- Header -->
-  <div
-    class="border-b border-base-300 bg-base-200 px-4 py-3 sm:px-6 lg:px-8 lg:hidden"
-  >
-    <div class="flex items-center">
-      <button
-        onclick={handleBack}
-        class="mr-3 dz-btn dz-btn-ghost dz-btn-circle dz-btn-sm"
-        aria-label="Back"
-      >
-        <Icon icon="tabler:arrow-left" class="text-lg" />
-      </button>
-      <h1 class="text-lg font-semibold text-base-content">Messages</h1>
+<div class="flex flex-col h-full overflow-hidden">
+  <!-- Header - similar to TimelineView navbar -->
+  <div class="flex-none bg-base-50 border-b border-base-400/30 dark:border-base-300/10">
+    <div class="w-full flex h-16 items-center justify-between p-2 overflow-hidden flex-shrink-0">
+      <div class="flex items-center gap-4 ml-4">
+        <button
+          onclick={handleBack}
+          class="mr-3 dz-btn dz-btn-ghost dz-btn-circle dz-btn-sm lg:hidden"
+          aria-label="Back"
+        >
+          <Icon icon="tabler:arrow-left" class="text-lg" />
+        </button>
+        <h1 class="text-lg font-bold text-base-content">Messages</h1>
+      </div>
     </div>
   </div>
 

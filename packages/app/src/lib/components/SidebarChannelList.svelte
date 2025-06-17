@@ -132,7 +132,7 @@
                     class="flex flex-col gap-2"
                   >
                     {#each item.data.channels?.values() || [] as channel}
-                      {#if channel}
+                      {#if channel && !channel.softDeleted}
                         <SidebarChannelButton
                           {channel}
                           {deleteItem}
