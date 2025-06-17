@@ -134,21 +134,11 @@ export class AtprotoFeedService {
       // Add new posts as messages (newest first)
       let addedCount = 0;
       const newMessages: string[] = [];
-      
+
       for (const post of posts) {
         if (!existingMessages.has(post.uri)) {
           try {
-            console.log(
-              `➕ Adding new post from ${post.author.handle}: ${post.record.text.substring(0, 50)}...`,
-            );
-            console.log(
-              `👤 Author info - Handle: ${post.author.handle}, Display: ${post.author.displayName}, Avatar: ${post.author.avatar}`,
-            );
             const message = this.createMessageFromPost(post);
-            console.log(
-              `📝 Created message with ID: ${message.id}, Author field: ${message.author}`,
-            );
-
             newMessages.push(message.id);
             addedCount++;
           } catch (error) {
@@ -163,14 +153,16 @@ export class AtprotoFeedService {
       // Add new messages to timeline (newest first)
       if (newMessages.length > 0) {
         if (typeof timeline.unshift === "function") {
-          newMessages.reverse().forEach(id => timeline.unshift(id));
+          newMessages.reverse().forEach((id) => timeline.unshift(id));
           console.log(`✅ Added ${newMessages.length} messages (newest first)`);
         } else if (typeof timeline.splice === "function") {
           timeline.splice(0, 0, ...newMessages.reverse());
           console.log(`✅ Added ${newMessages.length} messages (newest first)`);
         } else if (typeof timeline.push === "function") {
-          newMessages.reverse().forEach(id => timeline.push(id));
-          console.log(`⚠️ Added ${newMessages.length} messages (newest at bottom)`);
+          newMessages.reverse().forEach((id) => timeline.push(id));
+          console.log(
+            `⚠️ Added ${newMessages.length} messages (newest at bottom)`,
+          );
         } else {
           console.error("❌ Timeline has no add methods available");
         }
@@ -278,36 +270,48 @@ export class AtprotoFeedService {
   }
 
   // Fix existing ATProto messages to have proper avatar URLs
-  async fixExistingMessageAvatars(channel: co.loaded<typeof Channel>): Promise<void> {
-    console.log('🔧 Fixing existing ATProto message avatars...');
-    
+  async fixExistingMessageAvatars(
+    channel: co.loaded<typeof Channel>,
+  ): Promise<void> {
+    console.log("🔧 Fixing existing ATProto message avatars...");
+
     const timeline = channel.mainThread?.timeline;
     if (!timeline) {
-      console.error('❌ No timeline found');
+      console.error("❌ No timeline found");
       return;
     }
 
     let fixedCount = 0;
-    
+
     try {
-      if (timeline && typeof timeline[Symbol.iterator] === 'function') {
+      if (timeline && typeof timeline[Symbol.iterator] === "function") {
         for (const messageId of timeline) {
           try {
             const message = await Message.load(messageId);
-            if (message?.author && message.author.startsWith('atproto')) {
-              const parts = message.author.split('||');
+            if (message?.author && message.author.startsWith("atproto")) {
+              const parts = message.author.split("||");
               if (parts.length >= 6) {
-                const [prefix, handle, displayName, did, uri, avatarBlob] = parts;
-                
+                const [prefix, handle, displayName, did, uri, avatarBlob] =
+                  parts;
+
                 // If avatar is just a blob reference, construct proper URL
-                if (avatarBlob && !avatarBlob.startsWith('http')) {
+                if (avatarBlob && !avatarBlob.startsWith("http")) {
                   const properAvatarUrl = `https://cdn.bsky.app/img/avatar/plain/${did}/${avatarBlob}@jpeg`;
-                  const newAuthorInfo = [prefix, handle, displayName, did, uri, encodeURIComponent(properAvatarUrl)].join('||');
-                  
+                  const newAuthorInfo = [
+                    prefix,
+                    handle,
+                    displayName,
+                    did,
+                    uri,
+                    encodeURIComponent(properAvatarUrl),
+                  ].join("||");
+
                   message.author = newAuthorInfo;
                   fixedCount++;
-                  
-                  console.log(`✅ Fixed avatar for ${handle}: ${avatarBlob} -> ${properAvatarUrl}`);
+
+                  console.log(
+                    `✅ Fixed avatar for ${handle}: ${avatarBlob} -> ${properAvatarUrl}`,
+                  );
                 }
               }
             }
@@ -317,7 +321,7 @@ export class AtprotoFeedService {
         }
       }
     } catch (error) {
-      console.error('❌ Error fixing avatars:', error);
+      console.error("❌ Error fixing avatars:", error);
     }
 
     console.log(`🎉 Fixed ${fixedCount} message avatars`);
@@ -369,10 +373,12 @@ if (typeof window !== "undefined") {
 
   (window as any).fixExistingAvatars = async (channelId?: string) => {
     console.log("🔧 Fixing avatars in existing ATProto messages...");
-    
+
     if (!channelId) {
       console.log("ℹ️ Usage: fixExistingAvatars('channel-id')");
-      console.log("ℹ️ Or find channel ID in the URL when viewing an ATProto channel");
+      console.log(
+        "ℹ️ Or find channel ID in the URL when viewing an ATProto channel",
+      );
       return;
     }
 

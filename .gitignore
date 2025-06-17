@@ -26,3 +26,5 @@ Thumbs.db
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 src-tauri/icons
+
+mise.toml

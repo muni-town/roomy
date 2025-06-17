@@ -100,7 +100,7 @@
         // ATProto format: atproto||handle||displayName||did||uri||avatar
         const author = message.current.author.split("||");
         const avatarUrl = author?.[5] ? decodeURIComponent(author[5]) : "";
-        console.log(`👤 ATProto author data - Handle: ${author?.[1]}, Display: ${author?.[2]}, Avatar: ${avatarUrl}`);
+        // console.log(`👤 ATProto author data - Handle: ${author?.[1]}, Display: ${author?.[2]}, Avatar: ${avatarUrl}`);
         return {
           name: `${author?.[2] ?? author?.[1] ?? "Unknown"} (@${author?.[1] ?? "unknown"})`,
           imageUrl: avatarUrl,
@@ -126,10 +126,13 @@
 
     if (isImportedMessage) {
       // Handle ATProto with || delimiter
-      if (message.current?.author?.startsWith("atproto") && previousMessage.current?.author?.startsWith("atproto")) {
+      if (
+        message.current?.author?.startsWith("atproto") &&
+        previousMessage.current?.author?.startsWith("atproto")
+      ) {
         const previousAuthor = previousMessage.current.author.split("||");
         const currentAuthor = message.current.author.split("||");
-        
+
         // Compare by handle (index 1) and DID (index 3)
         if (
           previousAuthor?.[1] === currentAuthor?.[1] &&
@@ -148,7 +151,7 @@
       else {
         const previousAuthor = previousMessage.current?.author?.split(":");
         const currentAuthor = message.current?.author?.split(":");
-        
+
         if (
           previousAuthor?.[1] === currentAuthor?.[1] &&
           previousAuthor?.[2] === currentAuthor?.[2]
@@ -279,7 +282,7 @@
     try {
       // Get the user's handle - try blueskyHandle first, then name as fallback
       const userHandle = profile?.current?.blueskyHandle || authorData?.name;
-      
+
       if (!userHandle) {
         toast.error("Unable to find user handle for messaging");
         return;
@@ -294,7 +297,6 @@
 
       // Navigate to messages with user parameter for new/existing conversations
       await goto(`/messages?user=${encodeURIComponent(userHandle)}`);
-      
     } catch (error) {
       console.error("Failed to open DM:", error);
       toast.error("Failed to open direct message");
@@ -355,7 +357,7 @@
       <div class={"group relative flex w-full justify-start gap-3"}>
         {#if !mergeWithPrevious}
           <div class="size-8 sm:size-10">
-            <button 
+            <button
               onclick={async (e) => {
                 e.stopPropagation();
                 if (authorData?.id !== me.current?.id) {
@@ -363,7 +365,9 @@
                 }
               }}
               class="rounded-full hover:ring-2 hover:ring-blue-500 transition-all"
-              title={authorData?.id === me.current?.id ? 'Your profile' : `Message ${authorData?.name}`}
+              title={authorData?.id === me.current?.id
+                ? "Your profile"
+                : `Message ${authorData?.name}`}
             >
               <Avatar.Root class="size-8 sm:size-10">
                 <Avatar.Image src={authorData?.imageUrl} class="rounded-full" />

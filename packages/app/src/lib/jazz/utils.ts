@@ -14,6 +14,7 @@ import {
   SpaceList,
   Thread,
   Timeline,
+  GlobalHiddenPost,
 } from "./schema";
 import { allAccountsListId, allSpacesListId } from "./ids";
 
@@ -24,7 +25,7 @@ export function publicGroup(readWrite: "reader" | "writer" = "reader") {
   return group;
 }
 
-export function createChannel(name: string) {
+export function createChannel(name: string, channelType: "chat" | "feeds" = "chat") {
   const publicWriteGroup = publicGroup("writer");
   const publicReadGroup = publicGroup("reader");
 
@@ -42,12 +43,35 @@ export function createChannel(name: string) {
       name,
       mainThread: thread,
       subThreads: co.list(Thread).create([], publicWriteGroup),
+      channelType,
     },
     publicReadGroup,
   );
 
   thread.channelId = channel.id;
 
+  // Initialize global voting system for feed channels
+  if (channelType === "feeds") {
+    channel.globalHiddenPosts = co.list(GlobalHiddenPost).create([], publicWriteGroup);
+    channel.hideThreshold = 3; // Default threshold of 3 votes to hide
+  }
+
+  return channel;
+}
+
+export function createFeedsChannel(name: string, feedUris?: string[], threadsOnly = false) {
+  const channel = createChannel(name, "feeds");
+  
+  // Set up ATProto feeds configuration
+  channel.isAtprotoFeed = true;
+  channel.showAtprotoFeeds = true;
+  channel.atprotoFeedsConfig = {
+    feeds: feedUris || [], // Start with empty feeds array
+    threadsOnly,
+  };
+  
+  // Global voting system is already initialized in createChannel for feed channels
+  
   return channel;
 }
 

@@ -54,6 +54,22 @@ export const Page = co.map({
   body: z.string(),
 });
 
+// Voting system for globally hiding feed posts
+export const FeedPostVote = co.map({
+  postUri: z.string(), // AT Proto URI of the post
+  userId: z.string(), // User who voted to hide
+  reason: z.string().optional(), // Optional reason for hiding (spam, irrelevant, etc.)
+  votedAt: z.date(),
+});
+
+export const GlobalHiddenPost = co.map({
+  postUri: z.string(), // AT Proto URI of the post
+  votes: co.list(FeedPostVote), // List of votes to hide this post
+  threshold: z.number().default(3), // Number of votes needed to globally hide
+  isHidden: z.boolean().default(false), // Whether post is globally hidden
+  hiddenAt: z.date().optional(), // When it was globally hidden
+});
+
 export const Channel = co.map({
   name: z.string(),
 
@@ -65,12 +81,20 @@ export const Channel = co.map({
 
   softDeleted: z.boolean().optional(),
   
-  // ATProto feed integration for board view
+  // Channel type - determines how the channel behaves
+  channelType: z.enum(["chat", "feeds"]).optional().default("chat"),
+  
+  // ATProto feed integration - now used for feeds channels
+  isAtprotoFeed: z.boolean().optional(), // For backwards compatibility
   showAtprotoFeeds: z.boolean().optional(), // Show feeds in board view
   atprotoFeedsConfig: z.optional(z.object({
     feeds: z.array(z.string()), // Which feeds to show
     threadsOnly: z.boolean(), // Only show thread posts
   })),
+
+  // Global hiding system for feed channels
+  globalHiddenPosts: z.optional(co.list(GlobalHiddenPost)),
+  hideThreshold: z.number().optional().default(3), // Number of votes needed to globally hide
 });
 
 export const Category = co.map({
@@ -128,6 +152,13 @@ export const RoomyProfile = co.profile({
   bannerUrl: z.string().optional(),
   description: z.string().optional(),
   threadSubscriptions: z.optional(co.list(z.string())), // List of thread IDs user is subscribed to
+  hiddenFeedPosts: z.optional(co.list(z.string())), // List of AT Proto URIs for hidden feed posts
+  hiddenFeedPostsCache: z.optional(co.list(co.map({
+    uri: z.string(),
+    text: z.string(),
+    author: z.string(),
+    hiddenAt: z.date(),
+  }))), // Cache of hidden post data for better UI display
 });
 
 export const RoomyRoot = co.map({

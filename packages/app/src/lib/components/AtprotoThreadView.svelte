@@ -34,9 +34,15 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
 
-  // Initialize aggregator when user agent becomes available
+  // Initialize aggregator when user agent and session become available
   $effect(() => {
-    if (user.agent && !aggregator) {
+    if (user.agent && user.session && !aggregator) {
+      console.log('Creating aggregator with session:', user.session.did);
+      // Ensure the agent has the session
+      if (!user.agent.session) {
+        console.log('Agent missing session, re-setting it');
+        user.agent.session = user.session;
+      }
       aggregator = new AtprotoFeedAggregator(user.agent);
     }
   });
@@ -93,7 +99,18 @@
   }
 
   async function likePost(post: AtprotoThreadPost) {
-    if (!aggregator) return;
+    console.log('likePost called:', {
+      hasAggregator: !!aggregator,
+      hasSession: !!user.session,
+      sessionDid: user.session?.did,
+      agentSessionDid: user.agent?.session?.did
+    });
+    
+    if (!aggregator || !user.session) {
+      // Prompt user to login
+      user.isLoginDialogOpen = true;
+      return;
+    }
     const success = await aggregator.likePost(post.uri, post.cid);
     if (success) {
       // Optimistically update the UI
@@ -102,7 +119,11 @@
   }
 
   async function repostPost(post: AtprotoThreadPost) {
-    if (!aggregator) return;
+    if (!aggregator || !user.session) {
+      // Prompt user to login
+      user.isLoginDialogOpen = true;
+      return;
+    }
     const success = await aggregator.repostPost(post.uri, post.cid);
     if (success) {
       // Optimistically update the UI
@@ -198,6 +219,36 @@
             <p class="text-lg leading-relaxed whitespace-pre-wrap">{threadData.record.text}</p>
           </div>
 
+          <!-- Post Images -->
+          {#if threadData.images && threadData.images.length > 0}
+            <div class="mb-6">
+              {#if threadData.images.length === 1}
+                <img
+                  src={threadData.images[0]}
+                  alt="Post image"
+                  class="w-full max-w-2xl rounded-lg object-cover max-h-96"
+                  loading="lazy"
+                />
+              {:else}
+                <div class="grid gap-3 max-w-2xl {threadData.images.length === 2 ? 'grid-cols-2' : threadData.images.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}">
+                  {#each threadData.images as image, i}
+                    <img
+                      src={image}
+                      alt="Post image {i + 1}"
+                      class="w-full rounded-lg object-cover aspect-square {threadData.images.length > 4 && i >= 4 ? 'hidden' : ''}"
+                      loading="lazy"
+                    />
+                  {/each}
+                  {#if threadData.images.length > 4}
+                    <div class="flex items-center justify-center bg-base-300 rounded-lg aspect-square text-sm font-medium">
+                      +{threadData.images.length - 4} more
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {/if}
+
           <!-- Post Actions -->
           <div class="flex items-center gap-6 pt-4 border-t border-base-300">
             <button 
@@ -291,7 +342,7 @@
 </div>
 
 {#snippet replyComponent(reply: AtprotoThreadPost, depth: number, rootPost: AtprotoThreadPost)}
-  <div style="margin-left: {Math.min(depth * 24, 144)}px">
+  <div style="margin-left: {depth > 0 ? 20 : 0}px">
     <article class="dz-card bg-base-200 shadow-sm border-l-2 border-l-blue-400">
       <div class="dz-card-body p-4">
         <!-- Author Info -->
@@ -321,6 +372,36 @@
         <div class="mb-3">
           <p class="text-sm leading-relaxed whitespace-pre-wrap">{reply.record.text}</p>
         </div>
+
+        <!-- Reply Images -->
+        {#if reply.images && reply.images.length > 0}
+          <div class="mb-3">
+            {#if reply.images.length === 1}
+              <img
+                src={reply.images[0]}
+                alt="Reply image"
+                class="w-full max-w-md rounded-lg object-cover max-h-64"
+                loading="lazy"
+              />
+            {:else}
+              <div class="grid gap-2 max-w-md {reply.images.length === 2 ? 'grid-cols-2' : reply.images.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}">
+                {#each reply.images as image, i}
+                  <img
+                    src={image}
+                    alt="Reply image {i + 1}"
+                    class="w-full rounded-lg object-cover aspect-square {reply.images.length > 4 && i >= 4 ? 'hidden' : ''}"
+                    loading="lazy"
+                  />
+                {/each}
+                {#if reply.images.length > 4}
+                  <div class="flex items-center justify-center bg-base-300 rounded-lg aspect-square text-xs font-medium">
+                    +{reply.images.length - 4}
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/if}
 
         <!-- Reply Actions -->
         <div class="flex items-center gap-4 text-xs">
