@@ -4,7 +4,7 @@ import { Agent } from "@atproto/api";
 import toast from "svelte-french-toast";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
-import { atproto } from "./atproto.svelte";
+import { atproto, setOnSessionDeleted, setOnSessionUpdated } from "./atproto.svelte";
 import { lexicons } from "./lexicons";
 import { isTauri } from "@tauri-apps/api/core";
 import { navigate } from "$lib/utils.svelte";
@@ -123,6 +123,24 @@ export const user = {
     // Initialize oauth client.
     await atproto.init();
 
+    // Set up session event handlers using the setter functions
+    setOnSessionDeleted((cause: unknown) => {
+      toast.error("Session expired or revoked. Please log in again.");
+      user.logout();
+    });
+
+    setOnSessionUpdated((session: unknown) => {
+      // Update agent/session when tokens are refreshed
+      if (session && typeof session === 'object' && 'did' in session) {
+        // Create new agent with refreshed session
+        agent = new Agent(session as OAuthSession);
+        lexicons.forEach((l) => agent!.lex.add(l));
+        console.log("Session updated (tokens refreshed):", session);
+      } else {
+        console.log("Session updated (tokens refreshed):", session);
+      }
+    });
+
     // if there's a stored DID on localStorage and no session
     // restore the session
     const storedDid = localStorage.getItem("did");
@@ -208,5 +226,43 @@ export const user = {
     session = undefined;
     agent = undefined;
     navigate("home");
+  },
+
+  /**
+   * Check session health and provide feedback to user
+   */
+  async checkSessionHealth() {
+    if (!session || !agent) {
+      return { healthy: false, message: "No active session" };
+    }
+
+    try {
+      // Try to make a simple API call to test session validity
+      await agent.getProfile({ actor: agent.assertDid });
+      return { healthy: true, message: "Session is valid" };
+    } catch (error) {
+      console.error("Session health check failed:", error);
+      return { 
+        healthy: false, 
+        message: "Session appears to be invalid",
+        error 
+      };
+    }
+  },
+
+  /**
+   * Get session information for debugging/monitoring
+   */
+  getSessionInfo() {
+    if (!session) {
+      return { hasSession: false };
+    }
+
+    return {
+      hasSession: true,
+      did: session.did,
+      // Note: We don't expose token details for security
+      hasAgent: !!agent,
+    };
   },
 };

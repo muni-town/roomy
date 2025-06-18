@@ -38,7 +38,7 @@ importers:
         specifier: ^0.4.5
         version: 0.4.11
       '@atproto/oauth-client-browser':
-        specifier: ^0.3.7
+        specifier: ^0.3.23
         version: 0.3.23
       '@automerge/automerge-repo-storage-indexeddb':
         specifier: 2.0.0-collectionsync-alpha.1
