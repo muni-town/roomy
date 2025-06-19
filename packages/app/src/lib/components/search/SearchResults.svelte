@@ -15,6 +15,8 @@
     onMessageClick: (messageId: string) => void;
     onClose: () => void;
   } = $props();
+  
+  console.log("SearchResults component rendered with:", messages.length, "messages, query:", query);
 
   // Highlight the search term in the message content
   function highlightSearchTerm(content: string, searchTerm: string): string {

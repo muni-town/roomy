@@ -13,6 +13,8 @@
     onMessageClick: (messageId: string) => void;
     formatMessagePreview: (message: co.loaded<typeof Message>) => string;
   } = $props();
+  
+  // console.log("SearchResult component rendering for messageId:", messageId);
 
   const message = $derived(new CoState(Message, messageId));
 
@@ -33,6 +35,13 @@
       };
     }
     return profile.current;
+  });
+  
+  $effect(() => {
+    if (!message.current) {
+      console.log("SearchResult message not loaded yet:", messageId);
+    }
+    // console.log("SearchResult message loaded:", messageId, "message.current:", !!message.current, "authorData:", !!authorData);
   });
 </script>
 

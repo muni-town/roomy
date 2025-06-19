@@ -44,37 +44,41 @@
 
 <Tooltip text={space?.name} delayDuration={0} contentProps={{ side: "right", sideOffset: 2 }}>
   {#snippet child({ props })}
-    <button
-      {...props}
-      onclick={() => navigate({ space: space?.id || "" })}
-      value={space?.id}
-      class={[
-        "size-12 rounded-full relative group",
-        isActive &&
-          "outline-4 outline-accent-500 -outline-offset-4",
-        "transition-all duration-200",
-      ]}
-    >
-      <div
-        class={[
-          "flex items-center justify-center overflow-hidden",
-          !hasJoined && "opacity-50",
-        ]}
-      >
-        {#if space?.imageUrl}
-          <img
-            src={space?.imageUrl}
-            alt={space?.name || ""}
-            class="w-10 h-10 object-cover rounded-full object-center"
-          />
-        {:else if space && space.id}
-          <div class="w-10 h-10">
-            <AvatarMarble name={space.id} />
+    <ContextMenu items={[{ label: "Leave Space", icon: "mdi:exit-to-app", onselect: leaveSpace, destructive: true }]}>
+      {#snippet children()}
+        <button
+          {...props}
+          onclick={() => navigate({ space: space?.id || "" })}
+          value={space?.id}
+          class={[
+            "size-12 rounded-full relative group",
+            isActive &&
+              "outline-4 outline-accent-500 -outline-offset-4",
+            "transition-all duration-200",
+          ]}
+        >
+          <div
+            class={[
+              "flex items-center justify-center overflow-hidden",
+              !hasJoined && "opacity-50",
+            ]}
+          >
+            {#if space?.imageUrl}
+              <img
+                src={space?.imageUrl}
+                alt={space?.name || ""}
+                class="w-10 h-10 object-cover rounded-full object-center"
+              />
+            {:else if space && space.id}
+              <div class="w-10 h-10">
+                <AvatarMarble name={space.id} />
+              </div>
+            {:else}
+              <div class="w-10 h-10 bg-base-300 rounded-full"></div>
+            {/if}
           </div>
-        {:else}
-          <div class="w-10 h-10 bg-base-300 rounded-full"></div>
-        {/if}
-      </div>
-    </button>
+        </button>
+      {/snippet}
+    </ContextMenu>
   {/snippet}
 </Tooltip>

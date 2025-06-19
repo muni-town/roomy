@@ -8,8 +8,13 @@
   import { ScrollArea } from "bits-ui";
   import ChatMessage from "./ChatMessage.svelte";
   import { Virtualizer } from "virtua/svelte";
+  import { setContext } from "svelte";
+  import {
+    Message,
+    Timeline,
+  } from "$lib/jazz/schema";
+  import { derivePromise } from "$lib/utils.svelte";
   import { page } from "$app/state";
-  import { onMount, setContext } from "svelte";
   import { Account, co } from "jazz-tools";
   import type { Space } from "$lib/jazz/schema";
   import Icon from "@iconify/svelte";
@@ -24,6 +29,7 @@
     space,
     threadId,
     allowedToInteract,
+    threading,
   }: {
     timeline: string[];
     virtualizer?: Virtualizer<string>;
@@ -32,8 +38,10 @@
     space: co.loaded<typeof Space> | undefined | null;
     threadId?: string;
     allowedToInteract?: boolean;
+    threading?: { active: boolean; selectedMessages: string[] };
   } = $props();
 
+  let messagesLoaded = $derived(timeline && timeline.length >= 0);
   let showLastN = $state(50);
   let isAtBottom = $state(true);
   let showJumpToPresent = $derived(!isAtBottom && timeline.length > 0);
@@ -109,7 +117,16 @@
   </Button>
 {/if}
 
-<ScrollArea.Root type="scroll" class="h-full overflow-hidden">
+<div class="relative h-full">
+  
+  <ScrollArea.Root type="scroll" class="h-full overflow-hidden">
+    {#if !messagesLoaded}
+     <!-- Important: This area takes the place of the chat which pushes chat offscreen
+        which allows it to load then pop into place once the spinner is gone. -->
+     <div class="grid items-center justify-center h-full w-full bg-transparent">
+       <span class="dz-loading dz-loading-spinner"></span>
+     </div>
+   {/if}
   <ScrollArea.Viewport
     bind:ref={viewport}
     class="relative max-w-full w-full h-full"
@@ -162,6 +179,7 @@
                 {space}
                 {threadId}
                 {allowedToInteract}
+                {threading}
               />
             {/snippet}
           </Virtualizer>
@@ -179,3 +197,4 @@
   </ScrollArea.Scrollbar>
   <ScrollArea.Corner />
 </ScrollArea.Root>
+</div>

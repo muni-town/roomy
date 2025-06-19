@@ -1,7 +1,7 @@
-import { globalState } from "$lib/global.svelte";
 import { getProfile } from "$lib/profile.svelte";
 import { createCompleteExtensions } from "$lib/tiptap/editor";
-import { Message, Image, Category, TimelineItem } from "@roomy-chat/sdk";
+import { Message, Category } from "$lib/jazz/schema";
+import { co } from "jazz-tools";
 import { generateHTML } from "@tiptap/html";
 import TurndownService from "turndown";
 import * as zip from "@zip-js/zip-js";
@@ -33,16 +33,13 @@ const model = (() => {
   };
 })();
 
-export async function export_space() {
-  const space = await globalState.space;
-  const roomy = globalState.roomy;
-
+export async function export_space(space: any, account: any) {
   if (!space) {
     console.error("Space not found");
     return;
   }
-  if (!roomy) {
-    console.error("Roomy not found");
+  if (!account) {
+    console.error("Account not found");
     return;
   }
   const space_name = space.name;
@@ -69,10 +66,11 @@ export async function export_space() {
     });
   }
 
-  let space_icon;
+  let space_icon = null;
   if (space.image) {
-    const image = await roomy.open(Image, space.image);
-    space_icon = image.uri;
+    // TODO: Fix Image type - temporarily disabled
+    // const image = await account.open(Image, space.image);
+    // space_icon = image.uri;
   }
 
   const threads = await space.threads.items();
@@ -143,7 +141,7 @@ export async function export_space() {
 }
 
 async function export_timeline(
-  timeline: TimelineItem[],
+  timeline: any[],
   channelId: string,
   guildId: string,
 ) {

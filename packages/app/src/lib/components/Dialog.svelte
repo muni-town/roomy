@@ -29,10 +29,10 @@
     </Dialog.Trigger>
   {/if}
   <Dialog.Portal>
-    <Dialog.Overlay class="fixed inset-0 z-50 bg-black/80" />
+    <Dialog.Overlay class="fixed inset-0 z-[100] bg-black/80" />
 
     <Dialog.Content
-      class="fixed flex flex-col gap-4 p-4 w-dvw max-w-(--breakpoint-sm) left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%]"
+      class="fixed flex flex-col gap-4 p-4 w-dvw max-w-(--breakpoint-sm) left-[50%] top-[50%] z-[101] translate-x-[-50%] translate-y-[-50%]"
       onkeydown={(e) => {
         if (e.key === "Escape") {
           isDialogOpen = false;

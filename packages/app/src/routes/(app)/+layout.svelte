@@ -189,7 +189,7 @@
   <!-- Content -->
   <ServerBar
     spaces={me.current?.profile.joinedSpaces}
-    visible={isSpacesVisible.value || !page.params.space}
+    visible={isSpacesVisible.value || (page.params.space || page.url.pathname === "/messages")}
     me={me.current}
   />
   {#if page.params.space}
@@ -212,10 +212,10 @@
 <div
   class={[
     page.url.pathname === "/messages" ? "ml-24" : "",
-    isSidebarVisible.value || true
+    page.params.space && (isSidebarVisible.value || true)
       ? "sm:ml-84 z-40 bg-white shadow-lg border-l border-base-800/20 relative"
       : "",
-    "relative",
+    "h-screen overflow-hidden relative",
   ]}
 >
   {@render children()}

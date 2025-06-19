@@ -34,10 +34,10 @@
   );
 </script>
 
-<div class="flex flex-col gap-4 w-full overflow-y-auto">
+<div class="flex flex-col gap-4 w-full h-full overflow-y-auto">
   <UserProfile
     profile={{
-      id: user.current?.profile?.id,
+      id: page.params.user, // Use the account ID from URL
       avatar: user.current?.profile?.imageUrl,
       displayName: user.current?.profile?.name,
       handle: user.current?.profile?.blueskyHandle,

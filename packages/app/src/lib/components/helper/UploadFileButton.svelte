@@ -20,7 +20,7 @@
 </script>
 
 <button
-  class="p-1 rounded hover:bg-base-200 disabled:opacity-50"
+  class="p-2 rounded hover:bg-base-200 disabled:opacity-50"
   aria-label="Upload image"
   onclick={() => fileInput?.click()}
   tabindex="-1"

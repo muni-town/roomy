@@ -2,8 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { dmClient } from '$lib/dm.svelte';
   import Icon from "@iconify/svelte";
-  import { Avatar } from "bits-ui";
-  import { AvatarBeam } from "svelte-boring-avatars";
+  import DMProfileHeader from './DMProfileHeader.svelte';
   
   export let conversationId: string;
   
@@ -262,41 +261,15 @@
 </script>
 
 <div class="flex flex-col h-full bg-base-100 overflow-hidden">
-  <!-- Conversation Header -->
-  {#if conversationPartner}
-    <div class="flex-shrink-0 border-b border-base-300 p-4 bg-base-50">
-      <div class="flex items-center gap-3">
-        <Avatar.Root class="w-10 h-10">
-          <Avatar.Image 
-            src={conversationPartner.avatar} 
-            alt={conversationPartner.displayName || conversationPartner.handle}
-            class="rounded-full"
-          />
-          <Avatar.Fallback>
-            <AvatarBeam 
-              name={conversationPartner.did || conversationPartner.handle || 'unknown'} 
-              size={40}
-            />
-          </Avatar.Fallback>
-        </Avatar.Root>
-        <div class="flex-1">
-          <h3 class="font-semibold text-base-content">
-            {conversationPartner.displayName || conversationPartner.handle || 'Unknown User'}
-          </h3>
-          {#if conversationPartner.displayName && conversationPartner.handle}
-            <p class="text-sm text-base-content/60">@{conversationPartner.handle}</p>
-          {/if}
-        </div>
-      </div>
-    </div>
-  {/if}
+  <!-- Conversation Header with Activity Heatmap -->
+  <DMProfileHeader {conversationPartner} />
 
   {#if isLoading && messages.length === 0}
     <div class="flex-1 flex items-center justify-center">
-      <span class="dz-loading dz-loading-spinner dz-loading-lg text-primary"></span>
+      <span class="loading loading-spinner loading-lg text-primary"></span>
     </div>
   {:else if error}
-    <div class="dz-alert dz-alert-error m-4">
+    <div class="alert alert-error m-4">
       <Icon icon="tabler:alert-circle" />
       <div>
         <div class="font-bold">Error</div>
@@ -304,7 +277,7 @@
       </div>
       <button 
         onclick={loadMessages}
-        class="dz-btn dz-btn-sm dz-btn-outline"
+        class="btn btn-sm btn-outline"
       >
         Retry
       </button>
@@ -334,14 +307,14 @@
         </div>
       </div>
     {:else}
-      <div class="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 w-full">
+      <div class="flex-1 min-h-0 overflow-y-auto px-4 space-y-4">
         {#each messages as message}
-        <div class="dz-chat w-full {isCurrentUser(message.sender.did) ? 'dz-chat-end' : 'dz-chat-start'}" style="max-width: 100%; width: 100%;">
-          <div class="dz-chat-header text-xs opacity-50">
+        <div class="chat {isCurrentUser(message.sender.did) ? 'chat-end' : 'chat-start'}">
+          <div class="chat-header text-xs opacity-50">
             {message.sender.displayName || message.sender.handle}
             <time class="ml-1">{formatTimestamp(message.sentAt)}</time>
           </div>
-          <div class="dz-chat-bubble {isCurrentUser(message.sender.did) ? 'dz-chat-bubble-primary' : ''}" style="max-width: 100%; width: 100%;">
+          <div class="chat-bubble {isCurrentUser(message.sender.did) ? 'chat-bubble-primary' : 'chat-bubble-secondary'} prose max-w-none">
             {message.text}
           </div>
         </div>
@@ -350,7 +323,7 @@
       </div>
     {/if}
     
-    <div class="flex-shrink-0 border-t border-base-300 p-4">
+    <div class="flex-none border-t border-base-400/30 dark:border-base-300/10 p-4">
       <form 
         onsubmit={handleSendMessage}
         class="flex gap-2"
@@ -359,16 +332,16 @@
           type="text"
           bind:value={messageText}
           placeholder="Type a message..."
-          class="dz-input dz-input-bordered flex-1"
+          class="input input-bordered flex-1"
           disabled={isSending}
         />
         <button
           type="submit"
-          class="dz-btn dz-btn-primary dz-btn-square"
+          class="btn btn-primary btn-square"
           disabled={!messageText.trim() || isSending}
         >
           {#if isSending}
-            <span class="dz-loading dz-loading-spinner dz-loading-sm"></span>
+            <span class="loading loading-spinner loading-sm"></span>
           {:else}
             <Icon icon="tabler:send" class="w-4 h-4" />
           {/if}

@@ -63,21 +63,21 @@
   }
 </script>
 
-<div class="flex h-full bg-base-100 overflow-hidden">
-  <!-- Sidebar with conversation list -->
-  <div class="w-80 min-w-80 max-w-80 border-r border-base-300 bg-base-200 flex flex-col h-full">
+<div class="flex h-full bg-base-100">
+  <!-- Sidebar with conversation list - match SidebarMain style -->
+  <div class="w-80 flex-none border-r border-base-400/30 dark:border-base-300/10 bg-base-100 flex flex-col">
     <!-- Fixed header -->
-    <div class="flex-shrink-0 p-4 border-b border-base-300">
+    <div class="flex-none p-4 border-b border-base-400/30 dark:border-base-300/10">
       <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-base-content">Conversations</h2>
+        <h2 class="text-lg font-bold text-base-content">Conversations</h2>
         <button
           onclick={() => showNewConversationDialog = true}
-          class="dz-btn dz-btn-primary dz-btn-circle dz-btn-sm"
+          class="btn btn-primary btn-circle btn-sm"
           title="New conversation"
           disabled={isCreatingConversation}
         >
           {#if isCreatingConversation}
-            <span class="dz-loading dz-loading-spinner dz-loading-xs"></span>
+            <span class="loading loading-spinner loading-xs"></span>
           {:else}
             <Icon icon="tabler:plus" class="text-sm" />
           {/if}
@@ -86,7 +86,7 @@
     </div>
     
     <!-- Scrollable conversation list -->
-    <div class="flex-1 min-h-0 overflow-hidden">
+    <div class="flex-1 min-h-0 overflow-y-auto">
       <DMList 
         onConversationSelected={handleConversationSelected} 
         selectedConversationId={selectedConversationId}
@@ -95,7 +95,7 @@
   </div>
   
   <!-- Main content area for messages -->
-  <div class="flex-1 flex flex-col bg-base-100 h-full overflow-hidden w-full">
+  <div class="flex-1 flex flex-col bg-base-100 min-w-0">
     
     {#if isCreatingConversation && !selectedConversationId}
       <div class="flex items-center justify-center h-full">
@@ -188,16 +188,3 @@
   </Dialog>
 </div>
 
-<style>
-  :global(body) {
-    @apply h-full;
-  }
-  
-  :global(html) {
-    @apply h-full;
-  }
-  
-  :global(#app) {
-    @apply h-full;
-  }
-</style>
