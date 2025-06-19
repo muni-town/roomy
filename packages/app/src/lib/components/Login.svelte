@@ -6,6 +6,7 @@
   import AvatarImage from "$lib/components/AvatarImage.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import Icon from "@iconify/svelte";
+  import { onMount } from "svelte";
 
   let handleInput = $state("");
   let loginLoading = $state(false);
@@ -38,6 +39,14 @@
     }
     signupLoading = false;
   }
+
+  onMount(() => {
+    // Autofill handle input with last used handle if available and input is empty
+    const lastHandle = user.getLastUsedHandle();
+    if (!handleInput && lastHandle) {
+      handleInput = lastHandle;
+    }
+  });
 </script>
 
 <Dialog

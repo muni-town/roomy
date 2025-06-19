@@ -164,8 +164,25 @@ export const user = {
     // }
   },
 
+  /**
+   * Store the last used handle in localStorage for autofill.
+   */
+  setLastUsedHandle(handle: string) {
+    // Always overwrite the stored handle with the new one
+    localStorage.setItem("lastUsedHandle", handle);
+  },
+
+  /**
+   * Retrieve the last used handle from localStorage for autofill.
+   */
+  getLastUsedHandle(): string | null {
+    return localStorage.getItem("lastUsedHandle");
+  },
+
   /** Login a user using their handle, replacing the existing session if any. */
   async loginWithHandle(handle: string) {
+    // Save the handle for autofill before redirect
+    this.setLastUsedHandle(handle);
     localStorage.setItem("redirectAfterAuth", window.location.pathname);
     const url = await atproto.oauth.authorize(handle, {
       scope: atproto.scope,
@@ -223,6 +240,8 @@ export const user = {
   /** Logout the user. */
   logout() {
     localStorage.removeItem("did");
+    // Optionally clear last used handle on logout:
+    // localStorage.removeItem("lastUsedHandle");
     session = undefined;
     agent = undefined;
     navigate("home");
