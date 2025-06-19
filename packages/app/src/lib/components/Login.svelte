@@ -17,6 +17,10 @@
   // Latest login state
   let latestLogin = $state<{ handle: string; avatarUrl?: string; displayName?: string } | null>(null);
 
+  // UI feedback state
+  let autofillActive = $state(false);
+  let pulseLoginBtn = $state(false);
+
   // Load latest login from localStorage on mount
   $effect(() => {
     const saved = localStorage.getItem("latestLogin");
@@ -31,6 +35,14 @@
   function autofillHandle() {
     if (latestLogin) {
       handleInput = latestLogin.handle;
+      autofillActive = true;
+      pulseLoginBtn = true;
+      setTimeout(() => {
+        autofillActive = false;
+      }, 900);
+      setTimeout(() => {
+        pulseLoginBtn = false;
+      }, 900);
     }
   }
 
@@ -127,14 +139,14 @@
       <input
         bind:value={handleInput}
         placeholder="Handle (eg alice.bsky.social)"
-        class="dz-input w-full"
+        class={`dz-input w-full ${autofillActive ? 'ring-2 ring-primary/80 transition-all duration-300' : ''}`}
         type="text"
         id="handle"
         required
       />
       <Button.Root
         disabled={loadingAuth || !handleInput}
-        class="dz-btn dz-btn-primary"
+        class={`dz-btn dz-btn-primary ${pulseLoginBtn ? 'animate-pulse' : ''}`}
       >
         {#if loginLoading}
           <span class="dz-loading dz-loading-spinner"></span>
