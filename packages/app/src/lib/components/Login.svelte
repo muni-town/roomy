@@ -6,7 +6,6 @@
   import AvatarImage from "$lib/components/AvatarImage.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import Icon from "@iconify/svelte";
-  import { onMount } from "svelte";
 
   let handleInput = $state("");
   let loginLoading = $state(false);
@@ -15,12 +14,43 @@
 
   let loginError = $state("");
 
+  // Latest login state
+  let latestLogin = $state<{ handle: string; avatarUrl?: string; displayName?: string } | null>(null);
+
+  // Load latest login from localStorage on mount
+  $effect(() => {
+    const saved = localStorage.getItem("latestLogin");
+    if (saved) {
+      try {
+        latestLogin = JSON.parse(saved);
+      } catch {}
+    }
+  });
+
+  // Autofill handle when latest login is clicked
+  function autofillHandle() {
+    if (latestLogin) {
+      handleInput = latestLogin.handle;
+    }
+  }
+
   async function login() {
     loginLoading = true;
 
     try {
       handleInput = cleanHandle(handleInput);
       await user.loginWithHandle(handleInput);
+      // Save latest login info after successful login
+      // (Assume user.profile.data is updated after login)
+      if (user.profile.data) {
+        const info = {
+          handle: user.profile.data.handle,
+          avatarUrl: user.profile.data.avatar,
+          displayName: user.profile.data.displayName,
+        };
+        localStorage.setItem("latestLogin", JSON.stringify(info));
+        latestLogin = info;
+      }
     } catch (e: unknown) {
       console.error(e);
       loginError = e instanceof Error ? e.message.toString() : "Unknown error";
@@ -39,14 +69,6 @@
     }
     signupLoading = false;
   }
-
-  onMount(() => {
-    // Autofill handle input with last used handle if available and input is empty
-    const lastHandle = user.getLastUsedHandle();
-    if (!handleInput && lastHandle) {
-      handleInput = lastHandle;
-    }
-  });
 </script>
 
 <Dialog
@@ -71,6 +93,21 @@
       </Button.Root>
     </section>
   {:else}
+    <!-- Quick access section for latest login -->
+    {#if latestLogin}
+      <div class="flex flex-col gap-2 mb-4">
+        <span class="text-base font-semibold">Quick access</span>
+        <button type="button" class="flex items-center gap-3 rounded-xl border border-base-200 bg-base-100 px-4 py-2 hover:bg-base-200 transition" onclick={autofillHandle}>
+          <AvatarImage
+            className="size-8"
+            handle={latestLogin.handle}
+            avatarUrl={latestLogin.avatarUrl}
+          />
+          <span class="font-medium">{latestLogin.displayName || latestLogin.handle}</span>
+          <span class="text-xs text-base-content/60 ml-2">{latestLogin.handle}</span>
+        </button>
+      </div>
+    {/if}
     <Button.Root
       onclick={signup}
       disabled={loadingAuth}

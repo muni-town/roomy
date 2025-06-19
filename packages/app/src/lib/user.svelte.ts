@@ -28,6 +28,15 @@ let profile: { data: ProfileViewDetailed | undefined } = $derived.by(() => {
       .getProfile({ actor: agent.assertDid })
       .then((res) => {
         data = res.data;
+        // Save latest login info after profile is fetched
+        if (data) {
+          const info = {
+            handle: data.handle,
+            avatarUrl: data.avatar,
+            displayName: data.displayName,
+          };
+          localStorage.setItem("latestLogin", JSON.stringify(info));
+        }
       })
       .catch((error) => {
         console.error("Failed to fetch profile:", error);
@@ -96,6 +105,15 @@ export const user = {
       localStorage.setItem("did", newSession.did);
       agent = new Agent(newSession);
       lexicons.forEach((l) => agent!.lex.add(l));
+      // Save latest login info if profile is available
+      if (profile.data) {
+        const info = {
+          handle: profile.data.handle,
+          avatarUrl: profile.data.avatar,
+          displayName: profile.data.displayName,
+        };
+        localStorage.setItem("latestLogin", JSON.stringify(info));
+      }
     } else {
       this.logout();
     }
@@ -164,25 +182,8 @@ export const user = {
     // }
   },
 
-  /**
-   * Store the last used handle in localStorage for autofill.
-   */
-  setLastUsedHandle(handle: string) {
-    // Always overwrite the stored handle with the new one
-    localStorage.setItem("lastUsedHandle", handle);
-  },
-
-  /**
-   * Retrieve the last used handle from localStorage for autofill.
-   */
-  getLastUsedHandle(): string | null {
-    return localStorage.getItem("lastUsedHandle");
-  },
-
   /** Login a user using their handle, replacing the existing session if any. */
   async loginWithHandle(handle: string) {
-    // Save the handle for autofill before redirect
-    this.setLastUsedHandle(handle);
     localStorage.setItem("redirectAfterAuth", window.location.pathname);
     const url = await atproto.oauth.authorize(handle, {
       scope: atproto.scope,
@@ -240,8 +241,6 @@ export const user = {
   /** Logout the user. */
   logout() {
     localStorage.removeItem("did");
-    // Optionally clear last used handle on logout:
-    // localStorage.removeItem("lastUsedHandle");
     session = undefined;
     agent = undefined;
     navigate("home");
