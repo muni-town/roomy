@@ -12,6 +12,20 @@ const scope = "atproto transition:generic transition:chat.bsky";
 
 let oauth: BrowserOAuthClient | undefined = $state();
 
+/**
+ * Callback registry for session events
+ */
+const callbacks = {
+  onSessionDeleted: undefined as ((cause: unknown) => void) | undefined,
+};
+
+/**
+ * Set callback to be called when a session is deleted (invalidated, expired, or revoked).
+ */
+export function setOnSessionDeleted(cb: ((cause: unknown) => void) | undefined) {
+  callbacks.onSessionDeleted = cb;
+}
+
 /** The AtProto store. */
 export const atproto = {
   /** The scope required by the app when logging in. */
@@ -81,5 +95,22 @@ export const atproto = {
       handleResolver: "https://resolver.roomy.chat",
       clientMetadata,
     });
+
+    // Listen for session invalidation (deleted event)
+    oauth.addEventListener(
+      "deleted",
+      (event: CustomEvent<{ sub: string; cause: unknown }>) => {
+        if (callbacks.onSessionDeleted) {
+          callbacks.onSessionDeleted(event.detail.cause);
+        } else {
+          // Fallback: log to console
+          console.error(
+            `Session for ${event.detail.sub} is no longer available (cause:`,
+            event.detail.cause,
+            ")"
+          );
+        }
+      }
+    );
   },
 };

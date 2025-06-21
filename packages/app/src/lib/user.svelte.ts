@@ -4,7 +4,7 @@ import { Agent } from "@atproto/api";
 import toast from "svelte-french-toast";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
-import { atproto } from "./atproto.svelte";
+import { atproto, setOnSessionDeleted } from "./atproto.svelte";
 import { lexicons } from "./lexicons";
 import { isTauri } from "@tauri-apps/api/core";
 import { navigate } from "$lib/utils.svelte";
@@ -28,6 +28,15 @@ let profile: { data: ProfileViewDetailed | undefined } = $derived.by(() => {
       .getProfile({ actor: agent.assertDid })
       .then((res) => {
         data = res.data;
+        // Save latest login info after profile is fetched
+        if (data) {
+          const info = {
+            handle: data.handle,
+            avatarUrl: data.avatar,
+            displayName: data.displayName,
+          };
+          localStorage.setItem("latestLogin", JSON.stringify(info));
+        }
       })
       .catch((error) => {
         console.error("Failed to fetch profile:", error);
@@ -96,6 +105,15 @@ export const user = {
       localStorage.setItem("did", newSession.did);
       agent = new Agent(newSession);
       lexicons.forEach((l) => agent!.lex.add(l));
+      // Save latest login info if profile is available
+      if (profile.data) {
+        const info = {
+          handle: profile.data.handle,
+          avatarUrl: profile.data.avatar,
+          displayName: profile.data.displayName,
+        };
+        localStorage.setItem("latestLogin", JSON.stringify(info));
+      }
     } else {
       this.logout();
     }
@@ -122,6 +140,12 @@ export const user = {
 
     // Initialize oauth client.
     await atproto.init();
+
+    // Set up session event handlers using the setter functions
+    setOnSessionDeleted((cause: unknown) => {
+      toast.error("Session expired or revoked. Please log in again.");
+      user.logout();
+    });
 
     // if there's a stored DID on localStorage and no session
     // restore the session

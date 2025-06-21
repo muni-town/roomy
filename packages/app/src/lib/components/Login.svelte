@@ -14,18 +14,51 @@
 
   let loginError = $state("");
 
+  // Latest login state
+  let latestLogin = $state<{ handle: string; avatarUrl?: string; displayName?: string } | null>(null);
+
+  // UI feedback state
+  let autofillActive = $state(false);
+  let pulseLoginBtn = $state(false);
+
+  // Load latest login from localStorage on mount
+  $effect(() => {
+    const saved = localStorage.getItem("latestLogin");
+    if (saved) {
+      try {
+        latestLogin = JSON.parse(saved);
+      } catch {}
+    }
+  });
+
+  // Autofill handle when latest login is clicked
+  function autofillHandle() {
+    if (latestLogin) {
+      handleInput = latestLogin.handle;
+      autofillActive = true;
+      pulseLoginBtn = true;
+      setTimeout(() => {
+        autofillActive = false;
+      }, 900);
+      setTimeout(() => {
+        pulseLoginBtn = false;
+      }, 900);
+    }
+  }
+
   async function login() {
     loginLoading = true;
 
     try {
       handleInput = cleanHandle(handleInput);
       await user.loginWithHandle(handleInput);
+      // Note: Code after this point never executes due to redirect to Bluesky OAuth
+      // Latest login info is already saved in user.svelte.ts when session is set
     } catch (e: unknown) {
       console.error(e);
       loginError = e instanceof Error ? e.message.toString() : "Unknown error";
+      loginLoading = false;
     }
-
-    loginLoading = false;
   }
 
   async function signup() {
@@ -62,6 +95,21 @@
       </Button.Root>
     </section>
   {:else}
+    <!-- Quick access section for latest login -->
+    {#if latestLogin}
+      <div class="flex flex-col gap-2 mb-4">
+        <span class="text-base font-semibold">Quick access</span>
+        <button type="button" class="flex items-center gap-3 rounded-xl border border-base-200 bg-base-100 px-4 py-2 hover:bg-base-200 transition" onclick={autofillHandle}>
+          <AvatarImage
+            className="size-8"
+            handle={latestLogin.handle}
+            avatarUrl={latestLogin.avatarUrl}
+          />
+          <span class="font-medium">{latestLogin.displayName || latestLogin.handle}</span>
+          <span class="text-xs text-base-content/60 ml-2">{latestLogin.handle}</span>
+        </button>
+      </div>
+    {/if}
     <Button.Root
       onclick={signup}
       disabled={loadingAuth}
@@ -81,14 +129,14 @@
       <input
         bind:value={handleInput}
         placeholder="Handle (eg alice.bsky.social)"
-        class="dz-input w-full"
+        class={`dz-input w-full ${autofillActive ? 'ring-2 ring-primary/80 transition-all duration-300' : ''}`}
         type="text"
         id="handle"
         required
       />
       <Button.Root
         disabled={loadingAuth || !handleInput}
-        class="dz-btn dz-btn-primary"
+        class={`dz-btn dz-btn-primary ${pulseLoginBtn ? 'animate-pulse' : ''}`}
       >
         {#if loginLoading}
           <span class="dz-loading dz-loading-spinner"></span>
