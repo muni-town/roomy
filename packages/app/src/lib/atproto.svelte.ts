@@ -17,7 +17,6 @@ let oauth: BrowserOAuthClient | undefined = $state();
  */
 const callbacks = {
   onSessionDeleted: undefined as ((cause: unknown) => void) | undefined,
-  onSessionUpdated: undefined as ((session: unknown) => void) | undefined,
 };
 
 /**
@@ -25,13 +24,6 @@ const callbacks = {
  */
 export function setOnSessionDeleted(cb: ((cause: unknown) => void) | undefined) {
   callbacks.onSessionDeleted = cb;
-}
-
-/**
- * Set callback to be called when a session is updated (tokens refreshed).
- */
-export function setOnSessionUpdated(cb: ((session: unknown) => void) | undefined) {
-  callbacks.onSessionUpdated = cb;
 }
 
 /** The AtProto store. */
@@ -117,19 +109,6 @@ export const atproto = {
             event.detail.cause,
             ")"
           );
-        }
-      }
-    );
-
-    // Listen for session updates (token refreshes)
-    oauth.addEventListener(
-      "updated",
-      (event: CustomEvent<unknown>) => {
-        if (callbacks.onSessionUpdated) {
-          callbacks.onSessionUpdated(event.detail);
-        } else {
-          // Fallback: log to console
-          console.log("Session was updated (tokens refreshed):", event.detail);
         }
       }
     );

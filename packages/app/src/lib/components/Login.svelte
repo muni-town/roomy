@@ -52,23 +52,13 @@
     try {
       handleInput = cleanHandle(handleInput);
       await user.loginWithHandle(handleInput);
-      // Save latest login info after successful login
-      // (Assume user.profile.data is updated after login)
-      if (user.profile.data) {
-        const info = {
-          handle: user.profile.data.handle,
-          avatarUrl: user.profile.data.avatar,
-          displayName: user.profile.data.displayName,
-        };
-        localStorage.setItem("latestLogin", JSON.stringify(info));
-        latestLogin = info;
-      }
+      // Note: Code after this point never executes due to redirect to Bluesky OAuth
+      // Latest login info is already saved in user.svelte.ts when session is set
     } catch (e: unknown) {
       console.error(e);
       loginError = e instanceof Error ? e.message.toString() : "Unknown error";
+      loginLoading = false;
     }
-
-    loginLoading = false;
   }
 
   async function signup() {
