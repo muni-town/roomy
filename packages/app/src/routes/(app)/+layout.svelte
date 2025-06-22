@@ -17,6 +17,8 @@
   import { LastReadList, RoomyAccount } from "$lib/jazz/schema";
   import { wordlist } from "$lib/jazz/wordlist";
   import { addToAllAccountsList } from "$lib/jazz/utils";
+  import SmallSidebar from "$lib/components/ui/SmallSidebar.svelte";
+  import BigSidebar from "$lib/components/ui/BigSidebar.svelte";
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
@@ -177,24 +179,24 @@
   <!-- <RenderScan /> -->
 {/if}
 
-<!-- Container -->
 <Toaster />
+
 <div
-  class="{page.params.space &&
-    (isSidebarVisible.value
-      ? 'flex z-1 absolute w-full'
-      : 'hidden')} sm:w-auto sm:relative sm:flex h-full overflow-clip gap-0 z-50
-      "
+  class={[
+    "isolate fixed top-0 bottom-0 left-0 z-20 bg-base-100/50 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none",
+    isSidebarVisible.value ? "block" : "hidden sm:block",
+  ]}
 >
-  <!-- Content -->
-  <ServerBar
-    spaces={me.current?.profile.joinedSpaces}
-    visible={isSpacesVisible.value || (page.params.space || page.url.pathname === "/messages")}
-    me={me.current}
-  />
-  {#if page.params.space}
-    <SidebarMain />
-  {/if}
+  <div class="flex h-full w-fit">
+    <SmallSidebar>
+      <ServerBar spaces={me.current?.profile.joinedSpaces} me={me.current} />
+    </SmallSidebar>
+    {#if page.params.space}
+      <BigSidebar>
+        <SidebarMain />
+      </BigSidebar>
+    {/if}
+  </div>
   <!-- Overlay -->
   {#if page.params.space}
     <button
@@ -202,18 +204,16 @@
         isSidebarVisible.toggle();
       }}
       aria-label="toggle navigation"
-      class="{!isSidebarVisible.value
-        ? 'hidden w-full'
-        : 'sm:hidden'} cursor-pointer backdrop-blur-sm grow-2 h-full bg-black/10"
+      class="absolute inset-0 cursor-pointer sm:hidden"
     ></button>
   {/if}
 </div>
 
 <div
   class={[
-    page.url.pathname === "/messages" ? "ml-24" : "",
+    page.url.pathname === "/messages" ? "ml-18" : "",
     page.params.space && (isSidebarVisible.value || true)
-      ? "sm:ml-84 z-40 bg-white shadow-lg border-l border-base-800/20 relative"
+      ? "sm:ml-82 bg-white relative"
       : "",
     "h-screen overflow-hidden relative",
   ]}

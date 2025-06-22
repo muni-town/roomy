@@ -7,28 +7,33 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@theme {
-	--color-base-50: var(--color-zinc-50);
-	--color-base-100: var(--color-zinc-100);
-	--color-base-200: var(--color-zinc-200);
-	--color-base-300: var(--color-zinc-300);
-	--color-base-400: var(--color-zinc-400);
-	--color-base-500: var(--color-zinc-500);
-	--color-base-600: var(--color-zinc-600);
-	--color-base-700: var(--color-zinc-700);
-	--color-base-800: var(--color-zinc-800);
-	--color-base-900: var(--color-zinc-900);
-	--color-base-950: var(--color-zinc-950);
+/* for debugging */
+/* * {
+  outline: 1px solid red;
+} */
 
-	--color-accent-50: var(--color-emerald-50);
-	--color-accent-100: var(--color-emerald-100);
-	--color-accent-200: var(--color-emerald-200);
-	--color-accent-300: var(--color-emerald-300);
-	--color-accent-400: var(--color-emerald-400);
-	--color-accent-500: var(--color-emerald-500);
-	--color-accent-600: var(--color-emerald-600);
-	--color-accent-700: var(--color-emerald-700);
-	--color-accent-800: var(--color-emerald-800);
-	--color-accent-900: var(--color-emerald-900);
-	--color-accent-950: var(--color-emerald-950);
+@theme {
+	--color-base-50: var(--color-stone-50);
+	--color-base-100: var(--color-stone-100);
+	--color-base-200: var(--color-stone-200);
+	--color-base-300: var(--color-stone-300);
+	--color-base-400: var(--color-stone-400);
+	--color-base-500: var(--color-stone-500);
+	--color-base-600: var(--color-stone-600);
+	--color-base-700: var(--color-stone-700);
+	--color-base-800: var(--color-stone-800);
+	--color-base-900: var(--color-stone-900);
+	--color-base-950: var(--color-stone-950);
+
+	--color-accent-50: var(--color-pink-50);
+	--color-accent-100: var(--color-pink-100);
+	--color-accent-200: var(--color-pink-200);
+	--color-accent-300: var(--color-pink-300);
+	--color-accent-400: var(--color-pink-400);
+	--color-accent-500: var(--color-pink-500);
+	--color-accent-600: var(--color-pink-600);
+	--color-accent-700: var(--color-pink-700);
+	--color-accent-800: var(--color-pink-800);
+	--color-accent-900: var(--color-pink-900);
+	--color-accent-950: var(--color-pink-950);
 }

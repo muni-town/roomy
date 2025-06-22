@@ -9,10 +9,7 @@
   import ChatMessage from "./ChatMessage.svelte";
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
-  import {
-    Message,
-    Timeline,
-  } from "$lib/jazz/schema";
+  import { Message, Timeline } from "$lib/jazz/schema";
   import { derivePromise } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import { Account, co } from "jazz-tools";
@@ -118,35 +115,36 @@
 {/if}
 
 <div class="relative h-full">
-  
   <ScrollArea.Root type="scroll" class="h-full overflow-hidden">
     {#if !messagesLoaded}
-     <!-- Important: This area takes the place of the chat which pushes chat offscreen
+      <!-- Important: This area takes the place of the chat which pushes chat offscreen
         which allows it to load then pop into place once the spinner is gone. -->
-     <div class="grid items-center justify-center h-full w-full bg-transparent">
-       <span class="dz-loading dz-loading-spinner"></span>
-     </div>
-   {/if}
-  <ScrollArea.Viewport
-    bind:ref={viewport}
-    class="relative max-w-full w-full h-full"
-    onscroll={handleScroll}
-  >
-    <div class="flex flex-col w-full h-full pb-16">
-      {#if slicedTimeline.length < timeline.length}
-        <button
-          class="btn btn-sm btn-outline"
-          onclick={() => {
-            isShifting = true;
-            showLastN += 100;
-            setTimeout(() => {
-              isShifting = false;
-            }, 1000);
-          }}>Load More</button
-        >
-      {/if}
-      <ol class="flex flex-col gap-2 max-w-full">
-        <!--
+      <div
+        class="grid items-center justify-center h-full w-full bg-transparent"
+      >
+        <span class="dz-loading dz-loading-spinner"></span>
+      </div>
+    {/if}
+    <ScrollArea.Viewport
+      bind:ref={viewport}
+      class="relative max-w-full w-full h-full"
+      onscroll={handleScroll}
+    >
+      <div class="flex flex-col w-full h-full pb-16">
+        {#if slicedTimeline.length < timeline.length}
+          <button
+            class="btn btn-sm btn-outline"
+            onclick={() => {
+              isShifting = true;
+              showLastN += 100;
+              setTimeout(() => {
+                isShifting = false;
+              }, 1000);
+            }}>Load More</button
+          >
+        {/if}
+        <ol class="flex flex-col gap-2 max-w-full">
+          <!--
         This use of `key` needs explaining. `key` causes the components below
         it to be deleted and re-created when the expression passed to it is changed.
         This means that every time the `viewport` binding si updated, the virtualizer
@@ -161,40 +159,40 @@
         assigned, so that it's scroll integration works properly.
       -->
 
-        {#key viewport}
-          <Virtualizer
-            bind:this={virtualizer}
-            data={slicedTimeline || []}
-            getKey={(messageId) => messageId}
-            scrollRef={viewport}
-            overscan={50}
-            shift={isShifting}
-          >
-            {#snippet children(messageId: string, index: number)}
-              <ChatMessage
-                {messageId}
-                previousMessageId={slicedTimeline[index - 1]}
-                {isAdmin}
-                {admin}
-                {space}
-                {threadId}
-                {allowedToInteract}
-                {threading}
-              />
-            {/snippet}
-          </Virtualizer>
-        {/key}
-      </ol>
-    </div>
-  </ScrollArea.Viewport>
-  <ScrollArea.Scrollbar
-    orientation="vertical"
-    class="flex h-full w-2.5 touch-none select-none rounded-full border-l border-l-transparent p-px transition-all hover:w-3 hover:bg-dark-10 mr-1"
-  >
-    <ScrollArea.Thumb
-      class="relative flex-1 rounded-full bg-base-300 transition-opacity"
-    />
-  </ScrollArea.Scrollbar>
-  <ScrollArea.Corner />
-</ScrollArea.Root>
+          {#key viewport}
+            <Virtualizer
+              bind:this={virtualizer}
+              data={slicedTimeline || []}
+              getKey={(messageId) => messageId}
+              scrollRef={viewport}
+              overscan={50}
+              shift={isShifting}
+            >
+              {#snippet children(messageId: string, index: number)}
+                <ChatMessage
+                  {messageId}
+                  previousMessageId={slicedTimeline[index - 1]}
+                  {isAdmin}
+                  {admin}
+                  {space}
+                  {threadId}
+                  {allowedToInteract}
+                  {threading}
+                />
+              {/snippet}
+            </Virtualizer>
+          {/key}
+        </ol>
+      </div>
+    </ScrollArea.Viewport>
+    <ScrollArea.Scrollbar
+      orientation="vertical"
+      class="flex h-full w-2.5 touch-none select-none rounded-full border-l border-l-transparent p-px transition-all hover:w-3 hover:bg-dark-10 mr-1"
+    >
+      <ScrollArea.Thumb
+        class="relative flex-1 rounded-full bg-base-300 transition-opacity"
+      />
+    </ScrollArea.Scrollbar>
+    <ScrollArea.Corner />
+  </ScrollArea.Root>
 </div>

@@ -26,7 +26,6 @@
   } from "$lib/utils/atproToFeeds";
   import { Category, RoomyAccount, Space } from "$lib/jazz/schema";
   import { co } from "jazz-tools";
-  import SpaceSidebar from "./ui/SpaceSidebar.svelte";
 
   let space = $derived(
     page.params?.space
@@ -219,11 +218,12 @@
     e.preventDefault();
     if (!space?.current) return;
 
-    const channel = newChannelType === "feeds" 
-      ? createFeedsChannel(newChannelName, selectedFeeds)
-      : newChannelType === "links"
-      ? createLinksChannel(newChannelName)
-      : createChannel(newChannelName, newChannelType);
+    const channel =
+      newChannelType === "feeds"
+        ? createFeedsChannel(newChannelName, selectedFeeds)
+        : newChannelType === "links"
+          ? createLinksChannel(newChannelName)
+          : createChannel(newChannelName, newChannelType);
 
     space.current?.channels?.push(channel);
 
@@ -269,211 +269,214 @@
   }
 </script>
 
-<SpaceSidebar>
-  <!-- Header -->
-  <div
-    class="w-full pt-4 pb-1 px-2 h-fit flex mb-4 justify-between items-center"
-  >
-    <ToggleSidebarIcon class="pr-2" open={isSpacesVisible} />
-    <h1 class="text-sm font-bold text-base-content truncate flex-grow">
-      {space?.current?.name && space?.current?.name !== "Unnamed"
-        ? space.current?.name
-        : ""}
-    </h1>
-    <div class="flex items-center gap-1">
-      {#if userIsAdmin}
-        <SpaceSettingsDialog />
-      {/if}
-    </div>
+<!-- Header -->
+<div class="w-full pt-4 pb-1 px-2 h-fit flex mb-4 justify-between items-center">
+  <ToggleSidebarIcon class="pr-2" open={isSpacesVisible} />
+  <h1 class="text-sm font-bold text-base-content truncate flex-grow">
+    {space?.current?.name && space?.current?.name !== "Unnamed"
+      ? space.current?.name
+      : ""}
+  </h1>
+  <div class="flex items-center gap-1">
+    {#if userIsAdmin}
+      <SpaceSettingsDialog />
+    {/if}
   </div>
+</div>
 
-  <!-- Space description -->
-  {#if space?.current?.description}
-    <p class="text-xs text-base-content/70 line-clamp-2">
-      {space.current.description}
-    </p>
-  {/if}
+<!-- Space description -->
+{#if space?.current?.description}
+  <p class="text-xs text-base-content/70 line-clamp-2">
+    {space.current.description}
+  </p>
+{/if}
 
-  {#if isSpaceAdmin(space.current)}
-    <menu class="p-0 w-full justify-between px-2 flex flex-col gap-2 mb-4">
-      <Dialog title="Create Channel" bind:isDialogOpen={showNewChannelDialog}>
-        {#snippet dialogTrigger()}
-          <Button
-            variant="secondary"
-            title="Create Channel"
-            class="w-full justify-start"
-          >
-            <Icon icon="basil:comment-plus-solid" class="size-6" />
-            Create Channel
-          </Button>
-        {/snippet}
+{#if isSpaceAdmin(space?.current)}
+  <menu class="p-0 w-full justify-between px-2 flex flex-col gap-2 mb-4">
+    <Dialog title="Create Channel" bind:isDialogOpen={showNewChannelDialog}>
+      {#snippet dialogTrigger()}
+        <Button
+          variant="secondary"
+          title="Create Channel"
+          class="w-full justify-start"
+        >
+          <Icon icon="basil:comment-plus-solid" class="size-6" />
+          Create Channel
+        </Button>
+      {/snippet}
 
-        <div class="max-h-[80vh] overflow-y-auto">
-          <form
-            id="createChannel"
-            class="flex flex-col gap-4"
-            onsubmit={createChannelSubmit}
-          >
-           <label class="dz-input w-full">
-             <span class="dz-label">Name</span>
-             <input
-               bind:value={newChannelName}
-               use:focusOnRender
-               placeholder={newChannelType === "feeds" ? "AT Proto Feeds" : "General"}
-               type="text"
-               required
-             />
-           </label>
-           <label class="dz-select w-full">
-             <span class="dz-label">Type</span>
-             <select bind:value={newChannelType}>
-               <option value="chat">💬 Chat Channel</option>
-               <option value="feeds">📡 Feeds Channel</option>
-               <option value="links">🔗 Links Channel</option>
-             </select>
-           </label>
-           {#if newChannelType === "feeds"}
-             <div class="text-sm text-base-content/70 p-2 bg-base-200 rounded">
-               <Icon icon="information-circle" class="inline mr-1" />
-               This channel will automatically display AT Proto feed posts instead of regular chat messages.
-             </div>
-           {:else if newChannelType === "links"}
-             <div class="text-sm text-base-content/70 p-2 bg-base-200 rounded">
-               <Icon icon="information-circle" class="inline mr-1" />
-               This channel will automatically discover and display all links shared across channels in this space.
-             </div>
-           {/if}
-           {#if newChannelType === "feeds"}
-             <div class="space-y-3">
-               <h3 class="text-sm font-semibold">Select Feeds</h3>
-               
-               <!-- Available feeds -->
-               <div class="space-y-2">
-                 {#each Object.entries(ATPROTO_FEED_CONFIG) as [uri, config]}
-                   <label class="flex items-center gap-2 cursor-pointer">
-                     <input
-                        type="checkbox"
-                        checked={selectedFeeds.includes(uri)}
-                        onchange={() => toggleFeed(uri)}
-                        class="checkbox checkbox-sm"
-                      />
-                      <div class="flex-1 min-w-0">
-                        <div class="text-sm font-medium">{config.name}</div>
-                        <div class="text-xs text-base-content/60 truncate">
-                          {config.url}
-                        </div>
-                      </div>
-                   </label>
-                 {/each}
-               </div>
-
-                <!-- Custom feeds that aren't in the default list -->
-                {#each selectedFeeds.filter((uri) => !ATPROTO_FEEDS.includes(uri)) as customUri}
-                  <div class="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked
-                      disabled
-                      class="checkbox checkbox-sm"
-                    />
-                    <span class="text-sm flex-1 truncate">{customUri}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onclick={() => removeFeed(customUri)}
-                      class="text-error hover:bg-error/10"
-                    >
-                      <Icon icon="tabler:x" class="size-3" />
-                    </Button>
-                  </div>
-                {/each}
-
-                <!-- Add custom feed from URL or URI -->
-                <div class="space-y-2">
-                  <h4 class="text-sm font-medium">Add Custom Feed</h4>
-                  <div class="flex gap-2">
-                    <input
-                      type="text"
-                      bind:value={customFeedInput}
-                      placeholder="https://bsky.app/profile/did:plc:example/feed/feedname or at://..."
-                      class="dz-input flex-1 text-xs"
-                    />
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onclick={addCustomFeed}
-                      disabled={!customFeedInput}
-                    >
-                      Add
-                    </Button>
-                  </div>
-                  <p class="text-xs text-base-content/60">
-                    Accepts both Bluesky URLs and AT:// URIs
-                  </p>
-                </div>
-
-                <div class="text-xs text-base-content/60">
-                  Selected {selectedFeeds.length} feed{selectedFeeds.length !==
-                  1
-                    ? "s"
-                    : ""}
-                </div>
-              </div>
-           {/if}
-           <label class="dz-select w-full">
-             <span class="dz-label">Category</span>
-             <select bind:value={newChannelCategory}>
-               <option value={undefined}>None</option>
-               {#each space?.current?.categories?.filter((category) => !category?.softDeleted) ?? [] as category}
-                 <option value={category}>{category?.name}</option>
-               {/each}
-             </select>
-           </label>
-          <Button type="submit" class="w-full justify-start">
-            <Icon icon="basil:add-outline" font-size="1.8em" />
-            Create {newChannelType === "feeds" ? "Feeds" : newChannelType === "links" ? "Links" : "Chat"} Channel
-          </Button>
-          </form>
-        </div>
-      </Dialog>
-
-      <Dialog title="Create Category" bind:isDialogOpen={showNewCategoryDialog}>
-        {#snippet dialogTrigger()}
-          <Button
-            variant="secondary"
-            class="w-full justify-start"
-            title="Create Category"
-          >
-            <Icon icon="basil:folder-plus-solid" class="size-6" />
-            Create Category
-          </Button>
-        {/snippet}
-
+      <div class="max-h-[80vh] overflow-y-auto">
         <form
-          id="createCategory"
+          id="createChannel"
           class="flex flex-col gap-4"
-          onsubmit={createCategorySubmit}
+          onsubmit={createChannelSubmit}
         >
           <label class="dz-input w-full">
             <span class="dz-label">Name</span>
             <input
-              bind:value={newCategoryName}
+              bind:value={newChannelName}
               use:focusOnRender
-              placeholder="Discussions"
+              placeholder={newChannelType === "feeds"
+                ? "AT Proto Feeds"
+                : "General"}
               type="text"
               required
             />
           </label>
-          <Button.Root class="dz-btn dz-btn-primary">
-            <Icon icon="basil:add-outline" font-size="1.8em" />
-            Create Category
-          </Button.Root>
-        </form>
-      </Dialog>
-    </menu>
-  {/if}
+          <label class="dz-select w-full">
+            <span class="dz-label">Type</span>
+            <select bind:value={newChannelType}>
+              <option value="chat">💬 Chat Channel</option>
+              <option value="feeds">📡 Feeds Channel</option>
+              <option value="links">🔗 Links Channel</option>
+            </select>
+          </label>
+          {#if newChannelType === "feeds"}
+            <div class="text-sm text-base-content/70 p-2 bg-base-200 rounded">
+              <Icon icon="information-circle" class="inline mr-1" />
+              This channel will automatically display AT Proto feed posts instead
+              of regular chat messages.
+            </div>
+          {:else if newChannelType === "links"}
+            <div class="text-sm text-base-content/70 p-2 bg-base-200 rounded">
+              <Icon icon="information-circle" class="inline mr-1" />
+              This channel will automatically discover and display all links shared
+              across channels in this space.
+            </div>
+          {/if}
+          {#if newChannelType === "feeds"}
+            <div class="space-y-3">
+              <h3 class="text-sm font-semibold">Select Feeds</h3>
 
-  <div class="py-2 w-full px-2">
-    <SidebarChannelList {sidebarItems} space={space.current} me={me.current} />
-  </div>
-</SpaceSidebar>
+              <!-- Available feeds -->
+              <div class="space-y-2">
+                {#each Object.entries(ATPROTO_FEED_CONFIG) as [uri, config]}
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedFeeds.includes(uri)}
+                      onchange={() => toggleFeed(uri)}
+                      class="checkbox checkbox-sm"
+                    />
+                    <div class="flex-1 min-w-0">
+                      <div class="text-sm font-medium">{config.name}</div>
+                      <div class="text-xs text-base-content/60 truncate">
+                        {config.url}
+                      </div>
+                    </div>
+                  </label>
+                {/each}
+              </div>
+
+              <!-- Custom feeds that aren't in the default list -->
+              {#each selectedFeeds.filter((uri) => !ATPROTO_FEEDS.includes(uri)) as customUri}
+                <div class="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked
+                    disabled
+                    class="checkbox checkbox-sm"
+                  />
+                  <span class="text-sm flex-1 truncate">{customUri}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onclick={() => removeFeed(customUri)}
+                    class="text-error hover:bg-error/10"
+                  >
+                    <Icon icon="tabler:x" class="size-3" />
+                  </Button>
+                </div>
+              {/each}
+
+              <!-- Add custom feed from URL or URI -->
+              <div class="space-y-2">
+                <h4 class="text-sm font-medium">Add Custom Feed</h4>
+                <div class="flex gap-2">
+                  <input
+                    type="text"
+                    bind:value={customFeedInput}
+                    placeholder="https://bsky.app/profile/did:plc:example/feed/feedname or at://..."
+                    class="dz-input flex-1 text-xs"
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onclick={addCustomFeed}
+                    disabled={!customFeedInput}
+                  >
+                    Add
+                  </Button>
+                </div>
+                <p class="text-xs text-base-content/60">
+                  Accepts both Bluesky URLs and AT:// URIs
+                </p>
+              </div>
+
+              <div class="text-xs text-base-content/60">
+                Selected {selectedFeeds.length} feed{selectedFeeds.length !== 1
+                  ? "s"
+                  : ""}
+              </div>
+            </div>
+          {/if}
+          <label class="dz-select w-full">
+            <span class="dz-label">Category</span>
+            <select bind:value={newChannelCategory}>
+              <option value={undefined}>None</option>
+              {#each space?.current?.categories?.filter((category) => !category?.softDeleted) ?? [] as category}
+                <option value={category}>{category?.name}</option>
+              {/each}
+            </select>
+          </label>
+          <Button type="submit" class="w-full justify-start">
+            <Icon icon="basil:add-outline" font-size="1.8em" />
+            Create {newChannelType === "feeds"
+              ? "Feeds"
+              : newChannelType === "links"
+                ? "Links"
+                : "Chat"} Channel
+          </Button>
+        </form>
+      </div>
+    </Dialog>
+
+    <Dialog title="Create Category" bind:isDialogOpen={showNewCategoryDialog}>
+      {#snippet dialogTrigger()}
+        <Button
+          variant="secondary"
+          class="w-full justify-start"
+          title="Create Category"
+        >
+          <Icon icon="basil:folder-plus-solid" class="size-6" />
+          Create Category
+        </Button>
+      {/snippet}
+
+      <form
+        id="createCategory"
+        class="flex flex-col gap-4"
+        onsubmit={createCategorySubmit}
+      >
+        <label class="dz-input w-full">
+          <span class="dz-label">Name</span>
+          <input
+            bind:value={newCategoryName}
+            use:focusOnRender
+            placeholder="Discussions"
+            type="text"
+            required
+          />
+        </label>
+        <Button.Root class="dz-btn dz-btn-primary">
+          <Icon icon="basil:add-outline" font-size="1.8em" />
+          Create Category
+        </Button.Root>
+      </form>
+    </Dialog>
+  </menu>
+{/if}
+
+<div class="py-2 w-full px-2">
+  <SidebarChannelList {sidebarItems} space={space.current} me={me.current} />
+</div>

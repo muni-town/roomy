@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { navigateSync } from "$lib/utils.svelte";
+  import { Button } from "@fuxui/base";
+
   import { IDList } from "$lib/jazz/schema";
   import { allAccountsListId, allSpacesListId } from "$lib/jazz/ids";
   import { CoState } from "jazz-svelte";
@@ -8,13 +11,13 @@
   const allAccounts = $derived(new CoState(IDList, allAccountsListId));
 </script>
 
-<div class="flex flex-col gap-4">
+<div class="flex flex-col gap-4 ml-20 overflow-y-scroll h-screen">
   {#if allSpaces.current}
     <h2>All Spaces: {allSpaces.current.length}</h2>
     {#each allSpaces.current as spaceId}
-      <div>
+      <Button href={navigateSync({ space: spaceId })}>
         {spaceId}
-      </div>
+      </Button>
     {/each}
   {/if}
 

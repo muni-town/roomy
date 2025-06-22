@@ -13,7 +13,7 @@
 
 <div
 	class={cn(
-		'isolate fixed top-0 bottom-0 bg-base-200 h-screen left-0 z-[60] flex flex-col w-24 justify-between p-2 overflow-hidden',
+		'isolate bg-base-100 z-10 flex flex-col justify-between p-2 overflow-hidden border-r border-base-800/10',
 		className
 	)}
 	{...restProps}

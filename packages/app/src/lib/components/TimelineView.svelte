@@ -1,13 +1,10 @@
 <script lang="ts">
   import toast from "svelte-french-toast";
   import Icon from "@iconify/svelte";
-  import { setContext } from "svelte";
-  import { Index } from "flexsearch";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
-  import { Button } from "bits-ui";
+  import { Button } from "@fuxui/base";
   import { Account, co, Group } from "jazz-tools";
-  import { derivePromise } from "$lib/utils.svelte";
   import {
     LastReadList,
     Message,
@@ -41,6 +38,7 @@
   import { indexNewMessages } from "./search/search.svelte";
   import Navbar from "./ui/Navbar.svelte";
   import { Tabs } from "@fuxui/base";
+  import { blueskyLoginModalState } from "@fuxui/social";
 
   // Component-level threading state - scoped per channel
   let threading = $state({
@@ -114,7 +112,9 @@
   const readonly = $derived(thread.current?.name === "@links");
 
   let tab = $state<"chat" | "board">(
-    typeof window !== 'undefined' && window.location.hash === '#board' ? 'board' : 'chat'
+    typeof window !== "undefined" && window.location.hash === "#board"
+      ? "board"
+      : "chat",
   );
 
   // Index new messages when timeline changes
@@ -125,8 +125,10 @@
           space.current.id,
           timeline,
           channel.current.id,
-          channel.current.name
-        ).catch(error => console.error("Error indexing new messages:", error));
+          channel.current.name,
+        ).catch((error) =>
+          console.error("Error indexing new messages:", error),
+        );
       } else if (page.params.thread && thread.current) {
         indexNewMessages(
           space.current.id,
@@ -134,8 +136,10 @@
           undefined,
           undefined,
           thread.current.id,
-          thread.current.name
-        ).catch(error => console.error("Error indexing new messages:", error));
+          thread.current.name,
+        ).catch((error) =>
+          console.error("Error indexing new messages:", error),
+        );
       }
     }
   });
@@ -145,20 +149,20 @@
     const handleHashChange = () => {
       // For feeds channels, don't change tabs based on hash
       if (channel.current?.channelType === "feeds") return;
-      
-      if (window.location.hash === '#board') {
-        tab = 'board';
-      } else if (window.location.hash === '#chat') {
-        tab = 'chat';
+
+      if (window.location.hash === "#board") {
+        tab = "board";
+      } else if (window.location.hash === "#chat") {
+        tab = "chat";
       }
     };
 
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       // Check hash on mount
       handleHashChange();
-      
-      window.addEventListener('hashchange', handleHashChange);
-      return () => window.removeEventListener('hashchange', handleHashChange);
+
+      window.addEventListener("hashchange", handleHashChange);
+      return () => window.removeEventListener("hashchange", handleHashChange);
     }
   });
 
@@ -213,68 +217,6 @@
   let threadTitleInput = $state("");
 
   let filesInMessage: File[] = $state([]);
-  let selectedMessages: Message[] = $state([]);
-  
-  let isThreadingValue = $derived(threading.active);
-  let isThreading = { get value() { return isThreadingValue; } };
-  setContext("isThreading", isThreading);
-  setContext("selectMessage", (message: Message) => {
-    selectedMessages.push(message);
-  });
-  setContext("removeSelectedMessage", (msg: Message) => {
-    selectedMessages = selectedMessages.filter((m) => m !== msg);
-  });
-
-  $effect(() => {
-    if (!isThreading.value && selectedMessages.length > 0) {
-      selectedMessages = [];
-    }
-  });
-
-  // Reply Utils
-  let replyingTo = $state() as Message | undefined;
-  setContext("setReplyTo", (message: Message) => {
-    replyingTo = message;
-  });
-
-  // Initialize FlexSearch with appropriate options for message content
-  let searchIndex = new Index({
-    tokenize: "forward",
-    preset: "performance",
-  });
-  let searchQuery = $state("");
-  let showSearchInput = $state(false);
-  let searchResults = $state<Message[]>([]);
-  let showSearchResults = $state(false);
-  let virtualizer = $state<Virtualizer<string> | undefined>(undefined);
-
-  // Function to handle search result click
-  function handleSearchResultClick(messageId: string) {
-    // Hide search results
-    showSearchResults = false;
-
-    // Find the message in the timeline to get its index
-    if (channel.current) {
-      // Get the timeline IDs - this returns an array, not a Promise
-      const ids = channel.current.mainThread?.timeline?.perAccount ? 
-        Object.values(channel.current.mainThread.timeline.perAccount)
-          .flatMap(accountFeed => new Array(...accountFeed.all)) : [];
-
-      if (!messageId.includes("leaf:")) {
-        return;
-      }
-
-      const messageIndex = ids.indexOf(messageId);
-
-      if (messageIndex !== -1) {
-        virtualizer?.scrollToIndex(messageIndex);
-      } else {
-        console.error("Message not found in timeline:", messageId);
-      }
-    } else {
-      console.error("No active channel");
-    }
-  }
 
 
   async function handleCreateThread(e: SubmitEvent) {
@@ -470,7 +412,8 @@
 
   const channelThreads = $derived(
     channel.current?.subThreads?.filter(
-      (thread) => thread && !thread.softDeleted && !thread.name?.startsWith('💬'),
+      (thread) =>
+        thread && !thread.softDeleted && !thread.name?.startsWith("💬"),
     ) || [],
   );
 
@@ -556,23 +499,36 @@
 {/if}
 
 <div class="h-screen flex flex-col overflow-hidden">
-  <div class="flex-none bg-base-50 border-b border-base-400/30 dark:border-base-300/10">
+  <div
+    class="flex-none bg-base-50 border-b border-base-400/30 dark:border-base-300/10"
+  >
     <Navbar>
       <div class="flex gap-4 items-center ml-4">
+        <ToggleNavigation />
         {#if channel.current}
-          <ToggleNavigation />
-
           <h4
             class="sm:line-clamp-1 sm:overflow-hidden sm:text-ellipsis text-lg font-bold"
             title={"Channel"}
           >
             <span class="flex gap-2 items-center">
-              <Icon icon={channel.current.channelType === "feeds" ? "basil:feed-outline" : channel.current.channelType === "links" ? "basil:link-outline" : "basil:comment-solid"} />
+              <Icon
+                icon={channel.current.channelType === "feeds"
+                  ? "basil:feed-outline"
+                  : channel.current.channelType === "links"
+                    ? "basil:link-outline"
+                    : "basil:comment-solid"}
+              />
               {channel.current.name}
               {#if channel.current.channelType === "feeds"}
-                <span class="text-xs bg-primary/20 text-primary px-2 py-1 rounded">FEEDS</span>
+                <span
+                  class="text-xs bg-primary/20 text-primary px-2 py-1 rounded"
+                  >FEEDS</span
+                >
               {:else if channel.current.channelType === "links"}
-                <span class="text-xs bg-secondary/20 text-secondary px-2 py-1 rounded">LINKS</span>
+                <span
+                  class="text-xs bg-secondary/20 text-secondary px-2 py-1 rounded"
+                  >LINKS</span
+                >
               {/if}
             </span>
           </h4>
@@ -590,15 +546,19 @@
 
       <div class="hidden sm:flex dz-navbar-end items-center gap-2">
         {#if tab === "chat"}
-          <button
+          <!-- <button
             class="btn btn-ghost btn-sm btn-circle"
             onclick={() => (showSearch = !showSearch)}
             title="Toggle search"
           >
             <Icon icon="tabler:search" class="text-base-content" />
-          </button>
+          </button> -->
         {/if}
-        <TimelineToolbar createThread={handleCreateThread} bind:threadTitleInput bind:threading />
+        <!-- <TimelineToolbar
+          createThread={handleCreateThread}
+          bind:threadTitleInput
+          bind:threading
+        /> -->
       </div>
     </Navbar>
   </div>
@@ -624,7 +584,7 @@
       <BoardList items={channelThreads} title="Threads" route="thread">
         No threads for this channel.
       </BoardList>
-      
+
       <ChannelFeedsBoard channel={channel.current} />
     </div>
   {:else if tab === "chat"}
@@ -648,113 +608,116 @@
         </div>
 
         <div class="flex-none bg-white pt-2 pb-2 pr-2">
-        {#if replyTo.id}
-          <div
-            class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
-          >
-            <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
-              <span class="shrink-0">Replying to</span>
-              <MessageRepliedTo messageId={replyTo.id} />
-            </div>
-            <Button.Root
-              type="button"
-              onclick={() => (replyTo.id = "")}
-              class="dz-btn dz-btn-circle dz-btn-ghost flex-shrink-0"
+          {#if replyTo.id}
+            <div
+              class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
             >
-              <Icon icon="zondicons:close-solid" />
-            </Button.Root>
-          </div>
-        {/if}
-        <div class="w-full">
-          {#if user.session}
-            {#if hasJoinedSpace}
-              {#if readonly}
-                <div class="flex items-center grow flex-col">
-                  <Button.Root disabled class="w-full dz-btn"
-                    >Automated Thread</Button.Root
-                  >
-                </div>
-              {:else if !isBanned}
-                <div
-                  class="prose-a:text-primary prose-a:underline relative isolate"
-                >
-                  {#if previewImages.length > 0}
-                    <div class="flex gap-2 my-2 overflow-x-auto w-full">
-                      {#each previewImages as previewImage, index (previewImage)}
-                        <div class="size-24 relative shrink-0">
-                          <img
-                            src={previewImage}
-                            alt="Preview"
-                            class="absolute inset-0 w-full h-full object-cover"
-                          />
-
-                          <button
-                            class="btn btn-ghost btn-sm btn-circle absolute p-0.5 top-1 right-1 bg-base-100 rounded-full"
-                            onclick={() => removeImageFile(index)}
-                          >
-                            <Icon icon="tabler:x" class="size-4" />
-                          </button>
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-
-                  <div class="flex w-full pl-2 gap-2">
-                    <UploadFileButton {processImageFile} />
-
-                    {#key users.length + context.length}
-                      <ChatInput
-                        bind:content={messageInput}
-                        {users}
-                        {context}
-                        onEnter={sendMessage}
-                        {processImageFile}
-                      />
-                    {/key}
-                  </div>
-                  <FullscreenImageDropper {processImageFile} />
-
-                  {#if isSendingMessage}
-                    <div
-                      class="absolute inset-0 flex items-center text-primary justify-center z-20 bg-base-100/80"
+              <div
+                class="flex items-center gap-1 overflow-hidden text-xs w-full"
+              >
+                <span class="shrink-0">Replying to</span>
+                <MessageRepliedTo messageId={replyTo.id} />
+              </div>
+              <Button
+                type="button"
+                onclick={() => (replyTo.id = "")}
+                class="dz-btn dz-btn-circle dz-btn-ghost flex-shrink-0"
+              >
+                <Icon icon="zondicons:close-solid" />
+              </Button>
+            </div>
+          {/if}
+          <div class="w-full">
+            {#if user.session}
+              {#if hasJoinedSpace}
+                {#if readonly}
+                  <div class="flex items-center grow flex-col">
+                    <Button disabled class="w-full dz-btn"
+                      >Automated Thread</Button
                     >
-                      <div class="text-xl font-bold flex items-center gap-4">
-                        Sending message...
-                        <span class="dz-loading dz-loading-spinner mx-auto w-8"
-                        ></span>
+                  </div>
+                {:else if !isBanned}
+                  <div
+                    class="prose-a:text-primary prose-a:underline relative isolate"
+                  >
+                    {#if previewImages.length > 0}
+                      <div class="flex gap-2 my-2 overflow-x-auto w-full">
+                        {#each previewImages as previewImage, index (previewImage)}
+                          <div class="size-24 relative shrink-0">
+                            <img
+                              src={previewImage}
+                              alt="Preview"
+                              class="absolute inset-0 w-full h-full object-cover"
+                            />
+
+                            <button
+                              class="btn btn-ghost btn-sm btn-circle absolute p-0.5 top-1 right-1 bg-base-100 rounded-full"
+                              onclick={() => removeImageFile(index)}
+                            >
+                              <Icon icon="tabler:x" class="size-4" />
+                            </button>
+                          </div>
+                        {/each}
                       </div>
+                    {/if}
+
+                    <div class="flex w-full pl-2 gap-2">
+                      <UploadFileButton {processImageFile} />
+
+                      {#key users.length + context.length}
+                        <ChatInput
+                          bind:content={messageInput}
+                          {users}
+                          {context}
+                          onEnter={sendMessage}
+                          {processImageFile}
+                        />
+                      {/key}
                     </div>
-                  {/if}
-                </div>
+                    <FullscreenImageDropper {processImageFile} />
+
+                    {#if isSendingMessage}
+                      <div
+                        class="absolute inset-0 flex items-center text-primary justify-center z-20 bg-base-100/80"
+                      >
+                        <div class="text-xl font-bold flex items-center gap-4">
+                          Sending message...
+                          <span
+                            class="dz-loading dz-loading-spinner mx-auto w-8"
+                          ></span>
+                        </div>
+                      </div>
+                    {/if}
+                  </div>
+                {:else}
+                  <div class="flex items-center grow flex-col">
+                    <Button disabled class="w-full dz-btn"
+                      >You are banned from this space</Button
+                    >
+                  </div>
+                {/if}
               {:else}
                 <div class="flex items-center grow flex-col">
-                  <Button.Root disabled class="w-full dz-btn"
-                    >You are banned from this space</Button.Root
+                  <Button onclick={joinSpace} class="w-full dz-btn"
+                    >Join this space to chat</Button
                   >
                 </div>
               {/if}
             {:else}
-              <div class="flex items-center grow flex-col">
-                <Button.Root onclick={joinSpace} class="w-full dz-btn"
-                  >Join this space to chat</Button.Root
-                >
-              </div>
+              <Button
+                class="mx-auto"
+                onclick={() => {
+                  blueskyLoginModalState.show();
+                }}>Login to Chat</Button
+              >
             {/if}
-          {:else}
-            <Button.Root
-              class="w-full dz-btn"
-              onclick={() => {
-                user.isLoginDialogOpen = true;
-              }}>Login to Chat</Button.Root
-            >
-          {/if}
-        </div>
+          </div>
 
-        <!-- {#if isMobile}
+          <!-- {#if isMobile}
           <TimelineToolbar createThread={handleCreateThread} bind:threadTitleInput />
         {/if} -->
+        </div>
       </div>
-    </div>
+    {/if}
   {/if}
-{/if}
 </div>

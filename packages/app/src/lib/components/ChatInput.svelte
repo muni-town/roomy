@@ -13,6 +13,7 @@
   import { initUserMention, initSpaceContextMention } from "$lib/tiptap/editor";
   import { type Item, initKeyboardShortcutHandler } from "$lib/tiptap/editor";
   import { RichTextLink } from "$lib/tiptap/RichTextLink";
+  import { cn, inputVariants } from "@fuxui/base";
 
   type Props = {
     content: string;
@@ -72,7 +73,7 @@
       editorProps: {
         attributes: {
           class:
-            "w-full px-3 py-2 rounded bg-base-300 text-base-content outline-none",
+           cn(inputVariants({variant: "primary"}), "w-full outline-none"),
         },
       },
       onUpdate: (ctx) => {
