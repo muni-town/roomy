@@ -11,7 +11,7 @@
 </script>
 
 <div
-  class={"overflow-y-hidden bg-base-100/80 pl-2 block h-full w-64 border-r border-base-800/10 dark:border-base-300/10"}
+  class={"overflow-y-hidden bg-base-100/80 dark:bg-base-950 pl-2 block h-full w-64 border-r border-base-800/10 dark:border-base-300/10"}
   {...restProps}
 >
   <ScrollArea orientation="vertical" class="h-full overflow-y-scroll">

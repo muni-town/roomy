@@ -3,7 +3,7 @@
   import Icon from "@iconify/svelte";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
-  import { Button } from "@fuxui/base";
+  import { Button, ThemeToggle } from "@fuxui/base";
   import { Account, co, Group } from "jazz-tools";
   import {
     LastReadList,
@@ -217,7 +217,6 @@
   let threadTitleInput = $state("");
 
   let filesInMessage: File[] = $state([]);
-
 
   async function handleCreateThread(e: SubmitEvent) {
     e.preventDefault();
@@ -499,69 +498,67 @@
 {/if}
 
 <div class="h-screen flex flex-col overflow-hidden">
-  <div
-    class="flex-none bg-base-50 border-b border-base-400/30 dark:border-base-300/10"
-  >
-    <Navbar>
-      <div class="flex gap-4 items-center ml-4">
-        <ToggleNavigation />
-        {#if channel.current}
-          <h4
-            class="sm:line-clamp-1 sm:overflow-hidden sm:text-ellipsis text-lg font-bold"
-            title={"Channel"}
-          >
-            <span class="flex gap-2 items-center">
-              <Icon
-                icon={channel.current.channelType === "feeds"
-                  ? "basil:feed-outline"
-                  : channel.current.channelType === "links"
-                    ? "basil:link-outline"
-                    : "basil:comment-solid"}
-              />
-              {channel.current.name}
-              {#if channel.current.channelType === "feeds"}
-                <span
-                  class="text-xs bg-primary/20 text-primary px-2 py-1 rounded"
-                  >FEEDS</span
-                >
-              {:else if channel.current.channelType === "links"}
-                <span
-                  class="text-xs bg-secondary/20 text-secondary px-2 py-1 rounded"
-                  >LINKS</span
-                >
-              {/if}
-            </span>
-          </h4>
-          {#if channel.current.channelType !== "feeds" && channel.current.channelType !== "links"}
-            <Tabs
-              items={[
-                { name: "chat", onclick: () => (tab = "chat") },
-                { name: "board", onclick: () => (tab = "board") },
-              ]}
-              active={tab}
-            ></Tabs>
-          {/if}
+  <Navbar>
+    <div class="flex gap-4 items-center ml-4">
+      <ToggleNavigation />
+      {#if channel.current}
+        <h4
+          class="sm:line-clamp-1 sm:overflow-hidden sm:text-ellipsis text-lg font-bold text-base-900 dark:text-base-100"
+          title={"Channel"}
+        >
+          <span class="flex gap-2 items-center">
+            <Icon
+              icon={channel.current.channelType === "feeds"
+                ? "basil:feed-outline"
+                : channel.current.channelType === "links"
+                  ? "basil:link-outline"
+                  : "basil:comment-solid"}
+            />
+            {channel.current.name}
+            {#if channel.current.channelType === "feeds"}
+              <span class="text-xs bg-primary/20 text-primary px-2 py-1 rounded"
+                >FEEDS</span
+              >
+            {:else if channel.current.channelType === "links"}
+              <span
+                class="text-xs bg-secondary/20 text-secondary px-2 py-1 rounded"
+                >LINKS</span
+              >
+            {/if}
+          </span>
+        </h4>
+        {#if channel.current.channelType !== "feeds" && channel.current.channelType !== "links"}
+          <Tabs
+            items={[
+              { name: "chat", onclick: () => (tab = "chat") },
+              { name: "board", onclick: () => (tab = "board") },
+            ]}
+            active={tab}
+          ></Tabs>
         {/if}
-      </div>
 
-      <div class="hidden sm:flex dz-navbar-end items-center gap-2">
-        {#if tab === "chat"}
-          <!-- <button
+      {/if}
+    </div>
+
+    <div class="hidden sm:flex dz-navbar-end items-center gap-2">
+      {#if tab === "chat"}
+        <!-- <button
             class="btn btn-ghost btn-sm btn-circle"
             onclick={() => (showSearch = !showSearch)}
             title="Toggle search"
           >
             <Icon icon="tabler:search" class="text-base-content" />
           </button> -->
-        {/if}
-        <!-- <TimelineToolbar
+      {/if}
+      <!-- <TimelineToolbar
           createThread={handleCreateThread}
           bind:threadTitleInput
           bind:threading
         /> -->
-      </div>
-    </Navbar>
-  </div>
+    </div>
+
+    <ThemeToggle />
+  </Navbar>
 
   {#if channel.current?.channelType === "feeds"}
     <!-- Feeds Channel - Only show feeds -->
@@ -607,7 +604,7 @@
           />
         </div>
 
-        <div class="flex-none bg-white pt-2 pb-2 pr-2">
+        <div class="flex-none bg-white dark:bg-base-900 pt-2 pb-2 pr-2">
           {#if replyTo.id}
             <div
               class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
@@ -615,13 +612,13 @@
               <div
                 class="flex items-center gap-1 overflow-hidden text-xs w-full"
               >
-                <span class="shrink-0">Replying to</span>
+                <span class="shrink-0 text-base-900 dark:text-base-100">Replying to</span>
                 <MessageRepliedTo messageId={replyTo.id} />
               </div>
               <Button
-                type="button"
+              variant="ghost"
                 onclick={() => (replyTo.id = "")}
-                class="dz-btn dz-btn-circle dz-btn-ghost flex-shrink-0"
+                class="flex-shrink-0"
               >
                 <Icon icon="zondicons:close-solid" />
               </Button>

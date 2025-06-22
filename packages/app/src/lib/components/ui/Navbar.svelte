@@ -13,7 +13,7 @@
 
 <div
 	class={cn(
-		'w-full flex h-16 items-center justify-between p-2 overflow-hidden flex-shrink-0',
+		'w-full flex h-16 items-center justify-between p-2 overflow-hidden flex-shrink-0 bg-base-100 dark:bg-base-950 border-b border-base-800/10 dark:border-base-300/10',
 		className
 	)}
 	{...restProps}

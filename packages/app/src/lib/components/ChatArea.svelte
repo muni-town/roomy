@@ -106,7 +106,7 @@
 
 {#if showJumpToPresent}
   <Button
-    class="absolute bottom-16 left-1/2 -translate-x-1/2 z-50"
+    class="absolute bottom-6 left-1/2 -translate-x-1/2 z-50"
     onclick={scrollToBottom}
   >
     <Icon icon="tabler:arrow-down" class="w-4 h-4" />
@@ -132,16 +132,17 @@
     >
       <div class="flex flex-col w-full h-full pb-16">
         {#if slicedTimeline.length < timeline.length}
-          <button
-            class="btn btn-sm btn-outline"
+          <Button
+            class="w-fit mx-auto"
             onclick={() => {
               isShifting = true;
               showLastN += 100;
               setTimeout(() => {
                 isShifting = false;
               }, 1000);
-            }}>Load More</button
-          >
+            }}
+            >Load More
+          </Button>
         {/if}
         <ol class="flex flex-col gap-2 max-w-full">
           <!--

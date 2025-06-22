@@ -271,8 +271,7 @@
 
 <!-- Header -->
 <div class="w-full pt-4 pb-1 px-2 h-fit flex mb-4 justify-between items-center">
-  <ToggleSidebarIcon class="pr-2" open={isSpacesVisible} />
-  <h1 class="text-sm font-bold text-base-content truncate flex-grow">
+  <h1 class="text-sm font-bold text-base-900 dark:text-base-100 truncate flex-grow">
     {space?.current?.name && space?.current?.name !== "Unnamed"
       ? space.current?.name
       : ""}

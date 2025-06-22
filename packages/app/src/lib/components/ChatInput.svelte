@@ -73,7 +73,7 @@
       editorProps: {
         attributes: {
           class:
-           cn(inputVariants({variant: "primary"}), "w-full outline-none"),
+           cn(inputVariants({variant: "primary", sizeVariant: "default"}), "w-full outline-none text-base-950 dark:text-base-50"),
         },
       },
       onUpdate: (ctx) => {

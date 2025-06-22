@@ -197,23 +197,23 @@
       </BigSidebar>
     {/if}
   </div>
+</div>
+
   <!-- Overlay -->
-  {#if page.params.space}
+  {#if page.params.space && isSidebarVisible.value}
     <button
       onclick={() => {
         isSidebarVisible.toggle();
       }}
       aria-label="toggle navigation"
-      class="absolute inset-0 cursor-pointer sm:hidden"
+      class="absolute inset-0 cursor-pointer sm:hidden z-50 bg-base-100/50 dark:bg-base-950/50"
     ></button>
   {/if}
-</div>
-
 <div
   class={[
     page.url.pathname === "/messages" ? "ml-18" : "",
     page.params.space && (isSidebarVisible.value || true)
-      ? "sm:ml-82 bg-white relative"
+      ? "sm:ml-82 bg-white dark:bg-base-900/50 relative"
       : "",
     "h-screen overflow-hidden relative",
   ]}

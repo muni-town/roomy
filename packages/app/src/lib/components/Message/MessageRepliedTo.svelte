@@ -42,21 +42,21 @@
 
 <Button.Root
   onclick={() => scrollToMessage(message.current?.id ?? "")}
-  class="cursor-pointer flex gap-2 text-sm text-start w-full items-center px-4 py-1"
+  class="cursor-pointer flex gap-2 text-sm text-start items-center px-4 py-1 bg-base-200 dark:bg-base-400/5 w-fit max-w-full rounded-lg"
 >
   <div class="flex md:basis-auto gap-2 items-center shrink-0">
-    <Icon icon="prime:reply" width="12px" height="12px" />
+    <Icon icon="prime:reply" width="12px" height="12px" class="text-base-800 dark:text-base-300" />
     <Avatar.Root class="w-4 h-4">
       <Avatar.Image src={authorData?.imageUrl} class="rounded-full" />
       <Avatar.Fallback>
         <AvatarBeam size={16} name={authorData?.id ?? authorData?.name ?? ""} />
       </Avatar.Fallback>
     </Avatar.Root>
-    <h5 class="font-medium text-ellipsis">
+    <h5 class="font-medium text-ellipsis text-accent-800 dark:text-accent-300">
       {authorData?.name ?? ""}
     </h5>
   </div>
-  <div class="line-clamp-1 md:basis-auto overflow-hidden italic">
+  <div class="line-clamp-1 md:basis-auto overflow-hidden italic text-base-800 dark:text-base-300">
     {@html message.current?.content ?? ""}
   </div>
 </Button.Root>

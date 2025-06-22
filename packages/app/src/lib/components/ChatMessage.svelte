@@ -35,6 +35,7 @@
   import MessageThreadBadge from "./Message/MessageThreadBadge.svelte";
   import { goto } from "$app/navigation";
   import { dmClient } from "$lib/dm.svelte";
+  import { Badge } from "@fuxui/base";
 
   let {
     messageId,
@@ -183,7 +184,9 @@
 
   let isDrawerOpen = $state(false);
 
-  let isSelected = $derived(threading?.selectedMessages.includes(messageId) ?? false);
+  let isSelected = $derived(
+    threading?.selectedMessages.includes(messageId) ?? false,
+  );
 
   function deleteMessage() {
     if (!message.current) return;
@@ -308,7 +311,7 @@
 {#if shouldShow}
   <div
     id={message.current?.id}
-    class={`flex flex-col w-full relative max-w-screen isolate`}
+    class={`flex flex-col w-full relative max-w-screen isolate mx-4`}
   >
     {#if threading?.active}
       <Checkbox.Root
@@ -392,18 +395,18 @@
         <div class="flex flex-col gap-1">
           {#if !mergeWithPrevious || !message.current}
             <span class="flex items-center gap-2 text-sm">
-              <span class="font-bold text-primary"
+              <span class="font-bold text-accent-700 dark:text-accent-400"
                 >{authorData?.name ?? ""}</span
               >
               {#if isImportedMessage}
-                <span class="dz-badge dz-badge-info dz-badge-xs">App</span>
+                <Badge variant="secondary">App</Badge>
               {/if}
               {#if message.current?.createdAt}
                 {@render timestamp(message.current?.createdAt)}
               {/if}
             </span>
           {/if}
-          <div class="dz-prose prose-a:text-primary prose-a:hover:underline">
+          <div class="prose prose-a:text-accent-600 dark:prose-a:text-accent-400 dark:prose-invert prose-a:no-underline max-w-full">
             {#if editingMessage.id === messageId}
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
@@ -428,7 +431,7 @@
               {@html message.current?.content ?? ""}
 
               {#if isMessageEdited && message.current?.updatedAt}
-                <div class="text-xs text-secondary">
+                <div class="text-xs text-base-700 dark:text-base-400">
                   Edited {@render timestamp(message.current?.updatedAt)}
                 </div>
               {/if}
@@ -484,7 +487,7 @@
 
 {#snippet timestamp(date: Date)}
   {@const formattedDate = isToday(date) ? "Today" : format(date, "P")}
-  <time class="text-xs">
+  <time class="text-xs text-base-700 dark:text-base-400">
     {formattedDate}, {format(date, "pp")}
   </time>
 {/snippet}
