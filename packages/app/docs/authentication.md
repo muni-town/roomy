@@ -102,44 +102,6 @@ atproto.oauth
   });
 ```
 
-#### 3. Session Management
-```typescript
-// Session management utilities
-class SessionManager {
-  private session: AtpSession | null = null;
-  
-  async initialize() {
-    const storedSession = localStorage.getItem('atp_session');
-    if (storedSession) {
-      try {
-        this.session = JSON.parse(storedSession);
-        // Validate session with AT Protocol
-        await this.validateSession();
-      } catch (error) {
-        this.clearSession();
-      }
-    }
-  }
-  
-  async validateSession() {
-    if (!this.session) return false;
-    
-    try {
-      const agent = new AtpAgent({ service: 'https://bsky.social' });
-      await agent.resumeSession(this.session);
-      return true;
-    } catch (error) {
-      this.clearSession();
-      return false;
-    }
-  }
-  
-  clearSession() {
-    this.session = null;
-    localStorage.removeItem('atp_session');
-  }
-}
-```
 
 ## Jazz Framework Integration
 
