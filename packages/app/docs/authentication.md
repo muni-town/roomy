@@ -8,38 +8,78 @@ This document describes the authentication and authorization system used in the 
 
 Roomy uses the AT Protocol for authentication, providing users with decentralized identity management through Bluesky. The authentication system combines OAuth-based login with local account management through the Jazz framework.
 
+See also [AT Protocol OAuth Documentation](https://atproto.com/specs/oauth).
+
 ## AT Protocol Integration
 
 ### OAuth Flow
 
-Roomy implements OAuth 2.0 authentication flow with the AT Protocol:
+Roomy uses `'@atproto/oauth-client-browser'` to handle the OAuth flow. The client is initialized in `src/lib/atproto.svelte.ts`.
 
-```typescript
-// OAuth client setup
-import { OAuthClient } from '@atproto/oauth-client-browser';
+```ts
+// simplified non-Tauri version
+let clientMetadata: OAuthClientMetadataInput;
 
-const oauthClient = new OAuthClient({
-  clientId: 'your-client-id',
-  redirectUri: 'https://your-app.com/auth/callback',
-  scope: 'com.atproto.identity'
+// The `clientMetadata` is fetched from the `/oauth-client.json` file.
+const resp = await fetch(
+  `/oauth-client.json`,
+  {
+    headers: [["accept", "application/json"]],
+  },
+);
+clientMetadata = await resp.json();
+
+// Build the oauth client
+oauth = new BrowserOAuthClient({
+  responseMode: "query",
+  handleResolver: "https://resolver.roomy.chat",
+  clientMetadata,
 });
 ```
+
+See `app/static/oauth-client.json` for the actual client metadata.
+
+The `handleResolver` is used to resolve the user's handle from the AT Protocol.
+
+The `responseMode` is set to `"query"` to handle the OAuth callback.
 
 ### Authentication Process
 
 #### 1. User Initiation
+
+In `src/lib/user.svelte.ts` the `loginWithHandle` function is used to initiate the login process.
 ```typescript
-// User clicks login button
-async function initiateLogin() {
-  const authUrl = await oauthClient.getAuthorizationUrl({
-    state: generateRandomState(),
-    codeChallenge: generateCodeChallenge()
-  });
-  
-  // Redirect user to AT Protocol authorization
-  window.location.href = authUrl;
-}
+  /** Login a user using their handle, replacing the existing session if any. Tauri specific code omitted here.*/
+  async loginWithHandle(handle: string) {
+    localStorage.setItem("redirectAfterAuth", window.location.pathname);
+    const url = await atproto.oauth.authorize(handle, {
+      scope: atproto.scope,
+    });
+
+    window.location.href = url.href;
+
+    // Protect against browser's back-forward cache
+    await new Promise<never>((_resolve, reject) => {
+      setTimeout(
+        reject,
+        10000,
+        new Error("User navigated back from the authorization page"),
+      );
+    });
+  },
 ```
+
+For local development ATProto [allows metadata fields to be specified in the client id using URL query parameters](https://atproto.com/specs/oauth#localhost-client-development). This can be seen when the user is redirected to a URL such as: `https://bsky.social/oauth/authorize?client_id=http%3A%2F%2Flocalhost%3Fredirect_uri%3Dhttp%253A%252F%252F127.0.0.1%253A5173%252Foauth%252Fcallback%26scope%3Datproto%2520transition%253Ageneric%2520transition%253Achat.bsky&request_uri=urn%3Aietf%3Aparams%3Aoauth%3Arequest_uri%3Areq-{PAR reference token}]`
+
+Where the URL-decoded Client ID is: `http://localhost` with the following query params:
+
+Redirect URI: `http://127.0.0.1:5173/oauth/callback`
+
+Scope: `atproto transition:generic transition:chat.bsky`
+
+The Request URI is: `urn:ietf:params:oauth:request_uri:req-{PAR reference token}`.
+
+The `PAR reference token` is from the response from a [Pushed Authorization Request](https://atproto.com/specs/oauth#pushed-authorization-requests-par) made by the ATProto OAuth library.
 
 #### 2. OAuth Callback
 ```typescript
