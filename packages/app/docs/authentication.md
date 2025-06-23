@@ -102,6 +102,47 @@ atproto.oauth
   });
 ```
 
+#### 3. Session Management
+
+The logged in session is thereafter managed in the store in `user.svelte.ts`, which handles localStorage persistence.
+
+```typescript
+// src/lib/user.svelte.ts, on the user store
+set session(newSession) {
+  session = newSession;
+  if (newSession) {
+    // Store the user's DID on login
+    localStorage.setItem("did", newSession.did);
+    agent = new Agent(newSession);
+    lexicons.forEach((l) => agent!.lex.add(l));
+  } else {
+    this.logout();
+  }
+},
+```
+
+As a key example, `user.profile` is a derived store that uses the session with the newly created ATProto `Agent` to fetch the user's profile.
+
+```typescript
+let profile: { data: ProfileViewDetailed | undefined } = $derived.by(() => {
+  let data: ProfileViewDetailed | undefined = $state();
+  if (session && agent) {
+    agent
+      .getProfile({ actor: agent.assertDid })
+      .then((res) => {
+        data = res.data;
+      })
+      .catch((error) => {
+        console.error("Failed to fetch profile:", error);
+      });
+  }
+  return {
+    get data() {
+      return data;
+    },
+  };
+});
+```
 
 ## Jazz Framework Integration
 
