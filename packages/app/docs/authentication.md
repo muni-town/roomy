@@ -82,29 +82,24 @@ The Request URI is: `urn:ietf:params:oauth:request_uri:req-{PAR reference token}
 The `PAR reference token` is from the response from a [Pushed Authorization Request](https://atproto.com/specs/oauth#pushed-authorization-requests-par) made by the ATProto OAuth library.
 
 #### 2. OAuth Callback
+
+See `src/routes/(internal)/oauth/callback/+page.svelte` for how the OAuth callback is handled on web. The essential code is:
+
 ```typescript
 // Handle OAuth callback
-async function handleOAuthCallback(code: string, state: string) {
-  try {
-    const tokens = await oauthClient.validateCode(code);
-    
-    // Create AT Protocol agent
-    const agent = new AtpAgent({
-      service: 'https://bsky.social'
-    });
-    
-    // Exchange code for session
-    const session = await agent.resumeSession(tokens);
-    
-    // Store session for future use
-    localStorage.setItem('atp_session', JSON.stringify(session));
-    
-    return session;
-  } catch (error) {
-    console.error('OAuth callback failed:', error);
-    throw error;
-  }
-}
+await atproto.init();
+const searchParams = new URL(globalThis.location.href).searchParams;
+
+atproto.oauth
+  .callback(searchParams)
+  .then((result) => {
+    user.session = result.session;
+
+    window.location.href = localStorage.getItem("redirectAfterAuth") || "/";
+  })
+  .catch((e) => {
+    error = e.toString();
+  });
 ```
 
 #### 3. Session Management
