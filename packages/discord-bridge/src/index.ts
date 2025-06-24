@@ -1,5 +1,4 @@
-// this currently only works for one hardcoded space and channel
-// should instead work like specified in Readme.md
+// Discord Bridge functions for use by BridgeCard.svelte
 
 import { Client, GatewayIntentBits, TextChannel, Events } from 'discord.js';
 import dotenv from 'dotenv';
@@ -20,6 +19,15 @@ const __dirname = dirname(__filename);
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
+// Store active clients and connections
+const activeBridges = new Map<string, {
+  client: Client;
+  space: any;
+  channel: any;
+  admin: any;
+  processedMessages: Set<string>;
+}>();
+
 function createDiscordClient(): Client {
   const client = new Client({
     rest: {
@@ -35,137 +43,222 @@ function createDiscordClient(): Client {
   return client;
 }
 
-const discordToken = process.env.DISCORD_TOKEN;
-
 export const WorkerProfile = co.profile({
   name: z.string(),
   imageUrl: z.string().optional(),
   description: z.string().optional(),
 });
 
-export const RoomyRoot = co.map({
-});
+export const RoomyRoot = co.map({});
 
-export const WorkerAccount = co
-  .account({
-    profile: WorkerProfile,
-    root: RoomyRoot,
-  })
+export const WorkerAccount = co.account({ profile: WorkerProfile, root: RoomyRoot });
 
-const { worker } = await startWorker({
-  AccountSchema: WorkerAccount,
-  syncServer: 'wss://cloud.jazz.tools/?key=' + process.env.JAZZ_API_KEY,
-});
+// Initialize Jazz worker once for the module
+let jazzWorker: any = null;
 
-const space = await Space.load(process.env.SPACE_ID ?? "");
-if(!space) {
-  throw new Error('Error loading space');
-}
-
-const admin = await Group.load(space.adminGroupId);
-if(!admin) {
-  throw new Error('Error loading admin');
-}
-
-const channel = await Channel.load(process.env.CHANNEL_ID ?? "", {
-  resolve: {
-    mainThread: {
-      timeline: {
-        $each: true,
-        $onError: null,
-      }
+async function initJazzWorker() {
+  if (!jazzWorker) {
+    const accountID = process.env.JAZZ_WORKER_ACCOUNT;
+    const accountSecret = process.env.JAZZ_WORKER_SECRET;
+    const syncServer = `wss://cloud.jazz.tools/?key=${process.env.JAZZ_API_KEY}`;
+    
+    if (!accountID || !accountSecret) {
+      throw new Error('Jazz credentials not set in environment variables: JAZZ_WORKER_ACCOUNT, JAZZ_WORKER_SECRET');
     }
-  }
-});
-
-const processedMessages = new Set<string>();
-
-channel?.mainThread?.timeline?.subscribe(async (timeline) => {
-  const ids = Object.values(timeline.perAccount ?? {})
-    .map((accountFeed) => new Array(...accountFeed.all))
-    .flat()
-    .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
-    .map((a) => a.value);
-
-  for(const id of ids) {
-    if(processedMessages.has(id)) continue;
-
-    processedMessages.add(id);
-
-    const message = await Message.load(id);
-    if(!message) {
-      continue;
-    }
-
-    // check if message is less than 10 seconds old
-    if(Date.now() - message.createdAt.getTime() > 10000) {
-      console.log('Message is more than 10 seconds old, skipping', message.createdAt);
-      continue;
-    }
-
-    if(message.author?.startsWith('discord:')) {
-      console.log('Message is from discord, skipping', message.author);
-      continue;
-    }
-
-    const authorId = message._edits.content?.by?.profile?.id;
-    if(!authorId) {
-      console.log('No author id found', message);
-      continue;
-    }
-
-    const author = await RoomyProfile.load(authorId);
-    if(!author) {
-      console.log('Failed to load author', authorId);
-      continue;
-    }
-
-    const name = author?.name;
-    const avatarUrl = author?.imageUrl;
-
-    if(!discordChannel) {
-      console.log('No discord channel found');
-      return;
-    }
-
-    const channel = await client.channels.fetch(discordChannel.id) as TextChannel;
-    if (!channel) {
-      throw new Error(`Discord channel ${discordChannel.name} not found`);
-    }
-    let webhook = await findOrCreateWebhook(channel, client);
-
-    await webhook.send({
-      content: message.content,
-      username: name,
-      avatarURL: avatarUrl || undefined
+    
+    const { worker } = await startWorker({
+      AccountSchema: WorkerAccount,
+      accountID,
+      accountSecret,
+      syncServer,
     });
+    jazzWorker = worker;
+    console.log('Jazz worker initialized with account:', accountID);
   }
-});
-
-if(!channel) {
-  throw new Error('Error loading channel');
+  return jazzWorker;
 }
 
-let client: Client;
+export async function startBridge(spaceId: string, channelId: string, guildId: string, discordToken?: string) {
+  try {
+    // Initialize Jazz worker
+    await initJazzWorker();
+
+    // Use provided token or fall back to environment variable
+    const token = discordToken || process.env.DISCORD_TOKEN;
+    if (!token) {
+      throw new Error('Discord token is required');
+    }
+    
+    console.log('Loading space and channel...', spaceId, channelId, guildId);
+
+    // Load space and channel
+    const space = await Space.load(spaceId);
+    if (!space) throw new Error('Error loading space');
+    console.log('Space loaded:', space.name);
+    
+    const admin = await Group.load(space.adminGroupId);
+    if (!admin) throw new Error('Error loading admin');
+    
+    const channelObj = await Channel.load(channelId, {
+      resolve: {
+        mainThread: {
+          timeline: {
+            $each: true,
+            $onError: null,
+          }
+        }
+      }
+    });
+    if (!channelObj) throw new Error('Error loading channel');
+    console.log('Channel loaded:', channelObj.name);    const processedMessages = new Set<string>();
+    
+    // Subscribe to timeline changes
+    if (channelObj.mainThread?.timeline) {
+      channelObj.mainThread.timeline.subscribe(async (timeline: any) => {
+        const ids = Object.values(timeline.perAccount ?? {})
+          .map((accountFeed: any) => new Array(...accountFeed.all))
+          .flat()
+          .sort((a: any, b: any) => a.madeAt.getTime() - b.madeAt.getTime())
+          .map((a: any) => a.value);
+
+        for(const id of ids) {
+          if(processedMessages.has(id)) continue;
+
+          processedMessages.add(id);
+
+          const message = await Message.load(id);
+          if(!message) {
+            continue;
+          }
+
+          // check if message is less than 10 seconds old
+          if(Date.now() - message.createdAt.getTime() > 10000) {
+            console.log('Message is more than 10 seconds old, skipping', message.createdAt);
+            continue;
+          }
+
+          if(message.author?.startsWith('discord:')) {
+            console.log('Message is from discord, skipping', message.author);
+            continue;
+          }
+
+          const authorId = message._edits.content?.by?.profile?.id;
+          if(!authorId) {
+            console.log('No author id found', message);
+            continue;
+          }
+
+          const author = await RoomyProfile.load(authorId);
+          if(!author) {
+            console.log('Failed to load author', authorId);
+            continue;
+          }
+
+          const name = author?.name;
+          const avatarUrl = author?.imageUrl;
+
+          if(!discordChannel) {
+            console.log('No discord channel found');
+            return;
+          }
+
+          const channel = await client.channels.fetch(discordChannel.id) as TextChannel;
+          if (!channel) {
+            throw new Error(`Discord channel ${discordChannel.name} not found`);
+          }
+          let webhook = await findOrCreateWebhook(channel, client);
+
+          await webhook.send({
+            content: message.content,
+            username: name,
+            avatarURL: avatarUrl || undefined
+          });
+        }
+      });
+    }
+
+    // Setup Discord client and listen
+    const client = await setupClient(guildId, token);
+    await startListeningToDiscord(client, channelObj, admin, processedMessages);
+
+    // Store the bridge connection
+    const bridgeKey = `${spaceId}-${guildId}`;
+    activeBridges.set(bridgeKey, {
+      client,
+      space,
+      channel: channelObj,
+      admin,
+      processedMessages
+    });
+
+    return { success: true, bridgeKey };
+  } catch (error) {
+    console.error('Error starting bridge:', error);
+    throw error;
+  }
+}
+
+export async function stopBridge(bridgeKey: string): Promise<boolean> {
+  try {
+    const bridge = activeBridges.get(bridgeKey);
+    if (!bridge) {
+      return false;
+    }
+
+    // Disconnect Discord client
+    bridge.client.destroy();
+    
+    // Remove from active bridges
+    activeBridges.delete(bridgeKey);
+    
+    console.log(`Bridge ${bridgeKey} stopped successfully`);
+    return true;
+  } catch (error) {
+    console.error('Error stopping bridge:', error);
+    return false;
+  }
+}
+
+export async function getBridgeStatus(bridgeKey: string): Promise<{ active: boolean; channels?: string[] }> {
+  const bridge = activeBridges.get(bridgeKey);
+  if (!bridge) {
+    return { active: false };
+  }
+
+  try {
+    // Get available Discord channels
+    const guildId = bridgeKey.split('-').pop();
+    if (!guildId) {
+      return { active: true };
+    }
+
+    const channels = await getChannels(bridge.client, guildId);
+    return { 
+      active: true, 
+      channels: channels?.channels?.map(c => c.name) || []
+    };
+  } catch (error) {
+    return { active: true };
+  }
+}
 
 let discordChannel: { id: string, name: string } | undefined;
 
-async function setupClient() {
-  if(!discordToken) {
+async function setupClient(guildId: string, token: string) {
+  if(!token) {
     throw new Error('DISCORD_TOKEN is not set');
   }
 
   const discordClient = createDiscordClient();
-  const result = await discordClient.login(discordToken);
+  const result = await discordClient.login(token);
   console.log('Discord client login result', result);
 
   console.log('Discord client logged in');
 
-  client = discordClient;
-
-  const channels = await getChannels(client, process.env.GUILD_ID ?? "");
-  console.log(channels);
+  const channels = await getChannels(discordClient, guildId);
   discordChannel = channels?.channels?.[0];
+
+  return discordClient;
 }
 async function getChannels(client: Client, guildId: string) {
   const guild = await client.guilds.fetch(guildId);
@@ -182,7 +275,7 @@ async function getChannels(client: Client, guildId: string) {
   return { channels: textChannels };
 }
 
-async function startListeningToDiscord(client: Client) {
+async function startListeningToDiscord(client: Client, channelObj: any, admin: any, processedMessages: Set<string>) {
   // Setup Discord message handler
   client.on(Events.MessageCreate, async (message) => {
     // Ignore bot messages to avoid loops
@@ -190,18 +283,18 @@ async function startListeningToDiscord(client: Client) {
 
     const messageId = `discord-${message.id}`;
     if (processedMessages.has(messageId)) return;
-    processedMessages.add(messageId);;
+    processedMessages.add(messageId);
     
     try {
       // Get Discord avatar URL - similar to discord-import format
       let avatarUrl = message.author.displayAvatarURL({ size: 128 });
       
-      if(!channel?.mainThread?.timeline || !admin) {
-        console.log('No timeline or admin found', channel?.mainThread?.timeline, admin);
+      if(!channelObj?.mainThread?.timeline || !admin) {
+        console.log('No timeline or admin found', channelObj?.mainThread?.timeline, admin);
         return;
       }
 
-      sendMessage(channel?.mainThread?.timeline, message.content, message.author.username, avatarUrl, admin);
+      sendMessage(channelObj?.mainThread?.timeline, message.content, message.author.username, avatarUrl, admin);
     } catch (error: unknown) {
       console.error('Error processing Discord message:', error);
     }
@@ -231,11 +324,21 @@ async function findOrCreateWebhook(channel: TextChannel, client: Client) {
   }
 }
 
-
-// main function
+// main function - only used for standalone testing
 async function main() {
-  await setupClient();
-  await startListeningToDiscord(client);
+  const spaceId = process.env.SPACE_ID;
+  const channelId = process.env.CHANNEL_ID;
+  const guildId = process.env.GUILD_ID;
+  const discordToken = process.env.DISCORD_TOKEN;
+  
+  if (!spaceId || !channelId || !guildId) {
+    throw new Error('SPACE_ID, CHANNEL_ID, and GUILD_ID must be set');
+  }
+  
+  await startBridge(spaceId, channelId, guildId, discordToken);
 }
 
-main();
+// Only run main if this file is executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch(console.error);
+}
