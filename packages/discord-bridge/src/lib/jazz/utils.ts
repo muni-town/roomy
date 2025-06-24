@@ -14,13 +14,12 @@ import {
   SpaceList,
   Thread,
   Timeline,
-} from "./schema.js";
+} from "./schema";
 import { allAccountsListId, allSpacesListId } from "./ids";
 
 export function publicGroup(readWrite: "reader" | "writer" = "reader") {
   const group = Group.create();
   group.addMember("everyone", readWrite);
-
   return group;
 }
 
@@ -28,10 +27,12 @@ export function createChannel(name: string) {
   const publicWriteGroup = publicGroup("writer");
   const publicReadGroup = publicGroup("reader");
 
-  const thread = Thread.create(
+  const timeline = Timeline.create([], publicWriteGroup);
+
+  const mainThread = Thread.create(
     {
-      name: "main",
-      timeline: Timeline.create([], publicWriteGroup),
+      name,
+      timeline,
       channelId: "",
     },
     publicReadGroup,
@@ -40,13 +41,13 @@ export function createChannel(name: string) {
   const channel = Channel.create(
     {
       name,
-      mainThread: thread,
-      subThreads: co.list(Thread).create([], publicWriteGroup),
+      mainThread,
+      subThreads: co.list(Thread).create([], publicReadGroup),
     },
     publicReadGroup,
   );
 
-  thread.channelId = channel.id;
+  mainThread.channelId = channel.id;
 
   return channel;
 }
@@ -155,42 +156,37 @@ export function createMessage(
   admin?: co.loaded<typeof Group>,
   embeds?: ImageUrlEmbedCreate[],
 ) {
-  const readingGroup = publicGroup("reader");
-
-  if (admin) {
-    readingGroup.extend(admin);
-  }
-
-  let embedsList;
-  if (embeds && embeds.length > 0) {
-    embedsList = co.list(Embed).create([], readingGroup);
-    for (const embed of embeds) {
-      const imageUrlEmbed = ImageUrlEmbed.create(
-        { url: embed.data.url },
-        readingGroup,
-      );
-
-      embedsList.push(
-        Embed.create(
-          { type: "imageUrl", embedId: imageUrlEmbed.id },
-          readingGroup,
-        ),
-      );
-    }
-  }
-  const publicWriteGroup = publicGroup("writer");
+  const group = admin || publicGroup("writer");
 
   const message = Message.create(
     {
       content: input,
       createdAt: new Date(),
       updatedAt: new Date(),
-      reactions: co.list(Reaction).create([], publicWriteGroup),
-      replyTo: replyTo,
-      hiddenIn: co.list(z.string()).create([], readingGroup),
-      embeds: embedsList,
+      hiddenIn: co.list(z.string()).create([], group),
+      replyTo,
+      reactions: co.list(Reaction).create([], group),
+      embeds: embeds
+        ? co
+            .list(Embed)
+            .create(
+              embeds.map((embed) =>
+                Embed.create(
+                  {
+                    type: embed.type,
+                    embedId: ImageUrlEmbed.create(
+                      { url: embed.data.url },
+                      group,
+                    ).id,
+                  },
+                  group,
+                ),
+              ),
+              group,
+            )
+        : undefined,
     },
-    readingGroup,
+    group,
   );
 
   return message;
