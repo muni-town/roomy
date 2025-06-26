@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { Button, Toolbar, Popover } from "bits-ui";
+  import { Toolbar, Popover } from "bits-ui";
   import Drawer from "../Drawer.svelte";
   import Icon from "@iconify/svelte";
   import EmojiPicker from "../helper/EmojiPicker.svelte";
+  import { Button, buttonVariants } from "@fuxui/base";
+  import { PopoverEmojiPicker } from "@fuxui/social";
 
   let {
     canEdit = true,
@@ -37,9 +39,23 @@
   }
 </script>
 
-<Drawer bind:isDrawerOpen>
+<Drawer
+  bind:open={
+    () => isDrawerOpen,
+    (open) => {
+      if(open) {
+        isDrawerOpen = open;
+        return;
+      }
+
+      if (!isEmojiDrawerPickerOpen) isDrawerOpen = open;
+    }
+  }
+>
   <div class="flex gap-4 justify-center mb-4">
-    <Button.Root
+    <Button
+      variant="ghost"
+      size="icon"
       onclick={() => {
         toggleReaction("👍");
         isDrawerOpen = false;
@@ -47,29 +63,32 @@
       class="dz-btn dz-btn-circle"
     >
       👍
-    </Button.Root>
-    <Button.Root
+    </Button>
+    <Button
+      variant="ghost"
+      size="icon"
       onclick={() => {
         toggleReaction("😂");
         isDrawerOpen = false;
       }}
-      class="dz-btn dz-btn-circle"
     >
       😂
-    </Button.Root>
+    </Button>
 
-    <Popover.Root bind:open={isEmojiDrawerPickerOpen}>
-      <Popover.Trigger class="dz-btn dz-btn-circle">
-        <Icon icon="lucide:smile-plus" />
-      </Popover.Trigger>
-      <Popover.Content class="z-10">
-        <EmojiPicker onEmojiPick={onEmojiPick} />
-      </Popover.Content>
-    </Popover.Root>
+    <PopoverEmojiPicker
+      bind:open={isEmojiDrawerPickerOpen}
+      onpicked={(emoji) => onEmojiPick(emoji.unicode)}
+    >
+      {#snippet child({ props })}
+        <Button size="icon" variant="ghost" {...props}>
+          <Icon icon="lucide:smile-plus" class="text-primary" />
+        </Button>
+      {/snippet}
+    </PopoverEmojiPicker>
   </div>
 
-  <div class="dz-join dz-join-vertical w-full">
-    <Button.Root
+  <div class="flex flex-col gap-4 w-full">
+    <Button
       onclick={() => {
         setReplyTo();
         isDrawerOpen = false;
@@ -78,9 +97,9 @@
     >
       <Icon icon="fa6-solid:reply" />
       Reply
-    </Button.Root>
+    </Button>
     {#if canEdit}
-      <Button.Root
+      <Button
         onclick={() => {
           editMessage();
           isDrawerOpen = false;
@@ -89,47 +108,51 @@
       >
         <Icon icon="tabler:edit" />
         Edit
-      </Button.Root>
+      </Button>
     {/if}
     {#if canDelete}
-      <Button.Root
+      <Button
         onclick={() => deleteMessage()}
         class="dz-join-item dz-btn dz-btn-error w-full"
       >
         <Icon icon="tabler:trash" />
         Delete
-      </Button.Root>
+      </Button>
     {/if}
   </div>
 </Drawer>
 
 <Toolbar.Root
-  class={`${!isEmojiToolbarPickerOpen && "hidden"} group-hover:flex absolute -top-2 right-0 bg-base-300 p-1 rounded items-center`}
+  class={`${isEmojiToolbarPickerOpen ? "flex" : "hidden"} group-hover:flex shadow-lg border border-base-800/5 dark:border-base-300/10 absolute -top-4 right-2 bg-base-100/80 dark:bg-base-700/50 p-1 rounded-xl items-center`}
 >
   <Toolbar.Button
     onclick={() => toggleReaction("👍")}
-    class="dz-btn dz-btn-ghost dz-btn-square"
+    class={buttonVariants({ variant: "ghost", size: "iconSm" })}
   >
     👍
   </Toolbar.Button>
   <Toolbar.Button
     onclick={() => toggleReaction("😂")}
-    class="dz-btn dz-btn-ghost dz-btn-square"
+    class={buttonVariants({ variant: "ghost", size: "iconSm" })}
   >
     😂
   </Toolbar.Button>
-  <Popover.Root bind:open={isEmojiToolbarPickerOpen}>
-    <Popover.Trigger class="dz-btn dz-btn-ghost dz-btn-square">
-      <Icon icon="lucide:smile-plus" />
-    </Popover.Trigger>
-    <Popover.Content class="z-10">
-      <EmojiPicker onEmojiPick={onEmojiPick} />
-    </Popover.Content>
-  </Popover.Root>
+
+  <PopoverEmojiPicker
+    bind:open={isEmojiToolbarPickerOpen}
+    onpicked={(emoji) => onEmojiPick(emoji.unicode)}
+  >
+    {#snippet child({ props })}
+      <Button size="iconSm" variant="ghost" {...props}>
+        <Icon icon="lucide:smile-plus" class="text-primary" />
+      </Button>
+    {/snippet}
+  </PopoverEmojiPicker>
+
   {#if canEdit}
     <Toolbar.Button
       onclick={() => editMessage()}
-      class="dz-btn dz-btn-ghost dz-btn-square"
+      class={buttonVariants({ variant: "ghost", size: "iconSm" })}
     >
       <Icon icon="tabler:edit" />
     </Toolbar.Button>
@@ -138,7 +161,7 @@
   {#if canDelete}
     <Toolbar.Button
       onclick={() => deleteMessage()}
-      class="dz-btn dz-btn-ghost dz-btn-square"
+      class={buttonVariants({ variant: "ghost", size: "iconSm" })}
     >
       <Icon icon="tabler:trash" class="text-warning" />
     </Toolbar.Button>
@@ -147,7 +170,7 @@
   {#if isAdmin}
     <Toolbar.Button
       onclick={() => makeAdmin()}
-      class="dz-btn dz-btn-ghost dz-btn-square"
+      class={buttonVariants({ variant: "ghost", size: "iconSm" })}
     >
       <Icon icon="tabler:user-plus" />
     </Toolbar.Button>
@@ -155,7 +178,7 @@
 
   <Toolbar.Button
     onclick={() => setReplyTo()}
-    class="dz-btn dz-btn-ghost dz-btn-square"
+    class={buttonVariants({ variant: "ghost", size: "iconSm" })}
   >
     <Icon icon="fa6-solid:reply" />
   </Toolbar.Button>

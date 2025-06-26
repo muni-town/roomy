@@ -311,7 +311,7 @@
 {#if shouldShow}
   <div
     id={message.current?.id}
-    class={`flex flex-col w-full relative max-w-screen isolate mx-4`}
+    class={`flex flex-col w-full relative max-w-screen isolate px-4`}
   >
     {#if threading?.active}
       <Checkbox.Root
@@ -350,7 +350,7 @@
     {/if}
     <div
       class={[
-        `relative group w-full h-fit flex flex-col gap-2 px-2 pt-2 pb-1 hover:bg-white/5`,
+        `relative group w-full h-fit flex flex-col gap-2 px-2 pt-2 pb-1 hover:bg-base-100/50 dark:hover:bg-base-400/5`,
         !mergeWithPrevious && "pt-3",
       ]}
     >
@@ -423,8 +423,8 @@
                 />
 
                 <div class="text-xs text-base-content mt-1">
-                  Press <kbd class="text-primary">Enter</kbd> to save,
-                  <kbd class="text-primary font-medium">Escape</kbd> to cancel
+                  Press <kbd class="text-accent-600 dark:text-accent-400">Enter</kbd> to save,
+                  <kbd class="text-accent-600 dark:text-accent-400 font-medium">Escape</kbd> to cancel
                 </div>
               </div>
             {:else}

@@ -42,7 +42,7 @@
 
 <Button.Root
   onclick={() => scrollToMessage(message.current?.id ?? "")}
-  class="cursor-pointer flex gap-2 text-sm text-start items-center px-4 py-1 bg-base-200 dark:bg-base-400/5 w-fit max-w-full rounded-lg"
+  class="cursor-pointer flex gap-2 text-sm text-start items-center px-4 py-1 bg-base-300/20 dark:bg-base-400/5 w-full rounded-lg"
 >
   <div class="flex md:basis-auto gap-2 items-center shrink-0">
     <Icon icon="prime:reply" width="12px" height="12px" class="text-base-800 dark:text-base-300" />

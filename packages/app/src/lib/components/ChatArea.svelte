@@ -130,10 +130,10 @@
       class="relative max-w-full w-full h-full"
       onscroll={handleScroll}
     >
-      <div class="flex flex-col w-full h-full pb-16">
+      <div class="flex flex-col w-full h-full pb-16 pt-2">
         {#if slicedTimeline.length < timeline.length}
           <Button
-            class="w-fit mx-auto"
+            class="w-fit mx-auto mb-2"
             onclick={() => {
               isShifting = true;
               showLastN += 100;

@@ -1,7 +1,7 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
   import Dialog from "$lib/components/Dialog.svelte";
-  import { Button } from "@fuxui/base";
+  import { Button, Popover } from "@fuxui/base";
   import { navigate, Toggle } from "$lib/utils.svelte";
   import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
   import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
@@ -26,6 +26,7 @@
   } from "$lib/utils/atproToFeeds";
   import { Category, RoomyAccount, Space } from "$lib/jazz/schema";
   import { co } from "jazz-tools";
+  import { AvatarMarble } from "svelte-boring-avatars";
 
   let space = $derived(
     page.params?.space
@@ -267,11 +268,35 @@
   function removeFeed(feedUri: string) {
     selectedFeeds = selectedFeeds.filter((uri) => uri !== feedUri);
   }
+
+
+  // TODO: add leave space back in somewhere
+  function leaveSpace() {
+    if (!space?.current?.id || !me?.current?.profile?.joinedSpaces || !space.current.members) return;
+
+    // Remove the space from the user's joined spaces
+    const spaceIndex = me.current.profile.joinedSpaces.findIndex(
+      (s) => s?.id === space?.current?.id,
+    );
+    if (spaceIndex !== -1) {
+      me.current.profile.joinedSpaces.splice(spaceIndex, 1);
+    }
+
+    const memberIndex = space.current.members.findIndex((m) => m?.id === me?.current?.id);
+    if (memberIndex !== -1) {
+      space.current.members.splice(memberIndex, 1);
+    }
+
+    // If the user is currently viewing this space, navigate to home
+    if (page.url.pathname.includes(space?.current?.id || "XXX")) {
+      navigate("home");
+    }
+  }
 </script>
 
 <!-- Header -->
-<div class="w-full pt-4 pb-1 px-2 h-fit flex mb-4 justify-between items-center">
-  <h1 class="text-sm font-bold text-base-900 dark:text-base-100 truncate flex-grow">
+<div class="w-full pt-0 pb-1 px-2 h-fit flex mb-4 justify-between items-center">
+  <!-- <h1 class="text-sm font-bold text-base-900 dark:text-base-100 truncate flex-grow">
     {space?.current?.name && space?.current?.name !== "Unnamed"
       ? space.current?.name
       : ""}
@@ -280,7 +305,47 @@
     {#if userIsAdmin}
       <SpaceSettingsDialog />
     {/if}
-  </div>
+  </div> -->
+
+  <Popover side="bottom" class="w-full" align="end">
+    {#snippet child({ props })}
+      <button
+        {...props}
+        class="flex justify-between items-center mt-2 cursor-pointer rounded-xl bg-base-200 dark:bg-base-900/50 p-2 w-full text-left"
+      >
+        <div class="flex items-center gap-4">
+          {#if space?.current?.imageUrl}
+            <img
+              src={space?.current?.imageUrl}
+              alt={space?.current?.name || ""}
+              class="size-8 object-cover rounded-full object-center bg-base-200 dark:bg-base-900"
+            />
+          {:else if space?.current && space?.current.id}
+            <div class="size-8">
+              <AvatarMarble name={space?.current.id} />
+            </div>
+          {:else}
+            <div class="size-8 bg-base-300 rounded-full"></div>
+          {/if}
+
+          <h1
+            class="text-md font-semibold text-base-900 dark:text-base-100 truncate flex-grow"
+          >
+            {space?.current?.name && space?.current?.name !== "Unnamed"
+              ? space.current?.name
+              : ""}
+          </h1>
+        </div>
+        <Icon
+          icon="lucide:chevron-down"
+          class="size-4 text-base-700 dark:text-base-300"
+        />
+      </button>
+    {/snippet}
+    <Button variant="red" class="w-full" onclick={leaveSpace}>
+      <Icon icon="lucide:log-out" class="size-4" /> Leave Space
+    </Button>
+  </Popover>
 </div>
 
 <!-- Space description -->

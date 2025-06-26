@@ -5,7 +5,7 @@
   type Props = {
     title?: string;
     description?: string;
-    isDrawerOpen?: boolean;
+    open?: boolean;
     drawerTrigger?: Snippet;
     children: Snippet;
   };
@@ -13,14 +13,14 @@
   let {
     title,
     description,
-    isDrawerOpen = $bindable<boolean>(false),
+    open = $bindable<boolean>(false),
     drawerTrigger,
     children
   }: Props = $props();
 
 </script>
 
-<Drawer.Root bind:open={isDrawerOpen}>
+<Drawer.Root bind:open>
   {#if drawerTrigger}
     <Drawer.Trigger>
       {@render drawerTrigger?.()}

@@ -23,10 +23,10 @@
 </script>
 
 {#if error}
-  <p>
+  <p class="text-base-900 dark:text-base-100">
     Error logging in: {error}.
   </p>
-  <p>
+  <p class="text-base-900 dark:text-base-100">
     <a href="/">Go Home</a>
   </p>
 {/if}

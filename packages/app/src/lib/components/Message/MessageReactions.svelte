@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { Toggle, Popover, Tooltip } from "bits-ui";
   import Icon from "@iconify/svelte";
-  import EmojiPicker from "../helper/EmojiPicker.svelte";
+  import { PopoverEmojiPicker } from "@fuxui/social";
+  import { Button, Toggle, Tooltip, TooltipProvider } from "@fuxui/base";
 
   let {
     reactions,
@@ -26,7 +26,7 @@
 
 {#if reactions.length > 0}
   <div class="flex gap-2 flex-wrap pl-14 z-10">
-    <Tooltip.Provider>
+    <!-- <Tooltip.Provider>
       {#each reactions as reaction}
         <Tooltip.Root>
           <Tooltip.Trigger>
@@ -66,15 +66,41 @@
           </Tooltip.Content>
         </Tooltip.Root>
       {/each}
-    </Tooltip.Provider>
+    </Tooltip.Provider> -->
+    <TooltipProvider>
+    {#each reactions as reaction}
+      <Tooltip
+        text={reaction.emoji +
+          " " +
+          reaction.users.map((user) => user.name).join(", ")}
+      >
+        {#snippet child({ props })}
+          <Toggle
+            {...props}
+            bind:pressed={reaction.user}
+            onclick={() => toggleReaction(reaction.emoji)}
+          >
+            {reaction.emoji}
+            {#if reaction.count > 1}
+              <span class="text-xs font-semibold text-base-900 dark:text-base-100">
+                {reaction.count}
+              </span>
+            {/if}
+          </Toggle>
+        {/snippet}
+      </Tooltip>
+    {/each}
+  </TooltipProvider>
 
-    <Popover.Root bind:open={isEmojiRowPickerOpen}>
-      <Popover.Trigger class="p-2 hover:bg-white/5 rounded cursor-pointer">
-        <Icon icon="lucide:smile-plus" class="text-primary" />
-      </Popover.Trigger>
-      <Popover.Content class="z-10">
-        <EmojiPicker {onEmojiPick} />
-      </Popover.Content>
-    </Popover.Root>
+    <PopoverEmojiPicker
+      bind:open={isEmojiRowPickerOpen}
+      onpicked={(emoji) => onEmojiPick(emoji.unicode)}
+    >
+      {#snippet child({ props })}
+        <Button size="icon" variant="ghost" {...props}>
+          <Icon icon="lucide:smile-plus" class="text-primary" />
+        </Button>
+      {/snippet}
+    </PopoverEmojiPicker>
   </div>
 {/if}

@@ -5,6 +5,7 @@
     editor.commands.focus();
   }
 </script>
+
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { Editor, Extension } from "@tiptap/core";
@@ -57,7 +58,7 @@
         defaultProtocol: "https",
       }),
       initKeyboardShortcutHandler({ onEnter: wrappedOnEnter }),
-    ]
+    ];
 
     if (users) {
       extensions.push(initUserMention({ users }) as Extension);
@@ -65,22 +66,24 @@
     if (context) {
       extensions.push(initSpaceContextMention({ context }) as Extension);
     }
-    
+
     tiptap = new Editor({
       element,
       extensions,
       content,
       editorProps: {
         attributes: {
-          class:
-           cn(inputVariants({variant: "primary", sizeVariant: "default"}), "w-full outline-none text-base-950 dark:text-base-50"),
+          class: cn(
+            inputVariants({ variant: "primary", sizeVariant: "lg" }),
+            "w-full outline-none text-base-950 dark:text-base-50",
+          ),
         },
       },
       onUpdate: (ctx) => {
         content = ctx.editor.getHTML();
       },
     });
-    editor = tiptap
+    editor = tiptap;
     if (setFocus) {
       // focus at the end of the content
       tiptap?.commands.focus();

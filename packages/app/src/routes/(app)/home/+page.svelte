@@ -23,12 +23,11 @@
 <div class="min-h-screen flex flex-col items-center justify-center">
   <div class="dz-hero-content">
     <div class="flex flex-col gap-8 items-center">
-      <h1 class="text-5xl font-bold text-center">Hi Roomy 👋</h1>
-      <p class="text-lg font-medium max-w-2xl text-center">
+      <h1 class="text-5xl font-bold text-center text-base-950 dark:text-base-50">Hi Roomy 👋</h1>
+      <p class="text-lg font-medium max-w-2xl text-center text-base-800 dark:text-base-200">
         A digital gardening platform for communities. Flourish in Spaces,
         curating knowledge and conversations together.
       </p>
-      <div>Hello {me?.profile.name}!</div>
       <div class="divider"></div>
 
       {#if !user.session}
@@ -43,7 +42,7 @@
       {:else if !spaces}
         <span class="dz-loading dz-loading-spinner mx-auto w-25"></span>
       {:else if spaces.length > 0}
-        <h2 class="text-3xl font-bold">Your Spaces</h2>
+        <h2 class="text-3xl font-bold text-base-900 dark:text-base-100">Your Spaces</h2>
         <section class="flex flex-wrap justify-center gap-4 max-w-5xl">
           {#each spaces as space}
             <Button
