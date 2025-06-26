@@ -1,7 +1,6 @@
 import { format } from "date-fns";
-import { Message, Space, Channel } from "$lib/jazz/schema";
+import { Space } from "@roomy-chat/sdk";
 import { co } from "jazz-tools";
-import { CoState } from "jazz-svelte";
 
 export interface UserActivity {
   activityByDate: Record<string, number>;

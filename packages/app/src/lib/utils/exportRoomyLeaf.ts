@@ -1,7 +1,6 @@
 import { getProfile } from "$lib/profile.svelte";
 import { createCompleteExtensions } from "$lib/tiptap/editor";
-import { Message, Category } from "$lib/jazz/schema";
-import { co } from "jazz-tools";
+import { Message, Category } from "@roomy-chat/sdk";
 import { generateHTML } from "@tiptap/html";
 import TurndownService from "turndown";
 import * as zip from "@zip-js/zip-js";

@@ -6,10 +6,9 @@
   import { user } from "$lib/user.svelte";
   import toast from "svelte-french-toast";
   import { CoState } from "jazz-svelte";
-  import { Space } from "$lib/jazz/schema";
+  import { Space, publicGroup } from "@roomy-chat/sdk";
   import { page } from "$app/state";
   import { co, z } from "jazz-tools";
-  import { publicGroup } from "$lib/jazz/utils";
 
   let space = $derived(new CoState(Space, page.params.space));
 

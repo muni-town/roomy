@@ -3,7 +3,7 @@
   import Icon from "@iconify/svelte";
   import SidebarSpace from "$lib/components/SidebarSpace.svelte";
   import { co } from "jazz-tools";
-  import { RoomyAccount, Space, SpaceList } from "$lib/jazz/schema";
+  import { RoomyAccount, Space, SpaceList } from "@roomy-chat/sdk";
   import { CoState } from "jazz-svelte";
   import { page } from "$app/state";
   import { TooltipProvider, Button } from "@fuxui/base";

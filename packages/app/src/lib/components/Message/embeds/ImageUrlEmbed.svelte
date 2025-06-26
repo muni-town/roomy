@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ImageUrlEmbed } from "$lib/jazz/schema";
+  import { ImageUrlEmbed } from "@roomy-chat/sdk";
   import { CoState } from "jazz-svelte";
 
   let {

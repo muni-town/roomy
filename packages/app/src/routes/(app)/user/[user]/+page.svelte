@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import UserProfile from "$lib/components/UserProfile.svelte";
-  import { RoomyAccount } from "$lib/jazz/schema";
+  import { RoomyAccount } from "@roomy-chat/sdk";
   import Icon from "@iconify/svelte";
   import { AccountCoState, CoState } from "jazz-svelte";
 

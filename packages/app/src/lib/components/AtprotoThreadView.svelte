@@ -1,14 +1,11 @@
 <script lang="ts">
-  import { co } from "jazz-tools";
-  import { Thread } from "$lib/jazz/schema";
+  import { Thread, Message } from "@roomy-chat/sdk";
   import { AtprotoFeedAggregator } from "$lib/utils/atproToFeeds";
   import type { AtprotoThreadPost } from "$lib/utils/atproToFeeds";
   import { user } from "$lib/user.svelte";
   import Icon from "@iconify/svelte";
   import { page } from "$app/state";
   import { CoState } from "jazz-svelte";
-  import { Message } from "$lib/jazz/schema";
-  import { navigate } from "$lib/utils.svelte";
   import { goto } from "$app/navigation";
 
   let {

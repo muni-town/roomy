@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Thread } from "$lib/jazz/schema";
+  import { Thread } from "@roomy-chat/sdk";
   import { navigateSync } from "$lib/utils.svelte";
   import { Button } from "@fuxui/base";
   import { CoState } from "jazz-svelte";

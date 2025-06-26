@@ -5,11 +5,9 @@
   import { Button } from "@fuxui/base";
   import Dialog from "$lib/components/Dialog.svelte";
   import { toast } from "svelte-french-toast";
-  import { isSpaceAdmin } from "$lib/jazz/utils";
   import { CoState, AccountCoState } from "jazz-svelte";
-  import { Channel, Space, Thread, RoomyAccount, GlobalHiddenPost } from "$lib/jazz/schema";
+  import { Channel, Space, Thread, RoomyAccount, GlobalHiddenPost, isSpaceAdmin, publicGroup } from "@roomy-chat/sdk";
   import { co } from "jazz-tools";
-  import { publicGroup } from "$lib/jazz/utils";
   import { ATPROTO_FEED_CONFIG, ATPROTO_FEEDS, addFeedToList } from "$lib/utils/atproToFeeds";
   import { user } from "$lib/user.svelte";
 

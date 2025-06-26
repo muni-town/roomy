@@ -2,8 +2,7 @@
   import { toast } from "svelte-french-toast";
   import Dialog from "./Dialog.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
-  import { Channel, Space } from "$lib/jazz/schema";
-  import { createPage, createPagesList } from "$lib/jazz/utils";
+  import { Channel, Space, createPage, createPagesList } from "@roomy-chat/sdk";
   import { CoState } from "jazz-svelte";
   import { page } from "$app/state";
 

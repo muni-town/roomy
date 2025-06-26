@@ -1,6 +1,6 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
-  import type { Message } from "$lib/jazz/schema";
+  import type { Message } from "@roomy-chat/sdk";
   import SearchResult from "./SearchResult.svelte";
   import { co } from "jazz-tools";
 

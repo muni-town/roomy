@@ -14,9 +14,7 @@
   import SidebarMain from "$lib/components/SidebarMain.svelte";
   import { page } from "$app/state";
   import { afterNavigate } from "$app/navigation";
-  import { LastReadList, RoomyAccount } from "$lib/jazz/schema";
-  import { wordlist } from "$lib/jazz/wordlist";
-  import { addToAllAccountsList } from "$lib/jazz/utils";
+  import { LastReadList, RoomyAccount, wordlist, addToAllAccountsList } from "@roomy-chat/sdk";
   import SmallSidebar from "$lib/components/ui/SmallSidebar.svelte";
   import BigSidebar from "$lib/components/ui/BigSidebar.svelte";
 

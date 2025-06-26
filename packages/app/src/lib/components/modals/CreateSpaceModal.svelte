@@ -1,6 +1,5 @@
 <script lang="ts">
-  import type { RoomyAccount } from "$lib/jazz/schema";
-  import { createSpace, createSpaceList } from "$lib/jazz/utils";
+  import { type RoomyAccount, createSpace, createSpaceList } from "@roomy-chat/sdk";
   import { navigate } from "$lib/utils.svelte";
   import { Modal, Input, Button, Heading } from "@fuxui/base";
   import Icon from "@iconify/svelte";

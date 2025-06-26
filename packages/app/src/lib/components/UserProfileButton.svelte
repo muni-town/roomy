@@ -3,7 +3,7 @@
   import { AvatarBeam } from "svelte-boring-avatars";
   import { goto } from "$app/navigation";
   import { AccountCoState } from "jazz-svelte";
-  import { RoomyAccount } from "$lib/jazz/schema";
+  import { RoomyAccount } from "@roomy-chat/sdk";
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {

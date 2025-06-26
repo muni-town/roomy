@@ -3,8 +3,6 @@
   import Dialog from "$lib/components/Dialog.svelte";
   import { Button, Popover } from "@fuxui/base";
   import { navigate, Toggle } from "$lib/utils.svelte";
-  import SpaceSettingsDialog from "$lib/components/SpaceSettingsDialog.svelte";
-  import ToggleSidebarIcon from "./ToggleSidebarIcon.svelte";
   import { getContext } from "svelte";
   import SidebarChannelList from "./SidebarChannelList.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
@@ -18,13 +16,15 @@
     createThread,
     isSpaceAdmin,
     spacePages,
-  } from "$lib/jazz/utils";
+    Category,
+    RoomyAccount,
+    Space,
+  } from "@roomy-chat/sdk";
   import {
     ATPROTO_FEED_CONFIG,
     ATPROTO_FEEDS,
     addFeedToList,
   } from "$lib/utils/atproToFeeds";
-  import { Category, RoomyAccount, Space } from "$lib/jazz/schema";
   import { co } from "jazz-tools";
   import { AvatarMarble } from "svelte-boring-avatars";
 
@@ -125,6 +125,7 @@
 
   function allThreads() {
     let threads = space?.current?.threads || [];
+    console.log(threads);
     // Use page rune directly
     const currentSpace = page?.params?.space || "";
     return threads
@@ -269,10 +270,14 @@
     selectedFeeds = selectedFeeds.filter((uri) => uri !== feedUri);
   }
 
-
   // TODO: add leave space back in somewhere
   function leaveSpace() {
-    if (!space?.current?.id || !me?.current?.profile?.joinedSpaces || !space.current.members) return;
+    if (
+      !space?.current?.id ||
+      !me?.current?.profile?.joinedSpaces ||
+      !space.current.members
+    )
+      return;
 
     // Remove the space from the user's joined spaces
     const spaceIndex = me.current.profile.joinedSpaces.findIndex(
@@ -282,7 +287,9 @@
       me.current.profile.joinedSpaces.splice(spaceIndex, 1);
     }
 
-    const memberIndex = space.current.members.findIndex((m) => m?.id === me?.current?.id);
+    const memberIndex = space.current.members.findIndex(
+      (m) => m?.id === me?.current?.id,
+    );
     if (memberIndex !== -1) {
       space.current.members.splice(memberIndex, 1);
     }

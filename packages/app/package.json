@@ -105,7 +105,8 @@
     "vite-plugin-arraybuffer": "^0.1.0",
     "vite-plugin-top-level-await": "^1.4.4",
     "vite-plugin-wasm": "^3.4.1",
-    "vitest": "^3.0.9"
+    "vitest": "^3.0.9",
+    "@roomy-chat/sdk": "workspace:*"
   },
   "lint-staged": {
     "*.{svelte,svelte.ts}": [

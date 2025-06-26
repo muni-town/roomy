@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Message, RoomyProfile } from "$lib/jazz/schema";
+  import { Message, RoomyProfile } from "@roomy-chat/sdk";
   import { CoState } from "jazz-svelte";
   import { Button } from "bits-ui";
   import { Avatar } from "bits-ui";

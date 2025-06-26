@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { Space } from "$lib/jazz/schema";
+  import { Space } from "@roomy-chat/sdk";
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
   import { CoState } from "jazz-svelte";

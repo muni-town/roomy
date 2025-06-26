@@ -15,8 +15,8 @@ import {
   Thread,
   Timeline,
   GlobalHiddenPost,
-} from "./schema";
-import { allAccountsListId, allSpacesListId } from "./ids";
+} from "./schema.js";
+import { allAccountsListId, allSpacesListId } from "./ids.js";
 
 export function publicGroup(readWrite: "reader" | "writer" = "reader") {
   const group = Group.create();
@@ -25,7 +25,7 @@ export function publicGroup(readWrite: "reader" | "writer" = "reader") {
   return group;
 }
 
-export function createChannel(name: string, channelType: "chat" | "feeds" = "chat") {
+export function createChannel(name: string, channelType: "chat" | "feeds" | "links" = "chat") {
   const publicWriteGroup = publicGroup("writer");
   const publicReadGroup = publicGroup("reader");
 
@@ -44,6 +44,7 @@ export function createChannel(name: string, channelType: "chat" | "feeds" = "cha
       mainThread: thread,
       subThreads: co.list(Thread).create([], publicWriteGroup),
       channelType,
+      hideThreshold: 3,
     },
     publicReadGroup,
   );

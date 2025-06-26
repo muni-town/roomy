@@ -1,6 +1,5 @@
 import { co, z } from "jazz-tools";
-import { getRandomUsername } from "./username.ts";
-import { createInbox, createSpaceList, publicGroup } from "./utils.ts";
+import { createInbox, createSpaceList, publicGroup } from "./utils.js";
 
 export const Reaction = co.map({
   emoji: z.string(),
@@ -80,17 +79,19 @@ export const Channel = co.map({
   pages: z.optional(co.list(Page)),
 
   softDeleted: z.boolean().optional(),
-  
+
   // Channel type - determines how the channel behaves
   channelType: z.enum(["chat", "feeds", "links"]).optional().default("chat"),
-  
+
   // ATProto feed integration - now used for feeds channels
   isAtprotoFeed: z.boolean().optional(), // For backwards compatibility
   showAtprotoFeeds: z.boolean().optional(), // Show feeds in board view
-  atprotoFeedsConfig: z.optional(z.object({
-    feeds: z.array(z.string()), // Which feeds to show
-    threadsOnly: z.boolean(), // Only show thread posts
-  })),
+  atprotoFeedsConfig: z.optional(
+    z.object({
+      feeds: z.array(z.string()), // Which feeds to show
+      threadsOnly: z.boolean(), // Only show thread posts
+    }),
+  ),
 
   // Global hiding system for feed channels
   globalHiddenPosts: z.optional(co.list(GlobalHiddenPost)),
@@ -153,12 +154,16 @@ export const RoomyProfile = co.profile({
   description: z.string().optional(),
   threadSubscriptions: z.optional(co.list(z.string())), // List of thread IDs user is subscribed to
   hiddenFeedPosts: z.optional(co.list(z.string())), // List of AT Proto URIs for hidden feed posts
-  hiddenFeedPostsCache: z.optional(co.list(co.map({
-    uri: z.string(),
-    text: z.string(),
-    author: z.string(),
-    hiddenAt: z.date(),
-  }))), // Cache of hidden post data for better UI display
+  hiddenFeedPostsCache: z.optional(
+    co.list(
+      co.map({
+        uri: z.string(),
+        text: z.string(),
+        author: z.string(),
+        hiddenAt: z.date(),
+      }),
+    ),
+  ), // Cache of hidden post data for better UI display
 });
 
 export const RoomyRoot = co.map({
@@ -180,7 +185,7 @@ export const RoomyAccount = co
     if (account.profile === undefined) {
       account.profile = RoomyProfile.create(
         {
-          name: creationProps?.name ?? getRandomUsername(),
+          name: creationProps?.name ?? "Anonymous",
           joinedSpaces: createSpaceList(),
           roomyInbox: createInbox(),
         },

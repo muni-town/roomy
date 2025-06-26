@@ -5,9 +5,14 @@
     RoomyAccount,
     GlobalHiddenPost,
     FeedPostVote,
-  } from "$lib/jazz/schema";
+    Space,
+    enableAtprotoFeeds,
+    createThread,
+    createMessage,
+    publicGroup,
+    isSpaceAdmin,
+  } from "@roomy-chat/sdk";
   import { AccountCoState } from "jazz-svelte";
-  import { untrack } from "svelte";
   import {
     ATPROTO_FEED_CONFIG,
     AtprotoFeedAggregator,
@@ -19,16 +24,7 @@
     AtprotoThreadPost,
   } from "$lib/utils/atproToFeeds";
   import Icon from "@iconify/svelte";
-  import { format } from "date-fns";
-  import {
-    enableAtprotoFeeds,
-    createThread,
-    createMessage,
-    publicGroup,
-    isSpaceAdmin,
-  } from "$lib/jazz/utils";
   import { CoState } from "jazz-svelte";
-  import { Space } from "$lib/jazz/schema";
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
 

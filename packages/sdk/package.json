@@ -1,10 +1,9 @@
 {
   "name": "@roomy-chat/sdk",
-  "version": "0.1.0-preview.20",
+  "version": "0.2.0",
   "license": "MPL-2.0",
+  "type": "module",
   "packageManager": "pnpm@10.10.0",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "repository": {
     "url": "https://github.com/muni-town/roomy-sdk"
   },
@@ -14,17 +13,18 @@
     "./README.md"
   ],
   "scripts": {
-    "change": "beachball change --no-commit",
-    "build-lib": "pkgroll --minify --clean-dist --sourcemap && tsc"
+    "dev": "tsc --watch",
+    "build": "tsc"
+  },
+  "exports": {
+    ".": "./src/index.ts"
   },
   "devDependencies": {
     "beachball": "^2.54.0",
-    "jazz-tools": "^0.14.10",
+    "jazz-tools": "^0.14.21",
     "pkgroll": "^2.12.2",
     "turbo": "^2.5.2",
-    "typescript": "^5.8.3"
-  },
-  "dependencies": {
-    "@muni-town/leaf": "0.2.0-preview.22"
+    "typescript": "^5.8.3",
+    "@repo/tsconfig": "workspace:*"
   }
 }

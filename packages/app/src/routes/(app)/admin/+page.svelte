@@ -2,8 +2,7 @@
   import { navigateSync } from "$lib/utils.svelte";
   import { Button } from "@fuxui/base";
 
-  import { IDList, Space } from "$lib/jazz/schema";
-  import { allAccountsListId, allSpacesListId } from "$lib/jazz/ids";
+  import { IDList, Space, allAccountsListId, allSpacesListId } from "@roomy-chat/sdk";
   import { CoState } from "jazz-svelte";
 
   // load all spaces and accounts

@@ -1,10 +1,8 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { initSearch } from "$lib/components/search/search.svelte";
-  import { Space } from "$lib/jazz/schema";
-  import { wordlist } from "$lib/jazz/wordlist";
+  import { Space, wordlist } from "@roomy-chat/sdk";
   import { CoState, usePassphraseAuth } from "jazz-svelte";
-  import { atprotoFeedService } from "$lib/services/atprotoFeedService";
 
   let { children } = $props();
   const auth = usePassphraseAuth({ wordlist });

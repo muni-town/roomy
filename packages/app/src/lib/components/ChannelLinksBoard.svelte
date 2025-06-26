@@ -1,8 +1,7 @@
 <script lang="ts">
   import { co } from "jazz-tools";
-  import { Channel, Message, Space } from "$lib/jazz/schema";
+  import { Message, Space } from "@roomy-chat/sdk";
   import Icon from "@iconify/svelte";
-  import { format } from "date-fns";
 
   let {
     space,

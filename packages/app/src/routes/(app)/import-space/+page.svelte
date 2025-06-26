@@ -25,10 +25,10 @@
     createMessage,
     createSpace,
     createThread,
-  } from "$lib/jazz/utils";
+    RoomyAccount, SpaceMigrationReference,
+    spaceMigrationReferenceId
+  } from "@roomy-chat/sdk";
   import { AccountCoState } from "jazz-svelte";
-  import { RoomyAccount, SpaceMigrationReference } from "$lib/jazz/schema";
-  import { spaceMigrationReferenceId } from "$lib/jazz/ids";
 
   type DiscordMessage<
     MessageType extends "Default" | "Reply" | string = "Default",

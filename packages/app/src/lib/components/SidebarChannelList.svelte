@@ -1,11 +1,10 @@
 <script lang="ts">
   import Icon from "@iconify/svelte";
-  import { Category, Channel, RoomyAccount, Space } from "$lib/jazz/schema";
+  import { Category, Channel, RoomyAccount, Space, isSpaceAdmin} from "@roomy-chat/sdk";
   import { Accordion, Button } from "bits-ui";
   import { slide } from "svelte/transition";
   import Dialog from "./Dialog.svelte";
   import { co } from "jazz-tools";
-  import { isSpaceAdmin } from "$lib/jazz/utils";
   import SidebarChannelButton from "./SidebarChannelButton.svelte";
 
   let {

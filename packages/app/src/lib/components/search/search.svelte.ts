@@ -1,10 +1,4 @@
-import {
-  Channel,
-  Message,
-  Thread,
-  Timeline,
-  Space,
-} from "$lib/jazz/schema";
+import { Channel, Message, Thread, Space } from "@roomy-chat/sdk";
 import { Charset, Document, IndexedDB } from "flexsearch";
 import type { co } from "jazz-tools";
 

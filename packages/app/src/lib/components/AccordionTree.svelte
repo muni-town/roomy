@@ -4,9 +4,8 @@
   import { page } from "$app/state";
   import { navigateSync, type NavigationTarget } from "$lib/utils.svelte";
   import { slide } from "svelte/transition";
-  import { isSpaceAdmin } from "$lib/jazz/utils";
   import { CoState } from "jazz-svelte";
-  import { Space } from "$lib/jazz/schema";
+  import { Space, isSpaceAdmin } from "@roomy-chat/sdk";
 
   let space = $derived(
     new CoState(Space, page.params.space, {

@@ -9,11 +9,9 @@
   import ChatMessage from "./ChatMessage.svelte";
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
-  import { Message, Timeline } from "$lib/jazz/schema";
-  import { derivePromise } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import { Account, co } from "jazz-tools";
-  import type { Space } from "$lib/jazz/schema";
+  import type { Space } from "@roomy-chat/sdk";
   import Icon from "@iconify/svelte";
   import toast from "svelte-french-toast";
   import { Button } from "@fuxui/base";

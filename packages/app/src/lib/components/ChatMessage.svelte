@@ -16,14 +16,12 @@
     RoomyAccount,
     RoomyProfile,
     Space,
-  } from "$lib/jazz/schema";
-  import { Account, co } from "jazz-tools";
-  import MessageToolbar from "./Message/MessageToolbar.svelte";
-  import {
     makeSpaceAdmin,
     messageHasAdmin,
     publicGroup,
-  } from "$lib/jazz/utils";
+  } from "@roomy-chat/sdk";
+  import { Account, co } from "jazz-tools";
+  import MessageToolbar from "./Message/MessageToolbar.svelte";
   import MessageReactions from "./Message/MessageReactions.svelte";
   import ChatInput from "./ChatInput.svelte";
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";

@@ -1,4 +1,4 @@
-import type { ReactionList, RoomyAccount } from "$lib/jazz/schema";
+import type { ReactionList, RoomyAccount } from "@roomy-chat/sdk";
 import type { co, Loaded } from "jazz-tools";
 
 export function convertReactionsToEmojis(

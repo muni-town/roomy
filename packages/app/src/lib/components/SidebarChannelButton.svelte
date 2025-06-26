@@ -1,12 +1,10 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import type { Channel, RoomyAccount, Space } from "$lib/jazz/schema";
-  import { isSpaceAdmin, publicGroup } from "$lib/jazz/utils";
+  import { type Channel, type RoomyAccount, type Space, publicGroup, isSpaceAdmin } from "@roomy-chat/sdk";
   import { navigate, navigateSync } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
   import { Button } from "@fuxui/base";
   import { co, z } from "jazz-tools";
-  import { slide } from "svelte/transition";
 
   let {
     channel,

@@ -9,24 +9,20 @@
     LastReadList,
     Message,
     RoomyAccount,
-    Thread,
-  } from "$lib/jazz/schema";
-  import TimelineToolbar from "$lib/components/TimelineToolbar.svelte";
+    Thread,Channel, Space,
+    addToInbox,
+    createMessage,
+    createThread,
+    isSpaceAdmin,
+    type ImageUrlEmbedCreate,
+  } from "@roomy-chat/sdk";
   import CreatePageDialog from "$lib/components/CreatePageDialog.svelte";
   import BoardList from "./BoardList.svelte";
   import ChannelFeedsBoard from "./ChannelFeedsBoard.svelte";
   import ChannelLinksBoard from "./ChannelLinksBoard.svelte";
   import ToggleNavigation from "./ToggleNavigation.svelte";
   import { AccountCoState, CoState } from "jazz-svelte";
-  import { Channel, Space } from "$lib/jazz/schema";
   import { page } from "$app/state";
-  import {
-    addToInbox,
-    createMessage,
-    createThread,
-    isSpaceAdmin,
-    type ImageUrlEmbedCreate,
-  } from "$lib/jazz/utils";
   import { user } from "$lib/user.svelte";
   import { replyTo } from "./ChatMessage.svelte";
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";

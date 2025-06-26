@@ -13,8 +13,7 @@
   import Dialog from "$lib/components/Dialog.svelte";
   import { outerWidth } from "svelte/reactivity/window";
   import { CoState } from "jazz-svelte";
-  import { Page, Space } from "$lib/jazz/schema";
-  import { isSpaceAdmin } from "$lib/jazz/utils";
+  import { Page, Space, isSpaceAdmin } from "@roomy-chat/sdk";
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 
   const pg = $derived(new CoState(Page, page.params.page));

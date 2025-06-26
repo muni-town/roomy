@@ -1,7 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { spaceMigrationReferenceId } from "$lib/jazz/ids";
-  import { SpaceMigrationReference } from "$lib/jazz/schema";
+  import { spaceMigrationReferenceId, SpaceMigrationReference } from "@roomy-chat/sdk";
   import { user } from "$lib/user.svelte";
   import { Button } from "bits-ui";
   import { CoState } from "jazz-svelte";

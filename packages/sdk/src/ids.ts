@@ -1,6 +1,6 @@
 import { Group } from "jazz-tools";
-import { IDList, SpaceMigrationReference } from "./schema";
-import { publicGroup } from "./utils";
+import { IDList, SpaceMigrationReference } from "./schema.js";
+import { publicGroup } from "./utils.js";
 
 // the
 export function createAllSpacesList() {

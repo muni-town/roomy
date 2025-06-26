@@ -2,7 +2,7 @@
   import Icon from "@iconify/svelte";
   import { user } from "$lib/user.svelte";
   import { AccountCoState } from "jazz-svelte";
-  import { RoomyAccount } from "$lib/jazz/schema";
+  import { RoomyAccount } from "@roomy-chat/sdk";
   import { Button } from "@fuxui/base";
   import { blueskyLoginModalState } from "@fuxui/social";
 

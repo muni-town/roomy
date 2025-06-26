@@ -1,8 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { RoomyAccount, LastReadList } from "$lib/jazz/schema";
+  import { RoomyAccount, LastReadList } from "@roomy-chat/sdk";
   import { AccountCoState } from "jazz-svelte";
-  // import type { NamedEntity } from "@roomy-chat/sdk";
   import type { Snippet } from "svelte";
 
   let {

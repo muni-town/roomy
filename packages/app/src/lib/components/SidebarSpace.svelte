@@ -1,12 +1,10 @@
 <script lang="ts">
-  import ContextMenu from "./ContextMenu.svelte";
   import { AvatarMarble } from "svelte-boring-avatars";
   import { navigate, navigateSync } from "$lib/utils.svelte";
-  import TooltipPortal from "./TooltipPortal.svelte";
   import { page } from "$app/state";
   import { co } from "jazz-tools";
-  import { Space, RoomyAccount } from "$lib/jazz/schema";
-  import { Popover, Tooltip } from "@fuxui/base";
+  import { Space, RoomyAccount } from "@roomy-chat/sdk";
+  import { Tooltip } from "@fuxui/base";
 
   type Props = {
     space: co.loaded<typeof Space> | null | undefined;

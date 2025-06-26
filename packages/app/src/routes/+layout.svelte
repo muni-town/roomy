@@ -1,7 +1,7 @@
 <script lang="ts">
   import "../app.css";
   import { JazzProvider } from "jazz-svelte";
-  import { RoomyAccount } from "$lib/jazz/schema";
+  import { RoomyAccount } from "@roomy-chat/sdk";
   import "jazz-inspector-element";
   import { dev } from "$app/environment";
   import { BlueskyLoginModal } from "@fuxui/social";

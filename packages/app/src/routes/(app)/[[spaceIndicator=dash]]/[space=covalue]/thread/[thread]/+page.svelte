@@ -2,7 +2,7 @@
   import TimelineView from "$lib/components/TimelineView.svelte";
   import AtprotoThreadView from "$lib/components/AtprotoThreadView.svelte";
   import { CoState } from "jazz-svelte";
-  import { Thread, Message } from "$lib/jazz/schema";
+  import { Thread, Message } from "@roomy-chat/sdk";
   import { page } from "$app/state";
 
   let thread = $derived(new CoState(Thread, page.params.thread));
