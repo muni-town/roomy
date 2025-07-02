@@ -151,3 +151,20 @@ export const RoomyAccount = co
 
 export const SpaceMigrationReference = co.record(z.string(), z.string());
 export const IDList = co.list(z.string());
+
+// Discord Bridge Configuration Schema
+export const BridgeConfig = co.map({
+  id: z.string(),
+  name: z.string(),
+  discordToken: z.string(),
+  discordGuildId: z.string(),
+  discordChannelId: z.string(),
+  roomySpaceId: z.string(),
+  roomyChannelId: z.string().optional(),
+  enabled: z.boolean(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+  ownerId: z.string(), // The account ID of who created this bridge
+});
+
+export const BridgeConfigList = co.list(BridgeConfig);

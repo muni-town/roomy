@@ -1,64 +1,30 @@
 {
   "name": "discord-bridge",
   "version": "1.0.0",
-  "description": "Bridge between Discord and Roomy",
-  "main": "dist/index.js",
-  "type": "module",
-  "scripts": {
-    "dev": "vite dev --host 127.0.0.1 --port 5174",
-    "build": "vite build",
-    "preview": "vite preview",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "generate-env": "tsx generate-env.ts",
-    "backend:dev": "nodemon -I --exec node --experimental-specifier-resolution=node  --loader ts-node/esm ./src/backend/index.ts",
-    "discord": "nodemon -I --exec node --experimental-specifier-resolution=node  --loader ts-node/esm ./src/index.ts",
-    "backend:build": "tsc src/backend/index.ts --outDir dist --module esnext --target es2020",
-    "backend:start": "node dist/index.js"
-  },
-  "dependencies": {
-    "@atproto/api": "^0.14.9",
-    "@atproto/lexicon": "^0.4.11",
-    "@atproto/oauth-client-browser": "^0.3.17",
-    "@muni-town/leaf": "^0.2.0-preview.20",
-    "@muni-town/leaf-storage-indexeddb": "^0.1.0-preview.5",
-    "@muni-town/leaf-svelte": "^0.1.0-preview.5",
-    "@muni-town/leaf-sync-ws": "^0.1.0-preview.6",
+  "description": "Bridge between Discord and Roomy - Node.js Server",
+  "main": "dist/server.js",
+  "type": "module",  "scripts": {
+    "dev": "nodemon -I --exec node --experimental-specifier-resolution=node --loader ts-node/esm ./src/server.ts",
+    "build": "tsc --project tsconfig.json",
+    "start": "node dist/server.js",
+    "discord:dev": "nodemon -I --exec node --experimental-specifier-resolution=node  --loader ts-node/esm ./src/index.ts"
+  },"dependencies": {
     "cors": "^2.8.5",
     "discord.js": "^14.19.3",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "jazz-nodejs": "0.14.25",
-    "jazz-svelte": "0.14.25",
     "jazz-tools": "0.14.25",
-    "socket.io": "^4.8.1",
-    "svelte-french-toast": "^1.2.0",
     "undici": "6.21.1",
     "ws": "^8.18.2"
-  },
-  "devDependencies": {
-    "@iconify/svelte": "^4.2.0",
-    "@sveltejs/adapter-auto": "^3.0.0",
-    "@sveltejs/kit": "^2.20.7",
-    "@sveltejs/vite-plugin-svelte": "^5.0.3",
-    "@tailwindcss/typography": "^0.5.16",
+  },  "devDependencies": {
     "@types/cors": "^2.8.18",
     "@types/express": "^5.0.1",
     "@types/node": "^22.15.17",
     "@types/ws": "^8.18.1",
-    "autoprefixer": "^10.4.21",
-    "bits-ui": "^1.0.0",
-    "daisyui": "^4.12.24",
-    "node": "^24.0.1",
     "nodemon": "^3.1.10",
-    "postcss": "^8.5.6",
-    "svelte": "^5.0.0",
-    "svelte-check": "^4.0.0",
-    "tailwindcss": "3.4.0",
     "ts-node": "^10.9.2",
-    "ts-node-dev": "^2.0.0",
     "tsx": "^4.20.3",
-    "typescript": "^5.8.3",
-    "vite": "^6.0.0"
+    "typescript": "^5.8.3"
   }
 }

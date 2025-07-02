@@ -1,31 +1,101 @@
-# one time setup:
-  1. create co.list with discord bot and add "everyone" as "writeOnly", save id
+# Discord Bridge for Roomy
 
-# running discord bot:
-  1. subscribe to co.list with specified id
-  2. each item should be have 
-    - space id
-    - discord guild id
-    - status (requested, failed, running)
-  3. any time a new item is added/changed:
-    - if status is "requested" check if space and guild exist and can be accessed (if not, set status to "failed")
-    - if status is "running" check if event listeners in both directions exist
-      - if not add event listeners (for message events in discord and for messages in all roomy channels)
-  4. any time a message is received in discord:
-    - find a channel in the space that has the same name as the discord channel
-    - if found, send the message to the space
-  5. any time a message is sent to a space:
-    - find a channel in discord that has the same name as the space channel
-    - if found, send the message to the discord channel
-    
-# on client:
-  1. add bot to discord server
-  2. in space settings, enter your discord guild id and click "enable discord bridge"
-    -> will add a co.list item with status "requested"
-    -> wait for co.list item status to change
-      -> if failed show error message
-      -> if running, show success message
+A microservice that enables bidirectional message synchronization between Roomy spaces and Discord servers.
 
+## Architecture
 
-# other todos:
-  - move schema and utils to seperate package
+The Discord Bridge consists of:
+- **Express REST API Server** (`server.ts`) - Manages bridge configurations and validation
+- **Bridge Engine** (`index.ts`) - Handles active Discord connections and message routing
+- **Admin UI** - Web interface for managing bridges (in main Roomy app)
+
+## Setup & Configuration
+
+### 1. Environment Variables
+Create `.env` file in the discord-bridge package:
+```bash
+# Discord Bridge Service
+PORT=3001
+
+# Jazz Integration (for syncing with Roomy spaces)
+JAZZ_WORKER_ACCOUNT=your_worker_account_id
+JAZZ_WORKER_SECRET=your_worker_secret
+JAZZ_API_KEY=your_jazz_api_key
+```
+
+### 2. Running the Service
+```bash
+cd packages/discord-bridge
+npm install
+npm run dev
+```
+
+Service will start on http://localhost:3001
+
+## Usage
+
+### Creating a Discord Bridge
+
+1. **Setup Discord Bot:**
+   - Create a Discord application at https://discord.com/developers/applications
+   - Create a bot and copy the bot token
+   - Add bot to your Discord server with appropriate permissions
+   - Get your Discord Guild (Server) ID
+
+2. **Configure Bridge in Roomy:**
+   - Navigate to Admin → Discord Bridge in the Roomy app
+   - Click "New Bridge"
+   - Fill in:
+     - Bridge Name
+     - Discord Bot Token
+     - Discord Guild ID
+     - Select Roomy Space and Channel
+   - Click "Create Bridge"
+
+3. **Enable Bridge:**
+   - Click "Enable" on the created bridge
+   - Messages will now sync bidirectionally
+
+## API Endpoints
+
+### Health & Status
+- `GET /health` - Service health check
+- `GET /status` - Active bridge count and system info
+
+### Discord Validation
+- `POST /validate-discord` - Validate Discord bot token and guild access
+  ```json
+  {
+    "discordToken": "your_bot_token",
+    "guildId": "discord_guild_id"
+  }
+  ```
+
+### Bridge Management
+- `POST /bridges` - Start a new bridge
+- `DELETE /bridges/:id` - Stop a bridge
+- `GET /bridges` - List active bridges
+
+## Features
+
+### Current Implementation
+- REST API for bridge management
+- Discord bot token validation
+- Bidirectional message sync (Discord ↔ Roomy)
+- Admin UI with space/channel selection
+- Bridge status monitoring
+- User permission validation (space admin/creator only)
+- Persistent bridge configurations
+- Toast notifications and error handling
+- Webhook-based Discord message sending
+
+### Message Routing
+1. **Discord → Roomy:**
+   - Listens for Discord message events
+   - Sends to corresponding Roomy channel via Jazz
+   - Preserves author name and avatar
+
+2. **Roomy → Discord:**
+   - Monitors Roomy channel timeline
+   - Sends to Discord via webhooks
+   - Maintains message formatting
