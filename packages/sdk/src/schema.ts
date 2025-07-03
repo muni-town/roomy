@@ -64,8 +64,8 @@ export const FeedPostVote = co.map({
 export const GlobalHiddenPost = co.map({
   postUri: z.string(), // AT Proto URI of the post
   votes: co.list(FeedPostVote), // List of votes to hide this post
-  threshold: z.number().default(3), // Number of votes needed to globally hide
-  isHidden: z.boolean().default(false), // Whether post is globally hidden
+  threshold: z.number(), // Number of votes needed to globally hide
+  isHidden: z.boolean(), // Whether post is globally hidden
   hiddenAt: z.date().optional(), // When it was globally hidden
 });
 
@@ -81,7 +81,7 @@ export const Channel = co.map({
   softDeleted: z.boolean().optional(),
 
   // Channel type - determines how the channel behaves
-  channelType: z.enum(["chat", "feeds", "links"]).optional().default("chat"),
+  channelType: z.enum(["chat", "feeds", "links"]).optional(),
 
   // ATProto feed integration - now used for feeds channels
   isAtprotoFeed: z.boolean().optional(), // For backwards compatibility
@@ -95,7 +95,7 @@ export const Channel = co.map({
 
   // Global hiding system for feed channels
   globalHiddenPosts: z.optional(co.list(GlobalHiddenPost)),
-  hideThreshold: z.number().optional().default(3), // Number of votes needed to globally hide
+  hideThreshold: z.number().optional(), // Number of votes needed to globally hide
 });
 
 export const Category = co.map({
