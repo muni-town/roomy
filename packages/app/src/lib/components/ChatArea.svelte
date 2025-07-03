@@ -164,7 +164,7 @@
               data={slicedTimeline || []}
               getKey={(messageId) => messageId}
               scrollRef={viewport}
-              overscan={50}
+              overscan={5}
               shift={isShifting}
             >
               {#snippet children(messageId: string, index: number)}
