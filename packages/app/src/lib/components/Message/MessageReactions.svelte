@@ -77,7 +77,7 @@
         {#snippet child({ props })}
           <Toggle
             {...props}
-            bind:pressed={reaction.user}
+            pressed={reaction.user}
             onclick={() => toggleReaction(reaction.emoji)}
           >
             {reaction.emoji}

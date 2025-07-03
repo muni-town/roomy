@@ -5,6 +5,7 @@ import type { co } from "jazz-tools";
 let search: { [spaceId: string]: Document | null } = $state({});
 
 export async function initSearch(space: co.loaded<typeof Space>) {
+  return;
   if (!space) return;
   
   console.log("Initializing search for space:", space.id, space.name);
