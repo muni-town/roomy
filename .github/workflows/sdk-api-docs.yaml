@@ -9,6 +9,8 @@ on:
 jobs:
   # Build job
   build:
+    # Disable API docs for now since we don't have that much of an API anymore.
+    if: 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -26,7 +28,7 @@ jobs:
 
   # Deployment job
   deploy:
-    if: github.event_name == 'push' && github.ref_name == 'main'
+    if: false && github.event_name == 'push' && github.ref_name == 'main'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
