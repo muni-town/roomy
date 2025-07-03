@@ -582,7 +582,7 @@
     </div>
   {:else if tab === "chat"}
     {#if space.current}
-      <div class="flex flex-col flex-1 overflow-hidden pr-4">
+      <div class="flex flex-col flex-1 overflow-hidden">
         {#if showSearch && space.current}
           <div class="flex-none">
             <SearchBar spaceId={space.current.id} bind:showSearch />

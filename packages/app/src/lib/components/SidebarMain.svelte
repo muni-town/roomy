@@ -27,6 +27,7 @@
   } from "$lib/utils/atproToFeeds";
   import { co } from "jazz-tools";
   import { AvatarMarble } from "svelte-boring-avatars";
+  import toast from "svelte-french-toast";
 
   let space = $derived(
     page.params?.space
@@ -302,23 +303,14 @@
 </script>
 
 <!-- Header -->
-<div class="w-full pt-0 pb-1 px-2 h-fit flex mb-4 justify-between items-center">
-  <!-- <h1 class="text-sm font-bold text-base-900 dark:text-base-100 truncate flex-grow">
-    {space?.current?.name && space?.current?.name !== "Unnamed"
-      ? space.current?.name
-      : ""}
-  </h1>
-  <div class="flex items-center gap-1">
-    {#if userIsAdmin}
-      <SpaceSettingsDialog />
-    {/if}
-  </div> -->
-
+<div
+  class="w-full pt-0.5 pb-1 px-2 h-fit flex mb-4 justify-between items-center"
+>
   <Popover side="bottom" class="w-full" align="end">
     {#snippet child({ props })}
       <button
         {...props}
-        class="flex justify-between items-center mt-2 cursor-pointer rounded-xl bg-base-200 dark:bg-base-900/50 p-2 w-full text-left"
+        class="flex justify-between items-center mt-2 border border-base-800/10 dark:border-base-100/5 hover:bg-base-300/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl bg-base-200 dark:bg-base-900/50 p-2 w-full text-left"
       >
         <div class="flex items-center gap-4">
           {#if space?.current?.imageUrl}
@@ -349,9 +341,19 @@
         />
       </button>
     {/snippet}
-    <Button variant="red" class="w-full" onclick={leaveSpace}>
-      <Icon icon="lucide:log-out" class="size-4" /> Leave Space
-    </Button>
+    <div class="flex flex-col items-start justify-stretch gap-2">
+      <Button
+        onclick={() => {
+          navigator.clipboard.writeText(`${page.url.href}`);
+          toast.success("Invite link copied to clipboard");
+        }}
+      >
+        <Icon icon="lucide:share" class="size-4" /> Invite members
+      </Button>
+      <Button variant="red" class="w-full" onclick={leaveSpace}>
+        <Icon icon="lucide:log-out" class="size-4" /> Leave Space
+      </Button>
+    </div>
   </Popover>
 </div>
 

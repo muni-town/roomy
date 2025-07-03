@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { Toolbar, Popover } from "bits-ui";
+  import { Toolbar } from "bits-ui";
   import Drawer from "../Drawer.svelte";
   import Icon from "@iconify/svelte";
-  import EmojiPicker from "../helper/EmojiPicker.svelte";
   import { Button, buttonVariants } from "@fuxui/base";
   import { PopoverEmojiPicker } from "@fuxui/social";
 

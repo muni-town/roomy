@@ -2,10 +2,6 @@
   import { atproto } from "$lib/atproto.svelte";
   import { user } from "$lib/user.svelte";
   import { cleanHandle } from "$lib/utils.svelte";
-  import { Button } from "bits-ui";
-  import AvatarImage from "$lib/components/AvatarImage.svelte";
-  import Dialog from "$lib/components/Dialog.svelte";
-  import Icon from "@iconify/svelte";
   import { Avatar } from "@fuxui/base";
   import { blueskyLoginModalState } from "@fuxui/social";
   import UserSettingsModal from "./modals/UserSettingsModal.svelte";
