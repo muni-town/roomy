@@ -66,14 +66,14 @@
 
     <div class="divider my-0"></div>
     {#if !isOpenSpaceJoined && openSpace.current}
-      <SidebarSpace space={openSpace.current} hasJoined={false} {me} />
+      <SidebarSpace space={openSpace.current} hasJoined={false} />
     {/if}
   </div>
   <div class="flex-grow overflow-y-auto overflow-x-hidden">
     <div class="flex flex-col px-0 items-center gap-1.5">
       {#if spaces}
         {#each spaces as space}
-          <SidebarSpace {space} {me} />
+          <SidebarSpace {space} />
         {/each}
       {/if}
     </div>

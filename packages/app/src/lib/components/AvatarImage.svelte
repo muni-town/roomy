@@ -14,6 +14,6 @@
 <Avatar.Root class={`w-10 aspect-square ${className}`}>
   <Avatar.Image src={avatarUrl} class="rounded-full" />
   <Avatar.Fallback>
-    <AvatarMarble name={handle} />
+    <AvatarMarble name={handle} size={40} />
   </Avatar.Fallback>
 </Avatar.Root>

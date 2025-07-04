@@ -21,17 +21,17 @@
     // load roomyobjects and find first thread
     for (const childId of space.current.rootFolder.childrenIds) {
       const child = await RoomyObject.load(childId);
-      if (child?.objectType === "thread") {
-        navigate({
-          space: space.current.id,
-          channel: child.id,
-        });
-        return;
-      }
+      if(!child) continue;
+      
+      navigate({
+        space: space.current.id,
+        object: child.id,
+      });
+      return;
     }
   }
 
-  // Automatically navigate to the first channel in the space if we come to this empty space index
+  // Automatically navigate to the first object in the space if we come to this empty space index
   // page. We might have useful features on this index page eventually.
   $effect(() => {
     navigateToFirstThread();

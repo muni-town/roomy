@@ -1,49 +1,25 @@
 <script lang="ts">
   import { AvatarMarble } from "svelte-boring-avatars";
-  import { navigate, navigateSync } from "$lib/utils.svelte";
+  import { navigateSync } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import { co } from "jazz-tools";
-  import { Space, RoomyAccount } from "@roomy-chat/sdk";
+  import { Space } from "@roomy-chat/sdk";
   import { Tooltip } from "@fuxui/base";
 
   type Props = {
     space: co.loaded<typeof Space> | null | undefined;
     hasJoined?: boolean;
-    me: co.loaded<typeof RoomyAccount> | null | undefined;
   };
 
-  const { space, hasJoined = true, me }: Props = $props();
+  const { space, hasJoined = true }: Props = $props();
 
   let isActive = $derived(page.url.pathname.includes(space?.id || ""));
-
-  // TODO: add leave space back in somewhere
-  function leaveSpace() {
-    if (!space?.id || !me?.profile?.joinedSpaces || !space.members) return;
-
-    // Remove the space from the user's joined spaces
-    const spaceIndex = me.profile.joinedSpaces.findIndex(
-      (s) => s?.id === space.id,
-    );
-    if (spaceIndex !== -1) {
-      me.profile.joinedSpaces.splice(spaceIndex, 1);
-    }
-
-    const memberIndex = space.members.findIndex((m) => m?.id === me.id);
-    if (memberIndex !== -1) {
-      space.members.splice(memberIndex, 1);
-    }
-
-    // If the user is currently viewing this space, navigate to home
-    if (isActive) {
-      navigate("home");
-    }
-  }
 </script>
 
 <Tooltip
   text={space?.name}
   delayDuration={0}
-  contentProps={{ side: "right", sideOffset: 2 }}
+  contentProps={{ side: "right", sideOffset: 5 }}
 >
   {#snippet child({ props })}
     <a
@@ -69,7 +45,7 @@
           />
         {:else if space && space.id}
           <div class="size-10">
-            <AvatarMarble name={space.id} />
+            <AvatarMarble name={space.id} size={40} />
           </div>
         {:else}
           <div class="size-10 bg-base-300 rounded-full"></div>

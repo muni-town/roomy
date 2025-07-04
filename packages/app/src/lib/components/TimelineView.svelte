@@ -3,7 +3,7 @@
   import Icon from "@iconify/svelte";
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
-  import { Button, ThemeToggle } from "@fuxui/base";
+  import { Button } from "@fuxui/base";
   import { Account, co, Group } from "jazz-tools";
   import {
     LastReadList,
@@ -18,7 +18,6 @@
     isSpaceAdmin,
     type ImageUrlEmbedCreate,
   } from "@roomy-chat/sdk";
-  import ToggleNavigation from "./ToggleNavigation.svelte";
   import { AccountCoState, CoState } from "jazz-svelte";
   import { user } from "$lib/user.svelte";
   import { replyTo } from "./ChatMessage.svelte";
@@ -27,7 +26,6 @@
   import FullscreenImageDropper from "./helper/FullscreenImageDropper.svelte";
   import UploadFileButton from "./helper/UploadFileButton.svelte";
   import { afterNavigate } from "$app/navigation";
-  import Navbar from "./ui/Navbar.svelte";
   import { blueskyLoginModalState } from "@fuxui/social";
 
   // Component-level threading state - scoped per channel
@@ -377,185 +375,118 @@
   <div class="absolute top-0 left-0"></div>
 {/if}
 
-<div class="h-screen flex flex-col overflow-hidden">
-  <Navbar>
-    <div class="flex gap-4 items-center ml-4">
-      <ToggleNavigation />
-      <!-- {#if channel.current}
-        <h4
-          class="sm:line-clamp-1 sm:overflow-hidden sm:text-ellipsis text-lg font-bold text-base-900 dark:text-base-100"
-          title={"Channel"}
+{#if space.current}
+  <div class="flex flex-col flex-1 overflow-hidden">
+    <div class="flex-1 overflow-y-auto overflow-x-hidden relative">
+      <ChatArea
+        space={space.current}
+        {timeline}
+        isAdmin={isSpaceAdmin(space.current)}
+        admin={creator.current}
+        {threadId}
+        allowedToInteract={hasJoinedSpace && !isBanned}
+        {threading}
+      />
+    </div>
+
+    <div class="flex-none bg-white dark:bg-base-900 pt-2 pb-2 pr-2">
+      {#if replyTo.id}
+        <div
+          class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
         >
-          <span class="flex gap-2 items-center">
-            <Icon
-              icon={channel.current.channelType === "feeds"
-                ? "basil:feed-outline"
-                : channel.current.channelType === "links"
-                  ? "basil:link-outline"
-                  : "basil:comment-solid"}
-            />
-            {channel.current.name}
-            {#if channel.current.channelType === "feeds"}
-              <span class="text-xs bg-primary/20 text-primary px-2 py-1 rounded"
-                >FEEDS</span
-              >
-            {:else if channel.current.channelType === "links"}
-              <span
-                class="text-xs bg-secondary/20 text-secondary px-2 py-1 rounded"
-                >LINKS</span
-              >
-            {/if}
-          </span>
-        </h4>
-        {#if channel.current.channelType !== "feeds" && channel.current.channelType !== "links"}
-          <Tabs
-            items={[
-              { name: "chat", onclick: () => (tab = "chat") },
-              { name: "board", onclick: () => (tab = "board") },
-            ]}
-            active={tab}
-          ></Tabs>
-        {/if}
-      {/if} -->
-    </div>
-
-    <div class="hidden sm:flex dz-navbar-end items-center gap-2">
-      {#if tab === "chat"}
-        <!-- <button
-            class="btn btn-ghost btn-sm btn-circle"
-            onclick={() => (showSearch = !showSearch)}
-            title="Toggle search"
-          >
-            <Icon icon="tabler:search" class="text-base-content" />
-          </button> -->
-      {/if}
-      <!-- <TimelineToolbar
-          createThread={handleCreateThread}
-          bind:threadTitleInput
-          bind:threading
-        /> -->
-    </div>
-
-    <ThemeToggle />
-  </Navbar>
-
-  {#if space.current}
-    <div class="flex flex-col flex-1 overflow-hidden">
-      <div class="flex-1 overflow-y-auto overflow-x-hidden relative">
-        <ChatArea
-          space={space.current}
-          {timeline}
-          isAdmin={isSpaceAdmin(space.current)}
-          admin={creator.current}
-          {threadId}
-          allowedToInteract={hasJoinedSpace && !isBanned}
-          {threading}
-        />
-      </div>
-
-      <div class="flex-none bg-white dark:bg-base-900 pt-2 pb-2 pr-2">
-        {#if replyTo.id}
-          <div
-            class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
-          >
-            <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
-              <span class="shrink-0 text-base-900 dark:text-base-100"
-                >Replying to</span
-              >
-              <MessageRepliedTo messageId={replyTo.id} />
-            </div>
-            <Button
-              variant="ghost"
-              onclick={() => (replyTo.id = "")}
-              class="flex-shrink-0"
+          <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
+            <span class="shrink-0 text-base-900 dark:text-base-100"
+              >Replying to</span
             >
-              <Icon icon="zondicons:close-solid" />
-            </Button>
+            <MessageRepliedTo messageId={replyTo.id} />
           </div>
-        {/if}
-        <div class="w-full">
-          {#if user.session}
-            {#if hasJoinedSpace}
-              {#if !isBanned}
-                <div
-                  class="prose-a:text-primary prose-a:underline relative isolate"
-                >
-                  {#if previewImages.length > 0}
-                    <div class="flex gap-2 my-2 overflow-x-auto w-full">
-                      {#each previewImages as previewImage, index (previewImage)}
-                        <div class="size-24 relative shrink-0">
-                          <img
-                            src={previewImage}
-                            alt="Preview"
-                            class="absolute inset-0 w-full h-full object-cover"
-                          />
+          <Button
+            variant="ghost"
+            onclick={() => (replyTo.id = "")}
+            class="flex-shrink-0"
+          >
+            <Icon icon="zondicons:close-solid" />
+          </Button>
+        </div>
+      {/if}
+      <div class="w-full">
+        {#if user.session}
+          {#if hasJoinedSpace}
+            {#if !isBanned}
+              <div
+                class="prose-a:text-primary prose-a:underline relative isolate"
+              >
+                {#if previewImages.length > 0}
+                  <div class="flex gap-2 my-2 overflow-x-auto w-full">
+                    {#each previewImages as previewImage, index (previewImage)}
+                      <div class="size-24 relative shrink-0">
+                        <img
+                          src={previewImage}
+                          alt="Preview"
+                          class="absolute inset-0 w-full h-full object-cover"
+                        />
 
-                          <button
-                            class="btn btn-ghost btn-sm btn-circle absolute p-0.5 top-1 right-1 bg-base-100 rounded-full"
-                            onclick={() => removeImageFile(index)}
-                          >
-                            <Icon icon="tabler:x" class="size-4" />
-                          </button>
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-
-                  <div class="flex w-full pl-2 gap-2">
-                    <UploadFileButton {processImageFile} />
-
-                    {#key users.length + context.length}
-                      <ChatInput
-                        bind:content={messageInput}
-                        {users}
-                        {context}
-                        onEnter={sendMessage}
-                        {processImageFile}
-                      />
-                    {/key}
-                  </div>
-                  <FullscreenImageDropper {processImageFile} />
-
-                  {#if isSendingMessage}
-                    <div
-                      class="absolute inset-0 flex items-center text-primary justify-center z-20 bg-base-100/80"
-                    >
-                      <div class="text-xl font-bold flex items-center gap-4">
-                        Sending message...
-                        <span class="dz-loading dz-loading-spinner mx-auto w-8"
-                        ></span>
+                        <button
+                          class="btn btn-ghost btn-sm btn-circle absolute p-0.5 top-1 right-1 bg-base-100 rounded-full"
+                          onclick={() => removeImageFile(index)}
+                        >
+                          <Icon icon="tabler:x" class="size-4" />
+                        </button>
                       </div>
-                    </div>
-                  {/if}
+                    {/each}
+                  </div>
+                {/if}
+
+                <div class="flex w-full pl-2 gap-2">
+                  <UploadFileButton {processImageFile} />
+
+                  {#key users.length + context.length}
+                    <ChatInput
+                      bind:content={messageInput}
+                      {users}
+                      {context}
+                      onEnter={sendMessage}
+                      {processImageFile}
+                    />
+                  {/key}
                 </div>
-              {:else}
-                <div class="flex items-center grow flex-col">
-                  <Button disabled class="w-full dz-btn"
-                    >You are banned from this space</Button
+                <FullscreenImageDropper {processImageFile} />
+
+                {#if isSendingMessage}
+                  <div
+                    class="absolute inset-0 flex items-center text-primary justify-center z-20 bg-base-100/80"
                   >
-                </div>
-              {/if}
+                    <div class="text-xl font-bold flex items-center gap-4">
+                      Sending message...
+                      <span class="dz-loading dz-loading-spinner mx-auto w-8"
+                      ></span>
+                    </div>
+                  </div>
+                {/if}
+              </div>
             {:else}
               <div class="flex items-center grow flex-col">
-                <Button onclick={joinSpace} class="w-full dz-btn"
-                  >Join this space to chat</Button
+                <Button disabled class="w-full dz-btn"
+                  >You are banned from this space</Button
                 >
               </div>
             {/if}
           {:else}
-            <Button
-              class="mx-auto"
-              onclick={() => {
-                blueskyLoginModalState.show();
-              }}>Login to Chat</Button
-            >
+            <div class="flex items-center grow flex-col">
+              <Button onclick={joinSpace} class="w-full dz-btn"
+                >Join this space to chat</Button
+              >
+            </div>
           {/if}
-        </div>
-
-        <!-- {#if isMobile}
-          <TimelineToolbar createThread={handleCreateThread} bind:threadTitleInput />
-        {/if} -->
+        {:else}
+          <Button
+            class="mx-auto"
+            onclick={() => {
+              blueskyLoginModalState.show();
+            }}>Login to Chat</Button
+          >
+        {/if}
       </div>
     </div>
-  {/if}
-</div>
+  </div>
+{/if}

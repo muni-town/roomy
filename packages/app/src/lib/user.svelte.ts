@@ -205,8 +205,11 @@ export const user = {
   /** Logout the user. */
   logout() {
     localStorage.removeItem("did");
+    localStorage.removeItem("jazz-logged-in-secret");
     session = undefined;
     agent = undefined;
     navigate("home");
+    // reload the page to clear the session
+    window.location.reload();
   },
 };
