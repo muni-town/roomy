@@ -1,4 +1,4 @@
-<script module>
+<script module lang="ts">
   let editor: Editor;
   export function setInputFocus() {
     if (!editor) return;

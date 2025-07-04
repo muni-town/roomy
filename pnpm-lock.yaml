@@ -40,10 +40,6 @@ importers:
         version: 5.8.3
 
   packages/app:
-    dependencies:
-      lucide-svelte:
-        specifier: ^0.525.0
-        version: 0.525.0(svelte@5.35.2)
     devDependencies:
       '@atproto/api':
         specifier: ^0.14.9
@@ -2826,11 +2822,6 @@ packages:
 
   lru-cache@10.4.3:
     resolution: {integrity: sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==}
-
-  lucide-svelte@0.525.0:
-    resolution: {integrity: sha512-kfuN6JcCqTfCz2B76aXnyGLAzEBRSYw5GaUspM5RNHQZS5aI5yaKu06fbaofOk8cDvUtY0AUm/zAix7aUX6Q3A==}
-    peerDependencies:
-      svelte: ^3 || ^4 || ^5.0.0-next.42
 
   lunr@2.3.9:
     resolution: {integrity: sha512-zTU3DaZaF3Rt9rhN3uBMGQD3dD2/vFQqnvZCDv4dl5iOzq2IZQqTxu90r4E5J+nP70J3ilqVCrbho2eWaeW8Ow==}
@@ -6980,10 +6971,6 @@ snapshots:
   loupe@3.1.4: {}
 
   lru-cache@10.4.3: {}
-
-  lucide-svelte@0.525.0(svelte@5.35.2):
-    dependencies:
-      svelte: 5.35.2
 
   lunr@2.3.9: {}
 

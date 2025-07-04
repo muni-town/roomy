@@ -1,7 +1,5 @@
 packages:
   - packages/*
-ignoredBuiltDependencies:
-  - '@tailwindcss/oxide'
 onlyBuiltDependencies:
   - '@swc/core'
   - '@tailwindcss/oxide'
