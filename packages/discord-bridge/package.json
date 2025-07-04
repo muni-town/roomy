@@ -8,13 +8,12 @@
     "build": "tsc --project tsconfig.json",
     "start": "node dist/server.js",
     "discord:dev": "nodemon -I --exec node --experimental-specifier-resolution=node  --loader ts-node/esm ./src/index.ts"
-  },"dependencies": {
+  },  "dependencies": {
+    "@roomy-chat/sdk": "workspace:*",
     "cors": "^2.8.5",
     "discord.js": "^14.19.3",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
-    "jazz-nodejs": "0.14.25",
-    "jazz-tools": "0.14.25",
     "undici": "6.21.1",
     "ws": "^8.18.2"
   },  "devDependencies": {

@@ -1,6 +1,4 @@
-import { createMessage } from "./utils.js";
-import { Timeline } from "./schema.js";
-import { co, Group } from "jazz-tools";
+import { createMessage, Timeline, co, Group } from "@roomy-chat/sdk";
 
 export async function sendMessage(timeline: co.loaded<typeof Timeline>, messageInput: string, author: string, avatarUrl: string, admin: Group) {
 

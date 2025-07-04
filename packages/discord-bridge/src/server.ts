@@ -4,9 +4,7 @@ import * as dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path, { dirname } from 'path';
 import { setGlobalDispatcher, EnvHttpProxyAgent } from 'undici';
-import { startWorker } from 'jazz-nodejs';
-import { co, Group, Account } from "jazz-tools";
-import { RoomyAccount, BridgeConfig, BridgeConfigList, Space } from './schema.js';
+import { startWorker, co, Group, Account, RoomyAccount, BridgeConfig, BridgeConfigList, Space } from "@roomy-chat/sdk";
 import { startBridge, stopBridge, activeBridges, getBridgeStatus } from './index.js';
 import { Client, GatewayIntentBits } from 'discord.js';
 

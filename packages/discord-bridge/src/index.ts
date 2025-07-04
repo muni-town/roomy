@@ -5,9 +5,7 @@ import * as dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path, { dirname } from 'path';
 import { setGlobalDispatcher, EnvHttpProxyAgent } from 'undici'
-import { startWorker } from 'jazz-nodejs';
-import { co, Group, z } from "jazz-tools";
-import { Channel, Message, RoomyProfile, Space } from './schema.js';
+import { startWorker, co, Group, z, Channel, Message, RoomyProfile, Space } from "@roomy-chat/sdk";
 import { sendMessage } from './send.js';
 
 // Add support for running behind an http proxy.
