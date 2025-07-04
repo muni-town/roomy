@@ -1,5 +1,6 @@
-export * from "./schema.js";
-export * from "./utils.js";
-export * from "./ids.js";
+export * from "./schema/index.ts"
+export * from "./functions/index.ts";
 
-export * from "./utils/wordlist.js";
+export * from "./ids.ts";
+
+export * from "./utils/wordlist.ts";

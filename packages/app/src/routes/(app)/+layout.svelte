@@ -14,7 +14,12 @@
   import SidebarMain from "$lib/components/SidebarMain.svelte";
   import { page } from "$app/state";
   import { afterNavigate } from "$app/navigation";
-  import { LastReadList, RoomyAccount, wordlist, addToAllAccountsList } from "@roomy-chat/sdk";
+  import {
+    LastReadList,
+    RoomyAccount,
+    wordlist,
+    addToAllAccountsList,
+  } from "@roomy-chat/sdk";
   import SmallSidebar from "$lib/components/ui/SmallSidebar.svelte";
   import BigSidebar from "$lib/components/ui/BigSidebar.svelte";
 
@@ -54,6 +59,7 @@
     return true;
   }
 
+  // only used for testing
   async function removeProfileRecord() {
     await user.agent?.com.atproto.repo.deleteRecord({
       collection: "chat.roomy.profile",
@@ -197,16 +203,17 @@
   </div>
 </div>
 
-  <!-- Overlay -->
-  {#if page.params.space && isSidebarVisible.value}
-    <button
-      onclick={() => {
-        isSidebarVisible.toggle();
-      }}
-      aria-label="toggle navigation"
-      class="absolute inset-0 cursor-pointer sm:hidden z-50 bg-base-100/50 dark:bg-base-950/50"
-    ></button>
-  {/if}
+<!-- Overlay -->
+{#if page.params.space && isSidebarVisible.value}
+  <button
+    onclick={() => {
+      isSidebarVisible.toggle();
+    }}
+    aria-label="toggle navigation"
+    class="absolute inset-0 cursor-pointer sm:hidden z-50 bg-base-100/50 dark:bg-base-950/50"
+  ></button>
+{/if}
+
 <div
   class={[
     page.url.pathname === "/messages" ? "ml-18" : "",

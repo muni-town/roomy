@@ -1,5 +1,5 @@
 <!doctype html>
-<html data-theme lang="en" class="dark">
+<html data-theme lang="en">
   <head>
     <!-- Must -->
     <meta charset="utf-8" />
@@ -59,6 +59,36 @@
 
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     %sveltekit.head%
+
+    <script>
+      let dark = localStorage.getItem("darkMode");
+      if (dark) {
+        dark = JSON.parse(dark);
+      } else {
+        dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      }
+
+      var root = document.getElementsByTagName("html")[0];
+      if (dark) {
+        root.classList.add("dark");
+      } else {
+        root.classList.remove("dark");
+      }
+
+      // get accent color from local storage
+      let accentColor = localStorage.getItem("accentColor");
+      if (accentColor) {
+        accentColor = JSON.parse(accentColor);
+        root.classList.add(accentColor);
+      }
+
+      // get base color from local storage
+      let baseColor = localStorage.getItem("baseColor");
+      if (baseColor) {
+        baseColor = JSON.parse(baseColor);
+        root.classList.add(baseColor);
+      }
+    </script>
   </head>
   <body data-sveltekit-preload-data="hover" class="bg-white dark:bg-base-950">
     <div style="display: contents; overscroll-behavior: none">

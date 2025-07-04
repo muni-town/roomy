@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { Thread } from "@roomy-chat/sdk";
+  import { RoomyObject } from "@roomy-chat/sdk";
   import { navigateSync } from "$lib/utils.svelte";
   import { Button } from "@fuxui/base";
   import { CoState } from "jazz-svelte";
 
   let { threadId, spaceId }: { threadId: string; spaceId: string } = $props();
 
-  const thread = $derived(new CoState(Thread, threadId));
+  const thread = $derived(new CoState(RoomyObject, threadId));
 </script>
 
 <Button
@@ -14,7 +14,7 @@
   size="sm"
   href={navigateSync({
     space: spaceId,
-    thread: threadId,
+    object: threadId,
   })}
 >
   New thread: {thread.current?.name}
