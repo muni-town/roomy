@@ -7,12 +7,14 @@ set -ex
 # deno install
 # deno run build
 
+export NETLIFY=true
+
 pnpm install
 pnpm build-web-app
 
 target_url=""
 if [ "$PULL_REQUEST" = "true" ]; then
-  target_url="$DEPLOY_URL"
+  target_url="$DEPLOY_PRIME_URL"
 else 
   target_url="$URL"
 fi
