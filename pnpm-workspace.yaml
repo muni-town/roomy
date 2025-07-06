@@ -7,5 +7,10 @@ onlyBuiltDependencies:
   - core-js
   - esbuild
   - node
+catalog:
+  jazz-inspector-element: ^0.14
+  jazz-tools: ^0.14
+  jazz-svelte: ^0.14
+  jazz-nodejs: ^0.14
 patchedDependencies:
   '@discordjs/util': patches/@discordjs__util.patch
