@@ -1,14 +1,12 @@
-import { Client, GatewayIntentBits, TextChannel, Events, Webhook } from 'discord.js';
-import express from 'express';
-import type { Request, Response } from 'express';
-import http from 'http';
-import { Server as SocketIOServer } from 'socket.io';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import path from 'path';
+// Discord Bridge functions for use by BridgeCard.svelte
+
+import { Client, GatewayIntentBits, TextChannel, Events } from 'discord.js';
+import * as dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import path, { dirname } from 'path';
 import { setGlobalDispatcher, EnvHttpProxyAgent } from 'undici'
+import { startWorker, co, Group, z, Channel, Message, RoomyProfile, Space } from "@roomy-chat/sdk";
+import { sendMessage } from './send.js';
 
 // Add support for running behind an http proxy.
 const envHttpProxyAgent = new EnvHttpProxyAgent()
@@ -19,48 +17,16 @@ const __dirname = dirname(__filename);
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-// Define channel mapping type
-interface ChannelMapping {
-  discordChannelId: string;
-  discordChannelName: string;
-  roomyChannelId: string;
-  roomyChannelName: string;
-}
+// Store active clients and connections
+export const activeBridges = new Map<string, {
+  client: Client;
+  space: any;
+  channel: any;
+  admin: any;
+  processedMessages: Set<string>;
+}>();
 
-// Define bridge data type - simpler now, only Discord client
-interface BridgeData {
-  discordClient: Client;
-}
-
-const PORT = process.env.PORT || 3000;
-const app = express();
-const server = http.createServer(app);
-const io = new SocketIOServer(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
-});
-
-app.use(cors());
-app.use(express.json());
-
-// Add a basic route for testing
-app.get('/', (req: Request, res: Response) => {
-  res.send('Discord-Roomy Bridge Server is running');
-});
-
-// Track active bridges by user session
-const activeBridges = new Map<string, BridgeData>();
-
-// Channel mappings per user
-const channelMappings = new Map<string, ChannelMapping[]>();
-
-// Track processed messages to avoid loops
-const processedMessages = new Set<string>();
-
-// Setup Discord client
-function createDiscordClient(token: string): Client {
+function createDiscordClient(): Client {
   const client = new Client({
     rest: {
       agent: envHttpProxyAgent,
@@ -75,270 +41,274 @@ function createDiscordClient(token: string): Client {
   return client;
 }
 
-// REST API endpoint to fetch Discord channels
-// @ts-ignore
-app.post('/api/discord-channels', async (req: Request, res: Response) => {
-  const { token, guildId } = req.body;
+async function setupClient(guildId: string, token: string): Promise<Client> {
+  const client = createDiscordClient();
   
-  if (!token || !guildId) {
-    return res.status(400).json({ error: "Missing token or guild ID" });
-  }
+  await client.login(token);
   
-  try {
-    const client = createDiscordClient(token);
-    
-    // Use a promise to wait for the client to be ready
-    await new Promise<void>((resolve, reject) => {
-      client.once(Events.ClientReady, () => resolve());
-      client.once(Events.Error, reject);
-      client.login(token).catch(reject);
+  // Wait for client to be ready
+  await new Promise<void>((resolve) => {
+    client.once('ready', () => {
+      console.log(`Discord client logged in as ${client.user?.tag}`);
+      resolve();
     });
+  });
+
+  return client;
+}
+
+async function startListeningToDiscord(
+  client: Client, 
+  channelObj: any, 
+  admin: any, 
+  processedMessages: Set<string>
+) {
+  client.on(Events.MessageCreate, async (discordMessage) => {
+    if (discordMessage.author.bot) return;
+    if (processedMessages.has(discordMessage.id)) return;
+
+    processedMessages.add(discordMessage.id);
+
+    try {
+      // Send message to Roomy
+      await sendMessage(
+        channelObj.mainThread.timeline,
+        discordMessage.content,
+        discordMessage.author.username,
+        discordMessage.author.displayAvatarURL(),
+        admin
+      );
+
+      console.log(`Synced Discord message to Roomy: ${discordMessage.content.substring(0, 50)}...`);
+    } catch (error) {
+      console.error('Error syncing Discord message to Roomy:', error);
+    }
+  });
+}
+
+async function findOrCreateWebhook(channel: TextChannel, client: Client) {
+  try {
+    const webhooks = await channel.fetchWebhooks();
+    let webhook = webhooks.find(wh => wh.name === 'Roomy Bridge');
     
-    // Fetch guild and channels
-    const guild = await client.guilds.fetch(guildId);
-    if (!guild) {
-      await client.destroy();
-      return res.status(404).json({ error: "Guild not found" });
+    if (!webhook) {
+      webhook = await channel.createWebhook({
+        name: 'Roomy Bridge',
+        reason: 'Bridge messages from Roomy to Discord',
+      });
     }
     
-    const channels = await guild.channels.fetch();
-    const textChannels = channels.filter(channel => 
-      channel?.type === 0 || channel?.type === 5 // TextChannel or AnnouncementChannel
-    ).map(channel => ({
-      id: channel.id,
-      name: channel.name
-    }));
-    
-    await client.destroy();
-    
-    return res.json({ channels: textChannels });
+    return webhook;
   } catch (error) {
-    console.error("Error fetching Discord channels:", error);
-    return res.status(500).json({ error: "Failed to fetch Discord channels" });
+    console.error('Error creating webhook:', error);
+    throw new Error('Failed to create webhook for message customization');
   }
+}
+
+export const WorkerProfile = co.profile({
+  name: z.string(),
+  imageUrl: z.string().optional(),
+  description: z.string().optional(),
 });
 
-// WebSocket handling
-io.on('connection', (socket) => {
-  console.log("New client connected:", socket.id);
-  
-  // Start bridge
-  socket.on('startBridge', async (data: {
-    discordToken: string;
-    mappings: ChannelMapping[];
-  }) => {
-    const { discordToken, mappings } = data;
+export const WorkerAccount = co.account({
+  profile: WorkerProfile,
+  root: co.map({}),
+});
+
+// Initialize Jazz worker once for the module
+let jazzWorker: any = null;
+
+async function initJazzWorker() {
+  if (!jazzWorker) {
+    const accountID = process.env.JAZZ_WORKER_ACCOUNT;
+    const accountSecret = process.env.JAZZ_WORKER_SECRET;
+    const syncServer = `wss://cloud.jazz.tools/?key=${process.env.JAZZ_API_KEY}`;
     
-    if (!discordToken || !mappings || mappings.length === 0) {
-      socket.emit('bridgeStatus', { 
-        success: false, 
-        message: "Missing required data" 
-      });
-      return;
+    if (!accountID || !accountSecret) {
+      throw new Error('Jazz credentials not set in environment variables: JAZZ_WORKER_ACCOUNT, JAZZ_WORKER_SECRET');
     }
     
-    try {
-      // Initialize Discord client
-      const discordClient = createDiscordClient(discordToken);
-      await discordClient.login(discordToken);
-      
-      // Save mappings
-      channelMappings.set(socket.id, mappings);
-      
-      // Setup Discord message handler
-      discordClient.on(Events.MessageCreate, async (message) => {
-        // Ignore bot messages to avoid loops
-        if (message.author.bot) return;
-        
-        // Find the mapping for this channel
-        const mapping = mappings.find(m => m.discordChannelId === message.channelId);
-        if (!mapping) return;
-        
-        const messageId = `discord-${message.id}`;
-        if (processedMessages.has(messageId)) return;
-        processedMessages.add(messageId);
-        
-        try {
-          // Get Discord avatar URL - similar to discord-import format
-          let avatarUrl = message.author.displayAvatarURL({ size: 128 });
-          
-          // Send the message to the client to handle on the Roomy side
-          socket.emit('discordMessage', {
+    const { worker } = await startWorker({
+      AccountSchema: WorkerAccount,
+      accountID,
+      accountSecret,
+      syncServer,
+    });
+    jazzWorker = worker;
+    console.log('Jazz worker initialized with account:', accountID);
+  }
+  return jazzWorker;
+}
+
+export async function startBridge(spaceId: string, channelId: string, guildId: string, discordToken?: string) {
+  try {
+    // Initialize Jazz worker
+    await initJazzWorker();
+
+    // Use provided token or fall back to environment variable
+    const token = discordToken || process.env.DISCORD_TOKEN;
+    if (!token) {
+      throw new Error('Discord token is required');
+    }
+    
+    console.log('Loading space and channel...', spaceId, channelId, guildId);
+
+    // Load space and channel
+    const space = await Space.load(spaceId);
+    if (!space) throw new Error('Error loading space');
+    console.log('Space loaded:', space.name);
+    
+    const admin = await Group.load(space.adminGroupId);
+    if (!admin) throw new Error('Error loading admin');
+    
+    const channelObj = await Channel.load(channelId, {
+      resolve: {
+        mainThread: {
+          timeline: {
+            $each: true,
+            $onError: null,
+          }
+        }
+      }
+    });
+    if (!channelObj) throw new Error('Error loading channel');
+    console.log('Channel loaded:', channelObj.name);    const processedMessages = new Set<string>();
+    
+    // Subscribe to timeline changes
+    if (channelObj.mainThread?.timeline) {
+      channelObj.mainThread.timeline.subscribe(async (timeline: any) => {
+        const ids = Object.values(timeline.perAccount ?? {})
+          .map((accountFeed: any) => new Array(...accountFeed.all))
+          .flat()
+          .sort((a: any, b: any) => a.madeAt.getTime() - b.madeAt.getTime())
+          .map((a: any) => a.value);
+
+        for(const id of ids) {
+          if(processedMessages.has(id)) continue;
+
+          processedMessages.add(id);
+
+          const message = await Message.load(id);
+          if(!message) {
+            continue;
+          }
+
+          // check if message is less than 10 seconds old
+          if(Date.now() - message.createdAt.getTime() > 10000) {
+            console.log('Message is more than 10 seconds old, skipping', message.createdAt);
+            continue;
+          }
+
+          if(message.author?.startsWith('discord:')) {
+            console.log('Message is from discord, skipping', message.author);
+            continue;
+          }
+
+          const authorId = message._edits.content?.by?.profile?.id;
+          if(!authorId) {
+            console.log('No author id found', message);
+            continue;
+          }
+
+          const author = await RoomyProfile.load(authorId);
+          if(!author) {
+            console.log('Failed to load author', authorId);
+            continue;
+          }          const name = author?.name;
+          const avatarUrl = author?.imageUrl;
+
+          // Find Discord channel in the guild
+          const guild = client.guilds.cache.get(guildId);
+          if (!guild) {
+            console.log('Discord guild not found');
+            return;
+          }
+
+          const discordChannel = guild.channels.cache.find(ch => ch.name === channelObj.name);
+          if(!discordChannel || discordChannel.type !== 0) { // 0 = text channel
+            console.log('No matching Discord text channel found');
+            return;
+          }
+
+          const channel = discordChannel as TextChannel;
+          let webhook = await findOrCreateWebhook(channel, client);
+
+          await webhook.send({
             content: message.content,
-            author: {
-              username: message.author.username,
-              id: message.author.id,
-              avatarUrl: avatarUrl
-            },
-            mapping: mapping,
-            discordMessageId: message.id,
-            timestamp: message.createdTimestamp
-          });
-          
-          // Clean up message ID after a delay
-          setTimeout(() => {
-            processedMessages.delete(messageId);
-          }, 60000);
-          
-        } catch (error: unknown) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          console.error('Error processing Discord message:', error);
-          socket.emit('messageStatus', {
-            direction: "discord-to-roomy",
-            success: false,
-            message: `Error: ${errorMessage}`
+            username: name,
+            avatarURL: avatarUrl || undefined
           });
         }
       });
-      
-      // Store in active bridges
-      activeBridges.set(socket.id, { discordClient });
-      
-      socket.emit('bridgeStatus', { 
-        success: true, 
-        message: "Bridge started successfully" 
-      });
-      
-      console.log(`Bridge started for session ${socket.id}`);
-      
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error("Error starting bridge:", error);
-      socket.emit('bridgeStatus', { success: false, message: errorMessage });
     }
-  });
-  
-  // Handle messages from Roomy to Discord
-  socket.on('roomyMessage', async (data: {
-    content: string;
-    mapping: ChannelMapping;
-    author?: string;
-    avatarUrl?: string;
-  }) => {
-    const { content, mapping, author, avatarUrl } = data;
-    const bridge = activeBridges.get(socket.id);
-    
-    if (!bridge || !bridge.discordClient) {
-      socket.emit('messageStatus', {
-        direction: "roomy-to-discord",
-        success: false,
-        message: "No active Discord client"
-      });
+
+    // Setup Discord client and listen
+    const client = await setupClient(guildId, token);
+    await startListeningToDiscord(client, channelObj, admin, processedMessages);
+
+    // Store the bridge connection
+    const bridgeKey = `${spaceId}-${guildId}`;
+    activeBridges.set(bridgeKey, {
+      client,
+      space,
+      channel: channelObj,
+      admin,
+      processedMessages
+    });
+
+    return { success: true, bridgeKey };
+  } catch (error) {
+    console.error('Error starting bridge:', error);
+    throw error;
+  }
+}
+
+export async function stopBridge(bridgeId: string) {
+  try {
+    const bridge = activeBridges.get(bridgeId);
+    if (!bridge) {
+      console.log(`Bridge ${bridgeId} not found or already stopped`);
       return;
     }
+
+    // Disconnect Discord client
+    if (bridge.client) {
+      bridge.client.destroy();
+    }
+
+    // Remove from active bridges
+    activeBridges.delete(bridgeId);
     
-    try {
-      // Get the Discord channel
-      const channel = await bridge.discordClient.channels.fetch(mapping.discordChannelId) as TextChannel;
-      if (!channel) {
-        throw new Error(`Discord channel ${mapping.discordChannelName} not found`);
-      }
-      
-      // Use webhook approach if author is provided
-      if (author) {
-        // Find existing webhook or create new one
-        let webhook = await findOrCreateWebhook(channel, bridge.discordClient);
-        
-        // Send the message with custom username and optional avatar
-        await webhook.send({
-          content: content,
-          username: author,
-          avatarURL: avatarUrl || undefined
-        });
-      } else {
-        // Fallback to regular message
-        await channel.send(content);
-      }
-      
-      socket.emit('messageStatus', {
-        direction: "roomy-to-discord",
-        success: true,
-        message: `Message sent to Discord channel ${mapping.discordChannelName}`
-      });
-      
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('Error sending message to Discord:', error);
-      socket.emit('messageStatus', {
-        direction: "roomy-to-discord",
-        success: false,
-        message: `Error: ${errorMessage}`
-      });
-    }
-  });
-  
-  // Helper function to find or create webhook
-  async function findOrCreateWebhook(channel: TextChannel, client: Client) {
-    try {
-      // Check for existing webhooks
-      const webhooks = await channel.fetchWebhooks();
-      let webhook = webhooks.find(wh => wh.name === 'RoomyBridge');
-      
-      // Create webhook if it doesn't exist
-      if (!webhook) {
-        webhook = await channel.createWebhook({
-          name: 'RoomyBridge',
-          avatar: 'https://i.imgur.com/AfFp7pu.png', // Default avatar, change to your app's logo
-          reason: 'Created for Roomy-Discord bridge'
-        });
-      }
-      
-      return webhook;
-    } catch (error) {
-      console.error('Error creating webhook:', error);
-      throw new Error('Failed to create webhook for message customization');
-    }
+    console.log(`Bridge ${bridgeId} stopped successfully`);
+  } catch (error) {
+    console.error(`Error stopping bridge ${bridgeId}:`, error);
+    throw error;
   }
+}
 
-  // Stop bridge
-  socket.on('stopBridge', async () => {
-    try {
-      const bridge = activeBridges.get(socket.id);
-      if (!bridge) {
-        socket.emit('bridgeStatus', { success: false, message: "No active bridge found" });
-        return;
-      }
-      
-      // Cleanup Discord client
-      if (bridge.discordClient) {
-        await bridge.discordClient.destroy();
-      }
-      
-      // Remove from active bridges
-      activeBridges.delete(socket.id);
-      channelMappings.delete(socket.id);
-      
-      socket.emit('bridgeStatus', { success: true, message: "Bridge stopped successfully" });
-      console.log(`Bridge stopped for session ${socket.id}`);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error("Error stopping bridge:", error);
-      socket.emit('bridgeStatus', { success: false, message: errorMessage });
-    }
-  });
-  
-  // Test connection endpoint
-  socket.on('testConnection', () => {
-    socket.emit('testConnectionResponse', { success: true, message: "Connection is working" });
-  });
-  
-  // Handle disconnection
-  socket.on('disconnect', async () => {
-    console.log("Client disconnected:", socket.id);
-    
-    // Cleanup resources
-    const bridge = activeBridges.get(socket.id);
-    if (bridge && bridge.discordClient) {
-      await bridge.discordClient.destroy();
-    }
-    
-    // Remove session data
-    activeBridges.delete(socket.id);
-    channelMappings.delete(socket.id);
-  });
-});
+export function getBridgeStatus() {
+  return {
+    activeBridges: activeBridges.size,
+    bridges: Array.from(activeBridges.keys())
+  };
+}
 
-// Start server
-server.listen(PORT, () => {
-  console.log(`Discord-Roomy bridge server running on port ${PORT}`);
-});
+// main function - only used for standalone testing
+async function main() {
+  const spaceId = process.env.SPACE_ID;
+  const channelId = process.env.CHANNEL_ID;
+  const guildId = process.env.GUILD_ID;
+  const discordToken = process.env.DISCORD_TOKEN;
+  
+  if (!spaceId || !channelId || !guildId) {
+    throw new Error('SPACE_ID, CHANNEL_ID, and GUILD_ID must be set');
+  }
+  
+  await startBridge(spaceId, channelId, guildId, discordToken);
+}
+
+// Only run main if this file is executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch(console.error);
+}

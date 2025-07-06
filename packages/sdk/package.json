@@ -20,8 +20,9 @@
     ".": "./src/index.ts"
   },
   "devDependencies": {
+    "jazz-tools": "0.14.21",
+    "jazz-nodejs": "0.14.25",
     "beachball": "^2.54.0",
-    "jazz-tools": "^0.14.21",
     "pkgroll": "^2.12.2",
     "turbo": "^2.5.2",
     "typescript": "^5.8.3",
