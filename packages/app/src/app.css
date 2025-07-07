@@ -12,6 +12,11 @@
   outline: 1px solid red;
 } */
 
+div,
+span {
+  @apply text-base-800 dark:text-base-300;
+}
+
 @theme inline {
   --color-base-50: var(--base-50);
   --color-base-100: var(--base-100);

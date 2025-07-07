@@ -32,9 +32,7 @@
         >
           Hi Roomy 👋
         </h1>
-        <p
-          class="text-lg font-medium max-w-2xl text-center text-base-800 dark:text-base-200"
-        >
+        <p class="text-lg font-medium max-w-2xl text-center">
           A digital gardening platform for communities. Flourish in Spaces,
           curating knowledge and conversations together.
         </p>
