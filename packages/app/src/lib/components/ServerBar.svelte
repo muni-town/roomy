@@ -4,7 +4,7 @@
   import SidebarSpace from "$lib/components/SidebarSpace.svelte";
   import { co } from "jazz-tools";
   import { RoomyAccount, Space, SpaceList } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
   import { page } from "$app/state";
   import { TooltipProvider, Button, ThemeToggle } from "@fuxui/base";
   import { SelectThemePopover } from "@fuxui/colors";

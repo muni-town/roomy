@@ -2,10 +2,11 @@
   import { Button, Prose } from "@fuxui/base";
   import Icon from "@iconify/svelte";
   import { PageContent, RoomyAccount } from "@roomy-chat/sdk";
-  import { AccountCoState, CoState } from "jazz-svelte";
+  import { AccountCoState, CoState } from "jazz-tools/svelte";
   import { RichTextEditor } from "@fuxui/text";
 
-  let { objectId, spaceId: _ }: { objectId: string; spaceId: string } = $props();
+  let { objectId, spaceId: _ }: { objectId: string; spaceId: string } =
+    $props();
 
   const page = $derived(new CoState(PageContent, objectId));
 

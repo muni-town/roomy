@@ -29,7 +29,7 @@
     SpaceMigrationReference,
     spaceMigrationReferenceId,
   } from "@roomy-chat/sdk";
-  import { AccountCoState } from "jazz-svelte";
+  import { AccountCoState } from "jazz-tools/svelte";
 
   type DiscordMessage<
     MessageType extends "Default" | "Reply" | string = "Default",

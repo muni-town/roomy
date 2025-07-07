@@ -3,7 +3,7 @@
   import { Button, cn, Popover } from "@fuxui/base";
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
-  import { AccountCoState, CoState } from "jazz-svelte";
+  import { AccountCoState, CoState } from "jazz-tools/svelte";
   import { isSpaceAdmin, RoomyAccount, Space } from "@roomy-chat/sdk";
   import { AvatarMarble } from "svelte-boring-avatars";
   import toast from "svelte-french-toast";
@@ -14,7 +14,7 @@
       ? new CoState(Space, page.params.space, {
           resolve: {
             rootFolder: {
-              components: true
+              components: true,
             },
           },
         })
@@ -65,7 +65,6 @@
 
   let showNewObjectDialog = $state(false);
 </script>
-
 
 <div
   class="w-full pt-0.5 pb-1 px-2 h-fit flex mb-4 justify-between items-center"

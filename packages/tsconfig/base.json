@@ -9,7 +9,7 @@
     "isolatedModules": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
-    "module": "NodeNext",
+    "module": "es2022",
     "declaration": true,
     "allowImportingTsExtensions": true,
     "emitDeclarationOnly": true

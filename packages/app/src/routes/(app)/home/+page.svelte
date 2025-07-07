@@ -1,6 +1,6 @@
 <script lang="ts">
   import { user } from "$lib/user.svelte";
-  import { AccountCoState } from "jazz-svelte";
+  import { AccountCoState } from "jazz-tools/svelte";
   import { RoomyAccount } from "@roomy-chat/sdk";
   import { Button } from "@fuxui/base";
   import { blueskyLoginModalState } from "@fuxui/social";

@@ -4,7 +4,7 @@
   import { Accordion, AccordionItem, Button } from "@fuxui/base";
   import Icon from "@iconify/svelte";
   import { IDList, RoomyObject } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
   import SidebarObjectList from "./SidebarObjectList.svelte";
 
   let { id }: { id: string } = $props();

@@ -12,7 +12,7 @@
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import Dialog from "$lib/components/Dialog.svelte";
   import { outerWidth } from "svelte/reactivity/window";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
   import { Page, Space, isSpaceAdmin } from "@roomy-chat/sdk";
   let isMobile = $derived((outerWidth.current ?? 0) < 640);
 

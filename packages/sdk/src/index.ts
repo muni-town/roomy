@@ -5,7 +5,6 @@ export * from "./utils/wordlist.ts";
 
 // Re-export jazz core packages
 export * from "jazz-tools";
-export * from "jazz-nodejs";
 
 export const spaceMigrationReferenceId = "co_znkJLqM9qGVyrdpVTVDUytvVtqN";
 export const allSpacesListId = "co_zmvrY2Ai57fbYwcFEiBY3tDXBdK";

@@ -10,7 +10,7 @@
   import ToggleNavigation from "../ToggleNavigation.svelte";
   import { cn } from "@fuxui/base";
   import ServerBar from "../ServerBar.svelte";
-  import { AccountCoState } from "jazz-svelte";
+  import { AccountCoState } from "jazz-tools/svelte";
   import { RoomyAccount } from "@roomy-chat/sdk";
   import { onNavigate } from "$app/navigation";
 

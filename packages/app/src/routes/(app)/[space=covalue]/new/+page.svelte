@@ -11,7 +11,7 @@
     IDList,
     Space,
   } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
 
   let space = $derived(
     new CoState(Space, page.params.space, {
@@ -23,8 +23,10 @@
     }),
   );
 
-  const children = $derived(new CoState(IDList, space?.current?.rootFolder?.components?.children));
-  
+  const children = $derived(
+    new CoState(IDList, space?.current?.rootFolder?.components?.children),
+  );
+
   let adminGroup = $derived(new CoState(Group, space?.current?.adminGroupId));
 
   let objectType = $state("thread");

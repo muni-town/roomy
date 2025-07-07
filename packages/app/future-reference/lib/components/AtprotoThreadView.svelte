@@ -5,7 +5,7 @@
   import { user } from "$lib/user.svelte";
   import Icon from "@iconify/svelte";
   import { page } from "$app/state";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
   import { goto } from "$app/navigation";
 
   let {

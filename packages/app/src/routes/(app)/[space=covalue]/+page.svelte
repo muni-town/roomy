@@ -3,7 +3,7 @@
   import { IDList, RoomyObject, Space } from "@roomy-chat/sdk";
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
 
   let space = $derived(
     new CoState(Space, page.params.space, {

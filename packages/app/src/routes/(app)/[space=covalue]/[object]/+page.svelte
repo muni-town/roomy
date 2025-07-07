@@ -5,7 +5,7 @@
   import SidebarMain from "$lib/components/SidebarMain.svelte";
   import TimelineView from "$lib/components/TimelineView.svelte";
   import { RoomyObject } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
 
   let object = $derived(new CoState(RoomyObject, page.params.object));
 </script>

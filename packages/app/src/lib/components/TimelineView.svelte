@@ -19,7 +19,7 @@
     type ImageUrlEmbedCreate,
     type VideoUrlEmbedCreate,
   } from "@roomy-chat/sdk";
-  import { AccountCoState, CoState } from "jazz-svelte";
+  import { AccountCoState, CoState } from "jazz-tools/svelte";
   import { user } from "$lib/user.svelte";
   import { replyTo } from "./ChatMessage.svelte";
   import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";

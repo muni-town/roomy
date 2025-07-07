@@ -10,7 +10,7 @@
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { activityIndex } from "../services/activityIndex";
-  import { AccountCoState } from "jazz-svelte";
+  import { AccountCoState } from "jazz-tools/svelte";
   import { co } from "jazz-tools";
 
   // Props
