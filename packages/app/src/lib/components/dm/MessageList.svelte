@@ -2,8 +2,8 @@
   import { onDestroy, onMount } from "svelte";
   import { dmClient, type Message } from "$lib/dm.svelte";
   import Icon from "@iconify/svelte";
-  import { ChatBubble, cn } from "@fuxui/base";
-  import { afterNavigate, beforeNavigate } from "$app/navigation";
+  import { Button, ChatBubble, cn, Input } from "@fuxui/base";
+  import { afterNavigate } from "$app/navigation";
 
   const { conversationId }: { conversationId: string } = $props();
 
@@ -44,7 +44,7 @@
   });
 
   afterNavigate(() => {
-    if(conversationId) {
+    if (conversationId) {
       refreshMessages();
     }
   });
@@ -63,7 +63,9 @@
       ]);
 
       messages = messagesResult;
-      conversationStatus = conversationDetails.status;
+      conversationStatus = conversationDetails.status ?? null;
+
+      console.log("Conversation status:", conversationDetails);
 
       // Sort messages chronologically (oldest first)
       messages.sort(
@@ -122,11 +124,8 @@
       // Mark conversation as read with the latest message
       if (messages.length > 0) {
         const latestMessage = messages[messages.length - 1];
-        try {
+        if (latestMessage?.id)
           await dmClient.markAsRead(conversationId, latestMessage.id);
-        } catch (readError) {
-          console.error("Failed to mark conversation as read:", readError);
-        }
       }
 
       scrollToBottom();
@@ -134,46 +133,7 @@
       console.error("Failed to load messages:", err);
       error = `Failed to load messages: ${err instanceof Error ? err.message : err}`;
 
-      // Add mock messages for testing
-      if (conversationId.startsWith("mock-")) {
-        messages = [
-          {
-            id: "msg-1",
-            text: "Hello! This is a test message.",
-            sender: {
-              did: "did:plc:mock1",
-              handle: "alice.bsky.social",
-              displayName: "Alice",
-            },
-            sentAt: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
-          },
-          {
-            id: "msg-2",
-            text: "Hey there! How are you?",
-            sender: {
-              did: "current-user",
-              handle: "me.bsky.social",
-              displayName: "Me",
-            },
-            sentAt: new Date(Date.now() - 1800000).toISOString(), // 30 min ago
-          },
-          {
-            id: "msg-3",
-            text: "I'm doing great, thanks for asking!",
-            sender: {
-              did: "did:plc:mock1",
-              handle: "alice.bsky.social",
-              displayName: "Alice",
-            },
-            sentAt: new Date(Date.now() - 900000).toISOString(), // 15 min ago
-          },
-        ];
-        // Sort mock messages chronologically too
-        messages.sort(
-          (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
-        );
-        scrollToBottom();
-      }
+      scrollToBottom();
     } finally {
       isLoading = false;
     }
@@ -217,11 +177,8 @@
         // Mark as read if there are new messages and we have messages
         if (hasNewMessages && newMessages.length > 0) {
           const latestMessage = newMessages[newMessages.length - 1];
-          try {
+          if (latestMessage?.id)
             await dmClient.markAsRead(conversationId, latestMessage.id);
-          } catch (readError) {
-            console.error("Failed to mark new messages as read:", readError);
-          }
         }
 
         // Only auto-scroll if user was already at bottom
@@ -294,6 +251,28 @@
       senderDid === dmClient.getCurrentUserDid() || senderDid === "current-user"
     );
   }
+  export function isOnlyEmojis(str: string): boolean {
+    // 1. Remove all whitespace (spaces, tabs, newlines, etc.)
+    const compact = str.replace(/\s+/g, "");
+
+    // 2. If nothing left (or only whitespace), fail
+    if (!compact) return false;
+
+    // 3. Regex to match one “emoji sequence” (including ZWJ sequences & selectors)
+    const emojiRegex =
+      /\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?(?:\u200D\p{Extended_Pictographic}(?:\uFE0F|\uFE0E)?)*/gu;
+
+    // 4. Extract all emoji sequences
+    const matches = Array.from(compact.matchAll(emojiRegex), (m) => m[0]);
+
+    // 5. If no matches, or joined matches ≠ the compact string, there were other characters
+    if (matches.length === 0 || matches.join("") !== compact) {
+      return false;
+    }
+
+    // 6. Finally ensure fewer than 5 emojis
+    return matches.length < 5;
+  }
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
@@ -304,15 +283,13 @@
       <span class="loading loading-spinner loading-lg text-primary"></span>
     </div>
   {:else if error}
-    <div class="alert alert-error m-4">
+    <div class="alert alert-error m-4 text-base-900 dark:text-base-100">
       <Icon icon="tabler:alert-circle" />
       <div>
         <div class="font-bold">Error</div>
         <div class="text-xs">{error}</div>
       </div>
-      <button onclick={loadMessages} class="btn btn-sm btn-outline">
-        Retry
-      </button>
+      <Button onclick={loadMessages} variant="secondary">Retry</Button>
     </div>
   {:else}
     <!-- Show empty state for new conversations -->
@@ -321,12 +298,14 @@
         <div class="text-center max-w-sm">
           <Icon
             icon="tabler:message-circle-plus"
-            class="h-12 w-12 mx-auto text-primary mb-4"
+            class="h-12 w-12 mx-auto text-base-900 dark:text-base-100 mb-4"
           />
-          <h3 class="text-lg font-semibold text-base-content mb-2">
+          <h3
+            class="text-lg font-semibold text-base-900 dark:text-base-100 mb-2"
+          >
             Start the conversation
           </h3>
-          <p class="text-sm text-base-content/60 mb-4">
+          <p class="text-sm text-base-700 dark:text-base-300 mb-4">
             {#if conversationPartner}
               Send your first message to {conversationPartner.displayName ||
                 conversationPartner.handle}
@@ -352,23 +331,44 @@
         </div>
       </div>
     {:else}
-      <div class="flex-1 min-h-0 overflow-y-auto px-4">
-        {#each messages as message}
-          <div
-            class={cn(
-              "text-xs text-base-700 dark:text-base-300 mt-2 mb-1 w-full",
-              isCurrentUser(message.sender.did) ? "text-right" : "text-left",
-            )}
-          >
-            {message.sender.displayName || message.sender.handle}
-            <time class="ml-1">{formatTimestamp(message.sentAt)}</time>
-          </div>
-          <ChatBubble
-            side={isCurrentUser(message.sender.did) ? "right" : "left"}
-          >
-            {message.text}
-          </ChatBubble>
-        {/each}
+      <div class="flex-1 min-h-0 overflow-y-auto px-4 pb-8 pt-4">
+        {#key messages}
+          {#each messages as message}
+            {#if message.text}
+              <div
+                class={cn(
+                  "text-xs text-base-700 dark:text-base-300 mt-2 mb-1 w-full",
+                  isCurrentUser(message.sender.did)
+                    ? "text-right"
+                    : "text-left",
+                )}
+              >
+                {message.sender.displayName || message.sender.handle}
+                <time class="ml-1">{formatTimestamp(message.sentAt)}</time>
+              </div>
+              {#if !isOnlyEmojis(message.text)}
+                <ChatBubble
+                  side={isCurrentUser(message.sender.did) ? "right" : "left"}
+                >
+                  <div class="break-words max-w-full whitespace-pre-wrap">
+                    {@html message.text.replace(/\n/g, "<br />")}
+                  </div>
+                </ChatBubble>
+              {:else}
+                <div
+                  class={cn(
+                    "text-5xl w-full",
+                    isCurrentUser(message.sender.did)
+                      ? "text-right"
+                      : "text-left",
+                  )}
+                >
+                  {message.text}
+                </div>
+              {/if}
+            {/if}
+          {/each}
+        {/key}
         <div bind:this={messageEnd}></div>
       </div>
     {/if}
@@ -377,24 +377,20 @@
       class="flex-none border-t border-base-400/30 dark:border-base-300/10 p-4"
     >
       <form onsubmit={handleSendMessage} class="flex gap-2">
-        <input
+        <Input
           type="text"
           bind:value={messageText}
           placeholder="Type a message..."
-          class="input input-bordered flex-1"
+          class="flex-1"
           disabled={isSending}
         />
-        <button
+        <Button
           type="submit"
-          class="btn btn-primary btn-square"
+          variant="ghost"
           disabled={!messageText.trim() || isSending}
         >
-          {#if isSending}
-            <span class="loading loading-spinner loading-sm"></span>
-          {:else}
-            <Icon icon="tabler:send" class="w-4 h-4" />
-          {/if}
-        </button>
+          <Icon icon="tabler:send" />
+        </Button>
       </form>
     </div>
   {/if}

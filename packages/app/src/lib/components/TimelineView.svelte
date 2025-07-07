@@ -63,7 +63,7 @@
   );
 
   let threadContent = $derived(
-    new CoState(ThreadContent, threadObject.current?.contentId),
+    new CoState(ThreadContent, threadObject.current?.content?.thread),
   );
 
   let timeline = $derived.by(() => {

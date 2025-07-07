@@ -17,7 +17,7 @@
     <SidebarMain />
   {/snippet}
 
-  {#if object.current?.objectType === "thread"}
+  {#if object.current?.content?.thread}
     <TimelineView
       objectId={page.params.object ?? ""}
       spaceId={page.params.space ?? ""}

@@ -6,17 +6,15 @@
     type Participant,
   } from "$lib/dm.svelte";
   import Icon from "@iconify/svelte";
-  import { user } from "$lib/user.svelte";
-  import { Avatar, cn } from "@fuxui/base";
+  import { Avatar, Badge, cn } from "@fuxui/base";
+  import { fade } from "svelte/transition";
 
-  // Props
   let {
     selectedConversationId,
   }: {
     selectedConversationId?: string | null;
   } = $props();
 
-  // State for conversations and loading state
   let conversations: Conversation[] = $state([]);
   let isLoading = $state(true);
   let error: string | null = $state(null);
@@ -36,14 +34,7 @@
     }
   });
 
-  $inspect(conversations);
-
-  function participantsWithoutMe(participants: Participant[]) {
-    const myDid = dmClient.getCurrentUserDid();
-    return participants.filter((p) => p.did !== myDid);
-  }
-
-  function getParticipantName(participants: Participant[]) {
+  function getConversationNames(participants: Participant[]) {
     const myDid = dmClient.getCurrentUserDid();
     const participantsWithoutMe = participants.filter((p) => p.did !== myDid);
 
@@ -63,7 +54,7 @@
     return names;
   }
 
-  function getParticipantAvatar(participants: Participant[]) {
+  function getConversationAvatar(participants: Participant[]) {
     const myDid = dmClient.getCurrentUserDid();
     const participantsWithoutMe = participants.filter((p) => p.did !== myDid);
     return participantsWithoutMe[0]?.avatar;
@@ -73,7 +64,9 @@
 {#if isLoading}
   <div class="text-center py-4">
     <span class="loading loading-spinner loading-md text-primary"></span>
-    <p class="mt-2 text-sm text-base-content/60">Loading conversations...</p>
+    <p class="mt-2 text-sm text-base-700 dark:text-base-300">
+      Loading conversations...
+    </p>
   </div>
 {:else if error}
   <div class="alert alert-error m-4">
@@ -123,41 +116,50 @@
   </div>
 {:else}
   {#each conversations as conversation}
-    <a
-      class={cn(
-        "flex items-start justify-between w-full px-3 py-1.5 text-left transition-colors relative border-0 bg-transparent rounded-lg",
-        selectedConversationId === conversation.id
-          ? "bg-accent-500/5 border-r-2 border-accent-500 text-accent-600 dark:text-accent-400"
-          : "hover:bg-base-200/50 dark:hover:bg-base-800/50 text-base-900 dark:text-base-100",
-      )}
-      href={`/messages/${conversation.id}`}
-    >
-      <div class="min-w-0 flex-1">
-        <div class="text-sm font-medium truncate w-full">
-          <div class="flex items-center gap-2">
-            <Avatar
-              src={getParticipantAvatar(conversation.participants)}
-            />
-
-            {getParticipantName(conversation.participants)}
-          </div>
-        </div>
-        {#if conversation.lastMessage}
-          <p
-            class="text-sm truncate mt-1 w-full
-                   {selectedConversationId === conversation.id
-              ? 'text-primary/70'
-              : 'text-base-content/60'}"
-          >
-            {conversation.lastMessage.text}
-          </p>
+    {#key conversation}
+      <a
+        onclick={() => {
+          conversation.unreadCount = 0;
+        }}
+        class={cn(
+          "flex items-center gap-2 justify-between w-full px-3 py-1.5 text-left transition-colors relative border-0 bg-transparent rounded-xl",
+          selectedConversationId === conversation.id
+            ? "bg-accent-500/5 text-accent-600 dark:text-accent-400"
+            : "hover:bg-base-200/50 dark:hover:bg-base-800/50 text-base-900 dark:text-base-100",
+        )}
+        href={`/messages/${conversation.id}`}
+      >
+        {#if selectedConversationId === conversation.id}
+          <span
+            transition:fade
+            class="from-accent-500/0 via-accent-500/60 to-accent-500/0 dark:from-accent-400/0 dark:via-accent-400/60 dark:to-accent-400/0 absolute inset-y-1 right-0 w-px bg-gradient-to-b"
+          ></span>
         {/if}
-      </div>
-      {#if conversation.unreadCount > 0}
-        <div class="badge badge-primary badge-sm flex-shrink-0">
-          {conversation.unreadCount}
+        <div class="min-w-0 flex-1">
+          <div class="text-sm font-medium truncate w-full">
+            <div class="flex items-center gap-2">
+              <Avatar src={getConversationAvatar(conversation.participants)} />
+
+              {getConversationNames(conversation.participants)}
+            </div>
+          </div>
+          {#if conversation.lastMessage}
+            <p
+              class="text-sm truncate mt-1 w-full
+                   {selectedConversationId === conversation.id
+                ? 'text-primary/70'
+                : 'text-base-content/60'}"
+            >
+              {conversation.lastMessage.text}
+            </p>
+          {/if}
         </div>
-      {/if}
-    </a>
+        {#if conversation.unreadCount > 0}
+          <Badge>
+            {conversation.unreadCount}
+          </Badge>
+        {/if}
+      </a>
+    {/key}
   {/each}
 {/if}

@@ -1,9 +1,7 @@
 import { co, z } from "jazz-tools";
 
 export const RoomyObject = co.map({
-  objectType: z.enum(["thread", "page", "folder"]),
-
-  contentId: z.string().optional(),
+  content: z.optional(co.record(z.string(), z.string())),
 
   name: z.string(),
 

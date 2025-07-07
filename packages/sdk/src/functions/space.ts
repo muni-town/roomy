@@ -1,9 +1,9 @@
 import { Account, co, Group, z } from "jazz-tools";
 import { allSpacesListId } from "../ids.ts";
 import { IDList, RoomyObject, Space } from "../schema/index.ts";
-import { createRoomyObject } from "./roomyobject.ts";
 import { createThread } from "./thread.ts";
 import { publicGroup } from "./group.ts";
+import { createFolder } from "./folder.ts";
 
 export function createSpace(
   name: string,
@@ -22,7 +22,7 @@ export function createSpace(
 
   const thread = createDefaultChannel ? createThread("general", adminGroup) : undefined;
 
-  const rootFolder = createRoomyObject("root", "folder", adminGroup);
+  const rootFolder = createFolder("root", adminGroup);
 
   const threads = co.list(RoomyObject).create([], publicWriteGroup);
 

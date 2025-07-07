@@ -11,7 +11,7 @@
   let object = $derived(new CoState(RoomyObject, id));
 </script>
 
-{#if object.current?.objectType === "thread"}
+{#if object.current?.content?.thread}
   <Button
     href={navigateSync({
       space: page.params.space!,
@@ -21,7 +21,7 @@
     class="w-full justify-start"
     data-current={object.current?.id === page.params.object}
   >
-    <Icon icon={"basil:comment-solid"} class="shrink-0" />
+    <Icon icon={"tabler:message-circle"} class="shrink-0" />
     <span class="truncate">{object.current?.name || "..."}</span>
   </Button>
 {/if}

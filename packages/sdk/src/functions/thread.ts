@@ -14,9 +14,12 @@ export function createThread(name: string, adminGroup: Group) {
     publicReadGroup,
   );
 
-  const roomyObject = createRoomyObject(name, "thread", adminGroup, true);
+  const roomyObject = createRoomyObject(name, adminGroup, true);
 
-  roomyObject.contentId = thread.id;
+  if (!roomyObject.content) {
+    throw new Error("RoomyObject content is undefined");
+  }
+  roomyObject.content.thread = thread.id;
 
   return { roomyObject, thread };
 }

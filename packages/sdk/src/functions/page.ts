@@ -13,9 +13,12 @@ export function createPage(name: string, adminGroup: Group) {
     readingGroup,
   );
 
-  const roomyObject = createRoomyObject(name, "page", adminGroup);
+  const roomyObject = createRoomyObject(name, adminGroup);
 
-  roomyObject.contentId = page.id;
+  if (!roomyObject.content) {
+    throw new Error("RoomyObject content is undefined");
+  }
+  roomyObject.content.page = page.id;
 
   return page;
 }
