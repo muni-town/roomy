@@ -6,7 +6,8 @@
   import { RoomyAccount, Space, SpaceList } from "@roomy-chat/sdk";
   import { CoState } from "jazz-svelte";
   import { page } from "$app/state";
-  import { TooltipProvider, Button } from "@fuxui/base";
+  import { TooltipProvider, Button, ThemeToggle } from "@fuxui/base";
+  import { SelectThemePopover } from "@fuxui/colors";
   import CreateSpaceModal from "./modals/CreateSpaceModal.svelte";
   import User from "./User.svelte";
   import { user } from "$lib/user.svelte";
@@ -80,6 +81,8 @@
   </div>
 
   <section class="flex flex-col items-center gap-2 p-0">
+    <SelectThemePopover />
+    <ThemeToggle class="backdrop-blur-none" />
     <User />
   </section>
 </TooltipProvider>

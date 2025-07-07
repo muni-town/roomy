@@ -77,6 +77,9 @@ importers:
       '@fuxui/base':
         specifier: ^0.2.2
         version: 0.2.2(svelte@5.35.2)(tailwindcss@4.1.11)
+      '@fuxui/colors':
+        specifier: ^0.2.2
+        version: 0.2.3(svelte@5.35.2)(tailwindcss@4.1.11)
       '@fuxui/social':
         specifier: ^0.2.2
         version: 0.2.2(svelte@5.35.2)(tailwindcss@4.1.11)
@@ -749,6 +752,12 @@ packages:
 
   '@fuxui/base@0.2.2':
     resolution: {integrity: sha512-BITdKSsQpDRq9HoZAf+e88OunUPeKnc3OhNowsQ8ZeYjZKkNWT+ZLX9q8galPiiuqS/WuK0oyy52mHqYuibUlw==}
+    peerDependencies:
+      svelte: '>=5'
+      tailwindcss: '>=3'
+
+  '@fuxui/colors@0.2.3':
+    resolution: {integrity: sha512-gzaqC68g2Ol74SshpfGPyIc/Mn/2Oyxjlg+0FpkmVy+RY1tiomGHqx7JXnj1L++rBk4vcjmPhJ/hUS/6IPYz9w==}
     peerDependencies:
       svelte: '>=5'
       tailwindcss: '>=3'
@@ -1526,6 +1535,9 @@ packages:
 
   '@tauri-apps/plugin-os@2.3.0':
     resolution: {integrity: sha512-dm3bDsMuUngpIQdJ1jaMkMfyQpHyDcaTIKTFaAMHoKeUd+Is3UHO2uzhElr6ZZkfytIIyQtSVnCWdW2Kc58f3g==}
+
+  '@texel/color@1.1.10':
+    resolution: {integrity: sha512-0du+jhP68nvdXGoS/dxAyqkmWWzsogtU3chygmNf/u4QtDIbG1e5OfcVIWfx29B5ANCLEDOPEQIvOhrvwhlORg==}
 
   '@tiptap/core@2.24.2':
     resolution: {integrity: sha512-RZ0+RdU9i88WqJF3ca1MWWDC08Ad2y9F2pytCfgohKHswNzhz0qeacoWZU/44yI15D+r320Peu6ucsy0uV+u4w==}
@@ -4898,6 +4910,15 @@ snapshots:
       tailwind-variants: 1.0.0(tailwindcss@4.1.11)
       tailwindcss: 4.1.11
 
+  '@fuxui/colors@0.2.3(svelte@5.35.2)(tailwindcss@4.1.11)':
+    dependencies:
+      '@fuxui/base': 0.2.2(svelte@5.35.2)(tailwindcss@4.1.11)
+      '@texel/color': 1.1.10
+      '@use-gesture/vanilla': 10.3.1
+      bits-ui: 1.8.0(svelte@5.35.2)
+      svelte: 5.35.2
+      tailwindcss: 4.1.11
+
   '@fuxui/social@0.2.2(svelte@5.35.2)(tailwindcss@4.1.11)':
     dependencies:
       '@atproto/api': 0.15.23
@@ -5594,6 +5615,8 @@ snapshots:
   '@tauri-apps/plugin-os@2.3.0':
     dependencies:
       '@tauri-apps/api': 2.6.0
+
+  '@texel/color@1.1.10': {}
 
   '@tiptap/core@2.24.2(@tiptap/pm@2.24.2)':
     dependencies:
