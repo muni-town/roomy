@@ -12,8 +12,7 @@
   outline: 1px solid red;
 } */
 
-div,
-span {
+div {
   @apply text-base-800 dark:text-base-300;
 }
 
