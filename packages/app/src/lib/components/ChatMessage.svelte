@@ -31,6 +31,7 @@
   import { convertReactionsToEmojis } from "$lib/utils/reactions";
   import { dev } from "$app/environment";
   import MessageThreadBadge from "./Message/MessageThreadBadge.svelte";
+  import VideoUrlEmbed from "./Message/embeds/VideoUrlEmbed.svelte";
   import { goto } from "$app/navigation";
   import { dmClient } from "$lib/dm.svelte";
   import { Badge } from "@fuxui/base";
@@ -474,6 +475,9 @@
         {#each message.current?.embeds ?? [] as embed}
           {#if embed?.type === "imageUrl"}
             <ImageUrlEmbed embedId={embed.embedId} />
+          {/if}
+          {#if embed?.type === "videoUrl"}
+            <VideoUrlEmbed embedId={embed.embedId} />
           {/if}
         {/each}
       </div>

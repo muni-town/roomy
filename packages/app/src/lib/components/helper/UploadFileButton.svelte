@@ -13,7 +13,8 @@
     const input = event.target as HTMLInputElement;
     if (!input.files?.length) return;
     for (const file of input.files) {
-      if (!file?.type.startsWith("image/")) continue;
+      if (!file?.type.startsWith("image/") && !file?.type.startsWith("video/"))
+        continue;
       processImageFile(file);
     }
   }
@@ -36,7 +37,7 @@
 <input
   type="file"
   multiple
-  accept="image/*"
+  accept="image/*,video/mp4"
   onchange={handleFileProcess}
   class="hidden"
   bind:this={fileInput}
