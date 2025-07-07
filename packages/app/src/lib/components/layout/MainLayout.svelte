@@ -8,7 +8,7 @@
   import SmallSidebar from "../ui/SmallSidebar.svelte";
   import { type Snippet } from "svelte";
   import ToggleNavigation from "../ToggleNavigation.svelte";
-  import { cn, ThemeToggle } from "@fuxui/base";
+  import { cn } from "@fuxui/base";
   import ServerBar from "../ServerBar.svelte";
   import { AccountCoState } from "jazz-svelte";
   import { RoomyAccount } from "@roomy-chat/sdk";
@@ -88,7 +88,6 @@
     <div class="hidden sm:flex dz-navbar-end items-center gap-2"></div>
 
     {@render navbar?.()}
-    <ThemeToggle />
   </Navbar>
 
   {@render children?.()}
