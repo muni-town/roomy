@@ -5,6 +5,8 @@
   import { RoomyAccount } from "@roomy-chat/sdk";
   import { Button } from "@fuxui/base";
   import { blueskyLoginModalState } from "@fuxui/social";
+  import MainLayout from "$lib/components/layout/MainLayout.svelte";
+
 
   const account = new AccountCoState(RoomyAccount, {
     resolve: {
@@ -20,8 +22,11 @@
   let spaces = $derived(me?.profile?.joinedSpaces);
 </script>
 
+<MainLayout>
+
+
 <div class="min-h-screen flex flex-col items-center justify-center">
-  <div class="dz-hero-content">
+  <div>
     <div class="flex flex-col gap-8 items-center">
       <h1 class="text-5xl font-bold text-center text-base-950 dark:text-base-50">Hi Roomy 👋</h1>
       <p class="text-lg font-medium max-w-2xl text-center text-base-800 dark:text-base-200">
@@ -34,7 +39,7 @@
         <div class="flex gap-4">
           <Button
             onclick={() => (blueskyLoginModalState.open = true)}
-            class="dz-btn dz-btn-primary"
+            size="lg"
           >
             Create Account or Log In
           </Button>
@@ -68,3 +73,5 @@
     </div>
   </div>
 </div>
+
+</MainLayout>

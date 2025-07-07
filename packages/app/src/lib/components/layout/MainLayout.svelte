@@ -1,0 +1,83 @@
+<script lang="ts">
+  import Navbar from "../ui/Navbar.svelte";
+  import BigSidebar from "../ui/BigSidebar.svelte";
+  import SmallSidebar from "../ui/SmallSidebar.svelte";
+  import type { Snippet } from "svelte";
+  import ToggleNavigation from "../ToggleNavigation.svelte";
+  import { cn, ThemeToggle } from "@fuxui/base";
+  import ServerBar from "../ServerBar.svelte";
+  import { AccountCoState } from "jazz-svelte";
+  import { RoomyAccount } from "@roomy-chat/sdk";
+
+  const me = new AccountCoState(RoomyAccount, {
+    resolve: {
+      profile: true,
+      root: true,
+    },
+  });
+  // Big sidebar
+  // Navbar
+  // Main content
+
+  let {
+    serverBar,
+    sidebar,
+    navbar,
+    children,
+  }: {
+    serverBar?: Snippet;
+    sidebar?: Snippet;
+    navbar?: Snippet;
+    children: Snippet;
+  } = $props();
+
+  let isSidebarVisible = $state(false);
+</script>
+
+<div
+  class={[
+    "isolate fixed top-0 bottom-0 left-0 z-20 bg-base-100/50 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none",
+    isSidebarVisible ? "block" : "hidden sm:block",
+  ]}
+>
+  <div class="flex h-full w-fit">
+    <SmallSidebar>
+      {#if serverBar}
+        {@render serverBar?.()}
+      {:else}
+        <ServerBar spaces={me.current?.profile.joinedSpaces} me={me.current} />
+      {/if}
+    </SmallSidebar>
+    {#if sidebar}
+      <BigSidebar>
+        {@render sidebar?.()}
+      </BigSidebar>
+    {/if}
+  </div>
+</div>
+
+<!-- Overlay -->
+{#if isSidebarVisible}
+  <button
+    onclick={() => {
+      isSidebarVisible = !isSidebarVisible;
+    }}
+    aria-label="toggle navigation"
+    class="absolute inset-0 cursor-pointer sm:hidden z-10 bg-base-100/50 dark:bg-base-950/50"
+  ></button>
+{/if}
+
+<div class={cn("h-screen flex flex-col overflow-hidden", sidebar ? "sm:ml-82" : "sm:ml-18")}>
+  <Navbar>
+    <div class="flex gap-4 items-center ml-4">
+      <ToggleNavigation bind:isSidebarVisible />
+    </div>
+
+    <div class="hidden sm:flex dz-navbar-end items-center gap-2"></div>
+
+    {@render navbar?.()}
+    <ThemeToggle />
+  </Navbar>
+
+  {@render children?.()}
+</div>

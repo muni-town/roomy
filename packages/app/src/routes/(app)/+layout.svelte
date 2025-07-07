@@ -185,43 +185,4 @@
 
 <Toaster />
 
-<div
-  class={[
-    "isolate fixed top-0 bottom-0 left-0 z-20 bg-base-100/50 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none",
-    isSidebarVisible.value ? "block" : "hidden sm:block",
-  ]}
->
-  <div class="flex h-full w-fit">
-    <SmallSidebar>
-      <ServerBar spaces={me.current?.profile.joinedSpaces} me={me.current} />
-    </SmallSidebar>
-    {#if page.params.space}
-      <BigSidebar>
-        <SidebarMain />
-      </BigSidebar>
-    {/if}
-  </div>
-</div>
-
-<!-- Overlay -->
-{#if page.params.space && isSidebarVisible.value}
-  <button
-    onclick={() => {
-      isSidebarVisible.toggle();
-    }}
-    aria-label="toggle navigation"
-    class="absolute inset-0 cursor-pointer sm:hidden z-50 bg-base-100/50 dark:bg-base-950/50"
-  ></button>
-{/if}
-
-<div
-  class={[
-    page.url.pathname === "/messages" ? "ml-18" : "",
-    page.params.space && (isSidebarVisible.value || true)
-      ? "sm:ml-82 bg-white dark:bg-base-900/50 relative"
-      : "",
-    "h-screen overflow-hidden relative",
-  ]}
->
   {@render children()}
-</div>

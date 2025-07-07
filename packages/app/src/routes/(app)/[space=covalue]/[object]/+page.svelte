@@ -1,5 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import MainLayout from "$lib/components/layout/MainLayout.svelte";
+  import SidebarMain from "$lib/components/SidebarMain.svelte";
   import TimelineView from "$lib/components/TimelineView.svelte";
   import ToggleNavigation from "$lib/components/ToggleNavigation.svelte";
   import Navbar from "$lib/components/ui/Navbar.svelte";
@@ -10,16 +12,10 @@
   let object = $derived(new CoState(RoomyObject, page.params.object));
 </script>
 
-<div class="h-screen flex flex-col overflow-hidden">
-  <Navbar>
-    <div class="flex gap-4 items-center ml-4">
-      <ToggleNavigation />
-    </div>
-
-    <div class="hidden sm:flex dz-navbar-end items-center gap-2"></div>
-
-    <ThemeToggle />
-  </Navbar>
+<MainLayout>
+  {#snippet sidebar()}
+    <SidebarMain />
+  {/snippet}
 
   {#if object.current?.objectType === "thread"}
     <TimelineView
@@ -31,4 +27,4 @@
       <h1 class="text-2xl font-bold text-center text-base-900 dark:text-base-100">Unknown object type</h1>
     </div>
   {/if}
-</div>
+</MainLayout>

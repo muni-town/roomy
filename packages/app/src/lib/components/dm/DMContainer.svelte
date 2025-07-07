@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import DMList from './DMList.svelte';
   import MessageList from './MessageList.svelte';
   import { dmClient } from '$lib/dm.svelte';
   import Icon from "@iconify/svelte";
@@ -14,22 +12,6 @@
   let newConversationHandle = '';
   let isCreatingConversation = false;
   let error: string | null = null;
-  let lastInitialConversationId: string | null = null;
-  
-  // Update selected conversation when initialConversationId changes
-  $: {
-    if (initialConversationId && initialConversationId !== lastInitialConversationId) {
-      selectedConversationId = initialConversationId;
-      lastInitialConversationId = initialConversationId;
-    }
-  }
-  
-  // Handle conversation selection from DMList
-  function handleConversationSelected(conversationId: string) {
-    selectedConversationId = conversationId;
-    // Update the URL to reflect the selected conversation
-    window.history.pushState({}, '', '/messages');
-  }
   
   // Start a new conversation
   async function handleStartConversation(handle?: string) {
@@ -64,36 +46,6 @@
 </script>
 
 <div class="flex h-full bg-base-100">
-  <!-- Sidebar with conversation list - match SidebarMain style -->
-  <div class="w-80 flex-none border-r border-base-400/30 dark:border-base-300/10 bg-base-100 flex flex-col">
-    <!-- Fixed header -->
-    <div class="flex-none p-4 border-b border-base-400/30 dark:border-base-300/10">
-      <div class="flex items-center justify-between">
-        <h2 class="text-lg font-bold text-base-content">Conversations</h2>
-        <button
-          onclick={() => showNewConversationDialog = true}
-          class="btn btn-primary btn-circle btn-sm"
-          title="New conversation"
-          disabled={isCreatingConversation}
-        >
-          {#if isCreatingConversation}
-            <span class="loading loading-spinner loading-xs"></span>
-          {:else}
-            <Icon icon="tabler:plus" class="text-sm" />
-          {/if}
-        </button>
-      </div>
-    </div>
-    
-    <!-- Scrollable conversation list -->
-    <div class="flex-1 min-h-0 overflow-y-auto">
-      <DMList 
-        onConversationSelected={handleConversationSelected} 
-        selectedConversationId={selectedConversationId}
-      />
-    </div>
-  </div>
-  
   <!-- Main content area for messages -->
   <div class="flex-1 flex flex-col bg-base-100 min-w-0">
     
