@@ -5,96 +5,106 @@ import type { FeedViewPost } from "@atproto/api/dist/client/types/app/bsky/feed/
 export const ATPROTO_FEED_CONFIG = {
   "at://did:plc:cbkjy5n7bk3ax2wplmtjofq2/app.bsky.feed.generator/Ewfwlxphc": {
     name: "🔧 AT Proto Dev",
-    url: "https://bsky.app/profile/did:plc:cbkjy5n7bk3ax2wplmtjofq2/feed/Ewfwlxphc"
+    url: "https://bsky.app/profile/did:plc:cbkjy5n7bk3ax2wplmtjofq2/feed/Ewfwlxphc",
   },
-  "at://did:plc:oio4hkxaop4ao4wz2pp3f4cr/app.bsky.feed.generator/atproto-threads": {
-    name: "🧵 AT Proto Threads", 
-    url: "https://bsky.app/profile/did:plc:oio4hkxaop4ao4wz2pp3f4cr/feed/atproto-threads"
-  },
+  "at://did:plc:oio4hkxaop4ao4wz2pp3f4cr/app.bsky.feed.generator/atproto-threads":
+    {
+      name: "🧵 AT Proto Threads",
+      url: "https://bsky.app/profile/did:plc:oio4hkxaop4ao4wz2pp3f4cr/feed/atproto-threads",
+    },
   "at://did:plc:oio4hkxaop4ao4wz2pp3f4cr/app.bsky.feed.generator/atproto": {
     name: "⚡ AT Proto",
-    url: "https://bsky.app/profile/did:plc:oio4hkxaop4ao4wz2pp3f4cr/feed/atproto"
+    url: "https://bsky.app/profile/did:plc:oio4hkxaop4ao4wz2pp3f4cr/feed/atproto",
   },
   "at://did:plc:2jtyqespp2zfodukwvktqwe6/app.bsky.feed.generator/atprotodev": {
     name: "🚀 AT Proto Dev Community",
-    url: "https://bsky.app/profile/did:plc:2jtyqespp2zfodukwvktqwe6/feed/atprotodev"
-  }
+    url: "https://bsky.app/profile/did:plc:2jtyqespp2zfodukwvktqwe6/feed/atprotodev",
+  },
 } as const;
 
 export const ATPROTO_FEEDS = Object.keys(ATPROTO_FEED_CONFIG);
 export const FEED_NAMES: Record<string, string> = Object.fromEntries(
-  Object.entries(ATPROTO_FEED_CONFIG).map(([uri, config]) => [uri, config.name])
+  Object.entries(ATPROTO_FEED_CONFIG).map(([uri, config]) => [
+    uri,
+    config.name,
+  ]),
 );
 
 // Reusable function to add feeds from either URLs or URIs
 export function addFeedToList(
-  input: string, 
-  currentFeeds: string[], 
+  input: string,
+  currentFeeds: string[],
   onSuccess?: (uri: string) => void,
-  onError?: (message: string) => void
+  onError?: (message: string) => void,
 ): string[] {
   if (!input.trim()) return currentFeeds;
-  
+
   let feedUri: string;
-  
+
   // Check if it's already an AT:// URI
-  if (input.startsWith('at://')) {
+  if (input.startsWith("at://")) {
     feedUri = input;
-  } else if (input.startsWith('http')) {
+  } else if (input.startsWith("http")) {
     // Try to convert URL to URI
     const result = convertBlueskyFeedUrlToUri(input);
     if (result) {
       feedUri = result.uri;
     } else {
-      onError?.("Invalid feed URL. Please use a URL like: https://any.domain/profile/did:plc:example/feed/feedname");
+      onError?.(
+        "Invalid feed URL. Please use a URL like: https://any.domain/profile/did:plc:example/feed/feedname",
+      );
       return currentFeeds;
     }
   } else {
     onError?.("Please enter either an AT:// URI or a valid feed URL");
     return currentFeeds;
   }
-  
+
   // Add the feed if it's not already in the list
   if (!currentFeeds.includes(feedUri)) {
     onSuccess?.(feedUri);
     return [...currentFeeds, feedUri];
   }
-  
+
   return currentFeeds;
 }
 
 // Convert AT Proto feed URL to AT Proto URI (works with any domain)
-export function convertBlueskyFeedUrlToUri(url: string): { uri: string; name: string } | null {
+export function convertBlueskyFeedUrlToUri(
+  url: string,
+): { uri: string; name: string } | null {
   try {
     // Handle AT Proto feed URL format from any domain:
     // https://any.domain/profile/did:plc:example/feed/feedname
     // https://any.domain/profile/handle.bsky.social/feed/feedname
-    
+
     const urlObj = new URL(url);
-    
-    const pathMatch = urlObj.pathname.match(/^\/profile\/([^\/]+)\/feed\/([^\/]+)$/);
+
+    const pathMatch = urlObj.pathname.match(
+      /^\/profile\/([^\/]+)\/feed\/([^\/]+)$/,
+    );
     if (!pathMatch) {
       return null;
     }
-    
+
     const [, profile, feedName] = pathMatch;
-    
+
     // If the profile looks like a DID, use it directly
-    if (profile.startsWith('did:')) {
+    if (profile.startsWith("did:")) {
       const uri = `at://${profile}/app.bsky.feed.generator/${feedName}`;
-      
+
       // Generate a human-readable name from the feed name
       const displayName = feedName
-        .split('-')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
-      
+        .split("-")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+
       return {
         uri,
-        name: `📡 ${displayName}`
+        name: `📡 ${displayName}`,
       };
     }
-    
+
     // For handles, we'll need to resolve the DID (for now, return null and ask user for URI)
     // In a full implementation, we'd resolve the handle to a DID via AT Proto API
     return null;
@@ -151,12 +161,12 @@ export class AtprotoFeedAggregator {
     if (this.feedNames.has(feedUri)) {
       return this.feedNames.get(feedUri)!;
     }
-    
+
     // Check predefined feeds
     if (ATPROTO_FEED_CONFIG[feedUri]) {
       return ATPROTO_FEED_CONFIG[feedUri].name;
     }
-    
+
     return "📡 Custom Feed";
   }
 
@@ -172,15 +182,18 @@ export class AtprotoFeedAggregator {
   private triggerFeedNameCallbacks(feedUri: string): void {
     const callbacks = this.feedNameCallbacks.get(feedUri);
     if (callbacks) {
-      callbacks.forEach(callback => callback());
+      callbacks.forEach((callback) => callback());
     }
   }
 
   // Fetch feed name from AT Proto
   async fetchFeedName(feedUri: string): Promise<string> {
     try {
-      const response = await this.agent.app.bsky.feed.getFeedGenerator({ feed: feedUri });
-      const name = response.data.view.displayName || this.extractFeedNameFromUri(feedUri);
+      const response = await this.agent.app.bsky.feed.getFeedGenerator({
+        feed: feedUri,
+      });
+      const name =
+        response.data.view.displayName || this.extractFeedNameFromUri(feedUri);
       this.feedNames.set(feedUri, `📡 ${name}`);
       this.triggerFeedNameCallbacks(feedUri);
       console.log(`Successfully fetched feed name for ${feedUri}: ${name}`);
@@ -200,28 +213,31 @@ export class AtprotoFeedAggregator {
     if (match) {
       const feedName = match[1];
       return feedName
-        .split('-')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(' ');
+        .split("-")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
     }
-    return 'Custom Feed';
+    return "Custom Feed";
   }
 
-  private async fetchSingleFeed(feedUri: string, limit = 50): Promise<AtprotoFeedPost[]> {
+  private async fetchSingleFeed(
+    feedUri: string,
+    limit = 50,
+  ): Promise<AtprotoFeedPost[]> {
     try {
       const response = await this.agent.app.bsky.feed.getFeed({
         feed: feedUri,
         limit,
       });
-      
+
       // The getFeed response doesn't include generator info, so we need to fetch it separately
       // Check if we already have the name cached, if not, fetch it asynchronously
       if (!this.feedNames.has(feedUri) && !ATPROTO_FEED_CONFIG[feedUri]) {
-        this.fetchFeedName(feedUri).catch(e => {
+        this.fetchFeedName(feedUri).catch((e) => {
           console.warn(`Failed to fetch feed name for ${feedUri}:`, e);
         });
       }
-      
+
       return response.data.feed.map((item: FeedViewPost) => ({
         uri: item.post.uri,
         cid: item.post.cid,
@@ -231,27 +247,30 @@ export class AtprotoFeedAggregator {
           displayName: item.post.author.displayName,
           avatar: (() => {
             if (!item.post.author.avatar) return undefined;
-            
+
             let avatarUrl = item.post.author.avatar;
-            
+
             // If it's already a full URL, use it as-is
-            if (typeof avatarUrl === 'string' && avatarUrl.startsWith('http')) {
+            if (typeof avatarUrl === "string" && avatarUrl.startsWith("http")) {
               return avatarUrl;
             }
-            
+
             // If it's a blob reference, construct the CDN URL
-            if (typeof avatarUrl === 'string') {
+            if (typeof avatarUrl === "string") {
               return `https://cdn.bsky.app/img/avatar/plain/${item.post.author.did}/${avatarUrl}@jpeg`;
             }
-            
+
             // If it's an object (blob reference), try to extract the reference
-            if (typeof avatarUrl === 'object' && avatarUrl !== null) {
-              const ref = (avatarUrl as any).ref || (avatarUrl as any).$link || (avatarUrl as any).cid;
+            if (typeof avatarUrl === "object" && avatarUrl !== null) {
+              const ref =
+                (avatarUrl as any).ref ||
+                (avatarUrl as any).$link ||
+                (avatarUrl as any).cid;
               if (ref) {
                 return `https://cdn.bsky.app/img/avatar/plain/${item.post.author.did}/${ref}@jpeg`;
               }
             }
-            
+
             return undefined;
           })(),
         },
@@ -264,11 +283,11 @@ export class AtprotoFeedAggregator {
           // Extract images from post embeds
           const embed = item.post.embed;
           if (!embed) return undefined;
-          
+
           const images: string[] = [];
-          
+
           // Handle different embed types
-          if (embed.$type === 'app.bsky.embed.images#view') {
+          if (embed.$type === "app.bsky.embed.images#view") {
             // Direct image embed
             embed.images?.forEach((img: any) => {
               if (img.fullsize) {
@@ -277,10 +296,10 @@ export class AtprotoFeedAggregator {
                 images.push(img.thumb);
               }
             });
-          } else if (embed.$type === 'app.bsky.embed.recordWithMedia#view') {
+          } else if (embed.$type === "app.bsky.embed.recordWithMedia#view") {
             // Record with media (e.g., quote post with images)
             const media = embed.media;
-            if (media && media.$type === 'app.bsky.embed.images#view') {
+            if (media && media.$type === "app.bsky.embed.images#view") {
               media.images?.forEach((img: any) => {
                 if (img.fullsize) {
                   images.push(img.fullsize);
@@ -290,11 +309,11 @@ export class AtprotoFeedAggregator {
               });
             }
           }
-          
+
           return images.length > 0 ? images : undefined;
         })(),
         replyCount: item.post.replyCount,
-        repostCount: item.post.repostCount, 
+        repostCount: item.post.repostCount,
         likeCount: item.post.likeCount,
         indexedAt: item.post.indexedAt,
         feedSource: feedUri,
@@ -305,32 +324,43 @@ export class AtprotoFeedAggregator {
     }
   }
 
-  async fetchAggregatedFeed(limit = 50, feedUris?: string[]): Promise<AtprotoFeedPost[]> {
+  async fetchAggregatedFeed(
+    limit = 50,
+    feedUris?: string[],
+  ): Promise<AtprotoFeedPost[]> {
     const feedsToFetch = feedUris || ATPROTO_FEEDS;
-    const cacheKey = feedsToFetch.join(',');
+    const cacheKey = feedsToFetch.join(",");
     const now = Date.now();
-    
+
     // Check cache
-    if (this.cache.has(cacheKey) && 
-        this.lastFetch.has(cacheKey) && 
-        now - this.lastFetch.get(cacheKey)! < this.CACHE_DURATION) {
+    if (
+      this.cache.has(cacheKey) &&
+      this.lastFetch.has(cacheKey) &&
+      now - this.lastFetch.get(cacheKey)! < this.CACHE_DURATION
+    ) {
       return this.cache.get(cacheKey)!;
     }
 
     // Fetch specified feeds in parallel
-    const feedPromises = feedsToFetch.map(feedUri => this.fetchSingleFeed(feedUri, 30));
+    const feedPromises = feedsToFetch.map((feedUri) =>
+      this.fetchSingleFeed(feedUri, 30),
+    );
     const feedResults = await Promise.all(feedPromises);
-    
+
     // Combine and sort by creation time
     const allPosts = feedResults.flat();
-    
+
     const sortedPosts = allPosts
-      .sort((a, b) => new Date(b.record.createdAt).getTime() - new Date(a.record.createdAt).getTime())
+      .sort(
+        (a, b) =>
+          new Date(b.record.createdAt).getTime() -
+          new Date(a.record.createdAt).getTime(),
+      )
       .slice(0, limit);
 
     // Remove duplicates by URI
     const uniquePosts = Array.from(
-      new Map(sortedPosts.map(post => [post.uri, post])).values()
+      new Map(sortedPosts.map((post) => [post.uri, post])).values(),
     );
 
     // Cache result
@@ -346,9 +376,12 @@ export class AtprotoFeedAggregator {
   }
 
   // Get only thread posts (for threads-only channel)
-  async fetchThreadsOnly(limit = 50, feedUris?: string[]): Promise<AtprotoFeedPost[]> {
+  async fetchThreadsOnly(
+    limit = 50,
+    feedUris?: string[],
+  ): Promise<AtprotoFeedPost[]> {
     const allPosts = await this.fetchAggregatedFeed(limit * 2, feedUris); // Fetch more to filter
-    return allPosts.filter(post => this.isThreadPost(post)).slice(0, limit);
+    return allPosts.filter((post) => this.isThreadPost(post)).slice(0, limit);
   }
 
   // Fetch full thread context for a post
@@ -362,7 +395,7 @@ export class AtprotoFeedAggregator {
       // Transform the thread response into our format
       const convertThreadPost = (threadView: any): AtprotoThreadPost => {
         const post = threadView.post;
-        
+
         const converted: AtprotoThreadPost = {
           uri: post.uri,
           cid: post.cid,
@@ -372,24 +405,30 @@ export class AtprotoFeedAggregator {
             displayName: post.author.displayName,
             avatar: (() => {
               if (!post.author.avatar) return undefined;
-              
+
               let avatarUrl = post.author.avatar;
-              
-              if (typeof avatarUrl === 'string' && avatarUrl.startsWith('http')) {
+
+              if (
+                typeof avatarUrl === "string" &&
+                avatarUrl.startsWith("http")
+              ) {
                 return avatarUrl;
               }
-              
-              if (typeof avatarUrl === 'string') {
+
+              if (typeof avatarUrl === "string") {
                 return `https://cdn.bsky.app/img/avatar/plain/${post.author.did}/${avatarUrl}@jpeg`;
               }
-              
-              if (typeof avatarUrl === 'object' && avatarUrl !== null) {
-                const ref = (avatarUrl as any).ref || (avatarUrl as any).$link || (avatarUrl as any).cid;
+
+              if (typeof avatarUrl === "object" && avatarUrl !== null) {
+                const ref =
+                  (avatarUrl as any).ref ||
+                  (avatarUrl as any).$link ||
+                  (avatarUrl as any).cid;
                 if (ref) {
                   return `https://cdn.bsky.app/img/avatar/plain/${post.author.did}/${ref}@jpeg`;
                 }
               }
-              
+
               return undefined;
             })(),
           },
@@ -402,11 +441,11 @@ export class AtprotoFeedAggregator {
             // Extract images from post embeds
             const embed = post.embed;
             if (!embed) return undefined;
-            
+
             const images: string[] = [];
-            
+
             // Handle different embed types
-            if (embed.$type === 'app.bsky.embed.images#view') {
+            if (embed.$type === "app.bsky.embed.images#view") {
               // Direct image embed
               embed.images?.forEach((img: any) => {
                 if (img.fullsize) {
@@ -415,10 +454,10 @@ export class AtprotoFeedAggregator {
                   images.push(img.thumb);
                 }
               });
-            } else if (embed.$type === 'app.bsky.embed.recordWithMedia#view') {
+            } else if (embed.$type === "app.bsky.embed.recordWithMedia#view") {
               // Record with media (e.g., quote post with images)
               const media = embed.media;
-              if (media && media.$type === 'app.bsky.embed.images#view') {
+              if (media && media.$type === "app.bsky.embed.images#view") {
                 media.images?.forEach((img: any) => {
                   if (img.fullsize) {
                     images.push(img.fullsize);
@@ -428,7 +467,7 @@ export class AtprotoFeedAggregator {
                 });
               }
             }
-            
+
             return images.length > 0 ? images : undefined;
           })(),
           replyCount: post.replyCount,
@@ -465,13 +504,13 @@ export class AtprotoFeedAggregator {
     try {
       const did = this.agent.session?.did;
       if (!did) {
-        console.error('No authenticated session available for liking post');
+        console.error("No authenticated session available for liking post");
         return false;
       }
 
       await this.agent.api.com.atproto.repo.createRecord({
         repo: did,
-        collection: 'app.bsky.feed.like',
+        collection: "app.bsky.feed.like",
         record: {
           subject: {
             uri: postUri,
@@ -492,13 +531,13 @@ export class AtprotoFeedAggregator {
     try {
       const did = this.agent.session?.did;
       if (!did) {
-        console.error('No authenticated session available for reposting post');
+        console.error("No authenticated session available for reposting post");
         return false;
       }
 
       await this.agent.api.com.atproto.repo.createRecord({
         repo: did,
-        collection: 'app.bsky.feed.repost',
+        collection: "app.bsky.feed.repost",
         record: {
           subject: {
             uri: postUri,
@@ -515,17 +554,25 @@ export class AtprotoFeedAggregator {
   }
 
   // Reply to a post
-  async replyToPost(postUri: string, postCid: string, text: string, rootUri?: string, rootCid?: string): Promise<boolean> {
+  async replyToPost(
+    postUri: string,
+    postCid: string,
+    text: string,
+    rootUri?: string,
+    rootCid?: string,
+  ): Promise<boolean> {
     try {
       const did = this.agent.session?.did;
       if (!did) {
-        console.error('No authenticated session available for replying to post');
+        console.error(
+          "No authenticated session available for replying to post",
+        );
         return false;
       }
 
       await this.agent.api.com.atproto.repo.createRecord({
         repo: did,
-        collection: 'app.bsky.feed.post',
+        collection: "app.bsky.feed.post",
         record: {
           text: text,
           reply: {

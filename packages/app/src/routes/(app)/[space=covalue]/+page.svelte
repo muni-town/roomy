@@ -10,19 +10,24 @@
       resolve: {
         rootFolder: {
           childrenIds: true,
-        }
+        },
       },
     }),
   );
 
   async function navigateToFirstThread() {
-    if (!space.current || !space.current.rootFolder || space.current.rootFolder.childrenIds.length === 0) return;
+    if (
+      !space.current ||
+      !space.current.rootFolder ||
+      space.current.rootFolder.childrenIds.length === 0
+    )
+      return;
 
     // load roomyobjects and find first thread
     for (const childId of space.current.rootFolder.childrenIds) {
       const child = await RoomyObject.load(childId);
-      if(!child) continue;
-      
+      if (!child) continue;
+
       navigate({
         space: space.current.id,
         object: child.id,

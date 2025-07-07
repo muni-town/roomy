@@ -15,9 +15,8 @@
     description,
     open = $bindable<boolean>(false),
     drawerTrigger,
-    children
+    children,
   }: Props = $props();
-
 </script>
 
 <Drawer.Root bind:open>
@@ -29,9 +28,7 @@
 
   <Drawer.Portal>
     <Drawer.Overlay class="fixed inset-0 bg-black/40" />
-    <Drawer.Content
-      class="flex flex-col mt-24 fixed bottom-0 left-0 right-0"
-    >
+    <Drawer.Content class="flex flex-col mt-24 fixed bottom-0 left-0 right-0">
       <div class="bg-base-300 h-fit min-h-32 rounded-t-xl px-4 py-8">
         {#if title}
           <Drawer.Title>{title}</Drawer.Title>

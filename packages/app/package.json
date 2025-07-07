@@ -115,7 +115,7 @@
       "svelte-check --tsconfig ./tsconfig.json"
     ],
     "*.{json,js,ts,tsx,html,svelte,css}": [
-      "prettier --write --ignore-unknown"
+      "prettier --write --ignore-unknown ."
     ]
   },
   "keyords": [

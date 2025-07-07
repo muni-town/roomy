@@ -1,6 +1,12 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { type Channel, type RoomyAccount, type Space, publicGroup, isSpaceAdmin } from "@roomy-chat/sdk";
+  import {
+    type Channel,
+    type RoomyAccount,
+    type Space,
+    publicGroup,
+    isSpaceAdmin,
+  } from "@roomy-chat/sdk";
   import { navigate, navigateSync } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
   import { Button } from "@fuxui/base";
@@ -51,18 +57,19 @@
     // Use a stable filter to prevent layout shifts
     const filteredThreads = [];
     const subThreadsArray = Array.from(channel.subThreads); // Create stable array reference
-    
+
     // Check if the current thread is in this channel
     const currentThreadId = page.params?.thread;
-    const hasCurrentThread = currentThreadId && subThreadsArray.some(t => t?.id === currentThreadId);
-    
+    const hasCurrentThread =
+      currentThreadId && subThreadsArray.some((t) => t?.id === currentThreadId);
+
     if (currentThreadId) {
-      console.log('🔍 Sidebar filtering for channel:', channel?.name, {
+      console.log("🔍 Sidebar filtering for channel:", channel?.name, {
         channelId: channel?.id,
         currentThreadId,
         hasCurrentThread,
         totalSubThreads: subThreadsArray.length,
-        threadIds: subThreadsArray.map(t => t?.id).slice(0, 3) // First 3 for debugging
+        threadIds: subThreadsArray.map((t) => t?.id).slice(0, 3), // First 3 for debugging
       });
     }
 
@@ -71,10 +78,10 @@
 
       // Debug log for current thread
       if (thread.id === currentThreadId) {
-        console.log('🔍 Processing current thread:', {
+        console.log("🔍 Processing current thread:", {
           threadId: thread.id,
           threadName: thread.name,
-          channelName: channel?.name
+          channelName: channel?.name,
         });
       }
 
@@ -84,7 +91,7 @@
           (subId) => subId === `unsubscribe:${thread.id}`,
         );
         if (isUnsubscribed) {
-          console.log('❌ Thread unsubscribed:', thread.id);
+          console.log("❌ Thread unsubscribed:", thread.id);
           continue;
         }
       } catch (e) {
@@ -92,39 +99,42 @@
       }
 
       let shouldInclude = false;
-      
+
       // Check if I created the thread
       const threadCreator = thread._edits?.name?.by?.id;
       const isCreator = threadCreator === myUserId;
       if (isCreator) {
-        console.log('✅ Sidebar: Including thread (creator):', {
+        console.log("✅ Sidebar: Including thread (creator):", {
           threadId: thread.id,
           threadName: thread.name,
           threadCreator,
           myUserId,
-          match: threadCreator === myUserId
+          match: threadCreator === myUserId,
         });
         shouldInclude = true;
       } else if (thread.id === currentThreadId) {
-        console.log('❓ Sidebar: Current thread not included by creator check:', {
-          threadId: thread.id,
-          threadName: thread.name,
-          threadCreator,
-          myUserId,
-          isMatch: threadCreator === myUserId,
-          hasEdits: !!thread._edits,
-          hasNameEdit: !!thread._edits?.name,
-          hasBy: !!thread._edits?.name?.by
-        });
+        console.log(
+          "❓ Sidebar: Current thread not included by creator check:",
+          {
+            threadId: thread.id,
+            threadName: thread.name,
+            threadCreator,
+            myUserId,
+            isMatch: threadCreator === myUserId,
+            hasEdits: !!thread._edits,
+            hasNameEdit: !!thread._edits?.name,
+            hasBy: !!thread._edits?.name?.by,
+          },
+        );
       }
-      
+
       // Check if I have viewed/read this thread
       const hasRead = me?.root?.lastRead?.[thread.id];
       if (!shouldInclude && hasRead) {
-        console.log('✅ Sidebar: Including thread due to lastRead:', {
+        console.log("✅ Sidebar: Including thread due to lastRead:", {
           threadId: thread.id,
           threadName: thread.name,
-          lastReadTime: hasRead
+          lastReadTime: hasRead,
         });
         shouldInclude = true;
       }
@@ -148,12 +158,12 @@
           }
         }
       }
-      
+
       if (shouldInclude) {
         filteredThreads.push(thread);
       }
     }
-    
+
     return filteredThreads;
   });
 

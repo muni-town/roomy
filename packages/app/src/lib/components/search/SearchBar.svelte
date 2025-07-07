@@ -27,7 +27,7 @@
 
   async function updateSearchResults(query: string) {
     console.log("updateSearchResults called with query:", query);
-    if(!query.length) {
+    if (!query.length) {
       searchResults = [];
       showSearchResults = false;
       console.log("Empty query, hiding results");
@@ -37,7 +37,13 @@
     console.log("Search results from findMessages:", results);
     searchResults = results as string[];
     showSearchResults = results.length > 0;
-    console.log("showSearchResults set to:", showSearchResults, "with", searchResults.length, "results");
+    console.log(
+      "showSearchResults set to:",
+      showSearchResults,
+      "with",
+      searchResults.length,
+      "results",
+    );
   }
 </script>
 
@@ -84,5 +90,7 @@
     </div>
   </div>
 {:else}
-  <div class="text-xs text-gray-500">Search results hidden (showSearchResults: {showSearchResults})</div>
+  <div class="text-xs text-gray-500">
+    Search results hidden (showSearchResults: {showSearchResults})
+  </div>
 {/if}

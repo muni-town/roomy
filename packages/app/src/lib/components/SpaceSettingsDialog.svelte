@@ -91,7 +91,6 @@
   {/snippet}
 
   <div class="max-h-[80vh] overflow-y-auto pr-2">
-
     <form onsubmit={saveSpaceName} class="flex flex-col gap-3 mb-8">
       <label class="dz-input w-full">
         <span class="label">Name</span>

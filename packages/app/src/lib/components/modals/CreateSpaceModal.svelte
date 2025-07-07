@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { type RoomyAccount, createSpace, createSpaceList } from "@roomy-chat/sdk";
+  import {
+    type RoomyAccount,
+    createSpace,
+    createSpaceList,
+  } from "@roomy-chat/sdk";
   import { navigate } from "$lib/utils.svelte";
   import { Modal, Input, Button, Heading } from "@fuxui/base";
   import Icon from "@iconify/svelte";
@@ -42,13 +46,13 @@
     onsubmit={createSpaceSubmit}
   >
     <Heading>Create a new space</Heading>
-    <Input
-      bind:value={newSpaceName}
-      placeholder="Name"
-      type="text"
-      required
-    />
-    <Button type="submit" disabled={!newSpaceName} class="w-full justify-start" size="lg">
+    <Input bind:value={newSpaceName} placeholder="Name" type="text" required />
+    <Button
+      type="submit"
+      disabled={!newSpaceName}
+      class="w-full justify-start"
+      size="lg"
+    >
       <Icon icon="basil:plus-outline" font-size="2em" />
       Create Space
     </Button>

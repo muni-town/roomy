@@ -50,24 +50,40 @@
     const links: DiscoveredLink[] = [];
 
     try {
-      console.log("Discovering links in space with", space.channels.length, "channels");
+      console.log(
+        "Discovering links in space with",
+        space.channels.length,
+        "channels",
+      );
       // Iterate through all channels
       for (const channel of space.channels) {
-        if (!channel || channel.softDeleted || channel.channelType !== "chat") continue;
+        if (!channel || channel.softDeleted || channel.channelType !== "chat")
+          continue;
 
         const channelName = channel.name || "Unnamed Channel";
-        console.log("Checking channel:", channelName, "type:", channel.channelType);
+        console.log(
+          "Checking channel:",
+          channelName,
+          "type:",
+          channel.channelType,
+        );
 
         // Get messages from main thread
         if (channel.mainThread?.timeline?.perAccount) {
-          const allMessages = Object.values(channel.mainThread.timeline.perAccount);
-          console.log(`Channel ${channelName} has ${allMessages.length} account timelines`);
-          
+          const allMessages = Object.values(
+            channel.mainThread.timeline.perAccount,
+          );
+          console.log(
+            `Channel ${channelName} has ${allMessages.length} account timelines`,
+          );
+
           for (const accountFeed of allMessages) {
             if (!accountFeed?.all) continue;
             const entries = Array.from(accountFeed.all);
-            console.log(`Processing ${entries.length} messages from account timeline`);
-            
+            console.log(
+              `Processing ${entries.length} messages from account timeline`,
+            );
+
             for (const entry of entries) {
               try {
                 const messageId = entry.value;
@@ -76,9 +92,12 @@
 
                 const urls = extractUrls(message.content);
                 if (urls.length > 0) {
-                  console.log(`Found ${urls.length} URLs in message:`, message.content);
+                  console.log(
+                    `Found ${urls.length} URLs in message:`,
+                    message.content,
+                  );
                 }
-                
+
                 for (const url of urls) {
                   links.push({
                     url,
@@ -104,11 +123,11 @@
             if (!thread?.timeline?.perAccount) continue;
 
             const allMessages = Object.values(thread.timeline.perAccount);
-            
+
             for (const accountFeed of allMessages) {
               if (!accountFeed?.all) continue;
               const entries = Array.from(accountFeed.all);
-              
+
               for (const entry of entries) {
                 try {
                   const messageId = entry.value;
@@ -116,7 +135,7 @@
                   if (!message?.content) continue;
 
                   const urls = extractUrls(message.content);
-                  
+
                   for (const url of urls) {
                     links.push({
                       url,
@@ -141,11 +160,16 @@
       // Sort by timestamp (newest first) and remove duplicates
       const uniqueLinks = links
         .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-        .filter((link, index, array) => 
-          array.findIndex(l => l.url === link.url) === index
+        .filter(
+          (link, index, array) =>
+            array.findIndex((l) => l.url === link.url) === index,
         );
 
-      console.log("Discovered", links.length, "total links before deduplication");
+      console.log(
+        "Discovered",
+        links.length,
+        "total links before deduplication",
+      );
       discoveredLinks = uniqueLinks;
       console.log("Final discovered links:", uniqueLinks.length);
     } catch (error) {
@@ -168,15 +192,16 @@
 
     if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    if (diffInSeconds < 86400)
+      return `${Math.floor(diffInSeconds / 3600)}h ago`;
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
   }
 
   function stripHtml(html: string): string {
     // Create a temporary div element to parse HTML
-    const tempDiv = document.createElement('div');
+    const tempDiv = document.createElement("div");
     tempDiv.innerHTML = html;
-    return tempDiv.textContent || tempDiv.innerText || '';
+    return tempDiv.textContent || tempDiv.innerText || "";
   }
 
   function truncateText(text: string, maxLength: number = 100): string {
@@ -227,7 +252,7 @@
               <div class="flex-shrink-0 mt-1">
                 <Icon icon="basil:link-outline" class="size-5 text-secondary" />
               </div>
-              
+
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-2">
                   <a
@@ -242,12 +267,14 @@
                     {link.domain}
                   </span>
                 </div>
-                
+
                 <p class="text-sm text-base-content/80 mb-2">
                   {truncateText(link.messageText)}
                 </p>
-                
-                <div class="flex items-center gap-4 text-xs text-base-content/60">
+
+                <div
+                  class="flex items-center gap-4 text-xs text-base-content/60"
+                >
                   <span class="flex items-center gap-1">
                     <Icon icon="basil:comment-outline" class="size-3" />
                     {link.channelName}

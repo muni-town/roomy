@@ -58,7 +58,7 @@
     if (memberIndex !== -1) {
       space.current.members.splice(memberIndex, 1);
     }
-    
+
     navigate("home");
   }
 

@@ -74,7 +74,12 @@
   ></button>
 {/if}
 
-<div class={cn("h-screen flex flex-col overflow-hidden", sidebar ? "sm:ml-82" : "sm:ml-18")}>
+<div
+  class={cn(
+    "h-screen flex flex-col overflow-hidden",
+    sidebar ? "sm:ml-82" : "sm:ml-18",
+  )}
+>
   <Navbar>
     <div class="flex gap-4 items-center ml-4">
       <ToggleNavigation bind:isSidebarVisible={isSidebarVisible.value} />

@@ -7,7 +7,8 @@
   import { BlueskyLoginModal } from "@fuxui/social";
   import { user } from "$lib/user.svelte";
 
-  const peerUrl = "wss://cloud.jazz.tools/?key=flo.bit.dev@gmail.com" as `wss://${string}`;
+  const peerUrl =
+    "wss://cloud.jazz.tools/?key=flo.bit.dev@gmail.com" as `wss://${string}`;
   let sync = { peer: peerUrl, when: "signedUp" as const };
 
   let { children } = $props();

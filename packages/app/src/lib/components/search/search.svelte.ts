@@ -7,7 +7,7 @@ let search: { [spaceId: string]: Document | null } = $state({});
 export async function initSearch(space: co.loaded<typeof Space>) {
   return;
   if (!space) return;
-  
+
   console.log("Initializing search for space:", space.id, space.name);
 
   const db = new IndexedDB("roomy-search-index-" + space.id);
@@ -16,16 +16,8 @@ export async function initSearch(space: co.loaded<typeof Space>) {
     document: {
       id: "messageId",
       store: true,
-      index: [
-        "username",
-        "channelName", 
-        "messageContent"
-      ],
-      tag: [
-        "threadId",
-        "channelId",
-        "username"
-      ],
+      index: ["username", "channelName", "messageContent"],
+      tag: ["threadId", "channelId", "username"],
     },
     tokenize: "forward",
     encoder: Charset.LatinBalance,
@@ -70,9 +62,13 @@ export async function initSearch(space: co.loaded<typeof Space>) {
       const lastIndexedPosition = timeline.indexOf(lastIndexedMessageId);
       if (lastIndexedPosition >= 0) {
         startIndex = lastIndexedPosition + 1;
-        console.log(`Continuing indexing from message ${lastIndexedPosition + 1} in channel: ${c.name}`);
+        console.log(
+          `Continuing indexing from message ${lastIndexedPosition + 1} in channel: ${c.name}`,
+        );
       } else {
-        console.warn(`Last indexed message ${lastIndexedMessageId} not found in timeline for channel: ${c.name}, restarting from beginning`);
+        console.warn(
+          `Last indexed message ${lastIndexedMessageId} not found in timeline for channel: ${c.name}, restarting from beginning`,
+        );
         localStorage.removeItem(`lastIndexedMessageId-${c.id}`);
       }
     }
@@ -86,8 +82,10 @@ export async function initSearch(space: co.loaded<typeof Space>) {
     //   timeline.length,
     // );
 
-    console.log(`Indexing ${timeline.length - startIndex} messages for channel: ${c.name}`);
-    
+    console.log(
+      `Indexing ${timeline.length - startIndex} messages for channel: ${c.name}`,
+    );
+
     // add messages to index
     for (let i = startIndex; i < timeline.length; i++) {
       const messageId = timeline[i];
@@ -136,15 +134,21 @@ export async function initSearch(space: co.loaded<typeof Space>) {
       const lastIndexedPosition = timeline.indexOf(lastIndexedMessageId);
       if (lastIndexedPosition >= 0) {
         startIndex = lastIndexedPosition + 1;
-        console.log(`Continuing indexing from message ${lastIndexedPosition + 1} in thread: ${t.name || t.id}`);
+        console.log(
+          `Continuing indexing from message ${lastIndexedPosition + 1} in thread: ${t.name || t.id}`,
+        );
       } else {
-        console.warn(`Last indexed message ${lastIndexedMessageId} not found in timeline for thread: ${t.name || t.id}, restarting from beginning`);
+        console.warn(
+          `Last indexed message ${lastIndexedMessageId} not found in timeline for thread: ${t.name || t.id}, restarting from beginning`,
+        );
         localStorage.removeItem(`lastIndexedMessageId-${t.id}`);
       }
     }
 
-    console.log(`Indexing ${timeline.length - startIndex} messages for thread: ${t.name || t.id}`);
-    
+    console.log(
+      `Indexing ${timeline.length - startIndex} messages for thread: ${t.name || t.id}`,
+    );
+
     // add messages to index
     for (let i = startIndex; i < timeline.length; i++) {
       const messageId = timeline[i];
@@ -158,8 +162,10 @@ export async function initSearch(space: co.loaded<typeof Space>) {
 
     console.log("Indexed thread:", t.name || t.id);
   }
-  
-  console.log(`Search initialization completed for space: ${space.id} (${indexedCount} messages indexed)`);
+
+  console.log(
+    `Search initialization completed for space: ${space.id} (${indexedCount} messages indexed)`,
+  );
   indexedCount = 0; // Reset counter for this space
 }
 
@@ -182,7 +188,10 @@ export async function addMessageWithIndex(
 
     // Check if message has content - allow empty messages but log them
     if (!message.content || message.content.trim() === "") {
-      console.debug("Message has no content, indexing with metadata only:", messageId);
+      console.debug(
+        "Message has no content, indexing with metadata only:",
+        messageId,
+      );
       // Don't return early - still index the message with its metadata
     }
   } catch (error) {
@@ -198,7 +207,10 @@ export async function addMessageWithIndex(
     channelId: channelId,
     threadName: threadName,
     threadId: threadId,
-    username: message?.author?.split(":")[1] || message?._edits?.content?.by?.profile?.name || "",
+    username:
+      message?.author?.split(":")[1] ||
+      message?._edits?.content?.by?.profile?.name ||
+      "",
     userId: message?._edits?.content?.by?.profile?.id || "",
   });
 }
@@ -222,12 +234,12 @@ export function addMessage(
     console.error("no search index for space", spaceId);
     return;
   }
-  
+
   indexedCount++;
   if (indexedCount % 20 === 0) {
     console.log(`Indexed ${indexedCount} messages...`);
   }
-  
+
   try {
     search[spaceId].add(messageData.messageId, messageData);
   } catch (error) {
@@ -242,14 +254,14 @@ export function debugSearchIndex(spaceId: string) {
     console.log("Available spaces:", Object.keys(search));
     return null;
   }
-  
+
   console.log("✅ Search index exists for space:", spaceId);
   console.log("📊 Index type: FlexSearch Document");
-  
+
   return {
     exists: true,
     spaceId: spaceId,
-    indexObject: index
+    indexObject: index,
   };
 }
 
@@ -262,15 +274,32 @@ export async function inspectSearchIndex(spaceId: string, sampleSize = 5) {
   }
 
   console.log(`🔍 Inspecting search index for space: ${spaceId}`);
-  
+
   // Try searching for common words to see what's in the index
-  const commonTerms = ['the', 'and', 'a', 'to', 'is', 'it', 'in', 'you', 'that', 'of'];
-  
+  const commonTerms = [
+    "the",
+    "and",
+    "a",
+    "to",
+    "is",
+    "it",
+    "in",
+    "you",
+    "that",
+    "of",
+  ];
+
   for (const term of commonTerms.slice(0, 3)) {
     try {
-      const results = await index.search(term, { limit: sampleSize, enrich: true });
+      const results = await index.search(term, {
+        limit: sampleSize,
+        enrich: true,
+      });
       if (results && results.length > 0) {
-        console.log(`📝 Found ${results.length} field(s) with term "${term}":`, results);
+        console.log(
+          `📝 Found ${results.length} field(s) with term "${term}":`,
+          results,
+        );
         break; // Found some data, that's enough
       }
     } catch (error) {
@@ -289,19 +318,21 @@ export async function findMessageInIndex(spaceId: string, messageId: string) {
 
   try {
     // Search for the exact message ID
-    const results = await index.search('*', { 
-      limit: 1000, 
+    const results = await index.search("*", {
+      limit: 1000,
       enrich: true,
-      filter: (doc: any) => doc.id === messageId 
+      filter: (doc: any) => doc.id === messageId,
     });
-    
-    const found = results.some((fieldResult: any) => 
-      fieldResult.result?.some((doc: any) => 
-        (typeof doc === 'string' ? doc : doc.id) === messageId
-      )
+
+    const found = results.some((fieldResult: any) =>
+      fieldResult.result?.some(
+        (doc: any) => (typeof doc === "string" ? doc : doc.id) === messageId,
+      ),
     );
-    
-    console.log(`🎯 Message ${messageId} ${found ? 'FOUND' : 'NOT FOUND'} in index`);
+
+    console.log(
+      `🎯 Message ${messageId} ${found ? "FOUND" : "NOT FOUND"} in index`,
+    );
     return found;
   } catch (error) {
     console.warn("Error checking for message:", error);
@@ -310,7 +341,10 @@ export async function findMessageInIndex(spaceId: string, messageId: string) {
 }
 
 // Search for messages containing specific text and show details
-export async function searchAndShowDetails(spaceId: string, searchText: string) {
+export async function searchAndShowDetails(
+  spaceId: string,
+  searchText: string,
+) {
   const index = search[spaceId];
   if (!index) {
     console.log("❌ No search index found for space:", spaceId);
@@ -318,49 +352,56 @@ export async function searchAndShowDetails(spaceId: string, searchText: string) 
   }
 
   console.log(`🔍 Searching for "${searchText}" in space: ${spaceId}`);
-  
+
   try {
-    const results = await index.search(searchText, { 
-      limit: 10, 
-      enrich: true 
+    const results = await index.search(searchText, {
+      limit: 10,
+      enrich: true,
     });
-    
+
     console.log(`📊 Raw search results:`, results);
-    
+
     if (!results || results.length === 0) {
       console.log("❌ No results found");
       return;
     }
-    
+
     // Parse and show details of found messages
     const messageIds = [];
     for (const fieldResult of results) {
       if (fieldResult && fieldResult.result) {
         for (const doc of fieldResult.result) {
-          const messageId = typeof doc === 'string' ? doc : doc.id;
+          const messageId = typeof doc === "string" ? doc : doc.id;
           if (messageId && !messageIds.includes(messageId)) {
             messageIds.push(messageId);
-            
+
             // Try to load the actual message to show its content
             try {
               const message = await Message.load(messageId);
               if (message) {
-                const authorName = message?.author?.split(":")[1] || message?._edits?.content?.by?.profile?.name || 'Unknown';
+                const authorName =
+                  message?.author?.split(":")[1] ||
+                  message?._edits?.content?.by?.profile?.name ||
+                  "Unknown";
                 console.log(`✅ Found message: ${messageId}`);
-                console.log(`   Content: "${message.content?.substring(0, 100)}..."`);
+                console.log(
+                  `   Content: "${message.content?.substring(0, 100)}..."`,
+                );
                 console.log(`   Author: ${authorName}`);
               }
             } catch (error) {
-              console.log(`⚠️  Found message ID ${messageId} but couldn't load details:`, error);
+              console.log(
+                `⚠️  Found message ID ${messageId} but couldn't load details:`,
+                error,
+              );
             }
           }
         }
       }
     }
-    
+
     console.log(`📝 Total unique messages found: ${messageIds.length}`);
     return messageIds;
-    
   } catch (error) {
     console.error("❌ Search error:", error);
   }
@@ -375,36 +416,45 @@ export async function testSearch(spaceId: string, term: string) {
 
 // Simple real-time indexing that monitors timeline changes
 export async function indexNewMessages(
-  spaceId: string, 
-  timeline: string[], 
-  channelId?: string, 
+  spaceId: string,
+  timeline: string[],
+  channelId?: string,
   channelName?: string,
   threadId?: string,
-  threadName?: string
+  threadName?: string,
 ) {
   if (!search[spaceId] || !timeline?.length) return;
-  
+
   const contextId = channelId || threadId;
   if (!contextId) return;
-  
+
   // Get the last indexed message
   const lastIndexed = localStorage.getItem(`lastIndexedMessageId-${contextId}`);
   if (!lastIndexed) return;
-  
+
   // Find new messages after the last indexed one
   const lastIndexedPos = timeline.indexOf(lastIndexed);
   if (lastIndexedPos === -1) return;
-  
+
   const newMessages = timeline.slice(lastIndexedPos + 1);
   if (newMessages.length === 0) return;
-  
-  console.log(`Indexing ${newMessages.length} new messages in ${channelName || threadName}`);
-  
+
+  console.log(
+    `Indexing ${newMessages.length} new messages in ${channelName || threadName}`,
+  );
+
   // Index each new message sequentially to avoid race conditions
   for (const messageId of newMessages) {
     if (messageId) {
       try {
-        await addMessageWithIndex(spaceId, messageId, channelId, channelName, threadId, threadName);
+        await addMessageWithIndex(
+          spaceId,
+          messageId,
+          channelId,
+          channelName,
+          threadId,
+          threadName,
+        );
         localStorage.setItem(`lastIndexedMessageId-${contextId}`, messageId);
       } catch (error) {
         console.error(`Failed to index message ${messageId}:`, error);
@@ -418,7 +468,7 @@ export async function indexNewMessages(
 // Clear indexing progress for a space and force re-index
 export async function resetAndReindex(spaceId: string) {
   console.log(`🔄 Resetting and re-indexing space: ${spaceId}`);
-  
+
   try {
     // Load the space to get its channels
     const space = await Space.load(spaceId, {
@@ -430,18 +480,18 @@ export async function resetAndReindex(spaceId: string) {
         threads: {
           $each: true,
           $onError: null,
-        }
-      }
+        },
+      },
     });
-    
+
     if (!space) {
       console.log("❌ Could not load space");
       return;
     }
-    
+
     // Clear localStorage for all channels and threads
     let clearedCount = 0;
-    
+
     // Clear channel indexing progress
     for (const c of space.channels ?? []) {
       if (!c) continue;
@@ -452,7 +502,7 @@ export async function resetAndReindex(spaceId: string) {
         console.log(`🗑️  Cleared indexing progress for channel: ${c.name}`);
       }
     }
-    
+
     // Clear thread indexing progress
     for (const t of space.threads ?? []) {
       if (!t) continue;
@@ -460,25 +510,26 @@ export async function resetAndReindex(spaceId: string) {
       if (localStorage.getItem(key)) {
         localStorage.removeItem(key);
         clearedCount++;
-        console.log(`🗑️  Cleared indexing progress for thread: ${t.name || t.id}`);
+        console.log(
+          `🗑️  Cleared indexing progress for thread: ${t.name || t.id}`,
+        );
       }
     }
-    
+
     console.log(`🧹 Cleared ${clearedCount} indexing progress entries`);
-    
+
     // Clear the search index to start fresh
     if (search[spaceId]) {
       search[spaceId] = null;
       console.log(`🗑️  Cleared search index for space`);
     }
-    
+
     console.log(`🔄 Starting fresh indexing...`);
-    
+
     // Re-initialize search
     await initSearch(space);
-    
+
     console.log(`✅ Re-indexing completed!`);
-    
   } catch (error) {
     console.error("❌ Error during reset and re-index:", error);
   }
@@ -487,7 +538,7 @@ export async function resetAndReindex(spaceId: string) {
 // Diagnose indexing issues by checking the current space channels and messages
 export async function diagnoseIndexing(spaceId: string) {
   console.log(`🔍 Diagnosing indexing for space: ${spaceId}`);
-  
+
   try {
     // Load the space to see its structure
     const space = await Space.load(spaceId, {
@@ -495,32 +546,32 @@ export async function diagnoseIndexing(spaceId: string) {
         channels: {
           $each: true,
           $onError: null,
-        }
-      }
+        },
+      },
     });
-    
+
     if (!space) {
       console.log("❌ Could not load space");
       return;
     }
-    
+
     console.log(`📊 Space: ${space.name || spaceId}`);
     console.log(`📁 Channels found: ${space.channels?.length || 0}`);
-    
+
     for (const c of space.channels ?? []) {
       if (!c) continue;
-      
-      console.log(`\n📝 Channel: ${c.name} (${c.channelType || 'chat'})`);
-      
+
+      console.log(`\n📝 Channel: ${c.name} (${c.channelType || "chat"})`);
+
       if (c.channelType === "feeds") {
         console.log("   ⏭️  Skipped (feeds channel)");
         continue;
       }
-      
+
       // Check last indexed message
       const lastIndexed = localStorage.getItem(`lastIndexedMessageId-${c.id}`);
-      console.log(`   💾 Last indexed message: ${lastIndexed || 'none'}`);
-      
+      console.log(`   💾 Last indexed message: ${lastIndexed || "none"}`);
+
       // Try to load and inspect the channel
       try {
         const channel = await Channel.load(c.id, {
@@ -533,28 +584,34 @@ export async function diagnoseIndexing(spaceId: string) {
             },
           },
         });
-        
+
         if (channel?.mainThread?.timeline) {
-          const timeline = Object.values(channel.mainThread.timeline.perAccount ?? {})
+          const timeline = Object.values(
+            channel.mainThread.timeline.perAccount ?? {},
+          )
             .map((accountFeed) => new Array(...accountFeed.all))
             .flat()
             .filter((entry) => entry && entry.value)
             .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
             .map((a) => a.value)
             .filter((messageId) => messageId);
-            
+
           console.log(`   📨 Total messages in timeline: ${timeline.length}`);
-          
+
           // Show a few recent message IDs
           if (timeline.length > 0) {
             const recent = timeline.slice(-3);
             console.log(`   🆔 Recent message IDs:`, recent);
-            
+
             // Try to load one recent message to see its content
             try {
-              const recentMessage = await Message.load(recent[recent.length - 1]);
+              const recentMessage = await Message.load(
+                recent[recent.length - 1],
+              );
               if (recentMessage) {
-                console.log(`   📄 Recent message content: "${recentMessage.content?.substring(0, 100)}..."`);
+                console.log(
+                  `   📄 Recent message content: "${recentMessage.content?.substring(0, 100)}..."`,
+                );
               }
             } catch (error) {
               console.log(`   ⚠️  Could not load recent message:`, error);
@@ -567,16 +624,14 @@ export async function diagnoseIndexing(spaceId: string) {
         console.log(`   ❌ Error loading channel: ${error}`);
       }
     }
-    
+
     // Check search index status
     const hasIndex = search[spaceId];
-    console.log(`\n🗂️  Search index exists: ${hasIndex ? '✅' : '❌'}`);
-    
+    console.log(`\n🗂️  Search index exists: ${hasIndex ? "✅" : "❌"}`);
   } catch (error) {
     console.error("❌ Error during diagnosis:", error);
   }
 }
-
 
 export async function findMessages(spaceId: string, query: string) {
   let index = search[spaceId];
@@ -584,24 +639,24 @@ export async function findMessages(spaceId: string, query: string) {
     console.log("No search index found for space:", spaceId);
     return [];
   }
-  
+
   console.log("Searching for query:", query, "in space:", spaceId);
-  
+
   try {
     const results = await index.search(query, {
       limit: 10,
       enrich: true,
     });
-    
+
     console.log("Raw FlexSearch results:", results);
-    
+
     let messages = [];
-    
+
     if (Array.isArray(results)) {
       for (const fieldResult of results) {
         if (fieldResult && fieldResult.result) {
           for (const doc of fieldResult.result) {
-            if (typeof doc === 'string') {
+            if (typeof doc === "string") {
               messages.push(doc);
             } else if (doc && doc.id) {
               messages.push(doc.id);
@@ -610,7 +665,7 @@ export async function findMessages(spaceId: string, query: string) {
         }
       }
     }
-    
+
     return [...new Set(messages)].slice(0, 10);
   } catch (error) {
     console.error("Search error:", error);

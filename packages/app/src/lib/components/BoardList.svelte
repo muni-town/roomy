@@ -35,35 +35,38 @@
 
   // Function to mark thread as read when clicked
   function markThreadAsRead(threadId: string) {
-    console.log('🔗 BoardList: Marking thread as read:', threadId);
+    console.log("🔗 BoardList: Marking thread as read:", threadId);
     if (!me?.current?.root) {
-      console.log('❌ BoardList: No me.current.root available');
+      console.log("❌ BoardList: No me.current.root available");
       return;
     }
 
     if (!me.current.root.lastRead) {
-      console.log('📝 BoardList: Creating new lastRead object');
+      console.log("📝 BoardList: Creating new lastRead object");
       me.current.root.lastRead = LastReadList.create({});
     }
 
     // Mark the thread as read so it appears in sidebar
     me.current.root.lastRead[threadId] = new Date();
-    
+
     // Remove any unsubscribe entry for this thread since we're actively viewing it
     if (me.current?.profile?.threadSubscriptions) {
       const unsubscribeEntry = `unsubscribe:${threadId}`;
       const subscriptions = me.current.profile.threadSubscriptions;
       const index = subscriptions.indexOf(unsubscribeEntry);
       if (index !== -1) {
-        console.log('🔄 BoardList: Removing unsubscribe entry for thread:', threadId);
+        console.log(
+          "🔄 BoardList: Removing unsubscribe entry for thread:",
+          threadId,
+        );
         subscriptions.splice(index, 1);
       }
     }
-    
-    console.log('✅ BoardList: Thread marked as read:', {
+
+    console.log("✅ BoardList: Thread marked as read:", {
       threadId,
       timestamp: me.current.root.lastRead[threadId],
-      allLastRead: Object.keys(me.current.root.lastRead || {})
+      allLastRead: Object.keys(me.current.root.lastRead || {}),
     });
   }
 </script>

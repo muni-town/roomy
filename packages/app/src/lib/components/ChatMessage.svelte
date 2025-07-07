@@ -404,7 +404,9 @@
               {/if}
             </span>
           {/if}
-          <div class="prose prose-a:text-accent-600 dark:prose-a:text-accent-400 dark:prose-invert prose-a:no-underline max-w-full">
+          <div
+            class="prose prose-a:text-accent-600 dark:prose-a:text-accent-400 dark:prose-invert prose-a:no-underline max-w-full"
+          >
             {#if editingMessage.id === messageId}
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
@@ -421,8 +423,13 @@
                 />
 
                 <div class="text-xs text-base-content mt-1">
-                  Press <kbd class="text-accent-600 dark:text-accent-400">Enter</kbd> to save,
-                  <kbd class="text-accent-600 dark:text-accent-400 font-medium">Escape</kbd> to cancel
+                  Press <kbd class="text-accent-600 dark:text-accent-400"
+                    >Enter</kbd
+                  >
+                  to save,
+                  <kbd class="text-accent-600 dark:text-accent-400 font-medium"
+                    >Escape</kbd
+                  > to cancel
                 </div>
               </div>
             {:else}

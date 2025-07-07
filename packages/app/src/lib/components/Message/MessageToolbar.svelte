@@ -42,7 +42,7 @@
   bind:open={
     () => isDrawerOpen,
     (open) => {
-      if(open) {
+      if (open) {
         isDrawerOpen = open;
         return;
       }

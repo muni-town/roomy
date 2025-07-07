@@ -14,7 +14,7 @@
   async function newMessageSubmit(evt: Event) {
     evt.preventDefault();
     if (!handle) return;
-    const cleanHandle = handle.startsWith('@') ? handle.slice(1) : handle;
+    const cleanHandle = handle.startsWith("@") ? handle.slice(1) : handle;
 
     const conversation = await dmClient.startConversation(cleanHandle);
     handle = "";
@@ -26,19 +26,15 @@
 </script>
 
 <Modal bind:open>
-  <form
-    id="newMessage"
-    class="flex flex-col gap-4"
-    onsubmit={newMessageSubmit}
-  >
+  <form id="newMessage" class="flex flex-col gap-4" onsubmit={newMessageSubmit}>
     <Heading>Start a new conversation</Heading>
-    <Input
-      bind:value={handle}
-      placeholder="Handle"
-      type="text"
-      required
-    />
-    <Button type="submit" disabled={!handle} class="w-full justify-center" size="lg">
+    <Input bind:value={handle} placeholder="Handle" type="text" required />
+    <Button
+      type="submit"
+      disabled={!handle}
+      class="w-full justify-center"
+      size="lg"
+    >
       <Icon icon="basil:plus-outline" font-size="2em" />
       Start Conversation
     </Button>

@@ -68,29 +68,31 @@
       {/each}
     </Tooltip.Provider> -->
     <TooltipProvider>
-    {#each reactions as reaction}
-      <Tooltip
-        text={reaction.emoji +
-          " " +
-          reaction.users.map((user) => user.name).join(", ")}
-      >
-        {#snippet child({ props })}
-          <Toggle
-            {...props}
-            pressed={reaction.user}
-            onclick={() => toggleReaction(reaction.emoji)}
-          >
-            {reaction.emoji}
-            {#if reaction.count > 1}
-              <span class="text-xs font-semibold text-base-900 dark:text-base-100">
-                {reaction.count}
-              </span>
-            {/if}
-          </Toggle>
-        {/snippet}
-      </Tooltip>
-    {/each}
-  </TooltipProvider>
+      {#each reactions as reaction}
+        <Tooltip
+          text={reaction.emoji +
+            " " +
+            reaction.users.map((user) => user.name).join(", ")}
+        >
+          {#snippet child({ props })}
+            <Toggle
+              {...props}
+              pressed={reaction.user}
+              onclick={() => toggleReaction(reaction.emoji)}
+            >
+              {reaction.emoji}
+              {#if reaction.count > 1}
+                <span
+                  class="text-xs font-semibold text-base-900 dark:text-base-100"
+                >
+                  {reaction.count}
+                </span>
+              {/if}
+            </Toggle>
+          {/snippet}
+        </Tooltip>
+      {/each}
+    </TooltipProvider>
 
     <PopoverEmojiPicker
       bind:open={isEmojiRowPickerOpen}

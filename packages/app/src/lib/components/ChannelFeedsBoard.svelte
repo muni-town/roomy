@@ -40,7 +40,7 @@
   let feedNameUpdateTrigger = $state(0); // Force reactivity when feed names update
 
   let aggregator: AtprotoFeedAggregator | null = null;
-  
+
   // Get the current space for admin check
   let space = $derived(new CoState(Space, page.params.space));
 
@@ -60,25 +60,28 @@
 
   // Debug account data loading
   $effect(() => {
-    console.log('🔍 DEBUG: Account data changed', {
+    console.log("🔍 DEBUG: Account data changed", {
       hasMe: !!me.current,
       meId: me.current?.id,
       hasProfile: !!me.current?.profile,
       hasHiddenFeedPosts: !!me.current?.profile?.hiddenFeedPosts,
       hiddenFeedPostsLength: me.current?.profile?.hiddenFeedPosts?.length || 0,
       hasHiddenFeedPostsCache: !!me.current?.profile?.hiddenFeedPostsCache,
-      hiddenFeedPostsCacheLength: me.current?.profile?.hiddenFeedPostsCache?.length || 0,
+      hiddenFeedPostsCacheLength:
+        me.current?.profile?.hiddenFeedPostsCache?.length || 0,
     });
   });
 
   // Get user's hidden posts with details
-  let userHiddenPosts = $state<Array<{ uri: string; preview: string; author: string; hiddenAt: Date }>>([]);
+  let userHiddenPosts = $state<
+    Array<{ uri: string; preview: string; author: string; hiddenAt: Date }>
+  >([]);
 
   // Update hidden posts when account data changes
   $effect(() => {
     try {
       if (!me.current?.profile?.hiddenFeedPosts) {
-        console.log('🔍 DEBUG: No hidden posts data available');
+        console.log("🔍 DEBUG: No hidden posts data available");
         userHiddenPosts = [];
         return;
       }
@@ -86,13 +89,19 @@
       const personallyHidden = me.current.profile.hiddenFeedPosts || [];
       const hiddenCache = me.current.profile.hiddenFeedPostsCache || [];
 
-      console.log('🔍 DEBUG: userHiddenPosts effect called', {
+      console.log("🔍 DEBUG: userHiddenPosts effect called", {
         hasMe: !!me.current,
         hasProfile: !!me.current?.profile,
         personallyHiddenLength: personallyHidden.length,
         hiddenCacheLength: hiddenCache.length,
         personallyHidden: personallyHidden.slice(0, 2), // First 2 URIs for debugging
-        hiddenCache: hiddenCache.map(c => ({ uri: c?.uri, hasText: !!c?.text, hasAuthor: !!c?.author })).slice(0, 2)
+        hiddenCache: hiddenCache
+          .map((c) => ({
+            uri: c?.uri,
+            hasText: !!c?.text,
+            hasAuthor: !!c?.author,
+          }))
+          .slice(0, 2),
       });
 
       const result = personallyHidden.map((uri) => {
@@ -105,14 +114,14 @@
         };
       });
 
-      console.log('🔍 DEBUG: userHiddenPosts result', {
+      console.log("🔍 DEBUG: userHiddenPosts result", {
         resultLength: result.length,
-        firstFewResults: result.slice(0, 3)
+        firstFewResults: result.slice(0, 3),
       });
 
       userHiddenPosts = result;
     } catch (error) {
-      console.error('❌ DEBUG: userHiddenPosts effect error:', error);
+      console.error("❌ DEBUG: userHiddenPosts effect error:", error);
       userHiddenPosts = [];
     }
   });
@@ -688,7 +697,7 @@ ${
   }
 
   function hidePost(post: AtprotoFeedPost) {
-    console.log('🔍 DEBUG: hidePost called', {
+    console.log("🔍 DEBUG: hidePost called", {
       userId: me.current?.id,
       userProfile: !!me.current?.profile,
       channelProp: !!channel,
@@ -697,288 +706,347 @@ ${
       channelType: channel?.current?.channelType,
       postUri: post.uri,
       postAuthor: post.author.handle,
-      isAdmin: channel?.current?.owner?.id === me.current?.id
+      isAdmin: channel?.current?.owner?.id === me.current?.id,
     });
-    
+
     if (!me.current?.profile || !channel) {
-      console.log('❌ DEBUG: hidePost early return - no profile or channel');
+      console.log("❌ DEBUG: hidePost early return - no profile or channel");
       return;
     }
-    
+
     try {
       // Initialize hiddenFeedPosts if it doesn't exist
       if (!me.current.profile.hiddenFeedPosts) {
-        console.log('🔧 DEBUG: Initializing hiddenFeedPosts');
-        me.current.profile.hiddenFeedPosts = co.list(z.string()).create([], publicGroup("writer"));
+        console.log("🔧 DEBUG: Initializing hiddenFeedPosts");
+        me.current.profile.hiddenFeedPosts = co
+          .list(z.string())
+          .create([], publicGroup("writer"));
       }
-      
+
       // Initialize hiddenFeedPostsCache if it doesn't exist
       if (!me.current.profile.hiddenFeedPostsCache) {
-        console.log('🔧 DEBUG: Initializing hiddenFeedPostsCache');
-        me.current.profile.hiddenFeedPostsCache = co.list(co.map({
+        console.log("🔧 DEBUG: Initializing hiddenFeedPostsCache");
+        me.current.profile.hiddenFeedPostsCache = co
+          .list(
+            co.map({
+              uri: z.string(),
+              text: z.string(),
+              author: z.string(),
+              hiddenAt: z.date(),
+            }),
+          )
+          .create([], publicGroup("writer"));
+      }
+
+      // Store post data for better UI display
+      const postData = co
+        .map({
           uri: z.string(),
           text: z.string(),
           author: z.string(),
           hiddenAt: z.date(),
-        })).create([], publicGroup("writer"));
-      }
-      
-      // Store post data for better UI display
-      const postData = co.map({
-        uri: z.string(),
-        text: z.string(),
-        author: z.string(),
-        hiddenAt: z.date(),
-      }).create({
-        uri: post.uri,
-        text: post.record.text.slice(0, 100), // First 100 characters
-        author: post.author.displayName || post.author.handle,
-        hiddenAt: new Date(),
-      }, publicGroup("reader"));
-      
+        })
+        .create(
+          {
+            uri: post.uri,
+            text: post.record.text.slice(0, 100), // First 100 characters
+            author: post.author.displayName || post.author.handle,
+            hiddenAt: new Date(),
+          },
+          publicGroup("reader"),
+        );
+
       me.current.profile.hiddenFeedPostsCache.push(postData);
-      
+
       // Add the post URI to the personal hidden list
       me.current.profile.hiddenFeedPosts.push(post.uri);
-      console.log('✅ DEBUG: Added to personal hidden list', {
+      console.log("✅ DEBUG: Added to personal hidden list", {
         uri: post.uri,
-        totalPersonalHidden: me.current.profile.hiddenFeedPosts.length
+        totalPersonalHidden: me.current.profile.hiddenFeedPosts.length,
       });
-      
+
       // Global hiding logic for the channel
       if (channel) {
-        console.log('🌐 DEBUG: Calling addGlobalHideVote');
+        console.log("🌐 DEBUG: Calling addGlobalHideVote");
         addGlobalHideVote(post);
       } else {
-        console.log('❌ DEBUG: No channel, skipping global vote');
+        console.log("❌ DEBUG: No channel, skipping global vote");
       }
-      
+
       // Remove the post from the current feed display
-      feedPosts = feedPosts.filter(p => p.uri !== post.uri);
-      
+      feedPosts = feedPosts.filter((p) => p.uri !== post.uri);
     } catch (error) {
-      console.error('❌ DEBUG: Error hiding post:', error);
+      console.error("❌ DEBUG: Error hiding post:", error);
     }
   }
 
   function hidePostPersonally(post: AtprotoFeedPost) {
     if (!me.current?.profile) return;
-    
+
     try {
       // Initialize hiddenFeedPosts if it doesn't exist
       if (!me.current.profile.hiddenFeedPosts) {
-        me.current.profile.hiddenFeedPosts = co.list(z.string()).create([], publicGroup("writer"));
+        me.current.profile.hiddenFeedPosts = co
+          .list(z.string())
+          .create([], publicGroup("writer"));
       }
-      
+
       // Initialize hiddenFeedPostsCache if it doesn't exist
       if (!me.current.profile.hiddenFeedPostsCache) {
-        me.current.profile.hiddenFeedPostsCache = co.list(co.map({
+        me.current.profile.hiddenFeedPostsCache = co
+          .list(
+            co.map({
+              uri: z.string(),
+              text: z.string(),
+              author: z.string(),
+              hiddenAt: z.date(),
+            }),
+          )
+          .create([], publicGroup("writer"));
+      }
+
+      // Store post data for better UI display
+      const postData = co
+        .map({
           uri: z.string(),
           text: z.string(),
           author: z.string(),
           hiddenAt: z.date(),
-        })).create([], publicGroup("writer"));
-      }
-      
-      // Store post data for better UI display
-      const postData = co.map({
-        uri: z.string(),
-        text: z.string(),
-        author: z.string(),
-        hiddenAt: z.date(),
-      }).create({
-        uri: post.uri,
-        text: post.record.text.slice(0, 100),
-        author: post.author.displayName || post.author.handle,
-        hiddenAt: new Date(),
-      }, publicGroup("reader"));
-      
+        })
+        .create(
+          {
+            uri: post.uri,
+            text: post.record.text.slice(0, 100),
+            author: post.author.displayName || post.author.handle,
+            hiddenAt: new Date(),
+          },
+          publicGroup("reader"),
+        );
+
       me.current.profile.hiddenFeedPostsCache.push(postData);
       me.current.profile.hiddenFeedPosts.push(post.uri);
-      
+
       // Remove from display
-      feedPosts = feedPosts.filter(p => p.uri !== post.uri);
-      
-      console.log('✅ Personal hide completed');
+      feedPosts = feedPosts.filter((p) => p.uri !== post.uri);
+
+      console.log("✅ Personal hide completed");
     } catch (error) {
-      console.error('❌ Error hiding post personally:', error);
+      console.error("❌ Error hiding post personally:", error);
     }
   }
 
   function hidePostGlobally(post: AtprotoFeedPost) {
     if (!channel?.globalHiddenPosts) return;
-    
+
     try {
       // Find existing global hidden post entry or create new one
-      let globalPost = channel.globalHiddenPosts.find(ghp => ghp.postUri === post.uri);
-      
+      let globalPost = channel.globalHiddenPosts.find(
+        (ghp) => ghp.postUri === post.uri,
+      );
+
       if (!globalPost) {
         // Create new global hidden post entry with admin override
-        globalPost = GlobalHiddenPost.create({
-          postUri: post.uri,
-          votes: co.list(FeedPostVote).create([], publicGroup("reader")),
-          threshold: 1, // Admin override needs only 1 "vote"
-          isHidden: true, // Immediately hidden
-          hiddenAt: new Date(),
-        }, publicGroup("reader"));
-        
+        globalPost = GlobalHiddenPost.create(
+          {
+            postUri: post.uri,
+            votes: co.list(FeedPostVote).create([], publicGroup("reader")),
+            threshold: 1, // Admin override needs only 1 "vote"
+            isHidden: true, // Immediately hidden
+            hiddenAt: new Date(),
+          },
+          publicGroup("reader"),
+        );
+
         channel.globalHiddenPosts.push(globalPost);
       } else {
         // Mark existing post as globally hidden
         globalPost.isHidden = true;
         globalPost.hiddenAt = new Date();
       }
-      
+
       // Remove from display
-      feedPosts = feedPosts.filter(p => p.uri !== post.uri);
-      
-      console.log('✅ Global hide completed');
+      feedPosts = feedPosts.filter((p) => p.uri !== post.uri);
+
+      console.log("✅ Global hide completed");
     } catch (error) {
-      console.error('❌ Error hiding post globally:', error);
+      console.error("❌ Error hiding post globally:", error);
     }
   }
 
   function addGlobalHideVote(post: AtprotoFeedPost) {
-    console.log('🌐 DEBUG: addGlobalHideVote called', {
+    console.log("🌐 DEBUG: addGlobalHideVote called", {
       userId: me.current?.id,
       channelId: channel?.id,
       postUri: post.uri,
       hasGlobalHiddenPosts: !!channel?.globalHiddenPosts,
       globalHiddenPostsLength: channel?.globalHiddenPosts?.length || 0,
-      isAdmin: channel?.owner?.id === me.current?.id
+      isAdmin: channel?.owner?.id === me.current?.id,
     });
-    
+
     if (!channel || !me.current?.id) {
-      console.log('❌ DEBUG: addGlobalHideVote early return - no channel or user ID');
+      console.log(
+        "❌ DEBUG: addGlobalHideVote early return - no channel or user ID",
+      );
       return;
     }
-    
+
     try {
       // Skip global voting if system isn't initialized - keep it simple
       if (!channel.globalHiddenPosts) {
-        console.log('⚠️ DEBUG: Global voting system not initialized - votes will only be personal');
+        console.log(
+          "⚠️ DEBUG: Global voting system not initialized - votes will only be personal",
+        );
         return;
       }
-      
-      console.log('🔍 DEBUG: Checking for existing global post for URI:', post.uri);
-      
+
+      console.log(
+        "🔍 DEBUG: Checking for existing global post for URI:",
+        post.uri,
+      );
+
       // Find existing global hidden post entry or create new one
-      let globalPost = channel.globalHiddenPosts.find(ghp => ghp.postUri === post.uri);
-      
+      let globalPost = channel.globalHiddenPosts.find(
+        (ghp) => ghp.postUri === post.uri,
+      );
+
       if (!globalPost) {
-        console.log('✨ DEBUG: Creating new global hidden post entry');
-        
+        console.log("✨ DEBUG: Creating new global hidden post entry");
+
         try {
           // Create new global hidden post entry
-          const newVote = FeedPostVote.create({
+          const newVote = FeedPostVote.create(
+            {
+              postUri: post.uri,
+              userId: me.current.id,
+              reason: "irrelevant", // Could be made configurable
+              votedAt: new Date(),
+            },
+            publicGroup("reader"),
+          );
+
+          console.log("📊 DEBUG: Created new vote", {
             postUri: post.uri,
             userId: me.current.id,
-            reason: "irrelevant", // Could be made configurable
-            votedAt: new Date(),
-          }, publicGroup("reader"));
-          
-          console.log('📊 DEBUG: Created new vote', {
-            postUri: post.uri,
-            userId: me.current.id,
-            voteId: newVote.id
+            voteId: newVote.id,
           });
-          
+
           // Try to determine the right permission group for the global post
           let globalPostGroup;
           try {
             globalPostGroup = publicGroup("everyone");
-            console.log('🔓 DEBUG: Using "everyone" permission for global post');
+            console.log(
+              '🔓 DEBUG: Using "everyone" permission for global post',
+            );
           } catch (e) {
-            console.log('⚠️ DEBUG: Cannot use "everyone" permission, falling back to "reader"');
+            console.log(
+              '⚠️ DEBUG: Cannot use "everyone" permission, falling back to "reader"',
+            );
             globalPostGroup = publicGroup("reader");
           }
-          
-          globalPost = GlobalHiddenPost.create({
-            postUri: post.uri,
-            votes: co.list(FeedPostVote).create([newVote], globalPostGroup),
-            threshold: channel.hideThreshold || 3,
-            isHidden: false,
-          }, globalPostGroup);
-          
-          console.log('🆕 DEBUG: Created new global post', {
+
+          globalPost = GlobalHiddenPost.create(
+            {
+              postUri: post.uri,
+              votes: co.list(FeedPostVote).create([newVote], globalPostGroup),
+              threshold: channel.hideThreshold || 3,
+              isHidden: false,
+            },
+            globalPostGroup,
+          );
+
+          console.log("🆕 DEBUG: Created new global post", {
             postUri: post.uri,
             globalPostId: globalPost.id,
             threshold: globalPost.threshold,
-            initialVotes: globalPost.votes.length
+            initialVotes: globalPost.votes.length,
           });
-          
+
           channel.globalHiddenPosts.push(globalPost);
-          console.log('✅ DEBUG: Added global post to channel list', {
-            totalGlobalPosts: channel.globalHiddenPosts.length
+          console.log("✅ DEBUG: Added global post to channel list", {
+            totalGlobalPosts: channel.globalHiddenPosts.length,
           });
         } catch (createError) {
-          console.error('❌ DEBUG: Failed to create new global post:', createError, {
-            errorMessage: createError.message,
-            stack: createError.stack
-          });
+          console.error(
+            "❌ DEBUG: Failed to create new global post:",
+            createError,
+            {
+              errorMessage: createError.message,
+              stack: createError.stack,
+            },
+          );
           throw createError;
         }
       } else {
-        console.log('🔍 DEBUG: Found existing global post', {
+        console.log("🔍 DEBUG: Found existing global post", {
           globalPostId: globalPost.id,
           currentVotes: globalPost.votes.length,
-          isHidden: globalPost.isHidden
+          isHidden: globalPost.isHidden,
         });
-        
+
         // Check if user already voted
-        const existingVote = globalPost.votes.find(vote => vote.userId === me.current!.id);
+        const existingVote = globalPost.votes.find(
+          (vote) => vote.userId === me.current!.id,
+        );
         if (!existingVote) {
-          console.log('➕ DEBUG: Adding new vote to existing global post');
-          
+          console.log("➕ DEBUG: Adding new vote to existing global post");
+
           try {
             // Add new vote
-            const newVote = FeedPostVote.create({
-              postUri: post.uri,
-              userId: me.current.id,
-              reason: "irrelevant",
-              votedAt: new Date(),
-            }, publicGroup("reader"));
-            
+            const newVote = FeedPostVote.create(
+              {
+                postUri: post.uri,
+                userId: me.current.id,
+                reason: "irrelevant",
+                votedAt: new Date(),
+              },
+              publicGroup("reader"),
+            );
+
             globalPost.votes.push(newVote);
-            console.log('✅ DEBUG: Added vote to existing global post', {
+            console.log("✅ DEBUG: Added vote to existing global post", {
               newVoteId: newVote.id,
-              totalVotes: globalPost.votes.length
+              totalVotes: globalPost.votes.length,
             });
           } catch (voteError) {
-            console.error('❌ DEBUG: Failed to add vote to existing global post:', voteError, {
-              errorMessage: voteError.message,
-              stack: voteError.stack
-            });
+            console.error(
+              "❌ DEBUG: Failed to add vote to existing global post:",
+              voteError,
+              {
+                errorMessage: voteError.message,
+                stack: voteError.stack,
+              },
+            );
             throw voteError;
           }
         } else {
-          console.log('⚠️ DEBUG: User already voted for this post', {
+          console.log("⚠️ DEBUG: User already voted for this post", {
             existingVoteId: existingVote.id,
-            votedAt: existingVote.votedAt
+            votedAt: existingVote.votedAt,
           });
         }
       }
-      
+
       // Check if post should be globally hidden
       const voteCount = globalPost.votes.length;
       const threshold = globalPost.threshold;
-      
-      console.log('🎯 DEBUG: Checking threshold', {
+
+      console.log("🎯 DEBUG: Checking threshold", {
         voteCount,
         threshold,
         isCurrentlyHidden: globalPost.isHidden,
-        shouldHide: voteCount >= threshold && !globalPost.isHidden
+        shouldHide: voteCount >= threshold && !globalPost.isHidden,
       });
-      
+
       if (voteCount >= threshold && !globalPost.isHidden) {
         globalPost.isHidden = true;
         globalPost.hiddenAt = new Date();
-        console.log(`🚫 DEBUG: Post globally hidden with ${voteCount} votes (threshold: ${threshold})`);
+        console.log(
+          `🚫 DEBUG: Post globally hidden with ${voteCount} votes (threshold: ${threshold})`,
+        );
       }
-      
     } catch (error) {
-      console.error('❌ DEBUG: Error adding global hide vote:', error, {
-        stack: error.stack
+      console.error("❌ DEBUG: Error adding global hide vote:", error, {
+        stack: error.stack,
       });
     }
   }
@@ -995,11 +1063,11 @@ ${
         <!-- Show hidden posts button for all users -->
         <button
           onclick={() => {
-            console.log('🔘 DEBUG: Show Hidden button clicked', {
+            console.log("🔘 DEBUG: Show Hidden button clicked", {
               showHiddenPanel,
               userHiddenPostsLength: userHiddenPosts.length,
               isSpaceAdmin: isSpaceAdmin(space.current),
-              hasSpace: !!space.current
+              hasSpace: !!space.current,
             });
             showHiddenPanel = !showHiddenPanel;
           }}

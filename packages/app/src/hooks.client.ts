@@ -8,7 +8,7 @@ export const handleError: HandleClientError = async ({
   message,
 }) => {
   if (status !== 404) {
-    console.error(error,status,event,message)
+    console.error(error, status, event, message);
     posthog.captureException(error, { status, event, message });
   }
 };

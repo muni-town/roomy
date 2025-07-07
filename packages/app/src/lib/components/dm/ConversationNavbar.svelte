@@ -48,7 +48,9 @@
 
 {#if conversationDetails}
   <div class="flex flex-col items-center justify-between w-full px-2">
-    <h2 class="text-lg font-bold w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2">
+    <h2
+      class="text-lg font-bold w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
+    >
       <Avatar
         src={getConversationAvatar(conversationDetails?.members)}
         class="w-8 h-8"

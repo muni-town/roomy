@@ -29,7 +29,6 @@
     };
   } = $props();
 
-
   // Space and Heatmap data state
   let spacesList = $state<{ id: string; name: string; messageCount: number }[]>(
     [],
@@ -127,7 +126,10 @@
       const yearOfFirstDay = firstDayOfWeek.getFullYear();
 
       // Only create headers for current year months
-      if (yearOfFirstDay === today.getFullYear() && monthOfFirstDay !== currentMonth) {
+      if (
+        yearOfFirstDay === today.getFullYear() &&
+        monthOfFirstDay !== currentMonth
+      ) {
         if (currentMonth !== -1) {
           // Close the previous month header
           const lastHeader = monthHeaders[monthHeaders.length - 1];
@@ -203,7 +205,7 @@
 
       // Determine which spaces to check for activity
       let spacesToCheck: co.loaded<typeof Space>[];
-      
+
       if (isOwnProfile) {
         // Viewing our own profile - use our joined spaces
         spacesToCheck = me.current.profile.joinedSpaces.filter(
@@ -289,13 +291,14 @@
     const urlRegex = /(https?:\/\/[^\s<>"]+)/gi;
     return text
       .replaceAll("\n", "<br/>")
-      .replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-primary hover:text-primary-focus underline hover:no-underline transition-colors font-medium">$1</a>');
+      .replace(
+        urlRegex,
+        '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-primary hover:text-primary-focus underline hover:no-underline transition-colors font-medium">$1</a>',
+      );
   }
 </script>
 
-<div
-  class="mx-auto w-full max-w-full sm:max-w-4xl sm:py-6"
->
+<div class="mx-auto w-full max-w-full sm:max-w-4xl sm:py-6">
   <!-- Header -->
   <div class="flex justify-between items-center mb-4 px-4 sm:px-6 lg:px-8">
     <h2 class="text-xl font-bold">User Profile</h2>
@@ -321,9 +324,7 @@
     <Avatar.Root class="size-24 sm:size-32">
       <Avatar.Image src={profile?.avatar} class="rounded-full" />
       <Avatar.Fallback>
-        <AvatarBeam
-          name={profile?.did || profile?.handle || "unknown"}
-        />
+        <AvatarBeam name={profile?.did || profile?.handle || "unknown"} />
       </Avatar.Fallback>
     </Avatar.Root>
     <div
@@ -331,19 +332,19 @@
     >
       <div
         class={[
-          profile?.banner
-            ? "mt-4 sm:mt-0"
-            : "-mt-[4.5rem] sm:-mt-[6.5rem]",
+          profile?.banner ? "mt-4 sm:mt-0" : "-mt-[4.5rem] sm:-mt-[6.5rem]",
           "flex min-w-0 max-w-full flex-1 flex-col items-baseline",
         ]}
       >
-        <h1 class="max-w-full truncate text-lg font-bold text-primary sm:text-xl">
+        <h1
+          class="max-w-full truncate text-lg font-bold text-primary sm:text-xl"
+        >
           {profile?.displayName || profile?.handle}
         </h1>
         {#if profile?.handle}
-          <a 
-            href="https://bsky.app/profile/{profile.handle}" 
-            target="_blank" 
+          <a
+            href="https://bsky.app/profile/{profile.handle}"
+            target="_blank"
             rel="noopener noreferrer"
             class="text-sm text-primary hover:text-primary-focus transition-colors underline hover:no-underline"
           >
@@ -354,148 +355,148 @@
     </div>
   </div>
 
-
   {#if profile?.description}
     <div class="px-4 sm:px-6 lg:px-8 py-4 text-xs sm:text-sm text-base-900">
       {@html linkifyText(profile.description)}
     </div>
   {/if}
 
-    <!-- Content Area -->
-    <div class="px-4 sm:px-6 lg:px-8 py-4">
-      <div class="w-full">
-        {#if isLoading}
-          <div class="flex items-center justify-center py-8">
-            <span class="loading loading-spinner loading-lg text-primary"
-            ></span>
-            <span class="ml-2">Loading activity data...</span>
-          </div>
-        {:else}
-          <!-- Space Selector -->
-          <div class="mb-4">
-            <label for="space-select" class="block text-sm font-medium mb-2">
-              Select Space:
-            </label>
-            <select
-              id="space-select"
-              class="select select-bordered w-full"
-              bind:value={selectedSpaceId}
-            >
-              <option value="all">
-                All Spaces ({Object.values(heatmapData.all || {}).reduce(
-                  (a, b) => a + b,
-                  0,
-                )})
+  <!-- Content Area -->
+  <div class="px-4 sm:px-6 lg:px-8 py-4">
+    <div class="w-full">
+      {#if isLoading}
+        <div class="flex items-center justify-center py-8">
+          <span class="loading loading-spinner loading-lg text-primary"></span>
+          <span class="ml-2">Loading activity data...</span>
+        </div>
+      {:else}
+        <!-- Space Selector -->
+        <div class="mb-4">
+          <label for="space-select" class="block text-sm font-medium mb-2">
+            Select Space:
+          </label>
+          <select
+            id="space-select"
+            class="select select-bordered w-full"
+            bind:value={selectedSpaceId}
+          >
+            <option value="all">
+              All Spaces ({Object.values(heatmapData.all || {}).reduce(
+                (a, b) => a + b,
+                0,
+              )})
+            </option>
+            {#each spacesList as space}
+              <option value={space.id}>
+                {space.name} ({space.messageCount})
               </option>
-              {#each spacesList as space}
-                <option value={space.id}>
-                  {space.name} ({space.messageCount})
-                </option>
-              {/each}
-            </select>
-          </div>
+            {/each}
+          </select>
+        </div>
 
-          <!-- Heatmap -->
-          <div class="mb-6">
-            <h3 class="text-lg font-semibold mb-2">Message Activity</h3>
+        <!-- Heatmap -->
+        <div class="mb-6">
+          <h3 class="text-lg font-semibold mb-2">Message Activity</h3>
 
-            <div class="overflow-x-auto">
-              <div class="flex gap-x-1 tabular-nums min-w-max">
-                <!-- Day of Week Labels (Mon, Wed, Fri) -->
-                <div
-                  class="grid grid-rows-8 gap-y-1 w-6 mr-1 flex-shrink-0 text-xs text-base-content/60"
-                >
-                  <!-- Month header spacer -->
-                  <div class="h-4"></div>
-                  <div class="h-2.5"></div>
-                  <!-- Spacer for Sun -->
-                  <div class="h-2.5 flex items-center text-xs">M</div>
-                  <div class="h-2.5"></div>
-                  <!-- Spacer for Tue -->
-                  <div class="h-2.5 flex items-center text-xs">W</div>
-                  <div class="h-2.5"></div>
-                  <!-- Spacer for Thu -->
-                  <div class="h-2.5 flex items-center text-xs">F</div>
-                  <div class="h-2.5"></div>
-                  <!-- Spacer for Sat -->
-                </div>
+          <div class="overflow-x-auto">
+            <div class="flex gap-x-1 tabular-nums min-w-max">
+              <!-- Day of Week Labels (Mon, Wed, Fri) -->
+              <div
+                class="grid grid-rows-8 gap-y-1 w-6 mr-1 flex-shrink-0 text-xs text-base-content/60"
+              >
+                <!-- Month header spacer -->
+                <div class="h-4"></div>
+                <div class="h-2.5"></div>
+                <!-- Spacer for Sun -->
+                <div class="h-2.5 flex items-center text-xs">M</div>
+                <div class="h-2.5"></div>
+                <!-- Spacer for Tue -->
+                <div class="h-2.5 flex items-center text-xs">W</div>
+                <div class="h-2.5"></div>
+                <!-- Spacer for Thu -->
+                <div class="h-2.5 flex items-center text-xs">F</div>
+                <div class="h-2.5"></div>
+                <!-- Spacer for Sat -->
+              </div>
 
-                <!-- Activity Grid with Month Headers -->
-                <div
-                  class="grid grid-flow-col auto-cols-[10px] gap-x-1"
-                >
-                  {#each contributionGraphData.weekColumns as weekColumn, weekIndex}
-                    <div class="grid grid-rows-8 gap-y-1">
-                      <!-- Month Header Row -->
-                      <div class="h-4 text-xs text-base-content/60 flex items-end">
-                        {#if weekIndex === 0 || (weekColumn[0] && contributionGraphData.monthHeaders.find(h => h.startColumn === weekIndex))}
-                          <span class="text-xs">
-                            {contributionGraphData.monthHeaders.find(h => h.startColumn === weekIndex)?.name || ''}
-                          </span>
-                        {/if}
-                      </div>
-                      
-                      <!-- Activity Days -->
-                      {#each weekColumn as day}
-                        {#if day}
-                          <div class="relative group">
-                            <div
-                              class={`w-2.5 h-2.5 rounded-sm ${getColorClass(currentHeatmapData[format(day, "yyyy-MM-dd")] || 0)}`}
-                              title={`${format(day, "MMM d, yyyy")}: ${currentHeatmapData[format(day, "yyyy-MM-dd")] || 0} messages`}
-                            >
-                            </div>
-                          </div>
-                        {:else}
-                          <div
-                            class="w-2.5 h-2.5 rounded-sm bg-base-200/30"
-                          ></div>
-                        {/if}
-                      {/each}
+              <!-- Activity Grid with Month Headers -->
+              <div class="grid grid-flow-col auto-cols-[10px] gap-x-1">
+                {#each contributionGraphData.weekColumns as weekColumn, weekIndex}
+                  <div class="grid grid-rows-8 gap-y-1">
+                    <!-- Month Header Row -->
+                    <div
+                      class="h-4 text-xs text-base-content/60 flex items-end"
+                    >
+                      {#if weekIndex === 0 || (weekColumn[0] && contributionGraphData.monthHeaders.find((h) => h.startColumn === weekIndex))}
+                        <span class="text-xs">
+                          {contributionGraphData.monthHeaders.find(
+                            (h) => h.startColumn === weekIndex,
+                          )?.name || ""}
+                        </span>
+                      {/if}
                     </div>
-                  {/each}
-                </div>
-              </div>
-            </div>
 
-            <div
-              class="flex justify-between items-center mt-2 text-xs text-base-content/60"
-            >
-              <div class="text-xs">
-                {Object.values(currentHeatmapData).filter(count => count > 0).length} contributions in the last year
-              </div>
-              <div class="flex items-center gap-2">
-                <span>Less</span>
-                <div class="flex gap-1">
-                  <div class="w-2.5 h-2.5 rounded-sm bg-base-200"></div>
-                  <div class="w-2.5 h-2.5 rounded-sm bg-accent-200"></div>
-                  <div class="w-2.5 h-2.5 rounded-sm bg-accent-400"></div>
-                  <div class="w-2.5 h-2.5 rounded-sm bg-accent-600"></div>
-                  <div class="w-2.5 h-2.5 rounded-sm bg-accent-800"></div>
-                </div>
-                <span>More</span>
+                    <!-- Activity Days -->
+                    {#each weekColumn as day}
+                      {#if day}
+                        <div class="relative group">
+                          <div
+                            class={`w-2.5 h-2.5 rounded-sm ${getColorClass(currentHeatmapData[format(day, "yyyy-MM-dd")] || 0)}`}
+                            title={`${format(day, "MMM d, yyyy")}: ${currentHeatmapData[format(day, "yyyy-MM-dd")] || 0} messages`}
+                          ></div>
+                        </div>
+                      {:else}
+                        <div
+                          class="w-2.5 h-2.5 rounded-sm bg-base-200/30"
+                        ></div>
+                      {/if}
+                    {/each}
+                  </div>
+                {/each}
               </div>
             </div>
           </div>
 
-          <!-- Stats -->
-          <div class="grid grid-cols-2 gap-4 mb-6">
-            <div class="bg-base-200 p-4 rounded-lg">
-              <p class="text-sm text-base-content/60">Messages Sent</p>
-              <p class="text-2xl font-bold">
-                {Object.values(currentHeatmapData)
-                  .reduce((a, b) => a + b, 0)
-                  .toLocaleString()}
-              </p>
+          <div
+            class="flex justify-between items-center mt-2 text-xs text-base-content/60"
+          >
+            <div class="text-xs">
+              {Object.values(currentHeatmapData).filter((count) => count > 0)
+                .length} contributions in the last year
             </div>
-            <div class="bg-base-200 p-4 rounded-lg">
-              <p class="text-sm text-base-content/60">Active Days</p>
-              <p class="text-2xl font-bold">
-                {Object.values(currentHeatmapData).filter((count) => count > 0)
-                  .length}
-              </p>
+            <div class="flex items-center gap-2">
+              <span>Less</span>
+              <div class="flex gap-1">
+                <div class="w-2.5 h-2.5 rounded-sm bg-base-200"></div>
+                <div class="w-2.5 h-2.5 rounded-sm bg-accent-200"></div>
+                <div class="w-2.5 h-2.5 rounded-sm bg-accent-400"></div>
+                <div class="w-2.5 h-2.5 rounded-sm bg-accent-600"></div>
+                <div class="w-2.5 h-2.5 rounded-sm bg-accent-800"></div>
+              </div>
+              <span>More</span>
             </div>
           </div>
-        {/if}
-      </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid grid-cols-2 gap-4 mb-6">
+          <div class="bg-base-200 p-4 rounded-lg">
+            <p class="text-sm text-base-content/60">Messages Sent</p>
+            <p class="text-2xl font-bold">
+              {Object.values(currentHeatmapData)
+                .reduce((a, b) => a + b, 0)
+                .toLocaleString()}
+            </p>
+          </div>
+          <div class="bg-base-200 p-4 rounded-lg">
+            <p class="text-sm text-base-content/60">Active Days</p>
+            <p class="text-2xl font-bold">
+              {Object.values(currentHeatmapData).filter((count) => count > 0)
+                .length}
+            </p>
+          </div>
+        </div>
+      {/if}
     </div>
+  </div>
 </div>

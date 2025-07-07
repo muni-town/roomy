@@ -36,7 +36,6 @@
 
     open = false;
   }
-
 </script>
 
 <Modal bind:open>

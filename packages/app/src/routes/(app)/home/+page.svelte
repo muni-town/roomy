@@ -22,7 +22,9 @@
 </script>
 
 <MainLayout>
-  <div class="min-h-screen flex flex-col items-center justify-start py-8 overflow-y-auto">
+  <div
+    class="min-h-screen flex flex-col items-center justify-start py-8 overflow-y-auto"
+  >
     <div>
       <div class="flex flex-col gap-8 items-center">
         <h1

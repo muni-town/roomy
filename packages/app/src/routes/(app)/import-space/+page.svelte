@@ -25,8 +25,9 @@
     createMessage,
     createSpace,
     createThread,
-    RoomyAccount, SpaceMigrationReference,
-    spaceMigrationReferenceId
+    RoomyAccount,
+    SpaceMigrationReference,
+    spaceMigrationReferenceId,
   } from "@roomy-chat/sdk";
   import { AccountCoState } from "jazz-svelte";
 
@@ -303,7 +304,6 @@
         reference[oldSpaceId] = space.id;
         console.log("set reference", reference);
       }
-
     }
 
     toast.success(
