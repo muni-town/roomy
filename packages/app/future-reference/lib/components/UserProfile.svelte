@@ -9,7 +9,7 @@
   import { Space, RoomyAccount } from "@roomy-chat/sdk";
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import { activityIndex } from "$lib/services/activityIndex";
+  import { activityIndex } from "../services/activityIndex";
   import { AccountCoState } from "jazz-svelte";
   import { co } from "jazz-tools";
 

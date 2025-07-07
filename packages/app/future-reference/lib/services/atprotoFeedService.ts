@@ -5,7 +5,7 @@ import {
   ATPROTO_FEED_CONFIG,
 } from "$lib/utils/atproToFeeds";
 import { user } from "$lib/user.svelte";
-import { createMessage, Channel, Message } from "@roomy-chat/sdk";
+import { createMessage, Thread, Message } from "@roomy-chat/sdk";
 import { co } from "jazz-tools";
 
 export class AtprotoFeedService {

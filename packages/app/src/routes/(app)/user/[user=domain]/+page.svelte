@@ -1,6 +1,5 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import UserProfile from "$lib/components/UserProfile.svelte";
   import { RoomyAccount } from "@roomy-chat/sdk";
   import Icon from "@iconify/svelte";
   import { AccountCoState, CoState } from "jazz-svelte";
@@ -72,7 +71,8 @@
 </script>
 
 <div class="flex flex-col gap-4 w-full overflow-y-auto">
-  <UserProfile
+  <!-- TODO: Re-implement User Profile -->
+  <!-- <UserProfile
     profile={{
       id: profile.current?.profile?.id,
       avatar: profile.current?.profile?.imageUrl,
@@ -81,7 +81,7 @@
       banner: profile.current?.profile?.bannerUrl,
       description: profile.current?.profile?.description,
     }}
-  />
+  /> -->
 
   <div class="flex flex-col gap-4 w-full max-w-4xl mx-auto px-4">
     {#if spacesInCommon?.length && spacesInCommon?.length > 0}

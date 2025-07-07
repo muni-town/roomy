@@ -10,8 +10,6 @@
 
   import { user } from "$lib/user.svelte";
   import { Toggle } from "$lib/utils.svelte";
-  import ServerBar from "$lib/components/ServerBar.svelte";
-  import SidebarMain from "$lib/components/SidebarMain.svelte";
   import { page } from "$app/state";
   import { afterNavigate } from "$app/navigation";
   import {
@@ -20,8 +18,6 @@
     wordlist,
     addToAllAccountsList,
   } from "@roomy-chat/sdk";
-  import SmallSidebar from "$lib/components/ui/SmallSidebar.svelte";
-  import BigSidebar from "$lib/components/ui/BigSidebar.svelte";
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {

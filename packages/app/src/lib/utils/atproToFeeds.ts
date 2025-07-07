@@ -20,7 +20,7 @@ export const ATPROTO_FEED_CONFIG = {
     name: "🚀 AT Proto Dev Community",
     url: "https://bsky.app/profile/did:plc:2jtyqespp2zfodukwvktqwe6/feed/atprotodev",
   },
-} as const;
+} as { [key: string]: { name: string; url: string } };
 
 export const ATPROTO_FEEDS = Object.keys(ATPROTO_FEED_CONFIG);
 export const FEED_NAMES: Record<string, string> = Object.fromEntries(
@@ -90,7 +90,7 @@ export function convertBlueskyFeedUrlToUri(
     const [, profile, feedName] = pathMatch;
 
     // If the profile looks like a DID, use it directly
-    if (profile.startsWith("did:")) {
+    if (profile?.startsWith("did:") && feedName) {
       const uri = `at://${profile}/app.bsky.feed.generator/${feedName}`;
 
       // Generate a human-readable name from the feed name
@@ -163,8 +163,9 @@ export class AtprotoFeedAggregator {
     }
 
     // Check predefined feeds
-    if (ATPROTO_FEED_CONFIG[feedUri]) {
-      return ATPROTO_FEED_CONFIG[feedUri].name;
+    const entry = ATPROTO_FEED_CONFIG[feedUri];
+    if (entry) {
+      return entry.name;
     }
 
     return "📡 Custom Feed";
@@ -210,7 +211,7 @@ export class AtprotoFeedAggregator {
   // Extract feed name from URI as fallback
   private extractFeedNameFromUri(feedUri: string): string {
     const match = feedUri.match(/\/([^\/]+)$/);
-    if (match) {
+    if (match && match[1]) {
       const feedName = match[1];
       return feedName
         .split("-")
@@ -287,7 +288,10 @@ export class AtprotoFeedAggregator {
           const images: string[] = [];
 
           // Handle different embed types
-          if (embed.$type === "app.bsky.embed.images#view") {
+          if (
+            embed.$type === "app.bsky.embed.images#view" &&
+            "images" in embed
+          ) {
             // Direct image embed
             embed.images?.forEach((img: any) => {
               if (img.fullsize) {
@@ -296,10 +300,17 @@ export class AtprotoFeedAggregator {
                 images.push(img.thumb);
               }
             });
-          } else if (embed.$type === "app.bsky.embed.recordWithMedia#view") {
+          } else if (
+            embed.$type === "app.bsky.embed.recordWithMedia#view" &&
+            "media" in embed
+          ) {
             // Record with media (e.g., quote post with images)
             const media = embed.media;
-            if (media && media.$type === "app.bsky.embed.images#view") {
+            if (
+              media &&
+              media.$type === "app.bsky.embed.images#view" &&
+              "images" in media
+            ) {
               media.images?.forEach((img: any) => {
                 if (img.fullsize) {
                   images.push(img.fullsize);
@@ -487,7 +498,11 @@ export class AtprotoFeedAggregator {
         return converted;
       };
 
-      if (!response.data.thread?.post) {
+      if (
+        !response.data.thread ||
+        !("post" in response.data.thread) ||
+        !response.data.thread.post
+      ) {
         return null;
       }
 
@@ -502,7 +517,7 @@ export class AtprotoFeedAggregator {
   // Like a post
   async likePost(postUri: string, postCid: string): Promise<boolean> {
     try {
-      const did = this.agent.session?.did;
+      const did = this.agent?.did;
       if (!did) {
         console.error("No authenticated session available for liking post");
         return false;
@@ -529,7 +544,7 @@ export class AtprotoFeedAggregator {
   // Repost a post
   async repostPost(postUri: string, postCid: string): Promise<boolean> {
     try {
-      const did = this.agent.session?.did;
+      const did = this.agent?.did;
       if (!did) {
         console.error("No authenticated session available for reposting post");
         return false;
@@ -562,7 +577,7 @@ export class AtprotoFeedAggregator {
     rootCid?: string,
   ): Promise<boolean> {
     try {
-      const did = this.agent.session?.did;
+      const did = this.agent?.did;
       if (!did) {
         console.error(
           "No authenticated session available for replying to post",

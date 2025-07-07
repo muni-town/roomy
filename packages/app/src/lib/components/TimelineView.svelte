@@ -78,31 +78,6 @@
 
   let threadId = $derived(threadObject.current?.id);
 
-  let tab = $state<"chat" | "board">(
-    typeof window !== "undefined" && window.location.hash === "#board"
-      ? "board"
-      : "chat",
-  );
-
-  // Update tab when hash changes
-  $effect(() => {
-    const handleHashChange = () => {
-      if (window.location.hash === "#board") {
-        tab = "board";
-      } else if (window.location.hash === "#chat") {
-        tab = "chat";
-      }
-    };
-
-    if (typeof window !== "undefined") {
-      // Check hash on mount
-      handleHashChange();
-
-      window.addEventListener("hashchange", handleHashChange);
-      return () => window.removeEventListener("hashchange", handleHashChange);
-    }
-  });
-
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
       profile: {
@@ -130,6 +105,7 @@
 
   let filesInMessage: File[] = $state([]);
 
+  // @ts-ignore Temporary until threads are added back
   async function handleCreateThread(e: SubmitEvent) {
     e.preventDefault();
     const messageIds = <string[]>[];
