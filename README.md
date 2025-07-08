@@ -40,10 +40,13 @@ Tools we use:
 🔸 svelte 5
 🌬️ tailwind 4
 
+**Docs still pending.** While inaccurate, DeepWiki might provide some basic insights:
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/muni-town/roomy)
 
 ## Devlog
 
-* [Roomy Chat - Alpha](https://blog.muni.town/roomy-chat-alpha/)
+* [Roomy - Alpha-4]([https://blog.muni.town/roomy-chat-alpha/](https://blog.muni.town/roomy-space-alpha4/))
 * [Roomy Deep Dive: ATProto + Automerge](https://blog.muni.town/roomy-deep-dive/)
 
 ## Design
