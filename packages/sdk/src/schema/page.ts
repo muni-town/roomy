@@ -1,5 +1,7 @@
 import { co, z } from "jazz-tools";
 
 export const PageContent = co.map({
-  body: z.string(),
+  text: z.string(),
+
+  editableText: co.richText(),
 });

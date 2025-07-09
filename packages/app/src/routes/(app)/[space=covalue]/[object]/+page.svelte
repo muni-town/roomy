@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
+  import PageView from "$lib/components/PageView.svelte";
   import SidebarMain from "$lib/components/SidebarMain.svelte";
   import TimelineView from "$lib/components/TimelineView.svelte";
   import { RoomyObject } from "@roomy-chat/sdk";
@@ -14,8 +15,24 @@
     <SidebarMain />
   {/snippet}
 
+  {#snippet navbar()}
+    <div class="flex flex-col items-center justify-between w-full px-2">
+      <h2
+        class="text-lg font-bold w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
+      >
+        <span>{object.current?.name || "..."}</span>
+      </h2>
+    </div>
+  {/snippet}
+
+
   {#if object.current?.content?.thread}
     <TimelineView
+      objectId={page.params.object ?? ""}
+      spaceId={page.params.space ?? ""}
+    />
+  {:else if object.current?.content?.page}
+    <PageView
       objectId={page.params.object ?? ""}
       spaceId={page.params.space ?? ""}
     />

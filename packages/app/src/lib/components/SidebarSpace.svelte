@@ -13,7 +13,7 @@
 
   const { space, hasJoined = true }: Props = $props();
 
-  let isActive = $derived(page.url.pathname.includes(space?.id || ""));
+  let isActive = $derived(space?.id && page.url.pathname.includes(space?.id || ""));
 </script>
 
 <Tooltip

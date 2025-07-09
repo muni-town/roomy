@@ -119,10 +119,7 @@
       {#if isSpaceAdmin(space?.current)}
         <Button
           class="w-full"
-          onclick={() => {
-            showNewObjectDialog = true;
-            popoverOpen = false;
-          }}
+          href={`/${space?.current?.id}/new`}
           variant="secondary"
         >
           <Icon icon="lucide:plus" class="size-4" /> New Object

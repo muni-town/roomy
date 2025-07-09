@@ -14,4 +14,7 @@
       <SidebarObject id={childId} />
     </div>
   {/each}
+  {#if childrenIds?.length === 0}
+    <p class="text-sm text-base-500">No objects found</p>
+  {/if}
 </div>

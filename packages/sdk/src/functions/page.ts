@@ -1,4 +1,4 @@
-import { Group } from "jazz-tools";
+import { co, Group } from "jazz-tools";
 import { PageContent } from "../schema/index.ts";
 import { publicGroup } from "./group.ts";
 import { createRoomyObject } from "./roomyobject.ts";
@@ -8,7 +8,8 @@ export function createPage(name: string, adminGroup: Group) {
 
   const page = PageContent.create(
     {
-      body: "",
+      text: "",
+      editableText: co.richText().create("", readingGroup),
     },
     readingGroup,
   );
@@ -20,5 +21,5 @@ export function createPage(name: string, adminGroup: Group) {
   }
   roomyObject.content.page = page.id;
 
-  return page;
+  return { page, roomyObject };
 }

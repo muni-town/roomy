@@ -32,8 +32,9 @@
     "@blocknote/core": "^0.25.0",
     "@blocknote/react": "^0.25.0",
     "@fuxui/base": "^0.2.2",
-    "@fuxui/social": "^0.2.2",
     "@fuxui/colors": "^0.2.2",
+    "@fuxui/social": "^0.2.2",
+    "@fuxui/text": "^0.2.5",
     "@iconify/svelte": "^4.2.0",
     "@muni-town/leaf": "^0.2.0-preview.22",
     "@muni-town/leaf-storage-indexeddb": "^0.1.0-preview.6",
@@ -41,8 +42,9 @@
     "@muni-town/leaf-sync-ws": "^0.1.0-preview.7",
     "@noble/curves": "^1.8.1",
     "@repo/tsconfig": "workspace:*",
-    "@sveltejs/adapter-static": "^3.0.8",
+    "@roomy-chat/sdk": "workspace:*",
     "@sveltejs/adapter-netlify": "^5.0.2",
+    "@sveltejs/adapter-static": "^3.0.8",
     "@sveltejs/kit": "^2.20.7",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tailwindcss/forms": "^0.5.10",
@@ -107,8 +109,7 @@
     "vite-plugin-arraybuffer": "^0.1.0",
     "vite-plugin-top-level-await": "^1.4.4",
     "vite-plugin-wasm": "^3.4.1",
-    "vitest": "^3.0.9",
-    "@roomy-chat/sdk": "workspace:*"
+    "vitest": "^3.0.9"
   },
   "lint-staged": {
     "*.{svelte,svelte.ts}": [
