@@ -14,7 +14,7 @@
       ? new CoState(Space, page.params.space, {
           resolve: {
             rootFolder: {
-              childrenIds: true,
+              components: true
             },
           },
         })

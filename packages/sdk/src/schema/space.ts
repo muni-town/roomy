@@ -17,7 +17,7 @@ export const Space = co.map({
 
   rootFolder: RoomyObject,
 
-  threads: co.list(RoomyObject),
+  threads: co.feed(RoomyObject),
   pages: co.list(RoomyObject),
   folders: co.list(RoomyObject),
 

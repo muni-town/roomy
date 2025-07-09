@@ -9,6 +9,7 @@
     createPage,
     createThread,
     Group,
+    IDList,
     Space,
   } from "@roomy-chat/sdk";
   import { CoState } from "jazz-svelte";
@@ -22,6 +23,9 @@
       },
     }),
   );
+
+  const children = $derived(new CoState(IDList, space?.current?.rootFolder?.components?.children));
+  
   let adminGroup = $derived(new CoState(Group, space?.current?.adminGroupId));
 
   let objectType = $state("thread");
@@ -50,8 +54,7 @@
       console.log(firstFolder);
 
       // add to root folder
-      space.current?.rootFolder?.childrenIds?.push(thread.roomyObject.id);
-      // firstFolder?.childrenIds?.push(thread.roomyObject.id);
+      children.current?.push(thread.roomyObject.id);
       space.current?.threads?.push(thread.roomyObject);
 
       navigate({ space: space.current?.id, object: thread.roomyObject.id });
@@ -67,7 +70,7 @@
       const page = createPage(objectName, adminGroup.current);
 
       // add to root folder
-      space.current?.rootFolder?.childrenIds?.push(page.roomyObject.id);
+      children.current?.push(page.roomyObject.id);
       space.current?.pages?.push(page.roomyObject);
 
       navigate({ space: space.current?.id, object: page.roomyObject.id });

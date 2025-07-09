@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { RoomyObject, Space } from "@roomy-chat/sdk";
+  import { IDList, RoomyObject, Space } from "@roomy-chat/sdk";
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
   import { CoState } from "jazz-svelte";
@@ -9,22 +9,24 @@
     new CoState(Space, page.params.space, {
       resolve: {
         rootFolder: {
-          childrenIds: true,
+          components: true
         },
       },
     }),
   );
 
+  let children = $derived(new CoState(IDList, space.current?.rootFolder.components.children));
+
   async function navigateToFirstThread() {
     if (
       !space.current ||
-      !space.current.rootFolder ||
-      space.current.rootFolder.childrenIds.length === 0
+      !children.current ||
+      children.current?.length === 0
     )
       return;
 
     // load roomyobjects and find first thread
-    for (const childId of space.current.rootFolder.childrenIds) {
+    for (const childId of children.current ?? []) {
       const child = await RoomyObject.load(childId);
       if (!child) continue;
 

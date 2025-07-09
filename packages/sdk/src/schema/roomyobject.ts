@@ -1,18 +1,14 @@
 import { co, z } from "jazz-tools";
 
 export const RoomyObject = co.map({
-  content: z.optional(co.record(z.string(), z.string())),
-
   name: z.string(),
+  description: z.string().optional(),
 
-  parentId: z.string().optional(),
-
-  childrenIds: co.list(z.string()),
+  components: co.record(z.string(), z.string()),
 
   softDeleted: z.boolean().optional(),
 
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  creatorId: z.string().optional(),
 
-  creatorId: z.string(),
+  version: z.number().optional(),
 });

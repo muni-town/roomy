@@ -5,6 +5,7 @@ import { createRoomyObject } from "./roomyobject.ts";
 
 export function createPage(name: string, adminGroup: Group) {
   const readingGroup = publicGroup();
+  readingGroup.addMember(adminGroup);
 
   const page = PageContent.create(
     {
@@ -16,10 +17,10 @@ export function createPage(name: string, adminGroup: Group) {
 
   const roomyObject = createRoomyObject(name, adminGroup);
 
-  if (!roomyObject.content) {
-    throw new Error("RoomyObject content is undefined");
+  if (!roomyObject.components) {
+    throw new Error("RoomyObject components is undefined");
   }
-  roomyObject.content.page = page.id;
+  roomyObject.components.page = page.id;
 
   return { page, roomyObject };
 }

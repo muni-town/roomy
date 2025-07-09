@@ -3,7 +3,7 @@
   import { navigateSync } from "$lib/utils.svelte";
   import { Accordion, AccordionItem, Button } from "@fuxui/base";
   import Icon from "@iconify/svelte";
-  import { RoomyObject } from "@roomy-chat/sdk";
+  import { IDList, RoomyObject } from "@roomy-chat/sdk";
   import { CoState } from "jazz-svelte";
   import SidebarObjectList from "./SidebarObjectList.svelte";
 
@@ -11,12 +11,17 @@
 
   let object = $derived(new CoState(RoomyObject, id, {
     resolve: {
-      childrenIds: true,
+      components: {
+        $each: true,
+        $onError: null,
+      },
     }
   }));
+
+  let children = $derived(new CoState(IDList, object.current?.components?.children));
 </script>
 
-{#if object.current?.content?.thread}
+{#if object.current?.components?.thread}
   <Button
     href={navigateSync({
       space: page.params.space!,
@@ -29,7 +34,7 @@
     <Icon icon={"tabler:message-circle"} class="shrink-0" />
     <span class="truncate">{object.current?.name || "..."}</span>
   </Button>
-{:else if object.current?.content?.page}
+{:else if object.current?.components?.page}
   <Button
     href={navigateSync({
       space: page.params.space!,
@@ -51,7 +56,7 @@
       contentClasses="pl-5 pr-3"
       data-current={object.current?.id === page.params.object}
     >
-      <SidebarObjectList childrenIds={object.current?.childrenIds} />
+      <SidebarObjectList childrenIds={children.current} />
     </AccordionItem>
   </Accordion>
 {/if}

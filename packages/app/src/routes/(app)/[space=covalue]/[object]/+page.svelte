@@ -26,12 +26,12 @@
   {/snippet}
 
 
-  {#if object.current?.content?.thread}
+  {#if object.current?.components?.thread}
     <TimelineView
       objectId={page.params.object ?? ""}
       spaceId={page.params.space ?? ""}
     />
-  {:else if object.current?.content?.page}
+  {:else if object.current?.components?.page}
     <PageView
       objectId={page.params.object ?? ""}
       spaceId={page.params.space ?? ""}

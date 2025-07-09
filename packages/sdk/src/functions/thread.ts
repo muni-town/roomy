@@ -14,12 +14,15 @@ export function createThread(name: string, adminGroup: Group) {
     publicReadGroup,
   );
 
-  const roomyObject = createRoomyObject(name, adminGroup, true);
+  const roomyObject = createRoomyObject(name, adminGroup);
 
-  if (!roomyObject.content) {
-    throw new Error("RoomyObject content is undefined");
+  if (!roomyObject.components) {
+    throw new Error("RoomyObject components is undefined");
   }
-  roomyObject.content.thread = thread.id;
+  roomyObject.components.thread = thread.id;
+
+  const childrenThreads = co.feed(z.string()).create([], publicWriteGroup);
+  roomyObject.components.childrenThreads = childrenThreads.id;
 
   return { roomyObject, thread };
 }
@@ -41,7 +44,7 @@ export function createMessage(
   const readingGroup = publicGroup("reader");
 
   if (admin) {
-    readingGroup.extend(admin);
+    readingGroup.addMember(admin);
   }
 
   let embedsList;

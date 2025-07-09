@@ -58,13 +58,16 @@
   let threadObject = $derived(
     new CoState(RoomyObject, objectId, {
       resolve: {
-        childrenIds: true,
+        components: {
+          $each: true,
+          $onError: null,
+        },
       },
     }),
   );
 
   let threadContent = $derived(
-    new CoState(ThreadContent, threadObject.current?.content?.thread),
+    new CoState(ThreadContent, threadObject.current?.components?.thread),
   );
 
   let timeline = $derived.by(() => {
@@ -325,7 +328,11 @@
   );
 
   let threads = $derived(
-    space.current?.threads
+    Object.values(space.current?.threads?.perAccount ?? {})
+      .map((accountFeed) => new Array(...accountFeed.all))
+      .flat()
+      .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
+      .map((a) => a.value)
       ?.map((thread) => ({
         value: JSON.stringify({
           id: thread?.id ?? "",

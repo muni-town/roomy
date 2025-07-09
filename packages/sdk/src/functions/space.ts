@@ -3,7 +3,7 @@ import { allSpacesListId } from "../ids.ts";
 import { IDList, RoomyObject, Space } from "../schema/index.ts";
 import { createThread } from "./thread.ts";
 import { publicGroup } from "./group.ts";
-import { createFolder } from "./folder.ts";
+import { addToFolder, createFolder } from "./folder.ts";
 
 export function createSpace(
   name: string,
@@ -16,20 +16,19 @@ export function createSpace(
   const readerGroup = Group.create();
   // add reading for everyone
   readerGroup.addMember("everyone", "reader");
-  readerGroup.extend(adminGroup);
+  readerGroup.addMember(adminGroup);
 
   const publicWriteGroup = publicGroup("writer");
 
-  const thread = createDefaultChannel ? createThread("general", adminGroup) : undefined;
-
   const rootFolder = createFolder("root", adminGroup);
 
-  const threads = co.list(RoomyObject).create([], publicWriteGroup);
+  const threads = co.feed(RoomyObject).create([], publicWriteGroup);
 
-  if (thread) {
+  if (createDefaultChannel) {
+    const thread = createThread("general", adminGroup);
+
     threads.push(thread.roomyObject);
-
-    rootFolder.childrenIds.push(thread.roomyObject.id);
+    addToFolder(rootFolder, thread.roomyObject);
   }
 
   const space = Space.create(
@@ -46,8 +45,8 @@ export function createSpace(
       rootFolder,
 
       threads,
-      pages: co.list(RoomyObject).create([], readerGroup),
-      folders: co.list(RoomyObject).create([], readerGroup),
+      pages: co.list(RoomyObject).create([], publicWriteGroup),
+      folders: co.list(RoomyObject).create([], publicWriteGroup),
 
       bans: co.list(z.string()).create([], readerGroup),
     },

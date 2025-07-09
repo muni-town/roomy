@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { CoState } from "jazz-svelte";
-  import { Space } from "@roomy-chat/sdk";
+  import { IDList, Space } from "@roomy-chat/sdk";
 
   import SidebarObjectList from "./SidebarObjectList.svelte";
   import MainSidebarSpace from "./MainSidebarSpace.svelte";
@@ -11,18 +11,22 @@
       ? new CoState(Space, page.params.space, {
           resolve: {
             rootFolder: {
-              childrenIds: true,
+              components: {
+                $each: true,
+                $onError: null,
+              },
             },
           },
         })
       : null,
   );
 
+  let children = $derived(new CoState(IDList, space?.current?.rootFolder?.components?.children));
 </script>
 
 <!-- Header -->
 <MainSidebarSpace />
 
 <div class="py-2 w-full px-2">
-  <SidebarObjectList childrenIds={space?.current?.rootFolder?.childrenIds} />
+  <SidebarObjectList childrenIds={children.current} />
 </div>
