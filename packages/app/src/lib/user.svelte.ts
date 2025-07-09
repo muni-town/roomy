@@ -27,6 +27,14 @@ let profile: { data: ProfileViewDetailed | undefined } = $derived.by(() => {
     agent
       .getProfile({ actor: agent.assertDid })
       .then((res) => {
+        let lastLoginDid = localStorage.getItem("last-login");
+        if (agent?.did && agent.did === lastLoginDid) {
+          localStorage.setItem(
+            `profile-${lastLoginDid}`,
+            JSON.stringify(res.data),
+          );
+        }
+
         data = res.data;
       })
       .catch((error) => {
@@ -64,17 +72,8 @@ let passphrase: {
   };
 });
 
-let isLoginDialogOpen = $state(false);
-
 /** The user store. */
 export const user = {
-  get isLoginDialogOpen() {
-    return isLoginDialogOpen;
-  },
-  set isLoginDialogOpen(value) {
-    isLoginDialogOpen = value;
-  },
-
   /**
    * The AtProto agent that can be used to interact with the AtProto API
    * through the user's login.
@@ -94,6 +93,8 @@ export const user = {
     if (newSession) {
       // Store the user's DID on login
       localStorage.setItem("did", newSession.did);
+      localStorage.setItem("last-login", newSession.did);
+
       agent = new Agent(newSession);
       lexicons.forEach((l) => agent!.lex.add(l));
     } else {

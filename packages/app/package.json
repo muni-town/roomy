@@ -33,7 +33,7 @@
     "@blocknote/react": "^0.25.0",
     "@fuxui/base": "^0.2.2",
     "@fuxui/colors": "^0.2.2",
-    "@fuxui/social": "^0.2.2",
+    "@fuxui/social": "^0.2.3",
     "@fuxui/text": "^0.2.5",
     "@iconify/svelte": "^4.2.0",
     "@muni-town/leaf": "^0.2.0-preview.22",
