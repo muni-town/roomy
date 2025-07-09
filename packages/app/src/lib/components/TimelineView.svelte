@@ -27,6 +27,7 @@
   import UploadFileButton from "./helper/UploadFileButton.svelte";
   import { afterNavigate } from "$app/navigation";
   import { blueskyLoginModalState } from "@fuxui/social";
+	import { launchConfetti } from '@fuxui/visual';
 
   // Component-level threading state - scoped per channel
   let threading = $state({
@@ -291,6 +292,8 @@
 
     // add to space.current.members
     space.current?.members?.push(me.current);
+
+    launchConfetti();
   }
 
   let previewImages: string[] = $state([]);

@@ -135,5 +135,8 @@
     "url": "https://opencollective.com/weird-inc",
     "logo": "https://opencollective.com/opencollective/logo.txt"
   },
-  "license": "https://blueoakcouncil.org/license/1.0.0"
+  "license": "https://blueoakcouncil.org/license/1.0.0",
+  "dependencies": {
+    "@fuxui/visual": "^0.2.4"
+  }
 }

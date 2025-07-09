@@ -9,7 +9,7 @@
 
   const peerUrl =
     "wss://cloud.jazz.tools/?key=flo.bit.dev@gmail.com" as `wss://${string}`;
-  let sync = { peer: peerUrl, when: "signedUp" as const };
+  let sync = { peer: peerUrl, when: "always" as const };
 
   let { children } = $props();
 </script>
