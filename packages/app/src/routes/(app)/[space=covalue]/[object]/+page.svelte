@@ -26,7 +26,28 @@
   {/snippet}
 
 
-  {#if object.current?.components?.thread}
+  {#if object.current?.components?.feedConfig}
+    <!-- This is a feed aggregator - import and render the feed component -->
+    {#await import("$lib/components/FeedDisplay.svelte")}
+      <div class="flex-1 flex items-center justify-center">
+        <div class="text-center">
+          <div class="animate-spin w-6 h-6 border-2 border-accent-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+          <p class="text-base-600">Loading feed aggregator...</p>
+        </div>
+      </div>
+    {:then FeedDisplay}
+      <div class="flex-1 overflow-hidden">
+        <FeedDisplay.default thread={object.current} />
+      </div>
+    {:catch error}
+      <div class="flex-1 flex items-center justify-center">
+        <div class="text-center text-red-600">
+          <p>Error loading feed aggregator component</p>
+          <p class="text-sm">{error.message}</p>
+        </div>
+      </div>
+    {/await}
+  {:else if object.current?.components?.thread}
     <TimelineView
       objectId={page.params.object ?? ""}
       spaceId={page.params.space ?? ""}

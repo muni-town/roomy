@@ -120,6 +120,11 @@ export const user = {
   async init() {
     // Add the user store to the global scope so it can easily be accessed in dev tools
     (globalThis as any).user = this;
+    
+    // Add dev mode debugging functions
+    if (import.meta.env.DEV) {
+      this.addDevModeHelpers();
+    }
 
     // Initialize oauth client.
     await atproto.init();
@@ -212,5 +217,260 @@ export const user = {
     navigate("home");
     // reload the page to clear the session
     window.location.reload();
+  },
+
+  /** Add dev mode helper functions to window (only in development) */
+  addDevModeHelpers() {
+    // Import SDK functions dynamically to avoid issues in production
+    import("@roomy-chat/sdk").then(({ Space, IDList, allSpacesListId }) => {
+      
+      // Remove a space by ID
+      (globalThis as any).removeSpace = async (spaceId: string) => {
+        console.log(`🗑️ Removing space: ${spaceId}`);
+        
+        try {
+          // Load the space
+          const space = await Space.load(spaceId);
+          if (!space) {
+            console.error("❌ Space not found");
+            return false;
+          }
+          
+          console.log(`📝 Space name: ${space.name}`);
+          console.log(`🔍 Space owner: ${space.creatorId}`);
+          
+          // Import Account to check permissions
+          const { Account } = await import("@roomy-chat/sdk");
+          const me = Account.getMe();
+          
+          // Check if we can modify this space
+          if (!me.canAdmin(space)) {
+            console.error("❌ No admin permissions for this space");
+            console.log("💡 Tip: You can only remove spaces you created or have admin access to");
+            return false;
+          }
+          
+          // Remove from all spaces list first (this is usually more permissive)
+          const allSpacesList = await IDList.load(allSpacesListId);
+          if (allSpacesList) {
+            const index = allSpacesList.findIndex(id => id === spaceId);
+            if (index !== -1) {
+              allSpacesList.splice(index, 1);
+              console.log("✅ Removed from all spaces list");
+            } else {
+              console.log("⚠️ Space not found in all spaces list");
+            }
+          } else {
+            console.error("❌ Could not load all spaces list");
+          }
+          
+          console.log("✅ Space removed from system (soft delete not needed for cleanup)");
+          console.log("🔄 Refresh the page to see the space disappear from the UI");
+          return true;
+        } catch (error) {
+          console.error("❌ Error removing space:", error);
+          
+          // If it's a permission error, try to just remove from list
+          if (error.message && error.message.includes("proxy set handler returned false")) {
+            console.log("🔄 Trying alternative removal method (list removal only)...");
+            try {
+              const allSpacesList = await IDList.load(allSpacesListId);
+              if (allSpacesList) {
+                const index = allSpacesList.findIndex(id => id === spaceId);
+                if (index !== -1) {
+                  allSpacesList.splice(index, 1);
+                  console.log("✅ Removed from all spaces list (alternative method)");
+                  console.log("🔄 Refresh the page to see changes");
+                  return true;
+                }
+              }
+            } catch (altError) {
+              console.error("❌ Alternative removal also failed:", altError);
+            }
+          }
+          
+          return false;
+        }
+      };
+      
+      // Remove multiple spaces by IDs
+      (globalThis as any).removeSpaces = async (spaceIds: string[]) => {
+        console.log(`🗑️ Removing ${spaceIds.length} spaces`);
+        
+        const results = [];
+        for (const spaceId of spaceIds) {
+          const result = await (globalThis as any).removeSpace(spaceId);
+          results.push({ spaceId, success: result });
+        }
+        
+        const successful = results.filter(r => r.success).length;
+        console.log(`✅ Successfully removed ${successful}/${spaceIds.length} spaces`);
+        return results;
+      };
+      
+      // List all spaces (for debugging)
+      (globalThis as any).listSpaces = async () => {
+        console.log("📋 Listing all spaces:");
+        
+        try {
+          const allSpacesList = await IDList.load(allSpacesListId);
+          if (!allSpacesList) {
+            console.log("❌ No spaces list found");
+            return [];
+          }
+          
+          const spaces = [];
+          for (const spaceId of allSpacesList) {
+            try {
+              const space = await Space.load(spaceId);
+              if (space) {
+                spaces.push({
+                  id: spaceId,
+                  name: space.name,
+                  description: space.description,
+                  softDeleted: space.softDeleted || false,
+                  memberCount: space.members?.length || 0
+                });
+              }
+            } catch (error) {
+              console.warn(`⚠️ Could not load space ${spaceId}:`, error);
+            }
+          }
+          
+          console.table(spaces);
+          return spaces;
+        } catch (error) {
+          console.error("❌ Error listing spaces:", error);
+          return [];
+        }
+      };
+      
+      // Remove joined spaces from user profile
+      (globalThis as any).removeJoinedSpace = async (spaceId: string) => {
+        console.log(`🚪 Removing joined space from profile: ${spaceId}`);
+        
+        try {
+          const { Account } = await import("@roomy-chat/sdk");
+          const me = Account.getMe();
+          
+          if (!me.profile?.joinedSpaces) {
+            console.error("❌ No joined spaces list found in profile");
+            return false;
+          }
+          
+          // Find the space in joined spaces
+          const spaceIndex = me.profile.joinedSpaces.findIndex(space => space?.id === spaceId);
+          
+          if (spaceIndex === -1) {
+            console.log("⚠️ Space not found in joined spaces list");
+            return false;
+          }
+          
+          // Get space name for logging
+          const spaceName = me.profile.joinedSpaces[spaceIndex]?.name || "Unknown";
+          console.log(`📝 Removing: ${spaceName}`);
+          
+          // Remove the space from joined spaces
+          me.profile.joinedSpaces.splice(spaceIndex, 1);
+          
+          console.log("✅ Space removed from joined spaces");
+          return true;
+        } catch (error) {
+          console.error("❌ Error removing joined space:", error);
+          return false;
+        }
+      };
+      
+      // Remove multiple joined spaces from profile
+      (globalThis as any).removeJoinedSpaces = async (spaceIds: string[]) => {
+        console.log(`🚪 Removing ${spaceIds.length} joined spaces from profile`);
+        
+        const results = [];
+        for (const spaceId of spaceIds) {
+          const result = await (globalThis as any).removeJoinedSpace(spaceId);
+          results.push({ spaceId, success: result });
+        }
+        
+        const successful = results.filter(r => r.success).length;
+        console.log(`✅ Successfully removed ${successful}/${spaceIds.length} joined spaces`);
+        return results;
+      };
+      
+      // Clear all joined spaces from profile
+      (globalThis as any).clearJoinedSpaces = async () => {
+        console.log("🧹 Clearing all joined spaces from profile");
+        
+        try {
+          const { Account } = await import("@roomy-chat/sdk");
+          const me = Account.getMe();
+          
+          if (!me.profile?.joinedSpaces) {
+            console.error("❌ No joined spaces list found in profile");
+            return false;
+          }
+          
+          const count = me.profile.joinedSpaces.length;
+          console.log(`📊 Found ${count} joined spaces`);
+          
+          if (count === 0) {
+            console.log("✅ No joined spaces to clear");
+            return true;
+          }
+          
+          // Clear all joined spaces
+          me.profile.joinedSpaces.splice(0, me.profile.joinedSpaces.length);
+          
+          console.log(`✅ Cleared ${count} joined spaces from profile`);
+          return true;
+        } catch (error) {
+          console.error("❌ Error clearing joined spaces:", error);
+          return false;
+        }
+      };
+      
+      // List joined spaces in profile
+      (globalThis as any).listJoinedSpaces = async () => {
+        console.log("📋 Listing joined spaces in profile:");
+        
+        try {
+          const { Account } = await import("@roomy-chat/sdk");
+          const me = Account.getMe();
+          
+          if (!me.profile?.joinedSpaces) {
+            console.log("❌ No joined spaces list found in profile");
+            return [];
+          }
+          
+          const joinedSpaces = [];
+          for (const space of me.profile.joinedSpaces) {
+            if (space) {
+              joinedSpaces.push({
+                id: space.id,
+                name: space.name,
+                description: space.description,
+                memberCount: space.members?.length || 0,
+                softDeleted: space.softDeleted || false
+              });
+            }
+          }
+          
+          console.table(joinedSpaces);
+          console.log(`📊 Total joined spaces: ${joinedSpaces.length}`);
+          return joinedSpaces;
+        } catch (error) {
+          console.error("❌ Error listing joined spaces:", error);
+          return [];
+        }
+      };
+
+      console.log("🛠️ Dev mode helpers loaded:");
+      console.log("  • removeSpace(spaceId) - Remove a single space");
+      console.log("  • removeSpaces([spaceId1, spaceId2, ...]) - Remove multiple spaces");
+      console.log("  • listSpaces() - List all spaces");
+      console.log("  • removeJoinedSpace(spaceId) - Remove space from profile's joined spaces");
+      console.log("  • removeJoinedSpaces([spaceId1, spaceId2, ...]) - Remove multiple joined spaces");
+      console.log("  • clearJoinedSpaces() - Clear all joined spaces from profile");
+      console.log("  • listJoinedSpaces() - List spaces in profile's joined spaces");
+    });
   },
 };

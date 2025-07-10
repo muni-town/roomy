@@ -5,7 +5,7 @@ import {
   ATPROTO_FEED_CONFIG,
 } from "$lib/utils/atproToFeeds";
 import { user } from "$lib/user.svelte";
-import { createMessage, Thread, Message } from "@roomy-chat/sdk";
+import { createMessage, RoomyObject, Message, ThreadContent } from "@roomy-chat/sdk";
 import { co } from "jazz-tools";
 
 export class AtprotoFeedService {
@@ -25,10 +25,10 @@ export class AtprotoFeedService {
     }
   }
 
-  async populateChannel(channel: co.loaded<typeof Channel>): Promise<void> {
+  async populateThread(roomyObject: co.loaded<typeof RoomyObject>): Promise<void> {
     console.log(
-      "🔄 Starting ATProto feed population for channel:",
-      channel.name,
+      "🔄 Starting ATProto feed population for thread:",
+      roomyObject.name,
     );
 
     this.checkAgent();
@@ -37,19 +37,24 @@ export class AtprotoFeedService {
       return;
     }
 
-    if (!channel.isAtprotoFeed) {
-      console.log("⚠️ Channel is not an ATProto feed channel");
+    // Check if this is a feeds thread by looking for feed configuration in components
+    if (!roomyObject.components?.feedConfig) {
+      console.log("⚠️ Thread is not configured for ATProto feeds");
       return;
     }
 
     try {
       console.log("📡 Fetching posts from ATProto feeds...");
-      const posts = channel.atprotoThreadsOnly
-        ? await this.aggregator.fetchThreadsOnly(50)
-        : await this.aggregator.fetchAggregatedFeed(50);
+      
+      // Parse feed configuration from components
+      const feedConfig = JSON.parse(roomyObject.components.feedConfig);
+      
+      const posts = feedConfig.threadsOnly
+        ? await this.aggregator.fetchThreadsOnly(50, feedConfig.feeds)
+        : await this.aggregator.fetchAggregatedFeed(50, feedConfig.feeds);
 
       console.log(
-        `📊 Fetched ${posts.length} posts from feeds (threads only: ${channel.atprotoThreadsOnly})`,
+        `📊 Fetched ${posts.length} posts from feeds (threads only: ${feedConfig.threadsOnly})`,
       );
 
       if (posts.length > 0) {
@@ -61,9 +66,10 @@ export class AtprotoFeedService {
       }
 
       // Get existing messages to avoid duplicates
-      const timeline = channel.mainThread?.timeline;
+      const threadContent = await ThreadContent.load(roomyObject.components.thread);
+      const timeline = threadContent?.timeline;
       if (!timeline) {
-        console.error("❌ No timeline found for channel");
+        console.error("❌ No timeline found for thread");
         return;
       }
 
@@ -231,23 +237,23 @@ export class AtprotoFeedService {
     return message;
   }
 
-  startAutoUpdate(channels: co.loaded<typeof Channel>[]): void {
+  startAutoUpdate(feedThreads: co.loaded<typeof RoomyObject>[]): void {
     if (this.isRunning) return;
 
     this.isRunning = true;
     this.intervalId = setInterval(async () => {
-      for (const channel of channels) {
-        if (channel?.isAtprotoFeed) {
-          await this.populateChannel(channel);
+      for (const thread of feedThreads) {
+        if (thread?.components?.feedConfig) {
+          await this.populateThread(thread);
         }
       }
     }, this.UPDATE_INTERVAL);
 
     // Initial population
     setTimeout(async () => {
-      for (const channel of channels) {
-        if (channel?.isAtprotoFeed) {
-          await this.populateChannel(channel);
+      for (const thread of feedThreads) {
+        if (thread?.components?.feedConfig) {
+          await this.populateThread(thread);
         }
       }
     }, 1000); // Small delay to ensure everything is loaded
@@ -261,20 +267,21 @@ export class AtprotoFeedService {
     this.isRunning = false;
   }
 
-  async manualRefresh(channel: co.loaded<typeof Channel>): Promise<void> {
+  async manualRefresh(roomyObject: co.loaded<typeof RoomyObject>): Promise<void> {
     if (this.aggregator) {
       this.aggregator.clearCache();
-      await this.populateChannel(channel);
+      await this.populateThread(roomyObject);
     }
   }
 
   // Fix existing ATProto messages to have proper avatar URLs
   async fixExistingMessageAvatars(
-    channel: co.loaded<typeof Channel>,
+    roomyObject: co.loaded<typeof RoomyObject>,
   ): Promise<void> {
     console.log("🔧 Fixing existing ATProto message avatars...");
 
-    const timeline = channel.mainThread?.timeline;
+    const threadContent = await ThreadContent.load(roomyObject.components.thread);
+    const timeline = threadContent?.timeline;
     if (!timeline) {
       console.error("❌ No timeline found");
       return;
@@ -382,27 +389,27 @@ if (typeof window !== "undefined") {
     }
 
     try {
-      const channel = await Channel.load(channelId);
-      if (!channel) {
-        console.error("❌ Channel not found");
+      const roomyObject = await RoomyObject.load(channelId);
+      if (!roomyObject) {
+        console.error("❌ Thread not found");
         return;
       }
 
-      if (!channel.isAtprotoFeed) {
-        console.error("❌ This is not an ATProto feed channel");
+      if (!roomyObject.components?.feedConfig) {
+        console.error("❌ This is not an ATProto feed thread");
         return;
       }
 
-      await atprotoFeedService.fixExistingMessageAvatars(channel);
+      await atprotoFeedService.fixExistingMessageAvatars(roomyObject);
     } catch (error) {
       console.error("❌ Error:", error);
     }
   };
 
-  (window as any).refreshAtprotoChannel = async (
-    channelName = "atproto-feeds",
+  (window as any).refreshAtprotoThread = async (
+    threadName = "atproto-feeds",
   ) => {
-    console.log(`🔄 Manually refreshing ATProto channel: ${channelName}`);
+    console.log(`🔄 Manually refreshing ATProto thread: ${threadName}`);
     const service = atprotoFeedService;
     service.checkAgent();
     if (service.aggregator) {
@@ -410,6 +417,6 @@ if (typeof window !== "undefined") {
       service.aggregator.clearCache();
       console.log("🗑️ Cache cleared, forcing fresh fetch...");
     }
-    return "Run this in a space with an ATProto channel to test";
+    return "Run this in a space with an ATProto thread to test";
   };
 }

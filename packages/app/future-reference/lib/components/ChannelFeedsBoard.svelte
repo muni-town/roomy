@@ -1,13 +1,9 @@
 <script lang="ts">
   import { co, z } from "jazz-tools";
   import {
-    Channel,
+    RoomyObject,
     RoomyAccount,
-    GlobalHiddenPost,
-    FeedPostVote,
     Space,
-    enableAtprotoFeeds,
-    createThread,
     createMessage,
     publicGroup,
     isSpaceAdmin,
@@ -29,9 +25,9 @@
   import { page } from "$app/state";
 
   let {
-    channel,
+    thread,
   }: {
-    channel: co.loaded<typeof Channel> | null | undefined;
+    thread: co.loaded<typeof RoomyObject> | null | undefined;
   } = $props();
 
   let feedPosts = $state<AtprotoFeedPost[]>([]);
@@ -183,18 +179,16 @@
 
   function initializeGlobalVotingSystem() {
     console.log("🔧 DEBUG: initializeGlobalVotingSystem called", {
-      hasChannel: !!channel?.current,
-      channelId: channel?.current?.id,
+      hasThread: !!thread,
+      threadId: thread?.id,
       userId: me.current?.id,
-      channelOwnerId: channel?.current?.owner?.id,
-      isChannelOwner: channel?.current?.owner?.id === me.current?.id,
-      canUserWriteToChannel: me.current
-        ? me.current.canWrite(channel?.current)
+      canUserWriteToThread: me.current
+        ? me.current.canWrite(thread)
         : false,
     });
 
-    if (!channel?.current) {
-      console.log("❌ DEBUG: No channel.current, cannot initialize");
+    if (!thread) {
+      console.log("❌ DEBUG: No thread, cannot initialize");
       return;
     }
 
@@ -393,14 +387,12 @@
     }
   }
 
-  // Load feeds when channel changes or aggregator becomes available
+  // Load feeds when thread changes or aggregator becomes available
   $effect(() => {
-    if (aggregator && channel) {
-      console.log("ChannelFeedsBoard - Channel loaded:", {
-        channelType: channel.channelType,
-        showAtprotoFeeds: channel.showAtprotoFeeds,
-        atprotoFeedsConfig: channel.atprotoFeedsConfig,
-        configuredFeeds: channel.atprotoFeedsConfig?.feeds,
+    if (aggregator && thread) {
+      console.log("ChannelFeedsBoard - Thread loaded:", {
+        threadName: thread.name,
+        feedConfig: thread.components?.feedConfig,
       });
       loadFeeds();
     }
@@ -409,8 +401,7 @@
   async function loadFeeds() {
     if (
       !aggregator ||
-      !channel?.showAtprotoFeeds ||
-      !channel?.atprotoFeedsConfig
+      !thread?.components?.feedConfig
     ) {
       return;
     }
@@ -419,7 +410,8 @@
     error = null;
 
     try {
-      const configuredFeeds = channel.atprotoFeedsConfig.feeds;
+      const feedConfig = JSON.parse(thread.components.feedConfig);
+      const configuredFeeds = feedConfig.feeds;
 
       // If no feeds are configured, don't load anything
       if (!configuredFeeds || configuredFeeds.length === 0) {
@@ -427,17 +419,17 @@
         return;
       }
 
-      const posts = channel.atprotoFeedsConfig.threadsOnly
+      const posts = feedConfig.threadsOnly
         ? await aggregator.fetchThreadsOnly(50, configuredFeeds)
         : await aggregator.fetchAggregatedFeed(50, configuredFeeds);
 
       // Filter out hidden posts (both personal and globally hidden)
       const personallyHidden = me.current?.profile?.hiddenFeedPosts || [];
       const globallyHidden =
-        channel.atprotoFeedsConfig && channel.globalHiddenPosts
-          ? channel.globalHiddenPosts
-              .filter((ghp) => ghp && ghp.isHidden)
-              .map((ghp) => ghp.postUri)
+        thread.components?.globalHiddenPosts
+          ? JSON.parse(thread.components.globalHiddenPosts)
+              .filter((ghp: any) => ghp && ghp.isHidden)
+              .map((ghp: any) => ghp.postUri)
           : [];
 
       const allHiddenUris = [...personallyHidden, ...globallyHidden];
