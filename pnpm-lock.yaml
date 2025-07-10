@@ -382,6 +382,9 @@ importers:
       pkgroll:
         specifier: ^2.12.2
         version: 2.13.1(typescript@5.8.3)
+      prettier:
+        specifier: 3.5.3
+        version: 3.5.3
       turbo:
         specifier: ^2.5.2
         version: 2.5.4

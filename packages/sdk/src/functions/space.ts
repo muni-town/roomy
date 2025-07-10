@@ -8,6 +8,7 @@ import { addToFolder, createFolder } from "./folder.ts";
 export function createSpace(
   name: string,
   description?: string,
+  inviteServiceUrl?: string,
   createDefaultChannel: boolean = true,
 ) {
   // user is already admin
@@ -18,7 +19,7 @@ export function createSpace(
   readerGroup.addMember("everyone", "reader");
   readerGroup.addMember(adminGroup);
 
-  const publicWriteGroup = publicGroup("writer");
+  const publicWriteGroup = publicGroup("writer", inviteServiceUrl);
 
   const rootFolder = createFolder("root", adminGroup);
 
