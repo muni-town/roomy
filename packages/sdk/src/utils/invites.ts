@@ -17,18 +17,20 @@ async function getServiceAccount(inviteServiceUrl: string): Promise<Account> {
   return account;
 }
 
-export async function addInviteServiceAsGroupAdmin(
-  inviteServiceUrl: string,
-  group: Group,
-) {
-  const serviceAccount = await getServiceAccount(inviteServiceUrl);
-  console.warn('Adding service account!!!', serviceAccount);
-  if (!serviceAccount) throw "Could not load service ID";
-  group.addMember(serviceAccount, "admin");
+let inviteServiceUrl: string | undefined;
+let inviteServiceAccount: Account | undefined;
+export async function setInviteServiceUrl(url: string) {
+  inviteServiceUrl = url;
+  inviteServiceAccount = await getServiceAccount(url);
+}
+
+export function addInviteServiceAsGroupAdmin(group: Group) {
+  if (!inviteServiceAccount)
+    throw "You must call `setInviteServiceUrl()` before calling `addInviteServiceAsGroupAdmin`";
+  group.addMember(inviteServiceAccount, "admin");
 }
 
 export async function joinGroupThroughInviteService(
-  inviteServiceUrl: string,
   group: string,
   member: string,
 ) {

@@ -7,8 +7,7 @@
   import { BlueskyLoginModal } from "@fuxui/social";
   import { user } from "$lib/user.svelte";
 
-  const peerUrl =
-    "ws://127.0.0.1:4200" as `wss://${string}`;
+  const peerUrl = "ws://127.0.0.1:4200" as `wss://${string}`;
   let sync = { peer: peerUrl, when: "always" as const };
 
   let { children } = $props();

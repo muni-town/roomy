@@ -17,7 +17,9 @@
     RoomyAccount,
     wordlist,
     addToAllAccountsList,
+    setInviteServiceUrl,
   } from "@roomy-chat/sdk";
+  import { PUBLIC_INVITE_SERVICE_URL } from "$env/static/public";
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
@@ -25,6 +27,13 @@
       root: true,
     },
   });
+
+  $effect(() => {
+    if (me.current) {
+      setInviteServiceUrl(PUBLIC_INVITE_SERVICE_URL);
+    }
+  });
+
   const { children } = $props();
 
   const auth = usePassphraseAuth({ wordlist });

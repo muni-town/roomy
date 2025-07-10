@@ -2,6 +2,7 @@ export * from "./schema/index.ts"
 export * from "./functions/index.ts";
 
 export * from "./utils/wordlist.ts";
+export * from "./utils/invites.ts";
 
 // Re-export jazz core packages
 export * from "jazz-tools";

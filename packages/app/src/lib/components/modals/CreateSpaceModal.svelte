@@ -8,7 +8,6 @@
   import { Modal, Input, Button, Heading } from "@fuxui/base";
   import Icon from "@iconify/svelte";
   import { co } from "jazz-tools";
-  import { PUBLIC_INVITE_SERVICE_URL } from "$env/static/public";
 
   let {
     open = $bindable(false),
@@ -28,11 +27,10 @@
       me.profile.joinedSpaces = createSpaceList();
     }
 
-    const space = createSpace(
-      newSpaceName,
-      undefined,
-      PUBLIC_INVITE_SERVICE_URL,
-    );
+    const space = createSpace(newSpaceName, undefined, {
+      everyoneCanRead: false,
+      createDefaultChannel: true,
+    });
 
     me?.profile?.joinedSpaces?.push(space);
 
