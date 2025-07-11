@@ -1,6 +1,6 @@
 import { Account, type Group } from "jazz-tools";
 
-import { pow_work_wasm } from "./spow/spow-wasm_bg.js";
+import { pow_work_wasm } from "./spow/spow-wasm.js";
 
 async function checkResponse(resp: Response) {
   if (!resp.ok) {
@@ -37,9 +37,14 @@ export async function joinGroupThroughInviteService(
   const challengeResp = await fetch(`${inviteServiceUrl}/get-challenge`);
   await checkResponse(challengeResp);
   const challenge = await challengeResp.text();
+  console.log("challenge", challenge);
   const response = pow_work_wasm(challenge);
+  console.log("computed proof of work", response);
   if (!response) throw "Could not compute proof-of-work.";
 
-  const resp = await fetch(`${inviteServiceUrl}/${group}/${member}`);
+  const resp = await fetch(
+    `${inviteServiceUrl}/add-member/${group}/${member}`,
+    { method: "post", body: response },
+  );
   await checkResponse(resp);
 }

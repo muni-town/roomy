@@ -4,25 +4,30 @@
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
   import { CoState } from "jazz-svelte";
+  import { dev } from "$app/environment";
 
   let space = $derived(
     new CoState(Space, page.params.space, {
       resolve: {
         rootFolder: {
-          components: true
+          components: true,
         },
       },
     }),
   );
 
-  let children = $derived(new CoState(IDList, space.current?.rootFolder.components.children));
+  if (dev) {
+    $effect(() => {
+      (globalThis as any).space = space.current;
+    });
+  }
+
+  let children = $derived(
+    new CoState(IDList, space.current?.rootFolder.components.children),
+  );
 
   async function navigateToFirstThread() {
-    if (
-      !space.current ||
-      !children.current ||
-      children.current?.length === 0
-    )
+    if (!space.current || !children.current || children.current?.length === 0)
       return;
 
     // load roomyobjects and find first thread

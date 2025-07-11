@@ -3,7 +3,12 @@
   import Icon from "@iconify/svelte";
   import SidebarSpace from "$lib/components/SidebarSpace.svelte";
   import { co } from "jazz-tools";
-  import { joinGroupThroughInviteService, RoomyAccount, Space, SpaceList } from "@roomy-chat/sdk";
+  import {
+    joinGroupThroughInviteService,
+    RoomyAccount,
+    Space,
+    SpaceList,
+  } from "@roomy-chat/sdk";
   import { CoState } from "jazz-svelte";
   import { page } from "$app/state";
   import {
@@ -30,12 +35,18 @@
   let isNewSpaceDialogOpen = $state(false);
   let isJoinSpaceDialogOpen = $state(false);
   let joinSpaceId = $state("");
-
-  function joinSpace() {
-    joinGroupThroughInviteService()
-  }
+  let joinGroupId = $state("");
 
   let openSpace = $derived(new CoState(Space, page.params.space));
+
+  async function joinSpace() {
+    if (!me?.profile?.joinedSpaces) return;
+    await joinGroupThroughInviteService(joinGroupId, joinSpaceId);
+    const space = await Space.load(joinSpaceId);
+    console.log("joined space", space?.toJSON());
+    me.profile.joinedSpaces.push(space);
+    isJoinSpaceDialogOpen = false;
+  }
 
   let isOpenSpaceJoined = $derived(
     me?.profile?.joinedSpaces?.some((x) => x?.id === openSpace.current?.id),
@@ -83,6 +94,12 @@
           <Input
             bind:value={joinSpaceId}
             placeholder="Space ID"
+            type="text"
+            required
+          />
+          <Input
+            bind:value={joinGroupId}
+            placeholder="Group ID"
             type="text"
             required
           />

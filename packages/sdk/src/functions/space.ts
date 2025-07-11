@@ -2,7 +2,7 @@ import { Account, co, Group, z } from "jazz-tools";
 import { allSpacesListId } from "../ids.ts";
 import { IDList, RoomyObject, Space } from "../schema/index.ts";
 import { createThread } from "./thread.ts";
-import { publicGroup, publicInvitableWriteGroup } from "./group.ts";
+import { publicInvitableWriteGroup } from "./group.ts";
 import { addToFolder, createFolder } from "./folder.ts";
 
 export function createSpace(
@@ -48,6 +48,7 @@ export function createSpace(
       version: 2,
       creatorId: Account.getMe().id,
       adminGroupId: spaceAdminGroup.id,
+      memberGroupId: spaceMemberGroup.id,
 
       rootFolder,
 
