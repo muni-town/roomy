@@ -10,8 +10,12 @@ export const ImageUrlEmbed = co.map({
   url: z.string(),
 });
 
+export const VideoUrlEmbed = co.map({
+  url: z.string(),
+});
+
 export const Embed = co.map({
-  type: z.enum(["imageUrl"]),
+  type: z.enum(["imageUrl", "videoUrl"]),
   embedId: z.string(),
 });
 

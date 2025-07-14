@@ -1,6 +1,6 @@
 import { Account, co, Group, z } from "jazz-tools";
 import { publicGroup } from "./group.ts";
-import { Embed, ImageUrlEmbed, Message, Reaction, ThreadContent, Timeline } from "../schema/threads.ts";
+import { Embed, ImageUrlEmbed, Message, Reaction, ThreadContent, Timeline, VideoUrlEmbed } from "../schema/threads.ts";
 import { createRoomyObject } from "./roomyobject.ts";
 
 export function createThread(name: string, adminGroup: Group) {
@@ -35,33 +35,53 @@ export type ImageUrlEmbedCreate = {
   };
 };
 
+export type VideoUrlEmbedCreate = {
+  type: "videoUrl";
+  data: {
+    url: string;
+  };
+};
+
 export function createMessage(
   input: string,
   replyTo?: string,
   admin?: co.loaded<typeof Group>,
-  embeds?: ImageUrlEmbedCreate[],
+  embeds?: (ImageUrlEmbedCreate | VideoUrlEmbedCreate)[],
 ) {
   const readingGroup = publicGroup("reader");
 
   if (admin) {
-    readingGroup.addMember(admin);
+    readingGroup.extend(admin);
   }
 
   let embedsList;
   if (embeds && embeds.length > 0) {
     embedsList = co.list(Embed).create([], readingGroup);
     for (const embed of embeds) {
-      const imageUrlEmbed = ImageUrlEmbed.create(
-        { url: embed.data.url },
-        readingGroup,
-      );
-
-      embedsList.push(
-        Embed.create(
-          { type: "imageUrl", embedId: imageUrlEmbed.id },
+      if (embed.type === "imageUrl") {
+        const imageUrlEmbed = ImageUrlEmbed.create(
+          { url: embed.data.url },
           readingGroup,
-        ),
-      );
+        );
+
+        embedsList.push(
+          Embed.create(
+            { type: "imageUrl", embedId: imageUrlEmbed.id },
+            readingGroup,
+          ),
+        );
+      } else if (embed.type === "videoUrl") {
+        const videoUrlEmbed = VideoUrlEmbed.create(
+          { url: embed.data.url },
+          readingGroup,
+        );
+        embedsList.push(
+          Embed.create(
+            { type: "videoUrl", embedId: videoUrlEmbed.id },
+            readingGroup,
+          ),
+        );
+      }
     }
   }
   const publicWriteGroup = publicGroup("writer");

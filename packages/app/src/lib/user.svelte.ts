@@ -1,6 +1,6 @@
 import type { OAuthSession } from "@atproto/oauth-client-browser";
 import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
-import { Agent } from "@atproto/api";
+import { Agent, BlobRef } from "@atproto/api";
 import toast from "svelte-french-toast";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
@@ -203,6 +203,141 @@ export const user = {
     };
   },
 
+  /**
+   * Upload a video to Bluesky
+   */
+
+  async uploadVideo(file: File) {
+    const VIDEO_SERVICE = "https://video.bsky.app";
+    const videoName = file.name;
+    const mimeType = "video/mp4"; // Assuming you're only allowing .mp4
+
+    const agent = this.agent;
+    if (!agent) throw new Error("No agent initialised");
+
+    if (!agent.did) {
+      throw new Error("Agent did not resolve");
+    }
+
+    const { data: repoInfo } = await agent.com.atproto.repo.describeRepo({
+      repo: agent.did,
+    });
+
+    const pdsHost = new URL((repoInfo.didDoc.service as any)[0].serviceEndpoint)
+      .host;
+    const audience = `did:web:${pdsHost}`;
+
+    // Step 1: Get a service auth token
+    const { data: serviceAuth } = await agent.com.atproto.server.getServiceAuth(
+      {
+        aud: audience,
+        exp: Math.floor(Date.now() / 1000 + 60 * 30), // 30 minutes expiry
+        lxm: "com.atproto.repo.uploadBlob",
+      },
+    );
+
+    const token = serviceAuth.token;
+
+    // Step 2: Upload the video to the video service
+    const uploadUrl = new URL(
+      `${VIDEO_SERVICE}/xrpc/app.bsky.video.uploadVideo`,
+    );
+    uploadUrl.searchParams.append("did", agent.did);
+    uploadUrl.searchParams.append("name", videoName);
+
+    const uploadResponse = await fetch(uploadUrl.toString(), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": mimeType,
+        "Content-Length": file.arrayBuffer.length.toString(),
+      },
+      body: file,
+    });
+
+    const uploadResponseJson = await uploadResponse.json();
+    if (!uploadResponse.ok) {
+      if (uploadResponseJson.state !== "JOB_STATE_COMPLETED") {
+        throw new Error(
+          `Upload failed: ${uploadResponse.status} ${uploadResponseJson}`,
+        );
+      }
+    }
+
+    const jobStatus = uploadResponseJson;
+    console.log("Job status response:", jobStatus);
+    if (!jobStatus.jobId && !jobStatus.blob) {
+      throw new Error("Video upload failed: No jobId or blob in response");
+    }
+
+    // Step 3: Poll for job completion
+    let blob: BlobRef | undefined = jobStatus.blob;
+    const jobId = jobStatus.jobId;
+    const videoAgent = new Agent({ service: VIDEO_SERVICE });
+
+    while (!blob) {
+      const { data: status } = await videoAgent.app.bsky.video.getJobStatus({
+        jobId,
+      });
+
+      console.log(
+        "Video processing...",
+        status.jobStatus.state,
+        status.jobStatus.progress || "",
+      );
+
+      if (status.jobStatus.blob) {
+        blob = status.jobStatus.blob;
+      } else if (status.jobStatus.state === "failed") {
+        throw new Error("Video processing failed");
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    // Step 4: Create your custom record referencing the blob
+    const rkey = `${Date.now()}`;
+    const record = {
+      $type: "chat.roomy.v0.videos",
+      video: blob,
+      alt: "User uploaded video",
+    };
+
+    await agent.com.atproto.repo.putRecord({
+      repo: agent.did!,
+      collection: "chat.roomy.v0.videos",
+      rkey,
+      record,
+    });
+
+    // Step 5: Create a dummy embed post to activate CDN caching
+    const embedRecord = {
+      $type: "app.bsky.embed.video",
+      video: blob,
+      aspectRatio: await getAspectRatio(file),
+    };
+
+    await agent.com.atproto.repo.putRecord({
+      repo: agent.did!,
+      collection: "chat.roomy.v0.videoEmbeds",
+      rkey: `embed-${rkey}`,
+      record: {
+        $type: "chat.roomy.v0.videoEmbeds",
+        embed: embedRecord,
+        createdAt: new Date().toISOString(),
+      },
+    });
+
+    const url = `https://video.cdn.bsky.app/hls/${agent.did}/${blob.ref}/720p/video.m3u8`;
+    console.log("✅ Video uploaded and processed. CDN URL:", url);
+
+    return {
+      url,
+      mediaType: "video",
+      duration: undefined,
+    };
+  },
+
   /** Logout the user. */
   logout() {
     localStorage.removeItem("did");
@@ -214,3 +349,25 @@ export const user = {
     window.location.reload();
   },
 };
+
+function getAspectRatio(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(video.src); // clean up
+      if (video.videoWidth && video.videoHeight) {
+        const aspect = video.videoWidth / video.videoHeight;
+        resolve(parseFloat(aspect.toFixed(2)));
+      } else {
+        reject(new Error("Unable to determine video dimensions"));
+      }
+    };
+    video.onerror = () => {
+      reject(new Error("Failed to load video metadata"));
+    };
+
+    video.src = URL.createObjectURL(file);
+  });
+}

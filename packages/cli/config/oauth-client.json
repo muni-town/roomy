@@ -1,0 +1,11 @@
+{
+  "client_id": "https://roomy.space/oauth-client-native.json",
+  "client_name": "Roomy CLI",
+  "client_uri": "https://roomy.space",
+  "redirect_uris": ["http://127.0.0.1:3000/callback"],
+  "scope": "atproto transition:generic transition:chat.bsky",
+  "handleResolver": "https://resolver.roomy.chat",
+  "token_endpoint_auth_method": "none",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"]
+}

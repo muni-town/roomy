@@ -5,7 +5,6 @@
   import { navigate } from "$lib/utils.svelte";
   import { Button, Input } from "@fuxui/base";
   import {
-    createFolder,
     createPage,
     createThread,
     Group,
