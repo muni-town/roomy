@@ -28,6 +28,7 @@
     "hls.js": "^1.6.6"
   },
   "devDependencies": {
+    "@fuxui/visual": "^0.2.4",
     "@atproto/api": "^0.14.9",
     "@atproto/lexicon": "^0.4.5",
     "@atproto/oauth-client-browser": "^0.3.7",
@@ -138,8 +139,5 @@
     "url": "https://opencollective.com/weird-inc",
     "logo": "https://opencollective.com/opencollective/logo.txt"
   },
-  "license": "https://blueoakcouncil.org/license/1.0.0",
-  "dependencies": {
-    "@fuxui/visual": "^0.2.4"
-  }
+  "license": "https://blueoakcouncil.org/license/1.0.0"
 }

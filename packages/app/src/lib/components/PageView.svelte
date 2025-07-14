@@ -5,7 +5,7 @@
   import { AccountCoState, CoState } from "jazz-svelte";
   import { RichTextEditor } from "@fuxui/text";
 
-  let { objectId, spaceId }: { objectId: string; spaceId: string } = $props();
+  let { objectId, spaceId: _ }: { objectId: string; spaceId: string } = $props();
 
   const page = $derived(new CoState(PageContent, objectId));
 
@@ -59,7 +59,7 @@
     {#if isEditing}
       <RichTextEditor
         content={editingContent}
-        onupdate={(c, ctx) => {
+        onupdate={(_c, ctx) => {
           editingContent = ctx.editor.getHTML();
         }}
       />
