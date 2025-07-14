@@ -41,7 +41,7 @@
 
   async function joinSpace() {
     if (!me?.profile?.joinedSpaces) return;
-    await joinGroupThroughInviteService(joinGroupId, joinSpaceId);
+    await joinGroupThroughInviteService(joinGroupId, me.id);
     const space = await Space.load(joinSpaceId);
     console.log("joined space", space?.toJSON());
     me.profile.joinedSpaces.push(space);
