@@ -2,7 +2,7 @@
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { goto } from "$app/navigation";
-  import { AccountCoState } from "jazz-svelte";
+  import { AccountCoState } from "jazz-tools/svelte";
   import { RoomyAccount } from "@roomy-chat/sdk";
 
   const me = new AccountCoState(RoomyAccount, {

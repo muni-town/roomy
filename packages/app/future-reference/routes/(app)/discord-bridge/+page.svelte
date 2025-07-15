@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import toast from "svelte-french-toast";
   import { RoomyAccount } from "@roomy-chat/sdk";
-  import { AccountCoState } from "jazz-svelte";
+  import { AccountCoState } from "jazz-tools/svelte";
   import { env } from "$env/dynamic/public";
 
   const me = new AccountCoState(RoomyAccount, {

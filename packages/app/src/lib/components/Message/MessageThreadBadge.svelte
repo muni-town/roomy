@@ -2,7 +2,7 @@
   import { RoomyObject } from "@roomy-chat/sdk";
   import { navigateSync } from "$lib/utils.svelte";
   import { Button } from "@fuxui/base";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
 
   let { threadId, spaceId }: { threadId: string; spaceId: string } = $props();
 

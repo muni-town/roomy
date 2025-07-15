@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, setContext } from "svelte";
   import { browser, dev } from "$app/environment";
-  import { AccountCoState, usePassphraseAuth } from "jazz-svelte";
+  import { AccountCoState, usePassphraseAuth } from "jazz-tools/svelte";
   import posthog from "posthog-js";
   import { Toaster } from "svelte-french-toast";
 

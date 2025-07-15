@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Message, RoomyProfile } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
   import { Button } from "bits-ui";
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";

@@ -1,8 +1,8 @@
 <script lang="ts">
   import "../app.css";
-  import { JazzProvider } from "jazz-svelte";
+  import { JazzSvelteProvider } from "jazz-tools/svelte";
   import { RoomyAccount } from "@roomy-chat/sdk";
-  import "jazz-inspector-element";
+  import "jazz-tools/inspector/register-custom-element";
   import { dev } from "$app/environment";
   import { BlueskyLoginModal } from "@fuxui/social";
   import { user } from "$lib/user.svelte";
@@ -24,10 +24,10 @@
   {/if}
 </svelte:head>
 
-<JazzProvider {sync} AccountSchema={RoomyAccount}>
+<JazzSvelteProvider {sync} AccountSchema={RoomyAccount}>
   <jazz-inspector></jazz-inspector>
   {@render children?.()}
-</JazzProvider>
+</JazzSvelteProvider>
 
 <BlueskyLoginModal
   login={async (handle: string) => {

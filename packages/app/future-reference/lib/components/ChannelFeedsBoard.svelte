@@ -12,7 +12,7 @@
     publicGroup,
     isSpaceAdmin,
   } from "@roomy-chat/sdk";
-  import { AccountCoState } from "jazz-svelte";
+  import { AccountCoState } from "jazz-tools/svelte";
   import {
     ATPROTO_FEED_CONFIG,
     AtprotoFeedAggregator,
@@ -24,7 +24,7 @@
     AtprotoThreadPost,
   } from "$lib/utils/atproToFeeds";
   import Icon from "@iconify/svelte";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
 

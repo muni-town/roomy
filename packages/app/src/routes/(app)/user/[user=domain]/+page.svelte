@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import { RoomyAccount } from "@roomy-chat/sdk";
   import Icon from "@iconify/svelte";
-  import { AccountCoState, CoState } from "jazz-svelte";
+  import { AccountCoState, CoState } from "jazz-tools/svelte";
   import { AtpBaseClient } from "@atproto/api";
   import { user } from "$lib/user.svelte";
 

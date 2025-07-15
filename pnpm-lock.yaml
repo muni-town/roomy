@@ -6,18 +6,9 @@ settings:
 
 catalogs:
   default:
-    jazz-inspector-element:
-      specifier: ^0.14
-      version: 0.14.28
-    jazz-nodejs:
-      specifier: ^0.14
-      version: 0.14.28
-    jazz-svelte:
-      specifier: ^0.14
-      version: 0.14.28
     jazz-tools:
-      specifier: ^0.14
-      version: 0.14.28
+      specifier: ^0.15
+      version: 0.15.10
 
 patchedDependencies:
   '@discordjs/util':
@@ -222,15 +213,9 @@ importers:
       flexsearch:
         specifier: ^0.8.164
         version: 0.8.205
-      jazz-inspector-element:
-        specifier: 'catalog:'
-        version: 0.14.28(csstype@3.1.3)
-      jazz-svelte:
-        specifier: 'catalog:'
-        version: 0.14.28(svelte@5.35.2)
       jazz-tools:
         specifier: 'catalog:'
-        version: 0.14.28
+        version: 0.15.10(@tiptap/pm@2.24.2)(csstype@3.1.3)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.35.2)
       js-base64:
         specifier: ^3.7.7
         version: 3.7.7
@@ -467,12 +452,9 @@ importers:
       beachball:
         specifier: ^2.54.0
         version: 2.54.0(typescript@5.8.3)
-      jazz-nodejs:
-        specifier: 'catalog:'
-        version: 0.14.28
       jazz-tools:
         specifier: 'catalog:'
-        version: 0.14.28
+        version: 0.15.10(@tiptap/pm@2.24.2)(csstype@3.1.3)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.35.2)
       pkgroll:
         specifier: ^2.12.2
         version: 2.13.1(typescript@5.8.3)
@@ -2746,26 +2728,14 @@ packages:
     resolution: {integrity: sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA==}
     engines: {node: '>=6'}
 
-  cojson-storage-indexeddb@0.14.28:
-    resolution: {integrity: sha512-FHVEHU2JyN9v8Yu2VCq89+OuyzrXf+4yTx+bJLfP2Fy2Wihhiq/Q8Wko6WIsmhMB1NfSZ7TthymUPK6Y3ibEog==}
-
   cojson-storage-indexeddb@0.15.10:
     resolution: {integrity: sha512-Z+fIA82N+Qdy+sichU91l5CUeOkC7b+dy9KM3TIJfWfQT9nWjqHteqAOOM7IskQILTROwAi3KBw3esH6SAHpAQ==}
 
   cojson-storage-sqlite@0.15.10:
     resolution: {integrity: sha512-hzYyyAxyYZmWk/mnOt5Ew2ac0kMw4NwKTVEZFFqdk7n4BoSs4JPAmGoqqfTTAXACqhqKOjwVt6kbvaxAdvJFAQ==}
 
-  cojson-storage@0.14.28:
-    resolution: {integrity: sha512-I8izbwYbT3049s1iMydb4w1qEWD8oRR6TxdocWGbqc6PsT7FXFxnoWOAAP7jJpnuZhkaNeWSRRkVOfFlAyZawg==}
-
-  cojson-transport-ws@0.14.28:
-    resolution: {integrity: sha512-VUa3X8OltO0dqXmps4+KOJvdwJ2ztzr+Aiin9wsBcWEiK7K5r7ae/hEwqjnrOS/8jOX/C0V2jBdx645nGwBQRA==}
-
   cojson-transport-ws@0.15.10:
     resolution: {integrity: sha512-kCn0S2Io8esw0tkWRtOZZ1djtaq4rjWsoSpgZWpmYuzwbTmSrlNtwGOZbZg7NuFjN+qowgO5VjTGqrQzSZSRSQ==}
-
-  cojson@0.14.28:
-    resolution: {integrity: sha512-aIp4/66KHG5/E/mTrpIB5w3iYklweKOK/d4phKOMndAQy+UawvaZqvEmUteQ8XbTDNp7KZZD5g4p0uIy8BAi8A==}
 
   cojson@0.15.10:
     resolution: {integrity: sha512-qBdLaBQ2hCaH8efTc1LX+/76kPWLXomAvrsJ+owCjAG5gBDLISXfNq0JtydhWyiMEPysTwcx/CRwBmItXr1qzg==}
@@ -3189,9 +3159,6 @@ packages:
   fast-glob@3.3.3:
     resolution: {integrity: sha512-7MptL8U0cqcFdzIzwOTHoilX9x5BrNqye7Z/LuC7kCMRio1EMSyqRK3BEAUD7sXRq4iT4AzTVuZdhgQ2TCvYLg==}
     engines: {node: '>=8.6.0'}
-
-  fast-list@1.0.3:
-    resolution: {integrity: sha512-Lm56Ci3EqefHNdIneRFuzhpPcpVVBz9fgqVmG3UQIxAefJv1mEYsZ1WQLTWqmdqeGEwbI2t6fbZgp9TqTYARuA==}
 
   fast-myers-diff@3.2.0:
     resolution: {integrity: sha512-DxNm4a3gnV35AluvqjeAV3Zx3CAySs0tsaDjnex5JhnJAa2rxEUVCwmaL2gpz42ea1B+IJorlo7XLThXUaTQog==}
@@ -3644,39 +3611,12 @@ packages:
   isomorphic.js@0.2.5:
     resolution: {integrity: sha512-PIeMbHqMt4DnUP3MA/Flc0HElYjMXArsw1qwJZcm9sqR8mq3l8NYizFMty0pWwE/tzIGH3EKK5+jes5mAr85yw==}
 
-  jazz-browser@0.14.28:
-    resolution: {integrity: sha512-gwjL30LnH5UECQvAUVLfaIroTEFovsAwoIKs4a6aNpYs8mWaRmA6AJoqVkWG5kG2Jl1kFDrYvUhjJWGpR5yqVA==}
-
   jazz-crypto-rs@0.0.7:
     resolution: {integrity: sha512-Pzs8Zu1zgKVURkBVvqqF1B2r78FaSZdwPbmeCWx0Nb3nibzPuB/kSKEO7LJsKnb3P5HO0v+lTIJ53mGC5H1urQ==}
-
-  jazz-inspector-element@0.14.28:
-    resolution: {integrity: sha512-IF1k/fL3JpSASar+boSmeFakmQ1DnjmOWdEr0gI6jXkaueY7QPeH6+JO3fbwx8MpMclJwRnoqZs3sBOW7Td4hg==}
-
-  jazz-inspector@0.14.28:
-    resolution: {integrity: sha512-aFSYlpByUzybFOOy2avVJ6cE9om1BPlbTv7nPBvbfTn/9guKvms8KjEQmJtSiwApYGrMrsTkwiwQo/ajMI6Nkw==}
-    peerDependencies:
-      react: '*'
-
-  jazz-nodejs@0.14.28:
-    resolution: {integrity: sha512-2I5rAqMgDHk2ysb3++EDVS1M6VLqw4NZZhDHzgdPIw37rQ46dXlJeT3t9ctvEw5jfSlx35PJQPdYK6Oye9gZ+w==}
-
-  jazz-react-core@0.14.28:
-    resolution: {integrity: sha512-TVari/XgLqmaavaOOGhxYhRb4GxlTHe7dI6X5sbW4RovknjHS7lWqspZkf+6whzhPhJftV3rkITPrKNqVmtzbQ==}
-    peerDependencies:
-      react: '*'
 
   jazz-run@0.15.10:
     resolution: {integrity: sha512-kNX4v2FiR3Ug16QreC4lxPEBzWRXMy4Nb8Jg6OwN6t9kCZu9XVw2OI62pBy4UbeEBRcucvY1KZeFkKMizR3hYQ==}
     hasBin: true
-
-  jazz-svelte@0.14.28:
-    resolution: {integrity: sha512-JLDvbapbOkZJY4RHeLpaihQIMsWF1OkHDBlQ4dUqEgl4LA65ts8hFP8fO7O+hPArnJfGNKhQqzvqkmZx+j/jIQ==}
-    peerDependencies:
-      svelte: ^5.0.0
-
-  jazz-tools@0.14.28:
-    resolution: {integrity: sha512-T6HGV2zzDkITAfy5B/VcDbWyS9aZxihtqDVg5erU1VxfpH6SR0GKI9mTG+odCZ2zJVfzQDoanEY0StDmWNA5Ag==}
 
   jazz-tools@0.15.10:
     resolution: {integrity: sha512-La47WYBEsjQHOgN0wMJFRaiTPjREKeXfRt5Zlqe4IQb65z/p37J8cZAmT/RYPzjAwmgLvAu/o19s7L8+nj5PKQ==}
@@ -4613,10 +4553,6 @@ packages:
 
   queue-microtask@1.2.3:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
-
-  queueueue@4.1.2:
-    resolution: {integrity: sha512-YNOihQyk72FRrGQP+fVjUDVCSgxtHS5EdfgXjCYwPCTyhVWXriHfUt0XK0eT7vcBX0m91g0e0KVO8CxoNLh60g==}
-    engines: {node: '>=18'}
 
   range-parser@1.2.1:
     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
@@ -8056,11 +7992,6 @@ snapshots:
 
   clsx@2.1.1: {}
 
-  cojson-storage-indexeddb@0.14.28:
-    dependencies:
-      cojson: 0.14.28
-      cojson-storage: 0.14.28
-
   cojson-storage-indexeddb@0.15.10:
     dependencies:
       cojson: 0.15.10
@@ -8070,29 +8001,9 @@ snapshots:
       better-sqlite3: 11.10.0
       cojson: 0.15.10
 
-  cojson-storage@0.14.28:
-    dependencies:
-      cojson: 0.14.28
-
-  cojson-transport-ws@0.14.28:
-    dependencies:
-      cojson: 0.14.28
-
   cojson-transport-ws@0.15.10:
     dependencies:
       cojson: 0.15.10
-
-  cojson@0.14.28:
-    dependencies:
-      '@noble/ciphers': 1.3.0
-      '@noble/curves': 1.9.2
-      '@noble/hashes': 1.8.0
-      '@opentelemetry/api': 1.9.0
-      '@scure/base': 1.2.1
-      jazz-crypto-rs: 0.0.7
-      neverthrow: 7.2.0
-      queueueue: 4.1.2
-      unicode-segmenter: 0.12.0
 
   cojson@0.15.10:
     dependencies:
@@ -8573,8 +8484,6 @@ snapshots:
       glob-parent: 5.1.2
       merge2: 1.4.1
       micromatch: 4.0.8
-
-  fast-list@1.0.3: {}
 
   fast-myers-diff@3.2.0: {}
 
@@ -9096,46 +9005,7 @@ snapshots:
 
   isomorphic.js@0.2.5: {}
 
-  jazz-browser@0.14.28:
-    dependencies:
-      cojson: 0.14.28
-      cojson-storage-indexeddb: 0.14.28
-      cojson-transport-ws: 0.14.28
-      jazz-tools: 0.14.28
-
   jazz-crypto-rs@0.0.7: {}
-
-  jazz-inspector-element@0.14.28(csstype@3.1.3):
-    dependencies:
-      jazz-inspector: 0.14.28(csstype@3.1.3)(react@19.0.0)
-      jazz-tools: 0.14.28
-      react: 19.0.0
-      react-dom: 19.0.0(react@19.0.0)
-    transitivePeerDependencies:
-      - csstype
-
-  jazz-inspector@0.14.28(csstype@3.1.3)(react@19.0.0):
-    dependencies:
-      clsx: 2.1.1
-      cojson: 0.14.28
-      goober: 2.1.16(csstype@3.1.3)
-      jazz-react-core: 0.14.28(react@19.0.0)
-      jazz-tools: 0.14.28
-      react: 19.0.0
-    transitivePeerDependencies:
-      - csstype
-
-  jazz-nodejs@0.14.28:
-    dependencies:
-      cojson: 0.14.28
-      cojson-transport-ws: 0.14.28
-      jazz-tools: 0.14.28
-
-  jazz-react-core@0.14.28(react@19.0.0):
-    dependencies:
-      cojson: 0.14.28
-      jazz-tools: 0.14.28
-      react: 19.0.0
 
   jazz-run@0.15.10(@effect/platform@0.62.5(@effect/schema@0.71.4(effect@3.16.13))(effect@3.16.13))(@tiptap/pm@2.24.2)(csstype@3.1.3)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.35.2):
     dependencies:
@@ -9171,20 +9041,6 @@ snapshots:
       - react-native-quick-crypto
       - svelte
       - utf-8-validate
-
-  jazz-svelte@0.14.28(svelte@5.35.2):
-    dependencies:
-      cojson: 0.14.28
-      jazz-browser: 0.14.28
-      jazz-tools: 0.14.28
-      svelte: 5.35.2
-
-  jazz-tools@0.14.28:
-    dependencies:
-      '@scure/bip39': 1.6.0
-      cojson: 0.14.28
-      fast-myers-diff: 3.2.0
-      zod: 3.25.28
 
   jazz-tools@0.15.10(@tiptap/pm@2.24.2)(csstype@3.1.3)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.35.2):
     dependencies:
@@ -10252,10 +10108,6 @@ snapshots:
       side-channel: 1.1.0
 
   queue-microtask@1.2.3: {}
-
-  queueueue@4.1.2:
-    dependencies:
-      fast-list: 1.0.3
 
   range-parser@1.2.1: {}
 

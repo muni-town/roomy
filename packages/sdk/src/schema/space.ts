@@ -8,6 +8,7 @@ export const Space = co.map({
 
   description: z.string().optional(),
 
+  // Uncommenting this causes the error
   members: co.list(co.account()),
 
   version: z.number().optional(),

@@ -9,7 +9,7 @@
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
   import Icon from "@iconify/svelte";
-  import { AccountCoState, CoState } from "jazz-svelte";
+  import { AccountCoState, CoState } from "jazz-tools/svelte";
   import {
     Message,
     Reaction,

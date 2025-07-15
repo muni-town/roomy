@@ -8,7 +8,7 @@
     allAccountsListId,
     allSpacesListId,
   } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
   import { co, Group } from "jazz-tools";
 
   // load all spaces and accounts

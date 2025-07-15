@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { RoomyAccount, LastReadList } from "@roomy-chat/sdk";
-  import { AccountCoState } from "jazz-svelte";
+  import { AccountCoState } from "jazz-tools/svelte";
   import type { Snippet } from "svelte";
 
   let {

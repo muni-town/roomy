@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ImageUrlEmbed } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
 
   let {
     embedId,

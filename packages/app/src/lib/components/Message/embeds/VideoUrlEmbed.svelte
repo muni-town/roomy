@@ -1,7 +1,7 @@
 <script lang="ts">
   import { hls } from "$lib/actions/hls";
   import { VideoUrlEmbed } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
 
   let {
     embedId,

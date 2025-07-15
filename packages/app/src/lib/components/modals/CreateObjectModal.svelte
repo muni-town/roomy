@@ -5,7 +5,7 @@
   import { Modal, Input, Button, Heading } from "@fuxui/base";
   import Icon from "@iconify/svelte";
   import { createThread, Space } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
   import { co, Group } from "jazz-tools";
 
   let {

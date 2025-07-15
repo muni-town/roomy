@@ -5,7 +5,7 @@
   import { AvatarMarble } from "svelte-boring-avatars";
   import { user } from "$lib/user.svelte";
   import toast from "svelte-french-toast";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
   import { Space, publicGroup } from "@roomy-chat/sdk";
   import { page } from "$app/state";
   import { co, z } from "jazz-tools";

@@ -3,7 +3,7 @@
   import Dialog from "../../../src/lib/components/Dialog.svelte";
   import { focusOnRender } from "$lib/actions/useFocusOnRender.svelte";
   import { Channel, Space, createPage, createPagesList } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-svelte";
+  import { CoState } from "jazz-tools/svelte";
   import { page } from "$app/state";
 
   let space = $derived(
