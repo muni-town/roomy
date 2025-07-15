@@ -1,5 +1,11 @@
+import { dev } from "$app/environment";
 import type { HandleClientError } from "@sveltejs/kit";
 import posthog from "posthog-js";
+
+if (dev) {
+  const jazz = await import("jazz-tools");
+  (globalThis as any).jazz = jazz;
+}
 
 export const handleError: HandleClientError = async ({
   error,

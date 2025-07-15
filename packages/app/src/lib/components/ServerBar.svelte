@@ -3,10 +3,22 @@
   import Icon from "@iconify/svelte";
   import SidebarSpace from "$lib/components/SidebarSpace.svelte";
   import { co } from "jazz-tools";
-  import { RoomyAccount, Space, SpaceList } from "@roomy-chat/sdk";
+  import {
+    joinGroupThroughInviteService,
+    RoomyAccount,
+    Space,
+    SpaceList,
+  } from "@roomy-chat/sdk";
   import { CoState } from "jazz-svelte";
   import { page } from "$app/state";
-  import { TooltipProvider, Button, ThemeToggle } from "@fuxui/base";
+  import {
+    TooltipProvider,
+    Button,
+    ThemeToggle,
+    Modal,
+    Heading,
+    Input,
+  } from "@fuxui/base";
   import { SelectThemePopover } from "@fuxui/colors";
   import CreateSpaceModal from "./modals/CreateSpaceModal.svelte";
   import User from "./User.svelte";
@@ -21,8 +33,20 @@
   } = $props();
 
   let isNewSpaceDialogOpen = $state(false);
+  let isJoinSpaceDialogOpen = $state(false);
+  let joinSpaceId = $state("");
+  let joinGroupId = $state("");
 
   let openSpace = $derived(new CoState(Space, page.params.space));
+
+  async function joinSpace() {
+    if (!me?.profile?.joinedSpaces) return;
+    await joinGroupThroughInviteService(joinGroupId, me.id);
+    const space = await Space.load(joinSpaceId);
+    console.log("joined space", space?.toJSON());
+    me.profile.joinedSpaces.push(space);
+    isJoinSpaceDialogOpen = false;
+  }
 
   let isOpenSpaceJoined = $derived(
     me?.profile?.joinedSpaces?.some((x) => x?.id === openSpace.current?.id),
@@ -62,6 +86,42 @@
         onclick={() => (isNewSpaceDialogOpen = true)}
       >
         <Icon icon="basil:add-solid" font-size="2em" />
+      </Button>
+
+      <Modal bind:open={isJoinSpaceDialogOpen}>
+        <form onsubmit={joinSpace} class="flex flex-col gap-4">
+          <Heading>Join Space</Heading>
+          <Input
+            bind:value={joinSpaceId}
+            placeholder="Space ID"
+            type="text"
+            required
+          />
+          <Input
+            bind:value={joinGroupId}
+            placeholder="Group ID"
+            type="text"
+            required
+          />
+          <Button
+            type="submit"
+            disabled={!joinSpaceId}
+            class="w-full justify-start"
+            size="lg"
+          >
+            <Icon icon="basil:plus-outline" font-size="2em" />
+            Join Space
+          </Button>
+        </form>
+      </Modal>
+
+      <Button
+        variant="link"
+        title="Join Space"
+        class="aspect-square [&_svg]:size-8"
+        onclick={() => (isJoinSpaceDialogOpen = true)}
+      >
+        <Icon icon="basil:cursor-outline" font-size="2em" />
       </Button>
     {/if}
 

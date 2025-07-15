@@ -14,6 +14,7 @@ export const Space = co.map({
   creatorId: z.string(),
 
   adminGroupId: z.string(),
+  memberGroupId: z.string(),
 
   rootFolder: RoomyObject,
 

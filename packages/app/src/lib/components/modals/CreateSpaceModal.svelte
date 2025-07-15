@@ -27,7 +27,10 @@
       me.profile.joinedSpaces = createSpaceList();
     }
 
-    const space = createSpace(newSpaceName);
+    const space = createSpace(newSpaceName, undefined, {
+      everyoneCanRead: false,
+      createDefaultChannel: true,
+    });
 
     me?.profile?.joinedSpaces?.push(space);
 

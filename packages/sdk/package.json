@@ -14,12 +14,14 @@
   ],
   "scripts": {
     "dev": "tsc --watch",
-    "build": "tsc"
+    "build": "tsc",
+    "format": "prettier . --write"
   },
   "exports": {
     ".": "./src/index.ts"
   },
   "devDependencies": {
+    "prettier": "3.5.3",
     "jazz-tools": "catalog:",
     "jazz-nodejs": "catalog:",
     "beachball": "^2.54.0",

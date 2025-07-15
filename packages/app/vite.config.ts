@@ -20,6 +20,11 @@ export default defineConfig({
     sourcemap: true,
   },
   server: {
+    watch: {
+      ignored: [
+        '!**/node_modules/@roomy-chat/sdk/**'
+      ]
+    },
     fs: {
       allow: [allowDir],
     },
