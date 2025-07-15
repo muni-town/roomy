@@ -14,7 +14,8 @@
   ],
   "scripts": {
     "dev": "tsc --watch",
-    "build": "tsc"
+    "build": "tsc",
+    "format": "prettier . --write"
   },
   "exports": {
     ".": "./src/index.ts"
@@ -25,6 +26,7 @@
     "pkgroll": "^2.12.2",
     "turbo": "^2.5.2",
     "typescript": "^5.8.3",
-    "@repo/tsconfig": "workspace:*"
+    "@repo/tsconfig": "workspace:*",
+    "prettier": "3.5.3"
   }
 }
