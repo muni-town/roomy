@@ -35,7 +35,7 @@
 </script>
 
 <TooltipProvider>
-  <div class="flex flex-col gap-1 items-center justify-center py-2">
+  <div class="flex flex-col gap-1 items-center justify-center pt-2">
     <Button
       variant="link"
       type="button"
@@ -75,16 +75,25 @@
       <SidebarSpace space={openSpace.current} hasJoined={false} />
     {/if}
   </div>
-  <ScrollArea class="flex-grow overflow-y-auto overflow-x-hidden">
-    <div class="flex flex-col px-0 items-center gap-1.5 py-2">
-      {#if spaces}
-        {#each spaces.toReversed() as space}
-          <SidebarSpace {space} />
-        {/each}
-      {/if}
-    </div>
-  </ScrollArea>
 
+  <div class="relative flex-grow h-full overflow-hidden isolate">
+    <div
+      class="absolute top-0 left-0 right-0 h-5 w-full bg-gradient-to-b from-base-100 to-transparent z-10"
+    ></div>
+    <div
+      class="absolute bottom-0 left-0 right-0 h-5 w-full bg-gradient-to-t from-base-100 to-transparent z-10"
+    ></div>
+
+    <ScrollArea class="h-full overflow-y-auto overflow-x-hidden">
+      <div class="flex flex-col px-0 items-center gap-1.5 py-4">
+        {#if spaces}
+          {#each spaces.toReversed() as space}
+            <SidebarSpace {space} />
+          {/each}
+        {/if}
+      </div>
+    </ScrollArea>
+  </div>
   <section class="flex flex-col items-center gap-2 p-0 pb-2">
     <SelectThemePopover />
     <ThemeToggle class="backdrop-blur-none" />

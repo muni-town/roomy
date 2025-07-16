@@ -53,7 +53,7 @@
       {#if spacesInCommon?.length && spacesInCommon?.length > 0}
         <h2 class="text-3xl font-bold">Spaces in Common</h2>
         <section class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8 max-w-5xl">
-          {#each spacesInCommon as space}
+          {#each spacesInCommon.toReversed() as space}
             <SpaceButton {space} />
           {/each}
         </section>

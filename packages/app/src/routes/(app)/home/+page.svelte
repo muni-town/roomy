@@ -10,10 +10,7 @@
   const account = new AccountCoState(RoomyAccount, {
     resolve: {
       profile: {
-        joinedSpaces: {
-          $each: true,
-          $onError: null,
-        },
+        joinedSpaces: true
       },
     },
   });
@@ -53,7 +50,7 @@
             Your Spaces
           </h2>
           <section class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8 max-w-5xl">
-            {#each spaces as space}
+            {#each spaces.toReversed() as space}
               <SpaceButton space={space} />
             {/each}
           </section>
