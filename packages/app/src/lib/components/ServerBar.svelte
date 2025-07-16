@@ -78,10 +78,10 @@
 
   <div class="relative flex-grow h-full overflow-hidden isolate">
     <div
-      class="absolute top-0 left-0 right-0 h-5 w-full bg-gradient-to-b from-base-100 to-transparent z-10"
+      class="absolute top-0 left-0 right-0 h-5 w-full bg-gradient-to-b from-base-100 dark:from-base-950 to-transparent z-10"
     ></div>
     <div
-      class="absolute bottom-0 left-0 right-0 h-5 w-full bg-gradient-to-t from-base-100 to-transparent z-10"
+      class="absolute bottom-0 left-0 right-0 h-5 w-full bg-gradient-to-t from-base-100 dark:from-base-950 to-transparent z-10"
     ></div>
 
     <ScrollArea class="h-full overflow-y-auto overflow-x-hidden">
