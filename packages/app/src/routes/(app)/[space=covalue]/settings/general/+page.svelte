@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import SpaceAvatar from "$lib/components/SpaceAvatar.svelte";
   import { user } from "$lib/user.svelte";
-  import { Button, Input } from "@fuxui/base";
+  import { Button, Input, Textarea } from "@fuxui/base";
   import { Space } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
   import toast from "svelte-french-toast";
@@ -10,13 +10,16 @@
   let space = $derived(new CoState(Space, page.params.space));
   let spaceName = $derived(space.current?.name ?? "");
   let avatarUrl = $derived(space.current?.imageUrl ?? "");
+  let spaceDescription = $derived(space.current?.description ?? "");
 
   let avatarFile = $state<File | null>(null);
 
   let isSaving = $state(false);
 
   let hasChanged = $derived(
-    spaceName != space.current?.name || avatarUrl != space.current?.imageUrl,
+    spaceName != space.current?.name ||
+      avatarUrl != space.current?.imageUrl ||
+      spaceDescription != space.current?.description,
   );
 
   function resetData() {
@@ -30,6 +33,7 @@
     isSaving = true;
 
     let currentSpaceName = spaceName;
+    let currentSpaceDescription = spaceDescription;
 
     if (avatarFile) {
       await uploadAvatar();
@@ -37,6 +41,7 @@
 
     space.current.name = currentSpaceName;
     space.current.imageUrl = avatarUrl;
+    space.current.description = currentSpaceDescription;
     isSaving = false;
 
     toast.success("Space updated successfully", {
@@ -77,7 +82,7 @@
   let fileInput = $state<HTMLInputElement | null>(null);
 </script>
 
-<form class="max-w-3xl mx-auto pt-4">
+<form class="pt-4">
   <div class="space-y-12">
     <h2 class="text-base/7 font-semibold text-base-900 dark:text-base-100">
       General Settings
@@ -91,7 +96,7 @@
           >Avatar</label
         >
         <div class="mt-2 flex items-center gap-x-3">
-          <SpaceAvatar imageUrl={avatarUrl} id={space.current?.id} size={52} />
+          <SpaceAvatar imageUrl={avatarUrl} id={space.current?.id} size={64} />
 
           <input
             type="file"
@@ -114,6 +119,17 @@
         >
         <div class="mt-2">
           <Input bind:value={spaceName} class="w-full" />
+        </div>
+      </div>
+
+      <div class="sm:col-span-full">
+        <label
+          for="username"
+          class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
+          >Description</label
+        >
+        <div class="mt-2">
+          <Textarea bind:value={spaceDescription} class="w-full" rows={4} />
         </div>
       </div>
     </div>

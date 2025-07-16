@@ -37,17 +37,10 @@
         href={`/${page.params.space}/settings/members`}
         data-current={page.url.pathname.includes("members")}>Members</Button
       >
-      <Button
-        variant="ghost"
-        class="w-full justify-start"
-        href={`/${page.params.space}/settings/bans-permissions`}
-        data-current={page.url.pathname.includes("bans-permissions")}
-        >Bans & Permissions</Button
-      >
     </div>
   {/snippet}
 
-  <div class="p-4">
+  <div class="max-w-3xl mx-auto w-full p-4">
     {@render children?.()}
   </div>
 </MainLayout>

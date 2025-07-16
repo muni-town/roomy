@@ -10,9 +10,9 @@
 
   <span class="text-lg font-semibold">{space?.name}</span>
 
-  {#if space?.description || Math.random() < 0.5}
+  {#if space?.description}
     <p class="text-sm text-base-500 dark:text-base-400 max-w-full text-center line-clamp-3">
-      {space?.description ?? "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."}
+      {space?.description}
     </p>
   {/if}
 
