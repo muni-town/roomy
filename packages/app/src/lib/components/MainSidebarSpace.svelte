@@ -7,6 +7,9 @@
   import { isSpaceAdmin, RoomyAccount, Space } from "@roomy-chat/sdk";
   import toast from "svelte-french-toast";
   import SpaceAvatar from "./SpaceAvatar.svelte";
+  import { joinSpace } from "./helper/joinSpace";
+  import { user } from "$lib/user.svelte";
+  import { blueskyLoginModalState } from "@fuxui/social";
 
   let space = $derived(
     page.params?.space
@@ -61,20 +64,34 @@
   }
 
   let popoverOpen = $state(false);
+
+  let hasJoinedSpace = $derived(
+    me.current?.profile?.joinedSpaces?.some(
+      (joinedSpace) => joinedSpace?.id === space?.current?.id,
+    ),
+  );
 </script>
 
 <div
   class="w-full pt-0.5 pb-1 px-2 h-fit flex mb-4 justify-between items-center"
 >
-  <Popover side="bottom" class="w-full" align="end" bind:open={popoverOpen}>
+  <Popover
+    side="bottom"
+    class="w-full"
+    align="end"
+    bind:open={popoverOpen}
+    sideOffset={5}
+  >
     {#snippet child({ props })}
       <button
         {...props}
         class="flex justify-between items-center mt-2 border border-base-800/10 dark:border-base-100/5 hover:bg-base-300/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl bg-base-200 dark:bg-base-900/50 p-2 w-full text-left"
       >
         <div class="flex items-center gap-4">
-         
-          <SpaceAvatar imageUrl={space?.current?.imageUrl} id={space?.current?.id} />
+          <SpaceAvatar
+            imageUrl={space?.current?.imageUrl}
+            id={space?.current?.id}
+          />
 
           <h1
             class="text-md font-semibold text-base-900 dark:text-base-100 truncate flex-grow"
@@ -91,15 +108,38 @@
         />
       </button>
     {/snippet}
-    <div class="flex flex-col items-start justify-stretch gap-2">
-      <Button
-        onclick={() => {
-          navigator.clipboard.writeText(`${page.url.href}`);
-          toast.success("Invite link copied to clipboard");
-        }}
-      >
-        <Icon icon="lucide:share" class="size-4" /> Invite members
-      </Button>
+    <div class="flex flex-col items-start justify-stretch gap-2 w-[204px]">
+      {#if hasJoinedSpace}
+        <Button
+          onclick={() => {
+            navigator.clipboard.writeText(`${page.url.href}`);
+            toast.success("Invite link copied to clipboard");
+          }}
+          class="w-full"
+        >
+          <Icon icon="lucide:share" class="size-4" /> Invite
+        </Button>
+      {:else if user.session}
+        <Button
+          onclick={() => {
+            joinSpace(space?.current, me.current);
+            popoverOpen = false;
+          }}
+          class="w-full"
+        >
+          <Icon icon="lucide:plus" class="size-4" /> Join Space
+        </Button>
+      {:else}
+        <Button
+          onclick={() => {
+            blueskyLoginModalState.open = true;
+            popoverOpen = false;
+          }}
+          class="w-full"
+        >
+          <Icon icon="lucide:user" class="size-4" /> Login to join space
+        </Button>
+      {/if}
 
       {#if isSpaceAdmin(space?.current)}
         <Button
@@ -115,12 +155,15 @@
           href={`/${space?.current?.id}/settings`}
           variant="secondary"
         >
-          <Icon icon="lucide:settings" class="size-4" /> Space Settings
+          <Icon icon="lucide:settings" class="size-4" /> Settings
         </Button>
       {/if}
-      <Button variant="red" class="w-full" onclick={leaveSpace}>
-        <Icon icon="lucide:log-out" class="size-4" /> Leave Space
-      </Button>
+
+      {#if hasJoinedSpace}
+        <Button variant="red" class="w-full" onclick={leaveSpace}>
+          <Icon icon="lucide:log-out" class="size-4" /> Leave Space
+        </Button>
+      {/if}
     </div>
   </Popover>
 </div>

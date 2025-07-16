@@ -118,17 +118,17 @@
 </Drawer>
 
 <Toolbar.Root
-  class={`${isEmojiToolbarPickerOpen ? "flex" : "hidden"} group-hover:flex shadow-lg border border-base-800/5 dark:border-base-300/10 absolute -top-4 right-2 bg-base-100/80 dark:bg-base-700/50 p-1 rounded-xl items-center`}
+  class={`${isEmojiToolbarPickerOpen ? "flex" : "hidden"} group-hover:flex shadow-lg border border-base-800/5 dark:border-base-300/10 backdrop-blur-sm absolute -top-4 right-2 bg-base-100/80 dark:bg-base-800/70 p-1 rounded-xl items-center`}
 >
   <Toolbar.Button
     onclick={() => toggleReaction("👍")}
-    class={buttonVariants({ variant: "ghost", size: "iconSm" })}
+    class={[buttonVariants({ variant: "ghost", size: "iconSm" }), 'backdrop-blur-none']}
   >
     👍
   </Toolbar.Button>
   <Toolbar.Button
     onclick={() => toggleReaction("😂")}
-    class={buttonVariants({ variant: "ghost", size: "iconSm" })}
+    class={[buttonVariants({ variant: "ghost", size: "iconSm" }), 'backdrop-blur-none']}
   >
     😂
   </Toolbar.Button>
@@ -138,7 +138,7 @@
     onpicked={(emoji) => onEmojiPick(emoji.unicode)}
   >
     {#snippet child({ props })}
-      <Button size="iconSm" variant="ghost" {...props}>
+      <Button {...props} size="iconSm" variant="ghost" class="backdrop-blur-none">
         <Icon icon="lucide:smile-plus" class="text-primary" />
       </Button>
     {/snippet}
@@ -147,7 +147,7 @@
   {#if canEdit}
     <Toolbar.Button
       onclick={() => editMessage()}
-      class={buttonVariants({ variant: "ghost", size: "iconSm" })}
+      class={[buttonVariants({ variant: "ghost", size: "iconSm" }), 'backdrop-blur-none']}
     >
       <Icon icon="tabler:edit" />
     </Toolbar.Button>
@@ -156,7 +156,7 @@
   {#if canDelete}
     <Toolbar.Button
       onclick={() => deleteMessage()}
-      class={buttonVariants({ variant: "ghost", size: "iconSm" })}
+      class={[buttonVariants({ variant: "ghost", size: "iconSm" }), 'backdrop-blur-none']}
     >
       <Icon icon="tabler:trash" class="text-warning" />
     </Toolbar.Button>
@@ -164,7 +164,7 @@
 
   <Toolbar.Button
     onclick={() => setReplyTo()}
-    class={buttonVariants({ variant: "ghost", size: "iconSm" })}
+    class={[buttonVariants({ variant: "ghost", size: "iconSm" }), 'backdrop-blur-none']}
   >
     <Icon icon="fa6-solid:reply" />
   </Toolbar.Button>

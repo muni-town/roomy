@@ -21,7 +21,6 @@
   let setLastRead = $state(false);
 
   $effect(() => {
-    console.log("setting last read");
     if(setLastRead) return;
 
     let objectId = page.params.object;

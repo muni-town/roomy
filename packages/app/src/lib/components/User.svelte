@@ -15,9 +15,12 @@
       blueskyLoginModalState.open = true;
     }
   }}
-  class="cursor-pointer"
+  class="cursor-pointer opacity-90 hover:opacity-100 transition-opacity duration-200 group overflow-hidden rounded-full size-10"
 >
-  <Avatar src={user.profile.data?.avatar} fallback={user.profile.data?.handle}
+  <Avatar
+    src={user.profile.data?.avatar}
+    fallback={user.profile.data?.handle}
+    class="group-hover:scale-110 transition-transform duration-200"
   ></Avatar>
   {#if user.session}
     <span class="sr-only">{user.profile.data?.handle}</span>

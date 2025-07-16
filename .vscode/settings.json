@@ -3,11 +3,12 @@
 		"**/.git": true,
 		"**/.svn": true,
 		"**/.hg": true,
-		"**/CVS": true,
 		"**/.DS_Store": true,
 		"**/Thumbs.db": true,
+		"**/CVS": true,
 		"**/.retool_types/**": true,
 		".cache": true,
-		"retool.config.json": true
+		"retool.config.json": true,
+		"**/*tsconfig.json": true
 	}
 }

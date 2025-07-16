@@ -72,19 +72,23 @@
 
     <div class="divider my-0"></div>
     {#if !isOpenSpaceJoined && openSpace.current}
-      <SidebarSpace space={openSpace.current} hasJoined={false} />
+      <div class="py-2 flex">
+        <SidebarSpace space={openSpace.current} hasJoined={false} />
+      </div>
     {/if}
   </div>
 
   <div class="relative flex-grow h-full overflow-hidden isolate">
     <div
-      class="absolute top-0 left-0 right-0 h-5 w-full bg-gradient-to-b from-base-100 dark:from-base-950 to-transparent z-10"
+      class="absolute top-0 left-0 right-0 h-5 w-full bg-gradient-to-b from-base-100 dark:from-black to-transparent z-10"
     ></div>
     <div
-      class="absolute bottom-0 left-0 right-0 h-5 w-full bg-gradient-to-t from-base-100 dark:from-base-950 to-transparent z-10"
+      class="absolute bottom-0 left-0 right-0 h-5 w-full bg-gradient-to-t from-base-100 dark:from-black to-transparent z-10"
     ></div>
 
-    <ScrollArea class="h-full overflow-y-auto overflow-x-hidden">
+    <ScrollArea
+      class="h-full overflow-y-auto overflow-x-hidden"
+    >
       <div class="flex flex-col px-0 items-center gap-1.5 py-4">
         {#if spaces}
           {#each spaces.toReversed() as space}

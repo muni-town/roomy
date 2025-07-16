@@ -28,7 +28,7 @@
   import UploadFileButton from "./helper/UploadFileButton.svelte";
   import { afterNavigate } from "$app/navigation";
   import { blueskyLoginModalState } from "@fuxui/social";
-	import { launchConfetti } from '@fuxui/visual';
+  import { joinSpace } from "./helper/joinSpace";
 
   // Component-level threading state - scoped per channel
   let threading = $state({
@@ -224,7 +224,7 @@
     if (!user.agent || !space.current) return;
 
     console.log(messageInput);
-    if(messageInput.trim() === "<p> </p>") {
+    if (messageInput.trim() === "<p> </p>") {
       toast.error("Please enter a message");
       return;
     }
@@ -333,18 +333,6 @@
     }
   });
 
-  function joinSpace() {
-    if (!space.current || !me.current) return;
-
-    // add to my list of joined spaces
-    me.current?.profile?.joinedSpaces?.push(space.current);
-
-    // add to space.current.members
-    space.current?.members?.push(me.current);
-
-    launchConfetti();
-  }
-
   let previewImages: string[] = $state([]);
 
   function processImageFile(file: File) {
@@ -428,7 +416,9 @@
       />
     </div>
 
-    <div class="flex-none bg-white dark:bg-base-950 pt-2 pb-2 pr-2 border-t border-base-100 dark:border-base-900">
+    <div
+      class="flex-none bg-white dark:bg-base-950 pt-2 pb-2 pr-2 border-t border-base-100 dark:border-base-900"
+    >
       {#if replyTo.id}
         <div
           class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
@@ -513,18 +503,19 @@
             {/if}
           {:else}
             <div class="flex items-center grow flex-col px-4">
-              <Button onclick={joinSpace} class="w-full max-w-xl"
+              <Button onclick={() => joinSpace(space.current, me.current)} class="w-full max-w-xl"
                 >Join this space to chat</Button
               >
             </div>
           {/if}
         {:else}
-          <Button
-            class="mx-auto"
-            onclick={() => {
-              blueskyLoginModalState.show();
-            }}>Login to Chat</Button
-          >
+          <div class="flex items-center grow flex-col">
+            <Button
+              onclick={() => {
+                blueskyLoginModalState.show();
+              }}>Login to Chat</Button
+            >
+          </div>
         {/if}
       </div>
     </div>

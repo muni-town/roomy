@@ -2,7 +2,6 @@
   import { page } from "$app/state";
   import { IDList, RoomyObject, Space } from "@roomy-chat/sdk";
   import { navigate } from "$lib/utils.svelte";
-  import Icon from "@iconify/svelte";
   import { CoState } from "jazz-tools/svelte";
 
   let space = $derived(
@@ -44,9 +43,3 @@
     navigateToFirstThread();
   });
 </script>
-
-<main class="flex h-full">
-  <div class="m-auto text-white">
-    <Icon icon="ri:group-fill" class="text-6xl" />
-  </div>
-</main>

@@ -85,6 +85,8 @@
     new CoState(RoomyProfile, message.current?._edits.content?.by?.profile?.id),
   );
 
+  let accountId = $derived(message.current?._edits.content?.by?.id);
+
   let isImportedMessage = $derived(
     message.current?.author?.startsWith("discord:") ||
       message.current?.author?.startsWith("app:") ||
@@ -267,14 +269,14 @@
     }
   }
 
-  let bannedHandles = $derived(new Set(space?.bans ?? []));
+  let bannedAccounts = $derived(new Set(space?.bans ?? []));
   let hiddenIn = $derived(new Set(message.current?.hiddenIn ?? []));
 
   let shouldShow = $derived.by(() => {
     if (!message.current) return false;
     if (message.current.softDeleted) return false;
     if (!admin || !messageHasAdmin(message.current, admin)) return false;
-    if (bannedHandles.has(profile?.current?.blueskyHandle ?? "")) return false;
+    if (bannedAccounts.has(accountId ?? "")) return false;
     if (hiddenIn.has(threadId ?? "")) return false;
     return true;
   });

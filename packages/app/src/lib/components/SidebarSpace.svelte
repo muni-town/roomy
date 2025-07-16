@@ -13,7 +13,9 @@
 
   const { space, hasJoined = true }: Props = $props();
 
-  let isActive = $derived(space?.id && page.url.pathname.includes(space?.id || ""));
+  let isActive = $derived(
+    space?.id && page.url.pathname.includes(space?.id || ""),
+  );
 </script>
 
 <Tooltip
@@ -34,7 +36,7 @@
       <div
         class={[
           "flex items-center justify-center overflow-hidden",
-          !hasJoined && "opacity-50",
+          !hasJoined && "filter grayscale",
         ]}
       >
         <SpaceAvatar imageUrl={space?.imageUrl} id={space?.id} size={40} />
