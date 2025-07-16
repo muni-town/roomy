@@ -1,13 +1,23 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { navigateSync } from "$lib/utils.svelte";
-  import { Button } from "@fuxui/base";
+  import { Badge, Button } from "@fuxui/base";
   import Icon from "@iconify/svelte";
-  import { IDList, RoomyObject } from "@roomy-chat/sdk";
+  import {
+    co,
+    IDList,
+    RoomyAccount,
+    RoomyObject,
+    ThreadContent,
+  } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
   import SidebarObjectList from "./SidebarObjectList.svelte";
 
-  let { id }: { id: string } = $props();
+  let {
+    id,
+    me,
+  }: { id: string; me: co.loaded<typeof RoomyAccount> | undefined | null } =
+    $props();
 
   let object = $derived(
     new CoState(RoomyObject, id, {
@@ -23,6 +33,37 @@
   let children = $derived(
     new CoState(IDList, object.current?.components?.children),
   );
+
+  const thread = $derived(
+    object.current?.components?.thread
+      ? new CoState(ThreadContent, object.current?.components?.thread)
+      : null,
+  );
+
+  const latestEntriesByAccount = $derived(
+    Object.values(thread?.current?.timeline?.perAccount ?? {}).sort(
+      (a, b) => a.madeAt.getTime() - b.madeAt.getTime(),
+    ),
+  );
+
+  let lastReadDate = $derived(me?.root?.lastRead?.[id]);
+
+  $inspect(lastReadDate);
+  $inspect(me?.root?.lastRead);
+
+  let hasUnread = $derived.by(() => {
+    if (!lastReadDate) return latestEntriesByAccount.length !== 0;
+    if (latestEntriesByAccount.length === 0) return false;
+    let date = latestEntriesByAccount.at(-1)?.madeAt;
+    if (!date) return false;
+
+    return new Date(lastReadDate) < date;
+  });
+
+  const notificationCount = $derived(
+    me?.profile?.roomyInbox?.filter((x) => x?.objectId === id && !x?.read)
+      .length,
+  );
 </script>
 
 {#if object.current?.components?.thread}
@@ -35,8 +76,18 @@
     class="w-full justify-start"
     data-current={object.current?.id === page.params.object}
   >
+    {#if hasUnread}
+      <div
+        class="size-1.5 rounded-full bg-accent-500 absolute left-1.5 top-1.5"
+      ></div>
+    {/if}
     <Icon icon={"tabler:message-circle"} class="shrink-0" />
     <span class="truncate">{object.current?.name || "..."}</span>
+    {#if notificationCount}
+      <Badge>
+        {notificationCount}
+      </Badge>
+    {/if}
   </Button>
 {:else if object.current?.components?.page}
   <Button
@@ -63,7 +114,7 @@
     </Button>
 
     <div class="pl-3 w-full">
-      <SidebarObjectList childrenIds={children.current} />
+      <SidebarObjectList childrenIds={children.current} {me} />
     </div>
   </div>
 {/if}
