@@ -3,9 +3,9 @@
 </script>
 
 <script lang="ts">
-  import Navbar from "../ui/Navbar.svelte";
-  import BigSidebar from "../ui/BigSidebar.svelte";
-  import SmallSidebar from "../ui/SmallSidebar.svelte";
+  import Navbar from "./Navbar.svelte";
+  import BigSidebar from "./BigSidebar.svelte";
+  import SmallSidebar from "./SmallSidebar.svelte";
   import { type Snippet } from "svelte";
   import ToggleNavigation from "../ToggleNavigation.svelte";
   import { cn } from "@fuxui/base";

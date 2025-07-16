@@ -6,7 +6,12 @@
   import { RoomyAccount, Space, SpaceList } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
   import { page } from "$app/state";
-  import { TooltipProvider, Button, ThemeToggle } from "@fuxui/base";
+  import {
+    TooltipProvider,
+    Button,
+    ThemeToggle,
+    ScrollArea,
+  } from "@fuxui/base";
   import { SelectThemePopover } from "@fuxui/colors";
   import CreateSpaceModal from "./modals/CreateSpaceModal.svelte";
   import User from "./User.svelte";
@@ -38,7 +43,7 @@
       class="px-0 aspect-square [&_svg]:size-8"
       data-current={page.url.pathname.startsWith("/home")}
     >
-      <Icon icon="iconamoon:home-fill" font-size="1.75em" />
+      <Icon icon="tabler:home" font-size="1.75em" />
     </Button>
 
     {#if user.session}
@@ -61,7 +66,7 @@
         class="aspect-square [&_svg]:size-8"
         onclick={() => (isNewSpaceDialogOpen = true)}
       >
-        <Icon icon="basil:add-solid" font-size="2em" />
+        <Icon icon="tabler:plus" font-size="2em" />
       </Button>
     {/if}
 
@@ -70,17 +75,17 @@
       <SidebarSpace space={openSpace.current} hasJoined={false} />
     {/if}
   </div>
-  <div class="flex-grow overflow-y-auto overflow-x-hidden">
-    <div class="flex flex-col px-0 items-center gap-1.5">
+  <ScrollArea class="flex-grow overflow-y-auto overflow-x-hidden">
+    <div class="flex flex-col px-0 items-center gap-1.5 py-2">
       {#if spaces}
-        {#each spaces as space}
+        {#each spaces.toReversed() as space}
           <SidebarSpace {space} />
         {/each}
       {/if}
     </div>
-  </div>
+  </ScrollArea>
 
-  <section class="flex flex-col items-center gap-2 p-0">
+  <section class="flex flex-col items-center gap-2 p-0 pb-2">
     <SelectThemePopover />
     <ThemeToggle class="backdrop-blur-none" />
     <User />

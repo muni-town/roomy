@@ -19,13 +19,11 @@
   });
   const me = $derived(account.current);
   let spaces = $derived(me?.profile?.joinedSpaces);
-
-  $inspect(spaces);
 </script>
 
 <MainLayout>
   <div
-    class="flex flex-col items-center justify-start py-8 overflow-y-auto"
+    class="flex flex-col items-center justify-start py-8 overflow-y-auto px-4"
   >
       <div class="flex flex-col gap-8 items-center">
         <h1
@@ -33,7 +31,7 @@
         >
           Hi Roomy 👋
         </h1>
-        <p class="text-lg font-medium max-w-2xl text-center">
+        <p class="text-lg font-medium max-w-2xl text-center text-pretty">
           A digital gardening platform for communities. Flourish in Spaces,
           curating knowledge and conversations together.
         </p>

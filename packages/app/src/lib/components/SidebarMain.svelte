@@ -27,6 +27,6 @@
 <!-- Header -->
 <MainSidebarSpace />
 
-<div class="py-2 w-full px-2">
+<div class="w-full py-2 px-2">
   <SidebarObjectList childrenIds={children.current} />
 </div>

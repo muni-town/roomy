@@ -85,7 +85,11 @@
 
   $effect(() => {
     if (user.agent && !recordChecked && auth.state === "signedIn") {
-      checkProfileRecord();
+      try {
+        // checkProfileRecord();
+      } catch (e) {
+        console.error(e);
+      }
     }
   });
 

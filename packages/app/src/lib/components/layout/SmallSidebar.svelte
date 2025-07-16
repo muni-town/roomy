@@ -15,7 +15,7 @@
 
 <div
   class={cn(
-    "isolate bg-base-100 dark:bg-black z-10 w-18 flex flex-col justify-between p-2 overflow-hidden border-r border-base-800/10 dark:border-base-300/10",
+    "isolate bg-base-100 dark:bg-black z-10 w-18 flex flex-col justify-between overflow-hidden border-r border-base-800/10 dark:border-base-300/10",
     className,
   )}
   {...restProps}
