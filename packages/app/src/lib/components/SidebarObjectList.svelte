@@ -8,13 +8,10 @@
   }: { childrenIds: co.loaded<typeof IDList> | undefined | null } = $props();
 </script>
 
-<div class="flex flex-col gap-2 text-base-900 dark:text-base-100">
+<div class="flex flex-col gap-2 text-base-900 dark:text-base-100 w-full">
   {#each childrenIds ?? [] as childId}
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2 w-full">
       <SidebarObject id={childId} />
     </div>
   {/each}
-  {#if childrenIds?.length === 0}
-    <p class="text-sm text-base-500">No objects found</p>
-  {/if}
 </div>

@@ -3,12 +3,16 @@
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SidebarMain from "$lib/components/SidebarMain.svelte";
   import { navigate } from "$lib/utils.svelte";
-  import { Button, Input } from "@fuxui/base";
+  import { Button, Input, Select } from "@fuxui/base";
   import {
+  addToFolder,
+    co,
+    createFolder,
     createPage,
     createThread,
     Group,
     IDList,
+    RoomyObject,
     Space,
   } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
@@ -23,7 +27,7 @@
     }),
   );
 
-  const children = $derived(
+  const rootChildren = $derived(
     new CoState(IDList, space?.current?.rootFolder?.components?.children),
   );
 
@@ -31,6 +35,18 @@
 
   let objectType = $state("thread");
   let objectName = $state("");
+
+  async function addAsChild(object: co.loaded<typeof RoomyObject>) {
+    if (selectedParent === "root") {
+      rootChildren.current?.push(object.id);
+    } else {
+      const folder = space.current?.folders?.find((folder) => folder?.id === selectedParent);
+
+      if(folder) {
+        addToFolder(folder, object);
+      }
+    }
+  }
 
   function createObject(event: Event) {
     event.preventDefault();
@@ -54,29 +70,38 @@
 
       console.log(firstFolder);
 
-      // add to root folder
-      children.current?.push(thread.roomyObject.id);
-      space.current?.threads?.push(thread.roomyObject);
+      addAsChild(thread.roomyObject);
 
+      space.current?.threads?.push(thread.roomyObject);
       navigate({ space: space.current?.id, object: thread.roomyObject.id });
     } else if (objectType === "group") {
       // add group
-      // const group = createFolder(objectName, adminGroup.current);
-      // // add to root folder
-      // space.current?.rootFolder?.childrenIds?.push(group.id);
-      // space.current?.folders?.push(group);
-      // navigate({ space: space.current?.id, object: group.id });
+      const group = createFolder(objectName, adminGroup.current);
+
+      addAsChild(group);
+
+      space.current?.folders?.push(group);
     } else if (objectType === "page") {
       // add page
       const page = createPage(objectName, adminGroup.current);
 
-      // add to root folder
-      children.current?.push(page.roomyObject.id);
-      space.current?.pages?.push(page.roomyObject);
+      addAsChild(page.roomyObject);
 
+      space.current?.pages?.push(page.roomyObject);
       navigate({ space: space.current?.id, object: page.roomyObject.id });
     }
   }
+
+  let selectedParent = $state("root");
+
+  let folders = $derived(
+    (space.current?.folders ?? []).map((folder) => {
+      return {
+        value: folder?.id,
+        label: folder?.name,
+      };
+    }).filter((folder) => folder.value && folder.label) as { value: string; label: string }[]
+  );
 </script>
 
 {#if space.current}
@@ -99,12 +124,12 @@
   {/snippet}
 
   <form
-    class="px-4 flex flex-col gap-8 py-8 max-w-4xl mx-auto w-full"
+    class="px-4 flex flex-col gap-8 py-8 max-w-3xl mx-auto w-full"
     onsubmit={createObject}
   >
     <div>
-      <h1 class="text-2xl font-bold mb-2">Create new object</h1>
-      <p class="text-sm text-base-500">Create a new thread, group, or page.</p>
+      <h1 class="text-xl font-bold mb-2">Create new object</h1>
+      <p class="text-sm text-base-500">Create a new channel, group or page.</p>
     </div>
 
     <div>
@@ -139,10 +164,10 @@
           <label
             for="thread-type"
             class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-            >Thread</label
+            >Channel</label
           >
         </div>
-        <!-- <div class="flex items-center gap-x-3">
+        <div class="flex items-center gap-x-3">
           <input
             id="group-type"
             name="group-type"
@@ -153,9 +178,10 @@
           />
           <label
             for="group-type"
-            class="block text-sm/6 font-medium text-base-900 dark:text-base-100">Group</label
+            class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
+            >Group</label
           >
-        </div> -->
+        </div>
         <div class="flex items-center gap-x-3">
           <input
             id="page-type"
@@ -173,6 +199,24 @@
         </div>
       </div>
     </fieldset>
+
+    <div>
+      <label
+        for="parent"
+        class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
+        >Child of</label
+      >
+      <div class="mt-2">
+        <Select
+          bind:value={selectedParent}
+          type="single"
+          items={[
+            { value: "root", label: "root" },
+            ...folders,
+          ]}
+        />
+      </div>
+    </div>
 
     <div class="mt-4">
       <Button type="submit">Create object</Button>
