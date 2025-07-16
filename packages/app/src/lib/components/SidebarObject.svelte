@@ -62,7 +62,7 @@
       <span class="truncate">{object.current?.name || "..."}</span>
     </Button>
 
-    <div class="pl-4 w-full">
+    <div class="pl-3 w-full">
       <SidebarObjectList childrenIds={children.current} />
     </div>
   </div>
