@@ -1,14 +1,16 @@
 <script lang="ts">
   import { Avatar, Badge, Button, Popover } from "@fuxui/base";
   import Icon from "@iconify/svelte";
-  import { RoomyProfile } from "@roomy-chat/sdk";
+  import { co, makeSpaceAdmin, RoomyProfile, Space } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
+  import toast from "svelte-french-toast";
 
   let {
     profileId,
     accountId,
     isMe,
-  }: { profileId: string; accountId: string; isMe: boolean } = $props();
+    space,
+  }: { profileId: string; accountId: string; isMe: boolean, space: co.loaded<typeof Space> | undefined | null } = $props();
 
   const profile = $state(new CoState(RoomyProfile, profileId));
 </script>
@@ -39,7 +41,12 @@
             Go to profile
           </Button>
           <Button variant="red" disabled={true}>Ban user</Button>
-          <Button variant="red" disabled={true}>Make admin</Button>
+          <Button variant="red" onclick={() => {
+            if (space?.id && accountId) {
+              makeSpaceAdmin(space.id, accountId);
+              toast.success("User made admin");
+            }
+          }}>Make admin</Button>
         </div>
       </Popover>
     {/if}

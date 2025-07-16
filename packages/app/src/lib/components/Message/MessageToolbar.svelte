@@ -13,8 +13,6 @@
     isDrawerOpen = $bindable(false),
     toggleReaction,
     setReplyTo,
-    isAdmin,
-    makeAdmin,
   }: {
     canEdit?: boolean;
     canDelete?: boolean;
@@ -23,8 +21,6 @@
     toggleReaction: (reaction: string) => void;
     isDrawerOpen?: boolean;
     setReplyTo: () => void;
-    isAdmin: boolean;
-    makeAdmin: () => void;
   } = $props();
 
   let isEmojiDrawerPickerOpen = $state(false);
@@ -163,15 +159,6 @@
       class={buttonVariants({ variant: "ghost", size: "iconSm" })}
     >
       <Icon icon="tabler:trash" class="text-warning" />
-    </Toolbar.Button>
-  {/if}
-
-  {#if isAdmin}
-    <Toolbar.Button
-      onclick={() => makeAdmin()}
-      class={buttonVariants({ variant: "ghost", size: "iconSm" })}
-    >
-      <Icon icon="tabler:user-plus" />
     </Toolbar.Button>
   {/if}
 

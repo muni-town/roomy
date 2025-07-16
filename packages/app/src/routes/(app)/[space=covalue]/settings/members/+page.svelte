@@ -23,6 +23,7 @@
         {#if member?.profile?.id}
           <div class="flex items-center gap-2">
             <SettingsUser
+              space={space.current}
               isMe={me.current?.id === member?.id}
               profileId={member?.profile?.id}
               accountId={member?.id}

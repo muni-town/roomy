@@ -16,7 +16,6 @@
     RoomyAccount,
     RoomyProfile,
     Space,
-    makeSpaceAdmin,
     messageHasAdmin,
     publicGroup,
   } from "@roomy-chat/sdk";
@@ -29,7 +28,6 @@
   import ImageUrlEmbed from "./Message/embeds/ImageUrlEmbed.svelte";
   import { setInputFocus } from "./ChatInput.svelte";
   import { convertReactionsToEmojis } from "$lib/utils/reactions";
-  import { dev } from "$app/environment";
   import MessageThreadBadge from "./Message/MessageThreadBadge.svelte";
   import VideoUrlEmbed from "./Message/embeds/VideoUrlEmbed.svelte";
   import { goto } from "$app/navigation";
@@ -455,12 +453,6 @@
           {deleteMessage}
           {editMessage}
           {setReplyTo}
-          isAdmin={dev && (isAdmin ?? false)}
-          makeAdmin={() => {
-            if (space?.id && message.current?._edits.content?.by?.id) {
-              makeSpaceAdmin(space.id, message.current._edits.content.by.id);
-            }
-          }}
         />
       {/if}
 

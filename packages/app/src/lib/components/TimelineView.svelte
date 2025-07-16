@@ -506,8 +506,8 @@
               </div>
             {/if}
           {:else}
-            <div class="flex items-center grow flex-col">
-              <Button onclick={joinSpace} class="w-full dz-btn"
+            <div class="flex items-center grow flex-col px-4">
+              <Button onclick={joinSpace} class="w-full max-w-xl"
                 >Join this space to chat</Button
               >
             </div>
