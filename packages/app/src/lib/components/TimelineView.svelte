@@ -422,7 +422,7 @@
       />
     </div>
 
-    <div class="flex-none bg-white dark:bg-base-900 pt-2 pb-2 pr-2">
+    <div class="flex-none bg-white dark:bg-base-950 pt-2 pb-2 pr-2 border-t border-base-100 dark:border-base-900">
       {#if replyTo.id}
         <div
           class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
@@ -442,7 +442,7 @@
           </Button>
         </div>
       {/if}
-      <div class="w-full">
+      <div class="w-full py-1">
         {#if user.session}
           {#if hasJoinedSpace}
             {#if !isBanned}
@@ -459,12 +459,13 @@
                           class="absolute inset-0 w-full h-full object-cover"
                         />
 
-                        <button
-                          class="btn btn-ghost btn-sm btn-circle absolute p-0.5 top-1 right-1 bg-base-100 rounded-full"
+                        <Button
+                          variant="ghost"
+                          class="absolute p-0.5 top-1 right-1 bg-base-100 rounded-full"
                           onclick={() => removeImageFile(index)}
                         >
                           <Icon icon="tabler:x" class="size-4" />
-                        </button>
+                        </Button>
                       </div>
                     {/each}
                   </div>

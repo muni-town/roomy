@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { AvatarMarble } from "svelte-boring-avatars";
   import { navigateSync } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import { co } from "jazz-tools";
   import { Space } from "@roomy-chat/sdk";
   import { Tooltip } from "@fuxui/base";
+  import SpaceAvatar from "./SpaceAvatar.svelte";
 
   type Props = {
     space: co.loaded<typeof Space> | null | undefined;
@@ -37,19 +37,7 @@
           !hasJoined && "opacity-50",
         ]}
       >
-        {#if space?.imageUrl}
-          <img
-            src={space?.imageUrl}
-            alt={space?.name || ""}
-            class="size-10 object-cover rounded-full object-center"
-          />
-        {:else if space && space.id}
-          <div class="size-10">
-            <AvatarMarble name={space.id} size={40} />
-          </div>
-        {:else}
-          <div class="size-10 bg-base-300 rounded-full"></div>
-        {/if}
+        <SpaceAvatar imageUrl={space?.imageUrl} id={space?.id} size={40} />
       </div>
     </a>
   {/snippet}

@@ -5,9 +5,8 @@
   import { page } from "$app/state";
   import { AccountCoState, CoState } from "jazz-tools/svelte";
   import { isSpaceAdmin, RoomyAccount, Space } from "@roomy-chat/sdk";
-  import { AvatarMarble } from "svelte-boring-avatars";
   import toast from "svelte-french-toast";
-  import CreateObjectModal from "./modals/CreateObjectModal.svelte";
+  import SpaceAvatar from "./SpaceAvatar.svelte";
 
   let space = $derived(
     page.params?.space
@@ -62,8 +61,6 @@
   }
 
   let popoverOpen = $state(false);
-
-  let showNewObjectDialog = $state(false);
 </script>
 
 <div
@@ -76,19 +73,8 @@
         class="flex justify-between items-center mt-2 border border-base-800/10 dark:border-base-100/5 hover:bg-base-300/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl bg-base-200 dark:bg-base-900/50 p-2 w-full text-left"
       >
         <div class="flex items-center gap-4">
-          {#if space?.current?.imageUrl}
-            <img
-              src={space?.current?.imageUrl}
-              alt={space?.current?.name || ""}
-              class="size-8 object-cover rounded-full object-center bg-base-200 dark:bg-base-900"
-            />
-          {:else if space?.current && space?.current.id}
-            <div class="size-8">
-              <AvatarMarble name={space?.current.id} size={32} />
-            </div>
-          {:else}
-            <div class="size-8 bg-base-300 rounded-full"></div>
-          {/if}
+         
+          <SpaceAvatar imageUrl={space?.current?.imageUrl} id={space?.current?.id} />
 
           <h1
             class="text-md font-semibold text-base-900 dark:text-base-100 truncate flex-grow"
@@ -138,5 +124,3 @@
     </div>
   </Popover>
 </div>
-
-<CreateObjectModal bind:open={showNewObjectDialog} space={space?.current} />

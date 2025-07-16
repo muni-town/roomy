@@ -1,24 +1,12 @@
 <script lang="ts">
   import { co, Space } from "@roomy-chat/sdk";
-  import { AvatarMarble } from "svelte-boring-avatars";
+  import SpaceAvatar from "./SpaceAvatar.svelte";
 
   let { space }: { space: co.loaded<typeof Space> | undefined | null } = $props();
 </script>
 
-<div class="relative flex flex-col items-center justify-center gap-2 max-w-42">
-  {#if space?.imageUrl}
-    <img
-      src={space?.imageUrl}
-      alt={space?.name || ""}
-      class="size-24 object-cover rounded-full object-center bg-base-700 dark:bg-base-300"
-    />
-  {:else if space && space.id}
-    <div class="size-24">
-      <AvatarMarble name={space.id} size={96} />
-    </div>
-  {:else}
-    <div class="size-24 bg-base-300 rounded-full"></div>
-  {/if}
+<div class="relative flex flex-col items-center justify-start gap-2 max-w-42">
+  <SpaceAvatar imageUrl={space?.imageUrl} id={space?.id} size={96} />
 
   <span class="text-lg font-semibold">{space?.name}</span>
 
