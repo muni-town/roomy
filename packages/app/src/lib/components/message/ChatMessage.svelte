@@ -20,16 +20,16 @@
     publicGroup,
   } from "@roomy-chat/sdk";
   import { Account, co } from "jazz-tools";
-  import MessageToolbar from "./Message/MessageToolbar.svelte";
-  import MessageReactions from "./Message/MessageReactions.svelte";
-  import ChatInput from "./ChatInput.svelte";
-  import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
+  import MessageToolbar from "./MessageToolbar.svelte";
+  import MessageReactions from "./MessageReactions.svelte";
+  import ChatInput from "../ChatInput.svelte";
+  import MessageRepliedTo from "./MessageRepliedTo.svelte";
   import toast from "svelte-french-toast";
-  import ImageUrlEmbed from "./Message/embeds/ImageUrlEmbed.svelte";
-  import { setInputFocus } from "./ChatInput.svelte";
+  import ImageUrlEmbed from "./embeds/ImageUrlEmbed.svelte";
+  import { setInputFocus } from "../ChatInput.svelte";
   import { convertReactionsToEmojis } from "$lib/utils/reactions";
-  import MessageThreadBadge from "./Message/MessageThreadBadge.svelte";
-  import VideoUrlEmbed from "./Message/embeds/VideoUrlEmbed.svelte";
+  import MessageThreadBadge from "./MessageThreadBadge.svelte";
+  import VideoUrlEmbed from "./embeds/VideoUrlEmbed.svelte";
   import { goto } from "$app/navigation";
   import { dmClient } from "$lib/dm.svelte";
   import { Badge } from "@fuxui/base";

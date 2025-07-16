@@ -6,7 +6,7 @@
 
 <script lang="ts">
   import { ScrollArea } from "bits-ui";
-  import ChatMessage from "./ChatMessage.svelte";
+  import ChatMessage from "./message/ChatMessage.svelte";
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
   import { page } from "$app/state";

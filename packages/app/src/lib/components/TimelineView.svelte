@@ -21,8 +21,8 @@
   } from "@roomy-chat/sdk";
   import { AccountCoState, CoState } from "jazz-tools/svelte";
   import { user } from "$lib/user.svelte";
-  import { replyTo } from "./ChatMessage.svelte";
-  import MessageRepliedTo from "./Message/MessageRepliedTo.svelte";
+  import { replyTo } from "./message/ChatMessage.svelte";
+  import MessageRepliedTo from "./message/MessageRepliedTo.svelte";
   import { extractLinks } from "$lib/utils/collectLinks";
   import FullscreenImageDropper from "./helper/FullscreenImageDropper.svelte";
   import UploadFileButton from "./helper/UploadFileButton.svelte";
@@ -94,11 +94,11 @@
   function setLastRead() {
     if (!me?.current?.root) return;
 
-    if (!me?.current?.root?.lastRead) {
+    if (me?.current?.root?.lastRead === null) {
       me.current.root.lastRead = LastReadList.create({});
     }
 
-    if (objectId) {
+    if (objectId && me.current.root.lastRead) {
       me.current.root.lastRead[objectId] = new Date();
     }
   }

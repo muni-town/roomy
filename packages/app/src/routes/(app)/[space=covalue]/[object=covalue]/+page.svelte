@@ -4,10 +4,35 @@
   import PageView from "$lib/components/PageView.svelte";
   import SidebarMain from "$lib/components/SidebarMain.svelte";
   import TimelineView from "$lib/components/TimelineView.svelte";
-  import { RoomyObject } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-tools/svelte";
+  import { LastReadList, RoomyAccount, RoomyObject } from "@roomy-chat/sdk";
+  import { AccountCoState, CoState } from "jazz-tools/svelte";
 
   let object = $derived(new CoState(RoomyObject, page.params.object));
+
+  const me = new AccountCoState(RoomyAccount, {
+    resolve: {
+      profile: {
+        joinedSpaces: true,
+      },
+    },
+  });
+
+
+  let setLastRead = $state(false);
+
+  $effect(() => {
+    console.log("setting last read");
+    if(setLastRead) return;
+
+    let objectId = page.params.object;
+    if(objectId && me.current?.root?.lastRead === null) {
+      me.current.root.lastRead = LastReadList.create({});
+    }
+    if (objectId && me.current?.root?.lastRead) {
+      me.current.root.lastRead[objectId] = new Date();
+      setLastRead = true;
+    }
+  });
 </script>
 
 <MainLayout>
