@@ -55,7 +55,7 @@
   <div class="flex flex-col gap-1 w-full">
     <Button
       variant="ghost"
-      class="w-full justify-start"
+      class="w-full justify-start hover:bg-transparent hover:text-base-900 dark:hover:text-base-100 hover:cursor-default active:scale-100"
       data-current={object.current?.id === page.params.object}
     >
       <Icon icon={"tabler:folder"} class="shrink-0" />
