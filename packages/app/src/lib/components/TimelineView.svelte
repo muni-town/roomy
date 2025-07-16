@@ -223,6 +223,12 @@
   async function sendMessage() {
     if (!user.agent || !space.current) return;
 
+    console.log(messageInput);
+    if(messageInput.trim() === "<p> </p>") {
+      toast.error("Please enter a message");
+      return;
+    }
+
     isSendingMessage = true;
 
     let filesUrls: (ImageUrlEmbedCreate | VideoUrlEmbedCreate)[] = [];

@@ -42,6 +42,8 @@
   let showJumpToPresent = $derived(!isAtBottom && timeline.length > 0);
 
   let slicedTimeline = $derived(timeline.slice(-showLastN));
+
+  let isShowingFirstMessage = $derived(showLastN >= timeline.length);
   let viewport: HTMLDivElement = $state(null!);
 
   // Track initial load for auto-scroll
@@ -141,6 +143,12 @@
             }}
             >Load More
           </Button>
+        {/if}
+        {#if isShowingFirstMessage}
+          <div class="flex flex-col gap-2 max-w-full px-6 mb-4 mt-4">
+            <p class="text-base font-semibold text-base-900 dark:text-base-100">Hello world!</p>
+            <p class="text-sm text-base-600 dark:text-base-400">This is the beginning of something beautiful.</p>
+          </div>
         {/if}
         <ol class="flex flex-col gap-2 max-w-full">
           <!--
