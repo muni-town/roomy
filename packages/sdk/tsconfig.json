@@ -3,8 +3,19 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    // The massive inferred types from Zod were erroring unless we disable
+    // emitting declarations. We may have to figure out how to properly work
+    // around this later, but I'm not exactly sure.
+    "noEmit": true,
+    "emitDeclarationOnly": false,
+    "declaration": false
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

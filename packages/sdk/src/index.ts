@@ -1,5 +1,5 @@
 export * from "./schema/index.ts"
-export * from "./functions/index.ts";
+// export * from "./functions/index.ts";
 
 export * from "./utils/wordlist.ts";
 
