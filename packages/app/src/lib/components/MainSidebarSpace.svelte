@@ -87,14 +87,14 @@
         {...props}
         class="flex justify-between items-center mt-2 border border-base-800/10 dark:border-base-100/5 hover:bg-base-300/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl bg-base-200 dark:bg-base-900/50 p-2 w-full text-left"
       >
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-4 max-w-full">
           <SpaceAvatar
             imageUrl={space?.current?.imageUrl}
             id={space?.current?.id}
           />
 
           <h1
-            class="text-md font-semibold text-base-900 dark:text-base-100 truncate flex-grow"
+            class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full flex-grow"
           >
             {space?.current?.name ? space.current?.name : ""}
           </h1>

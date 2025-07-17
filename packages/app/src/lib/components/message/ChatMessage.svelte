@@ -465,7 +465,7 @@
         <span class="sr-only">Open toolbar</span>
       </button>
 
-      <div class="pl-11 md:pl-13 max-w-full flex flex-wrap gap-2">
+      <div class="pl-11 md:pl-13 max-w-full flex flex-wrap gap-2 z-10">
         {#each message.current?.embeds ?? [] as embed}
           {#if embed?.type === "imageUrl"}
             <ImageUrlEmbed embedId={embed.embedId} />
