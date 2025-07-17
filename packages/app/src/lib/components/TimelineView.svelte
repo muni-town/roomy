@@ -392,9 +392,7 @@
     ),
   );
 
-  let isBanned = $derived(
-    bannedAccounts.has(me.current?.id ?? ""),
-  );
+  let isBanned = $derived(bannedAccounts.has(me.current?.id ?? ""));
 </script>
 
 <!-- hack to get the admin to load ^^ it has to be used somewhere in this file -->
@@ -446,7 +444,7 @@
                 class="prose-a:text-primary prose-a:underline relative isolate"
               >
                 {#if previewImages.length > 0}
-                  <div class="flex gap-2 my-2 overflow-x-auto w-full">
+                  <div class="flex gap-2 my-2 overflow-x-auto w-full px-2">
                     {#each previewImages as previewImage, index (previewImage)}
                       <div class="size-24 relative shrink-0">
                         <img
@@ -457,7 +455,7 @@
 
                         <Button
                           variant="ghost"
-                          class="absolute p-0.5 top-1 right-1 bg-base-100 rounded-full"
+                          class="absolute p-0.5 top-1 right-1 bg-base-100 hover:bg-base-200 dark:bg-base-900 dark:hover:bg-base-800 rounded-full"
                           onclick={() => removeImageFile(index)}
                         >
                           <Icon icon="tabler:x" class="size-4" />
@@ -503,8 +501,9 @@
             {/if}
           {:else}
             <div class="flex items-center grow flex-col px-4">
-              <Button onclick={() => joinSpace(space.current, me.current)} class="w-full max-w-xl"
-                >Join this space to chat</Button
+              <Button
+                onclick={() => joinSpace(space.current, me.current)}
+                class="w-full max-w-xl">Join this space to chat</Button
               >
             </div>
           {/if}

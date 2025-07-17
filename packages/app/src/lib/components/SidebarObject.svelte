@@ -102,7 +102,7 @@
     <Icon icon={"tabler:file-text"} class="shrink-0" />
     <span class="truncate">{object.current?.name || "..."}</span>
   </Button>
-{:else if object.current}
+{:else if object.current?.components?.children}
   <div class="flex flex-col gap-1 w-full">
     <Button
       variant="ghost"
@@ -117,4 +117,17 @@
       <SidebarObjectList childrenIds={children.current} {me} />
     </div>
   </div>
+{:else if object.current}
+  <Button
+    href={navigateSync({
+      space: page.params.space!,
+      object: object.current?.id,
+    })}
+    variant="ghost"
+    class="w-full justify-start"
+    data-current={object.current?.id === page.params.object}
+  >
+    <Icon icon={"tabler:question-circle"} class="shrink-0" />
+    <span class="truncate">{object.current?.name || "..."}</span>
+  </Button>
 {/if}
