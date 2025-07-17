@@ -224,7 +224,7 @@
     if (!user.agent || !space.current) return;
 
     console.log(messageInput);
-    if (messageInput.trim() === "<p> </p>") {
+    if (messageInput.trim() === "<p> </p>" && filesInMessage.length === 0) {
       toast.error("Please enter a message");
       return;
     }
