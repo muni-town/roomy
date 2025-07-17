@@ -1,7 +1,7 @@
 import { co, Group } from "jazz-tools";
-import { createRoomyObject } from "./roomyobject.ts";
-import { IDList, RoomyObject } from "../schema/index.ts";
-import { publicGroup } from "./group.ts";
+import { createRoomyObject } from "./roomyobject.js";
+import { IDList, RoomyObject } from "../schema/index.js";
+import { publicGroup } from "./group.js";
 
 export function createFolder(name: string, adminGroup: Group, allowEveryoneToAddChildren: boolean = false) {
   // folder doesnt need any content, it just has children

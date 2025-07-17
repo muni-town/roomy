@@ -1,5 +1,5 @@
 import { co, z } from "jazz-tools";
-import { RoomyObject } from "./roomyobject.ts";
+import { RoomyObject } from "./roomyobject.js";
 
 export const Space = co.map({
   name: z.string(),

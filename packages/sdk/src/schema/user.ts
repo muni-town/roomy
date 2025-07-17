@@ -1,6 +1,6 @@
 import { co, z } from "jazz-tools";
-import { Space } from "./space.ts";
-import { createInbox, createSpaceList, publicGroup } from "../functions/index.ts";
+import { Space } from "./space.js";
+import { createInbox, createSpaceList, publicGroup } from "../functions/index.js";
 
 export const SpaceList = co.list(Space);
 

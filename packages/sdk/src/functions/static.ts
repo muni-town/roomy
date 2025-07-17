@@ -1,8 +1,8 @@
 import { Group } from "jazz-tools";
-import { IDList, SpaceMigrationReference } from "../schema/index.ts";
-import { publicGroup } from "./group.ts";
+import { IDList, SpaceMigrationReference } from "../schema/index.js";
+import { publicGroup } from "./group.js";
 
-// these functions are only called once during development and their id is saved in the ../ids.ts file
+// these functions are only called once during development and their id is saved in the ../ids.js file
 export function createAllSpacesList() {
   const group = Group.create();
   group.addMember("everyone", "writeOnly");

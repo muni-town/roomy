@@ -1,5 +1,5 @@
 import { Account, Group } from "jazz-tools";
-import { Space } from "../schema/index.ts";
+import { Space } from "../schema/index.js";
 
 export async function makeSpaceAdmin(spaceId: string, accountId: string) {
   const space = await Space.load(spaceId);

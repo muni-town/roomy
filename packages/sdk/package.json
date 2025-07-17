@@ -17,8 +17,12 @@
     "build": "tsc",
     "format": "prettier . --write"
   },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "import": "./dist/index.js"
+    }
   },
   "devDependencies": {
     "jazz-tools": "catalog:",

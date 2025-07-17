@@ -1,7 +1,7 @@
 import { co, Group } from "jazz-tools";
-import { PageContent } from "../schema/index.ts";
-import { publicGroup } from "./group.ts";
-import { createRoomyObject } from "./roomyobject.ts";
+import { PageContent } from "../schema/index.js";
+import { publicGroup } from "./group.js";
+import { createRoomyObject } from "./roomyobject.js";
 
 export function createPage(name: string, adminGroup: Group) {
   const readingGroup = publicGroup();
@@ -10,7 +10,7 @@ export function createPage(name: string, adminGroup: Group) {
   const page = PageContent.create(
     {
       text: "",
-      editableText: co.richText().create("", readingGroup),
+      //editableText: co.richText().create("", readingGroup),
     },
     readingGroup,
   );

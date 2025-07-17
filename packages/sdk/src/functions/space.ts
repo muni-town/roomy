@@ -1,9 +1,9 @@
 import { Account, co, Group, z } from "jazz-tools";
-import { allSpacesListId } from "../ids.ts";
-import { IDList, RoomyObject, Space } from "../schema/index.ts";
-import { createThread } from "./thread.ts";
-import { publicGroup } from "./group.ts";
-import { addToFolder, createFolder } from "./folder.ts";
+import { allSpacesListId } from "../ids.js";
+import { IDList, RoomyObject, Space } from "../schema/index.js";
+import { createThread } from "./thread.js";
+import { publicGroup } from "./group.js";
+import { addToFolder, createFolder } from "./folder.js";
 
 export function createSpace(
   name: string,

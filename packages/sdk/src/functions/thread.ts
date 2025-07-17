@@ -1,7 +1,7 @@
 import { Account, co, Group, z } from "jazz-tools";
-import { publicGroup } from "./group.ts";
-import { Embed, ImageUrlEmbed, Message, Reaction, ThreadContent, Timeline, VideoUrlEmbed } from "../schema/threads.ts";
-import { createRoomyObject } from "./roomyobject.ts";
+import { publicGroup } from "./group.js";
+import { Embed, ImageUrlEmbed, Message, Reaction, ThreadContent, Timeline, VideoUrlEmbed } from "../schema/threads.js";
+import { createRoomyObject } from "./roomyobject.js";
 
 export function createThread(name: string, adminGroup: Group) {
   const publicWriteGroup = publicGroup("writer");

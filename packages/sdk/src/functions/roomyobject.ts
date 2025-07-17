@@ -1,6 +1,6 @@
 import { Account, co, Group, z } from "jazz-tools";
-import { RoomyObject } from "../schema/index.ts";
-import { publicGroup } from "./group.ts";
+import { RoomyObject } from "../schema/index.js";
+import { publicGroup } from "./group.js";
 
 export function createRoomyObject(name: string, adminGroup: Group) {
   const publicReadGroup = publicGroup("reader");

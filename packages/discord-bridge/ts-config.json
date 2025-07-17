@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "node16",
+    "baseUrl": ".",
+    "paths": {
+      "@roomy-chat/sdk": [
+        "../sdk/src"
+      ]
+    }
+  }
+}

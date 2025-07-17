@@ -11,7 +11,7 @@
     "noUncheckedIndexedAccess": true,
     "module": "es2022",
     "declaration": true,
-    "allowImportingTsExtensions": true,
-    "emitDeclarationOnly": true
+    "allowImportingTsExtensions": false,
+    "emitDeclarationOnly": false
   }
 }
