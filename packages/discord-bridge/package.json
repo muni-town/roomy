@@ -7,7 +7,8 @@
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "start": "node dist/index.js",
-    "dev": "nodemon -I --exec \"node --loader ts-node/esm --require tsconfig-paths/register --experimental-specifier-resolution=node ./src/index.ts\""
+    "dev": "nodemon -I --exec \"node --loader ts-node/esm --require tsconfig-paths/register --experimental-specifier-resolution=node ./src/index.ts\"",
+    "prepare": "pnpm build"
   },
   "dependencies": {
     "@roomy-chat/sdk": "workspace:*",
