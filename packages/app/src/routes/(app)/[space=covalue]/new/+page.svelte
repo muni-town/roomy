@@ -5,9 +5,10 @@
   import { navigate } from "$lib/utils.svelte";
   import { Button, Input, Select } from "@fuxui/base";
   import {
-  addToFolder,
+    addToFolder,
     co,
     createFolder,
+    createGallery,
     createPage,
     createThread,
     Group,
@@ -40,9 +41,11 @@
     if (selectedParent === "root") {
       rootChildren.current?.push(object.id);
     } else {
-      const folder = space.current?.folders?.find((folder) => folder?.id === selectedParent);
+      const folder = space.current?.folders?.find(
+        (folder) => folder?.id === selectedParent,
+      );
 
-      if(folder) {
+      if (folder) {
         addToFolder(folder, object);
       }
     }
@@ -61,7 +64,7 @@
       return;
     }
 
-    if (objectType === "thread") {
+    if (objectType === "Channel") {
       // add thread
       const thread = createThread(objectName, adminGroup.current);
 
@@ -74,14 +77,14 @@
 
       space.current?.threads?.push(thread.roomyObject);
       navigate({ space: space.current?.id, object: thread.roomyObject.id });
-    } else if (objectType === "group") {
+    } else if (objectType === "Group") {
       // add group
       const group = createFolder(objectName, adminGroup.current);
 
       addAsChild(group);
 
       space.current?.folders?.push(group);
-    } else if (objectType === "page") {
+    } else if (objectType === "Page") {
       // add page
       const page = createPage(objectName, adminGroup.current);
 
@@ -89,19 +92,33 @@
 
       space.current?.pages?.push(page.roomyObject);
       navigate({ space: space.current?.id, object: page.roomyObject.id });
+    } else if (objectType === "Gallery") {
+      // add gallery
+      const gallery = createGallery(objectName, adminGroup.current);
+
+      addAsChild(gallery.roomyObject);
+
+      navigate({ space: space.current?.id, object: gallery.roomyObject.id });
     }
   }
 
   let selectedParent = $state("root");
 
   let folders = $derived(
-    (space.current?.folders ?? []).map((folder) => {
-      return {
-        value: folder?.id,
-        label: folder?.name,
-      };
-    }).filter((folder) => folder.value && folder.label) as { value: string; label: string }[]
+    (space.current?.folders ?? [])
+      .map((folder) => {
+        return {
+          value: folder?.id,
+          label: folder?.name,
+        };
+      })
+      .filter((folder) => folder.value && folder.label) as {
+      value: string;
+      label: string;
+    }[],
   );
+
+  const types = ["Channel", "Group", "Page", "Gallery"];
 </script>
 
 {#if space.current}
@@ -151,52 +168,24 @@
         Choose the type of object you want to create.
       </p>
       <div class="mt-6 space-y-4">
-        <div class="flex items-center gap-x-3">
-          <input
-            id="thread-type"
-            name="thread-type"
-            type="radio"
-            checked
-            bind:group={objectType}
-            value="thread"
-            class="relative size-4 appearance-none rounded-full border border-base-300 dark:border-base-700 bg-white dark:bg-base-800 before:absolute before:inset-1 before:rounded-full before:bg-white not-checked:before:hidden checked:border-accent-600 dark:checked:border-accent-400 dark:checked:bg-accent-400 checked:bg-accent-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600 disabled:border-base-300 disabled:bg-base-100 disabled:before:bg-base-400 forced-colors:appearance-auto forced-colors:before:hidden"
-          />
-          <label
-            for="thread-type"
-            class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-            >Channel</label
-          >
-        </div>
-        <div class="flex items-center gap-x-3">
-          <input
-            id="group-type"
-            name="group-type"
-            type="radio"
-            bind:group={objectType}
-            value="group"
-            class="relative size-4 appearance-none rounded-full border border-base-300 dark:border-base-700 bg-white dark:bg-base-800 before:absolute before:inset-1 before:rounded-full before:bg-white not-checked:before:hidden checked:border-accent-600 dark:checked:border-accent-400 dark:checked:bg-accent-400 checked:bg-accent-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600 disabled:border-base-300 disabled:bg-base-100 disabled:before:bg-base-400 forced-colors:appearance-auto forced-colors:before:hidden"
-          />
-          <label
-            for="group-type"
-            class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-            >Group</label
-          >
-        </div>
-        <div class="flex items-center gap-x-3">
-          <input
-            id="page-type"
-            name="page-type"
-            type="radio"
-            bind:group={objectType}
-            value="page"
-            class="relative size-4 appearance-none rounded-full border border-base-300 dark:border-base-700 bg-white dark:bg-base-800 before:absolute before:inset-1 before:rounded-full before:bg-white not-checked:before:hidden checked:border-accent-600 dark:checked:border-accent-400 dark:checked:bg-accent-400 checked:bg-accent-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600 disabled:border-base-300 disabled:bg-base-100 disabled:before:bg-base-400 forced-colors:appearance-auto forced-colors:before:hidden"
-          />
-          <label
-            for="page-type"
-            class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-            >Page</label
-          >
-        </div>
+        {#each types as type}
+          <div class="flex items-center gap-x-3">
+            <input
+              id={`${type}-type`}
+              name={`${type}-type`}
+              type="radio"
+              checked
+              bind:group={objectType}
+              value={type}
+              class="relative size-4 appearance-none rounded-full border border-base-300 dark:border-base-700 bg-white dark:bg-base-800 before:absolute before:inset-1 before:rounded-full before:bg-white not-checked:before:hidden checked:border-accent-600 dark:checked:border-accent-400 dark:checked:bg-accent-400 checked:bg-accent-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600 disabled:border-base-300 disabled:bg-base-100 disabled:before:bg-base-400 forced-colors:appearance-auto forced-colors:before:hidden"
+            />
+            <label
+              for={`${type}-type`}
+              class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
+              >{type}</label
+            >
+          </div>
+        {/each}
       </div>
     </fieldset>
 
@@ -210,10 +199,7 @@
         <Select
           bind:value={selectedParent}
           type="single"
-          items={[
-            { value: "root", label: "root" },
-            ...folders,
-          ]}
+          items={[{ value: "root", label: "root" }, ...folders]}
         />
       </div>
     </div>

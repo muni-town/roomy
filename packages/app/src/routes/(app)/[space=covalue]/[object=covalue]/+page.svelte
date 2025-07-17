@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import Gallery from "$lib/components/gallery/Gallery.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import PageView from "$lib/components/PageView.svelte";
   import SidebarMain from "$lib/components/SidebarMain.svelte";
@@ -56,6 +57,11 @@
     />
   {:else if object.current?.components?.page}
     <PageView
+      objectId={page.params.object ?? ""}
+      spaceId={page.params.space ?? ""}
+    />
+  {:else if object.current?.components?.gallery}
+    <Gallery
       objectId={page.params.object ?? ""}
       spaceId={page.params.space ?? ""}
     />

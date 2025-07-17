@@ -8,3 +8,4 @@ export * from "./roomyobject.ts";
 export * from "./space.ts";
 export * from "./threads.js";
 export * from "./user.ts";
+export * from "./gallery.ts";

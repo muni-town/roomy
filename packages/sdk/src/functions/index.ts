@@ -9,3 +9,5 @@ export * from "./user.ts";
 
 
 export * from "./static.ts";
+
+export * from "./gallery.ts";

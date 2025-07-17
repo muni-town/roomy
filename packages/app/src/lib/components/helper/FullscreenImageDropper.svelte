@@ -43,7 +43,7 @@
 {#if isDragOver}
   <Portal>
     <div
-      class="bg-base-100/80 backdrop-blur-md text-primary pointer-events-none absolute inset-0 flex items-center justify-center text-4xl font-bold z-[1000]"
+      class="bg-base-100/80 dark:bg-base-900/80 backdrop-blur-md text-primary pointer-events-none absolute inset-0 flex items-center justify-center text-4xl font-bold z-[1000]"
     >
       Drop image to add it to your message
     </div>
