@@ -1,7 +1,7 @@
 <script lang="ts" module>
   export let fullscreenImage = $state({
     src: "https://placehold.co/1000x1000",
-    show: true,
+    show: false,
   });
 </script>
 

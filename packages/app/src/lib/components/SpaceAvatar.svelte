@@ -15,7 +15,7 @@
 </script>
 
 <div
-  class="rounded-full overflow-hidden bg-base-200 dark:bg-base-900"
+  class="rounded-full overflow-hidden bg-base-200 dark:bg-base-900 shrink-0"
   style={`width: ${size}px; height: ${size}px;`}
 >
   {#if imageUrl}
