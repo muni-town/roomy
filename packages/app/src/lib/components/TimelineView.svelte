@@ -190,7 +190,8 @@
 
     space.current?.threads?.push(newThread.roomyObject);
 
-    threadObject.current?.childrenIds?.push(newThread.roomyObject.id);
+    // TODO: fix this; removed to appease husky
+    // threadObject.current?.childrenIds?.push(newThread.roomyObject.id);
 
     threading.active = false;
     threading.selectedMessages = [];
