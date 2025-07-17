@@ -9,7 +9,7 @@
 
   const me = new AccountCoState(RoomyAccount);
 
-  let members = $derived(space.current?.members ?? []);
+  let members = $derived(new Set(space.current?.members ?? []));
   let bans = $derived(space.current?.bans ?? []);
   let banSet = $derived(new Set(bans));
   let adminGroup = $derived(new CoState(Group, space.current?.adminGroupId));
