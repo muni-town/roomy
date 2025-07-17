@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Avatar, Badge, Button, Popover } from "@fuxui/base";
   import Icon from "@iconify/svelte";
-  import { co, makeSpaceAdmin, RoomyAccount, Space } from "@roomy-chat/sdk";
+  import { co, RoomyAccount, Space } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
   import toast from "svelte-french-toast";
 
@@ -11,12 +11,14 @@
     space,
     isAdmin = false,
     isBanned = false,
+    makeAdmin,
   }: {
     accountId: string;
-    isMe: boolean;
+    isMe?: boolean;
     space: co.loaded<typeof Space> | undefined | null;
-    isAdmin: boolean;
-    isBanned: boolean;
+    isAdmin?: boolean;
+    isBanned?: boolean;
+    makeAdmin?: () => void;
   } = $props();
 
   const account = $state(
@@ -26,6 +28,8 @@
       },
     }),
   );
+
+  let popoverOpen = $state(false);
 </script>
 
 <div
@@ -39,11 +43,17 @@
     {#if isMe}
       <Badge>You</Badge>
     {/if}
+    {#if isBanned}
+      <Badge variant="red">Banned</Badge>
+    {/if}
+    {#if isAdmin}
+      <Badge variant="green">Admin</Badge>
+    {/if}
   </div>
 
   <div>
     {#if !isMe}
-      <Popover side="left" align="end" sideOffset={5}>
+      <Popover side="left" align="end" sideOffset={5} bind:open={popoverOpen}>
         {#snippet child({ props })}
           <Button {...props} variant="ghost" size="icon">
             <Icon icon="heroicons:ellipsis-horizontal" />
@@ -54,26 +64,28 @@
             Go to profile
           </Button>
 
-          {#if !isAdmin}
-
-
-            <Button variant="red" onclick={() => {
-              if (space?.id && accountId) {
-                if (isBanned) {
-                  space.bans?.splice(space.bans?.indexOf(accountId), 1);
-                } else {
-                  space.bans?.push(accountId);
-                }
-                toast.success(isBanned ? "User unbanned" : "User banned");
-              }
-            }}>{isBanned ? "Unban user" : "Ban user"}</Button>
+          {#if !isAdmin && space}
             <Button
               variant="red"
               onclick={() => {
                 if (space?.id && accountId) {
-                  makeSpaceAdmin(space.id, accountId);
-                  toast.success("User made admin");
+                  if (isBanned) {
+                    space.bans?.splice(space.bans?.indexOf(accountId), 1);
+                  } else {
+                    space.bans?.push(accountId);
+                  }
+                  toast.success(isBanned ? "User unbanned" : "User banned");
+                  popoverOpen = false;
                 }
+              }}>{isBanned ? "Unban user" : "Ban user"}</Button
+            >
+          {/if}
+          {#if !isBanned && !isAdmin && makeAdmin}
+            <Button
+              variant="red"
+              onclick={() => {
+                makeAdmin();
+                popoverOpen = false;
               }}>Make admin</Button
             >
           {/if}

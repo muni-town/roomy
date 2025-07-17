@@ -17,7 +17,6 @@
     },
   });
 
-
   let setLastRead = $state(false);
 
   $effect(() => {

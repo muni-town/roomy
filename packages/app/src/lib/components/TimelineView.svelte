@@ -357,7 +357,7 @@
     }
   }
 
-  let bannedHandles = $derived(new Set(space.current?.bans ?? []));
+  let bannedAccounts = $derived(new Set(space.current?.bans ?? []));
 
   let users = $derived(
     space.current?.members
@@ -393,7 +393,7 @@
   );
 
   let isBanned = $derived(
-    bannedHandles.has(me.current?.profile?.blueskyHandle ?? ""),
+    bannedAccounts.has(me.current?.id ?? ""),
   );
 </script>
 
@@ -495,8 +495,8 @@
                 {/if}
               </div>
             {:else}
-              <div class="flex items-center grow flex-col">
-                <Button disabled class="w-full dz-btn"
+              <div class="flex items-center grow flex-col px-4">
+                <Button disabled class="w-full max-w-xl"
                   >You are banned from this space</Button
                 >
               </div>

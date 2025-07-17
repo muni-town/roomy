@@ -8,7 +8,7 @@
 <div class="relative flex flex-col items-center justify-start gap-2 max-w-42">
   <SpaceAvatar imageUrl={space?.imageUrl} id={space?.id} size={96} />
 
-  <span class="text-lg font-semibold">{space?.name}</span>
+  <span class="text-lg font-semibold text-center">{space?.name}</span>
 
   {#if space?.description}
     <p class="text-sm text-base-500 dark:text-base-400 max-w-full text-center line-clamp-3">
