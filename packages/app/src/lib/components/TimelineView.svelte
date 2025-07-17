@@ -29,6 +29,7 @@
   import { afterNavigate } from "$app/navigation";
   import { blueskyLoginModalState } from "@fuxui/social";
   import { joinSpace } from "./helper/joinSpace";
+  import FullscreenImage from "./helper/FullscreenImage.svelte";
 
   // Component-level threading state - scoped per channel
   let threading = $state({
@@ -520,3 +521,5 @@
     </div>
   </div>
 {/if}
+
+<FullscreenImage />
