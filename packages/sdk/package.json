@@ -21,12 +21,12 @@
     ".": "./src/index.ts"
   },
   "devDependencies": {
-    "jazz-tools": "catalog:",
-    "beachball": "^2.54.0",
-    "pkgroll": "^2.12.2",
-    "turbo": "^2.5.2",
-    "typescript": "^5.8.3",
     "@repo/tsconfig": "workspace:*",
-    "prettier": "3.5.3"
+    "beachball": "^2.54.0",
+    "jazz-tools": "catalog:",
+    "pkgroll": "^2.12.2",
+    "prettier": "3.5.3",
+    "turbo": "^2.5.2",
+    "typescript": "^5.8.3"
   }
 }

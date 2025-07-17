@@ -1,8 +1,7 @@
 import { co, z } from "jazz-tools";
-import { Space } from "./space.ts";
-import { createInbox, createSpaceList, publicGroup } from "../functions/index.ts";
+import { SpaceMeta } from "./components";
 
-export const SpaceList = co.list(Space);
+export const SpaceList = co.list(SpaceMeta);
 
 export const LastReadList = co.record(z.string(), z.date());
 
@@ -25,7 +24,7 @@ export const RoomyProfile = co.profile({
   roomyInbox: co.list(InboxItem),
   bannerUrl: z.string().optional(),
   description: z.string().optional(),
-  
+
   threadSubscriptions: z.optional(co.list(z.string())), // List of thread IDs user is subscribed to
   hiddenFeedPosts: z.optional(co.list(z.string())), // List of AT Proto URIs for hidden feed posts
 
@@ -58,13 +57,13 @@ export const RoomyAccount = co
     }
 
     if (account.profile === undefined) {
-      account.profile = RoomyProfile.create(
-        {
-          name: creationProps?.name ?? "Anonymous",
-          joinedSpaces: createSpaceList(),
-          roomyInbox: createInbox(),
-        },
-        publicGroup("reader"),
-      );
+      // account.profile = RoomyProfile.create(
+      //   {
+      //     name: creationProps?.name ?? "Anonymous",
+      //     joinedSpaces: createSpaceList(),
+      //     roomyInbox: createInbox(),
+      //   },
+      //   publicGroup("reader"),
+      // );
     }
   });
