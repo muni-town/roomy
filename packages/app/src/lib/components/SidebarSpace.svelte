@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { navigateSync } from "$lib/utils.svelte";
+  import { navigate, navigateSync } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import { co } from "jazz-tools";
   import { Space } from "@roomy-chat/sdk";
@@ -28,10 +28,19 @@
       {...props}
       href={navigateSync({ space: space?.id || "" })}
       class={[
-        "size-10 rounded-full relative group cursor-pointer",
-        isActive && "outline-4 outline-accent-500",
+        "size-10 rounded-full relative group",
+        isActive ? "outline-4 outline-accent-500 cursor-default" : "cursor-pointer",
         "transition-all duration-200 bg-base-300",
       ]}
+      onmousedown={() => {
+        if (isActive) return;
+        navigate({ space: space?.id || "" });
+      }}
+      onclick={(e) => {
+        if (!isActive) return;
+        e.preventDefault();
+        e.stopPropagation();
+      }}
     >
       <div
         class={[

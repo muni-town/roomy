@@ -91,7 +91,7 @@
     >
       <div class="flex flex-col px-0 items-center gap-1.5 py-4">
         {#if spaces}
-          {#each spaces.toReversed() as space}
+          {#each new Set(spaces.toReversed()) as space}
             <SidebarSpace {space} />
           {/each}
         {/if}
