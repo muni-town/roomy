@@ -1,5 +1,7 @@
-export * from "./schema/index.ts"
-// export * from "./functions/index.ts";
+export * from "./schema/bundles.ts";
+export * from "./schema/components.ts";
+export * from "./schema/index.ts";
+export * from "./functions/index.ts";
 
 export * from "./utils/wordlist.ts";
 

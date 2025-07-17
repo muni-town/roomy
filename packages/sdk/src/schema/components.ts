@@ -30,6 +30,13 @@ export const Embeds = defComponent(
   co.list(Entity),
 );
 
+export const CommonMark = defComponent(
+  "space.roomy.commonmark.v0",
+  co.map({
+    text: z.string(),
+  }),
+);
+
 export const PlainText = defComponent(
   "plain-text_01K07SDYCTSTPMETNME74WNA7N",
   co.map({

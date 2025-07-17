@@ -1,5 +1,6 @@
 import { co, z } from "jazz-tools";
 import { SpaceMeta } from "./components";
+import { createSpaceList, createInbox, publicGroup } from "../functions/index";
 
 export const SpaceList = co.list(SpaceMeta);
 
@@ -57,13 +58,13 @@ export const RoomyAccount = co
     }
 
     if (account.profile === undefined) {
-      // account.profile = RoomyProfile.create(
-      //   {
-      //     name: creationProps?.name ?? "Anonymous",
-      //     joinedSpaces: createSpaceList(),
-      //     roomyInbox: createInbox(),
-      //   },
-      //   publicGroup("reader"),
-      // );
+      account.profile = RoomyProfile.create(
+        {
+          name: creationProps?.name ?? "Anonymous",
+          joinedSpaces: createSpaceList(),
+          roomyInbox: createInbox(),
+        },
+        publicGroup("reader"),
+      );
     }
   });

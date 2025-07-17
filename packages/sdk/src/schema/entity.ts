@@ -165,7 +165,7 @@ type HelpersForComponents<C extends { [key: string]: Component<any, any> }> =
   // Add the universal helpers for adding and loading components
   LoadComponentHelper & AddComponentHelper & HelpersForSpecificComponents<C>;
 
-function addEntityHelpers<
+function createEntityHelperProxy<
   Components extends { [key: string]: Component<any, any> },
 >(ent: co.loaded<CoMapSchema<typeof entityMapShape>>, components: Components) {
   const helpers: LoadComponentHelper & AddComponentHelper = {
@@ -186,10 +186,9 @@ function addEntityHelpers<
       return data;
     },
   };
-  Object.assign(ent, helpers);
 
   const specificComponentHelpers = Object.fromEntries(
-    Object.entries(components).map(
+    Object.entries(components || {}).map(
       ([key, component]: [string, Component<any, any>]) => {
         return [
           key,
@@ -206,7 +205,19 @@ function addEntityHelpers<
     ),
   ) as HelpersForSpecificComponents<Components>;
 
-  Object.assign(ent, specificComponentHelpers);
+  return createHelperProxy(ent, { ...helpers, ...specificComponentHelpers });
+}
+
+export const helperProxyTarget = Symbol("helperProxyTarget");
+function createHelperProxy(object: any, helpers: { [key: string]: any }): any {
+  return new Proxy(object, {
+    get(target, key, receiver) {
+      if (key in helpers) {
+        return helpers[key as any];
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
 }
 
 /** Create a new entity schema that contains the given list of components. */
@@ -220,7 +231,7 @@ export function bundle<
       const ent = await schema.load(id, opts);
       if (!ent) return;
 
-      addEntityHelpers(ent, components);
+      createEntityHelperProxy(ent, components);
 
       return ent as any;
     },
@@ -230,7 +241,7 @@ export function bundle<
       };
       const componentsInitMap = co.record(z.string(), z.string()).create({});
 
-      for (const [key, value] of Object.entries(componentsInit)) {
+      for (const [key, value] of Object.entries(componentsInit || {})) {
         if (typeof value == "string") {
           componentsInitMap[key] = value;
         } else {
@@ -248,13 +259,13 @@ export function bundle<
       };
       const ent = schema.create(newInit, opts);
 
-      addEntityHelpers(ent, components);
+      const proxy = createEntityHelperProxy(ent, components);
 
-      return ent as any;
+      return proxy as any;
     },
   };
 
-  return Object.assign(schema, overrides);
+  return createHelperProxy(schema, overrides);
 }
 
 /** The blank entity type. */

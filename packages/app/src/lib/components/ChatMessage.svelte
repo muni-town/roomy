@@ -16,9 +16,6 @@
     RoomyAccount,
     RoomyProfile,
     Space,
-    makeSpaceAdmin,
-    messageHasAdmin,
-    publicGroup,
   } from "@roomy-chat/sdk";
   import { Account, co } from "jazz-tools";
   import MessageToolbar from "./Message/MessageToolbar.svelte";
@@ -63,17 +60,7 @@
     },
   });
 
-  let message = $derived(
-    new CoState(Message, messageId, {
-      resolve: {
-        reactions: true,
-        embeds: {
-          $each: true,
-          $onError: null,
-        },
-      },
-    }),
-  );
+  let message = $derived(new CoState(Message, messageId));
 
   let messageByMe = $derived(
     message.current?._edits.content?.by?.profile?.id ===
