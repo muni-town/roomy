@@ -14,6 +14,7 @@
   },
   "scripts": {
     "dev": "vite dev --host 127.0.0.1",
+    "build": "turbo build-web-app",
     "build-web-app": "vite build",
     "build-web-app-prod": "./scripts/build-prod.sh",
     "build:t": "env MODE=tauri vite build --mode tauri",

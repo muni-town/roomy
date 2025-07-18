@@ -10,6 +10,10 @@
       "dependsOn": ["^lint-staged"],
       "cache": false
     },
+    "build-discord-bridge": {
+      "dependsOn": ["^build-discord-bridge", "build-lib"],
+      "outputs": ["./dist/**"]
+    },
     "build-lib": {
       "dependsOn": ["^build-lib"],
       "outputs": ["./dist/**"]

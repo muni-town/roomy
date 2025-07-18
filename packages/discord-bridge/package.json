@@ -5,9 +5,10 @@
   "main": "dist/server.js",
   "type": "module",
   "scripts": {
-    "build": "tsc --project tsconfig.json",
+    "build": "turbo build-discord-bridge",
+    "build-discord-bridge": "tsc --project tsconfig.json",
     "start": "node dist/index.js",
-    "dev": "nodemon -I --exec \"node --loader ts-node/esm --require tsconfig-paths/register --experimental-specifier-resolution=node ./src/index.ts\""
+    "dev": "tsx watch -C development src/index.ts"
   },
   "dependencies": {
     "@roomy-chat/sdk": "workspace:*",
@@ -27,7 +28,6 @@
     "@types/node": "^22.15.17",
     "@types/ws": "^8.18.1",
     "nodemon": "^3.1.10",
-    "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3"
