@@ -15,12 +15,14 @@
   "scripts": {
     "dev": "tsc --watch",
     "build": "tsc",
-    "format": "prettier . --write"
+    "format": "prettier . --write",
+    "build-lib": "pnpm build"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "development": "./src/index.ts",
       "import": "./dist/index.js"
     }
   },
