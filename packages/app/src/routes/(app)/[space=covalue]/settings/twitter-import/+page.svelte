@@ -11,6 +11,38 @@
   let spaceDescription = $derived(space.current?.description ?? "");
 
   let fileList = $state<File[]>([]);
+  let tweetsJs = $derived(
+    fileList.find((file) => file.webkitRelativePath.includes("tweets.js")),
+  );
+  let tweetsPart1js = $derived(
+    fileList.find((file) =>
+      file.webkitRelativePath.includes("tweets-part1.js"),
+    ),
+  );
+
+  let mediaFiles = $derived(
+    fileList.filter((file) =>
+      file.webkitRelativePath.includes("/tweets_media/"),
+    ),
+  );
+  let fileInput = $state<HTMLInputElement | null>(null);
+  let logs = $state<string[]>([]);
+  let pending: string[] = [];
+  let scheduled = false;
+
+  export function pushLog(log: string) {
+    pending.push(log);
+
+    if (!scheduled) {
+      scheduled = true;
+
+      queueMicrotask(() => {
+        logs = [...logs, ...pending];
+        pending = [];
+        scheduled = false;
+      });
+    }
+  }
 
   // let avatarFile = $state<File | null>(null);
 
@@ -46,13 +78,39 @@
     });
   }
 
-  async function handleAvatarSelect(event: Event) {
+  async function handleFolderSelect(event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
       console.log(input.files);
       fileList = Array.from(input.files ?? []);
     }
   }
+
+  $effect(() => {
+    if (tweetsJs) {
+      tweetsJs.text().then((text) => {
+        const newText = text.replace("window.YTD.tweets.part0 = ", "");
+        const tweets = JSON.parse(newText);
+        console.log(tweets);
+        pushLog("tweets.js parsed, found " + tweets.length + " tweets");
+      });
+    }
+
+    if (tweetsPart1js) {
+      tweetsPart1js.text().then((text) => {
+        const newText = text.replace("window.YTD.tweets.part1 = ", "");
+        const tweets = JSON.parse(newText);
+        console.log(tweets);
+        pushLog("tweets-part1.js parsed, found " + tweets.length + " tweets");
+      });
+    }
+  });
+
+  $effect(() => {
+    if (mediaFiles.length > 0) {
+      pushLog("Media files found, " + mediaFiles.length + " files");
+    }
+  });
 
   // async function uploadAvatar() {
   //   if (!avatarFile || !user.agent || !space.current) return;
@@ -71,8 +129,6 @@
   //     avatarFile = null;
   //   }
   // }
-
-  let fileInput = $state<HTMLInputElement | null>(null);
 </script>
 
 <form class="pt-4 h-full">
@@ -99,7 +155,7 @@
             webkitdirectory
             multiple
             class="hidden"
-            onchange={handleAvatarSelect}
+            onchange={handleFolderSelect}
             bind:this={fileInput}
           />
           <Button variant="secondary" onclick={() => fileInput?.click()}
@@ -108,31 +164,31 @@
         </div>
 
         <div class="mt-2">
-          {#each fileList as file}
-            <div>{file.name}</div>
+          {#each logs as log}
+            <div>{log}</div>
           {/each}
         </div>
       </div>
     </div>
-  </div>
 
-  <div class="mt-6 flex items-center justify-end gap-x-6">
-    <div>
-      <Button
-        type="button"
-        variant="ghost"
-        disabled={!hasChanged}
-        onclick={resetData}
-      >
-        Cancel
-      </Button>
-      <Button type="submit" disabled={!hasChanged || isSaving} onclick={save}>
-        {#if isSaving}
-          Saving...
-        {:else}
-          Save
-        {/if}
-      </Button>
+    <div class="mt-6 flex items-center justify-end gap-x-6">
+      <div>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={!hasChanged}
+          onclick={resetData}
+        >
+          Cancel
+        </Button>
+        <Button type="submit" disabled={!hasChanged || isSaving} onclick={save}>
+          {#if isSaving}
+            Saving...
+          {:else}
+            Save
+          {/if}
+        </Button>
+      </div>
     </div>
   </div>
 </form>
