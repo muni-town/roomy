@@ -383,7 +383,7 @@
       .map((a) => a.value)
       .filter((a) => a && !a.softDeleted)
       .map((a) => ({
-        value: a?.id ?? "",
+        value: a?.account?.id ?? "",
         label: a?.account?.profile?.name ?? "",
       })) || [],
   );

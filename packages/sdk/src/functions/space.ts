@@ -19,6 +19,8 @@ import { addToFolder } from "./folder.js";
 import { createRoomyEntity } from "./roomyentity.js";
 import { addRoleToPermissions, createPermissions } from "./permissions.js";
 import { ChildrenComponent } from "../schema/folder.js";
+import { createInviteLink } from "jazz-tools/react";
+import { addMemberToSpace } from "./members.js";
 
 export async function createSpace(
   name: string,
@@ -80,22 +82,9 @@ export async function createSpace(
   membersGroup.addMember(addMembersGroup!, "writer");
   membersGroup.addMember(seeMembersGroup!, "reader");
 
-  const memberGroup = Group.create();
-  const editMembersGroupId = permissions[AllPermissions.manageMembers]!;
-  const editMembersGroup = await Group.load(editMembersGroupId);
-  memberGroup.addMember(editMembersGroup!, "writer");
-  memberGroup.addMember(seeMembersGroup!, "reader");
-
   const members = AllMembersComponent.schema.create([], membersGroup);
-  const me = MemberEntry.create(
-    {
-      account: Account.getMe(),
-      softDeleted: false,
-    },
-    memberGroup,
-  );
-  members.push(me);
   spaceObject.components[AllMembersComponent.id] = members.id;
+  await addMemberToSpace(Account.getMe(), spaceObject);
 
   // create all threads component
   const threadsGroup = Group.create();
@@ -134,13 +123,15 @@ export async function createSpace(
 
   // create member roles component
   const memberRole = Group.create();
+
+  const rolesGroup = Group.create();
   const manageRolesGroupId = permissions[AllPermissions.manageRoles]!;
   const manageRolesGroup = await Group.load(manageRolesGroupId);
-  memberRole.addMember(manageRolesGroup!, "writer");
-  memberRole.addMember(publicReadGroup!, "reader");
+  rolesGroup.addMember(manageRolesGroup!, "writer");
+  rolesGroup.addMember(publicReadGroup!, "reader");
   const roles = SpaceRolesComponent.schema.create(
     { member: memberRole.id },
-    memberRole,
+    rolesGroup,
   );
   spaceObject.components[SpaceRolesComponent.id] = roles.id;
 
@@ -158,12 +149,30 @@ export async function createSpace(
     permissions,
   );
 
-  // for testing
-  // add account co_zfQX8vuu3sW4dSLirrEg7qHV5bF to member role
-  const account = await co.account().load("co_zfQX8vuu3sW4dSLirrEg7qHV5bF");
-  if (account) {
-    console.log("adding account to member role", account.id);
-    memberRole.addMember(account, "writer");
+  // add invite account to member role as admin
+  // get from https://invites.roomy.space/service-id
+  try {
+    const inviteAccountId = await fetch(
+      "https://invites.roomy.space/service-id",
+    ).then((res) => res.text());
+    if (inviteAccountId) {
+      console.log("adding invite account to member role", inviteAccountId);
+      const inviteAccount = await co.account().load(inviteAccountId);
+      if (inviteAccount) {
+        memberRole.addMember(inviteAccount, "admin");
+      }
+    }
+  } catch (error) {
+    console.error("error adding invite account to member role", error);
+  }
+
+  // for testing for now we'll use an invite link instead
+  const inviteLink = createInviteLink(memberRole, "reader");
+  const inviteLinkParts = inviteLink.split("#/invite/");
+  const inviteLinkId = inviteLinkParts[1];
+
+  if (inviteLinkId) {
+    spaceObject.components.invite = inviteLinkId;
   }
 
   if (createDefaultChannel) {

@@ -1,7 +1,7 @@
 import { launchConfetti } from "@fuxui/visual";
 import {
-  AllMembersComponent,
-  MemberEntry,
+  addMemberToSpace,
+  Group,
   type co,
   type RoomyAccount,
   type RoomyEntity,
@@ -16,12 +16,18 @@ export async function joinSpace(
   // add to my list of joined spaces
   me.profile?.newJoinedSpacesTest?.push(space);
 
-  // add to space.current.members
-  const membersId = space.components?.[AllMembersComponent.id];
-  if (membersId) {
-    const members = await AllMembersComponent.schema.load(membersId);
-    members?.push(MemberEntry.create({ account: me, softDeleted: false }));
+  // accept invite
+  const inviteLink = space.components?.invite;
+  // split at /
+  const inviteLinkParts = inviteLink?.split("/");
+  const organizationId = inviteLinkParts?.[0];
+  const inviteSecret = inviteLinkParts?.[1] as `inviteSecret_z${string}`;
+
+  if (organizationId && inviteSecret) {
+    await me.acceptInvite(organizationId, inviteSecret, Group);
   }
+
+  await addMemberToSpace(me, space);
 
   launchConfetti();
 }

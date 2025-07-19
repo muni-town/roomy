@@ -8,3 +8,4 @@ export * from "./thread.js";
 export * from "./user.js";
 
 export * from "./static.js";
+export * from "./members.js";

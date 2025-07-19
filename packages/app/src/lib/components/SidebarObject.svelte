@@ -10,7 +10,6 @@
     RoomyAccount,
     RoomyEntity,
     ThreadComponent,
-    ThreadContent,
   } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
   import SidebarObjectList from "./SidebarObjectList.svelte";
@@ -42,8 +41,8 @@
   );
 
   const thread = $derived(
-    object?.components?.thread
-      ? new CoState(ThreadContent, object?.components?.thread)
+    object?.components?.[ThreadComponent.id]
+      ? new CoState(ThreadComponent.schema, object?.components?.[ThreadComponent.id])
       : null,
   );
 
