@@ -14,8 +14,8 @@
     Message,
     Reaction,
     RoomyAccount,
+    RoomyEntity,
     RoomyProfile,
-    Space,
     messageHasAdmin,
     publicGroup,
   } from "@roomy-chat/sdk";
@@ -48,7 +48,7 @@
     previousMessageId?: string;
     isAdmin?: boolean;
     admin: co.loaded<typeof Account> | undefined | null;
-    space: co.loaded<typeof Space> | undefined | null;
+    space: co.loaded<typeof RoomyEntity> | undefined | null;
     threadId?: string;
     allowedToInteract?: boolean;
     threading?: { active: boolean; selectedMessages: string[] };
@@ -307,7 +307,7 @@
   }
 </script>
 
-{#if shouldShow}
+{#if shouldShow || true}
   <div
     id={message.current?.id}
     class={`flex flex-col w-full relative max-w-screen isolate px-4`}

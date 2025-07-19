@@ -1,26 +1,27 @@
-import { co, Group } from "jazz-tools";
-import { PageContent } from "../schema/index.js";
-import { publicGroup } from "./group.js";
+import { Group } from "jazz-tools";
+import { PageComponent } from "../schema/index.js";
 import { createRoomyObject } from "./roomyobject.js";
 
-export function createPage(name: string, adminGroup: Group) {
-  const readingGroup = publicGroup();
-  readingGroup.addMember(adminGroup);
+export async function createPage(name: string, permissions: Record<string, string>) {
+  const publicReadGroupId = permissions.publicRead;
+  const publicReadGroup = await Group.load(publicReadGroupId!);
 
-  const page = PageContent.create(
+  const pageContentGroup = Group.create();
+  pageContentGroup.addMember(publicReadGroup!);
+
+  const page = PageComponent.schema.create(
     {
       text: "",
-      //editableText: co.richText().create("", readingGroup),
     },
-    readingGroup,
+    pageContentGroup,
   );
 
-  const roomyObject = createRoomyObject(name, adminGroup);
+  const {roomyObject, entityGroup, componentsGroup} = await createRoomyObject(name, permissions);
 
   if (!roomyObject.components) {
     throw new Error("RoomyObject components is undefined");
   }
-  roomyObject.components.page = page.id;
+  roomyObject.components[PageComponent.id] = page.id;
 
   return { page, roomyObject };
 }

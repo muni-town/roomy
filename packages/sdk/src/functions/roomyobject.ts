@@ -1,22 +1,24 @@
-import { Account, co, Group, z } from "jazz-tools";
-import { RoomyObject } from "../schema/index.js";
-import { publicGroup } from "./group.js";
+import { co, Group, z } from "jazz-tools";
+import { AllPermissions, RoomyEntity } from "../schema/index.js";
 
-export function createRoomyObject(name: string, adminGroup: Group) {
-  const publicReadGroup = publicGroup("reader");
+export async function createRoomyObject(name: string, permissions: Record<string, string>) {
+  const publicReadGroupId = permissions[AllPermissions.publicRead]!;
+  const publicReadGroup = await Group.load(publicReadGroupId);
 
-  const componentsGroup = publicGroup("reader");
-  componentsGroup.addMember(adminGroup);
+  const entityGroup = Group.create();
+  entityGroup.addMember(publicReadGroup!);
 
-  const roomyObject = RoomyObject.create(
+  const componentsGroup = Group.create();
+  componentsGroup.addMember(publicReadGroup!);
+
+  const roomyObject = RoomyEntity.create(
     {
       name,
       components: co.record(z.string(), z.string()).create({}, componentsGroup),
-      creatorId: Account.getMe().id,
       softDeleted: false,
     },
-    publicReadGroup,
+    entityGroup,
   );
 
-  return roomyObject;
+  return {roomyObject, entityGroup, componentsGroup};
 }

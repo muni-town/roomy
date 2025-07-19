@@ -4,7 +4,7 @@
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import { AccountCoState, CoState } from "jazz-tools/svelte";
-  import { isSpaceAdmin, RoomyAccount, Space } from "@roomy-chat/sdk";
+  import { isSpaceAdmin, RoomyAccount, RoomyEntity } from "@roomy-chat/sdk";
   import toast from "svelte-french-toast";
   import SpaceAvatar from "./SpaceAvatar.svelte";
   import { joinSpace } from "./helper/joinSpace";
@@ -13,11 +13,9 @@
 
   let space = $derived(
     page.params?.space
-      ? new CoState(Space, page.params.space, {
+      ? new CoState(RoomyEntity, page.params.space, {
           resolve: {
-            rootFolder: {
-              components: true,
-            },
+            components: true,
           },
         })
       : null,
@@ -66,7 +64,7 @@
   let popoverOpen = $state(false);
 
   let hasJoinedSpace = $derived(
-    me.current?.profile?.joinedSpaces?.some(
+    me.current?.profile?.newJoinedSpacesTest?.some(
       (joinedSpace) => joinedSpace?.id === space?.current?.id,
     ),
   );

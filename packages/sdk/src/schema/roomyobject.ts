@@ -1,6 +1,6 @@
 import { co, z } from "jazz-tools";
 
-export const RoomyObject = co.map({
+export const RoomyEntity = co.map({
   name: z.string(),
   description: z.string().optional(),
 
@@ -8,7 +8,7 @@ export const RoomyObject = co.map({
 
   softDeleted: z.boolean().optional(),
 
-  creatorId: z.string().optional(),
-
   version: z.number().optional(),
+
+  imageUrl: z.string().optional(),
 });

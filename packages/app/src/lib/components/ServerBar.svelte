@@ -3,7 +3,7 @@
   import Icon from "@iconify/svelte";
   import SidebarSpace from "$lib/components/SidebarSpace.svelte";
   import { co } from "jazz-tools";
-  import { RoomyAccount, Space, SpaceList } from "@roomy-chat/sdk";
+  import { RoomyAccount, RoomyEntity, RoomyEntityList } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
   import { page } from "$app/state";
   import {
@@ -21,16 +21,16 @@
     spaces,
     me,
   }: {
-    spaces: co.loaded<typeof SpaceList> | undefined | null;
+    spaces: co.loaded<typeof RoomyEntityList> | undefined | null;
     me: co.loaded<typeof RoomyAccount> | undefined | null;
   } = $props();
 
   let isNewSpaceDialogOpen = $state(false);
 
-  let openSpace = $derived(new CoState(Space, page.params.space));
+  let openSpace = $derived(new CoState(RoomyEntity, page.params.space));
 
   let isOpenSpaceJoined = $derived(
-    me?.profile?.joinedSpaces?.some((x) => x?.id === openSpace.current?.id),
+    me?.profile?.newJoinedSpacesTest?.some((x) => x?.id === openSpace.current?.id),
   );
 </script>
 

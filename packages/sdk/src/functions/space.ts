@@ -1,61 +1,66 @@
-import { Account, co, Group, z } from "jazz-tools";
+import { Account, co, Group } from "jazz-tools";
 import { allSpacesListId } from "../ids.js";
-import { IDList, RoomyObject, Space } from "../schema/index.js";
+import { AllFoldersComponent, AllMembersComponent, AllPagesComponent, AllPermissions, AllThreadsComponent, BansComponent, IDList, MemberEntry, RoomyEntity, Space, SpacePermissionsComponent } from "../schema/index.js";
 import { createThread } from "./thread.js";
-import { publicGroup } from "./group.js";
-import { addToFolder, createFolder } from "./folder.js";
+import { addToFolder } from "./folder.js";
+import { createRoomyObject } from "./roomyobject.js";
+import { createPermissions } from "./permissions.js";
+import { ChildrenComponent } from "../schema/folder.js";
 
-export function createSpace(
+export async function createSpace(
   name: string,
   description?: string,
   createDefaultChannel: boolean = true,
 ) {
-  // user is already admin
-  const adminGroup = Group.create();
+  const permissions = createPermissions();
 
-  const readerGroup = Group.create();
-  // add reading for everyone
-  readerGroup.addMember("everyone", "reader");
-  readerGroup.addMember(adminGroup);
+  const publicGroupId = permissions[AllPermissions.publicRead]!;
+  const publicReadGroup = await Group.load(publicGroupId!);
+  // if we take the next line out, the space is not visible to the public anymore
+  publicReadGroup?.addMember("everyone", "reader");
 
-  const publicWriteGroup = publicGroup("writer");
+  const {roomyObject: spaceObject, entityGroup, componentsGroup} = await createRoomyObject(name, permissions);
 
-  const rootFolder = createFolder("root", adminGroup);
+  spaceObject.name = name;
+  spaceObject.description = description;
+  spaceObject.version = 3;
 
-  const threads = co.feed(RoomyObject).create([], publicWriteGroup);
+  const spacePermissions = SpacePermissionsComponent.schema.create(permissions, publicReadGroup!);
+  spaceObject.components[SpacePermissionsComponent.id] = spacePermissions.id;
+
+  const children = ChildrenComponent.schema.create([], publicReadGroup!);
+  spaceObject.components[ChildrenComponent.id] = children.id;
+  
+  const members = AllMembersComponent.schema.create([], publicReadGroup!);
+  const me = MemberEntry.create({
+    account: Account.getMe(),
+    softDeleted: false,
+  }, publicReadGroup!);
+  members.push(me);
+  spaceObject.components[AllMembersComponent.id] = members.id;
+
+  const threads = AllThreadsComponent.schema.create([], publicReadGroup!);
+  spaceObject.components[AllThreadsComponent.id] = threads.id;
+
+  const pages = AllPagesComponent.schema.create([], publicReadGroup!);
+  spaceObject.components[AllPagesComponent.id] = pages.id;
+
+  const folders = AllFoldersComponent.schema.create([], publicReadGroup!);
+  spaceObject.components[AllFoldersComponent.id] = folders.id;
+
+  const bans = BansComponent.schema.create([], publicReadGroup!);
+  spaceObject.components[BansComponent.id] = bans.id;
 
   if (createDefaultChannel) {
-    const thread = createThread("general", adminGroup);
+    const thread = await createThread("general", permissions);
 
     threads.push(thread.roomyObject);
-    addToFolder(rootFolder, thread.roomyObject);
+    addToFolder(spaceObject, thread.roomyObject);
   }
 
-  const space = Space.create(
-    {
-      name,
-      description,
-      members: co
-        .list(co.account())
-        .create([Account.getMe()], publicWriteGroup),
-      version: 2,
-      creatorId: Account.getMe().id,
-      adminGroupId: adminGroup.id,
-      
-      rootFolder,
+  addToAllSpacesList(spaceObject.id);
 
-      threads,
-      pages: co.list(RoomyObject).create([], publicWriteGroup),
-      folders: co.list(RoomyObject).create([], publicWriteGroup),
-
-      bans: co.list(z.string()).create([], readerGroup),
-    },
-    readerGroup,
-  );
-
-  addToAllSpacesList(space.id);
-
-  return space;
+  return spaceObject;
 }
 
 export async function addToAllSpacesList(spaceId: string) {
@@ -65,7 +70,7 @@ export async function addToAllSpacesList(spaceId: string) {
 }
 
 export function isSpaceAdmin(
-  space: co.loaded<typeof Space> | undefined | null,
+  space: co.loaded<typeof RoomyEntity> | undefined | null,
 ) {
   if (!space) return false;
 

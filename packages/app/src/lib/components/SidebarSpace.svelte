@@ -2,12 +2,12 @@
   import { navigate, navigateSync } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import { co } from "jazz-tools";
-  import { Space } from "@roomy-chat/sdk";
+  import { RoomyEntity } from "@roomy-chat/sdk";
   import { Tooltip } from "@fuxui/base";
   import SpaceAvatar from "./SpaceAvatar.svelte";
 
   type Props = {
-    space: co.loaded<typeof Space> | null | undefined;
+    space: co.loaded<typeof RoomyEntity> | null | undefined;
     hasJoined?: boolean;
   };
 

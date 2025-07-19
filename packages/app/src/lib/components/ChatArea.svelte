@@ -11,7 +11,7 @@
   import { setContext } from "svelte";
   import { page } from "$app/state";
   import { Account, co } from "jazz-tools";
-  import type { Space } from "@roomy-chat/sdk";
+  import type { RoomyEntity } from "@roomy-chat/sdk";
   import Icon from "@iconify/svelte";
   import toast from "svelte-french-toast";
   import { Button } from "@fuxui/base";
@@ -30,7 +30,7 @@
     virtualizer?: Virtualizer<string>;
     isAdmin?: boolean;
     admin: co.loaded<typeof Account> | undefined | null;
-    space: co.loaded<typeof Space> | undefined | null;
+    space: co.loaded<typeof RoomyEntity> | undefined | null;
     threadId?: string;
     allowedToInteract?: boolean;
     threading?: { active: boolean; selectedMessages: string[] };

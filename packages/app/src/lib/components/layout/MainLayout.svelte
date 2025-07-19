@@ -52,7 +52,7 @@
       {#if serverBar}
         {@render serverBar?.()}
       {:else}
-        <ServerBar spaces={me.current?.profile.joinedSpaces} me={me.current} />
+        <ServerBar spaces={me.current?.profile.newJoinedSpacesTest} me={me.current} />
       {/if}
     </SmallSidebar>
     {#if sidebar}

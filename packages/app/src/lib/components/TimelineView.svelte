@@ -9,8 +9,7 @@
     LastReadList,
     Message,
     RoomyAccount,
-    RoomyObject,
-    Space,
+    RoomyEntity,
     ThreadContent,
     addToInbox,
     createMessage,
@@ -18,6 +17,11 @@
     isSpaceAdmin,
     type ImageUrlEmbedCreate,
     type VideoUrlEmbedCreate,
+    RoomyEntityFeed,
+    AllThreadsComponent,
+    ThreadComponent,
+    SpacePermissionsComponent,
+    BansComponent,
   } from "@roomy-chat/sdk";
   import { AccountCoState, CoState } from "jazz-tools/svelte";
   import { user } from "$lib/user.svelte";
@@ -40,13 +44,9 @@
   let { objectId, spaceId }: { objectId: string; spaceId: string } = $props();
 
   let space = $derived(
-    new CoState(Space, spaceId, {
+    new CoState(RoomyEntity, spaceId, {
       resolve: {
-        bans: {
-          $each: true,
-          $onError: null,
-        },
-        members: {
+        components: {
           $each: true,
           $onError: null,
         },
@@ -54,11 +54,18 @@
     }),
   );
 
+  let permissions = $derived(
+    new CoState(
+      SpacePermissionsComponent.schema,
+      space.current?.components?.[SpacePermissionsComponent.id],
+    ),
+  );
+
   let creator = $derived(new CoState(Account, space.current?.creatorId));
   let adminGroup = $derived(new CoState(Group, space.current?.adminGroupId));
 
   let threadObject = $derived(
-    new CoState(RoomyObject, objectId, {
+    new CoState(RoomyEntity, objectId, {
       resolve: {
         components: {
           $each: true,
@@ -69,7 +76,10 @@
   );
 
   let threadContent = $derived(
-    new CoState(ThreadContent, threadObject.current?.components?.thread),
+    new CoState(
+      ThreadComponent.schema,
+      threadObject.current?.components?.[ThreadComponent.id],
+    ),
   );
 
   let timeline = $derived.by(() => {
@@ -87,7 +97,7 @@
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
       profile: {
-        joinedSpaces: true,
+        newJoinedSpacesTest: true,
       },
     },
   });
@@ -185,13 +195,13 @@
     }
 
     if (firstMessage) {
-      firstMessage.threadId = newThread.roomyObject.id;
+      firstMessage.threadId = newThread.RoomyEntity.id;
     }
 
-    space.current?.threads?.push(newThread.roomyObject);
+    space.current?.threads?.push(newThread.RoomyEntity);
 
     // TODO: fix this; removed to appease husky
-    // threadObject.current?.childrenIds?.push(newThread.roomyObject.id);
+    // threadObject.current?.childrenIds?.push(newThread.RoomyEntity.id);
 
     threading.active = false;
     threading.selectedMessages = [];
@@ -255,15 +265,23 @@
       }
     }
 
-    const message = createMessage(
+    console.log("permissions", permissions.current);
+    if (!permissions.current) {
+      toast.error("You are not allowed to send messages in this space");
+      isSendingMessage = false;
+      return;
+    }
+
+    const message = await createMessage(
       messageInput,
       undefined,
-      adminGroup.current || undefined,
       filesUrls,
+      permissions.current,
     );
 
     let timeline = threadContent.current?.timeline;
     if (timeline) {
+      console.log("pushing message to timeline", message.id);
       timeline.push(message.id);
     }
     if (replyTo.id) {
@@ -299,19 +317,6 @@
         );
       }
     }
-
-    // if (links?.timeline) {
-    //   for (const link of allLinks) {
-    //     if (!link.startsWith("http")) continue;
-
-    //     const message = createMessage(
-    //       `<a href="${link}">${link}</a>`,
-    //       undefined,
-    //       adminGroup.current || undefined,
-    //     );
-    //     links.timeline.push(message.id);
-    //   }
-    // }
 
     messageInput = "";
     for (let i = filesInMessage.length - 1; i >= 0; i--) {
@@ -359,7 +364,8 @@
     }
   }
 
-  let bannedAccounts = $derived(new Set(space.current?.bans ?? []));
+  let bannedAccounts = $derived(new CoState(BansComponent.schema, space.current?.components?.[BansComponent.id]));
+  let bannedAccountsSet = $derived(new Set(bannedAccounts.current?.map((ban) => ban)));
 
   let users = $derived(
     space.current?.members
@@ -370,8 +376,15 @@
       .filter((user) => user.value && user.label) || [],
   );
 
+  const threadFeed = $derived(
+    new CoState(
+      AllThreadsComponent.schema,
+      space.current?.components?.[AllThreadsComponent.id],
+    ),
+  );
+
   let threads = $derived(
-    Object.values(space.current?.threads?.perAccount ?? {})
+    Object.values(threadFeed.current?.perAccount ?? {})
       .map((accountFeed) => new Array(...accountFeed.all))
       .flat()
       .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
@@ -389,16 +402,16 @@
   let context = $derived([...threads]);
 
   let hasJoinedSpace = $derived(
-    me.current?.profile?.joinedSpaces?.some(
+    me.current?.profile?.newJoinedSpacesTest?.some(
       (joinedSpace) => joinedSpace?.id === space.current?.id,
     ),
   );
 
-  let isBanned = $derived(bannedAccounts.has(me.current?.id ?? ""));
+  let isBanned = $derived(bannedAccountsSet.has(me.current?.id ?? ""));
 </script>
 
 <!-- hack to get the admin to load ^^ it has to be used somewhere in this file -->
-{#if creator.current}
+{#if permissions.current}
   <div class="absolute top-0 left-0"></div>
 {/if}
 

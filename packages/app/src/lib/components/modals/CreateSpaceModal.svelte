@@ -27,9 +27,9 @@
       me.profile.joinedSpaces = createSpaceList();
     }
 
-    const space = createSpace(newSpaceName);
+    const space = await createSpace(newSpaceName);
 
-    me?.profile?.joinedSpaces?.push(space);
+    me?.profile?.newJoinedSpacesTest?.push(space);
 
     newSpaceName = "";
 

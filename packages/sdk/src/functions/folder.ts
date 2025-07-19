@@ -1,28 +1,36 @@
 import { co, Group } from "jazz-tools";
 import { createRoomyObject } from "./roomyobject.js";
-import { IDList, RoomyObject } from "../schema/index.js";
-import { publicGroup } from "./group.js";
+import { RoomyEntity } from "../schema/index.js";
+import { ChildrenComponent } from "../schema/folder.js";
 
-export function createFolder(name: string, adminGroup: Group, allowEveryoneToAddChildren: boolean = false) {
+export async function createFolder(name: string, permissions: Record<string, string>) {
   // folder doesnt need any content, it just has children
-  const folder = createRoomyObject(name, adminGroup);
+  const {roomyObject: folder, entityGroup, componentsGroup} = await createRoomyObject(name, permissions);
 
-  const addChildrenGroup = publicGroup(allowEveryoneToAddChildren ? "writer" : "reader");
-  addChildrenGroup.addMember(adminGroup);
+  const publicReadGroupId = permissions.publicRead!;
+  const publicReadGroup = await Group.load(publicReadGroupId);
 
-  const children = IDList.create([], addChildrenGroup);
+  const childrenGroup = Group.create();
+  childrenGroup.addMember(publicReadGroup!);
 
-  folder.components['children'] = children.id;
+  const children = ChildrenComponent.schema.create([], childrenGroup);
+
+  folder.components[ChildrenComponent.id] = children.id;
 
   return folder;
 }
 
-
-export async function addToFolder(folder: co.loaded<typeof RoomyObject>, item: co.loaded<typeof RoomyObject>) {
-  const childrenId = folder.components?.children;
+export async function addToFolder(folder: co.loaded<typeof RoomyEntity>, item: co.loaded<typeof RoomyEntity>) {
+  await folder.ensureLoaded({
+    resolve: {
+      components: true
+    }
+  });
+  
+  const childrenId = folder.components?.[ChildrenComponent.id];
 
   if (childrenId) {
-    const children = await IDList.load(childrenId);
-    children?.push(item.id);
+    const children = await ChildrenComponent.schema.load(childrenId);
+    children?.push(item);
   }
 }

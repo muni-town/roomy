@@ -1,28 +1,51 @@
 import { Account, co, Group, z } from "jazz-tools";
 import { publicGroup } from "./group.js";
-import { Embed, ImageUrlEmbed, Message, Reaction, ThreadContent, Timeline, VideoUrlEmbed } from "../schema/threads.js";
+import { Embed, ImageUrlEmbed, Message, Reaction, SubThreadsComponent, ThreadComponent, Timeline, VideoUrlEmbed } from "../schema/threads.js";
 import { createRoomyObject } from "./roomyobject.js";
+import { AllPermissions } from "../schema/space.js";
 
-export function createThread(name: string, adminGroup: Group) {
-  const publicWriteGroup = publicGroup("writer");
-  const publicReadGroup = publicGroup("reader");
+export async function createThread(name: string, permissions: Record<string, string>) {
+  const publicReadGroupId = permissions[AllPermissions.publicRead]!;
+  const publicReadGroup = await Group.load(publicReadGroupId);
 
-  const thread = ThreadContent.create(
+  const addMessagesGroupId = permissions[AllPermissions.sendMessages]!;
+  const addMessagesGroup = await Group.load(addMessagesGroupId);
+
+  const threadContentGroup = Group.create();
+  threadContentGroup.addMember(publicReadGroup!, "reader");
+
+  const timelineGroup = Group.create();
+  timelineGroup.addMember(publicReadGroup!, "reader");
+  timelineGroup.addMember(addMessagesGroup!, "writer");
+
+  const addThreadsGroupId = permissions[AllPermissions.createThreads]!;
+  const addThreadsGroup = await Group.load(addThreadsGroupId);
+
+  const subThreadsGroup = Group.create();
+  subThreadsGroup.addMember(publicReadGroup!, "reader");
+  subThreadsGroup.addMember(addThreadsGroup!, "writer");
+
+  const thread = ThreadComponent.schema.create(
     {
-      timeline: Timeline.create([], publicWriteGroup),
+      timeline: Timeline.create([], timelineGroup),
     },
-    publicReadGroup,
+    threadContentGroup,
   );
 
-  const roomyObject = createRoomyObject(name, adminGroup);
+  const {roomyObject, entityGroup, componentsGroup} = await createRoomyObject(name, permissions);
+
+  const manageThreadsGroupId = permissions[AllPermissions.manageThreads]!;
+  const manageThreadsGroup = await Group.load(manageThreadsGroupId);
+
+  entityGroup.addMember(manageThreadsGroup!, "writer");
 
   if (!roomyObject.components) {
     throw new Error("RoomyObject components is undefined");
   }
-  roomyObject.components.thread = thread.id;
+  roomyObject.components[ThreadComponent.id] = thread.id;
 
-  const childrenThreads = co.feed(z.string()).create([], publicWriteGroup);
-  roomyObject.components.childrenThreads = childrenThreads.id;
+  const subThreads = SubThreadsComponent.schema.create([], subThreadsGroup);
+  roomyObject.components[SubThreadsComponent.id] = subThreads.id;
 
   return { roomyObject, thread };
 }
@@ -42,61 +65,80 @@ export type VideoUrlEmbedCreate = {
   };
 };
 
-export function createMessage(
+export async function createMessage(
   input: string,
   replyTo?: string,
-  admin?: co.loaded<typeof Group>,
   embeds?: (ImageUrlEmbedCreate | VideoUrlEmbedCreate)[],
+  permissions?: Record<string, string>,
 ) {
-  const readingGroup = publicGroup("reader");
+  const publicReadGroupId = permissions?.[AllPermissions.publicRead]!;
+  const publicReadGroup = await Group.load(publicReadGroupId);
 
-  if (admin) {
-    readingGroup.extend(admin);
-  }
+  const messageGroup = Group.create();
+  messageGroup.addMember(publicReadGroup!, "reader");
+
+  const addReactionsGroupId = permissions?.[AllPermissions.reactToMessages]!;
+  const addReactionsGroup = await Group.load(addReactionsGroupId);
+  
+  const reactionsGroup = Group.create();
+  reactionsGroup.addMember(publicReadGroup!, "reader");
+  reactionsGroup.addMember(addReactionsGroup!, "writer");
+
+  const hiddenInGroup = Group.create();
+  hiddenInGroup.addMember(publicReadGroup!, "reader");
+
+  const hideMessagesInThreadsGroupId = permissions?.[AllPermissions.hideMessagesInThreads]!;
+  const hideMessagesInThreadsGroup = await Group.load(hideMessagesInThreadsGroupId);
+  hiddenInGroup.addMember(hideMessagesInThreadsGroup!, "writer");
 
   let embedsList;
   if (embeds && embeds.length > 0) {
-    embedsList = co.list(Embed).create([], readingGroup);
+    const embedsGroup = Group.create();
+    embedsGroup.addMember(publicReadGroup!, "reader");
+
+    embedsList = co.list(Embed).create([], embedsGroup);
     for (const embed of embeds) {
+      const embedGroup = Group.create();
+      embedGroup.addMember(publicReadGroup!, "reader");
+
       if (embed.type === "imageUrl") {
         const imageUrlEmbed = ImageUrlEmbed.create(
           { url: embed.data.url },
-          readingGroup,
+          embedGroup,
         );
 
         embedsList.push(
           Embed.create(
             { type: "imageUrl", embedId: imageUrlEmbed.id },
-            readingGroup,
+            embedGroup,
           ),
         );
       } else if (embed.type === "videoUrl") {
         const videoUrlEmbed = VideoUrlEmbed.create(
           { url: embed.data.url },
-          readingGroup,
+          embedGroup,
         );
         embedsList.push(
           Embed.create(
             { type: "videoUrl", embedId: videoUrlEmbed.id },
-            readingGroup,
+            embedGroup,
           ),
         );
       }
     }
   }
-  const publicWriteGroup = publicGroup("writer");
 
   const message = Message.create(
     {
       content: input,
       createdAt: new Date(),
       updatedAt: new Date(),
-      reactions: co.list(Reaction).create([], publicWriteGroup),
+      reactions: co.list(Reaction).create([], reactionsGroup),
       replyTo: replyTo,
-      hiddenIn: co.list(z.string()).create([], readingGroup),
+      hiddenIn: co.list(z.string()).create([], hiddenInGroup),
       embeds: embedsList,
     },
-    readingGroup,
+    messageGroup,
   );
 
   return message;

@@ -1,32 +1,26 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { IDList, RoomyObject, Space } from "@roomy-chat/sdk";
+  import { RoomyEntity, ChildrenComponent } from "@roomy-chat/sdk";
   import { navigate } from "$lib/utils.svelte";
   import { CoState } from "jazz-tools/svelte";
 
   let space = $derived(
-    new CoState(Space, page.params.space, {
+    new CoState(RoomyEntity, page.params.space, {
       resolve: {
-        rootFolder: {
-          components: true
-        },
+        components: true,
       },
     }),
   );
 
-  let children = $derived(new CoState(IDList, space.current?.rootFolder.components.children));
+  let children = $derived(
+    new CoState(ChildrenComponent.schema, space.current?.components[ChildrenComponent.id]),
+  );
 
-  async function navigateToFirstThread() {
-    if (
-      !space.current ||
-      !children.current ||
-      children.current?.length === 0
-    )
+  async function navigateToFirstChild() {
+    if (!space.current || !children.current || children.current?.length === 0)
       return;
 
-    // load roomyobjects and find first thread
-    for (const childId of children.current ?? []) {
-      const child = await RoomyObject.load(childId);
+    for (const child of children.current ?? []) {
       if (!child) continue;
 
       navigate({
@@ -40,6 +34,8 @@
   // Automatically navigate to the first object in the space if we come to this empty space index
   // page. We might have useful features on this index page eventually.
   $effect(() => {
-    navigateToFirstThread();
+    navigateToFirstChild();
   });
 </script>
+
+<div class="text-base-900 dark:text-base-100">hello there</div>

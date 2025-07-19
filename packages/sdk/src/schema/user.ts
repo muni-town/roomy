@@ -1,6 +1,7 @@
 import { co, z } from "jazz-tools";
 import { Space } from "./space.js";
 import { createInbox, createSpaceList, publicGroup } from "../functions/index.js";
+import { RoomyEntity, RoomyEntityList } from "./index.js";
 
 export const SpaceList = co.list(Space);
 
@@ -39,6 +40,8 @@ export const RoomyProfile = co.profile({
       }),
     ),
   ), // Cache of hidden post data for better UI display
+
+  newJoinedSpacesTest: co.list(RoomyEntity)
 });
 
 export const RoomyRoot = co.map({
@@ -63,6 +66,7 @@ export const RoomyAccount = co
           name: creationProps?.name ?? "Anonymous",
           joinedSpaces: createSpaceList(),
           roomyInbox: createInbox(),
+          newJoinedSpacesTest: RoomyEntityList.create([], publicGroup("reader")),
         },
         publicGroup("reader"),
       );

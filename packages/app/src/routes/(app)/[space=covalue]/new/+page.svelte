@@ -5,42 +5,52 @@
   import { navigate } from "$lib/utils.svelte";
   import { Button, Input, Select } from "@fuxui/base";
   import {
-  addToFolder,
+    addToFolder,
+    AllFoldersComponent,
+    AllPagesComponent,
+    AllThreadsComponent,
     co,
     createFolder,
     createPage,
     createThread,
-    Group,
-    IDList,
-    RoomyObject,
-    Space,
+    RoomyEntity,
+    SpacePermissionsComponent,
   } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
 
   let space = $derived(
-    new CoState(Space, page.params.space, {
+    new CoState(RoomyEntity, page.params.space, {
       resolve: {
-        folders: true,
-        threads: true,
-        pages: true,
+        components: true,
       },
     }),
   );
 
-  const rootChildren = $derived(
-    new CoState(IDList, space?.current?.rootFolder?.components?.children),
+  const allFolders = $derived(
+    new CoState(AllFoldersComponent.schema, space?.current?.components?.[AllFoldersComponent.id]),
   );
 
-  let adminGroup = $derived(new CoState(Group, space?.current?.adminGroupId));
+  const permissions = $derived(
+    new CoState(SpacePermissionsComponent.schema, space?.current?.components?.[SpacePermissionsComponent.id]),
+  );
 
-  let objectType = $state("thread");
+  const allThreads = $derived(
+    new CoState(AllThreadsComponent.schema, space?.current?.components?.[AllThreadsComponent.id]),
+  );
+
+  const allPages = $derived(
+    new CoState(AllPagesComponent.schema, space?.current?.components?.[AllPagesComponent.id]),
+  );
+
+  let objectType = $state("Channel");
   let objectName = $state("");
 
-  async function addAsChild(object: co.loaded<typeof RoomyObject>) {
+  async function addAsChild(object: co.loaded<typeof RoomyEntity>) {
     if (selectedParent === "root") {
-      rootChildren.current?.push(object.id);
+      console.log("adding to root", space.current, object);
+      addToFolder(space.current!, object);
     } else {
-      const folder = space.current?.folders?.find((folder) => folder?.id === selectedParent);
+      const folder = allFolders.current?.find((folder) => folder?.id === selectedParent);
 
       if(folder) {
         addToFolder(folder, object);
@@ -48,7 +58,7 @@
     }
   }
 
-  function createObject(event: Event) {
+  async function createObject(event: Event) {
     event.preventDefault();
     console.log(objectType, objectName);
 
@@ -56,38 +66,38 @@
       return;
     }
 
-    if (!adminGroup.current || !space?.current) {
-      console.error("Admin group or space not found");
+    if (!space?.current) {
+      console.error("Space not found");
       return;
     }
 
-    if (objectType === "thread") {
+    if (!permissions.current) {
+      console.error("Permissions not found");
+      return;
+    }
+
+    if (objectType === "Channel") {
       // add thread
-      const thread = createThread(objectName, adminGroup.current);
-
-      // find first folder
-      const firstFolder = space.current?.folders?.[0];
-
-      console.log(firstFolder);
+      const thread = await createThread(objectName, permissions.current);
 
       addAsChild(thread.roomyObject);
 
-      space.current?.threads?.push(thread.roomyObject);
+      allThreads.current?.push(thread.roomyObject);
       navigate({ space: space.current?.id, object: thread.roomyObject.id });
-    } else if (objectType === "group") {
+    } else if (objectType === "Group") {
       // add group
-      const group = createFolder(objectName, adminGroup.current);
+      const group = await createFolder(objectName, permissions.current);
 
       addAsChild(group);
 
-      space.current?.folders?.push(group);
-    } else if (objectType === "page") {
+      allFolders.current?.push(group);
+    } else if (objectType === "Page") {
       // add page
-      const page = createPage(objectName, adminGroup.current);
+      const page = await createPage(objectName, permissions.current);
 
       addAsChild(page.roomyObject);
 
-      space.current?.pages?.push(page.roomyObject);
+      allPages.current?.push(page.roomyObject);
       navigate({ space: space.current?.id, object: page.roomyObject.id });
     }
   }
@@ -95,13 +105,15 @@
   let selectedParent = $state("root");
 
   let folders = $derived(
-    (space.current?.folders ?? []).map((folder) => {
+    (allFolders.current ?? []).map((folder) => {
       return {
         value: folder?.id,
         label: folder?.name,
       };
     }).filter((folder) => folder.value && folder.label) as { value: string; label: string }[]
   );
+
+  const types = ['Channel', 'Group', 'Page'];
 </script>
 
 {#if space.current}
@@ -151,52 +163,24 @@
         Choose the type of object you want to create.
       </p>
       <div class="mt-6 space-y-4">
-        <div class="flex items-center gap-x-3">
-          <input
-            id="thread-type"
-            name="thread-type"
+        {#each types as type}
+          <div class="flex items-center gap-x-3">
+            <input
+              id="{type}-type"
+            name="{type}-type"
             type="radio"
             checked
             bind:group={objectType}
-            value="thread"
+            value={type}
             class="relative size-4 appearance-none rounded-full border border-base-300 dark:border-base-700 bg-white dark:bg-base-800 before:absolute before:inset-1 before:rounded-full before:bg-white not-checked:before:hidden checked:border-accent-600 dark:checked:border-accent-400 dark:checked:bg-accent-400 checked:bg-accent-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600 disabled:border-base-300 disabled:bg-base-100 disabled:before:bg-base-400 forced-colors:appearance-auto forced-colors:before:hidden"
           />
           <label
-            for="thread-type"
+            for="{type}-type"
             class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-            >Channel</label
+            >{type}</label
           >
         </div>
-        <div class="flex items-center gap-x-3">
-          <input
-            id="group-type"
-            name="group-type"
-            type="radio"
-            bind:group={objectType}
-            value="group"
-            class="relative size-4 appearance-none rounded-full border border-base-300 dark:border-base-700 bg-white dark:bg-base-800 before:absolute before:inset-1 before:rounded-full before:bg-white not-checked:before:hidden checked:border-accent-600 dark:checked:border-accent-400 dark:checked:bg-accent-400 checked:bg-accent-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600 disabled:border-base-300 disabled:bg-base-100 disabled:before:bg-base-400 forced-colors:appearance-auto forced-colors:before:hidden"
-          />
-          <label
-            for="group-type"
-            class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-            >Group</label
-          >
-        </div>
-        <div class="flex items-center gap-x-3">
-          <input
-            id="page-type"
-            name="page-type"
-            type="radio"
-            bind:group={objectType}
-            value="page"
-            class="relative size-4 appearance-none rounded-full border border-base-300 dark:border-base-700 bg-white dark:bg-base-800 before:absolute before:inset-1 before:rounded-full before:bg-white not-checked:before:hidden checked:border-accent-600 dark:checked:border-accent-400 dark:checked:bg-accent-400 checked:bg-accent-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600 disabled:border-base-300 disabled:bg-base-100 disabled:before:bg-base-400 forced-colors:appearance-auto forced-colors:before:hidden"
-          />
-          <label
-            for="page-type"
-            class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-            >Page</label
-          >
-        </div>
+        {/each}
       </div>
     </fieldset>
 
