@@ -1,4 +1,4 @@
-export * from "./schema/index.js"
+export * from "./schema/index.js";
 export * from "./functions/index.js";
 
 export * from "./utils/wordlist.js";

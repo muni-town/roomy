@@ -17,6 +17,7 @@ export function createPermissions() {
     [AllPermissions.viewChildren]: "",
     [AllPermissions.manageChildren]: "",
     [AllPermissions.editEntities]: "",
+    [AllPermissions.editEntityComponents]: "",
 
     [AllPermissions.createThreads]: "",
     [AllPermissions.manageThreads]: "",
@@ -24,14 +25,35 @@ export function createPermissions() {
     [AllPermissions.editPages]: "",
 
     [AllPermissions.editSpace]: "",
+    [AllPermissions.addRootChildren]: "",
+    [AllPermissions.editSpacePermissions]: "",
 
+    [AllPermissions.addMembers]: "",
     [AllPermissions.seeMembers]: "",
     [AllPermissions.manageMembers]: "",
-  }
-  for(const key in permissions) {
+
+    [AllPermissions.banMembers]: "",
+
+    [AllPermissions.manageRoles]: "",
+  };
+  for (const key in permissions) {
     const group = Group.create();
     permissions[key] = group.id;
   }
 
   return permissions;
+}
+
+export async function addRoleToPermissions(
+  role: Group,
+  givePermissions: string[],
+  permissions: Record<string, string>,
+) {
+  for (const permission of givePermissions) {
+    const permissionGroup = await Group.load(permissions[permission]!);
+    if (!permissionGroup) {
+      throw new Error("Permission group not found");
+    }
+    permissionGroup.addMember(role, "reader");
+  }
 }

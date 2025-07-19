@@ -1,13 +1,16 @@
 import { Group } from "jazz-tools";
-import { PageComponent } from "../schema/index.js";
-import { createRoomyObject } from "./roomyobject.js";
+import { AllPermissions, PageComponent } from "../schema/index.js";
+import { createRoomyEntity } from "./roomyentity.js";
 
-export async function createPage(name: string, permissions: Record<string, string>) {
-  const publicReadGroupId = permissions.publicRead;
-  const publicReadGroup = await Group.load(publicReadGroupId!);
+export async function createPage(
+  name: string,
+  permissions: Record<string, string>,
+) {
+  const publicReadGroupId = permissions[AllPermissions.publicRead]!;
+  const publicReadGroup = await Group.load(publicReadGroupId);
 
   const pageContentGroup = Group.create();
-  pageContentGroup.addMember(publicReadGroup!);
+  pageContentGroup.addMember(publicReadGroup!, "reader");
 
   const page = PageComponent.schema.create(
     {
@@ -16,7 +19,21 @@ export async function createPage(name: string, permissions: Record<string, strin
     pageContentGroup,
   );
 
-  const {roomyObject, entityGroup, componentsGroup} = await createRoomyObject(name, permissions);
+  const { roomyObject, entityGroup, componentsGroup } = await createRoomyEntity(
+    name,
+    permissions,
+  );
+
+  const editEntityComponentsGroupId =
+    permissions[AllPermissions.editEntityComponents]!;
+  const editEntityComponentsGroup = await Group.load(
+    editEntityComponentsGroupId,
+  );
+  entityGroup.addMember(editEntityComponentsGroup!, "writer");
+
+  const editEntityGroupId = permissions[AllPermissions.editEntities]!;
+  const editEntityGroup = await Group.load(editEntityGroupId);
+  componentsGroup.addMember(editEntityGroup!, "writer");
 
   if (!roomyObject.components) {
     throw new Error("RoomyObject components is undefined");

@@ -6,7 +6,7 @@ export const DiscordBridgeRequest = co.map({
   status: z.enum(["requested", "active", "inactive", "error"]),
 
   error: z.string().optional(),
-})
+});
 
 export const DiscordBridgeRequestList = co.list(DiscordBridgeRequest);
 

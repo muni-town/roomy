@@ -16,10 +16,9 @@
     RoomyAccount,
     RoomyEntity,
     RoomyProfile,
-    messageHasAdmin,
     publicGroup,
   } from "@roomy-chat/sdk";
-  import { Account, co } from "jazz-tools";
+  import { co } from "jazz-tools";
   import MessageToolbar from "./MessageToolbar.svelte";
   import MessageReactions from "./MessageReactions.svelte";
   import ChatInput from "../ChatInput.svelte";
@@ -38,7 +37,6 @@
     messageId,
     previousMessageId,
     isAdmin,
-    admin,
     space,
     threadId,
     allowedToInteract,
@@ -47,7 +45,6 @@
     messageId: string;
     previousMessageId?: string;
     isAdmin?: boolean;
-    admin: co.loaded<typeof Account> | undefined | null;
     space: co.loaded<typeof RoomyEntity> | undefined | null;
     threadId?: string;
     allowedToInteract?: boolean;
@@ -84,8 +81,6 @@
   let profile = $derived(
     new CoState(RoomyProfile, message.current?._edits.content?.by?.profile?.id),
   );
-
-  let accountId = $derived(message.current?._edits.content?.by?.id);
 
   let isImportedMessage = $derived(
     message.current?.author?.startsWith("discord:") ||
@@ -269,14 +264,12 @@
     }
   }
 
-  let bannedAccounts = $derived(new Set(space?.bans ?? []));
   let hiddenIn = $derived(new Set(message.current?.hiddenIn ?? []));
 
   let shouldShow = $derived.by(() => {
     if (!message.current) return false;
     if (message.current.softDeleted) return false;
-    if (!admin || !messageHasAdmin(message.current, admin)) return false;
-    if (bannedAccounts.has(accountId ?? "")) return false;
+    // if (!admin || !messageHasAdmin(message.current, admin)) return false;
     if (hiddenIn.has(threadId ?? "")) return false;
     return true;
   });

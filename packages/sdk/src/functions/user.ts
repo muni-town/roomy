@@ -12,7 +12,6 @@ export function createInbox() {
   return inbox;
 }
 
-
 export function createSpaceList() {
   const spaces = SpaceList.create([], publicGroup("reader"));
 

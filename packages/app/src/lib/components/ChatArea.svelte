@@ -10,7 +10,7 @@
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
   import { page } from "$app/state";
-  import { Account, co } from "jazz-tools";
+  import { co } from "jazz-tools";
   import type { RoomyEntity } from "@roomy-chat/sdk";
   import Icon from "@iconify/svelte";
   import toast from "svelte-french-toast";
@@ -20,7 +20,6 @@
     timeline,
     virtualizer = $bindable(),
     isAdmin = false,
-    admin,
     space,
     threadId,
     allowedToInteract,
@@ -29,7 +28,6 @@
     timeline: string[];
     virtualizer?: Virtualizer<string>;
     isAdmin?: boolean;
-    admin: co.loaded<typeof Account> | undefined | null;
     space: co.loaded<typeof RoomyEntity> | undefined | null;
     threadId?: string;
     allowedToInteract?: boolean;
@@ -180,7 +178,6 @@
                   {messageId}
                   previousMessageId={slicedTimeline[index - 1]}
                   {isAdmin}
-                  {admin}
                   {space}
                   {threadId}
                   {allowedToInteract}

@@ -1,6 +1,10 @@
 import { co, z } from "jazz-tools";
 import { Space } from "./space.js";
-import { createInbox, createSpaceList, publicGroup } from "../functions/index.js";
+import {
+  createInbox,
+  createSpaceList,
+  publicGroup,
+} from "../functions/index.js";
 import { RoomyEntity, RoomyEntityList } from "./index.js";
 
 export const SpaceList = co.list(Space);
@@ -26,7 +30,7 @@ export const RoomyProfile = co.profile({
   roomyInbox: co.list(InboxItem),
   bannerUrl: z.string().optional(),
   description: z.string().optional(),
-  
+
   threadSubscriptions: z.optional(co.list(z.string())), // List of thread IDs user is subscribed to
   hiddenFeedPosts: z.optional(co.list(z.string())), // List of AT Proto URIs for hidden feed posts
 
@@ -41,7 +45,7 @@ export const RoomyProfile = co.profile({
     ),
   ), // Cache of hidden post data for better UI display
 
-  newJoinedSpacesTest: co.list(RoomyEntity)
+  newJoinedSpacesTest: co.list(RoomyEntity),
 });
 
 export const RoomyRoot = co.map({
@@ -66,7 +70,10 @@ export const RoomyAccount = co
           name: creationProps?.name ?? "Anonymous",
           joinedSpaces: createSpaceList(),
           roomyInbox: createInbox(),
-          newJoinedSpacesTest: RoomyEntityList.create([], publicGroup("reader")),
+          newJoinedSpacesTest: RoomyEntityList.create(
+            [],
+            publicGroup("reader"),
+          ),
         },
         publicGroup("reader"),
       );

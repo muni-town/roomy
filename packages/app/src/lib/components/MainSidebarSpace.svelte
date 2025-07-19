@@ -4,7 +4,7 @@
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import { AccountCoState, CoState } from "jazz-tools/svelte";
-  import { isSpaceAdmin, RoomyAccount, RoomyEntity } from "@roomy-chat/sdk";
+  import { AllMembersComponent, isSpaceAdmin, RoomyAccount, RoomyEntity } from "@roomy-chat/sdk";
   import toast from "svelte-french-toast";
   import SpaceAvatar from "./SpaceAvatar.svelte";
   import { joinSpace } from "./helper/joinSpace";
@@ -19,6 +19,18 @@
           },
         })
       : null,
+  );
+
+  let members = $derived(
+    new CoState(AllMembersComponent.schema, space?.current?.components?.[AllMembersComponent.id]),
+  );
+
+  let users = $derived(
+    Object.values(members.current?.perAccount ?? {})
+      .map((accountFeed) => new Array(...accountFeed.all))
+      .flat()
+      .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
+      .map((a) => a.value)
   );
 
   const me = new AccountCoState(RoomyAccount, {
@@ -39,7 +51,8 @@
     if (
       !space?.current?.id ||
       !me?.current?.profile?.joinedSpaces ||
-      !space.current.members
+      !users ||
+      !users.length
     )
       return;
 
@@ -51,11 +64,11 @@
       me.current.profile.joinedSpaces.splice(spaceIndex, 1);
     }
 
-    const memberIndex = space.current.members.findIndex(
-      (m) => m?.id === me?.current?.id,
+    const memberIndex = users.findIndex(
+      (m) => m?.account?.id === me?.current?.id,
     );
-    if (memberIndex !== -1) {
-      space.current.members.splice(memberIndex, 1);
+    if (memberIndex !== -1 && users[memberIndex]) {
+      users[memberIndex].softDeleted = true;
     }
 
     navigate("home");

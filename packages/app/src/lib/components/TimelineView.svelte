@@ -4,24 +4,24 @@
   import ChatArea from "$lib/components/ChatArea.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import { Button } from "@fuxui/base";
-  import { Account, co, Group } from "jazz-tools";
+  import { co } from "jazz-tools";
   import {
     LastReadList,
     Message,
     RoomyAccount,
     RoomyEntity,
-    ThreadContent,
     addToInbox,
     createMessage,
     createThread,
     isSpaceAdmin,
     type ImageUrlEmbedCreate,
     type VideoUrlEmbedCreate,
-    RoomyEntityFeed,
     AllThreadsComponent,
     ThreadComponent,
     SpacePermissionsComponent,
     BansComponent,
+    SubThreadsComponent,
+    AllMembersComponent,
   } from "@roomy-chat/sdk";
   import { AccountCoState, CoState } from "jazz-tools/svelte";
   import { user } from "$lib/user.svelte";
@@ -60,9 +60,6 @@
       space.current?.components?.[SpacePermissionsComponent.id],
     ),
   );
-
-  let creator = $derived(new CoState(Account, space.current?.creatorId));
-  let adminGroup = $derived(new CoState(Group, space.current?.adminGroupId));
 
   let threadObject = $derived(
     new CoState(RoomyEntity, objectId, {
@@ -187,7 +184,7 @@
       }
     }
 
-    let newThread = createThread(threadTitleInput, adminGroup.current!);
+    let newThread = await createThread(threadTitleInput, permissions.current!);
 
     // add all messages to the new thread
     for (const messageId of messageIds) {
@@ -195,13 +192,20 @@
     }
 
     if (firstMessage) {
-      firstMessage.threadId = newThread.RoomyEntity.id;
+      firstMessage.threadId = newThread.roomyObject.id;
     }
 
-    space.current?.threads?.push(newThread.RoomyEntity);
+    const allThreadsId = space.current?.components?.[AllThreadsComponent.id];
+    if (allThreadsId) {
+      const allThreads = await AllThreadsComponent.schema.load(allThreadsId);
+      allThreads?.push(newThread.roomyObject);
+    }
 
-    // TODO: fix this; removed to appease husky
-    // threadObject.current?.childrenIds?.push(newThread.RoomyEntity.id);
+    const subThreadsId = threadObject.current?.components?.[SubThreadsComponent.id];
+    if (subThreadsId) {
+      const subThreads = await SubThreadsComponent.schema.load(subThreadsId);
+      subThreads?.push(newThread.roomyObject);
+    }
 
     threading.active = false;
     threading.selectedMessages = [];
@@ -367,13 +371,21 @@
   let bannedAccounts = $derived(new CoState(BansComponent.schema, space.current?.components?.[BansComponent.id]));
   let bannedAccountsSet = $derived(new Set(bannedAccounts.current?.map((ban) => ban)));
 
+  let members = $derived(
+    new CoState(AllMembersComponent.schema, space.current?.components?.[AllMembersComponent.id]),
+  );
+
   let users = $derived(
-    space.current?.members
-      ?.map((member) => ({
-        value: member?.id ?? "",
-        label: member?.profile?.name ?? "",
-      }))
-      .filter((user) => user.value && user.label) || [],
+    Object.values(members.current?.perAccount ?? {})
+      .map((accountFeed) => new Array(...accountFeed.all))
+      .flat()
+      .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
+      .map((a) => a.value)
+      .filter((a) => a && !a.softDeleted)
+      .map((a) => ({
+        value: a?.id ?? "",
+        label: a?.account?.profile?.name ?? "",
+      })) || [],
   );
 
   const threadFeed = $derived(
@@ -422,7 +434,6 @@
         space={space.current}
         {timeline}
         isAdmin={isSpaceAdmin(space.current)}
-        admin={creator.current}
         {threadId}
         allowedToInteract={hasJoinedSpace && !isBanned}
         {threading}

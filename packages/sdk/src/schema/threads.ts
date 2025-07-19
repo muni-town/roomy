@@ -1,5 +1,5 @@
 import { co, z } from "jazz-tools";
-import { RoomyEntity } from "./roomyobject";
+import { RoomyEntity } from "./roomyentity";
 
 export const Reaction = co.map({
   emoji: z.string(),

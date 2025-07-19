@@ -1,10 +1,22 @@
 import { Account, co, Group, z } from "jazz-tools";
 import { publicGroup } from "./group.js";
-import { Embed, ImageUrlEmbed, Message, Reaction, SubThreadsComponent, ThreadComponent, Timeline, VideoUrlEmbed } from "../schema/threads.js";
-import { createRoomyObject } from "./roomyobject.js";
-import { AllPermissions } from "../schema/space.js";
+import {
+  Embed,
+  ImageUrlEmbed,
+  Message,
+  Reaction,
+  SubThreadsComponent,
+  ThreadComponent,
+  Timeline,
+  VideoUrlEmbed,
+} from "../schema/threads.js";
+import { createRoomyEntity } from "./roomyentity.js";
+import { AllPermissions } from "../schema/index.js";
 
-export async function createThread(name: string, permissions: Record<string, string>) {
+export async function createThread(
+  name: string,
+  permissions: Record<string, string>,
+) {
   const publicReadGroupId = permissions[AllPermissions.publicRead]!;
   const publicReadGroup = await Group.load(publicReadGroupId);
 
@@ -32,11 +44,24 @@ export async function createThread(name: string, permissions: Record<string, str
     threadContentGroup,
   );
 
-  const {roomyObject, entityGroup, componentsGroup} = await createRoomyObject(name, permissions);
+  const { roomyObject, entityGroup, componentsGroup } = await createRoomyEntity(
+    name,
+    permissions,
+  );
+
+  const editEntityComponentsGroupId =
+    permissions[AllPermissions.editEntityComponents]!;
+  const editEntityComponentsGroup = await Group.load(
+    editEntityComponentsGroupId,
+  );
+  componentsGroup.addMember(editEntityComponentsGroup!, "writer");
+
+  const editEntityGroupId = permissions[AllPermissions.editEntities]!;
+  const editEntityGroup = await Group.load(editEntityGroupId);
+  componentsGroup.addMember(editEntityGroup!, "writer");
 
   const manageThreadsGroupId = permissions[AllPermissions.manageThreads]!;
   const manageThreadsGroup = await Group.load(manageThreadsGroupId);
-
   entityGroup.addMember(manageThreadsGroup!, "writer");
 
   if (!roomyObject.components) {
@@ -49,7 +74,6 @@ export async function createThread(name: string, permissions: Record<string, str
 
   return { roomyObject, thread };
 }
-
 
 export type ImageUrlEmbedCreate = {
   type: "imageUrl";
@@ -79,7 +103,7 @@ export async function createMessage(
 
   const addReactionsGroupId = permissions?.[AllPermissions.reactToMessages]!;
   const addReactionsGroup = await Group.load(addReactionsGroupId);
-  
+
   const reactionsGroup = Group.create();
   reactionsGroup.addMember(publicReadGroup!, "reader");
   reactionsGroup.addMember(addReactionsGroup!, "writer");
@@ -87,8 +111,11 @@ export async function createMessage(
   const hiddenInGroup = Group.create();
   hiddenInGroup.addMember(publicReadGroup!, "reader");
 
-  const hideMessagesInThreadsGroupId = permissions?.[AllPermissions.hideMessagesInThreads]!;
-  const hideMessagesInThreadsGroup = await Group.load(hideMessagesInThreadsGroupId);
+  const hideMessagesInThreadsGroupId =
+    permissions?.[AllPermissions.hideMessagesInThreads]!;
+  const hideMessagesInThreadsGroup = await Group.load(
+    hideMessagesInThreadsGroupId,
+  );
   hiddenInGroup.addMember(hideMessagesInThreadsGroup!, "writer");
 
   let embedsList;
@@ -143,7 +170,6 @@ export async function createMessage(
 
   return message;
 }
-
 
 export function messageHasAdmin(
   message: co.loaded<typeof Message>,
