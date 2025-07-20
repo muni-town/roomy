@@ -167,13 +167,17 @@ export async function createSpace(
   }
 
   // for testing for now we'll use an invite link instead
-  const inviteLink = createInviteLink(memberRole, "reader");
-  const inviteLinkParts = inviteLink.split("#/invite/");
-  const inviteLinkId = inviteLinkParts[1];
+  // const inviteLink = createInviteLink(memberRole, "reader");
+  // const inviteLinkParts = inviteLink.split("#/invite/");
+  // const inviteLinkId = inviteLinkParts[1];
 
-  if (inviteLinkId) {
-    spaceObject.components.invite = inviteLinkId;
-  }
+  // if (inviteLinkId) {
+  //   spaceObject.components.invite = inviteLinkId;
+  // }
+
+  console.log("members id", memberRole.id);
+
+  spaceObject.components.memberRole = memberRole.id;
 
   if (createDefaultChannel) {
     const thread = await createThread("general", permissions);

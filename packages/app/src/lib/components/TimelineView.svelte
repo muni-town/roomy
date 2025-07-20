@@ -34,6 +34,7 @@
   import { blueskyLoginModalState } from "@fuxui/social";
   import { joinSpace } from "./helper/joinSpace";
   import FullscreenImage from "./helper/FullscreenImage.svelte";
+  import WaitingForJoinModal from "./modals/WaitingForJoinModal.svelte";
 
   // Component-level threading state - scoped per channel
   let threading = $state({
@@ -420,6 +421,8 @@
   );
 
   let isBanned = $derived(bannedAccountsSet.has(me.current?.id ?? ""));
+
+  let waitingForJoin = $state(false);
 </script>
 
 <!-- hack to get the admin to load ^^ it has to be used somewhere in this file -->
@@ -528,7 +531,11 @@
           {:else}
             <div class="flex items-center grow flex-col px-4">
               <Button
-                onclick={() => joinSpace(space.current, me.current)}
+                onclick={async () => {
+                  waitingForJoin = true;
+                  await joinSpace(space.current, me.current);
+                  waitingForJoin = false;
+                }}
                 class="w-full max-w-xl">Join this space to chat</Button
               >
             </div>
@@ -548,3 +555,5 @@
 {/if}
 
 <FullscreenImage />
+
+<WaitingForJoinModal bind:open={waitingForJoin} />
