@@ -115,6 +115,11 @@
       me.current.profile.newJoinedSpacesTest = RoomyEntityList.create([], publicGroup("reader"));
     }
 
+    if(!me.current.profile.joinedDate === null) {
+      me.current.profile.joinedDate = new Date();
+      console.log("joined date", me.current.profile.joinedDate);
+    }
+
     if (me.current.profile.name !== user.profile.data?.handle) {
       me.current.profile.name = user.profile.data?.handle;
     }

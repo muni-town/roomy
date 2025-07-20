@@ -4,6 +4,7 @@
   import { Badge, Button } from "@fuxui/base";
   import Icon from "@iconify/svelte";
   import {
+    BansComponent,
     ChildrenComponent,
     co,
     PageComponent,
@@ -19,11 +20,13 @@
     me,
     isEditing = $bindable(false),
     editEntity,
+    space,
   }: {
     object: co.loaded<typeof RoomyEntity> | null | undefined;
     me: co.loaded<typeof RoomyAccount> | undefined | null;
     isEditing?: boolean;
     editEntity?: (entity: co.loaded<typeof RoomyEntity>) => void;
+    space: co.loaded<typeof RoomyEntity> | undefined | null;
   } = $props();
 
   let children = $derived(
@@ -53,10 +56,15 @@
       : null,
   );
 
+  let bannedAccounts = $derived(
+    new CoState(BansComponent.schema, space?.components?.[BansComponent.id]),
+  );
+  let bannedAccountsSet = $derived(new Set(bannedAccounts.current ?? []));
+
   const latestEntriesByAccount = $derived(
-    Object.values(thread?.current?.timeline?.perAccount ?? {}).sort(
-      (a, b) => a.madeAt.getTime() - b.madeAt.getTime(),
-    ),
+    Object.values(thread?.current?.timeline?.perAccount ?? {})
+      .filter((x) => x && !bannedAccountsSet.has(x.by?.id ?? ""))
+      .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime()),
   );
 
   let lastReadDate = $derived(
@@ -74,7 +82,7 @@
 
   const notificationCount = $derived(
     me?.profile?.roomyInbox?.filter(
-      (x) => x?.objectId === object?.id && !x?.read,
+      (x) => x?.objectId === object?.id && !x?.read && !bannedAccountsSet.has(x?._edits?.objectId?.by?.id ?? ""),
     ).length,
   );
 </script>
@@ -144,7 +152,14 @@
     </div>
 
     <div class="pl-3 w-full">
-      <SidebarObjectList children={children.current} {me} bind:isEditing {editEntity} currentEntity={object} />
+      <SidebarObjectList
+        children={children.current}
+        {me}
+        bind:isEditing
+        {editEntity}
+        currentEntity={object}
+        {space}
+      />
     </div>
   </div>
 {:else if object?.id && !object?.softDeleted}

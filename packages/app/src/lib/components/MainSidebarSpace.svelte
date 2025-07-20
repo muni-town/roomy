@@ -190,7 +190,7 @@
           href={`/${space?.current?.id}/settings`}
           variant="secondary"
         >
-          <Icon icon="lucide:settings" class="size-4" /> Settings
+          <Icon icon="lucide:settings" class="size-4" /> Space settings
         </Button>
       {/if}
 

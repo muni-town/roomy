@@ -22,12 +22,14 @@
     isEditing = $bindable(false),
     editEntity,
     currentEntity,
+    space
   }: {
     children: co.loaded<typeof ChildrenComponent.schema> | undefined | null;
     me: co.loaded<typeof RoomyAccount> | undefined | null;
     isEditing?: boolean;
     editEntity?: (entity: co.loaded<typeof RoomyEntity>) => void;
     currentEntity?: co.loaded<typeof RoomyEntity> | undefined | null;
+    space: co.loaded<typeof RoomyEntity> | undefined | null;
   } = $props();
 
   let orderedChildren = $derived(children ?? []);
@@ -89,7 +91,7 @@
           <Icon icon="lucide:grip-vertical" class="size-4" />
         </div>
 
-        <SidebarObject object={child} {me} bind:isEditing {editEntity} />
+        <SidebarObject object={child} {me} bind:isEditing {editEntity} space={space} />
       </div>
     {/each}
   </div>
@@ -97,7 +99,7 @@
   <div class={["flex flex-col gap-2 w-full"]}>
     {#each (children ?? []).filter((x) => x && !x?.softDeleted) as child (child?.id)}
       <div class="flex items-start gap-2 w-full">
-        <SidebarObject object={child} {me} bind:isEditing {editEntity} />
+        <SidebarObject object={child} {me} bind:isEditing {editEntity} space={space} />
       </div>
     {/each}
   </div>

@@ -79,7 +79,12 @@
     ),
   );
 
-  let bannedAccounts = $derived(new CoState(BansComponent.schema, space.current?.components?.[BansComponent.id]));
+  let bannedAccounts = $derived(
+    new CoState(
+      BansComponent.schema,
+      space.current?.components?.[BansComponent.id],
+    ),
+  );
   let bannedAccountsSet = $derived(new Set(bannedAccounts.current ?? []));
 
   let timeline = $derived.by(() => {
@@ -205,7 +210,8 @@
       allThreads?.push(newThread.roomyObject);
     }
 
-    const subThreadsId = threadObject.current?.components?.[SubThreadsComponent.id];
+    const subThreadsId =
+      threadObject.current?.components?.[SubThreadsComponent.id];
     if (subThreadsId) {
       const subThreads = await SubThreadsComponent.schema.load(subThreadsId);
       subThreads?.push(newThread.roomyObject);
@@ -373,20 +379,40 @@
   }
 
   let members = $derived(
-    new CoState(AllMembersComponent.schema, space.current?.components?.[AllMembersComponent.id]),
+    new CoState(
+      AllMembersComponent.schema,
+      space.current?.components?.[AllMembersComponent.id],
+      {
+        resolve: {
+          $each: {
+            account: {
+              profile: {
+                $onError: null,
+              },
+            },
+          },
+          $onError: null,
+        },
+      },
+    ),
   );
+
+  $inspect(members.current);
 
   let users = $derived(
     Object.values(members.current?.perAccount ?? {})
-      .map((accountFeed) => new Array(...accountFeed.all))
+      .filter(
+        (a) =>
+          a && !bannedAccountsSet.has(a.by?.id ?? "") && !a.value?.softDeleted,
+      )
       .flat()
-      .map((a) => a.value)
-      .filter((a) => a && !a.softDeleted)
       .map((a) => ({
-        value: a?.account?.id ?? "",
-        label: a?.account?.profile?.name ?? "",
+        value: a?.value?.account?.id ?? "",
+        label: a?.value?.account?.profile?.name ?? "",
       })) || [],
   );
+
+  $inspect(users);
 
   const threadFeed = $derived(
     new CoState(
@@ -513,7 +539,9 @@
                   <div
                     class="absolute inset-0 flex items-center text-primary justify-center z-20 bg-base-100/80 dark:bg-base-900/80"
                   >
-                    <div class="text-xl font-bold flex items-center gap-4 text-base-900 dark:text-base-100">
+                    <div
+                      class="text-xl font-bold flex items-center gap-4 text-base-900 dark:text-base-100"
+                    >
                       Sending message...
                     </div>
                   </div>

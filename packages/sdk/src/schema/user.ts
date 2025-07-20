@@ -30,21 +30,7 @@ export const RoomyProfile = co.profile({
   roomyInbox: co.list(InboxItem),
   bannerUrl: z.string().optional(),
   description: z.string().optional(),
-
-  threadSubscriptions: z.optional(co.list(z.string())), // List of thread IDs user is subscribed to
-  hiddenFeedPosts: z.optional(co.list(z.string())), // List of AT Proto URIs for hidden feed posts
-
-  hiddenFeedPostsCache: z.optional(
-    co.list(
-      co.map({
-        uri: z.string(),
-        text: z.string(),
-        author: z.string(),
-        hiddenAt: z.date(),
-      }),
-    ),
-  ), // Cache of hidden post data for better UI display
-
+  joinedDate: z.date().optional(),
   newJoinedSpacesTest: co.list(RoomyEntity),
 });
 

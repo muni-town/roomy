@@ -54,7 +54,7 @@
   }
 </script>
 
-<menu class="bg-neutral p-4 flex flex-col gap-3">
+<menu class="p-4 flex flex-col gap-3">
   {#each categories as category, c}
     {@const prevCategoryLength =
       c === 0
@@ -66,8 +66,8 @@
       <Button.Root
         {disabled}
         class={[
-          actualIndex === activeIndex && "!border-neutral-content",
-          "border border-neutral-content/30 px-3 py-2 flex gap-4 bg-neutral text-white rounded cursor-pointer",
+          actualIndex === activeIndex && "!border border-accent-500",
+          "px-3 py-2 flex gap-4 bg-base text-base-900 dark:text-base-100 rounded cursor-pointer",
         ]}
         onmouseover={() => (activeIndex = actualIndex)}
         onclick={() => callback({ id: value, label })}

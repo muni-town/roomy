@@ -21,7 +21,7 @@
       return;
 
     for (const child of children.current ?? []) {
-      if (!child) continue;
+      if (!child || child.softDeleted) continue;
 
       navigate({
         space: space.current.id,

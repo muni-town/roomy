@@ -82,6 +82,7 @@
     bind:isEditing
     {editEntity}
     currentEntity={space?.current}
+    space={space?.current}
   />
 </div>
 
