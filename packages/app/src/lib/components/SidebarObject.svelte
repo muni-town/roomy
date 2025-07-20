@@ -87,7 +87,7 @@
   {/if}
 {/snippet}
 
-{#if object?.components?.[ThreadComponent.id]}
+{#if object?.components?.[ThreadComponent.id] && !object?.softDeleted}
   <div class="flex items-start justify-between gap-2 w-full">
     <Button
       href={navigateSync({
@@ -113,7 +113,7 @@
     </Button>
     {@render editButton?.()}
   </div>
-{:else if object?.components?.[PageComponent.id]}
+{:else if object?.components?.[PageComponent.id] && !object?.softDeleted}
   <div class="flex items-start justify-between gap-2 w-full">
     <Button
       href={navigateSync({
@@ -129,8 +129,8 @@
     </Button>
     {@render editButton?.()}
   </div>
-{:else if object?.components?.[ChildrenComponent.id]}
-  <div class={"inline-flex flex-col gap-1 w-full"}>
+{:else if object?.components?.[ChildrenComponent.id] && !object?.softDeleted}
+  <div class={"inline-flex flex-col gap-1 w-full max-w-full"}>
     <div class="flex items-start justify-between gap-2 w-full">
       <Button
         variant="ghost"
@@ -147,7 +147,7 @@
       <SidebarObjectList children={children.current} {me} bind:isEditing {editEntity} currentEntity={object} />
     </div>
   </div>
-{:else if object?.id}
+{:else if object?.id && !object?.softDeleted}
   <div class="flex items-start justify-between gap-2 w-full">
     <Button
       href={navigateSync({

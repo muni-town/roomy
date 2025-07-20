@@ -86,10 +86,10 @@
     const currentTimeline = threadContent.current?.timeline;
 
     return Object.values(currentTimeline?.perAccount ?? {})
+      .filter((a) => !bannedAccountsSet.has(a.by?.id ?? ""))
       .map((accountFeed) => new Array(...accountFeed.all))
       .flat()
       .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
-      .filter((a) => !bannedAccountsSet.has(a.by?.id ?? ""))
       .map((a) => a.value);
   });
 
@@ -401,7 +401,8 @@
       .flat()
       .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
       .map((a) => a.value)
-      ?.map((thread) => ({
+      .filter((thread) => !thread?.softDeleted)
+      .map((thread) => ({
         value: JSON.stringify({
           id: thread?.id ?? "",
           space: space.current?.id ?? "",

@@ -1,6 +1,9 @@
 <script lang="ts">
-  import { RoomyEntity } from "@roomy-chat/sdk";
-  import { Modal, Input, Button, Heading } from "@fuxui/base";
+  import {
+    ChildrenComponent,
+    RoomyEntity,
+  } from "@roomy-chat/sdk";
+  import { Modal, Input, Button } from "@fuxui/base";
   import Icon from "@iconify/svelte";
   import { co } from "jazz-tools";
 
@@ -22,21 +25,87 @@
 
     open = false;
   }
-  $inspect(entity);
+
+  async function deleteObject() {
+    if (!entity) return;
+
+    entity.softDeleted = true;
+
+    await deleteChildren(entity);
+
+    open = false;
+  }
+
+  // recursively delete children
+  async function deleteChildren(object: co.loaded<typeof RoomyEntity>) {
+    if (!object) return;
+
+    object.ensureLoaded({
+      resolve: {
+        components: {
+          $each: true,
+          $onError: null,
+        },
+      },
+    });
+
+    const childrenId = object.components?.[ChildrenComponent.id];
+
+    if (!childrenId) return;
+
+    const children = await ChildrenComponent.schema.load(childrenId, {
+      resolve: {
+        $each: {
+          components: {
+            $each: true,
+            $onError: null,
+          },
+        },
+      },
+    });
+
+    for (const child of children ?? []) {
+      child.softDeleted = true;
+      
+      await deleteChildren(child);
+    }
+  }
 </script>
 
 <Modal bind:open>
   <form id="createSpace" class="flex flex-col gap-4" onsubmit={save}>
-    <Heading>Change object name</Heading>
-    <Input bind:value={entityName} placeholder="Name" type="text" required />
-    <Button
-      type="submit"
-      disabled={!entityName}
-      class="w-full justify-start"
-      size="lg"
+    <h3
+      id="dialog-title"
+      class="text-base font-semibold text-base-900 dark:text-base-100"
     >
-      <Icon icon="basil:plus-outline" font-size="2em" />
-      Save
-    </Button>
+      Edit object
+    </h3>
+    <div class="mt-2">
+      <p class="text-sm text-base-500 dark:text-base-400">
+        Change the name of the object
+      </p>
+    </div>
+    <Input bind:value={entityName} placeholder="Name" type="text" required />
+    <div class="flex justify-start">
+      <Button type="submit" disabled={!entityName} class="justify-start">
+        <Icon icon="lucide:save" class="size-4" />
+        Save
+      </Button>
+    </div>
+
+    <h3 class="text-base font-semibold text-base-900 dark:text-base-100 mt-8">
+      Danger zone
+    </h3>
+    <div class="mt-1">
+      <p class="text-sm text-base-500 dark:text-base-400">
+        This will also delete all children of this object and cannot be undone
+      </p>
+    </div>
+    <div class="flex justify-start">
+      <Button onclick={deleteObject} class="justify-start" variant="red">
+        <Icon icon="lucide:trash" class="size-4" />
+        Delete object
+      </Button>
+    </div>
   </form>
 </Modal>

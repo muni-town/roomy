@@ -33,7 +33,7 @@
   let orderedChildren = $derived(children ?? []);
 
   function handleDndConsider(e: CustomEvent) {
-    orderedChildren = e.detail.items;
+    orderedChildren = e.detail.items.filter((x: any) => x && !x?.softDeleted);
   }
   async function handleDndFinalize(e: CustomEvent) {
     console.log("finalize", e);
@@ -69,17 +69,18 @@
 {#if isEditing}
   <div
     class={[
-      "flex flex-col gap-2 w-full pb-6 min-h-10 border border-accent-500/30 rounded-xl p-1",
+      "flex flex-col gap-2 w-full pb-6 min-h-10 border border-accent-400/30 dark:border-accent-900/50 rounded-xl p-1",
     ]}
     use:dragHandleZone={{
-      items: orderedChildren as Item[] ?? [],
+      items:
+        (orderedChildren.filter((x) => x && !x?.softDeleted) as Item[]) ?? [],
       dropTargetStyle: { outline: "--var(color-accent-500) solid 2px" },
     }}
     onconsider={handleDndConsider}
     onfinalize={handleDndFinalize}
   >
-    {#each orderedChildren.filter((x) => x) as child (child?.id)}
-      <div class="flex items-start gap-2 w-full">
+    {#each orderedChildren.filter((x) => x && !x?.softDeleted) as child (child?.id)}
+      <div class="flex items-start gap-1 w-full max-w-full">
         <div
           use:dragHandle
           aria-label="drag-handle for {child?.name}"
@@ -94,7 +95,7 @@
   </div>
 {:else}
   <div class={["flex flex-col gap-2 w-full"]}>
-    {#each (children ?? []).filter((x) => x) as child (child?.id)}
+    {#each (children ?? []).filter((x) => x && !x?.softDeleted) as child (child?.id)}
       <div class="flex items-start gap-2 w-full">
         <SidebarObject object={child} {me} bind:isEditing {editEntity} />
       </div>
