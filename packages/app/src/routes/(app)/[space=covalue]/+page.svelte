@@ -37,5 +37,3 @@
     navigateToFirstChild();
   });
 </script>
-
-<div class="text-base-900 dark:text-base-100">hello there</div>

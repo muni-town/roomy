@@ -134,7 +134,7 @@
             class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
             >1. Add bot to your Discord Server</label
           >
-          <p class="mt-1 text-sm/6 text-gray-600">
+          <p class="mt-1 text-sm/6 text-base-600 dark:text-base-400">
             You need to be a server admin to add the bot, please allow all
             requested permissions. Click the button below and select your
             server.
@@ -155,7 +155,7 @@
             class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
             >2. Enter your discord server ID</label
           >
-          <p class="mt-1 text-sm/6 text-gray-600">
+          <p class="mt-1 text-sm/6 text-base-600 dark:text-base-400">
             Right click on your discord server and select "Copy Server ID",
             paste it below.
           </p>
@@ -171,7 +171,7 @@
             class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
             >3. Start Bridging</label
           >
-          <p class="mt-1 text-sm/6 text-gray-600">
+          <p class="mt-1 text-sm/6 text-base-600 dark:text-base-400">
             Start bridging your discord server to your roomy space. All channels
             and threads that have the same name in both will be automatically
             bridged.

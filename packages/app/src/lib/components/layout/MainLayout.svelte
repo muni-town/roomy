@@ -13,6 +13,7 @@
   import { AccountCoState } from "jazz-tools/svelte";
   import { RoomyAccount } from "@roomy-chat/sdk";
   import { onNavigate } from "$app/navigation";
+  import * as rawEnv from "$env/static/public";
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
@@ -48,13 +49,18 @@
   ]}
 >
   <div class="flex h-full w-fit">
-    <SmallSidebar>
-      {#if serverBar}
-        {@render serverBar?.()}
-      {:else}
-        <ServerBar spaces={me.current?.profile.newJoinedSpacesTest} me={me.current} />
-      {/if}
-    </SmallSidebar>
+    {#if !rawEnv.PUBLIC_HIDE_SMALL_SIDEBAR}
+      <SmallSidebar>
+        {#if serverBar}
+          {@render serverBar?.()}
+        {:else}
+          <ServerBar
+            spaces={me.current?.profile.newJoinedSpacesTest}
+            me={me.current}
+          />
+        {/if}
+      </SmallSidebar>
+    {/if}
     {#if sidebar}
       <BigSidebar>
         {@render sidebar?.()}
@@ -77,7 +83,7 @@
 <div
   class={cn(
     "h-screen flex flex-col overflow-hidden",
-    sidebar ? "sm:ml-82" : "sm:ml-18",
+    rawEnv.PUBLIC_HIDE_SMALL_SIDEBAR ? (sidebar ? "sm:ml-64" : "sm:ml-0") : (sidebar ? "sm:ml-82" : "sm:ml-18"),
   )}
 >
   <Navbar>

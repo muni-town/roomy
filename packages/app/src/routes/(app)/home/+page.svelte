@@ -10,12 +10,12 @@
   const account = new AccountCoState(RoomyAccount, {
     resolve: {
       profile: {
-        joinedSpaces: true,
+        newJoinedSpacesTest: true,
       },
     },
   });
   const me = $derived(account.current);
-  let spaces = $derived(me?.profile?.joinedSpaces);
+  let spaces = $derived(me?.profile?.newJoinedSpacesTest);
 </script>
 
 <MainLayout>
