@@ -24,7 +24,9 @@
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
-      profile: true,
+      profile: {
+        $onError: null,
+      },
       root: true,
     },
   });
@@ -112,12 +114,12 @@
     if (!user.profile.data?.handle || !me.current) return;
 
     if(!me.current.profile.newJoinedSpacesTest === null) {
+      console.log("couldnt find newJoinedSpacesTest, creating new one");
       me.current.profile.newJoinedSpacesTest = RoomyEntityList.create([], publicGroup("reader"));
     }
 
     if(!me.current.profile.joinedDate === null) {
       me.current.profile.joinedDate = new Date();
-      console.log("joined date", me.current.profile.joinedDate);
     }
 
     if (me.current.profile.name !== user.profile.data?.handle) {
