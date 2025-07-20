@@ -44,13 +44,13 @@ export const RoomyAccount = co
     root: RoomyRoot,
   })
   .withMigration((account, creationProps?: { name: string }) => {
-    if (account.root === undefined) {
+    if (account.root === null) {
       account.root = RoomyRoot.create({
         lastRead: LastReadList.create({}),
       });
     }
 
-    if (account.profile === undefined) {
+    if (account.profile === null) {
       account.profile = RoomyProfile.create(
         {
           name: creationProps?.name ?? "Anonymous",
@@ -61,6 +61,12 @@ export const RoomyAccount = co
             publicGroup("reader"),
           ),
         },
+        publicGroup("reader"),
+      );
+    } else if(account.profile.newJoinedSpacesTest === null) {
+      console.log("newJoinedSpacesTest is null, creating new one (migration)");
+      account.profile.newJoinedSpacesTest = RoomyEntityList.create(
+        [],
         publicGroup("reader"),
       );
     }
