@@ -3,6 +3,8 @@ import {
   addMemberToSpace,
   Group,
   joinGroupThroughInviteService,
+  publicGroup,
+  RoomyEntityList,
   type co,
   type RoomyAccount,
   type RoomyEntity,
@@ -29,6 +31,14 @@ export async function joinSpace(
   await joinGroupThroughInviteService(memberRole!, me.id);
 
   await addMemberToSpace(me, space);
+
+
+  if (me.profile?.newJoinedSpacesTest === null) {
+    me.profile.newJoinedSpacesTest = RoomyEntityList.create(
+      [],
+      publicGroup("reader"),
+    );
+  }
 
   me.profile?.newJoinedSpacesTest?.push(space);
 
