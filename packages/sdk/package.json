@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "dev": "tsc --watch",
-    "build": "tsc",
+    "build": "tsc && cp src/utils/spow/spow-wasm_bg.wasm dist/utils/spow/",
     "format": "prettier . --write",
     "build-lib": "pnpm build"
   },
