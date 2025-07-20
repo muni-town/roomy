@@ -45,6 +45,7 @@ export async function createFolder(
 export async function addToFolder(
   folder: co.loaded<typeof RoomyEntity>,
   item: co.loaded<typeof RoomyEntity>,
+  atIndex?: number,
 ) {
   await folder.ensureLoaded({
     resolve: {
@@ -62,10 +63,47 @@ export async function addToFolder(
 
   if (childrenId && item.components) {
     const children = await ChildrenComponent.schema.load(childrenId);
-    children?.push(item);
+    if (atIndex !== undefined && atIndex >= 0) {
+      children?.splice(atIndex, 0, item);
+    } else {
+      children?.push(item);
+    }
 
     // add parentId to item
     item.components[ParentComponent.id] = folder.id;
+  } else {
+    throw new Error("Folder or item components not found");
+  }
+}
+
+export async function removeFromFolder(
+  folder: co.loaded<typeof RoomyEntity>,
+  item: co.loaded<typeof RoomyEntity>,
+) {
+  await folder.ensureLoaded({
+    resolve: {
+      components: true,
+    },
+  });
+
+  await item.ensureLoaded({
+    resolve: {
+      components: true,
+    },
+  });
+
+  const childrenId = folder.components?.[ChildrenComponent.id];
+
+  if (childrenId && item.components) {
+
+    const children = await ChildrenComponent.schema.load(childrenId);
+
+    const index = children?.findIndex((x) => x?.id === item.id);
+    
+    if (index !== undefined && index >= 0) {
+      children?.splice(index, 1);
+      delete item.components[ParentComponent.id];
+    }
   } else {
     throw new Error("Folder or item components not found");
   }

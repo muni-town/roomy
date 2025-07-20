@@ -67,7 +67,13 @@
 <MainSidebarSpace bind:isEditing />
 
 <div class="w-full py-2 px-2">
-  <SidebarObjectList children={children.current} me={me.current} bind:isEditing {editEntity} />
+  <SidebarObjectList
+    children={children.current}
+    me={me.current}
+    bind:isEditing
+    {editEntity}
+    currentEntity={space?.current}
+  />
 </div>
 
 <EditObjectModal bind:open={openEditObjectModal} bind:entity />

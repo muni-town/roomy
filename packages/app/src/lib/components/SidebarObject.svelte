@@ -130,7 +130,7 @@
     {@render editButton?.()}
   </div>
 {:else if object?.components?.[ChildrenComponent.id]}
-  <div class="inline-flex flex-col gap-1 w-full">
+  <div class={"inline-flex flex-col gap-1 w-full"}>
     <div class="flex items-start justify-between gap-2 w-full">
       <Button
         variant="ghost"
@@ -144,7 +144,7 @@
     </div>
 
     <div class="pl-3 w-full">
-      <SidebarObjectList children={children.current} {me} bind:isEditing {editEntity} />
+      <SidebarObjectList children={children.current} {me} bind:isEditing {editEntity} currentEntity={object} />
     </div>
   </div>
 {:else if object?.id}
