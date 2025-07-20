@@ -10,26 +10,26 @@
     new CoState(RoomyAccount, page.params.user, {
       resolve: {
         profile: {
-          joinedSpaces: true,
+          newJoinedSpacesTest: true,
         },
       },
     }),
   );
 
   const userSpaceIds = $derived(
-    user.current?.profile?.joinedSpaces?.map((space) => space?.id),
+    user.current?.profile?.newJoinedSpacesTest?.map((space) => space?.id),
   );
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
       profile: {
-        joinedSpaces: true,
+        newJoinedSpacesTest: true,
       },
     },
   });
 
   const spacesInCommon = $derived(
-    me.current?.profile?.joinedSpaces?.filter((space) =>
+    me.current?.profile?.newJoinedSpacesTest?.filter((space) =>
       userSpaceIds?.includes(space?.id),
     ),
   );
@@ -49,9 +49,9 @@
       }}
     />
 
-    <div class="flex flex-col gap-4 w-full max-w-5xl mx-auto px-4">
+    <div class="flex flex-col gap-4 w-full max-w-4xl mx-auto px-4">
       {#if spacesInCommon?.length && spacesInCommon?.length > 0}
-        <h2 class="text-3xl font-bold">Spaces in Common</h2>
+        <h2 class="text-3xl font-bold mb-8">Spaces in Common</h2>
         <section class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8 max-w-5xl">
           {#each spacesInCommon.toReversed() as space}
             <SpaceButton {space} />

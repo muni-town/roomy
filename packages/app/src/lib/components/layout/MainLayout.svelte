@@ -83,15 +83,23 @@
 <div
   class={cn(
     "h-screen flex flex-col overflow-hidden",
-    rawEnv.PUBLIC_HIDE_SMALL_SIDEBAR ? (sidebar ? "sm:ml-64" : "sm:ml-0") : (sidebar ? "sm:ml-82" : "sm:ml-18"),
+    rawEnv.PUBLIC_HIDE_SMALL_SIDEBAR
+      ? sidebar
+        ? "sm:ml-64"
+        : "sm:ml-0"
+      : sidebar
+        ? "sm:ml-82"
+        : "sm:ml-18",
   )}
 >
   <Navbar>
-    <div class="flex gap-4 items-center ml-4">
-      <ToggleNavigation bind:isSidebarVisible={isSidebarVisible.value} />
-    </div>
+    {#if !rawEnv.PUBLIC_HIDE_SMALL_SIDEBAR || sidebar}
+      <div class="flex gap-4 items-center ml-4">
+        <ToggleNavigation bind:isSidebarVisible={isSidebarVisible.value} />
+      </div>
+    {/if}
 
-    <div class="hidden sm:flex dz-navbar-end items-center gap-2"></div>
+    <div></div>
 
     {@render navbar?.()}
   </Navbar>

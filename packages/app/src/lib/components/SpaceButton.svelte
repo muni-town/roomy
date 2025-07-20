@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { co, Space } from "@roomy-chat/sdk";
+  import { co, RoomyEntity } from "@roomy-chat/sdk";
   import SpaceAvatar from "./SpaceAvatar.svelte";
 
-  let { space }: { space: co.loaded<typeof Space> | undefined | null } = $props();
+  let { space }: { space: co.loaded<typeof RoomyEntity> | undefined | null } = $props();
 </script>
 
 <div class="relative flex flex-col items-center justify-start gap-2 max-w-42">
