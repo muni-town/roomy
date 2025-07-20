@@ -124,12 +124,13 @@
     console.log("me.current.profile", me.current.profile);
     console.log("me.current.profile.newJoinedSpacesTest", me.current.profile.newJoinedSpacesTest);
 
-    if(!me.current.profile?.newJoinedSpacesTest === null) {
+    if(me.current.profile.newJoinedSpacesTest === undefined) {
       console.log("couldnt find newJoinedSpacesTest, creating new one");
       me.current.profile.newJoinedSpacesTest = RoomyEntityList.create([], publicGroup("reader"));
     }
 
-    if(!me.current.profile?.joinedDate === null) {
+    if(!me.current.profile?.joinedDate === undefined) {
+      console.log("couldnt find joinedDate, creating new one");
       me.current.profile.joinedDate = new Date();
     }
 
@@ -153,6 +154,8 @@
       me.current.profile.description = user.profile.data?.description;
     }
   });
+
+  $inspect(me.current?.profile?.newJoinedSpacesTest);
 
   onMount(async () => {
     await user.init();
