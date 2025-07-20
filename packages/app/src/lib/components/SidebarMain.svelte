@@ -5,10 +5,12 @@
     RoomyAccount,
     RoomyEntity,
     ChildrenComponent,
+    co,
   } from "@roomy-chat/sdk";
 
   import SidebarObjectList from "./SidebarObjectList.svelte";
   import MainSidebarSpace from "./MainSidebarSpace.svelte";
+  import EditObjectModal from "./modals/EditObjectModal.svelte";
 
   let space = $derived(
     page.params?.space
@@ -47,11 +49,25 @@
       },
     ),
   );
+
+  let isEditing = $state(false);
+
+  let openEditObjectModal = $state(false);
+
+  let entity = $state<co.loaded<typeof RoomyEntity> | undefined | null>(null);
+
+  function editEntity(editEntity: co.loaded<typeof RoomyEntity>) {
+    console.log("editEntity", editEntity);
+    openEditObjectModal = true;
+    entity = editEntity;
+  }
 </script>
 
 <!-- Header -->
-<MainSidebarSpace />
+<MainSidebarSpace bind:isEditing />
 
 <div class="w-full py-2 px-2">
-  <SidebarObjectList children={children.current} me={me.current} />
+  <SidebarObjectList children={children.current} me={me.current} bind:isEditing {editEntity} />
 </div>
+
+<EditObjectModal bind:open={openEditObjectModal} bind:entity />

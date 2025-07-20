@@ -4,12 +4,23 @@
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import { AccountCoState, CoState } from "jazz-tools/svelte";
-  import { AllMembersComponent, isSpaceAdmin, RoomyAccount, RoomyEntity } from "@roomy-chat/sdk";
+  import {
+    AllMembersComponent,
+    isSpaceAdmin,
+    RoomyAccount,
+    RoomyEntity,
+  } from "@roomy-chat/sdk";
   import toast from "svelte-french-toast";
   import SpaceAvatar from "./SpaceAvatar.svelte";
   import { joinSpace } from "./helper/joinSpace";
   import { user } from "$lib/user.svelte";
   import { blueskyLoginModalState } from "@fuxui/social";
+
+  let {
+    isEditing = $bindable(false),
+  }: {
+    isEditing?: boolean;
+  } = $props();
 
   let space = $derived(
     page.params?.space
@@ -22,7 +33,10 @@
   );
 
   let members = $derived(
-    new CoState(AllMembersComponent.schema, space?.current?.components?.[AllMembersComponent.id]),
+    new CoState(
+      AllMembersComponent.schema,
+      space?.current?.components?.[AllMembersComponent.id],
+    ),
   );
 
   let users = $derived(
@@ -30,7 +44,7 @@
       .map((accountFeed) => new Array(...accountFeed.all))
       .flat()
       .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
-      .map((a) => a.value)
+      .map((a) => a.value),
   );
 
   const me = new AccountCoState(RoomyAccount, {
@@ -159,6 +173,16 @@
           variant="secondary"
         >
           <Icon icon="lucide:plus" class="size-4" /> New Object
+        </Button>
+        <Button
+          class="w-full"
+          onclick={() => {
+            isEditing = !isEditing;
+            popoverOpen = false;
+          }}
+          variant="secondary"
+        >
+          <Icon icon="lucide:pencil" class="size-4" /> {isEditing ? "Finish editing" : "Edit objects"}
         </Button>
 
         <Button

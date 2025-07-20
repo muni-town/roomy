@@ -1,7 +1,7 @@
 import { co, Group } from "jazz-tools";
 import { createRoomyEntity } from "./roomyentity.js";
 import { AllPermissions, RoomyEntity } from "../schema/index.js";
-import { ChildrenComponent } from "../schema/folder.js";
+import { ChildrenComponent, ParentComponent } from "../schema/folder.js";
 
 export async function createFolder(
   name: string,
@@ -52,10 +52,21 @@ export async function addToFolder(
     },
   });
 
+  await item.ensureLoaded({
+    resolve: {
+      components: true,
+    },
+  });
+
   const childrenId = folder.components?.[ChildrenComponent.id];
 
-  if (childrenId) {
+  if (childrenId && item.components) {
     const children = await ChildrenComponent.schema.load(childrenId);
     children?.push(item);
+
+    // add parentId to item
+    item.components[ParentComponent.id] = folder.id;
+  } else {
+    throw new Error("Folder or item components not found");
   }
 }

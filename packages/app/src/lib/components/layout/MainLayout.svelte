@@ -82,7 +82,7 @@
 
 <div
   class={cn(
-    "h-screen flex flex-col overflow-hidden",
+    "h-[100dvh] flex flex-col overflow-hidden",
     rawEnv.PUBLIC_HIDE_SMALL_SIDEBAR
       ? sidebar
         ? "sm:ml-64"
