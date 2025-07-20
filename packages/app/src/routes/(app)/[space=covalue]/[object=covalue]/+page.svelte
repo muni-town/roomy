@@ -18,7 +18,7 @@
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
       profile: {
-        joinedSpaces: true,
+        newJoinedSpacesTest: true,
       },
     },
   });

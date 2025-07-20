@@ -1,8 +1,10 @@
 <script lang="ts">
   import {
     type RoomyAccount,
+    RoomyEntityList,
     createSpace,
     createSpaceList,
+    publicGroup,
   } from "@roomy-chat/sdk";
   import { navigate } from "$lib/utils.svelte";
   import { Modal, Input, Button, Heading } from "@fuxui/base";
@@ -23,8 +25,11 @@
     evt.preventDefault();
     if (!newSpaceName) return;
 
-    if (me?.profile && me.profile.joinedSpaces === undefined) {
-      me.profile.joinedSpaces = createSpaceList();
+    if (me?.profile && me.profile.newJoinedSpacesTest === undefined) {
+      me.profile.newJoinedSpacesTest = RoomyEntityList.create(
+        [],
+        publicGroup("reader"),
+      );
     }
 
     const space = await createSpace(newSpaceName);
