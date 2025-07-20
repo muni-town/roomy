@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Avatar, Badge, Button, Popover } from "@fuxui/base";
   import Icon from "@iconify/svelte";
-  import { co, RoomyAccount, Space } from "@roomy-chat/sdk";
+  import { BansComponent, co, RoomyAccount, RoomyEntity, Space } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
   import toast from "svelte-french-toast";
 
@@ -15,7 +15,7 @@
   }: {
     accountId: string;
     isMe?: boolean;
-    space: co.loaded<typeof Space> | undefined | null;
+    space: co.loaded<typeof RoomyEntity> | undefined | null;
     isAdmin?: boolean;
     isBanned?: boolean;
     makeAdmin?: () => void;
@@ -30,6 +30,8 @@
   );
 
   let popoverOpen = $state(false);
+
+  let bans = $derived(new CoState(BansComponent.schema, space?.components?.[BansComponent.id]));
 </script>
 
 <div
@@ -70,9 +72,9 @@
               onclick={() => {
                 if (space?.id && accountId) {
                   if (isBanned) {
-                    space.bans?.splice(space.bans?.indexOf(accountId), 1);
+                    bans.current?.splice(bans.current?.indexOf(accountId), 1);
                   } else {
-                    space.bans?.push(accountId);
+                    bans.current?.push(accountId);
                   }
                   toast.success(isBanned ? "User unbanned" : "User banned");
                   popoverOpen = false;

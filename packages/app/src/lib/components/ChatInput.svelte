@@ -106,7 +106,7 @@
     if (!items) return;
 
     for (const item of Array.from(items)) {
-      if (!item.type.startsWith("image/")) continue;
+      if (!item.type.startsWith("image/") && !item.type.startsWith("video/")) continue;
       const file = item.getAsFile();
       if (!file) continue;
       event.preventDefault();

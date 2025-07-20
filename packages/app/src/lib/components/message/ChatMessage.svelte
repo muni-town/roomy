@@ -300,7 +300,7 @@
   }
 </script>
 
-{#if shouldShow || true}
+{#if shouldShow}
   <div
     id={message.current?.id}
     class={`flex flex-col w-full relative max-w-screen isolate px-4`}

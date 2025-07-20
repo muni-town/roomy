@@ -16,23 +16,25 @@
     const dt = event.dataTransfer;
     if (!dt) return;
 
-    // 1) If you only care about image files, look at dt.items (newer browsers)
     let imageCount = 0;
     if (dt.items) {
-      // dt.items is a DataTransferItemList
       for (let i = 0; i < dt.items.length; i++) {
         const item = dt.items[i];
-        // kind==='file' ensures it's a File, and type starts with "image/"
-        if (item && item.kind === "file" && item.type.startsWith("image/")) {
+        if (
+          item &&
+          item.kind === "file" &&
+          (item.type.startsWith("image/") || item.type.startsWith("video/"))
+        ) {
           imageCount++;
         }
       }
-    }
-    // 2) Fallback: dt.files (FileList) – more widely supported
-    else if (dt.files) {
+    } else if (dt.files) {
       for (let i = 0; i < dt.files.length; i++) {
         const file = dt.files[i];
-        if (file?.type.startsWith("image/")) {
+        if (
+          file?.type.startsWith("image/") ||
+          file?.type.startsWith("video/")
+        ) {
           imageCount++;
         }
       }
@@ -51,7 +53,7 @@
     isDragOver = false;
     if (!event.dataTransfer?.files?.length) return;
     for (const file of event.dataTransfer.files) {
-      if (file?.type.startsWith("image/")) {
+      if (file?.type.startsWith("image/") || file?.type.startsWith("video/")) {
         processImageFile(file);
       }
     }
@@ -69,7 +71,7 @@
     <div
       class="bg-base-100/80 dark:bg-base-900/80 backdrop-blur-md text-primary pointer-events-none absolute inset-0 flex items-center justify-center text-4xl font-bold z-[1000] dark:text-base-100"
     >
-      Drop image to add it to your message
+      Drop file to add it to your message
     </div>
   </Portal>
 {/if}

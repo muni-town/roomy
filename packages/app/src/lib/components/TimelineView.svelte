@@ -36,7 +36,6 @@
   import FullscreenImage from "./helper/FullscreenImage.svelte";
   import WaitingForJoinModal from "./modals/WaitingForJoinModal.svelte";
 
-  // Component-level threading state - scoped per channel
   let threading = $state({
     active: false,
     selectedMessages: [] as string[],
@@ -80,6 +79,9 @@
     ),
   );
 
+  let bannedAccounts = $derived(new CoState(BansComponent.schema, space.current?.components?.[BansComponent.id]));
+  let bannedAccountsSet = $derived(new Set(bannedAccounts.current ?? []));
+
   let timeline = $derived.by(() => {
     const currentTimeline = threadContent.current?.timeline;
 
@@ -87,6 +89,7 @@
       .map((accountFeed) => new Array(...accountFeed.all))
       .flat()
       .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
+      .filter((a) => !bannedAccountsSet.has(a.by?.id ?? ""))
       .map((a) => a.value);
   });
 
@@ -369,9 +372,6 @@
     }
   }
 
-  let bannedAccounts = $derived(new CoState(BansComponent.schema, space.current?.components?.[BansComponent.id]));
-  let bannedAccountsSet = $derived(new Set(bannedAccounts.current?.map((ban) => ban)));
-
   let members = $derived(
     new CoState(AllMembersComponent.schema, space.current?.components?.[AllMembersComponent.id]),
   );
@@ -380,7 +380,6 @@
     Object.values(members.current?.perAccount ?? {})
       .map((accountFeed) => new Array(...accountFeed.all))
       .flat()
-      .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
       .map((a) => a.value)
       .filter((a) => a && !a.softDeleted)
       .map((a) => ({
@@ -511,12 +510,10 @@
 
                 {#if isSendingMessage}
                   <div
-                    class="absolute inset-0 flex items-center text-primary justify-center z-20 bg-base-100/80"
+                    class="absolute inset-0 flex items-center text-primary justify-center z-20 bg-base-100/80 dark:bg-base-900/80"
                   >
-                    <div class="text-xl font-bold flex items-center gap-4">
+                    <div class="text-xl font-bold flex items-center gap-4 text-base-900 dark:text-base-100">
                       Sending message...
-                      <span class="dz-loading dz-loading-spinner mx-auto w-8"
-                      ></span>
                     </div>
                   </div>
                 {/if}
