@@ -27,7 +27,9 @@
       profile: {
         $onError: null,
       },
-      root: true,
+      root: {
+        $onError: null,
+      }
     },
   });
   const { children } = $props();
