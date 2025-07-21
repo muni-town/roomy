@@ -3,9 +3,9 @@
   import SidebarObject from "./SidebarObject.svelte";
   import {
     addToFolder,
+    ChildrenComponent,
     removeFromFolder,
     RoomyEntity,
-    type ChildrenComponent,
     type RoomyAccount,
   } from "@roomy-chat/sdk";
   import {
@@ -22,7 +22,8 @@
     isEditing = $bindable(false),
     editEntity,
     currentEntity,
-    space
+    space,
+    level = 0,
   }: {
     children: co.loaded<typeof ChildrenComponent.schema> | undefined | null;
     me: co.loaded<typeof RoomyAccount> | undefined | null;
@@ -30,6 +31,7 @@
     editEntity?: (entity: co.loaded<typeof RoomyEntity>) => void;
     currentEntity?: co.loaded<typeof RoomyEntity> | undefined | null;
     space: co.loaded<typeof RoomyEntity> | undefined | null;
+    level?: number;
   } = $props();
 
   let orderedChildren = $derived(children ?? []);
@@ -71,7 +73,8 @@
 {#if isEditing}
   <div
     class={[
-      "flex flex-col gap-2 w-full pb-6 min-h-10 border border-accent-400/30 dark:border-accent-900/50 rounded-xl p-1",
+      "flex flex-col gap-2 w-full pb-6 min-h-10 flex-1 rounded-xl p-px max-w-full",
+      level > 0 ? "border border-accent-400/30 dark:border-accent-900/50 py-1" : ""
     ]}
     use:dragHandleZone={{
       items:
@@ -81,25 +84,25 @@
     onconsider={handleDndConsider}
     onfinalize={handleDndFinalize}
   >
-    {#each orderedChildren.filter((x) => x && !x?.softDeleted) as child (child?.id)}
-      <div class="flex items-start gap-1 w-full max-w-full">
+    {#each orderedChildren.filter((x) => x && !x?.softDeleted) as child, index (child?.id)}
+      <div class="flex items-start gap-0 w-full max-w-full min-w-0 relative">
         <div
           use:dragHandle
           aria-label="drag-handle for {child?.name}"
-          class="mt-2"
+          class={[level < 1 && child?.components?.[ChildrenComponent.id] && index > 0 ? "mt-4.5" : "mt-2.5", "absolute -left-2 top-0"]}
         >
-          <Icon icon="lucide:grip-vertical" class="size-4" />
+          <Icon icon="lucide:grip-vertical" class="!size-3" />
         </div>
 
-        <SidebarObject object={child} {me} bind:isEditing {editEntity} space={space} />
+        <SidebarObject object={child} {me} bind:isEditing {editEntity} space={space} level={level + 1} index={index} />
       </div>
     {/each}
   </div>
 {:else}
   <div class={["flex flex-col gap-2 w-full"]}>
-    {#each (children ?? []).filter((x) => x && !x?.softDeleted) as child (child?.id)}
+    {#each (children ?? []).filter((x) => x && !x?.softDeleted) as child, index (child?.id)}
       <div class="flex items-start gap-2 w-full">
-        <SidebarObject object={child} {me} bind:isEditing {editEntity} space={space} />
+        <SidebarObject object={child} {me} bind:isEditing {editEntity} space={space} level={level + 1} index={index} />
       </div>
     {/each}
   </div>
