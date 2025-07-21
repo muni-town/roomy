@@ -40,6 +40,9 @@
   onNavigate(() => {
     isSidebarVisible.value = false;
   });
+
+  // @ts-ignore
+  const hideSmallSidebar = rawEnv.PUBLIC_HIDE_SMALL_SIDEBAR;
 </script>
 
 <div
@@ -49,7 +52,7 @@
   ]}
 >
   <div class="flex h-full w-fit">
-    {#if !rawEnv.PUBLIC_HIDE_SMALL_SIDEBAR}
+    {#if !hideSmallSidebar}
       <SmallSidebar>
         {#if serverBar}
           {@render serverBar?.()}
@@ -83,7 +86,7 @@
 <div
   class={cn(
     "h-[100dvh] flex flex-col overflow-hidden",
-    rawEnv.PUBLIC_HIDE_SMALL_SIDEBAR
+    hideSmallSidebar
       ? sidebar
         ? "sm:ml-64"
         : "sm:ml-0"
@@ -93,7 +96,7 @@
   )}
 >
   <Navbar>
-    {#if !rawEnv.PUBLIC_HIDE_SMALL_SIDEBAR || sidebar}
+    {#if !hideSmallSidebar || sidebar}
       <div class="flex gap-4 items-center ml-4">
         <ToggleNavigation bind:isSidebarVisible={isSidebarVisible.value} />
       </div>

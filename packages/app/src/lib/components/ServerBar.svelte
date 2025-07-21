@@ -13,7 +13,6 @@
     ScrollArea,
   } from "@fuxui/base";
   import { SelectThemePopover } from "@fuxui/colors";
-  import CreateSpaceModal from "./modals/CreateSpaceModal.svelte";
   import User from "./User.svelte";
   import { user } from "$lib/user.svelte";
 
@@ -24,8 +23,6 @@
     spaces: co.loaded<typeof RoomyEntityList> | undefined | null;
     me: co.loaded<typeof RoomyAccount> | undefined | null;
   } = $props();
-
-  let isNewSpaceDialogOpen = $state(false);
 
   let openSpace = $derived(new CoState(RoomyEntity, page.params.space));
 
@@ -60,13 +57,12 @@
         <Icon icon="tabler:mail" font-size="1.75em" />
       </Button>
 
-      <CreateSpaceModal {me} bind:open={isNewSpaceDialogOpen} />
-
       <Button
         variant="link"
         title="Create Space"
         class="aspect-square [&_svg]:size-8"
-        onclick={() => (isNewSpaceDialogOpen = true)}
+        href="/new"
+        data-current={page.url.pathname.startsWith("/new")}
       >
         <Icon icon="tabler:plus" font-size="2em" />
       </Button>
