@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Modal, Heading } from "@fuxui/base";
+  import Icon from "@iconify/svelte";
 
   let {
     open = $bindable(false),
@@ -8,9 +9,9 @@
   } = $props();
 </script>
 
-<Modal bind:open>
-  <Heading
-    >Please wait a second while we prove you're not a robot by letting your
-    computer do some math</Heading
-  >
+<Modal bind:open closeButton={false}>
+  <Heading class="text-center">Joining Space</Heading>
+  <div class="flex justify-center">
+    <Icon icon="lucide:loader-circle" class="animate-spin" font-size="4em" />
+  </div>
 </Modal>

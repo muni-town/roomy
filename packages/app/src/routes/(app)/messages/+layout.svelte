@@ -13,6 +13,8 @@
   import { onMount } from "svelte";
   import ConversationNavbar from "$lib/components/dm/ConversationNavbar.svelte";
 
+  let { children } = $props();
+
   let isInitialized = $state(false);
   let error = $state<string | null>(null);
 
@@ -142,5 +144,11 @@
     {/if}
   </div>
 </MainLayout>
+
+<!--
+  Note: We are actually handling all rendering the layout and not actually worrying about
+  rendering the page. This is here merely to prevent a warning from Svelte.
+-->
+{@render children()}
 
 <NewMessageModal bind:open={showNewMessageModal} />
