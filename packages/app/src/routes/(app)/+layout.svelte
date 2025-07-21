@@ -163,7 +163,7 @@
     await user.init();
 
     // Initialize PostHog for analytics
-    if (!dev && browser) {
+    if (!dev && browser && globalThis.location.hostname == "roomy.space") {
       posthog.init("phc_j80ksIuoxjfjRI7rPBmTLWx79rntg4Njz6Dixc3I3ik", {
         api_host: "https://hog.roomy.space/",
         person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well
