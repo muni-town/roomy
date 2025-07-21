@@ -3,7 +3,6 @@
     type RoomyAccount,
     RoomyEntityList,
     createSpace,
-    createSpaceList,
     publicGroup,
   } from "@roomy-chat/sdk";
   import { navigate } from "$lib/utils.svelte";

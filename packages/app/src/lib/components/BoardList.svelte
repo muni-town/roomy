@@ -27,9 +27,6 @@
       root: {
         lastRead: true,
       },
-      profile: {
-        threadSubscriptions: true,
-      },
     },
   });
 
@@ -49,19 +46,19 @@
     // Mark the thread as read so it appears in sidebar
     me.current.root.lastRead[threadId] = new Date();
 
-    // Remove any unsubscribe entry for this thread since we're actively viewing it
-    if (me.current?.profile?.threadSubscriptions) {
-      const unsubscribeEntry = `unsubscribe:${threadId}`;
-      const subscriptions = me.current.profile.threadSubscriptions;
-      const index = subscriptions.indexOf(unsubscribeEntry);
-      if (index !== -1) {
-        console.log(
-          "🔄 BoardList: Removing unsubscribe entry for thread:",
-          threadId,
-        );
-        subscriptions.splice(index, 1);
-      }
-    }
+    // // Remove any unsubscribe entry for this thread since we're actively viewing it
+    // if (me.current?.profile?.threadSubscriptions) {
+    //   const unsubscribeEntry = `unsubscribe:${threadId}`;
+    //   const subscriptions = me.current.profile.threadSubscriptions;
+    //   const index = subscriptions.indexOf(unsubscribeEntry);
+    //   if (index !== -1) {
+    //     console.log(
+    //       "🔄 BoardList: Removing unsubscribe entry for thread:",
+    //       threadId,
+    //     );
+    //     subscriptions.splice(index, 1);
+    //   }
+    // }
 
     console.log("✅ BoardList: Thread marked as read:", {
       threadId,

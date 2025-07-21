@@ -6,7 +6,6 @@
     co,
     RoomyAccount,
     RoomyEntity,
-    Space,
   } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
   import toast from "svelte-french-toast";

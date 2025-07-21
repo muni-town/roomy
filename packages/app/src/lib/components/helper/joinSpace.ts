@@ -1,7 +1,6 @@
 import { launchConfetti } from "@fuxui/visual";
 import {
   addMemberToSpace,
-  Group,
   joinGroupThroughInviteService,
   publicGroup,
   RoomyEntityList,
