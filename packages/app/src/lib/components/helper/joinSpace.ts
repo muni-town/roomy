@@ -32,7 +32,6 @@ export async function joinSpace(
 
   await addMemberToSpace(me, space);
 
-
   if (me.profile && me.profile.newJoinedSpacesTest === undefined) {
     me.profile.newJoinedSpacesTest = RoomyEntityList.create(
       [],

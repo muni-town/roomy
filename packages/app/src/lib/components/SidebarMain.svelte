@@ -70,7 +70,10 @@
 
 <div class="w-full py-2 px-2">
   {#if isEditing}
-    <Button class="w-full justify-start mb-4" onclick={() => isEditing = false}>
+    <Button
+      class="w-full justify-start mb-4"
+      onclick={() => (isEditing = false)}
+    >
       <Icon icon="lucide:check" class="size-4" />
       Finish editing</Button
     >

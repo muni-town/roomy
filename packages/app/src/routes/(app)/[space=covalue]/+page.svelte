@@ -55,6 +55,8 @@
   // Automatically navigate to the first object that is a thread or page in the space if we come to this empty space index
   // page. We might have useful features on this index page eventually.
   $effect(() => {
-    navigateToFirstChildThreadOrPage(space.current?.components[ChildrenComponent.id] ?? "");
+    navigateToFirstChildThreadOrPage(
+      space.current?.components[ChildrenComponent.id] ?? "",
+    );
   });
 </script>

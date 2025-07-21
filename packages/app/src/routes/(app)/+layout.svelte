@@ -13,7 +13,7 @@
   import { page } from "$app/state";
   import { afterNavigate } from "$app/navigation";
   import {
-  addToAllAccountsList,
+    addToAllAccountsList,
     LastReadList,
     publicGroup,
     RoomyAccount,
@@ -29,7 +29,7 @@
       },
       root: {
         $onError: null,
-      }
+      },
     },
   });
   const { children } = $props();
@@ -118,20 +118,26 @@
       return;
     }
 
-    if(!me.current.profile) {
+    if (!me.current.profile) {
       console.log("couldnt find profile");
       return;
     }
 
     console.log("me.current.profile", me.current.profile);
-    console.log("me.current.profile.newJoinedSpacesTest", me.current.profile.newJoinedSpacesTest);
+    console.log(
+      "me.current.profile.newJoinedSpacesTest",
+      me.current.profile.newJoinedSpacesTest,
+    );
 
-    if(me.current.profile.newJoinedSpacesTest === undefined) {
+    if (me.current.profile.newJoinedSpacesTest === undefined) {
       console.log("couldnt find newJoinedSpacesTest, creating new one");
-      me.current.profile.newJoinedSpacesTest = RoomyEntityList.create([], publicGroup("reader"));
+      me.current.profile.newJoinedSpacesTest = RoomyEntityList.create(
+        [],
+        publicGroup("reader"),
+      );
     }
 
-    if(!me.current.profile?.joinedDate === undefined) {
+    if (!me.current.profile?.joinedDate === undefined) {
       console.log("couldnt find joinedDate, creating new one");
       me.current.profile.joinedDate = new Date();
     }

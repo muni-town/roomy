@@ -29,7 +29,9 @@
       href={navigateSync({ space: space?.id || "" })}
       class={[
         "size-10 rounded-full relative group",
-        isActive ? "outline-4 outline-accent-500 cursor-default" : "cursor-pointer",
+        isActive
+          ? "outline-4 outline-accent-500 cursor-default"
+          : "cursor-pointer",
         "transition-all duration-200 bg-base-300",
       ]}
       onmousedown={() => {

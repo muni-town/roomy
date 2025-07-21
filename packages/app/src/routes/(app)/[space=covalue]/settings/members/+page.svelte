@@ -1,23 +1,32 @@
 <script lang="ts">
   import { AccountCoState, CoState } from "jazz-tools/svelte";
-  import { AllMembersComponent, BansComponent, RoomyAccount, RoomyEntity } from "@roomy-chat/sdk";
+  import {
+    AllMembersComponent,
+    BansComponent,
+    RoomyAccount,
+    RoomyEntity,
+  } from "@roomy-chat/sdk";
   import { page } from "$app/state";
   import SettingsUser from "$lib/components/settings/SettingsUser.svelte";
 
-  let space = $derived(new CoState(RoomyEntity, page.params.space, {
-    resolve: {
-      components: {
-        $each: true,
-        $onError: null
-      }
-    }
-  }));
+  let space = $derived(
+    new CoState(RoomyEntity, page.params.space, {
+      resolve: {
+        components: {
+          $each: true,
+          $onError: null,
+        },
+      },
+    }),
+  );
 
   const me = new AccountCoState(RoomyAccount);
 
-
   let members = $derived(
-    new CoState(AllMembersComponent.schema, space.current?.components?.[AllMembersComponent.id]),
+    new CoState(
+      AllMembersComponent.schema,
+      space.current?.components?.[AllMembersComponent.id],
+    ),
   );
 
   let users = $derived(
@@ -28,7 +37,12 @@
       .filter((a) => a && !a.softDeleted) || [],
   );
 
-  let bans = $derived(new CoState(BansComponent.schema, space.current?.components?.[BansComponent.id]));
+  let bans = $derived(
+    new CoState(
+      BansComponent.schema,
+      space.current?.components?.[BansComponent.id],
+    ),
+  );
   let banSet = $derived(new Set(bans.current ?? []));
 </script>
 

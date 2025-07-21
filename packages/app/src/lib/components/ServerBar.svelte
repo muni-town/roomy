@@ -30,7 +30,9 @@
   let openSpace = $derived(new CoState(RoomyEntity, page.params.space));
 
   let isOpenSpaceJoined = $derived(
-    me?.profile?.newJoinedSpacesTest?.some((x) => x?.id === openSpace.current?.id),
+    me?.profile?.newJoinedSpacesTest?.some(
+      (x) => x?.id === openSpace.current?.id,
+    ),
   );
 </script>
 
@@ -86,9 +88,7 @@
       class="absolute bottom-0 left-0 right-0 h-5 w-full bg-gradient-to-t from-base-100 dark:from-black to-transparent z-10"
     ></div>
 
-    <ScrollArea
-      class="h-full overflow-y-auto overflow-x-hidden"
-    >
+    <ScrollArea class="h-full overflow-y-auto overflow-x-hidden">
       <div class="flex flex-col px-0 items-center gap-1.5 py-4">
         {#if spaces}
           {#each new Set(spaces.toReversed()) as space}

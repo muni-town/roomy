@@ -122,13 +122,19 @@
 >
   <Toolbar.Button
     onclick={() => toggleReaction("👍")}
-    class={[buttonVariants({ variant: "ghost", size: "iconSm" }), 'backdrop-blur-none']}
+    class={[
+      buttonVariants({ variant: "ghost", size: "iconSm" }),
+      "backdrop-blur-none",
+    ]}
   >
     👍
   </Toolbar.Button>
   <Toolbar.Button
     onclick={() => toggleReaction("😂")}
-    class={[buttonVariants({ variant: "ghost", size: "iconSm" }), 'backdrop-blur-none']}
+    class={[
+      buttonVariants({ variant: "ghost", size: "iconSm" }),
+      "backdrop-blur-none",
+    ]}
   >
     😂
   </Toolbar.Button>
@@ -138,7 +144,12 @@
     onpicked={(emoji) => onEmojiPick(emoji.unicode)}
   >
     {#snippet child({ props })}
-      <Button {...props} size="iconSm" variant="ghost" class="backdrop-blur-none">
+      <Button
+        {...props}
+        size="iconSm"
+        variant="ghost"
+        class="backdrop-blur-none"
+      >
         <Icon icon="lucide:smile-plus" class="text-primary" />
       </Button>
     {/snippet}
@@ -147,7 +158,10 @@
   {#if canEdit}
     <Toolbar.Button
       onclick={() => editMessage()}
-      class={[buttonVariants({ variant: "ghost", size: "iconSm" }), 'backdrop-blur-none']}
+      class={[
+        buttonVariants({ variant: "ghost", size: "iconSm" }),
+        "backdrop-blur-none",
+      ]}
     >
       <Icon icon="tabler:edit" />
     </Toolbar.Button>
@@ -156,7 +170,10 @@
   {#if canDelete}
     <Toolbar.Button
       onclick={() => deleteMessage()}
-      class={[buttonVariants({ variant: "ghost", size: "iconSm" }), 'backdrop-blur-none']}
+      class={[
+        buttonVariants({ variant: "ghost", size: "iconSm" }),
+        "backdrop-blur-none",
+      ]}
     >
       <Icon icon="tabler:trash" class="text-warning" />
     </Toolbar.Button>
@@ -164,7 +181,10 @@
 
   <Toolbar.Button
     onclick={() => setReplyTo()}
-    class={[buttonVariants({ variant: "ghost", size: "iconSm" }), 'backdrop-blur-none']}
+    class={[
+      buttonVariants({ variant: "ghost", size: "iconSm" }),
+      "backdrop-blur-none",
+    ]}
   >
     <Icon icon="fa6-solid:reply" />
   </Toolbar.Button>

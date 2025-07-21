@@ -74,7 +74,9 @@
   <div
     class={[
       "flex flex-col gap-2 w-full pb-6 min-h-10 flex-1 rounded-xl p-px max-w-full",
-      level > 0 ? "border border-accent-400/30 dark:border-accent-900/50 py-1" : ""
+      level > 0
+        ? "border border-accent-400/30 dark:border-accent-900/50 py-1"
+        : "",
     ]}
     use:dragHandleZone={{
       items:
@@ -89,12 +91,25 @@
         <div
           use:dragHandle
           aria-label="drag-handle for {child?.name}"
-          class={[level < 1 && child?.components?.[ChildrenComponent.id] && index > 0 ? "mt-4.5" : "mt-2.5", "absolute -left-2 top-0"]}
+          class={[
+            level < 1 && child?.components?.[ChildrenComponent.id] && index > 0
+              ? "mt-4.5"
+              : "mt-2.5",
+            "absolute -left-2 top-0",
+          ]}
         >
           <Icon icon="lucide:grip-vertical" class="!size-3" />
         </div>
 
-        <SidebarObject object={child} {me} bind:isEditing {editEntity} space={space} level={level + 1} index={index} />
+        <SidebarObject
+          object={child}
+          {me}
+          bind:isEditing
+          {editEntity}
+          {space}
+          level={level + 1}
+          {index}
+        />
       </div>
     {/each}
   </div>
@@ -102,7 +117,15 @@
   <div class={["flex flex-col gap-2 w-full"]}>
     {#each (children ?? []).filter((x) => x && !x?.softDeleted) as child, index (child?.id)}
       <div class="flex items-start gap-2 w-full">
-        <SidebarObject object={child} {me} bind:isEditing {editEntity} space={space} level={level + 1} index={index} />
+        <SidebarObject
+          object={child}
+          {me}
+          bind:isEditing
+          {editEntity}
+          {space}
+          level={level + 1}
+          {index}
+        />
       </div>
     {/each}
   </div>

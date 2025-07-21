@@ -76,7 +76,7 @@
           class: cn(
             inputVariants({ variant: "primary" }),
             "w-full outline-none text-base-950 dark:text-base-50",
-            "max-h-[30vh] overflow-y-auto"
+            "max-h-[30vh] overflow-y-auto",
           ),
         },
       },
@@ -106,7 +106,8 @@
     if (!items) return;
 
     for (const item of Array.from(items)) {
-      if (!item.type.startsWith("image/") && !item.type.startsWith("video/")) continue;
+      if (!item.type.startsWith("image/") && !item.type.startsWith("video/"))
+        continue;
       const file = item.getAsFile();
       if (!file) continue;
       event.preventDefault();

@@ -182,7 +182,8 @@
           }}
           variant="secondary"
         >
-          <Icon icon="lucide:pencil" class="size-4" /> {isEditing ? "Finish editing" : "Edit objects"}
+          <Icon icon="lucide:pencil" class="size-4" />
+          {isEditing ? "Finish editing" : "Edit objects"}
         </Button>
 
         <Button

@@ -96,7 +96,12 @@
 
 {#snippet editButton()}
   {#if isEditing && object}
-    <Button variant="ghost" size="icon" onclick={() => editEntity?.(object)} class="group-hover:opacity-100 opacity-0">
+    <Button
+      variant="ghost"
+      size="icon"
+      onclick={() => editEntity?.(object)}
+      class="group-hover:opacity-100 opacity-0"
+    >
       <Icon icon="lucide:pencil" class="size-4" />
     </Button>
   {/if}
@@ -133,7 +138,9 @@
     {@render editButton?.()}
   </div>
 {:else if object?.components?.[PageComponent.id] && !object?.softDeleted}
-  <div class="inline-flex items-start justify-between gap-2 w-full min-w-0 group">
+  <div
+    class="inline-flex items-start justify-between gap-2 w-full min-w-0 group"
+  >
     <Button
       href={navigateSync({
         space: page.params.space!,
@@ -157,7 +164,9 @@
       level < 2 ? (index > 0 ? "py-2" : "pb-2") : "",
     ]}
   >
-    <div class="inline-flex items-start justify-between gap-2 w-full shrink group">
+    <div
+      class="inline-flex items-start justify-between gap-2 w-full shrink group"
+    >
       <Button
         variant="ghost"
         class="w-full shrink min-w-0 justify-start hover:bg-transparent hover:text-base-900 dark:hover:bg-transparent dark:hover:text-base-100 hover:cursor-default active:scale-100"

@@ -144,8 +144,12 @@
         {/if}
         {#if isShowingFirstMessage}
           <div class="flex flex-col gap-2 max-w-full px-6 mb-4 mt-4">
-            <p class="text-base font-semibold text-base-900 dark:text-base-100">Hello world!</p>
-            <p class="text-sm text-base-600 dark:text-base-400">This is the beginning of something beautiful.</p>
+            <p class="text-base font-semibold text-base-900 dark:text-base-100">
+              Hello world!
+            </p>
+            <p class="text-sm text-base-600 dark:text-base-400">
+              This is the beginning of something beautiful.
+            </p>
           </div>
         {/if}
         <ol class="flex flex-col gap-2 max-w-full">

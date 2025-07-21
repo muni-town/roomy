@@ -1,7 +1,13 @@
 <script lang="ts">
   import { Avatar, Badge, Button, Popover } from "@fuxui/base";
   import Icon from "@iconify/svelte";
-  import { BansComponent, co, RoomyAccount, RoomyEntity, Space } from "@roomy-chat/sdk";
+  import {
+    BansComponent,
+    co,
+    RoomyAccount,
+    RoomyEntity,
+    Space,
+  } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
   import toast from "svelte-french-toast";
 
@@ -31,7 +37,9 @@
 
   let popoverOpen = $state(false);
 
-  let bans = $derived(new CoState(BansComponent.schema, space?.components?.[BansComponent.id]));
+  let bans = $derived(
+    new CoState(BansComponent.schema, space?.components?.[BansComponent.id]),
+  );
 </script>
 
 <div

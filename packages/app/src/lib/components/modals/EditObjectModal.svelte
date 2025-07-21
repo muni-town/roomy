@@ -1,8 +1,5 @@
 <script lang="ts">
-  import {
-    ChildrenComponent,
-    RoomyEntity,
-  } from "@roomy-chat/sdk";
+  import { ChildrenComponent, RoomyEntity } from "@roomy-chat/sdk";
   import { Modal, Input, Button } from "@fuxui/base";
   import Icon from "@iconify/svelte";
   import { co } from "jazz-tools";
@@ -66,7 +63,7 @@
 
     for (const child of children ?? []) {
       child.softDeleted = true;
-      
+
       await deleteChildren(child);
     }
   }
