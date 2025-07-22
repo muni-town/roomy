@@ -27,15 +27,15 @@
       <Button
         variant="ghost"
         class="w-full justify-start"
-        href={`/${page.params.space}/settings/discord-bridge`}
-        data-current={page.url.pathname.includes("discord-bridge")}
-        >Discord Bridge</Button
+        href={`/${page.params.space}/settings/members`}
+        data-current={page.url.pathname.includes("members")}>Members</Button
       >
       <Button
         variant="ghost"
+        disabled={true}
         class="w-full justify-start"
-        href={`/${page.params.space}/settings/members`}
-        data-current={page.url.pathname.includes("members")}>Members</Button
+        data-current={page.url.pathname.includes("discord-bridge")}
+        >Discord Bridge ( Coming Soon! )</Button
       >
     </div>
   {/snippet}
