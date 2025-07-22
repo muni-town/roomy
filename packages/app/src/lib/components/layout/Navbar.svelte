@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { WithElementRef } from "bits-ui";
   import type { HTMLAttributes } from "svelte/elements";
-  import { cn } from "@fuxui/base";
+  import { Alert, Button, cn } from "@fuxui/base";
+  import { onMount } from "svelte";
 
   const {
     class: className,
@@ -11,7 +12,34 @@
   }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
     hasSidebar?: boolean;
   } = $props();
+
+  let showAlphaWarning = $state(false);
+  onMount(() => {
+    showAlphaWarning = localStorage.getItem("showAlphaWarning") !== "false";
+  });
 </script>
+
+{#if showAlphaWarning}
+  <div class="p-1.5">
+    <Alert type="warning" class="text-sm">
+      <span class="flex items-center gap-2"
+        >Roomy is in an early "Alpha" state. This means that it is a
+        work-in-progress and is under heavy development. Many things may not
+        work as expected and data is preserved on a best-effort basis for the
+        time being.
+        <span class="flex flex-row-reverse grow">
+          <Button
+            size="sm"
+            onclick={() => {
+              showAlphaWarning = false;
+              localStorage.setItem("showAlphaWarning", "false");
+            }}>Dismiss</Button
+          >
+        </span>
+      </span>
+    </Alert>
+  </div>
+{/if}
 
 <div
   class={cn(

@@ -30,6 +30,7 @@
         A digital gardening platform for communities. Flourish in Spaces,
         curating knowledge and conversations together.
       </p>
+
       <div class="divider"></div>
 
       {#if !user.session}
