@@ -1,9 +1,9 @@
 <script lang="ts">
   import { page } from "$app/state";
-  // import { user } from "$lib/user.svelte";
+  import { user } from "$lib/user.svelte";
   import { Button } from "@fuxui/base";
-  import { Space } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-tools/svelte";
+  import { createThread, Group, RoomyAccount, Space } from "@roomy-chat/sdk";
+  import { AccountCoState, CoState } from "jazz-tools/svelte";
   import toast from "svelte-french-toast";
 
   let space = $derived(new CoState(Space, page.params.space));
@@ -46,32 +46,52 @@
 
   // let avatarFile = $state<File | null>(null);
 
-  let isSaving = $state(false);
+  let isImporting = $state(false);
 
   let hasChanged = $derived(
     spaceName != space.current?.name ||
       spaceDescription != space.current?.description,
   );
 
+  const account = new AccountCoState(RoomyAccount, {
+    resolve: {
+      profile: {
+        joinedSpaces: true,
+      },
+    },
+  });
+  const me = $derived(account.current);
+
   function resetData() {
     spaceName = space.current?.name ?? "";
     // avatarFile = null;
   }
 
-  async function save() {
+  async function importTweets() {
     if (!space.current) return;
-    isSaving = true;
+    isImporting = true;
 
     let currentSpaceName = spaceName;
     let currentSpaceDescription = spaceDescription;
+
+    // TODO: Check how to make channels
+    let adminGroup = new CoState(Group, space.current.adminGroupId);
+    if (!adminGroup.current) return;
+    let newChannel = createThread("Twitter Import", adminGroup.current);
+    newChannel;
+    // let newChannelId = newChannel.roomyObject.id;
 
     // if (avatarFile) {
     //   await uploadAvatar();
     // }
 
+    me?.root;
+
+    user.profile;
+
     space.current.name = currentSpaceName;
     space.current.description = currentSpaceDescription;
-    isSaving = false;
+    isImporting = false;
 
     toast.success("Space updated successfully", {
       position: "bottom-right",
@@ -88,23 +108,25 @@
 
   $effect(() => {
     if (tweetsJs) {
-      tweetsJs.text().then((text) => {
-        const newText = text.replace("window.YTD.tweets.part0 = ", "");
-        const tweets = JSON.parse(newText);
-        console.log(tweets);
-        pushLog("tweets.js parsed, found " + tweets.length + " tweets");
-      });
+      tweetsJs.text().then((text) => parseTweets(text, 0));
     }
 
     if (tweetsPart1js) {
-      tweetsPart1js.text().then((text) => {
-        const newText = text.replace("window.YTD.tweets.part1 = ", "");
-        const tweets = JSON.parse(newText);
-        console.log(tweets);
-        pushLog("tweets-part1.js parsed, found " + tweets.length + " tweets");
-      });
+      tweetsPart1js.text().then((text) => parseTweets(text, 1));
     }
   });
+
+  async function parseTweets(text: string, part: number) {
+    const newText = text.replace(`window.YTD.tweets.part${part} = `, "");
+    const tweets = JSON.parse(newText);
+    console.log(tweets);
+    pushLog(`tweets part${part} parsed, found ${tweets.length} tweets`);
+  }
+
+  // async function uploadMedia(file: File) {
+  //   const uploadResult = await user.uploadBlob(file);
+  //   return uploadResult.url;
+  // }
 
   $effect(() => {
     if (mediaFiles.length > 0) {
@@ -181,11 +203,15 @@
         >
           Cancel
         </Button>
-        <Button type="submit" disabled={!hasChanged || isSaving} onclick={save}>
-          {#if isSaving}
-            Saving...
+        <Button
+          type="submit"
+          disabled={!hasChanged || isImporting}
+          onclick={importTweets}
+        >
+          {#if isImporting}
+            Importing...
           {:else}
-            Save
+            Import
           {/if}
         </Button>
       </div>
