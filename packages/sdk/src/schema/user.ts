@@ -32,6 +32,8 @@ export const RoomyProfile = co.profile({
   description: z.string().optional(),
   joinedDate: z.date().optional(),
   newJoinedSpacesTest: co.list(RoomyEntity),
+
+  activityLog: co.record(z.string(), z.string()),
 });
 
 export const RoomyRoot = co.map({
@@ -60,6 +62,7 @@ export const RoomyAccount = co
             [],
             publicGroup("reader"),
           ),
+          activityLog: co.record(z.string(), z.string()).create({}, publicGroup("reader")),
         },
         publicGroup("reader"),
       );
