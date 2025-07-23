@@ -7,7 +7,7 @@ export function createAllSpacesList() {
   const group = Group.create();
   group.addMember("everyone", "writeOnly");
   const allSpaces = IDList.create([], group);
-  console.log("allSpacesList", allSpaces.id);
+  console.log("allSpacesListId", allSpaces.id);
   return allSpaces;
 }
 
@@ -15,7 +15,7 @@ export function createAllAccountsList() {
   const group = Group.create();
   group.addMember("everyone", "writeOnly");
   const allAccounts = IDList.create([], group);
-  console.log("allAccountsList", allAccounts.id);
+  console.log("allAccountsListId", allAccounts.id);
   return allAccounts;
 }
 
@@ -23,7 +23,7 @@ export function createDiscoverableSpacesList(): co.loaded<typeof IDFeed> {
   const group = Group.create();
   group.addMember("everyone", "writer");
   const discoverableSpaces = IDFeed.create([], group);
-  console.log("discoverableSpacesList", discoverableSpaces.id);
+  console.log("discoverableSpacesFeedId", discoverableSpaces.id);
   return discoverableSpaces;
 }
 

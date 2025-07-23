@@ -1,5 +1,5 @@
 import { Account, co, Group } from "jazz-tools";
-import { allSpacesListId } from "../ids.js";
+import { allSpacesListId, discoverableSpacesFeedId } from "../ids.js";
 import {
   AllFoldersComponent,
   AllMembersComponent,
@@ -7,6 +7,7 @@ import {
   AllPermissions,
   AllThreadsComponent,
   BansComponent,
+  IDFeed,
   IDList,
   RoomyEntity,
   SpacePermissionsComponent,
@@ -192,6 +193,12 @@ export async function addToAllSpacesList(spaceId: string) {
   const allSpacesList = await IDList.load(allSpacesListId);
   if (!allSpacesList) return;
   allSpacesList.push(spaceId);
+}
+
+export async function addToDiscoverableSpacesFeed(spaceId: string) {
+  const discoverableSpacesFeed = await IDFeed.load(discoverableSpacesFeedId);
+  if (!discoverableSpacesFeed) return;
+  discoverableSpacesFeed.push(spaceId);
 }
 
 export function isSpaceAdmin(

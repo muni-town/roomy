@@ -4,6 +4,7 @@
   import { navigate } from "$lib/utils.svelte";
   import { Button, Checkbox, Input, Label, Textarea } from "@fuxui/base";
   import {
+  addToDiscoverableSpacesFeed,
     createSpace,
     publicGroup,
     RoomyAccount,
@@ -99,6 +100,11 @@
     toast.success("Space created successfully", {
       position: "bottom-right",
     });
+
+    if (isDiscoverable) {
+      console.log("Adding to discoverable spaces feed");
+      await addToDiscoverableSpacesFeed(space.id);
+    }
 
     navigate({ space: space.id });
   }
