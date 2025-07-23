@@ -2,7 +2,7 @@
   import SpaceAvatar from "$lib/components/SpaceAvatar.svelte";
   import { user } from "$lib/user.svelte";
   import { navigate } from "$lib/utils.svelte";
-  import { Button, Input, Textarea } from "@fuxui/base";
+  import { Button, Checkbox, Input, Label, Textarea } from "@fuxui/base";
   import {
     createSpace,
     publicGroup,
@@ -22,6 +22,7 @@
   let spaceName = $state("");
   let avatarUrl = $state("");
   let spaceDescription = $state("");
+  let isDiscoverable = $state(true);
 
   let avatarFile = $state<File | null>(null);
 
@@ -112,12 +113,12 @@
     <div class="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
       <div class="sm:col-span-4">
         <label
-          for="username"
+          for="name"
           class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
           >Name</label
         >
         <div class="mt-2">
-          <Input bind:value={spaceName} class="w-full" />
+          <Input id="name" bind:value={spaceName} class="w-full" />
         </div>
       </div>
 
@@ -134,6 +135,7 @@
             type="file"
             accept="image/*"
             class="hidden"
+            id="photo"
             onchange={handleAvatarSelect}
             bind:this={fileInput}
           />
@@ -151,6 +153,29 @@
         >
         <div class="mt-2">
           <Textarea bind:value={spaceDescription} class="w-full" rows={4} />
+        </div>
+      </div>
+
+      <div class="sm:col-span-full">
+        <label
+          for="username"
+          class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
+          >Discovery</label
+        >
+        <div class="mt-4 flex items-center gap-x-2">
+          <Checkbox
+            id="discovery"
+            aria-labelledby="discovery-label"
+            variant="secondary"
+            bind:checked={isDiscoverable}
+          />
+          <Label
+            id="discovery-label"
+            for="discovery"
+            class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          >
+            Allow space to be publicly discoverable
+          </Label>
         </div>
       </div>
     </div>

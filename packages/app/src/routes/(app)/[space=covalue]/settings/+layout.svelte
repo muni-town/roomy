@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import MainSidebarSpace from "$lib/components/MainSidebarSpace.svelte";
-  import { Button } from "@fuxui/base";
+  import { Badge, Button } from "@fuxui/base";
   import Icon from "@iconify/svelte";
 
   let { children } = $props();
@@ -35,7 +35,7 @@
         disabled={true}
         class="w-full justify-start"
         data-current={page.url.pathname.includes("discord-bridge")}
-        >Discord Bridge ( Coming Soon! )</Button
+        >Discord Bridge <Badge>Coming Soon!</Badge></Button
       >
     </div>
   {/snippet}

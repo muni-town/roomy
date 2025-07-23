@@ -6,6 +6,7 @@
   import { blueskyLoginModalState } from "@fuxui/social";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SpaceButton from "$lib/components/SpaceButton.svelte";
+  import EarlyAlphaWarning from "$lib/components/helper/EarlyAlphaWarning.svelte";
 
   const account = new AccountCoState(RoomyAccount, {
     resolve: {
@@ -30,6 +31,8 @@
         A digital gardening platform for communities. Flourish in Spaces,
         curating knowledge and conversations together.
       </p>
+
+      <EarlyAlphaWarning />
 
       <div class="divider"></div>
 
