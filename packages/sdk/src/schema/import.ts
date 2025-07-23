@@ -7,4 +7,5 @@ export const UploadMedia = co.map({
   attachToMessageId: z.string().optional(),
 });
 
-export const MediaUploadQueue = co.list(UploadMedia);
+// record mapping file paths to UploadMedia objects
+export const MediaUploadQueue = co.record(z.string(), UploadMedia);
