@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
-  import MainSidebarSpace from "$lib/components/MainSidebarSpace.svelte";
+  import MainSidebarSpace from "$lib/components/sidebars/MainSidebarSpace.svelte";
   import { Badge, Button } from "@fuxui/base";
   import Icon from "@iconify/svelte";
 

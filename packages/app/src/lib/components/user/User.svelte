@@ -2,7 +2,7 @@
   import { user } from "$lib/user.svelte";
   import { Avatar } from "@fuxui/base";
   import { blueskyLoginModalState } from "@fuxui/social";
-  import UserSettingsModal from "./modals/UserSettingsModal.svelte";
+  import UserSettingsModal from "../modals/UserSettingsModal.svelte";
 
   let userSettingsModalOpen = $state(false);
 </script>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import SpaceAvatar from "$lib/components/SpaceAvatar.svelte";
+  import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { user } from "$lib/user.svelte";
   import { navigate } from "$lib/utils.svelte";
   import { Button, Checkbox, Input, Label, Textarea } from "@fuxui/base";

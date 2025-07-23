@@ -2,8 +2,8 @@
   import { page } from "$app/state";
   import { RoomyAccount } from "@roomy-chat/sdk";
   import { AccountCoState, CoState } from "jazz-tools/svelte";
-  import SpaceButton from "$lib/components/SpaceButton.svelte";
-  import UserProfile from "$lib/components/UserProfile.svelte";
+  import SpaceButton from "$lib/components/spaces/SpaceButton.svelte";
+  import UserProfile from "$lib/components/user/UserProfile.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
 
   const user = $derived(
@@ -59,7 +59,7 @@
           {/each}
         </section>
       {:else if spacesInCommon?.length === 0}
-        <p class="text-lg font-medium text-center">
+        <p class="text-lg font-medium text-center text-base-700 dark:text-base-300">
           You don't have any spaces in common with this user.
         </p>
       {/if}

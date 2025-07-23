@@ -7,9 +7,9 @@
   import BigSidebar from "./BigSidebar.svelte";
   import SmallSidebar from "./SmallSidebar.svelte";
   import { type Snippet } from "svelte";
-  import ToggleNavigation from "../ToggleNavigation.svelte";
+  import ToggleNavigation from "../helper/ToggleNavigation.svelte";
   import { cn } from "@fuxui/base";
-  import ServerBar from "../ServerBar.svelte";
+  import ServerBar from "../sidebars/ServerBar.svelte";
   import { AccountCoState } from "jazz-tools/svelte";
   import { RoomyAccount } from "@roomy-chat/sdk";
   import { onNavigate } from "$app/navigation";

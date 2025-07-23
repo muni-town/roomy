@@ -1,5 +1,5 @@
 <script lang="ts">
-  import SpaceAvatar from "$lib/components/SpaceAvatar.svelte";
+  import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import type { LoadedSpace } from "./type";
 
   let { space }: { space: LoadedSpace | undefined | null } = $props();

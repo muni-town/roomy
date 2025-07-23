@@ -4,7 +4,7 @@
   import { co } from "jazz-tools";
   import { RoomyEntity } from "@roomy-chat/sdk";
   import { Tooltip } from "@fuxui/base";
-  import SpaceAvatar from "./SpaceAvatar.svelte";
+  import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
 
   type Props = {
     space: co.loaded<typeof RoomyEntity> | null | undefined;

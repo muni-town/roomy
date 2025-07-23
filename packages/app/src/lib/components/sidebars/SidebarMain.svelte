@@ -10,7 +10,7 @@
 
   import SidebarObjectList from "./SidebarObjectList.svelte";
   import MainSidebarSpace from "./MainSidebarSpace.svelte";
-  import EditObjectModal from "./modals/EditObjectModal.svelte";
+  import EditObjectModal from "../modals/EditObjectModal.svelte";
   import { Button } from "@fuxui/base";
   import Icon from "@iconify/svelte";
 

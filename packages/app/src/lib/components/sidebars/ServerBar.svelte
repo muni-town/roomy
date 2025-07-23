@@ -1,7 +1,7 @@
 <script lang="ts">
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  import SidebarSpace from "$lib/components/SidebarSpace.svelte";
+  import SidebarSpace from "./SidebarSpace.svelte";
   import { co } from "jazz-tools";
   import { RoomyAccount, RoomyEntity, RoomyEntityList } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
@@ -13,7 +13,7 @@
     ScrollArea,
   } from "@fuxui/base";
   import { SelectThemePopover } from "@fuxui/colors";
-  import User from "./User.svelte";
+  import User from "../user/User.svelte";
   import { user } from "$lib/user.svelte";
 
   let {

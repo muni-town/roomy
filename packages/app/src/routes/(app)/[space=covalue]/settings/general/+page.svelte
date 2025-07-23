@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import SpaceAvatar from "$lib/components/SpaceAvatar.svelte";
+  import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { user } from "$lib/user.svelte";
   import { Button, Input, Textarea } from "@fuxui/base";
   import { RoomyEntity } from "@roomy-chat/sdk";

@@ -1,9 +1,9 @@
 <script lang="ts">
   import { page } from "$app/state";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
-  import PageView from "$lib/components/PageView.svelte";
-  import SidebarMain from "$lib/components/SidebarMain.svelte";
-  import TimelineView from "$lib/components/TimelineView.svelte";
+  import PageView from "$lib/components/content/page/PageView.svelte";
+  import SidebarMain from "$lib/components/sidebars/SidebarMain.svelte";
+  import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
   import {
     LastReadList,
     PageComponent,

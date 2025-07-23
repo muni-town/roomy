@@ -1,8 +1,8 @@
 <script lang="ts">
   import toast from "svelte-french-toast";
   import Icon from "@iconify/svelte";
-  import ChatArea from "$lib/components/ChatArea.svelte";
-  import ChatInput from "$lib/components/ChatInput.svelte";
+  import ChatArea from "$lib/components/content/thread/ChatArea.svelte";
+  import ChatInput from "$lib/components/content/thread/ChatInput.svelte";
   import { Button } from "@fuxui/base";
   import { co } from "jazz-tools";
   import {
@@ -28,13 +28,13 @@
   import { replyTo } from "./message/ChatMessage.svelte";
   import MessageRepliedTo from "./message/MessageRepliedTo.svelte";
   import { extractLinks } from "$lib/utils/collectLinks";
-  import FullscreenImageDropper from "./helper/FullscreenImageDropper.svelte";
-  import UploadFileButton from "./helper/UploadFileButton.svelte";
+  import FullscreenImageDropper from "$lib/components/helper/FullscreenImageDropper.svelte";
+  import UploadFileButton from "$lib/components/helper/UploadFileButton.svelte";
   import { afterNavigate } from "$app/navigation";
   import { blueskyLoginModalState } from "@fuxui/social";
-  import { joinSpace } from "./helper/joinSpace";
-  import FullscreenImage from "./helper/FullscreenImage.svelte";
-  import WaitingForJoinModal from "./modals/WaitingForJoinModal.svelte";
+  import { joinSpace } from "$lib/components/helper/joinSpace";
+  import FullscreenImage from "$lib/components/helper/FullscreenImage.svelte";
+  import WaitingForJoinModal from "$lib/components/modals/WaitingForJoinModal.svelte";
 
   let threading = $state({
     active: false,

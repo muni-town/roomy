@@ -2,7 +2,7 @@ import { mount, unmount } from "svelte";
 import { keymap } from "@tiptap/pm/keymap";
 import { PluginKey } from "@tiptap/pm/state";
 import Mention from "@tiptap/extension-mention";
-import SuggestionSelect from "$lib/components/SuggestionSelect.svelte";
+import SuggestionSelect from "$lib/components/helper/SuggestionSelect.svelte";
 import { Extension, mergeAttributes } from "@tiptap/core";
 import type {
   SuggestionKeyDownProps,

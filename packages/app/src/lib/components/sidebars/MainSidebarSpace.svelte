@@ -11,8 +11,8 @@
     RoomyEntity,
   } from "@roomy-chat/sdk";
   import toast from "svelte-french-toast";
-  import SpaceAvatar from "./SpaceAvatar.svelte";
-  import { joinSpace } from "./helper/joinSpace";
+  import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
+  import { joinSpace } from "../helper/joinSpace";
   import { user } from "$lib/user.svelte";
   import { blueskyLoginModalState } from "@fuxui/social";
 

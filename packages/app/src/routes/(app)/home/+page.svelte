@@ -5,7 +5,7 @@
   import { Button } from "@fuxui/base";
   import { blueskyLoginModalState } from "@fuxui/social";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
-  import SpaceButton from "$lib/components/SpaceButton.svelte";
+  import SpaceButton from "$lib/components/spaces/SpaceButton.svelte";
   import EarlyAlphaWarning from "$lib/components/helper/EarlyAlphaWarning.svelte";
 
   const account = new AccountCoState(RoomyAccount, {
