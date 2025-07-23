@@ -62,7 +62,10 @@ export const RoomyAccount = co
             [],
             publicGroup("reader"),
           ),
-          activityLog: co.record(z.string(), z.string()).create({}, publicGroup("reader")),
+          activityLog: co
+            .record(z.string(), z.string())
+            .create({}, publicGroup("reader")),
+          joinedDate: new Date(),
         },
         publicGroup("reader"),
       );
