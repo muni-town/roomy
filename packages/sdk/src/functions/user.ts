@@ -1,6 +1,5 @@
 import { co, Group } from "jazz-tools";
-import { IDList, InboxItem, RoomyAccount, SpaceList } from "../schema/index.js";
-import { publicGroup } from "./group.js";
+import { IDList, InboxItem, RoomyAccount } from "../schema/index.js";
 import { allAccountsListId } from "../ids.js";
 
 export function createInbox() {
@@ -10,12 +9,6 @@ export function createInbox() {
   const inbox = co.list(InboxItem).create([], group);
 
   return inbox;
-}
-
-export function createSpaceList() {
-  const spaces = SpaceList.create([], publicGroup("reader"));
-
-  return spaces;
 }
 
 export async function addToAllAccountsList(accountId: string) {

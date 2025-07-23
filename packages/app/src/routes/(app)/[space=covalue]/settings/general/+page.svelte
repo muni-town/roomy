@@ -3,11 +3,11 @@
   import SpaceAvatar from "$lib/components/SpaceAvatar.svelte";
   import { user } from "$lib/user.svelte";
   import { Button, Input, Textarea } from "@fuxui/base";
-  import { Space } from "@roomy-chat/sdk";
+  import { RoomyEntity } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
   import toast from "svelte-french-toast";
 
-  let space = $derived(new CoState(Space, page.params.space));
+  let space = $derived(new CoState(RoomyEntity, page.params.space));
   let spaceName = $derived(space.current?.name ?? "");
   let avatarUrl = $derived(space.current?.imageUrl ?? "");
   let spaceDescription = $derived(space.current?.description ?? "");

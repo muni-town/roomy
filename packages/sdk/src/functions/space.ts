@@ -8,9 +8,7 @@ import {
   AllThreadsComponent,
   BansComponent,
   IDList,
-  MemberEntry,
   RoomyEntity,
-  Space,
   SpacePermissionsComponent,
   SpaceRolesComponent,
 } from "../schema/index.js";
@@ -19,7 +17,6 @@ import { addToFolder } from "./folder.js";
 import { createRoomyEntity } from "./roomyentity.js";
 import { addRoleToPermissions, createPermissions } from "./permissions.js";
 import { ChildrenComponent } from "../schema/folder.js";
-import { createInviteLink } from "jazz-tools/react";
 import { addMemberToSpace } from "./members.js";
 
 export async function createSpace(
@@ -208,8 +205,4 @@ export function isSpaceAdmin(
   } catch (error) {
     return false;
   }
-}
-
-export function joinSpace(space: co.loaded<typeof Space>) {
-  space.members?.push(Account.getMe());
 }

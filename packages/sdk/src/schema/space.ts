@@ -1,30 +1,6 @@
 import { co, z } from "jazz-tools";
 import { RoomyEntity } from "./roomyentity.js";
 
-export const Space = co.map({
-  name: z.string(),
-
-  imageUrl: z.string().optional(),
-
-  description: z.string().optional(),
-
-  // Uncommenting this causes the error
-  members: co.list(co.account()),
-
-  version: z.number().optional(),
-  creatorId: z.string(),
-
-  adminGroupId: z.string(),
-
-  rootFolder: RoomyEntity,
-
-  threads: co.feed(RoomyEntity),
-  pages: co.list(RoomyEntity),
-  folders: co.list(RoomyEntity),
-
-  bans: co.list(z.string()),
-});
-
 export const MemberEntry = co.map({
   account: co.account(),
   softDeleted: z.boolean().optional(),

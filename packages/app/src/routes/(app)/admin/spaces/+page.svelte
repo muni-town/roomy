@@ -1,14 +1,20 @@
 <script lang="ts">
   import { Badge, NumberInput } from "@fuxui/base";
 
-  import { IDList, Space, allSpacesListId, co } from "@roomy-chat/sdk";
+  import {
+    AllMembersComponent,
+    IDList,
+    RoomyEntity,
+    allSpacesListId,
+  } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
   import SpaceButton from "./SpaceButton.svelte";
+  import type { LoadedSpace } from "./type";
 
   // load all spaces and accounts
   const allSpaces = $derived(new CoState(IDList, allSpacesListId));
 
-  const loadedSpaces = $state<co.loaded<typeof Space>[]>([]);
+  const loadedSpaces = $state<LoadedSpace[]>([]);
   const filteredSpaces = $derived(
     loadedSpaces.filter(
       (space) => (space?.members?.length ?? 0) >= minimumMemberCount,
@@ -25,14 +31,50 @@
 
     // add all spaces with more than one member to the usedSpaces list
     for (const spaceId of allSpaces.current.toReversed()) {
-      const space = await Space.load(spaceId, {
+      const space = await RoomyEntity.load(spaceId, {
         resolve: {
+          components: {
+            $each: true,
+            $onError: null,
+          },
           $onError: null,
         },
       });
-      if (space) {
-        loadedSpaces.push(space);
+
+      if (!space) continue;
+
+      const loadedSpace: LoadedSpace = {
+        space,
+      };
+
+      const membersId = space.components?.[AllMembersComponent.id];
+
+      if (membersId) {
+        const members = await AllMembersComponent.schema.load(membersId, {
+          resolve: {
+            $each: {
+              account: {
+                profile: {
+                  $onError: null,
+                },
+              },
+            },
+            $onError: null,
+          },
+        });
+
+        let users = Object.values(members?.perAccount ?? {})
+          .filter((a) => a && !a.value?.softDeleted)
+          .flat()
+          .map((a) => ({
+            value: a?.value?.account?.id ?? "",
+            label: a?.value?.account?.profile?.name ?? "",
+          }));
+
+        loadedSpace.members = users;
       }
+
+      loadedSpaces.push(loadedSpace);
     }
 
     isLoading = false;
@@ -63,12 +105,14 @@
 
 {#if filteredSpaces.length > 0}
   <div
-    class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 py-8"
+    class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 py-8 mz-8"
   >
     {#each filteredSpaces as space}
       <SpaceButton {space} />
     {/each}
   </div>
 {:else}
-  <div class="text-sm text-base-500 dark:text-base-400">No spaces found</div>
+  <div class="text-sm text-base-500 dark:text-base-400 mt-8">
+    No spaces found
+  </div>
 {/if}

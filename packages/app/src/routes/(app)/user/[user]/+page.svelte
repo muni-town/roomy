@@ -37,10 +37,9 @@
 
 <MainLayout>
   <div class="flex flex-col gap-4 w-full h-full overflow-y-auto sm:px-4 pb-8">
-    <!-- TODO: re-implement user profile -->
     <UserProfile
       profile={{
-        id: page.params.user, // Use the account ID from URL
+        id: page.params.user,
         avatar: user.current?.profile?.imageUrl,
         displayName: user.current?.profile?.name,
         handle: user.current?.profile?.blueskyHandle,

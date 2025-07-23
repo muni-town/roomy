@@ -31,10 +31,9 @@
 
   let users = $derived(
     Object.values(members.current?.perAccount ?? {})
-      .map((accountFeed) => new Array(...accountFeed.all))
+      .filter((a) => a && !a.value?.softDeleted)
       .flat()
-      .map((a) => a.value)
-      .filter((a) => a && !a.softDeleted) || [],
+      .map((a) => a.value) || []
   );
 
   let bans = $derived(

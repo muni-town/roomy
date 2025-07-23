@@ -47,6 +47,8 @@
     }
   }
 
+  const profileRecordRKey = "v2";
+
   // TODO: used in checkProfileRecord, which is unused; removed to appease husky
   async function setProfileRecord(accountId?: string, profileId?: string) {
     if (!accountId || !profileId) return false;
@@ -55,7 +57,7 @@
       collection: "chat.roomy.profile",
       record: { accountId, profileId },
       repo: user.agent.assertDid,
-      rkey: "self",
+      rkey: profileRecordRKey,
     });
 
     addToAllAccountsList(accountId);
@@ -78,7 +80,7 @@
       await user.agent?.com.atproto.repo.getRecord({
         collection: "chat.roomy.profile",
         repo: user.agent.assertDid,
-        rkey: "self",
+        rkey: profileRecordRKey,
       });
 
       recordChecked = true;
@@ -114,23 +116,14 @@
 
   $effect(() => {
     if (!user.profile.data?.handle || !me.current) {
-      console.log("couldnt find handle or me");
       return;
     }
 
     if (!me.current.profile) {
-      console.log("couldnt find profile");
       return;
     }
 
-    console.log("me.current.profile", me.current.profile);
-    console.log(
-      "me.current.profile.newJoinedSpacesTest",
-      me.current.profile.newJoinedSpacesTest,
-    );
-
     if (me.current.profile.newJoinedSpacesTest === undefined) {
-      console.log("couldnt find newJoinedSpacesTest, creating new one");
       me.current.profile.newJoinedSpacesTest = RoomyEntityList.create(
         [],
         publicGroup("reader"),
@@ -138,7 +131,6 @@
     }
 
     if (!me.current.profile?.joinedDate === undefined) {
-      console.log("couldnt find joinedDate, creating new one");
       me.current.profile.joinedDate = new Date();
     }
 
@@ -162,8 +154,6 @@
       me.current.profile.description = user.profile.data?.description;
     }
   });
-
-  $inspect(me.current?.profile?.newJoinedSpacesTest);
 
   onMount(async () => {
     await user.init();

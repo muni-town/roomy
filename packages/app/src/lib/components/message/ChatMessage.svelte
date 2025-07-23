@@ -30,7 +30,6 @@
   import MessageThreadBadge from "./MessageThreadBadge.svelte";
   import VideoUrlEmbed from "./embeds/VideoUrlEmbed.svelte";
   import { goto } from "$app/navigation";
-  import { dmClient } from "$lib/dm.svelte";
   import { Badge } from "@fuxui/base";
 
   let {
@@ -273,31 +272,6 @@
     if (hiddenIn.has(threadId ?? "")) return false;
     return true;
   });
-
-  async function handleOpenDM() {
-    try {
-      // Get the user's handle - try blueskyHandle first, then name as fallback
-      const userHandle = profile?.current?.blueskyHandle || authorData?.name;
-
-      if (!userHandle) {
-        toast.error("Unable to find user handle for messaging");
-        return;
-      }
-
-      // Initialize DM client if needed
-      const initialized = await dmClient.init();
-      if (!initialized) {
-        toast.error("Please log in to use direct messaging");
-        return;
-      }
-
-      // Navigate to messages with user parameter for new/existing conversations
-      await goto(`/messages?user=${encodeURIComponent(userHandle)}`);
-    } catch (error) {
-      console.error("Failed to open DM:", error);
-      toast.error("Failed to open direct message");
-    }
-  }
 </script>
 
 {#if shouldShow}
@@ -363,14 +337,7 @@
                   goto(`/user/${userId}`);
                 }
               }}
-              oncontextmenu={async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (authorData?.id !== me.current?.id) {
-                  await handleOpenDM();
-                }
-              }}
-              class="rounded-full hover:ring-2 hover:ring-blue-500 transition-all"
+              class="rounded-full hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer"
             >
               <Avatar.Root class="size-8 sm:size-10">
                 <Avatar.Image src={authorData?.imageUrl} class="rounded-full" />

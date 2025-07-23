@@ -397,8 +397,6 @@
     ),
   );
 
-  $inspect(members.current);
-
   let users = $derived(
     Object.values(members.current?.perAccount ?? {})
       .filter(

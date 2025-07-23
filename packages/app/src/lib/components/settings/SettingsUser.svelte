@@ -83,7 +83,7 @@
                   } else {
                     bans.current?.push(accountId);
                   }
-                  toast.success(isBanned ? "User unbanned" : "User banned");
+                  toast.success(isBanned ? "User banned" : "User unbanned");
                   popoverOpen = false;
                 }
               }}>{isBanned ? "Unban user" : "Ban user"}</Button

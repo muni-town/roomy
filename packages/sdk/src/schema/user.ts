@@ -1,13 +1,9 @@
 import { co, z } from "jazz-tools";
-import { Space } from "./space.js";
 import {
   createInbox,
-  createSpaceList,
   publicGroup,
 } from "../functions/index.js";
 import { RoomyEntity, RoomyEntityList } from "./index.js";
-
-export const SpaceList = co.list(Space);
 
 export const LastReadList = co.record(z.string(), z.date());
 
@@ -26,7 +22,6 @@ export const RoomyProfile = co.profile({
   name: z.string(),
   imageUrl: z.string().optional(),
   blueskyHandle: z.string().optional(),
-  joinedSpaces: SpaceList,
   roomyInbox: co.list(InboxItem),
   bannerUrl: z.string().optional(),
   description: z.string().optional(),
@@ -56,7 +51,6 @@ export const RoomyAccount = co
       account.profile = RoomyProfile.create(
         {
           name: creationProps?.name ?? "Anonymous",
-          joinedSpaces: createSpaceList(),
           roomyInbox: createInbox(),
           newJoinedSpacesTest: RoomyEntityList.create(
             [],
