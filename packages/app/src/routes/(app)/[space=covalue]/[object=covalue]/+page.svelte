@@ -4,6 +4,7 @@
   import PageView from "$lib/components/content/page/PageView.svelte";
   import SidebarMain from "$lib/components/sidebars/SidebarMain.svelte";
   import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
+  import FeedDisplay from "$lib/components/FeedDisplay.svelte";
   import {
     LastReadList,
     PageComponent,
@@ -54,7 +55,11 @@
     </div>
   {/snippet}
 
-  {#if object.current?.components?.[ThreadComponent.id]}
+  {#if object.current?.components?.feedConfig}
+    <div class="flex-1 overflow-hidden">
+      <FeedDisplay thread={object.current} />
+    </div>
+  {:else if object.current?.components?.[ThreadComponent.id]}
     <TimelineView
       objectId={page.params.object ?? ""}
       spaceId={page.params.space ?? ""}
