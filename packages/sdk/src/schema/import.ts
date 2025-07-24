@@ -4,6 +4,7 @@ export const UploadMedia = co.map({
   path: z.string(),
   mediaType: z.enum(["image", "video"]),
   status: z.enum(["pending", "processing", "completed", "failed"]),
+  url: z.string().optional(),
   attachToMessageId: z.string().optional(),
 });
 
