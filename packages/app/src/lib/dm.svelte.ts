@@ -1,3 +1,4 @@
+import type { $Typed, AppBskyEmbedRecord } from "@atproto/api";
 import { user } from "./user.svelte";
 
 export type Message = {
@@ -5,10 +6,14 @@ export type Message = {
   text: string;
   sender: {
     did: string;
-    handle: string;
-    displayName?: string;
   };
+  embed?: Embed;
   sentAt: string;
+};
+
+export type Embed = {
+  type: "bluesky-post";
+  atUri: string;
 };
 
 export type Participant = {
@@ -72,6 +77,25 @@ class DMClient {
     }));
   }
 
+  parseEmbed(
+    embed?: $Typed<AppBskyEmbedRecord.View> | { $type: string },
+  ): Embed | undefined {
+    if (!embed) return;
+
+    if (
+      embed.$type == "app.bsky.embed.record#view" &&
+      "record" in embed &&
+      embed.record.$type == "app.bsky.embed.record#viewRecord" &&
+      "value" in embed.record &&
+      embed.record.value.$type == "app.bsky.feed.post"
+    ) {
+      return {
+        type: "bluesky-post",
+        atUri: embed.record.uri,
+      };
+    }
+  }
+
   async getMessages(conversationId: string): Promise<Message[]> {
     if (!user.agent) throw new Error("User not authenticated");
 
@@ -86,16 +110,22 @@ class DMClient {
       },
     );
 
-    return response.data.messages.map((msg: any) => ({
-      id: msg.id,
-      text: msg.text,
-      sender: {
-        did: msg.sender.did,
-        handle: msg.sender.handle,
-        displayName: msg.sender.displayName,
-      },
-      sentAt: msg.sentAt,
-    }));
+    return response.data.messages
+      .map((msg) => {
+        if ("id" in msg && "text" in msg && "sender" in msg) {
+          if (msg.embed) console.warn(msg.embed);
+          return {
+            id: msg.id,
+            text: msg.text,
+            sender: {
+              did: msg.sender.did,
+            },
+            embed: this.parseEmbed(msg.embed),
+            sentAt: msg.sentAt,
+          };
+        }
+      })
+      .filter((x) => !!x);
   }
 
   async sendMessage(conversationId: string, text: string): Promise<void> {

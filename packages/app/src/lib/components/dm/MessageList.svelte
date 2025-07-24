@@ -5,6 +5,10 @@
   import { Button, ChatBubble, cn, Input } from "@fuxui/base";
   import { afterNavigate } from "$app/navigation";
 
+  import "bluesky-post-embed";
+  import "bluesky-post-embed/style.css";
+  import "bluesky-post-embed/themes/light.css";
+
   const { conversationId }: { conversationId: string } = $props();
 
   let messages: Message[] = $state([]);
@@ -16,7 +20,7 @@
   let refreshInterval: NodeJS.Timeout | null = $state(null);
   let conversationPartner: {
     displayName?: string;
-    handle: string;
+    handle?: string;
     did: string;
     avatar?: string;
   } | null = $state(null);
@@ -81,7 +85,6 @@
             "All message senders:",
             messages.map((m) => ({
               did: m.sender.did,
-              handle: m.sender.handle,
             })),
           );
 
@@ -92,32 +95,16 @@
 
           if (otherUser) {
             // If we have the user but missing handle/displayName, fetch their profile
-            if (!otherUser.handle) {
-              try {
-                const profile = await dmClient.getUserProfile(otherUser.did);
-                conversationPartner = profile;
-              } catch (err) {
-                console.error("Failed to fetch user profile:", err);
-                conversationPartner = otherUser;
-              }
-            } else {
+            try {
+              const profile = await dmClient.getUserProfile(otherUser.did);
+              conversationPartner = profile;
+            } catch (err) {
+              console.error("Failed to fetch user profile:", err);
               conversationPartner = otherUser;
-            }
-          } else {
-            // If no other user found, this might be a conversation with yourself or all messages are from current user
-            // In that case, take any sender that has proper info
-            const anySender = messages.find((msg) => msg.sender.handle)?.sender;
-            if (anySender) {
-              conversationPartner = anySender;
             }
           }
         } catch (err) {
           console.error("Failed to get current user DID:", err);
-          // Fallback: use the first sender with a handle
-          const firstSender = messages.find((msg) => msg.sender.handle)?.sender;
-          if (firstSender) {
-            conversationPartner = firstSender;
-          }
         }
       }
 
@@ -343,7 +330,6 @@
                     : "text-left",
                 )}
               >
-                {message.sender.displayName || message.sender.handle}
                 <time class="ml-1">{formatTimestamp(message.sentAt)}</time>
               </div>
               {#if !isOnlyEmojis(message.text)}
@@ -353,6 +339,10 @@
                   <div class="break-words max-w-full whitespace-pre-wrap">
                     {@html message.text.replace(/\n/g, "<br />")}
                   </div>
+                  {#if message.embed && message.embed.type == "bluesky-post"}
+                    <!-- TODO: use our own custom embed rendering? -->
+                    <bluesky-post src={message.embed.atUri}></bluesky-post>
+                  {/if}
                 </ChatBubble>
               {:else}
                 <div
@@ -395,3 +385,11 @@
     </div>
   {/if}
 </div>
+
+<style>
+  :global(.bluesky-embed) {
+    --background-primary: var(--color-base-800);
+    --text-secondary: var(--color-base-400);
+    --text-primary: var(--color-base-200);
+  }
+</style>
