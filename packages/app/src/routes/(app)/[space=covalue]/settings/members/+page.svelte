@@ -33,7 +33,7 @@
     Object.values(members.current?.perAccount ?? {})
       .filter((a) => a && !a.value?.softDeleted)
       .flat()
-      .map((a) => a.value) || []
+      .map((a) => a.value) || [],
   );
 
   let bans = $derived(

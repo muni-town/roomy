@@ -6,7 +6,11 @@
 </script>
 
 <div class="relative flex flex-col items-center justify-start gap-2 max-w-42">
-  <SpaceAvatar imageUrl={space?.space?.imageUrl} id={space?.space?.id} size={96} />
+  <SpaceAvatar
+    imageUrl={space?.space?.imageUrl}
+    id={space?.space?.id}
+    size={96}
+  />
 
   <span class="text-lg font-semibold text-center">{space?.space?.name}</span>
 

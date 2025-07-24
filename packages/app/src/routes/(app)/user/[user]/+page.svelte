@@ -59,7 +59,9 @@
           {/each}
         </section>
       {:else if spacesInCommon?.length === 0}
-        <p class="text-lg font-medium text-center text-base-700 dark:text-base-300">
+        <p
+          class="text-lg font-medium text-center text-base-700 dark:text-base-300"
+        >
           You don't have any spaces in common with this user.
         </p>
       {/if}

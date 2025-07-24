@@ -4,7 +4,7 @@
   import { navigate } from "$lib/utils.svelte";
   import { Button, Checkbox, Input, Label, Textarea } from "@fuxui/base";
   import {
-  addToDiscoverableSpacesFeed,
+    addToDiscoverableSpacesFeed,
     createSpace,
     publicGroup,
     RoomyAccount,
