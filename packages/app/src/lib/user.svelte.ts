@@ -58,7 +58,7 @@ let passphrase: {
     agent
       .call("chat.roomy.v1.passphrase", undefined, undefined, {
         headers: {
-          "atproto-proxy": "did:web:jazz.keyserver.roomy.chat#roomy_keyserver",
+          "atproto-proxy": "did:web:keyserver.roomy.space#roomy_keyserver",
         },
       })
       .then((resp) => {
