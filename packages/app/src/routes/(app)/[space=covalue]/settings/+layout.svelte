@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import MainSidebarSpace from "$lib/components/sidebars/MainSidebarSpace.svelte";
-  import { Badge, Button } from "@fuxui/base";
+  import { Badge, Button, ScrollArea } from "@fuxui/base";
   import Icon from "@iconify/svelte";
 
   let { children } = $props();
@@ -40,7 +40,9 @@
     </div>
   {/snippet}
 
-  <div class="max-w-3xl mx-auto w-full p-4">
-    {@render children?.()}
-  </div>
+  <ScrollArea>
+    <div class="max-w-3xl mx-auto w-full p-4">
+      {@render children?.()}
+    </div>
+  </ScrollArea>
 </MainLayout>
