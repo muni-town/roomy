@@ -9,13 +9,14 @@ const config = {
     serviceWorker: {
       register: process.env.MODE !== "tauri",
     },
-    adapter: (process.env.NETLIFY = "true"
-      ? adapterNetlify({
-          fallback: "index.html",
-        })
-      : adapterStatic({
-          fallback: "index.html",
-        })),
+    adapter:
+      process.env.NETLIFY == "true"
+        ? adapterNetlify({
+            fallback: "index.html",
+          })
+        : adapterStatic({
+            fallback: "index.html",
+          }),
   },
 };
 
