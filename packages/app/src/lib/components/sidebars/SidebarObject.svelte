@@ -178,6 +178,26 @@
       </div>
     {/if}
   </div>
+{:else if object?.components?.feedConfig && !object?.softDeleted}
+  <div
+    class="inline-flex items-start justify-between gap-2 w-full font-semibold min-w-0 group"
+  >
+    <Button
+      href={navigateSync({
+        space: page.params.space!,
+        object: object.id,
+      })}
+      variant="ghost"
+      class="w-full justify-start min-w-0"
+      data-current={object.id === page.params.object && !isEditing}
+    >
+      <Icon icon={"mdi:rss"} class="shrink-0" />
+      <span class="truncate whitespace-nowrap overflow-hidden min-w-0"
+        >{object.name || "..."}</span
+      >
+    </Button>
+    {@render editButton?.()}
+  </div>
 {:else if object?.components?.[PageComponent.id] && !object?.softDeleted}
   <!-- Object is a page -->
   <div

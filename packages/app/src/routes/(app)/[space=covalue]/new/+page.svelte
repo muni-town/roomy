@@ -98,6 +98,22 @@
 
       allThreads.current?.push(thread.roomyObject);
       navigate({ space: space.current?.id, object: thread.roomyObject.id });
+    } else if (objectType === "Feeds") {
+      // add feed thread
+      const thread = await createThread(objectName, permissions.current);
+
+      // Remove thread component and add feed configuration
+      delete thread.roomyObject.components.thread;
+      thread.roomyObject.components.feedConfig = JSON.stringify({
+        feeds: [],
+        threadsOnly: false,
+        enabled: false,
+      });
+
+      addAsChild(thread.roomyObject);
+
+      allThreads.current?.push(thread.roomyObject);
+      navigate({ space: space.current?.id, object: thread.roomyObject.id });
     } else if (objectType === "Group") {
       // add group
       const group = await createFolder(objectName, permissions.current);
@@ -132,7 +148,7 @@
     }[],
   );
 
-  const types = ["Channel", "Group", "Page"];
+  const types = ["Channel", "Feeds", "Group", "Page"];
 </script>
 
 {#if space.current}

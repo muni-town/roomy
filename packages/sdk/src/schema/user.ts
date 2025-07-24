@@ -32,6 +32,13 @@ export const RoomyProfile = co.profile({
   hiddenFeedPosts: co.optional(co.list(z.string())), // List of AT Proto URIs for hidden feed posts
 
   activityLog: co.record(z.string(), z.string()),
+  hiddenFeedPosts: co.list(z.string()).optional(),
+  hiddenFeedPostsCache: co.list(co.map({
+    uri: z.string(),
+    text: z.string(),
+    author: z.string(),
+    hiddenAt: z.date(),
+  })).optional(),
 });
 
 export const RoomyRoot = co.map({
@@ -64,6 +71,17 @@ export const RoomyAccount = co
             .record(z.string(), z.string())
             .create({}, publicGroup("reader")),
           joinedDate: new Date(),
+          hiddenFeedPosts: co
+            .list(z.string())
+            .create([], publicGroup("writer")),
+          hiddenFeedPostsCache: co
+            .list(co.map({
+              uri: z.string(),
+              text: z.string(),
+              author: z.string(),
+              hiddenAt: z.date(),
+            }))
+            .create([], publicGroup("writer")),
         },
         publicGroup("reader"),
       );
