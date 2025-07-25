@@ -5,170 +5,354 @@ import {
   ATPROTO_FEED_CONFIG,
 } from "$lib/utils/atproToFeeds";
 import { user } from "$lib/user.svelte";
-import { createMessage, RoomyEntity } from "@roomy-chat/sdk";
-import { co } from "jazz-tools";
+import { RoomyAccount, FeedConfig, FeedAggregatorConfigs, BookmarkedThread, BookmarkedThreads, HiddenThread, HiddenThreads, publicGroup } from "@roomy-chat/sdk";
+import { co, z } from "jazz-tools";
 
 export class AtprotoFeedService {
-  private aggregator: AtprotoFeedAggregator | null = null;
-  private intervalId: NodeJS.Timeout | null = null;
-  private isRunning = false;
-  private readonly UPDATE_INTERVAL = 5 * 60 * 1000; // 5 minutes
-
+  
   constructor() {
-    // Initialize aggregator when user agent becomes available
-    this.checkAgent();
+    // No initialization needed for stateless service
   }
 
-  private checkAgent() {
-    if (user.agent && !this.aggregator) {
-      this.aggregator = new AtprotoFeedAggregator(user.agent);
+  private getAggregator(): AtprotoFeedAggregator | null {
+    if (user.agent) {
+      return new AtprotoFeedAggregator(user.agent);
     }
+    return null;
   }
 
-  async populateThread(roomyEntity: co.loaded<typeof RoomyEntity>): Promise<void> {
-    console.log(
-      "🔄 Starting ATProto feed population for thread:",
-      roomyEntity.name,
-    );
+  getFeedConfig(account: any, objectId: string): { feeds: string[], threadsOnly: boolean } {
+    const config = account?.root?.feedConfigs?.[objectId];
+    if (config) {
+      return {
+        feeds: config.feeds || [],
+        threadsOnly: config.threadsOnly || false,
+      };
+    }
+    return { feeds: [], threadsOnly: false };
+  }
 
-    this.checkAgent();
-    if (!this.aggregator) {
+  setFeedConfig(account: any, objectId: string, config: { feeds: string[], threadsOnly: boolean }): void {
+    console.log("🔧 setFeedConfig called:", { objectId, config, hasAccount: !!account });
+    
+    if (!account?.root) {
+      console.error("❌ Account root not available");
+      return;
+    }
+
+    // Initialize feedConfigs if it doesn't exist
+    if (!account.root.feedConfigs) {
+      console.log("🔧 Initializing feedConfigs in account root");
+      try {
+        account.root.feedConfigs = FeedAggregatorConfigs.create({}, publicGroup("writer"));
+        console.log("✅ Successfully initialized feedConfigs");
+      } catch (error) {
+        console.error("❌ Failed to initialize feedConfigs:", error);
+        return;
+      }
+    }
+
+    console.log("🔧 Current feedConfigs:", Object.keys(account.root.feedConfigs));
+
+    if (config.feeds.length === 0) {
+      // Remove config if no feeds
+      console.log("🗑️ Removing config for objectId:", objectId);
+      delete account.root.feedConfigs[objectId];
+    } else {
+      console.log("💾 Setting config for objectId:", objectId, "with", config.feeds.length, "feeds");
+      
+      // Check if config already exists
+      const existingConfig = account.root.feedConfigs[objectId];
+      
+      if (existingConfig) {
+        // Update existing config
+        console.log("🔄 Updating existing config");
+        
+        // Clear existing feeds and add new ones
+        existingConfig.feeds.splice(0, existingConfig.feeds.length, ...config.feeds);
+        existingConfig.threadsOnly = config.threadsOnly;
+      } else {
+        // Create new config with proper group permissions
+        console.log("✨ Creating new config");
+        
+        try {
+          const feedsList = co.list(z.string()).create(config.feeds, publicGroup("writer"));
+          account.root.feedConfigs[objectId] = FeedConfig.create({
+            feeds: feedsList,
+            threadsOnly: config.threadsOnly,
+          }, publicGroup("writer"));
+          
+          console.log("✅ Successfully created new config");
+        } catch (error) {
+          console.error("❌ Error creating new config:", error);
+        }
+      }
+    }
+    
+    console.log("🔧 Final feedConfigs:", Object.keys(account.root.feedConfigs));
+  }
+
+  async fetchFeedPosts(feedUris: string[], threadsOnly: boolean = false, limit: number = 50): Promise<AtprotoFeedPost[]> {
+    console.log("📡 Fetching posts from ATProto feeds...");
+
+    const aggregator = this.getAggregator();
+    if (!aggregator) {
       console.error("❌ No ATProto aggregator available - user not logged in?");
-      return;
-    }
-
-    // Check if this is a feeds thread by looking for feed configuration in components
-    if (!roomyEntity.components?.feedConfig) {
-      console.log("⚠️ Thread is not configured for ATProto feeds");
-      return;
+      return [];
     }
 
     try {
-      console.log("📡 Fetching posts from ATProto feeds...");
+      const posts = threadsOnly
+        ? await aggregator.fetchThreadsOnly(limit, feedUris)
+        : await aggregator.fetchAggregatedFeed(limit, feedUris);
+
+      console.log(
+        `📊 Fetched ${posts.length} posts from feeds (threads only: ${threadsOnly})`,
+      );
+
+      return posts;
+    } catch (error) {
+      console.error("❌ Failed to fetch ATProto feed posts:", error);
+      return [];
+    }
+  }
+
+  async fetchFeedPostsForObject(account: any, objectId: string, limit: number = 50): Promise<AtprotoFeedPost[]> {
+    const config = this.getFeedConfig(account, objectId);
+    
+    if (config.feeds.length === 0) {
+      return [];
+    }
+
+    return this.fetchFeedPosts(config.feeds, config.threadsOnly, limit);
+  }
+
+
+  async fetchPostThread(postUri: string) {
+    const aggregator = this.getAggregator();
+    if (!aggregator) {
+      console.error("❌ No ATProto aggregator available - user not logged in?");
+      return null;
+    }
+
+    try {
+      return await aggregator.fetchPostThread(postUri);
+    } catch (error) {
+      console.error("❌ Failed to fetch post thread:", error);
+      return null;
+    }
+  }
+
+  getFeedName(feedUri: string): string {
+    const aggregator = this.getAggregator();
+    if (!aggregator) {
+      return "📡 Custom Feed";
+    }
+    return aggregator.getFeedName(feedUri);
+  }
+
+  // Migration helper to convert old JSON configs to new Jazz root structure
+  migrateEntityFeedConfig(account: any, objectId: string, entityFeedConfigJson: string): void {
+    if (!entityFeedConfigJson || !account?.root?.feedConfigs) return;
+
+    try {
+      const oldConfig = JSON.parse(entityFeedConfigJson);
       
-      // Parse feed configuration from components
-      const feedConfig = JSON.parse(roomyEntity.components.feedConfig);
-      
-      if (!feedConfig.enabled || !feedConfig.feeds || feedConfig.feeds.length === 0) {
-        console.log("⚠️ Feed is disabled or has no configured feeds");
+      // Skip if already migrated (check if config exists in root)
+      if (account.root.feedConfigs[objectId]) {
         return;
       }
 
-      const posts = feedConfig.threadsOnly
-        ? await this.aggregator.fetchThreadsOnly(50, feedConfig.feeds)
-        : await this.aggregator.fetchAggregatedFeed(50, feedConfig.feeds);
+      // Extract relevant data (ignore old 'enabled' field)
+      const config = {
+        feeds: oldConfig.feeds || [],
+        threadsOnly: oldConfig.threadsOnly || false,
+      };
 
-      console.log(
-        `📊 Fetched ${posts.length} posts from feeds (threads only: ${feedConfig.threadsOnly})`,
-      );
+      // Only migrate if there are feeds to migrate
+      if (config.feeds.length > 0) {
+        this.setFeedConfig(account, objectId, config);
+        console.log(`✅ Migrated feed config for object ${objectId}:`, config);
+      }
+    } catch (error) {
+      console.warn(`❌ Failed to migrate feed config for object ${objectId}:`, error);
+    }
+  }
 
-      if (posts.length > 0) {
-        console.log("📝 Sample post:", {
-          text: posts[0].record.text.substring(0, 100) + "...",
-          author: posts[0].author.handle,
-          isThread: !!(posts[0].record.reply || posts[0].replyCount),
-        });
+  // Bookmark management methods
+  bookmarkThread(account: any, postUri: string, postData: { 
+    title: string, 
+    author: { handle: string, displayName?: string, avatar?: string }, 
+    previewText: string, 
+    feedSource?: string 
+  }): boolean {
+    console.log("🔖 Bookmarking thread:", postUri);
+    
+    if (!account?.root) {
+      console.error("❌ Account root not available");
+      return false;
+    }
+
+    // Initialize bookmarkedThreads if it doesn't exist
+    if (!account.root.bookmarkedThreads) {
+      console.log("🔧 Initializing bookmarkedThreads in account root");
+      try {
+        account.root.bookmarkedThreads = BookmarkedThreads.create([], publicGroup("writer"));
+        console.log("✅ Successfully initialized bookmarkedThreads");
+      } catch (error) {
+        console.error("❌ Failed to initialize bookmarkedThreads:", error);
+        return false;
+      }
+    }
+
+    // Check if already bookmarked
+    const existing = account.root.bookmarkedThreads.find((bookmark: any) => bookmark.postUri === postUri);
+    if (existing) {
+      console.log("ℹ️ Thread already bookmarked");
+      return false;
+    }
+
+    try {
+      const bookmark = BookmarkedThread.create({
+        postUri,
+        title: postData.title,
+        author: {
+          handle: postData.author.handle,
+          displayName: postData.author.displayName,
+          avatar: postData.author.avatar,
+        },
+        previewText: postData.previewText,
+        bookmarkedAt: new Date(),
+        feedSource: postData.feedSource,
+      }, publicGroup("writer"));
+
+      account.root.bookmarkedThreads.push(bookmark);
+      console.log("✅ Successfully bookmarked thread");
+      return true;
+    } catch (error) {
+      console.error("❌ Error bookmarking thread:", error);
+      return false;
+    }
+  }
+
+  removeBookmark(account: any, postUri: string): boolean {
+    console.log("🗑️ Removing bookmark:", postUri);
+    
+    if (!account?.root?.bookmarkedThreads) {
+      console.log("ℹ️ No bookmarks to remove");
+      return false;
+    }
+
+    try {
+      const index = account.root.bookmarkedThreads.findIndex((bookmark: any) => bookmark.postUri === postUri);
+      if (index === -1) {
+        console.log("ℹ️ Bookmark not found");
+        return false;
       }
 
-      // For feed threads, we don't populate messages automatically
-      // Instead, we let the FeedDisplay component handle the display
-      console.log("✅ Feed thread ready for display");
-      
+      account.root.bookmarkedThreads.splice(index, 1);
+      console.log("✅ Successfully removed bookmark");
+      return true;
     } catch (error) {
-      console.error("❌ Failed to populate ATProto feed thread:", error);
-    }
-  }
-
-  private createMessageFromPost(
-    post: AtprotoFeedPost,
-  ) {
-    // Format the message content with HTML for proper formatting
-    let content = `<p>${post.record.text}</p>`;
-
-    // Add feed source with link
-    if (post.feedSource && ATPROTO_FEED_CONFIG[post.feedSource]) {
-      const feedConfig = ATPROTO_FEED_CONFIG[post.feedSource];
-      content += `<p style="margin: 8px 0;"><strong>📡 From:</strong> <a href="${feedConfig.url}" target="_blank" rel="noopener">${feedConfig.name}</a></p>`;
-    } else {
-      content += `<p style="margin: 8px 0;"><strong>📡 From:</strong> 🔮 ATProto Feed</p>`;
-    }
-
-    // Add engagement stats if available
-    const stats: string[] = [];
-    if (post.replyCount) stats.push(`${post.replyCount} replies`);
-    if (post.repostCount) stats.push(`${post.repostCount} reposts`);
-    if (post.likeCount) stats.push(`${post.likeCount} likes`);
-
-    if (stats.length > 0) {
-      content += `<p style="margin: 8px 0;"><strong>📊 Stats:</strong> ${stats.join(" • ")}</p>`;
-    }
-
-    // Add Bluesky link as proper HTML link
-    const postUrl = post.uri
-      .replace("at://", "https://bsky.app/profile/")
-      .replace("/app.bsky.feed.post/", "/post/");
-    content += `<p style="margin: 8px 0;"><strong>🔗 View on Bluesky:</strong> <a href="${postUrl}" target="_blank" rel="noopener">${postUrl}</a></p>`;
-
-    const message = createMessage(
-      content,
-      undefined, // not a reply in our system
-      undefined, // no special admin permissions
-      undefined, // no embeds for now
-    );
-
-    // Use ATProto author info - format: "atproto||handle||displayName||did||uri||avatar"
-    // Using || delimiter to avoid conflicts with colons in DIDs
-    const authorInfo = [
-      "atproto",
-      post.author.handle,
-      post.author.displayName || post.author.handle,
-      post.author.did || "",
-      post.uri, // Store URI for deduplication
-      post.author.avatar ? encodeURIComponent(post.author.avatar) : "", // Encode avatar URL
-    ].join("||");
-
-    message.roomyObject.author = authorInfo;
-
-    // Use original post creation time for both created and updated
-    const postDate = new Date(post.record.createdAt);
-    message.roomyObject.createdAt = postDate;
-    message.roomyObject.updatedAt = postDate; // Same as created to avoid "edited" indicator
-
-    return message.roomyObject;
-  }
-
-  async manualRefresh(roomyEntity: co.loaded<typeof RoomyEntity>): Promise<void> {
-    if (this.aggregator) {
-      this.aggregator.clearCache();
-      await this.populateThread(roomyEntity);
-    }
-  }
-
-  // Check if a thread is configured for feeds
-  isThreadConfiguredForFeeds(roomyEntity: co.loaded<typeof RoomyEntity>): boolean {
-    if (!roomyEntity.components?.feedConfig) {
-      return false;
-    }
-
-    try {
-      const feedConfig = JSON.parse(roomyEntity.components.feedConfig);
-      return feedConfig.enabled && feedConfig.feeds && feedConfig.feeds.length > 0;
-    } catch {
+      console.error("❌ Error removing bookmark:", error);
       return false;
     }
   }
 
-  // Get feed configuration for a thread
-  getFeedConfig(roomyEntity: co.loaded<typeof RoomyEntity>) {
-    if (!roomyEntity.components?.feedConfig) {
-      return null;
+  getBookmarks(account: any): any[] {
+    if (!account?.root?.bookmarkedThreads) {
+      return [];
+    }
+    return Array.from(account.root.bookmarkedThreads);
+  }
+
+  isBookmarked(account: any, postUri: string): boolean {
+    if (!account?.root?.bookmarkedThreads) {
+      return false;
+    }
+    return account.root.bookmarkedThreads.some((bookmark: any) => bookmark.postUri === postUri);
+  }
+
+  // Hide management methods
+  hideThread(account: any, postUri: string, reason?: string): boolean {
+    console.log("🙈 Hiding thread:", postUri);
+    
+    if (!account?.root) {
+      console.error("❌ Account root not available");
+      return false;
+    }
+
+    // Initialize hiddenThreads if it doesn't exist
+    if (!account.root.hiddenThreads) {
+      console.log("🔧 Initializing hiddenThreads in account root");
+      try {
+        account.root.hiddenThreads = HiddenThreads.create([], publicGroup("writer"));
+        console.log("✅ Successfully initialized hiddenThreads");
+      } catch (error) {
+        console.error("❌ Failed to initialize hiddenThreads:", error);
+        return false;
+      }
+    }
+
+    // Check if already hidden
+    const existing = account.root.hiddenThreads.find((hidden: any) => hidden.postUri === postUri);
+    if (existing) {
+      console.log("ℹ️ Thread already hidden");
+      return false;
     }
 
     try {
-      return JSON.parse(roomyEntity.components.feedConfig);
-    } catch {
-      return null;
+      const hiddenThread = HiddenThread.create({
+        postUri,
+        hiddenAt: new Date(),
+        reason,
+      }, publicGroup("writer"));
+
+      account.root.hiddenThreads.push(hiddenThread);
+      console.log("✅ Successfully hid thread");
+      return true;
+    } catch (error) {
+      console.error("❌ Error hiding thread:", error);
+      return false;
     }
+  }
+
+  unhideThread(account: any, postUri: string): boolean {
+    console.log("👁️ Unhiding thread:", postUri);
+    
+    if (!account?.root?.hiddenThreads) {
+      console.log("ℹ️ No hidden threads to unhide");
+      return false;
+    }
+
+    try {
+      const index = account.root.hiddenThreads.findIndex((hidden: any) => hidden.postUri === postUri);
+      if (index === -1) {
+        console.log("ℹ️ Thread not found in hidden list");
+        return false;
+      }
+
+      account.root.hiddenThreads.splice(index, 1);
+      console.log("✅ Successfully unhid thread");
+      return true;
+    } catch (error) {
+      console.error("❌ Error unhiding thread:", error);
+      return false;
+    }
+  }
+
+  getHiddenThreads(account: any): any[] {
+    if (!account?.root?.hiddenThreads) {
+      return [];
+    }
+    return Array.from(account.root.hiddenThreads);
+  }
+
+  isHidden(account: any, postUri: string): boolean {
+    if (!account?.root?.hiddenThreads) {
+      return false;
+    }
+    return account.root.hiddenThreads.some((hidden: any) => hidden.postUri === postUri);
   }
 }
 
@@ -180,38 +364,20 @@ if (typeof window !== "undefined") {
   (window as any).testAtprotoFeeds = async () => {
     console.log("🧪 Testing ATProto feed fetching...");
     const service = atprotoFeedService;
-    service.checkAgent();
-    if (service.aggregator) {
-      try {
-        // Clear cache to force fresh fetch
-        service.aggregator.clearCache();
-        const posts = await service.aggregator.fetchAggregatedFeed(10);
-        console.log(
-          "📊 Test result:",
-          posts.map((p) => ({
-            author: p.author.handle,
-            text: p.record.text.substring(0, 100),
-            isThread: !!(p.record.reply || p.replyCount),
-            avatar: p.author.avatar,
-          })),
-        );
-        return posts;
-      } catch (error) {
-        console.error("❌ Test failed:", error);
-      }
-    } else {
-      console.error("❌ No aggregator available");
-    }
-  };
-
-  (window as any).clearAtprotoCache = () => {
-    console.log("🗑️ Clearing ATProto feed cache...");
-    const service = atprotoFeedService;
-    if (service.aggregator) {
-      service.aggregator.clearCache();
-      console.log("✅ Cache cleared! Next fetch will get fresh data.");
-    } else {
-      console.log("⚠️ No aggregator available");
+    try {
+      const posts = await service.fetchFeedPosts(ATPROTO_FEEDS, false, 10);
+      console.log(
+        "📊 Test result:",
+        posts.map((p) => ({
+          author: p.author.handle,
+          text: p.record.text.substring(0, 100),
+          isThread: !!(p.record.reply || p.replyCount),
+          avatar: p.author.avatar,
+        })),
+      );
+      return posts;
+    } catch (error) {
+      console.error("❌ Test failed:", error);
     }
   };
 }

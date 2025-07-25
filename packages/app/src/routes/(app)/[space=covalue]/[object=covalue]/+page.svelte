@@ -4,7 +4,8 @@
   import PageView from "$lib/components/content/page/PageView.svelte";
   import SidebarMain from "$lib/components/sidebars/SidebarMain.svelte";
   import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
-  import FeedDisplay from "$lib/components/FeedDisplay.svelte";
+  import FeedDisplay from "$lib/components/content/bluesky-feed/FeedDisplay.svelte";
+  import { atprotoFeedService } from "$lib/services/atprotoFeedService";
   import {
     LastReadList,
     PageComponent,
@@ -38,6 +39,15 @@
       setLastRead = true;
     }
   });
+
+  // Migration effect for feed configs
+  $effect(() => {
+    const objectId = page.params.object;
+    if (objectId && object.current?.components?.feedConfig && me.current) {
+      // Attempt to migrate old JSON config to new Jazz root structure
+      atprotoFeedService.migrateEntityFeedConfig(me.current, objectId, object.current.components.feedConfig);
+    }
+  });
 </script>
 
 <MainLayout>
@@ -57,7 +67,7 @@
 
   {#if object.current?.components?.feedConfig}
     <div class="flex-1 overflow-hidden">
-      <FeedDisplay thread={object.current} />
+      <FeedDisplay objectId={page.params.object ?? ""} />
     </div>
   {:else if object.current?.components?.[ThreadComponent.id]}
     <TimelineView

@@ -3,7 +3,7 @@
   import { Modal, Input, Button } from "@fuxui/base";
   import Icon from "@iconify/svelte";
   import { co } from "jazz-tools";
-  import FeedConfiguration from "../FeedConfiguration.svelte";
+  import FeedConfiguration from "../content/bluesky-feed/FeedConfiguration.svelte";
 
   let {
     open = $bindable(false),
@@ -95,7 +95,7 @@
     <!-- Feed Configuration Section -->
     {#if entity?.components?.feedConfig}
       <div class="mt-8 pt-8 border-t border-base-300 dark:border-base-700">
-        <FeedConfiguration thread={entity} />
+        <FeedConfiguration objectId={entity.id} />
       </div>
     {/if}
 
