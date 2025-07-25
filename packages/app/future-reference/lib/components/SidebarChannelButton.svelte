@@ -221,20 +221,13 @@
       data-current={channel.id === page.params.channel}
     >
       <Icon
-        icon={channel.channelType === "feeds"
-          ? "basil:feed-outline"
-          : channel.channelType === "links"
-            ? "basil:link-outline"
-            : "basil:comment-solid"}
+        icon={channel.channelType === "links"
+          ? "basil:link-outline"
+          : "basil:comment-solid"}
         class="shrink-0"
       />
       <span class="truncate">{channel?.name || "..."}</span>
-      {#if channel.channelType === "feeds"}
-        <span
-          class="text-xs bg-primary/20 text-primary px-1 py-0.5 rounded shrink-0"
-          >FEEDS</span
-        >
-      {:else if channel.channelType === "links"}
+      {#if channel.channelType === "links"}
         <span
           class="text-xs bg-secondary/20 text-secondary px-1 py-0.5 rounded shrink-0"
           >LINKS</span
