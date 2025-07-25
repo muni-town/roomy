@@ -5,19 +5,23 @@
   import Icon from "@iconify/svelte";
 
   let {
+    bookmarks,
     onViewThread,
   }: {
+    bookmarks?: any[];
     onViewThread?: (postUri: string) => void;
   } = $props();
 
-  // Get the current Jazz account
+  // Get the current Jazz account (fallback if bookmarks not provided as prop)
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
       root: true,
     },
   });
 
-  let bookmarks = $derived(() => {
+  // Use provided bookmarks or fetch them if not provided  
+  let actualBookmarks = $derived.by(() => {
+    if (bookmarks) return bookmarks;
     if (!me.current) return [];
     return atprotoFeedService.getBookmarks(me.current);
   });
@@ -26,35 +30,40 @@
   let sortBy = $state<"date" | "author" | "feed">("date");
   let viewMode = $state<"list" | "grid">("list");
 
-  let filteredBookmarks = $derived(() => {
-    let filtered = bookmarks;
+  let filteredBookmarks = $derived.by(() => {
+    let items = actualBookmarks;
 
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(bookmark => 
-        bookmark.title.toLowerCase().includes(query) ||
-        bookmark.author.handle.toLowerCase().includes(query) ||
-        bookmark.author.displayName?.toLowerCase().includes(query) ||
-        bookmark.previewText.toLowerCase().includes(query)
+      items = items.filter(
+        (bookmark) =>
+          bookmark.title?.toLowerCase().includes(query) ||
+          bookmark.authorHandle?.toLowerCase().includes(query) ||
+          bookmark.authorDisplayName?.toLowerCase().includes(query) ||
+          bookmark.author?.handle?.toLowerCase().includes(query) ||
+          bookmark.author?.displayName?.toLowerCase().includes(query) ||
+          bookmark.previewText?.toLowerCase().includes(query)
       );
     }
 
     // Apply sorting
-    filtered = [...filtered].sort((a, b) => {
+    return [...items].sort((a, b) => {
       switch (sortBy) {
         case "date":
-          return new Date(b.bookmarkedAt).getTime() - new Date(a.bookmarkedAt).getTime();
+          const aDate = a.bookmarkedAt ? new Date(a.bookmarkedAt).getTime() : 0;
+          const bDate = b.bookmarkedAt ? new Date(b.bookmarkedAt).getTime() : 0;
+          return bDate - aDate;
         case "author":
-          return (a.author.displayName || a.author.handle).localeCompare(b.author.displayName || b.author.handle);
+          const aName = a.authorDisplayName || a.authorHandle || a.author?.displayName || a.author?.handle || 'ATProto User';
+          const bName = b.authorDisplayName || b.authorHandle || b.author?.displayName || b.author?.handle || 'ATProto User';
+          return aName.localeCompare(bName);
         case "feed":
           return (a.feedSource || "").localeCompare(b.feedSource || "");
         default:
           return 0;
       }
     });
-
-    return filtered;
   });
 
   function removeBookmark(postUri: string) {
@@ -87,25 +96,8 @@
 </script>
 
 <div class="flex-1 flex flex-col h-full overflow-hidden">
-  <!-- Header -->
+  <!-- Controls -->
   <div class="flex-shrink-0 p-6 border-b border-base-300 dark:border-base-700">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-xl font-bold flex items-center gap-2">
-        <Icon icon="mdi:bookmark" class="text-yellow-500" />
-        Bookmarked Threads
-      </h2>
-      <div class="flex items-center gap-2">
-        <button
-          onclick={() => viewMode = viewMode === "list" ? "grid" : "list"}
-          class="px-3 py-1.5 text-sm border border-base-300 dark:border-base-700 rounded-md hover:bg-base-100 dark:hover:bg-base-800 transition-colors"
-          title={`Switch to ${viewMode === "list" ? "grid" : "list"} view`}
-        >
-          <Icon icon={viewMode === "list" ? "mdi:grid" : "mdi:format-list-bulleted"} />
-        </button>
-      </div>
-    </div>
-
-    <!-- Controls -->
     <div class="flex items-center gap-4">
       <!-- Search -->
       <div class="flex-1 relative">
@@ -127,12 +119,34 @@
         <option value="author">Sort by Author</option>
         <option value="feed">Sort by Feed</option>
       </select>
+
+      <!-- View Mode Toggle -->
+      <div class="flex rounded-md border border-base-200 dark:border-base-700 overflow-hidden">
+        <button
+          onclick={() => viewMode = "list"}
+          class="px-3 py-2 text-sm transition-colors {viewMode === 'list' 
+            ? 'bg-blue-500 text-white' 
+            : 'bg-base-50 dark:bg-base-800 hover:bg-base-100 dark:hover:bg-base-700'}"
+          title="List view"
+        >
+          <Icon icon="mdi:format-list-bulleted" class="size-4" />
+        </button>
+        <button
+          onclick={() => viewMode = "grid"}
+          class="px-3 py-2 text-sm transition-colors border-l border-base-200 dark:border-base-700 {viewMode === 'grid' 
+            ? 'bg-blue-500 text-white' 
+            : 'bg-base-50 dark:bg-base-800 hover:bg-base-100 dark:hover:bg-base-700'}"
+          title="Grid view"
+        >
+          <Icon icon="mdi:grid" class="size-4" />
+        </button>
+      </div>
     </div>
   </div>
 
   <!-- Content -->
   <div class="flex-1 overflow-y-auto p-6">
-    {#if bookmarks.length === 0}
+    {#if actualBookmarks.length === 0}
       <div class="text-center py-8 text-base-content/60">
         <Icon icon="mdi:bookmark-outline" class="size-12 mx-auto mb-2" />
         <p>No bookmarked threads yet</p>
@@ -159,10 +173,10 @@
               <!-- Header -->
               <div class="flex items-start justify-between mb-3">
                 <div class="flex items-center gap-3 flex-1 min-w-0">
-                  {#if bookmark.author.avatar}
+                  {#if bookmark.authorAvatar || bookmark.author?.avatar}
                     <img
-                      src={bookmark.author.avatar}
-                      alt={bookmark.author.displayName || bookmark.author.handle}
+                      src={bookmark.authorAvatar || bookmark.author?.avatar}
+                      alt={bookmark.authorDisplayName || bookmark.authorHandle || bookmark.author?.displayName || bookmark.author?.handle}
                       class="size-8 rounded-full object-cover flex-shrink-0"
                     />
                   {:else}
@@ -172,10 +186,10 @@
                   {/if}
                   <div class="flex-1 min-w-0">
                     <div class="font-medium text-sm truncate">
-                      {bookmark.author.displayName || bookmark.author.handle}
+                      {bookmark.authorDisplayName || bookmark.authorHandle || bookmark.author?.displayName || bookmark.author?.handle || 'ATProto User'}
                     </div>
                     <div class="text-xs text-base-content/60 truncate">
-                      @{bookmark.author.handle}
+                      @{bookmark.authorHandle || bookmark.author?.handle || 'user'}
                     </div>
                   </div>
                 </div>
@@ -194,10 +208,10 @@
               <!-- Content -->
               <div class="mb-3">
                 <h3 class="font-medium text-sm mb-1 line-clamp-2">
-                  {bookmark.title}
+                  {bookmark.title || 'Untitled'}
                 </h3>
                 <p class="text-xs text-base-content/70 line-clamp-3">
-                  {bookmark.previewText}
+                  {bookmark.previewText || ''}
                 </p>
               </div>
 
@@ -209,8 +223,8 @@
                     {getFeedDisplayName(bookmark.feedSource)}
                   </span>
                 </div>
-                <span title={new Date(bookmark.bookmarkedAt).toLocaleString()}>
-                  {getRelativeTime(bookmark.bookmarkedAt)}
+                <span title={bookmark.bookmarkedAt ? new Date(bookmark.bookmarkedAt).toLocaleString() : ''}>
+                  {bookmark.bookmarkedAt ? getRelativeTime(bookmark.bookmarkedAt) : 'Unknown'}
                 </span>
               </div>
             </div>
@@ -221,11 +235,11 @@
   </div>
 
   <!-- Footer -->
-  {#if bookmarks.length > 0}
+  {#if actualBookmarks.length > 0}
     <div class="flex-shrink-0 px-6 py-3 border-t border-base-300 dark:border-base-700 bg-base-50 dark:bg-base-800/50">
       <div class="flex items-center justify-between text-sm text-base-content/60">
         <span>
-          {filteredBookmarks.length} of {bookmarks.length} bookmarks
+          {filteredBookmarks.length} of {actualBookmarks.length} bookmarks
           {searchQuery.trim() ? `matching "${searchQuery}"` : ""}
         </span>
         {#if searchQuery.trim()}

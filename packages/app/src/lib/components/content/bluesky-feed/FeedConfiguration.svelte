@@ -3,7 +3,7 @@
     ATPROTO_FEED_CONFIG,
     ATPROTO_FEEDS,
     addFeedToList,
-  } from "$lib/utils/atproToFeeds";
+  } from "$lib/utils/atprotoFeeds";
   import { atprotoFeedService } from "$lib/services/atprotoFeedService";
   import { RoomyAccount } from "@roomy-chat/sdk";
   import { AccountCoState } from "jazz-tools/svelte";
@@ -71,7 +71,7 @@
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(" ");
     }
-    return "📡 Custom Feed";
+    return `Feed (${feedUri.substring(0, 20)}...)`;
   }
 
   function addDefaultFeeds() {

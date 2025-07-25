@@ -164,26 +164,64 @@ export class AtprotoFeedAggregator {
 
   // Extract feed name from URI as fallback
   private extractFeedNameFromUri(feedUri: string): string {
-    const match = feedUri.match(/\/([^\/]+)$/);
-    if (match && match[1]) {
-      const feedName = match[1];
-      return feedName
-        .split("-")
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(" ");
+    try {
+      // Parse AT Proto URI: at://did:plc:example/app.bsky.feed.generator/feedname
+      const match = feedUri.match(/at:\/\/([^\/]+)\/app\.bsky\.feed\.generator\/(.+)$/);
+      if (match && match[2]) {
+        const feedName = match[2];
+        return feedName
+          .split("-")
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ");
+      }
+
+      // Fallback: extract the last part of any URI
+      const fallbackMatch = feedUri.match(/\/([^\/]+)$/);
+      if (fallbackMatch && fallbackMatch[1]) {
+        const feedName = fallbackMatch[1];
+        return feedName
+          .split("-")
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ");
+      }
+
+      // Last resort: extract domain or identifier from URI
+      const uriParts = feedUri.split('/');
+      const lastPart = uriParts[uriParts.length - 1];
+      if (lastPart && lastPart.length > 0) {
+        return lastPart
+          .split("-")
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ");
+      }
+    } catch (error) {
+      console.warn("Failed to extract feed name from URI:", feedUri, error);
     }
-    return "📡 Custom Feed";
+
+    // Final fallback using the URI itself
+    return `Feed (${feedUri.substring(0, 20)}...)`;
   }
 
   private async fetchSingleFeed(
     feedUri: string,
     limit = 50,
+    signal?: AbortSignal,
   ): Promise<AtprotoFeedPost[]> {
     try {
+      // Check if already aborted before making request
+      if (signal?.aborted) {
+        throw new Error('Aborted');
+      }
+
       const response = await this.agent.app.bsky.feed.getFeed({
         feed: feedUri,
         limit,
       });
+
+      // Check if aborted after request
+      if (signal?.aborted) {
+        throw new Error('Aborted');
+      }
 
       return response.data.feed.map((item: FeedViewPost) => ({
         uri: item.post.uri,
@@ -276,6 +314,10 @@ export class AtprotoFeedAggregator {
         feedSource: feedUri,
       }));
     } catch (error) {
+      // Don't log errors for aborted requests
+      if (error instanceof Error && error.message === 'Aborted') {
+        return [];
+      }
       console.error(`Failed to fetch feed ${feedUri}:`, error);
       return [];
     }
@@ -284,12 +326,13 @@ export class AtprotoFeedAggregator {
   async fetchAggregatedFeed(
     limit = 50,
     feedUris?: string[],
+    signal?: AbortSignal,  
   ): Promise<AtprotoFeedPost[]> {
     const feedsToFetch = feedUris || ATPROTO_FEEDS;
 
     // Fetch specified feeds in parallel
     const feedPromises = feedsToFetch.map((feedUri) =>
-      this.fetchSingleFeed(feedUri, 30),
+      this.fetchSingleFeed(feedUri, 30, signal),
     );
     const feedResults = await Promise.all(feedPromises);
 
@@ -321,8 +364,9 @@ export class AtprotoFeedAggregator {
   async fetchThreadsOnly(
     limit = 50,
     feedUris?: string[],
+    signal?: AbortSignal,
   ): Promise<AtprotoFeedPost[]> {
-    const allPosts = await this.fetchAggregatedFeed(limit * 2, feedUris); // Fetch more to filter
+    const allPosts = await this.fetchAggregatedFeed(limit * 2, feedUris, signal); // Fetch more to filter
     return allPosts.filter((post) => this.isThreadPost(post)).slice(0, limit);
   }
 

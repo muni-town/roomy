@@ -3,12 +3,14 @@
     ATPROTO_FEED_CONFIG,
     ATPROTO_FEEDS,
     type AtprotoThreadPost,
-  } from "$lib/utils/atproToFeeds";
+  } from "$lib/utils/atprotoFeeds";
   import { atprotoFeedService } from "$lib/services/atprotoFeedService";
-  import type { AtprotoFeedPost } from "$lib/utils/atproToFeeds";
+  import type { AtprotoFeedPost } from "$lib/utils/atprotoFeeds";
   import { RoomyAccount } from "@roomy-chat/sdk";
   import { AccountCoState } from "jazz-tools/svelte";
   import Icon from "@iconify/svelte";
+  import BookmarksModal from "./BookmarksModal.svelte";
+  import HiddenItemsModal from "./HiddenItemsModal.svelte";
 
   let {
     objectId,
@@ -18,17 +20,21 @@
     singlePostUri?: string;
   } = $props();
 
-  let feedPosts = $state<AtprotoFeedPost[]>([]);
+  let allFeedPosts = $state<AtprotoFeedPost[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
+  
+  // Request cancellation controller
+  let currentAbortController: AbortController | null = null;
   
   // Thread view state
   let showingThread = $state(false);
   let selectedPostUri = $state<string | null>(null);
   let threadLoading = $state(false);
   
-  // Hide functionality state
-  let showHidden = $state(false);
+  // Modal states
+  let showBookmarks = $state(false);
+  let showHiddenItems = $state(false);
 
   // Get the current Jazz account
   const me = new AccountCoState(RoomyAccount, {
@@ -37,16 +43,57 @@
     },
   });
 
-  // Load feeds when component mounts or props change
+
+  let feedPosts = $derived(
+    allFeedPosts.filter(post => !atprotoFeedService.isHidden(me.current, post.uri))
+  );
+
+  let hiddenFeedPosts = $derived(
+    allFeedPosts.filter(post => atprotoFeedService.isHidden(me.current, post.uri))
+  );
+
+  let bookmarks = $state<any[]>([]);
+
+  // Update bookmarks when modal opens or account changes
   $effect(() => {
-    loadFeeds();
+    if (showBookmarks && me.current) {
+      bookmarks = atprotoFeedService.getBookmarks(me.current);
+    } else if (!me.current) {
+      bookmarks = [];
+    }
   });
 
+  // Load feeds when component mounts or props change
+  $effect(() => {
+    // Debounce the loading to prevent rapid-fire requests
+    const timeoutId = setTimeout(() => {
+      loadFeeds();
+    }, 100);
+    
+    return () => clearTimeout(timeoutId);
+  });
+
+
   async function loadFeeds() {
+    // Cancel any existing request
+    if (currentAbortController) {
+      currentAbortController.abort();
+    }
+    
+    // Create new abort controller for this request
+    currentAbortController = new AbortController();
+    const signal = currentAbortController.signal;
+    
+    // The abort controller cancellation above handles preventing multiple loads
+    
     loading = true;
     error = null;
 
     try {
+      // Check if request was aborted before proceeding
+      if (signal.aborted) {
+        return;
+      }
       // Handle single post thread (either from prop or selected via click)
       const threadUri = singlePostUri || selectedPostUri;
       if (threadUri) {
@@ -115,25 +162,29 @@
 
             flattenReplies(postThread.replies);
           }
-
-          feedPosts = threadPosts;
+          allFeedPosts = threadPosts;
         } else {
-          feedPosts = [];
+          allFeedPosts = [];
         }
         return;
       }
 
       // Normal feed aggregation - use objectId to get config from Jazz root
-      const posts = await atprotoFeedService.fetchFeedPostsForObject(me.current, objectId, 50);
+      const posts = await atprotoFeedService.fetchFeedPostsForObject(me.current, objectId, 50, signal);
       
-      // Filter out hidden posts unless showHidden is true
-      if (showHidden || !me.current) {
-        feedPosts = posts;
-      } else {
-        feedPosts = posts.filter(post => !atprotoFeedService.isHidden(me.current, post.uri));
+      // Check if request was aborted before setting results
+      if (signal.aborted) {
+        return;
       }
+      
+      allFeedPosts = posts;
 
     } catch (err) {
+      // Don't show error for aborted requests
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      
       error = "Failed to load feeds";
       console.error("Feed loading error:", err);
     } finally {
@@ -209,6 +260,11 @@
     }
   }
 
+  function handleViewThreadFromBookmarks(postUri: string) {
+    showBookmarks = false;
+    showThread(postUri);
+  }
+
   function backToFeed() {
     showingThread = false;
     selectedPostUri = null;
@@ -258,10 +314,6 @@
       atprotoFeedService.unhideThread(me.current, post.uri);
     } else {
       atprotoFeedService.hideThread(me.current, post.uri);
-      // Remove from current display unless showing hidden
-      if (!showHidden) {
-        feedPosts = feedPosts.filter(p => p.uri !== post.uri);
-      }
     }
   }
 
@@ -288,13 +340,25 @@
           </button>
         {:else}
           <button
-            onclick={() => { showHidden = !showHidden; loadFeeds(); }}
+            onclick={() => {
+              showBookmarks = true;
+            }}
             class="px-3 py-1.5 text-sm border border-base-300 dark:border-base-700 rounded-md hover:bg-base-100 dark:hover:bg-base-800 transition-colors flex items-center gap-2"
-            title={showHidden ? "Hide hidden posts" : "Show hidden posts"}
+            title="Show bookmarks"
           >
-            <Icon icon={showHidden ? "mdi:eye-off" : "mdi:eye"} />
-            {showHidden ? "Hide Hidden" : "Show Hidden"}
+            <Icon icon="mdi:bookmark" />
+            Bookmarks
           </button>
+          {#if hiddenFeedPosts.length > 0}
+            <button
+              onclick={() => showHiddenItems = true}
+              class="px-3 py-1.5 text-sm border border-base-300 dark:border-base-700 rounded-md hover:bg-base-100 dark:hover:bg-base-800 transition-colors flex items-center gap-2"
+              title="Show hidden items"
+            >
+              <Icon icon="mdi:eye-off" />
+              Hidden Items ({hiddenFeedPosts.length})
+            </button>
+          {/if}
         {/if}
         <button
           onclick={loadFeeds}
@@ -331,7 +395,7 @@
           />
           <span class="text-red-800 dark:text-red-200">{error}</span>
         </div>
-      {:else if feedPosts.length === 0}
+      {:else if feedPosts.length === 0 && hiddenFeedPosts.length === 0}
         <div class="text-center py-8 text-base-content/60">
           <Icon icon={showingThread ? "mdi:comment-off" : "mdi:rss-off"} class="size-12 mx-auto mb-2" />
           <p>{showingThread ? "Thread not found" : "No feed posts available"}</p>
@@ -510,7 +574,7 @@
                   </div>
                   <div class="flex items-center gap-3">
                     <button
-                      onclick={() => handleBookmark(post)}
+                      onclick={(e) => { e.stopPropagation(); handleBookmark(post); }}
                       class="text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 dark:hover:text-yellow-300 flex items-center gap-1 transition-colors"
                       title={atprotoFeedService.isBookmarked(me.current, post.uri) ? "Remove bookmark" : "Bookmark thread"}
                     >
@@ -521,7 +585,7 @@
                       {atprotoFeedService.isBookmarked(me.current, post.uri) ? "Bookmarked" : "Bookmark"}
                     </button>
                     <button
-                      onclick={() => handleHide(post)}
+                      onclick={(e) => { e.stopPropagation(); handleHide(post); }}
                       class="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 flex items-center gap-1 transition-colors"
                       title={atprotoFeedService.isHidden(me.current, post.uri) ? "Unhide thread" : "Hide thread"}
                     >
@@ -549,3 +613,19 @@
       {/if}
     </div>
   </div>
+
+<BookmarksModal
+  show={showBookmarks}
+  bookmarks={bookmarks}
+  onClose={() => {
+    showBookmarks = false;
+  }}
+  onViewThread={handleViewThreadFromBookmarks}
+/>
+
+<HiddenItemsModal
+  show={showHiddenItems}
+  hiddenPosts={hiddenFeedPosts}
+  onClose={() => showHiddenItems = false}
+  onUnhide={handleHide}
+/>
