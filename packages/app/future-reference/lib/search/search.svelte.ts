@@ -26,7 +26,7 @@ export async function initSearch(space: co.loaded<typeof Space>) {
   await search[space.id]?.mount(db);
 
   for (const c of space.channels ?? []) {
-    if (!c || c.channelType === "feeds") continue;
+    if (!c) continue;
     // get last indexed messag id for channel
     const lastIndexedMessageId = localStorage.getItem(
       `lastIndexedMessageId-${c.id}`,
@@ -563,10 +563,6 @@ export async function diagnoseIndexing(spaceId: string) {
 
       console.log(`\n📝 Channel: ${c.name} (${c.channelType || "chat"})`);
 
-      if (c.channelType === "feeds") {
-        console.log("   ⏭️  Skipped (feeds channel)");
-        continue;
-      }
 
       // Check last indexed message
       const lastIndexed = localStorage.getItem(`lastIndexedMessageId-${c.id}`);
