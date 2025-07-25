@@ -3,7 +3,7 @@ import {
   type AtprotoFeedPost,
   ATPROTO_FEEDS,
   ATPROTO_FEED_CONFIG,
-} from "$lib/utils/atproToFeeds";
+} from "$lib/utils/atprotoFeeds";
 import { user } from "$lib/user.svelte";
 import { RoomyAccount, FeedConfig, FeedAggregatorConfigs, BookmarkedThread, BookmarkedThreads, HiddenThread, HiddenThreads, publicGroup } from "@roomy-chat/sdk";
 import { co, z } from "jazz-tools";
@@ -92,7 +92,7 @@ export class AtprotoFeedService {
     console.log("🔧 Final feedConfigs:", Object.keys(account.root.feedConfigs));
   }
 
-  async fetchFeedPosts(feedUris: string[], threadsOnly: boolean = false, limit: number = 50): Promise<AtprotoFeedPost[]> {
+  async fetchFeedPosts(feedUris: string[], threadsOnly: boolean = false, limit: number = 50, signal?: AbortSignal): Promise<AtprotoFeedPost[]> {
     console.log("📡 Fetching posts from ATProto feeds...");
 
     const aggregator = this.getAggregator();
@@ -103,8 +103,8 @@ export class AtprotoFeedService {
 
     try {
       const posts = threadsOnly
-        ? await aggregator.fetchThreadsOnly(limit, feedUris)
-        : await aggregator.fetchAggregatedFeed(limit, feedUris);
+        ? await aggregator.fetchThreadsOnly(limit, feedUris, signal)
+        : await aggregator.fetchAggregatedFeed(limit, feedUris, signal);
 
       console.log(
         `📊 Fetched ${posts.length} posts from feeds (threads only: ${threadsOnly})`,
@@ -117,14 +117,14 @@ export class AtprotoFeedService {
     }
   }
 
-  async fetchFeedPostsForObject(account: any, objectId: string, limit: number = 50): Promise<AtprotoFeedPost[]> {
+  async fetchFeedPostsForObject(account: any, objectId: string, limit: number = 50, signal?: AbortSignal): Promise<AtprotoFeedPost[]> {
     const config = this.getFeedConfig(account, objectId);
     
     if (config.feeds.length === 0) {
       return [];
     }
 
-    return this.fetchFeedPosts(config.feeds, config.threadsOnly, limit);
+    return this.fetchFeedPosts(config.feeds, config.threadsOnly, limit, signal);
   }
 
 
@@ -146,9 +146,50 @@ export class AtprotoFeedService {
   getFeedName(feedUri: string): string {
     const aggregator = this.getAggregator();
     if (!aggregator) {
-      return "📡 Custom Feed";
+      // Extract feed name from URI even without aggregator
+      return this.extractFeedNameFromUri(feedUri);
     }
     return aggregator.getFeedName(feedUri);
+  }
+
+  // Extract feed name from URI as fallback
+  private extractFeedNameFromUri(feedUri: string): string {
+    try {
+      // Parse AT Proto URI: at://did:plc:example/app.bsky.feed.generator/feedname
+      const match = feedUri.match(/at:\/\/([^\/]+)\/app\.bsky\.feed\.generator\/(.+)$/);
+      if (match && match[2]) {
+        const feedName = match[2];
+        return feedName
+          .split("-")
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ");
+      }
+
+      // Fallback: extract the last part of any URI
+      const fallbackMatch = feedUri.match(/\/([^\/]+)$/);
+      if (fallbackMatch && fallbackMatch[1]) {
+        const feedName = fallbackMatch[1];
+        return feedName
+          .split("-")
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ");
+      }
+
+      // Last resort: extract domain or identifier from URI
+      const uriParts = feedUri.split('/');
+      const lastPart = uriParts[uriParts.length - 1];
+      if (lastPart && lastPart.length > 0) {
+        return lastPart
+          .split("-")
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ");
+      }
+    } catch (error) {
+      console.warn("Failed to extract feed name from URI:", feedUri, error);
+    }
+
+    // Final fallback using the URI itself
+    return `Feed (${feedUri.substring(0, 20)}...)`;
   }
 
   // Migration helper to convert old JSON configs to new Jazz root structure
@@ -182,7 +223,7 @@ export class AtprotoFeedService {
   // Bookmark management methods
   bookmarkThread(account: any, postUri: string, postData: { 
     title: string, 
-    author: { handle: string, displayName?: string, avatar?: string }, 
+    author: { handle: string, displayName?: string, avatar?: string },
     previewText: string, 
     feedSource?: string 
   }): boolean {
@@ -206,21 +247,28 @@ export class AtprotoFeedService {
     }
 
     // Check if already bookmarked
-    const existing = account.root.bookmarkedThreads.find((bookmark: any) => bookmark.postUri === postUri);
+    const existing = account.root.bookmarkedThreads.find((bookmark: any) => bookmark && bookmark.postUri === postUri);
     if (existing) {
       console.log("ℹ️ Thread already bookmarked");
       return false;
     }
 
     try {
+      // Create the nested author object as a Jazz co.map
+      const authorMap = co.map({
+        handle: z.string(),
+        displayName: z.string().optional(),
+        avatar: z.string().optional(),
+      }).create({
+        handle: postData.author.handle,
+        displayName: postData.author.displayName,
+        avatar: postData.author.avatar,
+      }, publicGroup("writer"));
+
       const bookmark = BookmarkedThread.create({
         postUri,
         title: postData.title,
-        author: {
-          handle: postData.author.handle,
-          displayName: postData.author.displayName,
-          avatar: postData.author.avatar,
-        },
+        author: authorMap,
         previewText: postData.previewText,
         bookmarkedAt: new Date(),
         feedSource: postData.feedSource,
@@ -244,7 +292,7 @@ export class AtprotoFeedService {
     }
 
     try {
-      const index = account.root.bookmarkedThreads.findIndex((bookmark: any) => bookmark.postUri === postUri);
+      const index = account.root.bookmarkedThreads.findIndex((bookmark: any) => bookmark && bookmark.postUri === postUri);
       if (index === -1) {
         console.log("ℹ️ Bookmark not found");
         return false;
@@ -263,14 +311,18 @@ export class AtprotoFeedService {
     if (!account?.root?.bookmarkedThreads) {
       return [];
     }
-    return Array.from(account.root.bookmarkedThreads);
+    
+    const rawBookmarks = Array.from(account.root.bookmarkedThreads);
+    const filteredBookmarks = rawBookmarks.filter(bookmark => bookmark != null);
+    
+    return filteredBookmarks;
   }
 
   isBookmarked(account: any, postUri: string): boolean {
     if (!account?.root?.bookmarkedThreads) {
       return false;
     }
-    return account.root.bookmarkedThreads.some((bookmark: any) => bookmark.postUri === postUri);
+    return account.root.bookmarkedThreads.some((bookmark: any) => bookmark && bookmark.postUri === postUri);
   }
 
   // Hide management methods
@@ -295,7 +347,7 @@ export class AtprotoFeedService {
     }
 
     // Check if already hidden
-    const existing = account.root.hiddenThreads.find((hidden: any) => hidden.postUri === postUri);
+    const existing = account.root.hiddenThreads.find((hidden: any) => hidden && hidden.postUri === postUri);
     if (existing) {
       console.log("ℹ️ Thread already hidden");
       return false;
@@ -326,7 +378,7 @@ export class AtprotoFeedService {
     }
 
     try {
-      const index = account.root.hiddenThreads.findIndex((hidden: any) => hidden.postUri === postUri);
+      const index = account.root.hiddenThreads.findIndex((hidden: any) => hidden && hidden.postUri === postUri);
       if (index === -1) {
         console.log("ℹ️ Thread not found in hidden list");
         return false;
@@ -345,14 +397,14 @@ export class AtprotoFeedService {
     if (!account?.root?.hiddenThreads) {
       return [];
     }
-    return Array.from(account.root.hiddenThreads);
+    return Array.from(account.root.hiddenThreads).filter(hidden => hidden != null);
   }
 
   isHidden(account: any, postUri: string): boolean {
     if (!account?.root?.hiddenThreads) {
       return false;
     }
-    return account.root.hiddenThreads.some((hidden: any) => hidden.postUri === postUri);
+    return account.root.hiddenThreads.some((hidden: any) => hidden && hidden.postUri === postUri);
   }
 }
 
