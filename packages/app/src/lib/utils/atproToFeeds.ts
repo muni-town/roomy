@@ -146,66 +146,20 @@ export interface AtprotoThreadPost extends AtprotoFeedPost {
 
 export class AtprotoFeedAggregator {
   private agent: Agent;
-  private cache: Map<string, AtprotoFeedPost[]> = new Map();
-  private lastFetch: Map<string, number> = new Map();
-  private feedNames: Map<string, string> = new Map(); // Cache feed names from responses
-  private feedNameCallbacks: Map<string, (() => void)[]> = new Map(); // Callbacks for when names are updated
-  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
   constructor(agent: Agent) {
     this.agent = agent;
   }
 
-  // Get cached feed name or return a fallback
-  getCachedFeedName(feedUri: string): string {
-    if (this.feedNames.has(feedUri)) {
-      return this.feedNames.get(feedUri)!;
-    }
-
+  // Get feed name without caching - just return fallback or fetch directly
+  getFeedName(feedUri: string): string {
     // Check predefined feeds
     const entry = ATPROTO_FEED_CONFIG[feedUri];
     if (entry) {
       return entry.name;
     }
 
-    return "📡 Custom Feed";
-  }
-
-  // Register a callback to be called when a feed name is updated
-  onFeedNameUpdate(feedUri: string, callback: () => void): void {
-    if (!this.feedNameCallbacks.has(feedUri)) {
-      this.feedNameCallbacks.set(feedUri, []);
-    }
-    this.feedNameCallbacks.get(feedUri)!.push(callback);
-  }
-
-  // Trigger callbacks when a feed name is updated
-  private triggerFeedNameCallbacks(feedUri: string): void {
-    const callbacks = this.feedNameCallbacks.get(feedUri);
-    if (callbacks) {
-      callbacks.forEach((callback) => callback());
-    }
-  }
-
-  // Fetch feed name from AT Proto
-  async fetchFeedName(feedUri: string): Promise<string> {
-    try {
-      const response = await this.agent.app.bsky.feed.getFeedGenerator({
-        feed: feedUri,
-      });
-      const name =
-        response.data.view.displayName || this.extractFeedNameFromUri(feedUri);
-      this.feedNames.set(feedUri, `📡 ${name}`);
-      this.triggerFeedNameCallbacks(feedUri);
-      console.log(`Successfully fetched feed name for ${feedUri}: ${name}`);
-      return name;
-    } catch (error) {
-      console.warn(`Failed to fetch feed name for ${feedUri}:`, error);
-      const fallback = this.extractFeedNameFromUri(feedUri);
-      this.feedNames.set(feedUri, `📡 ${fallback}`);
-      this.triggerFeedNameCallbacks(feedUri);
-      return fallback;
-    }
+    return this.extractFeedNameFromUri(feedUri);
   }
 
   // Extract feed name from URI as fallback
@@ -218,7 +172,7 @@ export class AtprotoFeedAggregator {
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(" ");
     }
-    return "Custom Feed";
+    return "📡 Custom Feed";
   }
 
   private async fetchSingleFeed(
@@ -230,14 +184,6 @@ export class AtprotoFeedAggregator {
         feed: feedUri,
         limit,
       });
-
-      // The getFeed response doesn't include generator info, so we need to fetch it separately
-      // Check if we already have the name cached, if not, fetch it asynchronously
-      if (!this.feedNames.has(feedUri) && !ATPROTO_FEED_CONFIG[feedUri]) {
-        this.fetchFeedName(feedUri).catch((e) => {
-          console.warn(`Failed to fetch feed name for ${feedUri}:`, e);
-        });
-      }
 
       return response.data.feed.map((item: FeedViewPost) => ({
         uri: item.post.uri,
@@ -340,17 +286,6 @@ export class AtprotoFeedAggregator {
     feedUris?: string[],
   ): Promise<AtprotoFeedPost[]> {
     const feedsToFetch = feedUris || ATPROTO_FEEDS;
-    const cacheKey = feedsToFetch.join(",");
-    const now = Date.now();
-
-    // Check cache
-    if (
-      this.cache.has(cacheKey) &&
-      this.lastFetch.has(cacheKey) &&
-      now - this.lastFetch.get(cacheKey)! < this.CACHE_DURATION
-    ) {
-      return this.cache.get(cacheKey)!;
-    }
 
     // Fetch specified feeds in parallel
     const feedPromises = feedsToFetch.map((feedUri) =>
@@ -373,10 +308,6 @@ export class AtprotoFeedAggregator {
     const uniquePosts = Array.from(
       new Map(sortedPosts.map((post) => [post.uri, post])).values(),
     );
-
-    // Cache result
-    this.cache.set(cacheKey, uniquePosts);
-    this.lastFetch.set(cacheKey, now);
 
     return uniquePosts;
   }
@@ -610,9 +541,4 @@ export class AtprotoFeedAggregator {
     }
   }
 
-  // Clear cache (useful for manual refresh)
-  clearCache(): void {
-    this.cache.clear();
-    this.lastFetch.clear();
-  }
 }
