@@ -1,7 +1,11 @@
 {
   "packages": [
     "jujutsu@latest",
-    "deno@latest"
+    "killall@latest",
+    "ps@latest",
+    "pnpm@latest",
+    "nodejs@latest",
+    "claude-code@latest"
   ],
   "shell": {
     "init_hook": [

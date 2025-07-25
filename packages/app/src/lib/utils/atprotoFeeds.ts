@@ -146,97 +146,81 @@ export interface AtprotoThreadPost extends AtprotoFeedPost {
 
 export class AtprotoFeedAggregator {
   private agent: Agent;
-  private cache: Map<string, AtprotoFeedPost[]> = new Map();
-  private lastFetch: Map<string, number> = new Map();
-  private feedNames: Map<string, string> = new Map(); // Cache feed names from responses
-  private feedNameCallbacks: Map<string, (() => void)[]> = new Map(); // Callbacks for when names are updated
-  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
   constructor(agent: Agent) {
     this.agent = agent;
   }
 
-  // Get cached feed name or return a fallback
-  getCachedFeedName(feedUri: string): string {
-    if (this.feedNames.has(feedUri)) {
-      return this.feedNames.get(feedUri)!;
-    }
-
+  // Get feed name without caching - just return fallback or fetch directly
+  getFeedName(feedUri: string): string {
     // Check predefined feeds
     const entry = ATPROTO_FEED_CONFIG[feedUri];
     if (entry) {
       return entry.name;
     }
 
-    return "📡 Custom Feed";
-  }
-
-  // Register a callback to be called when a feed name is updated
-  onFeedNameUpdate(feedUri: string, callback: () => void): void {
-    if (!this.feedNameCallbacks.has(feedUri)) {
-      this.feedNameCallbacks.set(feedUri, []);
-    }
-    this.feedNameCallbacks.get(feedUri)!.push(callback);
-  }
-
-  // Trigger callbacks when a feed name is updated
-  private triggerFeedNameCallbacks(feedUri: string): void {
-    const callbacks = this.feedNameCallbacks.get(feedUri);
-    if (callbacks) {
-      callbacks.forEach((callback) => callback());
-    }
-  }
-
-  // Fetch feed name from AT Proto
-  async fetchFeedName(feedUri: string): Promise<string> {
-    try {
-      const response = await this.agent.app.bsky.feed.getFeedGenerator({
-        feed: feedUri,
-      });
-      const name =
-        response.data.view.displayName || this.extractFeedNameFromUri(feedUri);
-      this.feedNames.set(feedUri, `📡 ${name}`);
-      this.triggerFeedNameCallbacks(feedUri);
-      console.log(`Successfully fetched feed name for ${feedUri}: ${name}`);
-      return name;
-    } catch (error) {
-      console.warn(`Failed to fetch feed name for ${feedUri}:`, error);
-      const fallback = this.extractFeedNameFromUri(feedUri);
-      this.feedNames.set(feedUri, `📡 ${fallback}`);
-      this.triggerFeedNameCallbacks(feedUri);
-      return fallback;
-    }
+    return this.extractFeedNameFromUri(feedUri);
   }
 
   // Extract feed name from URI as fallback
   private extractFeedNameFromUri(feedUri: string): string {
-    const match = feedUri.match(/\/([^\/]+)$/);
-    if (match && match[1]) {
-      const feedName = match[1];
-      return feedName
-        .split("-")
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(" ");
+    try {
+      // Parse AT Proto URI: at://did:plc:example/app.bsky.feed.generator/feedname
+      const match = feedUri.match(/at:\/\/([^\/]+)\/app\.bsky\.feed\.generator\/(.+)$/);
+      if (match && match[2]) {
+        const feedName = match[2];
+        return feedName
+          .split("-")
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ");
+      }
+
+      // Fallback: extract the last part of any URI
+      const fallbackMatch = feedUri.match(/\/([^\/]+)$/);
+      if (fallbackMatch && fallbackMatch[1]) {
+        const feedName = fallbackMatch[1];
+        return feedName
+          .split("-")
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ");
+      }
+
+      // Last resort: extract domain or identifier from URI
+      const uriParts = feedUri.split('/');
+      const lastPart = uriParts[uriParts.length - 1];
+      if (lastPart && lastPart.length > 0) {
+        return lastPart
+          .split("-")
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ");
+      }
+    } catch (error) {
+      console.warn("Failed to extract feed name from URI:", feedUri, error);
     }
-    return "Custom Feed";
+
+    // Final fallback using the URI itself
+    return `Feed (${feedUri.substring(0, 20)}...)`;
   }
 
   private async fetchSingleFeed(
     feedUri: string,
     limit = 50,
+    signal?: AbortSignal,
   ): Promise<AtprotoFeedPost[]> {
     try {
+      // Check if already aborted before making request
+      if (signal?.aborted) {
+        throw new Error('Aborted');
+      }
+
       const response = await this.agent.app.bsky.feed.getFeed({
         feed: feedUri,
         limit,
       });
 
-      // The getFeed response doesn't include generator info, so we need to fetch it separately
-      // Check if we already have the name cached, if not, fetch it asynchronously
-      if (!this.feedNames.has(feedUri) && !ATPROTO_FEED_CONFIG[feedUri]) {
-        this.fetchFeedName(feedUri).catch((e) => {
-          console.warn(`Failed to fetch feed name for ${feedUri}:`, e);
-        });
+      // Check if aborted after request
+      if (signal?.aborted) {
+        throw new Error('Aborted');
       }
 
       return response.data.feed.map((item: FeedViewPost) => ({
@@ -330,6 +314,10 @@ export class AtprotoFeedAggregator {
         feedSource: feedUri,
       }));
     } catch (error) {
+      // Don't log errors for aborted requests
+      if (error instanceof Error && error.message === 'Aborted') {
+        return [];
+      }
       console.error(`Failed to fetch feed ${feedUri}:`, error);
       return [];
     }
@@ -338,23 +326,13 @@ export class AtprotoFeedAggregator {
   async fetchAggregatedFeed(
     limit = 50,
     feedUris?: string[],
+    signal?: AbortSignal,  
   ): Promise<AtprotoFeedPost[]> {
     const feedsToFetch = feedUris || ATPROTO_FEEDS;
-    const cacheKey = feedsToFetch.join(",");
-    const now = Date.now();
-
-    // Check cache
-    if (
-      this.cache.has(cacheKey) &&
-      this.lastFetch.has(cacheKey) &&
-      now - this.lastFetch.get(cacheKey)! < this.CACHE_DURATION
-    ) {
-      return this.cache.get(cacheKey)!;
-    }
 
     // Fetch specified feeds in parallel
     const feedPromises = feedsToFetch.map((feedUri) =>
-      this.fetchSingleFeed(feedUri, 30),
+      this.fetchSingleFeed(feedUri, 30, signal),
     );
     const feedResults = await Promise.all(feedPromises);
 
@@ -374,10 +352,6 @@ export class AtprotoFeedAggregator {
       new Map(sortedPosts.map((post) => [post.uri, post])).values(),
     );
 
-    // Cache result
-    this.cache.set(cacheKey, uniquePosts);
-    this.lastFetch.set(cacheKey, now);
-
     return uniquePosts;
   }
 
@@ -390,8 +364,9 @@ export class AtprotoFeedAggregator {
   async fetchThreadsOnly(
     limit = 50,
     feedUris?: string[],
+    signal?: AbortSignal,
   ): Promise<AtprotoFeedPost[]> {
-    const allPosts = await this.fetchAggregatedFeed(limit * 2, feedUris); // Fetch more to filter
+    const allPosts = await this.fetchAggregatedFeed(limit * 2, feedUris, signal); // Fetch more to filter
     return allPosts.filter((post) => this.isThreadPost(post)).slice(0, limit);
   }
 
@@ -610,9 +585,4 @@ export class AtprotoFeedAggregator {
     }
   }
 
-  // Clear cache (useful for manual refresh)
-  clearCache(): void {
-    this.cache.clear();
-    this.lastFetch.clear();
-  }
 }
