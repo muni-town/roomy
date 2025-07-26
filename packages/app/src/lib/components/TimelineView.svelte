@@ -255,12 +255,10 @@
       }
     }
 
-    const message = createMessage(
-      messageInput,
-      undefined,
-      adminGroup.current || undefined,
-      filesUrls,
-    );
+    const message = createMessage(messageInput, {
+      admin: adminGroup.current || undefined,
+      embeds: filesUrls,
+    });
 
     let timeline = threadContent.current?.timeline;
     if (timeline) {
