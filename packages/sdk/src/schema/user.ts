@@ -1,14 +1,12 @@
 import { co, z } from "jazz-tools";
-import { Space } from "./space.js";
 import {
   createInbox,
-  createSpaceList,
   publicGroup,
 } from "../functions/index.js";
 import { MediaUploadQueue } from "./import.js";
 import { RoomyEntity, RoomyEntityList } from "./index.js";
 
-export const SpaceList = co.list(Space);
+export const SpaceList = co.list(RoomyEntity);
 
 export const LastReadList = co.record(z.string(), z.date());
 
