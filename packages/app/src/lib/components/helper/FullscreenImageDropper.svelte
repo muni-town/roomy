@@ -16,25 +16,23 @@
     const dt = event.dataTransfer;
     if (!dt) return;
 
+    // 1) If you only care about image files, look at dt.items (newer browsers)
     let imageCount = 0;
     if (dt.items) {
+      // dt.items is a DataTransferItemList
       for (let i = 0; i < dt.items.length; i++) {
         const item = dt.items[i];
-        if (
-          item &&
-          item.kind === "file" &&
-          (item.type.startsWith("image/") || item.type.startsWith("video/"))
-        ) {
+        // kind==='file' ensures it's a File, and type starts with "image/"
+        if (item && item.kind === "file" && item.type.startsWith("image/")) {
           imageCount++;
         }
       }
-    } else if (dt.files) {
+    }
+    // 2) Fallback: dt.files (FileList) – more widely supported
+    else if (dt.files) {
       for (let i = 0; i < dt.files.length; i++) {
         const file = dt.files[i];
-        if (
-          file?.type.startsWith("image/") ||
-          file?.type.startsWith("video/")
-        ) {
+        if (file?.type.startsWith("image/")) {
           imageCount++;
         }
       }

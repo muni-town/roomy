@@ -7,13 +7,12 @@
   import BigSidebar from "./BigSidebar.svelte";
   import SmallSidebar from "./SmallSidebar.svelte";
   import { type Snippet } from "svelte";
-  import ToggleNavigation from "../helper/ToggleNavigation.svelte";
+  import ToggleNavigation from "../ToggleNavigation.svelte";
   import { cn } from "@fuxui/base";
-  import ServerBar from "../sidebars/ServerBar.svelte";
+  import ServerBar from "../ServerBar.svelte";
   import { AccountCoState } from "jazz-tools/svelte";
   import { RoomyAccount } from "@roomy-chat/sdk";
   import { onNavigate } from "$app/navigation";
-  import * as rawEnv from "$env/static/public";
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
@@ -40,9 +39,6 @@
   onNavigate(() => {
     isSidebarVisible.value = false;
   });
-
-  // @ts-ignore
-  const hideSmallSidebar = rawEnv.PUBLIC_HIDE_SMALL_SIDEBAR;
 </script>
 
 <div
@@ -52,18 +48,13 @@
   ]}
 >
   <div class="flex h-full w-fit">
-    {#if !hideSmallSidebar}
-      <SmallSidebar>
-        {#if serverBar}
-          {@render serverBar?.()}
-        {:else}
-          <ServerBar
-            spaces={me.current?.profile.newJoinedSpacesTest}
-            me={me.current}
-          />
-        {/if}
-      </SmallSidebar>
-    {/if}
+    <SmallSidebar>
+      {#if serverBar}
+        {@render serverBar?.()}
+      {:else}
+        <ServerBar spaces={me.current?.profile.joinedSpaces} me={me.current} />
+      {/if}
+    </SmallSidebar>
     {#if sidebar}
       <BigSidebar>
         {@render sidebar?.()}
@@ -85,24 +76,16 @@
 
 <div
   class={cn(
-    "h-[100dvh] flex flex-col overflow-hidden",
-    hideSmallSidebar
-      ? sidebar
-        ? "sm:ml-64"
-        : "sm:ml-0"
-      : sidebar
-        ? "sm:ml-82"
-        : "sm:ml-18",
+    "h-screen flex flex-col overflow-hidden",
+    sidebar ? "sm:ml-82" : "sm:ml-18",
   )}
 >
   <Navbar>
-    {#if !hideSmallSidebar || sidebar}
-      <div class="flex gap-4 items-center ml-4">
-        <ToggleNavigation bind:isSidebarVisible={isSidebarVisible.value} />
-      </div>
-    {/if}
+    <div class="flex gap-4 items-center ml-4">
+      <ToggleNavigation bind:isSidebarVisible={isSidebarVisible.value} />
+    </div>
 
-    <div></div>
+    <div class="hidden sm:flex dz-navbar-end items-center gap-2"></div>
 
     {@render navbar?.()}
   </Navbar>

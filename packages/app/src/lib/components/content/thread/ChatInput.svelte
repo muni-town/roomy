@@ -76,7 +76,7 @@
           class: cn(
             inputVariants({ variant: "primary" }),
             "w-full outline-none text-base-950 dark:text-base-50",
-            "max-h-[30vh] overflow-y-auto",
+            "max-h-[30vh] overflow-y-auto"
           ),
         },
       },

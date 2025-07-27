@@ -16,9 +16,11 @@
     RoomyAccount,
     RoomyEntity,
     RoomyProfile,
+    Space,
+    messageHasAdmin,
     publicGroup,
   } from "@roomy-chat/sdk";
-  import { co } from "jazz-tools";
+  import { Account, co } from "jazz-tools";
   import MessageToolbar from "./MessageToolbar.svelte";
   import MessageReactions from "./MessageReactions.svelte";
   import ChatInput from "../ChatInput.svelte";
@@ -30,6 +32,7 @@
   import MessageThreadBadge from "./MessageThreadBadge.svelte";
   import VideoUrlEmbed from "./embeds/VideoUrlEmbed.svelte";
   import { goto } from "$app/navigation";
+  import { dmClient } from "$lib/dm.svelte";
   import { Badge } from "@fuxui/base";
 
   let {
@@ -80,6 +83,8 @@
   let profile = $derived(
     new CoState(RoomyProfile, message.current?._edits.content?.by?.profile?.id),
   );
+
+  let accountId = $derived(message.current?._edits.content?.by?.id);
 
   let isImportedMessage = $derived(
     message.current?.author?.startsWith("discord:") ||
@@ -263,15 +268,43 @@
     }
   }
 
+  let bannedAccounts = $derived(new Set(space?.bans ?? []));
   let hiddenIn = $derived(new Set(message.current?.hiddenIn ?? []));
 
   let shouldShow = $derived.by(() => {
     if (!message.current) return false;
     if (message.current.softDeleted) return false;
-    // if (!admin || !messageHasAdmin(message.current, admin)) return false;
+
+    if (!admin || !messageHasAdmin(message.current, admin)) return false;
+    if (bannedAccounts.has(accountId ?? "")) return false;
     if (hiddenIn.has(threadId ?? "")) return false;
     return true;
   });
+
+  async function handleOpenDM() {
+    try {
+      // Get the user's handle - try blueskyHandle first, then name as fallback
+      const userHandle = profile?.current?.blueskyHandle || authorData?.name;
+
+      if (!userHandle) {
+        toast.error("Unable to find user handle for messaging");
+        return;
+      }
+
+      // Initialize DM client if needed
+      const initialized = await dmClient.init();
+      if (!initialized) {
+        toast.error("Please log in to use direct messaging");
+        return;
+      }
+
+      // Navigate to messages with user parameter for new/existing conversations
+      await goto(`/messages?user=${encodeURIComponent(userHandle)}`);
+    } catch (error) {
+      console.error("Failed to open DM:", error);
+      toast.error("Failed to open direct message");
+    }
+  }
 </script>
 
 {#if shouldShow}
@@ -337,7 +370,14 @@
                   goto(`/user/${userId}`);
                 }
               }}
-              class="rounded-full hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer"
+              oncontextmenu={async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (authorData?.id !== me.current?.id) {
+                  await handleOpenDM();
+                }
+              }}
+              class="rounded-full hover:ring-2 hover:ring-blue-500 transition-all"
             >
               <Avatar.Root class="size-8 sm:size-10">
                 <Avatar.Image src={authorData?.imageUrl} class="rounded-full" />

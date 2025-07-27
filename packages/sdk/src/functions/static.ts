@@ -1,13 +1,13 @@
-import { co, Group } from "jazz-tools";
-import { IDFeed, IDList, SpaceMigrationReference } from "../schema/index.js";
-import { publicGroup } from "./group.js";
+import { Group } from "jazz-tools";
+import { IDList, SpaceMigrationReference } from "../schema/index.ts";
+import { publicGroup } from "./group.ts";
 
-// these functions are only called once during development and their id is saved in the ../ids.js file
+// these functions are only called once during development and their id is saved in the ../ids.ts file
 export function createAllSpacesList() {
   const group = Group.create();
   group.addMember("everyone", "writeOnly");
   const allSpaces = IDList.create([], group);
-  console.log("allSpacesListId", allSpaces.id);
+  console.log("allSpacesList", allSpaces.id);
   return allSpaces;
 }
 
@@ -15,16 +15,8 @@ export function createAllAccountsList() {
   const group = Group.create();
   group.addMember("everyone", "writeOnly");
   const allAccounts = IDList.create([], group);
-  console.log("allAccountsListId", allAccounts.id);
+  console.log("allAccountsList", allAccounts.id);
   return allAccounts;
-}
-
-export function createDiscoverableSpacesList(): co.loaded<typeof IDFeed> {
-  const group = Group.create();
-  group.addMember("everyone", "writer");
-  const discoverableSpaces = IDFeed.create([], group);
-  console.log("discoverableSpacesFeedId", discoverableSpaces.id);
-  return discoverableSpaces;
 }
 
 export function createSpaceMigrationReference() {

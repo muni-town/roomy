@@ -1,11 +1,11 @@
-export * from "./admin.js";
-export * from "./folder.js";
-export * from "./group.js";
-export * from "./page.js";
-export * from "./roomyentity.js";
-export * from "./space.js";
-export * from "./thread.js";
-export * from "./user.js";
+export * from "./admin.ts";
+export * from "./folder.ts";
+export * from "./group.ts";
+export * from "./page.ts";
+export * from "./roomyobject.ts";
+export * from "./space.ts";
+export * from "./thread.ts";
+export * from "./user.ts";
 
-export * from "./static.js";
-export * from "./members.js";
+
+export * from "./static.ts";

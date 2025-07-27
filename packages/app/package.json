@@ -29,6 +29,7 @@
     "hls.js": "^1.6.6"
   },
   "devDependencies": {
+    "@fuxui/visual": "^0.2.4",
     "@atproto/api": "^0.14.9",
     "@atproto/lexicon": "^0.4.5",
     "@atproto/oauth-client-browser": "^0.3.7",
@@ -39,7 +40,6 @@
     "@fuxui/colors": "^0.2.2",
     "@fuxui/social": "^0.2.3",
     "@fuxui/text": "^0.2.5",
-    "@fuxui/visual": "^0.2.4",
     "@iconify/svelte": "^4.2.0",
     "@muni-town/leaf": "^0.2.0-preview.22",
     "@muni-town/leaf-storage-indexeddb": "^0.1.0-preview.6",

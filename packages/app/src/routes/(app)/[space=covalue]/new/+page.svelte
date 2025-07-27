@@ -1,78 +1,54 @@
 <script lang="ts">
   import { page } from "$app/state";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
-  import SidebarMain from "$lib/components/sidebars/SidebarMain.svelte";
+  import SidebarMain from "$lib/components/SidebarMain.svelte";
   import { navigate } from "$lib/utils.svelte";
-  import { Button, Input, ScrollArea, Select } from "@fuxui/base";
+  import { Button, Input, Select } from "@fuxui/base";
   import {
-    addToFolder,
-    AllFoldersComponent,
-    AllPagesComponent,
-    AllThreadsComponent,
+  addToFolder,
     co,
     createFolder,
     createPage,
     createThread,
-    RoomyEntity,
-    SpacePermissionsComponent,
+    Group,
+    IDList,
+    RoomyObject,
+    Space,
   } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
 
   let space = $derived(
-    new CoState(RoomyEntity, page.params.space, {
+    new CoState(Space, page.params.space, {
       resolve: {
-        components: true,
+        folders: true,
+        threads: true,
+        pages: true,
       },
     }),
   );
 
-  const allFolders = $derived(
-    new CoState(
-      AllFoldersComponent.schema,
-      space?.current?.components?.[AllFoldersComponent.id],
-    ),
+  const rootChildren = $derived(
+    new CoState(IDList, space?.current?.rootFolder?.components?.children),
   );
 
-  const permissions = $derived(
-    new CoState(
-      SpacePermissionsComponent.schema,
-      space?.current?.components?.[SpacePermissionsComponent.id],
-    ),
-  );
+  let adminGroup = $derived(new CoState(Group, space?.current?.adminGroupId));
 
-  const allThreads = $derived(
-    new CoState(
-      AllThreadsComponent.schema,
-      space?.current?.components?.[AllThreadsComponent.id],
-    ),
-  );
-
-  const allPages = $derived(
-    new CoState(
-      AllPagesComponent.schema,
-      space?.current?.components?.[AllPagesComponent.id],
-    ),
-  );
-
-  let objectType = $state("Channel");
+  let objectType = $state("thread");
   let objectName = $state("");
 
-  async function addAsChild(object: co.loaded<typeof RoomyEntity>) {
+  async function addAsChild(object: co.loaded<typeof RoomyObject>) {
     if (selectedParent === "root") {
-      console.log("adding to root", space.current, object);
-      addToFolder(space.current!, object);
+      rootChildren.current?.push(object.id);
     } else {
-      const folder = allFolders.current?.find(
-        (folder) => folder?.id === selectedParent,
-      );
+      const folder = space.current?.folders?.find((folder) => folder?.id === selectedParent);
 
-      if (folder) {
+      if(folder) {
         addToFolder(folder, object);
       }
     }
   }
 
-  async function createObject(event: Event) {
+  function createObject(event: Event) {
     event.preventDefault();
     console.log(objectType, objectName);
 
@@ -80,38 +56,38 @@
       return;
     }
 
-    if (!space?.current) {
-      console.error("Space not found");
+    if (!adminGroup.current || !space?.current) {
+      console.error("Admin group or space not found");
       return;
     }
 
-    if (!permissions.current) {
-      console.error("Permissions not found");
-      return;
-    }
-
-    if (objectType === "Channel") {
+    if (objectType === "thread") {
       // add thread
-      const thread = await createThread(objectName, permissions.current);
+      const thread = createThread(objectName, adminGroup.current);
+
+      // find first folder
+      const firstFolder = space.current?.folders?.[0];
+
+      console.log(firstFolder);
 
       addAsChild(thread.roomyObject);
 
-      allThreads.current?.push(thread.roomyObject);
+      space.current?.threads?.push(thread.roomyObject);
       navigate({ space: space.current?.id, object: thread.roomyObject.id });
-    } else if (objectType === "Group") {
+    } else if (objectType === "group") {
       // add group
-      const group = await createFolder(objectName, permissions.current);
+      const group = createFolder(objectName, adminGroup.current);
 
       addAsChild(group);
 
-      allFolders.current?.push(group);
-    } else if (objectType === "Page") {
+      space.current?.folders?.push(group);
+    } else if (objectType === "page") {
       // add page
-      const page = await createPage(objectName, permissions.current);
+      const page = createPage(objectName, adminGroup.current);
 
       addAsChild(page.roomyObject);
 
-      allPages.current?.push(page.roomyObject);
+      space.current?.pages?.push(page.roomyObject);
       navigate({ space: space.current?.id, object: page.roomyObject.id });
     }
   }
@@ -119,20 +95,13 @@
   let selectedParent = $state("root");
 
   let folders = $derived(
-    (allFolders.current ?? [])
-      .map((folder) => {
-        return {
-          value: folder?.id,
-          label: folder?.name,
-        };
-      })
-      .filter((folder) => folder.value && folder.label) as {
-      value: string;
-      label: string;
-    }[],
+    (space.current?.folders ?? []).map((folder) => {
+      return {
+        value: folder?.id,
+        label: folder?.name,
+      };
+    }).filter((folder) => folder.value && folder.label) as { value: string; label: string }[]
   );
-
-  const types = ["Channel", "Group", "Page"];
 </script>
 
 {#if space.current}
@@ -154,76 +123,103 @@
     </div>
   {/snippet}
 
-  <ScrollArea>
-    <form
-      class="px-4 flex flex-col gap-8 py-8 max-w-3xl mx-auto w-full"
-      onsubmit={createObject}
-    >
-      <div>
-        <h1 class="text-xl font-bold mb-2">Create new object</h1>
-        <p class="text-sm text-base-500">
-          Create a new channel, group or page.
-        </p>
+  <form
+    class="px-4 flex flex-col gap-8 py-8 max-w-3xl mx-auto w-full"
+    onsubmit={createObject}
+  >
+    <div>
+      <h1 class="text-xl font-bold mb-2">Create new object</h1>
+      <p class="text-sm text-base-500">Create a new channel, group or page.</p>
+    </div>
+
+    <div>
+      <label
+        for="name"
+        class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
+        >Name</label
+      >
+      <div class="mt-2">
+        <Input class="w-full" id="name" bind:value={objectName} />
       </div>
+    </div>
 
-      <div>
-        <label
-          for="name"
-          class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-          >Name</label
-        >
-        <div class="mt-2">
-          <Input class="w-full" id="name" bind:value={objectName} />
-        </div>
-      </div>
-
-      <fieldset>
-        <legend class="text-sm/6 font-semibold text-base-900 dark:text-base-100"
-          >Object type</legend
-        >
-        <p class="mt-1 text-sm/6 text-base-600 dark:text-base-400">
-          Choose the type of object you want to create.
-        </p>
-        <div class="mt-6 space-y-4">
-          {#each types as type}
-            <div class="flex items-center gap-x-3">
-              <input
-                id="{type}-type"
-                name="{type}-type"
-                type="radio"
-                checked
-                bind:group={objectType}
-                value={type}
-                class="relative size-4 appearance-none rounded-full border border-base-300 dark:border-base-700 bg-white dark:bg-base-800 before:absolute before:inset-1 before:rounded-full before:bg-white not-checked:before:hidden checked:border-accent-600 dark:checked:border-accent-400 dark:checked:bg-accent-400 checked:bg-accent-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600 disabled:border-base-300 disabled:bg-base-100 disabled:before:bg-base-400 forced-colors:appearance-auto forced-colors:before:hidden"
-              />
-              <label
-                for="{type}-type"
-                class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-                >{type}</label
-              >
-            </div>
-          {/each}
-        </div>
-      </fieldset>
-
-      <div>
-        <label
-          for="parent"
-          class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-          >Child of</label
-        >
-        <div class="mt-2">
-          <Select
-            bind:value={selectedParent}
-            type="single"
-            items={[{ value: "root", label: "root" }, ...folders]}
+    <fieldset>
+      <legend class="text-sm/6 font-semibold text-base-900 dark:text-base-100"
+        >Object type</legend
+      >
+      <p class="mt-1 text-sm/6 text-base-600 dark:text-base-400">
+        Choose the type of object you want to create.
+      </p>
+      <div class="mt-6 space-y-4">
+        <div class="flex items-center gap-x-3">
+          <input
+            id="thread-type"
+            name="thread-type"
+            type="radio"
+            checked
+            bind:group={objectType}
+            value="thread"
+            class="relative size-4 appearance-none rounded-full border border-base-300 dark:border-base-700 bg-white dark:bg-base-800 before:absolute before:inset-1 before:rounded-full before:bg-white not-checked:before:hidden checked:border-accent-600 dark:checked:border-accent-400 dark:checked:bg-accent-400 checked:bg-accent-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600 disabled:border-base-300 disabled:bg-base-100 disabled:before:bg-base-400 forced-colors:appearance-auto forced-colors:before:hidden"
           />
+          <label
+            for="thread-type"
+            class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
+            >Channel</label
+          >
+        </div>
+        <div class="flex items-center gap-x-3">
+          <input
+            id="group-type"
+            name="group-type"
+            type="radio"
+            bind:group={objectType}
+            value="group"
+            class="relative size-4 appearance-none rounded-full border border-base-300 dark:border-base-700 bg-white dark:bg-base-800 before:absolute before:inset-1 before:rounded-full before:bg-white not-checked:before:hidden checked:border-accent-600 dark:checked:border-accent-400 dark:checked:bg-accent-400 checked:bg-accent-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600 disabled:border-base-300 disabled:bg-base-100 disabled:before:bg-base-400 forced-colors:appearance-auto forced-colors:before:hidden"
+          />
+          <label
+            for="group-type"
+            class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
+            >Group</label
+          >
+        </div>
+        <div class="flex items-center gap-x-3">
+          <input
+            id="page-type"
+            name="page-type"
+            type="radio"
+            bind:group={objectType}
+            value="page"
+            class="relative size-4 appearance-none rounded-full border border-base-300 dark:border-base-700 bg-white dark:bg-base-800 before:absolute before:inset-1 before:rounded-full before:bg-white not-checked:before:hidden checked:border-accent-600 dark:checked:border-accent-400 dark:checked:bg-accent-400 checked:bg-accent-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-600 disabled:border-base-300 disabled:bg-base-100 disabled:before:bg-base-400 forced-colors:appearance-auto forced-colors:before:hidden"
+          />
+          <label
+            for="page-type"
+            class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
+            >Page</label
+          >
         </div>
       </div>
+    </fieldset>
 
-      <div class="mt-4">
-        <Button type="submit">Create object</Button>
+    <div>
+      <label
+        for="parent"
+        class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
+        >Child of</label
+      >
+      <div class="mt-2">
+        <Select
+          bind:value={selectedParent}
+          type="single"
+          items={[
+            { value: "root", label: "root" },
+            ...folders,
+          ]}
+        />
       </div>
-    </form>
-  </ScrollArea>
+    </div>
+
+    <div class="mt-4">
+      <Button type="submit">Create object</Button>
+    </div>
+  </form>
 </MainLayout>

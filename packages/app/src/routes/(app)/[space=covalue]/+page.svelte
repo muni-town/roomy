@@ -1,62 +1,45 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import {
-    RoomyEntity,
-    ChildrenComponent,
-    ThreadComponent,
-    PageComponent,
-  } from "@roomy-chat/sdk";
+  import { IDList, RoomyObject, Space } from "@roomy-chat/sdk";
   import { navigate } from "$lib/utils.svelte";
   import { CoState } from "jazz-tools/svelte";
 
   let space = $derived(
-    new CoState(RoomyEntity, page.params.space, {
+    new CoState(Space, page.params.space, {
       resolve: {
-        components: true,
+        rootFolder: {
+          components: true
+        },
       },
     }),
   );
 
-  async function navigateToFirstChildThreadOrPage(id: string) {
-    if (!space.current || !id) return;
+  let children = $derived(new CoState(IDList, space.current?.rootFolder.components.children));
 
-    const children = await ChildrenComponent.schema.load(id, {
-      resolve: {
-        $each: {
-          components: {
-            $each: true,
-            $onError: null,
-          },
-        },
-      },
-    });
+  async function navigateToFirstThread() {
+    if (
+      !space.current ||
+      !children.current ||
+      children.current?.length === 0
+    )
+      return;
 
-    for (const child of children ?? []) {
-      if (!child || child.softDeleted) continue;
+    // load roomyobjects and find first thread
+    for (const childId of children.current ?? []) {
+      const child = await RoomyObject.load(childId);
+      if (!child) continue;
 
-      if (
-        child.components?.[ThreadComponent.id] ||
-        child.components?.[PageComponent.id]
-      ) {
-        navigate({
-          space: space.current.id,
-          object: child.id,
-        });
-        return;
-      } else if (child.components?.[ChildrenComponent.id]) {
-        await navigateToFirstChildThreadOrPage(
-          child.components?.[ChildrenComponent.id] ?? "",
-        );
-        return;
-      }
+      navigate({
+        space: space.current.id,
+        object: child.id,
+      });
+      return;
     }
   }
 
-  // Automatically navigate to the first object that is a thread or page in the space if we come to this empty space index
+  // Automatically navigate to the first object in the space if we come to this empty space index
   // page. We might have useful features on this index page eventually.
   $effect(() => {
-    navigateToFirstChildThreadOrPage(
-      space.current?.components[ChildrenComponent.id] ?? "",
-    );
+    navigateToFirstThread();
   });
 </script>

@@ -14,17 +14,11 @@
   ],
   "scripts": {
     "dev": "tsc --watch",
-    "build": "tsc && cp src/utils/spow/spow-wasm_bg.wasm dist/utils/spow/",
-    "format": "prettier . --write",
-    "build-lib": "pnpm build"
+    "build": "tsc",
+    "format": "prettier . --write"
   },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
-    ".": {
-      "development": "./src/index.ts",
-      "import": "./dist/index.js"
-    }
+    ".": "./src/index.ts"
   },
   "devDependencies": {
     "jazz-tools": "catalog:",

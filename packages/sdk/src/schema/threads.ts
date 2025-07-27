@@ -1,5 +1,4 @@
 import { co, z } from "jazz-tools";
-import { RoomyEntity } from "./roomyentity";
 
 export const Reaction = co.map({
   emoji: z.string(),
@@ -45,13 +44,3 @@ export const Timeline = co.feed(z.string());
 export const ThreadContent = co.map({
   timeline: Timeline,
 });
-
-export const ThreadComponent = {
-  schema: ThreadContent,
-  id: "space.roomy.thread.v0",
-};
-
-export const SubThreadsComponent = {
-  schema: co.feed(RoomyEntity),
-  id: "space.roomy.subthreads.v0",
-};

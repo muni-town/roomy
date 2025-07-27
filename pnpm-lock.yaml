@@ -198,9 +198,6 @@ importers:
       bits-ui:
         specifier: ^1.3.19
         version: 1.8.0(svelte@5.35.2)
-      bluesky-post-embed:
-        specifier: ^1.0.5
-        version: 1.0.5
       daisyui:
         specifier: ^5.0.6
         version: 5.0.43
@@ -258,9 +255,6 @@ importers:
       svelte-check:
         specifier: ^4.0.0
         version: 4.2.2(picomatch@4.0.2)(svelte@5.35.2)(typescript@5.8.3)
-      svelte-dnd-action:
-        specifier: ^0.9.64
-        version: 0.9.64(svelte@5.35.2)
       svelte-french-toast:
         specifier: 2.0.0-alpha.0
         version: 2.0.0-alpha.0(svelte@5.35.2)
@@ -354,6 +348,9 @@ importers:
       express:
         specifier: ^4.18.0
         version: 4.21.2
+      fluent-ffmpeg:
+        specifier: ^2.1.3
+        version: 2.1.3
       form-data:
         specifier: ^4.0.0
         version: 4.0.3
@@ -418,15 +415,6 @@ importers:
       express:
         specifier: ^5.1.0
         version: 5.1.0
-      jazz-tools:
-        specifier: 'catalog:'
-        version: 0.15.10(@tiptap/pm@2.24.2)(csstype@3.1.3)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.35.2)
-      marked:
-        specifier: ^15.0.12
-        version: 15.0.12
-      turndown:
-        specifier: ^7.2.0
-        version: 7.2.0
       undici:
         specifier: 6.21.1
         version: 6.21.1
@@ -449,9 +437,9 @@ importers:
       nodemon:
         specifier: ^3.1.10
         version: 3.1.10
-      tsconfig-paths:
-        specifier: ^4.2.0
-        version: 4.2.0
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@swc/core@1.12.9(@swc/helpers@0.5.17))(@types/node@22.16.0)(typescript@5.8.3)
       tsx:
         specifier: ^4.20.3
         version: 4.20.3
@@ -509,20 +497,6 @@ packages:
 
   '@ark/util@0.46.0':
     resolution: {integrity: sha512-JPy/NGWn/lvf1WmGCPw2VGpBg5utZraE84I7wli18EDF3p3zc/e9WolT35tINeZO3l7C77SjqRJeAUoT0CvMRg==}
-
-  '@atcute/bluesky-richtext-segmenter@1.0.5':
-    resolution: {integrity: sha512-D0FfmJVwppky9naL1OGKcQjtgO0lDLhkG4iCQHpShuHhEZ9FUdf3eUb/eQpVRNJGaJ4ShjEOHA6FlAizcjMkGQ==}
-    peerDependencies:
-      '@atcute/bluesky': ^1.0.0
-      '@atcute/client': ^1.0.0 || ^2.0.0
-
-  '@atcute/bluesky@1.0.15':
-    resolution: {integrity: sha512-+EFiybmKQ97aBAgtaD+cKRJER5AMn3cZMkEwEg/pDdWyzxYJ9m1UgemmLdTgI8VrxPufKqdXS2nl7uO7TY6BPA==}
-    peerDependencies:
-      '@atcute/client': ^1.0.0 || ^2.0.0
-
-  '@atcute/client@2.0.9':
-    resolution: {integrity: sha512-QNDm9gMP6x9LY77ArwY+urQOBtQW74/onEAz42c40JxRm6Rl9K9cU4ROvNKJ+5cpVmEm1sthEWVRmDr5CSZENA==}
 
   '@atproto-labs/did-resolver@0.2.0':
     resolution: {integrity: sha512-y9GOx2gUETynDKmANnBrU5DTf+u0AwKBJpGns1vDDOYMdLdRCFIeYy3UH+TI8YOkcEazjgF5Q3m+LjwriE1KqQ==}
@@ -2534,6 +2508,9 @@ packages:
     resolution: {integrity: sha512-LElXdjswlqjWrPpJFg1Fx4wpkOCxj1TDHlSV4PlaRxHGWko024xICaa97ZkMfs6DRKlCguiAI+rbXv5GWwXIkg==}
     hasBin: true
 
+  async@0.2.10:
+    resolution: {integrity: sha512-eAkdoKxU6/LkKDBzLpT+t6Ff5EtfSF4wx1WfJiPEEV7WNLnDaRXk0oVysiEPm262roaachGexwUv94WhSgN5TQ==}
+
   asynckit@0.4.0:
     resolution: {integrity: sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==}
 
@@ -2595,9 +2572,6 @@ packages:
 
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
-
-  bluesky-post-embed@1.0.5:
-    resolution: {integrity: sha512-xnzbnGIYuLosTN2pXlUh2WcfYn6SBgQk8qfM6L/IxIrIwtJTjNMoPj1iv3dxgl7hK8ItJcBLWTEQuBA/8IpqwQ==}
 
   body-parser@1.20.3:
     resolution: {integrity: sha512-7rAxByjUMqQ3/bHJy7D6OGXvx/MMc4IqBn/X0fcM1QUcAItpZrBEYhWGem+tzXH90c+G01ypMcYJBO9Y30203g==}
@@ -3232,6 +3206,11 @@ packages:
   flexsearch@0.8.205:
     resolution: {integrity: sha512-REFjMqy86DKkCTJ4gIE42c9MVm9t1vUWfEub/8taixYuhvyu4jd4XmFALk5VuKW4GH4VLav8A4BJboTsslHF1w==}
 
+  fluent-ffmpeg@2.1.3:
+    resolution: {integrity: sha512-Be3narBNt2s6bsaqP6Jzq91heDgOEaDCJAXcE3qcma/EJBSy5FB4cvO31XBInuAuKBx8Kptf8dkhjK0IOru39Q==}
+    engines: {node: '>=18'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+
   focus-trap@7.6.5:
     resolution: {integrity: sha512-7Ke1jyybbbPZyZXFxEftUtxFGLMpE2n6A+z//m4CRDlj0hW+o3iYSmh8nFlYMurOiJVDmJRilUQtJr08KfIxlg==}
 
@@ -3710,11 +3689,6 @@ packages:
 
   json-parse-even-better-errors@2.3.1:
     resolution: {integrity: sha512-xyFwyhro/JEof6Ghe2iz2NcXoj2sloNsWr/XsERDK/oiPCfaNhl5ONfp+jQdAZRQQ0IJWNzH9zIZF7li91kh2w==}
-
-  json5@2.2.3:
-    resolution: {integrity: sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==}
-    engines: {node: '>=6'}
-    hasBin: true
 
   jsonfile@6.1.0:
     resolution: {integrity: sha512-5dgndWOriYSm5cnYaJNhalLNDKOqFwyDB/rr1E9ZsGciGvKPs8R2xYGCacuf3z6K1YKDz182fd+fY3cn3pMqXQ==}
@@ -4910,10 +4884,6 @@ packages:
     resolution: {integrity: sha512-iq6eVVI64nQQTRYq2KtEg2d2uU7LElhTJwsH4YzIHZshxlgZms/wIc4VoDQTlG/IvVIrBKG06CrZnp0qv7hkcQ==}
     engines: {node: '>=12'}
 
-  strip-bom@3.0.0:
-    resolution: {integrity: sha512-vavAMRXOgBVNF6nyEEmL3DBK19iRpDcoIwW+swQ+CbGiu7lju6t+JklA1MHweoWtadgt4ISVUsXLyDq34ddcwA==}
-    engines: {node: '>=4'}
-
   strip-final-newline@2.0.0:
     resolution: {integrity: sha512-BrpvfNAE3dcvq7ll3xVumzjKjZQ5tI1sEUIKr3Uoks0XUl45St3FlatVqef9prk4jRDzhW6WZg+3bk93y6pLjA==}
     engines: {node: '>=6'}
@@ -4954,11 +4924,6 @@ packages:
     peerDependencies:
       svelte: ^4.0.0 || ^5.0.0-next.0
       typescript: '>=5.0.0'
-
-  svelte-dnd-action@0.9.64:
-    resolution: {integrity: sha512-kbbnOTuVc+VINheraVyEQ7K11jXdQii6JNTGpsyIuwUqmda030eT3rPpqckD8UVh1DuyYH3xqyJDTWb8S610Jg==}
-    peerDependencies:
-      svelte: '>=3.23.0 || ^5.0.0-next.0'
 
   svelte-french-toast@2.0.0-alpha.0:
     resolution: {integrity: sha512-81wcVaY9UZ/0JuzLEizMSoIXqNbX7yhfTZavBuw94T3cnT2HmJ9O+qXY/c91h9FkeMwboo0KHZVmzOEQVTXDFg==}
@@ -5123,10 +5088,6 @@ packages:
         optional: true
       '@swc/wasm':
         optional: true
-
-  tsconfig-paths@4.2.0:
-    resolution: {integrity: sha512-NoZ4roiN7LnbKn9QqE1amc9DJfzvZXxF4xDavcOWt1BPkdx+m+0gJuPM+S0vCe7zTJMYUP0R8pO2XMr+Y8oLIg==}
-    engines: {node: '>=6'}
 
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
@@ -5487,6 +5448,10 @@ packages:
     resolution: {integrity: sha512-QaKxh0eNIi2mE9p2vEdzfagOKHCcj1pJ56EEHGQOVxp8r9/iszLUUV7v89x9O1p/T+NlTM5W7jW6+cz4Fq1YVg==}
     engines: {node: '>=18'}
 
+  which@1.3.1:
+    resolution: {integrity: sha512-HxJdYWq1MTIQbJ3nw0cqssHoTNU267KlrDuGZ1WYlxDStUtKUhOaJmh112/TZmHxxUfuJqPXSOm7tDyas0OSIQ==}
+    hasBin: true
+
   which@2.0.2:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
     engines: {node: '>= 8'}
@@ -5599,17 +5564,6 @@ snapshots:
       '@ark/util': 0.46.0
 
   '@ark/util@0.46.0': {}
-
-  '@atcute/bluesky-richtext-segmenter@1.0.5(@atcute/bluesky@1.0.15(@atcute/client@2.0.9))(@atcute/client@2.0.9)':
-    dependencies:
-      '@atcute/bluesky': 1.0.15(@atcute/client@2.0.9)
-      '@atcute/client': 2.0.9
-
-  '@atcute/bluesky@1.0.15(@atcute/client@2.0.9)':
-    dependencies:
-      '@atcute/client': 2.0.9
-
-  '@atcute/client@2.0.9': {}
 
   '@atproto-labs/did-resolver@0.2.0':
     dependencies:
@@ -7745,6 +7699,8 @@ snapshots:
 
   astring@1.9.0: {}
 
+  async@0.2.10: {}
+
   asynckit@0.4.0: {}
 
   await-lock@2.2.2: {}
@@ -7819,12 +7775,6 @@ snapshots:
       buffer: 5.7.1
       inherits: 2.0.4
       readable-stream: 3.6.2
-
-  bluesky-post-embed@1.0.5:
-    dependencies:
-      '@atcute/bluesky': 1.0.15(@atcute/client@2.0.9)
-      '@atcute/bluesky-richtext-segmenter': 1.0.5(@atcute/bluesky@1.0.15(@atcute/client@2.0.9))(@atcute/client@2.0.9)
-      '@atcute/client': 2.0.9
 
   body-parser@1.20.3:
     dependencies:
@@ -8570,6 +8520,11 @@ snapshots:
 
   flexsearch@0.8.205: {}
 
+  fluent-ffmpeg@2.1.3:
+    dependencies:
+      async: 0.2.10
+      which: 1.3.1
+
   focus-trap@7.6.5:
     dependencies:
       tabbable: 6.2.0
@@ -9116,8 +9071,6 @@ snapshots:
       argparse: 2.0.1
 
   json-parse-even-better-errors@2.3.1: {}
-
-  json5@2.2.3: {}
 
   jsonfile@6.1.0:
     dependencies:
@@ -10640,8 +10593,6 @@ snapshots:
     dependencies:
       ansi-regex: 6.1.0
 
-  strip-bom@3.0.0: {}
-
   strip-final-newline@2.0.0: {}
 
   strip-final-newline@3.0.0: {}
@@ -10679,10 +10630,6 @@ snapshots:
       typescript: 5.8.3
     transitivePeerDependencies:
       - picomatch
-
-  svelte-dnd-action@0.9.64(svelte@5.35.2):
-    dependencies:
-      svelte: 5.35.2
 
   svelte-french-toast@2.0.0-alpha.0(svelte@5.35.2):
     dependencies:
@@ -10844,12 +10791,6 @@ snapshots:
       yn: 3.1.1
     optionalDependencies:
       '@swc/core': 1.12.9(@swc/helpers@0.5.17)
-
-  tsconfig-paths@4.2.0:
-    dependencies:
-      json5: 2.2.3
-      minimist: 1.2.8
-      strip-bom: 3.0.0
 
   tslib@2.8.1: {}
 
@@ -11195,6 +11136,10 @@ snapshots:
       iconv-lite: 0.6.3
 
   whatwg-mimetype@4.0.0: {}
+
+  which@1.3.1:
+    dependencies:
+      isexe: 2.0.0
 
   which@2.0.2:
     dependencies:

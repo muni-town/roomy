@@ -2,8 +2,14 @@
   import { Button, ScrollArea } from "@fuxui/base";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import { page } from "$app/state";
+  import { goto } from "$app/navigation";
+  import { onMount } from "svelte";
 
   let { children } = $props();
+
+  onMount(() => {
+    goto("/admin/spaces");
+  });
 </script>
 
 <MainLayout>
