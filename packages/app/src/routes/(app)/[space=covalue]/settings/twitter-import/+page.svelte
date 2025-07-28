@@ -361,7 +361,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { user } from "$lib/user.svelte";
-  import { Button } from "@fuxui/base";
+  import { Alert, Button } from "@fuxui/base";
   import {
     addToFolder,
     AllThreadsComponent,
@@ -372,6 +372,7 @@
     RoomyAccount,
     RoomyEntity,
     SpacePermissionsComponent,
+    ThreadComponent,
     ThreadContent,
     UploadMedia,
     type ImageUrlEmbedCreate,
@@ -464,6 +465,7 @@
    */
 
   async function importTweets() {
+    if (isImporting) return;
     try {
       if (!space.current) throw new Error("No current space");
       isImporting = true;
@@ -504,10 +506,10 @@
       allThreads.current?.push(newChannel.roomyObject);
 
       // get the timeline for the thread
-      if (!newChannel.roomyObject.components.thread)
+      if (!newChannel.roomyObject.components[ThreadComponent.id])
         throw new Error("No thread in thread");
       const threadContent = await ThreadContent.load(
-        newChannel.roomyObject.components.thread,
+        newChannel.roomyObject.components[ThreadComponent.id]!,
         {
           resolve: {
             timeline: true,
@@ -566,16 +568,18 @@
         await postTweet(key);
       }
       pushLog(
-        "🎉 Finished Importing Tweets! Go to the 'Twitter Import' thread to see them.",
+        "🎉 Finished Importing Tweets! Go to the 'Twitter Import' channel to see them.",
       );
       toast.success(
-        "🎉 Finished Importing Tweets! Go to the 'Twitter Import' thread to see them.",
+        "🎉 Finished Importing Tweets! Go to the 'Twitter Import' channel to see them.",
         {
           position: "bottom-right",
         },
       );
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error("😔 " + e.message, {
+        position: "bottom-right",
+      });
     }
     isImporting = false;
   }
@@ -634,8 +638,15 @@
         !file ||
         !UploadMedia.safeParse(file).success ||
         file.status !== "pending"
-      )
+      ) {
+        pushLog(
+          "⚠️ Skipping file " +
+            path +
+            "with status " +
+            (file?.status || "unknown"),
+        );
         return;
+      }
       pushLog("🌠 Uploading file " + path);
       file.status = "processing";
       console.log("file JSON", file.toJSON());
@@ -660,6 +671,7 @@
     for (const path in uploadQueue) {
       await uploadFile(path);
     }
+    me!.root!.uploadQueue = MediaUploadQueue.create({});
     pushLog("🌅 Finished uploading media!");
   }
 </script>
@@ -674,6 +686,17 @@
       To import your Twitter data, please download your data from X/Twitter and
       select the uncompressed folder containing the data.
     </p>
+
+    {#if me?.root?.uploadQueue && Object.keys(me.root.uploadQueue).length > 0 && !isImporting}
+      <Alert
+        title={`There are ${Object.keys(me.root.uploadQueue).length} files in your upload queue.`}
+      >
+        <p>
+          If your import was interrupted, select the same folder you selected
+          previously and Resume, or Cancel to clear the queue.
+        </p>
+      </Alert>
+    {/if}
 
     <div class="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
       <div class="col-span-full">
@@ -706,13 +729,15 @@
             <p>&rarr; {mediaFiles.length} media files</p>
           </div>
         {/if}
-        {#if isImporting}
-          <p>
-            {importQueue &&
-              Object.values(importQueue).filter(
-                (f) => f?.status === "completed",
-              ).length} out of {importQueue && Object.keys(importQueue).length} media
-            files uploaded.
+        {#if importQueue && Object.keys(importQueue).length}
+          <p class="mt-2">
+            <strong class="text-accent-700"
+              >{importQueue &&
+                Object.values(importQueue).filter(
+                  (f) => f?.status === "completed",
+                ).length} out of {importQueue &&
+                Object.keys(importQueue).length} files</strong
+            > uploaded.
           </p>
         {/if}
       </div>
@@ -724,7 +749,7 @@
           type="button"
           disabled={!me?.root.uploadQueue ||
             Object.keys(me.root.uploadQueue).length == 0}
-          onclick={cancelUploads}>Cancel Uploads</Button
+          onclick={cancelUploads}>Cancel</Button
         >
         <Button
           type="submit"
@@ -733,6 +758,8 @@
         >
           {#if isImporting}
             Importing...
+          {:else if me?.root?.uploadQueue && Object.keys(me.root.uploadQueue).length}
+            Resume
           {:else}
             Import
           {/if}

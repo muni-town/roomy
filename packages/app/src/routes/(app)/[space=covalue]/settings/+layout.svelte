@@ -27,15 +27,15 @@
       <Button
         variant="ghost"
         class="w-full justify-start"
-        href={`/${page.params.space}/settings/twitter-import`}
-        data-current={page.url.pathname.includes("twitter-import")}
-        >Twitter Import</Button
+        href={`/${page.params.space}/settings/members`}
+        data-current={page.url.pathname.includes("members")}>Members</Button
       >
       <Button
         variant="ghost"
         class="w-full justify-start"
-        href={`/${page.params.space}/settings/members`}
-        data-current={page.url.pathname.includes("members")}>Members</Button
+        href={`/${page.params.space}/settings/twitter-import`}
+        data-current={page.url.pathname.includes("twitter-import")}
+        >Twitter Import</Button
       >
       <Button
         variant="ghost"
