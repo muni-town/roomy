@@ -2,7 +2,7 @@
 [build]
   command = "./scripts/netlify_build.sh"
   functions = "netlify/functions"
-  publish = "dist"
+  publish = "build"
 
 [build.environment]
   NPM_FLAGS = "--help" # hack to prevent netlify from installing deps with npm.
