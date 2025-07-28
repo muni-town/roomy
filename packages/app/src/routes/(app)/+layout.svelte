@@ -48,20 +48,20 @@
   }
 
   // TODO: used in checkProfileRecord, which is unused; removed to appease husky
-  // async function setProfileRecord(accountId?: string, profileId?: string) {
-  //   if (!accountId || !profileId) return false;
+  async function setProfileRecord(accountId?: string, profileId?: string) {
+    if (!accountId || !profileId) return false;
 
-  //   await user.agent?.com.atproto.repo.createRecord({
-  //     collection: "chat.roomy.profile",
-  //     record: { accountId, profileId },
-  //     repo: user.agent.assertDid,
-  //     rkey: "self",
-  //   });
+    await user.agent?.com.atproto.repo.createRecord({
+      collection: "chat.roomy.profile",
+      record: { accountId, profileId },
+      repo: user.agent.assertDid,
+      rkey: "self",
+    });
 
-  //   addToAllAccountsList(accountId);
+    addToAllAccountsList(accountId);
 
-  //   return true;
-  // }
+    return true;
+  }
 
   // only used for testing
   // async function removeProfileRecord() {
@@ -72,23 +72,22 @@
   //   });
   // }
 
-  // TODO: not sure what is used for; removed to appease husky
-  // async function checkProfileRecord() {
-  //   try {
-  //     await user.agent?.com.atproto.repo.getRecord({
-  //       collection: "chat.roomy.profile",
-  //       repo: user.agent.assertDid,
-  //       rkey: "self",
-  //     });
+  async function checkProfileRecord() {
+    try {
+      await user.agent?.com.atproto.repo.getRecord({
+        collection: "chat.roomy.profile",
+        repo: user.agent.assertDid,
+        rkey: "self",
+      });
 
-  //     recordChecked = true;
-  //   } catch (e) {
-  //     recordChecked = await setProfileRecord(
-  //       me.current?.id,
-  //       me.current?.profile.id,
-  //     );
-  //   }
-  // }
+      recordChecked = true;
+    } catch (e) {
+      recordChecked = await setProfileRecord(
+        me.current?.id,
+        me.current?.profile?.id,
+      );
+    }
+  }
 
   let recordChecked = $state(false);
 

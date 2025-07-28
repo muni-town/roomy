@@ -363,14 +363,15 @@
   import { user } from "$lib/user.svelte";
   import { Button } from "@fuxui/base";
   import {
+    addToFolder,
+    AllThreadsComponent,
     co,
     createMessage,
     createThread,
-    Group,
-    IDList,
     MediaUploadQueue,
     RoomyAccount,
-    Space,
+    RoomyEntity,
+    SpacePermissionsComponent,
     ThreadContent,
     UploadMedia,
     type ImageUrlEmbedCreate,
@@ -389,16 +390,40 @@
   let fileList = $state<File[]>([]);
   let tweetsQueue = $state<Map<string, QueuedTweet>>(new Map());
   let space = $derived(
-    new CoState(Space, page.params.space, {
+    new CoState(RoomyEntity, page.params.space, {
       resolve: {
-        threads: true,
+        components: {
+          $each: true,
+          $onError: null,
+        },
       },
     }),
   );
-  const rootChildren = $derived(
-    new CoState(IDList, space?.current?.rootFolder?.components?.children),
+
+  const account = new AccountCoState(RoomyAccount, {
+    resolve: {
+      root: {
+        uploadQueue: true,
+      },
+    },
+  });
+  const me = $derived(account.current);
+  let importQueue = $derived(me?.root.uploadQueue);
+
+  const permissions = $derived(
+    new CoState(
+      SpacePermissionsComponent.schema,
+      space?.current?.components?.[SpacePermissionsComponent.id],
+    ),
   );
-  let adminGroup = $derived(new CoState(Group, space?.current?.adminGroupId));
+
+  const allThreads = $derived(
+    new CoState(
+      AllThreadsComponent.schema,
+      space?.current?.components?.[AllThreadsComponent.id],
+    ),
+  );
+
   let tweetsJs = $derived(
     fileList.find((file) => file.webkitRelativePath.includes("tweets.js")),
   );
@@ -438,19 +463,6 @@
    * It also might be good to have a clear estimate of how much data that will be.
    */
 
-  const account = new AccountCoState(RoomyAccount, {
-    resolve: {
-      profile: {
-        joinedSpaces: true,
-      },
-      root: {
-        uploadQueue: true,
-      },
-    },
-  });
-  const me = $derived(account.current);
-  let importQueue = $derived(me?.root.uploadQueue);
-
   async function importTweets() {
     try {
       if (!space.current) throw new Error("No current space");
@@ -479,14 +491,17 @@
       await uploadMediaFiles(uploadQueue, fileList);
 
       // Then, create a channel
-      if (!adminGroup.current) throw new Error("no admin group");
-      let newChannel = createThread("Twitter Import", adminGroup.current!);
+      if (!permissions.current) throw new Error("no permissions");
+      let newChannel = await createThread(
+        "Twitter Import",
+        permissions.current!,
+      );
       if (!space.current) throw new Error("no space found");
-      if (!space.current.threads) throw new Error("no threads group");
       if (!newChannel) throw new Error("channel could not be created");
       if (!uploadQueue) throw new Error("no upload queue");
-      rootChildren.current?.push(newChannel.roomyObject.id);
-      space.current.threads.push(newChannel.roomyObject);
+      addToFolder(space.current!, newChannel.roomyObject);
+
+      allThreads.current?.push(newChannel.roomyObject);
 
       // get the timeline for the thread
       if (!newChannel.roomyObject.components.thread)
@@ -540,8 +555,8 @@
           });
         }
 
-        const message = createMessage(messageText, {
-          admin: adminGroup.current || undefined,
+        const message = await createMessage(messageText, {
+          permissions: permissions.current || undefined,
           embeds: fileUrlEmbeds,
           created: new Date(tweet.tweet.createdAt),
         });

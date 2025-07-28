@@ -286,12 +286,10 @@
       return;
     }
 
-    const message = await createMessage(
-      messageInput,
-      undefined,
-      filesUrls,
-      permissions.current,
-    );
+    const message = await createMessage(messageInput, {
+      embeds: filesUrls,
+      permissions: permissions.current,
+    });
 
     let timeline = threadContent.current?.timeline;
     if (timeline) {

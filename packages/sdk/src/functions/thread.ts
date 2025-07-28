@@ -91,29 +91,50 @@ export type VideoUrlEmbedCreate = {
 
 interface CreateMessageOptions {
   replyTo?: string,
-  admin?: co.loaded<typeof Group>;
+  permissions?: Record<string, string>
   embeds?: (ImageUrlEmbedCreate | VideoUrlEmbedCreate)[];
   created?: Date;
   updated?: Date;
 }
 
-export function createMessage(
+export async function createMessage(
   input: string,
   opts?: CreateMessageOptions
 ) {
-  const readingGroup = publicGroup("reader");
-  const publicWriteGroup = publicGroup("writer");
+  let permissions = opts?.permissions || {};
+  const publicReadGroupId = permissions?.[AllPermissions.publicRead]!;
+  const publicReadGroup = await Group.load(publicReadGroupId);
 
-  if (opts?.admin) {
-    readingGroup.extend(opts.admin);
-  }
+  const messageGroup = Group.create();
+  messageGroup.addMember(publicReadGroup!, "reader");
+
+  const addReactionsGroupId = permissions?.[AllPermissions.reactToMessages]!;
+  const addReactionsGroup = await Group.load(addReactionsGroupId);
+
+  const reactionsGroup = Group.create();
+  reactionsGroup.addMember(publicReadGroup!, "reader");
+  reactionsGroup.addMember(addReactionsGroup!, "writer");
+
+  const hiddenInGroup = Group.create();
+  hiddenInGroup.addMember(publicReadGroup!, "reader");
+
+  const hideMessagesInThreadsGroupId =
+    permissions?.[AllPermissions.hideMessagesInThreads]!;
+  const hideMessagesInThreadsGroup = await Group.load(
+    hideMessagesInThreadsGroupId,
+  );
+  hiddenInGroup.addMember(hideMessagesInThreadsGroup!, "writer");
 
   let embedsList;
   if (opts?.embeds && opts.embeds.length > 0) {
-    embedsList = co.list(Embed).create([], readingGroup);
+    const embedsGroup = Group.create();
+    embedsGroup.addMember(publicReadGroup!, "reader");
+
+    embedsList = co.list(Embed).create([], embedsGroup);
     for (const embed of opts.embeds) {
-      const embedGroup = readingGroup;
-      
+      const embedGroup = Group.create();
+      embedGroup.addMember(publicReadGroup!, "reader");
+
       if (embed.type === "imageUrl") {
         const imageUrlEmbed = ImageUrlEmbed.create(
           { url: embed.data.url },
@@ -146,12 +167,12 @@ export function createMessage(
       content: input,
       createdAt: opts?.created || new Date(),
       updatedAt: opts?.updated || new Date(),
-      reactions: co.list(Reaction).create([], publicWriteGroup),
+      reactions: co.list(Reaction).create([], reactionsGroup),
       replyTo: opts?.replyTo,
-      hiddenIn: co.list(z.string()).create([], readingGroup),
+      hiddenIn: co.list(z.string()).create([], hiddenInGroup),
       embeds: embedsList,
     },
-    readingGroup,
+    messageGroup,
   );
 
   return message;

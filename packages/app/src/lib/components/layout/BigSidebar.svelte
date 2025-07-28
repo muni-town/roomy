@@ -21,7 +21,8 @@
   <ScrollArea orientation="vertical" class="h-full overflow-y-scroll">
     {@render children?.()}
   </ScrollArea>
-  {#if rawEnv.PUBLIC_SHOW_BRANDING}
+
+  {#if "PUBLIC_SHOW_BRANDING" in rawEnv && rawEnv.PUBLIC_SHOW_BRANDING === "true"}
     <div class="text-xs p-2">
       <span class="text-base-500 dark:text-base-300">powered by</span>
       <a

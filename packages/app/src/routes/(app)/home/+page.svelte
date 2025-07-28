@@ -10,9 +10,7 @@
 
   const account = new AccountCoState(RoomyAccount, {
     resolve: {
-      profile: {
-        joinedSpaces: true,
-      },
+      profile: true,
     },
   });
   const me = $derived(account.current);
