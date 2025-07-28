@@ -1,6 +1,6 @@
 {
   "$schema": "https://turborepo.com/schema.json",
-  "globalEnv": ["http_proxy", "https_proxy", "no_proxy", "NODE_EXTRA_CA_CERTS"],
+  "globalEnv": ["http_proxy", "https_proxy", "no_proxy", "NODE_EXTRA_CA_CERTS", "NETLIFY"],
   "tasks": {
     "build-api-docs": {
       "dependsOn": ["^build-api-docs", "build-lib"],

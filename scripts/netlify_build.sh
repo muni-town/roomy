@@ -34,6 +34,6 @@ echo "{
   \"token_endpoint_auth_method\": \"none\",
   \"application_type\": \"web\",
   \"dpop_bound_access_tokens\": true
-}" > packages/app/build/oauth-client.json
+}" > packages/app/dist/oauth-client.json
 
-mv packages/app/build .
+mv packages/app/dist .
