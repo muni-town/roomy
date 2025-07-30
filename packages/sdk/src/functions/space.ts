@@ -56,7 +56,7 @@ export async function createSpace(
   const editPermissionsGroup = await Group.load(editPermissionsGroupId);
   permissionsGroup.addMember(publicReadGroup!, "reader");
   permissionsGroup.addMember(editPermissionsGroup!, "writer");
-  const spacePermissions = SpacePermissionsComponent.schema.create(
+  const spacePermissions = SpacePermissionsComponent.create(
     permissions,
     permissionsGroup,
   );
@@ -68,7 +68,7 @@ export async function createSpace(
   const addRootChildrenGroup = await Group.load(addRootChildrenGroupId);
   childrenGroup.addMember(addRootChildrenGroup!, "writer");
   childrenGroup.addMember(publicReadGroup!, "reader");
-  const children = ChildrenComponent.schema.create([], childrenGroup);
+  const children = ChildrenComponent.create([], childrenGroup);
   spaceObject.components[ChildrenComponent.id] = children.id;
 
   // create members component
@@ -80,7 +80,7 @@ export async function createSpace(
   membersGroup.addMember(addMembersGroup!, "writer");
   membersGroup.addMember(seeMembersGroup!, "reader");
 
-  const members = AllMembersComponent.schema.create([], membersGroup);
+  const members = AllMembersComponent.create([], membersGroup);
   spaceObject.components[AllMembersComponent.id] = members.id;
   await addMemberToSpace(Account.getMe(), spaceObject);
 
@@ -90,7 +90,7 @@ export async function createSpace(
   const createThreadsGroup = await Group.load(createThreadsGroupId);
   threadsGroup.addMember(createThreadsGroup!, "writer");
   threadsGroup.addMember(publicReadGroup!, "reader");
-  const threads = AllThreadsComponent.schema.create([], threadsGroup);
+  const threads = AllThreadsComponent.create([], threadsGroup);
   spaceObject.components[AllThreadsComponent.id] = threads.id;
 
   const manageChildrenGroupId = permissions[AllPermissions.manageChildren]!;
@@ -100,14 +100,14 @@ export async function createSpace(
   const pagesGroup = Group.create();
   pagesGroup.addMember(manageChildrenGroup!, "writer");
   pagesGroup.addMember(publicReadGroup!, "reader");
-  const pages = AllPagesComponent.schema.create([], pagesGroup);
+  const pages = AllPagesComponent.create([], pagesGroup);
   spaceObject.components[AllPagesComponent.id] = pages.id;
 
   // create all folders component
   const foldersGroup = Group.create();
   foldersGroup.addMember(manageChildrenGroup!, "writer");
   foldersGroup.addMember(publicReadGroup!, "reader");
-  const folders = AllFoldersComponent.schema.create([], foldersGroup);
+  const folders = AllFoldersComponent.create([], foldersGroup);
   spaceObject.components[AllFoldersComponent.id] = folders.id;
 
   // create bans component
@@ -116,7 +116,7 @@ export async function createSpace(
   const banMembersGroup = await Group.load(banMembersGroupId);
   bansGroup.addMember(banMembersGroup!, "writer");
   bansGroup.addMember(publicReadGroup!, "reader");
-  const bans = BansComponent.schema.create([], bansGroup);
+  const bans = BansComponent.create([], bansGroup);
   spaceObject.components[BansComponent.id] = bans.id;
 
   // create member roles component
@@ -127,7 +127,7 @@ export async function createSpace(
   const manageRolesGroup = await Group.load(manageRolesGroupId);
   rolesGroup.addMember(manageRolesGroup!, "writer");
   rolesGroup.addMember(publicReadGroup!, "reader");
-  const roles = SpaceRolesComponent.schema.create(
+  const roles = SpaceRolesComponent.create(
     { member: memberRole.id },
     rolesGroup,
   );

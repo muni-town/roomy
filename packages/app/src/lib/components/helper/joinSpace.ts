@@ -1,13 +1,13 @@
 import { launchConfetti } from "@fuxui/visual";
 import {
-  addMemberToSpace,
-  joinGroupThroughInviteService,
   publicGroup,
   RoomyEntityList,
+  addMemberToSpace,
   type co,
   type RoomyAccount,
   type RoomyEntity,
 } from "@roomy-chat/sdk";
+import { joinGroupThroughInviteService } from "@roomy-chat/sdk/utils/invites";
 
 export async function joinSpace(
   space: co.loaded<typeof RoomyEntity> | undefined | null,

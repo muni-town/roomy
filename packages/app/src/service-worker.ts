@@ -51,18 +51,22 @@ self.addEventListener("fetch", (event: FetchEvent) => {
       return cache.match(url.pathname);
     }
 
-    // for everything else, try the network first, but
-    // fall back to the cache if we're offline
+    // for everything else on our domain, try the network first, but fall back to the cache if we're
+    // offline.
     try {
       const response = await fetch(event.request);
 
-      if (response.status === 200) {
+      if (response.status === 200 && globalThis.location.host == url.host) {
         cache.put(event.request, response.clone());
       }
 
       return response;
-    } catch {
-      return cache.match(event.request);
+    } catch (e) {
+      if (globalThis.location.host == url.host) {
+        return cache.match(event.request);
+      } else {
+        throw e;
+      }
     }
   }
 

@@ -8,5 +8,3 @@ export * from "jazz-tools";
 export * from "jazz-tools/worker";
 
 export * from "./ids.js";
-
-export * from "./utils/invites.js";

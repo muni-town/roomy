@@ -24,6 +24,10 @@
     ".": {
       "development": "./src/index.ts",
       "import": "./dist/index.js"
+    },
+    "./utils/invites": {
+      "development": "./src/utils/invites.ts",
+      "import": "./dist/utils/invites.js"
     }
   },
   "devDependencies": {
