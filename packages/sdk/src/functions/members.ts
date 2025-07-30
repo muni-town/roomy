@@ -15,13 +15,13 @@ export async function addMemberToSpace(member: Account, space: co.loaded<typeof 
   if (!membersId) {
     throw new Error("Members component not found");
   }
-  const members = await AllMembersComponent.schema.load(membersId);
+  const members = await AllMembersComponent.load(membersId);
 
   const permissions = space.components?.[SpacePermissionsComponent.id];
   if (!permissions) {
     throw new Error("Permissions component not found");
   }
-  const permissionsRecord = await SpacePermissionsComponent.schema.load(permissions);
+  const permissionsRecord = await SpacePermissionsComponent.load(permissions);
   if (!permissionsRecord) {
     throw new Error("Permissions record not found");
   }

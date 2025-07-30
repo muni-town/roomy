@@ -100,40 +100,40 @@
   );
   let userAccessTimes = $derived(
     new CoState(
-      UserAccessTimesComponent.schema,
+      UserAccessTimesComponent,
       message.current?.components?.[UserAccessTimesComponent.id],
     ),
   );
   let prevMessageUserAccessTimes = $derived(
     new CoState(
-      UserAccessTimesComponent.schema,
+      UserAccessTimesComponent,
       previousMessage.current?.components?.[UserAccessTimesComponent.id],
     ),
   );
   let messageContent = $derived(
     new CoState(
-      PlainTextContentComponent.schema,
+      PlainTextContentComponent,
       message.current?.components?.[PlainTextContentComponent.id],
     ),
   );
 
   let embeds = $derived(
     new CoState(
-      EmbedsComponent.schema,
+      EmbedsComponent,
       message.current?.components?.[EmbedsComponent.id],
     ),
   );
 
   let hiddenIn = $derived(
     new CoState(
-      HiddenInComponent.schema,
+      HiddenInComponent,
       message.current?.components?.[HiddenInComponent.id],
     ),
   );
 
   let reactions = $derived(
     new CoState(
-      ReactionsComponent.schema,
+      ReactionsComponent,
       message.current?.components?.[ReactionsComponent.id],
     ),
   );

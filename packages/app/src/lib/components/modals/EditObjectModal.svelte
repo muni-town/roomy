@@ -50,7 +50,7 @@
 
     if (!childrenId) return;
 
-    const children = await ChildrenComponent.schema.load(childrenId, {
+    const children = await ChildrenComponent.load(childrenId, {
       resolve: {
         $each: {
           components: {

@@ -3,6 +3,7 @@ export * from "./folder.js";
 export * from "./group.js";
 export * from "./page.js";
 export * from "./roomyentity.js";
+export * from "./permissions.js";
 export * from "./space.js";
 export * from "./thread.js";
 export * from "./user.js";

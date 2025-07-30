@@ -34,7 +34,7 @@
 
   let members = $derived(
     new CoState(
-      AllMembersComponent.schema,
+      AllMembersComponent,
       space?.current?.components?.[AllMembersComponent.id],
     ),
   );

@@ -37,26 +37,22 @@
   } = $props();
 
   let children = $derived(
-    new CoState(
-      ChildrenComponent.schema,
-      object?.components?.[ChildrenComponent.id],
-      {
-        resolve: {
-          $each: {
-            components: {
-              $each: true,
-              $onError: null,
-            },
+    new CoState(ChildrenComponent, object?.components?.[ChildrenComponent.id], {
+      resolve: {
+        $each: {
+          components: {
+            $each: true,
+            $onError: null,
           },
-          $onError: null,
         },
+        $onError: null,
       },
-    ),
+    }),
   );
 
   let subthreads = $derived(
     new CoState(
-      SubThreadsComponent.schema,
+      SubThreadsComponent,
       object?.components?.[SubThreadsComponent.id],
       {
         resolve: {
@@ -74,17 +70,14 @@
 
   const thread = $derived(
     object?.components?.[ThreadComponent.id]
-      ? new CoState(
-          ThreadComponent.schema,
-          object?.components?.[ThreadComponent.id],
-        )
+      ? new CoState(ThreadComponent, object?.components?.[ThreadComponent.id])
       : null,
   );
 
   let showGroupChildren = $state(true);
 
   let bannedAccounts = $derived(
-    new CoState(BansComponent.schema, space?.components?.[BansComponent.id]),
+    new CoState(BansComponent, space?.components?.[BansComponent.id]),
   );
   let bannedAccountsSet = $derived(new Set(bannedAccounts.current ?? []));
 

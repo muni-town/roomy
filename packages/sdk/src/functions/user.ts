@@ -2,7 +2,11 @@ import { co, Group } from "jazz-tools";
 import { IDList, InboxItem, RoomyAccount } from "../schema/index.js";
 import { allAccountsListId } from "../ids.js";
 
-export function createInbox() {
+/**
+ * This unfortunately is returning any for now because TS is complaining about Jazz type
+ * dependencies. It'd be best to fix this if we can.
+ * */
+export function createInbox(): any {
   const group = Group.create();
   group.addMember("everyone", "writeOnly");
 

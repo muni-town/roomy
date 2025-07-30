@@ -28,28 +28,28 @@
 
   const allFolders = $derived(
     new CoState(
-      AllFoldersComponent.schema,
+      AllFoldersComponent,
       space?.current?.components?.[AllFoldersComponent.id],
     ),
   );
 
   const permissions = $derived(
     new CoState(
-      SpacePermissionsComponent.schema,
+      SpacePermissionsComponent,
       space?.current?.components?.[SpacePermissionsComponent.id],
     ),
   );
 
   const allThreads = $derived(
     new CoState(
-      AllThreadsComponent.schema,
+      AllThreadsComponent,
       space?.current?.components?.[AllThreadsComponent.id],
     ),
   );
 
   const allPages = $derived(
     new CoState(
-      AllPagesComponent.schema,
+      AllPagesComponent,
       space?.current?.components?.[AllPagesComponent.id],
     ),
   );

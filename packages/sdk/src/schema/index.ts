@@ -13,7 +13,6 @@ export * from "./roomyentity.js";
 export * from "./space.js";
 export * from "./threads.js";
 export * from "./user.js";
-export * from "./discord.js";
 export * from "./folder.js";
 export * from "./permissions.js";
 export * from "./import.js";

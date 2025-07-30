@@ -61,7 +61,7 @@
 
   let permissions = $derived(
     new CoState(
-      SpacePermissionsComponent.schema,
+      SpacePermissionsComponent,
       space.current?.components?.[SpacePermissionsComponent.id],
     ),
   );
@@ -79,16 +79,13 @@
 
   let threadContent = $derived(
     new CoState(
-      ThreadComponent.schema,
+      ThreadComponent,
       threadObject.current?.components?.[ThreadComponent.id],
     ),
   );
 
   let bannedAccounts = $derived(
-    new CoState(
-      BansComponent.schema,
-      space.current?.components?.[BansComponent.id],
-    ),
+    new CoState(BansComponent, space.current?.components?.[BansComponent.id]),
   );
   let bannedAccountsSet = $derived(new Set(bannedAccounts.current ?? []));
 
@@ -204,7 +201,7 @@
         console.error("Message not found when creating thread", messageId);
         continue;
       }
-      const hiddenIn = await HiddenInComponent.schema.load(
+      const hiddenIn = await HiddenInComponent.load(
         message.components[HiddenInComponent.id] || "",
       );
       // hide all messages except the first message in original thread
@@ -222,7 +219,7 @@
     )
       throw new Error("No components found on first message");
 
-    const firstMessageContent = await PlainTextContentComponent.schema.load(
+    const firstMessageContent = await PlainTextContentComponent.load(
       firstMessage.components[PlainTextContentComponent.id]!,
     );
 
@@ -250,14 +247,14 @@
 
     const allThreadsId = space.current?.components?.[AllThreadsComponent.id];
     if (allThreadsId) {
-      const allThreads = await AllThreadsComponent.schema.load(allThreadsId);
+      const allThreads = await AllThreadsComponent.load(allThreadsId);
       allThreads?.push(newThread.roomyObject);
     }
 
     const subThreadsId =
       threadObject.current?.components?.[SubThreadsComponent.id];
     if (subThreadsId) {
-      const subThreads = await SubThreadsComponent.schema.load(subThreadsId);
+      const subThreads = await SubThreadsComponent.load(subThreadsId);
       subThreads?.push(newThread.roomyObject);
     }
 
@@ -332,13 +329,10 @@
       return;
     }
 
-    const { roomyObject: message } = await createMessage(
-      messageInput,
-      permissions.current,
-      {
-        embeds: filesUrls,
-      },
-    );
+    const { roomyObject: message } = await createMessage(messageInput, {
+      permissions: permissions.current,
+      embeds: filesUrls,
+    });
 
     let timeline = threadContent.current?.timeline;
     if (timeline) {
@@ -427,7 +421,7 @@
 
   let members = $derived(
     new CoState(
-      AllMembersComponent.schema,
+      AllMembersComponent,
       space.current?.components?.[AllMembersComponent.id],
       {
         resolve: {
@@ -461,7 +455,7 @@
 
   const threadFeed = $derived(
     new CoState(
-      AllThreadsComponent.schema,
+      AllThreadsComponent,
       space.current?.components?.[AllThreadsComponent.id],
     ),
   );

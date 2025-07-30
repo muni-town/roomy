@@ -1,8 +1,5 @@
 import { co, z } from "jazz-tools";
-import {
-  createInbox,
-  publicGroup,
-} from "../functions/index.js";
+import { createInbox, publicGroup } from "../functions/index.js";
 import { MediaUploadQueue } from "./import.js";
 import { RoomyEntity, RoomyEntityList } from "./index.js";
 
@@ -31,15 +28,15 @@ export const RoomyProfile = co.profile({
   joinedDate: z.date().optional(),
   joinedSpaces: co.list(RoomyEntity),
 
-  threadSubscriptions: z.optional(co.list(z.string())), // List of thread IDs user is subscribed to
-  hiddenFeedPosts: z.optional(co.list(z.string())), // List of AT Proto URIs for hidden feed posts
+  threadSubscriptions: co.optional(co.list(z.string())), // List of thread IDs user is subscribed to
+  hiddenFeedPosts: co.optional(co.list(z.string())), // List of AT Proto URIs for hidden feed posts
 
   activityLog: co.record(z.string(), z.string()),
 });
 
 export const RoomyRoot = co.map({
   lastRead: LastReadList,
-  uploadQueue: z.optional(MediaUploadQueue),
+  uploadQueue: co.optional(MediaUploadQueue),
 });
 
 export const RoomyAccount = co
