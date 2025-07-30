@@ -72,7 +72,9 @@ export async function addToFolder(
     // add parentId to item
     item.components[ParentComponent.id] = folder.id;
   } else {
-    throw new Error("Folder or item components not found");
+    const children = ChildrenComponent.schema.create([item]);
+    folder.components![ChildrenComponent.id] = children.id;
+    item.components![ParentComponent.id] = folder.id;
   }
 }
 
@@ -94,12 +96,15 @@ export async function removeFromFolder(
 
   const childrenId = folder.components?.[ChildrenComponent.id];
 
-  if (childrenId && item.components) {
+  if (!folder.components || !item.components) {
+    throw new Error("Folder or item components not found");
+  }
 
+  if (childrenId) {
     const children = await ChildrenComponent.schema.load(childrenId);
 
     const index = children?.findIndex((x) => x?.id === item.id);
-    
+
     if (index !== undefined && index >= 0) {
       children?.splice(index, 1);
       delete item.components[ParentComponent.id];
