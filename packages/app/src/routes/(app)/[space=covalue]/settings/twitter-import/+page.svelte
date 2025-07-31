@@ -366,6 +366,7 @@
     addToFolder,
     AllThreadsComponent,
     co,
+    CoFeed,
     createMessage,
     createThread,
     MediaUploadQueue,
@@ -387,9 +388,14 @@
     id?: string;
   }
 
-  let isImporting = $state(false);
+  let logs = $state<string[]>([]);
+  let fileInput = $state<HTMLInputElement | null>(null);
+  let container = $state<HTMLDivElement | null>(null);
   let fileList = $state<File[]>([]);
+  let isImporting = $state(false);
+  let isFinished = $state(false);
   let tweetsQueue = $state<Map<string, QueuedTweet>>(new Map());
+  let twitterAccountId = $state("");
   let space = $derived(
     new CoState(RoomyEntity, page.params.space, {
       resolve: {
@@ -400,7 +406,6 @@
       },
     }),
   );
-
   const account = new AccountCoState(RoomyAccount, {
     resolve: {
       root: {
@@ -410,38 +415,79 @@
   });
   const me = $derived(account.current);
   let importQueue = $derived(me?.root.uploadQueue);
-
   const permissions = $derived(
     new CoState(
       SpacePermissionsComponent.schema,
       space?.current?.components?.[SpacePermissionsComponent.id],
     ),
   );
-
   const allThreads = $derived(
     new CoState(
       AllThreadsComponent.schema,
       space?.current?.components?.[AllThreadsComponent.id],
     ),
   );
-
-  let tweetsJs = $derived(
+  const tweetsJs = $derived(
     fileList.find((file) => file.webkitRelativePath.includes("tweets.js")),
   );
-  let tweetsPart1js = $derived(
+  const tweetsPart1js = $derived(
     fileList.find((file) =>
       file.webkitRelativePath.includes("tweets-part1.js"),
     ),
   );
-
-  let mediaFiles = $derived(
+  const mediaFiles = $derived(
     fileList.filter((file) =>
       file.webkitRelativePath.includes("/tweets_media/"),
     ),
   );
+  const accountFile = $derived(
+    fileList.find((file) => file.webkitRelativePath.includes("account.js")),
+  );
 
-  let fileInput = $state<HTMLInputElement | null>(null);
-  let logs = $state<string[]>([]);
+  $effect(() => {
+    space.current?.ensureLoaded({
+      resolve: {
+        components: {
+          $each: true,
+          $onError: null,
+        },
+      },
+    });
+    permissions.current?.ensureLoaded({
+      resolve: true,
+    });
+  });
+
+  $effect(() => {
+    if (accountFile && !twitterAccountId) {
+      const getAccountId = async () => {
+        const text = await accountFile.text();
+        const jsonText = text?.replace(`window.YTD.account.part0 = `, "");
+        const account = JSON.parse(jsonText || "{}");
+        console.log(account);
+        twitterAccountId = account[0].account.accountId;
+      };
+      getAccountId();
+    }
+  });
+
+  $effect(() => {
+    if (tweetsJs) {
+      tweetsJs.text().then((text) => parseTweets(text, 0));
+    }
+
+    if (tweetsPart1js) {
+      tweetsPart1js.text().then((text) => parseTweets(text, 1));
+    }
+  });
+
+  $effect(() => {
+    logs.length;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+  });
+
   let pending: string[] = [];
   let scheduled = false;
 
@@ -458,84 +504,170 @@
       });
     }
   }
-  /**
-   * First we need to upload all the media. This means putting all the media uploads into a persistent queue.
-   * This is the 'uploadQueue' on the user account root.
-   * It also might be good to have a clear estimate of how much data that will be.
-   */
+
+  function findParent(
+    parentId: string,
+    rootTweets: Map<string, SimplifiedTweet>,
+    replies: SimplifiedTweet[],
+    repliesMap: Map<string, string>,
+  ): SimplifiedTweet | null {
+    // console.log("finding parent", parentId)
+
+    // case 1 - parent is a root tweet
+    if (rootTweets.has(parentId)) {
+      // console.log("found root tweet", parentId)
+      return rootTweets.get(parentId)!;
+    }
+
+    // case 2 - parent is a reply
+    if (repliesMap.has(parentId)) {
+      const grandparentId = repliesMap.get(parentId);
+
+      if (grandparentId) {
+        const grandparent = findParent(
+          grandparentId,
+          rootTweets,
+          replies,
+          repliesMap,
+        );
+        if (grandparent) {
+          // console.log("found grandparent", grandparentId)
+          let parent = grandparent.replies.get(parentId);
+          if (parent) {
+            // console.log("found parent", parentId)
+            return parent;
+          }
+          // console.log("no parent found in grandparent", parentId)
+          parent = replies.find((r) => r.id === parentId);
+          if (parent) {
+            // console.log("found parent in replies", parentId)
+            grandparent.replies.set(parent.id, parent);
+            return parent;
+          }
+        }
+      }
+    }
+
+    // case 3 - no parent found
+    console.log("pathological case: no parent found", parentId);
+    return null;
+  }
 
   async function importTweets() {
     if (isImporting) return;
     try {
       if (!space.current) throw new Error("No current space");
+      if (!permissions.current) {
+        console.log("permisions", permissions);
+        throw new Error("no permissions");
+      }
+      if (!twitterAccountId) throw new Error("no account id");
       isImporting = true;
-
       await me?.root.ensureLoaded({ resolve: { uploadQueue: true } });
       // Populate the upload queue
-
-      console.log("UploadQueue", me?.root.uploadQueue);
-
       if (!me) throw new Error("Account not loaded");
       if (!me.root.uploadQueue)
         me.root.uploadQueue = MediaUploadQueue.create({});
       const uploadQueue = me.root.uploadQueue;
+      if (!uploadQueue) throw new Error("no upload queue");
 
       mediaFiles.forEach((file) => {
-        uploadQueue[file.webkitRelativePath] = UploadMedia.create({
-          path: file.webkitRelativePath,
-          mediaType: file.type.startsWith("video") ? "video" : "image",
-          status: "pending",
-        });
+        if (!uploadQueue[file.webkitRelativePath]) {
+          uploadQueue[file.webkitRelativePath] = UploadMedia.create({
+            path: file.webkitRelativePath,
+            mediaType: file.type.startsWith("video") ? "video" : "image",
+            status: "pending",
+          });
+        }
       });
 
       pushLog("📤 Queued " + Object.keys(uploadQueue).length + " uploads");
 
       await uploadMediaFiles(uploadQueue, fileList);
 
-      // Then, create a channel
-      if (!permissions.current) throw new Error("no permissions");
-      let newChannel = await createThread(
-        "Twitter Import",
+      // Then, create channels
+      let mainImportChannel = await createThread(
+        "Tweets",
         permissions.current!,
       );
-      if (!space.current) throw new Error("no space found");
-      if (!newChannel) throw new Error("channel could not be created");
-      if (!uploadQueue) throw new Error("no upload queue");
-      addToFolder(space.current!, newChannel.roomyObject);
+      let retweetsChannel = await createThread(
+        "Retweets",
+        permissions.current!,
+      );
+      if (!mainImportChannel || !retweetsChannel)
+        throw new Error("Channel could not be created");
+      addToFolder(space.current!, mainImportChannel.roomyObject);
+      addToFolder(space.current!, retweetsChannel.roomyObject);
+      allThreads.current?.push(mainImportChannel.roomyObject);
+      allThreads.current?.push(retweetsChannel.roomyObject);
 
-      allThreads.current?.push(newChannel.roomyObject);
-
-      // get the timeline for the thread
-      if (!newChannel.roomyObject.components[ThreadComponent.id])
-        throw new Error("No thread in thread");
-      const threadContent = await ThreadContent.load(
-        newChannel.roomyObject.components[ThreadComponent.id]!,
+      // get the timelines for the channels
+      if (!mainImportChannel.roomyObject.components[ThreadComponent.id])
+        throw new Error("No thread component in channel");
+      if (!retweetsChannel.roomyObject.components[ThreadComponent.id])
+        throw new Error("No thread component in channel");
+      const mainThreadContent = await ThreadContent.load(
+        mainImportChannel.roomyObject.components[ThreadComponent.id]!,
         {
           resolve: {
             timeline: true,
           },
         },
       );
-      if (!threadContent) throw new Error("no thread content");
-      let timeline = threadContent?.timeline;
+      const retweetsThreadContent = await ThreadContent.load(
+        retweetsChannel.roomyObject.components[ThreadComponent.id]!,
+        {
+          resolve: {
+            timeline: true,
+          },
+        },
+      );
+      if (!mainThreadContent) throw new Error("No thread content");
+      if (!retweetsThreadContent) throw new Error("No thread content");
+      let mainTimeline = mainThreadContent?.timeline;
+      let retweetsTimeline = retweetsThreadContent?.timeline;
 
       pushLog("🌱 Channel created: Twitter Import.");
 
-      pushLog("📚 Organising tweets into thread...");
+      pushLog("📚 Organising tweets into threads...");
+      // TODO: find twitter user id
 
-      // sort tweets by the unix timestamp in the key
-      const prefixInt = (s: string) => parseInt(s.split(":")[0]!, 10);
-      let tweetKeys = [...tweetsQueue.keys()].sort(
-        (a, b) => prefixInt(a) - prefixInt(b),
+      // SORT TWEETS INTO THREAD TREE
+      const allTweets = [...tweetsQueue.values()].map((t) => t.tweet);
+      const rootTweets = new Map(
+        allTweets
+          .filter((t) => !t.inReplyToStatusId)
+          .filter((t) => !t.text.startsWith("RT @"))
+          .map((t) => [`${new Date(t.createdAt).valueOf()}-${t.id}`, t]),
       );
-      // Then, post each tweet into the channel with the relevant file attached
-      const postTweet = async (key: string) => {
-        const tweet = tweetsQueue.get(key);
-        if (!tweet) return;
+      const retweets = allTweets.filter((t) => t.text.startsWith("RT @"));
+      const selfReplies = allTweets.filter(
+        (t) => !!t.inReplyToStatusId && t.inReplyToUserId === twitterAccountId,
+      );
 
+      const repliesMap = new Map(
+        selfReplies.map((r) => [r.id, r.inReplyToStatusId!]),
+      );
+
+      for (const reply of selfReplies) {
+        const parent = findParent(
+          reply.inReplyToStatusId!,
+          rootTweets,
+          selfReplies,
+          repliesMap,
+        );
+        if (parent) {
+          parent.replies.set(reply.id, reply);
+        }
+      }
+
+      const postTweet = async (
+        tweet: SimplifiedTweet,
+        timeline: CoFeed<string>,
+      ) => {
         // for each one, we have to get the URL for any attached media
         const uploadMediaUrls = Object.keys(uploadQueue!).filter(
-          (path) => tweet.tweet.id && path.includes(tweet.tweet.id),
+          (path) => tweet.id && path.includes(tweet.id),
         );
         const uploadMedia = uploadMediaUrls.map((key) => uploadQueue![key]);
 
@@ -544,7 +676,7 @@
           .map((m) => m!.url!);
 
         // and then, post the message in the channel
-        const messageText = tweet.tweet.text;
+        const messageText = tweet.text;
 
         let fileUrlEmbeds: (ImageUrlEmbedCreate | VideoUrlEmbedCreate)[] = [];
         // upload files
@@ -560,18 +692,31 @@
         const message = await createMessage(messageText, {
           permissions: permissions.current || undefined,
           embeds: fileUrlEmbeds,
-          created: new Date(tweet.tweet.createdAt),
+          created: new Date(tweet.createdAt),
         });
         timeline.push(message.id);
       };
-      for (const key of tweetKeys) {
-        await postTweet(key);
+
+      // maybe need to sort the tweets here
+      const sortedRootTweetKeys = Array.from(rootTweets.keys()).sort();
+      for (const key of sortedRootTweetKeys) {
+        const tweet = rootTweets.get(key)!;
+        await postTweet(tweet, mainTimeline);
+      }
+      const sortedRetweets = retweets
+        .reverse()
+        .sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+      for (const tweet of sortedRetweets) {
+        await postTweet(tweet, retweetsTimeline);
       }
       pushLog(
-        "🎉 Finished Importing Tweets! Go to the 'Twitter Import' channel to see them.",
+        "🎉 Finished Importing Tweets! Go to the 'Tweets' and 'Retweets' channels to see them.",
       );
       toast.success(
-        "🎉 Finished Importing Tweets! Go to the 'Twitter Import' channel to see them.",
+        "🎉 Finished Importing Tweets! Go to the 'Tweets' and 'Retweets' channels to see them.",
         {
           position: "bottom-right",
         },
@@ -582,6 +727,7 @@
       });
     }
     isImporting = false;
+    isFinished = true;
   }
 
   async function handleFolderSelect(event: Event) {
@@ -591,16 +737,6 @@
       fileList = Array.from(input.files ?? []);
     }
   }
-
-  $effect(() => {
-    if (tweetsJs) {
-      tweetsJs.text().then((text) => parseTweets(text, 0));
-    }
-
-    if (tweetsPart1js) {
-      tweetsPart1js.text().then((text) => parseTweets(text, 1));
-    }
-  });
 
   async function parseTweets(text: string, part: number) {
     const newText = text.replace(`window.YTD.tweets.part${part} = `, "");
@@ -753,7 +889,7 @@
         >
         <Button
           type="submit"
-          disabled={isImporting || !fileList.length}
+          disabled={isImporting || !fileList.length || isFinished}
           onclick={importTweets}
         >
           {#if isImporting}
@@ -766,7 +902,7 @@
         </Button>
       </div>
     </div>
-    <div class="mt-2 max-h-52 overflow-y-scroll">
+    <div class="mt-2 max-h-52 overflow-y-scroll" bind:this={container}>
       <ul>
         {#each logs as log}
           <li class="text-accent-500">{log}</li>
