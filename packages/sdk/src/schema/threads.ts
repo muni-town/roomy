@@ -55,3 +55,8 @@ export const SubThreadsComponent = {
   schema: co.feed(RoomyEntity),
   id: "space.roomy.subthreads.v0",
 };
+
+// ID of the message that starts a subthread
+export const ThreadRootComponent = {
+  id: "space.roomy.threadroot.v0"
+};

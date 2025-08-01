@@ -373,8 +373,10 @@
     RoomyAccount,
     RoomyEntity,
     SpacePermissionsComponent,
+    SubThreadsComponent,
     ThreadComponent,
     ThreadContent,
+    ThreadRootComponent,
     UploadMedia,
     type ImageUrlEmbedCreate,
     type VideoUrlEmbedCreate,
@@ -512,11 +514,14 @@
     repliesMap: Map<string, string>,
   ): SimplifiedTweet | null {
     // console.log("finding parent", parentId)
+    const rootTweetKeys = Array.from(rootTweets.keys());
 
     // case 1 - parent is a root tweet
-    if (rootTweets.has(parentId)) {
+    if (rootTweetKeys.some((key) => key.includes(parentId))) {
       // console.log("found root tweet", parentId)
-      return rootTweets.get(parentId)!;
+      const rootTweetKey = rootTweetKeys.find((key) => key.includes(parentId));
+      const rootTweet = rootTweets.get(rootTweetKey!);
+      return rootTweet!;
     }
 
     // case 2 - parent is a reply
@@ -553,10 +558,79 @@
     return null;
   }
 
+  async function createAndInsertChannel(
+    name: string,
+    permissions: Record<string, string>,
+    space: co.loaded<typeof RoomyEntity>,
+    allThreads: co.loaded<(typeof AllThreadsComponent)["schema"]>,
+  ) {
+    const channel = await createThread(name, permissions);
+    if (!channel) throw new Error("Channel could not be created");
+    addToFolder(space, channel.roomyObject);
+    allThreads.push(channel.roomyObject);
+    if (!channel.roomyObject.components[ThreadComponent.id])
+      throw new Error("Thread component not found in channel");
+    if (!channel.roomyObject.components[SubThreadsComponent.id])
+      throw new Error("Subthreads component not found in channel");
+    const threadContent = await ThreadContent.load(
+      channel.roomyObject.components[ThreadComponent.id]!,
+      {
+        resolve: {
+          timeline: true,
+        },
+      },
+    );
+    const subThreadsFeed = await SubThreadsComponent.schema.load(
+      channel.roomyObject.components[SubThreadsComponent.id]!,
+      {
+        resolve: {
+          $each: true,
+        },
+      },
+    );
+    if (!threadContent || !subThreadsFeed)
+      throw new Error("Thread content or subthreads content not found");
+    return {
+      timeline: threadContent.timeline,
+      subThreadsFeed,
+    };
+  }
+
+  async function createAndInsertSubthread(
+    name: string,
+    permissions: Record<string, string>,
+    allThreads: co.loaded<(typeof AllThreadsComponent)["schema"]>,
+    subThreads: co.loaded<(typeof SubThreadsComponent)["schema"]>,
+    parentId: string,
+  ) {
+    const channel = await createThread(name, permissions);
+    if (!channel) throw new Error("Channel could not be created");
+    allThreads.push(channel.roomyObject); // is this right?
+    subThreads.push(channel.roomyObject);
+    if (!channel.roomyObject.components[ThreadComponent.id])
+      throw new Error("Thread component not found in channel");
+    if (!channel.roomyObject.components[ThreadRootComponent.id])
+      channel.roomyObject.components[ThreadRootComponent.id] = parentId;
+    const threadContent = await ThreadContent.load(
+      channel.roomyObject.components[ThreadComponent.id]!,
+      {
+        resolve: {
+          timeline: true,
+        },
+      },
+    );
+    if (!threadContent)
+      throw new Error("Thread content or subthreads content not found");
+    return {
+      timeline: threadContent.timeline,
+    };
+  }
+
   async function importTweets() {
     if (isImporting) return;
     try {
-      if (!space.current) throw new Error("No current space");
+      if (!space.current || allThreads.current)
+        throw new Error("No current space");
       if (!permissions.current) {
         console.log("permisions", permissions);
         throw new Error("no permissions");
@@ -586,57 +660,31 @@
       await uploadMediaFiles(uploadQueue, fileList);
 
       // Then, create channels
-      let mainImportChannel = await createThread(
+      let mainChannel = await createAndInsertChannel(
         "Tweets",
         permissions.current!,
+        space.current!,
+        allThreads.current!,
       );
-      let retweetsChannel = await createThread(
+      let retweetsChannel = await createAndInsertChannel(
         "Retweets",
         permissions.current!,
+        space.current!,
+        allThreads.current!,
       );
-      if (!mainImportChannel || !retweetsChannel)
-        throw new Error("Channel could not be created");
-      addToFolder(space.current!, mainImportChannel.roomyObject);
-      addToFolder(space.current!, retweetsChannel.roomyObject);
-      allThreads.current?.push(mainImportChannel.roomyObject);
-      allThreads.current?.push(retweetsChannel.roomyObject);
-
-      // get the timelines for the channels
-      if (!mainImportChannel.roomyObject.components[ThreadComponent.id])
-        throw new Error("No thread component in channel");
-      if (!retweetsChannel.roomyObject.components[ThreadComponent.id])
-        throw new Error("No thread component in channel");
-      const mainThreadContent = await ThreadContent.load(
-        mainImportChannel.roomyObject.components[ThreadComponent.id]!,
-        {
-          resolve: {
-            timeline: true,
-          },
-        },
-      );
-      const retweetsThreadContent = await ThreadContent.load(
-        retweetsChannel.roomyObject.components[ThreadComponent.id]!,
-        {
-          resolve: {
-            timeline: true,
-          },
-        },
-      );
-      if (!mainThreadContent) throw new Error("No thread content");
-      if (!retweetsThreadContent) throw new Error("No thread content");
-      let mainTimeline = mainThreadContent?.timeline;
-      let retweetsTimeline = retweetsThreadContent?.timeline;
 
       pushLog("🌱 Channel created: Twitter Import.");
 
       pushLog("📚 Organising tweets into threads...");
-      // TODO: find twitter user id
 
-      // SORT TWEETS INTO THREAD TREE
+      // sort tweets into thread tree
       const allTweets = [...tweetsQueue.values()].map((t) => t.tweet);
       const rootTweets = new Map(
         allTweets
-          .filter((t) => !t.inReplyToStatusId)
+          .filter(
+            (t) =>
+              !t.inReplyToStatusId || t.inReplyToUserId !== twitterAccountId,
+          )
           .filter((t) => !t.text.startsWith("RT @"))
           .map((t) => [`${new Date(t.createdAt).valueOf()}-${t.id}`, t]),
       );
@@ -657,51 +705,102 @@
           repliesMap,
         );
         if (parent) {
-          parent.replies.set(reply.id, reply);
+          parent.replies.set(
+            `${new Date(reply.createdAt).valueOf()}-${reply.id}`,
+            reply,
+          );
         }
       }
 
       const postTweet = async (
         tweet: SimplifiedTweet,
-        timeline: CoFeed<string>,
+        channel: {
+          timeline: CoFeed<string>;
+          subThreads?: co.loaded<(typeof SubThreadsComponent)["schema"]>;
+        },
       ) => {
         // for each one, we have to get the URL for any attached media
         const uploadMediaUrls = Object.keys(uploadQueue!).filter(
           (path) => tweet.id && path.includes(tweet.id),
         );
-        const uploadMedia = uploadMediaUrls.map((key) => uploadQueue![key]);
-
-        const uploadedMediaUrls = uploadMedia
-          .filter((m) => m && m?.url)
-          .map((m) => m!.url!);
+        const uploadMedia = uploadMediaUrls
+          .map((key) => uploadQueue![key])
+          .filter((m) => m && m.url);
+        const uploadedMediaImageUrls = uploadMedia
+          .filter((m) => m!.mediaType === "image")
+          .map((m) => {
+            return {
+              type: "imageUrl",
+              data: {
+                url: m!.url!,
+              },
+            } as const;
+          });
+        const uploadedMediaVideoUrls = uploadMedia
+          .filter((m) => m!.mediaType === "video")
+          .map((m) => {
+            return {
+              type: "videoUrl",
+              data: {
+                url: m!.url!,
+              },
+            } as const;
+          });
 
         // and then, post the message in the channel
-        const messageText = tweet.text;
-
         let fileUrlEmbeds: (ImageUrlEmbedCreate | VideoUrlEmbedCreate)[] = [];
-        // upload files
-        for (const url of uploadedMediaUrls) {
-          fileUrlEmbeds.push({
-            type: "imageUrl",
-            data: {
-              url,
-            },
-          });
-        }
+        fileUrlEmbeds.push(...uploadedMediaImageUrls);
+        fileUrlEmbeds.push(...uploadedMediaVideoUrls);
 
+        const messageText = tweet.text;
         const message = await createMessage(messageText, {
-          permissions: permissions.current || undefined,
+          permissions: permissions.current!,
           embeds: fileUrlEmbeds,
           created: new Date(tweet.createdAt),
         });
-        timeline.push(message.id);
+        channel.timeline.push(message.id);
+
+        // for tweets in the root channel with replies,
+        // we create a subthread and post replies there
+        if (channel.subThreads && tweet.replies.size > 0) {
+          const subThread = await createAndInsertSubthread(
+            messageText,
+            permissions.current!,
+            allThreads.current!,
+            channel.subThreads,
+            message.id,
+          );
+
+          // post the original message here as well
+          subThread.timeline.push(message.id);
+
+          // sort replies & post in the subthread
+          const replyKeys = Array.from(tweet.replies.keys()).sort();
+          for (const replyKey of replyKeys) {
+            const reply = tweet.replies.get(replyKey);
+            if (!reply) continue;
+            await postTweet(reply, subThread);
+          }
+        }
+
+        // for tweets in a subthread that have replies,
+        // we post them in that subthread
+        if (!channel.subThreads && tweet.replies.size > 0) {
+          // sort replies and post in the current channel (which is a subthread)
+          const replyKeys = Array.from(tweet.replies.keys()).sort();
+          for (const replyKey of replyKeys) {
+            const reply = tweet.replies.get(replyKey);
+            if (!reply) continue;
+            await postTweet(reply, channel);
+          }
+        }
       };
 
-      // maybe need to sort the tweets here
+      // sort tweets
       const sortedRootTweetKeys = Array.from(rootTweets.keys()).sort();
       for (const key of sortedRootTweetKeys) {
         const tweet = rootTweets.get(key)!;
-        await postTweet(tweet, mainTimeline);
+        await postTweet(tweet, mainChannel);
       }
       const sortedRetweets = retweets
         .reverse()
@@ -710,7 +809,7 @@
             new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
         );
       for (const tweet of sortedRetweets) {
-        await postTweet(tweet, retweetsTimeline);
+        await postTweet(tweet, retweetsChannel);
       }
       pushLog(
         "🎉 Finished Importing Tweets! Go to the 'Tweets' and 'Retweets' channels to see them.",
@@ -794,7 +893,12 @@
         return;
       }
       try {
-        const result = await user.uploadBlob(fileHandle);
+        let result;
+        if (file.mediaType === "image") {
+          result = await user.uploadBlob(fileHandle);
+        } else if (file.mediaType === "video") {
+          result = await user.uploadVideo(fileHandle);
+        } else throw new Error("Unsupported media type");
         pushLog("✅ Uploaded file to " + result.url);
         file.url = result.url;
         file.status = "completed";
@@ -873,7 +977,7 @@
                   (f) => f?.status === "completed",
                 ).length} out of {importQueue &&
                 Object.keys(importQueue).length} files</strong
-            > uploaded.
+            > uploaded...
           </p>
         {/if}
       </div>
