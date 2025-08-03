@@ -39,8 +39,12 @@ export const atproto = {
     let clientMetadata: OAuthClientMetadataInput;
     if (dev && !isTauri()) {
       // Get the base URL and redirect URL for this deployment
+      if (window.location.hostname == "localhost")
+        globalThis.location.hostname = "127.0.0.1";
       const baseUrl = new URL(
-        dev ? "http://127.0.0.1:5173" : globalThis.location.href,
+        dev
+          ? `http://127.0.0.1:${window.location.port}`
+          : globalThis.location.href,
       );
       baseUrl.hash = "";
       baseUrl.pathname = "/";
