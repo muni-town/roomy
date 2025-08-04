@@ -120,8 +120,8 @@
       return;
     }
 
-    if (me.current.profile.newJoinedSpacesTest === undefined) {
-      me.current.profile.newJoinedSpacesTest = RoomyEntityList.create(
+    if (me.current.profile.joinedSpaces === undefined) {
+      me.current.profile.joinedSpaces = RoomyEntityList.create(
         [],
         publicGroup("reader"),
       );

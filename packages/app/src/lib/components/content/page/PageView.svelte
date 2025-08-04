@@ -13,7 +13,7 @@
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
       profile: {
-        newJoinedSpacesTest: true,
+        joinedSpaces: true,
       },
     },
   });

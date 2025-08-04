@@ -29,7 +29,7 @@ export const RoomyProfile = co.profile({
   bannerUrl: z.string().optional(),
   description: z.string().optional(),
   joinedDate: z.date().optional(),
-  newJoinedSpacesTest: co.list(RoomyEntity),
+  joinedSpaces: co.list(RoomyEntity),
 
   threadSubscriptions: z.optional(co.list(z.string())), // List of thread IDs user is subscribed to
   hiddenFeedPosts: z.optional(co.list(z.string())), // List of AT Proto URIs for hidden feed posts
@@ -59,7 +59,7 @@ export const RoomyAccount = co
         {
           name: creationProps?.name ?? "Anonymous",
           roomyInbox: createInbox(),
-          newJoinedSpacesTest: RoomyEntityList.create(
+          joinedSpaces: RoomyEntityList.create(
             [],
             publicGroup("reader"),
           ),

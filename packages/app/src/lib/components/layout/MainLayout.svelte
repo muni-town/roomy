@@ -58,7 +58,7 @@
           {@render serverBar?.()}
         {:else}
           <ServerBar
-            spaces={me.current?.profile.newJoinedSpacesTest}
+            spaces={me.current?.profile.joinedSpaces}
             me={me.current}
           />
         {/if}

@@ -10,26 +10,26 @@
     new CoState(RoomyAccount, page.params.user, {
       resolve: {
         profile: {
-          newJoinedSpacesTest: true,
+          joinedSpaces: true,
         },
       },
     }),
   );
 
   const userSpaceIds = $derived(
-    user.current?.profile?.newJoinedSpacesTest?.map((space) => space?.id),
+    user.current?.profile?.joinedSpaces?.map((space) => space?.id),
   );
 
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
       profile: {
-        newJoinedSpacesTest: true,
+        joinedSpaces: true,
       },
     },
   });
 
   const spacesInCommon = $derived(
-    me.current?.profile?.newJoinedSpacesTest?.filter((space) =>
+    me.current?.profile?.joinedSpaces?.filter((space) =>
       userSpaceIds?.includes(space?.id),
     ),
   );

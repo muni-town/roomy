@@ -31,14 +31,11 @@ export async function joinSpace(
 
   await addMemberToSpace(me, space);
 
-  if (me.profile && me.profile.newJoinedSpacesTest === undefined) {
-    me.profile.newJoinedSpacesTest = RoomyEntityList.create(
-      [],
-      publicGroup("reader"),
-    );
+  if (me.profile && me.profile.joinedSpaces === undefined) {
+    me.profile.joinedSpaces = RoomyEntityList.create([], publicGroup("reader"));
   }
 
-  me.profile?.newJoinedSpacesTest?.push(space);
+  me.profile?.joinedSpaces?.push(space);
 
   launchConfetti();
 }

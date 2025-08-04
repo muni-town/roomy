@@ -105,7 +105,7 @@
   const me = new AccountCoState(RoomyAccount, {
     resolve: {
       profile: {
-        newJoinedSpacesTest: true,
+        joinedSpaces: true,
       },
     },
   });
@@ -448,7 +448,7 @@
   let context = $derived([...threads]);
 
   let hasJoinedSpace = $derived(
-    me.current?.profile?.newJoinedSpacesTest?.some(
+    me.current?.profile?.joinedSpaces?.some(
       (joinedSpace) => joinedSpace?.id === space.current?.id,
     ),
   );

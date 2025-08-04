@@ -64,18 +64,18 @@
   function leaveSpace() {
     if (
       !space?.current?.id ||
-      !me?.current?.profile?.newJoinedSpacesTest ||
+      !me?.current?.profile?.joinedSpaces ||
       !users ||
       !users.length
     )
       return;
 
     // Remove the space from the user's joined spaces
-    const spaceIndex = me.current.profile.newJoinedSpacesTest.findIndex(
+    const spaceIndex = me.current.profile.joinedSpaces.findIndex(
       (s) => s?.id === space?.current?.id,
     );
     if (spaceIndex !== -1) {
-      me.current.profile.newJoinedSpacesTest.splice(spaceIndex, 1);
+      me.current.profile.joinedSpaces.splice(spaceIndex, 1);
     }
 
     const memberIndex = users.findIndex(
@@ -91,7 +91,7 @@
   let popoverOpen = $state(false);
 
   let hasJoinedSpace = $derived(
-    me.current?.profile?.newJoinedSpacesTest?.some(
+    me.current?.profile?.joinedSpaces?.some(
       (joinedSpace) => joinedSpace?.id === space?.current?.id,
     ),
   );

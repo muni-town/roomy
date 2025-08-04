@@ -27,9 +27,7 @@
   let openSpace = $derived(new CoState(RoomyEntity, page.params.space));
 
   let isOpenSpaceJoined = $derived(
-    me?.profile?.newJoinedSpacesTest?.some(
-      (x) => x?.id === openSpace.current?.id,
-    ),
+    me?.profile?.joinedSpaces?.some((x) => x?.id === openSpace.current?.id),
   );
 </script>
 

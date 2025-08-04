@@ -14,7 +14,7 @@
     },
   });
   const me = $derived(account.current);
-  let spaces = $derived(me?.profile?.newJoinedSpacesTest);
+  let spaces = $derived(me?.profile?.joinedSpaces);
 </script>
 
 <MainLayout>

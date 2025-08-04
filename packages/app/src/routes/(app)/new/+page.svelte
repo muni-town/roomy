@@ -75,11 +75,8 @@
       return;
     }
 
-    if (
-      me?.current?.profile &&
-      me.current.profile.newJoinedSpacesTest === undefined
-    ) {
-      me.current.profile.newJoinedSpacesTest = RoomyEntityList.create(
+    if (me?.current?.profile && me.current.profile.joinedSpaces === undefined) {
+      me.current.profile.joinedSpaces = RoomyEntityList.create(
         [],
         publicGroup("reader"),
       );
@@ -94,7 +91,7 @@
     space.imageUrl = avatarUrl;
     space.description = currentSpaceDescription;
 
-    me?.current?.profile?.newJoinedSpacesTest?.push(space);
+    me?.current?.profile?.joinedSpaces?.push(space);
 
     isSaving = false;
     toast.success("Space created successfully", {
