@@ -376,7 +376,6 @@
     SubThreadsComponent,
     ThreadComponent,
     ThreadContent,
-    ThreadRootComponent,
     UploadMedia,
     type ImageUrlEmbedCreate,
     type VideoUrlEmbedCreate,
@@ -603,14 +602,13 @@
     subThreads: co.loaded<(typeof SubThreadsComponent)["schema"]>,
     parentId: string,
   ) {
+    parentId; //use?
     const channel = await createThread(name, permissions);
     if (!channel) throw new Error("Channel could not be created");
     allThreads.push(channel.roomyObject); // is this right?
     subThreads.push(channel.roomyObject);
     if (!channel.roomyObject.components[ThreadComponent.id])
       throw new Error("Thread component not found in channel");
-    if (!channel.roomyObject.components[ThreadRootComponent.id])
-      channel.roomyObject.components[ThreadRootComponent.id] = parentId;
     const threadContent = await ThreadContent.load(
       channel.roomyObject.components[ThreadComponent.id]!,
       {
@@ -666,6 +664,12 @@
         space.current!,
         allThreads.current!,
       );
+      let repliesChannel = await createAndInsertChannel(
+        "Replies",
+        permissions.current!,
+        space.current!,
+        allThreads.current!,
+      );
       let retweetsChannel = await createAndInsertChannel(
         "Retweets",
         permissions.current!,
@@ -677,16 +681,15 @@
 
       pushLog("📚 Organising tweets into threads...");
 
-      // sort tweets into thread tree
       const allTweets = [...tweetsQueue.values()].map((t) => t.tweet);
       const rootTweets = new Map(
         allTweets
-          .filter(
-            (t) =>
-              !t.inReplyToStatusId || t.inReplyToUserId !== twitterAccountId,
-          )
+          .filter((t) => !t.inReplyToStatusId)
           .filter((t) => !t.text.startsWith("RT @"))
           .map((t) => [`${new Date(t.createdAt).valueOf()}-${t.id}`, t]),
+      );
+      const replies = allTweets.filter(
+        (t) => !!t.inReplyToStatusId && t.inReplyToUserId !== twitterAccountId,
       );
       const retweets = allTweets.filter((t) => t.text.startsWith("RT @"));
       const selfReplies = allTweets.filter(
@@ -694,9 +697,14 @@
       );
 
       const repliesMap = new Map(
-        selfReplies.map((r) => [r.id, r.inReplyToStatusId!]),
+        selfReplies
+          .map((r) => [r.id, r.inReplyToStatusId!] as const)
+          .concat(replies.map((r) => [r.id, r.inReplyToStatusId!] as const)),
       );
 
+      console.log("rootTweets", rootTweets);
+
+      // sort tweets into thread tree
       for (const reply of selfReplies) {
         const parent = findParent(
           reply.inReplyToStatusId!,
@@ -708,7 +716,7 @@
           parent.replies.set(
             `${new Date(reply.createdAt).valueOf()}-${reply.id}`,
             reply,
-          );
+          ); // does this mutate the rootTweets map?
         }
       }
 
@@ -753,12 +761,11 @@
         fileUrlEmbeds.push(...uploadedMediaVideoUrls);
 
         const messageText = tweet.text;
-        const message = await createMessage(messageText, {
-          permissions: permissions.current!,
+        const message = await createMessage(messageText, permissions.current!, {
           embeds: fileUrlEmbeds,
           created: new Date(tweet.createdAt),
         });
-        channel.timeline.push(message.id);
+        channel.timeline.push(message.roomyObject.id);
 
         // for tweets in the root channel with replies,
         // we create a subthread and post replies there
@@ -768,11 +775,11 @@
             permissions.current!,
             allThreads.current!,
             channel.subThreads,
-            message.id,
+            message.roomyObject.id,
           );
 
           // post the original message here as well
-          subThread.timeline.push(message.id);
+          subThread.timeline.push(message.roomyObject.id);
 
           // sort replies & post in the subthread
           const replyKeys = Array.from(tweet.replies.keys()).sort();
@@ -802,6 +809,15 @@
         const tweet = rootTweets.get(key)!;
         await postTweet(tweet, mainChannel);
       }
+
+      const sortedReplies = replies.sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
+      for (const reply of sortedReplies) {
+        await postTweet(reply, repliesChannel);
+      }
+
       const sortedRetweets = retweets
         .reverse()
         .sort(
@@ -811,6 +827,7 @@
       for (const tweet of sortedRetweets) {
         await postTweet(tweet, retweetsChannel);
       }
+
       pushLog(
         "🎉 Finished Importing Tweets! Go to the 'Tweets' and 'Retweets' channels to see them.",
       );

@@ -1,5 +1,10 @@
 <script lang="ts">
-  import { Message, RoomyProfile } from "@roomy-chat/sdk";
+  import {
+    AuthorComponent,
+    PlainTextContentComponent,
+    RoomyEntity,
+    RoomyProfile,
+  } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
   import { Button } from "bits-ui";
   import { Avatar } from "bits-ui";
@@ -10,25 +15,40 @@
   let { messageId } = $props();
 
   let message = $derived(
-    new CoState(Message, messageId, {
+    new CoState(RoomyEntity, messageId, {
       resolve: {
-        reactions: true,
+        components: {
+          $each: true,
+        },
       },
     }),
   );
 
   let profile = $derived(
-    new CoState(RoomyProfile, message.current?._edits.content?.by?.profile?.id),
+    new CoState(
+      RoomyProfile,
+      message.current?._edits.components?.by?.profile?.id,
+    ),
+  );
+
+  let content = $derived(
+    new CoState(
+      PlainTextContentComponent.schema,
+      message.current?.components?.[PlainTextContentComponent.id],
+    ),
   );
 
   const authorData = $derived.by(() => {
     // if the message has an author in the format of discord:username:avatarUrl,
     // and the message is made by the adming, return the profile data otherwise return profile data
-    if (message.current?.author?.includes("discord:")) {
+    if (
+      message.current?.components?.[AuthorComponent.id]?.includes("discord:")
+    ) {
       return {
-        name: message.current?.author?.split(":")[1],
+        name: message.current?.components?.[AuthorComponent.id]?.split(":")[1],
         imageUrl: decodeURIComponent(
-          message.current?.author?.split(":")[2] ?? "",
+          message.current?.components?.[AuthorComponent.id]?.split(":")[2] ??
+            "",
         ),
         id: undefined,
       };
@@ -56,6 +76,6 @@
     </h5>
   </div>
   <div class="line-clamp-1 md:basis-auto overflow-hidden italic">
-    {@html message.current?.content ?? ""}
+    {@html content.current?.content ?? ""}
   </div>
 </Button.Root>

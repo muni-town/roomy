@@ -16,7 +16,7 @@ export async function createRoomyEntity(
 
   const roomyObject = RoomyEntity.create(
     {
-      name,
+      name: name || undefined,
       components: co.record(z.string(), z.string()).create({}, componentsGroup),
       softDeleted: false,
     },

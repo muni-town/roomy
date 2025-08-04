@@ -11,12 +11,19 @@
   import Icon from "@iconify/svelte";
   import { AccountCoState, CoState } from "jazz-tools/svelte";
   import {
-    Message,
+    AuthorComponent,
+    PlainTextContentComponent,
     Reaction,
+    ReplyToComponent,
     RoomyAccount,
     RoomyEntity,
     RoomyProfile,
+    BranchThreadIdComponent,
+    UserAccessTimesComponent,
     publicGroup,
+    EmbedsComponent,
+    HiddenInComponent,
+    ReactionsComponent,
   } from "@roomy-chat/sdk";
   import { co } from "jazz-tools";
   import MessageToolbar from "./MessageToolbar.svelte";
@@ -58,10 +65,9 @@
   });
 
   let message = $derived(
-    new CoState(Message, messageId, {
+    new CoState(RoomyEntity, messageId, {
       resolve: {
-        reactions: true,
-        embeds: {
+        components: {
           $each: true,
           $onError: null,
         },
@@ -70,43 +76,93 @@
   );
 
   let messageByMe = $derived(
-    message.current?._edits.content?.by?.profile?.id ===
+    message.current?._edits.components?.by?.profile?.id ===
       me.current?.profile?.id,
   );
   let canDelete = $derived(isAdmin || messageByMe);
 
-  let previousMessage = $derived(new CoState(Message, previousMessageId));
+  let previousMessage = $derived(new CoState(RoomyEntity, previousMessageId));
 
   let profile = $derived(
-    new CoState(RoomyProfile, message.current?._edits.content?.by?.profile?.id),
+    new CoState(
+      RoomyProfile,
+      message.current?._edits.components?.by?.profile?.id,
+    ),
+  );
+
+  let author = $derived(message.current?.components?.[AuthorComponent.id]);
+  let prevMessageAuthor = $derived(
+    previousMessage.current?.components?.[AuthorComponent.id],
+  );
+  let userAccessTimes = $derived(
+    new CoState(
+      UserAccessTimesComponent.schema,
+      message.current?.components?.[UserAccessTimesComponent.id],
+    ),
+  );
+  let prevMessageUserAccessTimes = $derived(
+    new CoState(
+      UserAccessTimesComponent.schema,
+      previousMessage.current?.components?.[UserAccessTimesComponent.id],
+    ),
+  );
+  let messageContent = $derived(
+    new CoState(
+      PlainTextContentComponent.schema,
+      message.current?.components?.[PlainTextContentComponent.id],
+    ),
+  );
+
+  let embeds = $derived(
+    new CoState(
+      EmbedsComponent.schema,
+      message.current?.components?.[EmbedsComponent.id],
+    ),
+  );
+
+  let hiddenIn = $derived(
+    new CoState(
+      HiddenInComponent.schema,
+      message.current?.components?.[HiddenInComponent.id],
+    ),
+  );
+
+  let reactions = $derived(
+    new CoState(
+      ReactionsComponent.schema,
+      message.current?.components?.[ReactionsComponent.id],
+    ),
   );
 
   let isImportedMessage = $derived(
-    message.current?.author?.startsWith("discord:") ||
-      message.current?.author?.startsWith("app:") ||
-      message.current?.author?.startsWith("atproto"),
+    author?.startsWith("discord:") ||
+      author?.startsWith("app:") ||
+      author?.startsWith("atproto") ||
+      author?.startsWith("twitter:"),
   );
 
   const authorData = $derived.by(() => {
     // if the message has an author in the format of discord:username:avatarUrl or atproto||handle||displayName||did||uri||avatar,
     // and the message is made by the admin, return the profile data otherwise return profile data
     if (isImportedMessage) {
-      if (message.current?.author?.startsWith("atproto")) {
+      if (author?.startsWith("atproto")) {
         // ATProto format: atproto||handle||displayName||did||uri||avatar
-        const author = message.current.author.split("||");
-        const avatarUrl = author?.[5] ? decodeURIComponent(author[5]) : "";
+        const authorSplit = author.split("||");
+        const avatarUrl = authorSplit?.[5]
+          ? decodeURIComponent(authorSplit[5])
+          : "";
         // console.log(`👤 ATProto author data - Handle: ${author?.[1]}, Display: ${author?.[2]}, Avatar: ${avatarUrl}`);
         return {
-          name: `${author?.[2] ?? author?.[1] ?? "Unknown"} (@${author?.[1] ?? "unknown"})`,
+          name: `${authorSplit?.[2] ?? authorSplit?.[1] ?? "Unknown"} (@${authorSplit?.[1] ?? "unknown"})`,
           imageUrl: avatarUrl,
           id: undefined,
         };
       } else {
         // Discord format: discord:username:avatarUrl
-        const author = message.current?.author?.split(":");
+        const authorSplit = author?.split(":");
         return {
-          name: author?.[1] ?? "Unknown",
-          imageUrl: decodeURIComponent(author?.[2] ?? ""),
+          name: authorSplit?.[1] ?? "Unknown",
+          imageUrl: decodeURIComponent(authorSplit?.[2] ?? ""),
           id: undefined,
         };
       }
@@ -122,11 +178,11 @@
     if (isImportedMessage) {
       // Handle ATProto with || delimiter
       if (
-        message.current?.author?.startsWith("atproto") &&
-        previousMessage.current?.author?.startsWith("atproto")
+        author?.startsWith("atproto") &&
+        prevMessageAuthor?.startsWith("atproto")
       ) {
-        const previousAuthor = previousMessage.current.author.split("||");
-        const currentAuthor = message.current.author.split("||");
+        const previousAuthor = prevMessageAuthor.split("||");
+        const currentAuthor = author.split("||");
 
         // Compare by handle (index 1) and DID (index 3)
         if (
@@ -134,8 +190,8 @@
           previousAuthor?.[3] === currentAuthor?.[3]
         ) {
           return (
-            (message.current?.createdAt.getTime() ?? 0) -
-              (previousMessage?.current?.createdAt.getTime() ?? 0) <
+            (userAccessTimes.current?.createdAt.getTime() ?? 0) -
+              (prevMessageUserAccessTimes?.current?.createdAt.getTime() ?? 0) <
             1000 * 60 * 5
           );
         } else {
@@ -144,16 +200,16 @@
       }
       // Handle Discord with : delimiter
       else {
-        const previousAuthor = previousMessage.current?.author?.split(":");
-        const currentAuthor = message.current?.author?.split(":");
+        const previousAuthor = prevMessageAuthor?.split(":");
+        const currentAuthor = author?.split(":");
 
         if (
           previousAuthor?.[1] === currentAuthor?.[1] &&
           previousAuthor?.[2] === currentAuthor?.[2]
         ) {
           return (
-            (message.current?.createdAt.getTime() ?? 0) -
-              (previousMessage?.current?.createdAt.getTime() ?? 0) <
+            (userAccessTimes.current?.createdAt.getTime() ?? 0) -
+              (prevMessageUserAccessTimes?.current?.createdAt.getTime() ?? 0) <
             1000 * 60 * 5
           );
         } else {
@@ -163,14 +219,14 @@
     }
     if (
       authorData?.id === profile.current?.id &&
-      previousMessage.current?._edits.content?.by?.profile?.id !==
-        message.current?._edits.content?.by?.profile?.id
+      previousMessage.current?._edits.components?.by?.profile?.id !==
+        message.current?._edits.components?.by?.profile?.id
     )
       return false;
-    if (message.current?.replyTo) return false;
+    if (message.current?.components?.[ReplyToComponent.id]) return false;
     return (
-      (message.current?.createdAt.getTime() ?? 0) -
-        (previousMessage?.current?.createdAt.getTime() ?? 0) <
+      (userAccessTimes.current?.createdAt.getTime() ?? 0) -
+        (prevMessageUserAccessTimes?.current?.createdAt.getTime() ?? 0) <
       1000 * 60 * 5
     );
   });
@@ -191,16 +247,16 @@
   }
 
   function saveEditedMessage(content: string) {
-    if (!message.current) return;
+    if (!messageContent.current || !userAccessTimes.current) return;
 
     // if the content is the same, dont save
-    if (message.current.content === content) {
+    if (messageContent.current?.content === content) {
       editingMessage.id = "";
       return;
     }
 
-    message.current.content = content;
-    message.current.updatedAt = new Date();
+    messageContent.current.content = content;
+    userAccessTimes.current.updatedAt = new Date();
     editingMessage.id = "";
   }
 
@@ -210,11 +266,15 @@
 
   let isMessageEdited = $derived.by(() => {
     if (!message.current) return false;
-    if (!message.current.createdAt || !message.current.updatedAt) return false;
+    if (
+      !userAccessTimes.current?.createdAt ||
+      !userAccessTimes.current?.updatedAt
+    )
+      return false;
     // if time between createdAt and updatedAt is less than 1 minute, we dont consider it edited
     return (
-      message.current?.updatedAt.getTime() -
-        message.current?.createdAt.getTime() >
+      userAccessTimes.current?.updatedAt.getTime() -
+        userAccessTimes.current?.createdAt.getTime() >
       1000 * 60
     );
   });
@@ -225,17 +285,17 @@
   }
 
   function removeReaction(emoji: string) {
-    let index = message.current?.reactions?.findIndex(
+    let index = reactions.current?.reactions?.findIndex(
       (reaction) =>
         reaction?.emoji === emoji &&
         reaction?._edits.emoji?.by?.profile?.id === me.current?.profile?.id,
     );
     if (index === undefined || index < 0) return;
-    message.current?.reactions?.splice(index, 1);
+    reactions.current?.reactions?.splice(index, 1);
   }
 
   function addReaction(emoji: string) {
-    message.current?.reactions?.push(
+    reactions.current?.reactions?.push(
       Reaction.create(
         {
           emoji: emoji,
@@ -246,13 +306,13 @@
       ),
     );
   }
-  let reactions = $derived(
-    convertReactionsToEmojis(message.current?.reactions, me.current),
+  let reactionsEmojis = $derived(
+    convertReactionsToEmojis(reactions.current?.reactions, me.current),
   );
 
   function toggleReaction(emoji: string) {
     // check if the emoji is already in the reactions array with the current user
-    let index = reactions?.findIndex(
+    let index = reactionsEmojis?.findIndex(
       (reaction) => reaction.emoji === emoji && reaction.user,
     );
 
@@ -263,13 +323,13 @@
     }
   }
 
-  let hiddenIn = $derived(new Set(message.current?.hiddenIn ?? []));
+  let hiddenInSet = $derived(new Set(hiddenIn.current?.hiddenIn ?? []));
 
   let shouldShow = $derived.by(() => {
     if (!message.current) return false;
     if (message.current.softDeleted) return false;
     // if (!admin || !messageHasAdmin(message.current, admin)) return false;
-    if (hiddenIn.has(threadId ?? "")) return false;
+    if (hiddenInSet.has(threadId ?? "")) return false;
     return true;
   });
 </script>
@@ -320,8 +380,10 @@
         !mergeWithPrevious && "pt-3",
       ]}
     >
-      {#if message.current?.replyTo}
-        <MessageRepliedTo messageId={message.current.replyTo} />
+      {#if message.current?.components?.[ReplyToComponent.id]}
+        <MessageRepliedTo
+          messageId={message.current?.components?.[ReplyToComponent.id]}
+        />
       {/if}
 
       <div class={"group relative flex w-full justify-start gap-3"}>
@@ -332,7 +394,7 @@
                 e.stopPropagation();
                 // Navigate to user profile page
                 const userId =
-                  message.current?._edits.content?.by?.id || authorData?.id;
+                  message.current?._edits.components?.by?.id || authorData?.id;
                 if (userId) {
                   goto(`/user/${userId}`);
                 }
@@ -360,8 +422,8 @@
               {#if isImportedMessage}
                 <Badge variant="secondary">App</Badge>
               {/if}
-              {#if message.current?.createdAt}
-                {@render timestamp(message.current?.createdAt)}
+              {#if userAccessTimes.current?.createdAt}
+                {@render timestamp(userAccessTimes.current?.createdAt)}
               {/if}
             </span>
           {/if}
@@ -378,7 +440,7 @@
                 }}
               >
                 <ChatInput
-                  content={message.current?.content.toString() ?? ""}
+                  content={messageContent.current?.content.toString() ?? ""}
                   onEnter={saveEditedMessage}
                   setFocus={true}
                 />
@@ -394,11 +456,11 @@
                 </div>
               </div>
             {:else}
-              {@html message.current?.content ?? ""}
+              {@html messageContent.current?.content ?? ""}
 
-              {#if isMessageEdited && message.current?.updatedAt}
+              {#if isMessageEdited && userAccessTimes.current?.updatedAt}
                 <div class="text-xs text-base-700 dark:text-base-400">
-                  Edited {@render timestamp(message.current?.updatedAt)}
+                  Edited {@render timestamp(userAccessTimes.current?.updatedAt)}
                 </div>
               {/if}
             {/if}
@@ -426,7 +488,7 @@
       </button>
 
       <div class="pl-11 md:pl-13 max-w-full flex flex-wrap gap-2 z-10">
-        {#each message.current?.embeds ?? [] as embed}
+        {#each embeds.current?.embeds ?? [] as embed}
           {#if embed?.type === "imageUrl"}
             <ImageUrlEmbed embedId={embed.embedId} />
           {/if}
@@ -436,14 +498,14 @@
         {/each}
       </div>
 
-      {#if message.current?.threadId && message.current.threadId !== threadId}
+      {#if message.current?.components?.[BranchThreadIdComponent.id] && message.current?.components?.[BranchThreadIdComponent.id] !== threadId}
         <MessageThreadBadge
-          threadId={message.current.threadId}
+          threadId={message.current?.components?.[BranchThreadIdComponent.id]!}
           spaceId={space?.id ?? ""}
         />
       {/if}
 
-      <MessageReactions {reactions} {toggleReaction} />
+      <MessageReactions reactions={reactionsEmojis} {toggleReaction} />
     </div>
   </div>
 {/if}

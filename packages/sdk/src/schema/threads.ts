@@ -20,25 +20,18 @@ export const Embed = co.map({
   embedId: z.string(),
 });
 
-export const Message = co.map({
-  content: z.string(),
-
-  createdAt: z.date(),
-  updatedAt: z.date(),
-
-  hiddenIn: co.list(z.string()),
-
-  replyTo: z.string().optional(),
-  reactions: ReactionList,
-
-  softDeleted: z.boolean().optional(),
-
-  embeds: z.optional(co.list(Embed)),
-
-  author: z.string().optional(),
-
-  threadId: z.string().optional(),
-});
+// export const Message = co.map({
+//   content: z.string(), // ✅
+//   createdAt: z.date(), // ✅
+//   updatedAt: z.date(), // ✅
+//   hiddenIn: co.list(z.string()), // ✅ // list of thread IDs where message should be hidden
+//   replyTo: z.string().optional(), // ✅ // ID of the message that this message is a reply to
+//   reactions: ReactionList, // ✅
+//   softDeleted: z.boolean().optional(), // ✅
+//   embeds: z.optional(co.list(Embed)), // ✅
+//   author: z.string().optional(), // ✅ // optional author override
+//   threadId: z.string().optional(), // ID of the thread that branches off this message
+// });
 
 export const Timeline = co.feed(z.string());
 
@@ -56,7 +49,55 @@ export const SubThreadsComponent = {
   id: "space.roomy.subthreads.v0",
 };
 
-// ID of the message that starts a subthread
-export const ThreadRootComponent = {
-  id: "space.roomy.threadroot.v0"
+export const PlainTextContentComponent = {
+  schema: co.map({
+    content: z.string(),
+  }),
+  id: "space.roomy.content.plaintext.v0",
+};
+
+export const UserAccessTimesComponent = {
+  // note that Jazz also tracks access times for all CoValues;
+  // this component allows manual override of access times
+  schema: co.map({
+    createdAt: z.date(),
+    updatedAt: z.date(),
+  }),
+  id: "space.roomy.useraccesstimes.v0",
+};
+
+export const HiddenInComponent = {
+  schema: co.map({
+    hiddenIn: co.list(z.string()), // list of thread IDs where message should be hidden
+  }),
+  id: "space.roomy.hiddenin.v0",
+};
+
+export const ReplyToComponent = {
+  // ID of the message that this message is a reply to
+  id: "space.roomy.replyto.v0",
+};
+
+export const ReactionsComponent = {
+  schema: co.map({
+    reactions: ReactionList,
+  }),
+  id: "space.roomy.reactions.v0",
+};
+
+export const EmbedsComponent = {
+  schema: co.map({
+    embeds: z.optional(co.list(Embed)),
+  }),
+  id: "space.roomy.embeds.v0",
+};
+
+export const AuthorComponent = {
+  // optional author override
+  id: "space.roomy.author.v0",
+};
+
+export const BranchThreadIdComponent = {
+  // ID of the thread that branches off this message
+  id: "space.roomy.branchthreadid.v0",
 };

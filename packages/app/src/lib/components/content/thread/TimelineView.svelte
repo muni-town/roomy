@@ -7,7 +7,6 @@
   import { co } from "jazz-tools";
   import {
     LastReadList,
-    Message,
     RoomyAccount,
     RoomyEntity,
     addToInbox,
@@ -22,6 +21,9 @@
     BansComponent,
     SubThreadsComponent,
     AllMembersComponent,
+    HiddenInComponent,
+    BranchThreadIdComponent,
+    ReplyToComponent,
   } from "@roomy-chat/sdk";
   import { AccountCoState, CoState } from "jazz-tools/svelte";
   import { user } from "$lib/user.svelte";
@@ -171,23 +173,28 @@
       })
       .sort((a, b) => a[1] - b[1]);
 
-    let firstMessage: co.loaded<typeof Message> | undefined = undefined;
+    let firstMessage: co.loaded<typeof RoomyEntity> | undefined = undefined;
 
     for (const [messageId, _] of sortedMessages) {
       messageIds.push(messageId);
 
-      const message = await Message.load(messageId, {
+      const message = await RoomyEntity.load(messageId, {
         resolve: {
-          hiddenIn: true,
+          components: {
+            $each: true,
+          },
         },
       });
       if (!message) {
         console.error("Message not found when creating thread", messageId);
         continue;
       }
+      const hiddenIn = await HiddenInComponent.schema.load(
+        message.components[HiddenInComponent.id] || "",
+      );
       // hide all messages except the first message in original thread
       if (firstMessage) {
-        if (threadId) message.hiddenIn.push(threadId);
+        if (threadId) hiddenIn?.hiddenIn?.push(threadId);
       } else {
         firstMessage = message;
       }
@@ -200,8 +207,9 @@
       newThread.thread.timeline.push(messageId);
     }
 
-    if (firstMessage) {
-      firstMessage.threadId = newThread.roomyObject.id;
+    if (firstMessage && firstMessage.components) {
+      firstMessage.components[BranchThreadIdComponent.id] =
+        newThread.roomyObject.id;
     }
 
     const allThreadsId = space.current?.components?.[AllThreadsComponent.id];
@@ -286,10 +294,13 @@
       return;
     }
 
-    const message = await createMessage(messageInput, {
-      embeds: filesUrls,
-      permissions: permissions.current,
-    });
+    const { roomyObject: message } = await createMessage(
+      messageInput,
+      permissions.current,
+      {
+        embeds: filesUrls,
+      },
+    );
 
     let timeline = threadContent.current?.timeline;
     if (timeline) {
@@ -297,9 +308,9 @@
       timeline.push(message.id);
     }
     if (replyTo.id) {
-      message.replyTo = replyTo.id;
-      const replyToMessage = await Message.load(replyTo.id);
-      const userId = replyToMessage?._edits?.content?.by?.id;
+      message.components[ReplyToComponent.id] = replyTo.id;
+      const replyToMessage = await RoomyEntity.load(replyTo.id);
+      const userId = replyToMessage?._edits?.components?.by?.id;
       if (userId) {
         addToInbox(
           userId,
