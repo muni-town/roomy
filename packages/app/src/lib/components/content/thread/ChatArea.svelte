@@ -24,6 +24,8 @@
     threadId,
     allowedToInteract,
     threading,
+    startThreading,
+    toggleSelect,
   }: {
     timeline: string[];
     virtualizer?: Virtualizer<string>;
@@ -32,6 +34,8 @@
     threadId?: string;
     allowedToInteract?: boolean;
     threading?: { active: boolean; selectedMessages: string[] };
+    startThreading: () => void;
+    toggleSelect: (id: string) => void;
   } = $props();
 
   let messagesLoaded = $derived(timeline && timeline.length >= 0);
@@ -186,6 +190,8 @@
                   {threadId}
                   {allowedToInteract}
                   {threading}
+                  {startThreading}
+                  {toggleSelect}
                 />
               {/snippet}
             </Virtualizer>

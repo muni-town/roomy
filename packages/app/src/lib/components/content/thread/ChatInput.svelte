@@ -118,6 +118,7 @@
 
 <!-- Tiptap editor -->
 <div
+  id="chat-input"
   onpaste={handlePaste}
   bind:this={element}
   class="flex-1 relative"

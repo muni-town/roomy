@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { Toolbar } from "bits-ui";
+  import { Toolbar, Tooltip as BitsTooltip } from "bits-ui";
   import Drawer from "$lib/components/helper/Drawer.svelte";
+  import Tooltip from "$lib/components/helper/Tooltip.svelte";
   import Icon from "@iconify/svelte";
   import { Button, buttonVariants } from "@fuxui/base";
   import { PopoverEmojiPicker } from "@fuxui/social";
@@ -13,6 +14,7 @@
     isDrawerOpen = $bindable(false),
     toggleReaction,
     setReplyTo,
+    startThreading,
   }: {
     canEdit?: boolean;
     canDelete?: boolean;
@@ -21,6 +23,7 @@
     toggleReaction: (reaction: string) => void;
     isDrawerOpen?: boolean;
     setReplyTo: () => void;
+    startThreading: () => void;
   } = $props();
 
   let isEmojiDrawerPickerOpen = $state(false);
@@ -93,6 +96,15 @@
       <Icon icon="fa6-solid:reply" />
       Reply
     </Button>
+    <Button
+      onclick={() => {
+        startThreading();
+        isDrawerOpen = false;
+      }}
+      class="dz-join-item dz-btn w-full"
+    >
+      <Icon icon="tabler:needle-thread" />Create Thread
+    </Button>
     {#if canEdit}
       <Button
         onclick={() => {
@@ -117,75 +129,102 @@
   </div>
 </Drawer>
 
-<Toolbar.Root
-  class={`${isEmojiToolbarPickerOpen ? "flex" : "hidden"} group-hover:flex shadow-lg border border-base-800/5 dark:border-base-300/10 backdrop-blur-sm absolute -top-4 right-2 bg-base-100/80 dark:bg-base-800/70 p-1 rounded-xl items-center`}
->
-  <Toolbar.Button
-    onclick={() => toggleReaction("👍")}
-    class={[
-      buttonVariants({ variant: "ghost", size: "iconSm" }),
-      "backdrop-blur-none",
-    ]}
+<BitsTooltip.Provider>
+  <Toolbar.Root
+    class={`${isEmojiToolbarPickerOpen ? "flex" : "hidden"} group-hover:flex shadow-lg border border-base-800/5 dark:border-base-300/10 backdrop-blur-sm absolute -top-4 right-2 bg-base-100/80 dark:bg-base-800/70 p-1 rounded-xl items-center`}
   >
-    👍
-  </Toolbar.Button>
-  <Toolbar.Button
-    onclick={() => toggleReaction("😂")}
-    class={[
-      buttonVariants({ variant: "ghost", size: "iconSm" }),
-      "backdrop-blur-none",
-    ]}
-  >
-    😂
-  </Toolbar.Button>
+    <Toolbar.Button
+      onclick={() => toggleReaction("👍")}
+      class={[
+        buttonVariants({ variant: "ghost", size: "iconSm" }),
+        "backdrop-blur-none",
+      ]}
+    >
+      👍
+    </Toolbar.Button>
+    <Toolbar.Button
+      onclick={() => toggleReaction("😂")}
+      class={[
+        buttonVariants({ variant: "ghost", size: "iconSm" }),
+        "backdrop-blur-none",
+      ]}
+    >
+      😂
+    </Toolbar.Button>
 
-  <PopoverEmojiPicker
-    bind:open={isEmojiToolbarPickerOpen}
-    onpicked={(emoji) => onEmojiPick(emoji.unicode)}
-  >
-    {#snippet child({ props })}
-      <Button
-        {...props}
-        size="iconSm"
-        variant="ghost"
-        class="backdrop-blur-none"
+    <Tooltip tip="Pick an Emoji">
+      <PopoverEmojiPicker
+        bind:open={isEmojiToolbarPickerOpen}
+        onpicked={(emoji) => onEmojiPick(emoji.unicode)}
       >
-        <Icon icon="lucide:smile-plus" class="text-primary" />
-      </Button>
-    {/snippet}
-  </PopoverEmojiPicker>
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            size="iconSm"
+            variant="ghost"
+            class="backdrop-blur-none"
+            aria-label="Pick an emoji"
+          >
+            <Icon icon="lucide:smile-plus" class="text-primary" />
+          </Button>
+        {/snippet}
+      </PopoverEmojiPicker>
+    </Tooltip>
 
-  {#if canEdit}
-    <Toolbar.Button
-      onclick={() => editMessage()}
-      class={[
-        buttonVariants({ variant: "ghost", size: "iconSm" }),
-        "backdrop-blur-none",
-      ]}
-    >
-      <Icon icon="tabler:edit" />
-    </Toolbar.Button>
-  {/if}
+    {#if canEdit}
+      <Tooltip tip="Edit Message">
+        <Toolbar.Button
+          onclick={() => editMessage()}
+          class={[
+            buttonVariants({ variant: "ghost", size: "iconSm" }),
+            "backdrop-blur-none",
+          ]}
+          aria-label="Edit Message"
+        >
+          <Icon icon="tabler:edit" />
+        </Toolbar.Button>
+      </Tooltip>
+    {/if}
 
-  {#if canDelete}
-    <Toolbar.Button
-      onclick={() => deleteMessage()}
-      class={[
-        buttonVariants({ variant: "ghost", size: "iconSm" }),
-        "backdrop-blur-none",
-      ]}
-    >
-      <Icon icon="tabler:trash" class="text-warning" />
-    </Toolbar.Button>
-  {/if}
+    {#if canDelete}
+      <Tooltip tip="Delete Message">
+        <Toolbar.Button
+          onclick={() => deleteMessage()}
+          class={[
+            buttonVariants({ variant: "ghost", size: "iconSm" }),
+            "backdrop-blur-none",
+          ]}
+          aria-label="Delete Message"
+        >
+          <Icon icon="tabler:trash" class="text-warning" />
+        </Toolbar.Button>
+      </Tooltip>
+    {/if}
 
-  <Toolbar.Button
-    onclick={() => setReplyTo()}
-    class={[
-      buttonVariants({ variant: "ghost", size: "iconSm" }),
-      "backdrop-blur-none",
-    ]}
-  >
-    <Icon icon="fa6-solid:reply" />
-  </Toolbar.Button>
-</Toolbar.Root>
+    <Tooltip tip="Create Thread">
+      <Toolbar.Button
+        onclick={() => startThreading()}
+        class={[
+          buttonVariants({ variant: "ghost", size: "iconSm" }),
+          "backdrop-blur-none",
+        ]}
+        aria-label="Create Thread"
+      >
+        <Icon icon="tabler:needle-thread" class="text-primary" />
+      </Toolbar.Button>
+    </Tooltip>
+
+    <Tooltip tip="Reply">
+      <Toolbar.Button
+        onclick={() => setReplyTo()}
+        class={[
+          buttonVariants({ variant: "ghost", size: "iconSm" }),
+          "backdrop-blur-none",
+        ]}
+        aria-label="Reply"
+      >
+        <Icon icon="fa6-solid:reply" />
+      </Toolbar.Button>
+    </Tooltip>
+  </Toolbar.Root>
+</BitsTooltip.Provider>

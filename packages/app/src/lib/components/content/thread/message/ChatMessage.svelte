@@ -47,6 +47,8 @@
     threadId,
     allowedToInteract,
     threading,
+    startThreading,
+    toggleSelect,
   }: {
     messageId: string;
     previousMessageId?: string;
@@ -55,6 +57,8 @@
     threadId?: string;
     allowedToInteract?: boolean;
     threading?: { active: boolean; selectedMessages: string[] };
+    startThreading: () => void;
+    toggleSelect: (id: string) => void;
   } = $props();
 
   const me = new AccountCoState(RoomyAccount, {
@@ -332,15 +336,30 @@
     if (hiddenInSet.has(threadId ?? "")) return false;
     return true;
   });
+
+  const selectMessage = () => {
+    if (threading?.active) {
+      if (!isSelected && !messageByMe && !isAdmin) {
+        toast.error("You cannot move someone else's message");
+        return;
+      }
+
+      toggleSelect(messageId);
+    }
+  };
 </script>
 
 {#if shouldShow}
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div
     id={message.current?.id}
-    class={`flex flex-col w-full relative max-w-screen isolate px-4`}
+    class={`flex flex-col w-full relative max-w-screen isolate px-4 ${threading?.active ? "select-none" : ""}`}
+    onclick={selectMessage}
   >
     {#if threading?.active}
       <Checkbox.Root
+        aria-label="Select message"
+        onclick={(e) => e.stopPropagation()}
         bind:checked={
           () => isSelected,
           (value) => {
@@ -348,27 +367,18 @@
               toast.error("You cannot move someone else's message");
               return;
             }
-
-            if (value) {
-              threading?.selectedMessages.push(messageId);
-              return;
-            }
-
-            const index = threading?.selectedMessages.indexOf(messageId) ?? -1;
-            if (index > -1) {
-              threading?.selectedMessages.splice(index, 1);
-            }
+            toggleSelect(messageId);
           }
         }
-        class="absolute right-4 inset-y-0 z-10"
+        class="absolute right-8 inset-y-0 z-10"
       >
         <div
-          class="border border-primary bg-base-100 text-primary-content size-4 rounded items-center cursor-pointer"
+          class="border border-primary bg-base-50 text-primary-content size-4 rounded items-center cursor-pointer"
         >
           {#if isSelected}
             <Icon
               icon="material-symbols:check-rounded"
-              class="bg-primary size-3.5"
+              class="bg-primary size-3.5 dark:text-black"
             />
           {/if}
         </div>
@@ -376,7 +386,7 @@
     {/if}
     <div
       class={[
-        `relative group w-full h-fit flex flex-col gap-2 px-2 pt-2 pb-1 hover:bg-base-100/50 dark:hover:bg-base-400/5`,
+        `relative group w-full h-fit flex flex-col gap-2 px-2 pt-2 pb-1 ${isSelected ? "bg-accent-100/50 dark:bg-accent-900/50 hover:bg-accent-100/75 dark:hover:bg-accent-900/75" : " hover:bg-base-100/50  dark:hover:bg-base-400/5"}`,
         !mergeWithPrevious && "pt-3",
       ]}
     >
@@ -476,6 +486,7 @@
           {canDelete}
           {deleteMessage}
           {editMessage}
+          {startThreading}
           {setReplyTo}
         />
       {/if}

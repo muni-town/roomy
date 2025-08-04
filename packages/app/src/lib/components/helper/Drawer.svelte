@@ -34,7 +34,7 @@
       class="flex flex-col mt-24 fixed bottom-0 left-0 right-0 z-50"
     >
       <div
-        class="bg-base-300 dark:bg-base-900 h-fit min-h-32 rounded-t-xl px-4 py-8"
+        class="bg-base-50 border-t border-base-200 dark:border-base-800 dark:bg-base-900 h-fit min-h-32 rounded-t-xl px-4 py-8"
       >
         {#if title}
           <Drawer.Title>{title}</Drawer.Title>

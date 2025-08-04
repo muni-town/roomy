@@ -3,7 +3,7 @@
   import Icon from "@iconify/svelte";
   import ChatArea from "$lib/components/content/thread/ChatArea.svelte";
   import ChatInput from "$lib/components/content/thread/ChatInput.svelte";
-  import { Button } from "@fuxui/base";
+  import { Button, Input } from "@fuxui/base";
   import { co } from "jazz-tools";
   import {
     LastReadList,
@@ -26,6 +26,7 @@
     ReplyToComponent,
   } from "@roomy-chat/sdk";
   import { AccountCoState, CoState } from "jazz-tools/svelte";
+  import { setInputFocus } from "./ChatInput.svelte";
   import { user } from "$lib/user.svelte";
   import { replyTo } from "./message/ChatMessage.svelte";
   import MessageRepliedTo from "./message/MessageRepliedTo.svelte";
@@ -41,6 +42,7 @@
   let threading = $state({
     active: false,
     selectedMessages: [] as string[],
+    name: "",
   });
 
   let { objectId, spaceId }: { objectId: string; spaceId: string } = $props();
@@ -159,7 +161,21 @@
 
   let filesInMessage: File[] = $state([]);
 
-  // @ts-ignore Temporary until threads are added back
+  function startThreading() {
+    threading.active = true;
+    setInputFocus();
+  }
+
+  function toggleSelect(id: string) {
+    const index = threading?.selectedMessages.indexOf(id) ?? -1;
+    if (index > -1) {
+      threading?.selectedMessages.splice(index, 1);
+    } else {
+      threading?.selectedMessages.push(id);
+    }
+  }
+
+  // @ts-ignore
   async function handleCreateThread(e: SubmitEvent) {
     e.preventDefault();
     const messageIds = <string[]>[];
@@ -473,6 +489,8 @@
         {threadId}
         allowedToInteract={hasJoinedSpace && !isBanned}
         {threading}
+        {startThreading}
+        {toggleSelect}
       />
     </div>
 
@@ -497,6 +515,47 @@
             <Icon icon="zondicons:close-solid" />
           </Button>
         </div>
+      {/if}
+      {#if threading.active}
+        <div
+          class="flex items-start justify-between bg-secondary text-secondary-content rounded-t-lg px-2 py-2"
+        >
+          <div
+            class="px-2 flex items-center gap-1 overflow-hidden text-xs w-full"
+          >
+            <span class="shrink-0 text-base-900 dark:text-base-100"
+              >Creating thread with</span
+            >
+            {#if threading.selectedMessages[0]}
+              <MessageRepliedTo messageId={threading.selectedMessages[0]} />
+            {/if}
+            {#if threading.selectedMessages.length > 1}
+              <span class="shrink-0 text-base-900 dark:text-base-100"
+                >and {threading.selectedMessages.length - 1} other message{threading
+                  .selectedMessages.length > 2
+                  ? "s"
+                  : ""}</span
+              >
+            {:else if threading.selectedMessages.length === 0}
+              <span class="shrink-0 text-base-900 dark:text-base-100"
+                >no messages</span
+              >
+            {/if}
+          </div>
+          <Button
+            variant="ghost"
+            onclick={() => {
+              threading.active = false;
+              threading.selectedMessages = [];
+            }}
+            class="flex-shrink-0"
+          >
+            <Icon icon="zondicons:close-solid" />
+          </Button>
+        </div>
+        <label for="thread-name" class="px-4 py-2 uppercase text-xs font-medium"
+          >Thread name (optional)</label
+        >
       {/if}
       <div class="w-full py-1">
         {#if user.session}
@@ -528,17 +587,25 @@
                 {/if}
 
                 <div class="flex w-full pl-2 gap-2">
-                  <UploadFileButton {processImageFile} />
-
-                  {#key users.length + context.length}
-                    <ChatInput
-                      bind:content={messageInput}
-                      {users}
-                      {context}
-                      onEnter={sendMessage}
-                      {processImageFile}
+                  {#if threading.active}
+                    <Input
+                      bind:value={threading.name}
+                      id="thread-name"
+                      class="grow ml-2"
                     />
-                  {/key}
+                    <Button>Create</Button>
+                  {:else}
+                    <UploadFileButton {processImageFile} />
+                    {#key users.length + context.length}
+                      <ChatInput
+                        bind:content={messageInput}
+                        {users}
+                        {context}
+                        onEnter={sendMessage}
+                        {processImageFile}
+                      />
+                    {/key}
+                  {/if}
                 </div>
                 <FullscreenImageDropper {processImageFile} />
 

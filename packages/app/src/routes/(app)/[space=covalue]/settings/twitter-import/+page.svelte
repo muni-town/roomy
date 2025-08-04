@@ -761,6 +761,8 @@
         fileUrlEmbeds.push(...uploadedMediaVideoUrls);
 
         const messageText = tweet.text;
+
+        // TODO: Add AuthorComponent with 'twitter:' prefix to show it is imported
         const message = await createMessage(messageText, permissions.current!, {
           embeds: fileUrlEmbeds,
           created: new Date(tweet.createdAt),
