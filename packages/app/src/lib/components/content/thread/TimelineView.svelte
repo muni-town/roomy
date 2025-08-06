@@ -156,13 +156,11 @@
 
   let messageInput: string = $state("");
 
-  // thread maker
-  let threadTitleInput = $state("");
-
   let filesInMessage: File[] = $state([]);
 
-  function startThreading() {
+  function startThreading(id?: string) {
     threading.active = true;
+    id && threading.selectedMessages.push(id);
     setInputFocus();
   }
 
@@ -216,7 +214,7 @@
       }
     }
 
-    let newThread = await createThread(threadTitleInput, permissions.current!);
+    let newThread = await createThread(threading.name, permissions.current!);
 
     // add all messages to the new thread
     for (const messageId of messageIds) {
@@ -240,6 +238,8 @@
       const subThreads = await SubThreadsComponent.schema.load(subThreadsId);
       subThreads?.push(newThread.roomyObject);
     }
+
+    console.log("Created Subthread", newThread.roomyObject.id);
 
     threading.active = false;
     threading.selectedMessages = [];
@@ -521,13 +521,15 @@
           class="flex items-start justify-between bg-secondary text-secondary-content rounded-t-lg px-2 py-2"
         >
           <div
-            class="px-2 flex items-center gap-1 overflow-hidden text-xs w-full"
+            class="px-2 flex flex-wrap items-center gap-1 overflow-hidden text-xs w-full"
           >
             <span class="shrink-0 text-base-900 dark:text-base-100"
               >Creating thread with</span
             >
             {#if threading.selectedMessages[0]}
-              <MessageRepliedTo messageId={threading.selectedMessages[0]} />
+              <div class="max-w-[28rem]">
+                <MessageRepliedTo messageId={threading.selectedMessages[0]} />
+              </div>
             {/if}
             {#if threading.selectedMessages.length > 1}
               <span class="shrink-0 text-base-900 dark:text-base-100"
@@ -553,8 +555,8 @@
             <Icon icon="zondicons:close-solid" />
           </Button>
         </div>
-        <label for="thread-name" class="px-4 py-2 uppercase text-xs font-medium"
-          >Thread name (optional)</label
+        <label for="thread-name" class="px-4 py-2 text-xs font-medium"
+          >Thread name (optional):</label
         >
       {/if}
       <div class="w-full py-1">
@@ -588,12 +590,19 @@
 
                 <div class="flex w-full pl-2 gap-2">
                   {#if threading.active}
-                    <Input
-                      bind:value={threading.name}
-                      id="thread-name"
-                      class="grow ml-2"
-                    />
-                    <Button>Create</Button>
+                    <form onsubmit={handleCreateThread}>
+                      <Input
+                        bind:value={threading.name}
+                        id="thread-name"
+                        class="grow ml-2"
+                      />
+                      <Button type="submit"
+                        ><Icon icon="tabler:needle-thread" />Create
+                        <span class="hidden sm:inline-block sm:-ml-1"
+                          >Thread</span
+                        ></Button
+                      >
+                    </form>
                   {:else}
                     <UploadFileButton {processImageFile} />
                     {#key users.length + context.length}

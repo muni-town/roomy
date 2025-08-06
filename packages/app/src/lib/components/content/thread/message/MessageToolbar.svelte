@@ -132,6 +132,7 @@
 <BitsTooltip.Provider>
   <Toolbar.Root
     class={`${isEmojiToolbarPickerOpen ? "flex" : "hidden"} group-hover:flex shadow-lg border border-base-800/5 dark:border-base-300/10 backdrop-blur-sm absolute -top-4 right-2 bg-base-100/80 dark:bg-base-800/70 p-1 rounded-xl items-center`}
+    onclick={(e) => e.stopPropagation()}
   >
     <Toolbar.Button
       onclick={() => toggleReaction("👍")}
@@ -174,7 +175,7 @@
     {#if canEdit}
       <Tooltip tip="Edit Message">
         <Toolbar.Button
-          onclick={() => editMessage()}
+          onclick={editMessage}
           class={[
             buttonVariants({ variant: "ghost", size: "iconSm" }),
             "backdrop-blur-none",
@@ -189,7 +190,7 @@
     {#if canDelete}
       <Tooltip tip="Delete Message">
         <Toolbar.Button
-          onclick={() => deleteMessage()}
+          onclick={deleteMessage}
           class={[
             buttonVariants({ variant: "ghost", size: "iconSm" }),
             "backdrop-blur-none",
@@ -203,7 +204,7 @@
 
     <Tooltip tip="Create Thread">
       <Toolbar.Button
-        onclick={() => startThreading()}
+        onclick={startThreading}
         class={[
           buttonVariants({ variant: "ghost", size: "iconSm" }),
           "backdrop-blur-none",
@@ -216,7 +217,7 @@
 
     <Tooltip tip="Reply">
       <Toolbar.Button
-        onclick={() => setReplyTo()}
+        onclick={setReplyTo}
         class={[
           buttonVariants({ variant: "ghost", size: "iconSm" }),
           "backdrop-blur-none",

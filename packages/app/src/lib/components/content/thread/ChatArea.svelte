@@ -34,7 +34,7 @@
     threadId?: string;
     allowedToInteract?: boolean;
     threading?: { active: boolean; selectedMessages: string[] };
-    startThreading: () => void;
+    startThreading: (id?: string) => void;
     toggleSelect: (id: string) => void;
   } = $props();
 
