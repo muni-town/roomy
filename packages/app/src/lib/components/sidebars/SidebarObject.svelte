@@ -81,17 +81,6 @@
       : null,
   );
 
-  $effect(() => {
-    console.log(
-      "object name",
-      object?.name,
-      "has children:",
-      children.current?.toJSON(),
-      "and subthreads:",
-      subthreads.current?.toJSON(),
-    );
-  });
-
   let bannedAccounts = $derived(
     new CoState(BansComponent.schema, space?.components?.[BansComponent.id]),
   );
@@ -177,7 +166,6 @@
       {@render editButton?.()}
     </div>
     {#if object?.components?.[SubThreadsComponent.id]}
-      {console.log("considering rendering subthreads of ", object.name)}
       <div>
         <SidebarObjectList
           children={children.current}
@@ -187,7 +175,9 @@
           currentEntity={object}
           {space}
           level={level + 1}
-          subthreads={subthreads.current}
+          subthreads={object.id === page.params.object && !isEditing
+            ? subthreads.current
+            : undefined}
         />
       </div>
     {/if}

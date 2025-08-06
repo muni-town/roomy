@@ -41,15 +41,10 @@
   } = $props();
 
   let recentSubthreads = $derived.by(() => {
-    console.log("I want to iterate subthreads", subthreads);
-    console.log("Space", space?.name);
-    console.log("current entity", currentEntity?.name);
     const subthreadsIter = subthreads && me && subthreads.byMe?.all;
-    console.log("subthreadsIter", subthreadsIter?.next());
     let array = [];
     if (!subthreadsIter) return [];
     for (const subthread of subthreadsIter) {
-      console.log("iterated subthread", subthread.value);
       array.push(subthread.value);
     }
     return array;
