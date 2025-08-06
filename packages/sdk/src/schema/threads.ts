@@ -20,19 +20,6 @@ export const Embed = co.map({
   embedId: z.string(),
 });
 
-// export const Message = co.map({
-//   content: z.string(), // ✅
-//   createdAt: z.date(), // ✅
-//   updatedAt: z.date(), // ✅
-//   hiddenIn: co.list(z.string()), // ✅ // list of thread IDs where message should be hidden
-//   replyTo: z.string().optional(), // ✅ // ID of the message that this message is a reply to
-//   reactions: ReactionList, // ✅
-//   softDeleted: z.boolean().optional(), // ✅
-//   embeds: z.optional(co.list(Embed)), // ✅
-//   author: z.string().optional(), // ✅ // optional author override
-//   threadId: z.string().optional(), // ID of the thread that branches off this message
-// });
-
 export const Timeline = co.feed(z.string());
 
 export const ThreadContent = co.map({

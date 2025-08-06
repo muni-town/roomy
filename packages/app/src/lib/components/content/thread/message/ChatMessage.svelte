@@ -466,6 +466,7 @@
                 </div>
               </div>
             {:else}
+              <!-- TODO: review XSS safety -->
               {@html messageContent.current?.content ?? ""}
 
               {#if isMessageEdited && userAccessTimes.current?.updatedAt}

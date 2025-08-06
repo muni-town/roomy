@@ -6,6 +6,7 @@
     RoomyEntity,
     ChildrenComponent,
     co,
+    // SubThreadsComponent,
   } from "@roomy-chat/sdk";
 
   import SidebarObjectList from "./SidebarObjectList.svelte";

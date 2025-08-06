@@ -24,6 +24,7 @@
     HiddenInComponent,
     BranchThreadIdComponent,
     ReplyToComponent,
+    PlainTextContentComponent,
   } from "@roomy-chat/sdk";
   import { AccountCoState, CoState } from "jazz-tools/svelte";
   import { setInputFocus } from "./ChatInput.svelte";
@@ -214,7 +215,28 @@
       }
     }
 
-    let newThread = await createThread(threading.name, permissions.current!);
+    if (
+      !firstMessage ||
+      !firstMessage.components ||
+      !firstMessage.components[PlainTextContentComponent.id]
+    )
+      throw new Error("No components found on first message");
+
+    const firstMessageContent = await PlainTextContentComponent.schema.load(
+      firstMessage.components[PlainTextContentComponent.id]!,
+    );
+
+    let newThreadName = threading.name || firstMessageContent?.content;
+
+    if (!newThreadName) throw new Error("No thread name");
+
+    // TODO: fix this hack
+    if (newThreadName.includes("<p>"))
+      newThreadName = newThreadName.split("<p>")[1]!;
+    if (newThreadName.includes("</p>"))
+      newThreadName = newThreadName.split("</p>")[0]!;
+
+    let newThread = await createThread(newThreadName, permissions.current!);
 
     // add all messages to the new thread
     for (const messageId of messageIds) {

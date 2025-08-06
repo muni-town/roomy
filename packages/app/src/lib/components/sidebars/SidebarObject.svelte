@@ -10,6 +10,7 @@
     PageComponent,
     RoomyAccount,
     RoomyEntity,
+    SubThreadsComponent,
     ThreadComponent,
   } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
@@ -23,6 +24,7 @@
     space,
     level = 0,
     index = 0,
+    isSubthread,
   }: {
     object: co.loaded<typeof RoomyEntity> | null | undefined;
     me: co.loaded<typeof RoomyAccount> | undefined | null;
@@ -31,12 +33,31 @@
     space: co.loaded<typeof RoomyEntity> | undefined | null;
     level?: number;
     index?: number;
+    isSubthread?: boolean;
   } = $props();
 
   let children = $derived(
     new CoState(
       ChildrenComponent.schema,
       object?.components?.[ChildrenComponent.id],
+      {
+        resolve: {
+          $each: {
+            components: {
+              $each: true,
+              $onError: null,
+            },
+          },
+          $onError: null,
+        },
+      },
+    ),
+  );
+
+  let subthreads = $derived(
+    new CoState(
+      SubThreadsComponent.schema,
+      object?.components?.[SubThreadsComponent.id],
       {
         resolve: {
           $each: {
@@ -59,6 +80,17 @@
         )
       : null,
   );
+
+  $effect(() => {
+    console.log(
+      "object name",
+      object?.name,
+      "has children:",
+      children.current?.toJSON(),
+      "and subthreads:",
+      subthreads.current?.toJSON(),
+    );
+  });
 
   let bannedAccounts = $derived(
     new CoState(BansComponent.schema, space?.components?.[BansComponent.id]),
@@ -109,33 +141,56 @@
 
 {#if object?.components?.[ThreadComponent.id] && !object?.softDeleted}
   <div
-    class="inline-flex items-start justify-between gap-2 w-full font-semibold min-w-0 group"
+    class={[
+      "inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink",
+      level < 2 ? (index > 0 ? "py-2" : "pb-2") : "",
+    ]}
   >
-    <Button
-      href={navigateSync({
-        space: page.params.space!,
-        object: object.id,
-      })}
-      variant="ghost"
-      class="w-full justify-start min-w-0"
-      data-current={object.id === page.params.object && !isEditing}
+    <div
+      class="inline-flex items-start justify-between gap-2 w-full font-semibold min-w-0 group"
     >
-      {#if hasUnread}
-        <div
-          class="size-1.5 rounded-full bg-accent-500 absolute left-1.5 top-1.5"
-        ></div>
-      {/if}
-      <Icon icon={"heroicons:hashtag"} class="shrink-0" />
-      <span class="truncate whitespace-nowrap overflow-hidden min-w-0"
-        >{object.name || "..."}</span
+      <Button
+        href={navigateSync({
+          space: page.params.space!,
+          object: object.id,
+        })}
+        variant="ghost"
+        class="w-full justify-start min-w-0"
+        data-current={object.id === page.params.object && !isEditing}
       >
-      {#if notificationCount}
-        <Badge>
-          {notificationCount}
-        </Badge>
-      {/if}
-    </Button>
-    {@render editButton?.()}
+        {#if hasUnread}
+          <div
+            class="size-1.5 rounded-full bg-accent-500 absolute left-1.5 top-1.5"
+          ></div>
+        {/if}
+        {#if isSubthread}<Icon icon="tabler:corner-down-right" />{:else}
+          <Icon icon={"heroicons:hashtag"} class="shrink-0" />{/if}
+        <span class="truncate whitespace-nowrap overflow-hidden min-w-0"
+          >{object.name || "..."}</span
+        >
+        {#if notificationCount}
+          <Badge>
+            {notificationCount}
+          </Badge>
+        {/if}
+      </Button>
+      {@render editButton?.()}
+    </div>
+    {#if object?.components?.[SubThreadsComponent.id]}
+      {console.log("considering rendering subthreads of ", object.name)}
+      <div>
+        <SidebarObjectList
+          children={children.current}
+          {me}
+          bind:isEditing
+          {editEntity}
+          currentEntity={object}
+          {space}
+          level={level + 1}
+          subthreads={subthreads.current}
+        />
+      </div>
+    {/if}
   </div>
 {:else if object?.components?.[PageComponent.id] && !object?.softDeleted}
   <div
@@ -181,6 +236,7 @@
       {@render editButton?.()}
     </div>
 
+    <!-- Group children (pages, channels) -->
     <div
       class={["w-full max-w-full shrink min-w-0", level > 2 ? "pl-3" : "pl-1"]}
     >
@@ -192,6 +248,7 @@
         currentEntity={object}
         {space}
         level={level + 1}
+        subthreads={subthreads.current}
       />
     </div>
   </div>

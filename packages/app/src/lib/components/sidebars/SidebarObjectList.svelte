@@ -6,6 +6,7 @@
     ChildrenComponent,
     removeFromFolder,
     RoomyEntity,
+    SubThreadsComponent,
     type RoomyAccount,
   } from "@roomy-chat/sdk";
   import {
@@ -24,6 +25,7 @@
     currentEntity,
     space,
     level = 0,
+    subthreads,
   }: {
     children: co.loaded<typeof ChildrenComponent.schema> | undefined | null;
     me: co.loaded<typeof RoomyAccount> | undefined | null;
@@ -32,7 +34,26 @@
     currentEntity?: co.loaded<typeof RoomyEntity> | undefined | null;
     space: co.loaded<typeof RoomyEntity> | undefined | null;
     level?: number;
+    subthreads?:
+      | co.loaded<typeof SubThreadsComponent.schema>
+      | undefined
+      | null;
   } = $props();
+
+  let recentSubthreads = $derived.by(() => {
+    console.log("I want to iterate subthreads", subthreads);
+    console.log("Space", space?.name);
+    console.log("current entity", currentEntity?.name);
+    const subthreadsIter = subthreads && me && subthreads.byMe?.all;
+    console.log("subthreadsIter", subthreadsIter?.next());
+    let array = [];
+    if (!subthreadsIter) return [];
+    for (const subthread of subthreadsIter) {
+      console.log("iterated subthread", subthread.value);
+      array.push(subthread.value);
+    }
+    return array;
+  });
 
   let orderedChildren = $derived(children ?? []);
 
@@ -114,6 +135,33 @@
     {/each}
   </div>
 {:else}
+  <!-- 
+      In general, if an object has subthreads, it doesn't tend to have other children. 
+      But if it does, render recent subthreads first. 
+  -->
+  {#if subthreads && me}
+    <div class={["flex flex-col w-full pl-3 rounded-full"]}>
+      {#each [...recentSubthreads.values()]
+        .sort((a, b) => {
+          return a && b ? a._lastUpdatedAt - b._lastUpdatedAt : -1;
+        })
+        .slice(-3) as subthread, index (subthread?.id)}
+        <div class="flex items-start gap-2 w-full">
+          <SidebarObject
+            object={subthread}
+            {me}
+            bind:isEditing
+            {editEntity}
+            {space}
+            level={level + 1}
+            {index}
+            isSubthread
+          />
+        </div>
+      {/each}
+    </div>
+  {/if}
+  <!-- Render regular children -->
   <div class={["flex flex-col gap-2 w-full"]}>
     {#each (children ?? []).filter((x) => x && !x?.softDeleted) as child, index (child?.id)}
       <div class="flex items-start gap-2 w-full">
