@@ -81,6 +81,8 @@
       : null,
   );
 
+  let showGroupChildren = $state(true);
+
   let bannedAccounts = $derived(
     new CoState(BansComponent.schema, space?.components?.[BansComponent.id]),
   );
@@ -129,10 +131,11 @@
 {/snippet}
 
 {#if object?.components?.[ThreadComponent.id] && !object?.softDeleted}
+  <!-- Object is a thread -->
   <div
     class={[
       "inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink",
-      level < 2 ? (index > 0 ? "py-2" : "pb-2") : "",
+      level < 2 ? (index > 0 ? "pb-2" : "pb-2") : "",
     ]}
   >
     <div
@@ -147,7 +150,7 @@
         class="w-full justify-start min-w-0"
         data-current={object.id === page.params.object && !isEditing}
       >
-        {#if hasUnread}
+        {#if hasUnread && !isEditing}
           <div
             class="size-1.5 rounded-full bg-accent-500 absolute left-1.5 top-1.5"
           ></div>
@@ -157,7 +160,7 @@
         <span class="truncate whitespace-nowrap overflow-hidden min-w-0"
           >{object.name || "..."}</span
         >
-        {#if notificationCount}
+        {#if notificationCount && !isEditing}
           <Badge>
             {notificationCount}
           </Badge>
@@ -165,7 +168,7 @@
       </Button>
       {@render editButton?.()}
     </div>
-    {#if object?.components?.[SubThreadsComponent.id]}
+    {#if object?.components?.[SubThreadsComponent.id] && !isEditing}
       <div>
         <SidebarObjectList
           children={children.current}
@@ -183,6 +186,7 @@
     {/if}
   </div>
 {:else if object?.components?.[PageComponent.id] && !object?.softDeleted}
+  <!-- Object is a page -->
   <div
     class="inline-flex items-start justify-between gap-2 w-full min-w-0 group"
   >
@@ -203,6 +207,7 @@
     {@render editButton?.()}
   </div>
 {:else if object?.components?.[ChildrenComponent.id] && !object?.softDeleted}
+  <!-- Object is a group/folder -->
   <div
     class={[
       "inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink",
@@ -216,31 +221,40 @@
         variant="ghost"
         class="w-full shrink min-w-0 justify-start hover:bg-transparent hover:text-base-900 dark:hover:bg-transparent dark:hover:text-base-100 hover:cursor-default active:scale-100"
         data-current={object.id === page.params.object && !isEditing}
+        onclick={() => {
+          showGroupChildren = !showGroupChildren;
+        }}
       >
+        {#if showGroupChildren}
+          <Icon icon={"heroicons:chevron-down"} class="shrink-0 !size-3" />
+        {:else}
+          <Icon icon={"heroicons:chevron-up"} class="shrink-0 !size-3" />
+        {/if}
         <span
           class="truncate font-normal whitespace-nowrap overflow-hidden min-w-0"
           >{object.name || "..."}</span
         >
-        <Icon icon={"heroicons:chevron-down"} class="shrink-0 !size-3" />
       </Button>
       {@render editButton?.()}
     </div>
 
     <!-- Group children (pages, channels) -->
-    <div
-      class={["w-full max-w-full shrink min-w-0", level > 2 ? "pl-3" : "pl-1"]}
-    >
-      <SidebarObjectList
-        children={children.current}
-        {me}
-        bind:isEditing
-        {editEntity}
-        currentEntity={object}
-        {space}
-        level={level + 1}
-        subthreads={subthreads.current}
-      />
-    </div>
+    {#if showGroupChildren}
+      <div
+        class={["w-full max-w-full shrink min-w-0", level > 2 ? "pl-3" : ""]}
+      >
+        <SidebarObjectList
+          children={children.current}
+          {me}
+          bind:isEditing
+          {editEntity}
+          currentEntity={object}
+          {space}
+          level={level + 1}
+          subthreads={subthreads.current}
+        />
+      </div>
+    {/if}
   </div>
 {:else if object?.id && !object?.softDeleted}
   <div class="flex items-start justify-between gap-2 w-full group">
