@@ -97,12 +97,10 @@
 >
   <Navbar>
     {#if !hideSmallSidebar || sidebar}
-      <div class="flex gap-4 items-center ml-4">
+      <div class="flex gap-4 items-center ml-4 sm:hidden">
         <ToggleNavigation bind:isSidebarVisible={isSidebarVisible.value} />
       </div>
     {/if}
-
-    <div></div>
 
     {@render navbar?.()}
   </Navbar>

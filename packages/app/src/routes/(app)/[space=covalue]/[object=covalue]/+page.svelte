@@ -45,11 +45,11 @@
   {/snippet}
 
   {#snippet navbar()}
-    <div class="flex flex-col items-center justify-between w-full px-2">
+    <div class="flex flex-col items-center justify-between px-2 truncate">
       <h2
-        class="text-lg font-bold w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
+        class="text-lg font-bold max-w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
       >
-        <span>{object.current?.name || "..."}</span>
+        <span class="truncate">{object.current?.name || "..."}</span>
       </h2>
     </div>
   {/snippet}
