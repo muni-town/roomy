@@ -18,7 +18,7 @@
   )}
   {...restProps}
 >
-  <ScrollArea orientation="vertical" class="h-full overflow-y-scroll">
+  <ScrollArea orientation="vertical" class="h-full overflow-y-auto">
     {@render children?.()}
   </ScrollArea>
 

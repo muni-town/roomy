@@ -418,13 +418,13 @@
   let importQueue = $derived(me?.root.uploadQueue);
   const permissions = $derived(
     new CoState(
-      SpacePermissionsComponent.schema,
+      SpacePermissionsComponent,
       space?.current?.components?.[SpacePermissionsComponent.id],
     ),
   );
   const allThreads = $derived(
     new CoState(
-      AllThreadsComponent.schema,
+      AllThreadsComponent,
       space?.current?.components?.[AllThreadsComponent.id],
     ),
   );
@@ -561,7 +561,7 @@
     name: string,
     permissions: Record<string, string>,
     space: co.loaded<typeof RoomyEntity>,
-    allThreads: co.loaded<(typeof AllThreadsComponent)["schema"]>,
+    allThreads: co.loaded<typeof AllThreadsComponent>,
   ) {
     const channel = await createThread(name, permissions);
     if (!channel) throw new Error("Channel could not be created");
@@ -579,7 +579,7 @@
         },
       },
     );
-    const subThreadsFeed = await SubThreadsComponent.schema.load(
+    const subThreadsFeed = await SubThreadsComponent.load(
       channel.roomyObject.components[SubThreadsComponent.id]!,
       {
         resolve: {
@@ -598,8 +598,8 @@
   async function createAndInsertSubthread(
     name: string,
     permissions: Record<string, string>,
-    allThreads: co.loaded<(typeof AllThreadsComponent)["schema"]>,
-    subThreads: co.loaded<(typeof SubThreadsComponent)["schema"]>,
+    allThreads: co.loaded<typeof AllThreadsComponent>,
+    subThreads: co.loaded<typeof SubThreadsComponent>,
     parentId: string,
   ) {
     parentId; //use?
@@ -724,7 +724,7 @@
         tweet: SimplifiedTweet,
         channel: {
           timeline: CoFeed<string>;
-          subThreads?: co.loaded<(typeof SubThreadsComponent)["schema"]>;
+          subThreads?: co.loaded<typeof SubThreadsComponent>;
         },
       ) => {
         // for each one, we have to get the URL for any attached media
@@ -763,7 +763,8 @@
         const messageText = tweet.text;
 
         // TODO: Add AuthorComponent with 'twitter:' prefix to show it is imported
-        const message = await createMessage(messageText, permissions.current!, {
+        const message = await createMessage(messageText, {
+          permissions: permissions.current!,
           embeds: fileUrlEmbeds,
           created: new Date(tweet.createdAt),
         });
@@ -890,7 +891,7 @@
       const file = uploadQueue[path];
       if (
         !file ||
-        !UploadMedia.safeParse(file).success ||
+        !UploadMedia.getDefinition().shape.safeParse(file).success ||
         file.status !== "pending"
       ) {
         pushLog(

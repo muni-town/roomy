@@ -35,7 +35,7 @@ export async function createFolder(
   const manageChildrenGroup = await Group.load(manageChildrenGroupId);
   childrenGroup.addMember(manageChildrenGroup!, "writer");
 
-  const children = ChildrenComponent.schema.create([], childrenGroup);
+  const children = ChildrenComponent.create([], childrenGroup);
 
   folder.components[ChildrenComponent.id] = children.id;
 
@@ -62,7 +62,7 @@ export async function addToFolder(
   const childrenId = folder.components?.[ChildrenComponent.id];
 
   if (childrenId && item.components) {
-    const children = await ChildrenComponent.schema.load(childrenId);
+    const children = await ChildrenComponent.load(childrenId);
     if (atIndex !== undefined && atIndex >= 0) {
       children?.splice(atIndex, 0, item);
     } else {
@@ -72,7 +72,7 @@ export async function addToFolder(
     // add parentId to item
     item.components[ParentComponent.id] = folder.id;
   } else {
-    const children = ChildrenComponent.schema.create([item]);
+    const children = ChildrenComponent.create([item]);
     folder.components![ChildrenComponent.id] = children.id;
     item.components![ParentComponent.id] = folder.id;
   }
@@ -101,7 +101,7 @@ export async function removeFromFolder(
   }
 
   if (childrenId) {
-    const children = await ChildrenComponent.schema.load(childrenId);
+    const children = await ChildrenComponent.load(childrenId);
 
     const index = children?.findIndex((x) => x?.id === item.id);
 

@@ -37,7 +37,7 @@
   let popoverOpen = $state(false);
 
   let bans = $derived(
-    new CoState(BansComponent.schema, space?.components?.[BansComponent.id]),
+    new CoState(BansComponent, space?.components?.[BansComponent.id]),
   );
 </script>
 

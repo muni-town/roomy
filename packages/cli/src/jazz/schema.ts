@@ -66,7 +66,7 @@ export const Channel = co.map({
 
   pages: z.optional(co.list(Page)),
 
-  softDeleted: z.boolean().optional(),
+  softDeleted: co.optional(z.boolean()),
 });
 
 export const Category = co.map({

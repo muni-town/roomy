@@ -1,0 +1,13 @@
+diff --git a/dist/esm/Shard.js b/dist/esm/Shard.js
+index a7ca48cd2a66afd2bce4b38e9d003909e50b78ec..c94b0780c2349c1bbcf6830f74b56ef134c5301b 100644
+--- a/dist/esm/Shard.js
++++ b/dist/esm/Shard.js
+@@ -140,7 +140,7 @@ export class DiscordenoShard {
+             this.gatewayConfig.compress = false;
+         }
+         // We check for built-in WebSocket implementations in Bun or Deno, NodeJS v22 has an implementation too but it seems to be less optimized so for now it is better to use the ws npm package
+-        const shouldUseBuiltin = Reflect.has(globalThis, 'WebSocket') && (Reflect.has(globalThis, 'Bun') || Reflect.has(globalThis, 'Deno'));
++        const shouldUseBuiltin = true
+         // @ts-expect-error NodeWebSocket doesn't support "dispatchEvent", and while we don't use it, it is required on the "WebSocket" type
+         const socket = shouldUseBuiltin ? new WebSocket(url) : new NodeWebSocket(url);
+         this.socket = socket;

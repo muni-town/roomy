@@ -40,11 +40,11 @@
       >
       <Button
         variant="ghost"
-        disabled={true}
         class="w-full justify-start"
         data-current={page.url.pathname.includes("discord-bridge")}
-        >Discord Bridge <Badge>Coming Soon!</Badge></Button
-      >
+        href={`/${page.params.space}/settings/discord-bridge`}
+        >Discord Bridge
+      </Button>
     </div>
   {/snippet}
 

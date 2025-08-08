@@ -50,7 +50,7 @@
       const membersId = space.components?.[AllMembersComponent.id];
 
       if (membersId) {
-        const members = await AllMembersComponent.schema.load(membersId, {
+        const members = await AllMembersComponent.load(membersId, {
           resolve: {
             $each: {
               account: {
