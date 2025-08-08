@@ -11,7 +11,7 @@
 </script>
 
 <Button
-  class="w-fit ml-12 -mt-2 mb-2"
+  class="w-fit ml-12 -mt-2 mb-2 max-w-48 truncate"
   size="sm"
   href={navigateSync({
     space: spaceId,
@@ -19,5 +19,5 @@
   })}
 >
   <Icon icon="tabler:corner-down-right" />
-  {thread.current?.name}
+  <span class="truncate max-w-full">{thread.current?.name}</span>
 </Button>
