@@ -16,18 +16,20 @@ export const RoomyEntity = co.map({
 export type LoadType<Loaded> = {
   load: (id: string, opts?: any) => Promise<Loaded>;
 };
-export type CreateType<Init, Loaded> = {
-  create(init: Init): Promise<Loaded>;
+export type CreateType<Init, Opts, Loaded> = {
+  create(init: Init, opts?: Opts): Loaded;
 };
 export type ComponentDef<T> = T & { id: string };
 export type ComponentLoaded<Def> =
   Def extends ComponentDef<LoadType<infer Loaded>>
     ? Loaded
-    : Def extends ComponentDef<CreateType<any, infer Loaded>>
+    : Def extends ComponentDef<CreateType<any, any, infer Loaded>>
       ? Loaded
       : never;
 export type ComponentInit<Def> =
-  Def extends ComponentDef<CreateType<infer Init, any>> ? Init : never;
+  Def extends ComponentDef<CreateType<infer Init, any, any>> ? Init : never;
+export type ComponentInitOpts<Def> =
+  Def extends ComponentDef<CreateType<any, infer Opts, any>> ? Opts : never;
 
 export function defComponent<T extends LoadType<any>>(
   id: string,
@@ -46,19 +48,18 @@ export async function getComponent<D extends ComponentDef<LoadType<any>>>(
   return await def.load(id, opts);
 }
 
-export async function addComponent<
-  D extends ComponentDef<CreateType<any, any>>,
->(
+export function addComponent<D extends ComponentDef<CreateType<any, any, any>>>(
   entity: co.loaded<typeof RoomyEntity>,
   def: D,
   init: ComponentInit<D>,
+  opts?: ComponentInitOpts<D>,
 ): Promise<
-  D extends ComponentDef<CreateType<any, infer Loaded>> ? Loaded : never
+  D extends ComponentDef<CreateType<any, any, infer Loaded>> ? Loaded : never
 > {
-  const comp = await def.create(init);
+  const comp = def.create(init, opts);
   if (!entity.components) {
     entity.components = co.record(z.string(), z.string()).create({});
   }
-  entity.components[def.id] = comp;
+  entity.components[def.id] = comp.id;
   return comp;
 }

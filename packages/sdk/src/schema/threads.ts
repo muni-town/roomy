@@ -81,9 +81,15 @@ export const ReplyToComponent = {
 };
 
 /**  optional author override */
-export const AuthorComponent = {
-  id: "space.roomy.author.v0",
-};
+export const AuthorComponent = defComponent(
+  "space.roomy.author.v0",
+  co.map({
+    authorId: z.string().optional(),
+    name: z.string().optional(),
+    imageUrl: z.string().optional(),
+    description: z.string().optional(),
+  }),
+);
 
 /**  ID of the thread that branches off this message */
 export const BranchThreadIdComponent = {

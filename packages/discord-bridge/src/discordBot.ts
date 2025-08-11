@@ -5,7 +5,6 @@ import {
   CompleteDesiredProperties,
   createBot,
   Intents,
-  memberAvatarUrl,
   Message,
   RecursivePartial,
   SetupDesiredProps,
@@ -34,6 +33,9 @@ import {
   ThreadComponent,
   addToFolder,
   AuthorComponent,
+  addComponent,
+  AllPermissions,
+  Group,
 } from "@roomy-chat/sdk";
 
 const tracer = trace.getTracer("discordBot");
@@ -255,8 +257,14 @@ async function syncDiscordMessageToRoomy(opts: {
 
     const permissions = await getComponent(space, SpacePermissionsComponent);
     if (!permissions) {
-      console.log(space.components?.toJSON());
       throw error(span, `Error getting permissions for space: ${spaceId}`);
+    }
+    const readGroup = await Group.load(permissions[AllPermissions.publicRead]);
+    if (!readGroup) {
+      throw error(
+        span,
+        `Error loading public read group ( ${permissions[AllPermissions.publicRead]} ) for space: ${spaceId}`,
+      );
     }
 
     const existingRoomyThreadId = await syncedIds.get_roomyId(
@@ -311,8 +319,40 @@ async function syncDiscordMessageToRoomy(opts: {
       opts.message.author.discriminator,
       { avatar: opts.message.author.avatar },
     );
-    message.components[AuthorComponent.id] =
-      `discord:${opts.message.author.username}:${encodeURIComponent(avatar)}`;
+
+    // See if we already have a roomy author info for this user
+    const roomyId = await syncedIds.get_roomyId(
+      opts.message.author.id.toString(),
+    );
+    let authorComponentId;
+    if (roomyId) {
+      // Update the user avatar if necessary
+      AuthorComponent.load(roomyId).then((info) => {
+        if (info && info.imageUrl !== avatar) {
+          info.imageUrl = avatar;
+        }
+      });
+      authorComponentId = roomyId;
+    } else {
+      const authorInfo = AuthorComponent.create(
+        {
+          authorId: `discord:${opts.message.author.id}`,
+          imageUrl: avatar,
+          name: opts.message.author.username,
+        },
+        {
+          owner: readGroup,
+        },
+      );
+      authorComponentId = authorInfo.id;
+      syncedIds.register({
+        roomyId: authorInfo.id,
+        discordId: opts.message.author.id.toString(),
+      });
+    }
+
+    message.components[AuthorComponent.id] = authorComponentId;
+
     roomyThreadComponent.timeline.push(message.id);
 
     await syncedIds.register({

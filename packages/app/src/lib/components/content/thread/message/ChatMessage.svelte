@@ -94,9 +94,17 @@
     ),
   );
 
-  let author = $derived(message.current?.components?.[AuthorComponent.id]);
-  let prevMessageAuthor = $derived(
-    previousMessage.current?.components?.[AuthorComponent.id],
+  let customAuthor = $derived(
+    new CoState(
+      AuthorComponent,
+      message.current?.components?.[AuthorComponent.id],
+    ),
+  );
+  let prevMessageCustomAuthor = $derived(
+    new CoState(
+      AuthorComponent,
+      previousMessage.current?.components?.[AuthorComponent.id],
+    ),
   );
   let userAccessTimes = $derived(
     new CoState(
@@ -138,39 +146,8 @@
     ),
   );
 
-  let isImportedMessage = $derived(
-    author?.startsWith("discord:") ||
-      author?.startsWith("app:") ||
-      author?.startsWith("atproto") ||
-      author?.startsWith("twitter:"),
-  );
-
   const authorData = $derived.by(() => {
-    // if the message has an author in the format of discord:username:avatarUrl or atproto||handle||displayName||did||uri||avatar,
-    // and the message is made by the admin, return the profile data otherwise return profile data
-    if (isImportedMessage) {
-      if (author?.startsWith("atproto")) {
-        // ATProto format: atproto||handle||displayName||did||uri||avatar
-        const authorSplit = author.split("||");
-        const avatarUrl = authorSplit?.[5]
-          ? decodeURIComponent(authorSplit[5])
-          : "";
-        // console.log(`👤 ATProto author data - Handle: ${author?.[1]}, Display: ${author?.[2]}, Avatar: ${avatarUrl}`);
-        return {
-          name: `${authorSplit?.[2] ?? authorSplit?.[1] ?? "Unknown"} (@${authorSplit?.[1] ?? "unknown"})`,
-          imageUrl: avatarUrl,
-          id: undefined,
-        };
-      } else {
-        // Discord format: discord:username:avatarUrl
-        const authorSplit = author?.split(":");
-        return {
-          name: authorSplit?.[1] ?? "Unknown",
-          imageUrl: decodeURIComponent(authorSplit?.[2] ?? ""),
-          id: undefined,
-        };
-      }
-    }
+    if (customAuthor.current) return customAuthor.current;
     return profile.current;
   });
 
@@ -179,46 +156,19 @@
     if (!previousMessage) return false;
     if (previousMessage.current?.softDeleted) return false;
 
-    if (isImportedMessage) {
-      // Handle ATProto with || delimiter
+    if (customAuthor.current?.authorId) {
       if (
-        author?.startsWith("atproto") &&
-        prevMessageAuthor?.startsWith("atproto")
+        prevMessageCustomAuthor.current?.authorId &&
+        prevMessageCustomAuthor.current?.authorId ===
+          customAuthor.current.authorId
       ) {
-        const previousAuthor = prevMessageAuthor.split("||");
-        const currentAuthor = author.split("||");
-
-        // Compare by handle (index 1) and DID (index 3)
-        if (
-          previousAuthor?.[1] === currentAuthor?.[1] &&
-          previousAuthor?.[3] === currentAuthor?.[3]
-        ) {
-          return (
-            (userAccessTimes.current?.createdAt.getTime() ?? 0) -
-              (prevMessageUserAccessTimes?.current?.createdAt.getTime() ?? 0) <
-            1000 * 60 * 5
-          );
-        } else {
-          return false;
-        }
-      }
-      // Handle Discord with : delimiter
-      else {
-        const previousAuthor = prevMessageAuthor?.split(":");
-        const currentAuthor = author?.split(":");
-
-        if (
-          previousAuthor?.[1] === currentAuthor?.[1] &&
-          previousAuthor?.[2] === currentAuthor?.[2]
-        ) {
-          return (
-            (userAccessTimes.current?.createdAt.getTime() ?? 0) -
-              (prevMessageUserAccessTimes?.current?.createdAt.getTime() ?? 0) <
-            1000 * 60 * 5
-          );
-        } else {
-          return false;
-        }
+        return (
+          (userAccessTimes.current?.createdAt.getTime() ?? 0) -
+            (prevMessageUserAccessTimes?.current?.createdAt.getTime() ?? 0) <
+          1000 * 60 * 5
+        );
+      } else {
+        return false;
       }
     }
     if (
@@ -429,7 +379,7 @@
               <span class="font-bold text-accent-700 dark:text-accent-400"
                 >{authorData?.name ?? ""}</span
               >
-              {#if isImportedMessage}
+              {#if customAuthor.current}
                 <Badge variant="secondary">App</Badge>
               {/if}
               {#if userAccessTimes.current?.createdAt}

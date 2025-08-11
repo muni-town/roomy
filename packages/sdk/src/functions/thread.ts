@@ -238,7 +238,7 @@ export async function createMessage(
 
   // skip AuthorComponent and ThreadIdComponent - can be added later if needed
 
-  return { roomyObject, content, hiddenIn, reactions };
+  return { roomyObject, content, hiddenIn, reactions, componentsGroup };
 }
 
 export function messageHasAdmin(
