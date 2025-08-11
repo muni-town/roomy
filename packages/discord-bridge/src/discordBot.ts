@@ -1,6 +1,5 @@
 import {
   Bot,
-  Channel,
   ChannelTypes,
   CompleteDesiredProperties,
   createBot,
@@ -33,7 +32,6 @@ import {
   ThreadComponent,
   addToFolder,
   AuthorComponent,
-  addComponent,
   AllPermissions,
   Group,
 } from "@roomy-chat/sdk";
@@ -109,6 +107,60 @@ export async function startBot() {
       // Handle slash commands
       async interactionCreate(interaction) {
         await handleSlashCommandInteraction(interaction);
+      },
+
+      // Handle new messages
+      async messageCreate(message) {
+        // We don't handle realtime messages while we are in the middle of backfilling, otherwise we
+        // might be indexing at the same time and incorrectly update the latest message seen in the
+        // channel.
+        if (!doneBackfilling) return;
+
+        const guildId = message.guildId;
+        const channelId = message.channelId;
+        if (!guildId) {
+          console.error("Guild ID not present on Discord message event");
+          return;
+        }
+        if (!channelId) {
+          console.error("Channel ID not present on Discord message event");
+          return;
+        }
+
+        const spaceId = await registeredBridges.get_spaceId(guildId.toString());
+        if (!spaceId) {
+          // This guild is not bridged.
+          return;
+        }
+
+        const latestMessages = discordLatestMessageInChannelForBridge({
+          discordGuildId: guildId,
+          roomySpaceId: spaceId,
+        });
+
+        const syncedIds = syncedIdsForBridge({
+          discordGuildId: guildId,
+          roomySpaceId: spaceId,
+        });
+
+        // If the channel doesn't have a roomy channel created for it yet, we need to make sure we
+        // fetch the channel name before syncing the message.
+        let channelName: undefined | string;
+        const roomyThread = await syncedIds.get_roomyId(
+          message.channelId.toString(),
+        );
+        if (!roomyThread) {
+          const channel = await bot.helpers.getChannel(message.channelId);
+          channelName = channel.name;
+        }
+
+        await syncDiscordMessageToRoomy({
+          guildId,
+          message,
+          channel: { id: message.channelId, name: channelName },
+        });
+
+        latestMessages.put(message.channelId.toString(), message.id.toString());
       },
     },
   });
@@ -203,10 +255,7 @@ async function backfill(bot: DiscordBot, guildIds: bigint[]) {
 
 async function syncDiscordMessageToRoomy(opts: {
   guildId: bigint;
-  channel: SetupDesiredProps<
-    Channel,
-    CompleteDesiredProperties<NoInfer<typeof desiredProperties>>
-  >;
+  channel: { id: bigint; name?: string };
   message: SetupDesiredProps<
     Message,
     CompleteDesiredProperties<NoInfer<typeof desiredProperties>>
