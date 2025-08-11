@@ -67,7 +67,10 @@
 
   {#if object.current?.components?.feedConfig}
     <div class="flex-1 overflow-hidden">
-      <FeedDisplay objectId={page.params.object ?? ""} />
+      <FeedDisplay 
+        objectId={page.params.object ?? ""} 
+        singlePostUri={page.url.searchParams.get('thread') || undefined}
+      />
     </div>
   {:else if object.current?.components?.[ThreadComponent.id]}
     <TimelineView

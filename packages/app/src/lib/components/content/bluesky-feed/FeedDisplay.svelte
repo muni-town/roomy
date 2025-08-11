@@ -20,6 +20,11 @@
     singlePostUri?: string;
   } = $props();
 
+  // Debug the singlePostUri prop
+  $effect(() => {
+    console.log('🔍 FeedDisplay props changed:', { objectId, singlePostUri });
+  });
+
   let allFeedPosts = $state<AtprotoFeedPost[]>([]);
   let originalFeedPosts = $state<AtprotoFeedPost[]>([]); // Store original feed for back navigation
   let savedScrollPosition = $state(0); // Store scroll position for back navigation
@@ -65,9 +70,9 @@
 
   let bookmarks = $state<any[]>([]);
 
-  // Update bookmarks when modal opens or account changes
+  // Update bookmarks when modal opens, account changes, or when viewing main feed
   $effect(() => {
-    if (showBookmarks && me.current) {
+    if (me.current && (showBookmarks || !showingThread)) {
       bookmarks = atprotoFeedService.getBookmarks(me.current, objectId);
     } else if (!me.current) {
       bookmarks = [];
@@ -76,6 +81,7 @@
 
   // Load feeds when component mounts or props change
   $effect(() => {
+    console.log('🔍 FeedDisplay effect triggered - props:', { objectId, singlePostUri });
     // Debounce the loading to prevent rapid-fire requests
     const timeoutId = setTimeout(() => {
       loadFeeds();
@@ -107,7 +113,9 @@
       }
       // Handle single post thread (either from prop or selected via click)
       const threadUri = singlePostUri || selectedPostUri;
+      console.log('🔍 FeedDisplay loadFeeds - threadUri check:', { threadUri, singlePostUri, selectedPostUri });
       if (threadUri) {
+        console.log('🔍 FeedDisplay - Loading thread:', threadUri);
         const postThread = await atprotoFeedService.fetchPostThread(threadUri);
         if (postThread) {
           // Convert the entire thread to feed post format for display
@@ -662,3 +670,12 @@
   onClose={() => showHiddenItems = false}
   onUnhide={handleHide}
 />
+
+<style>
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+</style>
