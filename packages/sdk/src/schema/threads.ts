@@ -64,7 +64,7 @@ export const HiddenInComponent = defComponent(
 export const EmbedsComponent = defComponent(
   "space.roomy.embeds.v0",
   co.map({
-    embeds: z.optional(co.list(Embed)),
+    embeds: co.list(Embed),
   }),
 );
 

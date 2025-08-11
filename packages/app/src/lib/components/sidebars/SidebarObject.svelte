@@ -118,25 +118,6 @@
     if (object?.components?.feedConfig && me && object?.id) {
       try {
         const bookmarks = atprotoFeedService.getBookmarks(me, object.id);
-        
-        // If no bookmarks exist, create a test one for development
-        if (bookmarks.length === 0) {
-          atprotoFeedService.bookmarkThread(me, object.id, 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.post/3lepx3k7lec2t', {
-            title: 'Test Bookmark for Sidebar',
-            author: {
-              handle: 'jay.bsky.team',
-              displayName: 'Jay Graber',
-              avatar: '',
-            },
-            previewText: 'This is a test bookmark to verify sidebar display functionality',
-            feedSource: 'following',
-          });
-          
-          // Get bookmarks again after adding test
-          const newBookmarks = atprotoFeedService.getBookmarks(me, object.id);
-          return newBookmarks;
-        }
-        
         return bookmarks;
       } catch (error) {
         console.error('Error getting bookmarks:', error);

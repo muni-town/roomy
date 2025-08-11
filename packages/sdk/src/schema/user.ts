@@ -60,17 +60,17 @@ export const RoomyProfile = co.profile({
   joinedDate: z.date().optional(),
   joinedSpaces: co.list(RoomyEntity),
 
-  threadSubscriptions: z.optional(co.list(z.string())), // List of thread IDs user is subscribed to
-  hiddenFeedPosts: z.optional(co.list(z.string())), // List of AT Proto URIs for hidden feed posts
+  threadSubscriptions: co.list(z.string()), // List of thread IDs user is subscribed to
+  hiddenFeedPosts: co.list(z.string()), // List of AT Proto URIs for hidden feed posts
 
   activityLog: co.record(z.string(), z.string()),
 });
 
 export const RoomyRoot = co.map({
   lastRead: LastReadList,
-  uploadQueue: z.optional(MediaUploadQueue),
+  uploadQueue: MediaUploadQueue,
   feedConfigs: FeedAggregatorConfigs,
-  bookmarkedThreads: BookmarkedThreadsConfigs,
+  bookmarkedThreads: BookmarkedThreads,
   hiddenThreads: HiddenThreads,
 });
 
@@ -83,9 +83,9 @@ export const RoomyAccount = co
     if (account.root === undefined) {
       account.root = RoomyRoot.create({
         lastRead: LastReadList.create({}),
-        uploadQueue: undefined,
+        uploadQueue: MediaUploadQueue.create({}),
         feedConfigs: FeedAggregatorConfigs.create({}),
-        bookmarkedThreads: BookmarkedThreadsConfigs.create({}),
+        bookmarkedThreads: BookmarkedThreads.create([]),
         hiddenThreads: HiddenThreads.create([]),
       });
     }
@@ -97,7 +97,7 @@ export const RoomyAccount = co
 
     // Initialize bookmarkedThreads for existing users
     if (account.root && !account.root.bookmarkedThreads) {
-      account.root.bookmarkedThreads = BookmarkedThreadsConfigs.create({});
+      account.root.bookmarkedThreads = BookmarkedThreads.create([]);
     }
 
     // Initialize hiddenThreads for existing users
@@ -118,6 +118,8 @@ export const RoomyAccount = co
             .record(z.string(), z.string())
             .create({}, publicGroup("reader")),
           joinedDate: new Date(),
+          threadSubscriptions: co.list(z.string()).create([]),
+          hiddenFeedPosts: co.list(z.string()).create([]),
         },
         publicGroup("reader"),
       );
