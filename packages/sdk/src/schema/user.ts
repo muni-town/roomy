@@ -29,6 +29,8 @@ export const BookmarkedThread = co.map({
 
 export const BookmarkedThreads = co.list(BookmarkedThread);
 
+export const BookmarkedThreadsConfigs = co.record(z.string(), BookmarkedThreads);
+
 export const HiddenThread = co.map({
   postUri: z.string(),
   hiddenAt: z.date(),
@@ -68,7 +70,7 @@ export const RoomyRoot = co.map({
   lastRead: LastReadList,
   uploadQueue: z.optional(MediaUploadQueue),
   feedConfigs: FeedAggregatorConfigs,
-  bookmarkedThreads: BookmarkedThreads,
+  bookmarkedThreads: BookmarkedThreadsConfigs,
   hiddenThreads: HiddenThreads,
 });
 
@@ -83,7 +85,7 @@ export const RoomyAccount = co
         lastRead: LastReadList.create({}),
         uploadQueue: undefined,
         feedConfigs: FeedAggregatorConfigs.create({}),
-        bookmarkedThreads: BookmarkedThreads.create([]),
+        bookmarkedThreads: BookmarkedThreadsConfigs.create({}),
         hiddenThreads: HiddenThreads.create([]),
       });
     }
@@ -95,7 +97,7 @@ export const RoomyAccount = co
 
     // Initialize bookmarkedThreads for existing users
     if (account.root && !account.root.bookmarkedThreads) {
-      account.root.bookmarkedThreads = BookmarkedThreads.create([]);
+      account.root.bookmarkedThreads = BookmarkedThreadsConfigs.create({});
     }
 
     // Initialize hiddenThreads for existing users

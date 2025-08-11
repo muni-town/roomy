@@ -6,9 +6,11 @@
 
   let {
     bookmarks,
+    objectId,
     onViewThread,
   }: {
     bookmarks?: any[];
+    objectId?: string;
     onViewThread?: (postUri: string) => void;
   } = $props();
 
@@ -23,7 +25,7 @@
   let actualBookmarks = $derived.by(() => {
     if (bookmarks) return bookmarks;
     if (!me.current) return [];
-    return atprotoFeedService.getBookmarks(me.current);
+    return atprotoFeedService.getBookmarks(me.current, objectId);
   });
 
   let searchQuery = $state("");
@@ -67,8 +69,8 @@
   });
 
   function removeBookmark(postUri: string) {
-    if (!me.current) return;
-    atprotoFeedService.removeBookmark(me.current, postUri);
+    if (!me.current || !objectId) return;
+    atprotoFeedService.removeBookmark(me.current, objectId, postUri);
   }
 
   function viewThread(postUri: string) {

@@ -5,7 +5,7 @@ import {
   ATPROTO_FEED_CONFIG,
 } from "$lib/utils/atprotoFeeds";
 import { user } from "$lib/user.svelte";
-import { RoomyAccount, FeedConfig, FeedAggregatorConfigs, BookmarkedThread, BookmarkedThreads, HiddenThread, HiddenThreads, publicGroup } from "@roomy-chat/sdk";
+import { RoomyAccount, FeedConfig, FeedAggregatorConfigs, BookmarkedThread, BookmarkedThreads, BookmarkedThreadsConfigs, HiddenThread, HiddenThreads, publicGroup } from "@roomy-chat/sdk";
 import { co, z } from "jazz-tools";
 
 export class AtprotoFeedService {
@@ -221,7 +221,7 @@ export class AtprotoFeedService {
   }
 
   // Bookmark management methods
-  bookmarkThread(account: any, postUri: string, postData: { 
+  bookmarkThread(account: any, objectId: string, postUri: string, postData: { 
     title: string, 
     author: { handle: string, displayName?: string, avatar?: string },
     previewText: string, 
@@ -234,22 +234,78 @@ export class AtprotoFeedService {
       return false;
     }
 
-    // Initialize bookmarkedThreads if it doesn't exist
-    if (!account.root.bookmarkedThreads) {
-      console.log("🔧 Initializing bookmarkedThreads in account root");
-      try {
-        account.root.bookmarkedThreads = BookmarkedThreads.create([], publicGroup("writer"));
-        console.log("✅ Successfully initialized bookmarkedThreads");
-      } catch (error) {
-        console.error("❌ Failed to initialize bookmarkedThreads:", error);
-        return false;
-      }
+    // Extra safety check - make sure account.root is fully loaded
+    if (!account.root._type || typeof account.root !== 'object') {
+      console.error("❌ Account root not properly initialized");
+      return false;
     }
 
-    // Check if already bookmarked
-    const existing = account.root.bookmarkedThreads.find((bookmark: any) => bookmark && bookmark.postUri === postUri);
+    // Debug: Check what bookmarkedThreads actually is
+    console.log("🔍 Debug bookmarkedThreads:", {
+      exists: !!account.root.bookmarkedThreads,
+      type: typeof account.root.bookmarkedThreads,
+      isArray: Array.isArray(account.root.bookmarkedThreads),
+      constructor: account.root.bookmarkedThreads?.constructor?.name,
+      hasSetMethod: typeof account.root.bookmarkedThreads?.set === 'function'
+    });
+
+    // Force recreate bookmarkedThreads if it seems corrupted
+    try {
+      // Test if we can safely access the bookmarkedThreads object
+      const canAccess = account.root.bookmarkedThreads && 
+                       typeof account.root.bookmarkedThreads === 'object' &&
+                       !Array.isArray(account.root.bookmarkedThreads);
+      
+      if (!canAccess) {
+        console.log("🔧 Recreating bookmarkedThreads (corrupted or missing)");
+        account.root.bookmarkedThreads = BookmarkedThreadsConfigs.create({}, publicGroup("writer"));
+      }
+      
+      // Try to access the objectId property safely
+      let needsNewList = true;
+      try {
+        needsNewList = !account.root.bookmarkedThreads[objectId];
+      } catch (e) {
+        console.log("🔧 Cannot access objectId, recreating bookmarkedThreads");
+        account.root.bookmarkedThreads = BookmarkedThreadsConfigs.create({}, publicGroup("writer"));
+        needsNewList = true;
+      }
+      
+      if (needsNewList) {
+        console.log("🔧 Creating bookmark list for objectId:", objectId);
+        const newBookmarkList = BookmarkedThreads.create([], publicGroup("writer"));
+        
+        // Try to recreate the entire record with this objectId included
+        const currentData: { [key: string]: any } = {};
+        
+        // Try to preserve existing data, but handle gracefully if it fails
+        try {
+          for (const key in account.root.bookmarkedThreads) {
+            if (account.root.bookmarkedThreads[key]) {
+              currentData[key] = account.root.bookmarkedThreads[key];
+            }
+          }
+        } catch (e) {
+          console.log("🔍 Could not preserve existing data, starting fresh");
+        }
+        
+        // Add the new list
+        currentData[objectId] = newBookmarkList;
+        
+        // Recreate the entire record
+        account.root.bookmarkedThreads = BookmarkedThreadsConfigs.create(currentData, publicGroup("writer"));
+        console.log("✅ Recreated bookmarkedThreads with objectId:", objectId);
+      }
+      
+    } catch (error) {
+      console.error("❌ Failed to initialize bookmarks:", error);
+      return false;
+    }
+
+    // Check if already bookmarked in this object
+    const existing = account.root.bookmarkedThreads[objectId].find((bookmark: any) => bookmark && bookmark.postUri === postUri);
     if (existing) {
-      console.log("ℹ️ Thread already bookmarked");
+      console.log("ℹ️ Thread already bookmarked in this object");
       return false;
     }
 
@@ -274,7 +330,7 @@ export class AtprotoFeedService {
         feedSource: postData.feedSource,
       }, publicGroup("writer"));
 
-      account.root.bookmarkedThreads.push(bookmark);
+      account.root.bookmarkedThreads[objectId].push(bookmark);
       console.log("✅ Successfully bookmarked thread");
       return true;
     } catch (error) {
@@ -283,22 +339,22 @@ export class AtprotoFeedService {
     }
   }
 
-  removeBookmark(account: any, postUri: string): boolean {
+  removeBookmark(account: any, objectId: string, postUri: string): boolean {
     console.log("🗑️ Removing bookmark:", postUri);
     
-    if (!account?.root?.bookmarkedThreads) {
-      console.log("ℹ️ No bookmarks to remove");
+    if (!account?.root?.bookmarkedThreads?.[objectId]) {
+      console.log("ℹ️ No bookmarks to remove for this object");
       return false;
     }
 
     try {
-      const index = account.root.bookmarkedThreads.findIndex((bookmark: any) => bookmark && bookmark.postUri === postUri);
+      const index = account.root.bookmarkedThreads[objectId].findIndex((bookmark: any) => bookmark && bookmark.postUri === postUri);
       if (index === -1) {
-        console.log("ℹ️ Bookmark not found");
+        console.log("ℹ️ Bookmark not found in this object");
         return false;
       }
 
-      account.root.bookmarkedThreads.splice(index, 1);
+      account.root.bookmarkedThreads[objectId].splice(index, 1);
       console.log("✅ Successfully removed bookmark");
       return true;
     } catch (error) {
@@ -307,22 +363,52 @@ export class AtprotoFeedService {
     }
   }
 
-  getBookmarks(account: any): any[] {
+  getBookmarks(account: any, objectId?: string): any[] {
     if (!account?.root?.bookmarkedThreads) {
       return [];
     }
     
-    const rawBookmarks = Array.from(account.root.bookmarkedThreads);
-    const filteredBookmarks = rawBookmarks.filter(bookmark => bookmark != null);
-    
-    return filteredBookmarks;
+    if (objectId) {
+      // Return bookmarks for specific object
+      const objectBookmarks = account.root.bookmarkedThreads[objectId];
+      if (!objectBookmarks) return [];
+      
+      const rawBookmarks = Array.from(objectBookmarks);
+      return rawBookmarks.filter(bookmark => bookmark != null);
+    } else {
+      // Return all bookmarks from all objects
+      const allBookmarks: any[] = [];
+      for (const objId in account.root.bookmarkedThreads) {
+        const objectBookmarks = account.root.bookmarkedThreads[objId];
+        if (objectBookmarks) {
+          const rawBookmarks = Array.from(objectBookmarks);
+          allBookmarks.push(...rawBookmarks.filter(bookmark => bookmark != null));
+        }
+      }
+      return allBookmarks;
+    }
   }
 
-  isBookmarked(account: any, postUri: string): boolean {
+  isBookmarked(account: any, postUri: string, objectId?: string): boolean {
     if (!account?.root?.bookmarkedThreads) {
       return false;
     }
-    return account.root.bookmarkedThreads.some((bookmark: any) => bookmark && bookmark.postUri === postUri);
+    
+    if (objectId) {
+      // Check if bookmarked in specific object
+      const objectBookmarks = account.root.bookmarkedThreads[objectId];
+      if (!objectBookmarks) return false;
+      return objectBookmarks.some((bookmark: any) => bookmark && bookmark.postUri === postUri);
+    } else {
+      // Check if bookmarked in any object
+      for (const objId in account.root.bookmarkedThreads) {
+        const objectBookmarks = account.root.bookmarkedThreads[objId];
+        if (objectBookmarks && objectBookmarks.some((bookmark: any) => bookmark && bookmark.postUri === postUri)) {
+          return true;
+        }
+      }
+      return false;
+    }
   }
 
   // Hide management methods

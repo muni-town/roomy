@@ -21,6 +21,8 @@
   } = $props();
 
   let allFeedPosts = $state<AtprotoFeedPost[]>([]);
+  let originalFeedPosts = $state<AtprotoFeedPost[]>([]); // Store original feed for back navigation
+  let savedScrollPosition = $state(0); // Store scroll position for back navigation
   let loading = $state(true);
   let error = $state<string | null>(null);
   
@@ -31,6 +33,9 @@
   let showingThread = $state(false);
   let selectedPostUri = $state<string | null>(null);
   let threadLoading = $state(false);
+  
+  // Scroll container reference
+  let scrollContainer: HTMLElement;
   
   // Modal states
   let showBookmarks = $state(false);
@@ -52,12 +57,18 @@
     allFeedPosts.filter(post => atprotoFeedService.isHidden(me.current, post.uri))
   );
 
+  // Safe bookmark checking function
+  function isPostBookmarked(post: AtprotoFeedPost): boolean {
+    if (!me.current?.root) return false;
+    return atprotoFeedService.isBookmarked(me.current, post.uri, objectId);
+  }
+
   let bookmarks = $state<any[]>([]);
 
   // Update bookmarks when modal opens or account changes
   $effect(() => {
     if (showBookmarks && me.current) {
-      bookmarks = atprotoFeedService.getBookmarks(me.current);
+      bookmarks = atprotoFeedService.getBookmarks(me.current, objectId);
     } else if (!me.current) {
       bookmarks = [];
     }
@@ -178,6 +189,10 @@
       }
       
       allFeedPosts = posts;
+      // Store original feed posts for back navigation (only if we're not showing a thread)
+      if (!showingThread) {
+        originalFeedPosts = posts;
+      }
 
     } catch (err) {
       // Don't show error for aborted requests
@@ -245,6 +260,11 @@
   }
 
   async function showThread(postUri: string) {
+    // Save current scroll position before switching to thread view
+    if (scrollContainer) {
+      savedScrollPosition = scrollContainer.scrollTop;
+    }
+    
     threadLoading = true;
     selectedPostUri = postUri;
     showingThread = true;
@@ -268,8 +288,15 @@
   function backToFeed() {
     showingThread = false;
     selectedPostUri = null;
-    // Reload the main feed
-    loadFeeds();
+    // Restore the original feed posts without refetching
+    allFeedPosts = originalFeedPosts;
+    
+    // Restore scroll position after DOM updates
+    setTimeout(() => {
+      if (scrollContainer) {
+        scrollContainer.scrollTop = savedScrollPosition;
+      }
+    }, 0);
   }
 
   function handleBookmark(post: AtprotoFeedPost) {
@@ -278,10 +305,15 @@
       return;
     }
 
-    const isCurrentlyBookmarked = atprotoFeedService.isBookmarked(me.current, post.uri);
+    if (!me.current.root) {
+      console.error("❌ Cannot bookmark: Account root not loaded");
+      return;
+    }
+
+    const isCurrentlyBookmarked = atprotoFeedService.isBookmarked(me.current, post.uri, objectId);
     
     if (isCurrentlyBookmarked) {
-      atprotoFeedService.removeBookmark(me.current, post.uri);
+      atprotoFeedService.removeBookmark(me.current, objectId, post.uri);
     } else {
       // Extract title from post text (first 50 chars or until newline)
       const title = post.record.text.split('\n')[0].substring(0, 50).trim() || "Untitled Post";
@@ -289,7 +321,7 @@
       // Create preview text (first 100 chars)
       const previewText = post.record.text.substring(0, 100).trim();
       
-      atprotoFeedService.bookmarkThread(me.current, post.uri, {
+      atprotoFeedService.bookmarkThread(me.current, objectId, post.uri, {
         title,
         author: {
           handle: post.author.handle,
@@ -376,7 +408,7 @@
   </div>
 
   <!-- Scrollable content area -->
-  <div class="flex-1 overflow-y-auto p-6 space-y-6">
+  <div class="flex-1 overflow-y-auto p-6 space-y-6" bind:this={scrollContainer}>
 
       {#if loading}
         <div class="flex items-center justify-center py-8">
@@ -576,13 +608,13 @@
                     <button
                       onclick={(e) => { e.stopPropagation(); handleBookmark(post); }}
                       class="text-yellow-600 dark:text-yellow-400 hover:text-yellow-700 dark:hover:text-yellow-300 flex items-center gap-1 transition-colors"
-                      title={atprotoFeedService.isBookmarked(me.current, post.uri) ? "Remove bookmark" : "Bookmark thread"}
+                      title={isPostBookmarked(post) ? "Remove bookmark" : "Bookmark thread"}
                     >
                       <Icon 
-                        icon={atprotoFeedService.isBookmarked(me.current, post.uri) ? "mdi:bookmark" : "mdi:bookmark-outline"} 
+                        icon={isPostBookmarked(post) ? "mdi:bookmark" : "mdi:bookmark-outline"} 
                         class="size-4" 
                       />
-                      {atprotoFeedService.isBookmarked(me.current, post.uri) ? "Bookmarked" : "Bookmark"}
+                      {isPostBookmarked(post) ? "Bookmarked" : "Bookmark"}
                     </button>
                     <button
                       onclick={(e) => { e.stopPropagation(); handleHide(post); }}
@@ -617,6 +649,7 @@
 <BookmarksModal
   show={showBookmarks}
   bookmarks={bookmarks}
+  objectId={objectId}
   onClose={() => {
     showBookmarks = false;
   }}

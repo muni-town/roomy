@@ -5,11 +5,13 @@
   let {
     show,
     bookmarks,
+    objectId,
     onClose,
     onViewThread,
   }: {
     show: boolean;
     bookmarks: any[];
+    objectId?: string;
     onClose: () => void;
     onViewThread: (postUri: string) => void;
   } = $props();
@@ -38,7 +40,7 @@
         </button>
       </div>
       <div class="flex-1 overflow-hidden">
-        <BookmarksList {bookmarks} {onViewThread} />
+        <BookmarksList {bookmarks} {objectId} {onViewThread} />
       </div>
     </div>
   </div>
