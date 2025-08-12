@@ -18,6 +18,7 @@ import {
 
 import {
   discordLatestMessageInChannelForBridge,
+  discordWebhookTokensForBridge,
   registeredBridges,
   syncedIdsForBridge,
 } from "./db";
@@ -49,6 +50,7 @@ export const desiredProperties = {
     content: true,
     channelId: true,
     author: true,
+    webhookId: true,
   },
   guild: {
     id: true,
@@ -66,6 +68,10 @@ export const desiredProperties = {
     id: true,
     discriminator: true,
   },
+  webhook: {
+    id: true,
+    token: true,
+  },
   interaction: {
     id: true,
     type: true,
@@ -76,7 +82,9 @@ export const desiredProperties = {
   },
 } satisfies RecursivePartial<TransformersDesiredProperties>;
 
-type DiscordBot = Bot<CompleteDesiredProperties<typeof desiredProperties>>;
+export type DiscordBot = Bot<
+  CompleteDesiredProperties<typeof desiredProperties>
+>;
 
 export async function startBot() {
   const bot = createBot({
@@ -114,7 +122,7 @@ export async function startBot() {
         // We don't handle realtime messages while we are in the middle of backfilling, otherwise we
         // might be indexing at the same time and incorrectly update the latest message seen in the
         // channel.
-        if (!doneBackfilling) return;
+        if (!doneBackfillingFromDiscord) return;
 
         const guildId = message.guildId;
         const channelId = message.channelId;
@@ -154,7 +162,7 @@ export async function startBot() {
           channelName = channel.name;
         }
 
-        await syncDiscordMessageToRoomy({
+        await syncDiscordMessageToRoomy(bot, {
           guildId,
           message,
           channel: { id: message.channelId, name: channelName },
@@ -164,10 +172,11 @@ export async function startBot() {
       },
     },
   });
-  await bot.start();
+  bot.start();
+  return bot;
 }
 
-export let doneBackfilling = false;
+export let doneBackfillingFromDiscord = false;
 
 async function backfill(bot: DiscordBot, guildIds: bigint[]) {
   await tracer.startActiveSpan("backfill", async (span) => {
@@ -184,7 +193,7 @@ async function backfill(bot: DiscordBot, guildIds: bigint[]) {
         "backfillGuild",
         { attributes: { guildId: guildId.toString() } },
         async (span) => {
-          console.log("backfilling guild", guildId);
+          console.log("backfilling Discord guild", guildId);
           const channels = await bot.helpers.getChannels(guildId);
           for (const channel of channels.filter(
             (x) => x.type == ChannelTypes.GuildText,
@@ -221,7 +230,7 @@ async function backfill(bot: DiscordBot, guildIds: bigint[]) {
                   try {
                     for (const message of messages.reverse()) {
                       after = message.id;
-                      await syncDiscordMessageToRoomy({
+                      await syncDiscordMessageToRoomy(bot, {
                         guildId,
                         channel,
                         message,
@@ -249,18 +258,21 @@ async function backfill(bot: DiscordBot, guildIds: bigint[]) {
     }
 
     span.end();
-    doneBackfilling = true;
+    doneBackfillingFromDiscord = true;
   });
 }
 
-async function syncDiscordMessageToRoomy(opts: {
-  guildId: bigint;
-  channel: { id: bigint; name?: string };
-  message: SetupDesiredProps<
-    Message,
-    CompleteDesiredProperties<NoInfer<typeof desiredProperties>>
-  >;
-}) {
+async function syncDiscordMessageToRoomy(
+  bot: DiscordBot,
+  opts: {
+    guildId: bigint;
+    channel: { id: bigint; name?: string };
+    message: SetupDesiredProps<
+      Message,
+      CompleteDesiredProperties<NoInfer<typeof desiredProperties>>
+    >;
+  },
+) {
   const error = (span: Span, message: string) => {
     const error = new Error(message);
     span.recordException(error);
@@ -278,6 +290,21 @@ async function syncDiscordMessageToRoomy(opts: {
         span,
         `Registered space does not exist for guild: ${opts.guildId}`,
       );
+    }
+
+    // Skip messages sent by this bot
+    const webhookTokens = discordWebhookTokensForBridge({
+      discordGuildId: opts.guildId,
+      roomySpaceId: spaceId,
+    });
+    const channelWebhookId = (
+      await webhookTokens.get(opts.channel.id.toString())
+    )?.split(":")[0];
+    if (
+      channelWebhookId &&
+      opts.message.webhookId?.toString() == channelWebhookId
+    ) {
+      return;
     }
 
     // Skip if the message is already synced
@@ -305,10 +332,10 @@ async function syncDiscordMessageToRoomy(opts: {
     }
 
     const permissions = await getComponent(space, SpacePermissionsComponent);
-    if (!permissions) {
+    if (!(permissions && permissions[AllPermissions.publicRead])) {
       throw error(span, `Error getting permissions for space: ${spaceId}`);
     }
-    const readGroup = await Group.load(permissions[AllPermissions.publicRead]);
+    const readGroup = await Group.load(permissions[AllPermissions.publicRead]!);
     if (!readGroup) {
       throw error(
         span,
