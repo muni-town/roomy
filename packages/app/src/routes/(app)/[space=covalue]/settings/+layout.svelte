@@ -32,11 +32,10 @@
       >
       <Button
         variant="ghost"
-        disabled={true}
         class="w-full justify-start"
-        data-removethisprefix-href={`/${page.params.space}/settings/twitter-import`}
+        href={`/${page.params.space}/settings/twitter-import`}
         data-current={page.url.pathname.includes("twitter-import")}
-        >Twitter Import <Badge>Coming Soon!</Badge></Button
+        >Twitter Import</Button
       >
       <Button
         variant="ghost"
