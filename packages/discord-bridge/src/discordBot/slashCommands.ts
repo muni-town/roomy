@@ -13,6 +13,7 @@ import {
 import { co, hasFullWritePermissions, RoomyEntity } from "@roomy-chat/sdk";
 import {
   discordLatestMessageInChannelForBridge,
+  discordWebhookTokensForBridge,
   registeredBridges,
   syncedIdsForBridge,
 } from "../db";
@@ -147,6 +148,10 @@ export async function handleSlashCommandInteraction(
           roomySpaceId: roomySpace,
         }).clear();
         await discordLatestMessageInChannelForBridge({
+          discordGuildId: guildId,
+          roomySpaceId: roomySpace,
+        }).clear();
+        await discordWebhookTokensForBridge({
           discordGuildId: guildId,
           roomySpaceId: roomySpace,
         }).clear();

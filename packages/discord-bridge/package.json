@@ -9,7 +9,8 @@
     "build": "turbo build-discord-bridge",
     "build-discord-bridge": "tsc --project tsconfig.json",
     "start": "tsx -C development src/index.ts",
-    "dev": "tsx watch -C development src/index.ts"
+    "dev": "tsx watch -C development src/index.ts",
+    "generate-account": "tsx generate-env.ts"
   },
   "dependencies": {
     "@discordeno/bot": "^21.0.0",
