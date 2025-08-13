@@ -20,10 +20,10 @@ class ActivityIndex {
 
       let spaceMessageCount = 0;
 
-      // Get all chat channels in this space (exclude feeds channels)
+      // Get all chat channels in this space
       const channels = space.channels.filter(
         (channel) =>
-          channel && !channel.softDeleted && channel.channelType !== "feeds",
+          channel && !channel.softDeleted,
       );
 
       for (const channel of channels) {
@@ -105,10 +105,10 @@ class ActivityIndex {
 
     if (!space || !space.channels) return activityByDate;
 
-    // Get all chat channels in this space (exclude feeds channels)
+    // Get all chat channels in this space
     const channels = space.channels.filter(
       (channel) =>
-        channel && !channel.softDeleted && channel.channelType !== "feeds",
+        channel && !channel.softDeleted,
     );
 
     for (const channel of channels) {

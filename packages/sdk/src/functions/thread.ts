@@ -1,5 +1,4 @@
 import { Account, co, Group, z } from "jazz-tools";
-import { publicGroup } from "./group.js";
 import {
   Embed,
   EmbedsComponent,
@@ -25,25 +24,28 @@ export async function createThread(
 ) {
   const publicReadGroupId = permissions[AllPermissions.publicRead]!;
   const publicReadGroup = await Group.load(publicReadGroupId);
+  if (!publicReadGroup) throw new Error("Could not load publicReadGroup");
 
   const addMessagesGroupId = permissions[AllPermissions.sendMessages]!;
   const addMessagesGroup = await Group.load(addMessagesGroupId);
+  if (!addMessagesGroup) throw new Error("Could not load addMessagesGroup");
 
   const threadContentGroup = Group.create();
-  threadContentGroup.addMember(publicReadGroup!, "reader");
+  threadContentGroup.addMember(publicReadGroup, "reader");
 
   const timelineGroup = Group.create();
-  timelineGroup.addMember(publicReadGroup!, "reader");
-  timelineGroup.addMember(addMessagesGroup!, "writer");
+  timelineGroup.addMember(publicReadGroup, "reader");
+  timelineGroup.addMember(addMessagesGroup, "writer");
 
   const addThreadsGroupId = permissions[AllPermissions.createThreads]!;
   const addThreadsGroup = await Group.load(addThreadsGroupId);
+  if (!addThreadsGroup) throw new Error("Could not load addThreadsGroup");
 
   const subThreadsGroup = Group.create();
-  subThreadsGroup.addMember(publicReadGroup!, "reader");
-  subThreadsGroup.addMember(addThreadsGroup!, "writer");
+  subThreadsGroup.addMember(publicReadGroup, "reader");
+  subThreadsGroup.addMember(addThreadsGroup, "writer");
 
-  const thread = ThreadComponent.schema.create(
+  const thread = ThreadComponent.create(
     {
       timeline: Timeline.create([], timelineGroup),
     },
@@ -75,7 +77,7 @@ export async function createThread(
   }
   roomyObject.components[ThreadComponent.id] = thread.id;
 
-  const subThreads = SubThreadsComponent.schema.create([], subThreadsGroup);
+  const subThreads = SubThreadsComponent.create([], subThreadsGroup);
   roomyObject.components[SubThreadsComponent.id] = subThreads.id;
 
   return { roomyObject, thread };
@@ -96,7 +98,8 @@ export type VideoUrlEmbedCreate = {
 };
 
 interface CreateMessageOptions {
-  replyTo?: string,
+  replyTo?: string;
+  permissions?: Record<string, string>;
   embeds?: (ImageUrlEmbedCreate | VideoUrlEmbedCreate)[];
   created?: Date;
   updated?: Date;
@@ -104,9 +107,9 @@ interface CreateMessageOptions {
 
 export async function createMessage(
   input: string,
-  permissions: Record<string, string>,
-  opts?: CreateMessageOptions
+  opts?: CreateMessageOptions,
 ) {
+  const permissions = opts?.permissions || {};
   const publicReadGroupId = permissions?.[AllPermissions.publicRead];
   const publicReadGroup = await Group.load(publicReadGroupId || "");
 
@@ -130,7 +133,10 @@ export async function createMessage(
   );
   hiddenInGroup.addMember(hideMessagesInThreadsGroup!, "writer");
 
-  const { roomyObject, entityGroup, componentsGroup } = await createRoomyEntity("", permissions);
+  const { roomyObject, entityGroup, componentsGroup } = await createRoomyEntity(
+    "",
+    permissions,
+  );
 
   if (!roomyObject.components) {
     throw new Error("RoomyObject components is undefined");
@@ -151,37 +157,39 @@ export async function createMessage(
   const editMessagesGroup = await Group.load(editMessagesGroupId);
   entityGroup.addMember(editMessagesGroup!, "writer");
 
-  const content = PlainTextContentComponent.schema.create(
+  const content = PlainTextContentComponent.create(
     { content: input },
     componentsGroup,
   );
-  roomyObject.components[PlainTextContentComponent.id] = content.id
+  roomyObject.components[PlainTextContentComponent.id] = content.id;
 
-  const userAccessTimes = UserAccessTimesComponent.schema.create(
+  const userAccessTimes = UserAccessTimesComponent.create(
     {
       createdAt: opts?.created || new Date(),
-      updatedAt: opts?.updated || new Date()
+      updatedAt: opts?.updated || new Date(),
     },
     componentsGroup,
   );
-  roomyObject.components[UserAccessTimesComponent.id] = userAccessTimes.id
+  roomyObject.components[UserAccessTimesComponent.id] = userAccessTimes.id;
 
-  const hiddenIn = HiddenInComponent.schema.create(
+  const hiddenIn = HiddenInComponent.create(
     {
-      hiddenIn: co.list(z.string()).create([])
+      hiddenIn: co.list(z.string()).create([]),
     },
     componentsGroup,
   );
-  roomyObject.components[HiddenInComponent.id] = hiddenIn.id
+  roomyObject.components[HiddenInComponent.id] = hiddenIn.id;
 
   if (opts?.replyTo) {
     roomyObject.components[ReplyToComponent.id] = opts?.replyTo;
   }
 
-  const reactions = ReactionsComponent.schema.create({
-    reactions: ReactionList.create([])
-  },
-    reactionsGroup);
+  const reactions = ReactionsComponent.create(
+    {
+      reactions: ReactionList.create([]),
+    },
+    reactionsGroup,
+  );
   roomyObject.components[ReactionsComponent.id] = reactions.id;
 
   if (opts?.embeds && opts.embeds.length > 0) {
@@ -217,10 +225,12 @@ export async function createMessage(
         );
       }
     }
-    const embeds = EmbedsComponent.schema.create({
-      embeds: embedsList
-    },
-      embedsGroup);
+    const embeds = EmbedsComponent.create(
+      {
+        embeds: embedsList,
+      },
+      embedsGroup,
+    );
 
     // only add embeds component if there are any embeds
     roomyObject.components[EmbedsComponent.id] = embeds.id;
@@ -228,7 +238,7 @@ export async function createMessage(
 
   // skip AuthorComponent and ThreadIdComponent - can be added later if needed
 
-  return { roomyObject, content, hiddenIn, reactions };
+  return { roomyObject, content, hiddenIn, reactions, componentsGroup };
 }
 
 export function messageHasAdmin(

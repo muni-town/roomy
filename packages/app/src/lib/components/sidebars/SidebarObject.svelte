@@ -1,8 +1,10 @@
 <script lang="ts">
+  console.log('🔍 SidebarObject.svelte loading');
   import { page } from "$app/state";
   import { navigateSync } from "$lib/utils.svelte";
   import { Badge, Button } from "@fuxui/base";
   import Icon from "@iconify/svelte";
+  import { atprotoFeedService } from "$lib/services/atprotoFeedService";
   import {
     BansComponent,
     ChildrenComponent,
@@ -37,26 +39,22 @@
   } = $props();
 
   let children = $derived(
-    new CoState(
-      ChildrenComponent.schema,
-      object?.components?.[ChildrenComponent.id],
-      {
-        resolve: {
-          $each: {
-            components: {
-              $each: true,
-              $onError: null,
-            },
+    new CoState(ChildrenComponent, object?.components?.[ChildrenComponent.id], {
+      resolve: {
+        $each: {
+          components: {
+            $each: true,
+            $onError: null,
           },
-          $onError: null,
         },
+        $onError: null,
       },
-    ),
+    }),
   );
 
   let subthreads = $derived(
     new CoState(
-      SubThreadsComponent.schema,
+      SubThreadsComponent,
       object?.components?.[SubThreadsComponent.id],
       {
         resolve: {
@@ -74,17 +72,14 @@
 
   const thread = $derived(
     object?.components?.[ThreadComponent.id]
-      ? new CoState(
-          ThreadComponent.schema,
-          object?.components?.[ThreadComponent.id],
-        )
+      ? new CoState(ThreadComponent, object?.components?.[ThreadComponent.id])
       : null,
   );
 
   let showGroupChildren = $state(true);
 
   let bannedAccounts = $derived(
-    new CoState(BansComponent.schema, space?.components?.[BansComponent.id]),
+    new CoState(BansComponent, space?.components?.[BansComponent.id]),
   );
   let bannedAccountsSet = $derived(new Set(bannedAccounts.current ?? []));
 
@@ -108,13 +103,30 @@
   });
 
   const notificationCount = $derived(
-    me?.profile?.roomyInbox?.filter(
+    // Feed objects don't have traditional message notifications
+    object?.components?.feedConfig ? 0 : me?.profile?.roomyInbox?.filter(
       (x) =>
         x?.objectId === object?.id &&
         !x?.read &&
         !bannedAccountsSet.has(x?._edits?.objectId?.by?.id ?? ""),
     ).length,
   );
+
+  // Get bookmarks for feed objects
+  let feedBookmarks = $derived.by(() => {
+    // Only process feed objects with valid account data
+    if (object?.components?.feedConfig && me && object?.id) {
+      try {
+        const bookmarks = atprotoFeedService.getBookmarks(me, object.id);
+        return bookmarks;
+      } catch (error) {
+        console.error('Error getting bookmarks:', error);
+        return [];
+      }
+    }
+    
+    return [];
+  });
 </script>
 
 {#snippet editButton()}
@@ -130,7 +142,67 @@
   {/if}
 {/snippet}
 
-{#if object?.components?.[ThreadComponent.id] && !object?.softDeleted}
+{#if object?.components?.feedConfig && !object?.softDeleted}
+  <!-- Feed object with bookmarked threads -->
+  <div
+    class={[
+      "inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink",
+      level < 2 ? (index > 0 ? "pb-2" : "pb-2") : "",
+    ]}
+  >
+    <div
+      class="inline-flex items-start justify-between gap-2 w-full font-semibold min-w-0 group"
+    >
+      <Button
+        href={navigateSync({
+          space: page.params.space!,
+          object: object.id,
+        })}
+        variant="ghost"
+        class="w-full justify-start min-w-0"
+        data-current={object.id === page.params.object && !isEditing}
+      >
+        <Icon icon={"mdi:rss"} class="shrink-0" />
+        <span class="truncate whitespace-nowrap overflow-hidden min-w-0"
+          >{object.name || "..."}</span
+        >
+      </Button>
+      {@render editButton?.()}
+    </div>
+    
+    <!-- Bookmarked threads -->
+    {#if feedBookmarks.length > 0 && !isEditing && object.id === page.params.object}
+      <div class="pl-4">
+        {#each feedBookmarks as bookmark (bookmark.postUri)}
+          <div class="inline-flex items-start justify-between gap-2 w-full min-w-0 group py-1">
+            <Button
+              href={`${navigateSync({
+                space: page.params.space!,
+                object: object.id,
+              })}?thread=${encodeURIComponent(bookmark.postUri)}`}
+              variant="ghost"
+              class="w-full justify-start min-w-0 text-sm font-normal"
+              data-current={page.url?.searchParams?.get('thread') === bookmark.postUri}
+              onclick={() => {
+                console.log('🔍 Bookmark thread clicked:', bookmark.postUri);
+                console.log('🔍 Navigation URL:', `${navigateSync({
+                  space: page.params.space!,
+                  object: object.id,
+                })}?thread=${encodeURIComponent(bookmark.postUri)}`);
+              }}
+            >
+              <Icon icon="tabler:corner-down-right" class="shrink-0 size-3" />
+              <Icon icon="mdi:bookmark" class="shrink-0 size-3 text-yellow-500" />
+              <span class="truncate whitespace-nowrap overflow-hidden min-w-0">
+                {bookmark.title || bookmark.previewText?.substring(0, 30) + '...' || 'Bookmarked Thread'}
+              </span>
+            </Button>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
+{:else if object?.components?.[ThreadComponent.id] && !object?.softDeleted}
   <!-- Object is a thread -->
   <div
     class={[

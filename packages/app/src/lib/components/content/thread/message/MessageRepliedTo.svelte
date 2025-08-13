@@ -33,7 +33,7 @@
 
   let content = $derived(
     new CoState(
-      PlainTextContentComponent.schema,
+      PlainTextContentComponent,
       message.current?.components?.[PlainTextContentComponent.id],
     ),
   );

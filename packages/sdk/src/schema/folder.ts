@@ -1,10 +1,10 @@
 import { co, z } from "jazz-tools";
-import { RoomyEntity } from "./roomyentity";
+import { defComponent, RoomyEntity } from "./roomyentity";
 
-export const ChildrenComponent = {
-  schema: co.list(RoomyEntity),
-  id: "space.roomy.children",
-};
+export const ChildrenComponent = defComponent(
+  "space.roomy.children",
+  co.list(RoomyEntity),
+);
 
 export const ParentComponent = {
   id: "space.roomy.parent",

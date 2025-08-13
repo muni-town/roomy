@@ -1,6 +1,6 @@
 import type { OAuthSession } from "@atproto/oauth-client-browser";
 import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
-import { Agent, BlobRef } from "@atproto/api";
+import { Agent } from "@atproto/api";
 import toast from "svelte-french-toast";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
@@ -58,7 +58,7 @@ let passphrase: {
     agent
       .call("chat.roomy.v1.passphrase", undefined, undefined, {
         headers: {
-          "atproto-proxy": "did:web:keyserver.roomy.space#roomy_keyserver",
+          "atproto-proxy": "did:web:jazz.keyserver.roomy.chat#roomy_keyserver",
         },
       })
       .then((resp) => {
@@ -120,6 +120,11 @@ export const user = {
   async init() {
     // Add the user store to the global scope so it can easily be accessed in dev tools
     (globalThis as any).user = this;
+    
+    // Add dev mode debugging functions
+    if (import.meta.env.DEV) {
+      this.addDevModeHelpers();
+    }
 
     // Initialize oauth client.
     await atproto.init();
@@ -347,6 +352,103 @@ export const user = {
     navigate("home");
     // reload the page to clear the session
     window.location.reload();
+  },
+
+  /** Add dev mode helper functions to window (only in development) */
+  addDevModeHelpers() {
+    // Import SDK functions dynamically to avoid issues in production
+    import("@roomy-chat/sdk").then(({ Space, IDList, allSpacesListId }) => {
+      
+      // Remove a space by ID
+      (globalThis as any).removeSpace = async (spaceId: string) => {
+        console.log(`🗑️ Removing space: ${spaceId}`);
+        
+        try {
+          // Load the space
+          const space = await Space.load(spaceId);
+          if (!space) {
+            console.error("❌ Space not found");
+            return false;
+          }
+          
+          console.log(`📝 Space name: ${space.name}`);
+          console.log(`🔍 Space owner: ${space.creatorId}`);
+          
+          // Import Account to check permissions
+          const { Account } = await import("@roomy-chat/sdk");
+          const me = Account.getMe();
+          
+          // Check if we can modify this space
+          if (!me.canAdmin(space)) {
+            console.error("❌ No admin permissions for this space");
+            console.log("💡 Tip: You can only remove spaces you created or have admin access to");
+            return false;
+          }
+          
+          // Remove from all spaces list first (this is usually more permissive)
+          const allSpacesList = await IDList.load(allSpacesListId);
+          if (allSpacesList) {
+            const index = allSpacesList.findIndex(id => id === spaceId);
+            if (index !== -1) {
+              allSpacesList.splice(index, 1);
+              console.log("✅ Removed from all spaces list");
+            } else {
+              console.log("⚠️ Space not found in all spaces list");
+            }
+          } else {
+            console.error("❌ Could not load all spaces list");
+          }
+          
+          console.log("✅ Space removed from system");
+          console.log("🔄 Refresh the page to see the space disappear from the UI");
+          return true;
+        } catch (error) {
+          console.error("❌ Error removing space:", error);
+          return false;
+        }
+      };
+      
+      // List all spaces (for debugging)
+      (globalThis as any).listSpaces = async () => {
+        console.log("📋 Listing all spaces:");
+        
+        try {
+          const allSpacesList = await IDList.load(allSpacesListId);
+          if (!allSpacesList) {
+            console.log("❌ No spaces list found");
+            return [];
+          }
+          
+          const spaces = [];
+          for (const spaceId of allSpacesList) {
+            try {
+              const space = await Space.load(spaceId);
+              if (space) {
+                spaces.push({
+                  id: spaceId,
+                  name: space.name,
+                  description: space.description,
+                  softDeleted: space.softDeleted || false,
+                  memberCount: space.members?.length || 0
+                });
+              }
+            } catch (error) {
+              console.warn(`⚠️ Could not load space ${spaceId}:`, error);
+            }
+          }
+          
+          console.table(spaces);
+          return spaces;
+        } catch (error) {
+          console.error("❌ Error listing spaces:", error);
+          return [];
+        }
+      };
+
+      console.log("🛠️ Dev mode helpers loaded:");
+      console.log("  • removeSpace(spaceId) - Remove a space");
+      console.log("  • listSpaces() - List all spaces");
+    });
   },
 };
 

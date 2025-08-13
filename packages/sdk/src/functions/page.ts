@@ -12,7 +12,7 @@ export async function createPage(
   const pageContentGroup = Group.create();
   pageContentGroup.addMember(publicReadGroup!, "reader");
 
-  const page = PageComponent.schema.create(
+  const page = PageComponent.create(
     {
       text: "",
     },

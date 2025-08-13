@@ -3,6 +3,7 @@
   import { Modal, Input, Button } from "@fuxui/base";
   import Icon from "@iconify/svelte";
   import { co } from "jazz-tools";
+  import FeedConfiguration from "../content/bluesky-feed/FeedConfiguration.svelte";
 
   let {
     open = $bindable(false),
@@ -50,7 +51,7 @@
 
     if (!childrenId) return;
 
-    const children = await ChildrenComponent.schema.load(childrenId, {
+    const children = await ChildrenComponent.load(childrenId, {
       resolve: {
         $each: {
           components: {
@@ -70,7 +71,8 @@
 </script>
 
 <Modal bind:open>
-  <form id="createSpace" class="flex flex-col gap-4" onsubmit={save}>
+  <div class="max-h-[80vh] overflow-y-auto">
+    <form id="createSpace" class="flex flex-col gap-4" onsubmit={save}>
     <h3
       id="dialog-title"
       class="text-base font-semibold text-base-900 dark:text-base-100"
@@ -90,6 +92,13 @@
       </Button>
     </div>
 
+    <!-- Feed Configuration Section -->
+    {#if entity?.components?.feedConfig}
+      <div class="mt-8 pt-8 border-t border-base-300 dark:border-base-700">
+        <FeedConfiguration objectId={entity.id} />
+      </div>
+    {/if}
+
     <h3 class="text-base font-semibold text-base-900 dark:text-base-100 mt-8">
       Danger zone
     </h3>
@@ -105,4 +114,5 @@
       </Button>
     </div>
   </form>
+  </div>
 </Modal>

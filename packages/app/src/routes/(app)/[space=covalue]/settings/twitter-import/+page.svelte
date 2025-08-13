@@ -434,13 +434,13 @@
   let importQueue = $derived(me?.root.uploadQueue);
   const permissions = $derived(
     new CoState(
-      SpacePermissionsComponent.schema,
+      SpacePermissionsComponent,
       space?.current?.components?.[SpacePermissionsComponent.id],
     ),
   );
   const allThreads = $derived(
     new CoState(
-      AllThreadsComponent.schema,
+      AllThreadsComponent,
       space?.current?.components?.[AllThreadsComponent.id],
     ),
   );
@@ -582,7 +582,7 @@
     name: string,
     permissions: Record<string, string>,
     space: co.loaded<typeof RoomyEntity>,
-    allThreads: co.loaded<(typeof AllThreadsComponent)["schema"]>,
+    allThreads: co.loaded<typeof AllThreadsComponent>,
   ) {
     const channel = await createThread(name, permissions);
     if (!channel) throw new Error("Channel could not be created");
@@ -600,7 +600,7 @@
         },
       },
     );
-    const subThreadsFeed = await SubThreadsComponent.schema.load(
+    const subThreadsFeed = await SubThreadsComponent.load(
       channel.roomyObject.components[SubThreadsComponent.id]!,
       {
         resolve: {
@@ -620,8 +620,8 @@
   async function createAndInsertSubthread(
     name: string,
     permissions: Record<string, string>,
-    allThreads: co.loaded<(typeof AllThreadsComponent)["schema"]>,
-    subThreads: co.loaded<(typeof SubThreadsComponent)["schema"]>,
+    allThreads: co.loaded<typeof AllThreadsComponent>,
+    subThreads: co.loaded<typeof SubThreadsComponent>,
     parentId: string,
   ) {
     const parentMessage = await RoomyEntity.load(parentId, {
@@ -925,7 +925,7 @@
       const file = uploadQueue[path];
       if (
         !file ||
-        !UploadMedia.safeParse(file).success ||
+        !UploadMedia.getDefinition().shape.safeParse(file).success ||
         file.status !== "pending"
       ) {
         pushLog(

@@ -27,17 +27,14 @@
     level = 0,
     subthreads,
   }: {
-    children: co.loaded<typeof ChildrenComponent.schema> | undefined | null;
+    children: co.loaded<typeof ChildrenComponent> | undefined | null;
     me: co.loaded<typeof RoomyAccount> | undefined | null;
     isEditing?: boolean;
     editEntity?: (entity: co.loaded<typeof RoomyEntity>) => void;
     currentEntity?: co.loaded<typeof RoomyEntity> | undefined | null;
     space: co.loaded<typeof RoomyEntity> | undefined | null;
     level?: number;
-    subthreads?:
-      | co.loaded<typeof SubThreadsComponent.schema>
-      | undefined
-      | null;
+    subthreads?: co.loaded<typeof SubThreadsComponent> | undefined | null;
   } = $props();
 
   let recentSubthreads = $derived.by(() => {

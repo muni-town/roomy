@@ -1,113 +1,158 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { Badge, Button, Input } from "@fuxui/base";
-  import {
-    DiscordBridgeRequest,
-    Group,
-    WorkerAccount,
-    discordBridgeBotAccountId,
-  } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-tools/svelte";
+  import { env } from "$env/dynamic/public";
+  import { Badge, Button } from "@fuxui/base";
   import { onMount } from "svelte";
+  import {
+    Account,
+    grantFullWritePermissions,
+    hasFullWritePermissions,
+    revokeFullWritePermissions,
+    RoomyEntity,
+  } from "@roomy-chat/sdk";
   import toast from "svelte-french-toast";
+  import { CoState } from "jazz-tools/svelte";
 
-  let guildId = $state("");
+  let space = $derived(new CoState(RoomyEntity, page.params.space));
+  let bridgeStatus:
+    | { type: "checking" }
+    | {
+        type: "loaded";
+        guildId: undefined | string;
+        appId: string;
+        bridgeJazzAccount: Account;
+        hasFullWritePermissions: boolean;
+      }
+    | { type: "error_checking" } = $state({
+    type: "checking",
+  });
 
-  let isSendingRequest = $state(false);
-
-  let discordBridgeBotAccount = $derived(
-    new CoState(WorkerAccount, discordBridgeBotAccountId, {
-      resolve: {
-        profile: {
-          requests: {
-            $onError: null,
-            $each: true,
-          },
-        },
-      },
-    }),
-  );
-
-  let existingRequest = $derived(
-    discordBridgeBotAccount.current?.profile.requests?.find(
-      (request) => request.roomySpaceId === page.params.space,
-    ),
-  );
-
-  async function requestBridge() {
-    if (!page.params.space || !guildId) {
-      toast.error("Please fill in all fields");
-      return;
-    }
-
-    if (!discordBridgeBotAccount.current) {
-      toast.error("Couldn't find discord bridge bot account");
-      return;
-    }
-    isSendingRequest = true;
-
-    let group = Group.create();
-    group.addMember(discordBridgeBotAccount.current, "writer");
-
-    const request = DiscordBridgeRequest.create(
-      {
-        discordGuildId: guildId,
-        roomySpaceId: page.params.space,
-        status: "requested",
-      },
-      group,
-    );
-
-    discordBridgeBotAccount.current.profile.requests?.push(request);
-
-    isSendingRequest = false;
-
-    toast.success("Bridge request sent");
-  }
-
-  let botStatus: "loading" | "online" | "offline" = $state("loading");
-  async function checkBotStatus() {
+  async function updateBridgeStatus() {
+    if (!space.current) return;
     try {
-      // add random id to avoid service worker caching
-      const res = await fetch(
-        "http://localhost:3001/health?id=" + Math.random(),
-        {
-          cache: "no-store",
-        },
+      const aResp = await fetch(`${env.PUBLIC_DISCORD_BRIDGE}/info`);
+      const info:
+        | { discordAppId: string; jazzAccountId: string }
+        | { error: string; status: number } = await aResp.json();
+      if ("error" in info) {
+        console.error("Couldn't fetch Discord app ID from bridge.");
+        bridgeStatus = { type: "error_checking" };
+        return;
+      }
+      const gResp = await fetch(
+        `${env.PUBLIC_DISCORD_BRIDGE}/get-guild-id?spaceId=${page.params.space}`,
       );
-      const body = await res.json();
-      botStatus = body.status === "ok" ? "online" : "offline";
-    } catch (err) {
-      console.error("Network error:", err);
-      botStatus = "offline";
+      const { guildId }: { guildId?: string } = await gResp.json();
+      const jazzAccount = await Account.load(info.jazzAccountId);
+      if (!jazzAccount) {
+        console.error("Could not load jazz account for discord bridge.");
+        bridgeStatus = {
+          type: "error_checking",
+        };
+        return;
+      }
+      const hasWrite = await hasFullWritePermissions(
+        jazzAccount,
+        space.current,
+      );
+      bridgeStatus = {
+        type: "loaded",
+        appId: info.discordAppId,
+        bridgeJazzAccount: jazzAccount,
+        guildId,
+        hasFullWritePermissions: hasWrite,
+      };
+    } catch (e) {
+      bridgeStatus = {
+        type: "error_checking",
+      };
     }
   }
 
+  async function grantBotPermissions() {
+    if (bridgeStatus.type != "loaded" || !space.current) return;
+    await grantFullWritePermissions(
+      bridgeStatus.bridgeJazzAccount,
+      space.current,
+    );
+    updateBridgeStatus();
+    toast.success("Successfully granted bot permissions.");
+  }
+  async function revokeBotPermissions() {
+    if (bridgeStatus.type != "loaded" || !space.current) return;
+    await revokeFullWritePermissions(
+      bridgeStatus.bridgeJazzAccount,
+      space.current,
+    );
+    updateBridgeStatus();
+    toast.success("Revoked granted bot permissions.");
+  }
+
+  // Reload app when this module changes to prevent stacking the setIntervals
+  if (import.meta.hot) {
+    import.meta.hot.accept(() => {
+      window.location.reload();
+    });
+  }
   onMount(() => {
-    checkBotStatus();
+    let interval: undefined | ReturnType<typeof setInterval>;
+    const updateStatus = () => {
+      if (document.visibilityState == "visible") {
+        console.log("checking discord bridge status");
+        updateBridgeStatus();
+        clearInterval(interval);
+        interval = setInterval(updateStatus, 8000);
+      } else {
+        clearInterval(interval);
+      }
+    };
+    updateStatus();
+    document.addEventListener("visibilitychange", updateStatus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", updateStatus);
+      clearInterval(interval);
+    };
+  });
+  $effect(() => {
+    space;
+    updateBridgeStatus();
   });
 </script>
 
-{#if discordBridgeBotAccount.current?.profile}
-  <div></div>
-{/if}
+{#snippet bridgeStatusBadge()}
+  {#if bridgeStatus.type == "checking"}
+    <Badge variant="yellow">checking</Badge>
+  {:else if bridgeStatus.type == "loaded"}
+    {#if bridgeStatus.guildId}
+      <Badge variant="green">bridged</Badge>
+    {:else}
+      <Badge>not bridged</Badge>
+    {/if}
+  {:else if bridgeStatus.type == "error_checking"}
+    <Badge variant="red">error connecting to bridge</Badge>
+  {/if}
+{/snippet}
 
-{#if existingRequest}
+{#if bridgeStatus.type == "loaded" && bridgeStatus.guildId}
   <form class="pt-4">
     <div class="space-y-12">
       <h2
         class="text-base/7 font-semibold text-base-900 dark:text-base-100 flex items-center gap-2"
       >
         Discord Bridge
-
-        {#if botStatus === "loading"}
-          <Badge variant="yellow">loading</Badge>
-        {:else if botStatus === "offline"}
-          <Badge variant="red">offline</Badge>
-        {:else}
-          <Badge variant="green">online</Badge>
-        {/if}
+        {@render bridgeStatusBadge()}
       </h2>
+
+      <p class="text-base/8">
+        The Discord bridge is connected! This Roomy Space is bridge to your <a
+          class="text-accent-500 underline underline-offset-3"
+          href={`https://discord.com/channels/${bridgeStatus.guildId}`}
+          target="_blank">Discord server</a
+        >. You can disconnect it by going to Discord and running the slash
+        command:
+        <code class="bg-base-800 p-1 rounded">/disconnect-roomy-space</code>.
+      </p>
     </div>
   </form>
 {:else}
@@ -117,79 +162,105 @@
         class="text-base/7 font-semibold text-base-900 dark:text-base-100 flex items-center gap-2"
       >
         Discord Bridge
-
-        {#if botStatus === "loading"}
-          <Badge variant="yellow">loading</Badge>
-        {:else if botStatus === "offline"}
-          <Badge variant="red">offline</Badge>
-        {:else}
-          <Badge variant="green">online</Badge>
-        {/if}
+        {@render bridgeStatusBadge()}
       </h2>
 
-      <div class="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
+      <div class="flex flex-col justify-center gap-8">
         <div class="sm:col-span-4">
           <label
             for="username"
             class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-            >1. Add bot to your Discord Server</label
+          >
+            <span class="pr-1">
+              {bridgeStatus.type == "loaded"
+                ? bridgeStatus.hasFullWritePermissions
+                  ? "✅"
+                  : ""
+                : ""}
+            </span>
+            1. Grant bot admin access to your Roomy space</label
           >
           <p class="mt-1 text-sm/6 text-base-600 dark:text-base-400">
-            You need to be a server admin to add the bot, please allow all
+            In order to bridge channels, threads, and messages the bridge must
+            have admin access to your Roomy space.
+          </p>
+
+          <div class="mt-4">
+            <Button
+              disabled={bridgeStatus.type == "loaded"
+                ? bridgeStatus.hasFullWritePermissions
+                : true}
+              onclick={grantBotPermissions}>Grant Access</Button
+            >
+            <Button
+              disabled={bridgeStatus.type == "loaded"
+                ? !bridgeStatus.hasFullWritePermissions
+                : true}
+              onclick={revokeBotPermissions}>Revoke Access</Button
+            >
+          </div>
+        </div>
+
+        <div class="sm:col-span-4">
+          <label
+            for="username"
+            class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
+          >
+            <span class="pr-1">
+              {bridgeStatus.type == "loaded"
+                ? bridgeStatus.guildId
+                  ? "✅"
+                  : ""
+                : ""}
+            </span>
+            2. Invite bot to your Discord server</label
+          >
+          <p class="mt-1 text-sm/6 text-base-600 dark:text-base-400">
+            You need to be a server admin to add the bot. Please allow all
             requested permissions. Click the button below and select your
             server.
           </p>
 
           <div class="mt-2">
-            <Button
-              target="_blank"
-              href="https://discord.com/oauth2/authorize?client_id=1382088278001586307"
-              >Add bot</Button
-            >
+            {#if bridgeStatus.type == "loaded"}
+              <Button
+                target="_blank"
+                href={`https://discord.com/oauth2/authorize?client_id=${bridgeStatus.appId}`}
+                >Invite Bot</Button
+              >
+            {:else if bridgeStatus.type == "checking"}
+              <Button disabled={true}>Loading...</Button>
+            {:else if bridgeStatus.type == "error_checking"}
+              <Button disabled={true}>Error connecting to bridge</Button>
+            {/if}
           </div>
         </div>
 
-        <div class="sm:col-span-4">
+        <div class="sm:col-span-4 flex flex-col">
           <label
             for="username"
             class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-            >2. Enter your discord server ID</label
+          >
+            <span class="pr-1">
+              {bridgeStatus.type == "loaded"
+                ? bridgeStatus.guildId
+                  ? "✅"
+                  : ""
+                : ""}
+            </span>
+            3. Connect your Roomy space to your Discord server</label
           >
           <p class="mt-1 text-sm/6 text-base-600 dark:text-base-400">
-            Right click on your discord server and select "Copy Server ID",
-            paste it below.
+            Finish by running the <code class="bg-base-800 p-1 rounded"
+              >/connect-roomy-space</code
+            > slash command in your Discord server to connect the space. It will
+            require you to specify your space ID.
           </p>
-
-          <div class="mt-2">
-            <Input bind:value={guildId} class="w-full" />
-          </div>
-        </div>
-
-        <div class="sm:col-span-4">
-          <label
-            for="username"
-            class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
-            >3. Start Bridging</label
-          >
-          <p class="mt-1 text-sm/6 text-base-600 dark:text-base-400">
-            Start bridging your discord server to your roomy space. All channels
-            and threads that have the same name in both will be automatically
-            bridged.
-          </p>
-
-          <div class="mt-4">
-            <Button
-              disabled={isSendingRequest}
-              onclick={() => {
-                requestBridge();
-              }}
+          <div class="flex gap-2 items-center mt-4 ml-4">
+            <strong>space-id:</strong>
+            <code class="m-3 p-2 bg-base-800 text-sm rounded"
+              >{page.params.space}</code
             >
-              {#if isSendingRequest}
-                Sending request...
-              {:else}
-                Start Bridge
-              {/if}
-            </Button>
           </div>
         </div>
       </div>

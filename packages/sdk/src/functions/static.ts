@@ -3,7 +3,7 @@ import { IDFeed, IDList, SpaceMigrationReference } from "../schema/index.js";
 import { publicGroup } from "./group.js";
 
 // these functions are only called once during development and their id is saved in the ../ids.js file
-export function createAllSpacesList() {
+export function createAllSpacesList(): any {
   const group = Group.create();
   group.addMember("everyone", "writeOnly");
   const allSpaces = IDList.create([], group);
@@ -11,7 +11,7 @@ export function createAllSpacesList() {
   return allSpaces;
 }
 
-export function createAllAccountsList() {
+export function createAllAccountsList(): any {
   const group = Group.create();
   group.addMember("everyone", "writeOnly");
   const allAccounts = IDList.create([], group);

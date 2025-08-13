@@ -1,5 +1,5 @@
 {
-  "packageManager": "pnpm@10.10.0",
+  "packageManager": "pnpm@10.14.0",
   "repository": {
     "url": "https://github.com/muni-town/roomy"
   },
@@ -27,6 +27,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "date-fns": "^4.1.0"
+    "date-fns": "^4.1.0",
+    "jazz-run": "^0.15.10"
   }
 }
