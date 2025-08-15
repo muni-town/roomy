@@ -52,25 +52,22 @@ export async function createThread(
     threadContentGroup,
   );
 
-  const { roomyObject, entityGroup, componentsGroup } = await createRoomyEntity(
-    name,
-    permissions,
-  );
+  const { roomyObject } = await createRoomyEntity(name, permissions);
 
   const editEntityComponentsGroupId =
     permissions[AllPermissions.editEntityComponents]!;
   const editEntityComponentsGroup = await Group.load(
     editEntityComponentsGroupId,
   );
-  componentsGroup.addMember(editEntityComponentsGroup!, "writer");
+  // componentsGroup.addMember(editEntityComponentsGroup!, "writer");
 
   const editEntityGroupId = permissions[AllPermissions.editEntities]!;
   const editEntityGroup = await Group.load(editEntityGroupId);
-  componentsGroup.addMember(editEntityGroup!, "writer");
+  // componentsGroup.addMember(editEntityGroup!, "writer");
 
   const manageThreadsGroupId = permissions[AllPermissions.manageThreads]!;
   const manageThreadsGroup = await Group.load(manageThreadsGroupId);
-  entityGroup.addMember(manageThreadsGroup!, "writer");
+  // entityGroup.addMember(manageThreadsGroup!, "writer");
 
   if (!roomyObject.components) {
     throw new Error("RoomyObject components is undefined");
@@ -99,67 +96,59 @@ export type VideoUrlEmbedCreate = {
 
 interface CreateMessageOptions {
   replyTo?: string;
-  permissions?: Record<string, string>;
+  permissions: Record<string, string>;
   embeds?: (ImageUrlEmbedCreate | VideoUrlEmbedCreate)[];
   created?: Date;
   updated?: Date;
 }
 
-export async function createMessage(
-  input: string,
-  opts?: CreateMessageOptions,
-) {
-  const permissions = opts?.permissions || {};
-  const publicReadGroupId = permissions?.[AllPermissions.publicRead];
-  const publicReadGroup = await Group.load(publicReadGroupId || "");
+export async function createMessage(input: string, opts: CreateMessageOptions) {
+  const permissions = opts.permissions;
+  const publicReadGroupId = permissions[AllPermissions.publicRead];
+  if (!publicReadGroupId) throw "missing public read group";
+  const publicReadGroup = await Group.load(publicReadGroupId);
 
-  const messageGroup = Group.create();
-  messageGroup.addMember(publicReadGroup!, "reader");
+  const addReactionsGroupId = permissions[AllPermissions.reactToMessages];
+  const addReactionsGroup = await Group.load(addReactionsGroupId!);
 
-  const addReactionsGroupId = permissions?.[AllPermissions.reactToMessages];
-  const addReactionsGroup = await Group.load(addReactionsGroupId || "");
+  // const reactionsGroup = Group.create();
+  // reactionsGroup.addMember(publicReadGroup!, "reader");
+  // reactionsGroup.addMember(addReactionsGroup!, "writer");
 
-  const reactionsGroup = Group.create();
-  reactionsGroup.addMember(publicReadGroup!, "reader");
-  reactionsGroup.addMember(addReactionsGroup!, "writer");
-
-  const hiddenInGroup = Group.create();
-  hiddenInGroup.addMember(publicReadGroup!, "reader");
+  // const hiddenInGroup = Group.create();
+  // hiddenInGroup.addMember(publicReadGroup!, "reader");
 
   const hideMessagesInThreadsGroupId =
     permissions?.[AllPermissions.hideMessagesInThreads]!;
   const hideMessagesInThreadsGroup = await Group.load(
     hideMessagesInThreadsGroupId,
   );
-  hiddenInGroup.addMember(hideMessagesInThreadsGroup!, "writer");
+  // hiddenInGroup.addMember(hideMessagesInThreadsGroup!, "writer");
 
-  const { roomyObject, entityGroup, componentsGroup } = await createRoomyEntity(
-    "",
-    permissions,
-  );
+  const { roomyObject } = await createRoomyEntity("", permissions);
 
   if (!roomyObject.components) {
     throw new Error("RoomyObject components is undefined");
   }
 
-  const editEntityComponentsGroupId =
-    permissions[AllPermissions.editEntityComponents]!;
-  const editEntityComponentsGroup = await Group.load(
-    editEntityComponentsGroupId,
-  );
-  componentsGroup.addMember(editEntityComponentsGroup!, "writer");
+  // const editEntityComponentsGroupId =
+  //   permissions[AllPermissions.editEntityComponents]!;
+  // const editEntityComponentsGroup = await Group.load(
+  //   editEntityComponentsGroupId,
+  // );
+  // // componentsGroup.addMember(editEntityComponentsGroup!, "writer");
 
-  const editEntityGroupId = permissions[AllPermissions.editEntities]!;
-  const editEntityGroup = await Group.load(editEntityGroupId);
-  componentsGroup.addMember(editEntityGroup!, "writer");
+  // const editEntityGroupId = permissions[AllPermissions.editEntities]!;
+  // const editEntityGroup = await Group.load(editEntityGroupId);
+  // // componentsGroup.addMember(editEntityGroup!, "writer");
 
-  const editMessagesGroupId = permissions[AllPermissions.editMessages]!;
-  const editMessagesGroup = await Group.load(editMessagesGroupId);
-  entityGroup.addMember(editMessagesGroup!, "writer");
+  // const editMessagesGroupId = permissions[AllPermissions.editMessages]!;
+  // const editMessagesGroup = await Group.load(editMessagesGroupId);
+  // // entityGroup.addMember(editMessagesGroup!, "writer");
 
   const content = PlainTextContentComponent.create(
     { content: input },
-    componentsGroup,
+    publicReadGroup!,
   );
   roomyObject.components[PlainTextContentComponent.id] = content.id;
 
@@ -168,7 +157,7 @@ export async function createMessage(
       createdAt: opts?.created || new Date(),
       updatedAt: opts?.updated || new Date(),
     },
-    componentsGroup,
+    publicReadGroup!,
   );
   roomyObject.components[UserAccessTimesComponent.id] = userAccessTimes.id;
 
@@ -176,7 +165,7 @@ export async function createMessage(
     {
       hiddenIn: co.list(z.string()).create([]),
     },
-    componentsGroup,
+    hideMessagesInThreadsGroup!,
   );
   roomyObject.components[HiddenInComponent.id] = hiddenIn.id;
 
@@ -188,7 +177,7 @@ export async function createMessage(
     {
       reactions: ReactionList.create([]),
     },
-    reactionsGroup,
+    addReactionsGroup!,
   );
   roomyObject.components[ReactionsComponent.id] = reactions.id;
 
@@ -238,7 +227,7 @@ export async function createMessage(
 
   // skip AuthorComponent and ThreadIdComponent - can be added later if needed
 
-  return { roomyObject, content, hiddenIn, reactions, componentsGroup };
+  return { roomyObject, content, hiddenIn, reactions };
 }
 
 export function messageHasAdmin(

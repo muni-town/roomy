@@ -19,21 +19,18 @@ export async function createPage(
     pageContentGroup,
   );
 
-  const { roomyObject, entityGroup, componentsGroup } = await createRoomyEntity(
-    name,
-    permissions,
-  );
+  const { roomyObject } = await createRoomyEntity(name, permissions);
 
   const editEntityComponentsGroupId =
     permissions[AllPermissions.editEntityComponents]!;
   const editEntityComponentsGroup = await Group.load(
     editEntityComponentsGroupId,
   );
-  entityGroup.addMember(editEntityComponentsGroup!, "writer");
+  // entityGroup.addMember(editEntityComponentsGroup!, "writer");
 
   const editEntityGroupId = permissions[AllPermissions.editEntities]!;
   const editEntityGroup = await Group.load(editEntityGroupId);
-  componentsGroup.addMember(editEntityGroup!, "writer");
+  // componentsGroup.addMember(editEntityGroup!, "writer");
 
   if (!roomyObject.components) {
     throw new Error("RoomyObject components is undefined");

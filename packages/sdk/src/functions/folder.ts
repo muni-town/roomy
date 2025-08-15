@@ -10,8 +10,8 @@ export async function createFolder(
   // folder doesnt need any content, it just has children
   const {
     roomyObject: folder,
-    entityGroup,
-    componentsGroup,
+    // entityGroup,
+    // componentsGroup,
   } = await createRoomyEntity(name, permissions);
 
   const editEntityComponentsGroupId =
@@ -19,11 +19,11 @@ export async function createFolder(
   const editEntityComponentsGroup = await Group.load(
     editEntityComponentsGroupId,
   );
-  entityGroup.addMember(editEntityComponentsGroup!, "writer");
+  // entityGroup.addMember(editEntityComponentsGroup!, "writer");
 
   const editEntityGroupId = permissions[AllPermissions.editEntities]!;
   const editEntityGroup = await Group.load(editEntityGroupId);
-  componentsGroup.addMember(editEntityGroup!, "writer");
+  // componentsGroup.addMember(editEntityGroup!, "writer");
 
   const publicReadGroupId = permissions[AllPermissions.publicRead]!;
   const publicReadGroup = await Group.load(publicReadGroupId);
