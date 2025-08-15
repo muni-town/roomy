@@ -28,6 +28,6 @@
   },
   "dependencies": {
     "date-fns": "^4.1.0",
-    "jazz-run": "^0.15.10"
+    "jazz-tools": "file:../../other/jazz/packages/jazz-tools/"
   }
 }

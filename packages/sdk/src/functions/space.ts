@@ -35,13 +35,13 @@ export async function createSpace(
   // create space entity
   const {
     roomyObject: spaceObject,
-    entityGroup,
-    componentsGroup,
+    // entityGroup,
+    // componentsGroup,
   } = await createRoomyEntity(name, permissions);
-  const editSpaceGroupId = permissions[AllPermissions.editSpace]!;
-  const editSpaceGroup = await Group.load(editSpaceGroupId);
-  entityGroup.addMember(editSpaceGroup!, "writer");
-  componentsGroup.addMember(editSpaceGroup!, "writer");
+  // const editSpaceGroupId = permissions[AllPermissions.editSpace]!;
+  // const editSpaceGroup = await Group.load(editSpaceGroupId);
+  // entityGroup.addMember(editSpaceGroup!, "writer");
+  // componentsGroup.addMember(editSpaceGroup!, "writer");
 
   spaceObject.name = name;
   spaceObject.description = description;

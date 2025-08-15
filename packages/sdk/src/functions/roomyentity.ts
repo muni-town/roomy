@@ -8,20 +8,22 @@ export async function createRoomyEntity(
   const publicReadGroupId = permissions[AllPermissions.publicRead]!;
   const publicReadGroup = await Group.load(publicReadGroupId);
 
-  const entityGroup = Group.create();
-  entityGroup.addMember(publicReadGroup!, "reader");
+  // const entityGroup = Group.create();
+  // entityGroup.addMember(publicReadGroup!, "reader");
 
-  const componentsGroup = Group.create();
-  componentsGroup.addMember(publicReadGroup!, "reader");
+  // const componentsGroup = Group.create();
+  // componentsGroup.addMember(publicReadGroup!, "reader");
 
   const roomyObject = RoomyEntity.create(
     {
       name: name || undefined,
-      components: co.record(z.string(), z.string()).create({}, componentsGroup),
+      components: co
+        .record(z.string(), z.string())
+        .create({}, publicReadGroup!),
       softDeleted: false,
     },
-    entityGroup,
+    publicReadGroup!,
   );
 
-  return { roomyObject, entityGroup, componentsGroup };
+  return { roomyObject };
 }
