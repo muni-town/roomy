@@ -32,6 +32,7 @@
     "undici": "^7"
   },
   "devDependencies": {
+    "jazz-tools": "^0.17.3",
     "@types/node": "^22.15.17",
     "prettier": "^3.6.2",
     "tsconfig-paths": "^4.2.0",
