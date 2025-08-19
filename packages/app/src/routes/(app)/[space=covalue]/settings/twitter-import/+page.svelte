@@ -371,13 +371,12 @@
     CoFeed,
     createMessage,
     createThread,
+    getSpaceGroups,
+    Group,
     MediaUploadQueue,
     RoomyAccount,
     RoomyEntity,
-    SpacePermissionsComponent,
     SubThreadsComponent,
-    ThreadComponent,
-    ThreadContent,
     UploadMedia,
     type ImageUrlEmbedCreate,
     type VideoUrlEmbedCreate,
@@ -432,12 +431,6 @@
   });
   const me = $derived(account.current);
   let importQueue = $derived(me?.root.uploadQueue);
-  const permissions = $derived(
-    new CoState(
-      SpacePermissionsComponent,
-      space?.current?.components?.[SpacePermissionsComponent.id],
-    ),
-  );
   const allThreads = $derived(
     new CoState(
       AllThreadsComponent,
@@ -469,9 +462,6 @@
           $onError: null,
         },
       },
-    });
-    permissions.current?.ensureLoaded({
-      resolve: true,
     });
     allThreads.current?.ensureLoaded({
       resolve: true,
@@ -580,88 +570,58 @@
 
   async function createAndInsertChannel(
     name: string,
-    permissions: Record<string, string>,
     space: co.loaded<typeof RoomyEntity>,
     allThreads: co.loaded<typeof AllThreadsComponent>,
+    group: Group,
   ) {
-    const channel = await createThread(name, permissions);
-    if (!channel) throw new Error("Channel could not be created");
-    addToFolder(space, channel.roomyObject);
-    allThreads.push(channel.roomyObject);
-    if (!channel.roomyObject.components[ThreadComponent.id])
-      throw new Error("Thread component not found in channel");
-    if (!channel.roomyObject.components[SubThreadsComponent.id])
-      throw new Error("Subthreads component not found in channel");
-    const threadContent = await ThreadContent.load(
-      channel.roomyObject.components[ThreadComponent.id]!,
-      {
-        resolve: {
-          timeline: true,
-        },
-      },
-    );
-    const subThreadsFeed = await SubThreadsComponent.load(
-      channel.roomyObject.components[SubThreadsComponent.id]!,
-      {
-        resolve: {
-          $each: true,
-        },
-      },
-    );
-    if (!threadContent || !subThreadsFeed)
-      throw new Error("Thread content or subthreads content not found");
+    const { entity, thread, subThreads } = await createThread(name, {
+      admin: group,
+      public: group,
+    });
+    addToFolder(space, entity);
+    allThreads.push(entity);
+
     return {
-      timeline: threadContent.timeline,
-      id: channel.roomyObject.id,
-      childSubThreads: subThreadsFeed,
+      timeline: thread.timeline,
+      id: entity.id,
+      childSubThreads: subThreads,
     };
   }
 
   async function createAndInsertSubthread(
     name: string,
-    permissions: Record<string, string>,
     allThreads: co.loaded<typeof AllThreadsComponent>,
     subThreads: co.loaded<typeof SubThreadsComponent>,
     parentId: string,
+    group: Group,
   ) {
     const parentMessage = await RoomyEntity.load(parentId, {
       resolve: { components: { $each: true } },
     });
-    if (!parentMessage || !parentMessage.components)
-      throw new Error("Parent message not found");
-    const channel = await createThread(name, permissions);
-    if (!channel) throw new Error("Channel could not be created");
-    allThreads.push(channel.roomyObject);
-    subThreads.push(channel.roomyObject);
-    parentMessage.components[BranchThreadIdComponent.id] =
-      channel.roomyObject.id;
-    if (!channel.roomyObject.components[ThreadComponent.id])
-      throw new Error("Thread component not found in channel");
-    const threadContent = await ThreadContent.load(
-      channel.roomyObject.components[ThreadComponent.id]!,
-      {
-        resolve: {
-          timeline: true,
-        },
-      },
-    );
-    if (!threadContent)
-      throw new Error("Thread content or subthreads content not found");
+    if (!parentMessage) throw new Error("Parent message not found");
+    const { entity: channel, thread } = await createThread(name, {
+      admin: group,
+      public: group,
+    });
+    allThreads.push(channel);
+    subThreads.push(channel);
+    parentMessage.components[BranchThreadIdComponent.id] = channel.id;
     return {
-      timeline: threadContent.timeline,
-      id: channel.roomyObject.id,
+      timeline: thread.timeline,
+      id: channel.id,
     };
   }
 
+  // TODO: we create threads with the admin group here because I'm not sure if we want people to be
+  // able to chat in twitter import threads or not. We should figure out whether that's the right
+  // decision.
   async function importTweets() {
     if (isImporting) return;
     try {
       if (!space.current || !allThreads.current)
         throw new Error("No current space");
-      if (!permissions.current) {
-        console.log("permisions", permissions);
-        throw new Error("no permissions");
-      }
+      const groups = await getSpaceGroups(space.current);
+
       if (!twitterAccountId) throw new Error("no account id");
       isImporting = true;
       await me?.root.ensureLoaded({ resolve: { uploadQueue: true } });
@@ -689,21 +649,21 @@
       // Then, create channels
       let mainChannel = await createAndInsertChannel(
         "Tweets",
-        permissions.current,
         space.current,
         allThreads.current,
+        groups.admin,
       );
       let repliesChannel = await createAndInsertChannel(
         "Replies",
-        permissions.current,
         space.current,
         allThreads.current,
+        groups.admin,
       );
       let retweetsChannel = await createAndInsertChannel(
         "Retweets",
-        permissions.current,
         space.current,
         allThreads.current,
+        groups.admin,
       );
 
       pushLog("🌱 Channels created: Tweets, Replies, Retweets.");
@@ -753,7 +713,7 @@
         channel: {
           timeline: CoFeed<string>;
           id: string;
-          childSubThreads?: co.loaded<(typeof SubThreadsComponent)["schema"]>;
+          childSubThreads?: co.loaded<typeof SubThreadsComponent>;
         },
       ) => {
         if (tweet.importedId) return;
@@ -774,13 +734,17 @@
         const messageText = tweet.text;
 
         // TODO: Add AuthorComponent with 'twitter:' prefix to show it is imported
-        const message = await createMessage(messageText, permissions.current!, {
-          embeds: fileEmbeds,
-          created: new Date(tweet.createdAt),
-        });
-        channel.timeline.push(message.roomyObject.id);
+        const { entity: message } = await createMessage(
+          messageText,
+          groups.admin,
+          {
+            embeds: fileEmbeds,
+            created: new Date(tweet.createdAt),
+          },
+        );
+        channel.timeline.push(message.id);
 
-        tweet.importedId = message.roomyObject.id;
+        tweet.importedId = message.id;
         tweets.setItem(tweetKey(tweet), tweet);
 
         // allow UI updates to catch up
@@ -792,14 +756,14 @@
           // we create a subthread and post replies there
           const subThread = await createAndInsertSubthread(
             messageText,
-            permissions.current!,
             allThreads.current!,
             channel.childSubThreads,
-            message.roomyObject.id,
+            message.id,
+            groups.admin,
           );
 
           // post the original message here as well
-          subThread.timeline.push(message.roomyObject.id);
+          subThread.timeline.push(message.id);
 
           // sort replies & post in the subthread
           const replyKeys = Array.from(tweet.replies.keys()).sort();

@@ -82,7 +82,7 @@
       );
     }
 
-    const space = await createSpace(currentSpaceName);
+    const { entity: space } = await createSpace(currentSpaceName);
 
     if (avatarFile) {
       await uploadAvatar();

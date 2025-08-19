@@ -1,4 +1,4 @@
-import { co, z } from "jazz-tools";
+import { co, Group, z } from "jazz-tools";
 import { defComponent, RoomyEntity } from "./roomyentity.js";
 
 export const MemberEntry = co.map({
@@ -8,10 +8,22 @@ export const MemberEntry = co.map({
 
 export const SpacePermissions = co.record(z.string(), z.string());
 
-export const SpacePermissionsComponent = defComponent(
-  "space.roomy.permissions.v0",
-  co.record(z.string(), z.string()),
+export const SpaceGroups = co.map({
+  public: z.string(),
+  admin: z.string(),
+});
+export type SpaceGroupKeys =
+  typeof SpaceGroups extends co.Map<infer T> ? keyof T : never;
+export type LoadedSpaceGroups = { [key in SpaceGroupKeys]: Group };
+export const SpaceGroupsComponent = defComponent(
+  "space.roomy.groups.v0",
+  SpaceGroups,
 );
+
+// export const SpacePermissionsComponent = defComponent(
+//   "space.roomy.permissions.v0",
+//   co.record(z.string(), z.string()),
+// );
 
 export const AllThreadsComponent = defComponent(
   "space.roomy.threads.v0",

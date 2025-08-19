@@ -12,12 +12,10 @@
     addToInbox,
     createMessage,
     createThread,
-    isSpaceAdmin,
     type ImageUrlEmbedCreate,
     type VideoUrlEmbedCreate,
     AllThreadsComponent,
     ThreadComponent,
-    SpacePermissionsComponent,
     BansComponent,
     SubThreadsComponent,
     AllMembersComponent,
@@ -25,6 +23,9 @@
     BranchThreadIdComponent,
     ReplyToComponent,
     PlainTextContentComponent,
+    isCurrentAccountSpaceAdmin,
+    getSpaceGroups,
+    getUserSpaceGroup,
   } from "@roomy-chat/sdk";
   import { AccountCoState, CoState } from "jazz-tools/svelte";
   import { setInputFocus } from "./ChatInput.svelte";
@@ -51,20 +52,16 @@
   let space = $derived(
     new CoState(RoomyEntity, spaceId, {
       resolve: {
-        components: {
-          $each: true,
-          $onError: null,
-        },
+        components: true,
       },
     }),
   );
 
-  let permissions = $derived(
-    new CoState(
-      SpacePermissionsComponent,
-      space.current?.components?.[SpacePermissionsComponent.id],
-    ),
-  );
+  let isAdmin = $state(false);
+  $effect(() => {
+    if (!space?.current) return;
+    isCurrentAccountSpaceAdmin(space.current).then((b) => (isAdmin = b));
+  });
 
   let threadObject = $derived(
     new CoState(RoomyEntity, objectId, {
@@ -176,6 +173,9 @@
     e.preventDefault();
     const messageIds = <string[]>[];
 
+    if (!space.current) return;
+    const groups = await getSpaceGroups(space.current);
+
     const sortedMessages = threading.selectedMessages
       .map((messageId) => {
         const messageIndex = timeline.findIndex(
@@ -233,32 +233,31 @@
     if (newThreadName.includes("</p>"))
       newThreadName = newThreadName.split("</p>")[0]!;
 
-    let newThread = await createThread(newThreadName, permissions.current!);
+    let { entity, thread } = await createThread(newThreadName, groups);
 
     // add all messages to the new thread
     for (const messageId of messageIds) {
-      newThread.thread.timeline.push(messageId);
+      thread.timeline.push(messageId);
     }
 
     if (firstMessage && firstMessage.components) {
-      firstMessage.components[BranchThreadIdComponent.id] =
-        newThread.roomyObject.id;
+      firstMessage.components[BranchThreadIdComponent.id] = entity.id;
     }
 
-    const allThreadsId = space.current?.components?.[AllThreadsComponent.id];
+    const allThreadsId = space.current.components[AllThreadsComponent.id];
     if (allThreadsId) {
       const allThreads = await AllThreadsComponent.load(allThreadsId);
-      allThreads?.push(newThread.roomyObject);
+      allThreads?.push(entity);
     }
 
     const subThreadsId =
       threadObject.current?.components?.[SubThreadsComponent.id];
     if (subThreadsId) {
       const subThreads = await SubThreadsComponent.load(subThreadsId);
-      subThreads?.push(newThread.roomyObject);
+      subThreads?.push(entity);
     }
 
-    console.log("Created Subthread", newThread.roomyObject.id);
+    console.log("Created Subthread", entity.id);
 
     threading.active = false;
     threading.selectedMessages = [];
@@ -321,16 +320,8 @@
         });
       }
     }
-
-    console.log("permissions", permissions.current);
-    if (!permissions.current) {
-      toast.error("You are not allowed to send messages in this space");
-      isSendingMessage = false;
-      return;
-    }
-
-    const { roomyObject: message } = await createMessage(messageInput, {
-      permissions: permissions.current,
+    const group = await getUserSpaceGroup(space.current);
+    const { entity: message } = await createMessage(messageInput, group, {
       embeds: filesUrls,
     });
 
@@ -490,18 +481,13 @@
   let waitingForJoin = $state(false);
 </script>
 
-<!-- hack to get the admin to load ^^ it has to be used somewhere in this file -->
-{#if permissions.current}
-  <div class="absolute top-0 left-0"></div>
-{/if}
-
 {#if space.current}
   <div class="flex flex-col flex-1 overflow-hidden">
     <div class="flex-1 overflow-y-auto overflow-x-hidden relative">
       <ChatArea
         space={space.current}
         {timeline}
-        isAdmin={isSpaceAdmin(space.current)}
+        {isAdmin}
         {threadId}
         allowedToInteract={hasJoinedSpace && !isBanned}
         {threading}

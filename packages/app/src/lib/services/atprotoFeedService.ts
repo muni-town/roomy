@@ -2,14 +2,20 @@ import {
   AtprotoFeedAggregator,
   type AtprotoFeedPost,
   ATPROTO_FEEDS,
-  ATPROTO_FEED_CONFIG,
 } from "$lib/utils/atprotoFeeds";
 import { user } from "$lib/user.svelte";
-import { RoomyAccount, FeedConfig, FeedAggregatorConfigs, BookmarkedThread, BookmarkedThreads, HiddenThread, HiddenThreads, publicGroup } from "@roomy-chat/sdk";
+import {
+  FeedConfig,
+  FeedAggregatorConfigs,
+  BookmarkedThread,
+  BookmarkedThreads,
+  HiddenThread,
+  HiddenThreads,
+  publicGroup,
+} from "@roomy-chat/sdk";
 import { co, z } from "jazz-tools";
 
 export class AtprotoFeedService {
-  
   constructor() {
     // No initialization needed for stateless service
   }
@@ -21,7 +27,10 @@ export class AtprotoFeedService {
     return null;
   }
 
-  getFeedConfig(account: any, objectId: string): { feeds: string[], threadsOnly: boolean } {
+  getFeedConfig(
+    account: any,
+    objectId: string,
+  ): { feeds: string[]; threadsOnly: boolean } {
     const config = account?.root?.feedConfigs?.[objectId];
     if (config) {
       return {
@@ -32,9 +41,17 @@ export class AtprotoFeedService {
     return { feeds: [], threadsOnly: false };
   }
 
-  setFeedConfig(account: any, objectId: string, config: { feeds: string[], threadsOnly: boolean }): void {
-    console.log("🔧 setFeedConfig called:", { objectId, config, hasAccount: !!account });
-    
+  setFeedConfig(
+    account: any,
+    objectId: string,
+    config: { feeds: string[]; threadsOnly: boolean },
+  ): void {
+    console.log("🔧 setFeedConfig called:", {
+      objectId,
+      config,
+      hasAccount: !!account,
+    });
+
     if (!account?.root) {
       console.error("❌ Account root not available");
       return;
@@ -44,7 +61,10 @@ export class AtprotoFeedService {
     if (!account.root.feedConfigs) {
       console.log("🔧 Initializing feedConfigs in account root");
       try {
-        account.root.feedConfigs = FeedAggregatorConfigs.create({}, publicGroup("writer"));
+        account.root.feedConfigs = FeedAggregatorConfigs.create(
+          {},
+          publicGroup("writer"),
+        );
         console.log("✅ Successfully initialized feedConfigs");
       } catch (error) {
         console.error("❌ Failed to initialize feedConfigs:", error);
@@ -52,47 +72,70 @@ export class AtprotoFeedService {
       }
     }
 
-    console.log("🔧 Current feedConfigs:", Object.keys(account.root.feedConfigs));
+    console.log(
+      "🔧 Current feedConfigs:",
+      Object.keys(account.root.feedConfigs),
+    );
 
     if (config.feeds.length === 0) {
       // Remove config if no feeds
       console.log("🗑️ Removing config for objectId:", objectId);
       delete account.root.feedConfigs[objectId];
     } else {
-      console.log("💾 Setting config for objectId:", objectId, "with", config.feeds.length, "feeds");
-      
+      console.log(
+        "💾 Setting config for objectId:",
+        objectId,
+        "with",
+        config.feeds.length,
+        "feeds",
+      );
+
       // Check if config already exists
       const existingConfig = account.root.feedConfigs[objectId];
-      
+
       if (existingConfig) {
         // Update existing config
         console.log("🔄 Updating existing config");
-        
+
         // Clear existing feeds and add new ones
-        existingConfig.feeds.splice(0, existingConfig.feeds.length, ...config.feeds);
+        existingConfig.feeds.splice(
+          0,
+          existingConfig.feeds.length,
+          ...config.feeds,
+        );
         existingConfig.threadsOnly = config.threadsOnly;
       } else {
         // Create new config with proper group permissions
         console.log("✨ Creating new config");
-        
+
         try {
-          const feedsList = co.list(z.string()).create(config.feeds, publicGroup("writer"));
-          account.root.feedConfigs[objectId] = FeedConfig.create({
-            feeds: feedsList,
-            threadsOnly: config.threadsOnly,
-          }, publicGroup("writer"));
-          
+          const feedsList = co
+            .list(z.string())
+            .create(config.feeds, publicGroup("writer"));
+          account.root.feedConfigs[objectId] = FeedConfig.create(
+            {
+              feeds: feedsList,
+              threadsOnly: config.threadsOnly,
+            },
+            publicGroup("writer"),
+          );
+
           console.log("✅ Successfully created new config");
         } catch (error) {
           console.error("❌ Error creating new config:", error);
         }
       }
     }
-    
+
     console.log("🔧 Final feedConfigs:", Object.keys(account.root.feedConfigs));
   }
 
-  async fetchFeedPosts(feedUris: string[], threadsOnly: boolean = false, limit: number = 50, signal?: AbortSignal): Promise<AtprotoFeedPost[]> {
+  async fetchFeedPosts(
+    feedUris: string[],
+    threadsOnly: boolean = false,
+    limit: number = 50,
+    signal?: AbortSignal,
+  ): Promise<AtprotoFeedPost[]> {
     console.log("📡 Fetching posts from ATProto feeds...");
 
     const aggregator = this.getAggregator();
@@ -117,16 +160,20 @@ export class AtprotoFeedService {
     }
   }
 
-  async fetchFeedPostsForObject(account: any, objectId: string, limit: number = 50, signal?: AbortSignal): Promise<AtprotoFeedPost[]> {
+  async fetchFeedPostsForObject(
+    account: any,
+    objectId: string,
+    limit: number = 50,
+    signal?: AbortSignal,
+  ): Promise<AtprotoFeedPost[]> {
     const config = this.getFeedConfig(account, objectId);
-    
+
     if (config.feeds.length === 0) {
       return [];
     }
 
     return this.fetchFeedPosts(config.feeds, config.threadsOnly, limit, signal);
   }
-
 
   async fetchPostThread(postUri: string) {
     const aggregator = this.getAggregator();
@@ -156,7 +203,9 @@ export class AtprotoFeedService {
   private extractFeedNameFromUri(feedUri: string): string {
     try {
       // Parse AT Proto URI: at://did:plc:example/app.bsky.feed.generator/feedname
-      const match = feedUri.match(/at:\/\/([^\/]+)\/app\.bsky\.feed\.generator\/(.+)$/);
+      const match = feedUri.match(
+        /at:\/\/([^\/]+)\/app\.bsky\.feed\.generator\/(.+)$/,
+      );
       if (match && match[2]) {
         const feedName = match[2];
         return feedName
@@ -176,7 +225,7 @@ export class AtprotoFeedService {
       }
 
       // Last resort: extract domain or identifier from URI
-      const uriParts = feedUri.split('/');
+      const uriParts = feedUri.split("/");
       const lastPart = uriParts[uriParts.length - 1];
       if (lastPart && lastPart.length > 0) {
         return lastPart
@@ -193,12 +242,16 @@ export class AtprotoFeedService {
   }
 
   // Migration helper to convert old JSON configs to new Jazz root structure
-  migrateEntityFeedConfig(account: any, objectId: string, entityFeedConfigJson: string): void {
+  migrateEntityFeedConfig(
+    account: any,
+    objectId: string,
+    entityFeedConfigJson: string,
+  ): void {
     if (!entityFeedConfigJson || !account?.root?.feedConfigs) return;
 
     try {
       const oldConfig = JSON.parse(entityFeedConfigJson);
-      
+
       // Skip if already migrated (check if config exists in root)
       if (account.root.feedConfigs[objectId]) {
         return;
@@ -216,26 +269,34 @@ export class AtprotoFeedService {
         console.log(`✅ Migrated feed config for object ${objectId}:`, config);
       }
     } catch (error) {
-      console.warn(`❌ Failed to migrate feed config for object ${objectId}:`, error);
+      console.warn(
+        `❌ Failed to migrate feed config for object ${objectId}:`,
+        error,
+      );
     }
   }
 
   // Bookmark management methods
-  bookmarkThread(account: any, objectId: string, postUri: string, postData: { 
-    title: string, 
-    author: { handle: string, displayName?: string, avatar?: string },
-    previewText: string, 
-    feedSource?: string 
-  }): boolean {
+  bookmarkThread(
+    account: any,
+    _objectId: string,
+    postUri: string,
+    postData: {
+      title: string;
+      author: { handle: string; displayName?: string; avatar?: string };
+      previewText: string;
+      feedSource?: string;
+    },
+  ): boolean {
     console.log("🔖 Bookmarking thread:", postUri);
-    
+
     if (!account?.root) {
       console.error("❌ Account root not available");
       return false;
     }
 
     // Extra safety check - make sure account.root is fully loaded
-    if (!account.root._type || typeof account.root !== 'object') {
+    if (!account.root._type || typeof account.root !== "object") {
       console.error("❌ Account root not properly initialized");
       return false;
     }
@@ -246,14 +307,17 @@ export class AtprotoFeedService {
       type: typeof account.root.bookmarkedThreads,
       isArray: Array.isArray(account.root.bookmarkedThreads),
       constructor: account.root.bookmarkedThreads?.constructor?.name,
-      hasSetMethod: typeof account.root.bookmarkedThreads?.set === 'function'
+      hasSetMethod: typeof account.root.bookmarkedThreads?.set === "function",
     });
 
     // Initialize bookmarkedThreads if it doesn't exist
     try {
       if (!account.root.bookmarkedThreads) {
         console.log("🔧 Creating bookmarkedThreads list");
-        account.root.bookmarkedThreads = BookmarkedThreads.create([], publicGroup("writer"));
+        account.root.bookmarkedThreads = BookmarkedThreads.create(
+          [],
+          publicGroup("writer"),
+        );
       }
     } catch (error) {
       console.error("❌ Failed to initialize bookmarks:", error);
@@ -261,7 +325,9 @@ export class AtprotoFeedService {
     }
 
     // Check if already bookmarked
-    const existing = account.root.bookmarkedThreads.find((bookmark: any) => bookmark && bookmark.postUri === postUri);
+    const existing = account.root.bookmarkedThreads.find(
+      (bookmark: any) => bookmark && bookmark.postUri === postUri,
+    );
     if (existing) {
       console.log("ℹ️ Thread already bookmarked");
       return false;
@@ -269,24 +335,32 @@ export class AtprotoFeedService {
 
     try {
       // Create the nested author object as a Jazz co.map
-      const authorMap = co.map({
-        handle: z.string(),
-        displayName: z.string().optional(),
-        avatar: z.string().optional(),
-      }).create({
-        handle: postData.author.handle,
-        displayName: postData.author.displayName,
-        avatar: postData.author.avatar,
-      }, publicGroup("writer"));
+      const authorMap = co
+        .map({
+          handle: z.string(),
+          displayName: z.string().optional(),
+          avatar: z.string().optional(),
+        })
+        .create(
+          {
+            handle: postData.author.handle,
+            displayName: postData.author.displayName,
+            avatar: postData.author.avatar,
+          },
+          publicGroup("writer"),
+        );
 
-      const bookmark = BookmarkedThread.create({
-        postUri,
-        title: postData.title,
-        author: authorMap,
-        previewText: postData.previewText,
-        bookmarkedAt: new Date(),
-        feedSource: postData.feedSource,
-      }, publicGroup("writer"));
+      const bookmark = BookmarkedThread.create(
+        {
+          postUri,
+          title: postData.title,
+          author: authorMap,
+          previewText: postData.previewText,
+          bookmarkedAt: new Date(),
+          feedSource: postData.feedSource,
+        },
+        publicGroup("writer"),
+      );
 
       account.root.bookmarkedThreads.push(bookmark);
       console.log("✅ Successfully bookmarked thread");
@@ -297,16 +371,18 @@ export class AtprotoFeedService {
     }
   }
 
-  removeBookmark(account: any, objectId: string, postUri: string): boolean {
+  removeBookmark(account: any, _objectId: string, postUri: string): boolean {
     console.log("🗑️ Removing bookmark:", postUri);
-    
+
     if (!account?.root?.bookmarkedThreads) {
       console.log("ℹ️ No bookmarks to remove");
       return false;
     }
 
     try {
-      const index = account.root.bookmarkedThreads.findIndex((bookmark: any) => bookmark && bookmark.postUri === postUri);
+      const index = account.root.bookmarkedThreads.findIndex(
+        (bookmark: any) => bookmark && bookmark.postUri === postUri,
+      );
       if (index === -1) {
         console.log("ℹ️ Bookmark not found in this object");
         return false;
@@ -321,29 +397,31 @@ export class AtprotoFeedService {
     }
   }
 
-  getBookmarks(account: any, objectId?: string): any[] {
+  getBookmarks(account: any, _objectId?: string): any[] {
     if (!account?.root?.bookmarkedThreads) {
       return [];
     }
-    
+
     // Since bookmarks is now a simple list, just return all bookmarks
     const rawBookmarks = Array.from(account.root.bookmarkedThreads);
-    return rawBookmarks.filter(bookmark => bookmark != null);
+    return rawBookmarks.filter((bookmark) => bookmark != null);
   }
 
-  isBookmarked(account: any, postUri: string, objectId?: string): boolean {
+  isBookmarked(account: any, postUri: string, _objectId?: string): boolean {
     if (!account?.root?.bookmarkedThreads) {
       return false;
     }
-    
+
     // Check if bookmarked in the single list
-    return account.root.bookmarkedThreads.some((bookmark: any) => bookmark && bookmark.postUri === postUri);
+    return account.root.bookmarkedThreads.some(
+      (bookmark: any) => bookmark && bookmark.postUri === postUri,
+    );
   }
 
   // Hide management methods
   hideThread(account: any, postUri: string, reason?: string): boolean {
     console.log("🙈 Hiding thread:", postUri);
-    
+
     if (!account?.root) {
       console.error("❌ Account root not available");
       return false;
@@ -353,7 +431,10 @@ export class AtprotoFeedService {
     if (!account.root.hiddenThreads) {
       console.log("🔧 Initializing hiddenThreads in account root");
       try {
-        account.root.hiddenThreads = HiddenThreads.create([], publicGroup("writer"));
+        account.root.hiddenThreads = HiddenThreads.create(
+          [],
+          publicGroup("writer"),
+        );
         console.log("✅ Successfully initialized hiddenThreads");
       } catch (error) {
         console.error("❌ Failed to initialize hiddenThreads:", error);
@@ -362,18 +443,23 @@ export class AtprotoFeedService {
     }
 
     // Check if already hidden
-    const existing = account.root.hiddenThreads.find((hidden: any) => hidden && hidden.postUri === postUri);
+    const existing = account.root.hiddenThreads.find(
+      (hidden: any) => hidden && hidden.postUri === postUri,
+    );
     if (existing) {
       console.log("ℹ️ Thread already hidden");
       return false;
     }
 
     try {
-      const hiddenThread = HiddenThread.create({
-        postUri,
-        hiddenAt: new Date(),
-        reason,
-      }, publicGroup("writer"));
+      const hiddenThread = HiddenThread.create(
+        {
+          postUri,
+          hiddenAt: new Date(),
+          reason,
+        },
+        publicGroup("writer"),
+      );
 
       account.root.hiddenThreads.push(hiddenThread);
       console.log("✅ Successfully hid thread");
@@ -386,14 +472,16 @@ export class AtprotoFeedService {
 
   unhideThread(account: any, postUri: string): boolean {
     console.log("👁️ Unhiding thread:", postUri);
-    
+
     if (!account?.root?.hiddenThreads) {
       console.log("ℹ️ No hidden threads to unhide");
       return false;
     }
 
     try {
-      const index = account.root.hiddenThreads.findIndex((hidden: any) => hidden && hidden.postUri === postUri);
+      const index = account.root.hiddenThreads.findIndex(
+        (hidden: any) => hidden && hidden.postUri === postUri,
+      );
       if (index === -1) {
         console.log("ℹ️ Thread not found in hidden list");
         return false;
@@ -412,14 +500,18 @@ export class AtprotoFeedService {
     if (!account?.root?.hiddenThreads) {
       return [];
     }
-    return Array.from(account.root.hiddenThreads).filter(hidden => hidden != null);
+    return Array.from(account.root.hiddenThreads).filter(
+      (hidden) => hidden != null,
+    );
   }
 
   isHidden(account: any, postUri: string): boolean {
     if (!account?.root?.hiddenThreads) {
       return false;
     }
-    return account.root.hiddenThreads.some((hidden: any) => hidden && hidden.postUri === postUri);
+    return account.root.hiddenThreads.some(
+      (hidden: any) => hidden && hidden.postUri === postUri,
+    );
   }
 }
 

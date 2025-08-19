@@ -5,9 +5,9 @@
   import { onMount } from "svelte";
   import {
     Account,
-    grantFullWritePermissions,
-    hasFullWritePermissions,
-    revokeFullWritePermissions,
+    isSpaceAdmin,
+    makeSpaceAdmin,
+    revokeSpaceAdmin,
     RoomyEntity,
   } from "@roomy-chat/sdk";
   import toast from "svelte-french-toast";
@@ -51,10 +51,7 @@
         };
         return;
       }
-      const hasWrite = await hasFullWritePermissions(
-        jazzAccount,
-        space.current,
-      );
+      const hasWrite = await isSpaceAdmin(jazzAccount, space.current);
       bridgeStatus = {
         type: "loaded",
         appId: info.discordAppId,
@@ -71,19 +68,13 @@
 
   async function grantBotPermissions() {
     if (bridgeStatus.type != "loaded" || !space.current) return;
-    await grantFullWritePermissions(
-      bridgeStatus.bridgeJazzAccount,
-      space.current,
-    );
+    await makeSpaceAdmin(bridgeStatus.bridgeJazzAccount, space.current);
     updateBridgeStatus();
     toast.success("Successfully granted bot permissions.");
   }
   async function revokeBotPermissions() {
     if (bridgeStatus.type != "loaded" || !space.current) return;
-    await revokeFullWritePermissions(
-      bridgeStatus.bridgeJazzAccount,
-      space.current,
-    );
+    await revokeSpaceAdmin(bridgeStatus.bridgeJazzAccount, space.current);
     updateBridgeStatus();
     toast.success("Revoked granted bot permissions.");
   }

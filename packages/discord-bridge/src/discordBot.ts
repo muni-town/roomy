@@ -27,14 +27,12 @@ import {
   co,
   createMessage,
   RoomyEntity,
-  SpacePermissionsComponent,
   createThread,
   getComponent,
   ThreadComponent,
   addToFolder,
   AuthorComponent,
-  AllPermissions,
-  Group,
+  getSpaceGroups,
 } from "@roomy-chat/sdk";
 
 const tracer = trace.getTracer("discordBot");
@@ -330,18 +328,7 @@ async function syncDiscordMessageToRoomy(
     if (!space) {
       throw error(span, `Error loading space: ${spaceId}`);
     }
-
-    const permissions = await getComponent(space, SpacePermissionsComponent);
-    if (!(permissions && permissions[AllPermissions.publicRead])) {
-      throw error(span, `Error getting permissions for space: ${spaceId}`);
-    }
-    const readGroup = await Group.load(permissions[AllPermissions.publicRead]!);
-    if (!readGroup) {
-      throw error(
-        span,
-        `Error loading public read group ( ${permissions[AllPermissions.publicRead]} ) for space: ${spaceId}`,
-      );
-    }
+    const groups = await getSpaceGroups(space);
 
     const existingRoomyThreadId = await syncedIds.get_roomyId(
       opts.channel.id.toString(),
@@ -366,17 +353,17 @@ async function syncDiscordMessageToRoomy(
       roomyThreadComponent = thread;
       roomyThreadEntity = ent;
     } else {
-      const { thread, roomyObject } = await createThread(
+      const { thread, entity } = await createThread(
         opts.channel.name || "",
-        permissions,
+        groups,
       );
       roomyThreadComponent = thread;
-      roomyThreadEntity = roomyObject;
+      roomyThreadEntity = entity;
       await addToFolder(space, roomyThreadEntity);
 
       await syncedIds.register({
         discordId: opts.channel.id.toString(),
-        roomyId: roomyObject.id,
+        roomyId: entity.id,
       });
     }
     if (!roomyThreadComponent.timeline) {
@@ -386,9 +373,15 @@ async function syncDiscordMessageToRoomy(
       );
     }
 
-    const { roomyObject: message } = await createMessage(opts.message.content, {
-      permissions,
-    });
+    const { entity: message } = await createMessage(
+      opts.message.content,
+      groups.admin,
+      {
+        created: new Date(opts.message.timestamp),
+        // TODO: include Discord edited timestamp maybe
+        updated: new Date(opts.message.timestamp),
+      },
+    );
 
     const avatar = avatarUrl(
       opts.message.author.id,
@@ -416,9 +409,7 @@ async function syncDiscordMessageToRoomy(
           imageUrl: avatar,
           name: opts.message.author.username,
         },
-        {
-          owner: readGroup,
-        },
+        groups.admin,
       );
       authorComponentId = authorInfo.id;
       syncedIds.register({

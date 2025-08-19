@@ -29,7 +29,10 @@ export const BookmarkedThread = co.map({
 
 export const BookmarkedThreads = co.list(BookmarkedThread);
 
-export const BookmarkedThreadsConfigs = co.record(z.string(), BookmarkedThreads);
+export const BookmarkedThreadsConfigs = co.record(
+  z.string(),
+  BookmarkedThreads,
+);
 
 export const HiddenThread = co.map({
   postUri: z.string(),
@@ -59,6 +62,8 @@ export const RoomyProfile = co.profile({
   description: z.string().optional(),
   joinedDate: z.date().optional(),
   joinedSpaces: co.list(RoomyEntity),
+  /** For every space, contains the group that we will */
+  spaceGroups: co.record(z.string(), z.string()),
 
   threadSubscriptions: co.list(z.string()), // List of thread IDs user is subscribed to
   hiddenFeedPosts: co.list(z.string()), // List of AT Proto URIs for hidden feed posts
@@ -110,13 +115,11 @@ export const RoomyAccount = co
         {
           name: creationProps?.name ?? "Anonymous",
           roomyInbox: createInbox(),
-          joinedSpaces: RoomyEntityList.create(
-            [],
-            publicGroup("reader"),
-          ),
+          joinedSpaces: RoomyEntityList.create([], publicGroup("reader")),
           activityLog: co
             .record(z.string(), z.string())
             .create({}, publicGroup("reader")),
+          spaceGroups: co.record(z.string(), z.string()).create({}),
           joinedDate: new Date(),
           threadSubscriptions: co.list(z.string()).create([]),
           hiddenFeedPosts: co.list(z.string()).create([]),

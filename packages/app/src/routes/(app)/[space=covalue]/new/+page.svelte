@@ -12,9 +12,10 @@
     co,
     createFolder,
     createPage,
+    createRoomyEntity,
     createThread,
+    getSpaceGroups,
     RoomyEntity,
-    SpacePermissionsComponent,
   } from "@roomy-chat/sdk";
   import { CoState } from "jazz-tools/svelte";
 
@@ -30,13 +31,6 @@
     new CoState(
       AllFoldersComponent,
       space?.current?.components?.[AllFoldersComponent.id],
-    ),
-  );
-
-  const permissions = $derived(
-    new CoState(
-      SpacePermissionsComponent,
-      space?.current?.components?.[SpacePermissionsComponent.id],
     ),
   );
 
@@ -85,50 +79,46 @@
       return;
     }
 
-    if (!permissions.current) {
-      console.error("Permissions not found");
-      return;
-    }
+    const groups = await getSpaceGroups(space.current);
 
     if (objectType === "Channel") {
       // add thread
-      const thread = await createThread(objectName, permissions.current);
+      const { entity: thread } = await createThread(objectName, groups);
 
-      addAsChild(thread.roomyObject);
+      addAsChild(thread);
 
-      allThreads.current?.push(thread.roomyObject);
-      navigate({ space: space.current?.id, object: thread.roomyObject.id });
+      allThreads.current?.push(thread);
+      navigate({ space: space.current?.id, object: thread.id });
     } else if (objectType === "Feeds") {
       // add feed thread
-      const thread = await createThread(objectName, permissions.current);
+      const feed = await createRoomyEntity(objectName, groups.admin);
 
       // Remove thread component and add feed configuration
-      delete thread.roomyObject.components.thread;
-      thread.roomyObject.components.feedConfig = JSON.stringify({
+      feed.components.feedConfig = JSON.stringify({
         feeds: [],
         threadsOnly: false,
         enabled: false,
       });
 
-      addAsChild(thread.roomyObject);
+      addAsChild(feed);
 
-      allThreads.current?.push(thread.roomyObject);
-      navigate({ space: space.current?.id, object: thread.roomyObject.id });
+      allThreads.current?.push(feed);
+      navigate({ space: space.current?.id, object: feed.id });
     } else if (objectType === "Group") {
       // add group
-      const group = await createFolder(objectName, permissions.current);
+      const { entity: group } = await createFolder(objectName, groups.admin);
 
       addAsChild(group);
 
       allFolders.current?.push(group);
     } else if (objectType === "Page") {
       // add page
-      const page = await createPage(objectName, permissions.current);
+      const { entity: page } = await createPage(objectName, groups.admin);
 
-      addAsChild(page.roomyObject);
+      addAsChild(page);
 
-      allPages.current?.push(page.roomyObject);
-      navigate({ space: space.current?.id, object: page.roomyObject.id });
+      allPages.current?.push(page);
+      navigate({ space: space.current?.id, object: page.id });
     }
   }
 

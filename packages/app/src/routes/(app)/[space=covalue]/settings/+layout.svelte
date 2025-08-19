@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import MainSidebarSpace from "$lib/components/sidebars/MainSidebarSpace.svelte";
-  import { Badge, Button, ScrollArea } from "@fuxui/base";
+  import { Button, ScrollArea } from "@fuxui/base";
   import Icon from "@iconify/svelte";
 
   let { children } = $props();

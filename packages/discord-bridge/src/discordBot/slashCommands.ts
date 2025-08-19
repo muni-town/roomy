@@ -10,7 +10,7 @@ import {
   SetupDesiredProps,
 } from "@discordeno/bot";
 
-import { co, hasFullWritePermissions, RoomyEntity } from "@roomy-chat/sdk";
+import { co, isSpaceAdmin, RoomyEntity } from "@roomy-chat/sdk";
 import {
   discordLatestMessageInChannelForBridge,
   discordWebhookTokensForBridge,
@@ -100,7 +100,7 @@ export async function handleSlashCommandInteraction(
         return;
       }
 
-      const hasPermissions = await hasFullWritePermissions(jazz, space);
+      const hasPermissions = await isSpaceAdmin(jazz, space);
       if (!hasPermissions) {
         interaction.respond({
           flags: MessageFlags.Ephemeral,

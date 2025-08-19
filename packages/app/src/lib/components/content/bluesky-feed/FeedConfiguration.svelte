@@ -39,9 +39,16 @@
   let threadsOnly = $derived(config().threadsOnly);
   let accountLoaded = $derived(!!me.current);
 
-  function updateConfig(updates: Partial<{ feeds: string[]; threadsOnly: boolean }>) {
-    console.log("🔧 updateConfig called:", updates, "accountLoaded:", accountLoaded);
-    
+  function updateConfig(
+    updates: Partial<{ feeds: string[]; threadsOnly: boolean }>,
+  ) {
+    console.log(
+      "🔧 updateConfig called:",
+      updates,
+      "accountLoaded:",
+      accountLoaded,
+    );
+
     if (!me.current) {
       console.error("❌ Cannot update config: Account not loaded");
       return;
@@ -52,7 +59,7 @@
       threadsOnly,
       ...updates,
     };
-    
+
     console.log("🔧 Calling setFeedConfig with:", newConfig);
     atprotoFeedService.setFeedConfig(me.current, objectId, newConfig);
   }
@@ -76,7 +83,7 @@
 
   function addDefaultFeeds() {
     console.log("🔘 Add default feeds clicked");
-    
+
     if (readonly || !accountLoaded) {
       console.log("❌ Cannot add feeds:", { readonly, accountLoaded });
       return;
@@ -96,7 +103,7 @@
 
   function clearAllFeeds() {
     console.log("🔘 Clear all feeds clicked");
-    
+
     if (readonly || !accountLoaded) {
       console.log("❌ Cannot clear feeds:", { readonly, accountLoaded });
       return;
@@ -137,7 +144,7 @@
         },
         (error) => {
           console.error(`❌ Error adding feed: ${error}`);
-        }
+        },
       );
 
       updateConfig({ feeds: updatedFeeds });
@@ -158,7 +165,6 @@
       console.error("❌ Error removing feed:", error);
     }
   }
-
 </script>
 
 <div class="space-y-4">
@@ -171,7 +177,9 @@
   </div>
 
   <!-- Current Status -->
-  <div class="bg-base-100 dark:bg-base-800 rounded-lg p-4 border border-base-200 dark:border-base-700">
+  <div
+    class="bg-base-100 dark:bg-base-800 rounded-lg p-4 border border-base-200 dark:border-base-700"
+  >
     <div class="flex items-center justify-between">
       <div>
         {#if feeds.length > 0}
@@ -199,7 +207,11 @@
               disabled={feedConfigLoading || !accountLoaded}
               class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
             >
-              {feedConfigLoading ? "Adding..." : !accountLoaded ? "Loading..." : "Add Default Feeds"}
+              {feedConfigLoading
+                ? "Adding..."
+                : !accountLoaded
+                  ? "Loading..."
+                  : "Add Default Feeds"}
             </button>
           {:else}
             <button
@@ -207,7 +219,11 @@
               disabled={feedConfigLoading || !accountLoaded}
               class="px-3 py-1.5 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 transition-colors"
             >
-              {feedConfigLoading ? "Clearing..." : !accountLoaded ? "Loading..." : "Clear All Feeds"}
+              {feedConfigLoading
+                ? "Clearing..."
+                : !accountLoaded
+                  ? "Loading..."
+                  : "Clear All Feeds"}
             </button>
           {/if}
         </div>
@@ -217,7 +233,9 @@
 
   <!-- Configuration Panel -->
   {#if !readonly}
-    <div class="bg-base-100 dark:bg-base-800 rounded-lg p-4 border border-base-200 dark:border-base-700 space-y-4">
+    <div
+      class="bg-base-100 dark:bg-base-800 rounded-lg p-4 border border-base-200 dark:border-base-700 space-y-4"
+    >
       <!-- Feed Options -->
       <div>
         <label class="flex items-center gap-2 cursor-pointer">
@@ -231,50 +249,53 @@
         </label>
       </div>
 
-        <!-- Add Custom Feed -->
-        <div>
-          <label class="block text-sm font-medium mb-2">Add Custom Feed</label>
-          <div class="flex gap-2">
-            <input
-              type="text"
-              bind:value={newFeedInput}
-              placeholder="Feed URL or AT:// URI"
-              class="flex-1 input input-sm input-bordered"
-              onkeydown={(e) => e.key === "Enter" && addFeed()}
-            />
-            <button
-              onclick={addFeed}
-              disabled={!newFeedInput.trim()}
-              class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
-            >
-              <Icon icon="mdi:plus" class="size-4" />
-              Add
-            </button>
-          </div>
-          <p class="text-xs text-base-content/60 mt-1">
-            Enter a Bluesky feed URL or AT Proto URI
-          </p>
-        </div>
-
-        <!-- Quick Actions -->
+      <!-- Add Custom Feed -->
+      <div>
+        <label for="text" class="block text-sm font-medium mb-2"
+          >Add Custom Feed</label
+        >
         <div class="flex gap-2">
+          <input
+            name="text"
+            type="text"
+            bind:value={newFeedInput}
+            placeholder="Feed URL or AT:// URI"
+            class="flex-1 input input-sm input-bordered"
+            onkeydown={(e) => e.key === "Enter" && addFeed()}
+          />
           <button
-            onclick={addDefaultFeeds}
-            class="px-3 py-1.5 text-sm border border-base-300 dark:border-base-700 rounded-md hover:bg-base-100 dark:hover:bg-base-800 transition-colors"
+            onclick={addFeed}
+            disabled={!newFeedInput.trim()}
+            class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
-            <Icon icon="mdi:star" class="size-4 inline mr-1" />
-            Add Default Feeds
+            <Icon icon="mdi:plus" class="size-4" />
+            Add
           </button>
-          {#if feeds.length > 0}
-            <button
-              onclick={clearAllFeeds}
-              class="px-3 py-1.5 text-sm border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-            >
-              <Icon icon="mdi:trash" class="size-4 inline mr-1" />
-              Clear All
-            </button>
-          {/if}
         </div>
+        <p class="text-xs text-base-content/60 mt-1">
+          Enter a Bluesky feed URL or AT Proto URI
+        </p>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="flex gap-2">
+        <button
+          onclick={addDefaultFeeds}
+          class="px-3 py-1.5 text-sm border border-base-300 dark:border-base-700 rounded-md hover:bg-base-100 dark:hover:bg-base-800 transition-colors"
+        >
+          <Icon icon="mdi:star" class="size-4 inline mr-1" />
+          Add Default Feeds
+        </button>
+        {#if feeds.length > 0}
+          <button
+            onclick={clearAllFeeds}
+            class="px-3 py-1.5 text-sm border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+          >
+            <Icon icon="mdi:trash" class="size-4 inline mr-1" />
+            Clear All
+          </button>
+        {/if}
+      </div>
 
       <!-- Current Feeds List -->
       {#if feeds && feeds.length > 0}
@@ -282,7 +303,9 @@
           <h4 class="text-sm font-medium mb-2">Configured Feeds</h4>
           <div class="space-y-2 max-h-64 overflow-y-auto">
             {#each feeds as feedUri}
-              <div class="flex items-center justify-between gap-3 p-2 bg-base-200 dark:bg-base-700 rounded">
+              <div
+                class="flex items-center justify-between gap-3 p-2 bg-base-200 dark:bg-base-700 rounded"
+              >
                 <div class="flex-1 min-w-0">
                   <div class="text-sm font-medium truncate">
                     {getFeedDisplayName(feedUri)}
@@ -308,13 +331,21 @@
 
   <!-- Help Text -->
   {#if feeds.length === 0}
-    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+    <div
+      class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4"
+    >
       <div class="flex items-start gap-3">
-        <Icon icon="mdi:information" class="text-blue-600 dark:text-blue-400 size-5 flex-shrink-0 mt-0.5" />
+        <Icon
+          icon="mdi:information"
+          class="text-blue-600 dark:text-blue-400 size-5 flex-shrink-0 mt-0.5"
+        />
         <div>
-          <p class="text-sm text-blue-800 dark:text-blue-200 font-medium">About Feed Threads</p>
+          <p class="text-sm text-blue-800 dark:text-blue-200 font-medium">
+            About Feed Threads
+          </p>
           <p class="text-xs text-blue-700 dark:text-blue-300 mt-1">
-            Feed threads display posts from ATProto feeds (like Bluesky). Add feeds to start seeing posts from configured feeds.
+            Feed threads display posts from ATProto feeds (like Bluesky). Add
+            feeds to start seeing posts from configured feeds.
           </p>
         </div>
       </div>

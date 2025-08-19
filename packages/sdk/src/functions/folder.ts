@@ -1,45 +1,19 @@
 import { co, Group } from "jazz-tools";
 import { createRoomyEntity } from "./roomyentity.js";
-import { AllPermissions, RoomyEntity } from "../schema/index.js";
+import { addComponent, RoomyEntity } from "../schema/index.js";
 import { ChildrenComponent, ParentComponent } from "../schema/folder.js";
 
 export async function createFolder(
   name: string,
-  permissions: Record<string, string>,
-) {
-  // folder doesnt need any content, it just has children
-  const {
-    roomyObject: folder,
-    entityGroup,
-    componentsGroup,
-  } = await createRoomyEntity(name, permissions);
+  group: Group,
+): Promise<{
+  entity: co.loaded<typeof RoomyEntity>;
+  children: co.loaded<typeof ChildrenComponent>;
+}> {
+  const entity = await createRoomyEntity(name, group);
+  const children = await addComponent(entity, ChildrenComponent, [], group);
 
-  const editEntityComponentsGroupId =
-    permissions[AllPermissions.editEntityComponents]!;
-  const editEntityComponentsGroup = await Group.load(
-    editEntityComponentsGroupId,
-  );
-  entityGroup.addMember(editEntityComponentsGroup!, "writer");
-
-  const editEntityGroupId = permissions[AllPermissions.editEntities]!;
-  const editEntityGroup = await Group.load(editEntityGroupId);
-  componentsGroup.addMember(editEntityGroup!, "writer");
-
-  const publicReadGroupId = permissions[AllPermissions.publicRead]!;
-  const publicReadGroup = await Group.load(publicReadGroupId);
-
-  const childrenGroup = Group.create();
-  childrenGroup.addMember(publicReadGroup!, "reader");
-
-  const manageChildrenGroupId = permissions[AllPermissions.manageChildren]!;
-  const manageChildrenGroup = await Group.load(manageChildrenGroupId);
-  childrenGroup.addMember(manageChildrenGroup!, "writer");
-
-  const children = ChildrenComponent.create([], childrenGroup);
-
-  folder.components[ChildrenComponent.id] = children.id;
-
-  return folder;
+  return { entity, children };
 }
 
 export async function addToFolder(

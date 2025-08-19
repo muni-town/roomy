@@ -17,7 +17,7 @@ async function getServiceAccount(inviteServiceUrl: string): Promise<Account> {
   return account;
 }
 
-let inviteServiceUrl = "https://invites.roomy.space";
+export const inviteServiceUrl = "https://invites.roomy.space";
 let inviteServiceAccount: Account | undefined;
 
 export async function addInviteServiceAsGroupAdmin(group: Group) {

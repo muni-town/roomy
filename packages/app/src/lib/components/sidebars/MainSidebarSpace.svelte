@@ -6,7 +6,7 @@
   import { AccountCoState, CoState } from "jazz-tools/svelte";
   import {
     AllMembersComponent,
-    isSpaceAdmin,
+    isCurrentAccountSpaceAdmin,
     RoomyAccount,
     RoomyEntity,
   } from "@roomy-chat/sdk";
@@ -31,6 +31,12 @@
         })
       : null,
   );
+  let isAdmin = $state(false);
+  $effect(() => {
+    if (!space?.current) return;
+    console.log(space.current.id);
+    isCurrentAccountSpaceAdmin(space.current).then((b) => (isAdmin = b));
+  });
 
   let members = $derived(
     new CoState(
@@ -166,7 +172,7 @@
         </Button>
       {/if}
 
-      {#if isSpaceAdmin(space?.current)}
+      {#if isAdmin}
         <Button
           class="w-full"
           href={`/${space?.current?.id}/new`}

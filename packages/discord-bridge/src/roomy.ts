@@ -161,24 +161,26 @@ async function syncMessageFromRoomyToDiscord(
     );
   }
 
-  const discordMessage = await discordBot.helpers.executeWebhook(
-    webhookId,
-    webhookToken,
-    {
-      avatarUrl: authorInfo.avatarUrl,
-      username: authorInfo.username,
-      content: contentComp?.content,
-      wait: true,
-    },
-  );
+  if (contentComp?.content) {
+    const discordMessage = await discordBot.helpers.executeWebhook(
+      webhookId,
+      webhookToken,
+      {
+        avatarUrl: authorInfo.avatarUrl,
+        username: authorInfo.username,
+        content: contentComp?.content,
+        wait: true,
+      },
+    );
 
-  if (!discordMessage) {
-    console.error("Could not create Discord message");
-    return;
+    if (!discordMessage) {
+      console.error("Could not create Discord message");
+      return;
+    }
+
+    await syncedIds.register({
+      discordId: discordMessage.id.toString(),
+      roomyId: opts.roomyMessageId,
+    });
   }
-
-  await syncedIds.register({
-    discordId: discordMessage.id.toString(),
-    roomyId: opts.roomyMessageId,
-  });
 }

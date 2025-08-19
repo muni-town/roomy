@@ -6,7 +6,7 @@ import { RoomyAccount } from "@roomy-chat/sdk";
 export async function startWorker(): Promise<{
   worker: Account;
 }> {
-  const syncServer = `ws://127.0.0.1:4200/?key=${JAZZ_EMAIL}`;
+  const syncServer = `wss://cloud.jazz.tools/?key=${JAZZ_EMAIL}`;
 
   const { worker } = await startJazzWorker({
     AccountSchema: RoomyAccount,

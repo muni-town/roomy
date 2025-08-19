@@ -5,6 +5,12 @@
     "rootDir": "src",
     "moduleResolution": "bundler"
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src",
+    "../../gitignore/scripts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

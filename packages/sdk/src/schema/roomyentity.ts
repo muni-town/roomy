@@ -43,6 +43,13 @@ export async function getComponent<D extends ComponentDef<LoadType<any>>>(
   def: D,
   opts?: Parameters<D["load"]>[1],
 ): Promise<ComponentLoaded<D> | undefined> {
+  await entity.ensureLoaded({
+    resolve: {
+      components: {
+        [def.id]: true,
+      },
+    },
+  });
   const id = entity.components?.[def.id];
   if (!id) return;
   return await def.load(id, opts);

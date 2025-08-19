@@ -1,34 +1,35 @@
-export const AllPermissions = {
-  publicRead: "publicRead",
+// export const AllPermissions = {
+//   message: "message",
+//   // publicRead: "publicRead",
 
-  viewMessages: "viewMessages",
-  sendMessages: "sendMessages",
-  deleteMessages: "deleteMessages",
-  editMessages: "editMessages",
-  reactToMessages: "reactToMessages",
-  addEmbeds: "addEmbeds",
-  manageEmbeds: "manageEmbeds",
-  hideMessagesInThreads: "hideMessagesInThreads",
+//   // viewMessages: "viewMessages",
+//   // sendMessages: "sendMessages",
+//   // deleteMessages: "deleteMessages",
+//   // editMessages: "editMessages",
+//   // reactToMessages: "reactToMessages",
+//   // addEmbeds: "addEmbeds",
+//   // manageEmbeds: "manageEmbeds",
+//   // hideMessagesInThreads: "hideMessagesInThreads",
 
-  viewChildren: "viewChildren",
-  manageChildren: "manageChildren",
-  editEntities: "editEntities",
-  editEntityComponents: "editEntityComponents",
+//   // viewChildren: "viewChildren",
+//   // manageChildren: "manageChildren",
+//   // editEntities: "editEntities",
+//   // editEntityComponents: "editEntityComponents",
 
-  createThreads: "createThreads",
-  manageThreads: "manageThreads",
+//   // createThreads: "createThreads",
+//   // manageThreads: "manageThreads",
 
-  editPages: "editPages",
+//   // editPages: "editPages",
 
-  editSpace: "editSpace",
-  addRootChildren: "addRootChildren",
-  editSpacePermissions: "editSpacePermissions",
+//   // editSpace: "editSpace",
+//   // addRootChildren: "addRootChildren",
+//   // editSpacePermissions: "editSpacePermissions",
 
-  addMembers: "addMembers",
-  seeMembers: "seeMembers",
-  manageMembers: "manageMembers",
+//   // addMembers: "addMembers",
+//   // seeMembers: "seeMembers",
+//   // manageMembers: "manageMembers",
 
-  banMembers: "banMembers",
+//   // banMembers: "banMembers",
 
-  manageRoles: "manageRoles",
-};
+//   // manageRoles: "manageRoles",
+// };

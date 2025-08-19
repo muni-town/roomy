@@ -5,7 +5,6 @@ import {
   HiddenInComponent,
   ImageUrlEmbed,
   PlainTextContentComponent,
-  Reaction,
   ReactionList,
   ReactionsComponent,
   ReplyToComponent,
@@ -16,71 +15,37 @@ import {
   VideoUrlEmbed,
 } from "../schema/threads.js";
 import { createRoomyEntity } from "./roomyentity.js";
-import { AllPermissions, RoomyEntity } from "../schema/index.js";
+import {
+  addComponent,
+  LoadedSpaceGroups,
+  RoomyEntity,
+} from "../schema/index.js";
 
 export async function createThread(
   name: string,
-  permissions: Record<string, string>,
-) {
-  const publicReadGroupId = permissions[AllPermissions.publicRead]!;
-  const publicReadGroup = await Group.load(publicReadGroupId);
-  if (!publicReadGroup) throw new Error("Could not load publicReadGroup");
-
-  const addMessagesGroupId = permissions[AllPermissions.sendMessages]!;
-  const addMessagesGroup = await Group.load(addMessagesGroupId);
-  if (!addMessagesGroup) throw new Error("Could not load addMessagesGroup");
-
-  const threadContentGroup = Group.create();
-  threadContentGroup.addMember(publicReadGroup, "reader");
-
-  const timelineGroup = Group.create();
-  timelineGroup.addMember(publicReadGroup, "reader");
-  timelineGroup.addMember(addMessagesGroup, "writer");
-
-  const addThreadsGroupId = permissions[AllPermissions.createThreads]!;
-  const addThreadsGroup = await Group.load(addThreadsGroupId);
-  if (!addThreadsGroup) throw new Error("Could not load addThreadsGroup");
-
-  const subThreadsGroup = Group.create();
-  subThreadsGroup.addMember(publicReadGroup, "reader");
-  subThreadsGroup.addMember(addThreadsGroup, "writer");
-
-  const thread = ThreadComponent.create(
+  groups: LoadedSpaceGroups,
+): Promise<{
+  entity: co.loaded<typeof RoomyEntity, { components: true }>;
+  thread: co.loaded<typeof ThreadComponent, { timeline: true }>;
+  subThreads: co.loaded<typeof SubThreadsComponent>;
+}> {
+  const entity = await createRoomyEntity(name, groups.admin);
+  const thread = await addComponent(
+    entity,
+    ThreadComponent,
     {
-      timeline: Timeline.create([], timelineGroup),
+      timeline: Timeline.create([], groups.public),
     },
-    threadContentGroup,
+    groups.admin,
+  );
+  const subThreads = await addComponent(
+    entity,
+    SubThreadsComponent,
+    [],
+    groups.public,
   );
 
-  const { roomyObject, entityGroup, componentsGroup } = await createRoomyEntity(
-    name,
-    permissions,
-  );
-
-  const editEntityComponentsGroupId =
-    permissions[AllPermissions.editEntityComponents]!;
-  const editEntityComponentsGroup = await Group.load(
-    editEntityComponentsGroupId,
-  );
-  componentsGroup.addMember(editEntityComponentsGroup!, "writer");
-
-  const editEntityGroupId = permissions[AllPermissions.editEntities]!;
-  const editEntityGroup = await Group.load(editEntityGroupId);
-  componentsGroup.addMember(editEntityGroup!, "writer");
-
-  const manageThreadsGroupId = permissions[AllPermissions.manageThreads]!;
-  const manageThreadsGroup = await Group.load(manageThreadsGroupId);
-  entityGroup.addMember(manageThreadsGroup!, "writer");
-
-  if (!roomyObject.components) {
-    throw new Error("RoomyObject components is undefined");
-  }
-  roomyObject.components[ThreadComponent.id] = thread.id;
-
-  const subThreads = SubThreadsComponent.create([], subThreadsGroup);
-  roomyObject.components[SubThreadsComponent.id] = subThreads.id;
-
-  return { roomyObject, thread };
+  return { entity, thread, subThreads };
 }
 
 export type ImageUrlEmbedCreate = {
@@ -99,7 +64,6 @@ export type VideoUrlEmbedCreate = {
 
 interface CreateMessageOptions {
   replyTo?: string;
-  permissions?: Record<string, string>;
   embeds?: (ImageUrlEmbedCreate | VideoUrlEmbedCreate)[];
   created?: Date;
   updated?: Date;
@@ -107,138 +71,71 @@ interface CreateMessageOptions {
 
 export async function createMessage(
   input: string,
-  opts?: CreateMessageOptions,
+  group: Group,
+  opts: CreateMessageOptions,
 ) {
-  const permissions = opts?.permissions || {};
-  const publicReadGroupId = permissions?.[AllPermissions.publicRead];
-  const publicReadGroup = await Group.load(publicReadGroupId || "");
-
-  const messageGroup = Group.create();
-  messageGroup.addMember(publicReadGroup!, "reader");
-
-  const addReactionsGroupId = permissions?.[AllPermissions.reactToMessages];
-  const addReactionsGroup = await Group.load(addReactionsGroupId || "");
-
-  const reactionsGroup = Group.create();
-  reactionsGroup.addMember(publicReadGroup!, "reader");
-  reactionsGroup.addMember(addReactionsGroup!, "writer");
-
-  const hiddenInGroup = Group.create();
-  hiddenInGroup.addMember(publicReadGroup!, "reader");
-
-  const hideMessagesInThreadsGroupId =
-    permissions?.[AllPermissions.hideMessagesInThreads]!;
-  const hideMessagesInThreadsGroup = await Group.load(
-    hideMessagesInThreadsGroupId,
-  );
-  hiddenInGroup.addMember(hideMessagesInThreadsGroup!, "writer");
-
-  const { roomyObject, entityGroup, componentsGroup } = await createRoomyEntity(
-    "",
-    permissions,
-  );
-
-  if (!roomyObject.components) {
-    throw new Error("RoomyObject components is undefined");
-  }
-
-  const editEntityComponentsGroupId =
-    permissions[AllPermissions.editEntityComponents]!;
-  const editEntityComponentsGroup = await Group.load(
-    editEntityComponentsGroupId,
-  );
-  componentsGroup.addMember(editEntityComponentsGroup!, "writer");
-
-  const editEntityGroupId = permissions[AllPermissions.editEntities]!;
-  const editEntityGroup = await Group.load(editEntityGroupId);
-  componentsGroup.addMember(editEntityGroup!, "writer");
-
-  const editMessagesGroupId = permissions[AllPermissions.editMessages]!;
-  const editMessagesGroup = await Group.load(editMessagesGroupId);
-  entityGroup.addMember(editMessagesGroup!, "writer");
-
-  const content = PlainTextContentComponent.create(
+  const entity = await createRoomyEntity("", group);
+  const plainText = await addComponent(
+    entity,
+    PlainTextContentComponent,
     { content: input },
-    componentsGroup,
+    group,
   );
-  roomyObject.components[PlainTextContentComponent.id] = content.id;
-
-  const userAccessTimes = UserAccessTimesComponent.create(
+  const userAccessTimes = await addComponent(
+    entity,
+    UserAccessTimesComponent,
     {
       createdAt: opts?.created || new Date(),
       updatedAt: opts?.updated || new Date(),
     },
-    componentsGroup,
+    group,
   );
-  roomyObject.components[UserAccessTimesComponent.id] = userAccessTimes.id;
-
-  const hiddenIn = HiddenInComponent.create(
-    {
-      hiddenIn: co.list(z.string()).create([]),
-    },
-    componentsGroup,
-  );
-  roomyObject.components[HiddenInComponent.id] = hiddenIn.id;
-
+  const hiddenIn = await addComponent(entity, HiddenInComponent, {
+    hiddenIn: co.list(z.string()).create([]),
+  });
   if (opts?.replyTo) {
-    roomyObject.components[ReplyToComponent.id] = opts?.replyTo;
+    entity.components[ReplyToComponent.id] = opts?.replyTo;
   }
-
-  const reactions = ReactionsComponent.create(
-    {
-      reactions: ReactionList.create([]),
-    },
-    reactionsGroup,
+  const reactions = await addComponent(
+    entity,
+    ReactionsComponent,
+    { reactions: ReactionList.create([]) },
+    group,
   );
-  roomyObject.components[ReactionsComponent.id] = reactions.id;
 
+  let embeds;
   if (opts?.embeds && opts.embeds.length > 0) {
-    const embedsGroup = Group.create();
-    embedsGroup.addMember(publicReadGroup!, "reader");
-    let embedsList = co.list(Embed).create([], embedsGroup);
-    for (const embed of opts.embeds) {
-      const embedGroup = Group.create();
-      embedGroup.addMember(publicReadGroup!, "reader");
+    let embedsList = co.list(Embed).create([], group);
 
+    for (const embed of opts.embeds) {
       if (embed.type === "imageUrl") {
         const imageUrlEmbed = ImageUrlEmbed.create(
           { url: embed.data.url },
-          embedGroup,
+          group,
         );
 
         embedsList.push(
-          Embed.create(
-            { type: "imageUrl", embedId: imageUrlEmbed.id },
-            embedGroup,
-          ),
+          Embed.create({ type: "imageUrl", embedId: imageUrlEmbed.id }, group),
         );
       } else if (embed.type === "videoUrl") {
         const videoUrlEmbed = VideoUrlEmbed.create(
           { url: embed.data.url },
-          embedGroup,
+          group,
         );
         embedsList.push(
-          Embed.create(
-            { type: "videoUrl", embedId: videoUrlEmbed.id },
-            embedGroup,
-          ),
+          Embed.create({ type: "videoUrl", embedId: videoUrlEmbed.id }, group),
         );
       }
     }
-    const embeds = EmbedsComponent.create(
-      {
-        embeds: embedsList,
-      },
-      embedsGroup,
+    embeds = await addComponent(
+      entity,
+      EmbedsComponent,
+      { embeds: embedsList },
+      group,
     );
-
-    // only add embeds component if there are any embeds
-    roomyObject.components[EmbedsComponent.id] = embeds.id;
   }
 
-  // skip AuthorComponent and ThreadIdComponent - can be added later if needed
-
-  return { roomyObject, content, hiddenIn, reactions, componentsGroup };
+  return { entity, plainText, hiddenIn, reactions, userAccessTimes, embeds };
 }
 
 export function messageHasAdmin(
