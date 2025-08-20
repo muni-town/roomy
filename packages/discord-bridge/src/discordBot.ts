@@ -209,23 +209,24 @@ async function backfill(bot: DiscordBot, guildIds: bigint[]) {
                   : "0";
 
                 while (true) {
-                  // Get the next set of messages
-                  const messages = await bot.helpers.getMessages(channel.id, {
-                    after,
-                  });
-                  if (messages.length > 0)
-                    span.addEvent("Fetched new messages", {
-                      count: messages.length,
-                    });
-
-                  console.log(
-                    `    Found ${messages.length} messages since last message.`,
-                  );
-
-                  if (messages.length == 0) break;
-
-                  // Backfill each one that we haven't indexed yet
                   try {
+                    // Get the next set of messages
+                    const messages = await bot.helpers.getMessages(channel.id, {
+                      after,
+                      limit: 100,
+                    });
+                    if (messages.length > 0)
+                      span.addEvent("Fetched new messages", {
+                        count: messages.length,
+                      });
+
+                    console.log(
+                      `    Found ${messages.length} messages since last message.`,
+                    );
+
+                    if (messages.length == 0) break;
+
+                    // Backfill each one that we haven't indexed yet
                     for (const message of messages.reverse()) {
                       after = message.id;
                       await syncDiscordMessageToRoomy(bot, {
@@ -241,7 +242,10 @@ async function backfill(bot: DiscordBot, guildIds: bigint[]) {
                         after.toString(),
                       ));
                   } catch (e) {
-                    console.error(`Error syncing message to roomy: ${e}`);
+                    console.warn(
+                      `Error syncing message to roomy ( this might be normal if the bot does not have access to the channel ): ${e}`,
+                    );
+                    break;
                   }
                 }
 
