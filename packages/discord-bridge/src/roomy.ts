@@ -2,10 +2,9 @@ import {
   AuthorComponent,
   ChildrenComponent,
   getComponent,
-  PlainTextContentComponent,
+  CommonMarkContentComponent,
   RoomyAccount,
   RoomyEntity,
-  RoomyProfile,
   ThreadComponent,
 } from "@roomy-chat/sdk";
 import {
@@ -115,7 +114,7 @@ async function syncMessageFromRoomyToDiscord(
     return;
   }
 
-  const contentComp = await getComponent(message, PlainTextContentComponent);
+  const contentComp = await getComponent(message, CommonMarkContentComponent);
 
   let authorInfo: { username: string; avatarUrl?: string };
   const customAuthor = await getComponent(message, AuthorComponent);

@@ -22,10 +22,10 @@
     HiddenInComponent,
     BranchThreadIdComponent,
     ReplyToComponent,
-    PlainTextContentComponent,
     isCurrentAccountSpaceAdmin,
     getSpaceGroups,
     getUserSpaceGroup,
+    CommonMarkContentComponent,
   } from "@roomy-chat/sdk";
   import { AccountCoState, CoState } from "jazz-tools/svelte";
   import { setInputFocus } from "./ChatInput.svelte";
@@ -215,12 +215,12 @@
     if (
       !firstMessage ||
       !firstMessage.components ||
-      !firstMessage.components[PlainTextContentComponent.id]
+      !firstMessage.components[CommonMarkContentComponent.id]
     )
       throw new Error("No components found on first message");
 
-    const firstMessageContent = await PlainTextContentComponent.load(
-      firstMessage.components[PlainTextContentComponent.id]!,
+    const firstMessageContent = await CommonMarkContentComponent.load(
+      firstMessage.components[CommonMarkContentComponent.id]!,
     );
 
     let newThreadName = threading.name || firstMessageContent?.content;

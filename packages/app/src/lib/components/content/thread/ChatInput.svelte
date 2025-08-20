@@ -15,6 +15,7 @@
   import { type Item, initKeyboardShortcutHandler } from "$lib/tiptap/editor";
   import { RichTextLink } from "$lib/tiptap/RichTextLink";
   import { cn, inputVariants } from "@fuxui/base";
+  import { Markdown } from "tiptap-markdown";
 
   type Props = {
     content: string;
@@ -58,6 +59,7 @@
         defaultProtocol: "https",
       }),
       initKeyboardShortcutHandler({ onEnter: wrappedOnEnter }),
+      Markdown,
     ];
 
     if (users) {
@@ -81,7 +83,7 @@
         },
       },
       onUpdate: (ctx) => {
-        content = ctx.editor.getHTML();
+        content = ctx.editor.storage.markdown.getMarkdown();
       },
     });
     editor = tiptap;

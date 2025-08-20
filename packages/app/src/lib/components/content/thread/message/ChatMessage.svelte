@@ -12,7 +12,7 @@
   import { AccountCoState, CoState } from "jazz-tools/svelte";
   import {
     AuthorComponent,
-    PlainTextContentComponent,
+    CommonMarkContentComponent,
     Reaction,
     ReplyToComponent,
     RoomyAccount,
@@ -38,6 +38,7 @@
   import VideoUrlEmbed from "./embeds/VideoUrlEmbed.svelte";
   import { goto } from "$app/navigation";
   import { Badge } from "@fuxui/base";
+  import { renderMarkdownSanitized } from "$lib/markdown";
 
   let {
     messageId,
@@ -120,8 +121,8 @@
   );
   let messageContent = $derived(
     new CoState(
-      PlainTextContentComponent,
-      message.current?.components?.[PlainTextContentComponent.id],
+      CommonMarkContentComponent,
+      message.current?.components?.[CommonMarkContentComponent.id],
     ),
   );
 
@@ -416,8 +417,7 @@
                 </div>
               </div>
             {:else}
-              <!-- TODO: review XSS safety -->
-              {@html messageContent.current?.content ?? ""}
+              {@html renderMarkdownSanitized(messageContent.current?.content ?? "")}
 
               {#if isMessageEdited && userAccessTimes.current?.updatedAt}
                 <div class="text-xs text-base-700 dark:text-base-400">

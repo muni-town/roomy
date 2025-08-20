@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     AuthorComponent,
-    PlainTextContentComponent,
+    CommonMarkContentComponent,
     RoomyEntity,
     RoomyProfile,
   } from "@roomy-chat/sdk";
@@ -33,8 +33,8 @@
 
   let content = $derived(
     new CoState(
-      PlainTextContentComponent,
-      message.current?.components?.[PlainTextContentComponent.id],
+      CommonMarkContentComponent,
+      message.current?.components?.[CommonMarkContentComponent.id],
     ),
   );
 

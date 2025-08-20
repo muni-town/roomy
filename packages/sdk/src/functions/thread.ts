@@ -1,10 +1,10 @@
 import { Account, co, Group, z } from "jazz-tools";
 import {
+  CommonMarkContentComponent,
   Embed,
   EmbedsComponent,
   HiddenInComponent,
   ImageUrlEmbed,
-  PlainTextContentComponent,
   ReactionList,
   ReactionsComponent,
   ReplyToComponent,
@@ -75,9 +75,9 @@ export async function createMessage(
   opts: CreateMessageOptions,
 ) {
   const entity = await createRoomyEntity("", group);
-  const plainText = await addComponent(
+  const commonMark = await addComponent(
     entity,
-    PlainTextContentComponent,
+    CommonMarkContentComponent,
     { content: input },
     group,
   );
@@ -135,7 +135,7 @@ export async function createMessage(
     );
   }
 
-  return { entity, plainText, hiddenIn, reactions, userAccessTimes, embeds };
+  return { entity, commonMark, hiddenIn, reactions, userAccessTimes, embeds };
 }
 
 export function messageHasAdmin(

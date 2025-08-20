@@ -36,6 +36,13 @@ export const SubThreadsComponent = defComponent(
   co.feed(RoomyEntity),
 );
 
+export const CommonMarkContentComponent = defComponent(
+  "space.roomy.content.commonmark.v0",
+  co.map({
+    content: z.string(),
+  }),
+);
+
 export const PlainTextContentComponent = defComponent(
   "space.roomy.content.plaintext.v0",
   co.map({
