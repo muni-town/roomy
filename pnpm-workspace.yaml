@@ -8,6 +8,6 @@ onlyBuiltDependencies:
   - esbuild
   - node
 catalog:
-  jazz-tools: ^0.16.4
+  jazz-tools: ^0.17.10
 patchedDependencies:
   "@discordeno/gateway": patches/@discordeno__gateway.patch
