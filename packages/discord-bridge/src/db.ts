@@ -139,6 +139,9 @@ export const registeredBridges = createBidirectionalSublevelMap(
   "spaceId",
 );
 
+export type LatestMessages = ReturnType<
+  typeof discordLatestMessageInChannelForBridge
+>;
 export const discordLatestMessageInChannelForBridge = ({
   discordGuildId,
   roomySpaceId,
@@ -161,6 +164,7 @@ export const discordWebhookTokensForBridge = ({
     `discordWebhookTokens:${discordGuildId.toString()}:${roomySpaceId}`,
   );
 
+export type SyncedIds = ReturnType<typeof syncedIdsForBridge>;
 export const syncedIdsForBridge = ({
   discordGuildId,
   roomySpaceId,

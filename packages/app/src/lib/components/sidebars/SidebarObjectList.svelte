@@ -38,7 +38,9 @@
   } = $props();
 
   let recentSubthreads = $derived.by(() => {
-    const subthreadsIter = subthreads && me && subthreads.byMe?.all;
+    const subthreadsIter = Object.values(subthreads?.perAccount || {})
+      .map((x) => [...x.all])
+      .flat();
     let array = [];
     if (!subthreadsIter) return [];
     for (const subthread of subthreadsIter) {
