@@ -45,21 +45,18 @@ export async function getUserSpaceGroup(
 ): Promise<Group> {
   // Load the user profile
   const account = RoomyAccount.getMe();
+  await account.ensureLoaded({ resolve: { profile: true } });
   if (!account.profile)
-    throw new Error("Account profile is null, can't get user space group.");
-  await account.profile.ensureLoaded({
-    resolve: {
-      spaceGroups: true,
-    },
-  });
+    throw new Error("Account profile is null, can't get user space group. 1");
+  const profile = account.profile;
 
   // Create the space groups on our profile if it doesn't exist
-  if (!account.profile.spaceGroups) {
-    account.profile.spaceGroups = co.record(z.string(), z.string()).create({});
+  if (!profile.spaceGroups) {
+    profile.spaceGroups = co.record(z.string(), z.string()).create({});
   }
 
   // Get the existing space group ID if it exists.
-  const spaceGroupId = account.profile.spaceGroups[space.id];
+  const spaceGroupId = profile.spaceGroups[space.id];
 
   // Return the already existing space group for this user if it exists
   if (spaceGroupId) {
@@ -84,7 +81,7 @@ export async function getUserSpaceGroup(
   spaceGroup.addMember(adminGroup, "writer");
 
   // Record the new group as our space group for this space
-  account.profile.spaceGroups[space.id] = spaceGroup.id;
+  profile.spaceGroups[space.id] = spaceGroup.id;
 
   // And return it.
   return spaceGroup;

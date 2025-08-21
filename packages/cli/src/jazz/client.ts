@@ -68,7 +68,7 @@ export class RoomyJazzClient {
       }
 
       console.log(
-        '   Jazz Cloud Peer: wss://cloud.jazz.tools/?key=flo.bit.dev@gmail.com'
+        '   Jazz Cloud Peer: wss://cloud.jazz.tools/?key=zicklag@katharostech.com'
       );
       console.log('   Account ID:', accountID);
       console.log('   Account Secret:', accountSecret.slice(0, 10) + '...');
@@ -77,7 +77,7 @@ export class RoomyJazzClient {
       const workerOptions: WorkerOptions = {
         accountID,
         accountSecret: accountSecret,
-        syncServer: 'wss://cloud.jazz.tools/?key=flo.bit.dev@gmail.com',
+        syncServer: 'wss://cloud.jazz.tools/?key=zicklag@katharostech.com',
         WebSocket,
         AccountSchema: RoomyAccount,
         crypto,

@@ -162,12 +162,14 @@ export async function startBot() {
       async channelCreate(channel) {
         if (!channel.guildId)
           throw new Error("Discord guild ID missing from channel create event");
+        if (!(await hasBridge(channel.guildId!))) return;
         const ctx = await getGuildContext(channel.guildId);
         await getRoomyThreadForChannel(ctx, channel);
       },
       async threadCreate(channel) {
         if (!channel.guildId)
           throw new Error("Discord guild ID missing from thread create event");
+        if (!(await hasBridge(channel.guildId!))) return;
         const ctx = await getGuildContext(channel.guildId);
         await getRoomyThreadForChannel(ctx, channel);
       },
@@ -178,6 +180,7 @@ export async function startBot() {
         // might be indexing at the same time and incorrectly update the latest message seen in the
         // channel.
         if (!doneBackfillingFromDiscord) return;
+        if (!(await hasBridge(message.guildId!))) return;
 
         const guildId = message.guildId;
         const channelId = message.channelId;
