@@ -16,9 +16,9 @@ import {
   discordWebhookTokensForBridge,
   registeredBridges,
   syncedIdsForBridge,
-} from "../db";
-import { jazz } from "../jazz";
-import { desiredProperties } from "../discordBot";
+} from "../db.js";
+import { jazz } from "../jazz.js";
+import { desiredProperties } from "../discordBot.js";
 
 export const slashCommands = [
   {

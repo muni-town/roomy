@@ -1,6 +1,6 @@
 import { Account, co, Group } from "jazz-tools";
-import { RoomyEntity } from "../schema";
-import { getSpaceGroups } from "./space";
+import { RoomyEntity } from "../schema/index.js";
+import { getSpaceGroups } from "./space.js";
 
 export async function addRoleToPermissions(
   role: Group,

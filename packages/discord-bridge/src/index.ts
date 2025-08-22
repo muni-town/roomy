@@ -1,9 +1,9 @@
-import "./httpProxy";
-import "./otel";
+import "./httpProxy.js";
+import "./otel.js";
 import "dotenv/config";
-import { startBot } from "./discordBot";
-import { startRoomyWatcher } from "./roomy";
-import { startApi } from "./api";
+import { startBot } from "./discordBot.js";
+import { startRoomyWatcher } from "./roomy.js";
+import { startApi } from "./api.js";
 import { trace } from "@opentelemetry/api";
 
 const tracer = trace.getTracer("index");

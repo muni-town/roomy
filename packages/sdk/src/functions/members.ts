@@ -4,8 +4,8 @@ import {
   getComponent,
   MemberEntry,
   RoomyEntity,
-} from "../schema";
-import { getUserSpaceGroup } from "./space";
+} from "../schema/index.js";
+import { getUserSpaceGroup } from "./space.js";
 
 export async function addMemberToSpace(
   member: Account,

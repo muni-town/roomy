@@ -1,6 +1,6 @@
 import { Account } from "jazz-tools";
 import { startWorker as startJazzWorker } from "jazz-tools/worker";
-import { JAZZ_ACCOUNT_ID, JAZZ_ACCOUNT_SECRET, JAZZ_EMAIL } from "./env";
+import { JAZZ_ACCOUNT_ID, JAZZ_ACCOUNT_SECRET, JAZZ_EMAIL } from "./env.js";
 import { RoomyAccount } from "@roomy-chat/sdk";
 
 export async function startWorker(): Promise<{

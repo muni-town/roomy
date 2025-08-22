@@ -11,11 +11,11 @@ import {
   avatarUrl,
   Channel,
 } from "@discordeno/bot";
-import { DISCORD_TOKEN } from "./env";
+import { DISCORD_TOKEN } from "./env.js";
 import {
   handleSlashCommandInteraction,
   slashCommands,
-} from "./discordBot/slashCommands";
+} from "./discordBot/slashCommands.js";
 
 import {
   discordLatestMessageInChannelForBridge,
@@ -24,7 +24,7 @@ import {
   registeredBridges,
   SyncedIds,
   syncedIdsForBridge,
-} from "./db";
+} from "./db.js";
 import { trace } from "@opentelemetry/api";
 import {
   co,

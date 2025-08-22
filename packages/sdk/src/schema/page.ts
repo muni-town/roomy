@@ -1,5 +1,5 @@
 import { co, z } from "jazz-tools";
-import { defComponent } from "./roomyentity";
+import { defComponent } from "./roomyentity.js";
 
 export const PageContent = co.map({
   text: z.string(),

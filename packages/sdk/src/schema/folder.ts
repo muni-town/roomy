@@ -1,5 +1,5 @@
 import { co, z } from "jazz-tools";
-import { defComponent, RoomyEntity } from "./roomyentity";
+import { defComponent, RoomyEntity } from "./roomyentity.js";
 
 export const ChildrenComponent = defComponent(
   "space.roomy.children",

@@ -12,7 +12,7 @@ import {
   discordWebhookTokensForBridge,
   registeredBridges,
   syncedIdsForBridge,
-} from "./db";
+} from "./db.js";
 import type { DiscordBot } from "./discordBot";
 
 export async function startRoomyWatcher(discordBot: DiscordBot) {
