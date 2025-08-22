@@ -255,20 +255,27 @@ async function backfill(bot: DiscordBot, guildIds: bigint[]) {
                 let before;
                 let threads: DiscordChannel[] = [];
                 while (true) {
-                  const resp = await bot.helpers.getPublicArchivedThreads(
-                    x.id,
-                    {
-                      before,
-                    },
-                  );
-                  threads = [...threads, ...(resp.threads as any)];
-
-                  if (resp.hasMore) {
-                    before = parseInt(
-                      resp.threads[resp.threads.length - 1]?.threadMetadata
-                        ?.archiveTimestamp || "0",
+                  try {
+                    const resp = await bot.helpers.getPublicArchivedThreads(
+                      x.id,
+                      {
+                        before,
+                      },
                     );
-                  } else {
+                    threads = [...threads, ...(resp.threads as any)];
+
+                    if (resp.hasMore) {
+                      before = parseInt(
+                        resp.threads[resp.threads.length - 1]?.threadMetadata
+                          ?.archiveTimestamp || "0",
+                      );
+                    } else {
+                      break;
+                    }
+                  } catch (e) {
+                    console.warn(
+                      `Error fetching threads for channel ( this might be normal if the bot does not have access to the channel ): ${e}`,
+                    );
                     break;
                   }
                 }
