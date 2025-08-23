@@ -6,6 +6,7 @@
   import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
   import FeedDisplay from "$lib/components/content/bluesky-feed/FeedDisplay.svelte";
   import { atprotoFeedService } from "$lib/services/atprotoFeedService";
+  import { Tabs } from "@fuxui/base";
   import {
     LastReadList,
     PageComponent,
@@ -14,6 +15,7 @@
     ThreadComponent,
   } from "@roomy-chat/sdk";
   import { AccountCoState, CoState } from "jazz-tools/svelte";
+  import BoardView from "$lib/components/content/thread/BoardView.svelte";
 
   let object = $derived(new CoState(RoomyEntity, page.params.object));
 
@@ -45,7 +47,22 @@
     const objectId = page.params.object;
     if (objectId && object.current?.components?.feedConfig && me.current) {
       // Attempt to migrate old JSON config to new Jazz root structure
-      atprotoFeedService.migrateEntityFeedConfig(me.current, objectId, object.current.components.feedConfig);
+      atprotoFeedService.migrateEntityFeedConfig(
+        me.current,
+        objectId,
+        object.current.components.feedConfig,
+      );
+    }
+  });
+
+  let activeTab = $state("Chat") as "Chat" | "Threads";
+  $effect(() => {
+    if (page.url.hash == "#chat") {
+      activeTab = "Chat";
+    } else if (page.url.hash == "#threads") {
+      activeTab = "Threads";
+    } else {
+      activeTab = "Chat";
     }
   });
 </script>
@@ -56,27 +73,38 @@
   {/snippet}
 
   {#snippet navbar()}
-    <div class="flex flex-col items-center justify-between px-2 truncate">
+    <div class="flex items-center px-2 truncate w-full">
       <h2
         class="text-lg font-bold max-w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
       >
         <span class="truncate">{object.current?.name || "..."}</span>
       </h2>
+      <span class="flex-grow"></span>
+      <Tabs
+        items={[
+          { name: "Chat", href: "#chat" },
+          { name: "Threads", href: "#threads" },
+        ]}
+        active={activeTab}
+      />
+      <span class="flex-grow"></span>
     </div>
   {/snippet}
 
   {#if object.current?.components?.feedConfig}
     <div class="flex-1 overflow-hidden">
-      <FeedDisplay 
-        objectId={page.params.object ?? ""} 
-        singlePostUri={page.url.searchParams.get('thread') || undefined}
+      <FeedDisplay
+        objectId={page.params.object ?? ""}
+        singlePostUri={page.url.searchParams.get("thread") || undefined}
       />
     </div>
-  {:else if object.current?.components?.[ThreadComponent.id]}
+  {:else if object.current?.components?.[ThreadComponent.id] && activeTab == "Chat"}
     <TimelineView
       objectId={page.params.object ?? ""}
       spaceId={page.params.space ?? ""}
     />
+  {:else if object.current?.components?.[ThreadComponent.id] && activeTab == "Threads"}
+    <BoardView objectId={page.params.object ?? ""} />
   {:else if object.current?.components?.[PageComponent.id]}
     <PageView
       objectId={page.params.object ?? ""}
