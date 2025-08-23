@@ -54,7 +54,7 @@
           Public Demo Spaces
         </h2>
         <section
-          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8 max-w-5xl"
+          class="flex flex-row gap-8 max-w-5xl"
         >
           {#each publicDemoSpaces as space}
             <SpaceButton {space} />
@@ -78,7 +78,7 @@
           Your Spaces
         </h2>
         <section
-          class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-8 max-w-5xl"
+          class="flex flex-row gap-8 max-w-5xl"
         >
           {#each new Set(spaces.toReversed()) as space}
             {#if !publicDemoSpaces.find((x) => x.id == space?.id)}
