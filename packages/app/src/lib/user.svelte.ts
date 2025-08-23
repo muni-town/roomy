@@ -357,7 +357,9 @@ export const user = {
   /** Add dev mode helper functions to window (only in development) */
   addDevModeHelpers() {
     // Import SDK functions dynamically to avoid issues in production
-    import("@roomy-chat/sdk").then(({}) => {
+    import("@roomy-chat/sdk").then((roomy) => {
+      (globalThis as any).r = roomy;
+      (globalThis as any).me = roomy.Account.getMe();
       // These haven't been migrated to the latest version yet.
       // // Remove a space by ID
       // (globalThis as any).removeSpace = async (spaceId: string) => {

@@ -170,7 +170,7 @@ export async function createSpace(
   // add invite account to the public group as admin get from the invite service
   try {
     const inviteAccountId = await fetch(
-      `http://localhost:8000/service-id`,
+      `https://invites.roomy.space/service-id`,
     ).then((res) => res.text());
     if (inviteAccountId) {
       console.log("adding invite account to member role", inviteAccountId);
