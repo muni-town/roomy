@@ -380,7 +380,13 @@
               <span class="font-bold text-accent-700 dark:text-accent-400"
                 >{authorData?.name ?? ""}</span
               >
-              {#if customAuthor.current}
+              {#if customAuthor.current && customAuthor.current.authorId?.startsWith("discord:")}
+                <Badge
+                  variant="secondary"
+                  title="This message is being bridged into this space via a Discord.com instance."
+                  >Discord</Badge
+                >
+              {:else if customAuthor.current}
                 <Badge variant="secondary">App</Badge>
               {/if}
               {#if userAccessTimes.current?.createdAt}
@@ -417,7 +423,9 @@
                 </div>
               </div>
             {:else}
-              {@html renderMarkdownSanitized(messageContent.current?.content ?? "")}
+              {@html renderMarkdownSanitized(
+                messageContent.current?.content ?? "",
+              )}
 
               {#if isMessageEdited && userAccessTimes.current?.updatedAt}
                 <div class="text-xs text-base-700 dark:text-base-400">
