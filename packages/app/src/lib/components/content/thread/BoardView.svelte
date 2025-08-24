@@ -34,16 +34,6 @@
 </script>
 
 {#if subthreads.current}
-  <div
-    class="sticky flex pt-3 text-lg border-b-2 border-solid px-6 shadow-md pb-2"
-  >
-    Thread Name
-
-    <span class="grow"></span>
-
-    <span class="mr-12">Members</span>
-    <span class="pr-2">Last Activity</span>
-  </div>
   <ScrollArea class="h-full px-2 pb-4">
     {#each Object.values(subthreads.current.perAccount)
       .map((x) => [...x.all].map((x) => x.value))

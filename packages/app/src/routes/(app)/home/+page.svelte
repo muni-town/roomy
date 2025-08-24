@@ -31,6 +31,12 @@
 </script>
 
 <MainLayout>
+  {#snippet navbar()}
+    <div class="flex w-full">
+      <span class="flex-grow"></span>
+      <Button href="https://a.roomy.space" target="_blank">About Roomy</Button>
+    </div>
+  {/snippet}
   <div
     class="flex flex-col items-center justify-start py-8 overflow-y-auto px-4"
   >
@@ -53,9 +59,7 @@
         <h2 class="text-3xl font-bold text-base-900 dark:text-base-100">
           Public Demo Spaces
         </h2>
-        <section
-          class="flex flex-row gap-8 max-w-5xl"
-        >
+        <section class="flex flex-row gap-8 max-w-5xl">
           {#each publicDemoSpaces as space}
             <SpaceButton {space} />
           {/each}
@@ -77,9 +81,7 @@
         <h2 class="text-3xl font-bold text-base-900 dark:text-base-100">
           Your Spaces
         </h2>
-        <section
-          class="flex flex-row gap-8 max-w-5xl"
-        >
+        <section class="flex flex-row gap-8 max-w-5xl">
           {#each new Set(spaces.toReversed()) as space}
             {#if !publicDemoSpaces.find((x) => x.id == space?.id)}
               <SpaceButton {space} />

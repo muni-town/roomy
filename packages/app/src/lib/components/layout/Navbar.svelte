@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { WithElementRef } from "bits-ui";
   import type { HTMLAttributes } from "svelte/elements";
-  import { Button, cn } from "@fuxui/base";
+  import { cn } from "@fuxui/base";
 
   const {
     class: className,
@@ -21,6 +21,4 @@
   {...restProps}
 >
   {@render children?.()}
-
-  <Button href="https://a.roomy.space" target="_blank">About Roomy</Button>
 </div>
