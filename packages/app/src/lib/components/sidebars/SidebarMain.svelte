@@ -70,6 +70,13 @@
 <MainSidebarSpace bind:isEditing />
 
 <div class="w-full py-2 px-2">
+  <Button
+    class="w-full justify-start mb-4"
+    variant="ghost"
+    href={`/${page.params.space}/index`}
+  >
+    Index
+  </Button>
   {#if isEditing}
     <Button
       class="w-full justify-start mb-4"
