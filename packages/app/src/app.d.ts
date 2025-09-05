@@ -10,4 +10,8 @@ declare global {
   }
 }
 
+declare module "socket.io-msgpack-parser" {
+  export default parser as any;
+}
+
 export {};

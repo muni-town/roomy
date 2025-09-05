@@ -26,7 +26,8 @@
     "lint-staged": "lint-staged"
   },
   "dependencies": {
-    "hls.js": "^1.6.6"
+    "hls.js": "^1.6.6",
+    "socket.io-msgpack-parser": "^3.0.2"
   },
   "devDependencies": {
     "@atproto/api": "^0.14.9",
@@ -95,6 +96,7 @@
     "prettier-plugin-svelte": "3.3.3",
     "sanitize-html": "^2.14.0",
     "shiki": "^3.2.1",
+    "socket.io-client": "^4.8.1",
     "svelte": "^5.23.1",
     "svelte-boring-avatars": "^1.2.6",
     "svelte-check": "^4.0.0",
@@ -108,6 +110,7 @@
     "tweetnacl": "^1.0.3",
     "typescript": "^5.0.0",
     "typescript-event-target": "^1.1.1",
+    "ulidx": "^2.4.1",
     "underscore": "^1.13.7",
     "vaul-svelte": "^0.3.2",
     "virtua": "^0.41.0",
