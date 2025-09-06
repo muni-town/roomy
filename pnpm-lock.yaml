@@ -96,6 +96,9 @@ importers:
       '@muni-town/leaf':
         specifier: ^0.2.0-preview.22
         version: 0.2.0-preview.22
+      '@muni-town/leaf-client':
+        specifier: file:../../../leaf/clients/typescript
+        version: file:../leaf/clients/typescript
       '@muni-town/leaf-storage-indexeddb':
         specifier: ^0.1.0-preview.6
         version: 0.1.0-preview.7(@swc/core@1.12.9(@swc/helpers@0.5.17))(@types/node@22.16.0)(typescript@5.8.3)
@@ -1236,6 +1239,9 @@ packages:
   '@msgpack/msgpack@3.1.2':
     resolution: {integrity: sha512-JEW4DEtBzfe8HvUYecLU9e6+XJnKDlUAIve8FvPzF3Kzs6Xo/KuZkZJsDH0wJXl/qEZbeeE7edxDNY3kMs39hQ==}
     engines: {node: '>= 18'}
+
+  '@muni-town/leaf-client@file:../leaf/clients/typescript':
+    resolution: {directory: ../leaf/clients/typescript, type: directory}
 
   '@muni-town/leaf-storage-deno-kv@0.1.0-preview.7':
     resolution: {integrity: sha512-YISEYb+InAcgaiG47EyGIreW39kaNAtCxx7woWZ9VAwqZTR/HGD1RjGh6l0bbz4Kru7Z26N2tzFM6YROgjspmQ==}
@@ -6832,6 +6838,15 @@ snapshots:
   '@mixmark-io/domino@2.2.0': {}
 
   '@msgpack/msgpack@3.1.2': {}
+
+  '@muni-town/leaf-client@file:../leaf/clients/typescript':
+    dependencies:
+      socket.io-client: 4.8.1
+      socket.io-msgpack-parser: 3.0.2
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
 
   '@muni-town/leaf-storage-deno-kv@0.1.0-preview.7':
     dependencies:

@@ -1,19 +1,17 @@
 <script lang="ts">
   import { user } from "$lib/user.svelte";
   import { onMount, untrack } from "svelte";
-  import { io, Socket } from "socket.io-client";
   import { Input, Button, Textarea } from "@fuxui/base";
-  import parser from "socket.io-msgpack-parser";
   import * as zip from "@zip-js/zip-js";
   import * as types from "./discordTypes";
-
+  import { LeafClient } from "@muni-town/leaf-client";
   import { formatDistance } from "date-fns";
 
   onMount(() => {
     user.init();
   });
 
-  let socket = $state(undefined) as undefined | Socket;
+  let client = $state(undefined) as undefined | LeafClient;
   let loggedIn = $derived(!!user.agent);
   let connected = $state(false);
   let authenticatedDid = $state("");
@@ -28,10 +26,6 @@
     });
   }
 
-  const logOutgoing = (...args: any[]) => {
-    messages.push("→ " + JSON.stringify(args));
-  };
-
   $effect(() => {
     user.agent;
     if (!user.agent) return;
@@ -39,30 +33,27 @@
       if (!user.agent) return "no user";
 
       untrack(() => {
-        socket = io("https://leaf.muni.town", {
-          parser,
-          async auth(cb) {
-            const resp = await user.agent?.com.atproto.server.getServiceAuth({
-              aud: "did:web:roomy.space",
-              lxm: "space.roomy.token.v0",
-            });
-            const token = resp?.data.token;
-            if (!token) return;
-            cb({ token });
-          },
+        if (!user.agent) return;
+        client = new LeafClient("http://localhost:5530", async () => {
+          const data = await user.agent!.com.atproto.server.getServiceAuth({
+            aud: "did:web:localhost:5530",
+          });
+          return data.data.token;
         });
-        socket.compress(true);
-        socket.connected;
-        socket.on("connect", () => (connected = true));
-        socket.on("disconnect", () => (connected = false));
 
-        socket.on("authenticated", (data) => {
-          authenticatedDid = data.did;
+        client.on("connect", () => {
+          console.log("connected");
+          connected = true;
         });
-        socket.onAny((...args: any[]) => {
-          messages.push("← " + JSON.stringify(args));
+        client.on("disconnect", () => {
+          console.log("disconnected");
+          connected = false;
         });
-        socket.onAnyOutgoing(logOutgoing);
+        client.on("authenticated", (did) => (authenticatedDid = did));
+        client.on("error", (error) => messages.push(error));
+        client.on("event", (event) => {
+          messages.push(JSON.stringify(event));
+        });
       });
     })();
   });
@@ -70,25 +61,37 @@
   async function uploadWasm() {
     const bytes = await wasmFileInput?.files?.item(0)?.arrayBuffer();
     if (!bytes) return;
-    const resp = await socket?.emitWithAck("wasm/upload", bytes);
-    messages.push("←← wasm/upload: " + JSON.stringify(resp));
+    try {
+      const wasmId = await client?.uploadWasm(bytes);
+      messages.push("Uploaded WASM: " + wasmId);
+    } catch (e) {
+      messages.push("Error uploading wasm: " + e);
+    }
   }
 
   let hasWasmId = $state("");
   async function checkHasWasm() {
-    const resp = await socket?.emitWithAck("wasm/has", hasWasmId);
-    messages.push("←← wasm/has: " + JSON.stringify(resp));
+    try {
+      const hasWasm = await client?.hasWasm(hasWasmId);
+      messages.push(`Has WASM ${hasWasmId}: ${hasWasm}`);
+    } catch (e) {
+      messages.push("Error chekcing for wasm: " + e);
+    }
   }
 
   let moduleId = $state("");
   let params = $state("");
   async function createStream() {
     if (!user.agent) return;
-    const resp = await socket?.emitWithAck("stream/create", {
-      module: moduleId,
-      params,
-    });
-    messages.push("←← stream/create: " + JSON.stringify(resp));
+    try {
+      const streamId = await client?.createStream(
+        moduleId,
+        new TextEncoder().encode(params).buffer,
+      );
+      messages.push(`Created stream: ${streamId}`);
+    } catch (e) {
+      messages.push("Error creating stream: " + e);
+    }
   }
 
   let streamId = $state("");
@@ -103,46 +106,61 @@
   let eventPayload = $state("");
   async function sendEvent() {
     if (!user.agent) return;
-    const data = new TextEncoder().encode(eventPayload);
-    const resp = await socket?.emitWithAck("stream/event", {
-      id: streamId,
-      payload: data.buffer,
-    });
-    messages.push("←← stream/event: " + JSON.stringify(resp));
+    try {
+      await client?.sendEvent(
+        streamId,
+        new TextEncoder().encode(eventPayload).buffer,
+      );
+      messages.push(`Sent event`);
+    } catch (e) {
+      messages.push("Error sending event: " + e);
+    }
   }
 
   let offset = $state(1);
   let limit = $state(25);
   async function fetchEvents() {
-    if (!user.agent) return;
+    if (!user.agent || !client) return;
     const startFetch = Date.now();
-    const resp: { events: { payload: number[]; idx: number; user: string }[] } =
-      await socket?.emitWithAck("stream/fetch", {
-        id: streamId,
-        offset,
-        limit,
-      });
-    messages.push(
-      `←← stream/fetch in ${(Date.now() - startFetch) / 1000} seconds: \n` +
-        resp.events
-          .map(
-            (x) =>
-              `  ${x.idx}(${x.user}):` +
-              new TextDecoder().decode(new Uint8Array(x.payload)),
-          )
-          .join("\n"),
-    );
+    try {
+      const events = await client.fetchEvents(streamId, { limit, offset });
+      messages.push(
+        `Fetched ${events.length} events in ${(Date.now() - startFetch) / 1000} seconds: \n` +
+          events
+            .map(
+              (x) =>
+                `  ${x.idx}(${x.user}):` +
+                new TextDecoder().decode(new Uint8Array(x.payload)),
+            )
+            .join("\n"),
+      );
+    } catch (e) {
+      messages.push("Error Fetching events: " + e);
+    }
   }
 
   async function subscribe() {
     if (!user.agent) return;
-    const resp = await socket?.emitWithAck("stream/subscribe", streamId);
-    messages.push("←← stream/subscribe: " + JSON.stringify(resp));
+    try {
+      await client?.subscribe(streamId);
+      messages.push(`Subscribed to stream: ${streamId}`);
+    } catch (e) {
+      messages.push("Error subscribing to stream: " + e);
+    }
   }
   async function unsubscribe() {
     if (!user.agent) return;
-    const resp = await socket?.emitWithAck("stream/unsubscribe", streamId);
-    messages.push("←← stream/unsubscribe: " + JSON.stringify(resp));
+    try {
+      const subscribed = await client?.unsubscribe(streamId);
+
+      if (subscribed) {
+        messages.push(`Unsubscribed to stream: ${streamId}`);
+      } else {
+        messages.push(`Tried to unsubscribe but wasn't actually subscribed.`);
+      }
+    } catch (e) {
+      messages.push("Error subscribing to stream: " + e);
+    }
   }
 
   let discordFileInput = $state(null) as HTMLInputElement | null;
@@ -153,7 +171,6 @@
     const reader = new zip.ZipReader(new zip.BlobReader(file));
 
     messages.push("starting import");
-    socket?.offAnyOutgoing(logOutgoing);
 
     const startTime = Date.now();
     let count = 0;
@@ -178,30 +195,26 @@
         count += 1;
         batch.push(new TextEncoder().encode(JSON.stringify(message)).buffer);
         if (batch.length >= batchSize) {
-          socket
-            ?.emitWithAck("stream/event_batch", {
-              id: streamId,
-              payloads: batch,
-            })
-            .then((ack) => {
+          client
+            ?.sendEvents(streamId, batch)
+            .then(() => {
               finished_count += batchSize;
-              if (ack.error) {
-                messages.push("Error: " + ack.error);
-              }
+            })
+            .catch((e) => {
+              finished_count += batchSize;
+              messages.push("Error uploading batch: " + e);
             });
           batch = [];
         }
       }
-      socket
-        ?.emitWithAck("stream/event_batch", {
-          id: streamId,
-          payloads: batch,
-        })
-        .then((ack) => {
+      client
+        ?.sendEvents(streamId, batch)
+        .then(() => {
           finished_count += batchSize;
-          if (ack.error) {
-            messages.push("Error: " + ack.error);
-          }
+        })
+        .catch((e) => {
+          finished_count += batchSize;
+          messages.push("Error uploading batch: " + e);
         });
 
       messages.push(`importing channel: ${parsed.channel.name}`);
@@ -225,8 +238,6 @@
     messages.push(
       `Done importing ${count} messages in ${formatDistance(Date.now(), startTime)} ( ${(Date.now() - startTime) / 1000} seconds )`,
     );
-
-    socket?.onAnyOutgoing(logOutgoing);
   }
 </script>
 
