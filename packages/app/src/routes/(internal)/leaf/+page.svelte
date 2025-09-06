@@ -175,6 +175,7 @@
     const startTime = Date.now();
     let count = 0;
     let finished_count = 0;
+    let batchPromises = [];
     for await (const entry of reader.getEntriesGenerator()) {
       if (!entry.getData) continue;
 
@@ -195,9 +196,10 @@
         count += 1;
         batch.push(new TextEncoder().encode(JSON.stringify(message)).buffer);
         if (batch.length >= batchSize) {
-          client
-            ?.sendEvents(streamId, batch)
-            .then(() => {
+          const promise = client?.sendEvents(streamId, batch);
+          batchPromises.push(promise);
+          promise
+            ?.then(() => {
               finished_count += batchSize;
             })
             .catch((e) => {
@@ -207,9 +209,10 @@
           batch = [];
         }
       }
-      client
-        ?.sendEvents(streamId, batch)
-        .then(() => {
+      const promise = client?.sendEvents(streamId, batch);
+      batchPromises.push(promise);
+      promise
+        ?.then(() => {
           finished_count += batchSize;
         })
         .catch((e) => {
@@ -234,9 +237,10 @@
       };
       check();
     });
+    await Promise.all(batchPromises);
 
     messages.push(
-      `Done importing ${count} messages in ${formatDistance(Date.now(), startTime)} ( ${(Date.now() - startTime) / 1000} seconds )`,
+      `Done importing ${count} messages in ${(Date.now() - startTime) / 1000} seconds`,
     );
   }
 </script>
