@@ -115,6 +115,7 @@
   let limit = $state(25);
   async function fetchEvents() {
     if (!user.agent) return;
+    const startFetch = Date.now();
     const resp: { events: { payload: number[]; idx: number; user: string }[] } =
       await socket?.emitWithAck("stream/fetch", {
         id: streamId,
@@ -122,7 +123,7 @@
         limit,
       });
     messages.push(
-      "←← stream/fetch: \n" +
+      `←← stream/fetch in ${(Date.now() - startFetch) / 1000} seconds: \n` +
         resp.events
           .map(
             (x) =>
