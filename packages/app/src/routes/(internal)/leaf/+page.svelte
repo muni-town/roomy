@@ -4,6 +4,10 @@
   import { io, Socket } from "socket.io-client";
   import { Input, Button, Textarea } from "@fuxui/base";
   import parser from "socket.io-msgpack-parser";
+  import * as zip from "@zip-js/zip-js";
+  import * as types from "./discordTypes";
+
+  import { formatDistance } from "date-fns";
 
   onMount(() => {
     user.init();
@@ -15,7 +19,7 @@
   let authenticatedDid = $state("");
 
   let messages = $state([]) as string[];
-  let fileInput = $state(null) as HTMLInputElement | null;
+  let wasmFileInput = $state(null) as HTMLInputElement | null;
 
   // Reload window on hot reload to avoid holding multiple socket connections
   if (import.meta.hot) {
@@ -24,6 +28,10 @@
     });
   }
 
+  const logOutgoing = (...args: any[]) => {
+    messages.push("→ " + JSON.stringify(args));
+  };
+
   $effect(() => {
     user.agent;
     if (!user.agent) return;
@@ -31,7 +39,7 @@
       if (!user.agent) return "no user";
 
       untrack(() => {
-        socket = io("http://localhost:5530", {
+        socket = io("https://leaf.muni.town", {
           parser,
           async auth(cb) {
             const resp = await user.agent?.com.atproto.server.getServiceAuth({
@@ -54,15 +62,13 @@
         socket.onAny((...args: any[]) => {
           messages.push("← " + JSON.stringify(args));
         });
-        socket.onAnyOutgoing((...args: any[]) => {
-          messages.push("→ " + JSON.stringify(args));
-        });
+        socket.onAnyOutgoing(logOutgoing);
       });
     })();
   });
 
   async function uploadWasm() {
-    const bytes = await fileInput?.files?.item(0)?.arrayBuffer();
+    const bytes = await wasmFileInput?.files?.item(0)?.arrayBuffer();
     if (!bytes) return;
     const resp = await socket?.emitWithAck("wasm/upload", bytes);
     messages.push("←← wasm/upload: " + JSON.stringify(resp));
@@ -137,6 +143,90 @@
     const resp = await socket?.emitWithAck("stream/unsubscribe", streamId);
     messages.push("←← stream/unsubscribe: " + JSON.stringify(resp));
   }
+
+  let discordFileInput = $state(null) as HTMLInputElement | null;
+  async function importDiscord() {
+    const file = discordFileInput?.files?.item(0);
+    if (!file) return;
+
+    const reader = new zip.ZipReader(new zip.BlobReader(file));
+
+    messages.push("starting import");
+    socket?.offAnyOutgoing(logOutgoing);
+
+    const startTime = Date.now();
+    let count = 0;
+    let finished_count = 0;
+    for await (const entry of reader.getEntriesGenerator()) {
+      if (!entry.getData) continue;
+
+      const dataWriter = new zip.BlobWriter("application/json");
+      await entry.getData(dataWriter);
+      const data = new Uint8Array(
+        await (await dataWriter.getData()).arrayBuffer(),
+      );
+      if (data.length == 0) continue;
+
+      const parsed: types.ImportChannel = JSON.parse(
+        new TextDecoder().decode(data),
+      );
+
+      const batchSize = 1000;
+      let batch = [];
+      for (const message of parsed.messages) {
+        count += 1;
+        batch.push(new TextEncoder().encode(JSON.stringify(message)).buffer);
+        if (batch.length >= batchSize) {
+          socket
+            ?.emitWithAck("stream/event_batch", {
+              id: streamId,
+              payloads: batch,
+            })
+            .then((ack) => {
+              finished_count += batchSize;
+              if (ack.error) {
+                messages.push("Error: " + ack.error);
+              }
+            });
+          batch = [];
+        }
+      }
+      socket
+        ?.emitWithAck("stream/event_batch", {
+          id: streamId,
+          payloads: batch,
+        })
+        .then((ack) => {
+          finished_count += batchSize;
+          if (ack.error) {
+            messages.push("Error: " + ack.error);
+          }
+        });
+
+      messages.push(`importing channel: ${parsed.channel.name}`);
+    }
+
+    await new Promise((resolve) => {
+      const check = () => {
+        let secondsElapsed = (Date.now() - startTime) / 1000;
+        messages.push(
+          `Finished ${finished_count} / ${count} messages at ${finished_count / secondsElapsed} messages/second.`,
+        );
+        if (finished_count >= count) {
+          resolve(undefined);
+        } else {
+          setTimeout(check, 5000);
+        }
+      };
+      check();
+    });
+
+    messages.push(
+      `Done importing ${count} messages in ${formatDistance(Date.now(), startTime)} ( ${(Date.now() - startTime) / 1000} seconds )`,
+    );
+
+    socket?.onAnyOutgoing(logOutgoing);
+  }
 </script>
 
 <div class="flex flex-row thin-scrollbars">
@@ -161,7 +251,7 @@
       <h2 class="text-lg">Upload WASM</h2>
 
       <form class="flex gap-2 m-2 ml-3" onsubmit={uploadWasm}>
-        <Input bind:ref={fileInput} type="file" />
+        <Input bind:ref={wasmFileInput} type="file" accept=".wasm" />
         <Button type="submit">Upload</Button>
       </form>
     </div>
@@ -241,6 +331,18 @@
           <Textarea bind:value={eventPayload} class="w-full" />
         </label>
         <Button type="submit">Send</Button>
+      </form>
+    </div>
+
+    <div class="my-3">
+      <h2 class="text-lg">Import Discord Messages</h2>
+
+      <form
+        class="flex flex-col w-[20em] gap-3 m-2 ml-3"
+        onsubmit={importDiscord}
+      >
+        <Input bind:ref={discordFileInput} type="file" accept=".zip" />
+        <Button type="submit">Import</Button>
       </form>
     </div>
   </div>
