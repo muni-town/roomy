@@ -5,7 +5,6 @@
   import * as zip from "@zip-js/zip-js";
   import * as types from "./discordTypes";
   import { LeafClient } from "@muni-town/leaf-client";
-  import { formatDistance } from "date-fns";
 
   onMount(() => {
     user.init();
@@ -119,11 +118,18 @@
 
   let offset = $state(1);
   let limit = $state(25);
+  let fetchFilter = $state("");
   async function fetchEvents() {
     if (!user.agent || !client) return;
     const startFetch = Date.now();
     try {
-      const events = await client.fetchEvents(streamId, { limit, offset });
+      const events = await client.fetchEvents(streamId, {
+        limit,
+        offset,
+        filter: fetchFilter
+          ? new TextEncoder().encode(fetchFilter).buffer
+          : undefined,
+      });
       messages.push(
         `Fetched ${events.length} events in ${(Date.now() - startFetch) / 1000} seconds: \n` +
           events
@@ -316,6 +322,10 @@
         <label>
           Limit
           <Input type="number" bind:value={limit} class="w-full" />
+        </label>
+        <label>
+          Filter
+          <Input bind:value={fetchFilter} class="w-full" />
         </label>
         <Button type="submit">Fetch</Button>
       </form>
