@@ -1,5 +1,6 @@
 packages:
-  - packages/*
+  - packages/app
+  - packages/tsconfig
 onlyBuiltDependencies:
   - '@swc/core'
   - '@tailwindcss/oxide'
@@ -7,7 +8,5 @@ onlyBuiltDependencies:
   - core-js
   - esbuild
   - node
-catalog:
-  jazz-tools: ^0.17.10
-patchedDependencies:
-  "@discordeno/gateway": patches/@discordeno__gateway.patch
+# patchedDependencies:
+#   "@discordeno/gateway": patches/@discordeno__gateway.patch

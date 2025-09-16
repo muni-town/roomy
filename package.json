@@ -1,5 +1,5 @@
 {
-  "packageManager": "pnpm@10.14.0",
+  "packageManager": "pnpm@10.16.1",
   "repository": {
     "url": "https://github.com/muni-town/roomy"
   },

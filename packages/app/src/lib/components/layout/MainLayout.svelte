@@ -4,29 +4,17 @@
 
 <script lang="ts">
   import Navbar from "./Navbar.svelte";
-  import BigSidebar from "./BigSidebar.svelte";
-  import SmallSidebar from "./SmallSidebar.svelte";
+  // import BigSidebar from "./BigSidebar.svelte";
+  // import SmallSidebar from "./SmallSidebar.svelte";
   import { type Snippet } from "svelte";
   import ToggleNavigation from "../helper/ToggleNavigation.svelte";
   import { cn } from "@fuxui/base";
-  import ServerBar from "../sidebars/ServerBar.svelte";
-  import { AccountCoState } from "jazz-tools/svelte";
-  import { RoomyAccount } from "@roomy-chat/sdk";
+  // import ServerBar from "../sidebars/ServerBar.svelte";
   import { onNavigate } from "$app/navigation";
   import * as rawEnv from "$env/static/public";
 
-  const me = new AccountCoState(RoomyAccount, {
-    resolve: {
-      profile: true,
-      root: true,
-    },
-  });
-  // Big sidebar
-  // Navbar
-  // Main content
-
   let {
-    serverBar,
+    // serverBar,
     sidebar,
     navbar,
     children,
@@ -51,7 +39,7 @@
     isSidebarVisible.value ? "block" : "hidden sm:block",
   ]}
 >
-  <div class="flex h-full w-fit">
+  <!-- <div class="flex h-full w-fit">
     {#if !hideSmallSidebar}
       <SmallSidebar>
         {#if serverBar}
@@ -69,7 +57,7 @@
         {@render sidebar?.()}
       </BigSidebar>
     {/if}
-  </div>
+  </div> -->
 </div>
 
 <!-- Overlay -->
