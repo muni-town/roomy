@@ -5,26 +5,26 @@
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
 
   type Props = {
-    space: unknown;
+    name?: string;
+    avatar?: string;
+    id: string;
     hasJoined?: boolean;
   };
 
-  const { space, hasJoined = true }: Props = $props();
+  const { name, avatar, id, hasJoined = true }: Props = $props();
 
-  let isActive = $derived(
-    space?.id && page.url.pathname.includes(space?.id || ""),
-  );
+  let isActive = $derived(page.params.space == id);
 </script>
 
 <Tooltip
-  text={space?.name}
+  text={name}
   delayDuration={0}
   contentProps={{ side: "right", sideOffset: 5 }}
 >
   {#snippet child({ props })}
     <a
       {...props}
-      href={navigateSync({ space: space?.id || "" })}
+      href={navigateSync({ space: id })}
       class={[
         "size-10 rounded-full relative group",
         isActive
@@ -34,7 +34,7 @@
       ]}
       onmousedown={() => {
         if (isActive) return;
-        navigate({ space: space?.id || "" });
+        navigate({ space: id });
       }}
       onclick={(e) => {
         if (!isActive) return;
@@ -48,7 +48,7 @@
           !hasJoined && "filter grayscale",
         ]}
       >
-        <SpaceAvatar imageUrl={space?.imageUrl} id={space?.id} size={40} />
+        <SpaceAvatar imageUrl={avatar} {id} size={40} />
       </div>
     </a>
   {/snippet}

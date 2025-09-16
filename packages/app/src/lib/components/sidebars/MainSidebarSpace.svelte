@@ -3,17 +3,8 @@
   import { Button, cn, Popover } from "@fuxui/base";
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
-  import { AccountCoState, CoState } from "jazz-tools/svelte";
-  import {
-    AllMembersComponent,
-    isCurrentAccountSpaceAdmin,
-    RoomyAccount,
-    RoomyEntity,
-  } from "@roomy-chat/sdk";
   import toast from "svelte-french-toast";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
-  import { joinSpace } from "../helper/joinSpace";
-  import { user } from "$lib/user.svelte";
   import { blueskyLoginModalState } from "@fuxui/social";
 
   let {
@@ -22,74 +13,30 @@
     isEditing?: boolean;
   } = $props();
 
-  let space = $derived(
-    page.params?.space
-      ? new CoState(RoomyEntity, page.params.space, {
-          resolve: {
-            components: true,
-          },
-        })
-      : null,
-  );
-  let isAdmin = $state(false);
-  $effect(() => {
-    if (!space?.current) return;
-    console.log(space.current.id);
-    isCurrentAccountSpaceAdmin(space.current).then((b) => (isAdmin = b));
-  });
-
-  let members = $derived(
-    new CoState(
-      AllMembersComponent,
-      space?.current?.components?.[AllMembersComponent.id],
-    ),
-  );
-
-  let users = $derived(
-    Object.values(members.current?.perAccount ?? {})
-      .map((accountFeed) => new Array(...accountFeed.all))
-      .flat()
-      .sort((a, b) => a.madeAt.getTime() - b.madeAt.getTime())
-      .map((a) => a.value),
-  );
-
-  const me = new AccountCoState(RoomyAccount, {
-    resolve: {
-      profile: {
-        roomyInbox: {
-          $each: true,
-          $onError: null,
-        },
-      },
-      root: {
-        lastRead: true,
-      },
-    },
-  });
 
   function leaveSpace() {
-    if (
-      !space?.current?.id ||
-      !me?.current?.profile?.joinedSpaces ||
-      !users ||
-      !users.length
-    )
-      return;
+    // if (
+    //   !space?.current?.id ||
+    //   !me?.current?.profile?.joinedSpaces ||
+    //   !users ||
+    //   !users.length
+    // )
+    //   return;
 
-    // Remove the space from the user's joined spaces
-    const spaceIndex = me.current.profile.joinedSpaces.findIndex(
-      (s) => s?.id === space?.current?.id,
-    );
-    if (spaceIndex !== -1) {
-      me.current.profile.joinedSpaces.splice(spaceIndex, 1);
-    }
+    // // Remove the space from the user's joined spaces
+    // const spaceIndex = me.current.profile.joinedSpaces.findIndex(
+    //   (s) => s?.id === space?.current?.id,
+    // );
+    // if (spaceIndex !== -1) {
+    //   me.current.profile.joinedSpaces.splice(spaceIndex, 1);
+    // }
 
-    const memberIndex = users.findIndex(
-      (m) => m?.account?.id === me?.current?.id,
-    );
-    if (memberIndex !== -1 && users[memberIndex]) {
-      users[memberIndex].softDeleted = true;
-    }
+    // const memberIndex = users.findIndex(
+    //   (m) => m?.account?.id === me?.current?.id,
+    // );
+    // if (memberIndex !== -1 && users[memberIndex]) {
+    //   users[memberIndex].softDeleted = true;
+    // }
 
     navigate("home");
   }
@@ -97,13 +44,14 @@
   let popoverOpen = $state(false);
 
   let hasJoinedSpace = $derived(
-    me.current?.profile?.joinedSpaces?.some(
-      (joinedSpace) => joinedSpace?.id === space?.current?.id,
-    ),
+    false
+    // me.current?.profile?.joinedSpaces?.some(
+    //   (joinedSpace) => joinedSpace?.id === space?.current?.id,
+    // ),
   );
 </script>
 
-<div
+<!-- <div
   class="w-full pt-0.5 pb-1 px-2 h-fit flex mb-4 justify-between items-center"
 >
   <Popover
@@ -208,4 +156,4 @@
       {/if}
     </div>
   </Popover>
-</div>
+</div> -->

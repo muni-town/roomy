@@ -8,12 +8,14 @@
   // import SmallSidebar from "./SmallSidebar.svelte";
   import { type Snippet } from "svelte";
   import ToggleNavigation from "../helper/ToggleNavigation.svelte";
-  import { cn } from "@fuxui/base";
+  import { cn, Tooltip } from "@fuxui/base";
   // import ServerBar from "../sidebars/ServerBar.svelte";
   import { onNavigate } from "$app/navigation";
   import * as rawEnv from "$env/static/public";
   import SmallSidebar from "./SmallSidebar.svelte";
   import ServerBar from "../sidebars/ServerBar.svelte";
+  import { backendStatus } from "$lib/workers";
+  import Icon from "@iconify/svelte";
 
   let {
     serverBar,
@@ -55,6 +57,22 @@
     {/if}
 
     {@render navbar?.()}
+
+    <Tooltip
+      text={backendStatus.leafConnected ? "Connected" : "Disconnected"}
+      delayDuration={0}
+    >
+      {#snippet child({ props })}
+        <Icon
+          class={(backendStatus.leafConnected
+            ? "text-green-500"
+            : "text-red-500") + " mx-3"}
+          icon="mdi:wireless"
+          font-size="2em"
+          {...props}
+        />
+      {/snippet}
+    </Tooltip>
   </Navbar>
 
   {@render children?.()}

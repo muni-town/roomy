@@ -1,41 +1,30 @@
 <script lang="ts">
-  console.log('🔍 SidebarObject.svelte loading');
+  console.log("🔍 SidebarObject.svelte loading");
   import { page } from "$app/state";
   import { navigateSync } from "$lib/utils.svelte";
   import { Badge, Button } from "@fuxui/base";
   import Icon from "@iconify/svelte";
   import { atprotoFeedService } from "$lib/services/atprotoFeedService";
-  import {
-    BansComponent,
-    ChildrenComponent,
-    co,
-    PageComponent,
-    RoomyAccount,
-    RoomyEntity,
-    SubThreadsComponent,
-    ThreadComponent,
-  } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-tools/svelte";
   import SidebarObjectList from "./SidebarObjectList.svelte";
 
   let {
-    object,
-    me,
-    isEditing = $bindable(false),
-    editEntity,
-    space,
-    level = 0,
-    index = 0,
-    isSubthread,
+    // object,
+    // me,
+    // isEditing = $bindable(false),
+    // editEntity,
+    // space,
+    // level = 0,
+    // index = 0,
+    // isSubthread,
   }: {
-    object: co.loaded<typeof RoomyEntity> | null | undefined;
-    me: co.loaded<typeof RoomyAccount> | undefined | null;
-    isEditing?: boolean;
-    editEntity?: (entity: co.loaded<typeof RoomyEntity>) => void;
-    space: co.loaded<typeof RoomyEntity> | undefined | null;
-    level?: number;
-    index?: number;
-    isSubthread?: boolean;
+    // object: co.loaded<typeof RoomyEntity> | null | undefined;
+    // me: co.loaded<typeof RoomyAccount> | undefined | null;
+    // isEditing?: boolean;
+    // editEntity?: (entity: co.loaded<typeof RoomyEntity>) => void;
+    // space: co.loaded<typeof RoomyEntity> | undefined | null;
+    // level?: number;
+    // index?: number;
+    // isSubthread?: boolean;
   } = $props();
 
   let children = $derived(
@@ -104,12 +93,14 @@
 
   const notificationCount = $derived(
     // Feed objects don't have traditional message notifications
-    object?.components?.feedConfig ? 0 : me?.profile?.roomyInbox?.filter(
-      (x) =>
-        x?.objectId === object?.id &&
-        !x?.read &&
-        !bannedAccountsSet.has(x?._edits?.objectId?.by?.id ?? ""),
-    ).length,
+    object?.components?.feedConfig
+      ? 0
+      : me?.profile?.roomyInbox?.filter(
+          (x) =>
+            x?.objectId === object?.id &&
+            !x?.read &&
+            !bannedAccountsSet.has(x?._edits?.objectId?.by?.id ?? ""),
+        ).length,
   );
 
   // Get bookmarks for feed objects
@@ -120,11 +111,11 @@
         const bookmarks = atprotoFeedService.getBookmarks(me, object.id);
         return bookmarks;
       } catch (error) {
-        console.error('Error getting bookmarks:', error);
+        console.error("Error getting bookmarks:", error);
         return [];
       }
     }
-    
+
     return [];
   });
 </script>
@@ -169,12 +160,14 @@
       </Button>
       {@render editButton?.()}
     </div>
-    
+
     <!-- Bookmarked threads -->
     {#if feedBookmarks.length > 0 && !isEditing && object.id === page.params.object}
       <div class="pl-4">
         {#each feedBookmarks as bookmark (bookmark.postUri)}
-          <div class="inline-flex items-start justify-between gap-2 w-full min-w-0 group py-1">
+          <div
+            class="inline-flex items-start justify-between gap-2 w-full min-w-0 group py-1"
+          >
             <Button
               href={`${navigateSync({
                 space: page.params.space!,
@@ -182,19 +175,28 @@
               })}?thread=${encodeURIComponent(bookmark.postUri)}`}
               variant="ghost"
               class="w-full justify-start min-w-0 text-sm font-normal"
-              data-current={page.url?.searchParams?.get('thread') === bookmark.postUri}
+              data-current={page.url?.searchParams?.get("thread") ===
+                bookmark.postUri}
               onclick={() => {
-                console.log('🔍 Bookmark thread clicked:', bookmark.postUri);
-                console.log('🔍 Navigation URL:', `${navigateSync({
-                  space: page.params.space!,
-                  object: object.id,
-                })}?thread=${encodeURIComponent(bookmark.postUri)}`);
+                console.log("🔍 Bookmark thread clicked:", bookmark.postUri);
+                console.log(
+                  "🔍 Navigation URL:",
+                  `${navigateSync({
+                    space: page.params.space!,
+                    object: object.id,
+                  })}?thread=${encodeURIComponent(bookmark.postUri)}`,
+                );
               }}
             >
               <Icon icon="tabler:corner-down-right" class="shrink-0 size-3" />
-              <Icon icon="mdi:bookmark" class="shrink-0 size-3 text-yellow-500" />
+              <Icon
+                icon="mdi:bookmark"
+                class="shrink-0 size-3 text-yellow-500"
+              />
               <span class="truncate whitespace-nowrap overflow-hidden min-w-0">
-                {bookmark.title || bookmark.previewText?.substring(0, 30) + '...' || 'Bookmarked Thread'}
+                {bookmark.title ||
+                  bookmark.previewText?.substring(0, 30) + "..." ||
+                  "Bookmarked Thread"}
               </span>
             </Button>
           </div>

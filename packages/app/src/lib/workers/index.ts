@@ -57,7 +57,7 @@ export type BackendInterface = {
     params?: ArrayBuffer,
   ): Promise<string>;
   uploadImage(
-    bytes: Uint8Array,
+    bytes: ArrayBuffer,
     alt?: string,
   ): Promise<{ blob: BlobRef; uri: string; cid: string; url: string }>;
   /** Adds a new message port connection to the backend that can call the backend interface. */

@@ -1,16 +1,14 @@
-<script lang="ts">
-  import { ChildrenComponent, RoomyEntity } from "@roomy-chat/sdk";
+<!-- <script lang="ts">
   import { Modal, Input, Button } from "@fuxui/base";
   import Icon from "@iconify/svelte";
-  import { co } from "jazz-tools";
   import FeedConfiguration from "../content/bluesky-feed/FeedConfiguration.svelte";
 
   let {
     open = $bindable(false),
-    entity = $bindable(null),
+    // entity = $bindable(null),
   }: {
     open: boolean;
-    entity: co.loaded<typeof RoomyEntity> | undefined | null | null;
+    // entity: co.loaded<typeof RoomyEntity> | undefined | null | null;
   } = $props();
 
   let entityName = $derived(entity?.name);
@@ -92,7 +90,6 @@
       </Button>
     </div>
 
-    <!-- Feed Configuration Section -->
     {#if entity?.components?.feedConfig}
       <div class="mt-8 pt-8 border-t border-base-300 dark:border-base-700">
         <FeedConfiguration objectId={entity.id} />
@@ -115,4 +112,4 @@
     </div>
   </form>
   </div>
-</Modal>
+</Modal> -->

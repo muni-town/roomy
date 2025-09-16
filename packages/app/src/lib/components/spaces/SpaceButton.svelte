@@ -1,13 +1,12 @@
 <script lang="ts">
-  import { co, RoomyEntity } from "@roomy-chat/sdk";
   import SpaceAvatar from "./SpaceAvatar.svelte";
+  import type { SpaceMeta } from "$lib/queries.svelte";
 
-  let { space }: { space: co.loaded<typeof RoomyEntity> | undefined | null } =
-    $props();
+  let { space }: { space: SpaceMeta | undefined } = $props();
 </script>
 
 <div class="relative flex flex-col items-center justify-start gap-2 max-w-42">
-  <SpaceAvatar imageUrl={space?.imageUrl} id={space?.id} size={96} />
+  <SpaceAvatar imageUrl={space?.avatar} id={space?.id} size={96} />
 
   <span class="text-lg font-semibold text-center">{space?.name}</span>
 

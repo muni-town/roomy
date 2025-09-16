@@ -356,7 +356,9 @@ function connectMessagePort(port: MessagePortApi) {
     },
     async uploadImage(bytes, alt?: string) {
       if (!state.agent) throw new Error("Agent not initialized");
-      const resp = await state.agent.com.atproto.repo.uploadBlob(bytes);
+      const resp = await state.agent.com.atproto.repo.uploadBlob(
+        new Uint8Array(bytes),
+      );
       const blobRef = resp.data.blob;
       // Create a record that links to the blob
       const record = {
@@ -371,7 +373,7 @@ function connectMessagePort(port: MessagePortApi) {
         rkey: `${Date.now()}`, // Using timestamp as a unique key
         record: record,
       });
-      const url = `https://cdn.bsky.app/img/feed_thumbnail/plain/${agent.did}/${blobRef.ipld().ref}`;
+      const url = `https://cdn.bsky.app/img/feed_thumbnail/plain/${state.agent.assertDid}/${blobRef.ipld().ref}`;
       return {
         blob: blobRef,
         uri: putResponse.data.uri,

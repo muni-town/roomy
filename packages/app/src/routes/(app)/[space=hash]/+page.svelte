@@ -1,10 +1,10 @@
 <script lang="ts">
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SidebarMain from "$lib/components/sidebars/SidebarMain.svelte";
+  import { current } from "$lib/queries.svelte";
 
   async function navigateToFirstChildThreadOrPage(id: string) {
     // if (!space.current || !id) return;
-
     // const children = await ChildrenComponent.load(id, {
     //   resolve: {
     //     $each: {
@@ -15,10 +15,8 @@
     //     },
     //   },
     // });
-
     // for (const child of children ?? []) {
     //   if (!child || child.softDeleted) continue;
-
     //   if (
     //     child.components?.[ThreadComponent.id] ||
     //     child.components?.[PageComponent.id]
@@ -56,7 +54,7 @@
       <h2
         class="text-lg font-bold w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
       >
-        <span>{ "..."}</span>
+        <span>{current.spaceMeta?.name}</span>
       </h2>
     </div>
   {/snippet}

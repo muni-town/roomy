@@ -9,6 +9,7 @@
 
   import { fade } from "svelte/transition";
   import LoginForm from "$lib/components/user/LoginForm.svelte";
+  import { TooltipProvider } from "@fuxui/base";
 
   onMount(async () => {
     // Initialize PostHog for analytics
@@ -78,7 +79,9 @@
   {/if}
 
   <!-- Page Content -->
-  {@render children?.()}
+  <TooltipProvider>
+    {@render children?.()}
+  </TooltipProvider>
 {/if}
 
 <!-- Loading overlay -->

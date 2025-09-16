@@ -25,79 +25,68 @@
     }
   }
 
-  async function uploadAvatar() {
-    if (!avatarFile) return;
-
-    try {
-      // Upload the image
-      const uploadResult = await backend.uploadImage(await avatarFile.bytes());
-
-      avatarUrl = uploadResult.url;
-    } catch (error) {
-      console.error("Error uploading avatar:", error);
-      toast.error("Failed to upload avatar", {
-        position: "bottom-right",
-      });
-    } finally {
-      avatarFile = null;
-    }
-  }
-
   let fileInput = $state<HTMLInputElement | null>(null);
 
   async function createSpaceSubmit(evt: Event) {
     evt.preventDefault();
     if (!backendStatus.personalStreamId) return;
 
-    isSaving = true;
+    try {
+      isSaving = true;
 
-    let currentSpaceName = spaceName;
-    let currentSpaceDescription = spaceDescription;
+      let currentSpaceName = spaceName;
+      let currentSpaceDescription = spaceDescription;
 
-    if (!currentSpaceName) {
-      toast.error("Please enter a name for the space", {
+      if (!currentSpaceName) {
+        toast.error("Please enter a name for the space", {
+          position: "bottom-right",
+        });
+        return;
+      }
+
+      // Create a new stream for the space
+      const spaceId = await backend.createStream(
+        "262f081583741b6a0e06564e45b7ad4fc13d06d4189863a3fab5e860b83541c9",
+        "/leaf_module_public_read_write_admin_upgrade.wasm",
+      );
+
+      // Join the space
+      await backend.sendEvent(backendStatus.personalStreamId, {
+        kind: "space.roomy.joinSpace.0",
+        data: spaceId,
+      });
+
+      const avatarUpload =
+        avatarFile &&
+        (await backend.uploadImage(await avatarFile.arrayBuffer()));
+
+      await backend.sendEvent(spaceId, {
+        kind: "space.roomy.spaceInfo.0",
+        data: {
+          avatar: avatarUpload?.url || undefined,
+          name: currentSpaceName || undefined,
+          description: currentSpaceDescription || undefined,
+        },
+      });
+
+      isSaving = false;
+      toast.success("Space created successfully", {
         position: "bottom-right",
       });
-      return;
+
+      // FIXME: add discoverable feed.
+      // if (isDiscoverable) {
+      //   console.log("Adding to discoverable spaces feed");
+      //   await addToDiscoverableSpacesFeed(space.id);
+      // }
+
+      navigate({ space: spaceId });
+    } catch (e) {
+      console.error("Error creating space:", e);
+      toast.error('Error creating space', {
+        position: "bottom-right",
+      });
     }
-
-    // Create a new stream for the space
-    const spaceId = await backend.createStream(
-      "262f081583741b6a0e06564e45b7ad4fc13d06d4189863a3fab5e860b83541c9",
-      "/leaf_module_public_read_write_admin_upgrade.wasm",
-    );
-
-    // Join the space
-    await backend.sendEvent(backendStatus.personalStreamId, {
-      kind: "space.roomy.joinSpace.0",
-      data: spaceId,
-    });
-
-    if (avatarFile) {
-      await uploadAvatar();
-    }
-
-    await backend.sendEvent(spaceId, {
-      kind: "space.roomy.spaceInfo.0",
-      data: {
-        avatar: avatarUrl || undefined,
-        name: currentSpaceName || undefined,
-        description: currentSpaceDescription || undefined,
-      },
-    });
-
-    isSaving = false;
-    toast.success("Space created successfully", {
-      position: "bottom-right",
-    });
-
-    // FIXME: add discoverable feed.
-    // if (isDiscoverable) {
-    //   console.log("Adding to discoverable spaces feed");
-    //   await addToDiscoverableSpacesFeed(space.id);
-    // }
-
-    navigate({ space: spaceId });
   }
 </script>
 

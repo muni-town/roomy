@@ -1,14 +1,5 @@
 <script lang="ts">
-  import type { co } from "jazz-tools";
-  import SidebarObject from "./SidebarObject.svelte";
-  import {
-    addToFolder,
-    ChildrenComponent,
-    removeFromFolder,
-    RoomyEntity,
-    SubThreadsComponent,
-    type RoomyAccount,
-  } from "@roomy-chat/sdk";
+  // import SidebarObject from "./SidebarObject.svelte";
   import {
     TRIGGERS,
     dragHandleZone,
@@ -18,23 +9,23 @@
   import Icon from "@iconify/svelte";
 
   let {
-    children,
-    me,
-    isEditing = $bindable(false),
-    editEntity,
-    currentEntity,
-    space,
-    level = 0,
-    subthreads,
+    // children,
+    // me,
+    // isEditing = $bindable(false),
+    // editEntity,
+    // currentEntity,
+    // space,
+    // level = 0,
+    // subthreads,
   }: {
-    children: co.loaded<typeof ChildrenComponent> | undefined | null;
-    me: co.loaded<typeof RoomyAccount> | undefined | null;
-    isEditing?: boolean;
-    editEntity?: (entity: co.loaded<typeof RoomyEntity>) => void;
-    currentEntity?: co.loaded<typeof RoomyEntity> | undefined | null;
-    space: co.loaded<typeof RoomyEntity> | undefined | null;
-    level?: number;
-    subthreads?: co.loaded<typeof SubThreadsComponent> | undefined | null;
+    // children: co.loaded<typeof ChildrenComponent> | undefined | null;
+    // me: co.loaded<typeof RoomyAccount> | undefined | null;
+    // isEditing?: boolean;
+    // editEntity?: (entity: co.loaded<typeof RoomyEntity>) => void;
+    // currentEntity?: co.loaded<typeof RoomyEntity> | undefined | null;
+    // space: co.loaded<typeof RoomyEntity> | undefined | null;
+    // level?: number;
+    // subthreads?: co.loaded<typeof SubThreadsComponent> | undefined | null;
   } = $props();
 
   let recentSubthreads = $derived.by(() => {
@@ -85,6 +76,7 @@
   }
 </script>
 
+<!-- 
 {#if isEditing}
   <div
     class={[
@@ -127,10 +119,6 @@
     {/each}
   </div>
 {:else}
-  <!-- 
-      In general, if an object has subthreads, it doesn't tend to have other children. 
-      But if it does, render recent subthreads first. 
-  -->
   {#if subthreads && me}
     <div class="flex flex-col w-full pl-3 rounded-full">
       {#each [...recentSubthreads.values()]
@@ -153,7 +141,7 @@
       {/each}
     </div>
   {/if}
-  <!-- Render regular children -->
+
   <div class={["flex flex-col w-full", level > 0 ? "pl-3" : ""]}>
     {#each (children ?? []).filter((x) => x && !x?.softDeleted) as child, index (child?.id)}
       <div class="flex items-start gap-2 w-full">
@@ -169,4 +157,4 @@
       </div>
     {/each}
   </div>
-{/if}
+{/if} -->

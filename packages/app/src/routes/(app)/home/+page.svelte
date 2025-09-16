@@ -1,13 +1,14 @@
 <script lang="ts">
   import { Button } from "@fuxui/base";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
-  // import SpaceButton from "$lib/components/spaces/SpaceButton.svelte";
+  import SpaceButton from "$lib/components/spaces/SpaceButton.svelte";
   import EarlyAlphaWarning from "$lib/components/helper/EarlyAlphaWarning.svelte";
+  import { spaces } from "$lib/queries.svelte";
 </script>
 
 <MainLayout>
   {#snippet navbar()}
-    <div class="flex w-full">
+    <div class="flex w-full items-center gap-3">
       <span class="flex-grow"></span>
       <Button href="https://a.roomy.space" target="_blank">About Roomy</Button>
     </div>
@@ -39,37 +40,26 @@
             <SpaceButton {space} />
           {/each}
         </section>
-      {/if}
+      {/if} -->
 
-      {#if !user.session}
-        <div class="flex gap-4">
-          <Button
-            onclick={() => (blueskyLoginModalState.open = true)}
-            size="lg"
-          >
-            Create Account or Log In
-          </Button>
-        </div>
-      {:else if !spaces}
-        <span class="dz-loading dz-loading-spinner mx-auto w-25"></span>
-      {:else if spaces.length > 0}
+      {#if spaces.result?.length || 0 > 0}
         <h2 class="text-3xl font-bold text-base-900 dark:text-base-100">
           Your Spaces
         </h2>
-        <section class="flex flex-row gap-8 max-w-5xl">
-          {#each new Set(spaces.toReversed()) as space}
-            {#if !publicDemoSpaces.find((x) => x.id == space?.id)}
-              <SpaceButton {space} />
-            {/if}
+        <section
+          class="flex flex-row gap-8 mx-8 justify-center flex-wrap max-w-5xl"
+        >
+          {#each spaces.result || [] as space}
+            <SpaceButton {space} />
           {/each}
         </section>
-      {:else if spaces?.length === 0}
+      {:else if spaces.result?.length || 0 == 0}
         <p class="text-lg font-medium text-center">
           You don't have any spaces yet. Create one to get started!
         </p>
       {:else}
         <p>No servers found.</p>
-      {/if} -->
+      {/if}
     </div>
   </div>
 </MainLayout>

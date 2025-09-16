@@ -37,7 +37,6 @@
   import UploadFileButton from "$lib/components/helper/UploadFileButton.svelte";
   import { afterNavigate } from "$app/navigation";
   import { blueskyLoginModalState } from "@fuxui/social";
-  import { joinSpace } from "$lib/components/helper/joinSpace";
   import FullscreenImage from "$lib/components/helper/FullscreenImage.svelte";
   import WaitingForJoinModal from "$lib/components/modals/WaitingForJoinModal.svelte";
 
