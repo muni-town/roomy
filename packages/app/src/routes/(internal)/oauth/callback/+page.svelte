@@ -12,6 +12,7 @@
       .then(() => {
         // TODO remember location to redirect back to.
         window.location.href = "/";
+        localStorage.setItem("just-logged-in", "1");
       })
       .catch((e) => {
         error = e.toString();

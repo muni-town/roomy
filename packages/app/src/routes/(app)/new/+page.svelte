@@ -1,24 +1,9 @@
 <script lang="ts">
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
-  import { user } from "$lib/user.svelte";
   import { navigate } from "$lib/utils.svelte";
+  import { backend, backendStatus } from "$lib/workers";
   import { Button, Checkbox, Input, Label, Textarea } from "@fuxui/base";
-  import {
-    addToDiscoverableSpacesFeed,
-    createSpace,
-    publicGroup,
-    RoomyAccount,
-    RoomyEntityList,
-  } from "@roomy-chat/sdk";
-  import { AccountCoState } from "jazz-tools/svelte";
   import toast from "svelte-french-toast";
-
-  const me = new AccountCoState(RoomyAccount, {
-    resolve: {
-      profile: true,
-      root: true,
-    },
-  });
 
   let spaceName = $state("");
   let avatarUrl = $state("");
@@ -41,11 +26,11 @@
   }
 
   async function uploadAvatar() {
-    if (!avatarFile || !user.agent) return;
+    if (!avatarFile) return;
 
     try {
-      // Upload the image using the user's agent
-      const uploadResult = await user.uploadBlob(avatarFile);
+      // Upload the image
+      const uploadResult = await backend.uploadImage(await avatarFile.bytes());
 
       avatarUrl = uploadResult.url;
     } catch (error) {
@@ -62,6 +47,7 @@
 
   async function createSpaceSubmit(evt: Event) {
     evt.preventDefault();
+    if (!backendStatus.personalStreamId) return;
 
     isSaving = true;
 
@@ -75,35 +61,43 @@
       return;
     }
 
-    if (me?.current?.profile && me.current.profile.joinedSpaces === undefined) {
-      me.current.profile.joinedSpaces = RoomyEntityList.create(
-        [],
-        publicGroup("reader"),
-      );
-    }
+    // Create a new stream for the space
+    const spaceId = await backend.createStream(
+      "262f081583741b6a0e06564e45b7ad4fc13d06d4189863a3fab5e860b83541c9",
+      "/leaf_module_public_read_write_admin_upgrade.wasm",
+    );
 
-    const { entity: space } = await createSpace(currentSpaceName);
+    // Join the space
+    await backend.sendEvent(backendStatus.personalStreamId, {
+      kind: "space.roomy.joinSpace.0",
+      data: spaceId,
+    });
 
     if (avatarFile) {
       await uploadAvatar();
     }
 
-    space.imageUrl = avatarUrl;
-    space.description = currentSpaceDescription;
-
-    me?.current?.profile?.joinedSpaces?.push(space);
+    await backend.sendEvent(spaceId, {
+      kind: "space.roomy.spaceInfo.0",
+      data: {
+        avatar: avatarUrl || undefined,
+        name: currentSpaceName || undefined,
+        description: currentSpaceDescription || undefined,
+      },
+    });
 
     isSaving = false;
     toast.success("Space created successfully", {
       position: "bottom-right",
     });
 
-    if (isDiscoverable) {
-      console.log("Adding to discoverable spaces feed");
-      await addToDiscoverableSpacesFeed(space.id);
-    }
+    // FIXME: add discoverable feed.
+    // if (isDiscoverable) {
+    //   console.log("Adding to discoverable spaces feed");
+    //   await addToDiscoverableSpacesFeed(space.id);
+    // }
 
-    navigate({ space: space.id });
+    navigate({ space: spaceId });
   }
 </script>
 

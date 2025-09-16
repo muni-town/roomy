@@ -20,6 +20,25 @@
     }
   });
 
+  // Cache the current profile for use in the LoginForm to preview the last login.
+  $effect(() => {
+    if (
+      backendStatus.did &&
+      backendStatus.profile &&
+      localStorage.getItem("just-logged-in") != undefined
+    ) {
+      localStorage.setItem(
+        `last-login`,
+        JSON.stringify({
+          handle: backendStatus.profile.handle,
+          did: backendStatus.profile.did,
+          avatar: backendStatus.profile.avatar,
+        }),
+      );
+      localStorage.removeItem("just-logged-in");
+    }
+  });
+
   // We show the loading overlay when the login status is still loading
   let showLoadingOverlay = $derived(!backendStatus.authLoaded);
   // The loading icon, though, should only show up if auth loading takes more than a short time, so
@@ -65,7 +84,7 @@
 <!-- Loading overlay -->
 {#if showLoadingOverlay}
   <div
-    class="flex h-screen w-screen justify-center items-center fixed top-0 left-0 bg-base-950"
+    class="flex h-screen w-screen justify-center items-center fixed top-0 left-0 bg-base-50 dark:bg-base-950 z-50"
     transition:fade
   >
     {#if showLoadingIcon}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { user } from "$lib/user.svelte";
+  import { backend } from "$lib/workers";
   import { Modal, Button, Heading } from "@fuxui/base";
 
   let {
@@ -15,7 +15,7 @@
     class="w-full justify-start"
     size="lg"
     onclick={() => {
-      user.logout();
+      backend.logout();
       open = false;
     }}
   >

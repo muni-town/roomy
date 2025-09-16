@@ -1,13 +1,11 @@
 <script lang="ts">
   import { navigate, navigateSync } from "$lib/utils.svelte";
   import { page } from "$app/state";
-  import { co } from "jazz-tools";
-  import { RoomyEntity } from "@roomy-chat/sdk";
   import { Tooltip } from "@fuxui/base";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
 
   type Props = {
-    space: co.loaded<typeof RoomyEntity> | null | undefined;
+    space: unknown;
     hasJoined?: boolean;
   };
 

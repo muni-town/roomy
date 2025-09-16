@@ -3,6 +3,7 @@
   import { backend } from "$lib/workers";
 
   import { Button, Subheading, Label, Input, Avatar, Box } from "@fuxui/base";
+  import { onMount } from "svelte";
 
   let handle = $state("");
   let error: string | null = $state(null);
@@ -31,18 +32,11 @@
 
   let input: HTMLInputElement | null = $state(null);
 
-  let lastLogin: { handle: string; avatar: string } | null = $state(null);
+  let lastLogin: { handle: string; did: string; avatar: string } | undefined =
+    $state(undefined);
 
-  $effect(() => {
-    let lastLoginDid = localStorage.getItem("last-login");
-
-    if (lastLoginDid) {
-      let profile = localStorage.getItem(`profile-${lastLoginDid}`);
-
-      if (profile) {
-        lastLogin = JSON.parse(profile);
-      }
-    }
+  onMount(() => {
+    lastLogin = JSON.parse(localStorage.getItem("last-login") || "undefined");
   });
 </script>
 
@@ -76,7 +70,7 @@
       </a>, then come back here.
     </div>
 
-    {#if lastLogin}
+    {#if lastLogin?.handle}
       <Label for="bluesky-handle" class="mt-4 text-sm">Recent login:</Label>
       <Button
         class="max-w-xs overflow-x-hidden justify-start truncate"

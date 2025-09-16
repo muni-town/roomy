@@ -337,6 +337,14 @@ function connectMessagePort(port: MessagePortApi) {
         sqliteWorker.createLiveQuery(id, channel.port2, sql, params);
       }
     },
+    async createStream(moduleId, moduleUrl, params): Promise<string> {
+      if (!state.leafClient) throw new Error("Leaf client not initialized");
+      return await state.leafClient.createStreamFromModuleUrl(
+        moduleId,
+        moduleUrl,
+        params || new ArrayBuffer(),
+      );
+    },
     async sendEvent(streamId: string, event: EventType) {
       console.log(event);
       if (!state.leafClient) throw "Leaf client not ready";
@@ -345,6 +353,31 @@ function connectMessagePort(port: MessagePortApi) {
         streamId,
         eventCodec.enc(event).buffer as ArrayBuffer,
       );
+    },
+    async uploadImage(bytes, alt?: string) {
+      if (!state.agent) throw new Error("Agent not initialized");
+      const resp = await state.agent.com.atproto.repo.uploadBlob(bytes);
+      const blobRef = resp.data.blob;
+      // Create a record that links to the blob
+      const record = {
+        $type: "space.roomy.image",
+        image: blobRef,
+        alt,
+      };
+      // Put the record in the repository
+      const putResponse = await state.agent.com.atproto.repo.putRecord({
+        repo: state.agent.assertDid,
+        collection: "space.roomy.image",
+        rkey: `${Date.now()}`, // Using timestamp as a unique key
+        record: record,
+      });
+      const url = `https://cdn.bsky.app/img/feed_thumbnail/plain/${agent.did}/${blobRef.ipld().ref}`;
+      return {
+        blob: blobRef,
+        uri: putResponse.data.uri,
+        cid: putResponse.data.cid,
+        url,
+      };
     },
     async addClient(port) {
       connectMessagePort(port);
@@ -439,6 +472,8 @@ async function initializeLeafClient(client: LeafClient) {
     status.personalStreamId = streamId;
     client.subscribe(streamId);
     console.log("Subscribed to stream:", streamId);
+
+    await sqliteWorkerReady;
 
     state.personalSpaceMaterializer = new StreamMaterializer(
       streamId,

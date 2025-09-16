@@ -2,9 +2,6 @@
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
   import SidebarSpace from "./SidebarSpace.svelte";
-  import { co } from "jazz-tools";
-  import { RoomyAccount, RoomyEntity, RoomyEntityList } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-tools/svelte";
   import { page } from "$app/state";
   import {
     TooltipProvider,
@@ -13,22 +10,13 @@
     ScrollArea,
   } from "@fuxui/base";
   import { SelectThemePopover } from "@fuxui/colors";
-  import User from "../user/User.svelte";
-  import { user } from "$lib/user.svelte";
+  import UserProfileButton from "../user/UserProfileButton.svelte";
+  import { backendStatus } from "$lib/workers";
 
-  let {
-    spaces,
-    me,
-  }: {
-    spaces: co.loaded<typeof RoomyEntityList> | undefined | null;
-    me: co.loaded<typeof RoomyAccount> | undefined | null;
-  } = $props();
+  let {}: {} = $props();
 
-  let openSpace = $derived(new CoState(RoomyEntity, page.params.space));
-
-  let isOpenSpaceJoined = $derived(
-    me?.profile?.joinedSpaces?.some((x) => x?.id === openSpace.current?.id),
-  );
+  let openSpace = $derived(page.params.space);
+  let isOpenSpaceJoined = $derived(true);
 </script>
 
 <TooltipProvider>
@@ -43,7 +31,7 @@
       <Icon icon="tabler:home" font-size="1.75em" />
     </Button>
 
-    {#if user.session}
+    {#if backendStatus.did}
       <!-- Messages Button -->
       <Button
         href="/messages"
@@ -67,9 +55,9 @@
     {/if}
 
     <div class="divider my-0"></div>
-    {#if !isOpenSpaceJoined && openSpace.current}
+    {#if !isOpenSpaceJoined && openSpace}
       <div class="py-2 flex">
-        <SidebarSpace space={openSpace.current} hasJoined={false} />
+        <SidebarSpace space={openSpace} hasJoined={false} />
       </div>
     {/if}
   </div>
@@ -84,17 +72,17 @@
 
     <ScrollArea class="h-full overflow-y-auto overflow-x-hidden">
       <div class="flex flex-col px-0 items-center gap-1.5 py-4">
-        {#if spaces}
+        <!-- {#if spaces}
           {#each new Set(spaces.toReversed()) as space}
             <SidebarSpace {space} />
           {/each}
-        {/if}
+        {/if} -->
       </div>
     </ScrollArea>
   </div>
   <section class="flex flex-col items-center gap-2 p-0 pb-2">
     <SelectThemePopover />
     <ThemeToggle class="backdrop-blur-none" />
-    <User />
+    <UserProfileButton />
   </section>
 </TooltipProvider>
