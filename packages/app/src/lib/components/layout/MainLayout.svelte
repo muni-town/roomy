@@ -57,22 +57,6 @@
     {/if}
 
     {@render navbar?.()}
-
-    <Tooltip
-      text={backendStatus.leafConnected ? "Connected" : "Disconnected"}
-      delayDuration={0}
-    >
-      {#snippet child({ props })}
-        <Icon
-          class={(backendStatus.leafConnected
-            ? "text-green-500"
-            : "text-red-500") + " mx-3"}
-          icon="mdi:wireless"
-          font-size="2em"
-          {...props}
-        />
-      {/snippet}
-    </Tooltip>
   </Navbar>
 
   {@render children?.()}

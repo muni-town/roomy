@@ -3,7 +3,7 @@
   import Icon from "@iconify/svelte";
   import SidebarSpace from "./SidebarSpace.svelte";
   import { page } from "$app/state";
-  import { Button, ThemeToggle, ScrollArea } from "@fuxui/base";
+  import { Button, ThemeToggle, ScrollArea, Tooltip } from "@fuxui/base";
   import { SelectThemePopover } from "@fuxui/colors";
   import UserProfileButton from "../user/UserProfileButton.svelte";
   import { backendStatus } from "$lib/workers";
@@ -74,6 +74,22 @@
   </ScrollArea>
 </div>
 <section class="flex flex-col items-center gap-2 p-0 pb-2">
+  <Tooltip
+    text={backendStatus.leafConnected ? "Connected" : "Disconnected"}
+    delayDuration={0}
+    contentProps={{ side: "right", sideOffset: 5 }}
+  >
+    {#snippet child({ props })}
+      <Icon
+        class={(backendStatus.leafConnected
+          ? "text-green-500"
+          : "text-red-500") + " mx-3"}
+        icon="mdi:wireless"
+        font-size="2em"
+        {...props}
+      />
+    {/snippet}
+  </Tooltip>
   <SelectThemePopover />
   <ThemeToggle class="backdrop-blur-none" />
   <UserProfileButton />
