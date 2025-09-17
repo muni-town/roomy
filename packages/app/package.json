@@ -93,6 +93,7 @@
     "tailwindcss": "^4.1.13",
     "tiptap-markdown": "^0.8.10",
     "typescript": "^5.9.2",
+    "ulidx": "^2.4.1",
     "vaul-svelte": "^0.3.2",
     "virtua": "^0.41.5",
     "vite": "^6.3.6",

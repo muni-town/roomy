@@ -1,4 +1,4 @@
-import * as schema from "./schema";
+import { schema } from "./schema";
 import type { AnyEvent } from "./types/events";
 import type {
   CompConfig,
@@ -9,7 +9,7 @@ import type {
   CompUpload,
 } from "./types/components";
 import type { EdgeMember, EdgeReaction, EdgeBan } from "./types/edges";
-import { ulid } from "ulid";
+import { ulid } from "ulidx";
 import type { EntityId } from "./types/entities";
 
 export class LeafClient {
