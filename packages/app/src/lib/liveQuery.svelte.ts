@@ -1,6 +1,6 @@
 import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
 import { backend } from "./workers";
-import type { LiveQueryMessage } from "./setup-sqlite";
+import type { LiveQueryMessage } from "./workers/setupSqlite";
 
 export class LiveQuery<Row extends { [key: string]: unknown }> {
   result: Row[] | undefined = $state.raw(undefined);

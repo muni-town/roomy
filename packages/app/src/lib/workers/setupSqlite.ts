@@ -129,29 +129,63 @@ export type LiveQueryMessage =
   | { ok: true }
   | { rows: unknown[] }
   | { error: string };
-const liveQueries: Map<
-  string,
-  { port: MessagePort; tables: string[]; statement: PreparedStatement }
-> = new Map();
+const liveQueries: Map<string, { port: MessagePort; status: LiveQueryStatus }> =
+  new Map();
+type LiveQueryStatus =
+  | { kind: "unprepared"; sql: string; params?: BindingSpec }
+  | { kind: "prepared"; tables: string[]; statement: PreparedStatement };
 
-// FIXME: we need to make sure that this registers the live query even if the SQL statement fails to
-// prepare.
 export async function createLiveQuery(
   id: string,
   port: MessagePort,
   sql: string,
   params?: BindingSpec,
 ) {
-  try {
-    const { statement, actions } = await prepareSql(sql, params);
-    const tables = [];
-    for (const { actionCode, arg1: tableName } of actions) {
-      if (actionCode == "SQLITE_READ" && tableName) {
-        tables.push(tableName);
-      }
+  liveQueries.set(id, { port, status: { kind: "unprepared", sql, params } });
+  await updateLiveQuery(id);
+}
+
+function tablesFromActions(actions: Action[]): string[] {
+  const tables = [];
+  for (const { actionCode, arg1: tableName } of actions) {
+    if (actionCode == "SQLITE_READ" && tableName) {
+      tables.push(tableName);
     }
-    liveQueries.set(id, { port, tables, statement });
-    const result = runPreparedStatement(statement);
+  }
+  return tables;
+}
+
+async function updateLiveQuery(id: string) {
+  const query = liveQueries.get(id);
+  if (!query) throw `No Live query with ID: ${id}`;
+  const { port, status } = query;
+  let preparedStatement: PreparedStatement | undefined;
+  if (status.kind == "unprepared") {
+    try {
+      const { statement, actions } = await prepareSql(
+        status.sql,
+        status.params,
+      );
+      liveQueries.set(id, {
+        port,
+        status: {
+          kind: "prepared",
+          statement,
+          tables: tablesFromActions(actions),
+        },
+      });
+      preparedStatement = statement;
+    } catch (e: any) {
+      port.postMessage({ error: e.toString() } satisfies LiveQueryMessage);
+      return;
+    }
+  } else if (status.kind == "prepared") {
+    preparedStatement = status.statement;
+  }
+
+  try {
+    if (!preparedStatement) throw "Unreachable";
+    const result = runPreparedStatement(preparedStatement);
     port.postMessage(result satisfies LiveQueryMessage);
   } catch (e: any) {
     port.postMessage({ error: e.toString() } satisfies LiveQueryMessage);
@@ -159,23 +193,38 @@ export async function createLiveQuery(
 }
 
 async function updateLiveQueries(actions: Action[]) {
-  for (const { port, tables, statement } of liveQueries.values()) {
-    let foundMatchingUpdate = false;
-    for (const action of actions) {
-      if (
-        (action.actionCode == "SQLITE_INSERT" ||
-          action.actionCode == "SQLITE_UPDATE" ||
-          action.actionCode == "SQLITE_DELETE") &&
-        action.arg1 &&
-        tables.includes(action.arg1)
-      ) {
-        foundMatchingUpdate = true;
-        break;
+  for (const [id, { status }] of liveQueries.entries()) {
+    // If a query is unprepared it means it failed to prepare when the query was created. In this
+    // case we don't know what tables it was realted to so we try to re-prepare it for every query
+    // that is made on the database, hoping a schema change will fix it.
+    if (status.kind == "unprepared") {
+      await updateLiveQuery(id);
+
+      // For prepared statements we are able to check which tables they are involved in.
+    } else if (status.kind == "prepared") {
+      let foundMatchingUpdate = false;
+      for (const action of actions) {
+        if (
+          (action.actionCode == "SQLITE_INSERT" ||
+            action.actionCode == "SQLITE_UPDATE" ||
+            action.actionCode == "SQLITE_DELETE" ||
+            action.actionCode == "SQLITE_CREATE_TABLE" ||
+            action.actionCode == "SQLITE_DROP_TABLE" ||
+            action.actionCode == "SQLITE_CREATE_VTABLE" ||
+            action.actionCode == "SQLITE_DROP_VTABLE" ||
+            action.actionCode == "SQLITE_CREATE_VIEW" ||
+            action.actionCode == "SQLITE_DROP_VIEW" ||
+            action.actionCode == "SQLITE_ALTER_TABLE") &&
+          action.arg1 &&
+          status.tables.includes(action.arg1)
+        ) {
+          foundMatchingUpdate = true;
+          break;
+        }
       }
+      if (!foundMatchingUpdate) continue;
+      await updateLiveQuery(id);
     }
-    if (!foundMatchingUpdate) continue;
-    const result = runPreparedStatement(statement);
-    port.postMessage(result);
   }
 }
 

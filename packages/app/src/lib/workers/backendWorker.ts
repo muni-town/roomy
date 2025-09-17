@@ -32,7 +32,7 @@ import {
   type EventType,
 } from "./materializer";
 import { workerOauthClient } from "./oauth";
-import type { LiveQueryMessage } from "$lib/setup-sqlite";
+import type { LiveQueryMessage } from "$lib/workers/setupSqlite";
 import { Hash } from "./encoding";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
