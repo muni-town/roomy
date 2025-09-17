@@ -13,7 +13,7 @@ export type SpaceMeta = {
 export let spaces: LiveQuery<SpaceMeta>;
 
 export let current = $state({
-  spaceMeta: undefined as SpaceMeta | undefined,
+  space: undefined as SpaceMeta | undefined,
 });
 
 $effect.root(() => {
@@ -36,7 +36,7 @@ $effect.root(() => {
 
   // Update current values
   $effect(() => {
-    current.spaceMeta = page.params.space
+    current.space = page.params.space
       ? spaces.result?.find((x) => x.id == page.params.space)
       : undefined;
   });

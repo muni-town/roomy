@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import PageView from "$lib/components/content/page/PageView.svelte";
-  import SidebarMain from "$lib/components/sidebars/SidebarMain.svelte";
+  import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
   import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
   import FeedDisplay from "$lib/components/content/bluesky-feed/FeedDisplay.svelte";
   import { atprotoFeedService } from "$lib/services/atprotoFeedService";

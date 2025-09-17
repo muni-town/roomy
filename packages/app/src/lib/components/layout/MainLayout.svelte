@@ -8,14 +8,13 @@
   // import SmallSidebar from "./SmallSidebar.svelte";
   import { type Snippet } from "svelte";
   import ToggleNavigation from "../helper/ToggleNavigation.svelte";
-  import { cn, Tooltip } from "@fuxui/base";
+  import { cn } from "@fuxui/base";
   // import ServerBar from "../sidebars/ServerBar.svelte";
   import { onNavigate } from "$app/navigation";
   import * as rawEnv from "$env/static/public";
   import SmallSidebar from "./SmallSidebar.svelte";
-  import ServerBar from "../sidebars/ServerBar.svelte";
-  import { backendStatus } from "$lib/workers";
-  import Icon from "@iconify/svelte";
+  import ServerBar from "../sidebars/ThinSidebar.svelte";
+  import BigSidebar from "./BigSidebar.svelte";
 
   let {
     serverBar,
@@ -90,9 +89,9 @@
       </SmallSidebar>
     {/if}
     {#if sidebar}
-      <!-- <BigSidebar>
+      <BigSidebar>
         {@render sidebar?.()}
-      </BigSidebar> -->
+      </BigSidebar>
     {/if}
   </div>
 </div>

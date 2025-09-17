@@ -1,9 +1,9 @@
 <script lang="ts">
   import { page } from "$app/state";
 
-  import SidebarObjectList from "./SidebarObjectList.svelte";
-  import MainSidebarSpace from "./MainSidebarSpace.svelte";
-  import EditObjectModal from "../modals/EditObjectModal.svelte";
+  // import SidebarObjectList from "./SidebarObjectList.svelte";
+  import SpaceSidebarHeader from "./SpaceSidebarHeader.svelte";
+  // import EditObjectModal from "../modals/EditObjectModal.svelte";
   import { Button } from "@fuxui/base";
   import Icon from "@iconify/svelte";
 
@@ -47,7 +47,7 @@
 
   let isEditing = $state(false);
 
-  let openEditObjectModal = $state(false);
+  // let openEditObjectModal = $state(false);
 
   // let entity = $state<co.loaded<typeof RoomyEntity> | undefined | null>(null);
 
@@ -59,13 +59,13 @@
 </script>
 
 <!-- Header -->
-<MainSidebarSpace bind:isEditing />
+<SpaceSidebarHeader bind:isEditing />
 
 <div class="w-full py-2 px-2">
   <Button
     class="w-full justify-start mb-4"
     variant="ghost"
-    href={`/${page.params.space}/index`}
+    href={`/${page.params.space}`}
   >
     Index
   </Button>

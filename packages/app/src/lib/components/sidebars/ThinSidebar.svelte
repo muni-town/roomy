@@ -1,7 +1,7 @@
 <script lang="ts">
   import { navigate } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  import SidebarSpace from "./SidebarSpace.svelte";
+  import SidebarSpace from "./ThinSidebarSpace.svelte";
   import { page } from "$app/state";
   import { Button, ThemeToggle, ScrollArea, Tooltip } from "@fuxui/base";
   import { SelectThemePopover } from "@fuxui/colors";
@@ -66,8 +66,8 @@
   ></div>
 
   <ScrollArea class="h-full overflow-y-auto overflow-x-hidden">
-    <div class="flex flex-col px-0 items-center gap-1.5 py-4">
-      {#each spaces.result || [] as space}
+    <div class="flex flex-col px-0 items-center gap-2 py-4">
+      {#each spaces.result || [] as space (space.id)}
         <SidebarSpace {...space} />
       {/each}
     </div>
@@ -77,17 +77,18 @@
   <Tooltip
     text={backendStatus.leafConnected ? "Connected" : "Disconnected"}
     delayDuration={0}
-    contentProps={{ side: "right", sideOffset: 5 }}
+    contentProps={{ side: "right" }}
   >
     {#snippet child({ props })}
-      <Icon
-        class={(backendStatus.leafConnected
-          ? "text-green-500"
-          : "text-red-500") + " mx-3"}
-        icon="mdi:wireless"
-        font-size="2em"
-        {...props}
-      />
+      <div {...props}>
+        <Icon
+          class={(backendStatus.leafConnected
+            ? "text-green-500"
+            : "text-red-500") + " mx-3"}
+          icon="mdi:wireless"
+          font-size="2em"
+        />
+      </div>
     {/snippet}
   </Tooltip>
   <SelectThemePopover />

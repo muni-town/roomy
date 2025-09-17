@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
-  import SidebarMain from "$lib/components/sidebars/SidebarMain.svelte";
+  import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
   import { navigate } from "$lib/utils.svelte";
   import { Button, Input, ScrollArea, Select } from "@fuxui/base";
   import {
