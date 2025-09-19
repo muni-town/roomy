@@ -17,7 +17,7 @@
   async function leaveSpace() {
     if (!current.space || !backendStatus.personalStreamId) return;
     await backend.sendEvent(backendStatus.personalStreamId, {
-      kind: "space.roomy.leaveSpace.0",
+      variant: "space.roomy.leaveSpace.0",
       data: current.space.id,
     });
 

@@ -5,6 +5,7 @@ import backendWorkerUrl from "./backendWorker.ts?worker&url";
 import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
 import type { EventType } from "./materializer";
 import type { BlobRef } from "@atproto/lexicon";
+import type { QueryResult } from "./setupSqlite";
 
 // Force page reload when hot reloading this file to avoid confusion if the workers get mixed up.
 if (import.meta.hot) {
@@ -39,7 +40,7 @@ export type BackendInterface = {
   logout(): Promise<void>;
   oauthCallback(searchParams: string): Promise<void>;
   getProfile(did?: string): Promise<ProfileViewDetailed | undefined>;
-  runQuery(sql: string, params?: BindingSpec): Promise<unknown>;
+  runQuery(sql: string, params?: BindingSpec): Promise<QueryResult>;
   dangerousCompletelyDestroyDatabase(opts: {
     yesIAmSure: true;
   }): Promise<unknown>;
@@ -72,7 +73,7 @@ export type SqliteWorkerInterface = {
     params?: BindingSpec,
   ): Promise<void>;
   deleteLiveQuery(id: string): Promise<void>;
-  runQuery(sql: string, params?: BindingSpec): Promise<unknown>;
+  runQuery(sql: string, params?: BindingSpec): Promise<QueryResult>;
 };
 
 // Initialize shared worker

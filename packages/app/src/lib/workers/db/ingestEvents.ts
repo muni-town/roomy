@@ -1,6 +1,7 @@
 import type { CompPage } from "$lib/db/types/components";
 import type { EdgeLabel } from "$lib/db/types/edges";
 import type { EntityId, EntityLabel } from "$lib/db/types/entities";
+import { base32crockford } from "@scure/base";
 import type {
   AnyEvent,
   ComponentData,
@@ -35,32 +36,7 @@ function encodeJsonToBlob(data: unknown): Uint8Array {
 }
 
 function ulidToBytes(ulid: string): Uint8Array {
-  const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-  const map: Record<string, number> = {};
-  for (let i = 0; i < alphabet.length; i++) {
-    const ch = alphabet.charAt(i);
-    map[ch] = i;
-    map[ch.toLowerCase()] = i;
-  }
-  const out = new Uint8Array(16);
-  let bits = 0;
-  let value = 0;
-  let idx = 0;
-  for (let i = 0; i < ulid.length && idx < 16; i++) {
-    const c = ulid.charAt(i);
-    const v = map[c];
-    if (v === undefined) continue;
-    value = (value << 5) | v;
-    bits += 5;
-    if (bits >= 8) {
-      bits -= 8;
-      out[idx++] = (value >>> bits) & 0xff;
-      value = value & ((1 << bits) - 1);
-    }
-  }
-  if (idx === 16) return out;
-  // Fallback to ASCII bytes if decoding failed
-  return new TextEncoder().encode(ulid);
+  return base32crockford.decode(ulid);
 }
 
 type PreparedRow = [

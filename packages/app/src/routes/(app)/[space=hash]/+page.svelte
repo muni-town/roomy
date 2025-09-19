@@ -21,7 +21,7 @@
   async function joinSpace() {
     if (!backendStatus.personalStreamId || !page.params.space) return;
     await backend.sendEvent(backendStatus.personalStreamId, {
-      kind: "space.roomy.joinSpace.0",
+      variant: "space.roomy.joinSpace.0",
       data: page.params.space,
     });
   }

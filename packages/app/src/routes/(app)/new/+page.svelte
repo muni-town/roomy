@@ -52,7 +52,7 @@
 
       // Join the space
       await backend.sendEvent(backendStatus.personalStreamId, {
-        kind: "space.roomy.joinSpace.0",
+        variant: "space.roomy.joinSpace.0",
         data: spaceId,
       });
 
@@ -61,7 +61,7 @@
         (await backend.uploadImage(await avatarFile.arrayBuffer()));
 
       await backend.sendEvent(spaceId, {
-        kind: "space.roomy.spaceInfo.0",
+        variant: "space.roomy.spaceInfo.0",
         data: {
           avatar: avatarUpload?.url || undefined,
           name: currentSpaceName || undefined,

@@ -570,7 +570,10 @@ export type StreamEvent = {
 
 export type MaterializerConfig = {
   initSql: SqlStatement[];
-  materializer: (streamId: string, event: StreamEvent) => SqlStatement[];
+  materializer: (
+    streamId: string,
+    event: StreamEvent,
+  ) => Promise<SqlStatement[]>;
 };
 
 class StreamMaterializer {
@@ -578,7 +581,10 @@ class StreamMaterializer {
   #backfilling = true;
   #queue: StreamEvent[] = [];
   #latestEvent: number | undefined;
-  #materializer: (streamId: string, event: StreamEvent) => SqlStatement[];
+  #materializer: (
+    streamId: string,
+    event: StreamEvent,
+  ) => Promise<SqlStatement[]>;
 
   get streamId() {
     return this.#streamid;
@@ -601,11 +607,9 @@ class StreamMaterializer {
       this.#latestEvent = entry?.latestEvent || 0;
       console.log("latestevent", this.#latestEvent);
 
-      // Initialize the database if we haven't processed any events yet
-      if (this.#latestEvent == 0) {
-        for (const { sql, params } of config.initSql) {
-          await sqliteWorker.runQuery(sql, params);
-        }
+      // Initialize the database schema. This is assumed to be idempotent.
+      for (const { sql, params } of config.initSql) {
+        await sqliteWorker.runQuery(sql, params);
       }
 
       // Backfill events
@@ -652,7 +656,10 @@ class StreamMaterializer {
     if (this.#latestEvent == undefined) throw "latest event not initialized";
     if (event.idx != (this.#latestEvent || 0) + 1) throw "Unexpected event IDX";
 
-    for (const { sql, params } of this.#materializer(this.#streamid, event)) {
+    for (const { sql, params } of await this.#materializer(
+      this.#streamid,
+      event,
+    )) {
       try {
         await sqliteWorker.runQuery(sql, params);
       } catch (e) {

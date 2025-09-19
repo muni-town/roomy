@@ -4,7 +4,7 @@
  * It lets you specify a mapping between the kind string and the type of data that should follow it.
  */
 
-import { hex } from "@scure/base";
+import { base32crockford, hex } from "@scure/base";
 import {
   Bytes,
   enhanceCodec,
@@ -14,9 +14,9 @@ import {
   type DecoderType,
   type Encoder,
   type EncoderType,
-  internal,
-} from "@zicklag/scale-ts";
-import { createCodec, str, Tuple } from "@zicklag/scale-ts";
+  createDecoder,
+} from "scale-ts";
+import { createCodec, str, Tuple } from "scale-ts";
 
 /** encoding */
 const enc = <O extends { [key: string]: Encoder<any> }>(
@@ -42,7 +42,7 @@ const dec = <O extends { [key: string]: Decoder<any> }>(
     [K in keyof O]: { kind: K; data: DecoderType<O[K]> };
   }[keyof O]
 > => {
-  return internal.toInternalBytes((bytes) => {
+  return createDecoder((bytes) => {
     const kind = str.dec(bytes);
     const valueDecoder = inner[kind] as O[keyof O];
     if (!valueDecoder) throw `Unknown event kind: ${kind}`;
@@ -74,3 +74,9 @@ Kinds.enc = enc;
 Kinds.dec = dec;
 
 export const Hash = enhanceCodec(Bytes(32), hex.decode, hex.encode);
+
+export const Ulid = enhanceCodec(
+  Bytes(16),
+  base32crockford.decode,
+  base32crockford.encode,
+);

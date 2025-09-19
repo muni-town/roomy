@@ -69,7 +69,7 @@
     "@tiptap/suggestion": "^2.26.1",
     "@types/sanitize-html": "^2.16.0",
     "@types/underscore": "^1.13.0",
-    "@zicklag/scale-ts": "1.6.1-patch.1",
+    "scale-ts": "1.6.1",
     "@zip-js/zip-js": "jsr:2.7.59",
     "base32-decode": "^1.0.0",
     "base32-encode": "^2.0.0",

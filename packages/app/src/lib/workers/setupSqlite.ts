@@ -62,14 +62,13 @@ export async function initializeDatabase(dbName: string): Promise<void> {
   await initPromise;
 }
 
+export type QueryResult = { rows?: { [key: string]: unknown }[]; ok?: true } & {
+  actions: Action[];
+};
 export async function executeQuery(
   sql: string,
   params?: BindingSpec,
-): Promise<
-  ({ rows: { [key: string]: unknown }[] } | { ok: true }) & {
-    actions: Action[];
-  }
-> {
+): Promise<QueryResult> {
   if (!db && initPromise) await initPromise;
   if (!db || !sqlite3) throw new Error("database_not_initialized");
 
