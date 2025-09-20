@@ -83,7 +83,7 @@
         <Icon icon="lucide:share" class="size-4" /> Invite
       </Button>
 
-      {#if true}
+      {#if current.isSpaceAdmin}
         <Button
           class="w-full"
           href={`/${current.space?.id}/new`}

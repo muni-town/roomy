@@ -5,6 +5,7 @@ import initSqlite3, {
   type Sqlite3Static,
   type PreparedStatement,
 } from "@sqlite.org/sqlite-wasm";
+import { Hash, Ulid } from "./encoding";
 
 let sqlite3: Sqlite3Static | null = null;
 let db: OpfsSAHPoolDatabase | Database | null = null;
@@ -58,6 +59,20 @@ export async function initializeDatabase(dbName: string): Promise<void> {
     );
     db.exec("pragma locking_mode = exclusive;");
     db.exec("pragma journal_mode = wal");
+    db.createFunction("format_hash", (_ctx, blob) => {
+      if (blob instanceof Uint8Array) {
+        return Hash.dec(blob);
+      } else {
+        throw "Expected blob argument to format_hash";
+      }
+    });
+    db.createFunction("format_ulid", (_ctx, blob) => {
+      if (blob instanceof Uint8Array) {
+        return Ulid.dec(blob);
+      } else {
+        throw "Expected blob argument to format_hash";
+      }
+    });
   })();
   await initPromise;
 }

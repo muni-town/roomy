@@ -8,36 +8,46 @@ export type SpaceMeta = {
   name?: string;
   avatar?: string;
   description?: string;
+  admins: string[];
 };
 
 export let spaces: LiveQuery<SpaceMeta>;
 
 export let current = $state({
   space: undefined as SpaceMeta | undefined,
+  isSpaceAdmin: false,
 });
 
+// All of our queries have to be made in the scope of an effect root but we can't export them from
+// within the scope.
 $effect.root(() => {
   spaces = new LiveQuery(
-    "select id, name, avatar, description from spaces where stream = ? and hidden = 0",
+    `select json_object(
+      'id', format_hash(id),
+      'name', name,
+      'avatar', avatar,
+      'description', description,
+      'admins', (select json_group_array(admin_id) from space_admins where space_id = id)
+    ) as json
+    from spaces
+    where stream = ? and hidden = 0`,
     () => [
       backendStatus.personalStreamId &&
         Hash.enc(backendStatus.personalStreamId),
     ],
-    (row: {
-      id: Uint8Array;
-      name?: string;
-      avatar?: string;
-      description?: string;
-    }) => ({
-      ...row,
-      id: Hash.dec(row.id),
-    }),
+    (row) => JSON.parse(row.json),
   );
+
+  $inspect(spaces.result);
 
   // Update current values
   $effect(() => {
     current.space = page.params.space
       ? spaces.result?.find((x) => x.id == page.params.space)
       : undefined;
+  });
+  $effect(() => {
+    backendStatus.did &&
+      current.isSpaceAdmin == current.space?.admins.includes(backendStatus.did);
   });
 });
