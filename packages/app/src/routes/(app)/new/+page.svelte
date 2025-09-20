@@ -4,6 +4,7 @@
   import { backend, backendStatus } from "$lib/workers";
   import { Button, Checkbox, Input, Label, Textarea } from "@fuxui/base";
   import toast from "svelte-french-toast";
+  import { ulid } from "ulidx";
 
   let spaceName = $state("");
   let avatarUrl = $state("");
@@ -29,7 +30,7 @@
 
   async function createSpaceSubmit(evt: Event) {
     evt.preventDefault();
-    if (!backendStatus.personalStreamId) return;
+    if (!backendStatus.personalStreamId || !backendStatus.did) return;
 
     try {
       isSaving = true;
@@ -52,20 +53,49 @@
 
       // Join the space
       await backend.sendEvent(backendStatus.personalStreamId, {
-        variant: "space.roomy.joinSpace.0",
-        data: spaceId,
+        ulid: ulid(),
+        parent: undefined,
+        variant: {
+          kind: "space.roomy.space.join.0",
+          data: {
+            spaceId,
+          },
+        },
       });
 
       const avatarUpload =
         avatarFile &&
         (await backend.uploadImage(await avatarFile.arrayBuffer()));
 
+      // Update space info
       await backend.sendEvent(spaceId, {
-        variant: "space.roomy.spaceInfo.0",
-        data: {
-          avatar: avatarUpload?.url || undefined,
-          name: currentSpaceName || undefined,
-          description: currentSpaceDescription || undefined,
+        ulid: ulid(),
+        parent: undefined,
+        variant: {
+          kind: "space.roomy.entity.info.0",
+          data: {
+            avatar: avatarUpload?.url
+              ? { tag: "set", value: avatarUpload.url }
+              : { tag: "ignore", value: undefined },
+            name: currentSpaceName
+              ? { tag: "set", value: currentSpaceName }
+              : { tag: "ignore", value: undefined },
+            description: currentSpaceDescription
+              ? { tag: "set", value: currentSpaceDescription }
+              : { tag: "ignore", value: undefined },
+          },
+        },
+      });
+
+      // Make this user and admin
+      await backend.sendEvent(spaceId, {
+        ulid: ulid(),
+        parent: undefined,
+        variant: {
+          kind: "space.roomy.admin.add.0",
+          data: {
+            adminId: backendStatus.did,
+          },
         },
       });
 
@@ -83,7 +113,7 @@
       navigate({ space: spaceId });
     } catch (e) {
       console.error("Error creating space:", e);
-      toast.error('Error creating space', {
+      toast.error("Error creating space", {
         position: "bottom-right",
       });
     }

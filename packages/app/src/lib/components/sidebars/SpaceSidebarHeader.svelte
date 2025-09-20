@@ -7,6 +7,7 @@
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { current } from "$lib/queries.svelte";
   import { backend, backendStatus } from "$lib/workers";
+  import { ulid } from "ulidx";
 
   let {
     isEditing = $bindable(false),
@@ -17,8 +18,14 @@
   async function leaveSpace() {
     if (!current.space || !backendStatus.personalStreamId) return;
     await backend.sendEvent(backendStatus.personalStreamId, {
-      variant: "space.roomy.leaveSpace.0",
-      data: current.space.id,
+      ulid: ulid(),
+      parent: undefined,
+      variant: {
+        kind: "space.roomy.space.leave.0",
+        data: {
+          spaceId: current.space.id,
+        },
+      },
     });
 
     navigate("home");
@@ -76,7 +83,7 @@
         <Icon icon="lucide:share" class="size-4" /> Invite
       </Button>
 
-      {#if false}
+      {#if true}
         <Button
           class="w-full"
           href={`/${current.space?.id}/new`}

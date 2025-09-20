@@ -26,14 +26,10 @@ import Dexie, { type EntityTable } from "dexie";
 
 import { lexicons } from "../lexicons";
 import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
-import {
-  config as materializerConfig,
-  eventCodec,
-  type EventType,
-} from "./materializer";
+import { config as materializerConfig, type EventType } from "./materializer";
 import { workerOauthClient } from "./oauth";
 import type { LiveQueryMessage } from "$lib/workers/setupSqlite";
-import { Hash } from "./encoding";
+import { eventCodec, Hash } from "./encoding";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -99,7 +95,7 @@ globalThis.localStorage = {
   },
 };
 
-let sqliteWorker: SqliteWorkerInterface | undefined;
+export let sqliteWorker: SqliteWorkerInterface | undefined;
 let setSqliteWorkerReady = () => {};
 const sqliteWorkerReady = new Promise(
   (r) => (setSqliteWorkerReady = r as () => void),
@@ -257,23 +253,27 @@ const liveQueries: Map<
 > = new Map();
 (globalThis as any).liveQueries = liveQueries;
 
+export async function getProfile(
+  did: string,
+): Promise<ProfileViewDetailed | undefined> {
+  await state.ready;
+  if (!did || did == state.agent?.did) {
+    return state.profile;
+  }
+  const resp = await state.agent?.getProfile({
+    actor: did || state.agent.assertDid,
+  });
+  if (!resp?.data && !resp?.success) {
+    console.error("error fetching profile", resp, state.agent);
+    throw new Error("Error fetching profile:" + resp?.toString());
+  }
+  return resp.data;
+}
+
 function connectMessagePort(port: MessagePortApi) {
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   messagePortInterface<BackendInterface, {}>(port, {
-    async getProfile(did) {
-      await state.ready;
-      if (!did || did == state.agent?.did) {
-        return state.profile;
-      }
-      const resp = await state.agent?.getProfile({
-        actor: did || state.agent.assertDid,
-      });
-      if (!resp?.data && !resp?.success) {
-        console.error("error fetching profile", resp, state.agent);
-        throw new Error("Error fetching profile:" + resp?.toString());
-      }
-      return resp.data;
-    },
+    getProfile,
     async login(handle) {
       if (!state.oauth) throw "OAuth not initialized";
       const url = await state.oauth.authorize(handle, {
