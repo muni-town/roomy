@@ -5,7 +5,8 @@
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { current } from "$lib/queries.svelte";
   import { backend, backendStatus } from "$lib/workers";
-  import { Box, Button, ScrollArea } from "@fuxui/base";
+  import { Box, Button } from "@fuxui/base";
+  import { ulid } from "ulidx";
 
   async function navigateToFirstChildThreadOrPage() {}
 
@@ -21,8 +22,14 @@
   async function joinSpace() {
     if (!backendStatus.personalStreamId || !page.params.space) return;
     await backend.sendEvent(backendStatus.personalStreamId, {
-      variant: "space.roomy.joinSpace.0",
-      data: page.params.space,
+      ulid: ulid(),
+      parent: undefined,
+      variant: {
+        kind: "space.roomy.space.join.0",
+        data: {
+          spaceId: page.params.space,
+        },
+      },
     });
   }
 </script>

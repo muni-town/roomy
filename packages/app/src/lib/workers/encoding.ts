@@ -161,7 +161,7 @@ export const eventVariantCodec = Kinds({
   /**
    * Update the info for a room. Note that a room might be anything.
    */
-  "space.roomy.entity.info.0": Struct({
+  "space.roomy.info.0": Struct({
     name: ValueUpdate(Option(str)),
     avatar: ValueUpdate(Option(str)),
     description: ValueUpdate(Option(str)),
@@ -172,7 +172,7 @@ export const eventVariantCodec = Kinds({
    *
    * Each member is granted either read or write access to the room.
    * */
-  "space.roomy.room.addMember.0": Struct({
+  "space.roomy.room.member.add.0": Struct({
     member_id: GroupMember,
     access: ReadOrWrite,
   }),
@@ -180,7 +180,7 @@ export const eventVariantCodec = Kinds({
    * Remove a member from the room. A reason may be supplied to clarify in case of, for example, a
    * ban.
    */
-  "space.roomy.room.removeMember.0": Struct({
+  "space.roomy.room.member.remove.0": Struct({
     member_id: GroupMember,
     access: ReadOrWrite,
     reason: Option(str),
@@ -231,6 +231,10 @@ export const eventVariantCodec = Kinds({
     uri: str,
   }),
   "space.roomy.media.delete.0": _void,
+  /** Mark a room as a channel. */
+  "space.roomy.channel.mark.0": _void,
+  /** Unmark a room as a channel. */
+  "space.roomy.channel.unmark.0": _void,
 });
 
 export const eventCodec = Struct({

@@ -104,3 +104,7 @@ create table if not exists comp_media (
   entity blob primary key references entities(ulid) on delete cascade,
   uri text
 ) strict;
+
+create table if not exists comp_channel (
+  entity blob primary key references entities(ulid) on delete cascade
+)

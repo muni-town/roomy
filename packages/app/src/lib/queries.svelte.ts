@@ -37,8 +37,7 @@ $effect.root(() => {
     ],
     (row) => JSON.parse(row.json),
   );
-
-  $inspect(spaces.result);
+  (globalThis as any).spaces = spaces;
 
   // Update current values
   $effect(() => {
@@ -47,7 +46,8 @@ $effect.root(() => {
       : undefined;
   });
   $effect(() => {
-    backendStatus.did &&
-      current.isSpaceAdmin == current.space?.admins.includes(backendStatus.did);
+    if (backendStatus.did)
+      current.isSpaceAdmin =
+        current.space?.admins.includes(backendStatus.did) || false;
   });
 });

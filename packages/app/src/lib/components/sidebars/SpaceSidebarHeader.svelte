@@ -89,7 +89,7 @@
           href={`/${current.space?.id}/new`}
           variant="secondary"
         >
-          <Icon icon="lucide:plus" class="size-4" /> New Object
+          <Icon icon="lucide:plus" class="size-4" /> New
         </Button>
         <Button
           class="w-full"
@@ -100,7 +100,7 @@
           variant="secondary"
         >
           <Icon icon="lucide:pencil" class="size-4" />
-          {isEditing ? "Finish editing" : "Edit objects"}
+          {isEditing ? "Finish editing" : "Edit"}
         </Button>
 
         <Button

@@ -28,6 +28,7 @@ export const backendStatus = reactiveWorkerState<BackendStatus>(
   new BroadcastChannel("backend-status"),
   false,
 );
+(globalThis as any).backendStatus = backendStatus;
 
 const workerStatusChannel = new MessageChannel();
 export const sqliteStatus = reactiveWorkerState<SqliteStatus>(
@@ -90,7 +91,6 @@ export const backend = messagePortInterface<{}, BackendInterface>(
   {},
 );
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).backend = backend;
 
 // Start a sqlite worker for this tab.

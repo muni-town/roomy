@@ -24,7 +24,7 @@
         href={`/${page.params.space}/settings/general`}
         data-current={page.url.pathname.includes("general")}>General</Button
       >
-      <Button
+      <!-- <Button
         variant="ghost"
         class="w-full justify-start"
         href={`/${page.params.space}/settings/members`}
@@ -43,7 +43,7 @@
         data-current={page.url.pathname.includes("discord-bridge")}
         href={`/${page.params.space}/settings/discord-bridge`}
         >Discord Bridge
-      </Button>
+      </Button> -->
     </div>
   {/snippet}
 

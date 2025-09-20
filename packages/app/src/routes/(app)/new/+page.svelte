@@ -72,7 +72,7 @@
         ulid: ulid(),
         parent: undefined,
         variant: {
-          kind: "space.roomy.entity.info.0",
+          kind: "space.roomy.info.0",
           data: {
             avatar: avatarUpload?.url
               ? { tag: "set", value: avatarUpload.url }

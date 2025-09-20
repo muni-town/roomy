@@ -1,52 +1,74 @@
 <script lang="ts">
-  import { page } from "$app/state";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
-  import { user } from "$lib/user.svelte";
+  import { current } from "$lib/queries.svelte";
+  import { backend } from "$lib/workers";
   import { Button, Input, Textarea } from "@fuxui/base";
-  import { RoomyEntity } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-tools/svelte";
   import toast from "svelte-french-toast";
+  import { ulid } from "ulidx";
 
-  let space = $derived(new CoState(RoomyEntity, page.params.space));
-  let spaceName = $derived(space.current?.name ?? "");
-  let avatarUrl = $derived(space.current?.imageUrl ?? "");
-  let spaceDescription = $derived(space.current?.description ?? "");
+  let spaceName = $derived(current.space?.name ?? "");
+  let avatarUrl = $derived(current.space?.avatar ?? "");
+  let spaceDescription = $derived(current.space?.description ?? "");
 
   let avatarFile = $state<File | null>(null);
 
   let isSaving = $state(false);
 
-  let hasChanged = $derived(
-    spaceName != space.current?.name ||
-      avatarUrl != space.current?.imageUrl ||
-      spaceDescription != space.current?.description,
+  let nameChanged = $derived(spaceName != current.space?.name);
+  let avatarChanged = $derived(avatarUrl != current.space?.avatar);
+  let descriptionChanged = $derived(
+    spaceDescription != current.space?.description,
   );
+  let hasChanged = $derived(nameChanged || avatarChanged || descriptionChanged);
 
   function resetData() {
-    spaceName = space.current?.name ?? "";
-    avatarUrl = space.current?.imageUrl ?? "";
+    spaceName = current.space?.name ?? "";
+    avatarUrl = current.space?.avatar ?? "";
     avatarFile = null;
   }
 
   async function save() {
-    if (!space.current) return;
-    isSaving = true;
+    if (!current.space) return;
 
-    let currentSpaceName = spaceName;
-    let currentSpaceDescription = spaceDescription;
+    try {
+      isSaving = true;
 
-    if (avatarFile) {
-      await uploadAvatar();
+      const avatarUpload =
+        avatarFile &&
+        (await backend.uploadImage(await avatarFile.arrayBuffer()));
+
+      // Update space info
+      await backend.sendEvent(current.space.id, {
+        ulid: ulid(),
+        parent: undefined,
+        variant: {
+          kind: "space.roomy.info.0",
+          data: {
+            avatar:
+              avatarChanged && avatarUpload
+                ? { tag: "set", value: avatarUpload.url }
+                : { tag: "ignore", value: undefined },
+            name: nameChanged
+              ? { tag: "set", value: spaceName }
+              : { tag: "ignore", value: undefined },
+            description: descriptionChanged
+              ? { tag: "set", value: spaceDescription }
+              : { tag: "ignore", value: undefined },
+          },
+        },
+      });
+
+      toast.success("Space updated successfully", {
+        position: "bottom-right",
+      });
+    } catch (e) {
+      console.error("Error updating space:", e);
+      toast.error("Error updating space", {
+        position: "bottom-right",
+      });
+    } finally {
+      isSaving = false;
     }
-
-    space.current.name = currentSpaceName;
-    space.current.imageUrl = avatarUrl;
-    space.current.description = currentSpaceDescription;
-    isSaving = false;
-
-    toast.success("Space updated successfully", {
-      position: "bottom-right",
-    });
   }
 
   async function handleAvatarSelect(event: Event) {
@@ -57,25 +79,6 @@
         avatarFile = file;
         avatarUrl = URL.createObjectURL(file);
       }
-    }
-  }
-
-  async function uploadAvatar() {
-    if (!avatarFile || !user.agent || !space.current) return;
-
-    try {
-      // Upload the image using the user's agent
-      const uploadResult = await user.uploadBlob(avatarFile);
-
-      space.current.imageUrl = uploadResult.url;
-      avatarUrl = uploadResult.url;
-    } catch (error) {
-      console.error("Error uploading avatar:", error);
-      toast.error("Failed to upload avatar", {
-        position: "bottom-right",
-      });
-    } finally {
-      avatarFile = null;
     }
   }
 
@@ -96,7 +99,7 @@
           >Avatar</label
         >
         <div class="mt-2 flex items-center gap-x-3">
-          <SpaceAvatar imageUrl={avatarUrl} id={space.current?.id} size={64} />
+          <SpaceAvatar imageUrl={avatarUrl} id={current.space?.id} size={64} />
 
           <input
             type="file"
