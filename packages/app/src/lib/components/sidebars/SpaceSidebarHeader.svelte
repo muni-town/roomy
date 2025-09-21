@@ -1,5 +1,4 @@
 <script lang="ts">
-  import Icon from "@iconify/svelte";
   import { Button, cn, Popover } from "@fuxui/base";
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
@@ -8,6 +7,13 @@
   import { current } from "$lib/queries.svelte";
   import { backend, backendStatus } from "$lib/workers";
   import { ulid } from "ulidx";
+
+  import IconLucideChevronDown from "~icons/lucide/chevron-down";
+  import IconLucideShare from "~icons/lucide/share";
+  import IconLucidePlus from "~icons/lucide/plus";
+  import IconLucidePencil from "~icons/lucide/pencil";
+  import IconLucideSettings from "~icons/lucide/settings";
+  import IconLucideLogOut from "~icons/lucide/log-out";
 
   let {
     isEditing = $bindable(false),
@@ -61,8 +67,7 @@
             {current.space?.name ?? ""}
           </h1>
         </div>
-        <Icon
-          icon="lucide:chevron-down"
+        <IconLucideChevronDown
           class={cn(
             "size-4 text-base-700 dark:text-base-300 transition-transform duration-200",
             popoverOpen && "rotate-180",
@@ -80,7 +85,7 @@
         }}
         class="w-full"
       >
-        <Icon icon="lucide:share" class="size-4" /> Invite
+        <IconLucideShare class="size-4" /> Invite
       </Button>
 
       {#if current.isSpaceAdmin}
@@ -89,7 +94,7 @@
           href={`/${current.space?.id}/new`}
           variant="secondary"
         >
-          <Icon icon="lucide:plus" class="size-4" /> New
+          <IconLucidePlus class="size-4" /> New
         </Button>
         <Button
           class="w-full"
@@ -99,8 +104,8 @@
           }}
           variant="secondary"
         >
-          <Icon icon="lucide:pencil" class="size-4" />
-          {isEditing ? "Finish editing" : "Edit"}
+          <IconLucidePencil class="size-4" />
+          {isEditing ? "Finish editing" : "Edit Sidebar"}
         </Button>
 
         <Button
@@ -108,12 +113,12 @@
           href={`/${current.space?.id}/settings`}
           variant="secondary"
         >
-          <Icon icon="lucide:settings" class="size-4" /> Space settings
+          <IconLucideSettings class="size-4" /> Space settings
         </Button>
       {/if}
 
       <Button variant="red" class="w-full" onclick={leaveSpace}>
-        <Icon icon="lucide:log-out" class="size-4" /> Leave Space
+        <IconLucideLogOut class="size-4" /> Leave Space
       </Button>
     </div>
   </Popover>

@@ -6,10 +6,14 @@
     dragHandle,
     type Item,
   } from "svelte-dnd-action";
-  import Icon from "@iconify/svelte";
-  import { spaceTree } from "$lib/queries.svelte";
+  import { type SpaceTreeItem } from "$lib/queries.svelte";
+  import SidebarItem from "./SidebarItem.svelte";
 
-  let { isEditing = $bindable(false), level = 0 } = $props();
+  let {
+    isEditing = $bindable(false),
+    items,
+    level = 0,
+  }: { isEditing: boolean; items: SpaceTreeItem[]; level?: number } = $props();
 
   // let {
   //   // children,
@@ -79,14 +83,6 @@
   // }
 </script>
 
-<div>
-  {#each spaceTree.result || [] as item}
-    <div>
-      {item.name}
-    </div>
-  {/each}
-</div>
-
 <!-- 
 {#if isEditing}
   <div
@@ -130,7 +126,7 @@
     {/each}
   </div>
 {:else} -->
-  <!-- {#if subthreads && me}
+<!-- {#if subthreads && me}
     <div class="flex flex-col w-full pl-3 rounded-full">
       {#each [...recentSubthreads.values()]
         .sort((a, b) => {
@@ -153,19 +149,11 @@
     </div>
   {/if} -->
 
-  <div class={["flex flex-col w-full", level > 0 ? "pl-3" : ""]}>
-    {#each (children ?? []).filter((x) => x && !x?.softDeleted) as child, index (child?.id)}
-      <div class="flex items-start gap-2 w-full">
-        <SidebarObject
-          object={child}
-          {me}
-          bind:isEditing
-          {editEntity}
-          {space}
-          level={level + 1}
-          {index}
-        />
-      </div>
-    {/each}
-  </div>
+<div class={["flex flex-col w-full", level > 0 ? "pl-3" : ""]}>
+  {#each items as item, index (item.id)}
+    <div class="flex items-start gap-2 w-full">
+      <SidebarItem bind:isEditing level={level + 1} {index} {item} />
+    </div>
+  {/each}
+</div>
 <!-- {/if} -->

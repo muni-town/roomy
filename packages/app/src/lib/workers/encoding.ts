@@ -82,7 +82,9 @@ Kinds.dec = dec;
 
 export const Hash = enhanceCodec(Bytes(32), hex.decode, hex.encode);
 
-export const Ulid = enhanceCodec(Bytes(16), decodeBase32, encodeBase32);
+export const Ulid = enhanceCodec(Bytes(16), decodeBase32, (b) =>
+  encodeBase32(b).toUpperCase(),
+);
 
 export const ValueUpdate = <T>(ty: Codec<T>) =>
   Enum({

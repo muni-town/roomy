@@ -15,10 +15,7 @@ export type SpaceMeta = {
 export type SpaceTreeItem = { id: string; name: string } & (
   | {
       type: "category";
-      channels: {
-        id: string;
-        name: string;
-      }[];
+      children: SpaceTreeItem[];
     }
   | {
       type: "channel";
@@ -63,10 +60,11 @@ $effect.root(() => {
       'id', format_ulid(e.ulid),
       'name', i.name,
       'type', 'category',
-      'channels', (
+      'children', (
         select json_group_array(
           json_object(
             'id', format_ulid(e.ulid),
+            'type', 'channel',
             'name', inf.name
           )
         )

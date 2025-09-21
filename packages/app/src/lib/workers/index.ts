@@ -40,7 +40,6 @@ export type BackendInterface = {
   login(username: string): Promise<string>;
   logout(): Promise<void>;
   oauthCallback(searchParams: string): Promise<void>;
-  getProfile(did?: string): Promise<ProfileViewDetailed | undefined>;
   runQuery(statement: SqlStatement): Promise<QueryResult>;
   dangerousCompletelyDestroyDatabase(opts: {
     yesIAmSure: true;

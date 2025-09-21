@@ -1,6 +1,5 @@
 <script lang="ts">
   import { navigate } from "$lib/utils.svelte";
-  import Icon from "@iconify/svelte";
   import SidebarSpace from "./ThinSidebarSpace.svelte";
   import { page } from "$app/state";
   import { Button, ThemeToggle, ScrollArea, Tooltip } from "@fuxui/base";
@@ -9,6 +8,11 @@
   import { backendStatus } from "$lib/workers";
   import { spaces } from "$lib/queries.svelte";
   import { dev } from "$app/environment";
+
+  import IconTablerPlus from "~icons/tabler/plus";
+  import IconTablerHome from "~icons/tabler/home";
+  import IconMdiSqlQuery from "~icons/mdi/sql-query";
+  import IconMdiWireless from "~icons/mdi/wireless";
 
   let {}: {} = $props();
 
@@ -24,7 +28,7 @@
     class="px-0 aspect-square [&_svg]:size-8"
     data-current={page.url.pathname.startsWith("/home")}
   >
-    <Icon icon="tabler:home" font-size="1.75em" />
+    <IconTablerHome font-size="1.75em" />
   </Button>
 
   {#if backendStatus.did}
@@ -46,7 +50,7 @@
       href="/new"
       data-current={page.url.pathname.startsWith("/new")}
     >
-      <Icon icon="tabler:plus" font-size="2em" />
+      <IconTablerPlus font-size="2em" />
     </Button>
   {/if}
 
@@ -77,7 +81,7 @@
 <section class="flex flex-col items-center gap-2 p-0 pb-2">
   {#if dev}
     <a href="/query">
-      <Icon icon="mdi:sql-query" font-size="2em" />
+      <IconMdiSqlQuery font-size="2em" />
     </a>
   {/if}
   <Tooltip
@@ -87,11 +91,10 @@
   >
     {#snippet child({ props })}
       <div {...props}>
-        <Icon
+        <IconMdiWireless
           class={(backendStatus.leafConnected
             ? "text-green-500"
             : "text-red-500") + " mx-3"}
-          icon="mdi:wireless"
           font-size="2em"
         />
       </div>

@@ -81,7 +81,7 @@
       });
     }
 
-    navigate({ space: current.space.id });
+    navigate({ space: current.space.id, object: roomId });
   }
 </script>
 

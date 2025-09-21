@@ -3,6 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, type PluginOption } from "vite";
 import wasm from "vite-plugin-wasm";
 import topLevelAwait from "vite-plugin-top-level-await";
+import Icons from "unplugin-icons/vite";
 
 export default defineConfig({
   plugins: [
@@ -23,6 +24,9 @@ export default defineConfig({
         });
       },
     },
+    Icons({
+      compiler: "svelte",
+    }),
   ] as PluginOption[],
   build: {
     target: "es2022",

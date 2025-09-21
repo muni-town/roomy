@@ -1,8 +1,7 @@
-import {
-  type SqlStatement,
-  type StreamEvent,
-  type MaterializerConfig,
-  getProfile,
+import type {
+  SqlStatement,
+  StreamEvent,
+  MaterializerConfig,
 } from "./backendWorker";
 import { _void, type CodecType } from "scale-ts";
 import {
@@ -17,6 +16,7 @@ import schemaSql from "./db/schema.sql?raw";
 import { decodeTime } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
 import type { SqliteWorkerInterface } from ".";
+import type { Agent } from "@atproto/api";
 
 export type EventType = ReturnType<(typeof eventCodec)["dec"]>;
 
@@ -31,6 +31,7 @@ export const config: MaterializerConfig = {
 
 export async function materializer(
   sqliteWorker: SqliteWorkerInterface,
+  agent: Agent,
   streamId: string,
   streamEvent: StreamEvent,
 ): Promise<void> {
@@ -39,6 +40,7 @@ export async function materializer(
     const statements = await materializers[event.variant.kind]({
       sqliteWorker,
       streamId,
+      agent,
       user: streamEvent.user,
       event,
       variant: event.variant.data,
@@ -64,6 +66,7 @@ const materializers: {
   [K in EventVariantStr]: (opts: {
     sqliteWorker: SqliteWorkerInterface;
     streamId: string;
+    agent: Agent;
     user: string;
     event: Event;
     variant: EventVariant<K>;
@@ -91,8 +94,13 @@ const materializers: {
   ],
 
   // Admin
-  "space.roomy.admin.add.0": async ({ sqliteWorker, streamId, variant }) => [
-    ...(await ensureProfile(sqliteWorker, {
+  "space.roomy.admin.add.0": async ({
+    sqliteWorker,
+    agent,
+    streamId,
+    variant,
+  }) => [
+    ...(await ensureProfile(sqliteWorker, agent, {
       tag: "user",
       value: variant.adminId,
     })),
@@ -183,10 +191,11 @@ const materializers: {
     sqliteWorker,
     streamId,
     event,
+    agent,
     variant,
   }) => [
     ensureEntity(streamId, event.ulid, event.parent),
-    ...(await ensureProfile(sqliteWorker, variant.member_id)),
+    ...(await ensureProfile(sqliteWorker, agent, variant.member_id)),
     {
       sql: event.parent
         ? `insert into comp_room_members (room, member, access) values (?, ?, ?)`
@@ -218,11 +227,15 @@ const materializers: {
     streamId,
     user,
     event,
+    agent,
     variant,
   }) => {
     const statements = [
       ensureEntity(streamId, event.ulid, event.parent),
-      ...(await ensureProfile(sqliteWorker, { tag: "user", value: user })),
+      ...(await ensureProfile(sqliteWorker, agent, {
+        tag: "user",
+        value: user,
+      })),
       sql`
         insert into comp_content (entity, mime_type, data)
         values (
@@ -377,6 +390,7 @@ function ensureEntity(
 
 async function ensureProfile(
   sqliteWorker: SqliteWorkerInterface,
+  agent: Agent,
   member: CodecType<typeof GroupMember>,
 ): Promise<SqlStatement[]> {
   try {
@@ -390,16 +404,18 @@ async function ensureProfile(
         return [];
       }
 
-      const profile = await getProfile(did);
-      if (!profile) return [];
+      const profile = await agent.getProfile({ actor: did });
+      if (!profile.success) return [];
+      // FIXME: troubleshoot the fact that we are somehow making extraneous profile requests to the
+      // atproto PDS in the backend worker.
       return [
         sql`
-        insert into profiles (did, handle, display_name, avatar)
+        insert or ignore into profiles (did, handle, display_name, avatar)
         values (
            ${did},
-           ${profile.handle},
-           ${profile.displayName},
-           ${profile.avatar}
+           ${profile.data.handle},
+           ${profile.data.displayName},
+           ${profile.data.avatar}
         )
       `,
       ];

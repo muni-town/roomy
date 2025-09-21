@@ -164,6 +164,7 @@ class Backend {
     this.#session = session;
     status.did = session?.did;
     if (session) {
+      console.log("Setting up agent");
       db.kv.add({ key: "did", value: session.did });
       this.setAgent(new Agent(session));
     } else {
@@ -272,7 +273,6 @@ export async function getProfile(
 function connectMessagePort(port: MessagePortApi) {
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   messagePortInterface<BackendInterface, {}>(port, {
-    getProfile,
     async login(handle) {
       if (!state.oauth) throw "OAuth not initialized";
       const url = await state.oauth.authorize(handle, {
@@ -328,7 +328,6 @@ function connectMessagePort(port: MessagePortApi) {
       // When a new SQLite worker is created we need to make sure that we re-create all of the
       // live queries that were active on the old worker.
       for (const [id, { port, statement }] of liveQueries.entries()) {
-        console.log("recreating live query", sql);
         const channel = new MessageChannel();
         channel.port1.onmessage = (ev) => {
           port.postMessage(ev.data);
@@ -570,6 +569,7 @@ export type MaterializerConfig = {
   initSql: SqlStatement[];
   materializer: (
     sqliteWorker: SqliteWorkerInterface,
+    agent: Agent,
     streamId: string,
     event: StreamEvent,
   ) => Promise<void>;
@@ -582,6 +582,7 @@ class StreamMaterializer {
   #latestEvent: number | undefined;
   #materializer: (
     sqliteWorker: SqliteWorkerInterface,
+    agent: Agent,
     streamId: string,
     event: StreamEvent,
   ) => Promise<void>;
@@ -653,11 +654,17 @@ class StreamMaterializer {
 
   async #materializeEvent(event: StreamEvent) {
     if (!sqliteWorker) throw "No Sqlite worker";
+    if (!state.agent) throw "No ATProto agent";
     if (this.#latestEvent == undefined) throw "latest event not initialized";
     if (event.idx != (this.#latestEvent || 0) + 1) throw "Unexpected event IDX";
 
     try {
-      await this.#materializer(sqliteWorker, this.#streamid, event);
+      await this.#materializer(
+        sqliteWorker,
+        state.agent,
+        this.#streamid,
+        event,
+      );
     } catch (e) {
       console.warn(
         `Could not materialize event ${event.idx} in stream ${this.#streamid}`,

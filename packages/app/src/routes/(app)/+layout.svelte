@@ -3,13 +3,14 @@
   import { browser, dev } from "$app/environment";
   import posthog from "posthog-js";
   import { backendStatus } from "$lib/workers";
-  import Icon from "@iconify/svelte";
   import { onMount } from "svelte";
   import { Toaster } from "svelte-french-toast";
 
   import { fade } from "svelte/transition";
   import LoginForm from "$lib/components/user/LoginForm.svelte";
   import { TooltipProvider } from "@fuxui/base";
+
+  import IconMdiLoading from "~icons/mdi/loading"
 
   onMount(async () => {
     // Initialize PostHog for analytics
@@ -92,7 +93,7 @@
   >
     {#if showLoadingIcon}
       <div transition:fade={{ duration: 500 }}>
-        <Icon icon="mdi:loading" class="animate-spin size-40 text-primary" />
+        <IconMdiLoading font-size="8em" class="animate-spin text-primary" />
       </div>
     {/if}
   </div>

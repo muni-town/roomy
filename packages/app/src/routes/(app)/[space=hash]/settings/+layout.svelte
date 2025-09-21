@@ -3,7 +3,8 @@
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import MainSidebarSpace from "$lib/components/sidebars/SpaceSidebarHeader.svelte";
   import { Button, ScrollArea } from "@fuxui/base";
-  import Icon from "@iconify/svelte";
+
+  import IconLucideArrowLeft from "~icons/lucide/arrow-left"
 
   let { children } = $props();
 </script>
@@ -14,7 +15,7 @@
 
     <div class="px-2 flex flex-col gap-2">
       <Button href={`/${page.params.space}`} class="w-full justify-start mb-4">
-        <Icon icon="lucide:arrow-left" class="size-4" />
+        <IconLucideArrowLeft class="size-4" />
         Back to space
       </Button>
 

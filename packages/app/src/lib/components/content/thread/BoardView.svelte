@@ -1,39 +1,37 @@
 <script lang="ts">
-  import { RoomyEntity, SubThreadsComponent } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-tools/svelte";
   import BoardViewItem from "./BoardViewItem.svelte";
   import { ScrollArea } from "@fuxui/base";
 
-  let { objectId }: { objectId: string } = $props();
+  // let { objectId }: { objectId: string } = $props();
 
-  let object = $derived(
-    new CoState(RoomyEntity, objectId, {
-      resolve: {
-        components: true,
-      },
-    }),
-  );
+  // let object = $derived(
+  //   new CoState(RoomyEntity, objectId, {
+  //     resolve: {
+  //       components: true,
+  //     },
+  //   }),
+  // );
 
-  let subthreads = $derived(
-    new CoState(
-      SubThreadsComponent,
-      object?.current?.components?.[SubThreadsComponent.id],
-      {
-        resolve: {
-          $each: {
-            components: {
-              $each: true,
-              $onError: null,
-            },
-          },
-          $onError: null,
-        },
-      },
-    ),
-  );
+  // let subthreads = $derived(
+  //   new CoState(
+  //     SubThreadsComponent,
+  //     object?.current?.components?.[SubThreadsComponent.id],
+  //     {
+  //       resolve: {
+  //         $each: {
+  //           components: {
+  //             $each: true,
+  //             $onError: null,
+  //           },
+  //         },
+  //         $onError: null,
+  //       },
+  //     },
+  //   ),
+  // );
 </script>
 
-{#if subthreads.current}
+<!-- {#if subthreads.current}
   <ScrollArea class="h-full px-2 pb-4">
     {#each Object.values(subthreads.current.perAccount)
       .map((x) => [...x.all].map((x) => x.value))
@@ -47,4 +45,4 @@
   </ScrollArea>
 {:else}
   No threads in this Channel.
-{/if}
+{/if} -->
