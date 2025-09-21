@@ -3,7 +3,10 @@
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
   import { LiveQuery } from "$lib/liveQuery.svelte";
   import { current } from "$lib/queries.svelte";
+  import { navigate } from "$lib/utils.svelte";
+  import { sql } from "$lib/utils/sqlTemplate";
   import { backend } from "$lib/workers";
+  import { Hash } from "$lib/workers/encoding";
   import { Button, Input, ScrollArea, Select } from "@fuxui/base";
   import { ulid } from "ulidx";
 
@@ -14,12 +17,13 @@
   let selectedCategory = $state("");
 
   let categoriesQuery = new LiveQuery<{ name: string; id: string }>(
-    `select i.name, format_ulid(e.ulid) as id
-    from entities e
-      inner join comp_category c on e.ulid = c.entity
-      inner join comp_info i on e.ulid = i.entity
-    where e.stream = hash(?)`,
-    () => [current.space?.id],
+    () => sql`
+      select i.name, format_ulid(e.ulid) as id
+      from entities e
+        inner join comp_category c on e.ulid = c.entity
+        inner join comp_info i on e.ulid = i.entity
+      where e.stream = ${current.space?.id && Hash.enc(current.space.id)}
+    `,
   );
   const categories = $derived(categoriesQuery.result || []);
 
@@ -76,6 +80,8 @@
         },
       });
     }
+
+    navigate({ space: current.space.id });
   }
 </script>
 
