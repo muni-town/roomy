@@ -14,7 +14,7 @@
 
   async function runQuery() {
     try {
-      queryResult = await backend.runQuery(query);
+      queryResult = await backend.runQuery({ sql: query });
     } catch (e: any) {
       queryResult = e.toString();
     }

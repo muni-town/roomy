@@ -30,6 +30,7 @@ import { config as materializerConfig, type EventType } from "./materializer";
 import { workerOauthClient } from "./oauth";
 import type { LiveQueryMessage } from "$lib/workers/setupSqlite";
 import { eventCodec, Hash } from "./encoding";
+import { sql } from "$lib/utils/sqlTemplate";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -247,10 +248,8 @@ if (isSharedWorker) {
   connectMessagePort(globalThis);
 }
 
-const liveQueries: Map<
-  string,
-  { port: MessagePort; sql: string; params?: BindingSpec }
-> = new Map();
+const liveQueries: Map<string, { port: MessagePort; statement: SqlStatement }> =
+  new Map();
 (globalThis as any).liveQueries = liveQueries;
 
 export async function getProfile(
@@ -288,13 +287,13 @@ function connectMessagePort(port: MessagePortApi) {
     async logout() {
       state.logout();
     },
-    async runQuery(sql: string) {
+    async runQuery(statement: SqlStatement) {
       await sqliteWorkerReady;
       if (!sqliteWorker) throw new Error("Sqlite worker not initialized");
-      return await sqliteWorker.runQuery(sql);
+      return await sqliteWorker.runQuery(statement);
     },
-    async createLiveQuery(id, port, sql, params) {
-      liveQueries.set(id, { port, sql, params });
+    async createLiveQuery(id, port, statement) {
+      liveQueries.set(id, { port, statement });
       const channel = new MessageChannel();
       channel.port1.onmessage = (ev) => {
         port.postMessage(ev.data);
@@ -307,15 +306,15 @@ function connectMessagePort(port: MessagePortApi) {
       });
       await sqliteWorkerReady;
       if (!sqliteWorker) throw new Error("Sqlite worker not initialized");
-      return await sqliteWorker.createLiveQuery(id, channel.port2, sql, params);
+      return await sqliteWorker.createLiveQuery(id, channel.port2, statement);
     },
     async dangerousCompletelyDestroyDatabase({ yesIAmSure }) {
       if (!yesIAmSure) throw "You need to be sure";
       if (!sqliteWorker) throw "Sqlite worker not initialized";
-      await sqliteWorker.runQuery("pragma writable_schema = 1");
-      await sqliteWorker.runQuery("delete from sqlite_master");
-      await sqliteWorker.runQuery("vacuum");
-      await sqliteWorker.runQuery("pragma integrity_check");
+      await sqliteWorker.runQuery(sql`pragma writable_schema = 1`);
+      await sqliteWorker.runQuery(sql`delete from sqlite_master`);
+      await sqliteWorker.runQuery(sql`vacuum`);
+      await sqliteWorker.runQuery(sql`pragma integrity_check`);
       await db.streamCursors.clear();
     },
     async setActiveSqliteWorker(messagePort) {
@@ -328,13 +327,13 @@ function connectMessagePort(port: MessagePortApi) {
 
       // When a new SQLite worker is created we need to make sure that we re-create all of the
       // live queries that were active on the old worker.
-      for (const [id, { port, sql, params }] of liveQueries.entries()) {
+      for (const [id, { port, statement }] of liveQueries.entries()) {
         console.log("recreating live query", sql);
         const channel = new MessageChannel();
         channel.port1.onmessage = (ev) => {
           port.postMessage(ev.data);
         };
-        sqliteWorker.createLiveQuery(id, channel.port2, sql, params);
+        sqliteWorker.createLiveQuery(id, channel.port2, statement);
       }
     },
     async createStream(moduleId, moduleUrl, params): Promise<string> {
@@ -521,8 +520,7 @@ class OpenSpacesMaterializer {
     sqliteWorker.createLiveQuery(
       this.#liveQueryId,
       channel.port2,
-      "select id from spaces where stream = ? and hidden = 0",
-      [Hash.enc(this.#streamId)],
+      sql`select id from spaces where stream = ${Hash.enc(this.#streamId)} and hidden = 0`,
     );
   }
 
@@ -608,8 +606,8 @@ class StreamMaterializer {
       console.log("latestevent", this.#latestEvent);
 
       // Initialize the database schema. This is assumed to be idempotent.
-      for (const { sql, params } of config.initSql) {
-        await sqliteWorker.runQuery(sql, params);
+      for (const statement of config.initSql) {
+        await sqliteWorker.runQuery(statement);
       }
 
       // Backfill events
@@ -656,12 +654,9 @@ class StreamMaterializer {
     if (this.#latestEvent == undefined) throw "latest event not initialized";
     if (event.idx != (this.#latestEvent || 0) + 1) throw "Unexpected event IDX";
 
-    for (const { sql, params } of await this.#materializer(
-      this.#streamid,
-      event,
-    )) {
+    for (const statement of await this.#materializer(this.#streamid, event)) {
       try {
-        await sqliteWorker.runQuery(sql, params);
+        await sqliteWorker.runQuery(statement);
       } catch (e) {
         console.warn(
           `Could not materialize event ${event.idx} in stream ${this.#streamid}`,

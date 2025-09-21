@@ -1,11 +1,11 @@
 import initSqlite3, {
   type Database,
   type OpfsSAHPoolDatabase,
-  type BindingSpec,
   type Sqlite3Static,
   type PreparedStatement,
 } from "@sqlite.org/sqlite-wasm";
 import { Hash, Ulid } from "./encoding";
+import type { SqlStatement } from "./backendWorker";
 
 let sqlite3: Sqlite3Static | null = null;
 let db: OpfsSAHPoolDatabase | Database | null = null;
@@ -95,15 +95,14 @@ export type QueryResult = { rows?: { [key: string]: unknown }[]; ok?: true } & {
   actions: Action[];
 };
 export async function executeQuery(
-  sql: string,
-  params?: BindingSpec,
+  statement: SqlStatement,
 ): Promise<QueryResult> {
   if (!db && initPromise) await initPromise;
   if (!db || !sqlite3) throw new Error("database_not_initialized");
 
   try {
-    const { statement, actions } = await prepareSql(sql, params);
-    const result = runPreparedStatement(statement);
+    const { prepared, actions } = await prepareSql(statement);
+    const result = runPreparedStatement(prepared);
 
     // Update live queries asynchronously
     updateLiveQueries(actions);
@@ -116,17 +115,16 @@ export async function executeQuery(
 }
 
 async function prepareSql(
-  sql: string,
-  params?: BindingSpec,
-): Promise<{ statement: PreparedStatement; actions: Action[] }> {
+  statement: SqlStatement,
+): Promise<{ prepared: PreparedStatement; actions: Action[] }> {
   if (!db && initPromise) await initPromise;
   if (!db || !sqlite3) throw new Error("database_not_initialized");
 
   authorizerQueue = [];
-  const statement = db.prepare(sql);
-  if (params) statement.bind(params);
+  const prepared = db.prepare(statement.sql);
+  if (statement.params) prepared.bind(statement.params);
   const actions = [...authorizerQueue];
-  return { statement: statement, actions };
+  return { prepared, actions };
 }
 
 function runPreparedStatement(
@@ -160,16 +158,15 @@ export type LiveQueryMessage =
 const liveQueries: Map<string, { port: MessagePort; status: LiveQueryStatus }> =
   new Map();
 type LiveQueryStatus =
-  | { kind: "unprepared"; sql: string; params?: BindingSpec }
+  | { kind: "unprepared"; statement: SqlStatement }
   | { kind: "prepared"; tables: string[]; statement: PreparedStatement };
 
 export async function createLiveQuery(
   id: string,
   port: MessagePort,
-  sql: string,
-  params?: BindingSpec,
+  statement: SqlStatement,
 ) {
-  liveQueries.set(id, { port, status: { kind: "unprepared", sql, params } });
+  liveQueries.set(id, { port, status: { kind: "unprepared", statement } });
   await updateLiveQuery(id);
 }
 
@@ -190,9 +187,8 @@ async function updateLiveQuery(id: string) {
   let preparedStatement: PreparedStatement | undefined;
   if (status.kind == "unprepared") {
     try {
-      const { statement, actions } = await prepareSql(
-        status.sql,
-        status.params,
+      const { prepared: statement, actions } = await prepareSql(
+        status.statement,
       );
       liveQueries.set(id, {
         port,

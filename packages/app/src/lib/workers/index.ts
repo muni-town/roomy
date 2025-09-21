@@ -2,10 +2,10 @@ import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsk
 import { messagePortInterface, reactiveWorkerState } from "./workerMessaging";
 import backendWorkerUrl from "./backendWorker.ts?worker&url";
 
-import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
 import type { EventType } from "./materializer";
 import type { BlobRef } from "@atproto/lexicon";
 import type { QueryResult } from "./setupSqlite";
+import type { SqlStatement } from "./backendWorker";
 
 // Force page reload when hot reloading this file to avoid confusion if the workers get mixed up.
 if (import.meta.hot) {
@@ -41,15 +41,14 @@ export type BackendInterface = {
   logout(): Promise<void>;
   oauthCallback(searchParams: string): Promise<void>;
   getProfile(did?: string): Promise<ProfileViewDetailed | undefined>;
-  runQuery(sql: string, params?: BindingSpec): Promise<QueryResult>;
+  runQuery(statement: SqlStatement): Promise<QueryResult>;
   dangerousCompletelyDestroyDatabase(opts: {
     yesIAmSure: true;
   }): Promise<unknown>;
   createLiveQuery(
     id: string,
     port: MessagePort,
-    sql: string,
-    params?: BindingSpec,
+    statement: SqlStatement,
   ): Promise<void>;
   sendEvent(streamId: string, payload: EventType): Promise<void>;
   setActiveSqliteWorker(port: MessagePort): Promise<void>;
@@ -70,11 +69,10 @@ export type SqliteWorkerInterface = {
   createLiveQuery(
     id: string,
     port: MessagePort,
-    sql: string,
-    params?: BindingSpec,
+    statement: SqlStatement,
   ): Promise<void>;
   deleteLiveQuery(id: string): Promise<void>;
-  runQuery(sql: string, params?: BindingSpec): Promise<QueryResult>;
+  runQuery(statement: SqlStatement): Promise<QueryResult>;
 };
 
 // Initialize shared worker

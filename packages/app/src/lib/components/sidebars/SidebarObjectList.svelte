@@ -9,6 +9,8 @@
   import Icon from "@iconify/svelte";
   import { spaceTree } from "$lib/queries.svelte";
 
+  let { isEditing = $bindable(false), level = 0 } = $props();
+
   // let {
   //   // children,
   //   // me,
@@ -127,8 +129,8 @@
       </div>
     {/each}
   </div>
-{:else}
-  {#if subthreads && me}
+{:else} -->
+  <!-- {#if subthreads && me}
     <div class="flex flex-col w-full pl-3 rounded-full">
       {#each [...recentSubthreads.values()]
         .sort((a, b) => {
@@ -149,7 +151,7 @@
         </div>
       {/each}
     </div>
-  {/if}
+  {/if} -->
 
   <div class={["flex flex-col w-full", level > 0 ? "pl-3" : ""]}>
     {#each (children ?? []).filter((x) => x && !x?.softDeleted) as child, index (child?.id)}
@@ -166,4 +168,4 @@
       </div>
     {/each}
   </div>
-{/if} -->
+<!-- {/if} -->

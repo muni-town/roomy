@@ -1,0 +1,15 @@
+import type { SqlStatement } from "$lib/workers/backendWorker";
+
+/** Tagged template that returns a SQL statement for a SQLite query */
+export function sql(
+  strings: TemplateStringsArray,
+  ...params: any[]
+): SqlStatement {
+  const sql = strings.join("?");
+  return {
+    sql,
+    params: params.length > 0 ? params : undefined,
+  };
+}
+
+(globalThis as any).sql = sql;

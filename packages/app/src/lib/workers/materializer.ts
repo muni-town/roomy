@@ -16,6 +16,7 @@ import {
 } from "./encoding";
 import schemaSql from "./db/schema.sql?raw";
 import { decodeTime } from "ulidx";
+import { sql } from "$lib/utils/sqlTemplate";
 
 export type EventType = ReturnType<(typeof eventCodec)["dec"]>;
 
@@ -64,31 +65,43 @@ const materializers: {
 } = {
   // Space
   "space.roomy.space.join.0": async (streamId, _user, _event, variant) => [
-    {
-      sql: `insert into spaces (id, stream) values (?, ?)
-            on conflict do update set hidden = 0`,
-      params: [Hash.enc(variant.spaceId), Hash.enc(streamId)],
-    },
+    sql`
+      insert into spaces (id, stream)
+      values (
+        ${Hash.enc(variant.spaceId)},
+        ${Hash.enc(streamId)}
+      )
+      on conflict do update set hidden = 0
+    `,
   ],
   "space.roomy.space.leave.0": async (streamId, _user, _event, variant) => [
-    {
-      sql: "update spaces set hidden = 1 where id = ? and stream = ?",
-      params: [Hash.enc(variant.spaceId), Hash.enc(streamId)],
-    },
+    sql`
+      update spaces set hidden = 1
+      where
+        id = ${Hash.enc(variant.spaceId)}
+          and
+        stream = ${Hash.enc(streamId)}
+    `,
   ],
 
   // Admin
   "space.roomy.admin.add.0": async (streamId, _user, _event, variant) => [
-    {
-      sql: "insert into space_admins (space_id, admin_id) values (?, ?)",
-      params: [Hash.enc(streamId), variant.adminId],
-    },
+    sql`
+      insert into space_admins (space_id, admin_id)
+      values (
+        ${Hash.enc(streamId)},
+        ${variant.adminId}
+      )
+    `,
   ],
   "space.roomy.admin.remove.0": async (streamId, _user, _event, variant) => [
-    {
-      sql: "delete from space_admins where space_id = ? and admin_id = ?",
-      params: [Hash.enc(streamId), variant.adminId],
-    },
+    sql`
+      delete from space_admins
+      where 
+        space_id = ${Hash.enc(streamId)}
+          and
+        admin_id = ${variant.adminId}
+    `,
   ],
 
   // Info
@@ -135,13 +148,13 @@ const materializers: {
   // Room
   "space.roomy.room.create.0": async (streamId, _user, event) => [
     ensureEntity(streamId, event.ulid, event.parent),
-    {
-      sql: "insert into comp_room (entity, parent) values (?, ?)",
-      params: [
-        Ulid.enc(event.ulid),
-        event.parent ? Ulid.enc(event.parent) : null,
-      ],
-    },
+    sql`
+      insert into comp_room (entity, parent)
+      values (
+        ${Ulid.enc(event.ulid)},
+        ${event.parent ? Ulid.enc(event.parent) : null}
+      )
+    `,
   ],
   "space.roomy.room.delete.0": async (_streamId, _user, event, _variant) => {
     if (!event.parent) {
@@ -149,10 +162,11 @@ const materializers: {
       return [];
     }
     return [
-      {
-        sql: "update comp_room set deleted = 1 where id = ?",
-        params: [Ulid.enc(event.parent)],
-      },
+      sql`
+        update comp_room
+        set deleted = 1
+        where id = ${Ulid.enc(event.parent)}
+      `,
     ];
   },
   "space.roomy.room.member.add.0": async (streamId, _user, event, variant) => [
@@ -193,35 +207,36 @@ const materializers: {
     const statements = [
       ensureEntity(streamId, event.ulid, event.parent),
       ...(await ensureProfile({ tag: "user", value: user })),
-      {
-        sql: "insert into comp_content (entity, mime_type, data) values (?, ?, ?)",
-        params: [
-          Ulid.enc(event.ulid),
-          variant.content.mimeType,
-          variant.content.content,
-        ],
-      },
+      sql`
+        insert into comp_content (entity, mime_type, data)
+        values (
+          ${Ulid.enc(event.ulid)},
+          ${variant.content.mimeType},
+          ${variant.content.content}
+        )`,
     ];
 
     if (variant.replyTo) {
-      statements.push({
-        sql: "insert into comp_reply (entity, reply_to) values (?, ?)",
-        params: [Ulid.enc(event.ulid), Ulid.enc(variant.replyTo)],
-      });
+      statements.push(sql`
+        insert into comp_reply (entity, reply_to)
+        values (
+          ${Ulid.enc(event.ulid)},
+          ${Ulid.enc(variant.replyTo)}
+        )
+      `);
     }
 
     return statements;
   },
   "space.roomy.message.edit.0": async (streamId, _user, event, variant) => [
     ensureEntity(streamId, event.ulid, event.parent),
-    {
-      sql: "update comp_content set mime_type = ?, data = ? where entity = ?",
-      params: [
-        variant.content.mimeType,
-        variant.content.content,
-        Ulid.enc(event.ulid),
-      ],
-    },
+    sql`
+      update comp_content
+      set 
+        mime_type = ${variant.content.mimeType},
+        data = ${variant.content.content}
+      where entity = ${Ulid.enc(event.ulid)}
+    `,
   ],
   "space.roomy.message.overrideMeta.0": async (
     _streamId,
@@ -234,15 +249,14 @@ const materializers: {
       return [];
     }
     return [
-      {
-        sql: "insert into comp_override_meta (entity, source, author, timestamp) values (?, ?, ?, ?)",
-        params: [
-          Ulid.enc(event.parent),
-          variant.source,
-          variant.author,
-          variant.timestamp,
-        ],
-      },
+      sql`
+        insert into comp_override_meta (entity, source, author, timestamp)
+        values (
+          ${Ulid.enc(event.parent)},
+          ${variant.source},
+          ${variant.author},
+          ${variant.timestamp}
+        )`,
     ];
   },
   "space.roomy.message.delete.0": async (_streamId, _user, event) => {
@@ -250,25 +264,20 @@ const materializers: {
       console.warn("Missing target for message meta override.");
       return [];
     }
-    return [
-      {
-        sql: "delete from entities where ulid = ?",
-        params: [Ulid.enc(event.parent)],
-      },
-    ];
+    return [sql`delete from entities where ulid = ${Ulid.enc(event.parent)}`];
   },
 
   // Reaction
   "space.roomy.reaction.create.0": async (streamId, _user, event, variant) => [
     ensureEntity(streamId, event.ulid, event.parent),
-    {
-      sql: "insert into comp_reaction (entity, reaction_to, reaction) values (?, ?, ?)",
-      params: [
-        Ulid.enc(event.ulid),
-        Ulid.enc(variant.reaction_to),
-        variant.reaction,
-      ],
-    },
+    sql`
+      insert into comp_reaction (entity, reaction_to, reaction)
+      values (
+        ${Ulid.enc(event.ulid)},
+        ${Ulid.enc(variant.reaction_to)},
+        ${variant.reaction}
+      )
+    `,
   ],
   "space.roomy.reaction.delete.0": async (
     _streamId,
@@ -280,21 +289,19 @@ const materializers: {
       console.warn("Delete reaction missing parent");
       return [];
     }
-    return [
-      {
-        sql: "delete from entities where ulid = ?",
-        params: [Ulid.enc(event.parent)],
-      },
-    ];
+    return [sql`delete from entities where ulid = ${Ulid.enc(event.parent)}`];
   },
 
   // Media
   "space.roomy.media.create.0": async (streamId, _user, event, variant) => [
     ensureEntity(streamId, event.ulid, event.parent),
-    {
-      sql: "insert into comp_media (entity, mime_type, uri) values (?, ?, ?)",
-      params: [Ulid.enc(event.ulid), variant.uri],
-    },
+    sql`
+      insert into comp_media (entity, uri)
+      values (
+        ${Ulid.enc(event.ulid)},
+        ${variant.uri}
+      )
+    `,
   ],
 
   "space.roomy.media.delete.0": async (_streamId, _user, event) => {
@@ -302,12 +309,7 @@ const materializers: {
       console.warn("Missing target for media delete.");
       return [];
     }
-    return [
-      {
-        sql: "delete from entities where ulid = ?",
-        params: [Ulid.enc(event.parent)],
-      },
-    ];
+    return [sql`delete from entities where ulid = ${Ulid.enc(event.parent)}`];
   },
 
   // Channels
@@ -316,12 +318,7 @@ const materializers: {
       console.warn("Missing target for channel mark.");
       return [];
     }
-    return [
-      {
-        sql: "insert into comp_channel values (?)",
-        params: [Ulid.enc(event.parent)],
-      },
-    ];
+    return [sql`insert into comp_channel values (${Ulid.enc(event.parent)})`];
   },
   "space.roomy.channel.unmark.0": async (_streamId, _user, event) => {
     if (!event.parent) {
@@ -329,10 +326,7 @@ const materializers: {
       return [];
     }
     return [
-      {
-        sql: "delete from comp_channel where entity = ?",
-        params: [Ulid.enc(event.parent)],
-      },
+      sql`delete from comp_channel where entity = ${Ulid.enc(event.parent)}`,
     ];
   },
 
@@ -342,12 +336,7 @@ const materializers: {
       console.warn("Missing target for category mark.");
       return [];
     }
-    return [
-      {
-        sql: "insert into comp_category values (?)",
-        params: [Ulid.enc(event.parent)],
-      },
-    ];
+    return [sql`insert into comp_category values (${Ulid.enc(event.parent)})`];
   },
   "space.roomy.category.unmark.0": async (_streamId, _user, event) => {
     if (!event.parent) {
@@ -355,10 +344,7 @@ const materializers: {
       return [];
     }
     return [
-      {
-        sql: "delete from comp_category where entity = ?",
-        params: [Ulid.enc(event.parent)],
-      },
+      sql`delete from comp_category where entity = ${Ulid.enc(event.parent)}`,
     ];
   },
 };
@@ -371,18 +357,16 @@ function ensureEntity(
   parent: string | undefined,
 ): SqlStatement {
   const unixTimeMs = decodeTime(ulid);
-  return {
-    sql: `
-    INSERT INTO entities (ulid, stream, parent, created_at) VALUES (?, ?, ?, ?)
-    ON CONFLICT(ulid) DO NOTHING
-  `,
-    params: [
-      Ulid.enc(ulid),
-      Hash.enc(streamId),
-      parent ? Ulid.enc(parent) : null,
-      unixTimeMs,
-    ],
-  };
+  return sql`
+    insert into entities (ulid, stream, parent, created_at)
+    values (
+      ${Ulid.enc(ulid)},
+      ${Hash.enc(streamId)},
+      ${parent ? Ulid.enc(parent) : null},
+      ${unixTimeMs}
+    )
+    on conflict(ulid) do nothing
+  `;
 }
 
 async function ensureProfile(
@@ -391,8 +375,7 @@ async function ensureProfile(
   if (member.tag == "user") {
     const did = member.value;
     const profileFromDb = await sqliteWorker!.runQuery(
-      "select 1 from profiles where did = ?",
-      [did],
+      sql`select 1 from profiles where did = ${did}`,
     );
     if (!profileFromDb.rows?.length) {
       return [];
@@ -401,10 +384,15 @@ async function ensureProfile(
     const profile = await getProfile(did);
     if (!profile) return [];
     return [
-      {
-        sql: "insert into profiles (did, handle, display_name, avatar) values (?, ?, ?, ?)",
-        params: [did, profile.handle, profile.displayName, profile.avatar],
-      },
+      sql`
+        insert into profiles (did, handle, display_name, avatar)
+        values (
+           ${did},
+           ${profile.handle},
+           ${profile.displayName},
+           ${profile.avatar}
+        )
+      `,
     ];
   } else {
     return [];

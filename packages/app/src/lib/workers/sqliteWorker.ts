@@ -35,15 +35,15 @@ globalThis.onmessage = (ev) => {
 
       const sqliteChannel = new MessageChannel();
       messagePortInterface<SqliteWorkerInterface, {}>(sqliteChannel.port1, {
-        async runQuery(sql, params) {
+        async runQuery(statement) {
           try {
-            return await executeQuery(sql, params);
+            return await executeQuery(statement);
           } catch (e) {
-            throw new Error(`Error running SQL query \`${sql}\`: ${e}`);
+            throw new Error(`Error running SQL query \`${statement.sql}\`: ${e}`);
           }
         },
-        async createLiveQuery(id, port, sql, params) {
-          createLiveQuery(id, port, sql, params);
+        async createLiveQuery(id, port, statement) {
+          createLiveQuery(id, port, statement);
         },
         async deleteLiveQuery(id) {
           deleteLiveQuery(id);

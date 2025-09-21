@@ -1,5 +1,6 @@
 import { page } from "$app/state";
 import { LiveQuery } from "./liveQuery.svelte";
+import { sql } from "./utils/sqlTemplate";
 import { backendStatus } from "./workers";
 
 export type SpaceMeta = {
@@ -38,7 +39,7 @@ export let current = $state({
 // within the scope.
 $effect.root(() => {
   spaces = new LiveQuery(
-    `select json_object(
+    () => sql`select json_object(
       'id', format_hash(id),
       'name', name,
       'avatar', avatar,
@@ -46,14 +47,13 @@ $effect.root(() => {
       'admins', (select json_group_array(admin_id) from space_admins where space_id = id)
     ) as json
     from spaces
-    where stream = hash(?) and hidden = 0`,
-    () => [backendStatus.personalStreamId],
+    where stream = hash(${backendStatus.personalStreamId}) and hidden = 0`,
     (row) => JSON.parse(row.json),
   );
   (globalThis as any).spaces = spaces;
 
   spaceTree = new LiveQuery(
-    `select json_object(
+    () => sql`select json_object(
       'id', format_ulid(e.ulid),
       'name', i.name,
       'type', 'category',
@@ -84,8 +84,7 @@ $effect.root(() => {
     from entities e
       join comp_channel c on e.ulid = c.entity
       join comp_info i on e.ulid = i.entity
-    where stream = hash(?1) and e.parent is null`,
-    () => [current.space?.id],
+    where stream = hash(${current.space?.id}) and e.parent is null`,
     (row) => row.json && JSON.parse(row.json),
   );
 

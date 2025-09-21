@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { spaceTree } from "$lib/queries.svelte";
+  import SidebarObjectList from "./SidebarObjectList.svelte";
 
   // import SidebarObjectList from "./SidebarObjectList.svelte";
   import SpaceSidebarHeader from "./SpaceSidebarHeader.svelte";
@@ -50,8 +51,6 @@
 
   // let openEditObjectModal = $state(false);
 
-  // let entity = $state<co.loaded<typeof RoomyEntity> | undefined | null>(null);
-
   // function editEntity(editEntity: co.loaded<typeof RoomyEntity>) {
   //   console.log("editEntity", editEntity);
   //   openEditObjectModal = true;
@@ -98,14 +97,7 @@
     {/if}
   {/each}
 
-  <!-- <SidebarObjectList
-    children={children.current}
-    me={me.current}
-    bind:isEditing
-    {editEntity}
-    currentEntity={space?.current}
-    space={space?.current}
-  /> -->
+  <!-- <SidebarObjectList bind:isEditing /> -->
 </div>
 
 <!-- <EditObjectModal bind:open={openEditObjectModal} bind:entity /> -->
