@@ -2,7 +2,6 @@ import {
   type SqlStatement,
   type StreamEvent,
   type MaterializerConfig,
-  sqliteWorker,
   getProfile,
 } from "./backendWorker";
 import { _void, type CodecType } from "scale-ts";
@@ -17,6 +16,7 @@ import {
 import schemaSql from "./db/schema.sql?raw";
 import { decodeTime } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
+import type { SqliteWorkerInterface } from ".";
 
 export type EventType = ReturnType<(typeof eventCodec)["dec"]>;
 
@@ -30,20 +30,25 @@ export const config: MaterializerConfig = {
 };
 
 export async function materializer(
+  sqliteWorker: SqliteWorkerInterface,
   streamId: string,
   streamEvent: StreamEvent,
-): Promise<SqlStatement[]> {
+): Promise<void> {
   try {
     const event = eventCodec.dec(streamEvent.payload);
-    return await materializers[event.variant.kind](
+    const statements = await materializers[event.variant.kind]({
+      sqliteWorker,
       streamId,
-      streamEvent.user,
+      user: streamEvent.user,
       event,
-      event.variant.data as never,
-    );
+      variant: event.variant.data,
+    } as never);
+    for (const statement of statements) {
+      sqliteWorker.runQuery(statement);
+    }
   } catch (e) {
     console.warn("Could not process event, ignoring:", e);
-    return [];
+    return;
   }
 }
 
@@ -56,15 +61,16 @@ type EventVariant<K extends EventVariantStr> = Extract<
 >["data"];
 
 const materializers: {
-  [K in EventVariantStr]: (
-    streamId: string,
-    user: string,
-    event: Event,
-    variant: EventVariant<K>,
-  ) => Promise<SqlStatement[]>;
+  [K in EventVariantStr]: (opts: {
+    sqliteWorker: SqliteWorkerInterface;
+    streamId: string;
+    user: string;
+    event: Event;
+    variant: EventVariant<K>;
+  }) => Promise<SqlStatement[]>;
 } = {
   // Space
-  "space.roomy.space.join.0": async (streamId, _user, _event, variant) => [
+  "space.roomy.space.join.0": async ({ streamId, variant }) => [
     sql`
       insert into spaces (id, stream)
       values (
@@ -74,7 +80,7 @@ const materializers: {
       on conflict do update set hidden = 0
     `,
   ],
-  "space.roomy.space.leave.0": async (streamId, _user, _event, variant) => [
+  "space.roomy.space.leave.0": async ({ streamId, variant }) => [
     sql`
       update spaces set hidden = 1
       where
@@ -85,7 +91,11 @@ const materializers: {
   ],
 
   // Admin
-  "space.roomy.admin.add.0": async (streamId, _user, _event, variant) => [
+  "space.roomy.admin.add.0": async ({ sqliteWorker, streamId, variant }) => [
+    ...(await ensureProfile(sqliteWorker, {
+      tag: "user",
+      value: variant.adminId,
+    })),
     sql`
       insert into space_admins (space_id, admin_id)
       values (
@@ -94,7 +104,7 @@ const materializers: {
       )
     `,
   ],
-  "space.roomy.admin.remove.0": async (streamId, _user, _event, variant) => [
+  "space.roomy.admin.remove.0": async ({ streamId, variant }) => [
     sql`
       delete from space_admins
       where 
@@ -105,7 +115,7 @@ const materializers: {
   ],
 
   // Info
-  "space.roomy.info.0": async (streamId, _user, event, variant) => {
+  "space.roomy.info.0": async ({ streamId, event, variant }) => {
     const updates = [
       { key: "name", ...variant.name },
       { key: "avatar", ...variant.avatar },
@@ -146,7 +156,7 @@ const materializers: {
   },
 
   // Room
-  "space.roomy.room.create.0": async (streamId, _user, event) => [
+  "space.roomy.room.create.0": async ({ streamId, event }) => [
     ensureEntity(streamId, event.ulid, event.parent),
     sql`
       insert into comp_room (entity, parent)
@@ -156,7 +166,7 @@ const materializers: {
       )
     `,
   ],
-  "space.roomy.room.delete.0": async (_streamId, _user, event, _variant) => {
+  "space.roomy.room.delete.0": async ({ event }) => {
     if (!event.parent) {
       console.warn("Delete room missing parent");
       return [];
@@ -169,9 +179,14 @@ const materializers: {
       `,
     ];
   },
-  "space.roomy.room.member.add.0": async (streamId, _user, event, variant) => [
+  "space.roomy.room.member.add.0": async ({
+    sqliteWorker,
+    streamId,
+    event,
+    variant,
+  }) => [
     ensureEntity(streamId, event.ulid, event.parent),
-    ...(await ensureProfile(variant.member_id)),
+    ...(await ensureProfile(sqliteWorker, variant.member_id)),
     {
       sql: event.parent
         ? `insert into comp_room_members (room, member, access) values (?, ?, ?)`
@@ -183,12 +198,7 @@ const materializers: {
       ],
     },
   ],
-  "space.roomy.room.member.remove.0": async (
-    streamId,
-    _user,
-    event,
-    variant,
-  ) => [
+  "space.roomy.room.member.remove.0": async ({ streamId, event, variant }) => [
     ensureEntity(streamId, event.ulid, event.parent),
     {
       sql: event.parent
@@ -203,10 +213,16 @@ const materializers: {
   ],
 
   // Message
-  "space.roomy.message.create.0": async (streamId, user, event, variant) => {
+  "space.roomy.message.create.0": async ({
+    sqliteWorker,
+    streamId,
+    user,
+    event,
+    variant,
+  }) => {
     const statements = [
       ensureEntity(streamId, event.ulid, event.parent),
-      ...(await ensureProfile({ tag: "user", value: user })),
+      ...(await ensureProfile(sqliteWorker, { tag: "user", value: user })),
       sql`
         insert into comp_content (entity, mime_type, data)
         values (
@@ -228,7 +244,7 @@ const materializers: {
 
     return statements;
   },
-  "space.roomy.message.edit.0": async (streamId, _user, event, variant) => [
+  "space.roomy.message.edit.0": async ({ streamId, event, variant }) => [
     ensureEntity(streamId, event.ulid, event.parent),
     sql`
       update comp_content
@@ -238,12 +254,7 @@ const materializers: {
       where entity = ${Ulid.enc(event.ulid)}
     `,
   ],
-  "space.roomy.message.overrideMeta.0": async (
-    _streamId,
-    _user,
-    event,
-    variant,
-  ) => {
+  "space.roomy.message.overrideMeta.0": async ({ event, variant }) => {
     if (!event.parent) {
       console.warn("Missing target for message meta override.");
       return [];
@@ -259,7 +270,7 @@ const materializers: {
         )`,
     ];
   },
-  "space.roomy.message.delete.0": async (_streamId, _user, event) => {
+  "space.roomy.message.delete.0": async ({ event }) => {
     if (!event.parent) {
       console.warn("Missing target for message meta override.");
       return [];
@@ -268,7 +279,7 @@ const materializers: {
   },
 
   // Reaction
-  "space.roomy.reaction.create.0": async (streamId, _user, event, variant) => [
+  "space.roomy.reaction.create.0": async ({ streamId, event, variant }) => [
     ensureEntity(streamId, event.ulid, event.parent),
     sql`
       insert into comp_reaction (entity, reaction_to, reaction)
@@ -279,12 +290,7 @@ const materializers: {
       )
     `,
   ],
-  "space.roomy.reaction.delete.0": async (
-    _streamId,
-    _user,
-    event,
-    _variant,
-  ) => {
+  "space.roomy.reaction.delete.0": async ({ event }) => {
     if (!event.parent) {
       console.warn("Delete reaction missing parent");
       return [];
@@ -293,7 +299,7 @@ const materializers: {
   },
 
   // Media
-  "space.roomy.media.create.0": async (streamId, _user, event, variant) => [
+  "space.roomy.media.create.0": async ({ streamId, event, variant }) => [
     ensureEntity(streamId, event.ulid, event.parent),
     sql`
       insert into comp_media (entity, uri)
@@ -304,7 +310,7 @@ const materializers: {
     `,
   ],
 
-  "space.roomy.media.delete.0": async (_streamId, _user, event) => {
+  "space.roomy.media.delete.0": async ({ event }) => {
     if (!event.parent) {
       console.warn("Missing target for media delete.");
       return [];
@@ -313,14 +319,14 @@ const materializers: {
   },
 
   // Channels
-  "space.roomy.channel.mark.0": async (_streamId, _user, event) => {
+  "space.roomy.channel.mark.0": async ({ event }) => {
     if (!event.parent) {
       console.warn("Missing target for channel mark.");
       return [];
     }
     return [sql`insert into comp_channel values (${Ulid.enc(event.parent)})`];
   },
-  "space.roomy.channel.unmark.0": async (_streamId, _user, event) => {
+  "space.roomy.channel.unmark.0": async ({ event }) => {
     if (!event.parent) {
       console.warn("Missing target for channel unmark.");
       return [];
@@ -331,14 +337,14 @@ const materializers: {
   },
 
   // Categories
-  "space.roomy.category.mark.0": async (_streamId, _user, event) => {
+  "space.roomy.category.mark.0": async ({ event }) => {
     if (!event.parent) {
       console.warn("Missing target for category mark.");
       return [];
     }
     return [sql`insert into comp_category values (${Ulid.enc(event.parent)})`];
   },
-  "space.roomy.category.unmark.0": async (_streamId, _user, event) => {
+  "space.roomy.category.unmark.0": async ({ event }) => {
     if (!event.parent) {
       console.warn("Missing target for category unmark.");
       return [];
@@ -370,21 +376,24 @@ function ensureEntity(
 }
 
 async function ensureProfile(
+  sqliteWorker: SqliteWorkerInterface,
   member: CodecType<typeof GroupMember>,
 ): Promise<SqlStatement[]> {
-  if (member.tag == "user") {
-    const did = member.value;
-    const profileFromDb = await sqliteWorker!.runQuery(
-      sql`select 1 from profiles where did = ${did}`,
-    );
-    if (!profileFromDb.rows?.length) {
-      return [];
-    }
+  try {
+    if (member.tag == "user") {
+      const did = member.value;
+      const profileFromDb = await sqliteWorker.runQuery(
+        sql`select 1 from profiles where did = ${did}`,
+      );
+      if (profileFromDb.rows?.length) {
+        // The profile is already in the DB so we don't need to update it.
+        return [];
+      }
 
-    const profile = await getProfile(did);
-    if (!profile) return [];
-    return [
-      sql`
+      const profile = await getProfile(did);
+      if (!profile) return [];
+      return [
+        sql`
         insert into profiles (did, handle, display_name, avatar)
         values (
            ${did},
@@ -393,8 +402,12 @@ async function ensureProfile(
            ${profile.avatar}
         )
       `,
-    ];
-  } else {
+      ];
+    } else {
+      return [];
+    }
+  } catch (e) {
+    console.error("Could not ensure profile");
     return [];
   }
 }

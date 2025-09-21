@@ -569,9 +569,10 @@ export type StreamEvent = {
 export type MaterializerConfig = {
   initSql: SqlStatement[];
   materializer: (
+    sqliteWorker: SqliteWorkerInterface,
     streamId: string,
     event: StreamEvent,
-  ) => Promise<SqlStatement[]>;
+  ) => Promise<void>;
 };
 
 class StreamMaterializer {
@@ -580,9 +581,10 @@ class StreamMaterializer {
   #queue: StreamEvent[] = [];
   #latestEvent: number | undefined;
   #materializer: (
+    sqliteWorker: SqliteWorkerInterface,
     streamId: string,
     event: StreamEvent,
-  ) => Promise<SqlStatement[]>;
+  ) => Promise<void>;
 
   get streamId() {
     return this.#streamid;
@@ -654,15 +656,13 @@ class StreamMaterializer {
     if (this.#latestEvent == undefined) throw "latest event not initialized";
     if (event.idx != (this.#latestEvent || 0) + 1) throw "Unexpected event IDX";
 
-    for (const statement of await this.#materializer(this.#streamid, event)) {
-      try {
-        await sqliteWorker.runQuery(statement);
-      } catch (e) {
-        console.warn(
-          `Could not materialize event ${event.idx} in stream ${this.#streamid}`,
-        );
-        console.warn(e);
-      }
+    try {
+      await this.#materializer(sqliteWorker, this.#streamid, event);
+    } catch (e) {
+      console.warn(
+        `Could not materialize event ${event.idx} in stream ${this.#streamid}`,
+      );
+      console.warn(e);
     }
     this.#latestEvent += 1;
     await db.streamCursors.put({

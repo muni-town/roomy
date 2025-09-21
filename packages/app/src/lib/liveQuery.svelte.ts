@@ -16,7 +16,7 @@ export class LiveQuery<Row extends { [key: string]: unknown }> {
         if ("error" in data) {
           this.error = data.error;
           console.warn(
-            `Sqlite error in live query (${this.#statement.sql}) with params (${this.#statement.params}): ${this.error}`,
+            `Sqlite error in live query (${this.#statement.sql}): ${this.error}`,
           );
         } else if ("rows" in data) {
           this.result = (data as { rows: Row[] }).rows.map(

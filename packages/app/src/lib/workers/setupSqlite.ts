@@ -73,20 +73,23 @@ export async function initializeDatabase(dbName: string): Promise<void> {
         return blob;
       }
     });
-    db.createFunction("hash", (_ctx, s) => {
-      if (typeof s == "string") {
-        return Hash.enc(s);
-      } else {
-        return s;
-      }
-    });
-    db.createFunction("ulid", (_ctx, s) => {
-      if (typeof s == "string") {
-        return Ulid.enc(s);
-      } else {
-        return s;
-      }
-    });
+    // It's more performant just to encode in JS before sending it to SQLite,
+    // so for now lets not use these helper functions.
+    //
+    // db.createFunction("hash", (_ctx, s) => {
+    //   if (typeof s == "string") {
+    //     return Hash.enc(s);
+    //   } else {
+    //     return s;
+    //   }
+    // });
+    // db.createFunction("ulid", (_ctx, s) => {
+    //   if (typeof s == "string") {
+    //     return Ulid.enc(s);
+    //   } else {
+    //     return s;
+    //   }
+    // });
   })();
   await initPromise;
 }
