@@ -1,8 +1,14 @@
 <script lang="ts">
-  // import { page } from "$app/state";
+  import { page } from "$app/state";
+  import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
+
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   // import PageView from "$lib/components/content/page/PageView.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
+  import { LiveQuery } from "$lib/liveQuery.svelte";
+  import { sql } from "$lib/utils/sqlTemplate";
+  import { Ulid } from "$lib/workers/encoding";
+  import { Tabs } from "@fuxui/base";
   // import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
   // import FeedDisplay from "$lib/components/content/bluesky-feed/FeedDisplay.svelte";
   // import { atprotoFeedService } from "$lib/services/atprotoFeedService";
@@ -47,16 +53,33 @@
   //   }
   // });
 
-  // let activeTab = $state("Chat") as "Chat" | "Threads";
-  // $effect(() => {
-  //   if (page.url.hash == "#chat") {
-  //     activeTab = "Chat";
-  //   } else if (page.url.hash == "#threads") {
-  //     activeTab = "Threads";
-  //   } else {
-  //     activeTab = "Chat";
-  //   }
-  // });
+  let activeTab = $state("Chat") as "Chat" | "Threads";
+  $effect(() => {
+    if (page.url.hash == "#chat") {
+      activeTab = "Chat";
+    } else if (page.url.hash == "#threads") {
+      activeTab = "Threads";
+    } else {
+      activeTab = "Chat";
+    }
+  });
+
+  const query = new LiveQuery<{ name: string; channel: 1 | null }>(
+    () => sql`
+    select
+      i.name as name,
+      (select 1 from comp_channel where entity = e.ulid) as channel
+      -- Add checks for other component types later, like page, feed, etc.
+    from entities e
+      join comp_info i on i.entity = e.ulid
+    where e.ulid = ${page.params.object && Ulid.enc(page.params.object)}
+  `,
+  );
+
+  const objectName = $derived(query.result?.[0]?.name || "");
+  const objectType = $derived(
+    query.result?.[0]?.channel == 1 ? "channel" : "unknown",
+  ) as "channel" | "unknown";
 </script>
 
 <MainLayout>
@@ -65,25 +88,35 @@
   {/snippet}
 
   {#snippet navbar()}
-    <!-- <div class="flex items-center px-2 truncate w-full">
+    <div class="flex items-center px-2 truncate w-full">
       <h2
         class="text-lg font-bold max-w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
       >
-        <span class="truncate">{object.current?.name || "..."}</span>
+        <span class="truncate">{objectName}</span>
       </h2>
       <span class="flex-grow"></span>
-      <Tabs
-        items={[
-          { name: "Chat", href: "#chat" },
-          { name: "Threads", href: "#threads" },
-        ]}
-        active={activeTab}
-      />
+      {#if objectType == "channel"}
+        <Tabs
+          items={[
+            { name: "Chat", href: "#chat" },
+            { name: "Threads", href: "#threads" },
+          ]}
+          active={activeTab}
+        />
+      {/if}
       <span class="flex-grow"></span>
-    </div> -->
+    </div>
   {/snippet}
 
-  <div></div>
+  {#if objectType == "channel"}
+    {#if activeTab == "Chat"}
+      <TimelineView />
+    {:else if activeTab == "Threads"}
+      Threads
+    {/if}
+  {:else if objectType == "unknown"}
+    Unknown Object type
+  {/if}
 
   <!-- 
   {#if object.current?.components?.feedConfig}

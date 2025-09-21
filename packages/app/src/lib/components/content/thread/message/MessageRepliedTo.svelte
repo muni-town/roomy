@@ -1,60 +1,12 @@
 <script lang="ts">
-  import {
-    AuthorComponent,
-    CommonMarkContentComponent,
-    RoomyEntity,
-    RoomyProfile,
-  } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-tools/svelte";
   import { Button } from "bits-ui";
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import Icon from "@iconify/svelte";
   import { getContext } from "svelte";
 
-  let { messageId } = $props();
+  import IconMdiReply from "~icons/mdi/reply";
 
-  let message = $derived(
-    new CoState(RoomyEntity, messageId, {
-      resolve: {
-        components: {
-          $each: true,
-        },
-      },
-    }),
-  );
-
-  let profile = $derived(
-    new CoState(
-      RoomyProfile,
-      message.current?._edits.components?.by?.profile?.id,
-    ),
-  );
-
-  let content = $derived(
-    new CoState(
-      CommonMarkContentComponent,
-      message.current?.components?.[CommonMarkContentComponent.id],
-    ),
-  );
-
-  const authorData = $derived.by(() => {
-    // if the message has an author in the format of discord:username:avatarUrl,
-    // and the message is made by the adming, return the profile data otherwise return profile data
-    if (
-      message.current?.components?.[AuthorComponent.id]?.includes("discord:")
-    ) {
-      return {
-        name: message.current?.components?.[AuthorComponent.id]?.split(":")[1],
-        imageUrl: decodeURIComponent(
-          message.current?.components?.[AuthorComponent.id]?.split(":")[2] ??
-            "",
-        ),
-        id: undefined,
-      };
-    }
-    return profile.current;
-  });
+  let { messageId }: { messageId: string } = $props();
 
   const scrollToMessage = getContext("scrollToMessage") as (id: string) => void;
 </script>
@@ -64,7 +16,7 @@
   class="cursor-pointer flex gap-2 text-sm text-start items-center px-4 py-1 bg-base-300/20 dark:bg-base-400/5 w-full rounded-lg"
 >
   <div class="flex md:basis-auto gap-2 items-center shrink-0">
-    <Icon icon="prime:reply" width="12px" height="12px" class="" />
+    <IconMdiReply width="12px" height="12px" />
     <Avatar.Root class="w-4 h-4">
       <Avatar.Image src={authorData?.imageUrl} class="rounded-full" />
       <Avatar.Fallback>

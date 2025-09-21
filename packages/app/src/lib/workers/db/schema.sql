@@ -5,11 +5,9 @@ create table if not exists entities (
   stream blob not null,
   parent blob,
   created_at integer
-  -- not sure if we need labels or not
-  -- label text check(label in ('notification', 'media', 'device', 'user', 'timeline', 'message', 'task', 'space')),
 ) strict;
-
 create index if not exists idx_entities_stream on entities (stream);
+create index if not exists idx_entities_parent on entities (parent);
 
 create table if not exists spaces (
   id blob primary key,
@@ -86,6 +84,12 @@ create table if not exists comp_info (
   name text,
   avatar text,
   description text
+) strict;
+
+create table if not exists comp_author (
+  entity blob primary key references entities(ulid) on delete cascade,
+  -- DID of the author of an entity
+  author text
 ) strict;
 
 create table if not exists comp_override_meta (

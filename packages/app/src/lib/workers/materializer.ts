@@ -231,6 +231,7 @@ const materializers: {
     variant,
   }) => {
     const statements = [
+      sql`begin transaction`,
       ensureEntity(streamId, event.ulid, event.parent),
       ...(await ensureProfile(sqliteWorker, agent, {
         tag: "user",
@@ -243,6 +244,13 @@ const materializers: {
           ${variant.content.mimeType},
           ${variant.content.content}
         )`,
+      sql`
+        insert into comp_author (entity, author)
+        values (
+          ${Ulid.enc(event.ulid)},
+          ${user}
+        )`,
+      sql`commit`,
     ];
 
     if (variant.replyTo) {

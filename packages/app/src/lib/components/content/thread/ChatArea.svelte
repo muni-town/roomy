@@ -10,18 +10,14 @@
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
   import { page } from "$app/state";
-  import { co } from "jazz-tools";
-  import type { RoomyEntity } from "@roomy-chat/sdk";
-  import Icon from "@iconify/svelte";
   import toast from "svelte-french-toast";
   import { Button } from "@fuxui/base";
+
+  import IconTablerArrowDown from "~icons/tabler/arrow-down";
 
   let {
     timeline,
     virtualizer = $bindable(),
-    isAdmin = false,
-    space,
-    threadId,
     allowedToInteract,
     threading,
     startThreading,
@@ -29,9 +25,6 @@
   }: {
     timeline: string[];
     virtualizer?: Virtualizer<string>;
-    isAdmin?: boolean;
-    space: co.loaded<typeof RoomyEntity> | undefined | null;
-    threadId?: string;
     allowedToInteract?: boolean;
     threading?: { active: boolean; selectedMessages: string[] };
     startThreading: (id?: string) => void;
@@ -111,7 +104,7 @@
     class="absolute bottom-6 left-1/2 -translate-x-1/2 z-50"
     onclick={scrollToBottom}
   >
-    <Icon icon="tabler:arrow-down" class="w-4 h-4" />
+    <IconTablerArrowDown class="w-4 h-4" />
     Jump to present
   </Button>
 {/if}
@@ -185,9 +178,6 @@
                 <ChatMessage
                   {messageId}
                   previousMessageId={slicedTimeline[index - 1]}
-                  {isAdmin}
-                  {space}
-                  {threadId}
                   {allowedToInteract}
                   {threading}
                   {startThreading}
