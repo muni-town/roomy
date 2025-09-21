@@ -7,74 +7,83 @@
     type Item,
   } from "svelte-dnd-action";
   import Icon from "@iconify/svelte";
+  import { spaceTree } from "$lib/queries.svelte";
 
-  let {
-    // children,
-    // me,
-    // isEditing = $bindable(false),
-    // editEntity,
-    // currentEntity,
-    // space,
-    // level = 0,
-    // subthreads,
-  }: {
-    // children: co.loaded<typeof ChildrenComponent> | undefined | null;
-    // me: co.loaded<typeof RoomyAccount> | undefined | null;
-    // isEditing?: boolean;
-    // editEntity?: (entity: co.loaded<typeof RoomyEntity>) => void;
-    // currentEntity?: co.loaded<typeof RoomyEntity> | undefined | null;
-    // space: co.loaded<typeof RoomyEntity> | undefined | null;
-    // level?: number;
-    // subthreads?: co.loaded<typeof SubThreadsComponent> | undefined | null;
-  } = $props();
+  // let {
+  //   // children,
+  //   // me,
+  //   // isEditing = $bindable(false),
+  //   // editEntity,
+  //   // currentEntity,
+  //   // space,
+  //   // level = 0,
+  //   // subthreads,
+  // }: {
+  //   // children: co.loaded<typeof ChildrenComponent> | undefined | null;
+  //   // me: co.loaded<typeof RoomyAccount> | undefined | null;
+  //   // isEditing?: boolean;
+  //   // editEntity?: (entity: co.loaded<typeof RoomyEntity>) => void;
+  //   // currentEntity?: co.loaded<typeof RoomyEntity> | undefined | null;
+  //   // space: co.loaded<typeof RoomyEntity> | undefined | null;
+  //   // level?: number;
+  //   // subthreads?: co.loaded<typeof SubThreadsComponent> | undefined | null;
+  // } = $props();
 
-  let recentSubthreads = $derived.by(() => {
-    const subthreadsIter = Object.values(subthreads?.perAccount || {})
-      .map((x) => [...x.all])
-      .flat();
-    let array = [];
-    if (!subthreadsIter) return [];
-    for (const subthread of subthreadsIter) {
-      array.push(subthread.value);
-    }
-    return array;
-  });
+  // let recentSubthreads = $derived.by(() => {
+  //   const subthreadsIter = Object.values(subthreads?.perAccount || {})
+  //     .map((x) => [...x.all])
+  //     .flat();
+  //   let array = [];
+  //   if (!subthreadsIter) return [];
+  //   for (const subthread of subthreadsIter) {
+  //     array.push(subthread.value);
+  //   }
+  //   return array;
+  // });
 
-  let orderedChildren = $derived(children ?? []);
+  // let orderedChildren = $derived(children ?? []);
 
-  function handleDndConsider(e: CustomEvent) {
-    orderedChildren = e.detail.items.filter((x: any) => x && !x?.softDeleted);
-  }
-  async function handleDndFinalize(e: CustomEvent) {
-    console.log("finalize", e);
+  // function handleDndConsider(e: CustomEvent) {
+  //   orderedChildren = e.detail.items.filter((x: any) => x && !x?.softDeleted);
+  // }
+  // async function handleDndFinalize(e: CustomEvent) {
+  //   console.log("finalize", e);
 
-    const elementId = e.detail.info.id;
-    const element = await RoomyEntity.load(elementId, {
-      resolve: {
-        components: {
-          $each: true,
-          $onError: null,
-        },
-      },
-    });
+  //   const elementId = e.detail.info.id;
+  //   const element = await RoomyEntity.load(elementId, {
+  //     resolve: {
+  //       components: {
+  //         $each: true,
+  //         $onError: null,
+  //       },
+  //     },
+  //   });
 
-    if (e.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
-      if (element && currentEntity) {
-        await removeFromFolder(currentEntity, element);
-      }
-    } else if (e.detail.info.trigger === TRIGGERS.DROPPED_INTO_ZONE) {
-      if (element && currentEntity) {
-        await removeFromFolder(currentEntity, element);
-      }
-      // find new index
-      const newIndex = e.detail.items.findIndex((x: any) => x.id === elementId);
-      // add to folder
-      if (element && currentEntity) {
-        await addToFolder(currentEntity, element, newIndex);
-      }
-    }
-  }
+  //   if (e.detail.info.trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
+  //     if (element && currentEntity) {
+  //       await removeFromFolder(currentEntity, element);
+  //     }
+  //   } else if (e.detail.info.trigger === TRIGGERS.DROPPED_INTO_ZONE) {
+  //     if (element && currentEntity) {
+  //       await removeFromFolder(currentEntity, element);
+  //     }
+  //     // find new index
+  //     const newIndex = e.detail.items.findIndex((x: any) => x.id === elementId);
+  //     // add to folder
+  //     if (element && currentEntity) {
+  //       await addToFolder(currentEntity, element, newIndex);
+  //     }
+  //   }
+  // }
 </script>
+
+<div>
+  {#each spaceTree.result || [] as item}
+    <div>
+      {item.name}
+    </div>
+  {/each}
+</div>
 
 <!-- 
 {#if isEditing}

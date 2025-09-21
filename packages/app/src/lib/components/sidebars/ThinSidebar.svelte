@@ -8,6 +8,7 @@
   import UserProfileButton from "../user/UserProfileButton.svelte";
   import { backendStatus } from "$lib/workers";
   import { spaces } from "$lib/queries.svelte";
+  import { dev } from "$app/environment";
 
   let {}: {} = $props();
 
@@ -74,6 +75,11 @@
   </ScrollArea>
 </div>
 <section class="flex flex-col items-center gap-2 p-0 pb-2">
+  {#if dev}
+    <a href="/query">
+      <Icon icon="mdi:sql-query" font-size="2em" />
+    </a>
+  {/if}
   <Tooltip
     text={backendStatus.leafConnected ? "Connected" : "Disconnected"}
     delayDuration={0}

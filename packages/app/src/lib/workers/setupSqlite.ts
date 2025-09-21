@@ -63,14 +63,28 @@ export async function initializeDatabase(dbName: string): Promise<void> {
       if (blob instanceof Uint8Array) {
         return Hash.dec(blob);
       } else {
-        throw "Expected blob argument to format_hash";
+        return blob;
       }
     });
     db.createFunction("format_ulid", (_ctx, blob) => {
       if (blob instanceof Uint8Array) {
         return Ulid.dec(blob);
       } else {
-        throw "Expected blob argument to format_hash";
+        return blob;
+      }
+    });
+    db.createFunction("hash", (_ctx, s) => {
+      if (typeof s == "string") {
+        return Hash.enc(s);
+      } else {
+        return s;
+      }
+    });
+    db.createFunction("ulid", (_ctx, s) => {
+      if (typeof s == "string") {
+        return Ulid.enc(s);
+      } else {
+        return s;
       }
     });
   })();

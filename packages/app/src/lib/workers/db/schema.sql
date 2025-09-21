@@ -35,7 +35,8 @@ create table if not exists space_members (
 
 create table if not exists comp_room (
   entity blob primary key references entities(ulid) on delete cascade,
-  parent blob references entities(ulid) on delete set null
+  parent blob references entities(ulid) on delete set null,
+  deleted integer check(deleted in (0, 1)) default 0
 ) strict;
 
 create table if not exists comp_room_members (
@@ -107,4 +108,8 @@ create table if not exists comp_media (
 
 create table if not exists comp_channel (
   entity blob primary key references entities(ulid) on delete cascade
-)
+) strict;
+
+create table if not exists comp_category (
+  entity blob primary key references entities(ulid) on delete cascade
+) strict;

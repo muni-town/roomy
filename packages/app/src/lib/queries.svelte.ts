@@ -1,7 +1,6 @@
 import { page } from "$app/state";
 import { LiveQuery } from "./liveQuery.svelte";
 import { backendStatus } from "./workers";
-import { Hash } from "./workers/encoding";
 
 export type SpaceMeta = {
   id: string;
@@ -11,7 +10,24 @@ export type SpaceMeta = {
   admins: string[];
 };
 
+export type SpaceTreeItem = { id: string; name: string } & (
+  | {
+      type: "category";
+      channels: {
+        id: string;
+        name: string;
+      }[];
+    }
+  | {
+      type: "channel";
+    }
+);
+
+/** The space list. */
 export let spaces: LiveQuery<SpaceMeta>;
+
+/** The sidebar tree for the currently selected space. */
+export let spaceTree: LiveQuery<SpaceTreeItem>;
 
 export let current = $state({
   space: undefined as SpaceMeta | undefined,
@@ -30,14 +46,48 @@ $effect.root(() => {
       'admins', (select json_group_array(admin_id) from space_admins where space_id = id)
     ) as json
     from spaces
-    where stream = ? and hidden = 0`,
-    () => [
-      backendStatus.personalStreamId &&
-        Hash.enc(backendStatus.personalStreamId),
-    ],
+    where stream = hash(?) and hidden = 0`,
+    () => [backendStatus.personalStreamId],
     (row) => JSON.parse(row.json),
   );
   (globalThis as any).spaces = spaces;
+
+  spaceTree = new LiveQuery(
+    `select json_object(
+      'id', format_ulid(e.ulid),
+      'name', i.name,
+      'type', 'category',
+      'channels', (
+        select json_group_array(
+          json_object(
+            'id', format_ulid(e.ulid),
+            'name', inf.name
+          )
+        )
+        from entities e
+          join comp_channel cat on e.ulid = cat.entity
+          join comp_info inf on e.ulid = inf.entity
+        where e.parent = c.entity
+      )
+    ) as json
+    from entities e
+      join comp_category c on e.ulid = c.entity
+      join comp_info i on e.ulid = i.entity
+    where stream = hash(?1)
+    union
+    select json_object(
+      'id', format_ulid(e.ulid),
+      'name', i.name,
+      'type', 'channel',
+      'parent', format_ulid(e.parent)
+    ) as json
+    from entities e
+      join comp_channel c on e.ulid = c.entity
+      join comp_info i on e.ulid = i.entity
+    where stream = hash(?1) and e.parent is null`,
+    () => [current.space?.id],
+    (row) => row.json && JSON.parse(row.json),
+  );
 
   // Update current values
   $effect(() => {

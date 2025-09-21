@@ -23,6 +23,7 @@ export class LiveQuery<Row extends { [key: string]: unknown }> {
           this.result = (data as { rows: Row[] }).rows.map(
             mapper || ((x) => x),
           );
+          this.error = undefined;
         }
       };
       const p = params?.();

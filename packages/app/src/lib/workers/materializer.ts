@@ -62,6 +62,7 @@ const materializers: {
     variant: EventVariant<K>,
   ) => Promise<SqlStatement[]>;
 } = {
+  // Space
   "space.roomy.space.join.0": async (streamId, _user, _event, variant) => [
     {
       sql: `insert into spaces (id, stream) values (?, ?)
@@ -75,6 +76,8 @@ const materializers: {
       params: [Hash.enc(variant.spaceId), Hash.enc(streamId)],
     },
   ],
+
+  // Admin
   "space.roomy.admin.add.0": async (streamId, _user, _event, variant) => [
     {
       sql: "insert into space_admins (space_id, admin_id) values (?, ?)",
@@ -87,15 +90,8 @@ const materializers: {
       params: [Hash.enc(streamId), variant.adminId],
     },
   ],
-  "space.roomy.room.create.0": async (_streamId, _user, event) => [
-    {
-      sql: "insert into comp_room (entity, parent) values (?, ?)",
-      params: [
-        Ulid.enc(event.ulid),
-        event.parent ? Ulid.enc(event.parent) : null,
-      ],
-    },
-  ],
+
+  // Info
   "space.roomy.info.0": async (streamId, _user, event, variant) => {
     const updates = [
       { key: "name", ...variant.name },
@@ -110,7 +106,7 @@ const materializers: {
         ensureEntity(streamId, event.ulid, event.parent),
         {
           sql: `insert into comp_info (entity, ${setUpdates.map((x) => `${x.key}`).join(", ")})
-            VALUES (:entity, ${setUpdates.map((x) => `:${x.key}`)}) on conflict update
+            VALUES (:entity, ${setUpdates.map((x) => `:${x.key}`)}) on conflict do update
             set ${[...setUpdates].map((x) => `${x.key} = :${x.key}`)}`,
           params: Object.fromEntries([
             [":entity", Ulid.enc(event.parent)],
@@ -136,6 +132,29 @@ const materializers: {
     }
   },
 
+  // Room
+  "space.roomy.room.create.0": async (streamId, _user, event) => [
+    ensureEntity(streamId, event.ulid, event.parent),
+    {
+      sql: "insert into comp_room (entity, parent) values (?, ?)",
+      params: [
+        Ulid.enc(event.ulid),
+        event.parent ? Ulid.enc(event.parent) : null,
+      ],
+    },
+  ],
+  "space.roomy.room.delete.0": async (_streamId, _user, event, _variant) => {
+    if (!event.parent) {
+      console.warn("Delete room missing parent");
+      return [];
+    }
+    return [
+      {
+        sql: "update comp_room set deleted = 1 where id = ?",
+        params: [Ulid.enc(event.parent)],
+      },
+    ];
+  },
   "space.roomy.room.member.add.0": async (streamId, _user, event, variant) => [
     ensureEntity(streamId, event.ulid, event.parent),
     ...(await ensureProfile(variant.member_id)),
@@ -168,6 +187,8 @@ const materializers: {
       ],
     },
   ],
+
+  // Message
   "space.roomy.message.create.0": async (streamId, user, event, variant) => {
     const statements = [
       ensureEntity(streamId, event.ulid, event.parent),
@@ -236,6 +257,8 @@ const materializers: {
       },
     ];
   },
+
+  // Reaction
   "space.roomy.reaction.create.0": async (streamId, _user, event, variant) => [
     ensureEntity(streamId, event.ulid, event.parent),
     {
@@ -264,6 +287,8 @@ const materializers: {
       },
     ];
   },
+
+  // Media
   "space.roomy.media.create.0": async (streamId, _user, event, variant) => [
     ensureEntity(streamId, event.ulid, event.parent),
     {
@@ -285,6 +310,7 @@ const materializers: {
     ];
   },
 
+  // Channels
   "space.roomy.channel.mark.0": async (_streamId, _user, event) => {
     if (!event.parent) {
       console.warn("Missing target for channel mark.");
@@ -293,7 +319,7 @@ const materializers: {
     return [
       {
         sql: "insert into comp_channel values (?)",
-        params: [Hash.enc(event.parent)],
+        params: [Ulid.enc(event.parent)],
       },
     ];
   },
@@ -305,7 +331,33 @@ const materializers: {
     return [
       {
         sql: "delete from comp_channel where entity = ?",
-        params: [Hash.enc(event.parent)],
+        params: [Ulid.enc(event.parent)],
+      },
+    ];
+  },
+
+  // Categories
+  "space.roomy.category.mark.0": async (_streamId, _user, event) => {
+    if (!event.parent) {
+      console.warn("Missing target for category mark.");
+      return [];
+    }
+    return [
+      {
+        sql: "insert into comp_category values (?)",
+        params: [Ulid.enc(event.parent)],
+      },
+    ];
+  },
+  "space.roomy.category.unmark.0": async (_streamId, _user, event) => {
+    if (!event.parent) {
+      console.warn("Missing target for category unmark.");
+      return [];
+    }
+    return [
+      {
+        sql: "delete from comp_category where entity = ?",
+        params: [Ulid.enc(event.parent)],
       },
     ];
   },

@@ -158,8 +158,10 @@ export const eventVariantCodec = Kinds({
    * messages author that have the original message event as it's parent.
    * */
   "space.roomy.room.create.0": _void,
+  /** Delete a room */
+  "space.roomy.room.delete.0": _void,
   /**
-   * Update the info for a room. Note that a room might be anything.
+   * Set some entity's basic info. This is used for Rooms and possibly other things, too
    */
   "space.roomy.info.0": Struct({
     name: ValueUpdate(Option(str)),
@@ -235,6 +237,10 @@ export const eventVariantCodec = Kinds({
   "space.roomy.channel.mark.0": _void,
   /** Unmark a room as a channel. */
   "space.roomy.channel.unmark.0": _void,
+  /** Mark a room as a category. */
+  "space.roomy.category.mark.0": _void,
+  /** Unmark a room as a category. */
+  "space.roomy.category.unmark.0": _void,
 });
 
 export const eventCodec = Struct({

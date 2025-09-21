@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { spaceTree } from "$lib/queries.svelte";
 
   // import SidebarObjectList from "./SidebarObjectList.svelte";
   import SpaceSidebarHeader from "./SpaceSidebarHeader.svelte";
@@ -78,6 +79,24 @@
       Finish editing</Button
     >
   {/if}
+
+  <!-- <pre>{JSON.stringify(spaceTree.result, undefined, '  ')}</pre> -->
+  {#each spaceTree.result || [] as item}
+    {#if item.type == "category"}
+      <div>{item.name}</div>
+      <div class="ml-3">
+        {#each item.channels as channel}
+          <div>
+            {channel.name}
+          </div>
+        {/each}
+      </div>
+    {:else if item.type == "channel"}
+      <div>
+        {item.name}
+      </div>
+    {/if}
+  {/each}
 
   <!-- <SidebarObjectList
     children={children.current}
