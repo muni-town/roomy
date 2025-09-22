@@ -5,6 +5,7 @@
   import { backendStatus } from "$lib/workers";
   import { onMount } from "svelte";
   import { Toaster } from "svelte-french-toast";
+  import { Toaster as FxUIToaster } from '@fuxui/base';
 
   import { fade } from "svelte/transition";
   import LoginForm from "$lib/components/user/LoginForm.svelte";
@@ -100,3 +101,4 @@
 {/if}
 
 <Toaster />
+<FxUIToaster />

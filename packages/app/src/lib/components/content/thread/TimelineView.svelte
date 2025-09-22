@@ -1,20 +1,15 @@
 <script lang="ts">
+  import ChatArea from "./ChatArea.svelte";
   import ChatInputArea from "./ChatInputArea.svelte";
 
-  // import ChatArea from "./ChatArea.svelte";
+  const threading = $state({ active: false, selectedMessages: [], name: "" });
+
 </script>
 
-<!-- <ChatArea
-  allowedToInteract={hasJoinedSpace && !isBanned}
-  {threading}
-  {startThreading}
-  {toggleSelect}
-/> -->
-
 <div class="flex flex-col flex-1 overflow-hidden">
-  <div class="grow">
+  <ChatArea
+    {threading}
+  />
 
-  </div>
-
-  <ChatInputArea />
+  <ChatInputArea {threading} />
 </div>

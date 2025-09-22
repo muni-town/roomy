@@ -1,7 +1,7 @@
 <script lang="ts">
-  import Icon from "@iconify/svelte";
   import { PopoverEmojiPicker } from "@fuxui/social";
-  import { Button, Toggle, Tooltip, TooltipProvider } from "@fuxui/base";
+  import { Button, Toggle, Tooltip } from "@fuxui/base";
+  import IconLucideSmilePlus from "~icons/lucide/smile-plus";
 
   let {
     reactions,
@@ -58,7 +58,7 @@
     >
       {#snippet child({ props })}
         <Button size="icon" variant="ghost" {...props}>
-          <Icon icon="lucide:smile-plus" class="text-primary" />
+          <IconLucideSmilePlus class="text-primary" />
         </Button>
       {/snippet}
     </PopoverEmojiPicker>

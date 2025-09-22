@@ -344,12 +344,17 @@ function connectMessagePort(port: MessagePortApi) {
       );
     },
     async sendEvent(streamId: string, event: EventType) {
-      console.log(event);
       if (!state.leafClient) throw "Leaf client not ready";
-      console.log(eventCodec.dec(eventCodec.enc(event)));
       await state.leafClient.sendEvent(
         streamId,
         eventCodec.enc(event).buffer as ArrayBuffer,
+      );
+    },
+    async sendEventBatch(streamId, payloads) {
+      if (!state.leafClient) throw "Leaf client not ready";
+      await state.leafClient.sendEvents(
+        streamId,
+        payloads.map((x) => eventCodec.enc(x).buffer as ArrayBuffer),
       );
     },
     async uploadImage(bytes, alt?: string) {

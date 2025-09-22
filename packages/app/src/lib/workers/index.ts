@@ -50,6 +50,7 @@ export type BackendInterface = {
     statement: SqlStatement,
   ): Promise<void>;
   sendEvent(streamId: string, payload: EventType): Promise<void>;
+  sendEventBatch(streamId: string, payloads: EventType[]): Promise<void>;
   setActiveSqliteWorker(port: MessagePort): Promise<void>;
   createStream(
     moduleId: string,

@@ -4,7 +4,7 @@
   import MainSidebarSpace from "$lib/components/sidebars/SpaceSidebarHeader.svelte";
   import { Button, ScrollArea } from "@fuxui/base";
 
-  import IconLucideArrowLeft from "~icons/lucide/arrow-left"
+  import IconLucideArrowLeft from "~icons/lucide/arrow-left";
 
   let { children } = $props();
 </script>
@@ -23,8 +23,18 @@
         variant="ghost"
         class="w-full justify-start"
         href={`/${page.params.space}/settings/general`}
-        data-current={page.url.pathname.includes("general")}>General</Button
+        data-current={page.url.pathname.endsWith("general")}
       >
+        General
+      </Button>
+      <Button
+        variant="ghost"
+        class="w-full justify-start"
+        href={`/${page.params.space}/settings/discord-import`}
+        data-current={page.url.pathname.endsWith("discord-import")}
+      >
+        Discord Import
+      </Button>
       <!-- <Button
         variant="ghost"
         class="w-full justify-start"
@@ -43,7 +53,7 @@
         class="w-full justify-start"
         data-current={page.url.pathname.includes("discord-bridge")}
         href={`/${page.params.space}/settings/discord-bridge`}
-        >Discord Bridge
+       >Discord Bridge
       </Button> -->
     </div>
   {/snippet}

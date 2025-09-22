@@ -6,7 +6,7 @@
 
 <script lang="ts">
   import { ScrollArea } from "bits-ui";
-  import ChatMessage from "./message/ChatMessage.svelte";
+  // import ChatMessage from "./message/ChatMessage.svelte";
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
   import { page } from "$app/state";
@@ -14,31 +14,51 @@
   import { Button } from "@fuxui/base";
 
   import IconTablerArrowDown from "~icons/tabler/arrow-down";
+  import { LiveQuery } from "$lib/liveQuery.svelte";
+  import { sql } from "$lib/utils/sqlTemplate";
+  import { Ulid } from "$lib/workers/encoding";
+  import ChatMessage from "./message/ChatMessage.svelte";
 
   let {
-    timeline,
-    virtualizer = $bindable(),
-    allowedToInteract,
     threading,
-    startThreading,
-    toggleSelect,
   }: {
-    timeline: string[];
-    virtualizer?: Virtualizer<string>;
-    allowedToInteract?: boolean;
     threading?: { active: boolean; selectedMessages: string[] };
-    startThreading: (id?: string) => void;
-    toggleSelect: (id: string) => void;
   } = $props();
 
-  let messagesLoaded = $derived(timeline && timeline.length >= 0);
+  export type Message = {
+    id: string;
+    content: string;
+    authorDid: string;
+    authorHandle: string;
+    authorName: string;
+    authorAvatar: string;
+  };
+
+  let query = new LiveQuery<Message>(
+    () => sql`
+      select
+        format_ulid(c.entity) as id,
+        cast(data as text) as content,
+        a.author as authorDid,
+        p.handle as authorHandle,
+        p.display_name as authorName,
+        p.avatar as authorAvatar
+      from entities e
+        join comp_content c on c.entity = e.ulid
+        join comp_author a on a.entity = e.ulid
+        join profiles p on p.did = a.author
+      where e.parent = ${page.params.object && Ulid.enc(page.params.object)}
+      order by c.entity
+    `,
+  );
+
   let showLastN = $state(50);
   let isAtBottom = $state(true);
-  let showJumpToPresent = $derived(!isAtBottom && timeline.length > 0);
+  let showJumpToPresent = $derived(!isAtBottom);
 
-  let slicedTimeline = $derived(timeline.slice(-showLastN));
+  // let slicedTimeline = $derived(timeline.slice(-showLastN));
 
-  let isShowingFirstMessage = $derived(showLastN >= timeline.length);
+  // let isShowingFirstMessage = $derived(showLastN >= timeline.length);
   let viewport: HTMLDivElement = $state(null!);
 
   // Track initial load for auto-scroll
@@ -46,25 +66,25 @@
   let lastTimelineLength = $state(0);
 
   function scrollToBottom() {
-    if (!virtualizer) return;
-    virtualizer.scrollToIndex(timeline.length - 1, { align: "start" });
-    isAtBottom = true;
+    // if (!virtualizer) return;
+    // virtualizer.scrollToIndex(timeline.length - 1, { align: "start" });
+    // isAtBottom = true;
   }
 
   function handleScroll() {
-    if (!viewport || !virtualizer) return;
+    // if (!viewport || !virtualizer) return;
 
-    const { scrollTop, scrollHeight, clientHeight } = viewport;
-    const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 500;
-    isAtBottom = isNearBottom;
+    // const { scrollTop, scrollHeight, clientHeight } = viewport;
+    // const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 500;
+    // isAtBottom = isNearBottom;
   }
 
   function scrollToMessage(id: string) {
-    const idx = slicedTimeline.indexOf(id);
-    if (idx >= 0) virtualizer?.scrollToIndex(idx);
-    else {
-      toast.error("Message not found");
-    }
+    // const idx = slicedTimeline.indexOf(id);
+    // if (idx >= 0) virtualizer?.scrollToIndex(idx);
+    // else {
+    //   toast.error("Message not found");
+    // }
   }
 
   setContext("scrollToMessage", scrollToMessage);
@@ -75,26 +95,26 @@
     hasInitiallyScrolled = false; // Reset for new route
   });
 
-  // Simple initial scroll to bottom when timeline first loads
-  $effect(() => {
-    if (!hasInitiallyScrolled && timeline.length > 0 && virtualizer) {
-      setTimeout(() => {
-        scrollToBottom();
-        hasInitiallyScrolled = true;
-      }, 200);
-    }
-    chatArea.scrollToMessage = scrollToMessage;
-  });
+  // // Simple initial scroll to bottom when timeline first loads
+  // $effect(() => {
+  //   if (!hasInitiallyScrolled && timeline.length > 0 && virtualizer) {
+  //     setTimeout(() => {
+  //       scrollToBottom();
+  //       hasInitiallyScrolled = true;
+  //     }, 200);
+  //   }
+  //   chatArea.scrollToMessage = scrollToMessage;
+  // });
 
-  // Handle new messages - only auto-scroll if user is at bottom
-  $effect(() => {
-    if (timeline.length > lastTimelineLength && lastTimelineLength > 0) {
-      if (isAtBottom && virtualizer) {
-        setTimeout(() => scrollToBottom(), 50);
-      }
-    }
-    lastTimelineLength = timeline.length;
-  });
+  // // Handle new messages - only auto-scroll if user is at bottom
+  // $effect(() => {
+  //   if (timeline.length > lastTimelineLength && lastTimelineLength > 0) {
+  //     if (isAtBottom && virtualizer) {
+  //       setTimeout(() => scrollToBottom(), 50);
+  //     }
+  //   }
+  //   lastTimelineLength = timeline.length;
+  // });
 
   let isShifting = $state(false);
 </script>
@@ -111,22 +131,22 @@
 
 <div class="relative h-full">
   <ScrollArea.Root type="scroll" class="h-full overflow-hidden">
-    {#if !messagesLoaded}
-      <!-- Important: This area takes the place of the chat which pushes chat offscreen
+    <!-- Important: This area takes the place of the chat which pushes chat offscreen
         which allows it to load then pop into place once the spinner is gone. -->
+    <!-- {#if !messagesLoaded}
       <div
         class="grid items-center justify-center h-full w-full bg-transparent"
       >
         <span class="dz-loading dz-loading-spinner"></span>
       </div>
-    {/if}
+    {/if} -->
     <ScrollArea.Viewport
       bind:ref={viewport}
       class="relative max-w-full w-full h-full"
       onscroll={handleScroll}
     >
       <div class="flex flex-col w-full h-full pb-16 pt-2">
-        {#if slicedTimeline.length < timeline.length}
+        <!-- {#if slicedTimeline.length < timeline.length}
           <Button
             class="w-fit mx-auto mb-2"
             onclick={() => {
@@ -138,8 +158,8 @@
             }}
             >Load More
           </Button>
-        {/if}
-        {#if isShowingFirstMessage}
+        {/if} -->
+        <!-- {#if isShowingFirstMessage}
           <div class="flex flex-col gap-2 max-w-full px-6 mb-4 mt-4">
             <p class="text-base font-semibold text-base-900 dark:text-base-100">
               Hello world!
@@ -148,41 +168,32 @@
               This is the beginning of something beautiful.
             </p>
           </div>
-        {/if}
+        {/if} -->
         <ol class="flex flex-col gap-2 max-w-full">
           <!--
-        This use of `key` needs explaining. `key` causes the components below
-        it to be deleted and re-created when the expression passed to it is changed.
-        This means that every time the `viewport` binding si updated, the virtualizer
-        will be re-created. This is important because the virtualizer only actually sets
-        up the scrollRef when is mounted. And `viewport` is technically only assigned after
-        _this_ parent component is mounted. Leading to a chicken-egg problem.
+            This use of `key` needs explaining. `key` causes the components below
+            it to be deleted and re-created when the expression passed to it is changed.
+            This means that every time the `viewport` binding si updated, the virtualizer
+            will be re-created. This is important because the virtualizer only actually sets
+            up the scrollRef when is mounted. And `viewport` is technically only assigned after
+            _this_ parent component is mounted. Leading to a chicken-egg problem.
 
-        Once the `viewport` is assigned, the virtualizer has already been mounted with scrollRef
-        set to `undefined`, and it won't be re-calculated.
+            Once the `viewport` is assigned, the virtualizer has already been mounted with scrollRef
+            set to `undefined`, and it won't be re-calculated.
 
-        By using `key` we make sure that the virtualizer is re-mounted after the `viewport` is
-        assigned, so that it's scroll integration works properly.
-      -->
-
+            By using `key` we make sure that the virtualizer is re-mounted after the `viewport` is
+            assigned, so that it's scroll integration works properly.
+          -->
           {#key viewport}
             <Virtualizer
-              bind:this={virtualizer}
-              data={slicedTimeline || []}
-              getKey={(messageId) => messageId}
+              data={query.result || []}
               scrollRef={viewport}
               overscan={5}
               shift={isShifting}
+              getKey={(x) => x.id}
             >
-              {#snippet children(messageId: string, index: number)}
-                <ChatMessage
-                  {messageId}
-                  previousMessageId={slicedTimeline[index - 1]}
-                  {allowedToInteract}
-                  {threading}
-                  {startThreading}
-                  {toggleSelect}
-                />
+              {#snippet children(message: Message)}
+                <ChatMessage {message} {threading} />
               {/snippet}
             </Virtualizer>
           {/key}

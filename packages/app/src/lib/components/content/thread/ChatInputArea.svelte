@@ -84,6 +84,7 @@
   }
 
   let messageInput: string = $state("");
+  let messageInputEl: null | HTMLInputElement = $state(null);
   let isSendingMessage = $state(false);
   async function sendMessage() {
     if (!current.space) return;
@@ -106,6 +107,7 @@
       });
 
       messageInput = "";
+      messageInputEl?.focus();
     } catch (e: any) {
       console.error(e);
       toast.error("Failed to send message.", { position: "bottom-right" });
@@ -222,6 +224,7 @@
           <UploadFileButton {processImageFile} />
           <form onsubmit={sendMessage} class="w-full">
             <Input
+              bind:ref={messageInputEl}
               bind:value={messageInput}
               placeholder="Send a message..."
               class="w-full"
@@ -240,7 +243,7 @@
       </div>
       <FullscreenImageDropper {processImageFile} />
 
-      {#if isSendingMessage}
+      <!-- {#if isSendingMessage}
         <div
           class="absolute inset-0 flex items-center text-primary justify-center z-20 bg-base-100/80 dark:bg-base-900/80"
         >
@@ -250,7 +253,7 @@
             Sending message...
           </div>
         </div>
-      {/if}
+      {/if} -->
     </div>
   </div>
 </div>

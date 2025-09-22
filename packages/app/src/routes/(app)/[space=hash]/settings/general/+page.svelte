@@ -87,7 +87,7 @@
 
 <form class="pt-4">
   <div class="space-y-12">
-    <h2 class="text-base/7 font-semibold text-base-900 dark:text-base-100">
+    <h2 class="text-xl/7 font-bold text-base-900 dark:text-base-100">
       General Settings
     </h2>
 

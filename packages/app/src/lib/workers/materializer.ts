@@ -282,7 +282,7 @@ const materializers: {
     }
     return [
       sql`
-        insert into comp_override_meta (entity, source, author, timestamp)
+        insert or replace into comp_override_meta (entity, source, author, timestamp)
         values (
           ${Ulid.enc(event.parent)},
           ${variant.source},
