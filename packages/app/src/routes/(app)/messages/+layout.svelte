@@ -1,7 +1,5 @@
 <script lang="ts">
   import { dmClient } from "$lib/dm.svelte";
-  import { user } from "$lib/user.svelte";
-  import Icon from "@iconify/svelte";
   import { page } from "$app/state";
   import MainLayout, {
     isSidebarVisible,

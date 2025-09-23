@@ -2,8 +2,7 @@
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { navigate } from "$lib/utils.svelte";
   import { backend, backendStatus } from "$lib/workers";
-  import { Button, Checkbox, Input, Label, Textarea } from "@fuxui/base";
-  import toast from "svelte-french-toast";
+  import { Button, Checkbox, Input, Label, Textarea, toast } from "@fuxui/base";
   import { ulid } from "ulidx";
 
   let spaceName = $state("");

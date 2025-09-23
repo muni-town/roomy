@@ -1,7 +1,5 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { RoomyAccount } from "@roomy-chat/sdk";
-  import { AccountCoState, CoState } from "jazz-tools/svelte";
   import SpaceButton from "$lib/components/spaces/SpaceButton.svelte";
   import UserProfile from "$lib/components/user/UserProfile.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";

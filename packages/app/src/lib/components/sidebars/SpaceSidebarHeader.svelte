@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { Button, cn, Popover } from "@fuxui/base";
+  import { Button, cn, Popover, toast } from "@fuxui/base";
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
-  import toast from "svelte-french-toast";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { current } from "$lib/queries.svelte";
   import { backend, backendStatus } from "$lib/workers";

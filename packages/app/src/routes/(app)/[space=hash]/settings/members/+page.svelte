@@ -1,45 +1,38 @@
 <script lang="ts">
-  import { AccountCoState, CoState } from "jazz-tools/svelte";
-  import {
-    AllMembersComponent,
-    BansComponent,
-    RoomyAccount,
-    RoomyEntity,
-  } from "@roomy-chat/sdk";
   import { page } from "$app/state";
   import SettingsUser from "$lib/components/settings/SettingsUser.svelte";
 
-  let space = $derived(
-    new CoState(RoomyEntity, page.params.space, {
-      resolve: {
-        components: {
-          $each: true,
-          $onError: null,
-        },
-      },
-    }),
-  );
+  // let space = $derived(
+  //   new CoState(RoomyEntity, page.params.space, {
+  //     resolve: {
+  //       components: {
+  //         $each: true,
+  //         $onError: null,
+  //       },
+  //     },
+  //   }),
+  // );
 
-  const me = new AccountCoState(RoomyAccount);
+  // const me = new AccountCoState(RoomyAccount);
 
-  let members = $derived(
-    new CoState(
-      AllMembersComponent,
-      space.current?.components?.[AllMembersComponent.id],
-    ),
-  );
+  // let members = $derived(
+  //   new CoState(
+  //     AllMembersComponent,
+  //     space.current?.components?.[AllMembersComponent.id],
+  //   ),
+  // );
 
-  let users = $derived(
-    Object.values(members.current?.perAccount ?? {})
-      .filter((a) => a && !a.value?.softDeleted)
-      .flat()
-      .map((a) => a.value) || [],
-  );
+  // let users = $derived(
+  //   Object.values(members.current?.perAccount ?? {})
+  //     .filter((a) => a && !a.value?.softDeleted)
+  //     .flat()
+  //     .map((a) => a.value) || [],
+  // );
 
-  let bans = $derived(
-    new CoState(BansComponent, space.current?.components?.[BansComponent.id]),
-  );
-  let banSet = $derived(new Set(bans.current ?? []));
+  // let bans = $derived(
+  //   new CoState(BansComponent, space.current?.components?.[BansComponent.id]),
+  // );
+  // let banSet = $derived(new Set(bans.current ?? []));
 </script>
 
 <div class="space-y-12 pt-4 overflow-y-auto">

@@ -361,28 +361,7 @@
 
 <script lang="ts">
   import { page } from "$app/state";
-  import { user } from "$lib/user.svelte";
   import { Alert, Button } from "@fuxui/base";
-  import {
-    addToFolder,
-    AllThreadsComponent,
-    BranchThreadIdComponent,
-    co,
-    CoFeed,
-    createMessage,
-    createThread,
-    getSpaceGroups,
-    Group,
-    MediaUploadQueue,
-    RoomyAccount,
-    RoomyEntity,
-    SubThreadsComponent,
-    UploadMedia,
-    type ImageUrlEmbedCreate,
-    type VideoUrlEmbedCreate,
-  } from "@roomy-chat/sdk";
-  import { AccountCoState, CoState } from "jazz-tools/svelte";
-  import toast from "svelte-french-toast";
   import { writable } from "svelte/store";
 
   function mapStore<T>(initial: Map<string, T>) {

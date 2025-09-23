@@ -2,9 +2,9 @@
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { current } from "$lib/queries.svelte";
   import { backend } from "$lib/workers";
-  import { Button, Input, Textarea } from "@fuxui/base";
-  import toast from "svelte-french-toast";
+  import { Button, Input, Textarea, toast } from "@fuxui/base";
   import { ulid } from "ulidx";
+
 
   let spaceName = $derived(current.space?.name ?? "");
   let avatarUrl = $derived(current.space?.avatar ?? "");

@@ -1,17 +1,8 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { env } from "$env/dynamic/public";
-  import { Badge, Button } from "@fuxui/base";
+  import { Badge, Button, toast } from "@fuxui/base";
   import { onMount } from "svelte";
-  import {
-    Account,
-    isSpaceAdmin,
-    makeSpaceAdmin,
-    revokeSpaceAdmin,
-    RoomyEntity,
-  } from "@roomy-chat/sdk";
-  import toast from "svelte-french-toast";
-  import { CoState } from "jazz-tools/svelte";
 
   let space = $derived(new CoState(RoomyEntity, page.params.space));
   let bridgeStatus:

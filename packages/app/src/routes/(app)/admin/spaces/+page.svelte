@@ -1,13 +1,6 @@
 <script lang="ts">
   import { Badge, NumberInput } from "@fuxui/base";
 
-  import {
-    AllMembersComponent,
-    IDList,
-    RoomyEntity,
-    allSpacesListId,
-  } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-tools/svelte";
   import SpaceButton from "./SpaceButton.svelte";
   import type { LoadedSpace } from "./type";
 

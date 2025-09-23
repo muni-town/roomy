@@ -1,5 +1,4 @@
 import type { $Typed, AppBskyEmbedRecord } from "@atproto/api";
-import { user } from "./user.svelte";
 
 export type Message = {
   id: string;

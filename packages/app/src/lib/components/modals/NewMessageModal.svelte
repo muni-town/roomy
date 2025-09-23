@@ -1,8 +1,10 @@
 <script lang="ts">
   import { Modal, Input, Button, Heading } from "@fuxui/base";
-  import Icon from "@iconify/svelte";
   import { dmClient } from "$lib/dm.svelte";
   import { goto } from "$app/navigation";
+
+  import IconBasilPlusOutline from "~icons/basil/plus-outline";
+
   let {
     open = $bindable(false),
   }: {
@@ -35,7 +37,7 @@
       class="w-full justify-center"
       size="lg"
     >
-      <Icon icon="basil:plus-outline" font-size="2em" />
+      <IconBasilPlusOutline font-size="2em" />
       Start Conversation
     </Button>
   </form>

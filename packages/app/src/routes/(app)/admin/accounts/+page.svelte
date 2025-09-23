@@ -1,9 +1,5 @@
 <script lang="ts">
-  import { Badge } from "@fuxui/base";
-  import { IDList, allAccountsListId, allSpacesListId } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-tools/svelte";
-  import { co, Group } from "jazz-tools";
-  import toast from "svelte-french-toast";
+  import { Badge, toast } from "@fuxui/base";
   import SettingsUser from "$lib/components/settings/SettingsUser.svelte";
 
   // load all spaces and accounts

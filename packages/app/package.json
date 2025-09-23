@@ -93,7 +93,6 @@
     "svelte-boring-avatars": "^1.2.6",
     "svelte-check": "^4.3.1",
     "svelte-dnd-action": "^0.9.65",
-    "svelte-french-toast": "2.0.0-alpha.0",
     "svelte-render-scan": "^1.1.0",
     "svelte-tiptap": "^2.2.0",
     "tailwindcss": "^4.1.13",

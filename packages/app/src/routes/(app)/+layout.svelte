@@ -4,7 +4,6 @@
   import posthog from "posthog-js";
   import { backendStatus } from "$lib/workers";
   import { onMount } from "svelte";
-  import { Toaster } from "svelte-french-toast";
   import { Toaster as FxUIToaster } from '@fuxui/base';
 
   import { fade } from "svelte/transition";
@@ -100,5 +99,4 @@
   </div>
 {/if}
 
-<Toaster />
 <FxUIToaster />

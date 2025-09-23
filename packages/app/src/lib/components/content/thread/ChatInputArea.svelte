@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button, Input } from "@fuxui/base";
+  import { Button, Input, toast } from "@fuxui/base";
   import MessageRepliedTo from "./message/MessageRepliedTo.svelte";
   import FullscreenImageDropper from "$lib/components/helper/FullscreenImageDropper.svelte";
 
@@ -7,11 +7,11 @@
   import IconTablerNeedleThread from "~icons/tabler/needle-thread";
   import IconTablerX from "~icons/tabler/x";
   import UploadFileButton from "$lib/components/helper/UploadFileButton.svelte";
-  import toast from "svelte-french-toast";
   import { backend } from "$lib/workers";
   import { current } from "$lib/queries.svelte";
   import { ulid } from "ulidx";
   import { page } from "$app/state";
+
 
   let {
     replyTo,

@@ -1,14 +1,5 @@
 <script lang="ts">
-  import { Avatar, Badge, Button, Popover } from "@fuxui/base";
-  import Icon from "@iconify/svelte";
-  import {
-    BansComponent,
-    co,
-    RoomyAccount,
-    RoomyEntity,
-  } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-tools/svelte";
-  import toast from "svelte-french-toast";
+  import { toast, Avatar, Badge, Button, Popover } from "@fuxui/base";
 
   let {
     accountId,
