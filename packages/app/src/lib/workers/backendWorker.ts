@@ -665,7 +665,7 @@ class StreamMaterializer {
           console.time("fetchBatch");
           console.log("fetching");
 
-          const batchSize = 2500;
+          const batchSize = 2000;
           const newEvents = await state.leafClient.fetchEvents(this.#streamid, {
             offset: fetchCursor,
             limit: batchSize,
