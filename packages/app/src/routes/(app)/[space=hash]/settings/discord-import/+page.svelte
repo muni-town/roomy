@@ -56,6 +56,8 @@
     let batch: EventType[] = [];
     let batchMessageCount = 0;
 
+    await backend.pauseSubscription(current.space.id);
+
     try {
       const reader = new zip.ZipReader(new zip.BlobReader(file));
 
@@ -74,6 +76,7 @@
           new TextDecoder().decode(data),
         );
 
+        currentChannelImportingName = channel.channel.name;
         messageCount = channel.messageCount;
 
         const channelId = ulid();
@@ -164,6 +167,8 @@
       launchConfetti();
       importFinished = true;
       stopwatch.stop();
+
+      await backend.unpauseSubscription(current.space.id);
     } catch (e) {
       console.error(e);
       toast.error(`Error while importing Discord archive: ${e}`, {
@@ -204,7 +209,9 @@
 
 {#if importing || importFinished}
   <div class="flex flex-col items-stretch mt-4 gap-3">
-    <h1 class="text-2xl font-bold text-center">Importing</h1>
+    <h1 class="text-2xl font-bold text-center">
+      {importFinished ? "Done! 🎉" : "Importing"}
+    </h1>
 
     <Stopwatch bind:stopwatch />
 

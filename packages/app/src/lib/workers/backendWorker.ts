@@ -389,6 +389,12 @@ function connectMessagePort(port: MessagePortApi) {
     async addClient(port) {
       connectMessagePort(port);
     },
+    async pauseSubscription(streamId) {
+      await state.openSpacesMaterializer?.pauseSubscription(streamId);
+    },
+    async unpauseSubscription(streamId) {
+      await state.openSpacesMaterializer?.unpauseSubscription(streamId);
+    },
   });
 }
 
@@ -491,6 +497,7 @@ async function initializeLeafClient(client: LeafClient) {
     status.leafConnected = true;
   });
   client.on("event", (event) => {
+    console.log("%cin", "color: green", event.idx);
     if (event.stream == state.personalSpaceMaterializer?.streamId) {
       state.personalSpaceMaterializer.handleEvents([event]);
     }
@@ -507,6 +514,23 @@ class OpenSpacesMaterializer {
     this.#streamId = streamId;
     this.#liveQueryId = crypto.randomUUID();
     this.createLiveQuery();
+  }
+
+  get openSpaces(): string[] {
+    return [...this.#spaceMaterializers.keys()];
+  }
+
+  async pauseSubscription(streamId: string) {
+    state.leafClient?.unsubscribe(streamId);
+  }
+
+  async unpauseSubscription(streamId: string) {
+    if (!state.leafClient) throw "Leaf client not initialized";
+    const materializer = this.#spaceMaterializers.get(streamId);
+    if (materializer) {
+      state.leafClient.subscribe(streamId);
+      await materializer.backfillEvents();
+    }
   }
 
   createLiveQuery() {
@@ -587,11 +611,11 @@ export type MaterializerConfig = {
   ) => Promise<void>;
 };
 
+const MATERIALIZER_LOCK = "Materializer";
 class StreamMaterializer {
   #streamid: string;
-  #backfilling = true;
-  #queue: StreamEvent[] = [];
   #latestEvent: number | undefined;
+  #queue: StreamEvent[] = [];
   #materializer: (
     sqliteWorker: SqliteWorkerInterface,
     agent: Agent,
@@ -611,21 +635,26 @@ class StreamMaterializer {
 
     state.leafClient.subscribe(this.#streamid);
 
+    if (!sqliteWorker) throw "No Sqlite worker";
+
+    // Initialize the database schema. This is assumed to be idempotent.
+    console.time("initSql");
+    sqliteWorker.runSavepoint({ name: "init", items: config.initSql });
+    console.timeEnd("initSql");
+
     // Start backfilling the stream events
-    this.#backfilling = true;
+    this.backfillEvents();
+  }
+
+  async backfillEvents() {
     navigator.locks.request(
-      "MaterializerStreamInit",
+      MATERIALIZER_LOCK,
       (async () => {
         if (!state.leafClient) throw "No leaf client";
         if (!sqliteWorker) throw "No Sqlite worker";
         const entry = await db.streamCursors.get(this.#streamid);
         this.#latestEvent = entry?.latestEvent || 0;
         console.log("latestevent", this.#latestEvent);
-
-        // Initialize the database schema. This is assumed to be idempotent.
-        console.time("initSql");
-        sqliteWorker.runSavepoint({ name: "init", items: config.initSql });
-        console.timeEnd("initSql");
 
         // Backfill events
         console.time("backfill");
@@ -658,27 +687,51 @@ class StreamMaterializer {
         console.log("waiting or one last time");
         await previousMaterializationPromise;
 
-        // Finish off any events that have come in while we are backfilling
-        console.log("Materializing events in the queue ");
-        await this.#materializeEvents(this.#queue);
-
         console.timeEnd("backfill");
 
         console.log("Done backfilling");
-        this.#backfilling = false;
       }).bind(this),
     );
   }
 
   async handleEvents(events: StreamEvent[]) {
-    // If we're in the middle of backfilling
-    if (this.#backfilling) {
-      // Queue this event for later
-      this.#queue = [...this.#queue, ...events];
-    } else {
-      // Materialize the event
-      await this.#materializeEvents(events);
-    }
+    navigator.locks.request(
+      MATERIALIZER_LOCK,
+      { ifAvailable: true },
+      async (lock) => {
+        // console.log(
+        //   `Received ${events.length} events from ${events[0]?.idx} to ${events[events.length - 1]?.idx}`,
+        // );
+
+        if (!lock) {
+          // console.log(
+          //   `Failed to obtain lock, pushing to queue which currently has ${this.#queue.length} items in it.`,
+          // );
+          // Spawn a task to finish off the queue once we can obtain the lock
+          if (this.#queue.length == 0) {
+            (async () => {
+              // console.log("Starting a task to finish off the queue later.");
+              navigator.locks.request(MATERIALIZER_LOCK, async () => {
+                // console.log("queue task obtained lock, applying events");
+                while (this.#queue.length > 0) {
+                  const batch = [...this.#queue];
+                  this.#queue.length = 0;
+                  // console.log(`applying ${batch.length} events from queue`);
+                  await this.#materializeEvents(batch);
+                }
+                // console.log("Done applying queue");
+              });
+            })();
+          }
+          this.#queue.push(...events);
+          return;
+        }
+
+        // console.log("obtained lock, handling event");
+        // Materialize the event
+        await this.#materializeEvents(events);
+      },
+    );
   }
 
   async #materializeEvents(events: StreamEvent[]) {
@@ -688,19 +741,28 @@ class StreamMaterializer {
     if (this.#latestEvent == undefined) throw "latest event not initialized";
 
     // Make sure that the events are sequential
-    for (let i = 0; i < events.length; i++) {
-      if (i == 0) {
-        if (events[i]!.idx !== (this.#latestEvent || 0) + 1) {
-          throw new Error(
-            `Unexpected event IDX. Latest event is ${this.#latestEvent} next event is ${events[i]?.idx}`,
-          );
-        }
-      } else {
-        if (events[i]!.idx !== events[i - 1]!.idx + 1)
-          throw new Error(
-            `Unexpected event IDX. Previous event is ${events[i - 1]?.idx} next event is ${events[i]?.idx}`,
-          );
+    for (let i = 1; i < events.length; i++) {
+      const diff = events[i]!.idx - events[i - 1]!.idx;
+      if (diff != 1) {
+        console.warn(
+          `Unexpected event IDX. Previous event is ${events[i - 1]?.idx} next event is ${events[i]?.idx}. Triggering backfill instead.`,
+        );
+        return await this.backfillEvents();
       }
+    }
+
+    const startIdx = events[0]!.idx;
+    const diff = startIdx - this.#latestEvent;
+    if (diff < 1) {
+      console.warn(
+        `Ignoring ${Math.abs(diff) + 1} events older than the latest event we have processed ( ${this.#latestEvent} ).`,
+      );
+    } else if (diff > 1) {
+      console.warn(
+        `The incoming event ( idx ${startIdx} ) is newer than our latest event ( ${this.#latestEvent} ), \
+        cannot apply. Starting backfill instead to catch up.`,
+      );
+      return await this.backfillEvents();
     }
 
     try {
@@ -711,12 +773,14 @@ class StreamMaterializer {
         events,
       );
       this.#latestEvent = events[events.length - 1]!.idx;
+      console.log("%clatest", "color: red", this.#latestEvent);
     } catch (e) {
       console.error(
         `Could not materialize events ${events[0]?.idx} through ${events[events.length - 1]?.idx} in stream ${this.#streamid}`,
       );
       console.error(e);
     }
+    console.log("latest event", this.#latestEvent);
     await db.streamCursors.put({
       streamId: this.#streamid,
       latestEvent: this.#latestEvent,

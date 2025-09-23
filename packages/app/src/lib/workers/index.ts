@@ -52,6 +52,8 @@ export type BackendInterface = {
   sendEvent(streamId: string, payload: EventType): Promise<void>;
   sendEventBatch(streamId: string, payloads: EventType[]): Promise<void>;
   setActiveSqliteWorker(port: MessagePort): Promise<void>;
+  pauseSubscription(streamId: string): Promise<void>;
+  unpauseSubscription(streamId: string): Promise<void>;
   createStream(
     moduleId: string,
     moduleUrl: string,
