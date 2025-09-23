@@ -37,7 +37,7 @@ export let current = $state({
 // within the scope.
 $effect.root(() => {
   spaces = new LiveQuery(
-    () => sql`
+    () => sql`-- spaces
       select json_object(
         'id', format_hash(id),
         'name', name,
@@ -53,10 +53,9 @@ $effect.root(() => {
     (row) => JSON.parse(row.json),
   );
 
-  (globalThis as any).spaces = spaces;
-
   spaceTree = new LiveQuery(
-    () => sql`select json_object(
+    () => sql`-- spaceTree
+    select json_object(
       'id', format_ulid(e.ulid),
       'name', i.name,
       'type', 'category',

@@ -17,6 +17,18 @@ export function isDatabaseReady(): boolean {
 
 /** This is a queue of all operations recorded by our global sqlite authorizer */
 let authorizerQueue: Action[] = [];
+const authorizer: Parameters<
+  Sqlite3Static["capi"]["sqlite3_set_authorizer"]
+>[1] = (_arg, actionCode, arg1, arg2, database, triggerOrView) => {
+  authorizerQueue.push({
+    actionCode: actionCodeName(actionCode),
+    arg1: arg1 || undefined,
+    arg2: arg2 || undefined,
+    database: database || undefined,
+    triggerOrView: triggerOrView || undefined,
+  });
+  return 0;
+};
 
 export async function initializeDatabase(dbName: string): Promise<void> {
   if (initPromise) return initPromise;
@@ -43,22 +55,10 @@ export async function initializeDatabase(dbName: string): Promise<void> {
     if (!db) throw lastErr ?? new Error("sahpool_init_failed");
 
     // Set an authorizer function that will allow us to track reads and writes to the database
-    sqlite3.capi.sqlite3_set_authorizer(
-      db,
-      (_arg, actionCode, arg1, arg2, database, triggerOrView) => {
-        authorizerQueue.push({
-          actionCode: actionCodeName(actionCode),
-          arg1: arg1 || undefined,
-          arg2: arg2 || undefined,
-          database: database || undefined,
-          triggerOrView: triggerOrView || undefined,
-        });
-        return 0;
-      },
-      0,
-    );
+    sqlite3.capi.sqlite3_set_authorizer(db, authorizer, 0);
     db.exec("pragma locking_mode = exclusive;");
     db.exec("pragma journal_mode = wal");
+    db.exec("pragma page_size = 8192");
     db.createFunction("format_hash", (_ctx, blob) => {
       if (blob instanceof Uint8Array) {
         return Hash.dec(blob);
@@ -106,8 +106,8 @@ export async function executeQuery(
     const { prepared, actions } = await prepareSql(statement);
     const result = runPreparedStatement(prepared);
 
-    // Update live queries asynchronously
-    updateLiveQueries(actions);
+    // console.log("update live queries for execute", statement);
+    await updateLiveQueries(actions);
 
     return { ...result, actions };
   } catch (e) {
@@ -116,6 +116,7 @@ export async function executeQuery(
   }
 }
 
+const preparedSqlCache: Map<string, PreparedStatement> = new Map();
 async function prepareSql(
   statement: SqlStatement,
 ): Promise<{ prepared: PreparedStatement; actions: Action[] }> {
@@ -123,7 +124,13 @@ async function prepareSql(
   if (!db || !sqlite3) throw new Error("database_not_initialized");
 
   authorizerQueue = [];
-  const prepared = db.prepare(statement.sql);
+  let prepared = !statement.noCache
+    ? preparedSqlCache.get(statement.sql)
+    : undefined;
+  if (!prepared) {
+    prepared = db.prepare(statement.sql);
+    preparedSqlCache.set(statement.sql, prepared);
+  }
   if (statement.params) prepared.bind(statement.params);
   const actions = [...authorizerQueue];
   return { prepared, actions };
@@ -161,7 +168,28 @@ const liveQueries: Map<string, { port: MessagePort; status: LiveQueryStatus }> =
   new Map();
 type LiveQueryStatus =
   | { kind: "unprepared"; statement: SqlStatement }
-  | { kind: "prepared"; tables: string[]; statement: PreparedStatement };
+  | {
+      kind: "prepared";
+      tables: string[];
+      prepared: PreparedStatement;
+      sql: string;
+    };
+let liveQueriesEnabled = true;
+
+export function disableLiveQueries() {
+  liveQueriesEnabled = false;
+  db && sqlite3 && sqlite3.capi.sqlite3_set_authorizer(db, null as any, 0);
+  authorizerQueue = [];
+}
+export async function enableLiveQueries() {
+  if (!liveQueriesEnabled) {
+    for (const id of liveQueries.keys()) {
+      await updateLiveQuery(id);
+    }
+    db && sqlite3 && sqlite3.capi.sqlite3_set_authorizer(db, authorizer, 0);
+    liveQueriesEnabled = true;
+  }
+}
 
 export async function createLiveQuery(
   id: string,
@@ -189,24 +217,25 @@ async function updateLiveQuery(id: string) {
   let preparedStatement: PreparedStatement | undefined;
   if (status.kind == "unprepared") {
     try {
-      const { prepared: statement, actions } = await prepareSql(
+      const { prepared: prepared, actions } = await prepareSql(
         status.statement,
       );
       liveQueries.set(id, {
         port,
         status: {
           kind: "prepared",
-          statement,
+          prepared,
           tables: tablesFromActions(actions),
+          sql: status.statement.sql,
         },
       });
-      preparedStatement = statement;
+      preparedStatement = prepared;
     } catch (e: any) {
       port.postMessage({ error: e.toString() } satisfies LiveQueryMessage);
       return;
     }
   } else if (status.kind == "prepared") {
-    preparedStatement = status.statement;
+    preparedStatement = status.prepared;
   }
 
   try {
@@ -219,11 +248,14 @@ async function updateLiveQuery(id: string) {
 }
 
 async function updateLiveQueries(actions: Action[]) {
+  if (!liveQueriesEnabled) return;
+
   for (const [id, { status }] of liveQueries.entries()) {
     // If a query is unprepared it means it failed to prepare when the query was created. In this
     // case we don't know what tables it was realted to so we try to re-prepare it for every query
     // that is made on the database, hoping a schema change will fix it.
     if (status.kind == "unprepared") {
+      console.log("update unprepared");
       await updateLiveQuery(id);
 
       // For prepared statements we are able to check which tables they are involved in.

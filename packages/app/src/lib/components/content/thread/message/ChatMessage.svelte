@@ -23,8 +23,8 @@
   import { renderMarkdownSanitized } from "$lib/markdown";
   import type { Message } from "../ChatArea.svelte";
   import { backendStatus } from "$lib/workers";
-  import { current } from "$lib/queries.svelte";
   import { decodeTime } from "ulidx";
+  import { current } from "$lib/queries.svelte";
 
   let {
     message,
@@ -33,6 +33,55 @@
     message: Message;
     threading?: { active: boolean; selectedMessages: string[] };
   } = $props();
+
+  // TODO: move this author can masquerade logic into the materializer so we don't have to
+  // re-hash this in the UI.
+  let authorCanMasquerade = $derived(
+    current.space?.admins.includes(message.authorDid),
+  );
+  let metadata: {
+    name?: string;
+    handle: string;
+    avatarUrl?: string;
+    appTag?: string;
+    timestamp: Date;
+    profileUrl?: string;
+  } = $derived.by(() => {
+    const defaultInfo = {
+      name: message.authorName,
+      handle: message.authorHandle,
+      avatarUrl: message.authorAvatar,
+      timestamp: new Date(decodeTime(message.id)),
+      profileUrl: `/user/${message.authorDid}`,
+    };
+    if (!authorCanMasquerade) return defaultInfo;
+    if (!message.masqueradeAuthor) return defaultInfo;
+
+    try {
+      const uri = new URL(message.masqueradeAuthor);
+      if (uri.protocol == "discord:") {
+        const id = uri.searchParams.get("id");
+        const handle = uri.searchParams.get("handle");
+        const name = uri.searchParams.get("name");
+        const avatarHash = uri.searchParams.get("avatar_hash");
+        if (handle) {
+          return {
+            handle,
+            name: name || handle,
+            avatarUrl:
+              (id &&
+                `https://cdn.discordapp.com/avatars/${id}/${avatarHash}?size=64`) ||
+              undefined,
+            timestamp: message.masqueradeTimestamp
+              ? new Date(message.masqueradeTimestamp)
+              : new Date(decodeTime(message.id)),
+          };
+        }
+      }
+    } catch (_) {}
+
+    return defaultInfo;
+  });
 
   // const me = new AccountCoState(RoomyAccount, {
   //   resolve: {
@@ -311,14 +360,16 @@
             onclick={async (e) => {
               e.stopPropagation();
               // Navigate to user profile page
-              goto(`/user/${message.authorDid}`);
+              if (metadata.profileUrl) {
+                goto(metadata.profileUrl);
+              }
             }}
             class="rounded-full hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer"
           >
             <Avatar.Root class="size-8 sm:size-10">
-              <Avatar.Image src={message.authorAvatar} class="rounded-full" />
+              <Avatar.Image src={metadata.avatarUrl} class="rounded-full" />
               <Avatar.Fallback>
-                <AvatarBeam name={message.authorDid} />
+                <AvatarBeam name={metadata.handle} />
               </Avatar.Fallback>
             </Avatar.Root>
           </button>
@@ -331,7 +382,7 @@
         {#if !mergeWithPrevious}
           <span class="flex items-center gap-2 text-sm">
             <span class="font-bold text-accent-700 dark:text-accent-400"
-              >{message.authorName}</span
+              >{metadata.name}</span
             >
             <!-- {#if customAuthor.current && customAuthor.current.authorId?.startsWith("discord:")}
               <Badge
@@ -342,7 +393,7 @@
             {:else if customAuthor.current}
               <Badge variant="secondary">App</Badge>
             {/if} -->
-            {@render timestamp(new Date(decodeTime(message.id)))}
+            {@render timestamp(metadata.timestamp)}
           </span>
         {/if}
         <div

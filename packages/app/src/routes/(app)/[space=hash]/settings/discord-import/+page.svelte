@@ -125,6 +125,11 @@
               },
             },
           });
+          const authorAvatarUrl = message.author.avatarUrl;
+          const avatarPathSegments = new URL(authorAvatarUrl).pathname.split(
+            "/",
+          );
+          const avatarHash = avatarPathSegments[avatarPathSegments.length - 1];
           batch.push({
             ulid: ulid(),
             parent: messageId,
@@ -132,7 +137,7 @@
               kind: "space.roomy.message.overrideMeta.0",
               data: {
                 source: `discord:message?guild=${channel.guild.id}&channel=${channel.channel.id}&id=${message.id}`,
-                author: `discord:user?id=${message.author.id}`,
+                author: `discord:user?id=${message.author.id}&handle=${message.author.name}&name=${message.author.nickname}&avatar_hash=${avatarHash}`,
                 timestamp: BigInt(
                   Math.round(new Date(message.timestamp).getTime() / 100),
                 ),

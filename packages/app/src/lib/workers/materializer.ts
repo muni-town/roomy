@@ -15,7 +15,7 @@ import {
 import schemaSql from "./db/schema.sql?raw";
 import { decodeTime } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
-import type { SqliteWorkerInterface } from ".";
+import type { Savepoint, SqliteWorkerInterface } from ".";
 import type { Agent } from "@atproto/api";
 
 export type EventType = ReturnType<(typeof eventCodec)["dec"]>;
@@ -33,25 +33,39 @@ export async function materializer(
   sqliteWorker: SqliteWorkerInterface,
   agent: Agent,
   streamId: string,
-  streamEvent: StreamEvent,
+  events: StreamEvent[],
 ): Promise<void> {
-  try {
-    const event = eventCodec.dec(streamEvent.payload);
-    const statements = await materializers[event.variant.kind]({
-      sqliteWorker,
-      streamId,
-      agent,
-      user: streamEvent.user,
-      event,
-      variant: event.variant.data,
-    } as never);
-    for (const statement of statements) {
-      sqliteWorker.runQuery(statement);
+  console.time("convert");
+  const batch: SqlStatement[][] = [];
+  for (const incoming of events) {
+    try {
+      // Decode the event payload
+      const event = eventCodec.dec(incoming.payload);
+
+      // Get the SQL statements to be executed for this event
+      const statements = await materializers[event.variant.kind]({
+        sqliteWorker,
+        streamId,
+        agent,
+        user: incoming.user,
+        event,
+        variant: event.variant.data,
+      } as never);
+
+      batch.push(statements);
+
+      // // Add a savepoint to the list
+      // savepoints.push({ name: "event", items: statements });
+    } catch (e) {
+      console.error(e);
     }
-  } catch (e) {
-    console.warn("Could not process event, ignoring:", e);
-    return;
   }
+  console.timeEnd("convert");
+
+  // Execute all of the statements in a transaction
+  console.time("runSql");
+  await sqliteWorker.runSavepoint({ name: "batch", items: batch.flat() });
+  console.timeEnd("runSql");
 }
 
 type Event = CodecType<typeof eventCodec>;
@@ -231,7 +245,6 @@ const materializers: {
     variant,
   }) => {
     const statements = [
-      sql`begin transaction`,
       ensureEntity(streamId, event.ulid, event.parent),
       ...(await ensureProfile(sqliteWorker, agent, {
         tag: "user",
@@ -250,7 +263,6 @@ const materializers: {
           ${Ulid.enc(event.ulid)},
           ${user}
         )`,
-      sql`commit`,
     ];
 
     if (variant.replyTo) {
@@ -401,37 +413,38 @@ async function ensureProfile(
   agent: Agent,
   member: CodecType<typeof GroupMember>,
 ): Promise<SqlStatement[]> {
-  try {
-    if (member.tag == "user") {
-      const did = member.value;
-      const profileFromDb = await sqliteWorker.runQuery(
-        sql`select 1 from profiles where did = ${did}`,
-      );
-      if (profileFromDb.rows?.length) {
-        // The profile is already in the DB so we don't need to update it.
-        return [];
-      }
+  // try {
+  //   if (member.tag == "user") {
+  //     const did = member.value;
+  //     const profileFromDb = await sqliteWorker.runQuery(
+  //       sql`select 1 from profiles where did = ${did}`,
+  //     );
+  //     if (profileFromDb.rows?.length) {
+  //       // The profile is already in the DB so we don't need to update it.
+  //       return [];
+  //     }
 
-      const profile = await agent.getProfile({ actor: did });
-      if (!profile.success) return [];
-      // FIXME: troubleshoot the fact that we are somehow making extraneous profile requests to the
-      // atproto PDS in the backend worker.
-      return [
-        sql`
-        insert or ignore into profiles (did, handle, display_name, avatar)
-        values (
-           ${did},
-           ${profile.data.handle},
-           ${profile.data.displayName},
-           ${profile.data.avatar}
-        )
-      `,
-      ];
-    } else {
-      return [];
-    }
-  } catch (e) {
-    console.error("Could not ensure profile");
-    return [];
-  }
+  //     const profile = await agent.getProfile({ actor: did });
+  //     if (!profile.success) return [];
+  //     // FIXME: troubleshoot the fact that we are somehow making extraneous profile requests to the
+  //     // atproto PDS in the backend worker.
+  //     return [
+  //       sql`
+  //       insert or ignore into profiles (did, handle, display_name, avatar)
+  //       values (
+  //          ${did},
+  //          ${profile.data.handle},
+  //          ${profile.data.displayName},
+  //          ${profile.data.avatar}
+  //       )
+  //     `,
+  //     ];
+  //   } else {
+  //     return [];
+  //   }
+  // } catch (e) {
+  //   console.error("Could not ensure profile");
+  //   return [];
+  // }
+  return [];
 }

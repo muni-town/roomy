@@ -6,18 +6,16 @@
 
 <script lang="ts">
   import { ScrollArea } from "bits-ui";
-  // import ChatMessage from "./message/ChatMessage.svelte";
+  import ChatMessage from "./message/ChatMessage.svelte";
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
   import { page } from "$app/state";
-  import toast from "svelte-french-toast";
   import { Button } from "@fuxui/base";
 
   import IconTablerArrowDown from "~icons/tabler/arrow-down";
   import { LiveQuery } from "$lib/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { Ulid } from "$lib/workers/encoding";
-  import ChatMessage from "./message/ChatMessage.svelte";
 
   let {
     threading,
@@ -32,6 +30,9 @@
     authorHandle: string;
     authorName: string;
     authorAvatar: string;
+    masqueradeSource?: string;
+    masqueradeAuthor?: string;
+    masqueradeTimestamp?: string;
   };
 
   let query = new LiveQuery<Message>(
@@ -40,13 +41,18 @@
         format_ulid(c.entity) as id,
         cast(data as text) as content,
         a.author as authorDid,
-        p.handle as authorHandle,
-        p.display_name as authorName,
-        p.avatar as authorAvatar
+        'todo' as authorHandle,
+        'todo' as authorAvatar,
+        -- p.handle as authorHandle,
+        -- p.avatar as authorAvatar,
+        o.source as masqueradeSource,
+        o.author as masqueradeAuthor,
+        o.timestamp as masqueradeTimestamp
       from entities e
         join comp_content c on c.entity = e.ulid
         join comp_author a on a.entity = e.ulid
-        join profiles p on p.did = a.author
+        -- join profiles p on p.did = a.author
+        left join comp_override_meta o on o.entity = e.ulid
       where e.parent = ${page.params.object && Ulid.enc(page.params.object)}
       order by c.entity
     `,
@@ -73,7 +79,6 @@
 
   function handleScroll() {
     // if (!viewport || !virtualizer) return;
-
     // const { scrollTop, scrollHeight, clientHeight } = viewport;
     // const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 500;
     // isAtBottom = isNearBottom;

@@ -122,6 +122,7 @@ class Backend {
   }
 
   constructor() {
+    console.log("Starting roomy backend");
     this.#oauthReady = new Promise((r) => (this.#resolveOauthReady = r));
     createOauthClient().then((client) => {
       this.setOauthClient(client);
@@ -293,18 +294,19 @@ function connectMessagePort(port: MessagePortApi) {
       return await sqliteWorker.runQuery(statement);
     },
     async createLiveQuery(id, port, statement) {
+      await sqliteWorkerReady;
+
       liveQueries.set(id, { port, statement });
       const channel = new MessageChannel();
       channel.port1.onmessage = (ev) => {
         port.postMessage(ev.data);
       };
-      navigator.locks.request(id, () => {
+      navigator.locks.request(id, async () => {
         // When we obtain a lock to the query ID, that means that the query is no longer in
         // use and we can delete it.
         liveQueries.delete(id);
-        sqliteWorker?.deleteLiveQuery(id);
+        await sqliteWorker?.deleteLiveQuery(id);
       });
-      await sqliteWorkerReady;
       if (!sqliteWorker) throw new Error("Sqlite worker not initialized");
       return await sqliteWorker.createLiveQuery(id, channel.port2, statement);
     },
@@ -490,7 +492,7 @@ async function initializeLeafClient(client: LeafClient) {
   });
   client.on("event", (event) => {
     if (event.stream == state.personalSpaceMaterializer?.streamId) {
-      state.personalSpaceMaterializer.handleEvent(event);
+      state.personalSpaceMaterializer.handleEvents([event]);
     }
     state.openSpacesMaterializer?.handleEvent(event);
   });
@@ -524,7 +526,8 @@ class OpenSpacesMaterializer {
     sqliteWorker.createLiveQuery(
       this.#liveQueryId,
       channel.port2,
-      sql`select id from spaces where stream = ${Hash.enc(this.#streamId)} and hidden = 0`,
+      sql`-- backend space list
+      select id from spaces where stream = ${Hash.enc(this.#streamId)} and hidden = 0`,
     );
   }
 
@@ -550,7 +553,7 @@ class OpenSpacesMaterializer {
   handleEvent(event: IncomingEvent) {
     const materializer = this.#spaceMaterializers.get(event.stream);
     if (materializer) {
-      materializer.handleEvent(event);
+      materializer.handleEvents([event]);
     }
   }
 
@@ -562,6 +565,10 @@ class OpenSpacesMaterializer {
 export type SqlStatement = {
   sql: string;
   params?: BindingSpec;
+  /** If this is true, the query will not be pre-compiled and cached. Use this when you have to
+   * substitute strings into the sql query instead of using params, because that will mess up the
+   * cache which must be indexed by the SQL. */
+  noCache?: boolean;
 };
 
 export type StreamEvent = {
@@ -576,7 +583,7 @@ export type MaterializerConfig = {
     sqliteWorker: SqliteWorkerInterface,
     agent: Agent,
     streamId: string,
-    event: StreamEvent,
+    events: StreamEvent[],
   ) => Promise<void>;
 };
 
@@ -589,7 +596,7 @@ class StreamMaterializer {
     sqliteWorker: SqliteWorkerInterface,
     agent: Agent,
     streamId: string,
-    event: StreamEvent,
+    events: StreamEvent[],
   ) => Promise<void>;
 
   get streamId() {
@@ -606,77 +613,110 @@ class StreamMaterializer {
 
     // Start backfilling the stream events
     this.#backfilling = true;
-    (async () => {
-      if (!state.leafClient) throw "No leaf client";
-      if (!sqliteWorker) throw "No Sqlite worker";
-      const entry = await db.streamCursors.get(this.#streamid);
-      this.#latestEvent = entry?.latestEvent || 0;
-      console.log("latestevent", this.#latestEvent);
+    navigator.locks.request(
+      "MaterializerStreamInit",
+      (async () => {
+        if (!state.leafClient) throw "No leaf client";
+        if (!sqliteWorker) throw "No Sqlite worker";
+        const entry = await db.streamCursors.get(this.#streamid);
+        this.#latestEvent = entry?.latestEvent || 0;
+        console.log("latestevent", this.#latestEvent);
 
-      // Initialize the database schema. This is assumed to be idempotent.
-      for (const statement of config.initSql) {
-        await sqliteWorker.runQuery(statement);
-      }
+        // Initialize the database schema. This is assumed to be idempotent.
+        console.time("initSql");
+        sqliteWorker.runSavepoint({ name: "init", items: config.initSql });
+        console.timeEnd("initSql");
 
-      // Backfill events
-      console.log("Backfilling stream:", this.#streamid);
-      let iteration = 0;
-      while (true) {
-        iteration += 1;
-        const newEvents = await state.leafClient.fetchEvents(this.#streamid, {
-          offset: this.#latestEvent + 1,
-          limit: Math.min(100 + 100 * iteration, 1000),
-        });
-        console.log(`    Fetched batch of ${newEvents.length} events`);
-        for (const event of newEvents) {
-          await this.#materializeEvent(event);
+        // Backfill events
+        console.time("backfill");
+        console.log("Backfilling stream:", this.#streamid);
+        let previousMaterializationPromise: undefined | Promise<void>;
+        let fetchCursor = this.#latestEvent + 1;
+        while (true) {
+          console.time("fetchBatch");
+          console.log("fetching");
+
+          const batchSize = 2500;
+          const newEvents = await state.leafClient.fetchEvents(this.#streamid, {
+            offset: fetchCursor,
+            limit: batchSize,
+          });
+          fetchCursor += batchSize;
+          console.timeEnd("fetchBatch");
+
+          console.log(
+            `    Fetched batch of ${newEvents.length} events. latest event so far: ${this.#latestEvent}`,
+          );
+
+          await previousMaterializationPromise;
+
+          console.log("Materializing new events");
+          previousMaterializationPromise = this.#materializeEvents(newEvents);
+          if (newEvents.length == 0) break;
         }
-        if (newEvents.length == 0) break;
-      }
 
-      // Finish off any events that have come in while we are backfilling
-      while (true) {
-        const event = this.#queue.shift();
-        if (!event) break;
-        await this.#materializeEvent(event);
-      }
+        console.log("waiting or one last time");
+        await previousMaterializationPromise;
 
-      console.log("Done backfilling");
-      this.#backfilling = false;
-    }).bind(this)();
+        // Finish off any events that have come in while we are backfilling
+        console.log("Materializing events in the queue ");
+        await this.#materializeEvents(this.#queue);
+
+        console.timeEnd("backfill");
+
+        console.log("Done backfilling");
+        this.#backfilling = false;
+      }).bind(this),
+    );
   }
 
-  async handleEvent(event: StreamEvent) {
+  async handleEvents(events: StreamEvent[]) {
     // If we're in the middle of backfilling
     if (this.#backfilling) {
       // Queue this event for later
-      this.#queue.push(event);
+      this.#queue = [...this.#queue, ...events];
     } else {
       // Materialize the event
-      await this.#materializeEvent(event);
+      await this.#materializeEvents(events);
     }
   }
 
-  async #materializeEvent(event: StreamEvent) {
+  async #materializeEvents(events: StreamEvent[]) {
     if (!sqliteWorker) throw "No Sqlite worker";
     if (!state.agent) throw "No ATProto agent";
+    if (events.length == 0) return;
     if (this.#latestEvent == undefined) throw "latest event not initialized";
-    if (event.idx != (this.#latestEvent || 0) + 1) throw "Unexpected event IDX";
+
+    // Make sure that the events are sequential
+    for (let i = 0; i < events.length; i++) {
+      if (i == 0) {
+        if (events[i]!.idx !== (this.#latestEvent || 0) + 1) {
+          throw new Error(
+            `Unexpected event IDX. Latest event is ${this.#latestEvent} next event is ${events[i]?.idx}`,
+          );
+        }
+      } else {
+        if (events[i]!.idx !== events[i - 1]!.idx + 1)
+          throw new Error(
+            `Unexpected event IDX. Previous event is ${events[i - 1]?.idx} next event is ${events[i]?.idx}`,
+          );
+      }
+    }
 
     try {
       await this.#materializer(
         sqliteWorker,
         state.agent,
         this.#streamid,
-        event,
+        events,
       );
+      this.#latestEvent = events[events.length - 1]!.idx;
     } catch (e) {
-      console.warn(
-        `Could not materialize event ${event.idx} in stream ${this.#streamid}`,
+      console.error(
+        `Could not materialize events ${events[0]?.idx} through ${events[events.length - 1]?.idx} in stream ${this.#streamid}`,
       );
-      console.warn(e);
+      console.error(e);
     }
-    this.#latestEvent += 1;
     await db.streamCursors.put({
       streamId: this.#streamid,
       latestEvent: this.#latestEvent,

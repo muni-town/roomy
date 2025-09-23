@@ -8,32 +8,36 @@ export class LiveQuery<Row extends { [key: string]: unknown }> {
   #statement: SqlStatement = { sql: "" };
 
   constructor(statement: () => SqlStatement, mapper?: (row: any) => Row) {
+    const instanceId = "live-query-instance-" + crypto.randomUUID();
+
     $effect(() => {
-      const id = crypto.randomUUID();
-      const channel = new MessageChannel();
-      channel.port1.onmessage = (ev) => {
-        const data: LiveQueryMessage = ev.data;
-        if ("error" in data) {
-          this.error = data.error;
-          console.warn(
-            `Sqlite error in live query (${this.#statement.sql}): ${this.error}`,
-          );
-        } else if ("rows" in data) {
-          this.result = (data as { rows: Row[] }).rows.map(
-            mapper || ((x) => x),
-          );
-          this.error = undefined;
-        }
-      };
+      const id = `live-query-${crypto.randomUUID()}`;
+      let dropLock: () => void = () => {};
+      const lockPromise = new Promise((r) => (dropLock = r as any));
 
       this.#statement = statement();
 
-      // Obtain a lock to this query so that the shared worker can know when a live query is
-      // no longer needed and it can destroy it.
-      let dropLock: () => void = () => {};
-      navigator.locks.request(id, async (_lock) => {
-        backend.createLiveQuery(id, channel.port2, this.#statement);
-        await new Promise((r) => (dropLock = r as any));
+      navigator.locks.request(instanceId, async () => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = (ev) => {
+          const data: LiveQueryMessage = ev.data;
+          if ("error" in data) {
+            this.error = data.error;
+            console.warn(
+              `Sqlite error in live query (${this.#statement.sql}): ${this.error}`,
+            );
+          } else if ("rows" in data) {
+            this.result = (data as { rows: Row[] }).rows.map(
+              mapper || ((x) => x),
+            );
+            this.error = undefined;
+          }
+        };
+
+        navigator.locks.request(id, async (_lock) => {
+          backend.createLiveQuery(id, channel.port2, this.#statement);
+          await lockPromise;
+        });
       });
 
       return () => {

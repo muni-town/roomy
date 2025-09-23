@@ -9,5 +9,10 @@
 		"**/.retool_types/**": true,
 		".cache": true,
 		"retool.config.json": true
-	}
+	},
+	"cSpell.words": [
+		"materializer",
+		"Materializers",
+		"savepoint"
+	]
 }

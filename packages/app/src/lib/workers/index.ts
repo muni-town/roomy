@@ -65,6 +65,11 @@ export type BackendInterface = {
   addClient(port: MessagePort): Promise<void>;
 };
 
+export type Savepoint = {
+  name: string;
+  items: (SqlStatement | Savepoint)[];
+};
+
 export type SqliteWorkerInterface = {
   createLiveQuery(
     id: string,
@@ -73,6 +78,7 @@ export type SqliteWorkerInterface = {
   ): Promise<void>;
   deleteLiveQuery(id: string): Promise<void>;
   runQuery(statement: SqlStatement): Promise<QueryResult>;
+  runSavepoint(savepoint: Savepoint): Promise<void>;
 };
 
 // Initialize shared worker
