@@ -1,0 +1,12 @@
+
+:80 {
+  handle /oauth-client.json {
+    respond `{$OAUTH_CLIENT_JSON}`
+  }
+
+  handle {
+    root * /usr/share/caddy
+    file_server
+    try_files {path} /
+  }
+}
