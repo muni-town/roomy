@@ -24,6 +24,27 @@ export const lexicons: LexiconDoc[] = [
   },
   {
     lexicon: 1,
+    id: "space.roomy.stream.dev",
+    defs: {
+      main: {
+        type: "record",
+        record: {
+          type: "object",
+          properties: {
+            version: {
+              type: "integer",
+              const: 1,
+            },
+            id: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    lexicon: 1,
     id: "space.roomy.image",
     defs: {
       main: {

@@ -186,10 +186,12 @@ class Backend {
       });
 
       if (!this.#leafClient) {
+        const leafUrl =
+          import.meta.env.VITE_LEAF_URL || "https://leaf-dev.muni.town";
         this.setLeafClient(
-          new LeafClient("http://localhost:5530", async () => {
+          new LeafClient(leafUrl, async () => {
             const resp = await this.agent?.com.atproto.server.getServiceAuth({
-              aud: "did:web:localhost:5530",
+              aud: `did:web:${new URL(leafUrl).host}`,
             });
             if (!resp) throw "Error authenticating for leaf server";
             return resp.data.token;
@@ -449,12 +451,13 @@ async function initializeLeafClient(client: LeafClient) {
     console.log("Leaf: authenticated as", did);
 
     if (!state.agent) throw new Error("ATProto agent not initialized");
+    const streamNsid = import.meta.env.VITE_STREAM_NSID || "space.roomy.stream.dev";
 
     // Get the user's personal space ID
     let streamId: string;
     try {
       const resp1 = await state.agent.com.atproto.repo.getRecord({
-        collection: "space.roomy.stream",
+        collection: streamNsid,
         repo: did,
         rkey: "self",
       });
@@ -470,7 +473,7 @@ async function initializeLeafClient(client: LeafClient) {
       );
       console.log("Created new stream:", streamId);
       const resp2 = await state.agent.com.atproto.repo.putRecord({
-        collection: "space.roomy.stream",
+        collection: streamNsid,
         record: { id: streamId, version: 1 },
         repo: state.agent.assertDid,
         rkey: "self",
