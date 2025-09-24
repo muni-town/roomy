@@ -3,13 +3,12 @@
   import ChatInputArea from "./ChatInputArea.svelte";
 
   const threading = $state({ active: false, selectedMessages: [], name: "" });
-
 </script>
 
-<div class="flex flex-col flex-1 overflow-hidden">
-  <ChatArea
-    {threading}
-  />
+<div class="flex flex-col flex-1 h-full min-h-0 justify-stretch">
+  <ChatArea {threading} />
 
-  <ChatInputArea {threading} />
+  <div class="shrink-0">
+    <ChatInputArea {threading} />
+  </div>
 </div>

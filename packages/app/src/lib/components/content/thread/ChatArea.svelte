@@ -134,8 +134,8 @@
   </Button>
 {/if}
 
-<div class="relative h-full">
-  <ScrollArea.Root type="scroll" class="h-full overflow-hidden">
+<div class="grow min-h-0">
+  <ScrollArea.Root type="auto" class="h-full overflow-hidden">
     <!-- Important: This area takes the place of the chat which pushes chat offscreen
         which allows it to load then pop into place once the spinner is gone. -->
     <!-- {#if !messagesLoaded}
@@ -210,7 +210,7 @@
       class="flex h-full w-2.5 touch-none select-none rounded-full border-l border-l-transparent p-px transition-all hover:w-3 hover:bg-dark-10 mr-1"
     >
       <ScrollArea.Thumb
-        class="relative flex-1 rounded-full bg-base-300 transition-opacity"
+        class="relative flex-1 rounded-full bg-accent-300 dark:bg-accent-950 transition-opacity"
       />
     </ScrollArea.Scrollbar>
     <ScrollArea.Corner />
