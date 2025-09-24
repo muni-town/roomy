@@ -27,9 +27,9 @@
     id: string;
     content: string;
     authorDid: string;
-    authorHandle: string;
-    authorName: string;
-    authorAvatar: string;
+    authorName?: string;
+    authorHandle?: string;
+    authorAvatar?: string;
     masqueradeSource?: string;
     masqueradeAuthor?: string;
     masqueradeTimestamp?: string;
@@ -43,15 +43,16 @@
         a.author as authorDid,
         'todo' as authorHandle,
         'todo' as authorAvatar,
-        -- p.handle as authorHandle,
-        -- p.avatar as authorAvatar,
+        p.display_name as authorName,
+        p.handle as authorHandle,
+        p.avatar as authorAvatar,
         o.source as masqueradeSource,
         o.author as masqueradeAuthor,
         o.timestamp as masqueradeTimestamp
       from entities e
         join comp_content c on c.entity = e.ulid
         join comp_author a on a.entity = e.ulid
-        -- join profiles p on p.did = a.author
+        left join profiles p on p.did = a.author
         left join comp_override_meta o on o.entity = e.ulid
       where e.parent = ${page.params.object && Ulid.enc(page.params.object)}
       order by c.entity

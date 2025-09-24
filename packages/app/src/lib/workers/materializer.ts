@@ -413,38 +413,38 @@ async function ensureProfile(
   agent: Agent,
   member: CodecType<typeof GroupMember>,
 ): Promise<SqlStatement[]> {
-  // try {
-  //   if (member.tag == "user") {
-  //     const did = member.value;
-  //     const profileFromDb = await sqliteWorker.runQuery(
-  //       sql`select 1 from profiles where did = ${did}`,
-  //     );
-  //     if (profileFromDb.rows?.length) {
-  //       // The profile is already in the DB so we don't need to update it.
-  //       return [];
-  //     }
+  try {
+    if (member.tag == "user") {
+      const did = member.value;
+      const profileFromDb = await sqliteWorker.runQuery(
+        sql`select 1 from profiles where did = ${did}`,
+      );
+      if (profileFromDb.rows?.length) {
+        // The profile is already in the DB so we don't need to update it.
+        return [];
+      }
 
-  //     const profile = await agent.getProfile({ actor: did });
-  //     if (!profile.success) return [];
-  //     // FIXME: troubleshoot the fact that we are somehow making extraneous profile requests to the
-  //     // atproto PDS in the backend worker.
-  //     return [
-  //       sql`
-  //       insert or ignore into profiles (did, handle, display_name, avatar)
-  //       values (
-  //          ${did},
-  //          ${profile.data.handle},
-  //          ${profile.data.displayName},
-  //          ${profile.data.avatar}
-  //       )
-  //     `,
-  //     ];
-  //   } else {
-  //     return [];
-  //   }
-  // } catch (e) {
-  //   console.error("Could not ensure profile");
-  //   return [];
-  // }
-  return [];
+      const profile = await agent.getProfile({ actor: did });
+      if (!profile.success) return [];
+      // FIXME: troubleshoot the fact that we are somehow making extraneous profile requests to the
+      // atproto PDS in the backend worker.
+      return [
+        sql`
+        insert or ignore into profiles (did, handle, display_name, avatar)
+        values (
+           ${did},
+           ${profile.data.handle},
+           ${profile.data.displayName},
+           ${profile.data.avatar}
+        )
+      `,
+      ];
+    } else {
+      return [];
+    }
+  } catch (e) {
+    console.error("Could not ensure profile");
+    return [];
+  }
+  // return [];
 }
