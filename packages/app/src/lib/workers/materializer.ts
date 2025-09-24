@@ -15,7 +15,7 @@ import {
 import schemaSql from "./db/schema.sql?raw";
 import { decodeTime } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
-import type { Savepoint, SqliteWorkerInterface } from ".";
+import type { SqliteWorkerInterface } from ".";
 import type { Agent } from "@atproto/api";
 
 export type EventType = ReturnType<(typeof eventCodec)["dec"]>;
