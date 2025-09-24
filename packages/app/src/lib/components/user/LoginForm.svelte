@@ -16,6 +16,8 @@
 
     if (loading) return;
 
+    localStorage.setItem("redirect-after-login", window.location.href);
+
     loading = true;
     error = null;
 

@@ -10,8 +10,8 @@
     backend
       .oauthCallback(searchParams.toString())
       .then(() => {
-        // TODO remember location to redirect back to.
-        window.location.href = "/";
+        window.location.href =
+          localStorage.getItem("redirect-after-login") || "/";
         localStorage.setItem("just-logged-in", "1");
       })
       .catch((e) => {
