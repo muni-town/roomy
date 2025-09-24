@@ -406,7 +406,7 @@ async function createOauthClient(): Promise<OAuthClient> {
   if (import.meta.env.DEV) {
     // Get the base URL and redirect URL for this deployment
     if (globalThis.location.hostname == "localhost")
-      globalThis.location.hostname = "127.0.0.1";
+      throw new Error("hostname must be 127.0.0.1 if local");
     const baseUrl = new URL(`http://127.0.0.1:${globalThis.location.port}`);
     baseUrl.hash = "";
     baseUrl.pathname = "/";
@@ -451,7 +451,8 @@ async function initializeLeafClient(client: LeafClient) {
     console.log("Leaf: authenticated as", did);
 
     if (!state.agent) throw new Error("ATProto agent not initialized");
-    const streamNsid = import.meta.env.VITE_STREAM_NSID || "space.roomy.stream.dev";
+    const streamNsid =
+      import.meta.env.VITE_STREAM_NSID || "space.roomy.stream.dev";
 
     // Get the user's personal space ID
     let streamId: string;
