@@ -37,6 +37,10 @@ export async function materializer(
 ): Promise<void> {
   console.time("convert");
   const batch: SqlStatement[][] = [];
+
+  // reset ensured flags for each new batch
+  ensuredProfiles = new Set();
+
   for (const incoming of events) {
     try {
       // Decode the event payload
@@ -408,6 +412,14 @@ function ensureEntity(
   `;
 }
 
+/** When mapping incoming events to SQL, 'ensureProfile' checks whether a DID
+ * exists in the profiles table. If not, it makes an API call to bsky to get some
+ * basic info, and then returns SQL to add it to the profiles table. Rather than
+ * inserting it immediately and breaking transaction atomicity, this is just a set
+ * of flags to indicate that the profile doesn't need to be re-fetched.
+ */
+let ensuredProfiles = new Set();
+
 async function ensureProfile(
   sqliteWorker: SqliteWorkerInterface,
   agent: Agent,
@@ -416,6 +428,10 @@ async function ensureProfile(
   try {
     if (member.tag == "user") {
       const did = member.value;
+      if (ensuredProfiles.has(did)) {
+        // The profile has already been fetched and the statement to insert it is in the batch
+        return [];
+      }
       const profileFromDb = await sqliteWorker.runQuery(
         sql`select 1 from profiles where did = ${did}`,
       );
@@ -425,12 +441,15 @@ async function ensureProfile(
       }
 
       const profile = await agent.getProfile({ actor: did });
+
+      ensuredProfiles.add(did);
+
       if (!profile.success) return [];
       // FIXME: troubleshoot the fact that we are somehow making extraneous profile requests to the
       // atproto PDS in the backend worker.
       return [
         sql`
-        insert or ignore into profiles (did, handle, display_name, avatar)
+        insert into profiles (did, handle, display_name, avatar)
         values (
            ${did},
            ${profile.data.handle},
@@ -446,5 +465,4 @@ async function ensureProfile(
     console.error("Could not ensure profile");
     return [];
   }
-  // return [];
 }
