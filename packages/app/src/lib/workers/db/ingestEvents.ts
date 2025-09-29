@@ -1,6 +1,5 @@
-import type { CompPage } from "$lib/db/types/components";
-import type { EdgeLabel } from "$lib/db/types/edges";
-import type { EntityId, EntityLabel } from "$lib/db/types/entities";
+import type { EdgeLabel } from "./types/edges";
+import type { EntityId, EntityLabel } from "./types/entities";
 import { base32crockford } from "@scure/base";
 import type {
   AnyEvent,
@@ -27,7 +26,7 @@ import type {
   UploadStartEvent,
   UserCreateEvent,
   UserSubscribeThreadEvent,
-} from "../lib/db/types/events";
+} from "./types/events";
 import { executeQuery } from "./setup-sqlite";
 
 function encodeJsonToBlob(data: unknown): Uint8Array {
