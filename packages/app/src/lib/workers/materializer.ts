@@ -29,6 +29,9 @@ export const config: MaterializerConfig = {
   materializer,
 };
 
+/** Map a batch of incoming events to SQL that applies the event to the entities,
+ * components and edges, then execute them all as a single transaction.
+ */
 export async function materializer(
   sqliteWorker: SqliteWorkerInterface,
   agent: Agent,
@@ -53,7 +56,7 @@ export async function materializer(
         agent,
         user: incoming.user,
         event,
-        variant: event.variant.data,
+        data: event.variant.data,
       } as never);
 
       batch.push(statements);
@@ -80,6 +83,7 @@ type EventVariant<K extends EventVariantStr> = Extract<
   { kind: K }
 >["data"];
 
+/** SQL mapping for each event variant */
 const materializers: {
   [K in EventVariantStr]: (opts: {
     sqliteWorker: SqliteWorkerInterface;
@@ -87,25 +91,25 @@ const materializers: {
     agent: Agent;
     user: string;
     event: Event;
-    variant: EventVariant<K>;
+    data: EventVariant<K>;
   }) => Promise<SqlStatement[]>;
 } = {
   // Space
-  "space.roomy.space.join.0": async ({ streamId, variant }) => [
+  "space.roomy.space.join.0": async ({ streamId, data }) => [
     sql`
       insert into spaces (id, stream)
       values (
-        ${Hash.enc(variant.spaceId)},
+        ${Hash.enc(data.spaceId)},
         ${Hash.enc(streamId)}
       )
       on conflict do update set hidden = 0
     `,
   ],
-  "space.roomy.space.leave.0": async ({ streamId, variant }) => [
+  "space.roomy.space.leave.0": async ({ streamId, data }) => [
     sql`
       update spaces set hidden = 1
       where
-        id = ${Hash.enc(variant.spaceId)}
+        id = ${Hash.enc(data.spaceId)}
           and
         stream = ${Hash.enc(streamId)}
     `,
@@ -116,36 +120,36 @@ const materializers: {
     sqliteWorker,
     agent,
     streamId,
-    variant,
+    data,
   }) => [
-    ...(await ensureProfile(sqliteWorker, agent, {
-      tag: "user",
-      value: variant.adminId,
-    })),
-    sql`
+      ...(await ensureProfile(sqliteWorker, agent, {
+        tag: "user",
+        value: data.adminId,
+      })),
+      sql`
       insert into space_admins (space_id, admin_id)
       values (
         ${Hash.enc(streamId)},
-        ${variant.adminId}
+        ${data.adminId}
       )
     `,
-  ],
-  "space.roomy.admin.remove.0": async ({ streamId, variant }) => [
+    ],
+  "space.roomy.admin.remove.0": async ({ streamId, data }) => [
     sql`
       delete from space_admins
       where 
         space_id = ${Hash.enc(streamId)}
           and
-        admin_id = ${variant.adminId}
+        admin_id = ${data.adminId}
     `,
   ],
 
   // Info
-  "space.roomy.info.0": async ({ streamId, event, variant }) => {
+  "space.roomy.info.0": async ({ streamId, event, data }) => {
     const updates = [
-      { key: "name", ...variant.name },
-      { key: "avatar", ...variant.avatar },
-      { key: "description", ...variant.description },
+      { key: "name", ...data.name },
+      { key: "avatar", ...data.avatar },
+      { key: "description", ...data.description },
     ];
     const setUpdates = updates.filter((x) => x.tag == "set");
 
@@ -210,22 +214,22 @@ const materializers: {
     streamId,
     event,
     agent,
-    variant,
+    data,
   }) => [
-    ensureEntity(streamId, event.ulid, event.parent),
-    ...(await ensureProfile(sqliteWorker, agent, variant.member_id)),
-    {
-      sql: event.parent
-        ? `insert into comp_room_members (room, member, access) values (?, ?, ?)`
-        : `insert into space_members (space_id, member, access) values (?, ?, ?)`,
-      params: [
-        event.parent ? Ulid.enc(event.parent) : Hash.enc(streamId),
-        GroupMember.enc(variant.member_id),
-        ReadOrWrite.enc(variant.access),
-      ],
-    },
-  ],
-  "space.roomy.room.member.remove.0": async ({ streamId, event, variant }) => [
+      ensureEntity(streamId, event.ulid, event.parent),
+      ...(await ensureProfile(sqliteWorker, agent, data.member_id)),
+      {
+        sql: event.parent
+          ? `insert into comp_room_members (room, member, access) values (?, ?, ?)`
+          : `insert into space_members (space_id, member, access) values (?, ?, ?)`,
+        params: [
+          event.parent ? Ulid.enc(event.parent) : Hash.enc(streamId),
+          GroupMember.enc(data.member_id),
+          ReadOrWrite.enc(data.access),
+        ],
+      },
+    ],
+  "space.roomy.room.member.remove.0": async ({ streamId, event, data }) => [
     ensureEntity(streamId, event.ulid, event.parent),
     {
       sql: event.parent
@@ -233,8 +237,8 @@ const materializers: {
         : "delete from space_members where space_id = ? and member = ? and access = ?",
       params: [
         event.parent ? Ulid.enc(event.parent) : Hash.enc(streamId),
-        GroupMember.enc(variant.member_id),
-        ReadOrWrite.enc(variant.access),
+        GroupMember.enc(data.member_id),
+        ReadOrWrite.enc(data.access),
       ],
     },
   ],
@@ -246,7 +250,7 @@ const materializers: {
     user,
     event,
     agent,
-    variant,
+    data,
   }) => {
     const statements = [
       ensureEntity(streamId, event.ulid, event.parent),
@@ -258,8 +262,8 @@ const materializers: {
         insert into comp_content (entity, mime_type, data)
         values (
           ${Ulid.enc(event.ulid)},
-          ${variant.content.mimeType},
-          ${variant.content.content}
+          ${data.content.mimeType},
+          ${data.content.content}
         )`,
       sql`
         insert into comp_author (entity, author)
@@ -269,29 +273,29 @@ const materializers: {
         )`,
     ];
 
-    if (variant.replyTo) {
+    if (data.replyTo) {
       statements.push(sql`
         insert into comp_reply (entity, reply_to)
         values (
           ${Ulid.enc(event.ulid)},
-          ${Ulid.enc(variant.replyTo)}
+          ${Ulid.enc(data.replyTo)}
         )
       `);
     }
 
     return statements;
   },
-  "space.roomy.message.edit.0": async ({ streamId, event, variant }) => [
+  "space.roomy.message.edit.0": async ({ streamId, event, data }) => [
     ensureEntity(streamId, event.ulid, event.parent),
     sql`
       update comp_content
       set 
-        mime_type = ${variant.content.mimeType},
-        data = ${variant.content.content}
+        mime_type = ${data.content.mimeType},
+        data = ${data.content.content}
       where entity = ${Ulid.enc(event.ulid)}
     `,
   ],
-  "space.roomy.message.overrideMeta.0": async ({ event, variant }) => {
+  "space.roomy.message.overrideMeta.0": async ({ event, data }) => {
     if (!event.parent) {
       console.warn("Missing target for message meta override.");
       return [];
@@ -301,9 +305,9 @@ const materializers: {
         insert or replace into comp_override_meta (entity, source, author, timestamp)
         values (
           ${Ulid.enc(event.parent)},
-          ${variant.source},
-          ${variant.author},
-          ${variant.timestamp}
+          ${data.source},
+          ${data.author},
+          ${data.timestamp}
         )`,
     ];
   },
@@ -316,14 +320,14 @@ const materializers: {
   },
 
   // Reaction
-  "space.roomy.reaction.create.0": async ({ streamId, event, variant }) => [
+  "space.roomy.reaction.create.0": async ({ streamId, event, data }) => [
     ensureEntity(streamId, event.ulid, event.parent),
     sql`
       insert into comp_reaction (entity, reaction_to, reaction)
       values (
         ${Ulid.enc(event.ulid)},
-        ${Ulid.enc(variant.reaction_to)},
-        ${variant.reaction}
+        ${Ulid.enc(data.reaction_to)},
+        ${data.reaction}
       )
     `,
   ],
@@ -336,13 +340,13 @@ const materializers: {
   },
 
   // Media
-  "space.roomy.media.create.0": async ({ streamId, event, variant }) => [
+  "space.roomy.media.create.0": async ({ streamId, event, data }) => [
     ensureEntity(streamId, event.ulid, event.parent),
     sql`
       insert into comp_media (entity, uri)
       values (
         ${Ulid.enc(event.ulid)},
-        ${variant.uri}
+        ${data.uri}
       )
     `,
   ],
