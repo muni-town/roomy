@@ -46,7 +46,8 @@
 
       // Create a new stream for the space
       const spaceId = await backend.createStream(
-        "262f081583741b6a0e06564e45b7ad4fc13d06d4189863a3fab5e860b83541c9",
+        ulid(),
+        "128e499b08bf26bd3d2e6e73e1908330a11cbea57239f08bebb62a5e595a4fa5",
         "/leaf_module_public_read_write_admin_upgrade.wasm",
       );
 

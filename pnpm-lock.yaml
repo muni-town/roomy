@@ -98,8 +98,8 @@ importers:
         specifier: ^1.2.23
         version: 1.2.23
       '@muni-town/leaf-client':
-        specifier: 0.1.0-alpha.3
-        version: 0.1.0-alpha.3
+        specifier: 0.1.0-alpha.4
+        version: 0.1.0-alpha.4
       '@repo/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
@@ -835,8 +835,8 @@ packages:
     peerDependencies:
       svelte: '>=3 <5'
 
-  '@muni-town/leaf-client@0.1.0-alpha.3':
-    resolution: {integrity: sha512-KmvkQvAAqNj2YIzam1uWeUHQMCZWqQNv6MiBtmXfSiUBNTeBeavSTUEA9r46bmVWOzaVknG6XD7PncjkLnDy4g==}
+  '@muni-town/leaf-client@0.1.0-alpha.4':
+    resolution: {integrity: sha512-jzBlIMqU86AybfiNKg22jQ9UTAc5GZdrBy50KMKmNWt6DfUB9K18C+ehl6AuSlxdCsGvZlHFCOEAwAJvjphc1w==}
 
   '@noble/ciphers@1.3.0':
     resolution: {integrity: sha512-2I0gnIVPtfnMw9ee9h1dJG7tp81+8Ob3OJb3Mv37rx5L40/b0i7djjCVvGOVqc9AEIQyvyu1i6ypKdFw8R8gQw==}
@@ -4365,7 +4365,7 @@ snapshots:
       nanoid: 5.1.5
       svelte: 5.38.10
 
-  '@muni-town/leaf-client@0.1.0-alpha.3':
+  '@muni-town/leaf-client@0.1.0-alpha.4':
     dependencies:
       socket.io-client: 4.8.1
       socket.io-msgpack-parser: 3.0.2

@@ -55,6 +55,7 @@ export type BackendInterface = {
   pauseSubscription(streamId: string): Promise<void>;
   unpauseSubscription(streamId: string): Promise<void>;
   createStream(
+    ulid: string,
     moduleId: string,
     moduleUrl: string,
     params?: ArrayBuffer,
