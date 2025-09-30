@@ -14,12 +14,12 @@ export type SpaceMeta = {
 
 export type SpaceTreeItem = { id: string; name: string } & (
   | {
-      type: "category";
-      children: SpaceTreeItem[];
-    }
+    type: "category";
+    children: SpaceTreeItem[];
+  }
   | {
-      type: "channel";
-    }
+    type: "channel";
+  }
 );
 
 /** The space list. */
@@ -45,7 +45,7 @@ $effect.root(() => {
         'description', description,
         'admins', (select json_group_array(admin_id) from space_admins where space_id = id)
       ) as json
-      from spaces
+      from comp_space
       where stream = ${backendStatus.personalStreamId && Hash.enc(backendStatus.personalStreamId)}
         and
       hidden = 0
