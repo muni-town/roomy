@@ -31,6 +31,7 @@ import { workerOauthClient } from "./oauth";
 import type { LiveQueryMessage } from "$lib/workers/setupSqlite";
 import { eventCodec, Hash } from "./encoding";
 import { sql } from "$lib/utils/sqlTemplate";
+import { ulid } from "ulidx";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -186,8 +187,7 @@ class Backend {
       });
 
       if (!this.#leafClient) {
-        const leafUrl =
-          import.meta.env.VITE_LEAF_URL || "https://leaf-dev.muni.town";
+        const leafUrl = import.meta.env.VITE_LEAF_URL;
         this.setLeafClient(
           new LeafClient(leafUrl, async () => {
             const resp = await this.agent?.com.atproto.server.getServiceAuth({
@@ -339,9 +339,10 @@ function connectMessagePort(port: MessagePortApi) {
         sqliteWorker.createLiveQuery(id, channel.port2, statement);
       }
     },
-    async createStream(moduleId, moduleUrl, params): Promise<string> {
+    async createStream(ulid, moduleId, moduleUrl, params): Promise<string> {
       if (!state.leafClient) throw new Error("Leaf client not initialized");
       return await state.leafClient.createStreamFromModuleUrl(
+        ulid,
         moduleId,
         moduleUrl,
         params || new ArrayBuffer(),
@@ -434,8 +435,6 @@ async function createOauthClient(): Promise<OAuthClient> {
   return workerOauthClient(clientMetadata);
 }
 
-const personalModuleId =
-  "74191e22741f299ae69b9f234b31832397ee29c18974eb82a934df827aa0516a";
 async function initializeLeafClient(client: LeafClient) {
   client.on("connect", async () => {
     console.log("Leaf: connected");
@@ -468,7 +467,8 @@ async function initializeLeafClient(client: LeafClient) {
     } catch (_) {
       console.log("Could not find existing stream ID on PDS");
       streamId = await client.createStreamFromModuleUrl(
-        personalModuleId,
+        ulid(),
+        "7aa8ae23d1d408569ea292dc62555c01b77dfef0b9be29ad86e54ee2f17dd02e",
         "/leaf_module_personal.wasm",
         new ArrayBuffer(),
       );
