@@ -346,6 +346,18 @@ function connectMessagePort(port: MessagePortApi) {
       );
       return events;
     },
+    async previewSpace(streamId) {
+      await sqliteWorkerReady;
+      if (!sqliteWorker) throw new Error("Sqlite worker not initialized");
+      if (!state.leafClient) throw 'Leaf client not initialized';
+      const previewMaterializer = new PreviewMaterializer(streamId, materializerConfig);
+      await previewMaterializer.fetchPreviewEvents();
+      const result = await sqliteWorker.runQuery(sql`
+        select * from comp_space where leaf_space_hash_id = ${Hash.enc(streamId)}
+      `)
+      console.log("result", result)
+      return new Promise(() => { name: "test" })
+    },
     async uploadImage(bytes, alt?: string) {
       if (!state.agent) throw new Error("Agent not initialized");
       const resp = await state.agent.com.atproto.repo.uploadBlob(
@@ -662,6 +674,9 @@ class StreamMaterializer {
             offset: fetchCursor,
             limit: batchSize,
           });
+
+          // we *could* insert the events into the events table here
+
           fetchCursor += batchSize;
           console.timeEnd("fetchBatch");
 
@@ -777,5 +792,108 @@ class StreamMaterializer {
       streamId: this.#personalStreamId,
       latestEvent: this.#latestEvent,
     });
+  }
+}
+
+class PreviewMaterializer {
+  #personalStreamId: string;
+  #materializer: (
+    sqliteWorker: SqliteWorkerInterface,
+    agent: Agent,
+    streamId: string,
+    events: StreamEvent[],
+  ) => Promise<void>;
+
+  get personalStreamId() {
+    return this.#personalStreamId;
+  }
+
+  constructor(streamId: string, config: MaterializerConfig) {
+    console.log("new materializer for ", streamId);
+    if (!state.leafClient) throw "No leaf client";
+    this.#personalStreamId = streamId;
+    this.#materializer = config.materializer;
+
+    state.leafClient.subscribe(this.#personalStreamId);
+
+    if (!sqliteWorker) throw "No Sqlite worker";
+
+    // Initialize the database schema. This is assumed to be idempotent.
+    console.time("initSql");
+    sqliteWorker.runSavepoint({ name: "init", items: config.initSql });
+    console.timeEnd("initSql");
+  }
+
+  // fetch a subset of the events for a space and return a concise preview
+  async fetchPreviewEvents() {
+    navigator.locks.request(
+      MATERIALIZER_LOCK,
+      (async () => {
+        if (!state.leafClient) throw "No leaf client";
+        if (!sqliteWorker) throw "No Sqlite worker";
+
+        // Backfill events
+        console.time("backfill");
+        console.log("Backfilling stream:", this.#personalStreamId);
+        let previousMaterializationPromise: undefined | Promise<void>;
+        console.time("fetchBatch");
+        console.log("fetching");
+
+        const batchSize = 100;
+        const newEvents = await state.leafClient.fetchEvents(this.#personalStreamId, {
+          offset: 1,
+          limit: batchSize,
+        });
+
+        // we *could* insert the events into the events table here
+
+        console.log(
+          `    Fetched batch of ${newEvents.length} events.`,
+        );
+
+        await previousMaterializationPromise;
+
+        console.log("Materializing new events");
+        previousMaterializationPromise = this.#materializeEvents(newEvents);
+
+        console.log("waiting or one last time");
+        await previousMaterializationPromise;
+
+        console.timeEnd("backfill");
+
+        console.log("Done backfilling");
+      }).bind(this),
+    );
+  }
+
+  async #materializeEvents(events: StreamEvent[]) {
+    if (!sqliteWorker) throw "No Sqlite worker";
+    if (!state.agent) throw "No ATProto agent";
+    if (events.length == 0) return;
+
+    // Make sure that the events are sequential
+    for (let i = 1; i < events.length; i++) {
+      const diff = events[i]!.idx - events[i - 1]!.idx;
+      if (diff != 1) {
+        console.warn(
+          `Unexpected event IDX. Previous event is ${events[i - 1]?.idx} next event is ${events[i]?.idx}. Triggering backfill instead.`,
+        );
+        return;
+      }
+    }
+
+    try {
+      await this.#materializer(
+        sqliteWorker,
+        state.agent,
+        this.#personalStreamId,
+        events,
+      );
+    } catch (e) {
+      console.error(
+        `Could not materialize events ${events[0]?.idx} through ${events[events.length - 1]?.idx} in stream ${this.#personalStreamId}`,
+      );
+      console.error(e);
+    }
   }
 }

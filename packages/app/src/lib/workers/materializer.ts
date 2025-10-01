@@ -13,7 +13,7 @@ import {
   Ulid,
 } from "./encoding";
 import schemaSql from "./db/schema.sql?raw";
-import { decodeTime } from "ulidx";
+import { decodeTime, ulid } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
 import type { SqliteWorkerInterface } from "./types";
 import type { Agent } from "@atproto/api";
@@ -128,12 +128,12 @@ const materializers: {
       ...(await ensureProfile(sqliteWorker, agent, {
         tag: "user",
         value: data.adminId,
-      })),
+      }, streamId)),
       sql`
       insert into edges (head, tail, label, payload)
       values (
-        ${Hash.enc(streamId)},
-        ${data.adminId},
+        (select entity from comp_space where leaf_space_hash_id = ${Hash.enc(streamId)}),
+        ${Ulid.enc(data.adminId)},
         'member'
         ${edgePayload({
         can: "admin"
@@ -186,7 +186,7 @@ const materializers: {
       values (
         ${Ulid.enc(event.ulid)},
         ${event.parent ? Ulid.enc(event.parent) : null}
-      )
+      ) on conflict do update set parent = excluded.parent
     `,
   ],
   "space.roomy.room.delete.0": async ({ event }) => {
@@ -210,7 +210,7 @@ const materializers: {
     data,
   }) => [
       ensureEntity(streamId, event.ulid, event.parent),
-      ...(await ensureProfile(sqliteWorker, agent, data.member_id)),
+      ...(await ensureProfile(sqliteWorker, agent, data.member_id, streamId)),
       {
         sql: event.parent
           ? `insert into comp_room_members (room, member, access) values (?, ?, ?)`
@@ -250,25 +250,19 @@ const materializers: {
       ...(await ensureProfile(sqliteWorker, agent, {
         tag: "user",
         value: user,
-      })),
+      }, streamId)),
       sql`
-        insert into comp_content (entity, mime_type, data)
+        insert or replace into comp_content (entity, mime_type, data)
         values (
           ${Ulid.enc(event.ulid)},
           ${data.content.mimeType},
           ${data.content.content}
-        )`,
-      sql`
-        insert into comp_author (entity, author)
-        values (
-          ${Ulid.enc(event.ulid)},
-          ${user}
-        )`,
+        )`
     ];
 
     if (data.replyTo) {
       statements.push(sql`
-        insert into comp_reply (entity, reply_to)
+        insert or replace into comp_reply (entity, reply_to)
         values (
           ${Ulid.enc(event.ulid)},
           ${Ulid.enc(data.replyTo)}
@@ -295,12 +289,11 @@ const materializers: {
     }
     return [
       sql`
-        insert or replace into comp_override_meta (entity, source, author, timestamp)
+        insert or replace into comp_override_meta (entity, author, timestamp)
         values (
           ${Ulid.enc(event.parent)},
-          ${data.source},
           ${data.author},
-          ${data.timestamp}
+          ${Number(data.timestamp)}
         )`,
     ];
   },
@@ -358,7 +351,10 @@ const materializers: {
       console.warn("Missing target for channel mark.");
       return [];
     }
-    return [sql`insert into comp_channel values (${Ulid.enc(event.parent)})`];
+    return [sql`
+      insert into comp_room (entity, label) values (${Ulid.enc(event.parent)}, 'channel')
+      on conflict do update set label = excluded.label
+      `];
   },
   "space.roomy.channel.unmark.0": async ({ event }) => {
     if (!event.parent) {
@@ -366,7 +362,7 @@ const materializers: {
       return [];
     }
     return [
-      sql`delete from comp_channel where entity = ${Ulid.enc(event.parent)}`,
+      sql`update comp_room (label) where entity = ${Ulid.enc(event.parent)} values (null)`,
     ];
   },
 
@@ -392,16 +388,16 @@ const materializers: {
 // UTILS
 
 function ensureEntity(
-  streamId: string,
+  personalStreamId: string,
   ulid: string,
   parent?: string,
 ): SqlStatement {
   const unixTimeMs = decodeTime(ulid);
   return sql`
-    insert into entities (ulid, stream, parent, created_at)
+    insert into entities (ulid, personal_stream_hash_id, parent, created_at)
     values (
       ${Ulid.enc(ulid)},
-      ${Hash.enc(streamId)},
+      ${Hash.enc(personalStreamId)},
       ${parent ? Ulid.enc(parent) : null},
       ${unixTimeMs}
     )
@@ -421,6 +417,7 @@ async function ensureProfile(
   sqliteWorker: SqliteWorkerInterface,
   agent: Agent,
   member: CodecType<typeof GroupMember>,
+  personalStreamId: string
 ): Promise<SqlStatement[]> {
   try {
     if (member.tag == "user") {
@@ -430,7 +427,7 @@ async function ensureProfile(
         return [];
       }
       const profileFromDb = await sqliteWorker.runQuery(
-        sql`select 1 from profiles where did = ${did}`,
+        sql`select 1 from comp_user where did = ${did}`,
       );
       if (profileFromDb.rows?.length) {
         // The profile is already in the DB so we don't need to update it.
@@ -441,19 +438,32 @@ async function ensureProfile(
 
       ensuredProfiles.add(did);
 
+      const userUlid = ulid();
+
       if (!profile.success) return [];
       // FIXME: troubleshoot the fact that we are somehow making extraneous profile requests to the
       // atproto PDS in the backend worker.
       return [
         sql`
-        insert into profiles (did, handle, display_name, avatar)
+          insert into entities (ulid, personal_stream_hash_id)
+          values (${Ulid.enc(userUlid)}, ${Hash.enc(personalStreamId)})
+          `,
+        sql`
+        insert into comp_user (entity, did, handle)
         values (
+           ${Ulid.enc(userUlid)},
            ${did},
-           ${profile.data.handle},
-           ${profile.data.displayName},
-           ${profile.data.avatar}
+           ${profile.data.handle}
         )
       `,
+        sql`
+          insert into comp_info (entity, name, avatar)
+          values (
+            ${Ulid.enc(userUlid)},
+            ${profile.data.displayName},
+            ${profile.data.avatar}
+          )
+          `
       ];
     } else {
       return [];
