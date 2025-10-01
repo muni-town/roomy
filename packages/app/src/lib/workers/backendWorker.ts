@@ -67,38 +67,8 @@ db.version(1).stores({
   streamCursors: `streamId`,
 });
 
-// TODO: This might be a horrible local storage shim. I don't know how it handles multiple tabs
-// open. Works for now... 🤞 We just need it so that the atproto/oauth-client-browser doesn't panic
-// because localStorage isn't defined.
-globalThis.localStorage = {
-  data: {} as { [key: string]: string },
-  persist() {
-    db.kv.put({ key: "localStorageShim", value: JSON.stringify(this.data) });
-  },
-  clear() {
-    this.data = {};
-  },
-  getItem(s: string): string | null {
-    return this.data[s] || null;
-  },
-  key(idx: number): string | null {
-    return (Object.values(this.data)[idx] as string | undefined) || null;
-  },
-  get length(): number {
-    return Object.values(this.data).length;
-  },
-  removeItem(key: string) {
-    this.data[key] = undefined;
-    this.persist();
-  },
-  setItem(key: string, value: string) {
-    this.data[key] = value;
-    this.persist();
-  },
-};
-
 export let sqliteWorker: SqliteWorkerInterface | undefined;
-let setSqliteWorkerReady = () => {};
+let setSqliteWorkerReady = () => { };
 const sqliteWorkerReady = new Promise(
   (r) => (setSqliteWorkerReady = r as () => void),
 );
@@ -117,7 +87,7 @@ class Backend {
   openSpacesMaterializer: OpenSpacesMaterializer | undefined;
 
   #oauthReady: Promise<void>;
-  #resolveOauthReady: () => void = () => {};
+  #resolveOauthReady: () => void = () => { };
   get ready() {
     return state.#oauthReady;
   }
