@@ -10,12 +10,12 @@ CREATE TABLE IF NOT EXISTS events (
 
 create table if not exists entities (
   ulid blob primary key, 
-  personal_stream_hash_id blob not null,
+  stream_hash_id blob not null,
   parent blob,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
-create index if not exists idx_entities_personal_stream_hash_id on entities (personal_stream_hash_id);
+create index if not exists idx_entities_stream_hash_id on entities (stream_hash_id);
 create index if not exists idx_entities_parent on entities (parent);
 
 CREATE TABLE IF NOT EXISTS edges (

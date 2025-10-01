@@ -388,16 +388,16 @@ const materializers: {
 // UTILS
 
 function ensureEntity(
-  personalStreamId: string,
+  streamId: string,
   ulid: string,
   parent?: string,
 ): SqlStatement {
   const unixTimeMs = decodeTime(ulid);
   return sql`
-    insert into entities (ulid, personal_stream_hash_id, parent, created_at)
+    insert into entities (ulid, stream_hash_id, parent, created_at)
     values (
       ${Ulid.enc(ulid)},
-      ${Hash.enc(personalStreamId)},
+      ${Hash.enc(streamId)},
       ${parent ? Ulid.enc(parent) : null},
       ${unixTimeMs}
     )
@@ -445,7 +445,7 @@ async function ensureProfile(
       // atproto PDS in the backend worker.
       return [
         sql`
-          insert into entities (ulid, personal_stream_hash_id)
+          insert into entities (ulid, stream_hash_id)
           values (${Ulid.enc(userUlid)}, ${Hash.enc(personalStreamId)})
           `,
         sql`

@@ -78,7 +78,7 @@ $effect.root(() => {
     from entities e
       join comp_room c on e.ulid = c.entity
       join comp_info i on e.ulid = i.entity
-    where personal_stream_hash_id = ${current.space?.id && Hash.enc(current.space?.id)}
+    where e.stream_hash_id = ${current.space?.id && Hash.enc(current.space?.id)}
     union
     select json_object(
       'id', format_ulid(e.ulid),
@@ -89,7 +89,7 @@ $effect.root(() => {
     from entities e
       join comp_room c on e.ulid = c.entity
       join comp_info i on e.ulid = i.entity
-    where personal_stream_hash_id = ${backendStatus.personalStreamId && Hash.enc(backendStatus.personalStreamId)} 
+    where e.stream_hash_id = ${backendStatus.personalStreamId && Hash.enc(backendStatus.personalStreamId)} 
       and 
     e.parent is null`,
     (row) => row.json && JSON.parse(row.json),

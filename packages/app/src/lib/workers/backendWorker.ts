@@ -353,7 +353,8 @@ function connectMessagePort(port: MessagePortApi) {
       const previewMaterializer = new PreviewMaterializer(streamId, materializerConfig);
       await previewMaterializer.fetchPreviewEvents();
       const result = await sqliteWorker.runQuery(sql`
-        select * from comp_space where leaf_space_hash_id = ${Hash.enc(streamId)}
+        select e.*, c.* from entities e JOIN comp_info c
+          ON e.ulid = c.entity where e.stream_hash_id = ${Hash.enc(streamId)} and e.parent is null
       `)
       console.log("result", result)
       return new Promise(() => { name: "test" })
