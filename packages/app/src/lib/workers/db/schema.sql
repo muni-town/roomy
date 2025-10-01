@@ -10,12 +10,12 @@ CREATE TABLE IF NOT EXISTS events (
 
 create table if not exists entities (
   ulid blob primary key, 
-  stream blob not null,
+  personal_stream_hash_id blob not null,
   parent blob,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
-create index if not exists idx_entities_stream on entities (stream);
+create index if not exists idx_entities_personal_stream_hash_id on entities (personal_stream_hash_id);
 create index if not exists idx_entities_parent on entities (parent);
 
 CREATE TABLE IF NOT EXISTS edges (
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS edges (
     label TEXT NOT NULL, -- CHECK(label IN ('child', 'parent', 'subscribe', 'member', 'ban', 'hide', 'pin', 'last_read', 'embed', 'reply', 'link', 'author', 'reorder', 'source', 'avatar')),
     payload TEXT CHECK(json_valid(payload)),
     created_at integer not null default (unixepoch() * 1000),
-    updated_at integer not null default (unixepoch() * 1000)
+    updated_at integer not null default (unixepoch() * 1000),
     PRIMARY KEY (head, tail, label),
     FOREIGN KEY (head) REFERENCES entities(ulid) ON DELETE CASCADE,
     FOREIGN KEY (tail) REFERENCES entities(ulid) ON DELETE CASCADE
@@ -35,8 +35,8 @@ CREATE INDEX IF NOT EXISTS idx_events_entity_created ON events(entity_ulid, crea
 
 create table if not exists comp_space (
   entity blob primary key references entities(ulid) on delete cascade,
-  id blob,
-  stream blob not null,
+  leaf_space_hash_id blob,
+  personal_stream_hash_id blob not null,
   name text,
   avatar text,
   description text,
@@ -68,7 +68,6 @@ create table if not exists comp_user (
   entity blob primary key references entities(ulid),
   did text,
   handle text,
-  isAdmin integer check(isAdmin in (0, 1) default 0,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;

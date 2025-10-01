@@ -3,7 +3,7 @@
 ## Bootstrapping flow
 
 1. user logs in with atproto
-2. roomy requests space.roomy.stream/self from user's PDS
+2. roomy requests `space.roomy.stream.dev/self` from user's PDS
 3. that record contains the ID for a 'personal stream', which roomy then requests a subscription to from the leaf server
 4. roomy gets a backfill of events for the personal stream
 5. some of those are space join events, and when we materialise them, roomy requests subscriptions for the corresponding streams

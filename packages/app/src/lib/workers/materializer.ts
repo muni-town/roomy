@@ -15,8 +15,9 @@ import {
 import schemaSql from "./db/schema.sql?raw";
 import { decodeTime } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
-import type { SqliteWorkerInterface } from ".";
+import type { SqliteWorkerInterface } from "./types";
 import type { Agent } from "@atproto/api";
+import type { EdgesMap } from "./db/types/edges";
 
 export type EventType = ReturnType<(typeof eventCodec)["dec"]>;
 
@@ -96,9 +97,11 @@ const materializers: {
 } = {
   // Space
   "space.roomy.space.join.0": async ({ streamId, data }) => [
+    ensureEntity(streamId, data.spaceId),
     sql`
-      insert into spaces (id, stream)
+      insert into comp_space (entity, leaf_space_hash_id, personal_stream_hash_id)
       values (
+        ${Ulid.enc(data.ulid)},
         ${Hash.enc(data.spaceId)},
         ${Hash.enc(streamId)}
       )
@@ -107,11 +110,11 @@ const materializers: {
   ],
   "space.roomy.space.leave.0": async ({ streamId, data }) => [
     sql`
-      update spaces set hidden = 1
+      update comp_space set hidden = 1
       where
-        id = ${Hash.enc(data.spaceId)}
+        leaf_space_hash_id = ${Hash.enc(data.spaceId)}
           and
-        stream = ${Hash.enc(streamId)}
+        personal_stream_hash_id = ${Hash.enc(streamId)}
     `,
   ],
 
@@ -127,20 +130,27 @@ const materializers: {
         value: data.adminId,
       })),
       sql`
-      insert into space_admins (space_id, admin_id)
+      insert into edges (head, tail, label, payload)
       values (
         ${Hash.enc(streamId)},
-        ${data.adminId}
+        ${data.adminId},
+        'member'
+        ${edgePayload({
+        can: "admin"
+      })}
       )
     `,
     ],
   "space.roomy.admin.remove.0": async ({ streamId, data }) => [
     sql`
-      delete from space_admins
+      update space_admins (payload)
+      values (${JSON.stringify({ can: "post" })})
       where 
-        space_id = ${Hash.enc(streamId)}
+        head = ${Hash.enc(streamId)}
           and
-        admin_id = ${data.adminId}
+        tail = ${data.adminId}
+          and
+        label = 'member'
     `,
   ],
 
@@ -153,36 +163,19 @@ const materializers: {
     ];
     const setUpdates = updates.filter((x) => x.tag == "set");
 
-    // If this is an update to a room
-    if (event.parent) {
-      return [
-        ensureEntity(streamId, event.ulid, event.parent),
-        {
-          sql: `insert into comp_info (entity, ${setUpdates.map((x) => `${x.key}`).join(", ")})
+    return [
+      ensureEntity(streamId, event.ulid, event.parent),
+      {
+        sql: `insert into comp_info (entity, ${setUpdates.map((x) => `${x.key}`).join(", ")})
             VALUES (:entity, ${setUpdates.map((x) => `:${x.key}`)}) on conflict do update
             set ${[...setUpdates].map((x) => `${x.key} = :${x.key}`)}`,
-          params: Object.fromEntries([
-            [":entity", Ulid.enc(event.parent)],
-            ...setUpdates.map((x) => [":" + x.key, x.value]),
-          ]),
-        },
-      ];
+        params: Object.fromEntries([
+          [":entity", Ulid.enc(event.parent || streamId)],
+          ...setUpdates.map((x) => [":" + x.key, x.value]),
+        ]),
+      },
+    ];
 
-      // If this is an update to a space
-    } else {
-      return [
-        ensureEntity(streamId, event.ulid, event.parent),
-        {
-          sql: `update spaces
-            set ${[...setUpdates].map((x) => `${x.key} = :${x.key}`)}
-            where id = :id`,
-          params: Object.fromEntries([
-            [":id", Hash.enc(streamId)],
-            ...setUpdates.map((x) => [":" + x.key, x.value]),
-          ]),
-        },
-      ];
-    }
   },
 
   // Room
@@ -401,7 +394,7 @@ const materializers: {
 function ensureEntity(
   streamId: string,
   ulid: string,
-  parent: string | undefined,
+  parent?: string,
 ): SqlStatement {
   const unixTimeMs = decodeTime(ulid);
   return sql`
@@ -469,4 +462,9 @@ async function ensureProfile(
     console.error("Could not ensure profile");
     return [];
   }
+}
+
+
+function edgePayload<EdgeLabel extends "reaction" | "member" | "ban">(payload: EdgesMap[EdgeLabel]) {
+  return JSON.stringify(payload)
 }

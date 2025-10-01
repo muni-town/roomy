@@ -39,19 +39,21 @@ $effect.root(() => {
   spaces = new LiveQuery(
     () => sql`-- spaces
       select json_object(
-        'id', format_hash(id),
+        'id', format_hash(leaf_space_hash_id),
         'name', name,
         'avatar', avatar,
-        'description', description,
-        'admins', (select json_group_array(admin_id) from space_admins where space_id = id)
+        'description', description
       ) as json
       from comp_space
-      where stream = ${backendStatus.personalStreamId && Hash.enc(backendStatus.personalStreamId)}
-        and
+      where personal_stream_hash_id = ${backendStatus.personalStreamId && Hash.enc(backendStatus.personalStreamId)} 
+        and 
       hidden = 0
     `,
     (row) => JSON.parse(row.json),
   );
+
+  // 
+  // was in above query json bit --'admins', (select json_group_array(admin_id) from space_admins where space_id = id)
 
   spaceTree = new LiveQuery(
     () => sql`-- spaceTree
@@ -68,15 +70,15 @@ $effect.root(() => {
           )
         )
         from entities e
-          join comp_channel cat on e.ulid = cat.entity
+          join comp_room cat on e.ulid = cat.entity
           join comp_info inf on e.ulid = inf.entity
         where e.parent = c.entity
       )
     ) as json
     from entities e
-      join comp_category c on e.ulid = c.entity
+      join comp_room c on e.ulid = c.entity
       join comp_info i on e.ulid = i.entity
-    where stream = ${current.space?.id && Hash.enc(current.space?.id)}
+    where personal_stream_hash_id = ${current.space?.id && Hash.enc(current.space?.id)}
     union
     select json_object(
       'id', format_ulid(e.ulid),
@@ -85,12 +87,11 @@ $effect.root(() => {
       'parent', format_ulid(e.parent)
     ) as json
     from entities e
-      join comp_channel c on e.ulid = c.entity
+      join comp_room c on e.ulid = c.entity
       join comp_info i on e.ulid = i.entity
-    where
-      stream = ${current.space?.id && Hash.enc(current.space?.id)}
-        and
-      e.parent is null`,
+    where personal_stream_hash_id = ${backendStatus.personalStreamId && Hash.enc(backendStatus.personalStreamId)} 
+      and 
+    e.parent is null`,
     (row) => row.json && JSON.parse(row.json),
   );
 

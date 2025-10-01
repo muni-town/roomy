@@ -68,13 +68,15 @@
     () => sql`
     select
       i.name as name,
-      (select 1 from comp_channel where entity = e.ulid) as channel
+      (select 1 from comp_room where entity = e.ulid) as channel
       -- Add checks for other component types later, like page, feed, etc.
     from entities e
       join comp_info i on i.entity = e.ulid
     where e.ulid = ${page.params.object && Ulid.enc(page.params.object)}
   `,
   );
+
+  const queryHasResults = $derived(query.result && query.result.length);
 
   const objectName = $derived(query.result?.[0]?.name || "");
   const objectType = $derived(
@@ -108,14 +110,16 @@
     </div>
   {/snippet}
 
-  {#if objectType == "channel"}
+  {#if !queryHasResults}
+    <div class="p-4">Loading Space...</div>
+  {:else if objectType == "channel"}
     {#if activeTab == "Chat"}
       <TimelineView />
     {:else if activeTab == "Threads"}
       Threads
     {/if}
   {:else if objectType == "unknown"}
-    Unknown Object type
+    <div class="p-4">Unknown Object type</div>
   {/if}
 
   <!-- 

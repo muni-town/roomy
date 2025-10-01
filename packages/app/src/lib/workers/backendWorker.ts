@@ -2,11 +2,11 @@
 /// <reference lib="webworker" />
 
 import { LeafClient, type IncomingEvent } from "@muni-town/leaf-client";
-import type {
-  BackendInterface,
-  BackendStatus,
-  SqliteWorkerInterface,
-} from "./index";
+import {
+  type BackendInterface,
+  type BackendStatus,
+  type SqliteWorkerInterface,
+} from "./types";
 import {
   messagePortInterface,
   reactiveWorkerState,
@@ -50,6 +50,9 @@ const status = reactiveWorkerState<BackendStatus>(
 );
 
 const atprotoOauthScope = "atproto transition:generic transition:chat.bsky";
+
+const LEAF_MODULE_PERSONAL_HASH = "7aa8ae23d1d408569ea292dc62555c01b77dfef0b9be29ad86e54ee2f17dd02e";
+const LEAF_MODULE_PERSONAL_URL = "/leaf_module_personal.wasm";
 
 interface KeyValue {
   key: string;
@@ -292,6 +295,7 @@ function connectMessagePort(port: MessagePortApi) {
       await db.streamCursors.clear();
     },
     async setActiveSqliteWorker(messagePort) {
+      console.log("Setting active SQLite worker")
       // eslint-disable-next-line @typescript-eslint/no-empty-object-type
       sqliteWorker = messagePortInterface<{}, SqliteWorkerInterface>(
         messagePort,
@@ -424,7 +428,7 @@ async function initializeLeafClient(client: LeafClient) {
       import.meta.env.VITE_STREAM_NSID || "space.roomy.stream.dev";
 
     // Get the user's personal space ID
-    let streamId: string;
+    let personalStreamId: string;
     try {
       const resp1 = await state.agent.com.atproto.repo.getRecord({
         collection: streamNsid,
@@ -432,20 +436,24 @@ async function initializeLeafClient(client: LeafClient) {
         rkey: "self",
       });
       const existingRecord = resp1.data.value as { id: string };
-      streamId = existingRecord.id;
-      console.log("Found existing stream ID from PDS:", streamId);
+      personalStreamId = existingRecord.id;
+      status.personalStreamId = personalStreamId;
+      console.log("Found existing stream ID from PDS:", personalStreamId);
+      console.log("backend status:", status)
     } catch (_) {
       console.log("Could not find existing stream ID on PDS");
-      streamId = await client.createStreamFromModuleUrl(
+      // create a new stream on leaf server
+      personalStreamId = await client.createStreamFromModuleUrl(
         ulid(),
-        "7aa8ae23d1d408569ea292dc62555c01b77dfef0b9be29ad86e54ee2f17dd02e",
-        "/leaf_module_personal.wasm",
+        LEAF_MODULE_PERSONAL_HASH,
+        LEAF_MODULE_PERSONAL_URL,
         new ArrayBuffer(),
       );
-      console.log("Created new stream:", streamId);
+      console.log("Created new stream:", personalStreamId);
+      // put the stream ID in a record
       const resp2 = await state.agent.com.atproto.repo.putRecord({
         collection: streamNsid,
-        record: { id: streamId, version: 1 },
+        record: { id: personalStreamId, version: 1 },
         repo: state.agent.assertDid,
         rkey: "self",
       });
@@ -456,23 +464,23 @@ async function initializeLeafClient(client: LeafClient) {
       }
     }
 
-    status.personalStreamId = streamId;
-    client.subscribe(streamId);
-    console.log("Subscribed to stream:", streamId);
+    status.personalStreamId = personalStreamId;
+    client.subscribe(personalStreamId);
+    console.log("Subscribed to stream:", personalStreamId);
 
     await sqliteWorkerReady;
 
     state.personalSpaceMaterializer = new StreamMaterializer(
-      streamId,
+      personalStreamId,
       materializerConfig,
     );
-    state.openSpacesMaterializer = new OpenSpacesMaterializer(streamId);
+    state.openSpacesMaterializer = new OpenSpacesMaterializer(personalStreamId);
 
     status.leafConnected = true;
   });
   client.on("event", (event) => {
     console.log("%cin", "color: green", event.idx);
-    if (event.stream == state.personalSpaceMaterializer?.streamId) {
+    if (event.stream == state.personalSpaceMaterializer?.personalStreamId) {
       state.personalSpaceMaterializer.handleEvents([event]);
     }
     state.openSpacesMaterializer?.handleEvent(event);
@@ -525,7 +533,7 @@ class OpenSpacesMaterializer {
       this.#liveQueryId,
       channel.port2,
       sql`-- backend space list
-      select id from spaces where stream = ${Hash.enc(this.#streamId)} and hidden = 0`,
+      select leaf_space_hash_id from comp_space where personal_stream_hash_id = ${Hash.enc(this.#streamId)} and hidden = 0`,
     );
   }
 
@@ -587,7 +595,7 @@ export type MaterializerConfig = {
 
 const MATERIALIZER_LOCK = "Materializer";
 class StreamMaterializer {
-  #streamid: string;
+  #personalStreamId: string;
   #latestEvent: number | undefined;
   #queue: StreamEvent[] = [];
   #materializer: (
@@ -597,17 +605,17 @@ class StreamMaterializer {
     events: StreamEvent[],
   ) => Promise<void>;
 
-  get streamId() {
-    return this.#streamid;
+  get personalStreamId() {
+    return this.#personalStreamId;
   }
 
   constructor(streamId: string, config: MaterializerConfig) {
     console.log("new materializer for ", streamId);
     if (!state.leafClient) throw "No leaf client";
-    this.#streamid = streamId;
+    this.#personalStreamId = streamId;
     this.#materializer = config.materializer;
 
-    state.leafClient.subscribe(this.#streamid);
+    state.leafClient.subscribe(this.#personalStreamId);
 
     if (!sqliteWorker) throw "No Sqlite worker";
 
@@ -626,13 +634,13 @@ class StreamMaterializer {
       (async () => {
         if (!state.leafClient) throw "No leaf client";
         if (!sqliteWorker) throw "No Sqlite worker";
-        const entry = await db.streamCursors.get(this.#streamid);
+        const entry = await db.streamCursors.get(this.#personalStreamId);
         this.#latestEvent = entry?.latestEvent || 0;
         console.log("latestevent", this.#latestEvent);
 
         // Backfill events
         console.time("backfill");
-        console.log("Backfilling stream:", this.#streamid);
+        console.log("Backfilling stream:", this.#personalStreamId);
         let previousMaterializationPromise: undefined | Promise<void>;
         let fetchCursor = this.#latestEvent + 1;
         while (true) {
@@ -640,7 +648,7 @@ class StreamMaterializer {
           console.log("fetching");
 
           const batchSize = 2000;
-          const newEvents = await state.leafClient.fetchEvents(this.#streamid, {
+          const newEvents = await state.leafClient.fetchEvents(this.#personalStreamId, {
             offset: fetchCursor,
             limit: batchSize,
           });
@@ -673,9 +681,9 @@ class StreamMaterializer {
       MATERIALIZER_LOCK,
       { ifAvailable: true },
       async (lock) => {
-        // console.log(
-        //   `Received ${events.length} events from ${events[0]?.idx} to ${events[events.length - 1]?.idx}`,
-        // );
+        console.log(
+          `Received ${events.length} events from ${events[0]?.idx} to ${events[events.length - 1]?.idx}`,
+        );
 
         if (!lock) {
           // console.log(
@@ -743,20 +751,20 @@ class StreamMaterializer {
       await this.#materializer(
         sqliteWorker,
         state.agent,
-        this.#streamid,
+        this.#personalStreamId,
         events,
       );
       this.#latestEvent = events[events.length - 1]!.idx;
       console.log("%clatest", "color: red", this.#latestEvent);
     } catch (e) {
       console.error(
-        `Could not materialize events ${events[0]?.idx} through ${events[events.length - 1]?.idx} in stream ${this.#streamid}`,
+        `Could not materialize events ${events[0]?.idx} through ${events[events.length - 1]?.idx} in stream ${this.#personalStreamId}`,
       );
       console.error(e);
     }
     console.log("latest event", this.#latestEvent);
     await db.streamCursors.put({
-      streamId: this.#streamid,
+      streamId: this.#personalStreamId,
       latestEvent: this.#latestEvent,
     });
   }

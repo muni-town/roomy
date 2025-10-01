@@ -4,8 +4,7 @@
   import { Textarea, Button, ScrollArea } from "@fuxui/base";
 
   let query = $state(
-    localStorage.getItem("roomy-debug-query") ||
-      "select format_hash(id), name, avatar, description\nfrom spaces;",
+    localStorage.getItem("roomy-debug-query") || "select * from entities;",
   );
   $effect(() => {
     localStorage.setItem("roomy-debug-query", query);
