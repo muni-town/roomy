@@ -336,6 +336,16 @@ function connectMessagePort(port: MessagePortApi) {
         payloads.map((x) => eventCodec.enc(x).buffer as ArrayBuffer),
       );
     },
+    async fetchEvents(streamId, offset, limit) {
+      if (!state.leafClient) throw 'Leaf client not initialized';
+      const events = (await state.leafClient?.fetchEvents(streamId, { offset, limit }))?.map(
+        (x) => ({
+          ...x,
+          stream: streamId
+        })
+      );
+      return events;
+    },
     async uploadImage(bytes, alt?: string) {
       if (!state.agent) throw new Error("Agent not initialized");
       const resp = await state.agent.com.atproto.repo.uploadBlob(

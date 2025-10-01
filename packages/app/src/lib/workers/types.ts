@@ -3,6 +3,7 @@ import type { EventType } from "./materializer";
 import type { BlobRef } from "@atproto/lexicon";
 import type { QueryResult } from "./setupSqlite";
 import type { SqlStatement } from "./backendWorker";
+import type { IncomingEvent } from "@muni-town/leaf-client";
 
 export interface BackendStatus {
   authLoaded: boolean | undefined;
@@ -30,6 +31,7 @@ export type BackendInterface = {
   ): Promise<void>;
   sendEvent(streamId: string, payload: EventType): Promise<void>;
   sendEventBatch(streamId: string, payloads: EventType[]): Promise<void>;
+  fetchEvents(streamId: string, offset: number, limit: number): Promise<IncomingEvent[]>;
   setActiveSqliteWorker(port: MessagePort): Promise<void>;
   pauseSubscription(streamId: string): Promise<void>;
   unpauseSubscription(streamId: string): Promise<void>;
