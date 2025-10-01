@@ -18,6 +18,7 @@ import { sql } from "$lib/utils/sqlTemplate";
 import type { SqliteWorkerInterface } from "./types";
 import type { Agent } from "@atproto/api";
 import type { EdgesMap } from "./db/types/edges";
+import type { LeafClient } from "@muni-town/leaf-client";
 
 export type EventType = ReturnType<(typeof eventCodec)["dec"]>;
 
@@ -35,6 +36,7 @@ export const config: MaterializerConfig = {
  */
 export async function materializer(
   sqliteWorker: SqliteWorkerInterface,
+  leafClient: LeafClient,
   agent: Agent,
   streamId: string,
   events: StreamEvent[],
@@ -54,6 +56,7 @@ export async function materializer(
       const statements = await materializers[event.variant.kind]({
         sqliteWorker,
         streamId,
+        leafClient,
         agent,
         user: incoming.user,
         event,
@@ -88,6 +91,7 @@ type EventVariant<K extends EventVariantStr> = Extract<
 const materializers: {
   [K in EventVariantStr]: (opts: {
     sqliteWorker: SqliteWorkerInterface;
+    leafClient: LeafClient;
     streamId: string;
     agent: Agent;
     user: string;
@@ -96,18 +100,22 @@ const materializers: {
   }) => Promise<SqlStatement[]>;
 } = {
   // Space
-  "space.roomy.space.join.0": async ({ streamId, data }) => [
-    ensureEntity(streamId, data.spaceId),
-    sql`
+  "space.roomy.space.join.0": async ({ streamId, data, leafClient }) => {
+    const { stamp } = await leafClient.streamInfo(data.spaceId);
+    console.log('stamp', stamp);
+    return [
+      ensureEntity(streamId, stamp),
+      sql`
       insert into comp_space (entity, leaf_space_hash_id, personal_stream_hash_id)
       values (
-        ${Ulid.enc(data.ulid)},
+        ${Ulid.enc(stamp)},
         ${Hash.enc(data.spaceId)},
         ${Hash.enc(streamId)}
       )
       on conflict do update set hidden = 0
     `,
-  ],
+    ];
+  },
   "space.roomy.space.leave.0": async ({ streamId, data }) => [
     sql`
       update comp_space set hidden = 1
@@ -125,22 +133,27 @@ const materializers: {
     streamId,
     data,
   }) => [
-      ...(await ensureProfile(sqliteWorker, agent, {
+    ...(await ensureProfile(
+      sqliteWorker,
+      agent,
+      {
         tag: "user",
         value: data.adminId,
-      }, streamId)),
-      sql`
+      },
+      streamId,
+    )),
+    sql`
       insert into edges (head, tail, label, payload)
       values (
         (select entity from comp_space where leaf_space_hash_id = ${Hash.enc(streamId)}),
         ${Ulid.enc(data.adminId)},
         'member'
         ${edgePayload({
-        can: "admin"
-      })}
+          can: "admin",
+        })}
       )
     `,
-    ],
+  ],
   "space.roomy.admin.remove.0": async ({ streamId, data }) => [
     sql`
       update space_admins (payload)
@@ -175,7 +188,6 @@ const materializers: {
         ]),
       },
     ];
-
   },
 
   // Room
@@ -209,19 +221,19 @@ const materializers: {
     agent,
     data,
   }) => [
-      ensureEntity(streamId, event.ulid, event.parent),
-      ...(await ensureProfile(sqliteWorker, agent, data.member_id, streamId)),
-      {
-        sql: event.parent
-          ? `insert into comp_room_members (room, member, access) values (?, ?, ?)`
-          : `insert into space_members (space_id, member, access) values (?, ?, ?)`,
-        params: [
-          event.parent ? Ulid.enc(event.parent) : Hash.enc(streamId),
-          GroupMember.enc(data.member_id),
-          ReadOrWrite.enc(data.access),
-        ],
-      },
-    ],
+    ensureEntity(streamId, event.ulid, event.parent),
+    ...(await ensureProfile(sqliteWorker, agent, data.member_id, streamId)),
+    {
+      sql: event.parent
+        ? `insert into comp_room_members (room, member, access) values (?, ?, ?)`
+        : `insert into space_members (space_id, member, access) values (?, ?, ?)`,
+      params: [
+        event.parent ? Ulid.enc(event.parent) : Hash.enc(streamId),
+        GroupMember.enc(data.member_id),
+        ReadOrWrite.enc(data.access),
+      ],
+    },
+  ],
   "space.roomy.room.member.remove.0": async ({ streamId, event, data }) => [
     ensureEntity(streamId, event.ulid, event.parent),
     {
@@ -247,17 +259,22 @@ const materializers: {
   }) => {
     const statements = [
       ensureEntity(streamId, event.ulid, event.parent),
-      ...(await ensureProfile(sqliteWorker, agent, {
-        tag: "user",
-        value: user,
-      }, streamId)),
+      ...(await ensureProfile(
+        sqliteWorker,
+        agent,
+        {
+          tag: "user",
+          value: user,
+        },
+        streamId,
+      )),
       sql`
         insert or replace into comp_content (entity, mime_type, data)
         values (
           ${Ulid.enc(event.ulid)},
           ${data.content.mimeType},
           ${data.content.content}
-        )`
+        )`,
     ];
 
     if (data.replyTo) {
@@ -351,10 +368,12 @@ const materializers: {
       console.warn("Missing target for channel mark.");
       return [];
     }
-    return [sql`
+    return [
+      sql`
       insert into comp_room (entity, label) values (${Ulid.enc(event.parent)}, 'channel')
       on conflict do update set label = excluded.label
-      `];
+      `,
+    ];
   },
   "space.roomy.channel.unmark.0": async ({ event }) => {
     if (!event.parent) {
@@ -417,7 +436,7 @@ async function ensureProfile(
   sqliteWorker: SqliteWorkerInterface,
   agent: Agent,
   member: CodecType<typeof GroupMember>,
-  personalStreamId: string
+  personalStreamId: string,
 ): Promise<SqlStatement[]> {
   try {
     if (member.tag == "user") {
@@ -463,7 +482,7 @@ async function ensureProfile(
             ${profile.data.displayName},
             ${profile.data.avatar}
           )
-          `
+          `,
       ];
     } else {
       return [];
@@ -474,7 +493,8 @@ async function ensureProfile(
   }
 }
 
-
-function edgePayload<EdgeLabel extends "reaction" | "member" | "ban">(payload: EdgesMap[EdgeLabel]) {
-  return JSON.stringify(payload)
+function edgePayload<EdgeLabel extends "reaction" | "member" | "ban">(
+  payload: EdgesMap[EdgeLabel],
+) {
+  return JSON.stringify(payload);
 }

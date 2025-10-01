@@ -127,12 +127,10 @@ export const eventVariantCodec = Kinds({
   /** Join a Roomy space: used to track joined spaces in the user's personal space. */
   "space.roomy.space.join.0": Struct({
     spaceId: Hash,
-    ulid: Ulid
   }),
   /** Leave a Roomy space: used to track joined spaces in the users personal space. */
   "space.roomy.space.leave.0": Struct({
     spaceId: Hash,
-    ulid: Ulid,
   }),
   "space.roomy.admin.add.0": Struct({
     adminId: str,

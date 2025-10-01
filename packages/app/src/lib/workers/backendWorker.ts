@@ -51,7 +51,8 @@ const status = reactiveWorkerState<BackendStatus>(
 
 const atprotoOauthScope = "atproto transition:generic transition:chat.bsky";
 
-const LEAF_MODULE_PERSONAL_HASH = "7aa8ae23d1d408569ea292dc62555c01b77dfef0b9be29ad86e54ee2f17dd02e";
+const LEAF_MODULE_PERSONAL_HASH =
+  "7aa8ae23d1d408569ea292dc62555c01b77dfef0b9be29ad86e54ee2f17dd02e";
 const LEAF_MODULE_PERSONAL_URL = "/leaf_module_personal.wasm";
 
 interface KeyValue {
@@ -71,7 +72,7 @@ db.version(1).stores({
 });
 
 export let sqliteWorker: SqliteWorkerInterface | undefined;
-let setSqliteWorkerReady = () => { };
+let setSqliteWorkerReady = () => {};
 const sqliteWorkerReady = new Promise(
   (r) => (setSqliteWorkerReady = r as () => void),
 );
@@ -90,7 +91,7 @@ class Backend {
   openSpacesMaterializer: OpenSpacesMaterializer | undefined;
 
   #oauthReady: Promise<void>;
-  #resolveOauthReady: () => void = () => { };
+  #resolveOauthReady: () => void = () => {};
   get ready() {
     return state.#oauthReady;
   }
@@ -295,7 +296,7 @@ function connectMessagePort(port: MessagePortApi) {
       await db.streamCursors.clear();
     },
     async setActiveSqliteWorker(messagePort) {
-      console.log("Setting active SQLite worker")
+      console.log("Setting active SQLite worker");
       // eslint-disable-next-line @typescript-eslint/no-empty-object-type
       sqliteWorker = messagePortInterface<{}, SqliteWorkerInterface>(
         messagePort,
@@ -337,27 +338,32 @@ function connectMessagePort(port: MessagePortApi) {
       );
     },
     async fetchEvents(streamId, offset, limit) {
-      if (!state.leafClient) throw 'Leaf client not initialized';
-      const events = (await state.leafClient?.fetchEvents(streamId, { offset, limit }))?.map(
-        (x) => ({
-          ...x,
-          stream: streamId
-        })
-      );
+      if (!state.leafClient) throw "Leaf client not initialized";
+      const events = (
+        await state.leafClient?.fetchEvents(streamId, { offset, limit })
+      )?.map((x) => ({
+        ...x,
+        stream: streamId,
+      }));
       return events;
     },
     async previewSpace(streamId) {
       await sqliteWorkerReady;
       if (!sqliteWorker) throw new Error("Sqlite worker not initialized");
-      if (!state.leafClient) throw 'Leaf client not initialized';
-      const previewMaterializer = new PreviewMaterializer(streamId, materializerConfig);
+      if (!state.leafClient) throw "Leaf client not initialized";
+      const previewMaterializer = new PreviewMaterializer(
+        streamId,
+        materializerConfig,
+      );
       await previewMaterializer.fetchPreviewEvents();
       const result = await sqliteWorker.runQuery(sql`
         select e.*, c.* from entities e JOIN comp_info c
           ON e.ulid = c.entity where e.stream_hash_id = ${Hash.enc(streamId)} and e.parent is null
-      `)
-      console.log("result", result)
-      return new Promise(() => { name: "test" })
+      `);
+      console.log("result", result);
+      return new Promise(() => {
+        name: "test";
+      });
     },
     async uploadImage(bytes, alt?: string) {
       if (!state.agent) throw new Error("Agent not initialized");
@@ -462,7 +468,7 @@ async function initializeLeafClient(client: LeafClient) {
       personalStreamId = existingRecord.id;
       status.personalStreamId = personalStreamId;
       console.log("Found existing stream ID from PDS:", personalStreamId);
-      console.log("backend status:", status)
+      console.log("backend status:", status);
     } catch (_) {
       console.log("Could not find existing stream ID on PDS");
       // create a new stream on leaf server
@@ -610,6 +616,7 @@ export type MaterializerConfig = {
   initSql: SqlStatement[];
   materializer: (
     sqliteWorker: SqliteWorkerInterface,
+    leafClient: LeafClient,
     agent: Agent,
     streamId: string,
     events: StreamEvent[],
@@ -623,6 +630,7 @@ class StreamMaterializer {
   #queue: StreamEvent[] = [];
   #materializer: (
     sqliteWorker: SqliteWorkerInterface,
+    leafClient: LeafClient,
     agent: Agent,
     streamId: string,
     events: StreamEvent[],
@@ -671,10 +679,13 @@ class StreamMaterializer {
           console.log("fetching");
 
           const batchSize = 2000;
-          const newEvents = await state.leafClient.fetchEvents(this.#personalStreamId, {
-            offset: fetchCursor,
-            limit: batchSize,
-          });
+          const newEvents = await state.leafClient.fetchEvents(
+            this.#personalStreamId,
+            {
+              offset: fetchCursor,
+              limit: batchSize,
+            },
+          );
 
           // we *could* insert the events into the events table here
 
@@ -745,6 +756,7 @@ class StreamMaterializer {
   async #materializeEvents(events: StreamEvent[]) {
     if (!sqliteWorker) throw "No Sqlite worker";
     if (!state.agent) throw "No ATProto agent";
+    if (!state.leafClient) throw "No Leaf client";
     if (events.length == 0) return;
     if (this.#latestEvent == undefined) throw "latest event not initialized";
 
@@ -776,6 +788,7 @@ class StreamMaterializer {
     try {
       await this.#materializer(
         sqliteWorker,
+        state.leafClient,
         state.agent,
         this.#personalStreamId,
         events,
@@ -800,6 +813,7 @@ class PreviewMaterializer {
   #personalStreamId: string;
   #materializer: (
     sqliteWorker: SqliteWorkerInterface,
+    leafClient: LeafClient,
     agent: Agent,
     streamId: string,
     events: StreamEvent[],
@@ -841,16 +855,17 @@ class PreviewMaterializer {
         console.log("fetching");
 
         const batchSize = 100;
-        const newEvents = await state.leafClient.fetchEvents(this.#personalStreamId, {
-          offset: 1,
-          limit: batchSize,
-        });
+        const newEvents = await state.leafClient.fetchEvents(
+          this.#personalStreamId,
+          {
+            offset: 1,
+            limit: batchSize,
+          },
+        );
 
         // we *could* insert the events into the events table here
 
-        console.log(
-          `    Fetched batch of ${newEvents.length} events.`,
-        );
+        console.log(`    Fetched batch of ${newEvents.length} events.`);
 
         await previousMaterializationPromise;
 
@@ -870,6 +885,7 @@ class PreviewMaterializer {
   async #materializeEvents(events: StreamEvent[]) {
     if (!sqliteWorker) throw "No Sqlite worker";
     if (!state.agent) throw "No ATProto agent";
+    if (!state.leafClient) throw "No Leaf client";
     if (events.length == 0) return;
 
     // Make sure that the events are sequential
@@ -886,6 +902,7 @@ class PreviewMaterializer {
     try {
       await this.#materializer(
         sqliteWorker,
+        state.leafClient,
         state.agent,
         this.#personalStreamId,
         events,
