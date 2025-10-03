@@ -9,6 +9,7 @@ export function sql(
   return {
     sql,
     params: params.length > 0 ? params : undefined,
+    cache: true,
   };
 }
 

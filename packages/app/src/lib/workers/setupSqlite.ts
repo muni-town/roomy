@@ -131,12 +131,14 @@ async function prepareSql(
   if (!db || !sqlite3) throw new Error("database_not_initialized");
 
   authorizerQueue = [];
-  let prepared = !statement.noCache
+  let prepared = statement.cache
     ? preparedSqlCache.get(statement.sql)
     : undefined;
   if (!prepared) {
     prepared = db.prepare(statement.sql);
-    preparedSqlCache.set(statement.sql, prepared);
+    if (statement.cache) {
+      preparedSqlCache.set(statement.sql, prepared);
+    }
   }
   if (statement.params) prepared.bind(statement.params);
   const actions = [...authorizerQueue];

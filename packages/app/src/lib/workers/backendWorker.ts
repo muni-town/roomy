@@ -654,7 +654,7 @@ export type SqlStatement = {
   /** If this is true, the query will not be pre-compiled and cached. Use this when you have to
    * substitute strings into the sql query instead of using params, because that will mess up the
    * cache which must be indexed by the SQL. */
-  noCache?: boolean;
+  cache?: boolean;
 };
 
 export type StreamEvent = {
