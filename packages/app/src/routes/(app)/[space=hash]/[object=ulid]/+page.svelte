@@ -23,15 +23,15 @@
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
 
-  // fetch first 100 events
-  async function fetchEvents() {
-    if (!backendStatus.personalStreamId || !page.params.space) return;
-    console.log("Fetching events for space", page.params.space);
-    await backend.previewSpace(page.params.space);
-    console.log("Space preview materialised");
-  }
+  // // fetch first 100 events
+  // async function fetchEvents() {
+  //   if (!backendStatus.personalStreamId || !page.params.space) return;
+  //   console.log("Fetching events for space", page.params.space);
+  //   await backend.previewSpace(page.params.space);
+  //   console.log("Space preview materialised");
+  // }
 
-  fetchEvents();
+  // fetchEvents();
 
   async function joinSpace() {
     if (!backendStatus.personalStreamId || !page.params.space) return;

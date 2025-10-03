@@ -6,9 +6,7 @@
   import { current } from "$lib/queries.svelte";
   import { backend, backendStatus } from "$lib/workers";
   import { Box, Button } from "@fuxui/base";
-  import type { IncomingEvent } from "@muni-town/leaf-client";
   import { ulid } from "ulidx";
-  // import { ulid } from "ulidx";
 
   async function navigateToFirstChildThreadOrPage() {}
 
@@ -21,19 +19,19 @@
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
 
-  let events: IncomingEvent[] = $state([]);
+  // let events: IncomingEvent[] = $state([]);
 
-  // fetch first 100 events
-  async function fetchEvents() {
-    if (!backendStatus.personalStreamId || !page.params.space) return;
-    console.log("Fetching events for space", page.params.space);
-    events = await backend.fetchEvents(page.params.space, 1, 100);
-    $state.snapshot(events);
-    await backend.previewSpace(page.params.space);
-    console.log("Space preview materialised");
-  }
+  // // fetch first 100 events
+  // async function fetchEvents() {
+  //   if (!backendStatus.personalStreamId || !page.params.space) return;
+  //   console.log("Fetching events for space", page.params.space);
+  //   events = await backend.fetchEvents(page.params.space, 1, 100);
+  //   $state.snapshot(events);
+  //   await backend.previewSpace(page.params.space);
+  //   console.log("Space preview materialised");
+  // }
 
-  fetchEvents();
+  // fetchEvents();
 
   async function joinSpace() {
     if (!backendStatus.personalStreamId || !page.params.space) return;
