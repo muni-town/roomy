@@ -295,6 +295,7 @@ function connectMessagePort(port: MessagePortApi) {
       await sqliteWorker.runQuery(sql`vacuum`);
       await sqliteWorker.runQuery(sql`pragma integrity_check`);
       await db.streamCursors.clear();
+      await db.kv.delete("personalStreamId");
     },
     async setActiveSqliteWorker(messagePort) {
       console.log("Setting active SQLite worker");
