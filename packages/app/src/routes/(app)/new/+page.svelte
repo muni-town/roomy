@@ -1,5 +1,6 @@
 <script lang="ts">
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
+  import { LEAF_MODULE_PUBLIC_READ_WRITE } from "$lib/moduleUrls";
   import { navigate } from "$lib/utils.svelte";
   import { backend, backendStatus } from "$lib/workers";
   import { Button, Checkbox, Input, Label, Textarea, toast } from "@fuxui/base";
@@ -47,8 +48,8 @@
       // Create a new stream for the space
       const spaceId = await backend.createStream(
         ulid(),
-        "128e499b08bf26bd3d2e6e73e1908330a11cbea57239f08bebb62a5e595a4fa5",
-        "/leaf_module_public_read_write_admin_upgrade.wasm",
+        LEAF_MODULE_PUBLIC_READ_WRITE.id,
+        LEAF_MODULE_PUBLIC_READ_WRITE.url,
       );
 
       // Join the space

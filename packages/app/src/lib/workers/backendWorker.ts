@@ -33,6 +33,7 @@ import type { LiveQueryMessage } from "$lib/workers/setupSqlite";
 import { eventCodec, Hash, Ulid } from "./encoding";
 import { sql } from "$lib/utils/sqlTemplate";
 import { ulid } from "ulidx";
+import { LEAF_MODULE_PERSONAL } from "../moduleUrls";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -51,10 +52,6 @@ const status = reactiveWorkerState<BackendStatus>(
 );
 
 const atprotoOauthScope = "atproto transition:generic transition:chat.bsky";
-
-const LEAF_MODULE_PERSONAL_HASH =
-  "7aa8ae23d1d408569ea292dc62555c01b77dfef0b9be29ad86e54ee2f17dd02e";
-const LEAF_MODULE_PERSONAL_URL = "/leaf_module_personal.wasm";
 
 interface KeyValue {
   key: string;
@@ -481,8 +478,8 @@ async function initializeLeafClient(client: LeafClient) {
         const personalStreamUlid = ulid()
         const personalStreamId = await client.createStreamFromModuleUrl(
           personalStreamUlid,
-          LEAF_MODULE_PERSONAL_HASH,
-          LEAF_MODULE_PERSONAL_URL,
+          LEAF_MODULE_PERSONAL.id,
+          LEAF_MODULE_PERSONAL.url,
           new ArrayBuffer(),
         );
         console.log("Created new stream:", personalStreamId);
