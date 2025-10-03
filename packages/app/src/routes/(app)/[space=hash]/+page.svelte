@@ -7,6 +7,7 @@
   import { backend, backendStatus } from "$lib/workers";
   import { Box, Button } from "@fuxui/base";
   import type { IncomingEvent } from "@muni-town/leaf-client";
+  import { ulid } from "ulidx";
   // import { ulid } from "ulidx";
 
   async function navigateToFirstChildThreadOrPage() {}
@@ -36,18 +37,21 @@
 
   async function joinSpace() {
     if (!backendStatus.personalStreamId || !page.params.space) return;
-    throw new Error("Joining spaces not implemented yet");
-    // await backend.sendEvent(backendStatus.personalStreamId, {
-    //   ulid: ulid(),
-    //   parent: undefined,
-    //   variant: {
-    //     kind: "space.roomy.space.join.0",
-    //     data: {
-    //       spaceId: page.params.space,
-    //     },
-    //   },
-    // });
+    await backend.sendEvent(backendStatus.personalStreamId, {
+      ulid: ulid(),
+      parent: undefined,
+      variant: {
+        kind: "space.roomy.space.join.0",
+        data: {
+          spaceId: page.params.space,
+        },
+      },
+    });
   }
+
+  $effect(() => {
+    $inspect(current);
+  });
 </script>
 
 {#snippet sidebar()}

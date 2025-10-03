@@ -6,10 +6,11 @@ import { Hash } from "./workers/encoding";
 
 export type SpaceMeta = {
   id: string;
+  ulid: string;
   name?: string;
   avatar?: string;
   description?: string;
-  admins: string[];
+  permissions: [string, "read" | "post" | "admin"][];
 };
 
 export type SpaceTreeItem = { id: string; name: string } & (
@@ -39,18 +40,32 @@ $effect.root(() => {
   spaces = new LiveQuery(
     () => sql`-- spaces
       select json_object(
-        'id', format_hash(leaf_space_hash_id),
-        'name', name,
-        'avatar', avatar,
-        'description', description
-      ) as json
-      from comp_space
+          'id', format_hash(cs.leaf_space_hash_id),
+          'ulid', format_ulid(cs.entity),
+          'name', ci.name,
+          'avatar', ci.avatar,
+          'description', ci.description,
+          'rooms', (select json_group_array(json_object(
+            'id', format_ulid(cr.entity),
+            'type', cr.label
+          )) from comp_room cr where cr.parent = cs.entity),
+          'permissions', (
+            select json_group_array(
+              json_array(cu.did, json_extract(e.payload, '$.can')))
+            from edges e 
+            join comp_user cu on cu.entity = e.tail
+            where e.head = cs.entity and e.label = 'member'
+        )) as json
+      from comp_space cs
+      join comp_info ci on cs.entity = ci.entity
       where personal_stream_hash_id = ${backendStatus.personalStreamId && Hash.enc(backendStatus.personalStreamId)} 
-        and 
-      hidden = 0
+        and hidden = 0
     `,
     (row) => JSON.parse(row.json),
   );
+
+  console.log("personalStreamId", backendStatus.personalStreamId)
+  console.log("Spaces", spaces.result)
 
   // 
   // was in above query json bit --'admins', (select json_group_array(admin_id) from space_admins where space_id = id)
@@ -95,15 +110,19 @@ $effect.root(() => {
     (row) => row.json && JSON.parse(row.json),
   );
 
+  console.log("spaceTree", spaceTree.result)
+
   // Update current values
   $effect(() => {
+    // console.log("Checking current space for ", page.params.space)
     current.space = page.params.space
       ? spaces.result?.find((x) => x.id == page.params.space)
       : undefined;
   });
   $effect(() => {
-    if (backendStatus.did)
+    if (backendStatus.did) {
       current.isSpaceAdmin =
-        current.space?.admins.includes(backendStatus.did) || false;
+        current.space?.permissions?.some((permission) => permission[0] === backendStatus.did && permission[1] === "admin") || false;
+    }
   });
 });

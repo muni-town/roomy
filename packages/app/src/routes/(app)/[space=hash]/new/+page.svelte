@@ -35,7 +35,9 @@
     await backend.sendEvent(current.space.id, {
       ulid: roomId,
       parent:
-        type != "Category" && selectedCategory ? selectedCategory : undefined,
+        type != "Category" && selectedCategory
+          ? selectedCategory
+          : current.space.ulid,
       variant: {
         kind: "space.roomy.room.create.0",
         data: undefined,

@@ -1,11 +1,13 @@
 pragma foreign_keys = on;
 
 CREATE TABLE IF NOT EXISTS events (
-  event_ulid BLOB PRIMARY KEY,
+  idx INTEGER NOT NULL,
+  stream_hash_id BLOB NOT NULL,
   entity_ulid BLOB REFERENCES entities(ulid) ON DELETE CASCADE,
   payload BLOB,
   created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
-  applied INTEGER DEFAULT 0
+  applied INTEGER DEFAULT 0,
+  PRIMARY KEY (idx, stream_hash_id)
 ) STRICT;
 
 create table if not exists entities (
@@ -30,16 +32,10 @@ CREATE TABLE IF NOT EXISTS edges (
     FOREIGN KEY (tail) REFERENCES entities(ulid) ON DELETE CASCADE
 ) STRICT;
 
-CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
-CREATE INDEX IF NOT EXISTS idx_events_entity_created ON events(entity_ulid, created_at, event_ulid);
-
 create table if not exists comp_space (
   entity blob primary key references entities(ulid) on delete cascade,
   leaf_space_hash_id blob,
   personal_stream_hash_id blob not null,
-  name text,
-  avatar text,
-  description text,
   hidden integer not null default 0 check(hidden in (0, 1)),
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
@@ -47,7 +43,7 @@ create table if not exists comp_space (
 
 create table if not exists comp_room (
   entity blob primary key references entities(ulid) on delete cascade,
-  parent blob references entities(ulid) on delete set null,
+  parent blob references entities(ulid) on delete set null, -- would be more normalised for this to be an edge
   label text, -- "channel", "category", "thread", "page" etc
   deleted integer check(deleted in (0, 1)) default 0,
   created_at integer not null default (unixepoch() * 1000),

@@ -1,21 +1,51 @@
 <script lang="ts">
   import { page } from "$app/state";
   import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
-
+  import { current } from "$lib/queries.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   // import PageView from "$lib/components/content/page/PageView.svelte";
+  import { backend, backendStatus } from "$lib/workers";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
   import { LiveQuery } from "$lib/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { Ulid } from "$lib/workers/encoding";
   import { Tabs } from "@fuxui/base";
+  import { Box, Button } from "@fuxui/base";
+  import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
+  import { ulid } from "ulidx";
   // import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
   // import FeedDisplay from "$lib/components/content/bluesky-feed/FeedDisplay.svelte";
   // import { atprotoFeedService } from "$lib/services/atprotoFeedService";
-  // import { Tabs } from "@fuxui/base";
   // import BoardView from "$lib/components/content/thread/BoardView.svelte";
 
   // let object = $derived(new CoState(RoomyEntity, page.params.object));
+
+  let inviteSpaceName = $derived(page.url.searchParams.get("name"));
+  let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
+
+  // fetch first 100 events
+  async function fetchEvents() {
+    if (!backendStatus.personalStreamId || !page.params.space) return;
+    console.log("Fetching events for space", page.params.space);
+    await backend.previewSpace(page.params.space);
+    console.log("Space preview materialised");
+  }
+
+  fetchEvents();
+
+  async function joinSpace() {
+    if (!backendStatus.personalStreamId || !page.params.space) return;
+    await backend.sendEvent(backendStatus.personalStreamId, {
+      ulid: ulid(),
+      parent: undefined,
+      variant: {
+        kind: "space.roomy.space.join.0",
+        data: {
+          spaceId: page.params.space,
+        },
+      },
+    });
+  }
 
   // const me = new AccountCoState(RoomyAccount, {
   //   resolve: {
@@ -64,6 +94,7 @@
     }
   });
 
+  // doesn't currently return anything...
   const query = new LiveQuery<{ name: string; channel: 1 | null }>(
     () => sql`
     select
@@ -75,6 +106,19 @@
     where e.ulid = ${page.params.object && Ulid.enc(page.params.object)}
   `,
   );
+  //
+  // const query1 = new LiveQuery<{ name: string; channel: 1 | null }>(
+  //   () => sql`
+  //   select * from comp_room where
+  //   entity = ${page.params.object && Ulid.enc(page.params.object)}`,
+  // );
+
+  $effect(() => {
+    // $inspect(current);
+    console.log("query...");
+    $inspect(query.result);
+    $inspect(query.error);
+  });
 
   const queryHasResults = $derived(query.result && query.result.length);
 
@@ -110,7 +154,24 @@
     </div>
   {/snippet}
 
-  {#if !queryHasResults}
+  {#if !current.space}
+    <div class="flex items-center justify-center h-full">
+      <Box class="w-[20em] flex flex-col">
+        <div class="mb-5 flex justify-center items-center gap-3">
+          <SpaceAvatar
+            imageUrl={inviteSpaceAvatar ?? ""}
+            id={page.params.space}
+            name={inviteSpaceName ?? ""}
+            size={50}
+          />
+          {#if inviteSpaceName}
+            <h1 class="font-bold text-xl">{inviteSpaceName}</h1>
+          {/if}
+        </div>
+        <Button size="lg" onclick={joinSpace}>Join Space</Button>
+      </Box>
+    </div>
+  {:else if !queryHasResults}
     <div class="p-4">Loading Space...</div>
   {:else if objectType == "channel"}
     {#if activeTab == "Chat"}

@@ -5,6 +5,7 @@ import { LeafClient, type IncomingEvent } from "@muni-town/leaf-client";
 import {
   type BackendInterface,
   type BackendStatus,
+  type Savepoint,
   type SqliteWorkerInterface,
 } from "./types";
 import {
@@ -29,7 +30,7 @@ import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
 import { config as materializerConfig, type EventType } from "./materializer";
 import { workerOauthClient } from "./oauth";
 import type { LiveQueryMessage } from "$lib/workers/setupSqlite";
-import { eventCodec, Hash } from "./encoding";
+import { eventCodec, Hash, Ulid } from "./encoding";
 import { sql } from "$lib/utils/sqlTemplate";
 import { ulid } from "ulidx";
 
@@ -72,7 +73,7 @@ db.version(1).stores({
 });
 
 export let sqliteWorker: SqliteWorkerInterface | undefined;
-let setSqliteWorkerReady = () => {};
+let setSqliteWorkerReady = () => { };
 const sqliteWorkerReady = new Promise(
   (r) => (setSqliteWorkerReady = r as () => void),
 );
@@ -91,7 +92,7 @@ class Backend {
   openSpacesMaterializer: OpenSpacesMaterializer | undefined;
 
   #oauthReady: Promise<void>;
-  #resolveOauthReady: () => void = () => {};
+  #resolveOauthReady: () => void = () => { };
   get ready() {
     return state.#oauthReady;
   }
@@ -338,32 +339,27 @@ function connectMessagePort(port: MessagePortApi) {
       );
     },
     async fetchEvents(streamId, offset, limit) {
-      if (!state.leafClient) throw "Leaf client not initialized";
-      const events = (
-        await state.leafClient?.fetchEvents(streamId, { offset, limit })
-      )?.map((x) => ({
-        ...x,
-        stream: streamId,
-      }));
+      if (!state.leafClient) throw 'Leaf client not initialized';
+      const events = (await state.leafClient?.fetchEvents(streamId, { offset, limit }))?.map(
+        (x) => ({
+          ...x,
+          stream: streamId
+        })
+      );
       return events;
     },
     async previewSpace(streamId) {
       await sqliteWorkerReady;
       if (!sqliteWorker) throw new Error("Sqlite worker not initialized");
-      if (!state.leafClient) throw "Leaf client not initialized";
-      const previewMaterializer = new PreviewMaterializer(
-        streamId,
-        materializerConfig,
-      );
+      if (!state.leafClient) throw 'Leaf client not initialized';
+      const previewMaterializer = new PreviewMaterializer(streamId, materializerConfig);
       await previewMaterializer.fetchPreviewEvents();
       const result = await sqliteWorker.runQuery(sql`
         select e.*, c.* from entities e JOIN comp_info c
           ON e.ulid = c.entity where e.stream_hash_id = ${Hash.enc(streamId)} and e.parent is null
-      `);
-      console.log("result", result);
-      return new Promise(() => {
-        name: "test";
-      });
+      `)
+      console.log("Preview space result", result)
+      return new Promise(() => { name: "test" })
     },
     async uploadImage(bytes, alt?: string) {
       if (!state.agent) throw new Error("Agent not initialized");
@@ -456,60 +452,97 @@ async function initializeLeafClient(client: LeafClient) {
     const streamNsid =
       import.meta.env.VITE_STREAM_NSID || "space.roomy.stream.dev";
 
+    console.log("Now looking for personal stream id")
     // Get the user's personal space ID
-    let personalStreamId: string;
-    try {
-      const resp1 = await state.agent.com.atproto.repo.getRecord({
-        collection: streamNsid,
-        repo: did,
-        rkey: "self",
-      });
-      const existingRecord = resp1.data.value as { id: string };
-      personalStreamId = existingRecord.id;
-      status.personalStreamId = personalStreamId;
-      console.log("Found existing stream ID from PDS:", personalStreamId);
-      console.log("backend status:", status);
-    } catch (_) {
-      console.log("Could not find existing stream ID on PDS");
-      // create a new stream on leaf server
-      personalStreamId = await client.createStreamFromModuleUrl(
-        ulid(),
-        LEAF_MODULE_PERSONAL_HASH,
-        LEAF_MODULE_PERSONAL_URL,
-        new ArrayBuffer(),
-      );
-      console.log("Created new stream:", personalStreamId);
-      // put the stream ID in a record
-      const resp2 = await state.agent.com.atproto.repo.putRecord({
-        collection: streamNsid,
-        record: { id: personalStreamId, version: 1 },
-        repo: state.agent.assertDid,
-        rkey: "self",
-      });
-      if (!resp2.success) {
-        throw new Error("Could not create PDS record for personal stream", {
-          cause: JSON.stringify(resp2.data),
+
+    const id = await db.kv.get("personalStreamId")
+    console.log("kv result", id)
+    if (id?.value) {
+      status.personalStreamId = id.value;
+    } else {
+      try {
+        const resp1 = await state.agent.com.atproto.repo.getRecord({
+          collection: streamNsid,
+          repo: did,
+          rkey: "self",
         });
+        const existingRecord = resp1.data.value as { id: string };
+        status.personalStreamId = existingRecord.id;
+        await db.kv.add({ key: "personalStreamId", value: existingRecord.id })
+        console.log("Found existing stream ID from PDS:", existingRecord.id);
       }
+      catch (_) {
+        // this catch block creating a new stream needs to be refactored 
+        // so that it only happens when there definitely is no record
+        console.log("Could not find existing stream ID on PDS. Creating new stream!");
+
+        // create a new stream on leaf server
+        const personalStreamUlid = ulid()
+        const personalStreamId = await client.createStreamFromModuleUrl(
+          personalStreamUlid,
+          LEAF_MODULE_PERSONAL_HASH,
+          LEAF_MODULE_PERSONAL_URL,
+          new ArrayBuffer(),
+        );
+        console.log("Created new stream:", personalStreamId);
+
+        // put the stream ID in a record
+        const resp2 = await state.agent.com.atproto.repo.putRecord({
+          collection: streamNsid,
+          record: { id: personalStreamId, version: 1 },
+          repo: state.agent.assertDid,
+          rkey: "self",
+        });
+        if (!resp2.success) {
+          throw new Error("Could not create PDS record for personal stream", {
+            cause: JSON.stringify(resp2.data),
+          });
+        }
+        status.personalStreamId = personalStreamId;
+        await db.kv.add({ key: "personalStreamId", value: personalStreamId })
+      }
+
+      if (!sqliteWorker) {
+        console.log("unable to insert user profile into db")
+        throw new Error("Sqlite worker not initialized");
+      }
+      const { stamp } = await client.streamInfo(status.personalStreamId);
+      console.log("user insert stamp", stamp)
+      const profile = await state.agent.getProfile({ actor: did });
+      if (!profile?.data) throw new Error("Could not fetch user profile");
+      console.log("sending info event for user", did)
+      await client.sendEvent(status.personalStreamId, eventCodec.enc({
+        ulid: ulid(),
+        parent: undefined,
+        variant: {
+          kind: "space.roomy.info.0",
+          data: {
+            name: profile.data.displayName ? { tag: "set", value: profile.data.displayName } : { tag: "ignore", value: undefined },
+            avatar: profile.data.avatar ? { tag: "set", value: profile.data.avatar } : { tag: "ignore", value: undefined },
+            description: profile.data.description ? { tag: "set", value: profile.data.description } : { tag: "ignore", value: undefined },
+          }
+        }
+      }).buffer as ArrayBuffer)
+      console.log("sent info for user")
     }
 
-    status.personalStreamId = personalStreamId;
-    client.subscribe(personalStreamId);
-    console.log("Subscribed to stream:", personalStreamId);
+
+    client.subscribe(status.personalStreamId);
+    console.log("Subscribed to stream:", status.personalStreamId);
 
     await sqliteWorkerReady;
 
     state.personalSpaceMaterializer = new StreamMaterializer(
-      personalStreamId,
+      status.personalStreamId,
       materializerConfig,
     );
-    state.openSpacesMaterializer = new OpenSpacesMaterializer(personalStreamId);
+    state.openSpacesMaterializer = new OpenSpacesMaterializer(status.personalStreamId);
 
     status.leafConnected = true;
   });
   client.on("event", (event) => {
     console.log("%cin", "color: green", event.idx);
-    if (event.stream == state.personalSpaceMaterializer?.personalStreamId) {
+    if (event.stream == state.personalSpaceMaterializer?.streamId) {
       state.personalSpaceMaterializer.handleEvents([event]);
     }
     state.openSpacesMaterializer?.handleEvent(event);
@@ -553,8 +586,9 @@ class OpenSpacesMaterializer {
       if ("error" in data) {
         console.warn("Error in spaces list query", data.error);
       } else if ("rows" in data) {
-        const spaces = data.rows as { id: Uint8Array }[];
-        this.updateSpaceList(spaces.map(({ id }) => Hash.dec(id)));
+        const spaces = data.rows as { leaf_space_hash_id: Uint8Array }[];
+        console.log('spaces', spaces)
+        this.updateSpaceList(spaces.map(({ leaf_space_hash_id }) => Hash.dec(leaf_space_hash_id)));
       }
     };
 
@@ -583,6 +617,7 @@ class OpenSpacesMaterializer {
       );
       state.leafClient?.subscribe(spaceToOpen);
     }
+    console.log("Open spaces:", [...this.#spaceMaterializers.keys()]);
   }
 
   handleEvent(event: IncomingEvent) {
@@ -625,7 +660,7 @@ export type MaterializerConfig = {
 
 const MATERIALIZER_LOCK = "Materializer";
 class StreamMaterializer {
-  #personalStreamId: string;
+  #streamId: string;
   #latestEvent: number | undefined;
   #queue: StreamEvent[] = [];
   #materializer: (
@@ -636,17 +671,18 @@ class StreamMaterializer {
     events: StreamEvent[],
   ) => Promise<void>;
 
-  get personalStreamId() {
-    return this.#personalStreamId;
+  get streamId() {
+    return this.#streamId;
   }
 
   constructor(streamId: string, config: MaterializerConfig) {
     console.log("new materializer for ", streamId);
     if (!state.leafClient) throw "No leaf client";
-    this.#personalStreamId = streamId;
+    if (!status.personalStreamId) throw new Error("No personal stream id")
+    this.#streamId = streamId;
     this.#materializer = config.materializer;
 
-    state.leafClient.subscribe(this.#personalStreamId);
+    state.leafClient.subscribe(this.#streamId);
 
     if (!sqliteWorker) throw "No Sqlite worker";
 
@@ -655,8 +691,24 @@ class StreamMaterializer {
     sqliteWorker.runSavepoint({ name: "init", items: config.initSql });
     console.timeEnd("initSql");
 
-    // Start backfilling the stream events
-    this.backfillEvents();
+    async function init(client: LeafClient, sqliteWorker: SqliteWorkerInterface, streamId: string, personalStreamId: string, backfill: Promise<void>) {
+      const { stamp } = await client.streamInfo(streamId)
+      // create an entity for this stream
+      await sqliteWorker.runQuery(sql`insert into entities (ulid, stream_hash_id) values (${Ulid.enc(stamp)}, ${Hash.enc(streamId)})
+        on conflict(ulid) do nothing`);
+
+      await sqliteWorker.runQuery(sql`insert into comp_space (entity, leaf_space_hash_id, personal_stream_hash_id, hidden)
+        values (
+          (select ulid from entities where stream_hash_id = ${Hash.enc(streamId)}),
+          ${Hash.enc(streamId)},
+          ${Hash.enc(personalStreamId)},
+          ${streamId === personalStreamId ? 1 : 0} -- hide personal space by default
+        )
+        on conflict(entity) do update set leaf_space_hash_id = excluded.leaf_space_hash_id`);
+      // Start backfilling the stream events
+      await backfill;
+    }
+    init(state.leafClient, sqliteWorker, streamId, status.personalStreamId, this.backfillEvents());
   }
 
   async backfillEvents() {
@@ -665,13 +717,13 @@ class StreamMaterializer {
       (async () => {
         if (!state.leafClient) throw "No leaf client";
         if (!sqliteWorker) throw "No Sqlite worker";
-        const entry = await db.streamCursors.get(this.#personalStreamId);
+        const entry = await db.streamCursors.get(this.#streamId);
         this.#latestEvent = entry?.latestEvent || 0;
         console.log("latestevent", this.#latestEvent);
 
         // Backfill events
         console.time("backfill");
-        console.log("Backfilling stream:", this.#personalStreamId);
+        console.log("Backfilling stream:", this.#streamId);
         let previousMaterializationPromise: undefined | Promise<void>;
         let fetchCursor = this.#latestEvent + 1;
         while (true) {
@@ -680,14 +732,25 @@ class StreamMaterializer {
 
           const batchSize = 2000;
           const newEvents = await state.leafClient.fetchEvents(
-            this.#personalStreamId,
+            this.#streamId,
             {
               offset: fetchCursor,
               limit: batchSize,
             },
           );
 
-          // we *could* insert the events into the events table here
+          console.log("backfill_events for stream", this.#streamId)
+
+          const savepoint: Savepoint = {
+            name: "backfill_events",
+            items: newEvents.map(event =>
+              sql`INSERT INTO events (idx, stream_hash_id, payload)
+                  VALUES (${event.idx}, ${Hash.enc(this.#streamId)}, ${event.payload})
+                  ON CONFLICT(idx, stream_hash_id) DO NOTHING`
+            )
+          };
+
+          await sqliteWorker.runSavepoint(savepoint);
 
           fetchCursor += batchSize;
           console.timeEnd("fetchBatch");
@@ -698,7 +761,7 @@ class StreamMaterializer {
 
           await previousMaterializationPromise;
 
-          console.log("Materializing new events");
+          console.log("Materializing new events", newEvents);
           previousMaterializationPromise = this.#materializeEvents(newEvents);
           if (newEvents.length == 0) break;
         }
@@ -721,6 +784,8 @@ class StreamMaterializer {
         console.log(
           `Received ${events.length} events from ${events[0]?.idx} to ${events[events.length - 1]?.idx}`,
         );
+
+        console.log(events);
 
         if (!lock) {
           // console.log(
@@ -790,20 +855,20 @@ class StreamMaterializer {
         sqliteWorker,
         state.leafClient,
         state.agent,
-        this.#personalStreamId,
+        this.#streamId,
         events,
       );
       this.#latestEvent = events[events.length - 1]!.idx;
       console.log("%clatest", "color: red", this.#latestEvent);
     } catch (e) {
       console.error(
-        `Could not materialize events ${events[0]?.idx} through ${events[events.length - 1]?.idx} in stream ${this.#personalStreamId}`,
+        `Could not materialize events ${events[0]?.idx} through ${events[events.length - 1]?.idx} in stream ${this.#streamId}`,
       );
       console.error(e);
     }
     console.log("latest event", this.#latestEvent);
     await db.streamCursors.put({
-      streamId: this.#personalStreamId,
+      streamId: this.#streamId,
       latestEvent: this.#latestEvent,
     });
   }
@@ -852,7 +917,7 @@ class PreviewMaterializer {
         console.log("Backfilling stream:", this.#personalStreamId);
         let previousMaterializationPromise: undefined | Promise<void>;
         console.time("fetchBatch");
-        console.log("fetching");
+        console.log("fetching preview events");
 
         const batchSize = 100;
         const newEvents = await state.leafClient.fetchEvents(
@@ -863,7 +928,16 @@ class PreviewMaterializer {
           },
         );
 
-        // we *could* insert the events into the events table here
+        const savepoint: Savepoint = {
+          name: "backfill_events_preview",
+          items: newEvents.map(event =>
+            sql`INSERT INTO events (idx, stream_hash_id, payload)
+                VALUES (${event.idx}, ${Hash.enc(this.#personalStreamId)}, ${event.payload})
+                ON CONFLICT(idx, stream_hash_id) DO NOTHING`
+          )
+        };
+
+        await sqliteWorker.runSavepoint(savepoint);
 
         console.log(`    Fetched batch of ${newEvents.length} events.`);
 
