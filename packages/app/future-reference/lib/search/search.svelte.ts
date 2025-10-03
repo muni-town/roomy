@@ -563,7 +563,6 @@ export async function diagnoseIndexing(spaceId: string) {
 
       console.log(`\n📝 Channel: ${c.name} (${c.channelType || "chat"})`);
 
-
       // Check last indexed message
       const lastIndexed = localStorage.getItem(`lastIndexedMessageId-${c.id}`);
       console.log(`   💾 Last indexed message: ${lastIndexed || "none"}`);

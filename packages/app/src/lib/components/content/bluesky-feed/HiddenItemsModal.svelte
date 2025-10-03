@@ -24,7 +24,9 @@
       class="bg-white dark:bg-base-800 rounded-lg shadow-xl w-full max-w-2xl h-[70vh] flex flex-col"
       onclick={(e) => e.stopPropagation()}
     >
-      <div class="flex-shrink-0 p-4 border-b border-base-300 dark:border-base-700 flex items-center justify-between">
+      <div
+        class="flex-shrink-0 p-4 border-b border-base-300 dark:border-base-700 flex items-center justify-between"
+      >
         <h2 class="text-lg font-semibold flex items-center gap-2">
           <Icon icon="mdi:eye-off" />
           Hidden Items
@@ -44,7 +46,9 @@
           </div>
         {:else}
           {#each hiddenPosts as post (post.uri)}
-            <div class="flex items-center justify-between gap-3 p-2 bg-base-100 dark:bg-base-700 rounded">
+            <div
+              class="flex items-center justify-between gap-3 p-2 bg-base-100 dark:bg-base-700 rounded"
+            >
               <div class="flex-1 min-w-0">
                 <div class="text-sm font-medium truncate">
                   {post.author.displayName || post.author.handle}

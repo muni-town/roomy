@@ -166,7 +166,9 @@ export class AtprotoFeedAggregator {
   private extractFeedNameFromUri(feedUri: string): string {
     try {
       // Parse AT Proto URI: at://did:plc:example/app.bsky.feed.generator/feedname
-      const match = feedUri.match(/at:\/\/([^\/]+)\/app\.bsky\.feed\.generator\/(.+)$/);
+      const match = feedUri.match(
+        /at:\/\/([^\/]+)\/app\.bsky\.feed\.generator\/(.+)$/,
+      );
       if (match && match[2]) {
         const feedName = match[2];
         return feedName
@@ -186,7 +188,7 @@ export class AtprotoFeedAggregator {
       }
 
       // Last resort: extract domain or identifier from URI
-      const uriParts = feedUri.split('/');
+      const uriParts = feedUri.split("/");
       const lastPart = uriParts[uriParts.length - 1];
       if (lastPart && lastPart.length > 0) {
         return lastPart
@@ -210,7 +212,7 @@ export class AtprotoFeedAggregator {
     try {
       // Check if already aborted before making request
       if (signal?.aborted) {
-        throw new Error('Aborted');
+        throw new Error("Aborted");
       }
 
       const response = await this.agent.app.bsky.feed.getFeed({
@@ -220,7 +222,7 @@ export class AtprotoFeedAggregator {
 
       // Check if aborted after request
       if (signal?.aborted) {
-        throw new Error('Aborted');
+        throw new Error("Aborted");
       }
 
       return response.data.feed.map((item: FeedViewPost) => ({
@@ -315,7 +317,7 @@ export class AtprotoFeedAggregator {
       }));
     } catch (error) {
       // Don't log errors for aborted requests
-      if (error instanceof Error && error.message === 'Aborted') {
+      if (error instanceof Error && error.message === "Aborted") {
         return [];
       }
       console.error(`Failed to fetch feed ${feedUri}:`, error);
@@ -326,7 +328,7 @@ export class AtprotoFeedAggregator {
   async fetchAggregatedFeed(
     limit = 50,
     feedUris?: string[],
-    signal?: AbortSignal,  
+    signal?: AbortSignal,
   ): Promise<AtprotoFeedPost[]> {
     const feedsToFetch = feedUris || ATPROTO_FEEDS;
 
@@ -366,7 +368,11 @@ export class AtprotoFeedAggregator {
     feedUris?: string[],
     signal?: AbortSignal,
   ): Promise<AtprotoFeedPost[]> {
-    const allPosts = await this.fetchAggregatedFeed(limit * 2, feedUris, signal); // Fetch more to filter
+    const allPosts = await this.fetchAggregatedFeed(
+      limit * 2,
+      feedUris,
+      signal,
+    ); // Fetch more to filter
     return allPosts.filter((post) => this.isThreadPost(post)).slice(0, limit);
   }
 
@@ -584,5 +590,4 @@ export class AtprotoFeedAggregator {
       return false;
     }
   }
-
 }

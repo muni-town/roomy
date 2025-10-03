@@ -3,7 +3,7 @@
   import SidebarSpace from "./ThinSidebarSpace.svelte";
   import { page } from "$app/state";
   import { Button, ThemeToggle, ScrollArea, Tooltip } from "@fuxui/base";
-  import { SelectThemePopover  } from "@fuxui/colors";
+  import { SelectThemePopover } from "@fuxui/colors";
   import UserProfileButton from "../user/UserProfileButton.svelte";
   import { backendStatus } from "$lib/workers";
   import { spaces } from "$lib/queries.svelte";

@@ -31,7 +31,7 @@ export interface EdgeBan {
 
 export interface EdgeMember {
   // delegation?: string;
-  can: "read" | "post" | "admin"
+  can: "read" | "post" | "admin";
 }
 
 export type EdgesMap = {

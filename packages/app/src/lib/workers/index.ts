@@ -1,4 +1,3 @@
-
 import { messagePortInterface, reactiveWorkerState } from "./workerMessaging";
 import backendWorkerUrl from "./backendWorker.ts?worker&url";
 import type { BackendInterface, BackendStatus, SqliteStatus } from "./types";
@@ -23,9 +22,14 @@ export const sqliteStatus = reactiveWorkerState<SqliteStatus>(
 
 // Initialize shared worker
 export const hasSharedWorker = "SharedWorker" in globalThis;
-const hasWorker = "Worker" in globalThis
-const SharedWorkerConstructor = hasSharedWorker ? SharedWorker : hasWorker ? Worker : undefined;
-if (!SharedWorkerConstructor) throw new Error("No SharedWorker or Worker constructor defined")
+const hasWorker = "Worker" in globalThis;
+const SharedWorkerConstructor = hasSharedWorker
+  ? SharedWorker
+  : hasWorker
+    ? Worker
+    : undefined;
+if (!SharedWorkerConstructor)
+  throw new Error("No SharedWorker or Worker constructor defined");
 const backendWorker = new SharedWorkerConstructor(backendWorkerUrl, {
   name: "roomy-backend",
   type: "module",

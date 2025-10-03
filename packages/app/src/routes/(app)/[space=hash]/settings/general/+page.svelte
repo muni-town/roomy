@@ -5,7 +5,6 @@
   import { Button, Input, Textarea, toast } from "@fuxui/base";
   import { ulid } from "ulidx";
 
-
   let spaceName = $derived(current.space?.name ?? "");
   let avatarUrl = $derived(current.space?.avatar ?? "");
   let spaceDescription = $derived(current.space?.description ?? "");

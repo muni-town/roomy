@@ -22,8 +22,7 @@ class ActivityIndex {
 
       // Get all chat channels in this space
       const channels = space.channels.filter(
-        (channel) =>
-          channel && !channel.softDeleted,
+        (channel) => channel && !channel.softDeleted,
       );
 
       for (const channel of channels) {
@@ -107,8 +106,7 @@ class ActivityIndex {
 
     // Get all chat channels in this space
     const channels = space.channels.filter(
-      (channel) =>
-        channel && !channel.softDeleted,
+      (channel) => channel && !channel.softDeleted,
     );
 
     for (const channel of channels) {

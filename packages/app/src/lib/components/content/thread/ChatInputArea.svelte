@@ -12,7 +12,6 @@
   import { ulid } from "ulidx";
   import { page } from "$app/state";
 
-
   let {
     replyTo,
     threading = { active: false, selectedMessages: [], name: "" },

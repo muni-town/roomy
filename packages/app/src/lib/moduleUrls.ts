@@ -5,5 +5,5 @@ export const LEAF_MODULE_PERSONAL = {
 
 export const LEAF_MODULE_PUBLIC_READ_WRITE = {
   id: "128e499b08bf26bd3d2e6e73e1908330a11cbea57239f08bebb62a5e595a4fa5",
-  url: "/leaf_module_public_read_write_admin_upgrade.wasm"
+  url: "/leaf_module_public_read_write_admin_upgrade.wasm",
 } as const;

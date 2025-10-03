@@ -104,8 +104,8 @@ export async function executeQuery(
 
   try {
     if (statement.params) {
-      console.log(statement.sql)
-      console.log(statement.params)
+      console.log(statement.sql);
+      console.log(statement.params);
     }
     const { prepared, actions } = await prepareSql(statement);
     const result = runPreparedStatement(prepared);
@@ -115,7 +115,10 @@ export async function executeQuery(
 
     return { ...result, actions };
   } catch (e) {
-    const message = (e instanceof Error ? e.message : String(e)) + " " + JSON.stringify(statement);
+    const message =
+      (e instanceof Error ? e.message : String(e)) +
+      " " +
+      JSON.stringify(statement);
     throw new Error(message);
   }
 }
@@ -173,11 +176,11 @@ const liveQueries: Map<string, { port: MessagePort; status: LiveQueryStatus }> =
 type LiveQueryStatus =
   | { kind: "unprepared"; statement: SqlStatement }
   | {
-    kind: "prepared";
-    tables: string[];
-    prepared: PreparedStatement;
-    sql: string;
-  };
+      kind: "prepared";
+      tables: string[];
+      prepared: PreparedStatement;
+      sql: string;
+    };
 let liveQueriesEnabled = true;
 
 export function disableLiveQueries() {

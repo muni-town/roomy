@@ -15,12 +15,12 @@ export type SpaceMeta = {
 
 export type SpaceTreeItem = { id: string; name: string } & (
   | {
-    type: "category";
-    children: SpaceTreeItem[];
-  }
+      type: "category";
+      children: SpaceTreeItem[];
+    }
   | {
-    type: "channel";
-  }
+      type: "channel";
+    }
 );
 
 /** The space list. */
@@ -64,10 +64,10 @@ $effect.root(() => {
     (row) => JSON.parse(row.json),
   );
 
-  console.log("personalStreamId", backendStatus.personalStreamId)
-  console.log("Spaces", spaces.result)
+  console.log("personalStreamId", backendStatus.personalStreamId);
+  console.log("Spaces", spaces.result);
 
-  // 
+  //
   // was in above query json bit --'admins', (select json_group_array(admin_id) from space_admins where space_id = id)
 
   spaceTree = new LiveQuery(
@@ -110,7 +110,7 @@ $effect.root(() => {
     (row) => row.json && JSON.parse(row.json),
   );
 
-  console.log("spaceTree", spaceTree.result)
+  console.log("spaceTree", spaceTree.result);
 
   // Update current values
   $effect(() => {
@@ -122,7 +122,10 @@ $effect.root(() => {
   $effect(() => {
     if (backendStatus.did) {
       current.isSpaceAdmin =
-        current.space?.permissions?.some((permission) => permission[0] === backendStatus.did && permission[1] === "admin") || false;
+        current.space?.permissions?.some(
+          (permission) =>
+            permission[0] === backendStatus.did && permission[1] === "admin",
+        ) || false;
     }
   });
 });

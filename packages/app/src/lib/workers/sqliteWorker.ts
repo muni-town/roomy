@@ -62,7 +62,7 @@ globalThis.onmessage = (ev) => {
         runSavepoint,
       });
       backend.setActiveSqliteWorker(sqliteChannel.port2);
-      await new Promise(() => { });
+      await new Promise(() => {});
     },
   );
   status.isActiveWorker = false;

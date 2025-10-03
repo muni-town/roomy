@@ -4,13 +4,13 @@
   import posthog from "posthog-js";
   import { backendStatus } from "$lib/workers";
   import { onMount } from "svelte";
-  import { Toaster as FxUIToaster } from '@fuxui/base';
+  import { Toaster as FxUIToaster } from "@fuxui/base";
 
   import { fade } from "svelte/transition";
   import LoginForm from "$lib/components/user/LoginForm.svelte";
   import { TooltipProvider } from "@fuxui/base";
 
-  import IconMdiLoading from "~icons/mdi/loading"
+  import IconMdiLoading from "~icons/mdi/loading";
 
   onMount(async () => {
     // Initialize PostHog for analytics
