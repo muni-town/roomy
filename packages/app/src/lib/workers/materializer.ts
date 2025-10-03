@@ -158,13 +158,6 @@ const materializers: {
     data,
     leafClient,
   }) => {
-    const userUlid = ensuredProfiles.get(data.adminId);
-    console.log("space.roomy.admin.add.0 streamId", streamId);
-    const spaceUlid = await sqliteWorker.runQuery(
-      sql`select entity from comp_space where leaf_space_hash_id = ${Hash.enc(streamId)}`,
-    );
-    console.log("userUlid", userUlid);
-    console.log("spaceUlid", spaceUlid);
     return [
       ...(await ensureProfile(
         sqliteWorker,
@@ -527,8 +520,6 @@ async function ensureProfile(
 
       if (!profile.success) return [];
 
-      // FIXME: troubleshoot the fact that we are somehow making extraneous profile requests to the
-      // atproto PDS in the backend worker.
       return [
         sql`
           insert into entities (ulid, stream_hash_id)
