@@ -708,34 +708,34 @@ class StreamMaterializer {
     console.timeEnd("initSql");
 
     async function init(
+      this: StreamMaterializer,
       client: LeafClient,
       sqliteWorker: SqliteWorkerInterface,
       streamId: string,
       personalStreamId: string,
-      backfill: Promise<void>,
     ) {
       const { stamp } = await client.streamInfo(streamId);
       // create an entity for this stream
-      await sqliteWorker.runQuery(sql`insert into entities (ulid, stream_hash_id) values (${Ulid.enc(stamp)}, ${Hash.enc(streamId)})
+      await sqliteWorker.runQuery(sql`insert into entities (ulid, stream_hash_id) values (${Ulid.enc(stamp)}, ${Hash.enc(personalStreamId)})
         on conflict(ulid) do nothing`);
 
       await sqliteWorker.runQuery(sql`insert into comp_space (entity, leaf_space_hash_id, personal_stream_hash_id, hidden)
         values (
-          (select ulid from entities where stream_hash_id = ${Hash.enc(streamId)}),
+          ${Ulid.enc(stamp)},
           ${Hash.enc(streamId)},
           ${Hash.enc(personalStreamId)},
           ${streamId === personalStreamId ? 1 : 0} -- hide personal space by default
         )
-        on conflict(entity) do update set leaf_space_hash_id = excluded.leaf_space_hash_id`);
+        on conflict(entity) do nothing`);
       // Start backfilling the stream events
-      await backfill;
+      await this.backfillEvents();
     }
-    init(
+
+    init.bind(this)(
       state.leafClient,
       sqliteWorker,
       streamId,
       status.personalStreamId,
-      this.backfillEvents(),
     );
   }
 
