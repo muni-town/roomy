@@ -505,38 +505,6 @@ async function initializeLeafClient(client: LeafClient) {
         status.personalStreamId = personalStreamId;
         await db.kv.add({ key: "personalStreamId", value: personalStreamId });
       }
-
-      if (!sqliteWorker) {
-        console.log("unable to insert user profile into db");
-        throw new Error("Sqlite worker not initialized");
-      }
-      const { stamp } = await client.streamInfo(status.personalStreamId);
-      console.log("user insert stamp", stamp);
-      const profile = await state.agent.getProfile({ actor: did });
-      if (!profile?.data) throw new Error("Could not fetch user profile");
-      console.log("sending info event for user", did);
-      await client.sendEvent(
-        status.personalStreamId,
-        eventCodec.enc({
-          ulid: ulid(),
-          parent: undefined,
-          variant: {
-            kind: "space.roomy.info.0",
-            data: {
-              name: profile.data.displayName
-                ? { tag: "set", value: profile.data.displayName }
-                : { tag: "ignore", value: undefined },
-              avatar: profile.data.avatar
-                ? { tag: "set", value: profile.data.avatar }
-                : { tag: "ignore", value: undefined },
-              description: profile.data.description
-                ? { tag: "set", value: profile.data.description }
-                : { tag: "ignore", value: undefined },
-            },
-          },
-        }).buffer as ArrayBuffer,
-      );
-      console.log("sent info for user");
     }
 
     client.subscribe(status.personalStreamId);

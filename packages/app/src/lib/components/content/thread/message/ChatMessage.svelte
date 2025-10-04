@@ -36,9 +36,7 @@
 
   // TODO: move this author can masquerade logic into the materializer so we don't have to
   // re-hash this in the UI.
-  let authorCanMasquerade = $derived(
-    current.space?.admins.includes(message.authorDid),
-  );
+  let authorCanMasquerade = $derived(true);
   let metadata: {
     name?: string;
     handle: string;

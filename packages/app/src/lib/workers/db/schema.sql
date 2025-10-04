@@ -53,13 +53,6 @@ create table if not exists comp_room (
 create index if not exists idx_comp_room_parent on comp_room(parent);
 create index if not exists idx_comp_room_label on comp_room(label);
 
-create table if not exists comp_reply (
-  entity blob primary key references entities(ulid),
-  reply_to blob not null references entities(ulid),
-  created_at integer not null default (unixepoch() * 1000),
-  updated_at integer not null default (unixepoch() * 1000)
-) strict;
-
 create table if not exists comp_user (
   entity blob primary key references entities(ulid),
   did text,

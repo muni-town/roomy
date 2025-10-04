@@ -40,21 +40,19 @@
       select
         format_ulid(c.entity) as id,
         cast(data as text) as content,
-        a.author as authorDid,
-        'todo' as authorHandle,
-        'todo' as authorAvatar,
-        p.display_name as authorName,
-        p.handle as authorHandle,
-        p.avatar as authorAvatar,
-        o.source as masqueradeSource,
+        u.did as authorDid,
+        i.name as authorName,
+        i.avatar as authorAvatar,
         o.author as masqueradeAuthor,
         o.timestamp as masqueradeTimestamp
       from entities e
         join comp_content c on c.entity = e.ulid
-        join comp_author a on a.entity = e.ulid
-        left join profiles p on p.did = a.author
+        join edges author_edge on author_edge.head = e.ulid and author_edge.label = 'author'
+        join comp_user u on u.entity = author_edge.tail
+        join comp_info i on i.entity = author_edge.tail
         left join comp_override_meta o on o.entity = e.ulid
-      where e.parent = ${page.params.object && Ulid.enc(page.params.object)}
+      where
+        e.parent = ${page.params.object && Ulid.enc(page.params.object)}
       order by c.entity
     `,
   );

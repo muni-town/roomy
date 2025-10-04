@@ -9,11 +9,10 @@ import {
   eventVariantCodec,
   GroupMember,
   Hash,
-  ReadOrWrite,
   Ulid,
 } from "./encoding";
 import schemaSql from "./db/schema.sql?raw";
-import { decodeTime } from "ulidx";
+import { decodeTime, ulid } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
 import type { SqliteWorkerInterface } from "./types";
 import type { Agent } from "@atproto/api";
@@ -262,45 +261,49 @@ const materializers: {
       `,
     ];
   },
-  "space.roomy.room.member.add.0": async ({
-    sqliteWorker,
-    streamId,
-    event,
-    agent,
-    data,
-    leafClient,
-  }) => [
-    ensureEntity(streamId, event.ulid, event.parent),
-    ...(await ensureProfile(
-      sqliteWorker,
-      agent,
-      data.member_id,
-      streamId,
-      leafClient,
-    )),
+  // TODO
+  "space.roomy.room.member.add.0": async (
     {
-      sql: event.parent
-        ? `insert into comp_room_members (room, member, access) values (?, ?, ?)`
-        : `insert into space_members (space_id, member, access) values (?, ?, ?)`,
-      params: [
-        event.parent ? Ulid.enc(event.parent) : Hash.enc(streamId),
-        GroupMember.enc(data.member_id),
-        ReadOrWrite.enc(data.access),
-      ],
+      // sqliteWorker,
+      // streamId,
+      // event,
+      // agent,
+      // data,
+      // leafClient,
     },
+  ) => [
+    // ensureEntity(streamId, event.ulid, event.parent),
+    // ...(await ensureProfile(
+    //   sqliteWorker,
+    //   agent,
+    //   data.member_id,
+    //   streamId,
+    //   leafClient,
+    // )),
+    // {
+    //   sql: event.parent
+    //     ? `insert into comp_room_members (room, member, access) values (?, ?, ?)`
+    //     : `insert into space_members (space_id, member, access) values (?, ?, ?)`,
+    //   params: [
+    //     event.parent ? Ulid.enc(event.parent) : Hash.enc(streamId),
+    //     GroupMember.enc(data.member_id),
+    //     ReadOrWrite.enc(data.access),
+    //   ],
+    // },
   ],
-  "space.roomy.room.member.remove.0": async ({ streamId, event, data }) => [
-    ensureEntity(streamId, event.ulid, event.parent),
-    {
-      sql: event.parent
-        ? "delete from comp_room_members where room = ? and member = ? and access = ?"
-        : "delete from space_members where space_id = ? and member = ? and access = ?",
-      params: [
-        event.parent ? Ulid.enc(event.parent) : Hash.enc(streamId),
-        GroupMember.enc(data.member_id),
-        ReadOrWrite.enc(data.access),
-      ],
-    },
+  // TODO
+  "space.roomy.room.member.remove.0": async ({}) => [
+    // ensureEntity(streamId, event.ulid, event.parent),
+    // {
+    //   sql: event.parent
+    //     ? "delete from comp_room_members where room = ? and member = ? and access = ?"
+    //     : "delete from space_members where space_id = ? and member = ? and access = ?",
+    //   params: [
+    //     event.parent ? Ulid.enc(event.parent) : Hash.enc(streamId),
+    //     GroupMember.enc(data.member_id),
+    //     ReadOrWrite.enc(data.access),
+    //   ],
+    // },
   ],
 
   // Message
@@ -326,6 +329,14 @@ const materializers: {
         leafClient,
       )),
       sql`
+        insert into edges (head, tail, label)
+        values (
+          ${Ulid.enc(event.ulid)},
+          (select entity from comp_user where did = ${user}),
+          'author'
+        )
+      `,
+      sql`
         insert or replace into comp_content (entity, mime_type, data)
         values (
           ${Ulid.enc(event.ulid)},
@@ -336,10 +347,11 @@ const materializers: {
 
     if (data.replyTo) {
       statements.push(sql`
-        insert or replace into comp_reply (entity, reply_to)
+        insert into edges (head, tail, label)
         values (
           ${Ulid.enc(event.ulid)},
-          ${Ulid.enc(data.replyTo)}
+          ${Ulid.enc(data.replyTo)},
+          'reply'
         )
       `);
     }
@@ -498,7 +510,7 @@ async function ensureProfile(
   agent: Agent,
   member: CodecType<typeof GroupMember>,
   streamId: string,
-  client: LeafClient,
+  _client: LeafClient,
 ): Promise<SqlStatement[]> {
   try {
     if (member.tag == "user") {
@@ -510,60 +522,48 @@ async function ensureProfile(
 
       const profile = await agent.getProfile({ actor: did });
 
-      const user = await sqliteWorker.runQuery(sql`
-        select entity from comp_user where did = ${did}
-      `);
-      console.log("user", user, "for did", did);
-      const { stamp } = await client.streamInfo(streamId);
-
-      console.log("stamp", stamp);
-      ensuredProfiles.set(did, stamp);
-
       if (!profile.success) return [];
+
+      const existingEntity = await sqliteWorker.runQuery(sql`
+        select format_ulid(entity) as ulid from comp_user where did = ${did}
+      `);
+      let existingUlid = existingEntity.rows?.[0]?.ulid as string | undefined;
+      let userUlid = existingUlid || ulid();
+
+      ensuredProfiles.set(did, userUlid);
+
+      if (existingUlid) return [];
 
       return [
         sql`
           insert into entities (ulid, stream_hash_id)
-          values (${Ulid.enc(stamp)}, ${Hash.enc(streamId)})
+          values (${Ulid.enc(userUlid)}, ${Hash.enc(streamId)})
           on conflict(ulid) do nothing
           `,
         sql`
         insert into comp_user (entity, did, handle)
         values (
-           ${Ulid.enc(stamp)},
+           ${Ulid.enc(userUlid)},
            ${did},
            ${profile.data.handle}
         )
         on conflict(entity) do nothing
       `,
-        // sql`
-        //   insert into comp_info (entity, name, avatar)
-        //   values (
-        //     ${Ulid.enc(stamp)},
-        //     ${profile.data.displayName},
-        //     ${profile.data.avatar}
-        //   )
-        //   on conflict(entity) do nothing
-        //   `,
+        sql`
+          insert into comp_info (entity, name, avatar)
+          values (
+            ${Ulid.enc(userUlid)},
+            ${profile.data.displayName},
+            ${profile.data.avatar}
+          )
+          on conflict(entity) do nothing
+          `,
       ];
     } else {
       return [];
     }
   } catch (e) {
     console.error("Could not ensure profile", e);
-    return [];
-  }
-}
-
-let ensuredSpaces = new Map();
-
-async function ensureSpace(streamId: string): Promise<SqlStatement[]> {
-  try {
-    // space has already been added
-    if (ensuredSpaces.has(streamId)) return [];
-    return [];
-  } catch (e) {
-    console.error("Could not ensure space", e);
     return [];
   }
 }
