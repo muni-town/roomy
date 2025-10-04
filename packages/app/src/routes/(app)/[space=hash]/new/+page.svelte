@@ -8,7 +8,7 @@
   import { backend } from "$lib/workers";
   import { Hash } from "$lib/workers/encoding";
   import { Button, Input, ScrollArea, Select } from "@fuxui/base";
-  import { ulid } from "ulidx";
+  import { monotonicFactory } from "ulidx";
 
   const types = ["Channel", "Category"] as const;
   let type = $state("Channel") as (typeof types)[number];
@@ -20,9 +20,12 @@
     () => sql`
       select i.name, format_ulid(e.ulid) as id
       from entities e
-        inner join comp_category c on e.ulid = c.entity
+        inner join comp_room r on e.ulid = r.entity
         inner join comp_info i on e.ulid = i.entity
-      where e.stream = ${current.space?.id && Hash.enc(current.space.id)}
+      where
+        e.stream_hash_id = ${current.space?.id && Hash.enc(current.space.id)}
+          and
+        r.label = 'category' 
     `,
   );
   const categories = $derived(categoriesQuery.result || []);
@@ -30,14 +33,14 @@
   async function createObject() {
     if (!current.space) return;
 
+    const ulid = monotonicFactory();
+
     // Create a new room
     const roomId = ulid();
     await backend.sendEvent(current.space.id, {
       ulid: roomId,
       parent:
-        type != "Category" && selectedCategory
-          ? selectedCategory
-          : current.space.ulid,
+        type != "Category" && selectedCategory ? selectedCategory : undefined,
       variant: {
         kind: "space.roomy.room.create.0",
         data: undefined,

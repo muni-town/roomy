@@ -72,45 +72,54 @@ $effect.root(() => {
 
   spaceTree = new LiveQuery(
     () => sql`-- spaceTree
-    select json_object(
-      'id', format_ulid(e.ulid),
-      'name', i.name,
-      'type', 'category',
-      'children', (
-        select json_group_array(
-          json_object(
-            'id', format_ulid(e.ulid),
-            'type', 'channel',
-            'name', inf.name
+      select json_object(
+        'id', format_ulid(e.ulid),
+        'name', i.name,
+        'type', 'category',
+        'children', (
+          select json_group_array(
+            json_object(
+              'id', format_ulid(e.ulid),
+              'type', 'channel',
+              'parent', format_ulid(e.parent),
+              'name', inf.name
+            )
           )
+          from entities e
+            join comp_room room on e.ulid = room.entity
+            join comp_info inf on e.ulid = inf.entity
+          where
+            e.parent = r.entity
+              and
+            room.label = 'channel'
         )
-        from entities e
-          join comp_room cat on e.ulid = cat.entity
-          join comp_info inf on e.ulid = inf.entity
-        where e.parent = c.entity
-      )
-    ) as json
-    from entities e
-      join comp_room c on e.ulid = c.entity
-      join comp_info i on e.ulid = i.entity
-    where e.stream_hash_id = ${current.space?.id && Hash.enc(current.space?.id)}
+      ) as json
+      from entities e
+        join comp_room r on e.ulid = r.entity
+        join comp_info i on e.ulid = i.entity
+      where
+        e.stream_hash_id = ${current.space?.id && Hash.enc(current.space?.id)}
+          and
+        r.label = 'category' 
     union
-    select json_object(
-      'id', format_ulid(e.ulid),
-      'name', i.name,
-      'type', 'channel',
-      'parent', format_ulid(e.parent)
-    ) as json
-    from entities e
-      join comp_room c on e.ulid = c.entity
-      join comp_info i on e.ulid = i.entity
-    where e.stream_hash_id = ${backendStatus.personalStreamId && Hash.enc(backendStatus.personalStreamId)} 
-      and 
-    e.parent is null`,
+      select json_object(
+        'id', format_ulid(e.ulid),
+        'name', i.name,
+        'type', 'channel',
+        'parent', format_ulid(e.parent)
+      ) as json
+      from entities e
+        join comp_room r on e.ulid = r.entity
+        join comp_info i on e.ulid = i.entity
+      where
+        e.stream_hash_id = ${current.space?.id && Hash.enc(current.space.id)}
+          and
+        r.label = 'channel'
+          and
+        e.parent is null
+  `,
     (row) => row.json && JSON.parse(row.json),
   );
-
-  console.log("spaceTree", spaceTree.result);
 
   // Update current values
   $effect(() => {

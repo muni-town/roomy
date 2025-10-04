@@ -230,7 +230,7 @@ const materializers: {
             VALUES (:ulid, ${setUpdates.map((x) => `:${x.key}`)}) on conflict do update
             set ${[...setUpdates].map((x) => `${x.key} = :${x.key}`)}`,
           params: Object.fromEntries([
-            [":ulid", Ulid.enc(event.ulid)],
+            [":ulid", Ulid.enc(event.parent)],
             ...setUpdates.map((x) => [":" + x.key, x.value]),
           ]),
         },
@@ -427,8 +427,7 @@ const materializers: {
     }
     return [
       sql`
-      insert into comp_room (entity, label) values (${Ulid.enc(event.parent)}, 'channel')
-      on conflict do update set label = excluded.label
+      update comp_room set label = 'channel' where entity = ${Ulid.enc(event.parent)}
       `,
     ];
   },
@@ -438,7 +437,7 @@ const materializers: {
       return [];
     }
     return [
-      sql`update comp_room (label) where entity = ${Ulid.enc(event.parent)} values (null)`,
+      sql`update comp_room set label = null where entity = ${Ulid.enc(event.parent)} and label = 'channel'`,
     ];
   },
 
@@ -448,7 +447,9 @@ const materializers: {
       console.warn("Missing target for category mark.");
       return [];
     }
-    return [sql`insert into comp_category values (${Ulid.enc(event.parent)})`];
+    return [
+      sql`update comp_room set label = 'category' where entity = ${Ulid.enc(event.parent)}`,
+    ];
   },
   "space.roomy.category.unmark.0": async ({ event }) => {
     if (!event.parent) {
@@ -456,7 +457,7 @@ const materializers: {
       return [];
     }
     return [
-      sql`delete from comp_category where entity = ${Ulid.enc(event.parent)}`,
+      sql`update comp_room set label = null where entity = ${Ulid.enc(event.parent)} and label = 'category'`,
     ];
   },
 };
@@ -474,7 +475,7 @@ function ensureEntity(
     values (
       ${Ulid.enc(ulid)},
       ${Hash.enc(streamId)},
-      ${parent ? Ulid.enc(parent) : null},
+      ${parent ? Ulid.enc(parent) : undefined},
       ${unixTimeMs}
     )
     on conflict(ulid) do nothing
