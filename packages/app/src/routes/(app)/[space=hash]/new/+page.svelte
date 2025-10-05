@@ -6,7 +6,7 @@
   import { navigate } from "$lib/utils.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { backend } from "$lib/workers";
-  import { Hash } from "$lib/workers/encoding";
+  import { id } from "$lib/workers/encoding";
   import { Button, Input, ScrollArea, Select } from "@fuxui/base";
   import { monotonicFactory } from "ulidx";
 
@@ -18,12 +18,12 @@
 
   let categoriesQuery = new LiveQuery<{ name: string; id: string }>(
     () => sql`
-      select i.name, format_ulid(e.ulid) as id
+      select i.name, id(e.id) as id
       from entities e
-        inner join comp_room r on e.ulid = r.entity
-        inner join comp_info i on e.ulid = i.entity
+        inner join comp_room r on e.id = r.entity
+        inner join comp_info i on e.id = i.entity
       where
-        e.stream_hash_id = ${current.space?.id && Hash.enc(current.space.id)}
+        e.stream_id = ${current.space?.id && id(current.space.id)}
           and
         r.label = 'category' 
     `,
@@ -74,6 +74,8 @@
           data: undefined,
         },
       });
+
+      navigate({ space: current.space.id, object: roomId });
     } else if (type == "Category") {
       // Mark the room as a category
       await backend.sendEvent(current.space.id, {
@@ -84,9 +86,9 @@
           data: undefined,
         },
       });
-    }
 
-    navigate({ space: current.space.id, object: roomId });
+      navigate({ space: current.space.id });
+    }
   }
 </script>
 

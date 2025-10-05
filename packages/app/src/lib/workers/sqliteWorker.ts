@@ -80,7 +80,7 @@ async function runSavepoint(savepoint: Savepoint, depth = 0) {
         }
       }
     } catch (e) {
-      console.error("Error executing savepoint", e);
+      console.error(`Error executing savepoint: ${savepoint.name}`, e);
       await executeQuery({ sql: `rollback to ${savepoint.name}` });
     }
     await executeQuery({ sql: `release ${savepoint.name}` });

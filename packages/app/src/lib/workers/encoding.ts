@@ -5,6 +5,7 @@
  */
 
 import { decodeBase32, encodeBase32 } from "$lib/utils/base32";
+import { isDid } from "@atproto/oauth-client";
 import { hex } from "@scure/base";
 import {
   Bytes,
@@ -26,7 +27,7 @@ import {
 import { createCodec, str, Tuple } from "scale-ts";
 
 /** encoding */
-const enc = <O extends { [key: string]: Encoder<any> }>(
+const kindsEnc = <O extends { [key: string]: Encoder<any> }>(
   inner: O,
 ): Encoder<
   {
@@ -42,7 +43,7 @@ const enc = <O extends { [key: string]: Encoder<any> }>(
 };
 
 /** decoding */
-const dec = <O extends { [key: string]: Decoder<any> }>(
+const kindsDec = <O extends { [key: string]: Decoder<any> }>(
   inner: O,
 ): Decoder<
   {
@@ -74,17 +75,53 @@ export const Kinds = <O extends { [key: string]: Codec<any> }>(
   const d = Object.fromEntries(
     Object.entries(inner).map(([k, v]) => [k, v.dec]),
   );
-  return createCodec(enc(e), dec(d)) as any;
+  return createCodec(kindsEnc(e), kindsDec(d)) as any;
 };
 
-Kinds.enc = enc;
-Kinds.dec = dec;
+Kinds.enc = kindsEnc;
+Kinds.dec = kindsDec;
 
 export const Hash = enhanceCodec(Bytes(32), hex.decode, hex.encode);
 
 export const Ulid = enhanceCodec(Bytes(16), decodeBase32, (b) =>
   encodeBase32(b).toUpperCase(),
 );
+
+export const IdCodec = Enum({
+  unknown: str,
+  ulid: Ulid,
+  hash: Hash,
+  did: enhanceCodec<string, string>(
+    str,
+    (s) => {
+      if (isDid(s)) {
+        return s;
+      } else {
+        throw new Error(`DID is not valid: ${s}`);
+      }
+    },
+    (s) => {
+      if (isDid(s)) {
+        return s;
+      } else {
+        throw new Error(`DID is not valid: ${s}`);
+      }
+    },
+  ),
+});
+
+/** Encode an ID to it's binary format */
+export const id = (id: string): Uint8Array => {
+  if (isDid(id)) {
+    return IdCodec.enc({ tag: "did", value: id });
+  } else if (id.match(/^[A-Fa-f0-9]{64}$/)) {
+    return IdCodec.enc({ tag: "hash", value: id });
+  } else if (id.match(/^[\da-hjkmnp-tv-z]{26}$/iu)) {
+    return IdCodec.enc({ tag: "ulid", value: id });
+  } else {
+    return IdCodec.enc({ tag: "unknown", value: id });
+  }
+};
 
 export const ValueUpdate = <T>(ty: Codec<T>) =>
   Enum({

@@ -30,7 +30,7 @@ import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
 import { config as materializerConfig, type EventType } from "./materializer";
 import { workerOauthClient } from "./oauth";
 import type { LiveQueryMessage } from "$lib/workers/setupSqlite";
-import { eventCodec, Hash, Ulid } from "./encoding";
+import { eventCodec, Hash, id } from "./encoding";
 import { sql } from "$lib/utils/sqlTemplate";
 import { ulid } from "ulidx";
 import { LEAF_MODULE_PERSONAL } from "../moduleUrls";
@@ -357,7 +357,7 @@ function connectMessagePort(port: MessagePortApi) {
       await previewMaterializer.fetchPreviewEvents();
       const result = await sqliteWorker.runQuery(sql`
         select e.*, c.* from entities e JOIN comp_info c
-          ON e.ulid = c.entity where e.stream_hash_id = ${Hash.enc(streamId)} and e.parent is null
+          ON e.ulid = c.entity where e.stream_id = ${Hash.enc(streamId)} and e.parent is null
       `);
       console.log("Preview space result", result);
       return new Promise(() => {
@@ -568,11 +568,9 @@ class OpenSpacesMaterializer {
       if ("error" in data) {
         console.warn("Error in spaces list query", data.error);
       } else if ("rows" in data) {
-        const spaces = data.rows as { leaf_space_hash_id: Uint8Array }[];
+        const spaces = data.rows as { id: string }[];
         console.log("spaces", spaces);
-        this.updateSpaceList(
-          spaces.map(({ leaf_space_hash_id }) => Hash.dec(leaf_space_hash_id)),
-        );
+        this.updateSpaceList(spaces.map(({ id }) => id));
       }
     };
 
@@ -580,7 +578,9 @@ class OpenSpacesMaterializer {
       this.#liveQueryId,
       channel.port2,
       sql`-- backend space list
-      select leaf_space_hash_id from comp_space where personal_stream_hash_id = ${Hash.enc(this.#streamId)} and hidden = 0`,
+        select id(e.id) as id from entities e join comp_space on e.id = comp_space.entity
+        where stream_id = ${id(this.#streamId)} and hidden = 0
+      `,
     );
   }
 
@@ -675,36 +675,8 @@ class StreamMaterializer {
     sqliteWorker.runSavepoint({ name: "init", items: config.initSql });
     console.timeEnd("initSql");
 
-    async function init(
-      this: StreamMaterializer,
-      client: LeafClient,
-      sqliteWorker: SqliteWorkerInterface,
-      streamId: string,
-      personalStreamId: string,
-    ) {
-      const { stamp } = await client.streamInfo(streamId);
-      // create an entity for this stream
-      await sqliteWorker.runQuery(sql`insert into entities (ulid, stream_hash_id) values (${Ulid.enc(stamp)}, ${Hash.enc(personalStreamId)})
-        on conflict(ulid) do nothing`);
-
-      await sqliteWorker.runQuery(sql`insert into comp_space (entity, leaf_space_hash_id, personal_stream_hash_id, hidden)
-        values (
-          ${Ulid.enc(stamp)},
-          ${Hash.enc(streamId)},
-          ${Hash.enc(personalStreamId)},
-          ${streamId === personalStreamId ? 1 : 0} -- hide personal space by default
-        )
-        on conflict(entity) do nothing`);
-      // Start backfilling the stream events
-      await this.backfillEvents();
-    }
-
-    init.bind(this)(
-      state.leafClient,
-      sqliteWorker,
-      streamId,
-      status.personalStreamId,
-    );
+    // Start backfilling the stream events
+    this.backfillEvents();
   }
 
   async backfillEvents() {
@@ -738,9 +710,9 @@ class StreamMaterializer {
             name: "backfill_events",
             items: newEvents.map(
               (event) =>
-                sql`INSERT INTO events (idx, stream_hash_id, payload)
+                sql`INSERT INTO events (idx, stream_id, payload)
                   VALUES (${event.idx}, ${Hash.enc(this.#streamId)}, ${event.payload})
-                  ON CONFLICT(idx, stream_hash_id) DO NOTHING`,
+                  ON CONFLICT(idx, stream_id) DO NOTHING`,
             ),
           };
 
@@ -926,9 +898,9 @@ class PreviewMaterializer {
           name: "backfill_events_preview",
           items: newEvents.map(
             (event) =>
-              sql`INSERT INTO events (idx, stream_hash_id, payload)
+              sql`INSERT INTO events (idx, stream_id, payload)
                 VALUES (${event.idx}, ${Hash.enc(this.#personalStreamId)}, ${event.payload})
-                ON CONFLICT(idx, stream_hash_id) DO NOTHING`,
+                ON CONFLICT(idx, stream_id) DO NOTHING`,
           ),
         };
 

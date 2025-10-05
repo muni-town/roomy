@@ -4,7 +4,7 @@ import initSqlite3, {
   type Sqlite3Static,
   type PreparedStatement,
 } from "@sqlite.org/sqlite-wasm";
-import { Hash, Ulid } from "./encoding";
+import { IdCodec } from "./encoding";
 import type { SqlStatement } from "./backendWorker";
 
 let sqlite3: Sqlite3Static | null = null;
@@ -59,34 +59,13 @@ export async function initializeDatabase(dbName: string): Promise<void> {
     db.exec("pragma locking_mode = exclusive;");
     db.exec("pragma journal_mode = wal");
     db.exec("pragma page_size = 8192");
-    db.createFunction("format_hash", (_ctx, blob) => {
+
+    // Parse a binary ID to it's string representation
+    db.createFunction("id", (_ctx, blob) => {
       if (blob instanceof Uint8Array) {
-        return Hash.dec(blob);
+        return IdCodec.dec(blob).value;
       } else {
         return blob;
-      }
-    });
-    db.createFunction("format_ulid", (_ctx, blob) => {
-      if (blob instanceof Uint8Array) {
-        return Ulid.dec(blob);
-      } else {
-        return blob;
-      }
-    });
-    // It's hypothetically more performant just to encode in JS before sending it to SQLite, so this
-    // is mostly for debugging.
-    db.createFunction("hash", (_ctx, s) => {
-      if (typeof s == "string") {
-        return Hash.enc(s);
-      } else {
-        return s;
-      }
-    });
-    db.createFunction("ulid", (_ctx, s) => {
-      if (typeof s == "string") {
-        return Ulid.enc(s);
-      } else {
-        return s;
       }
     });
   })();

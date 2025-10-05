@@ -8,7 +8,7 @@
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
   import { LiveQuery } from "$lib/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { Ulid } from "$lib/workers/encoding";
+  import { id, Ulid } from "$lib/workers/encoding";
   import { Tabs } from "@fuxui/base";
   import { Box, Button } from "@fuxui/base";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
@@ -94,34 +94,17 @@
     }
   });
 
-  // doesn't currently return anything...
   const query = new LiveQuery<{ name: string; channel: 1 | null }>(
-    () => sql`
+    () => sql`--
     select
       i.name as name,
-      (select 1 from comp_room where entity = e.ulid) as channel
+      (select 1 from comp_room where entity = e.id) as channel
       -- Add checks for other component types later, like page, feed, etc.
     from entities e
-      join comp_info i on i.entity = e.ulid
-    where e.ulid = ${page.params.object && Ulid.enc(page.params.object)}
+      join comp_info i on i.entity = e.id
+    where e.id = ${page.params.object && id(page.params.object)}
   `,
   );
-  //
-  // const query1 = new LiveQuery<{ name: string; channel: 1 | null }>(
-  //   () => sql`
-  //   select * from comp_room where
-  //   entity = ${page.params.object && Ulid.enc(page.params.object)}`,
-  // );
-
-  $effect(() => {
-    // $inspect(current);
-    console.log("query...");
-    $inspect(query.result);
-    $inspect(query.error);
-  });
-
-  const queryHasResults = $derived(query.result && query.result.length);
-
   const objectName = $derived(query.result?.[0]?.name || "");
   const objectType = $derived(
     query.result?.[0]?.channel == 1 ? "channel" : "unknown",
@@ -171,8 +154,6 @@
         <Button size="lg" onclick={joinSpace}>Join Space</Button>
       </Box>
     </div>
-  {:else if !queryHasResults}
-    <div class="p-4">Loading Space...</div>
   {:else if objectType == "channel"}
     {#if activeTab == "Chat"}
       <TimelineView />

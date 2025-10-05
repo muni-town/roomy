@@ -15,7 +15,7 @@
   import IconTablerArrowDown from "~icons/tabler/arrow-down";
   import { LiveQuery } from "$lib/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { Ulid } from "$lib/workers/encoding";
+  import { id } from "$lib/workers/encoding";
 
   let {
     threading,
@@ -38,24 +38,25 @@
   let query = new LiveQuery<Message>(
     () => sql`
       select
-        format_ulid(c.entity) as id,
-        cast(data as text) as content,
+        id(c.entity) as id,
+        cast(c.data as text) as content,
         u.did as authorDid,
         i.name as authorName,
         i.avatar as authorAvatar,
         o.author as masqueradeAuthor,
         o.timestamp as masqueradeTimestamp
       from entities e
-        join comp_content c on c.entity = e.ulid
-        join edges author_edge on author_edge.head = e.ulid and author_edge.label = 'author'
-        join comp_user u on u.entity = author_edge.tail
+        join comp_content c on c.entity = e.id
+        join edges author_edge on author_edge.head = e.id and author_edge.label = 'author'
+        join comp_user u on u.did = author_edge.tail
         join comp_info i on i.entity = author_edge.tail
-        left join comp_override_meta o on o.entity = e.ulid
+        left join comp_override_meta o on o.entity = e.id
       where
-        e.parent = ${page.params.object && Ulid.enc(page.params.object)}
+        e.parent = ${page.params.object && id(page.params.object)}
       order by c.entity
     `,
   );
+  $inspect({ messages: query.result });
 
   let showLastN = $state(50);
   let isAtBottom = $state(true);

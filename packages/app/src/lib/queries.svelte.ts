@@ -2,7 +2,7 @@ import { page } from "$app/state";
 import { LiveQuery } from "./liveQuery.svelte";
 import { sql } from "./utils/sqlTemplate";
 import { backendStatus } from "./workers";
-import { Hash } from "./workers/encoding";
+import { id } from "./workers/encoding";
 
 export type SpaceMeta = {
   id: string;
@@ -40,32 +40,29 @@ $effect.root(() => {
   spaces = new LiveQuery(
     () => sql`-- spaces
       select json_object(
-          'id', format_hash(cs.leaf_space_hash_id),
-          'ulid', format_ulid(cs.entity),
+          'id', id(cs.entity),
           'name', ci.name,
           'avatar', ci.avatar,
           'description', ci.description,
           'rooms', (select json_group_array(json_object(
-            'id', format_ulid(cr.entity),
+            'id', id(cr.entity),
             'type', cr.label
           )) from comp_room cr where cr.parent = cs.entity),
           'permissions', (
             select json_group_array(
-              json_array(cu.did, json_extract(e.payload, '$.can')))
+              json_array(id(cu.did), json_extract(e.payload, '$.can')))
             from edges e 
-            join comp_user cu on cu.entity = e.tail
+            join comp_user cu on cu.did = e.tail
             where e.head = cs.entity and e.label = 'member'
         )) as json
       from comp_space cs
       join comp_info ci on cs.entity = ci.entity
-      where personal_stream_hash_id = ${backendStatus.personalStreamId && Hash.enc(backendStatus.personalStreamId)} 
+      join entities e on e.id = cs.entity
+      where e.stream_id = ${backendStatus.personalStreamId && id(backendStatus.personalStreamId)} 
         and hidden = 0
     `,
     (row) => JSON.parse(row.json),
   );
-
-  console.log("personalStreamId", backendStatus.personalStreamId);
-  console.log("Spaces", spaces.result);
 
   //
   // was in above query json bit --'admins', (select json_group_array(admin_id) from space_admins where space_id = id)
@@ -73,21 +70,21 @@ $effect.root(() => {
   spaceTree = new LiveQuery(
     () => sql`-- spaceTree
       select json_object(
-        'id', format_ulid(e.ulid),
+        'id', id(e.id),
         'name', i.name,
         'type', 'category',
         'children', (
           select json_group_array(
             json_object(
-              'id', format_ulid(e.ulid),
+              'id', id(e.id),
               'type', 'channel',
-              'parent', format_ulid(e.parent),
+              'parent', id(e.parent),
               'name', inf.name
             )
           )
           from entities e
-            join comp_room room on e.ulid = room.entity
-            join comp_info inf on e.ulid = inf.entity
+            join comp_room room on e.id = room.entity
+            join comp_info inf on e.id = inf.entity
           where
             e.parent = r.entity
               and
@@ -95,24 +92,24 @@ $effect.root(() => {
         )
       ) as json
       from entities e
-        join comp_room r on e.ulid = r.entity
-        join comp_info i on e.ulid = i.entity
+        join comp_room r on e.id = r.entity
+        join comp_info i on e.id = i.entity
       where
-        e.stream_hash_id = ${current.space?.id && Hash.enc(current.space?.id)}
+        e.stream_id = ${current.space?.id && id(current.space.id)}
           and
         r.label = 'category' 
     union
       select json_object(
-        'id', format_ulid(e.ulid),
+        'id', id(e.id),
         'name', i.name,
         'type', 'channel',
-        'parent', format_ulid(e.parent)
+        'parent', id(e.parent)
       ) as json
       from entities e
-        join comp_room r on e.ulid = r.entity
-        join comp_info i on e.ulid = i.entity
+        join comp_room r on e.id = r.entity
+        join comp_info i on e.id = i.entity
       where
-        e.stream_hash_id = ${current.space?.id && Hash.enc(current.space.id)}
+        e.stream_id = ${current.space?.id && id(current.space.id)}
           and
         r.label = 'channel'
           and
