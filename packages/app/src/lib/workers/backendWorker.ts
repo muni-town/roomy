@@ -159,7 +159,7 @@ class Backend {
       });
 
       if (!this.#leafClient) {
-        const leafUrl = import.meta.env.VITE_LEAF_URL;
+        const leafUrl = import.meta.env.VITE_LEAF_URL || 'https://leaf-dev.muni.town';
         this.setLeafClient(
           new LeafClient(leafUrl, async () => {
             const resp = await this.agent?.com.atproto.server.getServiceAuth({
