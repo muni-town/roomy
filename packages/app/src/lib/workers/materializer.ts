@@ -448,7 +448,7 @@ function ensureEntity(
 let ensuredProfiles = new Set();
 
 async function ensureProfile(
-  _sqliteWorker: SqliteWorkerInterface,
+  sqliteWorker: SqliteWorkerInterface,
   agent: Agent,
   member: CodecType<typeof GroupMember>,
   streamId: string,
@@ -457,6 +457,14 @@ async function ensureProfile(
   try {
     if (member.tag == "user") {
       const did = member.value;
+
+      const existingProfile = await sqliteWorker.runQuery(
+        sql`select 1 from entities where id = ${id(did)}`,
+      );
+
+      // We already have the profile.
+      if (existingProfile.rows?.length) return [];
+
       if (ensuredProfiles.has(did)) {
         // The profile has already been fetched and the statement to insert it is in the batch
         return [];
