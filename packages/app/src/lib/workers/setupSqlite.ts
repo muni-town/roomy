@@ -82,14 +82,9 @@ export async function executeQuery(
   if (!db || !sqlite3) throw new Error("database_not_initialized");
 
   try {
-    if (statement.params) {
-      console.log(statement.sql);
-      console.log(statement.params);
-    }
     const { prepared, actions } = await prepareSql(statement);
     const result = runPreparedStatement(prepared);
 
-    // console.log("update live queries for execute", statement);
     await updateLiveQueries(actions);
 
     return { ...result, actions };
