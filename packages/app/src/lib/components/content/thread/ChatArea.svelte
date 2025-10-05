@@ -43,7 +43,7 @@
         u.did as authorDid,
         i.name as authorName,
         i.avatar as authorAvatar,
-        o.author as masqueradeAuthor,
+        id(o.author) as masqueradeAuthor,
         o.timestamp as masqueradeTimestamp
       from entities e
         join comp_content c on c.entity = e.id
@@ -56,7 +56,6 @@
       order by c.entity
     `,
   );
-  $inspect({ messages: query.result });
 
   let showLastN = $state(50);
   let isAtBottom = $state(true);
