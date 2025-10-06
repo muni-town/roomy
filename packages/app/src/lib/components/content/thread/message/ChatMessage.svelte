@@ -10,8 +10,8 @@
   import MessageRepliedTo from "./MessageRepliedTo.svelte";
   import MessageReactions from "./MessageReactions.svelte";
   import ChatInput from "../ChatInput.svelte";
+  import IconTablerCheck from "~icons/tabler/check";
   // import MessageRepliedTo from "./MessageRepliedTo.svelte";
-  import toast from "svelte-french-toast";
   // import ImageUrlEmbed from "./embeds/ImageUrlEmbed.svelte";
   // import { convertReactionsToEmojis } from "$lib/utils/reactions";
   // import MessageThreadBadge from "./MessageThreadBadge.svelte";
@@ -23,7 +23,6 @@
   import { backendStatus } from "$lib/workers";
   import { decodeTime } from "ulidx";
   import { current } from "$lib/queries.svelte";
-  import Icon from "@iconify/svelte";
 
   let {
     message,
@@ -275,10 +274,7 @@
         class="border border-primary bg-base-50 text-primary-content size-4 rounded items-center cursor-pointer"
       >
         {#if isSelected}
-          <Icon
-            icon="material-symbols:check-rounded"
-            class="bg-primary size-3.5 dark:text-black"
-          />
+          <IconTablerCheck class="bg-primary size-3.5 dark:text-black" />
         {/if}
       </div>
     </Checkbox.Root>

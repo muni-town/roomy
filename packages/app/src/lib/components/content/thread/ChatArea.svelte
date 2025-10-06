@@ -10,8 +10,7 @@
   import { Virtualizer } from "virtua/svelte";
   import { setContext } from "svelte";
   import { page } from "$app/state";
-  import { Button } from "@fuxui/base";
-  import toast from "svelte-french-toast";
+  import { Button, toast } from "@fuxui/base";
 
   import IconTablerArrowDown from "~icons/tabler/arrow-down";
   import { LiveQuery } from "$lib/liveQuery.svelte";

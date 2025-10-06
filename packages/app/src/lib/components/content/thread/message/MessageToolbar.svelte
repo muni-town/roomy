@@ -2,10 +2,16 @@
   import { Toolbar, Tooltip as BitsTooltip } from "bits-ui";
   import Drawer from "$lib/components/helper/Drawer.svelte";
   import Tooltip from "$lib/components/helper/Tooltip.svelte";
-  import Icon from "@iconify/svelte";
   import { Button, buttonVariants } from "@fuxui/base";
   import { PopoverEmojiPicker } from "@fuxui/social";
   import { setReplyTo } from "../ChatInputArea.svelte";
+  import type { Message } from "../ChatArea.svelte";
+
+  import IconLucideSmilePlus from "~icons/lucide/smile-plus";
+  import IconMdiReply from "~icons/mdi/reply";
+  import IconTablerNeedleThread from "~icons/tabler/needle-thread";
+  import IconTablerEdit from "~icons/tabler/edit";
+  import IconTablerTrash from "~icons/tabler/trash";
 
   let {
     canEdit = true,
@@ -80,7 +86,7 @@
     >
       {#snippet child({ props })}
         <Button size="icon" variant="ghost" {...props}>
-          <Icon icon="lucide:smile-plus" class="text-primary" />
+          <IconLucideSmilePlus class="text-primary" />
         </Button>
       {/snippet}
     </PopoverEmojiPicker>
@@ -94,7 +100,7 @@
       }}
       class="dz-join-item dz-btn w-full"
     >
-      <Icon icon="fa6-solid:reply" />
+      <IconMdiReply />
       Reply
     </Button>
     <Button
@@ -104,7 +110,7 @@
       }}
       class="dz-join-item dz-btn w-full"
     >
-      <Icon icon="tabler:needle-thread" />Create Thread
+      <IconTablerNeedleThread />Create Thread
     </Button>
     {#if canEdit}
       <Button
@@ -114,7 +120,7 @@
         }}
         class="dz-join-item dz-btn w-full"
       >
-        <Icon icon="tabler:edit" />
+        <IconTablerEdit />
         Edit
       </Button>
     {/if}
@@ -123,7 +129,7 @@
         onclick={() => deleteMessage()}
         class="dz-join-item dz-btn dz-btn-error w-full"
       >
-        <Icon icon="tabler:trash" />
+        <IconTablerTrash />
         Delete
       </Button>
     {/if}
@@ -167,7 +173,7 @@
             class="backdrop-blur-none"
             aria-label="Pick an emoji"
           >
-            <Icon icon="lucide:smile-plus" class="text-primary" />
+            <IconLucideSmilePlus class="text-primary" />
           </Button>
         {/snippet}
       </PopoverEmojiPicker>
@@ -183,7 +189,7 @@
           ]}
           aria-label="Edit Message"
         >
-          <Icon icon="tabler:edit" />
+          <IconTablerEdit />
         </Toolbar.Button>
       </Tooltip>
     {/if}
@@ -198,7 +204,7 @@
           ]}
           aria-label="Delete Message"
         >
-          <Icon icon="tabler:trash" class="text-warning" />
+          <IconTablerTrash class="text-warning" />
         </Toolbar.Button>
       </Tooltip>
     {/if}
@@ -212,7 +218,7 @@
         ]}
         aria-label="Create Thread"
       >
-        <Icon icon="tabler:needle-thread" class="text-primary" />
+        <IconTablerNeedleThread class="text-primary" />
       </Toolbar.Button>
     </Tooltip>
 
@@ -225,7 +231,7 @@
         ]}
         aria-label="Reply"
       >
-        <Icon icon="fa6-solid:reply" />
+        <IconMdiReply />
       </Toolbar.Button>
     </Tooltip>
   </Toolbar.Root>
