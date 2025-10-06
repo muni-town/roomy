@@ -39,9 +39,6 @@ importers:
 
   packages/app:
     dependencies:
-      '@iconify/svelte':
-        specifier: ^5.0.2
-        version: 5.0.2(svelte@5.38.10)
       hls.js:
         specifier: ^1.6.12
         version: 1.6.12
@@ -238,9 +235,6 @@ importers:
       svelte-dnd-action:
         specifier: ^0.9.65
         version: 0.9.65(svelte@5.38.10)
-      svelte-french-toast:
-        specifier: 2.0.0-alpha.0
-        version: 2.0.0-alpha.0(svelte@5.38.10)
       svelte-render-scan:
         specifier: ^1.1.0
         version: 1.1.0(svelte@5.38.10)
@@ -800,11 +794,6 @@ packages:
 
   '@iconify-json/tabler@1.2.23':
     resolution: {integrity: sha512-Knb8ykgMwB5uSoqrDv1xIdJYM03OP06OXjN6QvGXaTNtdHkW9ciKA+aftz6lwM2jwJA+bsUWeDzLBlPt2uJm4w==}
-
-  '@iconify/svelte@5.0.2':
-    resolution: {integrity: sha512-1iWUT+1veS/QOAzKDG0NPgBtJYGoJqEPwF97voTm8jw6PQ6yU0hL73lEwFoTGMrZmatLvh9cjRBmeSHHaltmrg==}
-    peerDependencies:
-      svelte: '>4.0.0'
 
   '@iconify/types@2.0.0':
     resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
@@ -3349,11 +3338,6 @@ packages:
     peerDependencies:
       svelte: '>=3.23.0 || ^5.0.0-next.0'
 
-  svelte-french-toast@2.0.0-alpha.0:
-    resolution: {integrity: sha512-81wcVaY9UZ/0JuzLEizMSoIXqNbX7yhfTZavBuw94T3cnT2HmJ9O+qXY/c91h9FkeMwboo0KHZVmzOEQVTXDFg==}
-    peerDependencies:
-      svelte: ^5.0.0
-
   svelte-render-scan@1.1.0:
     resolution: {integrity: sha512-9S73wEtcnn9Hn0HsOSufm+AC+3Es2rMXoWMEWk6Fa3w3yORBg6khOSsZ8+kj/rY4BJRZTyjuFQBytFPGC8YHGQ==}
     peerDependencies:
@@ -3378,11 +3362,6 @@ packages:
     engines: {node: '>=18', pnpm: '>=8.7.0'}
     peerDependencies:
       svelte: ^5.0.0
-
-  svelte-writable-derived@3.1.1:
-    resolution: {integrity: sha512-w4LR6/bYZEuCs7SGr+M54oipk/UQKtiMadyOhW0PTwAtJ/Ai12QS77sLngEcfBx2q4H8ZBQucc9ktSA5sUGZWw==}
-    peerDependencies:
-      svelte: ^3.2.1 || ^4.0.0-next.1 || ^5.0.0-next.94
 
   svelte@5.38.10:
     resolution: {integrity: sha512-UY+OhrWK7WI22bCZ00P/M3HtyWgwJPi9IxSRkoAE2MeAy6kl7ZlZWJZ8RaB+X4KD/G+wjis+cGVnVYaoqbzBqg==}
@@ -4313,11 +4292,6 @@ snapshots:
   '@iconify-json/tabler@1.2.23':
     dependencies:
       '@iconify/types': 2.0.0
-
-  '@iconify/svelte@5.0.2(svelte@5.38.10)':
-    dependencies:
-      '@iconify/types': 2.0.0
-      svelte: 5.38.10
 
   '@iconify/types@2.0.0': {}
 
@@ -6845,11 +6819,6 @@ snapshots:
     dependencies:
       svelte: 5.38.10
 
-  svelte-french-toast@2.0.0-alpha.0(svelte@5.38.10):
-    dependencies:
-      svelte: 5.38.10
-      svelte-writable-derived: 3.1.1(svelte@5.38.10)
-
   svelte-render-scan@1.1.0(svelte@5.38.10):
     dependencies:
       svelte: 5.38.10
@@ -6871,10 +6840,6 @@ snapshots:
       clsx: 2.1.1
       runed: 0.23.4(svelte@5.38.10)
       style-to-object: 1.0.9
-      svelte: 5.38.10
-
-  svelte-writable-derived@3.1.1(svelte@5.38.10):
-    dependencies:
       svelte: 5.38.10
 
   svelte@5.38.10:
