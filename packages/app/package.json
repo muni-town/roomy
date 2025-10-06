@@ -26,6 +26,7 @@
     "lint-staged": "lint-staged"
   },
   "dependencies": {
+    "@iconify/svelte": "^5.0.2",
     "hls.js": "^1.6.12",
     "socket.io-msgpack-parser": "^3.0.2"
   },

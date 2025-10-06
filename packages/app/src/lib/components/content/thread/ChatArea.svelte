@@ -30,14 +30,19 @@
     masqueradeAuthor?: string;
     masqueradeTimestamp?: string;
     mergeWithPrevious?: boolean;
+    replyTo?: string;
   };
 
   let {
     threading,
+    startThreading,
     virtualizer = $bindable(),
+    toggleSelect,
   }: {
-    threading?: { active: boolean; selectedMessages: string[] };
+    threading?: { active: boolean; selectedMessages: Message[]; name: string };
+    startThreading: (message?: Message) => void;
     virtualizer?: Virtualizer<Message>;
+    toggleSelect: (message: Message) => void;
   } = $props();
 
   let query = new LiveQuery<Message>(
@@ -49,13 +54,15 @@
         i.name as authorName,
         i.avatar as authorAvatar,
         id(o.author) as masqueradeAuthor,
-        o.timestamp as masqueradeTimestamp
+        o.timestamp as masqueradeTimestamp,
+        id(e.tail) as replyTo
       from entities e
         join comp_content c on c.entity = e.id
         join edges author_edge on author_edge.head = e.id and author_edge.label = 'author'
         join comp_user u on u.did = author_edge.tail
         join comp_info i on i.entity = author_edge.tail
         left join comp_override_meta o on o.entity = e.id
+        left join edges e on e.head = c.entity and e.label = 'reply'
       where
         e.parent = ${page.params.object && id(page.params.object)}
       order by c.entity
@@ -265,7 +272,12 @@
               getKey={(x) => x.id}
             >
               {#snippet children(message: Message)}
-                <ChatMessage {message} {threading} />
+                <ChatMessage
+                  {message}
+                  {threading}
+                  {startThreading}
+                  {toggleSelect}
+                />
               {/snippet}
             </Virtualizer>
           {/key}

@@ -5,6 +5,7 @@
   import Icon from "@iconify/svelte";
   import { Button, buttonVariants } from "@fuxui/base";
   import { PopoverEmojiPicker } from "@fuxui/social";
+  import { setReplyTo } from "../ChatInputArea.svelte";
 
   let {
     canEdit = true,
@@ -13,7 +14,7 @@
     deleteMessage,
     isDrawerOpen = $bindable(false),
     toggleReaction,
-    setReplyTo,
+    message,
     startThreading,
   }: {
     canEdit?: boolean;
@@ -22,7 +23,7 @@
     deleteMessage: () => void;
     toggleReaction: (reaction: string) => void;
     isDrawerOpen?: boolean;
-    setReplyTo: () => void;
+    message: Message;
     startThreading: () => void;
   } = $props();
 
@@ -88,7 +89,7 @@
   <div class="flex flex-col gap-4 w-full">
     <Button
       onclick={() => {
-        setReplyTo();
+        setReplyTo(id);
         isDrawerOpen = false;
       }}
       class="dz-join-item dz-btn w-full"
@@ -217,7 +218,7 @@
 
     <Tooltip tip="Reply">
       <Toolbar.Button
-        onclick={setReplyTo}
+        onclick={() => setReplyTo(message)}
         class={[
           buttonVariants({ variant: "ghost", size: "iconSm" }),
           "backdrop-blur-none",

@@ -8,7 +8,7 @@
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
   import { LiveQuery } from "$lib/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { id, Ulid } from "$lib/workers/encoding";
+  import { id } from "$lib/workers/encoding";
   import { Tabs } from "@fuxui/base";
   import { Box, Button } from "@fuxui/base";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
@@ -95,7 +95,7 @@
   });
 
   const query = new LiveQuery<{ name: string; channel: 1 | null }>(
-    () => sql`--
+    () => sql`
     select
       i.name as name,
       (select 1 from comp_room where entity = e.id) as channel

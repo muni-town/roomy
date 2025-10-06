@@ -1,20 +1,18 @@
 <script lang="ts" module>
   export let editingMessage = $state({ id: "" });
-
-  export let replyTo = $state({ id: "" });
 </script>
 
 <script lang="ts">
   import { Avatar, Checkbox } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
-  // import MessageToolbar from "./MessageToolbar.svelte";
+  import MessageToolbar from "./MessageToolbar.svelte";
+  import MessageRepliedTo from "./MessageRepliedTo.svelte";
   import MessageReactions from "./MessageReactions.svelte";
   import ChatInput from "../ChatInput.svelte";
   // import MessageRepliedTo from "./MessageRepliedTo.svelte";
-  // import toast from "svelte-french-toast";
+  import toast from "svelte-french-toast";
   // import ImageUrlEmbed from "./embeds/ImageUrlEmbed.svelte";
-  import { setInputFocus } from "../ChatInput.svelte";
   // import { convertReactionsToEmojis } from "$lib/utils/reactions";
   // import MessageThreadBadge from "./MessageThreadBadge.svelte";
   // import VideoUrlEmbed from "./embeds/VideoUrlEmbed.svelte";
@@ -25,13 +23,18 @@
   import { backendStatus } from "$lib/workers";
   import { decodeTime } from "ulidx";
   import { current } from "$lib/queries.svelte";
+  import Icon from "@iconify/svelte";
 
   let {
     message,
     threading,
+    startThreading,
+    toggleSelect,
   }: {
     message: Message;
-    threading?: { active: boolean; selectedMessages: string[] };
+    threading?: { active: boolean; selectedMessages: Message[]; name: string };
+    startThreading: (message?: Message) => void;
+    toggleSelect: (message: Message) => void;
   } = $props();
 
   // TODO: move this author can masquerade logic into the materializer so we don't have to
@@ -39,7 +42,7 @@
   let authorCanMasquerade = $derived(true);
   let metadata: {
     name?: string;
-    handle: string;
+    handle?: string;
     avatarUrl?: string;
     appTag?: string;
     timestamp: Date;
@@ -82,7 +85,7 @@
   });
 
   let messageByMe = $derived(message.authorDid == backendStatus.did);
-  // let canDelete = $derived(current.isSpaceAdmin || messageByMe);
+  let canDelete = $derived(current.isSpaceAdmin || messageByMe);
 
   // let previousMessage = $derived(new CoState(RoomyEntity, previousMessageId));
 
@@ -196,11 +199,6 @@
     // );
   });
 
-  function setReplyTo() {
-    // replyTo.id = message.current?.id ?? "";
-    setInputFocus();
-  }
-
   function removeReaction(emoji: string) {
     // let index = reactions.current?.reactions?.findIndex(
     //   (reaction) =>
@@ -257,7 +255,7 @@
   class={`flex flex-col w-full relative max-w-screen isolate px-4 ${threading?.active ? "select-none" : ""}`}
   onclick={selectMessage}
 >
-  <!-- {#if threading?.active}
+  {#if threading?.active}
     <Checkbox.Root
       aria-label="Select message"
       onclick={(e) => e.stopPropagation()}
@@ -284,7 +282,7 @@
         {/if}
       </div>
     </Checkbox.Root>
-  {/if} -->
+  {/if}
 
   <div
     class={[
@@ -292,11 +290,9 @@
       !message.mergeWithPrevious && "pt-3",
     ]}
   >
-    <!-- {#if message.current?.components?.[ReplyToComponent.id]}
-      <MessageRepliedTo
-        messageId={message.current?.components?.[ReplyToComponent.id]}
-      />
-    {/if} -->
+    {#if message.replyTo}
+      <MessageRepliedTo messageId={message.replyTo} />
+    {/if}
 
     <div class={"group relative flex w-full justify-start gap-3"}>
       {#if !message.mergeWithPrevious}
@@ -383,7 +379,7 @@
     </div>
 
     {#if editingMessage.id !== message.id && !threading?.active}
-      <!-- <MessageToolbar
+      <MessageToolbar
         bind:isDrawerOpen
         {toggleReaction}
         canEdit={messageByMe}
@@ -391,8 +387,8 @@
         {deleteMessage}
         {editMessage}
         startThreading={() => startThreading(message)}
-        {setReplyTo}
-      /> -->
+        {message}
+      />
     {/if}
 
     <button

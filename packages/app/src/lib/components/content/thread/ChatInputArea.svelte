@@ -1,3 +1,12 @@
+<script module lang="ts">
+  let replyTo: Message | null = $state(null);
+
+  export function setReplyTo(message: Message) {
+    replyTo = message;
+    setInputFocus();
+  }
+</script>
+
 <script lang="ts">
   import { Button, Input, toast } from "@fuxui/base";
   import MessageRepliedTo from "./message/MessageRepliedTo.svelte";
@@ -11,13 +20,13 @@
   import { current } from "$lib/queries.svelte";
   import { ulid } from "ulidx";
   import { page } from "$app/state";
+  import type { Message } from "./ChatArea.svelte";
+  import { setInputFocus } from "./ChatInput.svelte";
 
   let {
-    replyTo,
     threading = { active: false, selectedMessages: [], name: "" },
   }: {
-    replyTo?: string;
-    threading?: { active: boolean; selectedMessages: string[]; name: string };
+    threading?: { active: boolean; selectedMessages: Message[]; name: string };
   } = $props();
 
   let previewImages: string[] = $state([]);
@@ -96,7 +105,7 @@
         variant: {
           kind: "space.roomy.message.create.0",
           data: {
-            replyTo: undefined,
+            replyTo: replyTo ? replyTo.id : undefined,
             content: {
               content: new TextEncoder().encode(messageInput),
               mimeType: "text/markdown",
@@ -105,6 +114,7 @@
         },
       });
 
+      replyTo = null;
       messageInput = "";
       messageInputEl?.focus();
     } catch (e: any) {
@@ -127,11 +137,11 @@
         <span class="shrink-0 text-base-900 dark:text-base-100"
           >Replying to</span
         >
-        <MessageRepliedTo messageId={replyTo} />
+        <MessageRepliedTo message={replyTo} />
       </div>
       <Button
         variant="ghost"
-        onclick={() => (replyTo = "")}
+        onclick={() => (replyTo = null)}
         class="flex-shrink-0"
       >
         <IconMdiCloseCircle />
@@ -150,7 +160,7 @@
         >
         {#if threading.selectedMessages[0]}
           <div class="max-w-[28rem]">
-            <MessageRepliedTo messageId={threading.selectedMessages[0]} />
+            <MessageRepliedTo message={threading.selectedMessages[0]} />
           </div>
         {/if}
         {#if threading.selectedMessages.length > 1}
@@ -242,17 +252,17 @@
       </div>
       <FullscreenImageDropper {processImageFile} />
 
-      <!-- {#if isSendingMessage}
+      {#if isSendingMessage}
         <div
           class="absolute inset-0 flex items-center text-primary justify-center z-20 bg-base-100/80 dark:bg-base-900/80"
         >
           <div
-            class="text-xl font-bold flex items-center gap-4 text-base-900 dark:text-base-100"
+            class="text-xl flex items-center gap-4 text-base-900 dark:text-base-100"
           >
             Sending message...
           </div>
         </div>
-      {/if} -->
+      {/if}
     </div>
   </div>
 </div>
