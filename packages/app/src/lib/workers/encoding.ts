@@ -5,7 +5,6 @@
  */
 
 import { decodeBase32, encodeBase32 } from "$lib/utils/base32";
-import { isDid } from "@atproto/oauth-client";
 import { hex } from "@scure/base";
 import {
   Bytes,
@@ -87,21 +86,40 @@ export const Ulid = enhanceCodec(Bytes(16), decodeBase32, (b) =>
   encodeBase32(b).toUpperCase(),
 );
 
-export const IdCodec = Enum({
+type InlineTagged<C extends Codec<any>> =
+  CodecType<C> extends { tag: infer Tag; value: infer Value }
+    ? Tag extends string
+      ? { [K in Tag]: Value }
+      : never
+    : never;
+const inlineTagged = <C extends Codec<any>>(codec: C) =>
+  enhanceCodec<CodecType<C>, InlineTagged<C>>(
+    codec,
+    (id) => {
+      const entry = Object.entries(id)[0];
+      if (!entry) throw "Invalid ID type";
+      return { tag: entry[0], value: entry[1] } as any;
+    },
+    (id) => {
+      return { [id.tag]: id.value } as any;
+    },
+  );
+
+const rawIdCodec = Enum({
   unknown: str,
   ulid: Ulid,
   hash: Hash,
   did: enhanceCodec<string, string>(
     str,
     (s) => {
-      if (isDid(s)) {
+      if (s.startsWith("did:")) {
         return s;
       } else {
         throw new Error(`DID is not valid: ${s}`);
       }
     },
     (s) => {
-      if (isDid(s)) {
+      if (s.startsWith("did:")) {
         return s;
       } else {
         throw new Error(`DID is not valid: ${s}`);
@@ -109,25 +127,32 @@ export const IdCodec = Enum({
     },
   ),
 });
+export const IdCodec = enhanceCodec<CodecType<typeof rawIdCodec>, string>(
+  rawIdCodec,
+  (id: string) => {
+    if (id.startsWith("did:")) {
+      return { tag: "did", value: id };
+    } else if (id.match(/^[A-Fa-f0-9]{64}$/)) {
+      return { tag: "hash", value: id };
+    } else if (id.match(/^[\da-hjkmnp-tv-z]{26}$/iu)) {
+      return { tag: "ulid", value: id };
+    } else {
+      return { tag: "unknown", value: id };
+    }
+  },
+  ({ value }) => value,
+);
 
 /** Encode an ID to it's binary format */
-export const id = (id: string): Uint8Array => {
-  if (isDid(id)) {
-    return IdCodec.enc({ tag: "did", value: id });
-  } else if (id.match(/^[A-Fa-f0-9]{64}$/)) {
-    return IdCodec.enc({ tag: "hash", value: id });
-  } else if (id.match(/^[\da-hjkmnp-tv-z]{26}$/iu)) {
-    return IdCodec.enc({ tag: "ulid", value: id });
-  } else {
-    return IdCodec.enc({ tag: "unknown", value: id });
-  }
-};
+export const id = IdCodec.enc;
 
 export const ValueUpdate = <T>(ty: Codec<T>) =>
-  Enum({
-    set: ty,
-    ignore: _void,
-  });
+  inlineTagged(
+    Enum({
+      set: ty,
+      ignore: _void,
+    }),
+  );
 
 /** Read permission or write permission */
 export const ReadOrWrite = Enum({
@@ -241,11 +266,16 @@ export const eventVariantCodec = Kinds({
     attachments: Vector(Ulid),
   }),
   /**
+   * Override a user handle. This is mostly used for bridged accounts, such as Discord accounts
+   * where we can not retrieve the handle based on the ID. */
+  "space.roomy.user.overrideMeta.0": Struct({
+    /** The original handle of the user account on whatever platform it came from. */
+    handle: str,
+  }),
+  /**
    * Set an override for the author and timestamp of a previously sent message. This is used by chat
    * bridges, to send messages as remote users. */
   "space.roomy.message.overrideMeta.0": Struct({
-    /** And identifier for the original / source ID of the bridged message. */
-    source: str,
     /** The override for the author ID. */
     author: str,
     /** The override for the unix timestamp in milliseconds. */
@@ -286,7 +316,7 @@ export const eventCodec = Struct({
   /** The ULID here serves to uniquely represent the event and provide a timestamp. */
   ulid: Ulid,
   /** The room that the event is sent in. If none, it is considered to be at the space level. */
-  parent: Option(Ulid),
+  parent: Option(IdCodec),
   /** The event variant. */
   variant: eventVariantCodec,
 });

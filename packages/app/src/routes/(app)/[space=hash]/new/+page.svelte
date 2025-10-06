@@ -55,11 +55,10 @@
         kind: "space.roomy.info.0",
         data: {
           name: {
-            tag: "set",
-            value: name,
+            set: name,
           },
-          avatar: { tag: "ignore", value: undefined },
-          description: { tag: "ignore", value: undefined },
+          avatar: { ignore: undefined },
+          description: { ignore: undefined },
         },
       },
     });

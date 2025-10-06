@@ -76,14 +76,14 @@
           kind: "space.roomy.info.0",
           data: {
             avatar: avatarUpload?.url
-              ? { tag: "set", value: avatarUpload.url }
-              : { tag: "ignore", value: undefined },
+              ? { set: avatarUpload.url }
+              : { ignore: undefined },
             name: currentSpaceName
-              ? { tag: "set", value: currentSpaceName }
-              : { tag: "ignore", value: undefined },
+              ? { set: currentSpaceName }
+              : { ignore: undefined },
             description: currentSpaceDescription
-              ? { tag: "set", value: currentSpaceDescription }
-              : { tag: "ignore", value: undefined },
+              ? { set: currentSpaceDescription }
+              : { ignore: undefined },
           },
         },
       });

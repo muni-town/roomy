@@ -23,6 +23,7 @@
   import { backendStatus } from "$lib/workers";
   import { decodeTime } from "ulidx";
   import { current } from "$lib/queries.svelte";
+  import { toast } from "@fuxui/base";
 
   let {
     message,
@@ -40,6 +41,7 @@
   // re-hash this in the UI.
   let authorCanMasquerade = $derived(true);
   let metadata: {
+    id: string;
     name?: string;
     handle?: string;
     avatarUrl?: string;
@@ -48,6 +50,7 @@
     profileUrl?: string;
   } = $derived.by(() => {
     const defaultInfo = {
+      id: message.authorDid,
       name: message.authorName,
       handle: message.authorHandle,
       avatarUrl: message.authorAvatar,
@@ -58,26 +61,15 @@
     if (!message.masqueradeAuthor) return defaultInfo;
 
     try {
-      const uri = new URL(message.masqueradeAuthor);
-      if (uri.protocol == "discord:") {
-        const id = uri.searchParams.get("id");
-        const handle = uri.searchParams.get("handle");
-        const name = uri.searchParams.get("name");
-        const avatarHash = uri.searchParams.get("avatar_hash");
-        if (handle) {
-          return {
-            handle,
-            name: name || handle,
-            avatarUrl:
-              (id &&
-                `https://cdn.discordapp.com/avatars/${id}/${avatarHash}?size=64`) ||
-              undefined,
-            timestamp: message.masqueradeTimestamp
-              ? new Date(message.masqueradeTimestamp)
-              : new Date(decodeTime(message.id)),
-          };
-        }
-      }
+      return {
+        id: message.masqueradeAuthor,
+        handle: message.masqueradeAuthorHandle,
+        name: message.masqueradeAuthorName,
+        avatarUrl: message.masqueradeAuthorAvatar,
+        timestamp: message.masqueradeTimestamp
+          ? new Date(message.masqueradeTimestamp)
+          : new Date(decodeTime(message.id)),
+      };
     } catch (_) {}
 
     return defaultInfo;
@@ -155,7 +147,7 @@
   let isDrawerOpen = $state(false);
 
   let isSelected = $derived(
-    threading?.selectedMessages.includes(message.id) ?? false,
+    threading?.selectedMessages.find((x) => x.id == message.id) ?? false,
   );
 
   function deleteMessage() {
@@ -261,7 +253,7 @@
       bind:checked={
         () => isSelected,
         (value) => {
-          if (value && !messageByMe && !isAdmin) {
+          if (value && !messageByMe && !current.isSpaceAdmin) {
             toast.error("You cannot move someone else's message");
             return;
           }
@@ -306,7 +298,7 @@
             <Avatar.Root class="size-8 sm:size-10">
               <Avatar.Image src={metadata.avatarUrl} class="rounded-full" />
               <Avatar.Fallback>
-                <AvatarBeam name={metadata.handle} />
+                <AvatarBeam name={metadata.id} />
               </Avatar.Fallback>
             </Avatar.Root>
           </button>

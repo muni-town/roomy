@@ -45,14 +45,12 @@
           data: {
             avatar:
               avatarChanged && avatarUpload
-                ? { tag: "set", value: avatarUpload.url }
-                : { tag: "ignore", value: undefined },
-            name: nameChanged
-              ? { tag: "set", value: spaceName }
-              : { tag: "ignore", value: undefined },
+                ? { set: avatarUpload.url }
+                : { ignore: undefined },
+            name: nameChanged ? { set: spaceName } : { ignore: undefined },
             description: descriptionChanged
-              ? { tag: "set", value: spaceDescription }
-              : { tag: "ignore", value: undefined },
+              ? { set: spaceDescription }
+              : { ignore: undefined },
           },
         },
       });

@@ -45,10 +45,6 @@
     return query.result[0];
   });
 
-  $effect(() => {
-    $inspect(message);
-  });
-
   const scrollToMessage = getContext("scrollToMessage") as (id: string) => void;
 </script>
 

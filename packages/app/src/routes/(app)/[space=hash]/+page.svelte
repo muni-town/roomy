@@ -46,10 +46,6 @@
       },
     });
   }
-
-  $effect(() => {
-    $inspect(current);
-  });
 </script>
 
 {#snippet sidebar()}

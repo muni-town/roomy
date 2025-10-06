@@ -25,9 +25,11 @@
     authorName?: string;
     authorHandle?: string;
     authorAvatar?: string;
-    masqueradeSource?: string;
     masqueradeAuthor?: string;
+    masqueradeAuthorHandle?: string;
     masqueradeTimestamp?: string;
+    masqueradeAuthorName?: string;
+    masqueradeAuthorAvatar?: string;
     mergeWithPrevious?: boolean;
     replyTo?: string;
   };
@@ -54,13 +56,18 @@
         i.avatar as authorAvatar,
         id(o.author) as masqueradeAuthor,
         o.timestamp as masqueradeTimestamp,
-        id(e.tail) as replyTo
+        id(e.tail) as replyTo,
+        oai.name as masqueradeAuthorName,
+        oai.avatar as masqueradeAuthorAvatar,
+        oau.handle as masqueradeAuthorHandle
       from entities e
         join comp_content c on c.entity = e.id
         join edges author_edge on author_edge.head = e.id and author_edge.label = 'author'
         join comp_user u on u.did = author_edge.tail
         join comp_info i on i.entity = author_edge.tail
         left join comp_override_meta o on o.entity = e.id
+        left join comp_info oai on oai.entity = o.author
+        left join comp_user oau on oau.did = o.author
         left join edges e on e.head = c.entity and e.label = 'reply'
       where
         e.parent = ${page.params.object && id(page.params.object)}
@@ -84,7 +91,9 @@
         ? {
             authorDid: prevMessage.authorDid,
             masqueradeAuthor: prevMessage.masqueradeAuthor,
-            timestamp: prevMessage.masqueradeTimestamp || prevMessage.id,
+            timestamp:
+              parseInt(prevMessage.masqueradeTimestamp || "0") * 1000 ||
+              decodeTime(prevMessage.id),
           }
         : undefined;
 
@@ -101,10 +110,10 @@
           ) {
             // Check if within 5 minutes (using masqueradeTimestamp)
             const currentTime = message.masqueradeTimestamp
-              ? new Date(decodeTime(message.masqueradeTimestamp)).getTime()
+              ? new Date(message.masqueradeTimestamp).getTime()
               : 0;
             const prevTime = previousMessage.timestamp
-              ? new Date(decodeTime(previousMessage.timestamp)).getTime()
+              ? new Date(previousMessage.timestamp).getTime()
               : 0;
             mergeWithPrevious = currentTime - prevTime < 1000 * 60 * 5;
           }
@@ -113,7 +122,7 @@
           if (previousMessage.authorDid == message.authorDid) {
             // Check if within 5 minutes using message IDs as timestamps
             const currentTime = decodeTime(message.id) || 0;
-            const prevTime = decodeTime(previousMessage.timestamp || "0") || 0;
+            const prevTime = previousMessage.timestamp;
             mergeWithPrevious = currentTime - prevTime < 1000 * 60 * 5;
           }
         }
@@ -128,11 +137,6 @@
   });
   let slicedTimeline = $derived(timeline.slice(-showLastN));
   let messagesLoaded = $derived(timeline && timeline.length >= 0);
-
-  $effect(() => {
-    console.log("check timeline");
-    $inspect(timeline);
-  });
 
   let isShowingFirstMessage = $derived(showLastN >= timeline.length);
   let viewport: HTMLDivElement = $state(null!);

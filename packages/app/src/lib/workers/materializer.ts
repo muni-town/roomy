@@ -164,7 +164,7 @@ const materializers: {
       { key: "avatar", ...data.avatar },
       { key: "description", ...data.description },
     ];
-    const setUpdates = updates.filter((x) => x.tag == "set");
+    const setUpdates = updates.filter((x) => 'set' in x);
 
     const entityId = event.parent ? event.parent : streamId;
 
@@ -176,7 +176,7 @@ const materializers: {
             on conflict do update set ${[...setUpdates].map((x) => `${x.key} = :${x.key}`)}`,
         params: Object.fromEntries([
           [":entity", id(entityId)],
-          ...setUpdates.map((x) => [":" + x.key, x.value]),
+          ...setUpdates.map((x) => [":" + x.key, x.set]),
         ]),
       },
     ];
@@ -280,6 +280,7 @@ const materializers: {
           ${id(user)},
           'author'
         )
+        on conflict do nothing
       `,
       sql`
         insert or replace into comp_content (entity, mime_type, data)
@@ -313,6 +314,22 @@ const materializers: {
       where entity = ${id(event.ulid)}
     `,
   ],
+  "space.roomy.user.overrideMeta.0": async ({ event, data }) => {
+    if (!event.parent) {
+      console.warn("Missing target for message meta override.");
+      return [];
+    }
+    return [
+      sql`
+        insert into comp_user (did, handle)
+        values (
+          ${id(event.parent)},
+          ${data.handle}
+        )
+        on conflict(did) do update set handle = ${data.handle}
+      `,
+    ];
+  },
   "space.roomy.message.overrideMeta.0": async ({ event, data }) => {
     if (!event.parent) {
       console.warn("Missing target for message meta override.");
@@ -457,6 +474,9 @@ async function ensureProfile(
   try {
     if (member.tag == "user") {
       const did = member.value;
+      // This is only for fetching Bluesky
+      if (!(did.startsWith("did:plc:") || did.startsWith("did:web:")))
+        return [];
 
       const existingProfile = await sqliteWorker.runQuery(
         sql`select 1 from entities where id = ${id(did)}`,
@@ -470,11 +490,11 @@ async function ensureProfile(
         return [];
       }
 
-      const profile = await agent.getProfile({ actor: did });
-
-      if (!profile.success) return [];
-
       if (ensuredProfiles.has(did)) return [];
+      ensuredProfiles.add(did);
+
+      const profile = await agent.getProfile({ actor: did });
+      if (!profile.success) return [];
 
       return [
         sql`

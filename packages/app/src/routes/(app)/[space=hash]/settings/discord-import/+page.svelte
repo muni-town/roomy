@@ -8,8 +8,9 @@
   import * as zip from "@zip-js/zip-js";
   import { backend } from "$lib/workers";
   import { current } from "$lib/queries.svelte";
-  import { ulid } from "ulidx";
+  import { monotonicFactory } from "ulidx";
   import type { EventType } from "$lib/workers/materializer";
+  import { sql } from "$lib/utils/sqlTemplate";
 
   let files = $state(undefined) as FileList | undefined;
 
@@ -43,6 +44,8 @@
   };
 
   async function importZip() {
+    const ulid = monotonicFactory();
+
     if (!current.space) return;
     const file = files?.item(0);
     if (!file) {
@@ -57,6 +60,15 @@
     let batchMessageCount = 0;
 
     await backend.pauseSubscription(current.space.id);
+
+    const existingDiscordUsers = new Set();
+
+    const existingInDb = await backend.runQuery(
+      sql`select id(did) as did from comp_user where id(did) like 'did:discord:%';`,
+    );
+    for (const row of existingInDb.rows || []) {
+      existingDiscordUsers.add(row.id);
+    }
 
     try {
       const reader = new zip.ZipReader(new zip.BlobReader(file));
@@ -95,11 +107,10 @@
             kind: "space.roomy.info.0",
             data: {
               name: {
-                tag: "set",
-                value: channel.channel.name,
+                set: channel.channel.name,
               },
-              avatar: { tag: "ignore", value: undefined },
-              description: { tag: "set", value: channel.channel.topic },
+              avatar: { ignore: undefined },
+              description: { set: channel.channel.topic },
             },
           },
         });
@@ -133,14 +144,43 @@
             "/",
           );
           const avatarHash = avatarPathSegments[avatarPathSegments.length - 1];
+
+          const author = `did:discord:${message.author.id}`;
+          if (!existingDiscordUsers.has(author)) {
+            batch.push({
+              ulid: ulid(),
+              parent: author,
+              variant: {
+                kind: "space.roomy.info.0",
+                data: {
+                  name: { set: message.author.nickname },
+                  avatar: {
+                    set: `https://cdn.discordapp.com/avatars/${message.author.id}/${avatarHash}?size=64`,
+                  },
+                  description: { ignore: undefined },
+                },
+              },
+            });
+            batch.push({
+              ulid: ulid(),
+              parent: author,
+              variant: {
+                kind: "space.roomy.user.overrideMeta.0",
+                data: {
+                  handle: message.author.name,
+                },
+              },
+            });
+            existingDiscordUsers.add(author);
+          }
+
           batch.push({
             ulid: ulid(),
             parent: messageId,
             variant: {
               kind: "space.roomy.message.overrideMeta.0",
               data: {
-                source: `discord:message?guild=${channel.guild.id}&channel=${channel.channel.id}&id=${message.id}`,
-                author: `discord:user?id=${message.author.id}&handle=${message.author.name}&name=${message.author.nickname}&avatar_hash=${avatarHash}`,
+                author,
                 timestamp: BigInt(
                   Math.round(new Date(message.timestamp).getTime() / 100),
                 ),

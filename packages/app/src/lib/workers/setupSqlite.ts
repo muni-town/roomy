@@ -63,7 +63,7 @@ export async function initializeDatabase(dbName: string): Promise<void> {
     // Parse a binary ID to it's string representation
     db.createFunction("id", (_ctx, blob) => {
       if (blob instanceof Uint8Array) {
-        return IdCodec.dec(blob).value;
+        return IdCodec.dec(blob);
       } else {
         return blob;
       }

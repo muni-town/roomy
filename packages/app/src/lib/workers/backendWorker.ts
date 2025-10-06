@@ -332,10 +332,17 @@ function connectMessagePort(port: MessagePortApi) {
     },
     async sendEventBatch(streamId, payloads) {
       if (!state.leafClient) throw "Leaf client not ready";
-      await state.leafClient.sendEvents(
-        streamId,
-        payloads.map((x) => eventCodec.enc(x).buffer as ArrayBuffer),
-      );
+      const encodedPayloads = payloads.map((x) => {
+        try {
+          return eventCodec.enc(x).buffer as ArrayBuffer;
+        } catch (e) {
+          throw new Error(
+            `Could not encode event: ${JSON.stringify(x, null, "  ")}`,
+            { cause: e },
+          );
+        }
+      });
+      await state.leafClient.sendEvents(streamId, encodedPayloads);
     },
     async fetchEvents(streamId, offset, limit) {
       if (!state.leafClient) throw "Leaf client not initialized";
