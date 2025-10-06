@@ -11,17 +11,13 @@
   import { setContext } from "svelte";
   import { page } from "$app/state";
   import { Button } from "@fuxui/base";
+  import toast from "svelte-french-toast";
 
   import IconTablerArrowDown from "~icons/tabler/arrow-down";
   import { LiveQuery } from "$lib/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { id } from "$lib/workers/encoding";
-
-  let {
-    threading,
-  }: {
-    threading?: { active: boolean; selectedMessages: string[] };
-  } = $props();
+  import { decodeTime } from "ulidx";
 
   export type Message = {
     id: string;
@@ -33,14 +29,23 @@
     masqueradeSource?: string;
     masqueradeAuthor?: string;
     masqueradeTimestamp?: string;
+    mergeWithPrevious?: boolean;
   };
+
+  let {
+    threading,
+    virtualizer = $bindable(),
+  }: {
+    threading?: { active: boolean; selectedMessages: string[] };
+    virtualizer?: Virtualizer<Message>;
+  } = $props();
 
   let query = new LiveQuery<Message>(
     () => sql`
       select
         id(c.entity) as id,
         cast(c.data as text) as content,
-        u.did as authorDid,
+        id(u.did) as authorDid,
         i.name as authorName,
         i.avatar as authorAvatar,
         id(o.author) as masqueradeAuthor,
@@ -61,9 +66,69 @@
   let isAtBottom = $state(true);
   let showJumpToPresent = $derived(!isAtBottom);
 
-  // let slicedTimeline = $derived(timeline.slice(-showLastN));
+  let timeline = $derived.by(() => {
+    if (!query.result) return [];
+    // return query.result;
 
-  // let isShowingFirstMessage = $derived(showLastN >= timeline.length);
+    const mapped = query.result.map((message, index) => {
+      // Get the previous message (if it exists)
+      const prevMessage = index > 0 ? query.result![index - 1] : null;
+
+      const previousMessage = prevMessage
+        ? {
+            authorDid: prevMessage.authorDid,
+            masqueradeAuthor: prevMessage.masqueradeAuthor,
+            timestamp: prevMessage.masqueradeTimestamp || prevMessage.id,
+          }
+        : undefined;
+
+      // Calculate mergeWithPrevious
+      let mergeWithPrevious = false;
+
+      if (previousMessage) {
+        // Don't merge if current message has a masquerade author
+        if (message.masqueradeAuthor) {
+          // Only merge if previous message also has the same masquerade author
+          if (
+            previousMessage.masqueradeAuthor &&
+            previousMessage.masqueradeAuthor === message.masqueradeAuthor
+          ) {
+            // Check if within 5 minutes (using masqueradeTimestamp)
+            const currentTime = message.masqueradeTimestamp
+              ? new Date(decodeTime(message.masqueradeTimestamp)).getTime()
+              : 0;
+            const prevTime = previousMessage.timestamp
+              ? new Date(decodeTime(previousMessage.timestamp)).getTime()
+              : 0;
+            mergeWithPrevious = currentTime - prevTime < 1000 * 60 * 5;
+          }
+        } else {
+          // Don't merge if previous message had a different author
+          if (previousMessage.authorDid == message.authorDid) {
+            // Check if within 5 minutes using message IDs as timestamps
+            const currentTime = decodeTime(message.id) || 0;
+            const prevTime = decodeTime(previousMessage.timestamp || "0") || 0;
+            mergeWithPrevious = currentTime - prevTime < 1000 * 60 * 5;
+          }
+        }
+      }
+
+      return {
+        ...message,
+        mergeWithPrevious,
+      };
+    });
+    return mapped;
+  });
+  let slicedTimeline = $derived(timeline.slice(-showLastN));
+  let messagesLoaded = $derived(timeline && timeline.length >= 0);
+
+  $effect(() => {
+    console.log("check timeline");
+    $inspect(timeline);
+  });
+
+  let isShowingFirstMessage = $derived(showLastN >= timeline.length);
   let viewport: HTMLDivElement = $state(null!);
 
   // Track initial load for auto-scroll
@@ -71,24 +136,29 @@
   let lastTimelineLength = $state(0);
 
   function scrollToBottom() {
-    // if (!virtualizer) return;
-    // virtualizer.scrollToIndex(timeline.length - 1, { align: "start" });
-    // isAtBottom = true;
+    if (!virtualizer) return;
+    virtualizer.scrollToIndex(timeline.length - 1, { align: "start" });
+    isAtBottom = true;
   }
 
   function handleScroll() {
-    // if (!viewport || !virtualizer) return;
-    // const { scrollTop, scrollHeight, clientHeight } = viewport;
-    // const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 500;
-    // isAtBottom = isNearBottom;
+    if (!viewport || !virtualizer) return;
+    const { scrollTop, scrollHeight, clientHeight } = viewport;
+    const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 500;
+    isAtBottom = isNearBottom;
   }
 
   function scrollToMessage(id: string) {
-    // const idx = slicedTimeline.indexOf(id);
-    // if (idx >= 0) virtualizer?.scrollToIndex(idx);
-    // else {
-    //   toast.error("Message not found");
-    // }
+    const message = slicedTimeline.find((msg) => id === msg.id);
+    if (!message) {
+      toast.error("Message not found");
+      return;
+    }
+    const idx = slicedTimeline.indexOf(message);
+    if (idx >= 0) virtualizer?.scrollToIndex(idx);
+    else {
+      toast.error("Message not found");
+    }
   }
 
   setContext("scrollToMessage", scrollToMessage);
@@ -100,34 +170,31 @@
   });
 
   // // Simple initial scroll to bottom when timeline first loads
-  // $effect(() => {
-  //   if (!hasInitiallyScrolled && timeline.length > 0 && virtualizer) {
-  //     setTimeout(() => {
-  //       scrollToBottom();
-  //       hasInitiallyScrolled = true;
-  //     }, 200);
-  //   }
-  //   chatArea.scrollToMessage = scrollToMessage;
-  // });
+  $effect(() => {
+    if (!hasInitiallyScrolled && timeline.length > 0 && virtualizer) {
+      setTimeout(() => {
+        scrollToBottom();
+        hasInitiallyScrolled = true;
+      }, 200);
+    }
+    chatArea.scrollToMessage = scrollToMessage;
+  });
 
   // // Handle new messages - only auto-scroll if user is at bottom
-  // $effect(() => {
-  //   if (timeline.length > lastTimelineLength && lastTimelineLength > 0) {
-  //     if (isAtBottom && virtualizer) {
-  //       setTimeout(() => scrollToBottom(), 50);
-  //     }
-  //   }
-  //   lastTimelineLength = timeline.length;
-  // });
+  $effect(() => {
+    if (timeline.length > lastTimelineLength && lastTimelineLength > 0) {
+      if (isAtBottom && virtualizer) {
+        setTimeout(() => scrollToBottom(), 50);
+      }
+    }
+    lastTimelineLength = timeline.length;
+  });
 
   let isShifting = $state(false);
 </script>
 
 {#if showJumpToPresent}
-  <Button
-    class="absolute bottom-6 left-1/2 -translate-x-1/2 z-50"
-    onclick={scrollToBottom}
-  >
+  <Button class="absolute bottom-18 right-2 z-50" onclick={scrollToBottom}>
     <IconTablerArrowDown class="w-4 h-4" />
     Jump to present
   </Button>
@@ -137,20 +204,20 @@
   <ScrollArea.Root type="auto" class="h-full overflow-hidden">
     <!-- Important: This area takes the place of the chat which pushes chat offscreen
         which allows it to load then pop into place once the spinner is gone. -->
-    <!-- {#if !messagesLoaded}
+    {#if !messagesLoaded}
       <div
         class="grid items-center justify-center h-full w-full bg-transparent"
       >
         <span class="dz-loading dz-loading-spinner"></span>
       </div>
-    {/if} -->
+    {/if}
     <ScrollArea.Viewport
       bind:ref={viewport}
       class="relative max-w-full w-full h-full"
       onscroll={handleScroll}
     >
       <div class="flex flex-col w-full h-full pb-16 pt-2">
-        <!-- {#if slicedTimeline.length < timeline.length}
+        {#if slicedTimeline.length < timeline.length}
           <Button
             class="w-fit mx-auto mb-2"
             onclick={() => {
@@ -162,8 +229,8 @@
             }}
             >Load More
           </Button>
-        {/if} -->
-        <!-- {#if isShowingFirstMessage}
+        {/if}
+        {#if isShowingFirstMessage}
           <div class="flex flex-col gap-2 max-w-full px-6 mb-4 mt-4">
             <p class="text-base font-semibold text-base-900 dark:text-base-100">
               Hello world!
@@ -172,7 +239,7 @@
               This is the beginning of something beautiful.
             </p>
           </div>
-        {/if} -->
+        {/if}
         <ol class="flex flex-col gap-2 max-w-full">
           <!--
             This use of `key` needs explaining. `key` causes the components below
@@ -190,7 +257,8 @@
           -->
           {#key viewport}
             <Virtualizer
-              data={query.result || []}
+              bind:this={virtualizer}
+              data={timeline}
               scrollRef={viewport}
               overscan={5}
               shift={isShifting}

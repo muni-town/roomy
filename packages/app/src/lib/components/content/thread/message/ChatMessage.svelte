@@ -81,24 +81,6 @@
     return defaultInfo;
   });
 
-  // const me = new AccountCoState(RoomyAccount, {
-  //   resolve: {
-  //     profile: true,
-  //     root: true,
-  //   },
-  // });
-
-  // let message = $derived(
-  //   new CoState(RoomyEntity, messageId, {
-  //     resolve: {
-  //       components: {
-  //         $each: true,
-  //         $onError: null,
-  //       },
-  //     },
-  //   }),
-  // );
-
   let messageByMe = $derived(message.authorDid == backendStatus.did);
   // let canDelete = $derived(current.isSpaceAdmin || messageByMe);
 
@@ -167,41 +149,6 @@
   //   if (customAuthor.current) return customAuthor.current;
   //   return profile.current;
   // });
-
-  // if the same user and the message was created in the last 5 minutes, don't show the border, username or avatar
-  let mergeWithPrevious = $derived.by(() => {
-    return false;
-    // if (!previousMessage) return false;
-    // if (previousMessage.current?.softDeleted) return false;
-
-    // if (customAuthor.current?.authorId) {
-    //   if (
-    //     prevMessageCustomAuthor.current?.authorId &&
-    //     prevMessageCustomAuthor.current?.authorId ===
-    //       customAuthor.current.authorId
-    //   ) {
-    //     return (
-    //       (userAccessTimes.current?.createdAt.getTime() ?? 0) -
-    //         (prevMessageUserAccessTimes?.current?.createdAt.getTime() ?? 0) <
-    //       1000 * 60 * 5
-    //     );
-    //   } else {
-    //     return false;
-    //   }
-    // }
-    // if (
-    //   authorData?.id === profile.current?.id &&
-    //   previousMessage.current?._edits.components?.by?.profile?.id !==
-    //     message.current?._edits.components?.by?.profile?.id
-    // )
-    //   return false;
-    // if (message.current?.components?.[ReplyToComponent.id]) return false;
-    // return (
-    //   (userAccessTimes.current?.createdAt.getTime() ?? 0) -
-    //     (prevMessageUserAccessTimes?.current?.createdAt.getTime() ?? 0) <
-    //   1000 * 60 * 5
-    // );
-  });
 
   let isDrawerOpen = $state(false);
 
@@ -342,7 +289,7 @@
   <div
     class={[
       `relative group w-full h-fit flex flex-col gap-2 px-2 pt-2 pb-1 ${isSelected ? "bg-accent-100/50 dark:bg-accent-900/50 hover:bg-accent-100/75 dark:hover:bg-accent-900/75" : " hover:bg-base-100/50  dark:hover:bg-base-400/5"}`,
-      !mergeWithPrevious && "pt-3",
+      !message.mergeWithPrevious && "pt-3",
     ]}
   >
     <!-- {#if message.current?.components?.[ReplyToComponent.id]}
@@ -352,7 +299,7 @@
     {/if} -->
 
     <div class={"group relative flex w-full justify-start gap-3"}>
-      {#if !mergeWithPrevious}
+      {#if !message.mergeWithPrevious}
         <div class="size-8 sm:size-10">
           <button
             onclick={async (e) => {
@@ -377,7 +324,7 @@
       {/if}
 
       <div class="flex flex-col gap-1">
-        {#if !mergeWithPrevious}
+        {#if !message.mergeWithPrevious}
           <span class="flex items-center gap-2 text-sm">
             <span class="font-bold text-accent-700 dark:text-accent-400"
               >{metadata.name}</span
