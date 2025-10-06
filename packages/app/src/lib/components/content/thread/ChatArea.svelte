@@ -87,46 +87,26 @@
       // Get the previous message (if it exists)
       const prevMessage = index > 0 ? query.result![index - 1] : null;
 
-      const previousMessage = prevMessage
+      // Normalize messages for calculating whether or not to merge them
+      const prevMessageNorm = prevMessage
         ? {
-            authorDid: prevMessage.authorDid,
-            masqueradeAuthor: prevMessage.masqueradeAuthor,
+            author: prevMessage.masqueradeAuthor || prevMessage.authorDid,
             timestamp:
-              parseInt(prevMessage.masqueradeTimestamp || "0") * 1000 ||
+              parseInt(prevMessage.masqueradeTimestamp || "0") ||
               decodeTime(prevMessage.id),
           }
         : undefined;
+      const messageNorm = {
+        author: message.masqueradeAuthor || message.authorDid,
+        timestamp:
+          parseInt(message.masqueradeTimestamp || "0") ||
+          decodeTime(message.id),
+      };
 
       // Calculate mergeWithPrevious
-      let mergeWithPrevious = false;
-
-      if (previousMessage) {
-        // Don't merge if current message has a masquerade author
-        if (message.masqueradeAuthor) {
-          // Only merge if previous message also has the same masquerade author
-          if (
-            previousMessage.masqueradeAuthor &&
-            previousMessage.masqueradeAuthor === message.masqueradeAuthor
-          ) {
-            // Check if within 5 minutes (using masqueradeTimestamp)
-            const currentTime = message.masqueradeTimestamp
-              ? new Date(message.masqueradeTimestamp).getTime()
-              : 0;
-            const prevTime = previousMessage.timestamp
-              ? new Date(previousMessage.timestamp).getTime()
-              : 0;
-            mergeWithPrevious = currentTime - prevTime < 1000 * 60 * 5;
-          }
-        } else {
-          // Don't merge if previous message had a different author
-          if (previousMessage.authorDid == message.authorDid) {
-            // Check if within 5 minutes using message IDs as timestamps
-            const currentTime = decodeTime(message.id) || 0;
-            const prevTime = previousMessage.timestamp;
-            mergeWithPrevious = currentTime - prevTime < 1000 * 60 * 5;
-          }
-        }
-      }
+      let mergeWithPrevious =
+        prevMessageNorm?.author == messageNorm.author &&
+        messageNorm.timestamp - prevMessageNorm.timestamp < 1000 * 60 * 5;
 
       return {
         ...message,
