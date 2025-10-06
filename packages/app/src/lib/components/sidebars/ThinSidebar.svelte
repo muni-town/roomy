@@ -13,6 +13,7 @@
   import IconTablerHome from "~icons/tabler/home";
   import IconMdiSqlQuery from "~icons/mdi/sql-query";
   import IconMdiWireless from "~icons/mdi/wireless";
+  import { CONFIG } from "$lib/config";
 
   let {}: {} = $props();
 
@@ -85,7 +86,8 @@
     </a>
   {/if}
   <Tooltip
-    text={backendStatus.leafConnected ? "Connected" : "Disconnected"}
+    text={(backendStatus.leafConnected ? "Connected" : "Disconnected") +
+      `: ${CONFIG.leafUrl}`}
     delayDuration={0}
     contentProps={{ side: "right" }}
   >

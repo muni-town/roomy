@@ -34,6 +34,7 @@ import { eventCodec, Hash, id } from "./encoding";
 import { sql } from "$lib/utils/sqlTemplate";
 import { ulid } from "ulidx";
 import { LEAF_MODULE_PERSONAL } from "../moduleUrls";
+import { CONFIG } from "$lib/config";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -159,12 +160,10 @@ class Backend {
       });
 
       if (!this.#leafClient) {
-        const leafUrl =
-          import.meta.env.VITE_LEAF_URL || "https://leaf-dev.muni.town";
         this.setLeafClient(
-          new LeafClient(leafUrl, async () => {
+          new LeafClient(CONFIG.leafUrl, async () => {
             const resp = await this.agent?.com.atproto.server.getServiceAuth({
-              aud: `did:web:${new URL(leafUrl).host}`,
+              aud: `did:web:${new URL(CONFIG.leafUrl).host}`,
             });
             if (!resp) throw "Error authenticating for leaf server";
             return resp.data.token;
@@ -460,8 +459,6 @@ async function initializeLeafClient(client: LeafClient) {
     console.log("Leaf: authenticated as", did);
 
     if (!state.agent) throw new Error("ATProto agent not initialized");
-    const streamNsid =
-      import.meta.env.VITE_STREAM_NSID || "space.roomy.stream.dev";
 
     console.log("Now looking for personal stream id");
     // Get the user's personal space ID
@@ -473,7 +470,7 @@ async function initializeLeafClient(client: LeafClient) {
     } else {
       try {
         const resp1 = await state.agent.com.atproto.repo.getRecord({
-          collection: streamNsid,
+          collection: CONFIG.streamNsid,
           repo: did,
           rkey: "self",
         });
@@ -500,7 +497,7 @@ async function initializeLeafClient(client: LeafClient) {
 
         // put the stream ID in a record
         const resp2 = await state.agent.com.atproto.repo.putRecord({
-          collection: streamNsid,
+          collection: CONFIG.streamNsid,
           record: { id: personalStreamId, version: 1 },
           repo: state.agent.assertDid,
           rkey: "self",
