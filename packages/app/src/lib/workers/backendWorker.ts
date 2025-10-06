@@ -159,7 +159,8 @@ class Backend {
       });
 
       if (!this.#leafClient) {
-        const leafUrl = import.meta.env.VITE_LEAF_URL || 'https://leaf-dev.muni.town';
+        const leafUrl =
+          import.meta.env.VITE_LEAF_URL || "https://leaf-dev.muni.town";
         this.setLeafClient(
           new LeafClient(leafUrl, async () => {
             const resp = await this.agent?.com.atproto.server.getServiceAuth({
@@ -711,7 +712,7 @@ class StreamMaterializer {
             items: newEvents.map(
               (event) =>
                 sql`INSERT INTO events (idx, stream_id, payload)
-                  VALUES (${event.idx}, ${Hash.enc(this.#streamId)}, ${event.payload})
+                  VALUES (${event.idx}, ${id(this.#streamId)}, ${event.payload})
                   ON CONFLICT(idx, stream_id) DO NOTHING`,
             ),
           };
@@ -899,7 +900,7 @@ class PreviewMaterializer {
           items: newEvents.map(
             (event) =>
               sql`INSERT INTO events (idx, stream_id, payload)
-                VALUES (${event.idx}, ${Hash.enc(this.#personalStreamId)}, ${event.payload})
+                VALUES (${event.idx}, ${id(this.#personalStreamId)}, ${event.payload})
                 ON CONFLICT(idx, stream_id) DO NOTHING`,
           ),
         };
