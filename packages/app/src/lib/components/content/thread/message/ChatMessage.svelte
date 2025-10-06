@@ -37,6 +37,8 @@
     toggleSelect: (message: Message) => void;
   } = $props();
 
+  let hovered = $state(false);
+
   // TODO: move this author can masquerade logic into the materializer so we don't have to
   // re-hash this in the UI.
   let authorCanMasquerade = $derived(true);
@@ -245,6 +247,8 @@
   id={message.id}
   class={`flex flex-col w-full relative max-w-screen isolate px-4 ${threading?.active ? "select-none" : ""}`}
   onclick={selectMessage}
+  onmouseenter={() => (hovered = true)}
+  onmouseleave={() => (hovered = false)}
 >
   {#if threading?.active}
     <Checkbox.Root
@@ -366,7 +370,7 @@
       </div>
     </div>
 
-    {#if editingMessage.id !== message.id && !threading?.active}
+    {#if editingMessage.id !== message.id && hovered && !threading?.active}
       <MessageToolbar
         bind:isDrawerOpen
         {toggleReaction}
