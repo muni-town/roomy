@@ -1,11 +1,10 @@
 name: Build & Publish Discord Bridge Docker Image
 on:
-  # This isn't working anymore so disable the build, but keep the file for reference.
-  # push:
-  #   branches:
-  #     - main
-  #   tags:
-  #     - "v*"
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
 permissions:
   packages: write
 
@@ -14,6 +13,8 @@ env:
 
 jobs:
   build-and-publish:
+    # This isn't working anymore so disable the build, but keep the file for reference.
+    if: 'false'
     name: Build and Publish Docker Image
     runs-on: ubuntu-latest
 
