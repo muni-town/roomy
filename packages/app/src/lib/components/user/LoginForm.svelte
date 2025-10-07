@@ -38,7 +38,7 @@
     $state(undefined);
 
   onMount(() => {
-    lastLogin = JSON.parse(localStorage.getItem("last-login") || "undefined");
+    lastLogin = JSON.parse(localStorage.getItem("last-login") || "null");
   });
 </script>
 
