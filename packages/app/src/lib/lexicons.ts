@@ -10,10 +10,6 @@ export const lexicons: LexiconDoc[] = [
         record: {
           type: "object",
           properties: {
-            version: {
-              type: "integer",
-              const: 1,
-            },
             id: {
               type: "string",
             },
@@ -31,10 +27,6 @@ export const lexicons: LexiconDoc[] = [
         record: {
           type: "object",
           properties: {
-            version: {
-              type: "integer",
-              const: 1,
-            },
             id: {
               type: "string",
             },

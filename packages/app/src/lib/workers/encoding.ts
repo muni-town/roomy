@@ -320,3 +320,10 @@ export const eventCodec = Struct({
   /** The event variant. */
   variant: eventVariantCodec,
 });
+
+export const streamParamsCodec = Struct({
+  /** The type of stream as an NSID. */
+  streamType: str,
+  /** The stream schema version from $lib/config.ts CONFIG.streamSchemaVersion. */
+  schemaVersion: str,
+});

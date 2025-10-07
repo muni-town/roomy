@@ -30,7 +30,7 @@ import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
 import { config as materializerConfig, type EventType } from "./materializer";
 import { workerOauthClient } from "./oauth";
 import type { LiveQueryMessage } from "$lib/workers/setupSqlite";
-import { eventCodec, Hash, id } from "./encoding";
+import { eventCodec, Hash, id, streamParamsCodec } from "./encoding";
 import { sql } from "$lib/utils/sqlTemplate";
 import { ulid } from "ulidx";
 import { LEAF_MODULE_PERSONAL } from "../moduleUrls";
@@ -69,6 +69,36 @@ db.version(1).stores({
   kv: `key`,
   streamCursors: `streamId`,
 });
+
+// Helpers for caching the personal stream ID in the key-value store.
+const getPersonalStreamIdCache = async (
+  did: string,
+): Promise<string | undefined> => {
+  return (
+    await db.kv.get(`personalStreamId-${CONFIG.streamSchemaVersion}-${did}`)
+  )?.value;
+};
+const setPersonalStreamIdCache = async (
+  did: string,
+  value: string,
+): Promise<void> => {
+  await db.kv.put({
+    key: `personalStreamId-${CONFIG.streamSchemaVersion}-${did}`,
+    value,
+  });
+};
+const clearPersonalStreamIdCache = async () => {
+  await db.kv.filter((x) => x.key.startsWith("personalStreamId-")).delete();
+};
+// Helpers for getting/setting the previous stream schema version in the key-value store.
+const getPreviousStreamSchemaVersion = async (): Promise<
+  string | undefined
+> => {
+  return (await db.kv.get("previousStreamSchemaVersion"))?.value;
+};
+const setPreviousStreamSchemaVersion = async (version: string) => {
+  await db.kv.put({ key: "previousStreamSchemaVersion", value: version });
+};
 
 export let sqliteWorker: SqliteWorkerInterface | undefined;
 let setSqliteWorkerReady = () => {};
@@ -246,6 +276,17 @@ export async function getProfile(
 }
 
 function connectMessagePort(port: MessagePortApi) {
+  const resetLocalDatabase = async () => {
+    if (!sqliteWorker)
+      throw new Error("Sqlite worker not initialized when resetting database.");
+    await sqliteWorker.runQuery(sql`pragma writable_schema = 1`);
+    await sqliteWorker.runQuery(sql`delete from sqlite_master`);
+    await sqliteWorker.runQuery(sql`vacuum`);
+    await sqliteWorker.runQuery(sql`pragma integrity_check`);
+    await db.streamCursors.clear();
+    await clearPersonalStreamIdCache();
+  };
+
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   messagePortInterface<BackendInterface, {}>(port, {
     async login(handle) {
@@ -287,20 +328,27 @@ function connectMessagePort(port: MessagePortApi) {
     async dangerousCompletelyDestroyDatabase({ yesIAmSure }) {
       if (!yesIAmSure) throw "You need to be sure";
       if (!sqliteWorker) throw "Sqlite worker not initialized";
-      await sqliteWorker.runQuery(sql`pragma writable_schema = 1`);
-      await sqliteWorker.runQuery(sql`delete from sqlite_master`);
-      await sqliteWorker.runQuery(sql`vacuum`);
-      await sqliteWorker.runQuery(sql`pragma integrity_check`);
-      await db.streamCursors.clear();
-      await db.kv.delete("personalStreamId");
+      resetLocalDatabase();
     },
     async setActiveSqliteWorker(messagePort) {
       console.log("Setting active SQLite worker");
+      const firstUpdate = !sqliteWorker;
+
       // eslint-disable-next-line @typescript-eslint/no-empty-object-type
       sqliteWorker = messagePortInterface<{}, SqliteWorkerInterface>(
         messagePort,
         {},
       );
+
+      if (firstUpdate) {
+        const previousSchemaVersion = await getPreviousStreamSchemaVersion();
+        if (previousSchemaVersion != CONFIG.streamSchemaVersion) {
+          // Reset the local database cache when the schema version changes.
+          await resetLocalDatabase();
+        }
+        await setPreviousStreamSchemaVersion(CONFIG.streamSchemaVersion);
+      }
+
       setSqliteWorkerReady();
 
       // When a new SQLite worker is created we need to make sure that we re-create all of the
@@ -463,20 +511,19 @@ async function initializeLeafClient(client: LeafClient) {
     console.log("Now looking for personal stream id");
     // Get the user's personal space ID
 
-    const id = await db.kv.get("personalStreamId");
-    console.log("kv result", id);
-    if (id?.value) {
-      status.personalStreamId = id.value;
+    const id = await getPersonalStreamIdCache(did);
+    if (id) {
+      status.personalStreamId = id;
     } else {
       try {
         const resp1 = await state.agent.com.atproto.repo.getRecord({
           collection: CONFIG.streamNsid,
           repo: did,
-          rkey: "self",
+          rkey: CONFIG.streamSchemaVersion,
         });
         const existingRecord = resp1.data.value as { id: string };
         status.personalStreamId = existingRecord.id;
-        await db.kv.add({ key: "personalStreamId", value: existingRecord.id });
+        await setPersonalStreamIdCache(did, existingRecord.id);
         console.log("Found existing stream ID from PDS:", existingRecord.id);
       } catch (_) {
         // this catch block creating a new stream needs to be refactored
@@ -491,16 +538,19 @@ async function initializeLeafClient(client: LeafClient) {
           personalStreamUlid,
           LEAF_MODULE_PERSONAL.id,
           LEAF_MODULE_PERSONAL.url,
-          new ArrayBuffer(),
+          streamParamsCodec.enc({
+            streamType: "space.roomy.stream.personal",
+            schemaVersion: CONFIG.streamSchemaVersion,
+          }).buffer as ArrayBuffer,
         );
         console.log("Created new stream:", personalStreamId);
 
         // put the stream ID in a record
         const resp2 = await state.agent.com.atproto.repo.putRecord({
           collection: CONFIG.streamNsid,
-          record: { id: personalStreamId, version: 1 },
+          record: { id: personalStreamId },
           repo: state.agent.assertDid,
-          rkey: "self",
+          rkey: CONFIG.streamSchemaVersion,
         });
         if (!resp2.success) {
           throw new Error("Could not create PDS record for personal stream", {
@@ -508,7 +558,7 @@ async function initializeLeafClient(client: LeafClient) {
           });
         }
         status.personalStreamId = personalStreamId;
-        await db.kv.add({ key: "personalStreamId", value: personalStreamId });
+        await setPersonalStreamIdCache(did, personalStreamId);
       }
     }
 

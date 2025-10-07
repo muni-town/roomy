@@ -1,8 +1,10 @@
 <script lang="ts">
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
+  import { CONFIG } from "$lib/config";
   import { LEAF_MODULE_PUBLIC_READ_WRITE } from "$lib/moduleUrls";
   import { navigate } from "$lib/utils.svelte";
   import { backend, backendStatus } from "$lib/workers";
+  import { streamParamsCodec } from "$lib/workers/encoding";
   import { Button, Checkbox, Input, Label, Textarea, toast } from "@fuxui/base";
   import { ulid } from "ulidx";
 
@@ -50,6 +52,10 @@
         ulid(),
         LEAF_MODULE_PUBLIC_READ_WRITE.id,
         LEAF_MODULE_PUBLIC_READ_WRITE.url,
+        streamParamsCodec.enc({
+          streamType: "space.roomy.stream.space",
+          schemaVersion: CONFIG.streamSchemaVersion,
+        }).buffer as ArrayBuffer,
       );
 
       // Join the space
