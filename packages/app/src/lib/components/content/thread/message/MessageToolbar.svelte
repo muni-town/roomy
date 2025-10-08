@@ -58,7 +58,7 @@
         variant: {
           kind: "space.roomy.reaction.create.0",
           data: {
-            reaction_to: message.id,
+            reactionTo: message.id,
             reaction: emoji,
           },
         },

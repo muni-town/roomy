@@ -288,7 +288,7 @@ export const eventVariantCodec = Kinds({
   /** Create a reaction to a message. */
   "space.roomy.reaction.create.0": Struct({
     /** The message that is being reacted to. */
-    reaction_to: Ulid,
+    reactionTo: Ulid,
     /**
      * This is usually a unicode code point, and otherwise should be a URI describing the reaction.
      * */
@@ -298,6 +298,18 @@ export const eventVariantCodec = Kinds({
   "space.roomy.reaction.delete.0": Struct({
     reaction_to: Ulid,
     reaction: str,
+  }),
+  /** Create a bridged reaction. This is similar to a normal reaction except it allows you to
+   * specify an alternative user ID for who is doing the reacting. */
+  "space.roomy.reaction.bridged.create.0": Struct({
+    reactionTo: Ulid,
+    reaction: str,
+    reactingUser: str,
+  }),
+  "space.roomy.reaction.bridged.delete.0": Struct({
+    reaction_to: Ulid,
+    reaction: str,
+    reactingUser: str,
   }),
   /** Create new media that can, for example, be attached to messages. */
   "space.roomy.media.create.0": Struct({

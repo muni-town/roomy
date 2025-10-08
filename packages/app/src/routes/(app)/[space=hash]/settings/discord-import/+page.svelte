@@ -139,6 +139,24 @@
               },
             },
           });
+
+          for (const reaction of message.reactions) {
+            for (const user of reaction.users) {
+              batch.push({
+                ulid: ulid(),
+                parent: channelId,
+                variant: {
+                  kind: "space.roomy.reaction.bridged.create.0",
+                  data: {
+                    reactingUser: `did:discord:${user.id}`,
+                    reaction: reaction.emoji.name,
+                    reactionTo: messageId,
+                  },
+                },
+              });
+            }
+          }
+
           const authorAvatarUrl = message.author.avatarUrl;
           const avatarPathSegments = new URL(authorAvatarUrl).pathname.split(
             "/",

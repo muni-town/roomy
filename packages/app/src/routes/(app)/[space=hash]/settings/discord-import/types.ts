@@ -54,11 +54,14 @@ export type ImportAuthor = {
   avatarUrl: string;
 };
 export type ImportEmoji = {
-  id: string;
-  name: string;
-  code: string;
-  isAnimated: boolean;
-  imageUrl: string;
+  emoji: {
+    id: string;
+    name: string;
+    code: string;
+    isAnimated: boolean;
+    imageUrl: string;
+  };
+  users: Exclude<ImportAuthor, "roles">[];
 };
 export type ImportChannel = {
   guild: {

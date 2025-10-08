@@ -319,6 +319,8 @@ const materializers: {
       where entity = ${id(event.ulid)}
     `,
   ],
+
+  // TODO: make sure there is valid permission to send override metadata
   "space.roomy.user.overrideMeta.0": async ({ event, data }) => {
     if (!event.parent) {
       console.warn("Missing target for message meta override.");
@@ -365,7 +367,7 @@ const materializers: {
         insert into edges (head, tail, label, payload)
         values (
           ${id(user)},
-          ${id(data.reaction_to)},
+          ${id(data.reactionTo)},
           'reaction',
           ${data.reaction}
         )
@@ -382,6 +384,37 @@ const materializers: {
       delete from edges
       where
         head = ${id(user)} and
+        label = 'reaction' and
+        tail = ${id(data.reaction_to)} and
+        payload = ${data.reaction}
+    `,
+    ];
+  },
+
+  // TODO: make sure there is valid permission to send bridged reaction
+  "space.roomy.reaction.bridged.create.0": async ({ data }) => {
+    return [
+      sql`
+        insert into edges (head, tail, label, payload)
+        values (
+          ${id(data.reactingUser)},
+          ${id(data.reactionTo)},
+          'reaction',
+          ${data.reaction}
+        )
+      `,
+    ];
+  },
+  "space.roomy.reaction.bridged.delete.0": async ({ event, data }) => {
+    if (!event.parent) {
+      console.warn("Delete reaction missing parent");
+      return [];
+    }
+    return [
+      sql`
+      delete from edges
+      where
+        head = ${id(data.reactingUser)} and
         label = 'reaction' and
         tail = ${id(data.reaction_to)} and
         payload = ${data.reaction}
