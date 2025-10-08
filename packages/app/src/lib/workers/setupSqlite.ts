@@ -68,6 +68,14 @@ export async function initializeDatabase(dbName: string): Promise<void> {
         return blob;
       }
     });
+    // Format a string ID to it's binary format
+    db.createFunction("make_id", (_ctx, id) => {
+      if (typeof id == "string") {
+        return IdCodec.enc(id);
+      } else {
+        return id;
+      }
+    });
   })();
   await initPromise;
 }

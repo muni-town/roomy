@@ -2,9 +2,9 @@
   import { page } from "$app/state";
   import { AvatarGroup, Box } from "@fuxui/base";
   import { formatDistance } from "date-fns";
-  import { untrack } from "svelte";
+  import type { ThreadInfo } from "./types";
 
-  // let { thread }: { thread: co.loaded<typeof RoomyEntity> } = $props();
+  let { thread }: { thread: ThreadInfo } = $props();
 
   // let threadComponent = $derived(
   //   new CoState(ThreadComponent, thread.components?.[ThreadComponent.id], {
@@ -58,21 +58,21 @@
   // });
 </script>
 
-<!-- <a href={`/${page.params.space}/${thread.id}`}>
+<a href={`/${page.params.space}/${thread.id}`}>
   <Box class="flex items-center">
     {thread.name}
     <span class="flex-grow"></span>
     <span class="mr-8">
       <AvatarGroup
-        users={avatars.map((url) => ({
-          src: url,
+        users={thread.members.map((m) => ({
+          src: m.avatar,
           fallback: "U",
           alt: "U",
         }))}
       />
     </span>
-    {#if lastMessageTimestamp}
+    <!-- {#if lastMessageTimestamp}
       {formatDistance(Date.now(), lastMessageTimestamp)}
-    {/if}
+    {/if} -->
   </Box>
-</a> -->
+</a>

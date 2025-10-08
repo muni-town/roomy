@@ -84,7 +84,7 @@
   let isDrawerOpen = $state(false);
 
   let isSelected = $derived(
-    threading?.selectedMessages.find((x) => x.id == message.id) ?? false,
+    threading?.selectedMessages.find((x) => x.id == message.id) ? true : false,
   );
 
   function deleteMessage() {

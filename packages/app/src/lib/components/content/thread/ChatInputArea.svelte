@@ -18,10 +18,11 @@
   import UploadFileButton from "$lib/components/helper/UploadFileButton.svelte";
   import { backend } from "$lib/workers";
   import { current } from "$lib/queries.svelte";
-  import { ulid } from "ulidx";
+  import { ulid, monotonicFactory } from "ulidx";
   import { page } from "$app/state";
   import type { Message } from "./ChatArea.svelte";
   import { setInputFocus } from "./ChatInput.svelte";
+  import { navigate } from "$lib/utils.svelte";
 
   let {
     threading = { active: false, selectedMessages: [], name: "" },
@@ -87,8 +88,60 @@
     }
   }
 
-  function handleCreateThread() {
-    // TODO
+  async function handleCreateThread() {
+    if (!current.space?.id) return;
+    if (threading.selectedMessages.length == 0) return;
+    const ulid = monotonicFactory();
+    const threadName =
+      threading.name ||
+      threading.selectedMessages[0]?.content.slice(0, 50) + "...";
+
+    const threadId = ulid();
+    await backend.sendEvent(current.space.id, {
+      ulid: threadId,
+      parent: current.roomId,
+      variant: {
+        kind: "space.roomy.room.create.0",
+        data: undefined,
+      },
+    });
+
+    await backend.sendEvent(current.space.id, {
+      ulid: ulid(),
+      parent: threadId,
+      variant: {
+        kind: "space.roomy.thread.mark.0",
+        data: undefined,
+      },
+    });
+
+    await backend.sendEvent(current.space.id, {
+      ulid: ulid(),
+      parent: threadId,
+      variant: {
+        kind: "space.roomy.info.0",
+        data: {
+          name: { set: threadName },
+          description: { ignore: undefined },
+          avatar: { ignore: undefined },
+        },
+      },
+    });
+
+    for (const message of threading.selectedMessages) {
+      await backend.sendEvent(current.space.id, {
+        ulid: ulid(),
+        parent: message.id,
+        variant: {
+          kind: "space.roomy.room.parent.update.0",
+          data: {
+            parent: threadId,
+          },
+        },
+      });
+    }
+
+    await navigate({ space: page.params.space, object: threadId });
   }
 
   let messageInput: string = $state("");
@@ -224,9 +277,7 @@
               class="grow ml-2"
             />
             <Button type="submit"
-              ><IconTablerNeedleThread />Create
-              <span class="hidden sm:inline-block sm:-ml-1">Thread</span
-              ></Button
+              ><IconTablerNeedleThread />Create Thread</Button
             >
           </form>
         {:else}

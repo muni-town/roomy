@@ -201,6 +201,18 @@ export const eventVariantCodec = Kinds({
     adminId: str,
   }),
   /**
+   * Set some entity's basic info. This is used for Rooms and possibly other things, too
+   */
+  "space.roomy.info.0": Struct({
+    name: ValueUpdate(Option(str)),
+    avatar: ValueUpdate(Option(str)),
+    description: ValueUpdate(Option(str)),
+  }),
+  // TODO: It might make sense to move these parent events up out of the event variant and into the
+  // envelope because they are fundamental and will need to be read by the auth implementation,
+  // while all the other event variants are informative, indifferent to auth, and possibly
+  // client-specific.
+  /**
    * A room is the most general container smaller than a space for events.
    *
    * Each event has a room that it is a part of except for top-level events which considered at the
@@ -224,13 +236,9 @@ export const eventVariantCodec = Kinds({
   "space.roomy.room.create.0": _void,
   /** Delete a room */
   "space.roomy.room.delete.0": _void,
-  /**
-   * Set some entity's basic info. This is used for Rooms and possibly other things, too
-   */
-  "space.roomy.info.0": Struct({
-    name: ValueUpdate(Option(str)),
-    avatar: ValueUpdate(Option(str)),
-    description: ValueUpdate(Option(str)),
+  /** Change the parent of a room. */
+  "space.roomy.room.parent.update.0": Struct({
+    parent: IdCodec,
   }),
   /**
    * Add a member to the Room's member list. Each room has a member list, and some Rooms are created
@@ -325,6 +333,10 @@ export const eventVariantCodec = Kinds({
   "space.roomy.category.mark.0": _void,
   /** Unmark a room as a category. */
   "space.roomy.category.unmark.0": _void,
+  /** Mark a room as a thread. */
+  "space.roomy.thread.mark.0": _void,
+  /** Unmark a room as a thread. */
+  "space.roomy.thread.unmark.0": _void,
 });
 
 export const eventCodec = Struct({

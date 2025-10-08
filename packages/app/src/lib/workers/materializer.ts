@@ -185,11 +185,8 @@ const materializers: {
   "space.roomy.room.create.0": async ({ streamId, event }) => [
     ensureEntity(streamId, event.ulid, event.parent),
     sql`
-      insert into comp_room (entity, parent)
-      values (
-        ${id(event.ulid)},
-        ${event.parent ? id(event.parent) : null}
-      ) on conflict do update set parent = excluded.parent
+      insert into comp_room ( entity )
+      values ( ${id(event.ulid)} )
     `,
   ],
   "space.roomy.room.delete.0": async ({ event }) => {
@@ -201,6 +198,18 @@ const materializers: {
       sql`
         update comp_room
         set deleted = 1
+        where id = ${id(event.parent)}
+      `,
+    ];
+  },
+  "space.roomy.room.parent.update.0": async ({ event, data }) => {
+    if (!event.parent) {
+      console.warn("Update room parent missing parent");
+      return [];
+    }
+    return [
+      sql`
+        update entities set parent = ${id(data.parent)}
         where id = ${id(event.parent)}
       `,
     ];
@@ -460,6 +469,28 @@ const materializers: {
     }
     return [
       sql`update comp_room set label = null where entity = ${id(event.parent)} and label = 'channel'`,
+    ];
+  },
+
+  // Threads
+  "space.roomy.thread.mark.0": async ({ event }) => {
+    if (!event.parent) {
+      console.warn("Missing target for thread mark.");
+      return [];
+    }
+    return [
+      sql`
+      update comp_room set label = 'thread' where entity = ${id(event.parent)}
+      `,
+    ];
+  },
+  "space.roomy.thread.unmark.0": async ({ event }) => {
+    if (!event.parent) {
+      console.warn("Missing target for thread unmark.");
+      return [];
+    }
+    return [
+      sql`update comp_room set label = null where entity = ${id(event.parent)} and label = 'thread'`,
     ];
   },
 

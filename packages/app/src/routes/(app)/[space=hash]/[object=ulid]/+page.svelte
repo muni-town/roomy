@@ -3,6 +3,7 @@
   import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
   import { current } from "$lib/queries.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
+  import BoardView from "$lib/components/content/thread/boardView/BoardView.svelte";
   // import PageView from "$lib/components/content/page/PageView.svelte";
   import { backend, backendStatus } from "$lib/workers";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
@@ -13,6 +14,9 @@
   import { Box, Button } from "@fuxui/base";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { ulid } from "ulidx";
+
+  import IconMdiArrowRight from "~icons/mdi/arrow-right";
+
   // import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
   // import FeedDisplay from "$lib/components/content/bluesky-feed/FeedDisplay.svelte";
   // import { atprotoFeedService } from "$lib/services/atprotoFeedService";
@@ -94,21 +98,35 @@
     }
   });
 
-  const query = new LiveQuery<{ name: string; channel: 1 | null }>(
+  const query = new LiveQuery<{
+    name: string;
+    kind: string;
+    parent?: { id: string; name: string; kind: string };
+  }>(
     () => sql`
-    select
-      i.name as name,
-      (select 1 from comp_room where entity = e.id) as channel
-      -- Add checks for other component types later, like page, feed, etc.
+    select json_object(
+      'name', name,
+      'parent', (
+        select json_object(
+          'id', id(pe.id),
+          'name', pi.name,
+          'kind', pr.label
+        )
+        from comp_info pi
+          join entities pe on pe.id = pi.entity
+          join comp_room pr on pe.id = pr.entity
+          where pe.id = e.parent
+      ),
+      'kind', r.label
+    ) as json
     from entities e
       join comp_info i on i.entity = e.id
+      join comp_room r on r.entity = e.id
     where e.id = ${page.params.object && id(page.params.object)}
   `,
+    (row) => JSON.parse(row.json),
   );
-  const objectName = $derived(query.result?.[0]?.name || "");
-  const objectType = $derived(
-    query.result?.[0]?.channel == 1 ? "channel" : "unknown",
-  ) as "channel" | "unknown";
+  const object = $derived(query.result?.[0]);
 </script>
 
 <MainLayout>
@@ -121,10 +139,19 @@
       <h2
         class="text-lg font-bold max-w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
       >
-        <span class="truncate">{objectName}</span>
+        {#if object?.parent && object.parent.kind == "channel"}
+          <a
+            href={`/${page.params.space}/${object.parent.id}`}
+            class="hover:underline underline-offset-4"
+          >
+            {object?.parent?.name}
+          </a>
+          <IconMdiArrowRight />
+        {/if}
+        <span class="truncate">{object?.name}</span>
       </h2>
       <span class="flex-grow"></span>
-      {#if objectType == "channel"}
+      {#if object?.kind == "channel"}
         <Tabs
           items={[
             { name: "Chat", href: "#chat" },
@@ -154,13 +181,15 @@
         <Button size="lg" onclick={joinSpace}>Join Space</Button>
       </Box>
     </div>
-  {:else if objectType == "channel"}
+  {:else if object?.kind == "channel"}
     {#if activeTab == "Chat"}
       <TimelineView />
     {:else if activeTab == "Threads"}
-      Threads
+      <BoardView />
     {/if}
-  {:else if objectType == "unknown"}
+  {:else if object?.kind == "thread"}
+    <TimelineView />
+  {:else}
     <div class="p-4">Unknown Object type</div>
   {/if}
 
