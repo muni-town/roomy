@@ -15,16 +15,16 @@ type HalfInterface = {
 };
 type IncomingMessage<In extends HalfInterface, Out extends HalfInterface> =
   | {
-      [K in keyof In]: ["call", K, string, ...Parameters<In[K]>];
-    }[keyof In]
+    [K in keyof In]: ["call", K, string, ...Parameters<In[K]>];
+  }[keyof In]
   | {
-      [K in keyof Out]: [
-        "response",
-        string,
-        "resolve" | "reject",
-        ReturnType<Out[K]>,
-      ];
-    }[keyof Out];
+    [K in keyof Out]: [
+      "response",
+      string,
+      "resolve" | "reject",
+      ReturnType<Out[K]>,
+    ];
+  }[keyof Out];
 
 /**
  * Wrap a message port to allow calling remote functions and providing functions to a remote worker.
@@ -41,8 +41,33 @@ export function messagePortInterface<
   } = {};
 
   messagePort.onmessage = async (
-    ev: MessageEvent<IncomingMessage<Local, Remote>>,
+    ev: MessageEvent<IncomingMessage<Local, Remote> | ConsoleForwardMessage>,
   ) => {
+    // Handle console forwarding messages
+    if (Array.isArray(ev.data) && ev.data.length === 3 && ev.data[0] === 'console') {
+      const [, level, args]: ConsoleForwardMessage = ev.data;
+      const prefixedArgs = ['[SharedWorker]', ...args];
+
+      switch (level) {
+        case 'log':
+          console.log(...prefixedArgs);
+          break;
+        case 'warn':
+          console.warn(...prefixedArgs);
+          break;
+        case 'error':
+          console.error(...prefixedArgs);
+          break;
+        case 'info':
+          console.info(...prefixedArgs);
+          break;
+        case 'debug':
+          console.debug(...prefixedArgs);
+          break;
+      }
+      return;
+    }
+
     const type = ev.data[0];
 
     if (type == "call") {
@@ -166,4 +191,93 @@ export function reactiveWorkerState<
       return true;
     },
   }) as unknown as T;
+}
+
+/**
+ * Console Forwarding for SharedWorkers
+ * 
+ * Safari doesn't show console output from SharedWorkers in the developer tools,
+ * making debugging difficult. This utility forwards console messages from 
+ * SharedWorkers to the main thread where they can be seen.
+ * 
+ * Usage in SharedWorker:
+ * ```typescript
+ * function connectMessagePort(port: MessagePortApi) {
+ *   // Basic usage - forwards all console messages
+ *   setupConsoleForwarding(port);
+ *   
+ *   // Optional: disable forwarding
+ *   setupConsoleForwarding(port, false);
+ *   
+ *   // Optional: get cleanup function to restore original console
+ *   const cleanup = setupConsoleForwarding(port);
+ *   // Later: cleanup(); // restores original console methods
+ *   
+ *   console.log("This will appear in main thread console with [SharedWorker] prefix");
+ * }
+ * ```
+ * 
+ * The main thread automatically receives and displays these messages when using
+ * messagePortInterface() - no additional setup required on the main thread.
+ * 
+ * All console methods are supported: log, warn, error, info, debug
+ * Messages appear in both the worker context (if available) and the main thread.
+ */
+
+/**
+ * Console forwarding message types
+ */
+type ConsoleLevel = 'log' | 'warn' | 'error' | 'info' | 'debug';
+type ConsoleForwardMessage = ['console', ConsoleLevel, any[]];
+
+/**
+ * Sets up console forwarding from a worker to the main thread via a message port.
+ * Call this in the worker to forward all console messages to the main thread.
+ * 
+ * @param messagePort - The message port to send console messages through
+ * @param enabled - Whether to enable console forwarding (default: true)
+ * @returns A cleanup function to restore original console methods
+ */
+export function setupConsoleForwarding(messagePort: MessagePortApi, enabled: boolean = true): () => void {
+  const originalConsole = {
+    log: console.log,
+    warn: console.warn,
+    error: console.error,
+    info: console.info,
+    debug: console.debug,
+  };
+
+  const forwardConsoleMessage = (level: ConsoleLevel, args: any[]) => {
+    // Send to main thread if enabled
+    if (enabled) {
+      try {
+        messagePort.postMessage(['console', level, args] satisfies ConsoleForwardMessage);
+      } catch (e) {
+        // Fallback to original console if forwarding fails
+        originalConsole[level](...args);
+        return;
+      }
+    }
+
+    // Also call original console method so logs still appear in worker context if available
+    originalConsole[level](...args);
+  };
+
+  // Override console methods only if enabled
+  if (enabled) {
+    console.log = (...args: any[]) => forwardConsoleMessage('log', args);
+    console.warn = (...args: any[]) => forwardConsoleMessage('warn', args);
+    console.error = (...args: any[]) => forwardConsoleMessage('error', args);
+    console.info = (...args: any[]) => forwardConsoleMessage('info', args);
+    console.debug = (...args: any[]) => forwardConsoleMessage('debug', args);
+  }
+
+  // Return cleanup function to restore original console methods
+  return () => {
+    console.log = originalConsole.log;
+    console.warn = originalConsole.warn;
+    console.error = originalConsole.error;
+    console.info = originalConsole.info;
+    console.debug = originalConsole.debug;
+  };
 }

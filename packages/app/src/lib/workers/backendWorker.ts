@@ -11,6 +11,7 @@ import {
 import {
   messagePortInterface,
   reactiveWorkerState,
+  setupConsoleForwarding,
   type MessagePortApi,
 } from "./workerMessaging";
 
@@ -101,7 +102,7 @@ const setPreviousStreamSchemaVersion = async (version: string) => {
 };
 
 export let sqliteWorker: SqliteWorkerInterface | undefined;
-let setSqliteWorkerReady = () => {};
+let setSqliteWorkerReady = () => { };
 const sqliteWorkerReady = new Promise(
   (r) => (setSqliteWorkerReady = r as () => void),
 );
@@ -120,7 +121,7 @@ class Backend {
   openSpacesMaterializer: OpenSpacesMaterializer | undefined;
 
   #oauthReady: Promise<void>;
-  #resolveOauthReady: () => void = () => {};
+  #resolveOauthReady: () => void = () => { };
   get ready() {
     return state.#oauthReady;
   }
@@ -276,6 +277,19 @@ export async function getProfile(
 }
 
 function connectMessagePort(port: MessagePortApi) {
+  // Set up console forwarding to main thread for Safari debugging
+  // This intercepts console.log/warn/error/info/debug calls in the SharedWorker
+  // and forwards them to the main thread with a [SharedWorker] prefix.
+  // This is essential for debugging on Safari where SharedWorker console
+  // output is not directly visible in developer tools.
+
+  // if (import.meta.env?.SHARED_WORKER_LOG_FORWARDING) {
+  setupConsoleForwarding(port);
+  console.log("SharedWorker backend connected with console forwarding enabled for development");
+  // } else {
+  //   console.log("SharedWorker backend connected");
+  // }
+
   const resetLocalDatabase = async () => {
     if (!sqliteWorker)
       throw new Error("Sqlite worker not initialized when resetting database.");
