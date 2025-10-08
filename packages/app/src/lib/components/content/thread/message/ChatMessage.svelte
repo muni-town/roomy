@@ -38,6 +38,7 @@
   } = $props();
 
   let hovered = $state(false);
+  let keepToolbarOpen = $state(false);
 
   // TODO: move this author can masquerade logic into the materializer so we don't have to
   // re-hash this in the UI.
@@ -79,72 +80,6 @@
 
   let messageByMe = $derived(message.authorDid == backendStatus.did);
   let canDelete = $derived(current.isSpaceAdmin || messageByMe);
-
-  // let previousMessage = $derived(new CoState(RoomyEntity, previousMessageId));
-
-  // let profile = $derived(
-  //   new CoState(
-  //     RoomyProfile,
-  //     message.current?._edits.components?.by?.profile?.id,
-  //   ),
-  // );
-
-  // let customAuthor = $derived(
-  //   new CoState(
-  //     AuthorComponent,
-  //     message.current?.components?.[AuthorComponent.id],
-  //   ),
-  // );
-  // let prevMessageCustomAuthor = $derived(
-  //   new CoState(
-  //     AuthorComponent,
-  //     previousMessage.current?.components?.[AuthorComponent.id],
-  //   ),
-  // );
-  // let userAccessTimes = $derived(
-  //   new CoState(
-  //     UserAccessTimesComponent,
-  //     message.current?.components?.[UserAccessTimesComponent.id],
-  //   ),
-  // );
-  // let prevMessageUserAccessTimes = $derived(
-  //   new CoState(
-  //     UserAccessTimesComponent,
-  //     previousMessage.current?.components?.[UserAccessTimesComponent.id],
-  //   ),
-  // );
-  // let messageContent = $derived(
-  //   new CoState(
-  //     CommonMarkContentComponent,
-  //     message.current?.components?.[CommonMarkContentComponent.id],
-  //   ),
-  // );
-
-  // let embeds = $derived(
-  //   new CoState(
-  //     EmbedsComponent,
-  //     message.current?.components?.[EmbedsComponent.id],
-  //   ),
-  // );
-
-  // let hiddenIn = $derived(
-  //   new CoState(
-  //     HiddenInComponent,
-  //     message.current?.components?.[HiddenInComponent.id],
-  //   ),
-  // );
-
-  // let reactions = $derived(
-  //   new CoState(
-  //     ReactionsComponent,
-  //     message.current?.components?.[ReactionsComponent.id],
-  //   ),
-  // );
-
-  // const authorData = $derived.by(() => {
-  //   if (customAuthor.current) return customAuthor.current;
-  //   return profile.current;
-  // });
 
   let isDrawerOpen = $state(false);
 
@@ -191,45 +126,6 @@
     //   1000 * 60
     // );
   });
-
-  function removeReaction(emoji: string) {
-    // let index = reactions.current?.reactions?.findIndex(
-    //   (reaction) =>
-    //     reaction?.emoji === emoji &&
-    //     reaction?._edits.emoji?.by?.profile?.id === me.current?.profile?.id,
-    // );
-    // if (index === undefined || index < 0) return;
-    // reactions.current?.reactions?.splice(index, 1);
-  }
-
-  function addReaction(emoji: string) {
-    // reactions.current?.reactions?.push(
-    //   Reaction.create(
-    //     {
-    //       emoji: emoji,
-    //     },
-    //     {
-    //       owner: publicGroup("reader"),
-    //     },
-    //   ),
-    // );
-  }
-  let reactionsEmojis = $derived(
-    [],
-    // convertReactionsToEmojis(reactions.current?.reactions, me.current),
-  );
-
-  function toggleReaction(emoji: string) {
-    // // check if the emoji is already in the reactions array with the current user
-    // let index = reactionsEmojis?.findIndex(
-    //   (reaction) => reaction.emoji === emoji && reaction.user,
-    // );
-    // if (index === undefined || index < 0) {
-    //   addReaction(emoji);
-    // } else {
-    //   removeReaction(emoji);
-    // }
-  }
 
   const selectMessage = () => {
     // if (threading?.active) {
@@ -370,11 +266,11 @@
       </div>
     </div>
 
-    {#if editingMessage.id !== message.id && hovered && !threading?.active}
+    {#if (editingMessage.id !== message.id && hovered && !threading?.active) || keepToolbarOpen}
       <MessageToolbar
         bind:isDrawerOpen
-        {toggleReaction}
         canEdit={messageByMe}
+        bind:keepToolbarOpen
         {canDelete}
         {deleteMessage}
         {editMessage}
@@ -408,7 +304,7 @@
       />
     {/if} -->
 
-    <MessageReactions reactions={reactionsEmojis} {toggleReaction} />
+    <MessageReactions {message} />
   </div>
 </div>
 

@@ -6,7 +6,6 @@ import { id } from "./workers/encoding";
 
 export type SpaceMeta = {
   id: string;
-  ulid: string;
   name?: string;
   avatar?: string;
   description?: string;
@@ -31,6 +30,7 @@ export let spaceTree: LiveQuery<SpaceTreeItem>;
 
 export let current = $state({
   space: undefined as SpaceMeta | undefined,
+  roomId: undefined as string | undefined,
   isSpaceAdmin: false,
 });
 
@@ -133,5 +133,8 @@ $effect.root(() => {
             permission[0] === backendStatus.did && permission[1] === "admin",
         ) || false;
     }
+  });
+  $effect(() => {
+    current.roomId = page.params.object;
   });
 });

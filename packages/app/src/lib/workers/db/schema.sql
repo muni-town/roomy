@@ -21,13 +21,13 @@ create index if not exists idx_entities_stream_id on entities (stream_id);
 create index if not exists idx_entities_parent on entities (parent);
 
 CREATE TABLE IF NOT EXISTS edges (
+    edge_id integer primary key autoincrement,
     head BLOB NOT NULL,
     tail BLOB NOT NULL,
     label TEXT NOT NULL, -- CHECK(label IN ('child', 'parent', 'subscribe', 'member', 'ban', 'hide', 'pin', 'last_read', 'embed', 'reply', 'link', 'author', 'reorder', 'source', 'avatar')),
-    payload TEXT CHECK(json_valid(payload)),
+    payload TEXT,
     created_at integer not null default (unixepoch() * 1000),
     updated_at integer not null default (unixepoch() * 1000),
-    PRIMARY KEY (head, tail, label),
     FOREIGN KEY (head) REFERENCES entities(id) ON DELETE CASCADE,
     FOREIGN KEY (tail) REFERENCES entities(id) ON DELETE CASCADE
 ) STRICT;

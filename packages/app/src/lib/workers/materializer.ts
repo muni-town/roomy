@@ -164,7 +164,7 @@ const materializers: {
       { key: "avatar", ...data.avatar },
       { key: "description", ...data.description },
     ];
-    const setUpdates = updates.filter((x) => 'set' in x);
+    const setUpdates = updates.filter((x) => "set" in x);
 
     const entityId = event.parent ? event.parent : streamId;
 
@@ -275,12 +275,17 @@ const materializers: {
       )),
       sql`
         insert into edges (head, tail, label)
-        values (
+        select 
           ${id(event.ulid)},
           ${id(user)},
           'author'
+        where not exists (
+          select 1 from edges
+          where
+            head = ${id(event.ulid)} and
+            tail = ${id(user)} and
+            label = 'author'
         )
-        on conflict do nothing
       `,
       sql`
         insert or replace into comp_content (entity, mime_type, data)
@@ -354,16 +359,34 @@ const materializers: {
   },
 
   // Reaction
-  "space.roomy.reaction.create.0": async ({ streamId, event }) => [
-    ensureEntity(streamId, event.ulid, event.parent),
-    // TODO: insert edge for reaction
-  ],
-  "space.roomy.reaction.delete.0": async ({ event }) => {
+  "space.roomy.reaction.create.0": async ({ data, user }) => {
+    return [
+      sql`
+        insert into edges (head, tail, label, payload)
+        values (
+          ${id(user)},
+          ${id(data.reaction_to)},
+          'reaction',
+          ${data.reaction}
+        )
+      `,
+    ];
+  },
+  "space.roomy.reaction.delete.0": async ({ event, user, data }) => {
     if (!event.parent) {
       console.warn("Delete reaction missing parent");
       return [];
     }
-    return [sql`delete from entities where id = ${id(event.parent)}`];
+    return [
+      sql`
+      delete from edges
+      where
+        head = ${id(user)} and
+        label = 'reaction' and
+        tail = ${id(data.reaction_to)} and
+        payload = ${data.reaction}
+    `,
+    ];
   },
 
   // Media
@@ -514,7 +537,7 @@ async function ensureProfile(
           insert into comp_info (entity, name, avatar)
           values (
             ${id(did)},
-            ${profile.data.displayName},
+            ${profile.data.displayName || profile.data.handle},
             ${profile.data.avatar}
           )
           on conflict(entity) do nothing

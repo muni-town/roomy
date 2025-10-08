@@ -32,6 +32,7 @@
     masqueradeAuthorAvatar?: string;
     mergeWithPrevious?: boolean;
     replyTo?: string;
+    reactions: { reaction: string; userId: string; userName: string }[];
   };
 
   let {
@@ -48,18 +49,29 @@
 
   let query = new LiveQuery<Message>(
     () => sql`
-      select
-        id(c.entity) as id,
-        cast(c.data as text) as content,
-        id(u.did) as authorDid,
-        i.name as authorName,
-        i.avatar as authorAvatar,
-        id(o.author) as masqueradeAuthor,
-        o.timestamp as masqueradeTimestamp,
-        id(e.tail) as replyTo,
-        oai.name as masqueradeAuthorName,
-        oai.avatar as masqueradeAuthorAvatar,
-        oau.handle as masqueradeAuthorHandle
+      select json_object(
+        'id', id(c.entity),
+        'content', cast(c.data as text),
+        'authorDid', id(u.did),
+        'authorName', i.name,
+        'authorAvatar', i.avatar,
+        'masqueradeAuthor', id(o.author),
+        'masqueradeTimestamp', o.timestamp,
+        'replyTo', id(e.tail),
+        'masqueradeAuthorName', oai.name,
+        'masqueradeAuthorAvatar', oai.avatar,
+        'masqueradeAuthorHandle', oau.handle,
+        'reactions', (
+          select json_group_array(json_object(
+            'reaction', ed.payload,
+            'userId', id(ed.head),
+            'userName', i.name
+          ))
+          from edges ed
+          join comp_info i on i.entity = ed.head
+          where ed.tail = e.id and ed.label = 'reaction'
+        )
+      ) as json
       from entities e
         join comp_content c on c.entity = e.id
         join edges author_edge on author_edge.head = e.id and author_edge.label = 'author'
@@ -73,6 +85,7 @@
         e.parent = ${page.params.object && id(page.params.object)}
       order by c.entity
     `,
+    (row) => JSON.parse(row.json),
   );
 
   let showLastN = $state(50);

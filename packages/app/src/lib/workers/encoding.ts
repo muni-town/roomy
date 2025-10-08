@@ -294,8 +294,11 @@ export const eventVariantCodec = Kinds({
      * */
     reaction: str,
   }),
-  /** Delete a reaction. The parent is the reaction that should be deleted. */
-  "space.roomy.reaction.delete.0": _void,
+  /** Delete a reaction. */
+  "space.roomy.reaction.delete.0": Struct({
+    reaction_to: Ulid,
+    reaction: str,
+  }),
   /** Create new media that can, for example, be attached to messages. */
   "space.roomy.media.create.0": Struct({
     /** For now all media is external and we use a URI to load it. */

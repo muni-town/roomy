@@ -12,6 +12,9 @@
   import IconTablerNeedleThread from "~icons/tabler/needle-thread";
   import IconTablerEdit from "~icons/tabler/edit";
   import IconTablerTrash from "~icons/tabler/trash";
+  import { backend, backendStatus } from "$lib/workers";
+  import { current } from "$lib/queries.svelte";
+  import { ulid } from "ulidx";
 
   let {
     canEdit = true,
@@ -19,25 +22,48 @@
     editMessage,
     deleteMessage,
     isDrawerOpen = $bindable(false),
-    toggleReaction,
     message,
     startThreading,
+    keepToolbarOpen = $bindable(false),
   }: {
     canEdit?: boolean;
     canDelete?: boolean;
     editMessage: () => void;
     deleteMessage: () => void;
-    toggleReaction: (reaction: string) => void;
     isDrawerOpen?: boolean;
     message: Message;
     startThreading: () => void;
+    keepToolbarOpen: boolean;
   } = $props();
 
   let isEmojiDrawerPickerOpen = $state(false);
   let isEmojiToolbarPickerOpen = $state(false);
 
+  $effect(() => {
+    keepToolbarOpen = isEmojiDrawerPickerOpen || isEmojiToolbarPickerOpen;
+  });
+
   function onEmojiPick(emoji: string) {
-    toggleReaction(emoji);
+    if (!current.space) return;
+
+    // If we haven't already made this reaction to this post.
+    if (
+      !message.reactions.find(
+        (x) => x.userId == backendStatus.did && x.reaction == emoji,
+      )
+    ) {
+      backend.sendEvent(current.space.id, {
+        ulid: ulid(),
+        parent: current.roomId,
+        variant: {
+          kind: "space.roomy.reaction.create.0",
+          data: {
+            reaction_to: message.id,
+            reaction: emoji,
+          },
+        },
+      });
+    }
     isEmojiToolbarPickerOpen = false;
     isEmojiDrawerPickerOpen = false;
     isDrawerOpen = false;
@@ -62,7 +88,7 @@
       variant="ghost"
       size="icon"
       onclick={() => {
-        toggleReaction("👍");
+        onEmojiPick("👍");
         isDrawerOpen = false;
       }}
       class="dz-btn dz-btn-circle"
@@ -73,7 +99,7 @@
       variant="ghost"
       size="icon"
       onclick={() => {
-        toggleReaction("😂");
+        onEmojiPick("😂");
         isDrawerOpen = false;
       }}
     >
@@ -95,7 +121,7 @@
   <div class="flex flex-col gap-4 w-full">
     <Button
       onclick={() => {
-        setReplyTo(id);
+        setReplyTo(message);
         isDrawerOpen = false;
       }}
       class="dz-join-item dz-btn w-full"
@@ -142,7 +168,7 @@
     onclick={(e) => e.stopPropagation()}
   >
     <Toolbar.Button
-      onclick={() => toggleReaction("👍")}
+      onclick={() => onEmojiPick("👍")}
       class={[
         buttonVariants({ variant: "ghost", size: "iconSm" }),
         "backdrop-blur-none",
@@ -151,7 +177,7 @@
       👍
     </Toolbar.Button>
     <Toolbar.Button
-      onclick={() => toggleReaction("😂")}
+      onclick={() => onEmojiPick("😂")}
       class={[
         buttonVariants({ variant: "ghost", size: "iconSm" }),
         "backdrop-blur-none",
