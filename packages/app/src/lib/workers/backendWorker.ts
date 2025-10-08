@@ -4,14 +4,15 @@
 import { LeafClient, type IncomingEvent } from "@muni-town/leaf-client";
 import {
   type BackendInterface,
+  type ConsoleInterface,
   type BackendStatus,
   type Savepoint,
   type SqliteWorkerInterface,
+  consoleLogLevels,
 } from "./types";
 import {
   messagePortInterface,
   reactiveWorkerState,
-  setupConsoleForwarding,
   type MessagePortApi,
 } from "./workerMessaging";
 
@@ -102,7 +103,7 @@ const setPreviousStreamSchemaVersion = async (version: string) => {
 };
 
 export let sqliteWorker: SqliteWorkerInterface | undefined;
-let setSqliteWorkerReady = () => { };
+let setSqliteWorkerReady = () => {};
 const sqliteWorkerReady = new Promise(
   (r) => (setSqliteWorkerReady = r as () => void),
 );
@@ -121,7 +122,7 @@ class Backend {
   openSpacesMaterializer: OpenSpacesMaterializer | undefined;
 
   #oauthReady: Promise<void>;
-  #resolveOauthReady: () => void = () => { };
+  #resolveOauthReady: () => void = () => {};
   get ready() {
     return state.#oauthReady;
   }
@@ -277,19 +278,6 @@ export async function getProfile(
 }
 
 function connectMessagePort(port: MessagePortApi) {
-  // Set up console forwarding to main thread for Safari debugging
-  // This intercepts console.log/warn/error/info/debug calls in the SharedWorker
-  // and forwards them to the main thread with a [SharedWorker] prefix.
-  // This is essential for debugging on Safari where SharedWorker console
-  // output is not directly visible in developer tools.
-
-  // if (import.meta.env?.SHARED_WORKER_LOG_FORWARDING) {
-  setupConsoleForwarding(port);
-  console.log("SharedWorker backend connected with console forwarding enabled for development");
-  // } else {
-  //   console.log("SharedWorker backend connected");
-  // }
-
   const resetLocalDatabase = async () => {
     if (!sqliteWorker)
       throw new Error("Sqlite worker not initialized when resetting database.");
@@ -302,174 +290,190 @@ function connectMessagePort(port: MessagePortApi) {
   };
 
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-  messagePortInterface<BackendInterface, {}>(port, {
-    async login(handle) {
-      if (!state.oauth) throw "OAuth not initialized";
-      const url = await state.oauth.authorize(handle, {
-        scope: atprotoOauthScope,
-      });
-      return url.href;
-    },
-    async oauthCallback(paramsStr) {
-      const params = new URLSearchParams(paramsStr);
-      await state.oauthCallback(params);
-    },
-    async logout() {
-      state.logout();
-    },
-    async runQuery(statement: SqlStatement) {
-      await sqliteWorkerReady;
-      if (!sqliteWorker) throw new Error("Sqlite worker not initialized");
-      return await sqliteWorker.runQuery(statement);
-    },
-    async createLiveQuery(id, port, statement) {
-      await sqliteWorkerReady;
+  const consoleInterface = messagePortInterface<BackendInterface, ConsoleInterface>(
+    port,
+    {
+      async login(handle) {
+        if (!state.oauth) throw "OAuth not initialized";
+        const url = await state.oauth.authorize(handle, {
+          scope: atprotoOauthScope,
+        });
+        return url.href;
+      },
+      async oauthCallback(paramsStr) {
+        const params = new URLSearchParams(paramsStr);
+        await state.oauthCallback(params);
+      },
+      async logout() {
+        state.logout();
+      },
+      async runQuery(statement: SqlStatement) {
+        await sqliteWorkerReady;
+        if (!sqliteWorker) throw new Error("Sqlite worker not initialized");
+        return await sqliteWorker.runQuery(statement);
+      },
+      async createLiveQuery(id, port, statement) {
+        await sqliteWorkerReady;
 
-      liveQueries.set(id, { port, statement });
-      const channel = new MessageChannel();
-      channel.port1.onmessage = (ev) => {
-        port.postMessage(ev.data);
-      };
-      navigator.locks.request(id, async () => {
-        // When we obtain a lock to the query ID, that means that the query is no longer in
-        // use and we can delete it.
-        liveQueries.delete(id);
-        await sqliteWorker?.deleteLiveQuery(id);
-      });
-      if (!sqliteWorker) throw new Error("Sqlite worker not initialized");
-      return await sqliteWorker.createLiveQuery(id, channel.port2, statement);
-    },
-    async dangerousCompletelyDestroyDatabase({ yesIAmSure }) {
-      if (!yesIAmSure) throw "You need to be sure";
-      if (!sqliteWorker) throw "Sqlite worker not initialized";
-      resetLocalDatabase();
-    },
-    async setActiveSqliteWorker(messagePort) {
-      console.log("Setting active SQLite worker");
-      const firstUpdate = !sqliteWorker;
-
-      // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-      sqliteWorker = messagePortInterface<{}, SqliteWorkerInterface>(
-        messagePort,
-        {},
-      );
-
-      if (firstUpdate) {
-        const previousSchemaVersion = await getPreviousStreamSchemaVersion();
-        if (previousSchemaVersion != CONFIG.streamSchemaVersion) {
-          // Reset the local database cache when the schema version changes.
-          await resetLocalDatabase();
-        }
-        await setPreviousStreamSchemaVersion(CONFIG.streamSchemaVersion);
-      }
-
-      setSqliteWorkerReady();
-
-      // When a new SQLite worker is created we need to make sure that we re-create all of the
-      // live queries that were active on the old worker.
-      for (const [id, { port, statement }] of liveQueries.entries()) {
+        liveQueries.set(id, { port, statement });
         const channel = new MessageChannel();
         channel.port1.onmessage = (ev) => {
           port.postMessage(ev.data);
         };
-        sqliteWorker.createLiveQuery(id, channel.port2, statement);
-      }
-    },
-    async createStream(ulid, moduleId, moduleUrl, params): Promise<string> {
-      if (!state.leafClient) throw new Error("Leaf client not initialized");
-      return await state.leafClient.createStreamFromModuleUrl(
-        ulid,
-        moduleId,
-        moduleUrl,
-        params || new ArrayBuffer(),
-      );
-    },
-    async sendEvent(streamId: string, event: EventType) {
-      if (!state.leafClient) throw "Leaf client not ready";
-      await state.leafClient.sendEvent(
-        streamId,
-        eventCodec.enc(event).buffer as ArrayBuffer,
-      );
-    },
-    async sendEventBatch(streamId, payloads) {
-      if (!state.leafClient) throw "Leaf client not ready";
-      const encodedPayloads = payloads.map((x) => {
-        try {
-          return eventCodec.enc(x).buffer as ArrayBuffer;
-        } catch (e) {
-          throw new Error(
-            `Could not encode event: ${JSON.stringify(x, null, "  ")}`,
-            { cause: e },
-          );
+        navigator.locks.request(id, async () => {
+          // When we obtain a lock to the query ID, that means that the query is no longer in
+          // use and we can delete it.
+          liveQueries.delete(id);
+          await sqliteWorker?.deleteLiveQuery(id);
+        });
+        if (!sqliteWorker) throw new Error("Sqlite worker not initialized");
+        return await sqliteWorker.createLiveQuery(id, channel.port2, statement);
+      },
+      async dangerousCompletelyDestroyDatabase({ yesIAmSure }) {
+        if (!yesIAmSure) throw "You need to be sure";
+        if (!sqliteWorker) throw "Sqlite worker not initialized";
+        resetLocalDatabase();
+      },
+      async setActiveSqliteWorker(messagePort) {
+        console.log("Setting active SQLite worker");
+        const firstUpdate = !sqliteWorker;
+
+        // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+        sqliteWorker = messagePortInterface<{}, SqliteWorkerInterface>(
+          messagePort,
+          {},
+        );
+
+        if (firstUpdate) {
+          const previousSchemaVersion = await getPreviousStreamSchemaVersion();
+          if (previousSchemaVersion != CONFIG.streamSchemaVersion) {
+            // Reset the local database cache when the schema version changes.
+            await resetLocalDatabase();
+          }
+          await setPreviousStreamSchemaVersion(CONFIG.streamSchemaVersion);
         }
-      });
-      await state.leafClient.sendEvents(streamId, encodedPayloads);
-    },
-    async fetchEvents(streamId, offset, limit) {
-      if (!state.leafClient) throw "Leaf client not initialized";
-      const events = (
-        await state.leafClient?.fetchEvents(streamId, { offset, limit })
-      )?.map((x) => ({
-        ...x,
-        stream: streamId,
-      }));
-      return events;
-    },
-    async previewSpace(streamId) {
-      await sqliteWorkerReady;
-      if (!sqliteWorker) throw new Error("Sqlite worker not initialized");
-      if (!state.leafClient) throw "Leaf client not initialized";
-      const previewMaterializer = new PreviewMaterializer(
-        streamId,
-        materializerConfig,
-      );
-      await previewMaterializer.fetchPreviewEvents();
-      const result = await sqliteWorker.runQuery(sql`
+
+        setSqliteWorkerReady();
+
+        // When a new SQLite worker is created we need to make sure that we re-create all of the
+        // live queries that were active on the old worker.
+        for (const [id, { port, statement }] of liveQueries.entries()) {
+          const channel = new MessageChannel();
+          channel.port1.onmessage = (ev) => {
+            port.postMessage(ev.data);
+          };
+          sqliteWorker.createLiveQuery(id, channel.port2, statement);
+        }
+      },
+      async createStream(ulid, moduleId, moduleUrl, params): Promise<string> {
+        if (!state.leafClient) throw new Error("Leaf client not initialized");
+        return await state.leafClient.createStreamFromModuleUrl(
+          ulid,
+          moduleId,
+          moduleUrl,
+          params || new ArrayBuffer(),
+        );
+      },
+      async sendEvent(streamId: string, event: EventType) {
+        if (!state.leafClient) throw "Leaf client not ready";
+        await state.leafClient.sendEvent(
+          streamId,
+          eventCodec.enc(event).buffer as ArrayBuffer,
+        );
+      },
+      async sendEventBatch(streamId, payloads) {
+        if (!state.leafClient) throw "Leaf client not ready";
+        const encodedPayloads = payloads.map((x) => {
+          try {
+            return eventCodec.enc(x).buffer as ArrayBuffer;
+          } catch (e) {
+            throw new Error(
+              `Could not encode event: ${JSON.stringify(x, null, "  ")}`,
+              { cause: e },
+            );
+          }
+        });
+        await state.leafClient.sendEvents(streamId, encodedPayloads);
+      },
+      async fetchEvents(streamId, offset, limit) {
+        if (!state.leafClient) throw "Leaf client not initialized";
+        const events = (
+          await state.leafClient?.fetchEvents(streamId, { offset, limit })
+        )?.map((x) => ({
+          ...x,
+          stream: streamId,
+        }));
+        return events;
+      },
+      async previewSpace(streamId) {
+        await sqliteWorkerReady;
+        if (!sqliteWorker) throw new Error("Sqlite worker not initialized");
+        if (!state.leafClient) throw "Leaf client not initialized";
+        const previewMaterializer = new PreviewMaterializer(
+          streamId,
+          materializerConfig,
+        );
+        await previewMaterializer.fetchPreviewEvents();
+        const result = await sqliteWorker.runQuery(sql`
         select e.*, c.* from entities e JOIN comp_info c
           ON e.ulid = c.entity where e.stream_id = ${Hash.enc(streamId)} and e.parent is null
       `);
-      console.log("Preview space result", result);
-      return new Promise(() => {
-        name: "test";
-      });
+        console.log("Preview space result", result);
+        return new Promise(() => {
+          name: "test";
+        });
+      },
+      async uploadImage(bytes, alt?: string) {
+        if (!state.agent) throw new Error("Agent not initialized");
+        const resp = await state.agent.com.atproto.repo.uploadBlob(
+          new Uint8Array(bytes),
+        );
+        const blobRef = resp.data.blob;
+        // Create a record that links to the blob
+        const record = {
+          $type: "space.roomy.image",
+          image: blobRef,
+          alt,
+        };
+        // Put the record in the repository
+        const putResponse = await state.agent.com.atproto.repo.putRecord({
+          repo: state.agent.assertDid,
+          collection: "space.roomy.image",
+          rkey: `${Date.now()}`, // Using timestamp as a unique key
+          record: record,
+        });
+        const url = `https://cdn.bsky.app/img/feed_thumbnail/plain/${state.agent.assertDid}/${blobRef.ipld().ref}`;
+        return {
+          blob: blobRef,
+          uri: putResponse.data.uri,
+          cid: putResponse.data.cid,
+          url,
+        };
+      },
+      async addClient(port) {
+        connectMessagePort(port);
+      },
+      async pauseSubscription(streamId) {
+        await state.openSpacesMaterializer?.pauseSubscription(streamId);
+      },
+      async unpauseSubscription(streamId) {
+        await state.openSpacesMaterializer?.unpauseSubscription(streamId);
+      },
     },
-    async uploadImage(bytes, alt?: string) {
-      if (!state.agent) throw new Error("Agent not initialized");
-      const resp = await state.agent.com.atproto.repo.uploadBlob(
-        new Uint8Array(bytes),
-      );
-      const blobRef = resp.data.blob;
-      // Create a record that links to the blob
-      const record = {
-        $type: "space.roomy.image",
-        image: blobRef,
-        alt,
-      };
-      // Put the record in the repository
-      const putResponse = await state.agent.com.atproto.repo.putRecord({
-        repo: state.agent.assertDid,
-        collection: "space.roomy.image",
-        rkey: `${Date.now()}`, // Using timestamp as a unique key
-        record: record,
-      });
-      const url = `https://cdn.bsky.app/img/feed_thumbnail/plain/${state.agent.assertDid}/${blobRef.ipld().ref}`;
-      return {
-        blob: blobRef,
-        uri: putResponse.data.uri,
-        cid: putResponse.data.cid,
-        url,
-      };
-    },
-    async addClient(port) {
-      connectMessagePort(port);
-    },
-    async pauseSubscription(streamId) {
-      await state.openSpacesMaterializer?.pauseSubscription(streamId);
-    },
-    async unpauseSubscription(streamId) {
-      await state.openSpacesMaterializer?.unpauseSubscription(streamId);
-    },
-  });
+  );
+
+  // Set up console forwarding to main thread for debugging
+  // This intercepts console.log/warn/error/info/debug calls in the SharedWorker
+  // and forwards them to the main thread with a [SharedWorker] prefix.
+  // This is essential for debugging on Safari where SharedWorker console
+  // output is not directly visible in developer tools.
+  for (const level of consoleLogLevels) {
+    const normalLog = globalThis.console[level];
+    globalThis.console[level] = (...args) => {
+      normalLog(...args);
+      consoleInterface.log(level, args);
+    };
+  }
 }
 
 async function createOauthClient(): Promise<OAuthClient> {
@@ -773,20 +777,6 @@ class StreamMaterializer {
             limit: batchSize,
           });
 
-          console.log("backfill_events for stream", this.#streamId);
-
-          const savepoint: Savepoint = {
-            name: "backfill_events",
-            items: newEvents.map(
-              (event) =>
-                sql`INSERT INTO events (idx, stream_id, payload)
-                  VALUES (${event.idx}, ${id(this.#streamId)}, ${event.payload})
-                  ON CONFLICT(idx, stream_id) DO NOTHING`,
-            ),
-          };
-
-          await sqliteWorker.runSavepoint(savepoint);
-
           fetchCursor += batchSize;
           console.timeEnd("fetchBatch");
 
@@ -796,7 +786,6 @@ class StreamMaterializer {
 
           await previousMaterializationPromise;
 
-          console.log("Materializing new events", newEvents);
           previousMaterializationPromise = this.#materializeEvents(newEvents);
           if (newEvents.length == 0) break;
         }

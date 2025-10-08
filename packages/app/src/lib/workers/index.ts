@@ -1,6 +1,11 @@
 import { messagePortInterface, reactiveWorkerState } from "./workerMessaging";
 import backendWorkerUrl from "./backendWorker.ts?worker&url";
-import type { BackendInterface, BackendStatus, SqliteStatus } from "./types";
+import type {
+  BackendInterface,
+  BackendStatus,
+  ConsoleInterface,
+  SqliteStatus,
+} from "./types";
 
 // Force page reload when hot reloading this file to avoid confusion if the workers get mixed up.
 if (import.meta.hot) {
@@ -36,9 +41,14 @@ const backendWorker = new SharedWorkerConstructor(backendWorkerUrl, {
 });
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export const backend = messagePortInterface<{}, BackendInterface>(
+export const backend = messagePortInterface<ConsoleInterface, BackendInterface>(
   "port" in backendWorker ? backendWorker.port : backendWorker,
-  {},
+  {
+    async log(level, args) {
+      const prefixedArgs = ["[SharedWorker]", ...args];
+      console[level](...prefixedArgs);
+    },
+  },
 );
 
 (globalThis as any).backend = backend;
