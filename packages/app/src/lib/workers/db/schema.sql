@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS edges (
     FOREIGN KEY (head) REFERENCES entities(id) ON DELETE CASCADE,
     FOREIGN KEY (tail) REFERENCES entities(id) ON DELETE CASCADE
 ) STRICT;
+create index if not exists idx_edges_label on edges(label);
+create index if not exists idx_edges_label_head on edges(label, head);
+create index if not exists idx_edges_label_tail on edges(label, tail);
 
 create table if not exists comp_space (
   entity blob primary key references entities(id) on delete cascade,
