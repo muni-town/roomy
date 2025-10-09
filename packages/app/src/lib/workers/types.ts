@@ -15,12 +15,21 @@ export interface BackendStatus {
 export interface SqliteStatus {
   isActiveWorker: boolean | undefined;
 }
+export interface Profile {
+  id: string;
+  handle?: string;
+  avatar?: string;
+  displayName?: string;
+  banner?: string;
+  description?: string;
+}
 
 export type BackendInterface = {
   login(username: string): Promise<string>;
   logout(): Promise<void>;
   oauthCallback(searchParams: string): Promise<void>;
   runQuery(statement: SqlStatement): Promise<QueryResult>;
+  loadProfile(did: string): Promise<Profile | undefined>;
   dangerousCompletelyDestroyDatabase(opts: {
     yesIAmSure: true;
   }): Promise<unknown>;

@@ -102,7 +102,7 @@ const setPreviousStreamSchemaVersion = async (version: string) => {
 };
 
 export let sqliteWorker: SqliteWorkerInterface | undefined;
-let setSqliteWorkerReady = () => { };
+let setSqliteWorkerReady = () => {};
 const sqliteWorkerReady = new Promise(
   (r) => (setSqliteWorkerReady = r as () => void),
 );
@@ -121,7 +121,7 @@ class Backend {
   openSpacesMaterializer: OpenSpacesMaterializer | undefined;
 
   #oauthReady: Promise<void>;
-  #resolveOauthReady: () => void = () => { };
+  #resolveOauthReady: () => void = () => {};
   get ready() {
     return state.#oauthReady;
   }
@@ -285,7 +285,9 @@ function connectMessagePort(port: MessagePortApi) {
 
   // if (import.meta.env?.SHARED_WORKER_LOG_FORWARDING) {
   setupConsoleForwarding(port);
-  console.log("SharedWorker backend connected with console forwarding enabled for development");
+  console.log(
+    "SharedWorker backend connected with console forwarding enabled for development",
+  );
   // } else {
   //   console.log("SharedWorker backend connected");
   // }
@@ -316,6 +318,20 @@ function connectMessagePort(port: MessagePortApi) {
     },
     async logout() {
       state.logout();
+    },
+    async loadProfile(did) {
+      if (!state.agent) return;
+      const resp = await state.agent.getProfile({ actor: did });
+      if (resp.success) {
+        return {
+          id: resp.data.did,
+          avatar: resp.data.avatar,
+          banner: resp.data.banner,
+          description: resp.data.description,
+          displayName: resp.data.displayName,
+          handle: resp.data.handle,
+        };
+      }
     },
     async runQuery(statement: SqlStatement) {
       await sqliteWorkerReady;
