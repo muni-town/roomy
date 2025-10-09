@@ -26,6 +26,8 @@
           i.name as authorName,
           i.avatar as authorAvatar,
           id(o.author) as masqueradeAuthor,
+          oi.name as masqueradeAuthorName,
+          oi.avatar as masqueradeAuthorAvatar,
           o.timestamp as masqueradeTimestamp
         from entities e
           join comp_content c on c.entity = e.id
@@ -33,6 +35,7 @@
           join comp_user u on u.did = author_edge.tail
           join comp_info i on i.entity = author_edge.tail
           left join comp_override_meta o on o.entity = e.id
+          left join comp_info oi on oi.entity = o.author
         where
           e.id = ${id(messageId || passedMessage?.id || "")}
           limit 1
@@ -55,13 +58,19 @@
   <div class="flex md:basis-auto gap-2 items-center shrink-0">
     <IconMdiReply width="12px" height="12px" />
     <Avatar.Root class="w-4 h-4">
-      <Avatar.Image src={message?.authorAvatar} class="rounded-full" />
+      <Avatar.Image
+        src={message?.masqueradeAuthorAvatar || message?.authorAvatar}
+        class="rounded-full"
+      />
       <Avatar.Fallback>
-        <AvatarBeam size={16} name={message?.authorName ?? ""} />
+        <AvatarBeam
+          size={16}
+          name={message?.masqueradeAuthor || message?.authorDid || ""}
+        />
       </Avatar.Fallback>
     </Avatar.Root>
     <h5 class="font-medium text-ellipsis text-accent-800 dark:text-accent-300">
-      {message?.authorName ?? ""}
+      {message?.masqueradeAuthorName || message?.authorName || ""}
     </h5>
   </div>
   <div class="line-clamp-1 md:basis-auto overflow-hidden italic">
