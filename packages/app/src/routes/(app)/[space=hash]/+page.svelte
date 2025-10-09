@@ -1,37 +1,20 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import BoardView from "$lib/components/content/thread/boardView/BoardView.svelte";
+  import type { ThreadInfo } from "$lib/components/content/thread/boardView/types";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
+  import { LiveQuery } from "$lib/liveQuery.svelte";
   import { current } from "$lib/queries.svelte";
+  import { sql } from "$lib/utils/sqlTemplate";
   import { backend, backendStatus } from "$lib/workers";
+  import { id } from "$lib/workers/encoding";
   import { Box, Button } from "@fuxui/base";
   import { ulid } from "ulidx";
 
-  async function navigateToFirstChildThreadOrPage() {}
-
-  // Automatically navigate to the first object that is a thread or page in the space if we come to this empty space index
-  // page. We might have useful features on this index page eventually.
-  $effect(() => {
-    navigateToFirstChildThreadOrPage();
-  });
-
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
-
-  // let events: IncomingEvent[] = $state([]);
-
-  // // fetch first 100 events
-  // async function fetchEvents() {
-  //   if (!backendStatus.personalStreamId || !page.params.space) return;
-  //   console.log("Fetching events for space", page.params.space);
-  //   events = await backend.fetchEvents(page.params.space, 1, 100);
-  //   $state.snapshot(events);
-  //   await backend.previewSpace(page.params.space);
-  //   console.log("Space preview materialised");
-  // }
-
-  // fetchEvents();
 
   async function joinSpace() {
     if (!backendStatus.personalStreamId || !page.params.space) return;
@@ -46,6 +29,27 @@
       },
     });
   }
+
+  const threadsList = new LiveQuery<ThreadInfo>(
+    () =>
+      sql`
+        select json_object(
+          'id', id(r.entity),
+          'name', name,
+          'members', (
+            select json_array()
+          )
+        ) as json
+        from comp_room r
+          join comp_info i on i.entity = r.entity
+          join entities e on e.id = r.entity
+        where
+          e.stream_id = ${page.params.space ? id(page.params.space) : null}
+            and
+          r.label = 'thread'
+      `,
+    (row) => JSON.parse(row.json),
+  );
 </script>
 
 {#snippet sidebar()}
@@ -82,20 +86,6 @@
       </Box>
     </div>
   {:else}
-    <div class="flex-1 flex items-center justify-center">
-      <!-- {#if subthreadEnts.current}
-        <ScrollArea class="h-full px-2 pb-4">
-          {#each sortedSubthreads as subthread}
-            {#if subthread}
-              <div class="mt-4">
-                <BoardViewItem thread={subthread} />
-              </div>
-            {/if}
-          {/each}
-        </ScrollArea>
-      {:else}
-        No threads in this Channel.
-      {/if} -->
-    </div>
+    <BoardView threads={threadsList.result || []} />
   {/if}
 </MainLayout>

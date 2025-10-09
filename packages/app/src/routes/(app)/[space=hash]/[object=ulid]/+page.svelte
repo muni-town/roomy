@@ -3,7 +3,6 @@
   import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
   import { current } from "$lib/queries.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
-  import BoardView from "$lib/components/content/thread/boardView/BoardView.svelte";
   import { backend, backendStatus } from "$lib/workers";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
   import { LiveQuery } from "$lib/liveQuery.svelte";
@@ -15,6 +14,7 @@
   import { monotonicFactory, ulid } from "ulidx";
 
   import IconMdiArrowRight from "~icons/mdi/arrow-right";
+  import ChannelBoardView from "$lib/components/content/thread/boardView/ChannelBoardView.svelte";
 
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
@@ -225,7 +225,7 @@
     {#if activeTab == "Chat"}
       <TimelineView />
     {:else if activeTab == "Threads"}
-      <BoardView />
+      <ChannelBoardView />
     {/if}
   {:else if object?.kind == "thread"}
     <TimelineView />
