@@ -147,7 +147,13 @@
   let messageInput: string = $state("");
   let messageInputEl: null | HTMLInputElement = $state(null);
   let isSendingMessage = $state(false);
-  async function sendMessage() {
+  async function sendMessage(e: SubmitEvent) {
+    e.preventDefault();
+    const message = messageInput;
+    messageInput = "";
+    const replyToId = replyTo?.id;
+    replyTo = null;
+
     if (!current.space) return;
     try {
       isSendingMessage = true;
@@ -158,18 +164,14 @@
         variant: {
           kind: "space.roomy.message.create.0",
           data: {
-            replyTo: replyTo ? replyTo.id : undefined,
+            replyTo: replyToId,
             content: {
-              content: new TextEncoder().encode(messageInput),
+              content: new TextEncoder().encode(message),
               mimeType: "text/markdown",
             },
           },
         },
       });
-
-      replyTo = null;
-      messageInput = "";
-      messageInputEl?.focus();
     } catch (e: any) {
       console.error(e);
       toast.error("Failed to send message.", { position: "bottom-right" });
@@ -272,6 +274,7 @@
         {#if threading.active}
           <form onsubmit={handleCreateThread}>
             <Input
+              disabled={isSendingMessage}
               bind:value={threading.name}
               id="thread-name"
               class="grow ml-2"
@@ -302,18 +305,6 @@
         {/if}
       </div>
       <FullscreenImageDropper {processImageFile} />
-
-      {#if isSendingMessage}
-        <div
-          class="absolute inset-0 flex items-center text-primary justify-center z-20 bg-base-100/80 dark:bg-base-900/80"
-        >
-          <div
-            class="text-xl flex items-center gap-4 text-base-900 dark:text-base-100"
-          >
-            Sending message...
-          </div>
-        </div>
-      {/if}
     </div>
   </div>
 </div>
