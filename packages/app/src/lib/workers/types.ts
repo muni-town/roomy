@@ -54,6 +54,19 @@ export type BackendInterface = {
   addClient(port: MessagePort): Promise<void>;
 };
 
+export const consoleLogLevels = [
+  "trace",
+  "debug",
+  "log",
+  "info",
+  "warn",
+  "error",
+] as const;
+export type ConsoleLogLevel = (typeof consoleLogLevels)[number];
+export type ConsoleInterface = {
+  log(level: ConsoleLogLevel, ...args: any[]): Promise<void>;
+};
+
 export type Savepoint = {
   name: string;
   items: (SqlStatement | Savepoint)[];
