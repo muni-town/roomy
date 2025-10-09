@@ -237,8 +237,8 @@ export const eventVariantCodec = Kinds({
   /** Delete a room */
   "space.roomy.room.delete.0": _void,
   /** Change the parent of a room. */
-  "space.roomy.room.parent.update.0": Struct({
-    parent: IdCodec,
+  "space.roomy.parent.update.0": Struct({
+    parent: Option(IdCodec),
   }),
   /**
    * Add a member to the Room's member list. Each room has a member list, and some Rooms are created

@@ -202,14 +202,14 @@ const materializers: {
       `,
     ];
   },
-  "space.roomy.room.parent.update.0": async ({ event, data }) => {
+  "space.roomy.parent.update.0": async ({ event, data }) => {
     if (!event.parent) {
       console.warn("Update room parent missing parent");
       return [];
     }
     return [
       sql`
-        update entities set parent = ${id(data.parent)}
+        update entities set parent = ${data.parent ? id(data.parent) : null}
         where id = ${id(event.parent)}
       `,
     ];

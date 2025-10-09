@@ -133,7 +133,7 @@
         ulid: ulid(),
         parent: message.id,
         variant: {
-          kind: "space.roomy.room.parent.update.0",
+          kind: "space.roomy.parent.update.0",
           data: {
             parent: threadId,
           },
@@ -141,7 +141,7 @@
       });
     }
 
-    await navigate({ space: page.params.space, object: threadId });
+    navigate({ space: page.params.space, object: threadId });
   }
 
   let messageInput: string = $state("");
