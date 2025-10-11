@@ -48,6 +48,9 @@ import { CONFIG } from "$lib/config";
  * */
 const isSharedWorker = "SharedWorkerGlobalScope" in globalThis;
 
+// Generate unique ID for this worker instance
+const backendWorkerId = crypto.randomUUID();
+
 const status = reactiveWorkerState<BackendStatus>(
   new BroadcastChannel("backend-status"),
   true,
@@ -104,7 +107,7 @@ const setPreviousStreamSchemaVersion = async (version: string) => {
 export let sqliteWorker: SqliteWorkerInterface | undefined;
 let setSqliteWorkerReady = () => { };
 const sqliteWorkerReady = new Promise(
-  (r) => (setSqliteWorkerReady = r as () => void),
+  (resolve) => (setSqliteWorkerReady = resolve as () => void),
 );
 
 /**
@@ -286,9 +289,16 @@ function connectMessagePort(port: MessagePortApi) {
   // if (import.meta.env?.SHARED_WORKER_LOG_FORWARDING) {
   setupConsoleForwarding(port);
   console.log("SharedWorker backend connected with console forwarding enabled for development");
+  // console.log("isSharedWorker?", isSharedWorker);
   // } else {
   //   console.log("SharedWorker backend connected");
   // }
+
+  // console.log("Pinging sqlite worker if it exists?", !!sqliteWorker)
+  // sqliteWorker?.ping().then((response) => {
+  //   console.log("Backend: SQLite worker ping successful", response);
+  // })
+
 
   const resetLocalDatabase = async () => {
     if (!sqliteWorker)
@@ -344,17 +354,35 @@ function connectMessagePort(port: MessagePortApi) {
       if (!sqliteWorker) throw "Sqlite worker not initialized";
       resetLocalDatabase();
     },
-    async setActiveSqliteWorker(messagePort) {
+    async ping() {
+      console.log("Backend: Ping received");
+      return {
+        timestamp: Date.now(),
+        workerId: backendWorkerId,
+      };
+    },
+    async setActiveSqliteWorker(messagePort, resetDb = false) {
       console.log("Setting active SQLite worker");
       const firstUpdate = !sqliteWorker;
 
+      // a proxy object to let us call remote methods on the SQLite worker
       // eslint-disable-next-line @typescript-eslint/no-empty-object-type
       sqliteWorker = messagePortInterface<{}, SqliteWorkerInterface>(
         messagePort,
         {},
       );
 
-      if (firstUpdate) {
+      try {
+        await sqliteWorker.ping();
+
+        // Set up periodic health checks
+        setupSqliteHealthCheck();
+      } catch (error) {
+        console.error("Backend: SQLite worker ping failed", error);
+        // Could trigger reconnection logic here
+      }
+
+      if (firstUpdate || resetDb) {
         const previousSchemaVersion = await getPreviousStreamSchemaVersion();
         if (previousSchemaVersion != CONFIG.streamSchemaVersion) {
           // Reset the local database cache when the schema version changes.
@@ -372,8 +400,14 @@ function connectMessagePort(port: MessagePortApi) {
         channel.port1.onmessage = (ev) => {
           port.postMessage(ev.data);
         };
-        sqliteWorker.createLiveQuery(id, channel.port2, statement);
+        try {
+          console.log(`Backend: Re-establishing live query ${id}`);
+          sqliteWorker.createLiveQuery(id, channel.port2, statement);
+        } catch (error) {
+          console.error(`Backend: Failed to re-establish live query ${id}`, error);
+        }
       }
+      status.workerRunning = true;
     },
     async createStream(ulid, moduleId, moduleUrl, params): Promise<string> {
       if (!state.leafClient) throw new Error("Leaf client not initialized");
@@ -470,6 +504,26 @@ function connectMessagePort(port: MessagePortApi) {
       await state.openSpacesMaterializer?.unpauseSubscription(streamId);
     },
   });
+}
+
+// Add periodic health check function
+let healthCheckInterval: NodeJS.Timeout | null = null;
+
+function setupSqliteHealthCheck() {
+  if (healthCheckInterval) {
+    clearInterval(healthCheckInterval);
+  }
+
+  healthCheckInterval = setInterval(async () => {
+    if (!sqliteWorker) return;
+
+    try {
+      await sqliteWorker.ping();
+    } catch (error) {
+      console.error("Backend: SQLite health check failed", error);
+      // Could trigger reconnection logic here
+    }
+  }, 10000); // Check every 10 seconds
 }
 
 async function createOauthClient(): Promise<OAuthClient> {

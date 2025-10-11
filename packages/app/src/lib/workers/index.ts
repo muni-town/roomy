@@ -57,3 +57,28 @@ sqliteWorker.postMessage(
   },
   [sqliteWorkerChannel.port2, workerStatusChannel.port2],
 );
+
+// for running in console REPL
+(window as any).debugWorkers = {
+  async pingBackend() {
+    try {
+      const result = await backend.ping();
+      console.log("Main thread: Backend ping result", result);
+      return result;
+    } catch (error) {
+      console.error("Main thread: Backend ping failed", error);
+      throw error;
+    }
+  },
+
+  async testSqliteConnection() {
+    try {
+      const result = await backend.runQuery({ sql: "SELECT 1 as test" });
+      console.log("Main thread: SQLite test query result", result);
+      return result;
+    } catch (error) {
+      console.error("Main thread: SQLite test query failed", error);
+      throw error;
+    }
+  }
+};

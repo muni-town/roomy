@@ -6,6 +6,7 @@ import type { SqlStatement } from "./backendWorker";
 import type { IncomingEvent } from "@muni-town/leaf-client";
 
 export interface BackendStatus {
+  workerRunning: boolean | undefined;
   authLoaded: boolean | undefined;
   did: string | undefined;
   profile: ProfileViewDetailed | undefined;
@@ -14,6 +15,7 @@ export interface BackendStatus {
 }
 export interface SqliteStatus {
   isActiveWorker: boolean | undefined;
+  workerId: string | undefined;
 }
 
 export type BackendInterface = {
@@ -24,6 +26,7 @@ export type BackendInterface = {
   dangerousCompletelyDestroyDatabase(opts: {
     yesIAmSure: true;
   }): Promise<unknown>;
+  ping(): Promise<{ timestamp: number; workerId: string }>;
   createLiveQuery(
     id: string,
     port: MessagePort,
@@ -68,4 +71,5 @@ export type SqliteWorkerInterface = {
   deleteLiveQuery(id: string): Promise<void>;
   runQuery(statement: SqlStatement): Promise<QueryResult>;
   runSavepoint(savepoint: Savepoint): Promise<void>;
+  ping(): Promise<{ timestamp: number; workerId: string; isActive: boolean }>;
 };
