@@ -4,7 +4,6 @@
  * It lets you specify a mapping between the kind string and the type of data that should follow it.
  */
 
-import { decodeBase32, encodeBase32 } from "$lib/utils/base32";
 import { hex } from "@scure/base";
 import {
   Bytes,
@@ -82,9 +81,7 @@ Kinds.dec = kindsDec;
 
 export const Hash = enhanceCodec(Bytes(32), hex.decode, hex.encode);
 
-export const Ulid = enhanceCodec(Bytes(16), decodeBase32, (b) =>
-  encodeBase32(b).toUpperCase(),
-);
+export const Ulid = enhanceCodec(Bytes(16), crockfordDecode, crockfordEncode);
 
 type InlineTagged<C extends Codec<any>> =
   CodecType<C> extends { tag: infer Tag; value: infer Value }
@@ -354,3 +351,52 @@ export const streamParamsCodec = Struct({
   /** The stream schema version from $lib/config.ts CONFIG.streamSchemaVersion. */
   schemaVersion: str,
 });
+
+// Code from https://github.com/perry-mitchell/ulidx/blob/5043c511406fb9b836ddf126583c80ffb90cbb73/source/crockford.ts
+// We already use ulidx but encoding is not exposed so we copy the functions here.
+const B32_CHARACTERS = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+export function crockfordEncode(input: Uint8Array): string {
+  const output: number[] = [];
+  let bitsRead = 0;
+  let buffer = 0;
+  const reversedInput = new Uint8Array(input.slice().reverse());
+  for (const byte of reversedInput) {
+    buffer |= byte << bitsRead;
+    bitsRead += 8;
+
+    while (bitsRead >= 5) {
+      output.unshift(buffer & 0x1f);
+      buffer >>>= 5;
+      bitsRead -= 5;
+    }
+  }
+  if (bitsRead > 0) {
+    output.unshift(buffer & 0x1f);
+  }
+  return output.map((byte) => B32_CHARACTERS.charAt(byte)).join("");
+}
+export function crockfordDecode(input: string): Uint8Array {
+  const sanitizedInput = input.toUpperCase().split("").reverse().join("");
+  const output: number[] = [];
+  let bitsRead = 0;
+  let buffer = 0;
+  for (const character of sanitizedInput) {
+    const byte = B32_CHARACTERS.indexOf(character);
+    if (byte === -1) {
+      throw new Error(
+        `Invalid base 32 character found in string: ${character}`,
+      );
+    }
+    buffer |= byte << bitsRead;
+    bitsRead += 5;
+    while (bitsRead >= 8) {
+      output.unshift(buffer & 0xff);
+      buffer >>>= 8;
+      bitsRead -= 8;
+    }
+  }
+  if (bitsRead >= 5 || buffer > 0) {
+    output.unshift(buffer & 0xff);
+  }
+  return new Uint8Array(output);
+}
