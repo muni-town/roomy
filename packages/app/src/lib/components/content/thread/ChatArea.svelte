@@ -197,6 +197,15 @@
     }
     lastTimelineLength = timeline.length;
   });
+  let isShifting = $state(false);
+  let lastShowLastN = $state(0);
+  $effect(() => {
+    if (showLastN > lastShowLastN) {
+      lastShowLastN = showLastN;
+      isShifting = true;
+      setTimeout(() => (isShifting = false), 1000);
+    }
+  });
 </script>
 
 <div class="grow min-h-0 relative">
@@ -256,10 +265,10 @@
               data={timeline}
               scrollRef={viewport}
               overscan={5}
-              shift={true}
+              shift={isShifting}
               getKey={(x) => x.id}
-              onscroll={(offset) => {
-                if (offset < 100) showLastN += 50;
+              onscroll={(o) => {
+                if (o < 100) showLastN += 50;
               }}
             >
               {#snippet children(message: Message)}
