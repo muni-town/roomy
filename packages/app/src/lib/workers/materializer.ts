@@ -333,16 +333,15 @@ const materializers: {
       `,
     ];
   },
-  "space.roomy.message.overrideMeta.0": async ({ event, data }) => {
-    if (!event.parent) {
-      console.warn("Missing target for message meta override.");
-      return [];
-    }
+  "space.roomy.message.overrideMeta.0": async ({ streamId, event, data }) => {
+    // Note using the stream ID is kind of a special case for a "system" user if you want to have
+    // the space itself be able to send messages.
+    const userId = event.parent || streamId;
     return [
       sql`
         insert or replace into comp_override_meta (entity, author, timestamp)
         values (
-          ${id(event.parent)},
+          ${id(userId)},
           ${id(data.author)},
           ${Number(data.timestamp)}
         )`,
