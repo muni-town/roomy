@@ -4,13 +4,14 @@ import type {
   MaterializerConfig,
 } from "./backendWorker";
 import { _void, type CodecType } from "scale-ts";
-import { eventCodec, eventVariantCodec, GroupMember, id } from "./encoding";
+import { eventCodec, eventVariantCodec, id } from "./encoding";
 import schemaSql from "./schema.sql?raw";
 import { decodeTime } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
 import type { SqliteWorkerInterface } from "./types";
 import type { Agent } from "@atproto/api";
 import type { LeafClient } from "@muni-town/leaf-client";
+import { AsyncChannel } from "./asyncChannel";
 
 export type EventType = ReturnType<(typeof eventCodec)["dec"]>;
 
@@ -26,52 +27,80 @@ export const config: MaterializerConfig = {
 /** Map a batch of incoming events to SQL that applies the event to the entities,
  * components and edges, then execute them all as a single transaction.
  */
-export async function materializer(
+export function materializer(
   sqliteWorker: SqliteWorkerInterface,
-  leafClient: LeafClient,
   agent: Agent,
   streamId: string,
-  events: StreamEvent[],
-): Promise<void> {
-  const batch: SqlStatement[] = [];
+  eventChannel: AsyncChannel<StreamEvent[]>,
+): AsyncChannel<{ sqlStatements: SqlStatement[]; latestEvent: number }> {
+  const sqlChannel = new AsyncChannel<{
+    sqlStatements: SqlStatement[];
+    latestEvent: number;
+  }>();
 
-  // reset ensured flags for each new batch
-  ensuredProfiles = new Set();
+  (async () => {
+    for await (const events of eventChannel) {
+      const batch: SqlStatement[] = [];
 
-  console.time("convert-events-to-sql");
-  for (const incoming of events) {
-    try {
-      // Decode the event payload
-      const event = eventCodec.dec(incoming.payload);
+      console.time("convert-events-to-sql");
 
-      // Get the SQL statements to be executed for this event
-      const statements = await materializers[event.variant.kind]({
-        sqliteWorker,
-        streamId,
-        leafClient,
-        agent,
-        user: incoming.user,
-        event,
-        data: event.variant.data,
-      } as never);
+      // reset ensured flags for each new batch
+      ensuredProfiles = new Set();
 
-      statements.push(sql`
-        update events set applied = 1 
-        where stream_id = ${id(streamId)} 
-          and
-        idx = ${incoming.idx} `);
+      const decodedEvents = events.map(
+        (e) => [e, eventCodec.dec(e.payload)] as const,
+      );
 
-      batch.push(...statements);
-    } catch (e) {
-      console.error(e);
+      // Make sure all of the profiles we need are downloaded and inserted
+      const neededProfiles = new Set<string>();
+      decodedEvents.forEach(([i, ev]) =>
+        ev.variant.kind == "space.roomy.message.create.0"
+          ? neededProfiles.add(i.user)
+          : undefined,
+      );
+
+      batch.push(
+        ...(await ensureProfiles(
+          streamId,
+          neededProfiles,
+          sqliteWorker,
+          agent,
+        )),
+      );
+
+      let latestEvent = 0;
+      for (const [incoming, event] of decodedEvents) {
+        latestEvent = Math.max(latestEvent, incoming.idx);
+        try {
+          // Get the SQL statements to be executed for this event
+          const statements = await materializers[event.variant.kind]({
+            sqliteWorker,
+            streamId,
+            agent,
+            user: incoming.user,
+            event,
+            data: event.variant.data,
+          } as never);
+
+          statements.push(sql`
+            update events set applied = 1 
+            where stream_id = ${id(streamId)} 
+              and
+            idx = ${incoming.idx}
+          `);
+
+          batch.push(...statements);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      sqlChannel.push({ sqlStatements: batch, latestEvent });
+      console.timeEnd("convert-events-to-sql");
     }
-  }
-  console.timeEnd("convert-events-to-sql");
+    sqlChannel.finish();
+  })();
 
-  // Execute all of the statements in a transaction
-  console.time("run-events-sql-transaction");
-  await sqliteWorker.runSavepoint({ name: "batch", items: batch });
-  console.timeEnd("run-events-sql-transaction");
+  return sqlChannel;
 }
 
 type Event = CodecType<typeof eventCodec>;
@@ -113,24 +142,8 @@ const materializers: {
   ],
 
   // Admin
-  "space.roomy.admin.add.0": async ({
-    sqliteWorker,
-    agent,
-    streamId,
-    data,
-    leafClient,
-  }) => {
+  "space.roomy.admin.add.0": async ({ streamId, data }) => {
     return [
-      ...(await ensureProfile(
-        sqliteWorker,
-        agent,
-        {
-          tag: "user",
-          value: data.adminId,
-        },
-        streamId,
-        leafClient,
-      )),
       sql`
       insert or replace into edges (head, tail, label, payload)
       values (
@@ -260,40 +273,15 @@ const materializers: {
   ],
 
   // Message
-  "space.roomy.message.create.0": async ({
-    sqliteWorker,
-    streamId,
-    user,
-    event,
-    agent,
-    data,
-    leafClient,
-  }) => {
+  "space.roomy.message.create.0": async ({ streamId, user, event, data }) => {
     const statements = [
       ensureEntity(streamId, event.ulid, event.parent),
-      ...(await ensureProfile(
-        sqliteWorker,
-        agent,
-        {
-          tag: "user",
-          value: user,
-        },
-        streamId,
-        leafClient,
-      )),
       sql`
         insert into edges (head, tail, label)
         select 
           ${id(event.ulid)},
           ${id(user)},
           'author'
-        where not exists (
-          select 1 from edges
-          where
-            head = ${id(event.ulid)} and
-            tail = ${id(user)} and
-            label = 'author'
-        )
       `,
       sql`
         insert or replace into comp_content (entity, mime_type, data)
@@ -548,47 +536,54 @@ function ensureEntity(
  * inserting it immediately and breaking transaction atomicity, this is just a set
  * of flags to indicate that the profile doesn't need to be re-fetched.
  */
-let ensuredProfiles = new Set();
+let ensuredProfiles = new Set<string>();
 
-async function ensureProfile(
+async function ensureProfiles(
+  streamId: string,
+  profileDids: Set<string>,
   sqliteWorker: SqliteWorkerInterface,
   agent: Agent,
-  member: CodecType<typeof GroupMember>,
-  streamId: string,
-  _client: LeafClient,
 ): Promise<SqlStatement[]> {
   try {
-    if (member.tag == "user") {
-      const did = member.value;
-      // This is only for fetching Bluesky
-      if (!(did.startsWith("did:plc:") || did.startsWith("did:web:")))
-        return [];
+    // This only knows how to fetch Bluesky DIDs for now
+    const dids = [...profileDids].filter(
+      (x) =>
+        x.startsWith("did:plc:") ||
+        x.startsWith("did:web:") ||
+        ensuredProfiles.has(x),
+    );
+    if (dids.length == 0) return [];
 
-      const existingProfile = await sqliteWorker.runQuery(
-        sql`select 1 from entities where id = ${id(did)}`,
-      );
+    const missingProfilesResp = await sqliteWorker.runQuery<{ did: string }>({
+      sql: `with existing(did) as (
+        values ${dids.map((_) => `(?)`).join(",")}
+      )
+      select id(did) as did
+      from existing
+      left join entities ent on ent.id = existing.did
+      where ent.id is null
+      `,
+      params: dids.map(id),
+    });
+    const missingDids = missingProfilesResp.rows?.map((x) => x.did) || [];
+    if (missingDids.length == 0) return [];
 
-      // We already have the profile.
-      if (existingProfile.rows?.length) return [];
+    const statements = [];
 
-      if (ensuredProfiles.has(did)) {
-        // The profile has already been fetched and the statement to insert it is in the batch
-        return [];
-      }
-
-      if (ensuredProfiles.has(did)) return [];
+    for (const did of missingDids) {
       ensuredProfiles.add(did);
 
       const profile = await agent.getProfile({ actor: did });
-      if (!profile.success) return [];
+      if (!profile.success) continue;
 
-      return [
-        sql`
+      statements.push(
+        ...[
+          sql`
           insert into entities (id, stream_id)
           values (${id(did)}, ${id(streamId)})
           on conflict(id) do nothing
         `,
-        sql`
+          sql`
           insert into comp_user (did, handle)
           values (
             ${id(did)},
@@ -596,7 +591,7 @@ async function ensureProfile(
           )
           on conflict(did) do nothing
         `,
-        sql`
+          sql`
           insert into comp_info (entity, name, avatar)
           values (
             ${id(did)},
@@ -605,10 +600,11 @@ async function ensureProfile(
           )
           on conflict(entity) do nothing
         `,
-      ];
-    } else {
-      return [];
+        ],
+      );
     }
+
+    return statements;
   } catch (e) {
     console.error("Could not ensure profile", e);
     return [];

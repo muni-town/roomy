@@ -75,6 +75,6 @@ export type SqliteWorkerInterface = {
     statement: SqlStatement,
   ): Promise<void>;
   deleteLiveQuery(id: string): Promise<void>;
-  runQuery(statement: SqlStatement): Promise<QueryResult>;
+  runQuery<Row>(statement: SqlStatement): Promise<QueryResult<Row>>;
   runSavepoint(savepoint: Savepoint): Promise<void>;
 };

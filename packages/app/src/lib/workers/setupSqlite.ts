@@ -46,6 +46,9 @@ export async function initializeDatabase(dbName: string): Promise<void> {
       try {
         const pool = await sqlite3.installOpfsSAHPoolVfs({});
         db = new pool.OpfsSAHPoolDb(dbName);
+        db.exec(`pragma locking_mode = exclusive`);
+        db.exec(`pragma synchronous = normal`);
+        db.exec(`pragma journal_mode = wal`);
         break;
       } catch (e) {
         lastErr = e;
@@ -56,9 +59,6 @@ export async function initializeDatabase(dbName: string): Promise<void> {
 
     // Set an authorizer function that will allow us to track reads and writes to the database
     sqlite3.capi.sqlite3_set_authorizer(db, authorizer, 0);
-    db.exec("pragma locking_mode = exclusive;");
-    db.exec("pragma journal_mode = wal");
-    db.exec("pragma page_size = 8192");
 
     // Parse a binary ID to it's string representation
     db.createFunction("id", (_ctx, blob) => {
@@ -80,7 +80,10 @@ export async function initializeDatabase(dbName: string): Promise<void> {
   await initPromise;
 }
 
-export type QueryResult = { rows?: { [key: string]: unknown }[]; ok?: true } & {
+export type QueryResult<Row = { [key: string]: unknown }> = {
+  rows?: Row[];
+  ok?: true;
+} & {
   actions: Action[];
 };
 export async function executeQuery(
