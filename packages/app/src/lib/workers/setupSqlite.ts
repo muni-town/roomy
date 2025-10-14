@@ -6,6 +6,7 @@ import initSqlite3, {
 } from "@sqlite.org/sqlite-wasm";
 import { IdCodec } from "./encoding";
 import type { SqlStatement } from "./backendWorker";
+import { decodeTime } from "ulidx";
 
 let sqlite3: Sqlite3Static | null = null;
 let db: OpfsSAHPoolDatabase | Database | null = null;
@@ -72,6 +73,15 @@ export async function initializeDatabase(dbName: string): Promise<void> {
     db.createFunction("make_id", (_ctx, id) => {
       if (typeof id == "string") {
         return IdCodec.enc(id);
+      } else {
+        return id;
+      }
+    });
+    db.createFunction("ulid_timestamp", (_ctx, id) => {
+      if (typeof id == "string") {
+        return decodeTime(id);
+      } else if (id instanceof Uint8Array) {
+        return decodeTime(IdCodec.dec(id));
       } else {
         return id;
       }
