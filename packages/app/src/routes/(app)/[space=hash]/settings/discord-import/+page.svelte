@@ -254,7 +254,7 @@
               data: {
                 author,
                 timestamp: BigInt(
-                  Math.round(new Date(message.timestamp).getTime() / 100),
+                  Math.round(new Date(message.timestamp).getTime()),
                 ),
               },
             },
