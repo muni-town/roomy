@@ -18,7 +18,10 @@ create table if not exists entities (
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
 create index if not exists idx_entities_stream_id on entities (stream_id);
-create index if not exists idx_entities_parent on entities (parent);
+
+-- This is an important index because it allows us to query for entities in a thread
+-- with a reverse sort order to get only the latest entities.
+create index if not exists idx_entities_parent on entities (parent, id desc);
 
 CREATE TABLE IF NOT EXISTS edges (
     edge_id integer primary key autoincrement,
