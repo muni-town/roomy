@@ -39,6 +39,7 @@
                   left join comp_info author_override_info on author_override_info.entity = override.author
                 where me.parent = e.id
                 group by author
+                order by me.id desc
                 limit 5
               )
             ) as activity

@@ -64,6 +64,7 @@
                   left join comp_info author_override_info on author_override_info.entity = override.author
                 where me.parent = e.id
                 group by author
+                order by me.id desc
                 limit 5
               )
             ) as activity
@@ -92,7 +93,6 @@
       <h2
         class="text-lg font-bold w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
       >
-        <span>{current.space?.name}</span>
         <div class="ml-2 font-bold grow text-center">All Threads</div>
       </h2>
     </div>
