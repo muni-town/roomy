@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onNavigate } from "$app/navigation";
   import { page } from "$app/state";
   import BoardView from "$lib/components/content/thread/boardView/BoardView.svelte";
   import type { ThreadInfo } from "$lib/components/content/thread/boardView/types";
@@ -11,6 +12,7 @@
   import { backend, backendStatus } from "$lib/workers";
   import { id } from "$lib/workers/encoding";
   import { Box, Button } from "@fuxui/base";
+  import { fade } from "svelte/transition";
   import { ulid } from "ulidx";
 
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
@@ -37,13 +39,15 @@
           'id', id(id), 
           'name', name,
           'channel', channel,
-          'activity', json(activity)
+          'activity', json(activity),
+          'kind', label
         ) as json
         from (
           select
             r.entity as id,
             i.name as name,
             ci.name as channel,
+            r.label as label,
             (
               select json_object(
                 'members', json_group_array(json_object(
@@ -75,12 +79,14 @@
           where
             e.stream_id = ${page.params.space ? id(page.params.space) : null}
               and
-            r.label = 'thread'
+            (r.label = 'thread' or r.label = 'channel')
         )
         order by activity ->> 'latestTimestamp' desc
       `,
     (row) => JSON.parse(row.json),
   );
+
+  onNavigate(() => (threadsList.result = undefined));
 </script>
 
 {#snippet sidebar()}
@@ -115,7 +121,19 @@
         <Button size="lg" onclick={joinSpace}>Join Space</Button>
       </Box>
     </div>
+  {:else if threadsList.result}
+    <div
+      transition:fade={{ duration: 200 }}
+      class="flex flex-col justify-center h-full w-full"
+    >
+      <BoardView threads={threadsList.result || []} />
+    </div>
+  {:else if threadsList.error}
+    Error loading: {threadsList.error}
   {:else}
-    <BoardView threads={threadsList.result || []} />
+    <!-- TODO loading spinner -->
+    <div class="h-full w-full flex">
+      <div class="m-auto">Loading...</div>
+    </div>
   {/if}
 </MainLayout>

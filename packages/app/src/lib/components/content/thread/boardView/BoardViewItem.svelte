@@ -33,6 +33,9 @@
 <a href={`/${page.params.space}/${thread.id}`}>
   <Box class="flex items-center">
     <div class="shrink text-ellipsis min-w-0 overflow-hidden">
+      {#if thread.kind == "channel"}
+        #&nbsp;
+      {/if}
       {thread.name}
     </div>
 
@@ -48,7 +51,9 @@
       />
     </div>
 
-    <div class={`flex items-center ${ thread.channel ? 'w-[10em]' : 'w-[4em]' } shrink-0`}>
+    <div
+      class={`flex items-center ${thread.channel ? "w-[10em]" : "w-[4em]"} shrink-0`}
+    >
       {#if thread.channel}
         <div class="flex items-center justify-between gap-2">
           <span class="text-xl"># </span>{thread.channel}
