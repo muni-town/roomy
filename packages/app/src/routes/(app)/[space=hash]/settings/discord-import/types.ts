@@ -71,7 +71,7 @@ export type ImportChannel = {
   };
   channel: {
     id: string;
-    type: string;
+    type: 'GuildPublicThread' | 'GuildTextChat';
     categoryId: string;
     category: string;
     name: string;
