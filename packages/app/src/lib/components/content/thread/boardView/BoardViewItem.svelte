@@ -3,12 +3,8 @@
   import { AvatarGroup, Box } from "@fuxui/base";
   import { formatDistanceToNowStrict, type Locale } from "date-fns";
   import type { ThreadInfo } from "./types";
-  import ActivityGraph from "$lib/components/graphs/ActivityGraph.svelte";
 
-  let {
-    thread,
-    activityCountMax,
-  }: { thread: ThreadInfo; activityCountMax?: number } = $props();
+  let { thread }: { thread: ThreadInfo; activityCountMax?: number } = $props();
 
   let lastMessageTimestamp = $derived(thread.activity.latestTimestamp);
 
@@ -22,32 +18,22 @@
         case "xHours":
           name = "hrs";
           break;
+        case "xDays":
+          name = "days";
+          break;
         case "xMonths":
           name = "months";
           break;
         case "xYears":
           name = "yrs";
+          break;
+        default:
+          name = token;
       }
 
       return `${count} ${name}`;
     },
   };
-
-  let activityGraphData = $derived.by(() => {
-    const items: { x: number; y: number }[] = [];
-    const days = 365;
-    const secondsPerSlot = 86400;
-    const todaysTimeSlot = Math.floor(Date.now() / 1000 / secondsPerSlot);
-    const firstTimeSlot = todaysTimeSlot - days;
-    for (let timeSlot = firstTimeSlot; timeSlot <= todaysTimeSlot; timeSlot++) {
-      const y = thread.activity.histogram[timeSlot.toString()] || 0;
-      items.push({
-        x: timeSlot,
-        y,
-      });
-    }
-    return items;
-  });
 </script>
 
 <a href={`/${page.params.space}/${thread.id}`}>
@@ -68,15 +54,6 @@
           fallback: "U",
           alt: "U",
         }))}
-      />
-    </div>
-
-    <div class="pr-4">
-      <ActivityGraph
-        data={activityGraphData}
-        height="40px"
-        width="120px"
-        yDomain={[0, activityCountMax || null]}
       />
     </div>
 

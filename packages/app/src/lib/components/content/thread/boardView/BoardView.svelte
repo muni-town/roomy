@@ -3,17 +3,14 @@
   import { ScrollArea } from "@fuxui/base";
   import type { ThreadInfo } from "./types";
 
-  const {
-    threads,
-    activityCountMax,
-  }: { threads: ThreadInfo[]; activityCountMax?: number } = $props();
+  const { threads }: { threads: ThreadInfo[] } = $props();
 </script>
 
 {#if threads.length}
   <ScrollArea class="h-full px-4 pb-4 lg:max-w-[80%] w-full self-center">
     {#each threads as thread}
       <div class="mt-4">
-        <BoardViewItem {thread} {activityCountMax} />
+        <BoardViewItem {thread} />
       </div>
     {/each}
   </ScrollArea>

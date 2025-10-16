@@ -5,7 +5,6 @@ export type ThreadInfo = {
   channel?: string;
   activity: {
     members: { avatar?: string; name: string }[];
-    histogram: { [time_slot: string]: number };
     latestTimestamp: number;
   };
 };

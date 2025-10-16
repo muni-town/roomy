@@ -32,21 +32,6 @@
     });
   }
 
-  const activityCountMaxQuery = new LiveQuery<{ countMax: number }>(
-    () =>
-      sql`
-        select max(count) as countMax
-        from agg_room_activity a
-        join comp_room r on r.entity = a.room_entity
-        where
-          time_slot > unixepoch() / 86400 - 356
-      `,
-  );
-  const activityCountMax: number | undefined = $derived(
-    activityCountMaxQuery.result?.[0]?.countMax || undefined,
-  );
-  $inspect(activityCountMaxQuery.result);
-
   const threadsList = new LiveQuery<ThreadInfo>(
     () =>
       sql`
@@ -69,20 +54,7 @@
                   'avatar', avatar,
                   'name', author
                 )),
-                'latestTimestamp', max(timestamp),
-                'histogram', (
-                  select json_group_object(cast(time_slot as text), count)
-                  from (
-                    select count, time_slot
-                    from
-                    agg_room_activity
-                    where
-                      room_entity = e.id
-                        and
-                      time_slot > unixepoch() / 86400 - 365
-                    order by time_slot desc
-                  )
-                )
+                'latestTimestamp', max(timestamp)
               ) from (
                 select
                   coalesce(author_override_info.avatar, author_info.avatar) as avatar,
@@ -97,7 +69,7 @@
                 where me.parent = e.id
                 group by author
                 order by me.id desc
-                limit 5
+                limit 3
               )
             ) as activity
           from comp_room r
@@ -107,7 +79,7 @@
           where
             e.stream_id = ${page.params.space ? id(page.params.space) : null}
               and
-            (r.label = 'thread' or r.label = 'channel')
+            r.label = 'thread'
         )
         order by activity ->> 'latestTimestamp' desc
       `,
@@ -154,7 +126,7 @@
       transition:fade={{ duration: 200 }}
       class="flex flex-col justify-center h-full w-full"
     >
-      <BoardView threads={threadsList.result || []} {activityCountMax} />
+      <BoardView threads={threadsList.result || []} />
     </div>
   {:else if threadsList.error}
     Error loading: {threadsList.error}

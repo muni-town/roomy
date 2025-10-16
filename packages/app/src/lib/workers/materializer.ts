@@ -22,7 +22,7 @@ export const config: MaterializerConfig = {
     .filter((x) => !x.startsWith("--"))
     .join("\n")
     .split(";\n\n")
-    .filter((x) => !!x)
+    .filter((x) => !!x.replace("\n", ""))
     .map((sql) => ({ sql })),
   materializer,
 };
