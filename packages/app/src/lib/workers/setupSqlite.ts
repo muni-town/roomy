@@ -6,7 +6,7 @@ import initSqlite3, {
 } from "@sqlite.org/sqlite-wasm";
 import { IdCodec } from "./encoding";
 import type { SqlStatement } from "./backendWorker";
-import { decodeTime } from "ulidx";
+import { decodeTime, isValid as isValidUlid } from "ulidx";
 import { patchApply, patchFromText } from "diff-match-patch-es";
 
 let sqlite3: Sqlite3Static | null = null;
@@ -71,11 +71,29 @@ export async function initializeDatabase(dbName: string): Promise<void> {
       }
     });
     // Format a string ID to it's binary format
+    db.createFunction(
+      "print",
+      (_ctx, ...args) => {
+        console.log("%c[sqlite log]", "color: green", ...args);
+        return null;
+      },
+      { arity: -1, deterministic: false },
+    );
+    // Format a string ID to it's binary format
     db.createFunction("make_id", (_ctx, id) => {
       if (typeof id == "string") {
         return IdCodec.enc(id);
       } else {
         return id;
+      }
+    });
+    db.createFunction("is_ulid", (_ctx, id) => {
+      if (typeof id == "string") {
+        return isValidUlid(id) ? 1 : 0;
+      } else if (id instanceof Uint8Array) {
+        return isValidUlid(IdCodec.dec(id)) ? 1 : 0;
+      } else {
+        return 0;
       }
     });
     db.createFunction("ulid_timestamp", (_ctx, id) => {

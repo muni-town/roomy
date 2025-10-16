@@ -32,6 +32,21 @@
     });
   }
 
+  const activityCountMaxQuery = new LiveQuery<{ countMax: number }>(
+    () =>
+      sql`
+        select max(count) as countMax
+        from agg_room_activity a
+        join comp_room r on r.entity = a.room_entity
+        where
+          time_slot > unixepoch() / 86400 - 356
+      `,
+  );
+  const activityCountMax: number | undefined = $derived(
+    activityCountMaxQuery.result?.[0]?.countMax || undefined,
+  );
+  $inspect(activityCountMaxQuery.result);
+
   const threadsList = new LiveQuery<ThreadInfo>(
     () =>
       sql`
@@ -54,7 +69,20 @@
                   'avatar', avatar,
                   'name', author
                 )),
-                'latestTimestamp', max(timestamp)
+                'latestTimestamp', max(timestamp),
+                'histogram', (
+                  select json_group_object(cast(time_slot as text), count)
+                  from (
+                    select count, time_slot
+                    from
+                    agg_room_activity
+                    where
+                      room_entity = e.id
+                        and
+                      time_slot > unixepoch() / 86400 - 365
+                    order by time_slot desc
+                  )
+                )
               ) from (
                 select
                   coalesce(author_override_info.avatar, author_info.avatar) as avatar,
@@ -126,7 +154,7 @@
       transition:fade={{ duration: 200 }}
       class="flex flex-col justify-center h-full w-full"
     >
-      <BoardView threads={threadsList.result || []} />
+      <BoardView threads={threadsList.result || []} {activityCountMax} />
     </div>
   {:else if threadsList.error}
     Error loading: {threadsList.error}

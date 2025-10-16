@@ -100,3 +100,46 @@ create table if not exists comp_media (
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
+
+-- Aggregation table containing the number of entities created in a room in a
+-- 48 hour time slot. This can be used to build an activity histogram.
+create table if not exists agg_room_activity (
+  room_entity blob references entities(id) on delete cascade,
+  time_slot integer,
+  count integer,
+  primary key (room_entity, time_slot)
+) strict;
+
+create trigger if not exists agg_room_activity_update_entity
+after insert on entities
+for each row when new.parent is not null and is_ulid(new.id)
+begin
+  insert into agg_room_activity (room_entity, time_slot, count)
+  values (
+      new.parent,
+      ulid_timestamp(new.id) / 1000 / 86400,
+      1
+  )
+  on conflict(room_entity, time_slot) do update set count = count + 1;
+end;
+
+create trigger if not exists agg_room_activity_update_override
+after insert on comp_override_meta
+for each row when exists
+  (select 1 from entities e where e.id = new.entity and e.parent is not null)
+begin
+  update agg_room_activity set count = count - 1
+  where
+    room_entity in (
+      select parent from entities where id = new.entity
+    )
+      and
+    time_slot = ulid_timestamp(new.entity) / 1000 / 86400;
+  insert into agg_room_activity (room_entity, time_slot, count)
+  values (
+      (select parent from entities where id = new.entity),
+      new.timestamp / 1000 / 86400,
+      1
+  )
+  on conflict(room_entity, time_slot) do update set count = count + 1;
+end;

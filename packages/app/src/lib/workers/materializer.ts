@@ -18,7 +18,10 @@ export type EventType = ReturnType<(typeof eventCodec)["dec"]>;
 /** Database materializer config. */
 export const config: MaterializerConfig = {
   initSql: schemaSql
-    .split(";")
+    .split("\n")
+    .filter((x) => !x.startsWith("--"))
+    .join("\n")
+    .split(";\n\n")
     .filter((x) => !!x)
     .map((sql) => ({ sql })),
   materializer,
