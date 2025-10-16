@@ -19,7 +19,6 @@ import {
   Enum,
   _void,
   Struct,
-  Vector,
   u64,
 } from "scale-ts";
 import { createCodec, str, Tuple } from "scale-ts";
@@ -263,12 +262,17 @@ export const eventVariantCodec = Kinds({
   }),
   /** Edit a previously sent message */
   "space.roomy.message.edit.0": Struct({
-    /** The message content */
+    /**
+     * The message content. Depending on the mime-type this will replace the previous value.
+     *
+     * By default, the new content will replace the original content entirely, but there is a
+     * convention that if the mime-type of the new content is text/x-dmp-diff ( diff-match-patch
+     * diff ) then the new content will be applied as a diff to previous content to produce the new
+     * value.
+     * */
     content: Content,
-    /** The message this message is in reply to, if any. */
+    /** The message this message is in reply to, if any. This will replace the previous value. */
     replyTo: Option(Ulid),
-    /** List of attached media or other entities. */
-    attachments: Vector(Ulid),
   }),
   /**
    * Override a user handle. This is mostly used for bridged accounts, such as Discord accounts

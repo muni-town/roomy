@@ -3,6 +3,7 @@
 </script>
 
 <script lang="ts">
+  import { patchMake, patchToText } from "diff-match-patch-es";
   import { Avatar, Checkbox } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
@@ -11,17 +12,11 @@
   import MessageReactions from "./MessageReactions.svelte";
   import ChatInput from "../ChatInput.svelte";
   import IconTablerCheck from "~icons/tabler/check";
-  // import MessageRepliedTo from "./MessageRepliedTo.svelte";
-  // import ImageUrlEmbed from "./embeds/ImageUrlEmbed.svelte";
-  // import { convertReactionsToEmojis } from "$lib/utils/reactions";
-  // import MessageThreadBadge from "./MessageThreadBadge.svelte";
-  // import VideoUrlEmbed from "./embeds/VideoUrlEmbed.svelte";
   import { goto } from "$app/navigation";
-  // import { Badge } from "@fuxui/base";
   import { renderMarkdownSanitized } from "$lib/markdown";
   import type { Message } from "../ChatArea.svelte";
-  import { backendStatus } from "$lib/workers";
-  import { decodeTime } from "ulidx";
+  import { backend, backendStatus } from "$lib/workers";
+  import { decodeTime, ulid } from "ulidx";
   import { current } from "$lib/queries.svelte";
   import { toast } from "@fuxui/base";
 
@@ -79,7 +74,6 @@
   });
 
   let messageByMe = $derived(message.authorDid == backendStatus.did);
-  let canDelete = $derived(current.isSpaceAdmin || messageByMe);
 
   let isDrawerOpen = $state(false);
 
@@ -87,29 +81,41 @@
     threading?.selectedMessages.find((x) => x.id == message.id) ? true : false,
   );
 
-  function deleteMessage() {
-    // if (!message.current) return;
-    // message.current.softDeleted = true;
-  }
-
   function editMessage() {
-    // editingMessage.id = message;
+    editingMessage.id = message.id;
   }
 
-  function saveEditedMessage(content: string) {
-    // if (!messageContent.current || !userAccessTimes.current) return;
-    // // if the content is the same, dont save
-    // if (messageContent.current?.content === content) {
-    //   editingMessage.id = "";
-    //   return;
-    // }
-    // messageContent.current.content = content;
-    // userAccessTimes.current.updatedAt = new Date();
-    // editingMessage.id = "";
+  async function saveEditedMessage(newContent: string) {
+    editingMessage.id = "";
+    if (!current.space) return;
+
+    // If the content is the same, don't save
+    if (message.content == newContent) {
+      editingMessage.id = "";
+      return;
+    }
+    let contentPatch = patchToText(patchMake(message.content, newContent));
+
+    await backend.sendEvent(current.space.id, {
+      ulid: ulid(),
+      parent: message.id,
+      variant: {
+        kind: "space.roomy.message.edit.0",
+        data: {
+          content: {
+            mimeType: "text/x-dmp-patch",
+            content: new TextEncoder().encode(contentPatch),
+          },
+          replyTo: message.replyTo || undefined,
+        },
+      },
+    });
+
+    editingMessage.id = "";
   }
 
   function cancelEditing() {
-    // editingMessage.id = "";
+    editingMessage.id = "";
   }
 
   let isMessageEdited = $derived.by(() => {
@@ -126,23 +132,12 @@
     //   1000 * 60
     // );
   });
-
-  const selectMessage = () => {
-    // if (threading?.active) {
-    //   if (!isSelected && !messageByMe && !isAdmin) {
-    //     toast.error("You cannot move someone else's message");
-    //     return;
-    //   }
-    //   toggleSelect(message);
-    // }
-  };
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
   id={message.id}
   class={`flex flex-col w-full relative max-w-screen isolate px-4 ${threading?.active ? "select-none" : ""}`}
-  onclick={selectMessage}
   onmouseenter={() => (hovered = true)}
   onmouseleave={() => (hovered = false)}
 >
@@ -271,8 +266,6 @@
         bind:isDrawerOpen
         canEdit={messageByMe}
         bind:keepToolbarOpen
-        {canDelete}
-        {deleteMessage}
         {editMessage}
         startThreading={() => startThreading(message)}
         {message}

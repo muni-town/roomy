@@ -7,6 +7,7 @@ import initSqlite3, {
 import { IdCodec } from "./encoding";
 import type { SqlStatement } from "./backendWorker";
 import { decodeTime } from "ulidx";
+import { patchApply, patchFromText } from "diff-match-patch-es";
 
 let sqlite3: Sqlite3Static | null = null;
 let db: OpfsSAHPoolDatabase | Database | null = null;
@@ -85,6 +86,17 @@ export async function initializeDatabase(dbName: string): Promise<void> {
       } else {
         return id;
       }
+    });
+    db.createFunction("apply_dmp_patch", (_ctx, content, patch) => {
+      if (!(typeof content == "string" && typeof patch == "string"))
+        throw "Expected two string arguments to apply_dpm_patch()";
+
+      const [patched, _successful] = patchApply(
+        patchFromText(patch),
+        content,
+      ) as [string, boolean[]];
+
+      return patched;
     });
   })();
   await initPromise;

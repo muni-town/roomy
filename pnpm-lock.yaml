@@ -202,6 +202,9 @@ importers:
       dexie:
         specifier: ^4.2.0
         version: 4.2.0
+      diff-match-patch-es:
+        specifier: ^1.0.1
+        version: 1.0.1
       lint-staged:
         specifier: ^15.5.2
         version: 15.5.2
@@ -2163,6 +2166,9 @@ packages:
 
   dexie@4.2.0:
     resolution: {integrity: sha512-OSeyyWOUetDy9oFWeddJgi83OnRA3hSFh3RrbltmPgqHszE9f24eUCVLI4mPg0ifsWk0lQTdnS+jyGNrPMvhDA==}
+
+  diff-match-patch-es@1.0.1:
+    resolution: {integrity: sha512-KhSofrZDERg/NE6Nd+TK53knp2qz0o2Ix8rhkXd3Chfm7Wlo58Eq/juNmkyS6bS+3xS26L3Pstz3BdY/q+e9UQ==}
 
   diff@3.5.0:
     resolution: {integrity: sha512-A46qtFgd+g7pDZinpnwiRJtxbC1hpgf0uzP3iG89scHk0AUC7A1TGxf5OiiOUv/JMZR8GOt8hL900hV0bOy5xA==}
@@ -5542,6 +5548,8 @@ snapshots:
       dequal: 2.0.3
 
   dexie@4.2.0: {}
+
+  diff-match-patch-es@1.0.1: {}
 
   diff@3.5.0: {}
 

@@ -305,16 +305,36 @@ const materializers: {
 
     return statements;
   },
-  "space.roomy.message.edit.0": async ({ streamId, event, data }) => [
-    ensureEntity(streamId, event.ulid, event.parent),
-    sql`
-      update comp_content
-      set 
-        mime_type = ${data.content.mimeType},
-        data = ${data.content.content}
-      where entity = ${id(event.ulid)}
-    `,
-  ],
+  "space.roomy.message.edit.0": async ({ streamId, event, data }) => {
+    if (!event.parent) {
+      console.warn("Edit event missing parent");
+      return [];
+    }
+
+    return [
+      ensureEntity(streamId, event.ulid, event.parent),
+      data.content.mimeType == "text/x-dmp-patch"
+        ? // If this is a patch, apply the patch using our SQL user-defined-function
+          sql`
+          update comp_content
+          set 
+            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(data.content.content)}) as blob)
+          where
+            entity = ${id(event.parent)}
+              and
+            mime_type like 'text/%'
+        `
+        : // If this is not a patch, just replace the previous value
+          sql`
+          update comp_content
+          set
+            mime_type = ${data.content.mimeType}
+            data = ${data.content.content}
+          where
+            entity = ${id(event.parent)}
+        `,
+    ];
+  },
 
   // TODO: make sure there is valid permission to send override metadata
   "space.roomy.user.overrideMeta.0": async ({ event, data }) => {

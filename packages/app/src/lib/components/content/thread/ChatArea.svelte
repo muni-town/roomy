@@ -23,16 +23,16 @@
     id: string;
     content: string;
     authorDid: string;
-    authorName?: string;
-    authorHandle?: string;
-    authorAvatar?: string;
-    masqueradeAuthor?: string;
-    masqueradeAuthorHandle?: string;
-    masqueradeTimestamp?: string;
-    masqueradeAuthorName?: string;
-    masqueradeAuthorAvatar?: string;
-    mergeWithPrevious?: boolean;
-    replyTo?: string;
+    authorName: string | null;
+    authorHandle: string | null;
+    authorAvatar: string | null;
+    masqueradeAuthor: string | null;
+    masqueradeAuthorHandle: string | null;
+    masqueradeTimestamp: string | null;
+    masqueradeAuthorName: string | null;
+    masqueradeAuthorAvatar: string | null;
+    mergeWithPrevious: boolean | null;
+    replyTo: string | null;
     reactions: { reaction: string; userId: string; userName: string }[];
   };
 
