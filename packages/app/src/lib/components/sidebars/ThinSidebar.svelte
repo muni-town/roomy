@@ -2,7 +2,7 @@
   import { navigate } from "$lib/utils.svelte";
   import SidebarSpace from "./ThinSidebarSpace.svelte";
   import { page } from "$app/state";
-  import { Button, ThemeToggle, ScrollArea, Tooltip } from "@fuxui/base";
+  import { Button, ThemeToggle, ScrollArea } from "@fuxui/base";
   import { SelectThemePopover } from "@fuxui/colors";
   import UserProfileButton from "../user/UserProfileButton.svelte";
   import { backendStatus } from "$lib/workers";
@@ -12,8 +12,6 @@
   import IconTablerPlus from "~icons/tabler/plus";
   import IconTablerHome from "~icons/tabler/home";
   import IconMdiSqlQuery from "~icons/mdi/sql-query";
-  import IconMdiWireless from "~icons/mdi/wireless";
-  import { CONFIG } from "$lib/config";
 
   let {}: {} = $props();
 
@@ -85,23 +83,6 @@
       <IconMdiSqlQuery font-size="2em" />
     </a>
   {/if}
-  <Tooltip
-    text={(backendStatus.leafConnected ? "Connected" : "Disconnected") +
-      `: ${CONFIG.leafUrl}`}
-    delayDuration={0}
-    contentProps={{ side: "right" }}
-  >
-    {#snippet child({ props })}
-      <div {...props}>
-        <IconMdiWireless
-          class={(backendStatus.leafConnected
-            ? "text-green-500"
-            : "text-red-500") + " mx-3"}
-          font-size="2em"
-        />
-      </div>
-    {/snippet}
-  </Tooltip>
   <SelectThemePopover />
   <ThemeToggle class="backdrop-blur-none" />
   <UserProfileButton />
