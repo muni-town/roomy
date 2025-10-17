@@ -16,11 +16,13 @@
   }
 
   function toggleSelect(message: Message) {
-    const index = threading?.selectedMessages.indexOf(message) ?? -1;
-    if (index > -1) {
-      threading?.selectedMessages.splice(index, 1);
+    let messageIdx = threading.selectedMessages.findIndex(
+      (x) => x.id == message.id,
+    );
+    if (messageIdx != -1) {
+      threading.selectedMessages.splice(messageIdx, 1);
     } else {
-      threading?.selectedMessages.push(message);
+      threading.selectedMessages.push(message);
     }
   }
 </script>

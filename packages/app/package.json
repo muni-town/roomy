@@ -82,6 +82,8 @@
     "bluesky-post-embed": "^1.0.5",
     "date-fns": "^4.1.0",
     "dexie": "^4.2.0",
+    "diff-match-patch-es": "^1.0.1",
+    "layercake": "^10.0.2",
     "lint-staged": "^15.5.2",
     "marked": "^15.0.12",
     "posthog-js": "^1.266.0",

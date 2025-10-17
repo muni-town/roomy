@@ -17,12 +17,21 @@ export interface SqliteStatus {
   isActiveWorker: boolean | undefined;
   workerId: string | undefined;
 }
+export interface Profile {
+  id: string;
+  handle?: string;
+  avatar?: string;
+  displayName?: string;
+  banner?: string;
+  description?: string;
+}
 
 export type BackendInterface = {
   login(username: string): Promise<string>;
   logout(): Promise<void>;
   oauthCallback(searchParams: string): Promise<void>;
   runQuery(statement: SqlStatement): Promise<QueryResult>;
+  loadProfile(did: string): Promise<Profile | undefined>;
   dangerousCompletelyDestroyDatabase(opts: {
     yesIAmSure: true;
   }): Promise<unknown>;
@@ -69,7 +78,7 @@ export type SqliteWorkerInterface = {
     statement: SqlStatement,
   ): Promise<void>;
   deleteLiveQuery(id: string): Promise<void>;
-  runQuery(statement: SqlStatement): Promise<QueryResult>;
+  runQuery<Row>(statement: SqlStatement): Promise<QueryResult<Row>>;
   runSavepoint(savepoint: Savepoint): Promise<void>;
   ping(): Promise<{ timestamp: number; workerId: string; isActive: boolean }>;
 };

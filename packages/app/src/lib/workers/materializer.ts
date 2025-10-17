@@ -4,22 +4,25 @@ import type {
   MaterializerConfig,
 } from "./backendWorker";
 import { _void, type CodecType } from "scale-ts";
-import { eventCodec, eventVariantCodec, GroupMember, id } from "./encoding";
-import schemaSql from "./db/schema.sql?raw";
+import { eventCodec, eventVariantCodec, id } from "./encoding";
+import schemaSql from "./schema.sql?raw";
 import { decodeTime } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
 import type { SqliteWorkerInterface } from "./types";
 import type { Agent } from "@atproto/api";
-import type { EdgesMap } from "./db/types/edges";
 import type { LeafClient } from "@muni-town/leaf-client";
+import { AsyncChannel } from "./asyncChannel";
 
 export type EventType = ReturnType<(typeof eventCodec)["dec"]>;
 
 /** Database materializer config. */
 export const config: MaterializerConfig = {
   initSql: schemaSql
-    .split(";")
-    .filter((x) => !!x)
+    .split("\n")
+    .filter((x) => !x.startsWith("--"))
+    .join("\n")
+    .split(";\n\n")
+    .filter((x) => !!x.replace("\n", ""))
     .map((sql) => ({ sql })),
   materializer,
 };
@@ -27,52 +30,80 @@ export const config: MaterializerConfig = {
 /** Map a batch of incoming events to SQL that applies the event to the entities,
  * components and edges, then execute them all as a single transaction.
  */
-export async function materializer(
+export function materializer(
   sqliteWorker: SqliteWorkerInterface,
-  leafClient: LeafClient,
   agent: Agent,
   streamId: string,
-  events: StreamEvent[],
-): Promise<void> {
-  const batch: SqlStatement[] = [];
+  eventChannel: AsyncChannel<StreamEvent[]>,
+): AsyncChannel<{ sqlStatements: SqlStatement[]; latestEvent: number }> {
+  const sqlChannel = new AsyncChannel<{
+    sqlStatements: SqlStatement[];
+    latestEvent: number;
+  }>();
 
-  // reset ensured flags for each new batch
-  ensuredProfiles = new Set();
+  (async () => {
+    for await (const events of eventChannel) {
+      const batch: SqlStatement[] = [];
 
-  console.time("convert-events-to-sql");
-  for (const incoming of events) {
-    try {
-      // Decode the event payload
-      const event = eventCodec.dec(incoming.payload);
+      console.time("convert-events-to-sql");
 
-      // Get the SQL statements to be executed for this event
-      const statements = await materializers[event.variant.kind]({
-        sqliteWorker,
-        streamId,
-        leafClient,
-        agent,
-        user: incoming.user,
-        event,
-        data: event.variant.data,
-      } as never);
+      // reset ensured flags for each new batch
+      ensuredProfiles = new Set();
 
-      statements.push(sql`
-        update events set applied = 1 
-        where stream_id = ${id(streamId)} 
-          and
-        idx = ${incoming.idx} `);
+      const decodedEvents = events.map(
+        (e) => [e, eventCodec.dec(e.payload)] as const,
+      );
 
-      batch.push(...statements);
-    } catch (e) {
-      console.error(e);
+      // Make sure all of the profiles we need are downloaded and inserted
+      const neededProfiles = new Set<string>();
+      decodedEvents.forEach(([i, ev]) =>
+        ev.variant.kind == "space.roomy.message.create.0"
+          ? neededProfiles.add(i.user)
+          : undefined,
+      );
+
+      batch.push(
+        ...(await ensureProfiles(
+          streamId,
+          neededProfiles,
+          sqliteWorker,
+          agent,
+        )),
+      );
+
+      let latestEvent = 0;
+      for (const [incoming, event] of decodedEvents) {
+        latestEvent = Math.max(latestEvent, incoming.idx);
+        try {
+          // Get the SQL statements to be executed for this event
+          const statements = await materializers[event.variant.kind]({
+            sqliteWorker,
+            streamId,
+            agent,
+            user: incoming.user,
+            event,
+            data: event.variant.data,
+          } as never);
+
+          statements.push(sql`
+            update events set applied = 1 
+            where stream_id = ${id(streamId)} 
+              and
+            idx = ${incoming.idx}
+          `);
+
+          batch.push(...statements);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      sqlChannel.push({ sqlStatements: batch, latestEvent });
+      console.timeEnd("convert-events-to-sql");
     }
-  }
-  console.timeEnd("convert-events-to-sql");
+    sqlChannel.finish();
+  })();
 
-  // Execute all of the statements in a transaction
-  console.time("run-events-sql-transaction");
-  await sqliteWorker.runSavepoint({ name: "batch", items: batch });
-  console.timeEnd("run-events-sql-transaction");
+  return sqlChannel;
 }
 
 type Event = CodecType<typeof eventCodec>;
@@ -114,24 +145,8 @@ const materializers: {
   ],
 
   // Admin
-  "space.roomy.admin.add.0": async ({
-    sqliteWorker,
-    agent,
-    streamId,
-    data,
-    leafClient,
-  }) => {
+  "space.roomy.admin.add.0": async ({ streamId, data }) => {
     return [
-      ...(await ensureProfile(
-        sqliteWorker,
-        agent,
-        {
-          tag: "user",
-          value: data.adminId,
-        },
-        streamId,
-        leafClient,
-      )),
       sql`
       insert or replace into edges (head, tail, label, payload)
       values (
@@ -186,11 +201,8 @@ const materializers: {
   "space.roomy.room.create.0": async ({ streamId, event }) => [
     ensureEntity(streamId, event.ulid, event.parent),
     sql`
-      insert into comp_room (entity, parent)
-      values (
-        ${id(event.ulid)},
-        ${event.parent ? id(event.parent) : null}
-      ) on conflict do update set parent = excluded.parent
+      insert into comp_room ( entity )
+      values ( ${id(event.ulid)} )
     `,
   ],
   "space.roomy.room.delete.0": async ({ event }) => {
@@ -202,6 +214,18 @@ const materializers: {
       sql`
         update comp_room
         set deleted = 1
+        where id = ${id(event.parent)}
+      `,
+    ];
+  },
+  "space.roomy.parent.update.0": async ({ event, data }) => {
+    if (!event.parent) {
+      console.warn("Update room parent missing parent");
+      return [];
+    }
+    return [
+      sql`
+        update entities set parent = ${data.parent ? id(data.parent) : null}
         where id = ${id(event.parent)}
       `,
     ];
@@ -252,40 +276,15 @@ const materializers: {
   ],
 
   // Message
-  "space.roomy.message.create.0": async ({
-    sqliteWorker,
-    streamId,
-    user,
-    event,
-    agent,
-    data,
-    leafClient,
-  }) => {
+  "space.roomy.message.create.0": async ({ streamId, user, event, data }) => {
     const statements = [
       ensureEntity(streamId, event.ulid, event.parent),
-      ...(await ensureProfile(
-        sqliteWorker,
-        agent,
-        {
-          tag: "user",
-          value: user,
-        },
-        streamId,
-        leafClient,
-      )),
       sql`
         insert into edges (head, tail, label)
         select 
           ${id(event.ulid)},
           ${id(user)},
           'author'
-        where not exists (
-          select 1 from edges
-          where
-            head = ${id(event.ulid)} and
-            tail = ${id(user)} and
-            label = 'author'
-        )
       `,
       sql`
         insert or replace into comp_content (entity, mime_type, data)
@@ -309,16 +308,38 @@ const materializers: {
 
     return statements;
   },
-  "space.roomy.message.edit.0": async ({ streamId, event, data }) => [
-    ensureEntity(streamId, event.ulid, event.parent),
-    sql`
-      update comp_content
-      set 
-        mime_type = ${data.content.mimeType},
-        data = ${data.content.content}
-      where entity = ${id(event.ulid)}
-    `,
-  ],
+  "space.roomy.message.edit.0": async ({ streamId, event, data }) => {
+    if (!event.parent) {
+      console.warn("Edit event missing parent");
+      return [];
+    }
+
+    return [
+      ensureEntity(streamId, event.ulid, event.parent),
+      data.content.mimeType == "text/x-dmp-patch"
+        ? // If this is a patch, apply the patch using our SQL user-defined-function
+          sql`
+          update comp_content
+          set 
+            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(data.content.content)}) as blob)
+          where
+            entity = ${id(event.parent)}
+              and
+            mime_type like 'text/%'
+        `
+        : // If this is not a patch, just replace the previous value
+          sql`
+          update comp_content
+          set
+            mime_type = ${data.content.mimeType}
+            data = ${data.content.content}
+          where
+            entity = ${id(event.parent)}
+        `,
+    ];
+  },
+
+  // TODO: make sure there is valid permission to send override metadata
   "space.roomy.user.overrideMeta.0": async ({ event, data }) => {
     if (!event.parent) {
       console.warn("Missing target for message meta override.");
@@ -335,16 +356,15 @@ const materializers: {
       `,
     ];
   },
-  "space.roomy.message.overrideMeta.0": async ({ event, data }) => {
-    if (!event.parent) {
-      console.warn("Missing target for message meta override.");
-      return [];
-    }
+  "space.roomy.message.overrideMeta.0": async ({ streamId, event, data }) => {
+    // Note using the stream ID is kind of a special case for a "system" user if you want to have
+    // the space itself be able to send messages.
+    const userId = event.parent || streamId;
     return [
       sql`
         insert or replace into comp_override_meta (entity, author, timestamp)
         values (
-          ${id(event.parent)},
+          ${id(userId)},
           ${id(data.author)},
           ${Number(data.timestamp)}
         )`,
@@ -365,7 +385,7 @@ const materializers: {
         insert into edges (head, tail, label, payload)
         values (
           ${id(user)},
-          ${id(data.reaction_to)},
+          ${id(data.reactionTo)},
           'reaction',
           ${data.reaction}
         )
@@ -382,6 +402,37 @@ const materializers: {
       delete from edges
       where
         head = ${id(user)} and
+        label = 'reaction' and
+        tail = ${id(data.reaction_to)} and
+        payload = ${data.reaction}
+    `,
+    ];
+  },
+
+  // TODO: make sure there is valid permission to send bridged reaction
+  "space.roomy.reaction.bridged.create.0": async ({ data }) => {
+    return [
+      sql`
+        insert into edges (head, tail, label, payload)
+        values (
+          ${id(data.reactingUser)},
+          ${id(data.reactionTo)},
+          'reaction',
+          ${data.reaction}
+        )
+      `,
+    ];
+  },
+  "space.roomy.reaction.bridged.delete.0": async ({ event, data }) => {
+    if (!event.parent) {
+      console.warn("Delete reaction missing parent");
+      return [];
+    }
+    return [
+      sql`
+      delete from edges
+      where
+        head = ${id(data.reactingUser)} and
         label = 'reaction' and
         tail = ${id(data.reaction_to)} and
         payload = ${data.reaction}
@@ -428,6 +479,28 @@ const materializers: {
     }
     return [
       sql`update comp_room set label = null where entity = ${id(event.parent)} and label = 'channel'`,
+    ];
+  },
+
+  // Threads
+  "space.roomy.thread.mark.0": async ({ event }) => {
+    if (!event.parent) {
+      console.warn("Missing target for thread mark.");
+      return [];
+    }
+    return [
+      sql`
+      update comp_room set label = 'thread' where entity = ${id(event.parent)}
+      `,
+    ];
+  },
+  "space.roomy.thread.unmark.0": async ({ event }) => {
+    if (!event.parent) {
+      console.warn("Missing target for thread unmark.");
+      return [];
+    }
+    return [
+      sql`update comp_room set label = null where entity = ${id(event.parent)} and label = 'thread'`,
     ];
   },
 
@@ -485,47 +558,54 @@ function ensureEntity(
  * inserting it immediately and breaking transaction atomicity, this is just a set
  * of flags to indicate that the profile doesn't need to be re-fetched.
  */
-let ensuredProfiles = new Set();
+let ensuredProfiles = new Set<string>();
 
-async function ensureProfile(
+async function ensureProfiles(
+  streamId: string,
+  profileDids: Set<string>,
   sqliteWorker: SqliteWorkerInterface,
   agent: Agent,
-  member: CodecType<typeof GroupMember>,
-  streamId: string,
-  _client: LeafClient,
 ): Promise<SqlStatement[]> {
   try {
-    if (member.tag == "user") {
-      const did = member.value;
-      // This is only for fetching Bluesky
-      if (!(did.startsWith("did:plc:") || did.startsWith("did:web:")))
-        return [];
+    // This only knows how to fetch Bluesky DIDs for now
+    const dids = [...profileDids].filter(
+      (x) =>
+        x.startsWith("did:plc:") ||
+        x.startsWith("did:web:") ||
+        ensuredProfiles.has(x),
+    );
+    if (dids.length == 0) return [];
 
-      const existingProfile = await sqliteWorker.runQuery(
-        sql`select 1 from entities where id = ${id(did)}`,
-      );
+    const missingProfilesResp = await sqliteWorker.runQuery<{ did: string }>({
+      sql: `with existing(did) as (
+        values ${dids.map((_) => `(?)`).join(",")}
+      )
+      select id(did) as did
+      from existing
+      left join entities ent on ent.id = existing.did
+      where ent.id is null
+      `,
+      params: dids.map(id),
+    });
+    const missingDids = missingProfilesResp.rows?.map((x) => x.did) || [];
+    if (missingDids.length == 0) return [];
 
-      // We already have the profile.
-      if (existingProfile.rows?.length) return [];
+    const statements = [];
 
-      if (ensuredProfiles.has(did)) {
-        // The profile has already been fetched and the statement to insert it is in the batch
-        return [];
-      }
-
-      if (ensuredProfiles.has(did)) return [];
+    for (const did of missingDids) {
       ensuredProfiles.add(did);
 
       const profile = await agent.getProfile({ actor: did });
-      if (!profile.success) return [];
+      if (!profile.success) continue;
 
-      return [
-        sql`
+      statements.push(
+        ...[
+          sql`
           insert into entities (id, stream_id)
           values (${id(did)}, ${id(streamId)})
           on conflict(id) do nothing
         `,
-        sql`
+          sql`
           insert into comp_user (did, handle)
           values (
             ${id(did)},
@@ -533,7 +613,7 @@ async function ensureProfile(
           )
           on conflict(did) do nothing
         `,
-        sql`
+          sql`
           insert into comp_info (entity, name, avatar)
           values (
             ${id(did)},
@@ -542,10 +622,11 @@ async function ensureProfile(
           )
           on conflict(entity) do nothing
         `,
-      ];
-    } else {
-      return [];
+        ],
+      );
     }
+
+    return statements;
   } catch (e) {
     console.error("Could not ensure profile", e);
     return [];
@@ -557,3 +638,51 @@ function edgePayload<EdgeLabel extends "reaction" | "member" | "ban">(
 ) {
   return JSON.stringify(payload);
 }
+
+export type EdgeLabel =
+  | "child"
+  | "parent"
+  | "subscribe"
+  | "member"
+  | "ban"
+  | "hide"
+  | "pin"
+  | "last_read"
+  | "embed"
+  | "reply"
+  | "link"
+  | "author"
+  | "reorder"
+  | "source"
+  | "avatar"
+  | "reaction";
+
+type EntityId = string;
+export interface EdgeReaction {
+  reaction: string;
+}
+
+export interface EdgeBan {
+  reason: string;
+  banned_by: EntityId;
+}
+
+export interface EdgeMember {
+  // delegation?: string;
+  can: "read" | "post" | "admin";
+}
+
+export type EdgesMap = {
+  [K in Exclude<EdgeLabel, "reaction" | "member" | "ban">]: null;
+} & {
+  reaction: EdgeReaction;
+  ban: EdgeBan;
+  member: EdgeMember;
+};
+
+/** Given a tuple of edge names, produces a record whose keys are exactly
+ * those edge names and whose values are arrays of the corresponding edge types.
+ */
+export type EdgesRecord<TRequired extends readonly EdgeLabel[]> = {
+  [K in TRequired[number]]: [EdgesMap[K], EntityId];
+};

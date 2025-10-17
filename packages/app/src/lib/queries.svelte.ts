@@ -44,10 +44,6 @@ $effect.root(() => {
           'name', ci.name,
           'avatar', ci.avatar,
           'description', ci.description,
-          'rooms', (select json_group_array(json_object(
-            'id', id(cr.entity),
-            'type', cr.label
-          )) from comp_room cr where cr.parent = cs.entity),
           'permissions', (
             select json_group_array(
               json_array(id(cu.did), json_extract(e.payload, '$.can')))

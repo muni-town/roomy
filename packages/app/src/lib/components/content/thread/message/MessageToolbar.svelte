@@ -17,19 +17,14 @@
   import { ulid } from "ulidx";
 
   let {
-    canEdit = true,
-    canDelete = true,
     editMessage,
-    deleteMessage,
     isDrawerOpen = $bindable(false),
     message,
     startThreading,
     keepToolbarOpen = $bindable(false),
   }: {
     canEdit?: boolean;
-    canDelete?: boolean;
     editMessage: () => void;
-    deleteMessage: () => void;
     isDrawerOpen?: boolean;
     message: Message;
     startThreading: () => void;
@@ -42,6 +37,25 @@
   $effect(() => {
     keepToolbarOpen = isEmojiDrawerPickerOpen || isEmojiToolbarPickerOpen;
   });
+
+  let canEditAndDelete = $derived(
+    current.isSpaceAdmin || message.authorDid == backendStatus.did,
+  );
+
+  async function deleteMessage() {
+    if (!current.space) return;
+    if (!canEditAndDelete) return;
+    await backend.sendEvent(current.space.id, {
+      ulid: ulid(),
+      parent: message.id,
+      variant: {
+        kind: "space.roomy.message.delete.0",
+        data: {
+          reason: undefined,
+        },
+      },
+    });
+  }
 
   function onEmojiPick(emoji: string) {
     if (!current.space) return;
@@ -58,7 +72,7 @@
         variant: {
           kind: "space.roomy.reaction.create.0",
           data: {
-            reaction_to: message.id,
+            reactionTo: message.id,
             reaction: emoji,
           },
         },
@@ -138,7 +152,7 @@
     >
       <IconTablerNeedleThread />Create Thread
     </Button>
-    {#if canEdit}
+    {#if canEditAndDelete}
       <Button
         onclick={() => {
           editMessage();
@@ -150,7 +164,7 @@
         Edit
       </Button>
     {/if}
-    {#if canDelete}
+    {#if canEditAndDelete}
       <Button
         onclick={() => deleteMessage()}
         class="dz-join-item dz-btn dz-btn-error w-full"
@@ -205,7 +219,7 @@
       </PopoverEmojiPicker>
     </Tooltip>
 
-    {#if canEdit}
+    {#if canEditAndDelete}
       <Tooltip tip="Edit Message">
         <Toolbar.Button
           onclick={editMessage}
@@ -220,7 +234,7 @@
       </Tooltip>
     {/if}
 
-    {#if canDelete}
+    {#if canEditAndDelete}
       <Tooltip tip="Delete Message">
         <Toolbar.Button
           onclick={deleteMessage}

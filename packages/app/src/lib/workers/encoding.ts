@@ -4,7 +4,6 @@
  * It lets you specify a mapping between the kind string and the type of data that should follow it.
  */
 
-import { decodeBase32, encodeBase32 } from "$lib/utils/base32";
 import { hex } from "@scure/base";
 import {
   Bytes,
@@ -20,7 +19,6 @@ import {
   Enum,
   _void,
   Struct,
-  Vector,
   u64,
 } from "scale-ts";
 import { createCodec, str, Tuple } from "scale-ts";
@@ -82,9 +80,7 @@ Kinds.dec = kindsDec;
 
 export const Hash = enhanceCodec(Bytes(32), hex.decode, hex.encode);
 
-export const Ulid = enhanceCodec(Bytes(16), decodeBase32, (b) =>
-  encodeBase32(b).toUpperCase(),
-);
+export const Ulid = enhanceCodec(Bytes(16), crockfordDecode, crockfordEncode);
 
 type InlineTagged<C extends Codec<any>> =
   CodecType<C> extends { tag: infer Tag; value: infer Value }
@@ -201,6 +197,18 @@ export const eventVariantCodec = Kinds({
     adminId: str,
   }),
   /**
+   * Set some entity's basic info. This is used for Rooms and possibly other things, too
+   */
+  "space.roomy.info.0": Struct({
+    name: ValueUpdate(Option(str)),
+    avatar: ValueUpdate(Option(str)),
+    description: ValueUpdate(Option(str)),
+  }),
+  // TODO: It might make sense to move these parent events up out of the event variant and into the
+  // envelope because they are fundamental and will need to be read by the auth implementation,
+  // while all the other event variants are informative, indifferent to auth, and possibly
+  // client-specific.
+  /**
    * A room is the most general container smaller than a space for events.
    *
    * Each event has a room that it is a part of except for top-level events which considered at the
@@ -224,13 +232,9 @@ export const eventVariantCodec = Kinds({
   "space.roomy.room.create.0": _void,
   /** Delete a room */
   "space.roomy.room.delete.0": _void,
-  /**
-   * Set some entity's basic info. This is used for Rooms and possibly other things, too
-   */
-  "space.roomy.info.0": Struct({
-    name: ValueUpdate(Option(str)),
-    avatar: ValueUpdate(Option(str)),
-    description: ValueUpdate(Option(str)),
+  /** Change the parent of a room. */
+  "space.roomy.parent.update.0": Struct({
+    parent: Option(IdCodec),
   }),
   /**
    * Add a member to the Room's member list. Each room has a member list, and some Rooms are created
@@ -258,12 +262,17 @@ export const eventVariantCodec = Kinds({
   }),
   /** Edit a previously sent message */
   "space.roomy.message.edit.0": Struct({
-    /** The message content */
+    /**
+     * The message content. Depending on the mime-type this will replace the previous value.
+     *
+     * By default, the new content will replace the original content entirely, but there is a
+     * convention that if the mime-type of the new content is text/x-dmp-diff ( diff-match-patch
+     * diff ) then the new content will be applied as a diff to previous content to produce the new
+     * value.
+     * */
     content: Content,
-    /** The message this message is in reply to, if any. */
+    /** The message this message is in reply to, if any. This will replace the previous value. */
     replyTo: Option(Ulid),
-    /** List of attached media or other entities. */
-    attachments: Vector(Ulid),
   }),
   /**
    * Override a user handle. This is mostly used for bridged accounts, such as Discord accounts
@@ -288,7 +297,7 @@ export const eventVariantCodec = Kinds({
   /** Create a reaction to a message. */
   "space.roomy.reaction.create.0": Struct({
     /** The message that is being reacted to. */
-    reaction_to: Ulid,
+    reactionTo: Ulid,
     /**
      * This is usually a unicode code point, and otherwise should be a URI describing the reaction.
      * */
@@ -298,6 +307,18 @@ export const eventVariantCodec = Kinds({
   "space.roomy.reaction.delete.0": Struct({
     reaction_to: Ulid,
     reaction: str,
+  }),
+  /** Create a bridged reaction. This is similar to a normal reaction except it allows you to
+   * specify an alternative user ID for who is doing the reacting. */
+  "space.roomy.reaction.bridged.create.0": Struct({
+    reactionTo: Ulid,
+    reaction: str,
+    reactingUser: str,
+  }),
+  "space.roomy.reaction.bridged.delete.0": Struct({
+    reaction_to: Ulid,
+    reaction: str,
+    reactingUser: str,
   }),
   /** Create new media that can, for example, be attached to messages. */
   "space.roomy.media.create.0": Struct({
@@ -313,6 +334,10 @@ export const eventVariantCodec = Kinds({
   "space.roomy.category.mark.0": _void,
   /** Unmark a room as a category. */
   "space.roomy.category.unmark.0": _void,
+  /** Mark a room as a thread. */
+  "space.roomy.thread.mark.0": _void,
+  /** Unmark a room as a thread. */
+  "space.roomy.thread.unmark.0": _void,
 });
 
 export const eventCodec = Struct({
@@ -330,3 +355,52 @@ export const streamParamsCodec = Struct({
   /** The stream schema version from $lib/config.ts CONFIG.streamSchemaVersion. */
   schemaVersion: str,
 });
+
+// Code from https://github.com/perry-mitchell/ulidx/blob/5043c511406fb9b836ddf126583c80ffb90cbb73/source/crockford.ts
+// We already use ulidx but encoding is not exposed so we copy the functions here.
+const B32_CHARACTERS = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+export function crockfordEncode(input: Uint8Array): string {
+  const output: number[] = [];
+  let bitsRead = 0;
+  let buffer = 0;
+  const reversedInput = new Uint8Array(input.slice().reverse());
+  for (const byte of reversedInput) {
+    buffer |= byte << bitsRead;
+    bitsRead += 8;
+
+    while (bitsRead >= 5) {
+      output.unshift(buffer & 0x1f);
+      buffer >>>= 5;
+      bitsRead -= 5;
+    }
+  }
+  if (bitsRead > 0) {
+    output.unshift(buffer & 0x1f);
+  }
+  return output.map((byte) => B32_CHARACTERS.charAt(byte)).join("");
+}
+export function crockfordDecode(input: string): Uint8Array {
+  const sanitizedInput = input.toUpperCase().split("").reverse().join("");
+  const output: number[] = [];
+  let bitsRead = 0;
+  let buffer = 0;
+  for (const character of sanitizedInput) {
+    const byte = B32_CHARACTERS.indexOf(character);
+    if (byte === -1) {
+      throw new Error(
+        `Invalid base 32 character found in string: ${character}`,
+      );
+    }
+    buffer |= byte << bitsRead;
+    bitsRead += 5;
+    while (bitsRead >= 8) {
+      output.unshift(buffer & 0xff);
+      buffer >>>= 8;
+      bitsRead -= 8;
+    }
+  }
+  if (bitsRead >= 5 || buffer > 0) {
+    output.unshift(buffer & 0xff);
+  }
+  return new Uint8Array(output);
+}

@@ -18,10 +18,11 @@
   import UploadFileButton from "$lib/components/helper/UploadFileButton.svelte";
   import { backend } from "$lib/workers";
   import { current } from "$lib/queries.svelte";
-  import { ulid } from "ulidx";
+  import { ulid, monotonicFactory } from "ulidx";
   import { page } from "$app/state";
   import type { Message } from "./ChatArea.svelte";
   import { setInputFocus } from "./ChatInput.svelte";
+  import { navigate } from "$lib/utils.svelte";
 
   let {
     threading = { active: false, selectedMessages: [], name: "" },
@@ -87,14 +88,72 @@
     }
   }
 
-  function handleCreateThread() {
-    // TODO
+  async function handleCreateThread() {
+    if (!current.space?.id) return;
+    if (threading.selectedMessages.length == 0) return;
+    const ulid = monotonicFactory();
+    const threadName =
+      threading.name ||
+      threading.selectedMessages[0]?.content.slice(0, 50) + "...";
+
+    const threadId = ulid();
+    await backend.sendEvent(current.space.id, {
+      ulid: threadId,
+      parent: current.roomId,
+      variant: {
+        kind: "space.roomy.room.create.0",
+        data: undefined,
+      },
+    });
+
+    await backend.sendEvent(current.space.id, {
+      ulid: ulid(),
+      parent: threadId,
+      variant: {
+        kind: "space.roomy.thread.mark.0",
+        data: undefined,
+      },
+    });
+
+    await backend.sendEvent(current.space.id, {
+      ulid: ulid(),
+      parent: threadId,
+      variant: {
+        kind: "space.roomy.info.0",
+        data: {
+          name: { set: threadName },
+          description: { ignore: undefined },
+          avatar: { ignore: undefined },
+        },
+      },
+    });
+
+    for (const message of threading.selectedMessages) {
+      await backend.sendEvent(current.space.id, {
+        ulid: ulid(),
+        parent: message.id,
+        variant: {
+          kind: "space.roomy.parent.update.0",
+          data: {
+            parent: threadId,
+          },
+        },
+      });
+    }
+
+    navigate({ space: page.params.space, object: threadId });
   }
 
   let messageInput: string = $state("");
   let messageInputEl: null | HTMLInputElement = $state(null);
   let isSendingMessage = $state(false);
-  async function sendMessage() {
+  async function sendMessage(e: SubmitEvent) {
+    e.preventDefault();
+    const message = messageInput;
+    messageInput = "";
+    const replyToId = replyTo?.id;
+    replyTo = null;
+
     if (!current.space) return;
     try {
       isSendingMessage = true;
@@ -105,18 +164,14 @@
         variant: {
           kind: "space.roomy.message.create.0",
           data: {
-            replyTo: replyTo ? replyTo.id : undefined,
+            replyTo: replyToId,
             content: {
-              content: new TextEncoder().encode(messageInput),
+              content: new TextEncoder().encode(message),
               mimeType: "text/markdown",
             },
           },
         },
       });
-
-      replyTo = null;
-      messageInput = "";
-      messageInputEl?.focus();
     } catch (e: any) {
       console.error(e);
       toast.error("Failed to send message.", { position: "bottom-right" });
@@ -219,14 +274,13 @@
         {#if threading.active}
           <form onsubmit={handleCreateThread}>
             <Input
+              disabled={isSendingMessage}
               bind:value={threading.name}
               id="thread-name"
               class="grow ml-2"
             />
             <Button type="submit"
-              ><IconTablerNeedleThread />Create
-              <span class="hidden sm:inline-block sm:-ml-1">Thread</span
-              ></Button
+              ><IconTablerNeedleThread />Create Thread</Button
             >
           </form>
         {:else}
@@ -251,18 +305,6 @@
         {/if}
       </div>
       <FullscreenImageDropper {processImageFile} />
-
-      {#if isSendingMessage}
-        <div
-          class="absolute inset-0 flex items-center text-primary justify-center z-20 bg-base-100/80 dark:bg-base-900/80"
-        >
-          <div
-            class="text-xl flex items-center gap-4 text-base-900 dark:text-base-100"
-          >
-            Sending message...
-          </div>
-        </div>
-      {/if}
     </div>
   </div>
 </div>

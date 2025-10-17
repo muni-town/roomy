@@ -7,7 +7,7 @@
 <script lang="ts">
   import { ScrollArea } from "bits-ui";
   import ChatMessage from "./message/ChatMessage.svelte";
-  import { Virtualizer } from "virtua/svelte";
+  import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { setContext } from "svelte";
   import { page } from "$app/state";
   import { Button, toast } from "@fuxui/base";
@@ -17,21 +17,22 @@
   import { sql } from "$lib/utils/sqlTemplate";
   import { id } from "$lib/workers/encoding";
   import { decodeTime } from "ulidx";
+  import { onNavigate } from "$app/navigation";
 
   export type Message = {
     id: string;
     content: string;
     authorDid: string;
-    authorName?: string;
-    authorHandle?: string;
-    authorAvatar?: string;
-    masqueradeAuthor?: string;
-    masqueradeAuthorHandle?: string;
-    masqueradeTimestamp?: string;
-    masqueradeAuthorName?: string;
-    masqueradeAuthorAvatar?: string;
-    mergeWithPrevious?: boolean;
-    replyTo?: string;
+    authorName: string | null;
+    authorHandle: string | null;
+    authorAvatar: string | null;
+    masqueradeAuthor: string | null;
+    masqueradeAuthorHandle: string | null;
+    masqueradeTimestamp: string | null;
+    masqueradeAuthorName: string | null;
+    masqueradeAuthorAvatar: string | null;
+    mergeWithPrevious: boolean | null;
+    replyTo: string | null;
     reactions: { reaction: string; userId: string; userName: string }[];
   };
 
@@ -43,7 +44,7 @@
   }: {
     threading?: { active: boolean; selectedMessages: Message[]; name: string };
     startThreading: (message?: Message) => void;
-    virtualizer?: Virtualizer<Message>;
+    virtualizer?: VirtualizerHandle;
     toggleSelect: (message: Message) => void;
   } = $props();
 
@@ -83,12 +84,16 @@
         left join edges e on e.head = c.entity and e.label = 'reply'
       where
         e.parent = ${page.params.object && id(page.params.object)}
-      order by c.entity
+      order by e.id desc
+      limit ${showLastN}
     `,
     (row) => JSON.parse(row.json),
   );
 
   let showLastN = $state(50);
+  onNavigate(() => {
+    showLastN = 50;
+  });
   let isAtBottom = $state(true);
   let showJumpToPresent = $derived(!isAtBottom);
 
@@ -96,7 +101,7 @@
     if (!query.result) return [];
     // return query.result;
 
-    const mapped = query.result.map((message, index) => {
+    const mapped = query.result.reverse().map((message, index) => {
       // Get the previous message (if it exists)
       const prevMessage = index > 0 ? query.result![index - 1] : null;
 
@@ -192,18 +197,27 @@
     }
     lastTimelineLength = timeline.length;
   });
-
   let isShifting = $state(false);
+  let lastShowLastN = $state(0);
+  $effect(() => {
+    if (showLastN > lastShowLastN) {
+      lastShowLastN = showLastN;
+      isShifting = true;
+      setTimeout(() => (isShifting = false), 1000);
+    }
+  });
 </script>
 
-{#if showJumpToPresent}
-  <Button class="absolute bottom-18 right-2 z-50" onclick={scrollToBottom}>
-    <IconTablerArrowDown class="w-4 h-4" />
-    Jump to present
-  </Button>
-{/if}
+<div class="grow min-h-0 relative">
+  <div class="absolute w-full bottom-4 right-2 z-50 flex justify-center">
+    {#if showJumpToPresent}
+      <Button onclick={scrollToBottom}>
+        <IconTablerArrowDown class="w-4 h-4" />
+        Jump to present
+      </Button>
+    {/if}
+  </div>
 
-<div class="grow min-h-0">
   <ScrollArea.Root type="auto" class="h-full overflow-hidden">
     <!-- Important: This area takes the place of the chat which pushes chat offscreen
         which allows it to load then pop into place once the spinner is gone. -->
@@ -220,19 +234,6 @@
       onscroll={handleScroll}
     >
       <div class="flex flex-col w-full h-full pb-16 pt-2">
-        {#if slicedTimeline.length < timeline.length}
-          <Button
-            class="w-fit mx-auto mb-2"
-            onclick={() => {
-              isShifting = true;
-              showLastN += 100;
-              setTimeout(() => {
-                isShifting = false;
-              }, 1000);
-            }}
-            >Load More
-          </Button>
-        {/if}
         {#if isShowingFirstMessage}
           <div class="flex flex-col gap-2 max-w-full px-6 mb-4 mt-4">
             <p class="text-base font-semibold text-base-900 dark:text-base-100">
@@ -266,6 +267,9 @@
               overscan={5}
               shift={isShifting}
               getKey={(x) => x.id}
+              onscroll={(o) => {
+                if (o < 100) showLastN += 50;
+              }}
             >
               {#snippet children(message: Message)}
                 <ChatMessage
