@@ -16,6 +16,8 @@ import {
 import { messagePortInterface, reactiveWorkerState } from "./workerMessaging";
 import Dexie, { type EntityTable } from "dexie";
 
+console.log("Started sqlite worker");
+
 const QUERY_LOCK = "sqliteQueryLock";
 const HEARTBEAT_KEY = "sqlite-worker-heartbeat";
 const LOCK_TIMEOUT_MS = 8000; // 30 seconds
@@ -50,11 +52,12 @@ function startHeartbeat() {
   heartbeatInterval = setInterval(() => {
     // Store heartbeat with current timestamp
     try {
-      db.kv.add({
-        key: HEARTBEAT_KEY, value: JSON.stringify({
+      db.kv.put({
+        key: HEARTBEAT_KEY,
+        value: JSON.stringify({
           workerId,
           timestamp: Date.now(),
-        })
+        }),
       });
     } catch (e) {
       console.warn("SQLite worker: Failed to update heartbeat", e);
@@ -70,7 +73,7 @@ function stopHeartbeat() {
 }
 
 globalThis.onmessage = (ev) => {
-  console.log("Started sqlite worker");
+  console.log("SqliteWorker received message", ev);
   const ports: { backendPort: MessagePort; statusPort: MessagePort } = ev.data;
 
   // Monitor port health
@@ -92,7 +95,7 @@ globalThis.onmessage = (ev) => {
   );
 
   status.workerId = workerId;
-  console.log("Worker id", workerId)
+  console.log("Worker id", workerId);
 
   function cleanup() {
     console.log("SQLite worker: Cleaning up...");
@@ -101,17 +104,20 @@ globalThis.onmessage = (ev) => {
 
     // Clear our heartbeat
 
-    db.kv.get(HEARTBEAT_KEY).then((heartbeatData) => {
-      if (heartbeatData) {
-        const { workerId: storedWorkerId } = JSON.parse(heartbeatData.value);
-        if (storedWorkerId === workerId) {
-          db.kv.delete(HEARTBEAT_KEY);
+    db.kv
+      .get(HEARTBEAT_KEY)
+      .then((heartbeatData) => {
+        if (heartbeatData) {
+          const { workerId: storedWorkerId } = JSON.parse(heartbeatData.value);
+          if (storedWorkerId === workerId) {
+            db.kv.delete(HEARTBEAT_KEY);
+          }
         }
-      }
-    }).catch((e) =>
-      console.warn("SQLite worker: Failed to clear heartbeat on cleanup", e));
+      })
+      .catch((e) =>
+        console.warn("SQLite worker: Failed to clear heartbeat on cleanup", e),
+      );
   }
-
 
   const callback = async () => {
     console.log(
@@ -120,8 +126,8 @@ globalThis.onmessage = (ev) => {
     status.isActiveWorker = true;
     startHeartbeat();
 
-    globalThis.addEventListener('error', cleanup);
-    globalThis.addEventListener('unhandledrejection', cleanup);
+    globalThis.addEventListener("error", cleanup);
+    globalThis.addEventListener("unhandledrejection", cleanup);
 
     try {
       await initializeDatabase("/mini.db");
@@ -152,32 +158,32 @@ globalThis.onmessage = (ev) => {
 
           // Check lock status
           const lockInfo = await navigator.locks.query();
-          const sqliteLocks = lockInfo?.held?.filter(lock =>
-            lock.name === "sqlite-worker-lock" || lock.name === QUERY_LOCK
+          const sqliteLocks = lockInfo?.held?.filter(
+            (lock) =>
+              lock.name === "sqlite-worker-lock" || lock.name === QUERY_LOCK,
           );
 
           if (!isConnectionHealthy) {
             console.warn("SQLite worker: Connection is unhealthy.");
           }
           if (!isConnectionHealthy) {
-            console.warn(
-              "SQLite worker: Connection is unhealthy.",
-            );
+            console.warn("SQLite worker: Connection is unhealthy.");
           }
           return {
             timestamp: Date.now(),
             workerId,
             isActive: status.isActiveWorker || false,
             locks: sqliteLocks,
-            locksPending: lockInfo?.pending?.filter(lock =>
-              lock.name === "sqlite-worker-lock" || lock.name === QUERY_LOCK
-            )
+            locksPending: lockInfo?.pending?.filter(
+              (lock) =>
+                lock.name === "sqlite-worker-lock" || lock.name === QUERY_LOCK,
+            ),
           };
         },
         runSavepoint,
       });
       backend.setActiveSqliteWorker(sqliteChannel.port2);
-      await new Promise(() => { });
+      await new Promise(() => {});
     } catch (e) {
       console.error("SQLite worker: Fatal error", e);
       cleanup();
@@ -185,18 +191,18 @@ globalThis.onmessage = (ev) => {
     }
   };
 
-
-  navigator.locks.request(
-    "sqlite-worker-lock",
-    { mode: "exclusive", signal: AbortSignal.timeout(LOCK_TIMEOUT_MS) },
-    callback
-  ).catch(async (error) => {
-    if (error.name === 'TimeoutError') {
-      console.warn("SQLite worker: Lock timeout, attempting steal");
-      await attemptLockSteal(callback);
-    }
-  });
-  status.isActiveWorker = false;
+  navigator.locks
+    .request(
+      "sqlite-worker-lock",
+      { mode: "exclusive", signal: AbortSignal.timeout(LOCK_TIMEOUT_MS) },
+      callback,
+    )
+    .catch(async (error) => {
+      if (error.name === "TimeoutError") {
+        console.warn("SQLite worker: Lock timeout, attempting steal");
+        await attemptLockSteal(callback);
+      }
+    });
 };
 
 async function runSavepoint(savepoint: Savepoint, depth = 0) {
@@ -237,16 +243,22 @@ async function attemptLockSteal(callback: () => Promise<void>) {
     // Check if there's a recent heartbeat from another worker
     const heartbeatData = await db.kv.get(HEARTBEAT_KEY);
     if (heartbeatData) {
-      const { timestamp, workerId: otherWorkerId } = JSON.parse(heartbeatData.value);
+      const { timestamp, workerId: otherWorkerId } = JSON.parse(
+        heartbeatData.value,
+      );
       const age = Date.now() - timestamp;
 
       if (age < LOCK_TIMEOUT_MS && otherWorkerId !== workerId) {
-        console.log("SQLite worker: Another active worker detected, backing off");
+        console.log(
+          "SQLite worker: Another active worker detected, backing off",
+        );
         return;
       }
     }
 
-    console.log("SQLite worker: No recent heartbeat detected, attempting to acquire lock");
+    console.log(
+      "SQLite worker: No recent heartbeat detected, attempting to acquire lock",
+    );
 
     // Try to acquire lock with ifAvailable first
     const lockAcquired = await navigator.locks.request(
@@ -258,11 +270,13 @@ async function attemptLockSteal(callback: () => Promise<void>) {
         console.log("SQLite worker: Successfully stole abandoned lock");
         await callback();
         return true;
-      }
+      },
     );
 
     if (!lockAcquired) {
-      console.warn("SQLite worker: Could not steal lock, another worker may be active");
+      console.warn(
+        "SQLite worker: Could not steal lock, another worker may be active",
+      );
     }
   } catch (error) {
     console.error("SQLite worker: Lock steal attempt failed", error);

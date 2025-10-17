@@ -20,6 +20,8 @@ export const sqliteStatus = reactiveWorkerState<SqliteStatus>(
   false,
 );
 
+(globalThis as any).sqliteStatus = sqliteStatus;
+
 // Initialize shared worker
 export const hasSharedWorker = "SharedWorker" in globalThis;
 const hasWorker = "Worker" in globalThis;
@@ -80,5 +82,5 @@ sqliteWorker.postMessage(
       console.error("Main thread: SQLite test query failed", error);
       throw error;
     }
-  }
+  },
 };
