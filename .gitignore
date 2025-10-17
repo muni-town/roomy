@@ -11,6 +11,8 @@ node_modules
 /.svelte-kit
 /dist
 **/dist
+test-results
+playwright-report
 
 # OS
 .DS_Store
