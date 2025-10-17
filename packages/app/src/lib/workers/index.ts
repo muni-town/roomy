@@ -3,7 +3,7 @@ import backendWorkerUrl from "./backendWorker.ts?worker&url";
 import type { BackendInterface, BackendStatus, SqliteStatus } from "./types";
 
 // Force page reload when hot reloading this file to avoid confusion if the workers get mixed up.
-if (import.meta.hot) {
+if (import.meta.hot && !(window as any).__playwright) {
   import.meta.hot.accept(() => window.location.reload());
 }
 

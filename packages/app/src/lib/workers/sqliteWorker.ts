@@ -95,6 +95,7 @@ globalThis.onmessage = (ev) => {
   );
 
   status.workerId = workerId;
+  status.isActiveWorker = false; // Initialize to false for reactive state tracking
   console.log("Worker id", workerId);
 
   function cleanup() {
@@ -203,6 +204,7 @@ globalThis.onmessage = (ev) => {
         await attemptLockSteal(callback);
       }
     });
+  // status.isActiveWorker = false;
 };
 
 async function runSavepoint(savepoint: Savepoint, depth = 0) {

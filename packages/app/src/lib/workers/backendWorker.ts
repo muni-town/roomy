@@ -105,7 +105,7 @@ const setPreviousStreamSchemaVersion = async (version: string) => {
 };
 
 export let sqliteWorker: SqliteWorkerInterface | undefined;
-let setSqliteWorkerReady = () => { };
+let setSqliteWorkerReady = () => {};
 const sqliteWorkerReady = new Promise(
   (resolve) => (setSqliteWorkerReady = resolve as () => void),
 );
@@ -124,7 +124,7 @@ class Backend {
   openSpacesMaterializer: OpenSpacesMaterializer | undefined;
 
   #oauthReady: Promise<void>;
-  #resolveOauthReady: () => void = () => { };
+  #resolveOauthReady: () => void = () => {};
   get ready() {
     return state.#oauthReady;
   }
@@ -246,6 +246,12 @@ class Backend {
 const state = new Backend();
 (globalThis as any).state = state;
 
+// Track connected ports to prevent duplicate connections and for broadcasting
+const connectedPorts = new WeakMap<MessagePortApi, string>();
+const activePorts = new Set<MessagePortApi>();
+let connectionCounter = 0;
+let consoleForwardingSetup = false;
+
 if (isSharedWorker) {
   (globalThis as any).onconnect = async ({
     ports: [port],
@@ -280,20 +286,74 @@ export async function getProfile(
 }
 
 function connectMessagePort(port: MessagePortApi) {
-  // Set up console forwarding to main thread for Safari debugging
-  // This intercepts console.log/warn/error/info/debug calls in the SharedWorker
-  // and forwards them to the main thread with a [SharedWorker] prefix.
-  // This is essential for debugging on Safari where SharedWorker console
-  // output is not directly visible in developer tools.
+  // Prevent duplicate connections - only connect once per port
+  if (connectedPorts.has(port)) {
+    const existingId = connectedPorts.get(port);
+    console.log(
+      `SharedWorker: Port already connected (ID: ${existingId}), skipping duplicate connection`,
+    );
+    return;
+  }
 
-  // if (import.meta.env?.SHARED_WORKER_LOG_FORWARDING) {
-  setupConsoleForwarding(port);
+  const connectionId = `conn-${++connectionCounter}`;
+  connectedPorts.set(port, connectionId);
+
+  // Log connection BEFORE setting up console forwarding to avoid broadcast duplication
   console.log(
-    "SharedWorker backend connected with console forwarding enabled for development",
+    `SharedWorker backend connected (ID: ${connectionId}, total: ${connectionCounter})`,
   );
-  // } else {
-  //   console.log("SharedWorker backend connected");
-  // }
+
+  // Clean up on port close/error
+  if ("addEventListener" in port) {
+    const cleanup = () => {
+      activePorts.delete(port);
+      console.log(`SharedWorker: Port disconnected (ID: ${connectionId})`);
+    };
+
+    // MessagePort has close event in some browsers
+    port.addEventListener("messageerror", cleanup);
+
+    // For Worker, we can't detect close directly, but we track it anyway
+  }
+
+  // Add port to active ports for broadcasting
+  activePorts.add(port);
+
+  // Set up console forwarding once globally to broadcast to all ports
+  // This prevents nested wrapping that causes log duplication
+  if (!consoleForwardingSetup) {
+    consoleForwardingSetup = true;
+
+    const originalConsole = {
+      log: console.log,
+      warn: console.warn,
+      error: console.error,
+      info: console.info,
+      debug: console.debug,
+    };
+
+    const broadcastConsoleMessage = (
+      level: "log" | "warn" | "error" | "info" | "debug",
+      args: any[],
+    ) => {
+      // Broadcast to all active ports
+      for (const activePort of activePorts) {
+        try {
+          activePort.postMessage(["console", level, args]);
+        } catch (e) {
+          // Port might be closed, will be cleaned up later
+        }
+      }
+      // Also call original console for worker context
+      originalConsole[level](...args);
+    };
+
+    console.log = (...args: any[]) => broadcastConsoleMessage("log", args);
+    console.warn = (...args: any[]) => broadcastConsoleMessage("warn", args);
+    console.error = (...args: any[]) => broadcastConsoleMessage("error", args);
+    console.info = (...args: any[]) => broadcastConsoleMessage("info", args);
+    console.debug = (...args: any[]) => broadcastConsoleMessage("debug", args);
+  }
 
   const resetLocalDatabase = async () => {
     if (!sqliteWorker)
@@ -413,7 +473,10 @@ function connectMessagePort(port: MessagePortApi) {
           console.log(`Backend: Re-establishing live query ${id}`);
           sqliteWorker.createLiveQuery(id, channel.port2, statement);
         } catch (error) {
-          console.error(`Backend: Failed to re-establish live query ${id}`, error);
+          console.error(
+            `Backend: Failed to re-establish live query ${id}`,
+            error,
+          );
         }
       }
       status.workerRunning = true;
