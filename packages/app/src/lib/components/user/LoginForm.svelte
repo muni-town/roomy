@@ -92,7 +92,7 @@
       console.log("Created account", did);
       toast.success(`Created account, you may now login.`);
       tab = "Login";
-      handle = `${handle}.pds.roomy.space`;
+      handle = `${handle}${env.PUBLIC_PDS_HANDLE_SUFFIX}`;
     } catch (e) {
       console.error(e);
       toast.error(`Error creating account: ${e}`);
