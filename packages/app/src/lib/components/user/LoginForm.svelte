@@ -85,7 +85,7 @@
         body: {
           email,
           inviteCode: env.PUBLIC_PDS_INVITE_CODE,
-          handle: `${handle}.pds.roomy.space`,
+          handle: `${handle}${env.PUBLIC_PDS_HANDLE_SUFFIX}`,
           password,
         },
       });
@@ -195,7 +195,7 @@
           bind:value={handle}
           placeholder="Handle"
         />
-        .pds.roomy.space
+        {env.PUBLIC_PDS_HANDLE_SUFFIX}
       </div>
       <Input type="password" bind:value={password} placeholder="Password" />
       <Input type="email" bind:value={email} placeholder="Email" />
