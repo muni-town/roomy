@@ -15,6 +15,7 @@
 
   import IconMdiArrowRight from "~icons/mdi/arrow-right";
   import ChannelBoardView from "$lib/components/content/thread/boardView/ChannelBoardView.svelte";
+  import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
 
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
@@ -144,62 +145,75 @@
   {/snippet}
 
   {#snippet navbar()}
-    <div class="flex items-center px-2 truncate w-full">
-      <h2
-        class="text-lg font-bold max-w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
-      >
-        {#if object?.parent && object.parent.kind == "channel"}
-          <a
-            href={`/${page.params.space}/${object.parent.id}`}
-            class="hover:underline underline-offset-4"
-          >
-            {object?.parent?.name}
-          </a>
-          <IconMdiArrowRight />
-        {/if}
-        <span class="truncate">{object?.name}</span>
-      </h2>
-      <span class="flex-grow"></span>
-      {#if object?.kind == "channel"}
-        <Tabs
-          items={[
-            { name: "Chat", href: "#chat" },
-            { name: "Threads", href: "#threads" },
-          ]}
-          active={activeTab}
-        />
-      {/if}
-      <span class="flex-grow"></span>
-
-      {#if object?.kind == "thread"}
-        <Popover>
-          {#snippet child({ props })}
-            <Button {...props}>Thread Options</Button>
-          {/snippet}
-
-          <Button onclick={() => (promoteChannelDialogOpen = true)}
-            >Promote to Channel</Button
-          >
-        </Popover>
-
-        <Modal
-          bind:open={promoteChannelDialogOpen}
-          title="Promote Thread to Channel"
+    <div class="relative w-full">
+      <div class="flex items-center px-2 truncate w-full">
+        <h2
+          class="text-lg font-bold max-w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
         >
-          <form
-            class="flex flex-col items-stretch gap-4"
-            onsubmit={promoteToChannel}
-          >
-            <label class="flex flex-col gap-2">
-              New Channel Name
-              <Input bind:value={promoteChannelName} />
-            </label>
+          {#if object?.parent && object.parent.kind == "channel"}
+            <a
+              href={`/${page.params.space}/${object.parent.id}`}
+              class="hover:underline underline-offset-4"
+            >
+              {object?.parent?.name}
+            </a>
+            <IconMdiArrowRight />
+          {/if}
+          <span class="truncate">{object?.name}</span>
+        </h2>
+        <span class="flex-grow"></span>
+        {#if object?.kind == "channel"}
+          <Tabs
+            items={[
+              { name: "Chat", href: "#chat" },
+              { name: "Threads", href: "#threads" },
+            ]}
+            active={activeTab}
+          />
+        {/if}
+        <span class="flex-grow"></span>
 
-            <div class="flex justify-end">
-              <Button type="submit">Promote</Button>
-            </div>
-          </form>
-        </Modal>
+        {#if current.space?.id && backendStatus.loadingSpaces}
+          <div class="dark:!text-base-400 !text-base-600 mx-3">
+            Downloading Entire Space...
+          </div>
+        {/if}
+
+        {#if object?.kind == "thread"}
+          <Popover>
+            {#snippet child({ props })}
+              <Button {...props}>Thread Options</Button>
+            {/snippet}
+
+            <Button onclick={() => (promoteChannelDialogOpen = true)}
+              >Promote to Channel</Button
+            >
+          </Popover>
+
+          <Modal
+            bind:open={promoteChannelDialogOpen}
+            title="Promote Thread to Channel"
+          >
+            <form
+              class="flex flex-col items-stretch gap-4"
+              onsubmit={promoteToChannel}
+            >
+              <label class="flex flex-col gap-2">
+                New Channel Name
+                <Input bind:value={promoteChannelName} />
+              </label>
+
+              <div class="flex justify-end">
+                <Button type="submit">Promote</Button>
+              </div>
+            </form>
+          </Modal>
+        {/if}
+
+      </div>
+
+      {#if current.space?.id && backendStatus.loadingSpaces}
+        <LoadingLine />
       {/if}
     </div>
   {/snippet}

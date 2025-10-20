@@ -12,6 +12,7 @@ export interface BackendStatus {
   profile: ProfileViewDetailed | undefined;
   leafConnected: boolean | undefined;
   personalStreamId: string | undefined;
+  loadingSpaces: number | undefined;
 }
 export interface SqliteStatus {
   isActiveWorker: boolean | undefined;

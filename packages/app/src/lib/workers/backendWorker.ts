@@ -10,7 +10,6 @@ import {
 import {
   messagePortInterface,
   reactiveWorkerState,
-  setupConsoleForwarding,
   type MessagePortApi,
 } from "./workerMessaging";
 
@@ -55,6 +54,15 @@ const status = reactiveWorkerState<BackendStatus>(
   new BroadcastChannel("backend-status"),
   true,
 );
+
+const statusStartBackfillingStream = () => {
+  if (!status.loadingSpaces) status.loadingSpaces = 0;
+  status.loadingSpaces += 1;
+};
+const statusDoneBackfillingStream = () => {
+  if (!status.loadingSpaces) return;
+  status.loadingSpaces -= 1;
+};
 
 const atprotoOauthScope = "atproto transition:generic transition:chat.bsky";
 
@@ -105,7 +113,7 @@ const setPreviousStreamSchemaVersion = async (version: string) => {
 };
 
 export let sqliteWorker: SqliteWorkerInterface | undefined;
-let setSqliteWorkerReady = () => { };
+let setSqliteWorkerReady = () => {};
 const sqliteWorkerReady = new Promise(
   (resolve) => (setSqliteWorkerReady = resolve as () => void),
 );
@@ -124,7 +132,7 @@ class Backend {
   openSpacesMaterializer: OpenSpacesMaterializer | undefined;
 
   #oauthReady: Promise<void>;
-  #resolveOauthReady: () => void = () => { };
+  #resolveOauthReady: () => void = () => {};
   get ready() {
     return state.#oauthReady;
   }
@@ -881,9 +889,12 @@ class StreamMaterializer {
       (async () => {
         if (!state.leafClient) throw "No leaf client";
         if (!sqliteWorker) throw "No Sqlite worker";
+
         const entry = await db.streamCursors.get(this.#streamId);
         this.#latestEvent = entry?.latestEvent || 0;
         console.log("latestevent", this.#latestEvent);
+
+        statusStartBackfillingStream();
 
         // Backfill events
         console.time(`finishedBackfill-${this.#streamId}`);
@@ -923,6 +934,7 @@ class StreamMaterializer {
         await this.#materializeEvents(fetchChannel);
 
         console.timeEnd(`finishedBackfill-${this.#streamId}`);
+        statusDoneBackfillingStream();
 
         // It's good practice to run optimize every once in a while, so after backfilling feels like
         // a good time.

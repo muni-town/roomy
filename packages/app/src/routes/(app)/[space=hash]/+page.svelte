@@ -3,6 +3,7 @@
   import { page } from "$app/state";
   import BoardView from "$lib/components/content/thread/boardView/BoardView.svelte";
   import type { ThreadInfo } from "$lib/components/content/thread/boardView/types";
+  import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
@@ -95,12 +96,24 @@
 
 <MainLayout sidebar={current.space ? (sidebar as any) : undefined}>
   {#snippet navbar()}
-    <div class="flex flex-col items-center justify-between w-full px-2">
-      <h2
-        class="text-lg font-bold w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
-      >
-        <div class="ml-2 font-bold grow text-center">All Threads</div>
-      </h2>
+    <div class="relative w-full">
+      <div class="flex flex-col items-center justify-between w-full px-2">
+        <h2
+          class="w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
+        >
+          <div class="ml-2 font-bold grow text-center text-lg">All Threads</div>
+
+          {#if current.space?.id && backendStatus.loadingSpaces}
+            <div class="dark:!text-base-400 !text-base-600">
+              Downloading Entire Space...
+            </div>
+          {/if}
+        </h2>
+      </div>
+
+      {#if current.space?.id && backendStatus.loadingSpaces}
+        <LoadingLine />
+      {/if}
     </div>
   {/snippet}
 
