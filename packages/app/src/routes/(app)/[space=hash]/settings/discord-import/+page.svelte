@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button, toast } from "@fuxui/base";
+  import { Button, Input, toast } from "@fuxui/base";
   import { Slider } from "@fuxui/base";
   import { Stopwatch, StopwatchState } from "@fuxui/time";
   import { launchConfetti } from "@fuxui/visual";
@@ -11,7 +11,15 @@
   import { monotonicFactory } from "ulidx";
   import type { EventType } from "$lib/workers/materializer";
   import { sql } from "$lib/utils/sqlTemplate";
+  import { formatDate } from "date-fns";
 
+  let cutoffDateInput = $state("");
+  let cutoffDate = $derived.by(() => {
+    if (!cutoffDateInput) return;
+    const parsed = new Date(cutoffDateInput);
+    if (isNaN(parsed.getTime())) return;
+    return parsed;
+  });
   let files = $state(undefined) as FileList | undefined;
 
   let guildProgress = $state(0);
@@ -178,6 +186,13 @@
         if (!roomId) return;
 
         for (const message of channel.messages) {
+          if (
+            cutoffDate &&
+            new Date(message.timestamp).getTime() < cutoffDate.getTime()
+          ) {
+            continue;
+          }
+
           const messageId = ulid();
           batch.push({
             ulid: messageId,
@@ -299,6 +314,22 @@
     </h2>
 
     <p>Import a Discord zip archive into your Roomy space.</p>
+
+    <label class="flex flex-col gap-2">
+      Cutoff date:
+      <Input bind:value={cutoffDateInput} placeholder="Jan 10 2020" />
+      {#if cutoffDate != undefined}
+        <span class="text-sm"
+          >Messages older than {formatDate(cutoffDate, "MMM dd, yyyy")} will not
+          be imported.</span
+        >
+      {:else}
+        <span class="text-sm"
+          >Optionally specify a date and messages older than that will not be
+          imported.</span
+        >
+      {/if}
+    </label>
 
     <div class="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
       <label

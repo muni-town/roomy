@@ -209,7 +209,6 @@
             </form>
           </Modal>
         {/if}
-
       </div>
 
       {#if current.space?.id && backendStatus.loadingSpaces}
