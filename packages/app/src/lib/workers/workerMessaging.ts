@@ -15,26 +15,26 @@ type HalfInterface = {
 };
 type IncomingMessage<In extends HalfInterface, Out extends HalfInterface> =
   | {
-    [K in keyof In]: ["call", K, string, ...Parameters<In[K]>];
-  }[keyof In]
+      [K in keyof In]: ["call", K, string, ...Parameters<In[K]>];
+    }[keyof In]
   | {
-    [K in keyof Out]: [
-      "response",
-      string,
-      "resolve" | "reject",
-      ReturnType<Out[K]>,
-    ];
-  }[keyof Out];
+      [K in keyof Out]: [
+        "response",
+        string,
+        "resolve" | "reject",
+        ReturnType<Out[K]>,
+      ];
+    }[keyof Out];
 
 /**
- * Establish a a typed bidirectional RPC (remote procedure call) layer on a message port. 
+ * Establish a a typed bidirectional RPC (remote procedure call) layer on a message port.
  * The `Local` type parameter defines the functions that can be called by the remote side,
  * while the `Remote` type parameter defines the functions that can be called on the returned
  * proxy object to invoke functions on the remote side.
- * 
- * Sets up a message port to listen for events representing incoming function calls, and 
- * route them to the provided local handlers. Returns a Proxy object for calling remote 
- * functions as if they were local async functions. 
+ *
+ * Sets up a message port to listen for events representing incoming function calls, and
+ * route them to the provided local handlers. Returns a Proxy object for calling remote
+ * functions as if they were local async functions.
  * */
 export function messagePortInterface<
   Local extends HalfInterface,
@@ -51,24 +51,28 @@ export function messagePortInterface<
     ev: MessageEvent<IncomingMessage<Local, Remote> | ConsoleForwardMessage>,
   ) => {
     // Handle console forwarding messages
-    if (Array.isArray(ev.data) && ev.data.length === 3 && ev.data[0] === 'console') {
+    if (
+      Array.isArray(ev.data) &&
+      ev.data.length === 3 &&
+      ev.data[0] === "console"
+    ) {
       const [, level, args]: ConsoleForwardMessage = ev.data;
-      const prefixedArgs = ['[SharedWorker]', ...args];
+      const prefixedArgs = ["[SharedWorker]", ...args];
 
       switch (level) {
-        case 'log':
+        case "log":
           console.log(...prefixedArgs);
           break;
-        case 'warn':
+        case "warn":
           console.warn(...prefixedArgs);
           break;
-        case 'error':
+        case "error":
           console.error(...prefixedArgs);
           break;
-        case 'info':
+        case "info":
           console.info(...prefixedArgs);
           break;
-        case 'debug':
+        case "debug":
           console.debug(...prefixedArgs);
           break;
       }
@@ -202,31 +206,31 @@ export function reactiveWorkerState<
 
 /**
  * Console Forwarding for SharedWorkers
- * 
+ *
  * Safari doesn't show console output from SharedWorkers in the developer tools,
- * making debugging difficult. This utility forwards console messages from 
+ * making debugging difficult. This utility forwards console messages from
  * SharedWorkers to the main thread where they can be seen.
- * 
+ *
  * Usage in SharedWorker:
  * ```typescript
  * function connectMessagePort(port: MessagePortApi) {
  *   // Basic usage - forwards all console messages
  *   setupConsoleForwarding(port);
- *   
+ *
  *   // Optional: disable forwarding
  *   setupConsoleForwarding(port, false);
- *   
+ *
  *   // Optional: get cleanup function to restore original console
  *   const cleanup = setupConsoleForwarding(port);
  *   // Later: cleanup(); // restores original console methods
- *   
+ *
  *   console.log("This will appear in main thread console with [SharedWorker] prefix");
  * }
  * ```
- * 
+ *
  * The main thread automatically receives and displays these messages when using
  * messagePortInterface() - no additional setup required on the main thread.
- * 
+ *
  * All console methods are supported: log, warn, error, info, debug
  * Messages appear in both the worker context (if available) and the main thread.
  */
@@ -234,18 +238,21 @@ export function reactiveWorkerState<
 /**
  * Console forwarding message types
  */
-type ConsoleLevel = 'log' | 'warn' | 'error' | 'info' | 'debug';
-type ConsoleForwardMessage = ['console', ConsoleLevel, any[]];
+type ConsoleLevel = "log" | "warn" | "error" | "info" | "debug";
+type ConsoleForwardMessage = ["console", ConsoleLevel, any[]];
 
 /**
  * Sets up console forwarding from a worker to the main thread via a message port.
  * Call this in the worker to forward all console messages to the main thread.
- * 
+ *
  * @param messagePort - The message port to send console messages through
  * @param enabled - Whether to enable console forwarding (default: true)
  * @returns A cleanup function to restore original console methods
  */
-export function setupConsoleForwarding(messagePort: MessagePortApi, enabled: boolean = true): () => void {
+export function setupConsoleForwarding(
+  messagePort: MessagePortApi,
+  enabled: boolean = true,
+): () => void {
   const originalConsole = {
     log: console.log,
     warn: console.warn,
@@ -258,7 +265,11 @@ export function setupConsoleForwarding(messagePort: MessagePortApi, enabled: boo
     // Send to main thread if enabled
     if (enabled) {
       try {
-        messagePort.postMessage(['console', level, args] satisfies ConsoleForwardMessage);
+        messagePort.postMessage([
+          "console",
+          level,
+          args,
+        ] satisfies ConsoleForwardMessage);
       } catch (e) {
         // Fallback to original console if forwarding fails
         originalConsole[level](...args);
@@ -272,11 +283,11 @@ export function setupConsoleForwarding(messagePort: MessagePortApi, enabled: boo
 
   // Override console methods only if enabled
   if (enabled) {
-    console.log = (...args: any[]) => forwardConsoleMessage('log', args);
-    console.warn = (...args: any[]) => forwardConsoleMessage('warn', args);
-    console.error = (...args: any[]) => forwardConsoleMessage('error', args);
-    console.info = (...args: any[]) => forwardConsoleMessage('info', args);
-    console.debug = (...args: any[]) => forwardConsoleMessage('debug', args);
+    console.log = (...args: any[]) => forwardConsoleMessage("log", args);
+    console.warn = (...args: any[]) => forwardConsoleMessage("warn", args);
+    console.error = (...args: any[]) => forwardConsoleMessage("error", args);
+    console.info = (...args: any[]) => forwardConsoleMessage("info", args);
+    console.debug = (...args: any[]) => forwardConsoleMessage("debug", args);
   }
 
   // Return cleanup function to restore original console methods

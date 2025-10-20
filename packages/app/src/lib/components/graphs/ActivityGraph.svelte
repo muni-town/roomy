@@ -16,12 +16,7 @@
 </script>
 
 <div style={`width: ${width}; height: ${height}`}>
-  <LayerCake
-    x="x"
-    y="y"
-    {yDomain}
-    {data}
-  >
+  <LayerCake x="x" y="y" {yDomain} {data}>
     <Svg>
       <Line />
     </Svg>

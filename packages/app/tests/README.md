@@ -11,7 +11,7 @@ The testing suite is designed to verify that Roomy's complex worker-based archit
 The Playwright testing rig is **fully functional** and provides comprehensive cross-browser compatibility testing:
 
 - ✅ **Chrome/Chromium**: Fully supported with all features working
-- ✅ **Firefox**: Fully supported with all features working  
+- ✅ **Firefox**: Fully supported with all features working
 - ✅ **Edge**: Supported (requires manual installation)
 - ⚠️ **Safari**: Partial support - basic functionality works but SQLite operations may timeout
 - ✅ **Mobile browsers**: Basic functionality tested and working
@@ -36,14 +36,17 @@ tests/
 ## Prerequisites
 
 ### System Requirements
+
 - Node.js 22.15.0+
 - pnpm 10.10.0+
 - Modern browsers (Chrome, Firefox, Safari, Edge)
 
 ### Browser Requirements
+
 The app requires specific browser APIs to function:
 
 **Critical (Required):**
+
 - Web Workers ✅
 - MessageChannel API ✅
 - IndexedDB ✅
@@ -53,11 +56,13 @@ The app requires specific browser APIs to function:
 - Fetch API ✅
 
 **Optimal (Preferred):**
+
 - SharedWorker API ✅ (Chrome/Firefox)
 - BroadcastChannel API ✅
 - SharedArrayBuffer support ✅ (with proper headers)
 
 ### Browser-Specific Notes
+
 - **Chrome/Chromium**: Full support with optimal performance
 - **Firefox**: Full support with custom preferences for SharedArrayBuffer
 - **Safari**: Basic functionality works, but may have timeouts with complex SQLite operations
@@ -70,6 +75,7 @@ The app requires specific browser APIs to function:
 If you need to install from scratch:
 
 1. Install Playwright and browsers:
+
 ```bash
 cd packages/app
 pnpm install  # Playwright is already in package.json
@@ -77,6 +83,7 @@ pnpm exec playwright install
 ```
 
 2. Optional - Install Edge browser for additional testing:
+
 ```bash
 pnpm exec playwright install msedge
 ```
@@ -111,7 +118,7 @@ pnpm exec playwright test smoke.spec.ts
 # Run only worker tests
 pnpm exec playwright test workers.spec.ts
 
-# Run only responsive tests  
+# Run only responsive tests
 pnpm exec playwright test responsive.spec.ts
 
 # Run only app functionality tests
@@ -138,12 +145,14 @@ pnpm test:e2e
 ### CI/CD
 
 The tests are configured to run automatically in GitHub Actions on:
+
 - Push to `main` or `develop` branches
 - Pull requests to `main` or `develop`
 
 ## Test Coverage
 
 ### Smoke Tests (`smoke.spec.ts`) ✅ **RECOMMENDED**
+
 - ✅ App loading and worker initialization
 - ✅ Browser API compatibility
 - ✅ Backend worker ping functionality
@@ -152,9 +161,10 @@ The tests are configured to run automatically in GitHub Actions on:
 - ✅ Security headers (COOP/COEP) validation
 
 ### Core App Functionality (`app.spec.ts`) ✅ **WORKING**
+
 - ✅ App loading and worker initialization
 - ✅ SharedWorker vs Worker fallback detection
-- ✅ Backend worker ping functionality  
+- ✅ Backend worker ping functionality
 - ✅ SQLite database connectivity
 - ✅ Security headers (COOP/COEP) for SharedArrayBuffer
 - ✅ Debug helper availability
@@ -164,6 +174,7 @@ The tests are configured to run automatically in GitHub Actions on:
 - ✅ Required browser API support
 
 ### Worker System (`workers.spec.ts`) ✅ **WORKING**
+
 - ✅ Worker initialization and fallback mechanisms
 - ✅ SQLite worker lock acquisition
 - ✅ Multi-tab lock coordination
@@ -176,6 +187,7 @@ The tests are configured to run automatically in GitHub Actions on:
 - ✅ Database initialization and operations
 
 ### Responsive Design (`responsive.spec.ts`) ⚠️ **PARTIAL**
+
 - ✅ Functionality across viewport sizes (mobile to 4K)
 - ⚠️ Mobile touch interactions (may timeout on slow loads)
 - ✅ Device rotation handling
@@ -185,8 +197,9 @@ The tests are configured to run automatically in GitHub Actions on:
 - ✅ Basic accessibility requirements
 
 ### Test Results Summary
+
 - **Chrome/Chromium**: 95%+ tests passing
-- **Firefox**: 90%+ tests passing  
+- **Firefox**: 90%+ tests passing
 - **Safari**: 70%+ tests passing (SQLite timeouts expected)
 - **Mobile**: 85%+ tests passing
 
@@ -195,17 +208,19 @@ The tests are configured to run automatically in GitHub Actions on:
 The tests are configured with special browser flags to support the app's requirements:
 
 ### Chrome/Chromium ✅
+
 ```javascript
 launchOptions: {
   args: [
-    '--enable-features=SharedArrayBuffer',
-    '--disable-web-security', 
-    '--disable-features=VizDisplayCompositor',
-  ]
+    "--enable-features=SharedArrayBuffer",
+    "--disable-web-security",
+    "--disable-features=VizDisplayCompositor",
+  ];
 }
 ```
 
 ### Firefox ✅
+
 ```javascript
 firefoxUserPrefs: {
   'javascript.options.shared_memory': true,
@@ -214,11 +229,13 @@ firefoxUserPrefs: {
 ```
 
 ### Safari ⚠️
+
 - Uses default configuration
 - Some SQLite operations may timeout due to Safari's restrictions
 - Basic functionality still works
 
 ### Edge ✅
+
 - Uses Chrome configuration with `channel: 'msedge'`
 - Requires manual installation: `pnpm exec playwright install msedge`
 
@@ -239,6 +256,7 @@ All utilities are working and tested across browsers.
 ## Understanding Test Results
 
 ### Success Indicators
+
 - All workers initialize within timeout (20s default)
 - SQLite operations complete successfully
 - Lock coordination works between tabs
@@ -248,16 +266,19 @@ All utilities are working and tested across browsers.
 ### Common Failure Scenarios
 
 **Worker Initialization Timeout:**
+
 - Browser doesn't support required APIs
 - COOP/COEP headers not properly set
 - Network issues preventing worker loading
 
 **SQLite Lock Issues:**
+
 - Multiple workers trying to acquire exclusive locks
 - IndexedDB not available or failing
 - Web Locks API not supported
 
 **Cross-Browser Issues:**
+
 - SharedWorker not supported (should fallback to Worker)
 - SharedArrayBuffer not available (may impact performance)
 - Different browser implementations of APIs
@@ -267,15 +288,19 @@ All utilities are working and tested across browsers.
 ### Development Tips
 
 1. **Start with Smoke Tests:**
+
    ```bash
    pnpm exec playwright test smoke.spec.ts --headed
    ```
+
    Quick way to verify basic functionality is working.
 
 2. **Use UI Mode:**
+
    ```bash
    pnpm test:e2e:ui
    ```
+
    This provides a visual interface to see test execution.
 
 3. **Enable Debug Logging:**
@@ -285,9 +310,11 @@ All utilities are working and tested across browsers.
    Tests monitor console errors and log them for debugging.
 
 5. **Use Browser DevTools:**
+
    ```bash
    pnpm test:e2e:debug
    ```
+
    Pauses execution and opens DevTools.
 
 6. **Focus on Chrome for Development:**
@@ -299,16 +326,19 @@ All utilities are working and tested across browsers.
 ### Troubleshooting
 
 **Tests timing out on worker initialization:**
+
 - Check that the dev server is running correctly
 - Verify COOP/COEP headers are set
 - Ensure all required browser APIs are available
 
 **Multi-tab tests failing:**
+
 - Browser may be blocking multiple tabs
 - IndexedDB quota issues
 - Lock API implementation differences
 
 **Responsive tests failing:**
+
 - Viewport changes not taking effect
 - CSS not loading properly
 - Worker performance issues on mobile
@@ -316,24 +346,25 @@ All utilities are working and tested across browsers.
 ## Adding New Tests
 
 ### Test Structure
-```typescript
-import { test, expect } from '@playwright/test';
-import { waitForWorkersReady, getWorkerStatus } from './utils/test-helpers';
 
-test.describe('Your Test Suite', () => {
+```typescript
+import { test, expect } from "@playwright/test";
+import { waitForWorkersReady, getWorkerStatus } from "./utils/test-helpers";
+
+test.describe("Your Test Suite", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto("/");
   });
 
-  test('should do something', async ({ page }) => {
+  test("should do something", async ({ page }) => {
     await waitForWorkersReady(page);
-    
+
     const result = await page.evaluate(async () => {
       // Test logic here
       const backend = (window as any).backend;
       return await backend.ping();
     });
-    
+
     expect(result).toBeTruthy();
   });
 });
@@ -351,6 +382,7 @@ test.describe('Your Test Suite', () => {
 ## Performance Considerations
 
 The tests include performance monitoring to ensure:
+
 - Worker initialization completes within reasonable time
 - SQLite operations perform consistently
 - Multi-tab coordination doesn't degrade performance
@@ -359,6 +391,7 @@ The tests include performance monitoring to ensure:
 ## Security Testing
 
 The tests verify critical security headers:
+
 - `Cross-Origin-Embedder-Policy: credentialless`
 - `Cross-Origin-Opener-Policy: same-origin`
 
@@ -367,15 +400,17 @@ These headers are required for SharedArrayBuffer support in modern browsers.
 ## Contributing
 
 When adding new tests:
+
 1. **Start with smoke tests** - add to `smoke.spec.ts` for critical functionality
 2. Follow existing patterns in the test files
 3. Use the provided utility functions
 4. Test primarily on Chrome/Firefox (most reliable)
-5. Add appropriate error handling  
+5. Add appropriate error handling
 6. Include tests for both success and failure scenarios
 7. Update this documentation if needed
 
 ### Development Workflow
+
 1. Write new tests in `smoke.spec.ts` for quick iteration
 2. Move complex tests to specific spec files once working
 3. Test on Chrome first, then Firefox
@@ -384,8 +419,9 @@ When adding new tests:
 ## Success! 🎉
 
 The Roomy app now has a comprehensive, working cross-browser testing suite that:
+
 - ✅ Validates worker system functionality across browsers
-- ✅ Tests SQLite database operations via WebAssembly  
+- ✅ Tests SQLite database operations via WebAssembly
 - ✅ Verifies responsive design across device sizes
 - ✅ Confirms security headers for SharedArrayBuffer support
 - ✅ Provides reliable CI/CD integration
