@@ -331,14 +331,15 @@
             id="discovery"
             aria-labelledby="discovery-label"
             variant="secondary"
-            bind:checked={isDiscoverable}
+            checked={isDiscoverable}
+            disabled={true}
           />
           <Label
             id="discovery-label"
             for="discovery"
             class="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
           >
-            Allow space to be publicly discoverable
+            Allow space to be publicly discoverable.
           </Label>
         </div>
       </div>
