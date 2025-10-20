@@ -105,7 +105,7 @@ const setPreviousStreamSchemaVersion = async (version: string) => {
 };
 
 export let sqliteWorker: SqliteWorkerInterface | undefined;
-let setSqliteWorkerReady = () => {};
+let setSqliteWorkerReady = () => { };
 const sqliteWorkerReady = new Promise(
   (resolve) => (setSqliteWorkerReady = resolve as () => void),
 );
@@ -124,7 +124,7 @@ class Backend {
   openSpacesMaterializer: OpenSpacesMaterializer | undefined;
 
   #oauthReady: Promise<void>;
-  #resolveOauthReady: () => void = () => {};
+  #resolveOauthReady: () => void = () => { };
   get ready() {
     return state.#oauthReady;
   }
