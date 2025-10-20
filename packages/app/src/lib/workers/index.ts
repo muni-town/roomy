@@ -15,12 +15,27 @@ export const backendStatus = reactiveWorkerState<BackendStatus>(
 (globalThis as any).backendStatus = backendStatus;
 
 const workerStatusChannel = new MessageChannel();
+
+/** Reactive status of the sqlite worker for this tab. */
 export const sqliteStatus = reactiveWorkerState<SqliteStatus>(
   workerStatusChannel.port1,
   false,
 );
 
 (globalThis as any).sqliteStatus = sqliteStatus;
+// console.log(
+//   "Main thread: sqliteStatus created, workerId:",
+//   sqliteStatus.workerId,
+// );
+
+// // Add a manual check
+// setInterval(() => {
+//   console.log("Main thread: Current sqliteStatus =", {
+//     workerId: sqliteStatus.workerId,
+//     isActive: sqliteStatus.isActiveWorker,
+//     vfsType: sqliteStatus.vfsType,
+//   });
+// }, 10000);
 
 // Initialize shared worker
 export const hasSharedWorker = "SharedWorker" in globalThis;

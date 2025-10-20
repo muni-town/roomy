@@ -16,6 +16,7 @@ export interface BackendStatus {
 export interface SqliteStatus {
   isActiveWorker: boolean | undefined;
   workerId: string | undefined;
+  vfsType: string | undefined;
 }
 export interface Profile {
   id: string;

@@ -12,6 +12,7 @@ import {
   createLiveQuery,
   disableLiveQueries,
   enableLiveQueries,
+  getVfsType,
 } from "./setupSqlite";
 import { messagePortInterface, reactiveWorkerState } from "./workerMessaging";
 import Dexie, { type EntityTable } from "dexie";
@@ -96,7 +97,8 @@ globalThis.onmessage = (ev) => {
 
   status.workerId = workerId;
   status.isActiveWorker = false; // Initialize to false for reactive state tracking
-  console.log("Worker id", workerId);
+  status.vfsType = undefined; // Will be set after database initialization
+  console.log("SQLite Worker id", workerId);
 
   function cleanup() {
     console.log("SQLite worker: Cleaning up...");
@@ -121,9 +123,7 @@ globalThis.onmessage = (ev) => {
   }
 
   const callback = async () => {
-    console.log(
-      "Sqlite worker lock obtained: I'm now the active sqlite worker.",
-    );
+    console.log("Sqlite worker lock obtained: Active worker id:", workerId);
     status.isActiveWorker = true;
     startHeartbeat();
 
@@ -132,6 +132,8 @@ globalThis.onmessage = (ev) => {
 
     try {
       await initializeDatabase("/mini.db");
+      status.vfsType = getVfsType() || undefined;
+      console.log("SQLite Worker using VFS:", status.vfsType);
 
       const sqliteChannel = new MessageChannel();
       messagePortInterface<SqliteWorkerInterface, {}>(sqliteChannel.port1, {
