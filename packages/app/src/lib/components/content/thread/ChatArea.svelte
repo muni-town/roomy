@@ -34,6 +34,10 @@
     mergeWithPrevious: boolean | null;
     replyTo: string | null;
     reactions: { reaction: string; userId: string; userName: string }[];
+    media: {
+      uri: string;
+      mimeType: string;
+    }[];
   };
 
   let {
@@ -71,6 +75,15 @@
           from edges ed
           join comp_info i on i.entity = ed.head
           where ed.tail = e.id and ed.label = 'reaction'
+        ),
+        'media', (
+          select json_group_array(json_object(
+            'mimeType', m.mime_type,
+            'uri', m.uri
+          ))
+          from comp_media m
+          join entities me on me.id = m.entity
+          where me.parent = e.id
         )
       ) as json
       from entities e

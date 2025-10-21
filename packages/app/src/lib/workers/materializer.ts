@@ -444,10 +444,11 @@ const materializers: {
   "space.roomy.media.create.0": async ({ streamId, event, data }) => [
     ensureEntity(streamId, event.ulid, event.parent),
     sql`
-      insert into comp_media (entity, uri)
+      insert into comp_media (entity, uri, mime_type)
       values (
         ${id(event.ulid)},
-        ${data.uri}
+        ${data.uri},
+        ${data.mimeType}
       )
     `,
   ],

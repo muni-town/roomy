@@ -60,10 +60,13 @@ export type BackendInterface = {
     moduleUrl: string,
     params?: ArrayBuffer,
   ): Promise<string>;
-  uploadImage(
+  uploadToPds(
     bytes: ArrayBuffer,
-    alt?: string,
-  ): Promise<{ blob: BlobRef; uri: string; cid: string; url: string }>;
+    opts?: { alt?: string; mimeType?: string },
+  ): Promise<{
+    blob: ReturnType<BlobRef["toJSON"]>;
+    uri: string;
+  }>;
   /** Adds a new message port connection to the backend that can call the backend interface. */
   addClient(port: MessagePort): Promise<void>;
 };

@@ -4,7 +4,7 @@
 
 <script lang="ts">
   import { patchMake, patchToText } from "diff-match-patch-es";
-  import { Avatar, Checkbox } from "bits-ui";
+  import { Avatar, Checkbox, Portal } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
   import MessageToolbar from "./MessageToolbar.svelte";
@@ -18,7 +18,8 @@
   import { backend, backendStatus } from "$lib/workers";
   import { decodeTime, ulid } from "ulidx";
   import { current } from "$lib/queries.svelte";
-  import { toast } from "@fuxui/base";
+  import { ScrollArea, toast } from "@fuxui/base";
+  import { cdnImageUrl } from "$lib/utils.svelte";
 
   let {
     message,
@@ -80,6 +81,8 @@
   let isSelected = $derived(
     threading?.selectedMessages.find((x) => x.id == message.id) ? true : false,
   );
+
+  let imageZooming = $state(false);
 
   function editMessage() {
     editingMessage.id = message.id;
@@ -299,7 +302,73 @@
 
     <MessageReactions {message} />
   </div>
+
+  <div class="flex flex-wrap gap-4 my-3">
+    {#each message.media.filter((x) => x.mimeType.startsWith("image")) as media}
+      <a
+        href={`#${encodeURIComponent(media.uri)}`}
+        aria-label="image full screen"
+      >
+        <img
+          src={cdnImageUrl(media.uri, { size: "thumbnail" })}
+          class="max-w-[15em]"
+        />
+      </a>
+    {/each}
+
+    <!-- TODO: display videos from Bluesky CDN. -->
+  </div>
 </div>
+
+<Portal>
+  {#each message.media.filter((x) => x.mimeType.startsWith("image")) as media}
+    <div
+      id={encodeURIComponent(media.uri)}
+      class="media-overlay"
+      tabindex="0"
+      onclick={() => {
+        imageZooming = false;
+        window.location.href = "#";
+      }}
+      onkeydown={(e) => {
+        if (e.key == " ") {
+          imageZooming = !imageZooming;
+        } else if (e.key == "Escape") {
+          window.location.href = "#";
+          imageZooming = false;
+        }
+      }}
+    >
+      <a
+        class="flex justify-center items-center absolute top-8 right-8 font-bold size-12 py-3 rounded-full bg-black/50"
+        href="#"
+        onclick={() => {
+          imageZooming = false;
+        }}
+      >
+        X
+      </a>
+      <ScrollArea orientation="both" class="m-auto max-w-full max-h-full">
+        <img
+          src={cdnImageUrl(media.uri)}
+          class="transition-all duration-100 ease-linear"
+          class:no-zoom={!imageZooming}
+          onload={(e) => {
+            const img = e.currentTarget as HTMLImageElement;
+            img.setAttribute(
+              "style",
+              `max-width: ${img.naturalWidth}px; max-height: ${img.naturalHeight}px`,
+            );
+          }}
+          onclick={(e) => {
+            e.stopPropagation();
+            imageZooming = !imageZooming;
+          }}
+        />
+      </ScrollArea>
+    </div>
+  {/each}
+</Portal>
 
 {#snippet timestamp(date: Date)}
   {@const formattedDate = isToday(date) ? "Today" : format(date, "P")}
@@ -307,3 +376,30 @@
     {formattedDate}, {format(date, "pp")}
   </time>
 {/snippet}
+
+<style>
+  .media-overlay {
+    display: flex;
+    position: fixed;
+    top: 0px;
+    bottom: 0px;
+    right: 0px;
+    left: 0px;
+    transition: all 0.5s;
+    pointer-events: none;
+    box-sizing: border-box;
+    background-color: hsla(0, 0%, 0%, 0.86);
+    opacity: 0;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+  }
+  .media-overlay:target {
+    pointer-events: initial;
+    opacity: 1;
+  }
+  .no-zoom {
+    max-width: 90vw !important;
+    max-height: 90vh !important;
+  }
+</style>

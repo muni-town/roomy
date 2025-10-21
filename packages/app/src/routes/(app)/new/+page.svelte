@@ -73,7 +73,7 @@
 
       const avatarUpload =
         avatarFile &&
-        (await backend.uploadImage(await avatarFile.arrayBuffer()));
+        (await backend.uploadToPds(await avatarFile.arrayBuffer()));
 
       const batch: EventType[] = [];
 
@@ -84,8 +84,8 @@
         variant: {
           kind: "space.roomy.info.0",
           data: {
-            avatar: avatarUpload?.url
-              ? { set: avatarUpload.url }
+            avatar: avatarUpload?.uri
+              ? { set: avatarUpload.uri }
               : { ignore: undefined },
             name: currentSpaceName
               ? { set: currentSpaceName }

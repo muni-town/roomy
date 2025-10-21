@@ -157,6 +157,26 @@ export const Toggle = ({
   };
 };
 
+/**
+ * Takes an image URI, which may be a normal http URL or possibly an atblob:// URI and returns an
+ * HTTP URL that can be used to display the image.
+ *
+ * Returns undefined if the URI fails to parse
+ * */
+export function cdnImageUrl(
+  uri: string,
+  opts?: { size: "full" | "thumbnail" },
+): string | undefined {
+  if (uri.startsWith("atblob://")) {
+    const split = uri.split("atblob://")[1]?.split("/");
+    if (!split || split.length != 2) return;
+    const [did, cid] = split as [string, string];
+    return `https://cdn.bsky.app/img/${opts?.size == "thumbnail" ? "feed_thumbnail" : "feed_fullsize"}/plain/${did}/${cid}`;
+  } else {
+    return uri;
+  }
+}
+
 // export function unreadCount<Channel>(
 //   doc: Doc<Channel>,
 //   viewedHeads: Automerge.Heads,

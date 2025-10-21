@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { cdnImageUrl } from "$lib/utils.svelte";
   import { AvatarMarble } from "svelte-boring-avatars";
 
   let {
@@ -20,7 +21,7 @@
 >
   {#if imageUrl}
     <img
-      src={imageUrl}
+      src={cdnImageUrl(imageUrl)}
       alt={name}
       class="object-cover object-center h-full w-full"
     />

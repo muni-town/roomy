@@ -491,32 +491,32 @@ function connectMessagePort(port: MessagePortApi) {
         name: "test";
       });
     },
-    async uploadImage(bytes, alt?: string) {
+    async uploadToPds(bytes, opts?: { mimetype?: string; alt?: string }) {
       if (!state.agent) throw new Error("Agent not initialized");
       const resp = await state.agent.com.atproto.repo.uploadBlob(
         new Uint8Array(bytes),
       );
       const blobRef = resp.data.blob;
+      if (opts?.mimetype) blobRef.mimeType = opts?.mimetype;
+      const blobInfo = {
+        blob: blobRef.toJSON(),
+        uri: `atblob://${state.agent.assertDid}/${blobRef.ref}`,
+      };
+
       // Create a record that links to the blob
       const record = {
-        $type: "space.roomy.image",
+        $type: "space.roomy.upload",
         image: blobRef,
-        alt,
+        alt: opts?.alt,
       };
       // Put the record in the repository
-      const putResponse = await state.agent.com.atproto.repo.putRecord({
+      await state.agent.com.atproto.repo.putRecord({
         repo: state.agent.assertDid,
-        collection: "space.roomy.image",
+        collection: "space.roomy.upload",
         rkey: `${Date.now()}`, // Using timestamp as a unique key
         record: record,
       });
-      const url = `https://cdn.bsky.app/img/feed_thumbnail/plain/${state.agent.assertDid}/${blobRef.ipld().ref}`;
-      return {
-        blob: blobRef,
-        uri: putResponse.data.uri,
-        cid: putResponse.data.cid,
-        url,
-      };
+      return blobInfo;
     },
     async addClient(port) {
       connectMessagePort(port);

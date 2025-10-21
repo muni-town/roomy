@@ -18,11 +18,12 @@
   import UploadFileButton from "$lib/components/helper/UploadFileButton.svelte";
   import { backend } from "$lib/workers";
   import { current } from "$lib/queries.svelte";
-  import { ulid, monotonicFactory } from "ulidx";
+  import { monotonicFactory } from "ulidx";
   import { page } from "$app/state";
   import type { Message } from "./ChatArea.svelte";
   import { setInputFocus } from "./ChatInput.svelte";
   import { navigate } from "$lib/utils.svelte";
+  import type { EventType } from "$lib/workers/materializer";
 
   let {
     threading = { active: false, selectedMessages: [], name: "" },
@@ -63,8 +64,6 @@
   }
 
   let filesInMessage: File[] = $state([]);
-
-  // let filesUrls: (ImageUrlEmbedCreate | VideoUrlEmbedCreate)[] = [];
 
   function processImageFile(file: File) {
     filesInMessage.push(file);
@@ -149,17 +148,33 @@
   let isSendingMessage = $state(false);
   async function sendMessage(e: SubmitEvent) {
     e.preventDefault();
+    if (!messageInput && filesInMessage.length == 0) return;
     const message = messageInput;
     messageInput = "";
+    const filesToUpload = [...filesInMessage];
+    filesInMessage = [];
+    previewImages = [];
     const replyToId = replyTo?.id;
     replyTo = null;
+
+    const uploadedFiles: { uri: string; mimeType: string }[] = [];
+    for (const media of filesToUpload) {
+      const { uri } = await backend.uploadToPds(await media.arrayBuffer(), {
+        mimeType: media.type,
+      });
+      uploadedFiles.push({ uri, mimeType: media.type });
+    }
 
     if (!current.space) return;
     try {
       isSendingMessage = true;
 
-      await backend.sendEvent(current.space.id, {
-        ulid: ulid(),
+      const ulid = monotonicFactory();
+      const events: EventType[] = [];
+
+      const messageId = ulid();
+      events.push({
+        ulid: messageId,
         parent: page.params.object,
         variant: {
           kind: "space.roomy.message.create.0",
@@ -172,11 +187,29 @@
           },
         },
       });
+
+      for (const { uri: uri, mimeType } of uploadedFiles) {
+        events.push({
+          ulid: ulid(),
+          parent: messageId,
+          variant: {
+            kind: "space.roomy.media.create.0",
+            data: {
+              uri,
+              mimeType,
+            },
+          },
+        });
+      }
+
+      await backend.sendEventBatch(current.space.id, events);
     } catch (e: any) {
       console.error(e);
       toast.error("Failed to send message.", { position: "bottom-right" });
     } finally {
       isSendingMessage = false;
+      previewImages = [];
+      filesInMessage = [];
     }
   }
 </script>

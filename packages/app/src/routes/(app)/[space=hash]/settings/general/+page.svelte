@@ -34,7 +34,7 @@
 
       const avatarUpload =
         avatarFile &&
-        (await backend.uploadImage(await avatarFile.arrayBuffer()));
+        (await backend.uploadToPds(await avatarFile.arrayBuffer()));
 
       // Update space info
       await backend.sendEvent(current.space.id, {
@@ -45,7 +45,7 @@
           data: {
             avatar:
               avatarChanged && avatarUpload
-                ? { set: avatarUpload.url }
+                ? { set: avatarUpload.uri }
                 : { ignore: undefined },
             name: nameChanged ? { set: spaceName } : { ignore: undefined },
             description: descriptionChanged

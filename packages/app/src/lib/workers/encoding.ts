@@ -324,6 +324,7 @@ export const eventVariantCodec = Kinds({
   "space.roomy.media.create.0": Struct({
     /** For now all media is external and we use a URI to load it. */
     uri: str,
+    mimeType: str,
   }),
   "space.roomy.media.delete.0": _void,
   /** Mark a room as a channel. */

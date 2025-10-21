@@ -96,7 +96,8 @@ create table if not exists comp_override_meta (
 
 create table if not exists comp_media (
   entity blob primary key references entities(ulid) on delete cascade,
-  uri text,
+  uri text not null,
+  mime_type text not null,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
