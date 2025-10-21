@@ -8,7 +8,8 @@
   import { LiveQuery } from "$lib/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { id } from "$lib/workers/encoding";
-  import { Input, Modal, Popover, Tabs } from "@fuxui/base";
+  import Tabs from "$lib/components/layout/Tabs.svelte";
+  import { Input, Modal, Popover } from "@fuxui/base";
   import { Box, Button } from "@fuxui/base";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { monotonicFactory, ulid } from "ulidx";
