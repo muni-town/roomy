@@ -20,6 +20,7 @@
   import type { EventType } from "$lib/workers/materializer";
   import PageView from "$lib/components/content/page/PageView.svelte";
   import PageHistory from "$lib/components/content/page/PageHistory.svelte";
+  import { navigate } from "$lib/utils.svelte";
 
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
@@ -103,6 +104,7 @@
     try {
       await backend.sendEventBatch(current.space.id, events);
       toast.success(`Created page: ${pageName}`);
+      navigate({ space: current.space.id, object: pageId });
     } catch (e) {
       toast.error(`Error creating page: ${e}`);
     } finally {
