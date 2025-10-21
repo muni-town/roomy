@@ -8,7 +8,7 @@ import type {
 } from "./types";
 
 // Force page reload when hot reloading this file to avoid confusion if the workers get mixed up.
-if (import.meta.hot) {
+if (import.meta.hot && !(window as any).__playwright) {
   import.meta.hot.accept(() => window.location.reload());
 }
 
@@ -20,10 +20,27 @@ export const backendStatus = reactiveWorkerState<BackendStatus>(
 (globalThis as any).backendStatus = backendStatus;
 
 const workerStatusChannel = new MessageChannel();
+
+/** Reactive status of the sqlite worker for this tab. */
 export const sqliteStatus = reactiveWorkerState<SqliteStatus>(
   workerStatusChannel.port1,
   false,
 );
+
+(globalThis as any).sqliteStatus = sqliteStatus;
+// console.log(
+//   "Main thread: sqliteStatus created, workerId:",
+//   sqliteStatus.workerId,
+// );
+
+// // Add a manual check
+// setInterval(() => {
+//   console.log("Main thread: Current sqliteStatus =", {
+//     workerId: sqliteStatus.workerId,
+//     isActive: sqliteStatus.isActiveWorker,
+//     vfsType: sqliteStatus.vfsType,
+//   });
+// }, 10000);
 
 // Initialize shared worker
 export const hasSharedWorker = "SharedWorker" in globalThis;
@@ -67,3 +84,28 @@ sqliteWorker.postMessage(
   },
   [sqliteWorkerChannel.port2, workerStatusChannel.port2],
 );
+
+// for running in console REPL
+(window as any).debugWorkers = {
+  async pingBackend() {
+    try {
+      const result = await backend.ping();
+      console.log("Main thread: Backend ping result", result);
+      return result;
+    } catch (error) {
+      console.error("Main thread: Backend ping failed", error);
+      throw error;
+    }
+  },
+
+  async testSqliteConnection() {
+    try {
+      const result = await backend.runQuery({ sql: "SELECT 1 as test" });
+      console.log("Main thread: SQLite test query result", result);
+      return result;
+    } catch (error) {
+      console.error("Main thread: SQLite test query failed", error);
+      throw error;
+    }
+  },
+};

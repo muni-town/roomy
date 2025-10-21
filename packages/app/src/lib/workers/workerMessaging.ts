@@ -27,7 +27,14 @@ type IncomingMessage<In extends HalfInterface, Out extends HalfInterface> =
     }[keyof Out];
 
 /**
- * Wrap a message port to allow calling remote functions and providing functions to a remote worker.
+ * Establish a a typed bidirectional RPC (remote procedure call) layer on a message port.
+ * The `Local` type parameter defines the functions that can be called by the remote side,
+ * while the `Remote` type parameter defines the functions that can be called on the returned
+ * proxy object to invoke functions on the remote side.
+ *
+ * Sets up a message port to listen for events representing incoming function calls, and
+ * route them to the provided local handlers. Returns a Proxy object for calling remote
+ * functions as if they were local async functions.
  * */
 export function messagePortInterface<
   Local extends HalfInterface,

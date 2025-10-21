@@ -6,13 +6,20 @@ import initSqlite3, {
 } from "@sqlite.org/sqlite-wasm";
 import { IdCodec } from "./encoding";
 import type { SqlStatement } from "./backendWorker";
+import { decodeTime, isValid as isValidUlid } from "ulidx";
+import { patchApply, patchFromText } from "diff-match-patch-es";
 
 let sqlite3: Sqlite3Static | null = null;
 let db: OpfsSAHPoolDatabase | Database | null = null;
 let initPromise: Promise<void> | null = null;
+let vfsType: string | null = null;
 
 export function isDatabaseReady(): boolean {
   return !!db;
+}
+
+export function getVfsType(): string | null {
+  return vfsType;
 }
 
 /** This is a queue of all operations recorded by our global sqlite authorizer */
@@ -41,24 +48,89 @@ export async function initializeDatabase(dbName: string): Promise<void> {
     }
 
     let lastErr: unknown = null;
+
+    // Strategy 1: Try OpfsSAHPoolVfs (best performance, no COOP/COEP required)
     // Retry a few times because SAH Pool can transiently fail during context handoff
+    console.log("Attempting to initialize with OpfsSAHPoolVfs...");
     for (let attempt = 0; attempt < 6; attempt++) {
       try {
         const pool = await sqlite3.installOpfsSAHPoolVfs({});
         db = new pool.OpfsSAHPoolDb(dbName);
+        db.exec(`pragma locking_mode = exclusive`);
+        db.exec(`pragma synchronous = normal`);
+        db.exec(`pragma journal_mode = wal`);
+        vfsType = "opfs-sahpool";
         break;
       } catch (e) {
         lastErr = e;
         await new Promise((r) => setTimeout(r, 100 * Math.pow(2, attempt)));
       }
     }
-    if (!db) throw lastErr ?? new Error("sahpool_init_failed");
+
+    // Strategy 2: Fall back to regular OPFS VFS (requires COOP/COEP headers)
+    // if (!db && sqlite3.capi.sqlite3_vfs_find("opfs")) {
+    //   console.warn(
+    //     "OpfsSAHPoolVfs failed, attempting regular OPFS VFS...",
+    //     lastErr,
+    //   );
+    //   try {
+    //     // Check if cross-origin isolation is available
+    //     if (
+    //       typeof crossOriginIsolated !== "undefined" &&
+    //       !crossOriginIsolated
+    //     ) {
+    //       console.warn(
+    //         "Cross-origin isolation not available - OPFS VFS may not work",
+    //       );
+    //     }
+
+    //     // The regular OPFS VFS is available - try to use it
+    //     db = new sqlite3.oo1.OpfsDb(dbName);
+    //     db.exec(`pragma locking_mode = exclusive`);
+    //     db.exec(`pragma synchronous = normal`);
+    //     db.exec(`pragma journal_mode = wal`);
+    //     vfsType = "opfs";
+    //     lastErr = null; // Clear the error since we succeeded
+    //   } catch (e) {
+    //     console.error("Regular OPFS VFS also failed:", e);
+    //     lastErr = e;
+    //   }
+    // }
+
+    // Strategy 3: Fall back to in-memory database (for testing environments like Playwright)
+    if (!db) {
+      console.warn(
+        "All persistent storage options failed, falling back to in-memory database...",
+        lastErr,
+      );
+      try {
+        db = new sqlite3.oo1.DB(":memory:");
+        db.exec(`pragma locking_mode = exclusive`);
+        db.exec(`pragma synchronous = normal`);
+        db.exec(`pragma journal_mode = memory`);
+        vfsType = "memory";
+        lastErr = null; // Clear the error since we succeeded
+        console.warn(
+          "⚠️  Using in-memory database - data will not persist across page reloads",
+        );
+      } catch (e) {
+        console.error("In-memory database fallback also failed:", e);
+        lastErr = e;
+      }
+    }
+
+    if (!db) {
+      const error = new Error(
+        `Failed to initialize database with any available VFS. Last error: ${lastErr}`,
+      );
+      console.error("Database initialization failed:", error);
+      throw error;
+    }
+
+    console.log(`✓ Database initialized successfully using VFS: ${vfsType}`);
 
     // Set an authorizer function that will allow us to track reads and writes to the database
     sqlite3.capi.sqlite3_set_authorizer(db, authorizer, 0);
-    db.exec("pragma locking_mode = exclusive;");
-    db.exec("pragma journal_mode = wal");
-    db.exec("pragma page_size = 8192");
 
     // Parse a binary ID to it's string representation
     db.createFunction("id", (_ctx, blob) => {
@@ -68,11 +140,60 @@ export async function initializeDatabase(dbName: string): Promise<void> {
         return blob;
       }
     });
+    // Format a string ID to it's binary format
+    db.createFunction(
+      "print",
+      (_ctx, ...args) => {
+        console.log("%c[sqlite log]", "color: green", ...args);
+        return null;
+      },
+      { arity: -1, deterministic: false },
+    );
+    // Format a string ID to it's binary format
+    db.createFunction("make_id", (_ctx, id) => {
+      if (typeof id == "string") {
+        return IdCodec.enc(id);
+      } else {
+        return id;
+      }
+    });
+    db.createFunction("is_ulid", (_ctx, id) => {
+      if (typeof id == "string") {
+        return isValidUlid(id) ? 1 : 0;
+      } else if (id instanceof Uint8Array) {
+        return isValidUlid(IdCodec.dec(id)) ? 1 : 0;
+      } else {
+        return 0;
+      }
+    });
+    db.createFunction("ulid_timestamp", (_ctx, id) => {
+      if (typeof id == "string") {
+        return decodeTime(id);
+      } else if (id instanceof Uint8Array) {
+        return decodeTime(IdCodec.dec(id));
+      } else {
+        return id;
+      }
+    });
+    db.createFunction("apply_dmp_patch", (_ctx, content, patch) => {
+      if (!(typeof content == "string" && typeof patch == "string"))
+        throw "Expected two string arguments to apply_dpm_patch()";
+
+      const [patched, _successful] = patchApply(
+        patchFromText(patch),
+        content,
+      ) as [string, boolean[]];
+
+      return patched;
+    });
   })();
   await initPromise;
 }
 
-export type QueryResult = { rows?: { [key: string]: unknown }[]; ok?: true } & {
+export type QueryResult<Row = { [key: string]: unknown }> = {
+  rows?: Row[];
+  ok?: true;
+} & {
   actions: Action[];
 };
 export async function executeQuery(
@@ -124,17 +245,16 @@ function runPreparedStatement(
 ): { ok: true } | { rows: { [key: string]: unknown }[] } {
   const rows = [];
   const columnCount = statement.columnCount;
-  const columnNames = [
-    ...Array(columnCount)
-      .keys()
-      .map((x) => statement.getColumnName(x)),
-  ];
+  const columnNames = Array.from(Array(columnCount).keys()).map((x) =>
+    statement.getColumnName(x),
+  );
   while (statement.step()) {
     rows.push(
       Object.fromEntries(
-        Array(columnCount)
-          .keys()
-          .map((i) => [columnNames[i], statement.get(i)]),
+        Array.from(Array(columnCount).keys()).map((i) => [
+          columnNames[i],
+          statement.get(i),
+        ]),
       ),
     );
   }

@@ -6,14 +6,26 @@ import type { SqlStatement } from "./backendWorker";
 import type { IncomingEvent } from "@muni-town/leaf-client";
 
 export interface BackendStatus {
+  workerRunning: boolean | undefined;
   authLoaded: boolean | undefined;
   did: string | undefined;
   profile: ProfileViewDetailed | undefined;
   leafConnected: boolean | undefined;
   personalStreamId: string | undefined;
+  loadingSpaces: number | undefined;
 }
 export interface SqliteStatus {
   isActiveWorker: boolean | undefined;
+  workerId: string | undefined;
+  vfsType: string | undefined;
+}
+export interface Profile {
+  id: string;
+  handle?: string;
+  avatar?: string;
+  displayName?: string;
+  banner?: string;
+  description?: string;
 }
 
 export type BackendInterface = {
@@ -21,9 +33,11 @@ export type BackendInterface = {
   logout(): Promise<void>;
   oauthCallback(searchParams: string): Promise<void>;
   runQuery(statement: SqlStatement): Promise<QueryResult>;
+  loadProfile(did: string): Promise<Profile | undefined>;
   dangerousCompletelyDestroyDatabase(opts: {
     yesIAmSure: true;
   }): Promise<unknown>;
+  ping(): Promise<{ timestamp: number; workerId: string }>;
   createLiveQuery(
     id: string,
     port: MessagePort,
@@ -79,6 +93,7 @@ export type SqliteWorkerInterface = {
     statement: SqlStatement,
   ): Promise<void>;
   deleteLiveQuery(id: string): Promise<void>;
-  runQuery(statement: SqlStatement): Promise<QueryResult>;
+  runQuery<Row>(statement: SqlStatement): Promise<QueryResult<Row>>;
   runSavepoint(savepoint: Savepoint): Promise<void>;
+  ping(): Promise<{ timestamp: number; workerId: string; isActive: boolean }>;
 };

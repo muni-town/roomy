@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button, toast } from "@fuxui/base";
+  import { Button, Input, toast } from "@fuxui/base";
   import { Slider } from "@fuxui/base";
   import { Stopwatch, StopwatchState } from "@fuxui/time";
   import { launchConfetti } from "@fuxui/visual";
@@ -11,7 +11,15 @@
   import { monotonicFactory } from "ulidx";
   import type { EventType } from "$lib/workers/materializer";
   import { sql } from "$lib/utils/sqlTemplate";
+  import { formatDate } from "date-fns";
 
+  let cutoffDateInput = $state("");
+  let cutoffDate = $derived.by(() => {
+    if (!cutoffDateInput) return;
+    const parsed = new Date(cutoffDateInput);
+    if (isNaN(parsed.getTime())) return;
+    return parsed;
+  });
   let files = $state(undefined) as FileList | undefined;
 
   let guildProgress = $state(0);
@@ -73,28 +81,67 @@
     try {
       const reader = new zip.ZipReader(new zip.BlobReader(file));
 
-      const entries = await reader.getEntries();
+      const entries = (
+        await Promise.all(
+          (await reader.getEntries()).map(async (entry) => {
+            if (!entry.getData) return undefined;
+            const dataWriter = new zip.BlobWriter("application/json");
+            await entry.getData(dataWriter);
+            const data = new Uint8Array(
+              await (await dataWriter.getData()).arrayBuffer(),
+            );
+            if (data.length == 0) return undefined;
+            const channel: types.ImportChannel = JSON.parse(
+              new TextDecoder().decode(data),
+            );
+            return channel;
+          }),
+        )
+      ).filter((x) => !!x) as types.ImportChannel[];
       channelCount = entries.length;
 
+      // Create all the threads and channels up-front
+      const rooms: Map<
+        string,
+        {
+          kind: "category" | "channel" | "thread";
+          name: string;
+          discordParentId?: string;
+          topic?: string;
+          roomyId: string;
+        }
+      > = new Map();
+
       for (const entry of entries) {
-        if (!entry.getData) continue;
-        const dataWriter = new zip.BlobWriter("application/json");
-        await entry.getData(dataWriter);
-        const data = new Uint8Array(
-          await (await dataWriter.getData()).arrayBuffer(),
-        );
-        if (data.length == 0) continue;
-        const channel: types.ImportChannel = JSON.parse(
-          new TextDecoder().decode(data),
-        );
+        const parentInfo = rooms.get(entry.channel.categoryId);
+        if (!parentInfo) {
+          rooms.set(entry.channel.categoryId, {
+            kind:
+              entry.channel.type == "GuildPublicThread"
+                ? "channel"
+                : "category",
+            name: entry.channel.category,
+            roomyId: ulid(),
+          });
+        }
 
-        currentChannelImportingName = channel.channel.name;
-        messageCount = channel.messageCount;
+        const existingChannelInfo = rooms.get(entry.channel.id);
+        rooms.set(entry.channel.id, {
+          discordParentId: entry.channel.categoryId,
+          kind:
+            entry.channel.type == "GuildPublicThread" ? "thread" : "channel",
+          name: entry.channel.name,
+          roomyId: existingChannelInfo?.roomyId || ulid(),
+          topic: entry.channel.topic,
+        });
+      }
 
-        const channelId = ulid();
+      for (const room of rooms.values()) {
+        const roomyParentId =
+          room.discordParentId && rooms.get(room.discordParentId)?.roomyId;
         batch.push({
-          ulid: channelId,
-          parent: undefined,
+          ulid: room.roomyId,
+          parent: roomyParentId,
           variant: {
             kind: "space.roomy.room.create.0",
             data: undefined,
@@ -102,32 +149,54 @@
         });
         batch.push({
           ulid: ulid(),
-          parent: channelId,
+          parent: room.roomyId,
           variant: {
             kind: "space.roomy.info.0",
             data: {
               name: {
-                set: channel.channel.name,
+                set: room.name,
               },
               avatar: { ignore: undefined },
-              description: { set: channel.channel.topic },
+              description: room.topic
+                ? { set: room.topic }
+                : { ignore: undefined },
             },
           },
         });
         batch.push({
           ulid: ulid(),
-          parent: channelId,
+          parent: room.roomyId,
           variant: {
-            kind: "space.roomy.channel.mark.0",
+            kind:
+              room.kind == "category"
+                ? "space.roomy.category.mark.0"
+                : room.kind == "channel"
+                  ? "space.roomy.channel.mark.0"
+                  : "space.roomy.thread.mark.0",
             data: undefined,
           },
         });
+      }
+
+      for (const channel of entries) {
+        currentChannelImportingName = channel.channel.name;
+        messageCount = channel.messageCount;
+
+        let roomId = rooms.get(channel.channel.id)?.roomyId;
+        if (!roomId) return;
 
         for (const message of channel.messages) {
+          if (
+            cutoffDate &&
+            new Date(message.timestamp).getTime() < cutoffDate.getTime()
+          ) {
+            continue;
+          }
+
           const messageId = ulid();
           batch.push({
             ulid: messageId,
-            parent: channelId,
+            parent: roomId,
             variant: {
               kind: "space.roomy.message.create.0",
               data: {
@@ -144,7 +213,7 @@
             for (const user of reaction.users) {
               batch.push({
                 ulid: ulid(),
-                parent: channelId,
+                parent: roomId,
                 variant: {
                   kind: "space.roomy.reaction.bridged.create.0",
                   data: {
@@ -200,7 +269,7 @@
               data: {
                 author,
                 timestamp: BigInt(
-                  Math.round(new Date(message.timestamp).getTime() / 100),
+                  Math.round(new Date(message.timestamp).getTime()),
                 ),
               },
             },
@@ -245,6 +314,22 @@
     </h2>
 
     <p>Import a Discord zip archive into your Roomy space.</p>
+
+    <label class="flex flex-col gap-2">
+      Cutoff date:
+      <Input bind:value={cutoffDateInput} placeholder="Jan 10 2020" />
+      {#if cutoffDate != undefined}
+        <span class="text-sm"
+          >Messages older than {formatDate(cutoffDate, "MMM dd, yyyy")} will not
+          be imported.</span
+        >
+      {:else}
+        <span class="text-sm"
+          >Optionally specify a date and messages older than that will not be
+          imported.</span
+        >
+      {/if}
+    </label>
 
     <div class="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
       <label
