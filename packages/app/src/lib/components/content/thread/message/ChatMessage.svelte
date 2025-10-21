@@ -303,21 +303,23 @@
     <MessageReactions {message} />
   </div>
 
-  <div class="flex flex-wrap gap-4 my-3">
-    {#each message.media.filter((x) => x.mimeType.startsWith("image")) as media}
-      <a
-        href={`#${encodeURIComponent(media.uri)}`}
-        aria-label="image full screen"
-      >
-        <img
-          src={cdnImageUrl(media.uri, { size: "thumbnail" })}
-          class="max-w-[15em]"
-        />
-      </a>
-    {/each}
+  {#if message.media.length}
+    <div class="flex flex-wrap gap-4 my-3">
+      {#each message.media.filter( (x) => x.mimeType.startsWith("image"), ) as media}
+        <a
+          href={`#${encodeURIComponent(media.uri)}`}
+          aria-label="image full screen"
+        >
+          <img
+            src={cdnImageUrl(media.uri, { size: "thumbnail" })}
+            class="max-w-[15em]"
+          />
+        </a>
+      {/each}
 
-    <!-- TODO: display videos from Bluesky CDN. -->
-  </div>
+      <!-- TODO: display videos from Bluesky CDN. -->
+    </div>
+  {/if}
 </div>
 
 <Portal>
