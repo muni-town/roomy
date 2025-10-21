@@ -8,15 +8,18 @@
   import { LiveQuery } from "$lib/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { id } from "$lib/workers/encoding";
-  import Tabs from "$lib/components/layout/Tabs.svelte";
-  import { Input, Modal, Popover } from "@fuxui/base";
-  import { Box, Button } from "@fuxui/base";
+  import ToggleTabs from "$lib/components/layout/Tabs.svelte";
+  import { Input, Modal, Popover, toast } from "@fuxui/base";
+  import { Box, Button, Tabs } from "@fuxui/base";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { monotonicFactory, ulid } from "ulidx";
 
   import IconMdiArrowRight from "~icons/mdi/arrow-right";
   import ChannelBoardView from "$lib/components/content/thread/boardView/ChannelBoardView.svelte";
   import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
+  import type { EventType } from "$lib/workers/materializer";
+  import PageView from "$lib/components/content/page/PageView.svelte";
+  import PageHistory from "$lib/components/content/page/PageHistory.svelte";
 
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
@@ -33,6 +36,78 @@
         },
       },
     });
+  }
+
+  let createPageDialogOpen = $state(false);
+  let createPageName = $state("");
+  async function createPage() {
+    const pageName = createPageName;
+    const ulid = monotonicFactory();
+    if (!current.space || !page.params.space || !object) return;
+
+    promoteChannelDialogOpen = false;
+
+    const events: EventType[] = [];
+
+    // Create a new room for the page
+    const pageId = ulid();
+    events.push({
+      ulid: pageId,
+      parent: page.params.object,
+      variant: {
+        kind: "space.roomy.room.create.0",
+        data: undefined,
+      },
+    });
+
+    // Mark the room as a page
+    events.push({
+      ulid: ulid(),
+      parent: pageId,
+      variant: {
+        kind: "space.roomy.page.mark.0",
+        data: undefined,
+      },
+    });
+
+    // Set the page name
+    events.push({
+      ulid: ulid(),
+      parent: pageId,
+      variant: {
+        kind: "space.roomy.info.0",
+        data: {
+          name: { set: pageName },
+          avatar: { ignore: undefined },
+          description: { ignore: undefined },
+        },
+      },
+    });
+
+    events.push({
+      ulid: ulid(),
+      parent: pageId,
+      variant: {
+        kind: "space.roomy.page.edit.0",
+        data: {
+          content: {
+            content: new TextEncoder().encode(
+              `# ${pageName}\n\nNew page. Fill me with something awesome. ✨`,
+            ),
+            mimeType: "text/markdown",
+          },
+        },
+      },
+    });
+
+    try {
+      await backend.sendEventBatch(current.space.id, events);
+      toast.success(`Created page: ${pageName}`);
+    } catch (e) {
+      toast.error(`Error creating page: ${e}`);
+    } finally {
+      createPageDialogOpen = false;
+    }
   }
 
   let promoteChannelName = $state("");
@@ -97,18 +172,31 @@
     promoteChannelDialogOpen = false;
   }
 
-  let activeTab = $state("Chat") as "Chat" | "Threads";
+  const channelTabList = ["Chat", "Threads", "Pages"] as const;
+  let channelActiveTab = $state("Chat") as (typeof channelTabList)[number];
   $effect(() => {
     if (page.url.hash == "#chat") {
-      activeTab = "Chat";
+      channelActiveTab = "Chat";
     } else if (page.url.hash == "#threads") {
-      activeTab = "Threads";
+      channelActiveTab = "Threads";
+    } else if (page.url.hash == "#pages") {
+      channelActiveTab = "Pages";
     } else {
-      activeTab = "Chat";
+      channelActiveTab = "Chat";
     }
   });
 
-  const query = new LiveQuery<{
+  const pageTabList = ["Page", "History"] as const;
+  let pageActiveTab = $state("Page") as (typeof pageTabList)[number];
+  $effect(() => {
+    if (page.url.hash == "#history") {
+      pageActiveTab = "History";
+    } else {
+      pageActiveTab = "Page";
+    }
+  });
+
+  const objectQuery = new LiveQuery<{
     name: string;
     kind: string;
     parent?: { id: string; name: string; kind: string; parent: string | null };
@@ -137,7 +225,7 @@
   `,
     (row) => JSON.parse(row.json),
   );
-  const object = $derived(query.result?.[0]);
+  const object = $derived(objectQuery.result?.[0]);
 </script>
 
 <MainLayout>
@@ -153,7 +241,7 @@
         >
           {#if object?.parent && object.parent.kind == "channel"}
             <a
-              href={`/${page.params.space}/${object.parent.id}`}
+              href={`/${page.params.space}/${object.parent.id}${object.kind == "page" ? "#pages" : object.kind == "thread" ? "#threads" : ""}`}
               class="hover:underline underline-offset-4"
             >
               {object?.parent?.name}
@@ -164,12 +252,12 @@
         </h2>
         <span class="flex-grow"></span>
         {#if object?.kind == "channel"}
-          <Tabs
-            items={[
-              { name: "Chat", href: "#chat" },
-              { name: "Threads", href: "#threads" },
-            ]}
-            active={activeTab}
+          <ToggleTabs
+            items={channelTabList.map((x) => ({
+              name: x,
+              href: `#${x.toLowerCase()}`,
+            }))}
+            active={channelActiveTab}
           />
         {/if}
         <span class="flex-grow"></span>
@@ -209,6 +297,34 @@
               </div>
             </form>
           </Modal>
+        {:else if object?.kind == "channel"}
+          <Button onclick={() => (createPageDialogOpen = true)}
+            >Create Page</Button
+          >
+
+          <Modal bind:open={createPageDialogOpen} title="Create Page">
+            <form
+              class="flex flex-col items-stretch gap-4"
+              onsubmit={createPage}
+            >
+              <label class="flex flex-col gap-2">
+                Page Name
+                <Input bind:value={createPageName} />
+              </label>
+
+              <div class="flex justify-end">
+                <Button type="submit">Create</Button>
+              </div>
+            </form>
+          </Modal>
+        {:else if object?.kind == "page"}
+          <Tabs
+            items={pageTabList.map((x) => ({
+              name: x,
+              href: `#${x.toLowerCase()}`,
+            }))}
+            active={pageActiveTab}
+          />
         {/if}
       </div>
 
@@ -236,13 +352,21 @@
       </Box>
     </div>
   {:else if object?.kind == "channel"}
-    {#if activeTab == "Chat"}
+    {#if channelActiveTab == "Chat"}
       <TimelineView />
-    {:else if activeTab == "Threads"}
+    {:else if channelActiveTab == "Threads"}
       <ChannelBoardView />
+    {:else if channelActiveTab == "Pages"}
+      <ChannelBoardView objectType={"page"} />
     {/if}
   {:else if object?.kind == "thread"}
     <TimelineView />
+  {:else if object?.kind == "page"}
+    {#if pageActiveTab == "Page"}
+      <PageView />
+    {:else}
+      <PageHistory />
+    {/if}
   {:else}
     <div class="p-4">Unknown Object type</div>
   {/if}

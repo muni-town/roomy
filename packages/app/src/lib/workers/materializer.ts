@@ -338,6 +338,53 @@ const materializers: {
         `,
     ];
   },
+  "space.roomy.page.edit.0": async ({ user, streamId, event, data }) => {
+    if (!event.parent) {
+      console.warn("Edit event missing parent");
+      return [];
+    }
+
+    return [
+      ensureEntity(streamId, event.ulid, event.parent),
+      sql`
+        insert into comp_page_edits (edit_id, entity, mime_type, data, user_id) 
+        values (
+          ${id(event.ulid)},
+          ${id(event.parent)},
+          ${data.content.mimeType},
+          ${data.content.content},
+          ${id(user)}
+        )
+      `,
+      data.content.mimeType == "text/x-dmp-patch"
+        ? // If this is a patch, apply the patch using our SQL user-defined-function
+          sql`
+          insert into comp_content (entity, mime_type, data)
+          values (
+            ${id(event.parent)},
+            'text/markdown',
+            cast(apply_dmp_patch('', ${new TextDecoder().decode(data.content.content)}) as blob)
+          )
+          on conflict do update set
+            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(data.content.content)}) as blob)
+        `
+        : // If this is not a patch, just replace the previous value
+          sql`
+          insert into comp_content (entity, mime_type, data)
+          values (
+            ${id(event.parent)},
+            ${data.content.mimeType},
+            ${data.content.content}
+          )
+          on conflict do update
+          set
+            mime_type = ${data.content.mimeType},
+            data = ${data.content.content}
+          where
+            entity = ${id(event.parent)}
+        `,
+    ];
+  },
 
   // TODO: make sure there is valid permission to send override metadata
   "space.roomy.user.overrideMeta.0": async ({ event, data }) => {
@@ -522,6 +569,26 @@ const materializers: {
     }
     return [
       sql`update comp_room set label = null where entity = ${id(event.parent)} and label = 'category'`,
+    ];
+  },
+
+  // Pages
+  "space.roomy.page.mark.0": async ({ event }) => {
+    if (!event.parent) {
+      console.warn("Missing target for page mark.");
+      return [];
+    }
+    return [
+      sql`update comp_room set label = 'page' where entity = ${id(event.parent)}`,
+    ];
+  },
+  "space.roomy.page.unmark.0": async ({ event }) => {
+    if (!event.parent) {
+      console.warn("Missing target for page unmark.");
+      return [];
+    }
+    return [
+      sql`update comp_room set label = null where entity = ${id(event.parent)} and label = 'page'`,
     ];
   },
 };

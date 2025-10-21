@@ -101,3 +101,21 @@ create table if not exists comp_media (
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
+
+-- This is a component, attached to a page room entity,
+-- but because it has multiple values ( a page can have multiple edits )
+-- it has it's own primary key, the ID of the edit, and a separate column
+-- that references the entity ID, so that multiple edits can be tied
+-- to the same entity.
+create table if not exists comp_page_edits( 
+  -- This is the ID of the edit event
+  edit_id blob primary key,
+  -- The page entity that is being edited
+  entity blob references entities(ulid) on delete cascade,
+  mime_type text not null,
+  data blob not null,
+  user_id not null
+  -- We don't need a created_at date because that is in the ULID
+  -- and we don't need an updated_at date because the diff will
+  -- never, itself, be edited.
+)

@@ -15,7 +15,7 @@
 
 <Tabs.Root bind:value={active}>
   <Tabs.List
-    class="rounded-xl bg-base-200/50 dark:bg-base-900/50 grid grid-cols-2 p-1 text-sm font-semibold  border border-base-800/10 dark:border-base-100/10"
+    class="rounded-xl bg-base-200/50 dark:bg-base-900/50 grid grid-cols-3 p-1 text-sm font-semibold  border border-base-800/10 dark:border-base-100/10"
   >
     {#each items as { name, href }}
       <a {href}>

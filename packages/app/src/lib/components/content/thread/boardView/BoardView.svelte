@@ -3,7 +3,10 @@
   import { ScrollArea } from "@fuxui/base";
   import type { ThreadInfo } from "./types";
 
-  const { threads }: { threads: ThreadInfo[] } = $props();
+  const {
+    threads,
+    emptyMessage = "No items",
+  }: { threads: ThreadInfo[]; emptyMessage?: string } = $props();
 </script>
 
 {#if threads.length}
@@ -15,5 +18,7 @@
     {/each}
   </ScrollArea>
 {:else}
-  <div class="p-2">No threads in this Channel.</div>
+  <div class="h-full w-full flex items-center justify-center">
+    <div class="p-2">{emptyMessage}</div>
+  </div>
 {/if}

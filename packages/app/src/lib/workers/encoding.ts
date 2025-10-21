@@ -326,6 +326,17 @@ export const eventVariantCodec = Kinds({
     uri: str,
     mimeType: str,
   }),
+  "space.roomy.page.edit.0": Struct({
+    /**
+     * This content contains a mime-type and the actual content of the edit.
+     *
+     * If the mime type of the edit is just something like text/markdown then it will completely
+     * replace the previous content. Usually it will be text/x-dmp-diff indicating a
+     * meyers-algorithm patch to the previous content, allowing us to display and apply a precise
+     * edit history.
+     * **/
+    content: Content,
+  }),
   "space.roomy.media.delete.0": _void,
   /** Mark a room as a channel. */
   "space.roomy.channel.mark.0": _void,
@@ -339,6 +350,10 @@ export const eventVariantCodec = Kinds({
   "space.roomy.thread.mark.0": _void,
   /** Unmark a room as a thread. */
   "space.roomy.thread.unmark.0": _void,
+  /** Mark a room as a page. */
+  "space.roomy.page.mark.0": _void,
+  /** Unmark a room as a thread. */
+  "space.roomy.page.unmark.0": _void,
 });
 
 export const eventCodec = Struct({

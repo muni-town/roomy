@@ -6,6 +6,11 @@
   import BoardView from "./BoardView.svelte";
   import type { ThreadInfo } from "./types";
 
+  let {
+    objectType = "thread",
+    emptyMessage,
+  }: { objectType?: string; emptyMessage?: string } = $props();
+
   const threadsList = new LiveQuery<ThreadInfo>(
     () =>
       sql`
@@ -52,7 +57,7 @@
               and
             e.parent = ${page.params.object && id(page.params.object)}
               and
-            r.label = 'thread'
+            r.label = ${objectType} 
         )
         order by activity ->> 'latestTimestamp' desc
       `,
@@ -61,5 +66,5 @@
 </script>
 
 {#if threadsList.result || threadsList.error}
-  <BoardView threads={threadsList.result || []} />
+  <BoardView threads={threadsList.result || []} {emptyMessage} />
 {/if}

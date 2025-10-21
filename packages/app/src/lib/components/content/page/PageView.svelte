@@ -1,71 +1,96 @@
 <script lang="ts">
-  import { Button, Prose } from "@fuxui/base";
-  import Icon from "@iconify/svelte";
-  import { PageContent, RoomyAccount } from "@roomy-chat/sdk";
-  import { AccountCoState, CoState } from "jazz-tools/svelte";
+  import { page } from "$app/state";
+  import { LiveQuery } from "$lib/liveQuery.svelte";
+  import { renderMarkdownSanitized } from "$lib/markdown";
+  import { current } from "$lib/queries.svelte";
+  import { sql } from "$lib/utils/sqlTemplate";
+  import { backend } from "$lib/workers";
+  import { id } from "$lib/workers/encoding";
+  import { Button, Prose, ScrollArea } from "@fuxui/base";
   import { RichTextEditor } from "@fuxui/text";
+  import { patchMake, patchToText } from "diff-match-patch-es";
+  import Turndown from "turndown";
+  import { ulid } from "ulidx";
 
-  let { objectId, spaceId: _ }: { objectId: string; spaceId: string } =
-    $props();
-
-  const page = $derived(new CoState(PageContent, objectId));
-
-  const me = new AccountCoState(RoomyAccount, {
-    resolve: {
-      profile: {
-        joinedSpaces: true,
-      },
-    },
-  });
+  import IconTablerCheck from "~icons/tabler/check";
+  import IconTablerPencil from "~icons/tabler/pencil";
 
   let isEditing = $state(false);
 
-  let editingContent = $state("hello");
+  let pageQuery = new LiveQuery<{ content: string }>(
+    () => sql`
+    select cast(data as text) as content
+    from comp_content
+    where
+      entity = ${page.params.object && id(page.params.object)}
+        and
+      mime_type = 'text/markdown'
+  `,
+  );
+  let pageContent = $derived(pageQuery.result?.[0]?.content);
+  let editingContent = $state("");
+
+  async function savePage() {
+    if (!current.space?.id || !page.params.object) return;
+
+    isEditing = false;
+    const newMarkdown = new Turndown().turndown(editingContent);
+    if (pageContent == newMarkdown) return;
+    const patch = patchToText(patchMake(pageContent || "", newMarkdown));
+    await backend.sendEvent(current.space.id, {
+      ulid: ulid(),
+      parent: page.params.object,
+      variant: {
+        kind: "space.roomy.page.edit.0",
+        data: {
+          content: {
+            mimeType: "text/x-dmp-patch",
+            content: new TextEncoder().encode(patch),
+          },
+        },
+      },
+    });
+  }
 </script>
 
-<div class="max-w-4xl mx-auto w-full px-4 py-8">
-  {#if page.current && me.current?.canWrite(page.current)}
+<ScrollArea orientation="vertical">
+  <div class="max-w-4xl mx-auto w-full px-4 py-8">
     <div class="flex justify-end mb-4">
       {#if isEditing}
-        <Button
-          onclick={() => {
-            isEditing = false;
-            if (page.current) {
-              console.log(editingContent);
-              page.current.text = editingContent;
-            }
-          }}
-        >
-          <Icon icon="tabler:check" />
+        <Button onclick={savePage}>
+          <IconTablerCheck />
           Save
         </Button>
       {:else}
         <Button
           variant="secondary"
+          disabled={!pageQuery.result?.length}
           onclick={() => {
-            if (page.current) {
-              editingContent = page.current.text;
-            }
             isEditing = true;
+            editingContent = pageContent
+              ? renderMarkdownSanitized(pageContent)
+              : "";
           }}
         >
-          <Icon icon="tabler:pencil" />
+          <IconTablerPencil />
           Edit
         </Button>
       {/if}
     </div>
-  {/if}
 
-  <Prose>
-    {#if isEditing}
-      <RichTextEditor
-        content={editingContent}
-        onupdate={(_c, ctx) => {
-          editingContent = ctx.editor.getHTML();
-        }}
-      />
-    {:else}
-      {@html page.current?.text || "Empty page..."}
-    {/if}
-  </Prose>
-</div>
+    <Prose>
+      {#if isEditing}
+        <RichTextEditor
+          content={editingContent}
+          onupdate={(_c, ctx) => {
+            editingContent = ctx.editor.getHTML();
+          }}
+        />
+      {:else if pageContent}
+        {@html renderMarkdownSanitized(pageContent)}
+      {:else}
+        Loading...
+      {/if}
+    </Prose>
+  </div>
+</ScrollArea>
