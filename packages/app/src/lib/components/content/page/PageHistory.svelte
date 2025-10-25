@@ -45,7 +45,6 @@
 
     let previousContent = "";
     for (const edit of historyQuery.result || []) {
-      console.log(edit);
       const date = new Date(decodeTime(edit.edit_id));
 
       if (edit.mime_type == "text/x-dmp-patch") {

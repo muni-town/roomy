@@ -23,9 +23,7 @@
     from comp_content
     where
       entity = ${page.params.object && id(page.params.object)}
-        and
-      mime_type = 'text/markdown'
-  `,
+    `,
   );
   let pageContent = $derived(pageQuery.result?.[0]?.content);
   let editingContent = $state("");

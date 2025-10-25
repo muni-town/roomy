@@ -174,6 +174,68 @@
     promoteChannelDialogOpen = false;
   }
 
+  async function convertToThread() {
+    if (!current.space || !page.params.space || !object) return;
+
+    const ulid = monotonicFactory();
+    const events: EventType[] = [
+      {
+        ulid: ulid(),
+        parent: page.params.object,
+        variant: {
+          kind: "space.roomy.channel.unmark.0",
+          data: undefined,
+        },
+      },
+      {
+        ulid: ulid(),
+        parent: page.params.object,
+        variant: {
+          kind: "space.roomy.thread.mark.0",
+          data: undefined,
+        },
+      },
+    ];
+    await backend.sendEventBatch(current.space.id, events);
+  }
+  async function convertToPage() {
+    if (!current.space || !page.params.space || !object) return;
+
+    const ulid = monotonicFactory();
+    const events: EventType[] = [
+      {
+        ulid: ulid(),
+        parent: page.params.object,
+        variant: {
+          kind: "space.roomy.channel.unmark.0",
+          data: undefined,
+        },
+      },
+      {
+        ulid: ulid(),
+        parent: page.params.object,
+        variant: {
+          kind: "space.roomy.page.mark.0",
+          data: undefined,
+        },
+      },
+      {
+        ulid: ulid(),
+        parent: page.params.object,
+        variant: {
+          kind: "space.roomy.page.edit.0",
+          data: {
+            content: {
+              content: new TextEncoder().encode(`# ${object.name}\n\nConverted channel to page.`),
+              mimeType: 'text/markdown'
+            }
+          }
+        }
+      }
+    ];
+    await backend.sendEventBatch(current.space.id, events);
+  }
+
   const channelTabList = ["Chat", "Threads", "Pages"] as const;
   let channelActiveTab = $state("Chat") as (typeof channelTabList)[number];
   $effect(() => {
@@ -300,9 +362,21 @@
             </form>
           </Modal>
         {:else if object?.kind == "channel"}
-          <Button onclick={() => (createPageDialogOpen = true)}
+          <Button class="mr-2" onclick={() => (createPageDialogOpen = true)}
             >Create Page</Button
           >
+
+          <Popover>
+            {#snippet child({ props })}
+              <Button {...props}>Channel Options</Button>
+            {/snippet}
+
+            <div class="flex flex-col gap-2">
+
+            <Button onclick={convertToThread}>Convert to Thread</Button>
+            <Button onclick={convertToPage}>Convert to Page</Button>
+            </div>
+          </Popover>
 
           <Modal bind:open={createPageDialogOpen} title="Create Page">
             <form
