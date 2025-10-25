@@ -49,22 +49,24 @@
     <div class="mr-5">
       <AvatarGroup
         avatarClass="size-8"
-        users={thread.activity.members.map((m) => ({
-          src: m.avatar,
-          fallback: "U",
-          alt: "U",
-        }))}
+        users={thread.activity.members
+          .filter((x) => !!x.avatar)
+          .map((m) => ({
+            src: m.avatar!,
+            fallback: "U",
+            alt: "U",
+          }))}
       />
     </div>
 
-    <div
-      class={`flex items-center ${thread.channel ? "w-[14em]" : "w-[4em]"} shrink-0`}
-    >
-      {#if thread.channel}
-        <div class="flex items-center justify-between gap-2">
+    <div class={`flex items-center w-[14em] shrink-0`}>
+      <div class="flex items-center justify-between gap-2">
+        {#if thread.kind == "page"}
+          Page
+        {:else if thread.channel}
           <span class="text-xl"># </span>{thread.channel}
-        </div>
-      {/if}
+        {/if}
+      </div>
 
       <div class="grow"></div>
 

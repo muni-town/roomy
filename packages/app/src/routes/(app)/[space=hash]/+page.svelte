@@ -47,6 +47,47 @@
           select
             r.entity as id,
             i.name as name,
+            null as channel,
+            r.label as label,
+            (
+              select json_object(
+                'members', json_group_array(json_object(
+                  'avatar', avatar,
+                  'name', author,
+                  'id', id(author_id)
+                )),
+                'latestTimestamp', max(timestamp),
+                'test', json_group_array(id(id))
+              ) from (
+                select
+                  ulid_timestamp(edits.edit_id) as timestamp,
+                  edits.edit_id as id,
+                  author_info.name as author,
+                  edits.user_id as author_id,
+                  author_info.avatar as avatar,
+                  row_number() over (
+                    partition by user_id
+                    order by edit_id desc
+                  ) as row_num
+                from comp_page_edits edits
+                  join entities me on me.id = edits.entity
+                  left join comp_info author_info on author_info.entity = edits.user_id
+                where edits.entity = e.id
+              ) where row_num = 1 limit 3
+            ) as activity
+          from comp_room r
+            join comp_info i on i.entity = r.entity
+            join entities e on e.id = r.entity
+          where
+            e.stream_id = ${page.params.space ? id(page.params.space) : null}
+              and
+            r.label = 'page'
+
+            union
+
+          select
+            r.entity as id,
+            i.name as name,
             ci.name as channel,
             r.label as label,
             (
