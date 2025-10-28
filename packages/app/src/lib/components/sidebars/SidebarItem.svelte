@@ -3,7 +3,7 @@
   import { navigateSync } from "$lib/utils.svelte";
   import { Badge, Button } from "@fuxui/base";
   // import { atprotoFeedService } from "$lib/services/atprotoFeedService";
-  import SidebarObjectList from "./SidebarItemList.svelte";
+  import SidebarItemList from "./SidebarItemList.svelte";
   import type { SpaceTreeItem } from "$lib/queries.svelte";
 
   import IconLucidePencil from "~icons/lucide/pencil";
@@ -11,6 +11,8 @@
   import IconHeroiconsChevronUp from "~icons/heroicons/chevron-up";
   import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
   import IconTablerCornerDownRight from "~icons/tabler/corner-down-right";
+  import IconHeroiconsDocument from "~icons/heroicons/document";
+  import IconCustomThread from "~icons/custom/thread";
 
   let {
     item,
@@ -30,43 +32,7 @@
   let isSubthread = $state(false);
   let notificationCount = 0;
 
-  // let children = $derived(
-  //   new CoState(ChildrenComponent, object?.components?.[ChildrenComponent.id], {
-  //     resolve: {
-  //       $each: {
-  //         components: {
-  //           $each: true,
-  //           $onError: null,
-  //         },
-  //       },
-  //       $onError: null,
-  //     },
-  //   }),
-  // );
-
-  // let subthreads = $derived(
-  //   new CoState(
-  //     SubThreadsComponent,
-  //     object?.components?.[SubThreadsComponent.id],
-  //     {
-  //       resolve: {
-  //         $each: {
-  //           components: {
-  //             $each: true,
-  //             $onError: null,
-  //           },
-  //         },
-  //         $onError: null,
-  //       },
-  //     },
-  //   ),
-  // );
-
-  // const thread = $derived(
-  //   object?.components?.[ThreadComponent.id]
-  //     ? new CoState(ThreadComponent, object?.components?.[ThreadComponent.id])
-  //     : null,
-  // );
+  console.log("sidebar level", level, "item", item);
 
   // let bannedAccounts = $derived(
   //   new CoState(BansComponent, space?.components?.[BansComponent.id]),
@@ -126,7 +92,7 @@
     <Button
       variant="ghost"
       size="icon"
-      onclick={() => editEntity?.(object)}
+      onclick={() => "editEntity?.(object)"}
       class="group-hover:opacity-100 opacity-0"
     >
       <IconLucidePencil class="size-4" />
@@ -279,12 +245,7 @@
   </div> -->
 {#if item.type == "category"}
   <!-- Object is a group/folder -->
-  <div
-    class={[
-      "inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink",
-      level < 2 ? (index > 0 ? "py-2" : "pb-2") : "",
-    ]}
-  >
+  <div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink pb-4">
     <div
       class="inline-flex items-start justify-between gap-2 w-full shrink group"
     >
@@ -296,25 +257,23 @@
           showGroupChildren = !showGroupChildren;
         }}
       >
-        {#if showGroupChildren}
-          <IconHeroiconsChevronDown class="shrink-0 !size-3" />
-        {:else}
-          <IconHeroiconsChevronUp class="shrink-0 !size-3" />
-        {/if}
         <span
-          class="truncate font-normal whitespace-nowrap overflow-hidden min-w-0"
+          class="truncate font-regular text-base-600 text-xs tracking-wide whitespace-nowrap overflow-hidden min-w-0"
           >{item.name}</span
         >
+        {#if showGroupChildren}
+          <IconHeroiconsChevronDown class="shrink-0 !size-2" />
+        {:else}
+          <IconHeroiconsChevronUp class="shrink-0 !size-2" />
+        {/if}
       </Button>
       {@render editButton?.()}
     </div>
 
     <!-- Group children (pages, channels) -->
     {#if showGroupChildren}
-      <div
-        class={["w-full max-w-full shrink min-w-0", level > 2 ? "pl-3" : ""]}
-      >
-        <SidebarObjectList
+      <div class={"w-full max-w-full shrink min-w-0"}>
+        <SidebarItemList
           items={item.children}
           bind:isEditing
           level={level + 1}
@@ -322,15 +281,10 @@
       </div>
     {/if}
   </div>
-{:else if item.type == "channel"}
-  <div
-    class={[
-      "inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink",
-      level < 2 ? (index > 0 ? "pb-2" : "pb-2") : "",
-    ]}
-  >
+{:else if (item.type == "channel" || item.type == "thread") && level < 2}
+  <div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink">
     <div
-      class="inline-flex items-start justify-between gap-2 w-full font-semibold min-w-0 group"
+      class="inline-flex items-start justify-between gap-2 w-full min-w-0 group"
     >
       <Button
         href={navigateSync({
@@ -348,8 +302,11 @@
         {/if}
         {#if isSubthread}<IconTablerCornerDownRight />{:else}
           <IconHeroiconsHashtag class="shrink-0" />{/if}
-        <span class="truncate whitespace-nowrap overflow-hidden min-w-0"
-          >{item.name}</span
+        <span
+          class={[
+            "truncate whitespace-nowrap overflow-hidden min-w-0",
+            level > 1 ? "font-normal" : "font-semibold",
+          ]}>{item.name}</span
         >
         {#if notificationCount && !isEditing}
           <Badge>
@@ -360,9 +317,81 @@
       {@render editButton?.()}
     </div>
 
-    <!-- TODO: Show subthreads -->
-    <!-- <div>
-      <SidebarObjectList level={level + 1} />
-    </div> -->
+    <!-- Group children (pages, channels) -->
+    {#if showGroupChildren && item.children && item.children.length > 0}
+      <div class={"w-full max-w-full shrink min-w-0"}>
+        <SidebarItemList
+          items={item.children}
+          bind:isEditing
+          level={level + 1}
+        />
+      </div>
+    {/if}
+  </div>
+{:else if level >= 1}
+  <div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink">
+    <div
+      class="inline-flex items-start justify-between w-full min-w-0 group pl-3"
+    >
+      <div class="max-h-4 overflow-visible">
+        <IconCustomThread
+          class="shrink-0 stroke-[0.6] stroke-base-500 h-[1.85rem] -mt-2"
+        />
+      </div>
+      <Button
+        href={navigateSync({
+          space: page.params.space!,
+          object: item.id,
+        })}
+        variant="ghost"
+        class="w-full justify-start min-w-0 px-1 rounded-sm py-1 text-base-600"
+        data-current={item.id === page.params.object && !isEditing}
+      >
+        {#if hasUnread && !isEditing}
+          <div
+            class="size-1.5 rounded-full bg-accent-500 absolute left-1.5 top-1.5"
+          ></div>
+        {/if}
+        <!-- {#if isSubthread}<IconTablerCornerDownRight />{:else}
+          <IconHeroiconsHashtag class="shrink-0" />{/if} -->
+
+        <span
+          class="truncate whitespace-nowrap overflow-hidden min-w-0 font-normal"
+          >{item.name}</span
+        >
+        {#if notificationCount && !isEditing}
+          <Badge>
+            {notificationCount}
+          </Badge>
+        {/if}
+        {#if item.type === "page"}<div class="ml-auto">
+            <IconHeroiconsDocument class="opacity-60 shrink" />
+          </div>{/if}
+      </Button>
+      {@render editButton?.()}
+    </div>
+  </div>
+{:else if item.type == "page"}
+  <div
+    class="inline-flex items-start justify-between gap-2 w-full min-w-0 group"
+  >
+    <Button
+      href={navigateSync({
+        space: page.params.space!,
+        object: item.id,
+      })}
+      variant="ghost"
+      class={[
+        "w-full justify-start min-w-0",
+        level > 1 ? "font-normal" : "font-semibold",
+      ]}
+      data-current={item.id === page.params.object && !isEditing}
+    >
+      <IconHeroiconsDocument class="shrink-0" />
+      <span class="truncate min-w-0 whitespace-nowrap overflow-hidden"
+        >{item.name}</span
+      >
+    </Button>
+    {@render editButton?.()}
   </div>
 {/if}

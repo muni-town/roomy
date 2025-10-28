@@ -11,8 +11,16 @@ node_modules
 /.svelte-kit
 /dist
 **/dist
+
+# Testing
 test-results
 playwright-report
+playwright-browserstack-sdk.config.temp.json
+browserstackSetupConfig.json
+
+# Logs
+local.log
+**/log
 
 # OS
 .DS_Store

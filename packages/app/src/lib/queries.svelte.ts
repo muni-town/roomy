@@ -12,15 +12,31 @@ export type SpaceMeta = {
   permissions: [string, "read" | "post" | "admin"][];
 };
 
-export type SpaceTreeItem = { id: string; name: string } & (
+export type SpaceTreeItem = {
+  id: string;
+  name: string;
+  parent?: string;
+} & (
   | {
       type: "category";
-      children: SpaceTreeItem[];
+      children: (ChannelTreeItem | PageTreeItem)[];
     }
   | {
       type: "channel";
+      children?: (ThreadTreeItem | PageTreeItem)[];
+    }
+  | {
+      type: "thread";
+      children?: PageTreeItem[];
+    }
+  | {
+      type: "page";
     }
 );
+
+type ChannelTreeItem = Extract<SpaceTreeItem, { type: "channel" }>;
+type ThreadTreeItem = Extract<SpaceTreeItem, { type: "thread" }>;
+type PageTreeItem = Extract<SpaceTreeItem, { type: "page" }>;
 
 /** The space list. */
 export let spaces: LiveQuery<SpaceMeta>;
@@ -72,19 +88,36 @@ $effect.root(() => {
         'children', (
           select json_group_array(
             json_object(
-              'id', id(e.id),
-              'type', 'channel',
-              'parent', id(e.parent),
-              'name', inf.name
+              'id', id(c1.id),
+              'type', case
+                when r1.label = 'channel' then 'channel'
+                when r1.label = 'page' then 'page'
+              end,
+              'parent', id(c1.parent),
+              'name', i1.name,
+              'children', (
+                select json_group_array(
+                  json_object(
+                    'id', id(c2.id),
+                    'type', case
+                      when r2.label = 'thread' then 'thread'
+                      when r2.label = 'page' then 'page'
+                    end,
+                    'parent', id(c2.parent),
+                    'name', i2.name
+                  )
+                )
+                from entities c2
+                  join comp_room r2 on c2.id = r2.entity
+                  join comp_info i2 on c2.id = i2.entity
+                where c2.parent = c1.id
+              )
             )
           )
-          from entities e
-            join comp_room room on e.id = room.entity
-            join comp_info inf on e.id = inf.entity
-          where
-            e.parent = r.entity
-              and
-            room.label = 'channel'
+          from entities c1
+            join comp_room r1 on c1.id = r1.entity
+            join comp_info i1 on c1.id = i1.entity
+          where c1.parent = e.id
         )
       ) as json
       from entities e
@@ -92,13 +125,47 @@ $effect.root(() => {
         join comp_info i on e.id = i.entity
       where
         e.stream_id = ${current.space?.id && id(current.space.id)}
-          and
-        r.label = 'category' 
-    union
+        and r.label = 'category'
+      
+      union
+      
       select json_object(
         'id', id(e.id),
         'name', i.name,
         'type', 'channel',
+        'parent', id(e.parent),
+        'children', (
+          select json_group_array(
+            json_object(
+              'id', id(c.id),
+              'type', case
+                when r1.label = 'thread' then 'thread'
+                when r1.label = 'page' then 'page'
+              end,
+              'parent', id(c.parent),
+              'name', i1.name
+            )
+          )
+          from entities c
+            join comp_room r1 on c.id = r1.entity
+            join comp_info i1 on c.id = i1.entity
+          where c.parent = e.id
+        )
+      ) as json
+      from entities e
+        join comp_room r on e.id = r.entity
+        join comp_info i on e.id = i.entity
+      where
+        e.stream_id = ${current.space?.id && id(current.space.id)}
+        and r.label = 'channel'
+        and e.parent is null
+      
+      union
+      
+      select json_object(
+        'id', id(e.id),
+        'name', i.name,
+        'type', 'page',
         'parent', id(e.parent)
       ) as json
       from entities e
@@ -106,13 +173,15 @@ $effect.root(() => {
         join comp_info i on e.id = i.entity
       where
         e.stream_id = ${current.space?.id && id(current.space.id)}
-          and
-        r.label = 'channel'
-          and
-        e.parent is null
+        and r.label = 'page'
+        and e.parent is null
   `,
     (row) => row.json && JSON.parse(row.json),
   );
+
+  $effect(() => {
+    console.log("spaceTree", spaceTree);
+  });
 
   // Update current values
   $effect(() => {
