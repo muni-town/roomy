@@ -18,7 +18,7 @@
     item,
     isEditing = $bindable(false),
     level = 0,
-    index = 0,
+    // index = 0,
   }: {
     item: SpaceTreeItem;
     isEditing: boolean;
@@ -328,7 +328,7 @@
       </div>
     {/if}
   </div>
-{:else if level >= 1}
+{:else if level >= 2}
   <div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink">
     <div
       class="inline-flex items-start justify-between w-full min-w-0 group pl-3"
