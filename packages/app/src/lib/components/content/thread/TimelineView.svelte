@@ -30,7 +30,7 @@
 <div class="flex flex-col flex-1 h-full min-h-0 justify-stretch">
   <ChatArea {threading} {startThreading} {toggleSelect} />
 
-  <div class="shrink-0">
+  <div class="shrink-0 mt-auto">
     <ChatInputArea {threading} />
   </div>
 </div>
