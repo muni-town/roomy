@@ -4,6 +4,7 @@ import { defineConfig, type PluginOption } from "vite";
 import wasm from "vite-plugin-wasm";
 import topLevelAwait from "vite-plugin-top-level-await";
 import Icons from "unplugin-icons/vite";
+import { FileSystemIconLoader } from "unplugin-icons/loaders";
 
 export default defineConfig({
   plugins: [
@@ -26,6 +27,10 @@ export default defineConfig({
     },
     Icons({
       compiler: "svelte",
+      customCollections: {
+        // Register your custom collection name ("custom" here)
+        custom: FileSystemIconLoader("./static/icons"),
+      },
     }),
   ] as PluginOption[],
   build: {

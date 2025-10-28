@@ -323,7 +323,7 @@
               bind:ref={messageInputEl}
               bind:value={messageInput}
               placeholder="Send a message..."
-              class="w-full"
+              class="w-full font-normal text-base-800 dark:text-base-200"
             />
           </form>
           <!-- {#key users.length + context.length} -->

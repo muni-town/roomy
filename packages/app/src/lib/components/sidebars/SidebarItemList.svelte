@@ -1,11 +1,11 @@
 <script lang="ts">
   // import SidebarObject from "./SidebarObject.svelte";
-  import {
-    TRIGGERS,
-    dragHandleZone,
-    dragHandle,
-    type Item,
-  } from "svelte-dnd-action";
+  // import {
+  //   TRIGGERS,
+  //   dragHandleZone,
+  //   dragHandle,
+  //   type Item,
+  // } from "svelte-dnd-action";
   import { type SpaceTreeItem } from "$lib/queries.svelte";
   import SidebarItem from "./SidebarItem.svelte";
 
@@ -14,6 +14,8 @@
     items,
     level = 0,
   }: { isEditing: boolean; items: SpaceTreeItem[]; level?: number } = $props();
+
+  console.log("sidebar list items", items);
 
   // let {
   //   // children,
@@ -149,10 +151,10 @@
     </div>
   {/if} -->
 
-<div class={["flex flex-col w-full", level > 0 ? "pl-3" : ""]}>
+<div class="flex flex-col w-full">
   {#each items as item, index (item.id)}
     <div class="flex items-start gap-2 w-full">
-      <SidebarItem bind:isEditing level={level + 1} {index} {item} />
+      <SidebarItem bind:isEditing {level} {index} {item} />
     </div>
   {/each}
 </div>

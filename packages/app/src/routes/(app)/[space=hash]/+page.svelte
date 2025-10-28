@@ -142,7 +142,7 @@
         <h2
           class="w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
         >
-          <div class="ml-2 font-bold grow text-center text-lg">All Threads</div>
+          <div class="ml-2 font-bold grow text-center text-lg">Index</div>
 
           {#if current.space?.id && backendStatus.loadingSpaces}
             <div class="dark:!text-base-400 !text-base-600">
