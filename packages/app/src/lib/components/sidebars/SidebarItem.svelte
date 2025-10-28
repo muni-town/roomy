@@ -258,7 +258,7 @@
         }}
       >
         <span
-          class="truncate font-regular text-base-600 text-xs tracking-wide whitespace-nowrap overflow-hidden min-w-0"
+          class="truncate font-regular text-base-600 dark:text-base-400 text-xs tracking-wide whitespace-nowrap overflow-hidden min-w-0"
           >{item.name}</span
         >
         {#if showGroupChildren}
