@@ -58,7 +58,9 @@
     {@render navbar?.()}
   </Navbar>
 
-  {@render children?.()}
+  <div class="flex flex-col h-full max-h-full overflow-y-hidden">
+    {@render children?.()}
+  </div>
 </div>
 
 <!-- Overlay -->

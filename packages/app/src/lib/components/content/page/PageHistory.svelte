@@ -83,8 +83,8 @@
   let currentPoint = $derived(pointsInTime[currentPointIdx]);
 </script>
 
-<div class="px-3 flex flex-col max-h-full">
-  <h2 class="text-lg font-bold px-4 py-2">Edit History</h2>
+<div class="p-3 flex flex-col grow max-h-full">
+  <h2 class="text-lg font-bold px-4 py-2 mt-4">Edit History</h2>
 
   <ScrollArea orientation="horizontal" class="shrink-0">
     <div class="flex gap-3 my-3 px-4">
@@ -104,7 +104,7 @@
   </ScrollArea>
 
   {#if currentPoint}
-    <ScrollArea orientation="vertical" class="grow max-h-full py-8 px-4">
+    <ScrollArea orientation="vertical" class="grow max-h-full mt-2 py-8 px-4">
       <div class="diff">
         {@html diffPrettyHtml(currentPoint.diffs)}
       </div>

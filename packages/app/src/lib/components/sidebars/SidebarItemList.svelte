@@ -15,8 +15,6 @@
     level = 0,
   }: { isEditing: boolean; items: SpaceTreeItem[]; level?: number } = $props();
 
-  console.log("sidebar list items", items);
-
   // let {
   //   // children,
   //   // me,

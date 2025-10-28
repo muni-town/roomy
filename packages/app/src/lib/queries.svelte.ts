@@ -179,10 +179,6 @@ $effect.root(() => {
     (row) => row.json && JSON.parse(row.json),
   );
 
-  $effect(() => {
-    console.log("spaceTree", spaceTree);
-  });
-
   // Update current values
   $effect(() => {
     // console.log("Checking current space for ", page.params.space)

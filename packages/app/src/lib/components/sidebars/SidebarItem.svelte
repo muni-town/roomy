@@ -32,8 +32,6 @@
   let isSubthread = $state(false);
   let notificationCount = 0;
 
-  console.log("sidebar level", level, "item", item);
-
   // let bannedAccounts = $derived(
   //   new CoState(BansComponent, space?.components?.[BansComponent.id]),
   // );
