@@ -7,8 +7,6 @@
     threads,
     emptyMessage = "No items",
   }: { threads: ThreadInfo[]; emptyMessage?: string } = $props();
-
-  console.log("threads", threads);
 </script>
 
 {#if threads.length}
