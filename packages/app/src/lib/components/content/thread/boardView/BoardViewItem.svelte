@@ -1,10 +1,11 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { AvatarGroup, Badge, Box } from "@fuxui/base";
+  import { Badge, Box } from "@fuxui/base";
   import { formatDistanceToNowStrict, type Locale } from "date-fns";
   import type { ThreadInfo } from "./types";
   import IconHeroiconsDocument from "~icons/heroicons/document";
   import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
+  import AvatarGroup from "$lib/components/user/AvatarGroup.svelte";
 
   let { thread }: { thread: ThreadInfo; activityCountMax?: number } = $props();
 
@@ -81,8 +82,8 @@
           .filter((x) => !!x.avatar)
           .map((m) => ({
             src: m.avatar!,
-            fallback: "U",
-            alt: "U",
+            id: m.id,
+            alt: "User Avatar for " + (m.name || "Unknown User"),
           }))}
       />
     </div>
