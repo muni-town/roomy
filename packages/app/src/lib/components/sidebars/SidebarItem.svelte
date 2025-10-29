@@ -26,6 +26,8 @@
     index: number;
   } = $props();
 
+  console.log("sidebar item level", level, item);
+
   let showGroupChildren = $state(true);
   // TODO: actually handle unreads & subthreads
   let hasUnread = $state(false);
@@ -279,7 +281,7 @@
       </div>
     {/if}
   </div>
-{:else if (item.type == "channel" || item.type == "thread") && level < 2}
+{:else if item.type == "channel" && level < 2}
   <div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink">
     <div
       class="inline-flex items-start justify-between gap-2 w-full min-w-0 group"
@@ -326,7 +328,7 @@
       </div>
     {/if}
   </div>
-{:else if level >= 2}
+{:else if level >= 2 || item.type == "thread"}
   <div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink">
     <div
       class="inline-flex items-start justify-between w-full min-w-0 group pl-3"
