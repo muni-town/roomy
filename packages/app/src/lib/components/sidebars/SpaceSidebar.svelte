@@ -28,7 +28,10 @@
 <SpaceSidebarHeader bind:isEditing />
 
 {#if isEditing}
-  <Button class="w-full justify-start mb-4" onclick={() => (isEditing = false)}>
+  <Button
+    class="justify-start mb-4 mx-2 self-stretch"
+    onclick={() => (isEditing = false)}
+  >
     <IconBasilCheckSolid class="size-4" />
     Finish editing</Button
   >
