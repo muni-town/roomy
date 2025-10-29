@@ -335,7 +335,7 @@
     >
       <div class="max-h-4 overflow-visible">
         <IconCustomThread
-          class="shrink-0 stroke-[0.6] stroke-base-500 h-[1.85rem] -mt-2"
+          class="shrink-0 stroke-[0.6] stroke-base-500 h-[1.85rem] -mt-2 ml-[2px] -mr-[2px]"
         />
       </div>
       <Button
