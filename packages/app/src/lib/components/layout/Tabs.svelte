@@ -50,7 +50,7 @@
     </Select.Trigger>
     <Select.Portal>
       <Select.Content
-        class="rounded-[12px] bg-base-100 dark:bg-base-900 text-sm border border-base-800/10 dark:border-base-100/10"
+        class="z-20 rounded-[12px] bg-base-100 dark:bg-base-900 text-sm border border-base-800/10 dark:border-base-100/10"
         sideOffset={10}
       >
         <Select.Viewport class="p-1">
