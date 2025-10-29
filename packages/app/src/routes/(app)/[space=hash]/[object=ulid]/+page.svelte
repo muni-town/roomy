@@ -20,6 +20,7 @@
   import IconHeroiconsEllipsisHorizontal from "~icons/heroicons/ellipsis-horizontal";
   import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
   import IconHeroiconsDocument from "~icons/heroicons/document";
+  import IconHeroiconsChatBubbleLeftRight from "~icons/heroicons/chat-bubble-left-right";
   import ChannelBoardView from "$lib/components/content/thread/boardView/ChannelBoardView.svelte";
   import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
   import type { EventType } from "$lib/workers/materializer";
@@ -43,6 +44,8 @@
       },
     });
   }
+
+  let showPageChat = $state(false);
 
   const ref = $derived($scrollContainerRef);
   let shouldShowPageTitle = $state(false);
@@ -333,13 +336,14 @@
         <h2
           class="mr-2 max-w-full truncate font-regular shrink py-4 text-base-900 dark:text-base-100 flex items-center gap-2 transition-all duration-300"
         >
-          {#if object?.kind !== "page"}
+          {#if object?.kind === "channel" || object?.kind === "thread"}
             <div>
               <IconHeroiconsHashtag
                 class="w-5 h-5 ml-2 shrink-0 text-base-700 dark:text-base-300"
               />
             </div>
           {/if}
+
           {#if object?.kind === "page" && shouldShowPageTitle}
             <div in:fade={{ duration: 300 }} out:fade={{ duration: 100 }}>
               <IconHeroiconsDocument
@@ -347,6 +351,7 @@
               />
             </div>
           {/if}
+
           {#if object?.parent && object.parent.kind == "channel"}
             <a
               href={`/${page.params.space}/${object.parent.id}${object.kind == "page" ? "#pages" : object.kind == "thread" ? "#threads" : ""}`}
@@ -356,6 +361,7 @@
             </a>
             <IconHeroiconsChevronRight class="w-4 h-4 shrink-0" />
           {/if}
+
           {#if object?.kind !== "page"}
             <span class="truncate">{object?.name}</span>
           {:else if shouldShowPageTitle}
@@ -455,6 +461,16 @@
               </form>
             </Modal>
           {:else if object?.kind == "page"}
+            {#if pageActiveTab == "Page"}
+              <Button
+                data-active={showPageChat}
+                variant={showPageChat ? "primary" : "secondary"}
+                onclick={() => (showPageChat = !showPageChat)}
+                ><IconHeroiconsChatBubbleLeftRight
+                  class="shrink-0"
+                />Chat</Button
+              >
+            {/if}
             <ToggleTabs
               items={pageTabList.map((x) => ({
                 name: x,
@@ -501,7 +517,7 @@
     <TimelineView />
   {:else if object?.kind == "page"}
     {#if pageActiveTab == "Page"}
-      <PageView />
+      <PageView bind:showPageChat />
     {:else}
       <PageHistory />
     {/if}
