@@ -322,101 +322,104 @@
           <span class="truncate">{object?.name}</span>
         </h2>
         <div class="flex items-center ml-auto gap-2">
-          {#if object?.kind == "channel"}
-            <ToggleTabs
-              items={channelTabList.map((x) => ({
-                name: x,
-                href: `#${x.toLowerCase()}`,
-              }))}
-              active={channelActiveTab}
-            />
-          {/if}
-
           {#if current.space?.id && backendStatus.loadingSpaces}
             <div class="dark:!text-base-400 !text-base-600 mx-3">
               Downloading Entire Space...
             </div>
-          {/if}
+          {:else}
+            {#if object?.kind == "channel"}
+              <ToggleTabs
+                items={channelTabList.map((x) => ({
+                  name: x,
+                  href: `#${x.toLowerCase()}`,
+                }))}
+                active={channelActiveTab}
+              />
+            {/if}
 
-          {#if object?.kind == "thread"}
-            <Popover>
-              {#snippet child({ props })}
-                <Button {...props}>Thread Options</Button>
-              {/snippet}
+            {#if object?.kind == "thread"}
+              <Popover>
+                {#snippet child({ props })}
+                  <Button {...props}>Thread Options</Button>
+                {/snippet}
 
-              <Button onclick={() => (promoteChannelDialogOpen = true)}
-                >Promote to Channel</Button
+                <Button onclick={() => (promoteChannelDialogOpen = true)}
+                  >Promote to Channel</Button
+                >
+              </Popover>
+
+              <Modal
+                bind:open={promoteChannelDialogOpen}
+                title="Promote Thread to Channel"
               >
-            </Popover>
+                <form
+                  class="flex flex-col items-stretch gap-4"
+                  onsubmit={promoteToChannel}
+                >
+                  <label class="flex flex-col gap-2">
+                    New Channel Name
+                    <Input bind:value={promoteChannelName} />
+                  </label>
 
-            <Modal
-              bind:open={promoteChannelDialogOpen}
-              title="Promote Thread to Channel"
-            >
-              <form
-                class="flex flex-col items-stretch gap-4"
-                onsubmit={promoteToChannel}
+                  <div class="flex justify-end">
+                    <Button type="submit">Promote</Button>
+                  </div>
+                </form>
+              </Modal>
+            {:else if object?.kind == "channel"}
+              <Button
+                class="hidden lg:block"
+                onclick={() => (createPageDialogOpen = true)}
+                >Create Page</Button
               >
-                <label class="flex flex-col gap-2">
-                  New Channel Name
-                  <Input bind:value={promoteChannelName} />
-                </label>
 
-                <div class="flex justify-end">
-                  <Button type="submit">Promote</Button>
-                </div>
-              </form>
-            </Modal>
-          {:else if object?.kind == "channel"}
-            <Button
-              class="mr-2 hidden lg:block"
-              onclick={() => (createPageDialogOpen = true)}>Create Page</Button
-            >
+              <Popover>
+                {#snippet child({ props })}
+                  <Button {...props}
+                    ><span class="hidden lg:block">Channel Options</span><span
+                      class="block lg:hidden"
+                      ><IconHeroiconsEllipsisHorizontal
+                        class="shrink-0"
+                      /></span
+                    ></Button
+                  >
+                {/snippet}
 
-            <Popover>
-              {#snippet child({ props })}
-                <Button {...props}
-                  ><span class="hidden lg:block">Channel Options</span><span
+                <div class="flex flex-col gap-2">
+                  <Button
                     class="block lg:hidden"
-                    ><IconHeroiconsEllipsisHorizontal class="shrink-0" /></span
-                  ></Button
-                >
-              {/snippet}
-
-              <div class="flex flex-col gap-2">
-                <Button
-                  class="block lg:hidden"
-                  onclick={() => (createPageDialogOpen = true)}
-                  >Create Page</Button
-                >
-                <Button onclick={convertToThread}>Convert to Thread</Button>
-                <Button onclick={convertToPage}>Convert to Page</Button>
-              </div>
-            </Popover>
-
-            <Modal bind:open={createPageDialogOpen} title="Create Page">
-              <form
-                class="flex flex-col items-stretch gap-4"
-                onsubmit={createPage}
-              >
-                <label class="flex flex-col gap-2">
-                  Page Name
-                  <Input bind:value={createPageName} />
-                </label>
-
-                <div class="flex justify-end">
-                  <Button type="submit">Create</Button>
+                    onclick={() => (createPageDialogOpen = true)}
+                    >Create Page</Button
+                  >
+                  <Button onclick={convertToThread}>Convert to Thread</Button>
+                  <Button onclick={convertToPage}>Convert to Page</Button>
                 </div>
-              </form>
-            </Modal>
-          {:else if object?.kind == "page"}
-            <Tabs
-              items={pageTabList.map((x) => ({
-                name: x,
-                href: `#${x.toLowerCase()}`,
-              }))}
-              active={pageActiveTab}
-            />
+              </Popover>
+
+              <Modal bind:open={createPageDialogOpen} title="Create Page">
+                <form
+                  class="flex flex-col items-stretch gap-4"
+                  onsubmit={createPage}
+                >
+                  <label class="flex flex-col gap-2">
+                    Page Name
+                    <Input bind:value={createPageName} />
+                  </label>
+
+                  <div class="flex justify-end">
+                    <Button type="submit">Create</Button>
+                  </div>
+                </form>
+              </Modal>
+            {:else if object?.kind == "page"}
+              <Tabs
+                items={pageTabList.map((x) => ({
+                  name: x,
+                  href: `#${x.toLowerCase()}`,
+                }))}
+                active={pageActiveTab}
+              />
+            {/if}
           {/if}
         </div>
       </div>
