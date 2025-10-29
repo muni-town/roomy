@@ -2,6 +2,7 @@ import type { DidDocument } from "@atproto/oauth-client-browser";
 import { decodeBase32 } from "./utils/base32";
 import { goto } from "$app/navigation";
 import type { JSONContent } from "@tiptap/core";
+import { writable } from "svelte/store";
 
 /** Cleans a handle string by removing any characters not valid for a domain. */
 export function cleanHandle(handle: string): string {
@@ -198,3 +199,7 @@ export function cdnImageUrl(
 //   }
 //   return count;
 // }
+
+// For global access to a ref on scrollable div
+
+export const scrollContainerRef = writable<HTMLDivElement | null>(null);

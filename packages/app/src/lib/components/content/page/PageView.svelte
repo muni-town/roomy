@@ -6,11 +6,13 @@
   import { sql } from "$lib/utils/sqlTemplate";
   import { backend } from "$lib/workers";
   import { id } from "$lib/workers/encoding";
-  import { Button, Prose, ScrollArea } from "@fuxui/base";
+  import { Button, Prose } from "@fuxui/base";
+  import ScrollArea from "$lib/components/layout/ScrollArea.svelte";
   import { RichTextEditor } from "@fuxui/text";
   import { patchMake, patchToText } from "diff-match-patch-es";
   import Turndown from "turndown";
   import { ulid } from "ulidx";
+  import { scrollContainerRef } from "$lib/utils.svelte";
 
   import IconTablerCheck from "~icons/tabler/check";
   import IconTablerPencil from "~icons/tabler/pencil";
@@ -49,11 +51,19 @@
       },
     });
   }
+
+  let ref: HTMLDivElement | null = $state(null);
+
+  // Sync the ref to the store
+  $effect(() => {
+    console.log("Setting scroll container ref", ref);
+    scrollContainerRef.set(ref);
+  });
 </script>
 
-<ScrollArea orientation="vertical">
+<ScrollArea orientation="vertical" class="relative" bind:ref>
   <div class="max-w-4xl mx-auto w-full px-4 py-8">
-    <div class="flex justify-end mb-4">
+    <div class="flex z-10 justify-end mb-4 fixed top-20 right-4">
       {#if isEditing}
         <Button onclick={savePage}>
           <IconTablerCheck />

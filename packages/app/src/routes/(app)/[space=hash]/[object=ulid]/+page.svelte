@@ -10,13 +10,16 @@
   import { id } from "$lib/workers/encoding";
   import ToggleTabs from "$lib/components/layout/Tabs.svelte";
   import { Input, Modal, Popover, toast } from "@fuxui/base";
-  import { Box, Button, Tabs } from "@fuxui/base";
+  import { Box, Button } from "@fuxui/base";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { monotonicFactory, ulid } from "ulidx";
+  import { scrollContainerRef } from "$lib/utils.svelte";
+  import { fade } from "svelte/transition";
 
   import IconHeroiconsChevronRight from "~icons/heroicons/chevron-right";
   import IconHeroiconsEllipsisHorizontal from "~icons/heroicons/ellipsis-horizontal";
   import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
+  import IconHeroiconsDocument from "~icons/heroicons/document";
   import ChannelBoardView from "$lib/components/content/thread/boardView/ChannelBoardView.svelte";
   import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
   import type { EventType } from "$lib/workers/materializer";
@@ -40,6 +43,25 @@
       },
     });
   }
+
+  const ref = $derived($scrollContainerRef);
+  let shouldShowPageTitle = $state(false);
+
+  $effect(() => {
+    console.log("ref changed", ref);
+    if (!ref) return;
+
+    function handleScroll() {
+      if (ref && ref.scrollTop > 100) {
+        shouldShowPageTitle = true;
+      } else {
+        shouldShowPageTitle = false;
+      }
+    }
+
+    ref.addEventListener("scroll", handleScroll);
+    return () => ref.removeEventListener("scroll", handleScroll);
+  });
 
   let createPageDialogOpen = $state(false);
   let createPageName = $state("");
@@ -308,18 +330,23 @@
   {#snippet navbar()}
     <div class="relative w-full">
       <div class="flex items-center w-full max-w-full">
-        {#if object?.kind === "channel"}
-          <IconHeroiconsHashtag
-            class="w-5 h-5 shrink-0 text-base-700 dark:text-base-300 mr-1"
-          />
-        {:else if object?.kind === "thread"}
-          <IconHeroiconsHashtag
-            class="w-5 h-5 shrink-0 text-base-700 dark:text-base-300 mr-1"
-          />
-        {/if}
         <h2
-          class="mr-2 max-w-full truncate font-regular shrink py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
+          class="mr-2 max-w-full truncate font-regular shrink py-4 text-base-900 dark:text-base-100 flex items-center gap-2 transition-all duration-300"
         >
+          {#if object?.kind !== "page"}
+            <div>
+              <IconHeroiconsHashtag
+                class="w-5 h-5 ml-2 shrink-0 text-base-700 dark:text-base-300"
+              />
+            </div>
+          {/if}
+          {#if object?.kind === "page" && shouldShowPageTitle}
+            <div in:fade={{ duration: 300 }} out:fade={{ duration: 100 }}>
+              <IconHeroiconsDocument
+                class="w-5 h-5 ml-2 shrink-0 text-base-700 dark:text-base-300 mr-1"
+              />
+            </div>
+          {/if}
           {#if object?.parent && object.parent.kind == "channel"}
             <a
               href={`/${page.params.space}/${object.parent.id}${object.kind == "page" ? "#pages" : object.kind == "thread" ? "#threads" : ""}`}
@@ -331,6 +358,12 @@
           {/if}
           {#if object?.kind !== "page"}
             <span class="truncate">{object?.name}</span>
+          {:else if shouldShowPageTitle}
+            <span
+              class="truncate"
+              in:fade={{ duration: 300 }}
+              out:fade={{ duration: 100 }}>{object?.name}</span
+            >
           {/if}
         </h2>
         <div class="flex items-center ml-auto shrink-0 gap-2">
