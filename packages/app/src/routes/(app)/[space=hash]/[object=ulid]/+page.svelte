@@ -14,8 +14,9 @@
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { monotonicFactory, ulid } from "ulidx";
 
-  import IconMdiArrowRight from "~icons/mdi/arrow-right";
+  import IconHeroiconsChevronRight from "~icons/heroicons/chevron-right";
   import IconHeroiconsEllipsisHorizontal from "~icons/heroicons/ellipsis-horizontal";
+  import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
   import ChannelBoardView from "$lib/components/content/thread/boardView/ChannelBoardView.svelte";
   import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
   import type { EventType } from "$lib/workers/materializer";
@@ -306,9 +307,18 @@
 
   {#snippet navbar()}
     <div class="relative w-full">
-      <div class="flex items-center px-2 truncate w-full">
+      <div class="flex items-center w-full max-w-full">
+        {#if object?.kind === "channel"}
+          <IconHeroiconsHashtag
+            class="w-5 h-5 shrink-0 text-base-700 dark:text-base-300 mr-1"
+          />
+        {:else if object?.kind === "thread"}
+          <IconHeroiconsHashtag
+            class="w-5 h-5 shrink-0 text-base-700 dark:text-base-300 mr-1"
+          />
+        {/if}
         <h2
-          class="text-lg font-bold max-w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
+          class="mr-2 max-w-full truncate font-regular shrink py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
         >
           {#if object?.parent && object.parent.kind == "channel"}
             <a
@@ -317,109 +327,108 @@
             >
               {object?.parent?.name}
             </a>
-            <IconMdiArrowRight />
+            <IconHeroiconsChevronRight class="w-4 h-4 shrink-0" />
           {/if}
-          <span class="truncate">{object?.name}</span>
+          {#if object?.kind !== "page"}
+            <span class="truncate">{object?.name}</span>
+          {/if}
         </h2>
-        <div class="flex items-center ml-auto gap-2">
+        <div class="flex items-center ml-auto shrink-0 gap-2">
           {#if current.space?.id && backendStatus.loadingSpaces}
             <div class="dark:!text-base-400 !text-base-600 mx-3">
               Downloading Entire Space...
             </div>
-          {:else}
-            {#if object?.kind == "channel"}
-              <ToggleTabs
-                items={channelTabList.map((x) => ({
-                  name: x,
-                  href: `#${x.toLowerCase()}`,
-                }))}
-                active={channelActiveTab}
-              />
-            {/if}
-
-            {#if object?.kind == "thread"}
-              <Popover>
-                {#snippet child({ props })}
-                  <Button {...props}>Thread Options</Button>
-                {/snippet}
-
-                <Button onclick={() => (promoteChannelDialogOpen = true)}
-                  >Promote to Channel</Button
+          {:else if object?.kind == "thread"}
+            <Popover>
+              {#snippet child({ props })}
+                <Button {...props}>
+                  <span class="hidden md:block">Thread Options</span>
+                  <IconHeroiconsEllipsisHorizontal
+                    class="shrink-0 block md:hidden"
+                  /></Button
                 >
-              </Popover>
+              {/snippet}
 
-              <Modal
-                bind:open={promoteChannelDialogOpen}
-                title="Promote Thread to Channel"
+              <Button onclick={() => (promoteChannelDialogOpen = true)}
+                >Promote to Channel</Button
               >
-                <form
-                  class="flex flex-col items-stretch gap-4"
-                  onsubmit={promoteToChannel}
-                >
-                  <label class="flex flex-col gap-2">
-                    New Channel Name
-                    <Input bind:value={promoteChannelName} />
-                  </label>
+            </Popover>
 
-                  <div class="flex justify-end">
-                    <Button type="submit">Promote</Button>
-                  </div>
-                </form>
-              </Modal>
-            {:else if object?.kind == "channel"}
-              <Button
-                class="hidden lg:block"
-                onclick={() => (createPageDialogOpen = true)}
-                >Create Page</Button
+            <Modal
+              bind:open={promoteChannelDialogOpen}
+              title="Promote Thread to Channel"
+            >
+              <form
+                class="flex flex-col items-stretch gap-4"
+                onsubmit={promoteToChannel}
               >
+                <label class="flex flex-col gap-2">
+                  New Channel Name
+                  <Input bind:value={promoteChannelName} />
+                </label>
 
-              <Popover>
-                {#snippet child({ props })}
-                  <Button {...props}
-                    ><span class="hidden lg:block">Channel Options</span><span
-                      class="block lg:hidden"
-                      ><IconHeroiconsEllipsisHorizontal
-                        class="shrink-0"
-                      /></span
-                    ></Button
-                  >
-                {/snippet}
-
-                <div class="flex flex-col gap-2">
-                  <Button
-                    class="block lg:hidden"
-                    onclick={() => (createPageDialogOpen = true)}
-                    >Create Page</Button
-                  >
-                  <Button onclick={convertToThread}>Convert to Thread</Button>
-                  <Button onclick={convertToPage}>Convert to Page</Button>
+                <div class="flex justify-end">
+                  <Button type="submit">Promote</Button>
                 </div>
-              </Popover>
+              </form>
+            </Modal>
+          {:else if object?.kind == "channel"}
+            <ToggleTabs
+              items={channelTabList.map((x) => ({
+                name: x,
+                href: `#${x.toLowerCase()}`,
+              }))}
+              active={channelActiveTab}
+            />
+            <Button
+              class="hidden lg:block"
+              onclick={() => (createPageDialogOpen = true)}>Create Page</Button
+            >
 
-              <Modal bind:open={createPageDialogOpen} title="Create Page">
-                <form
-                  class="flex flex-col items-stretch gap-4"
-                  onsubmit={createPage}
+            <Popover>
+              {#snippet child({ props })}
+                <Button {...props}
+                  ><span class="hidden lg:block">Channel Options</span
+                  ><IconHeroiconsEllipsisHorizontal
+                    class="shrink-0 block lg:hidden"
+                  />
+                </Button>
+              {/snippet}
+
+              <div class="flex flex-col gap-2">
+                <Button
+                  class="block lg:hidden"
+                  onclick={() => (createPageDialogOpen = true)}
+                  >Create Page</Button
                 >
-                  <label class="flex flex-col gap-2">
-                    Page Name
-                    <Input bind:value={createPageName} />
-                  </label>
+                <Button onclick={convertToThread}>Convert to Thread</Button>
+                <Button onclick={convertToPage}>Convert to Page</Button>
+              </div>
+            </Popover>
 
-                  <div class="flex justify-end">
-                    <Button type="submit">Create</Button>
-                  </div>
-                </form>
-              </Modal>
-            {:else if object?.kind == "page"}
-              <Tabs
-                items={pageTabList.map((x) => ({
-                  name: x,
-                  href: `#${x.toLowerCase()}`,
-                }))}
-                active={pageActiveTab}
-              />
-            {/if}
+            <Modal bind:open={createPageDialogOpen} title="Create Page">
+              <form
+                class="flex flex-col items-stretch gap-4"
+                onsubmit={createPage}
+              >
+                <label class="flex flex-col gap-2">
+                  Page Name
+                  <Input bind:value={createPageName} />
+                </label>
+
+                <div class="flex justify-end">
+                  <Button type="submit">Create</Button>
+                </div>
+              </form>
+            </Modal>
+          {:else if object?.kind == "page"}
+            <ToggleTabs
+              items={pageTabList.map((x) => ({
+                name: x,
+                href: `#${x.toLowerCase()}`,
+              }))}
+              active={pageActiveTab}
+            />
           {/if}
         </div>
       </div>
