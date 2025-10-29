@@ -39,12 +39,24 @@ importers:
 
   packages/app:
     dependencies:
+      '@tiptap/extension-bubble-menu':
+        specifier: ^3.9.0
+        version: 3.9.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
+      '@tiptap/extension-typography':
+        specifier: ^3.9.0
+        version: 3.9.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))
+      '@tiptap/extension-underline':
+        specifier: ^3.9.0
+        version: 3.9.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))
       hls.js:
         specifier: ^1.6.12
         version: 1.6.12
       socket.io-msgpack-parser:
         specifier: ^3.0.2
         version: 3.0.2
+      tippy.js:
+        specifier: ^6.3.7
+        version: 6.3.7
     devDependencies:
       '@atproto/api':
         specifier: ^0.14.22
@@ -255,7 +267,7 @@ importers:
         version: 1.1.0(svelte@5.38.10)
       svelte-tiptap:
         specifier: ^2.2.0
-        version: 2.2.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/extension-bubble-menu@2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extension-floating-menu@2.24.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)(svelte@5.38.10)
+        version: 2.2.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/extension-bubble-menu@3.9.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extension-floating-menu@2.24.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)(svelte@5.38.10)
       tailwindcss:
         specifier: ^4.1.13
         version: 4.1.13
@@ -1624,6 +1636,12 @@ packages:
       '@tiptap/core': ^2.7.0
       '@tiptap/pm': ^2.7.0
 
+  '@tiptap/extension-bubble-menu@3.9.0':
+    resolution: {integrity: sha512-lpRNzW4zh/bI8QaImrdKgeiEifk/AaKIsruZbMVW3unRPoRUq+MmeRyeVI9OofgJtO+QsuWytqGvgy5YC02U3g==}
+    peerDependencies:
+      '@tiptap/core': ^3.9.0
+      '@tiptap/pm': ^3.9.0
+
   '@tiptap/extension-bullet-list@2.26.1':
     resolution: {integrity: sha512-HHakuV4ckYCDOnBbne088FvCEP4YICw+wgPBz/V2dfpiFYQ4WzT0LPK9s7OFMCN+ROraoug+1ryN1Z1KdIgujQ==}
     peerDependencies:
@@ -1758,10 +1776,20 @@ packages:
     peerDependencies:
       '@tiptap/core': ^2.7.0
 
+  '@tiptap/extension-typography@3.9.0':
+    resolution: {integrity: sha512-ylYtL7lz5oUBYi7PtYpOw6/5njLx2EZI0HxNb8/EytH5nO4ljh+x60DzDqbGf+NIkPHyIPF4p283MrMoIdyHvg==}
+    peerDependencies:
+      '@tiptap/core': ^3.9.0
+
   '@tiptap/extension-underline@2.26.1':
     resolution: {integrity: sha512-/fufv41WDMdf0a4xmFAxONoAz08TonJXX6NEoSJmuGKO59M/Y0Pz8DTK1g32Wk44kn7dyScDiPlvvndl+UOv0A==}
     peerDependencies:
       '@tiptap/core': ^2.7.0
+
+  '@tiptap/extension-underline@3.9.0':
+    resolution: {integrity: sha512-8/Ygl0kdZkIPRYmby++yNaksxXhEHi/NTWV1jMOPBMWoYrAMklW18WS4b0KPDYQDXrn8wdibuDc/Ace1CPhSzw==}
+    peerDependencies:
+      '@tiptap/core': ^3.9.0
 
   '@tiptap/html@2.26.1':
     resolution: {integrity: sha512-93keIjciRdjgQabxntXBjW6NTrAoM+uC/u3dwoM5CJFs40cpJC+/CEPYG7SJ5Cyv8srv/OqzyjCjoz7PQGvXyA==}
@@ -5061,6 +5089,12 @@ snapshots:
       '@tiptap/pm': 2.26.1
       tippy.js: 6.3.7
 
+  '@tiptap/extension-bubble-menu@3.9.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)':
+    dependencies:
+      '@floating-ui/dom': 1.7.4
+      '@tiptap/core': 2.26.1(@tiptap/pm@2.26.1)
+      '@tiptap/pm': 2.26.1
+
   '@tiptap/extension-bullet-list@2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))':
     dependencies:
       '@tiptap/core': 2.26.1(@tiptap/pm@2.26.1)
@@ -5173,7 +5207,15 @@ snapshots:
     dependencies:
       '@tiptap/core': 2.26.1(@tiptap/pm@2.26.1)
 
+  '@tiptap/extension-typography@3.9.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))':
+    dependencies:
+      '@tiptap/core': 2.26.1(@tiptap/pm@2.26.1)
+
   '@tiptap/extension-underline@2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))':
+    dependencies:
+      '@tiptap/core': 2.26.1(@tiptap/pm@2.26.1)
+
+  '@tiptap/extension-underline@3.9.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))':
     dependencies:
       '@tiptap/core': 2.26.1(@tiptap/pm@2.26.1)
 
@@ -6993,6 +7035,14 @@ snapshots:
     dependencies:
       '@tiptap/core': 2.26.1(@tiptap/pm@2.26.1)
       '@tiptap/extension-bubble-menu': 2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
+      '@tiptap/extension-floating-menu': 2.24.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
+      '@tiptap/pm': 2.26.1
+      svelte: 5.38.10
+
+  svelte-tiptap@2.2.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/extension-bubble-menu@3.9.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extension-floating-menu@2.24.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)(svelte@5.38.10):
+    dependencies:
+      '@tiptap/core': 2.26.1(@tiptap/pm@2.26.1)
+      '@tiptap/extension-bubble-menu': 3.9.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
       '@tiptap/extension-floating-menu': 2.24.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
       '@tiptap/pm': 2.26.1
       svelte: 5.38.10

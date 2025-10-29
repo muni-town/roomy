@@ -30,8 +30,12 @@
     "lint-staged": "lint-staged"
   },
   "dependencies": {
+    "@tiptap/extension-bubble-menu": "^3.9.0",
+    "@tiptap/extension-typography": "^3.9.0",
+    "@tiptap/extension-underline": "^3.9.0",
     "hls.js": "^1.6.12",
-    "socket.io-msgpack-parser": "^3.0.2"
+    "socket.io-msgpack-parser": "^3.0.2",
+    "tippy.js": "^6.3.7"
   },
   "devDependencies": {
     "@atproto/api": "^0.14.22",
