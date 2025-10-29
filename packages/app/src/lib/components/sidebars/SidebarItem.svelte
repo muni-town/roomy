@@ -364,9 +364,9 @@
             {notificationCount}
           </Badge>
         {/if}
-        {#if item.type === "page"}<div class="ml-auto">
+        <!-- {#if item.type === "page"}<div class="ml-auto">
             <IconHeroiconsDocument class="opacity-60 shrink" />
-          </div>{/if}
+          </div>{/if} -->
       </Button>
       {@render editButton?.()}
     </div>
