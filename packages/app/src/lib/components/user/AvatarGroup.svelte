@@ -1,4 +1,9 @@
 <script lang="ts">
+  /***
+   * Adapted from Fox UI AvatarGroup component by Flo-bit
+   * https://github.com/flo-bit/ui-kit/blob/main/packages/core/src/lib/components/avatar/AvatarGroup.svelte
+   */
+
   import { Avatar, type WithElementRef } from "bits-ui";
   import type { HTMLAttributes } from "svelte/elements";
   import { cn } from "@fuxui/base";
