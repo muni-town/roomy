@@ -12,6 +12,8 @@ import type { SqliteWorkerInterface } from "./types";
 import type { Agent } from "@atproto/api";
 import type { LeafClient } from "@muni-town/leaf-client";
 import { AsyncChannel } from "./asyncChannel";
+import type { Embed } from "$lib/types/embed-sdk";
+import { getLinkEmbedData } from "$lib/utils/getLinkEmbedData";
 
 export type EventType = ReturnType<(typeof eventCodec)["dec"]>;
 
@@ -26,6 +28,9 @@ export const config: MaterializerConfig = {
     .map((sql) => ({ sql })),
   materializer,
 };
+
+/** Matches full or partial url. partials might include false positive like butter.fingers */
+const UrlRegex = /<?(https?:\/\/)*[a-z0-9][-a-z0-9]*\.[a-z]{2,}[^\s]*[a-zA-Z0-9\/]>?/gi;
 
 /** Map a batch of incoming events to SQL that applies the event to the entities,
  * components and edges, then execute them all as a single transaction.
@@ -56,11 +61,49 @@ export function materializer(
 
       // Make sure all of the profiles we need are downloaded and inserted
       const neededProfiles = new Set<string>();
-      decodedEvents.forEach(([i, ev]) =>
-        ev.variant.kind == "space.roomy.message.create.0"
-          ? neededProfiles.add(i.user)
-          : undefined,
-      );
+      // decodedEvents.forEach(([i, ev]) => {
+      for (const [i, ev] of decodedEvents) {
+        if (ev.variant.kind === "space.roomy.message.create.0") {
+          neededProfiles.add(i.user)
+
+          if (ev.variant.data.content.mimeType === 'text/markdown') {
+            const message = new TextDecoder().decode(ev.variant.data.content.content);
+            const hasUrl = (str: string): boolean => {
+              const http = str.indexOf('http');
+              if (
+                http === -1
+                && (str[http + 4] === ':' || (str[http + 4] === 's' && str[http + 5] === ':'))
+              ) { return true }
+              // all remaining potential urls are partials
+              if (str.indexOf('.') === -1) return false;
+
+              return UrlRegex.test(str);
+            }
+            if (hasUrl(message)) {
+              await Promise.all((message.match(UrlRegex) ?? []).map(async _url => {
+                let shouldEmbed = true
+                if (_url.startsWith('<') && _url.endsWith('>')) {
+                  shouldEmbed = false
+                  _url = _url.slice(1, -1)
+                }
+                let url = (_url.startsWith('http://') || _url.startsWith('https://')) ? _url : 'https://' + _url
+                let data = await getLinkEmbedData(url)
+                console.debug({ data })
+                return batch.push(sql`
+                  insert into edges (head, tail, label, payload)
+                  values (
+                    ${id(ev.ulid)},
+                    ${id(url)},
+                    'link',
+                    ${edgePayload({ shouldEmbed, data })}
+                  )
+                `)
+              })
+              )
+            }
+          }
+        }
+      };
 
       batch.push(
         ...(await ensureProfiles(
@@ -294,7 +337,6 @@ const materializers: {
           ${data.content.content}
         )`,
     ];
-
     if (data.replyTo) {
       statements.push(sql`
         insert into edges (head, tail, label)
@@ -701,7 +743,7 @@ async function ensureProfiles(
   }
 }
 
-function edgePayload<EdgeLabel extends "reaction" | "member" | "ban">(
+function edgePayload<EdgeLabel extends "reaction" | "member" | "ban" | "link">(
   payload: EdgesMap[EdgeLabel],
 ) {
   return JSON.stringify(payload);
@@ -740,12 +782,18 @@ export interface EdgeMember {
   can: "read" | "post" | "admin";
 }
 
+export interface EdgeLink {
+  shouldEmbed: boolean;
+  data?: Embed | null;
+}
+
 export type EdgesMap = {
-  [K in Exclude<EdgeLabel, "reaction" | "member" | "ban">]: null;
+  [K in Exclude<EdgeLabel, "reaction" | "member" | "ban" | "link">]: null;
 } & {
   reaction: EdgeReaction;
   ban: EdgeBan;
   member: EdgeMember;
+  link: EdgeLink
 };
 
 /** Given a tuple of edge names, produces a record whose keys are exactly

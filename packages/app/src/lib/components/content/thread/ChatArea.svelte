@@ -18,6 +18,8 @@
   import { id } from "$lib/workers/encoding";
   import { decodeTime } from "ulidx";
   import { onNavigate } from "$app/navigation";
+  import type { Embed } from "$lib/types/embed-sdk";
+  import type { TimelineKind } from "./TimelineView.svelte";
 
   export type Message = {
     id: string;
@@ -32,6 +34,11 @@
     masqueradeAuthorName: string | null;
     masqueradeAuthorAvatar: string | null;
     mergeWithPrevious: boolean | null;
+    links: {
+      url: string;
+      shouldEmbed: true;
+      data: Embed | null;
+    }[];
     replyTo: string | null;
     reactions: { reaction: string; userId: string; userName: string }[];
     media: {
@@ -45,15 +52,20 @@
     startThreading,
     virtualizer = $bindable(),
     toggleSelect,
+    kind = "chat",
   }: {
     threading?: { active: boolean; selectedMessages: Message[]; name: string };
     startThreading: (message?: Message) => void;
     virtualizer?: VirtualizerHandle;
     toggleSelect: (message: Message) => void;
+    kind?: TimelineKind;
   } = $props();
-
   let query = new LiveQuery<Message>(
-    () => sql`
+    () =>
+      // query difference is only 4 lines but kept getting a template error
+      // when using a ternary inside the tagged template
+      kind === "chat"
+        ? sql`
       select json_object(
         'id', id(c.entity),
         'content', cast(c.data as text),
@@ -84,6 +96,15 @@
           from comp_media m
           join entities me on me.id = m.entity
           where me.parent = e.id
+        ),
+        'links', (
+          select json_group_array(json_object(
+            'url', id(le.tail),
+            'shouldEmbed', json_extract(le.payload, '$.shouldEmbed'),
+            'data', json_extract(le.payload, '$.data')
+          ))
+          from edges le
+          where le.head = e.id and le.label = 'link'
         )
       ) as json
       from entities e
@@ -95,8 +116,63 @@
         left join comp_info oai on oai.entity = o.author
         left join comp_user oau on oau.did = o.author
         left join edges e on e.head = c.entity and e.label = 'reply'
-      where
-        e.parent = ${page.params.object && id(page.params.object)}
+        where
+            e.parent = ${page.params.object && id(page.params.object)}
+      order by e.id desc
+      limit ${showLastN}
+    `
+        : sql`
+            select json_object(
+        'id', id(c.entity),
+        'content', cast(c.data as text),
+        'authorDid', id(u.did),
+        'authorName', i.name,
+        'authorAvatar', i.avatar,
+        'masqueradeAuthor', id(o.author),
+        'masqueradeTimestamp', o.timestamp,
+        'replyTo', id(e.tail),
+        'masqueradeAuthorName', oai.name,
+        'masqueradeAuthorAvatar', oai.avatar,
+        'masqueradeAuthorHandle', oau.handle,
+        'reactions', (
+          select json_group_array(json_object(
+            'reaction', ed.payload,
+            'userId', id(ed.head),
+            'userName', i.name
+          ))
+          from edges ed
+          join comp_info i on i.entity = ed.head
+          where ed.tail = e.id and ed.label = 'reaction'
+        ),
+        'media', (
+          select json_group_array(json_object(
+            'mimeType', m.mime_type,
+            'uri', m.uri
+          ))
+          from comp_media m
+          join entities me on me.id = m.entity
+          where me.parent = e.id
+        ),
+        'links', (
+          select json_group_array(json_object(
+            'url', id(le.tail),
+            'shouldEmbed', json_extract(le.payload, '$.shouldEmbed'),
+            'data', json_extract(le.payload, '$.data')
+          ))
+          from edges le
+          where le.tail = link_edge.tail and le.head = link_edge.head
+        )
+      ) as json
+      from entities e
+        join comp_content c on c.entity = e.id
+        join edges author_edge on author_edge.head = e.id and author_edge.label = 'author'
+        join comp_user u on u.did = author_edge.tail
+        join comp_info i on i.entity = author_edge.tail
+        left join comp_override_meta o on o.entity = e.id
+        left join comp_info oai on oai.entity = o.author
+        left join comp_user oau on oau.did = o.author
+        left join edges e on e.head = c.entity and e.label = 'reply'
+        join edges link_edge on link_edge.head = e.id and link_edge.label = 'link'
       order by e.id desc
       limit ${showLastN}
     `,
@@ -279,7 +355,7 @@
               scrollRef={viewport}
               overscan={5}
               shift={isShifting}
-              getKey={(x) => x.id}
+              getKey={(x) => kind === 'chat' ? x.id : x.links[0]}
               onscroll={(o) => {
                 if (o < 100) showLastN += 50;
               }}
@@ -290,6 +366,7 @@
                   {threading}
                   {startThreading}
                   {toggleSelect}
+                  showMessage={kind === "chat"}
                 />
               {/snippet}
             </Virtualizer>

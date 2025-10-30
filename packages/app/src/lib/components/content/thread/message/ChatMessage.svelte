@@ -12,6 +12,7 @@
   import MessageReactions from "./MessageReactions.svelte";
   import ChatInput from "../ChatInput.svelte";
   import IconTablerCheck from "~icons/tabler/check";
+  import IconLucideX from "~icons/lucide/x";
   import { goto } from "$app/navigation";
   import { renderMarkdownSanitized } from "$lib/markdown";
   import type { Message } from "../ChatArea.svelte";
@@ -20,17 +21,20 @@
   import { current } from "$lib/queries.svelte";
   import { ScrollArea, toast } from "@fuxui/base";
   import { cdnImageUrl } from "$lib/utils.svelte";
+  import LinkCard from "./LinkCard.svelte";
 
   let {
     message,
     threading,
     startThreading,
     toggleSelect,
+    showMessage = true
   }: {
     message: Message;
     threading?: { active: boolean; selectedMessages: Message[]; name: string };
     startThreading: (message?: Message) => void;
     toggleSelect: (message: Message) => void;
+    showMessage?: boolean
   } = $props();
 
   let hovered = $state(false);
@@ -252,13 +256,27 @@
               </div>
             </div>
           {:else}
+          {#if showMessage}
             {@html renderMarkdownSanitized(message.content)}
+          {/if}
 
             <!-- {#if isMessageEdited && userAccessTimes.current?.updatedAt}
               <div class="text-xs text-base-700 dark:text-base-400">
                 Edited {@render timestamp(userAccessTimes.current?.updatedAt)}
               </div>
             {/if} -->
+          {/if}
+          {#if message.links.filter((l) => l.shouldEmbed).length}
+            <div class="pr-2 flex gap-1 items-start">
+              <div class="">
+                {#each message.links.filter((l) => l.shouldEmbed) as { url, data }}
+                  <div class="py-1">
+                        <LinkCard embed={data} {url} />
+                  </div>
+                {/each}
+              </div>
+              <button class="opacity-0 hover:opacity-100 cursor-pointer transition-opacity ease-in-out duration-75"><IconLucideX /></button>
+            </div>
           {/if}
         </div>
       </div>

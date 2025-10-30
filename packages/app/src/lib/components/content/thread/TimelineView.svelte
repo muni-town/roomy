@@ -3,6 +3,8 @@
   import ChatInputArea from "./ChatInputArea.svelte";
   import { setInputFocus } from "./ChatInput.svelte";
 
+  export type TimelineKind = "chat" | "link";
+  let { kind = "chat" }: { kind?: TimelineKind } = $props();
   const threading: {
     active: boolean;
     selectedMessages: Message[];
@@ -28,9 +30,15 @@
 </script>
 
 <div class="flex flex-col flex-1 h-full min-h-0 justify-stretch">
-  <ChatArea {threading} {startThreading} {toggleSelect} />
+  <ChatArea {threading} {startThreading} {toggleSelect} {kind} />
 
-  <div class="shrink-0 mt-auto">
-    <ChatInputArea {threading} />
-  </div>
+  {#if kind === "chat"}
+    <div class="shrink-0 mt-auto">
+      <ChatInputArea {threading} />
+    </div>
+  {:else if kind === "link"}
+    <div class="shrink-0 mt-auto py-1 text-center w-full bg-accent-100 dark:bg-accent-900/30 cursor-not-allowed">
+        Automated Thread
+    </div>
+  {/if}
 </div>

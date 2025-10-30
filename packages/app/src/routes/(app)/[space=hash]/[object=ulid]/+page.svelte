@@ -505,6 +505,8 @@
         <Button size="lg" onclick={joinSpace}>Join Space</Button>
       </Box>
     </div>
+  {:else if object?.name == "@links"}
+      <TimelineView kind="link"/>
   {:else if object?.kind == "channel"}
     {#if channelActiveTab == "Chat"}
       <TimelineView />

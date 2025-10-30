@@ -40,6 +40,16 @@ export default defineConfig({
   },
   server: {
     host: "127.0.0.1",
+    // Uncomment to test embeds locally
+    /* proxy: {
+      '/api/og': {
+        target: 'https://embed.internal.weird.one?lang=en',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/api\/og/, ''),
+      }
+
+    }*/
   },
   optimizeDeps: {
     exclude: ["@sqlite.org/sqlite-wasm"],

@@ -105,6 +105,7 @@ const rawIdCodec = Enum({
   unknown: str,
   ulid: Ulid,
   hash: Hash,
+  url: str,
   did: enhanceCodec<string, string>(
     str,
     (s) => {
@@ -132,6 +133,8 @@ export const IdCodec = enhanceCodec<CodecType<typeof rawIdCodec>, string>(
       return { tag: "hash", value: id };
     } else if (id.match(/^[\da-hjkmnp-tv-z]{26}$/iu)) {
       return { tag: "ulid", value: id };
+    } else if (id.startsWith('http')) {
+      return { tag: "url", value: id };
     } else {
       return { tag: "unknown", value: id };
     }
