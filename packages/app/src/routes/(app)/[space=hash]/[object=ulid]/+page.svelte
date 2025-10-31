@@ -320,9 +320,9 @@
   );
   const object = $derived(objectQuery.result?.[0]);
 
-  // $effect(() => {
-  //   console.log("object", object);
-  // });
+  $effect(() => {
+    console.log("object", object);
+  });
 </script>
 
 <MainLayout>
@@ -352,7 +352,7 @@
             </div>
           {/if}
 
-          {#if object?.parent && object.parent.kind == "channel"}
+          {#if object?.parent && object.parent.kind == "channel" && (object?.kind !== "page" || shouldShowPageTitle)}
             <a
               href={`/${page.params.space}/${object.parent.id}${object.kind == "page" ? "#pages" : object.kind == "thread" ? "#threads" : ""}`}
               class="hover:underline underline-offset-4"
