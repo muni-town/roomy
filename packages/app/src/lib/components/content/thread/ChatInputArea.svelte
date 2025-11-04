@@ -162,6 +162,7 @@
     e.preventDefault();
     if (messagingState.kind === "threading") return;
     if (!messagingState.input && messagingState.files.length == 0) return;
+    if (!current.space) return;
 
     isSendingMessage = true;
 
@@ -178,7 +179,6 @@
       uploadedFiles.push({ uri, mimeType: media.type });
     }
 
-    if (!current.space) return;
     try {
       const ulid = monotonicFactory();
       const events: EventType[] = [];
