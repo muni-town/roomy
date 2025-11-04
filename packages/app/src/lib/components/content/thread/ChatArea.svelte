@@ -18,6 +18,7 @@
   import { id } from "$lib/workers/encoding";
   import { decodeTime } from "ulidx";
   import { onNavigate } from "$app/navigation";
+  import type { MessagingState } from "./TimelineView.svelte";
 
   export type Message = {
     id: string;
@@ -41,12 +42,12 @@
   };
 
   let {
-    threading,
+    messagingState,
     startThreading,
     virtualizer = $bindable(),
     toggleSelect,
   }: {
-    threading?: { active: boolean; selectedMessages: Message[]; name: string };
+    messagingState?: MessagingState;
     startThreading: (message?: Message) => void;
     virtualizer?: VirtualizerHandle;
     toggleSelect: (message: Message) => void;
@@ -287,7 +288,7 @@
               {#snippet children(message: Message)}
                 <ChatMessage
                   {message}
-                  {threading}
+                  {messagingState}
                   {startThreading}
                   {toggleSelect}
                 />

@@ -8,7 +8,7 @@
   import { id } from "$lib/workers/encoding";
   import { Button, Prose } from "@fuxui/base";
   import ScrollArea from "$lib/components/layout/ScrollArea.svelte";
-  import { RichTextEditor } from "@fuxui/text";
+  import { RichTextEditor } from "$lib/components/richtext";
   import { patchMake, patchToText } from "diff-match-patch-es";
   import Turndown from "turndown";
   import { ulid } from "ulidx";
@@ -17,29 +17,51 @@
   import IconTablerCheck from "~icons/tabler/check";
   import IconTablerPencil from "~icons/tabler/pencil";
   import TimelineView from "../thread/TimelineView.svelte";
+  import { setCommenting, type Comment } from "../thread/TimelineView.svelte";
+  import { ensureShowPageChat } from "$lib/../routes/(app)/[space=hash]/[object=ulid]/+page.svelte";
 
   let isEditing = $state(false);
+  let contentInitialised = $state(false);
 
   let { showPageChat = $bindable(false) } = $props();
 
-  let pageQuery = new LiveQuery<{ content: string }>(
+  $effect(() => {
+    console.log("showPageChat", showPageChat);
+  });
+  let pageQuery = new LiveQuery<{ content: string; latestEditId: string }>(
     () => sql`
-    select cast(data as text) as content
+    select 
+      cast(data as text) as content,
+      (
+        select id(edit_id)
+        from comp_page_edits
+        where entity = ${page.params.object && id(page.params.object)}
+        order by edit_id desc
+        limit 1
+      ) as latestEditId
     from comp_content
     where
       entity = ${page.params.object && id(page.params.object)}
     `,
   );
-  let pageContent = $derived(pageQuery.result?.[0]?.content);
-  let editingContent = $state("");
+  let pageMarkdown = $derived(pageQuery.result?.[0]?.content);
+  let latestEditId = $derived(pageQuery.result?.[0]?.latestEditId);
+  let pageHTML = $state("");
+
+  $effect(() => {
+    if (!contentInitialised && pageMarkdown) {
+      pageHTML = renderMarkdownSanitized(pageMarkdown);
+      contentInitialised = true;
+    }
+  });
 
   async function savePage() {
     if (!current.space?.id || !page.params.object) return;
 
     isEditing = false;
-    const newMarkdown = new Turndown().turndown(editingContent);
-    if (pageContent == newMarkdown) return;
-    const patch = patchToText(patchMake(pageContent || "", newMarkdown));
+    const newMarkdown = new Turndown().turndown(pageHTML);
+    if (pageMarkdown == newMarkdown) return;
+    const patch = patchToText(patchMake(pageMarkdown || "", newMarkdown));
     await backend.sendEvent(current.space.id, {
       ulid: ulid(),
       parent: page.params.object,
@@ -62,6 +84,21 @@
     console.log("Setting scroll container ref", ref);
     scrollContainerRef.set(ref);
   });
+
+  function handleComment(selectedText: string, startOffset: number) {
+    // Ensure the chat is visible
+    ensureShowPageChat();
+
+    // Create the comment with the selected text and latest edit ID
+    const comment: Comment = {
+      snippet: selectedText.slice(0, 200), // limit to 200 chars
+      docVersion: latestEditId || "",
+      startOffset: startOffset, // TODO: Calculate actual offset if needed
+      length: selectedText.length,
+    };
+
+    setCommenting(comment);
+  }
 </script>
 
 <div class="flex h-full gap-1 py-4 px-1">
@@ -91,15 +128,15 @@
     </div>
     <div class="max-w-2xl mx-auto w-full px-4 pb-8">
       <Prose>
-        {#if isEditing}
+        {#if pageHTML}
           <RichTextEditor
-            content={editingContent}
+            content={pageHTML}
+            bind:editable={isEditing}
             onupdate={(_c, ctx) => {
-              editingContent = ctx.editor.getHTML();
+              pageHTML = ctx.editor.getHTML();
             }}
+            oncomment={handleComment}
           />
-        {:else if pageContent}
-          {@html renderMarkdownSanitized(pageContent)}
         {:else}
           Loading...
         {/if}

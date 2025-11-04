@@ -4,7 +4,7 @@
   import Tooltip from "$lib/components/helper/Tooltip.svelte";
   import { Button, buttonVariants } from "@fuxui/base";
   import { PopoverEmojiPicker } from "@fuxui/social";
-  import { setReplyTo } from "../ChatInputArea.svelte";
+  import { setReplyTo } from "../TimelineView.svelte";
   import type { Message } from "../ChatArea.svelte";
 
   import IconLucideSmilePlus from "~icons/lucide/smile-plus";

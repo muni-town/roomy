@@ -5,7 +5,7 @@
    */
 
   import { onMount, onDestroy } from "svelte";
-  import { Editor, mergeAttributes, type Content } from "@tiptap/core";
+  import { Editor, Mark, mergeAttributes, type Content } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
   import Placeholder from "@tiptap/extension-placeholder";
   import Image from "@tiptap/extension-image";
@@ -27,14 +27,17 @@
 
   let {
     content = $bindable({}),
+    editable = $bindable(false),
     placeholder = "Write or press / for commands",
     editor = $bindable(null),
     ref = $bindable(null),
     class: className,
     onupdate,
     ontransaction,
+    oncomment,
   }: {
     content?: Content;
+    editable?: boolean;
     placeholder?: string;
     editor?: Editor | null;
     ref?: HTMLDivElement | null;
@@ -44,9 +47,15 @@
       context: { editor: Editor; transaction: Transaction },
     ) => void;
     ontransaction?: () => void;
+    oncomment?: (selectedText: string, startOffset: number) => void;
   } = $props();
 
-  // const lowlight = createLowlight(all);
+  $effect(() => {
+    console.log("editor is editable?", editable);
+    if (editor?.isEditable !== editable) {
+      editor?.setEditable(editable);
+    }
+  });
 
   let hasFocus = true;
 
@@ -61,6 +70,33 @@
   let isStrikethrough = $state(false);
   let isLink = $state(false);
   let isImage = $state(false);
+  let isComment = $state(false);
+
+  const Comment = Mark.create({
+    name: "comment",
+    addOptions() {
+      return {
+        HTMLAttributes: {},
+      };
+    },
+    parseHTML() {
+      return [
+        {
+          tag: "span[data-comment]",
+        },
+      ];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return [
+        "span",
+        mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
+          "data-comment": "true",
+          class: "bg-accent-200/60",
+        }),
+        0,
+      ];
+    },
+  });
 
   const CustomImage = Image.extend({
     // addAttributes(this) {
@@ -121,6 +157,7 @@
           return "";
         },
       }),
+      Comment.configure(),
       CustomImage.configure({
         HTMLAttributes: {
           class: "max-w-full object-contain relative rounded-2xl",
@@ -135,21 +172,34 @@
         element: menu,
         shouldShow: ({ editor }) => {
           // dont show if image selected or no selection or is code block
-          return (
+          const shouldShow =
             !editor.isActive("image") &&
             !editor.view.state.selection.empty &&
             !editor.isActive("codeBlock") &&
             !editor.isActive("link") &&
-            !editor.isActive("imageUpload")
-          );
+            !editor.isActive("imageUpload");
+          if (shouldShow) {
+            console.log("should show?");
+            menu?.classList.remove("hidden");
+          }
+          return shouldShow;
         },
+        options: {},
         pluginKey: "bubble-menu-marks",
       }),
       BubbleMenu.configure({
         element: menuLink,
         shouldShow: ({ editor }) => {
           // only show if link is selected
-          return editor.isActive("link") && !editor.view.state.selection.empty;
+          const shouldShow =
+            editor.isEditable &&
+            editor.isActive("link") &&
+            !editor.view.state.selection.empty;
+          if (shouldShow) {
+            console.log("should show link menu?");
+            menuLink?.classList.remove("hidden");
+          }
+          return shouldShow;
         },
         pluginKey: "bubble-menu-links",
       }),
@@ -183,6 +233,7 @@
     ];
 
     editor = new Editor({
+      editable,
       element: ref,
       extensions,
       editorProps: {
@@ -207,6 +258,7 @@
         isStrikethrough = ctx.editor.isActive("strike");
         isLink = ctx.editor.isActive("link");
         isImage = ctx.editor.isActive("image");
+        isComment = ctx.editor.isActive("comment");
 
         if (ctx.editor.isActive("heading", { level: 1 })) {
           selectedType = "heading-1";
@@ -229,9 +281,6 @@
       },
       content,
     });
-
-    menu?.classList.remove("hidden");
-    menuLink?.classList.remove("hidden");
   });
 
   // Flag to track whether a file is being dragged over the drop area
@@ -378,6 +427,7 @@
 
 <RichTextEditorMenu
   bind:ref={menu}
+  bind:editable
   {editor}
   {isBold}
   {isItalic}
@@ -385,13 +435,21 @@
   {isStrikethrough}
   {isLink}
   {isImage}
+  {isComment}
   {clickedLink}
   {processImageFile}
   {switchTo}
   bind:selectedType
+  {oncomment}
 />
 
-<RichTextEditorLinkMenu bind:ref={menuLink} {editor} bind:link bind:linkInput />
+<RichTextEditorLinkMenu
+  bind:ref={menuLink}
+  bind:editable
+  {editor}
+  bind:link
+  bind:linkInput
+/>
 
 <style>
   :global(.tiptap) {

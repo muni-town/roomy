@@ -1,15 +1,6 @@
-<script module lang="ts">
-  let replyTo: Message | null = $state(null);
-
-  export function setReplyTo(message: Message) {
-    replyTo = message;
-    setInputFocus();
-  }
-</script>
-
 <script lang="ts">
   import { Button, Input, toast } from "@fuxui/base";
-  import MessageRepliedTo from "./message/MessageRepliedTo.svelte";
+  import MessageContext from "./message/MessageContext.svelte";
   import FullscreenImageDropper from "$lib/components/helper/FullscreenImageDropper.svelte";
 
   import IconMdiCloseCircle from "~icons/mdi/close-circle";
@@ -20,16 +11,32 @@
   import { current } from "$lib/queries.svelte";
   import { monotonicFactory } from "ulidx";
   import { page } from "$app/state";
-  import type { Message } from "./ChatArea.svelte";
-  import { setInputFocus } from "./ChatInput.svelte";
+  // import type { Message } from "./ChatArea.svelte";
+  // import { setInputFocus } from "./ChatInput.svelte";
   import { navigate } from "$lib/utils.svelte";
   import type { EventType } from "$lib/workers/materializer";
+  import {
+    setNormal,
+    type MessagingState,
+    type Threading,
+  } from "./TimelineView.svelte";
 
+  // let {
+  //   threading = $bindable({ active: false, selectedMessages: [], name: "" }),
+  // }: {
+  //   threading?: ;
+  // } = $props();
+  //
   let {
-    threading = { active: false, selectedMessages: [], name: "" },
-  }: {
-    threading?: { active: boolean; selectedMessages: Message[]; name: string };
-  } = $props();
+    messagingState = $bindable({
+      kind: "normal",
+      input: "",
+      files: [],
+    }),
+  }: { messagingState: MessagingState } = $props();
+
+  let messageInputEl: null | HTMLInputElement = $state(null);
+  let isSendingMessage = $state(false);
 
   let previewImages: string[] = $state([]);
 
@@ -63,10 +70,14 @@
     });
   }
 
-  let filesInMessage: File[] = $state([]);
-
   function processImageFile(file: File) {
-    filesInMessage.push(file);
+    if (messagingState.kind === "threading") {
+      toast.error("Cannot send files while creating a thread.", {
+        position: "bottom-right",
+      });
+      return;
+    }
+    messagingState.files.push(file);
 
     if (file.type.startsWith("video/")) {
       getVideoThumbnail(file).then((thumbnail) => {
@@ -78,8 +89,17 @@
   }
 
   function removeImageFile(index: number) {
+    if (messagingState.kind === "threading") {
+      toast.error(
+        "It shouldn't be possible to have (or remove) files while threading...",
+        {
+          position: "bottom-right",
+        },
+      );
+      return;
+    }
     let previewImage = previewImages[index];
-    filesInMessage = filesInMessage.filter((_, i) => i !== index);
+    messagingState.files = messagingState.files.filter((_, i) => i !== index);
     previewImages = previewImages.filter((_, i) => i !== index);
 
     if (previewImage) {
@@ -89,11 +109,12 @@
 
   async function handleCreateThread() {
     if (!current.space?.id) return;
-    if (threading.selectedMessages.length == 0) return;
+    if (messagingState.kind !== "threading") return;
+    if ((messagingState as Threading).selectedMessages.length == 0) return;
     const ulid = monotonicFactory();
     const threadName =
-      threading.name ||
-      threading.selectedMessages[0]?.content.slice(0, 50) + "...";
+      messagingState.name ||
+      messagingState.selectedMessages[0]?.content.slice(0, 50) + "...";
 
     const threadId = ulid();
     await backend.sendEvent(current.space.id, {
@@ -127,7 +148,7 @@
       },
     });
 
-    for (const message of threading.selectedMessages) {
+    for (const message of messagingState.selectedMessages) {
       await backend.sendEvent(current.space.id, {
         ulid: ulid(),
         parent: message.id,
@@ -143,19 +164,19 @@
     navigate({ space: page.params.space, object: threadId });
   }
 
-  let messageInput: string = $state("");
-  let messageInputEl: null | HTMLInputElement = $state(null);
-  let isSendingMessage = $state(false);
   async function sendMessage(e: SubmitEvent) {
     e.preventDefault();
-    if (!messageInput && filesInMessage.length == 0) return;
-    const message = messageInput;
-    messageInput = "";
-    const filesToUpload = [...filesInMessage];
-    filesInMessage = [];
-    previewImages = [];
-    const replyToId = replyTo?.id;
-    replyTo = null;
+    if (messagingState.kind === "threading") return;
+    if (!messagingState.input && messagingState.files.length == 0) return;
+
+    isSendingMessage = true;
+
+    const message = messagingState.input;
+    const filesToUpload = [...messagingState.files];
+    const replyToId =
+      "replyTo" in messagingState ? messagingState.replyTo?.id : undefined;
+
+    console.log("Uploading files:", filesToUpload);
 
     const uploadedFiles: { uri: string; mimeType: string }[] = [];
     for (const media of filesToUpload) {
@@ -163,12 +184,11 @@
         mimeType: media.type,
       });
       uploadedFiles.push({ uri, mimeType: media.type });
+      console.log("Uploaded file", media);
     }
 
     if (!current.space) return;
     try {
-      isSendingMessage = true;
-
       const ulid = monotonicFactory();
       const events: EventType[] = [];
 
@@ -207,9 +227,9 @@
       console.error(e);
       toast.error("Failed to send message.", { position: "bottom-right" });
     } finally {
+      messagingState = { kind: "normal", input: "", files: [] };
       isSendingMessage = false;
       previewImages = [];
-      filesInMessage = [];
     }
   }
 </script>
@@ -217,69 +237,57 @@
 <div
   class="flex-none pt-2 pb-2 pr-2 border-t border-base-100 dark:border-base-900"
 >
-  {#if replyTo}
-    <div
-      class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
-    >
+  <!-- Message context: reply, threading, or comment -->
+  <div
+    class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
+  >
+    {#if messagingState.kind === "replying"}
       <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
         <span class="shrink-0 text-base-900 dark:text-base-100"
           >Replying to</span
         >
-        <MessageRepliedTo message={replyTo} />
+        <MessageContext bind:context={messagingState} />
       </div>
-      <Button
-        variant="ghost"
-        onclick={() => (replyTo = null)}
-        class="flex-shrink-0"
-      >
+      <Button variant="ghost" onclick={() => setNormal()} class="flex-shrink-0">
         <IconMdiCloseCircle />
       </Button>
-    </div>
-  {/if}
-
-  {#if threading.active}
-    <div
-      class="flex items-start justify-between bg-secondary text-secondary-content rounded-t-lg px-2 py-2"
-    >
+    {:else if messagingState.kind === "threading"}
       <div
         class="px-2 flex flex-wrap items-center gap-1 overflow-hidden text-xs w-full"
       >
         <span class="shrink-0 text-base-900 dark:text-base-100"
           >Creating thread with</span
         >
-        {#if threading.selectedMessages[0]}
+        {#if messagingState.selectedMessages[0]}
           <div class="max-w-[28rem]">
-            <MessageRepliedTo message={threading.selectedMessages[0]} />
+            <MessageContext bind:context={messagingState} />
           </div>
         {/if}
-        {#if threading.selectedMessages.length > 1}
+        {#if messagingState.selectedMessages.length > 1}
           <span class="shrink-0 text-base-900 dark:text-base-100"
-            >and {threading.selectedMessages.length - 1} other message{threading
+            >and {messagingState.selectedMessages.length - 1} other message{messagingState
               .selectedMessages.length > 2
               ? "s"
               : ""}</span
           >
-        {:else if threading.selectedMessages.length === 0}
+        {:else if messagingState.selectedMessages.length === 0}
           <span class="shrink-0 text-base-900 dark:text-base-100"
             >no messages</span
           >
         {/if}
       </div>
-      <Button
-        variant="ghost"
-        onclick={() => {
-          threading.active = false;
-          threading.selectedMessages = [];
-        }}
-        class="flex-shrink-0"
-      >
+      <Button variant="ghost" onclick={() => setNormal()} class="flex-shrink-0">
         <IconMdiCloseCircle />
       </Button>
-    </div>
-    <label for="thread-name" class="px-4 py-2 text-xs font-medium"
-      >Thread name (optional):</label
-    >
-  {/if}
+    {:else if messagingState.kind === "commenting"}
+      <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
+        <MessageContext bind:context={messagingState} />
+      </div>
+      <Button variant="ghost" onclick={() => setNormal()} class="flex-shrink-0">
+        <IconMdiCloseCircle />
+      </Button>
+    {/if}
+  </div>
 
   <div class="w-full py-1">
     <div class="prose-a:text-primary prose-a:underline relative isolate">
@@ -312,14 +320,18 @@
       {/if}
 
       <div class="flex w-full pl-2 gap-2">
-        {#if threading.active}
-          <form onsubmit={handleCreateThread}>
+        {#if messagingState.kind === "threading"}
+          <form onsubmit={handleCreateThread} class="flex w-full gap-2">
+            <label for="thread-name" class="pl-4 py-2 text-xs font-medium"
+              >Thread name (optional):</label
+            >
             <Input
               disabled={isSendingMessage}
-              bind:value={threading.name}
+              bind:value={messagingState.name}
               id="thread-name"
               class="grow ml-2 disabled:opacity-50"
             />
+
             <Button type="submit"
               ><IconTablerNeedleThread />Create Thread</Button
             >
@@ -330,15 +342,17 @@
           {:else}
             <UploadFileButton {processImageFile} />
           {/if}
+
           <form onsubmit={sendMessage} class="w-full">
             <Input
               disabled={isSendingMessage}
               bind:ref={messageInputEl}
-              bind:value={messageInput}
+              bind:value={messagingState.input}
               placeholder="Send a message..."
               class="w-full font-normal text-base-800 dark:text-base-200 disabled:opacity-50"
             />
           </form>
+
           <!-- {#key users.length + context.length} -->
           <!-- <ChatInput
               bind:content={messageInput}

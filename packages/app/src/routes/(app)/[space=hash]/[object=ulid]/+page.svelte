@@ -1,3 +1,16 @@
+<script lang="ts" module>
+  let showPageChat = $state(false);
+  export function toggleShowPageChat() {
+    showPageChat = !showPageChat;
+  }
+  export function ensureShowPageChat() {
+    if (!showPageChat) {
+      console.log("Does it ensure??");
+      showPageChat = true;
+    }
+  }
+</script>
+
 <script lang="ts">
   import { page } from "$app/state";
   import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
@@ -45,10 +58,12 @@
     });
   }
 
-  let showPageChat = $state(false);
-
   const ref = $derived($scrollContainerRef);
   let shouldShowPageTitle = $state(false);
+
+  $effect(() => {
+    console.log("showPageChat", showPageChat);
+  });
 
   $effect(() => {
     console.log("ref changed", ref);
@@ -465,7 +480,7 @@
               <Button
                 data-active={showPageChat}
                 variant={showPageChat ? "primary" : "secondary"}
-                onclick={() => (showPageChat = !showPageChat)}
+                onclick={() => toggleShowPageChat()}
                 ><IconHeroiconsChatBubbleLeftRight
                   class="shrink-0"
                 />Chat</Button

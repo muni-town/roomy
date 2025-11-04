@@ -26,7 +26,7 @@
     index: number;
   } = $props();
 
-  console.log("sidebar item level", level, item);
+  // console.log("sidebar item level", level, item);
 
   let showGroupChildren = $state(true);
   // TODO: actually handle unreads & subthreads

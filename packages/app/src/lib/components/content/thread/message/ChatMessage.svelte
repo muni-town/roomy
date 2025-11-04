@@ -8,7 +8,7 @@
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
   import MessageToolbar from "./MessageToolbar.svelte";
-  import MessageRepliedTo from "./MessageRepliedTo.svelte";
+  import MessageContext from "./MessageContext.svelte";
   import MessageReactions from "./MessageReactions.svelte";
   import ChatInput from "../ChatInput.svelte";
   import IconTablerCheck from "~icons/tabler/check";
@@ -21,18 +21,25 @@
   import { ScrollArea, toast } from "@fuxui/base";
   import { cdnImageUrl } from "$lib/utils.svelte";
   import IconLucideImageOff from "~icons/lucide/image-off";
+  import type { MessagingState } from "../TimelineView.svelte";
 
   let {
     message,
-    threading,
+    messagingState,
     startThreading,
     toggleSelect,
   }: {
     message: Message;
-    threading?: { active: boolean; selectedMessages: Message[]; name: string };
+    messagingState?: MessagingState;
     startThreading: (message?: Message) => void;
     toggleSelect: (message: Message) => void;
   } = $props();
+
+  const threading = $derived.by(() => {
+    if (!messagingState) return null;
+    if (messagingState.kind !== "threading") return null;
+    return messagingState;
+  });
 
   let hovered = $state(false);
   let keepToolbarOpen = $state(false);
@@ -51,9 +58,9 @@
   } = $derived.by(() => {
     const defaultInfo = {
       id: message.authorDid,
-      name: message.authorName,
-      handle: message.authorHandle,
-      avatarUrl: message.authorAvatar,
+      name: message.authorName || undefined,
+      handle: message.authorHandle || undefined,
+      avatarUrl: message.authorAvatar || undefined,
       timestamp: new Date(decodeTime(message.id)),
       profileUrl: `/user/${message.authorDid}`,
     };
@@ -63,9 +70,9 @@
     try {
       return {
         id: message.masqueradeAuthor,
-        handle: message.masqueradeAuthorHandle,
-        name: message.masqueradeAuthorName,
-        avatarUrl: message.masqueradeAuthorAvatar,
+        handle: message.masqueradeAuthorHandle || undefined,
+        name: message.masqueradeAuthorName || undefined,
+        avatarUrl: message.masqueradeAuthorAvatar || undefined,
         timestamp: message.masqueradeTimestamp
           ? new Date(message.masqueradeTimestamp)
           : new Date(decodeTime(message.id)),
@@ -130,30 +137,30 @@
     editingMessage.id = "";
   }
 
-  let isMessageEdited = $derived.by(() => {
-    // if (!message.current) return false;
-    // if (
-    //   !userAccessTimes.current?.createdAt ||
-    //   !userAccessTimes.current?.updatedAt
-    // )
-    //   return false;
-    // // if time between createdAt and updatedAt is less than 1 minute, we dont consider it edited
-    // return (
-    //   userAccessTimes.current?.updatedAt.getTime() -
-    //     userAccessTimes.current?.createdAt.getTime() >
-    //   1000 * 60
-    // );
-  });
+  // let isMessageEdited = $derived.by(() => {
+  // if (!message.current) return false;
+  // if (
+  //   !userAccessTimes.current?.createdAt ||
+  //   !userAccessTimes.current?.updatedAt
+  // )
+  //   return false;
+  // // if time between createdAt and updatedAt is less than 1 minute, we dont consider it edited
+  // return (
+  //   userAccessTimes.current?.updatedAt.getTime() -
+  //     userAccessTimes.current?.createdAt.getTime() >
+  //   1000 * 60
+  // );
+  // });
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
   id={message.id}
-  class={`flex flex-col w-full relative max-w-screen isolate px-4 ${threading?.active ? "select-none" : ""}`}
+  class={`flex flex-col w-full relative max-w-screen isolate px-4 ${threading ? "select-none" : ""}`}
   onmouseenter={() => (hovered = true)}
   onmouseleave={() => (hovered = false)}
 >
-  {#if threading?.active}
+  {#if threading}
     <Checkbox.Root
       aria-label="Select message"
       onclick={(e) => e.stopPropagation()}
@@ -186,7 +193,14 @@
     ]}
   >
     {#if message.replyTo}
-      <MessageRepliedTo messageId={message.replyTo} />
+      <MessageContext
+        context={{
+          kind: "replying",
+          replyTo: { id: message.replyTo },
+          input: "",
+          files: [],
+        }}
+      />
     {/if}
 
     <div class="group relative flex w-full justify-start gap-3">
@@ -279,26 +293,27 @@
         {#if message.media.length}
           <div class="flex flex-wrap gap-4 my-3">
             {#each message.media.filter( (x) => x.mimeType.startsWith("image"), ) as media}
-              <a
-                href={`#${encodeURIComponent(media.uri)}`}
-                aria-label="image full screen"
-              >
-                <!-- TODO: support input and rendering of alt text -->
-                {#if mediaWithErrors.includes(media.uri)}
-                  <!-- Error Loading -->
-                  <div
-                    class="w-40 h-28 flex items-center justify-center bg-base-200 dark:bg-base-800 rounded-lg"
-                  >
-                    <IconLucideImageOff class="shrink-0" />
-                  </div>
-                {:else}
+              {#if mediaWithErrors.includes(media.uri)}
+                <!-- Error Loading -->
+                <div
+                  class="w-40 h-28 flex items-center justify-center bg-base-200 dark:bg-base-800 rounded"
+                >
+                  <IconLucideImageOff class="shrink-0" />
+                </div>
+              {:else}
+                <a
+                  href={`#${encodeURIComponent(media.uri)}`}
+                  aria-label="image full screen"
+                >
+                  <!-- TODO: support input and rendering of alt text. Also, store image size (and blur hash?), so we can pre-render loading states without layout shift -->
+
                   <img
                     src={cdnImageUrl(media.uri, { size: "thumbnail" })}
-                    class="max-w-[15em]"
+                    class="max-w-[15em] rounded"
                     onerror={() => markMediaError(media.uri)}
                   />
-                {/if}
-              </a>
+                </a>
+              {/if}
             {/each}
 
             <!-- TODO: display videos from Bluesky CDN. -->
@@ -318,7 +333,7 @@
       </div>
     </div>
 
-    {#if (editingMessage.id !== message.id && hovered && !threading?.active) || keepToolbarOpen}
+    {#if (editingMessage.id !== message.id && hovered && !threading) || keepToolbarOpen}
       <MessageToolbar
         bind:isDrawerOpen
         canEdit={messageByMe}

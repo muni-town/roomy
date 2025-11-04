@@ -9,18 +9,20 @@
 
   let {
     editor,
+    editable = $bindable(false),
     link = $bindable(""),
     ref = $bindable(null),
     linkInput = $bindable(null),
   }: {
     editor: Editor | null;
+    editable: boolean;
     link: string;
     ref: HTMLElement | null;
     linkInput: HTMLInputElement | null;
   } = $props();
 
   function processLink(link: string) {
-    return link.includes(":") ? link : `http://${link}`;
+    return link.includes("://") ? link : `http://${link}`;
   }
 </script>
 
