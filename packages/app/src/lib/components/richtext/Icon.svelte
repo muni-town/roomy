@@ -1,6 +1,6 @@
 <script lang="ts">
   /***
-   * From Fox UI by Flo-bit
+   * Icon From Fox UI by Flo-bit
    * https://github.com/flo-bit/ui-kit/tree/main/packages/text/src/lib/components/rich-text-editor
    */
 
@@ -12,10 +12,6 @@
     name: RichTextTypes;
   } = $props();
 </script>
-
-/*** * From Fox UI by Flo-bit *
-https://github.com/flo-bit/ui-kit/tree/main/packages/text/src/lib/components/rich-text-editor
-*/
 
 {#if name === "paragraph"}
   <svg
