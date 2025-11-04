@@ -236,6 +236,7 @@
       </Button>
     </div>
   {/if}
+
   {#if threading.active}
     <div
       class="flex items-start justify-between bg-secondary text-secondary-content rounded-t-lg px-2 py-2"
@@ -279,12 +280,18 @@
       >Thread name (optional):</label
     >
   {/if}
+
   <div class="w-full py-1">
     <div class="prose-a:text-primary prose-a:underline relative isolate">
       {#if previewImages.length > 0}
         <div class="flex gap-2 my-2 overflow-x-auto w-full px-2">
           {#each previewImages as previewImage, index (previewImage)}
-            <div class="size-24 relative shrink-0">
+            <div
+              class={[
+                "size-24 relative shrink-0",
+                isSendingMessage ? "opacity-60" : "",
+              ]}
+            >
               <img
                 src={previewImage}
                 alt="Preview"
@@ -292,8 +299,9 @@
               />
 
               <Button
+                disabled={isSendingMessage}
                 variant="ghost"
-                class="absolute p-0.5 top-1 right-1 bg-base-100 hover:bg-base-200 dark:bg-base-900 dark:hover:bg-base-800 rounded-full"
+                class="absolute p-0.5 top-1 right-1 bg-base-100 hover:bg-base-200 dark:bg-base-900 dark:hover:bg-base-800 rounded-full disabled:hidden"
                 onclick={() => removeImageFile(index)}
               >
                 <IconTablerX class="size-4" />
@@ -310,20 +318,25 @@
               disabled={isSendingMessage}
               bind:value={threading.name}
               id="thread-name"
-              class="grow ml-2"
+              class="grow ml-2 disabled:opacity-50"
             />
             <Button type="submit"
               ><IconTablerNeedleThread />Create Thread</Button
             >
           </form>
         {:else}
-          <UploadFileButton {processImageFile} />
+          {#if isSendingMessage}
+            <div class="flex items-center justify-center py-2">Sending...</div>
+          {:else}
+            <UploadFileButton {processImageFile} />
+          {/if}
           <form onsubmit={sendMessage} class="w-full">
             <Input
+              disabled={isSendingMessage}
               bind:ref={messageInputEl}
               bind:value={messageInput}
               placeholder="Send a message..."
-              class="w-full font-normal text-base-800 dark:text-base-200"
+              class="w-full font-normal text-base-800 dark:text-base-200 disabled:opacity-50"
             />
           </form>
           <!-- {#key users.length + context.length} -->
