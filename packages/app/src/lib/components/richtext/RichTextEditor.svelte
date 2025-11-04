@@ -56,7 +56,7 @@
       context: { editor: Editor; transaction: Transaction },
     ) => void;
     ontransaction?: () => void;
-    oncomment?: (selectedText: string, startOffset: number) => void;
+    oncomment?: (selectedText: string, from: number, to: number) => void;
   } = $props();
 
   $effect(() => {
@@ -71,14 +71,15 @@
 
     if (shouldRemoveComment.length) {
       for (const comment of shouldRemoveComment) {
-        const { from, to } = editor.state.selection;
-        // only remove if selection matches comment range
-        if (
-          from === comment.startOffset &&
-          to === comment.startOffset + comment.length
-        ) {
-          editor.chain().focus().unsetMark("comment").run();
-        }
+        editor
+          .chain()
+          .focus()
+          .setTextSelection({
+            from: comment.from,
+            to: comment.to,
+          })
+          .unsetMark("comment")
+          .run();
       }
       shouldRemoveComment = [];
     }
@@ -426,9 +427,14 @@
   function clickedComment() {
     if (isComment) {
       // remove comment mark
-      editor?.chain().focus().unsetMark("comment").run();
+      editor
+        ?.chain()
+        .focus()
+        .extendMarkRange("comment")
+        .unsetMark("comment")
+        .run();
       if (!oncomment) throw new Error("oncomment is not defined");
-      oncomment("", 0);
+      oncomment("", 0, 0);
       return;
     } else {
       if (!editor) throw new Error("Editor is not defined");
@@ -437,8 +443,8 @@
       editor.chain().focus().setMark("comment").run();
 
       const { from, to } = editor.state.selection;
-      const selectedText = editor.state.doc.textBetween(from, to, " ");
-      oncomment(selectedText, from);
+      const selectedText = editor.state.doc.textBetween(from, to, " "); // plain text
+      oncomment(selectedText, from, to);
     }
   }
 

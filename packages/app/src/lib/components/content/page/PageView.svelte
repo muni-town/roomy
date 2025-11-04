@@ -85,8 +85,8 @@
     scrollContainerRef.set(ref);
   });
 
-  function setComment(selectedText: string, startOffset: number) {
-    console.log("Running setComment", selectedText, startOffset);
+  function setComment(selectedText: string, from: number, to: number) {
+    console.log("Running setComment", selectedText, from);
     // Ensure the chat is visible
     ensureShowPageChat();
 
@@ -95,8 +95,8 @@
       const comment: Comment = {
         snippet: selectedText.slice(0, 200), // limit to 200 chars
         docVersion: latestEditId || "",
-        startOffset: startOffset, // TODO: Calculate actual offset if needed
-        length: selectedText.length,
+        from,
+        to,
       };
 
       setCommenting(comment);

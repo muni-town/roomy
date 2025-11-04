@@ -21,8 +21,8 @@
   export type Comment = {
     snippet: string; // limit length
     docVersion: string; // ULID of the edit version
-    startOffset: number;
-    length: number;
+    from: number;
+    to: number;
   };
 
   export type Commenting = {
