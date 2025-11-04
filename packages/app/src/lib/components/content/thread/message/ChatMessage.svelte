@@ -20,6 +20,7 @@
   import { current } from "$lib/queries.svelte";
   import { ScrollArea, toast } from "@fuxui/base";
   import { cdnImageUrl } from "$lib/utils.svelte";
+  import IconLucideImageOff from "~icons/lucide/image-off";
 
   let {
     message,
@@ -73,6 +74,14 @@
 
     return defaultInfo;
   });
+
+  let mediaWithErrors = $state<string[]>([]);
+
+  function markMediaError(uri: string) {
+    if (!mediaWithErrors.includes(uri)) {
+      mediaWithErrors = [...mediaWithErrors, uri];
+    }
+  }
 
   let messageByMe = $derived(message.authorDid == backendStatus.did);
 
@@ -275,10 +284,20 @@
                 aria-label="image full screen"
               >
                 <!-- TODO: support input and rendering of alt text -->
-                <img
-                  src={cdnImageUrl(media.uri, { size: "thumbnail" })}
-                  class="max-w-[15em]"
-                />
+                {#if mediaWithErrors.includes(media.uri)}
+                  <!-- Error Loading -->
+                  <div
+                    class="w-40 h-28 flex items-center justify-center bg-base-200 dark:bg-base-800 rounded-lg"
+                  >
+                    <IconLucideImageOff class="shrink-0" />
+                  </div>
+                {:else}
+                  <img
+                    src={cdnImageUrl(media.uri, { size: "thumbnail" })}
+                    class="max-w-[15em]"
+                    onerror={() => markMediaError(media.uri)}
+                  />
+                {/if}
               </a>
             {/each}
 
