@@ -21,11 +21,11 @@
     isLink,
     isComment,
     clickedLink,
+    clickedComment,
     selectedType = $bindable("paragraph"),
     ref = $bindable(null),
     processImageFile,
     switchTo,
-    oncomment,
   }: {
     editor: Editor | null;
     editable: boolean;
@@ -37,11 +37,11 @@
     isLink: boolean;
     isComment: boolean;
     clickedLink: () => void;
+    clickedComment: () => void;
     selectedType: RichTextTypes;
     ref: HTMLElement | null;
     processImageFile: (file: File, input: HTMLInputElement) => void;
     switchTo: (value: RichTextTypes) => void;
-    oncomment?: (selectedText: string, startOffset: number) => void;
   } = $props();
 
   $inspect(isBold);
@@ -198,14 +198,7 @@
   <Toggle
     size="sm"
     onclick={() => {
-      if (!editor) throw new Error("Editor is not defined");
-      if (!oncomment) throw new Error("oncomment is not defined");
-
-      editor?.chain().focus().setMark("comment").run();
-
-      const { from, to } = editor.state.selection;
-      const selectedText = editor.state.doc.textBetween(from, to, " ");
-      oncomment(selectedText, from);
+      clickedComment();
     }}
     bind:pressed={() => isComment, (_comment) => {}}
   >

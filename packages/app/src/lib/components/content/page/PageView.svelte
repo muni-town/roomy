@@ -16,7 +16,7 @@
 
   import IconTablerCheck from "~icons/tabler/check";
   import IconTablerPencil from "~icons/tabler/pencil";
-  import TimelineView from "../thread/TimelineView.svelte";
+  import TimelineView, { setNormal } from "../thread/TimelineView.svelte";
   import { setCommenting, type Comment } from "../thread/TimelineView.svelte";
   import { ensureShowPageChat } from "$lib/../routes/(app)/[space=hash]/[object=ulid]/+page.svelte";
 
@@ -85,19 +85,25 @@
     scrollContainerRef.set(ref);
   });
 
-  function handleComment(selectedText: string, startOffset: number) {
+  function setComment(selectedText: string, startOffset: number) {
+    console.log("Running setComment", selectedText, startOffset);
     // Ensure the chat is visible
     ensureShowPageChat();
 
-    // Create the comment with the selected text and latest edit ID
-    const comment: Comment = {
-      snippet: selectedText.slice(0, 200), // limit to 200 chars
-      docVersion: latestEditId || "",
-      startOffset: startOffset, // TODO: Calculate actual offset if needed
-      length: selectedText.length,
-    };
+    if (selectedText.length) {
+      // Create the comment with the selected text and latest edit ID
+      const comment: Comment = {
+        snippet: selectedText.slice(0, 200), // limit to 200 chars
+        docVersion: latestEditId || "",
+        startOffset: startOffset, // TODO: Calculate actual offset if needed
+        length: selectedText.length,
+      };
 
-    setCommenting(comment);
+      setCommenting(comment);
+    } else {
+      // If no text is selected, revert to normal mode
+      setNormal();
+    }
   }
 </script>
 
@@ -135,7 +141,7 @@
             onupdate={(_c, ctx) => {
               pageHTML = ctx.editor.getHTML();
             }}
-            oncomment={handleComment}
+            oncomment={setComment}
           />
         {:else}
           Loading...
@@ -145,7 +151,7 @@
   </ScrollArea>
   {#if showPageChat}
     <div
-      class="max-w-lg mr-2 w-full border border-base-200 rounded-xl justify-self-end"
+      class="max-w-lg mr-2 w-full border border-base-200 dark:border-base-800 rounded-xl justify-self-end"
     >
       <TimelineView />
     </div>

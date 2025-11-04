@@ -1,3 +1,11 @@
+<script lang="ts" module>
+  let shouldRemoveComment = $state<CommentType[]>([]);
+
+  export function markCommentForRemoval(comment: CommentType) {
+    shouldRemoveComment = [...shouldRemoveComment, comment];
+  }
+</script>
+
 <script lang="ts">
   /***
    * From Fox UI by Flo-bit
@@ -24,6 +32,7 @@
   import { cn } from "@fuxui/base";
   import { ImageUploadNode } from "./image-upload/ImageUploadNode";
   import { Transaction } from "@tiptap/pm/state";
+  import type { Comment as CommentType } from "../content/thread/TimelineView.svelte";
 
   let {
     content = $bindable({}),
@@ -57,6 +66,24 @@
     }
   });
 
+  $effect(() => {
+    if (!editor) return;
+
+    if (shouldRemoveComment.length) {
+      for (const comment of shouldRemoveComment) {
+        const { from, to } = editor.state.selection;
+        // only remove if selection matches comment range
+        if (
+          from === comment.startOffset &&
+          to === comment.startOffset + comment.length
+        ) {
+          editor.chain().focus().unsetMark("comment").run();
+        }
+      }
+      shouldRemoveComment = [];
+    }
+  });
+
   let hasFocus = true;
 
   let menu: HTMLElement | null = $state(null);
@@ -74,6 +101,8 @@
 
   const Comment = Mark.create({
     name: "comment",
+    keepOnSplit: true,
+    spanning: true,
     addOptions() {
       return {
         HTMLAttributes: {},
@@ -394,6 +423,25 @@
     }
   }
 
+  function clickedComment() {
+    if (isComment) {
+      // remove comment mark
+      editor?.chain().focus().unsetMark("comment").run();
+      if (!oncomment) throw new Error("oncomment is not defined");
+      oncomment("", 0);
+      return;
+    } else {
+      if (!editor) throw new Error("Editor is not defined");
+      if (!oncomment) throw new Error("oncomment is not defined");
+
+      editor.chain().focus().setMark("comment").run();
+
+      const { from, to } = editor.state.selection;
+      const selectedText = editor.state.doc.textBetween(from, to, " ");
+      oncomment(selectedText, from);
+    }
+  }
+
   function switchTo(value: RichTextTypes) {
     editor?.chain().focus().setParagraph().run();
 
@@ -437,10 +485,10 @@
   {isImage}
   {isComment}
   {clickedLink}
+  {clickedComment}
   {processImageFile}
   {switchTo}
   bind:selectedType
-  {oncomment}
 />
 
 <RichTextEditorLinkMenu

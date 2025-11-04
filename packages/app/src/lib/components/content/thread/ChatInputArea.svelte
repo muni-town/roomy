@@ -11,22 +11,16 @@
   import { current } from "$lib/queries.svelte";
   import { monotonicFactory } from "ulidx";
   import { page } from "$app/state";
-  // import type { Message } from "./ChatArea.svelte";
-  // import { setInputFocus } from "./ChatInput.svelte";
   import { navigate } from "$lib/utils.svelte";
   import type { EventType } from "$lib/workers/materializer";
   import {
     setNormal,
+    type Commenting,
     type MessagingState,
     type Threading,
   } from "./TimelineView.svelte";
+  import { markCommentForRemoval } from "$lib/components/richtext/RichTextEditor.svelte";
 
-  // let {
-  //   threading = $bindable({ active: false, selectedMessages: [], name: "" }),
-  // }: {
-  //   threading?: ;
-  // } = $props();
-  //
   let {
     messagingState = $bindable({
       kind: "normal",
@@ -176,15 +170,12 @@
     const replyToId =
       "replyTo" in messagingState ? messagingState.replyTo?.id : undefined;
 
-    console.log("Uploading files:", filesToUpload);
-
     const uploadedFiles: { uri: string; mimeType: string }[] = [];
     for (const media of filesToUpload) {
       const { uri } = await backend.uploadToPds(await media.arrayBuffer(), {
         mimeType: media.type,
       });
       uploadedFiles.push({ uri, mimeType: media.type });
-      console.log("Uploaded file", media);
     }
 
     if (!current.space) return;
@@ -283,7 +274,14 @@
       <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
         <MessageContext bind:context={messagingState} />
       </div>
-      <Button variant="ghost" onclick={() => setNormal()} class="flex-shrink-0">
+      <Button
+        variant="ghost"
+        onclick={() => {
+          markCommentForRemoval((messagingState as Commenting).comment);
+          setNormal();
+        }}
+        class="flex-shrink-0"
+      >
         <IconMdiCloseCircle />
       </Button>
     {/if}
