@@ -180,7 +180,8 @@
       <MessageRepliedTo messageId={message.replyTo} />
     {/if}
 
-    <div class={"group relative flex w-full justify-start gap-3"}>
+    <div class="group relative flex w-full justify-start gap-3">
+      <!-- Avatar, or left margin -->
       {#if !message.mergeWithPrevious}
         <div class="size-8 sm:size-10">
           <button
@@ -206,6 +207,7 @@
       {/if}
 
       <div class="flex flex-col gap-1">
+        <!-- Username, timestamp -->
         {#if !message.mergeWithPrevious}
           <span class="flex items-center gap-2 text-sm">
             <span class="font-bold text-accent-700 dark:text-accent-400"
@@ -223,6 +225,8 @@
             {@render timestamp(metadata.timestamp)}
           </span>
         {/if}
+
+        <!-- Message text -->
         <div
           class="prose prose-a:text-accent-600 dark:prose-a:text-accent-400 dark:prose-invert prose-a:no-underline max-w-full"
         >
@@ -261,6 +265,37 @@
             {/if} -->
           {/if}
         </div>
+
+        <!-- Media -->
+        {#if message.media.length}
+          <div class="flex flex-wrap gap-4 my-3">
+            {#each message.media.filter( (x) => x.mimeType.startsWith("image"), ) as media}
+              <a
+                href={`#${encodeURIComponent(media.uri)}`}
+                aria-label="image full screen"
+              >
+                <!-- TODO: support input and rendering of alt text -->
+                <img
+                  src={cdnImageUrl(media.uri, { size: "thumbnail" })}
+                  class="max-w-[15em]"
+                />
+              </a>
+            {/each}
+
+            <!-- TODO: display videos from Bluesky CDN. -->
+
+            <!-- <div class="pl-11 md:pl-13 max-w-full flex flex-wrap gap-2 z-10">
+              {#each embeds.current?.embeds ?? [] as embed}
+                {#if embed?.type === "imageUrl"}
+                  <ImageUrlEmbed embedId={embed.embedId} />
+                {/if}
+                {#if embed?.type === "videoUrl"}
+                  <VideoUrlEmbed embedId={embed.embedId} />
+                {/if}
+              {/each}
+            </div> -->
+          </div>
+        {/if}
       </div>
     </div>
 
@@ -282,16 +317,6 @@
       <span class="sr-only">Open toolbar</span>
     </button>
 
-    <!-- <div class="pl-11 md:pl-13 max-w-full flex flex-wrap gap-2 z-10">
-      {#each embeds.current?.embeds ?? [] as embed}
-        {#if embed?.type === "imageUrl"}
-          <ImageUrlEmbed embedId={embed.embedId} />
-        {/if}
-        {#if embed?.type === "videoUrl"}
-          <VideoUrlEmbed embedId={embed.embedId} />
-        {/if}
-      {/each}
-    </div> -->
     <!-- 
     {#if message.current?.components?.[BranchThreadIdComponent.id] && message.current?.components?.[BranchThreadIdComponent.id] !== threadId}
       <MessageThreadBadge
@@ -302,32 +327,16 @@
 
     <MessageReactions {message} />
   </div>
-
-  {#if message.media.length}
-    <div class="flex flex-wrap gap-4 my-3">
-      {#each message.media.filter( (x) => x.mimeType.startsWith("image"), ) as media}
-        <a
-          href={`#${encodeURIComponent(media.uri)}`}
-          aria-label="image full screen"
-        >
-          <img
-            src={cdnImageUrl(media.uri, { size: "thumbnail" })}
-            class="max-w-[15em]"
-          />
-        </a>
-      {/each}
-
-      <!-- TODO: display videos from Bluesky CDN. -->
-    </div>
-  {/if}
 </div>
 
 <Portal>
   {#each message.media.filter((x) => x.mimeType.startsWith("image")) as media}
+    <!-- TODO: convert to native HTML dialog modal -->
     <div
       id={encodeURIComponent(media.uri)}
       class="media-overlay"
       tabindex="0"
+      aria-label="Dismiss image zoom"
       onclick={() => {
         imageZooming = false;
         window.location.href = "#";
@@ -351,22 +360,26 @@
         X
       </a>
       <ScrollArea orientation="both" class="m-auto max-w-full max-h-full">
-        <img
-          src={cdnImageUrl(media.uri)}
-          class="transition-all duration-100 ease-linear"
-          class:no-zoom={!imageZooming}
-          onload={(e) => {
-            const img = e.currentTarget as HTMLImageElement;
-            img.setAttribute(
-              "style",
-              `max-width: ${img.naturalWidth}px; max-height: ${img.naturalHeight}px`,
-            );
-          }}
+        <button
+          aria-label="Toggle image zoom"
           onclick={(e) => {
             e.stopPropagation();
             imageZooming = !imageZooming;
           }}
-        />
+        >
+          <img
+            src={cdnImageUrl(media.uri)}
+            class="transition-all duration-100 ease-linear"
+            class:no-zoom={!imageZooming}
+            onload={(e) => {
+              const img = e.currentTarget as HTMLImageElement;
+              img.setAttribute(
+                "style",
+                `max-width: ${img.naturalWidth}px; max-height: ${img.naturalHeight}px`,
+              );
+            }}
+          />
+        </button>
       </ScrollArea>
     </div>
   {/each}
