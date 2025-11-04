@@ -64,36 +64,32 @@
   });
 </script>
 
-<div class="flex h-full">
+<div class="flex h-full gap-1 py-4 px-1">
   <ScrollArea
     orientation="vertical"
-    class={["relative", showPageChat ? "w-1/2" : ""]}
+    class={["relative grow w-full", showPageChat ? "" : ""]}
     bind:ref
   >
-    <div class="max-w-4xl mx-auto w-full px-4 pb-8">
-      <div class="flex z-10 justify-end mb-4 sticky top-4 right-4">
-        {#if isEditing}
-          <Button onclick={savePage}>
-            <IconTablerCheck />
-            Save
-          </Button>
-        {:else}
-          <Button
-            variant="secondary"
-            disabled={!pageQuery.result?.length}
-            onclick={() => {
-              isEditing = true;
-              editingContent = pageContent
-                ? renderMarkdownSanitized(pageContent)
-                : "";
-            }}
-          >
-            <IconTablerPencil />
-            Edit
-          </Button>
-        {/if}
-      </div>
-
+    <div class="flex z-10 justify-end mb-4 sticky top-0 pr-3">
+      {#if isEditing}
+        <Button onclick={savePage}>
+          <IconTablerCheck />
+          Save
+        </Button>
+      {:else}
+        <Button
+          variant="secondary"
+          disabled={!pageQuery.result?.length}
+          onclick={() => {
+            isEditing = true;
+          }}
+        >
+          <IconTablerPencil />
+          Edit
+        </Button>
+      {/if}
+    </div>
+    <div class="max-w-2xl mx-auto w-full px-4 pb-8">
       <Prose>
         {#if isEditing}
           <RichTextEditor
@@ -111,6 +107,10 @@
     </div>
   </ScrollArea>
   {#if showPageChat}
-    <TimelineView />
+    <div
+      class="max-w-lg mr-2 w-full border border-base-200 rounded-xl justify-self-end"
+    >
+      <TimelineView />
+    </div>
   {/if}
 </div>

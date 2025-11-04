@@ -215,7 +215,7 @@
 </script>
 
 <div
-  class="flex-none bg-white dark:bg-base-950 pt-2 pb-2 pr-2 border-t border-base-100 dark:border-base-900"
+  class="flex-none pt-2 pb-2 pr-2 border-t border-base-100 dark:border-base-900"
 >
   {#if replyTo}
     <div
