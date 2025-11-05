@@ -20,10 +20,13 @@ import {
   _void,
   Struct,
   u64,
+  compact,
 } from "scale-ts";
 import { createCodec, str, Tuple } from "scale-ts";
 
-/** encoding */
+/** encoding -
+ * old version for compatibility,
+ * but should be removed when Leaf changes hit */
 const kindsEnc = <O extends { [key: string]: Encoder<any> }>(
   inner: O,
 ): Encoder<
@@ -39,7 +42,9 @@ const kindsEnc = <O extends { [key: string]: Encoder<any> }>(
   };
 };
 
-/** decoding */
+/** decoding -
+ * old version for compatibility,
+ * but should be removed when Leaf changes hit */
 const kindsDec = <O extends { [key: string]: Decoder<any> }>(
   inner: O,
 ): Decoder<
@@ -58,7 +63,9 @@ const kindsDec = <O extends { [key: string]: Decoder<any> }>(
   });
 };
 
-/** Kinds codec creator */
+/** Kinds codec creator -
+ * old version for compatibility,
+ * but should be removed when Leaf changes hit */
 export const Kinds = <O extends { [key: string]: Codec<any> }>(
   inner: O,
 ): Codec<
@@ -77,6 +84,105 @@ export const Kinds = <O extends { [key: string]: Codec<any> }>(
 
 Kinds.enc = kindsEnc;
 Kinds.dec = kindsDec;
+
+/** Custom 'Kinds' codec: encoding function
+ * extensible kinds, adds length prefix so data
+ * that compose unknown kinds can be decoded */
+const kinds2Enc = <O extends { [key: string]: Encoder<any> }>(
+  inner: O,
+): Encoder<
+  {
+    [K in keyof O]: { kind: K; data: EncoderType<O[K]> };
+  }[keyof O]
+> => {
+  return ({ kind, data }) => {
+    if (typeof kind !== "string") throw "key must be string";
+    const kindEncoder = inner[kind];
+    if (!kindEncoder) throw `Unknown kind: ${kind}`;
+
+    // Encode the data first to get its size
+    const encodedData = kindEncoder(data);
+
+    // Use Tuple to encode: [kind_string, data_size, data_bytes]
+    // We encode the data as raw bytes since it's already encoded
+    return Tuple(str, compact, Bytes(encodedData.length)).enc([
+      kind,
+      encodedData.length,
+      encodedData,
+    ]);
+  };
+};
+
+/** Custom 'Kinds' codec: decoding function
+ * Unknown kinds can still be decoded as raw bytes,
+ * meaning kinds can safely be extended in the future
+ * with backward compatibility
+ */
+const kinds2Dec = <O extends { [key: string]: Decoder<any> }>(
+  inner: O,
+): Decoder<
+  | {
+      [K in keyof O]: { kind: K; data: DecoderType<O[K]> };
+    }[keyof O]
+  | { kind: string; data: Uint8Array }
+> => {
+  return createDecoder((bytes) => {
+    // Decode the kind string
+    const kind = str.dec(bytes);
+
+    // Decode the data size
+    const dataSize = compact.dec(bytes) as number;
+
+    // Check if we have a decoder for this kind
+    const valueDecoder = inner[kind] as O[keyof O] | undefined;
+
+    if (!valueDecoder) {
+      // Unknown kind: read the raw bytes and return them
+      const rawData = Bytes(dataSize).dec(bytes);
+      return {
+        kind,
+        data: rawData,
+      };
+    }
+
+    // Known kind: decode the data normally
+    // We need to create a view of just the data bytes for this variant
+    const variantBytes = Bytes(dataSize).dec(bytes);
+    const data = valueDecoder(variantBytes);
+
+    return {
+      kind,
+      data,
+    };
+  });
+};
+
+/** 'Kinds' codec creator
+ * Kinds is like an enum, but SCALE enums by default use a numeric index
+ * to indicate the variant. Kinds uses a string identifier instead.
+ *
+ * This version supports unknown kinds by encoding the data size
+ * before the data, allowing future extensions while maintaining
+ * backward compatibility.
+ */
+export const Kinds2 = <O extends { [key: string]: Codec<any> }>(
+  inner: O,
+): Codec<
+  {
+    [K in keyof O]: { kind: K; data: CodecType<O[K]> };
+  }[keyof O]
+> => {
+  const e = Object.fromEntries(
+    Object.entries(inner).map(([k, v]) => [k, v.enc]),
+  );
+  const d = Object.fromEntries(
+    Object.entries(inner).map(([k, v]) => [k, v.dec]),
+  );
+  return createCodec(kinds2Enc(e), kinds2Dec(d)) as any;
+};
+
+Kinds2.enc = kinds2Enc;
+Kinds2.dec = kinds2Dec;
 
 export const Hash = enhanceCodec(Bytes(32), hex.decode, hex.encode);
 
