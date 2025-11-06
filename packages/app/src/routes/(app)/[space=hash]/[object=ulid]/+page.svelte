@@ -334,10 +334,6 @@
     (row) => JSON.parse(row.json),
   );
   const object = $derived(objectQuery.result?.[0]);
-
-  $effect(() => {
-    console.log("object", object);
-  });
 </script>
 
 <MainLayout>

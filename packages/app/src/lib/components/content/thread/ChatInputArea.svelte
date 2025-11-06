@@ -20,6 +20,7 @@
     type Threading,
   } from "./TimelineView.svelte";
   import { markCommentForRemoval } from "$lib/components/richtext/RichTextEditor.svelte";
+  import { getMediaPreloadData } from "$lib/utils/media";
 
   let {
     messagingState = $bindable({
@@ -171,12 +172,20 @@
     const replyToId =
       "replyTo" in messagingState ? messagingState.replyTo?.id : undefined;
 
-    const uploadedFiles: { uri: string; mimeType: string }[] = [];
+    const uploadedFiles: {
+      uri: string;
+      mimeType: string;
+      height?: number;
+      width?: number;
+      blurhash?: string;
+    }[] = [];
     for (const media of filesToUpload) {
       const { uri } = await backend.uploadToPds(await media.arrayBuffer(), {
         mimeType: media.type,
       });
-      uploadedFiles.push({ uri, mimeType: media.type });
+      const dimensions = await getMediaPreloadData(media);
+
+      uploadedFiles.push({ uri, mimeType: media.type, ...dimensions });
     }
 
     try {
@@ -184,34 +193,44 @@
       const events: EventType[] = [];
 
       const messageId = ulid();
+
+      type MessageExtensions = Extract<
+        EventType["variant"],
+        { kind: "space.roomy.message.create.1" }
+      >["data"]["extensions"];
+
+      const extensions: MessageExtensions = uploadedFiles.map((data) => ({
+        kind: "space.roomy.image.0",
+        data: {
+          uri: data.uri,
+          mimeType: data.mimeType,
+          width: data.width,
+          height: data.height,
+          blurhash: data.blurhash,
+        },
+      }));
+
+      if (replyToId) {
+        extensions.push({
+          kind: "space.roomy.replyTo.0",
+          data: replyToId,
+        });
+      }
+
       events.push({
         ulid: messageId,
         parent: page.params.object,
         variant: {
-          kind: "space.roomy.message.create.0",
+          kind: "space.roomy.message.create.1",
           data: {
-            replyTo: replyToId,
             content: {
               content: new TextEncoder().encode(message),
               mimeType: "text/markdown",
             },
+            extensions,
           },
         },
       });
-
-      for (const { uri: uri, mimeType } of uploadedFiles) {
-        events.push({
-          ulid: ulid(),
-          parent: messageId,
-          variant: {
-            kind: "space.roomy.media.create.0",
-            data: {
-              uri,
-              mimeType,
-            },
-          },
-        });
-      }
 
       await backend.sendEventBatch(current.space.id, events);
     } catch (e: any) {

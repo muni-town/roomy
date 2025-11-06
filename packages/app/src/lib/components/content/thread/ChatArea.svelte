@@ -38,6 +38,16 @@
     media: {
       uri: string;
       mimeType: string;
+      width?: number;
+      height?: number;
+      blurhash?: string;
+      length?: number;
+      size?: number;
+      name?: string;
+    }[];
+    links: {
+      uri: string;
+      showPreview: boolean;
     }[];
   };
 
@@ -79,12 +89,29 @@
         ),
         'media', (
           select json_group_array(json_object(
-            'mimeType', m.mime_type,
-            'uri', m.uri
+            'mimeType', coalesce(i.mime_type, v.mime_type, f.mime_type),
+            'uri', coalesce(i.uri, v.uri, f.uri),
+            'width', coalesce(i.width, v.width),
+            'height', coalesce(i.height, v.height),
+            'blurhash', coalesce(i.blurhash, v.blurhash),
+            'length', v.length,
+            'size', coalesce(v.size, f.size),
+            'name', f.name
           ))
-          from comp_media m
-          join entities me on me.id = m.entity
+          from entities me
+          left join comp_image i on i.entity = me.id
+          left join comp_video v on v.entity = me.id
+          left join comp_file f on f.entity = me.id
           where me.parent = e.id
+            and (i.entity is not null or v.entity is not null or f.entity is not null)
+        ),
+        'links', (
+          select json_group_array(json_object(
+            'uri', l.uri,
+            'showPreview', l.show_preview
+          ))
+          from comp_link l
+          where l.entity = e.id
         )
       ) as json
       from entities e

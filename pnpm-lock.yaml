@@ -48,6 +48,9 @@ importers:
       '@tiptap/extension-underline':
         specifier: ^3.9.0
         version: 3.9.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))
+      blurhash:
+        specifier: ^2.0.5
+        version: 2.0.5
       hls.js:
         specifier: ^1.6.12
         version: 1.6.12
@@ -2017,6 +2020,9 @@ packages:
 
   bluesky-post-embed@1.0.5:
     resolution: {integrity: sha512-xnzbnGIYuLosTN2pXlUh2WcfYn6SBgQk8qfM6L/IxIrIwtJTjNMoPj1iv3dxgl7hK8ItJcBLWTEQuBA/8IpqwQ==}
+
+  blurhash@2.0.5:
+    resolution: {integrity: sha512-cRygWd7kGBQO3VEhPiTgq4Wc43ctsM+o46urrmPOiuAe+07fzlSB9OJVdpgDL0jPqXUVQ9ht7aq7kxOeJHRK+w==}
 
   boolbase@1.0.0:
     resolution: {integrity: sha512-JZOSA7Mo9sNGB8+UjSgzdLtokWAky1zbztM3WRLCbZ70/3cTANmQmOdR7y2g+J0e2WXywy1yS468tY+IruqEww==}
@@ -5501,6 +5507,8 @@ snapshots:
       '@atcute/bluesky': 1.0.15(@atcute/client@2.0.9)
       '@atcute/bluesky-richtext-segmenter': 1.0.5(@atcute/bluesky@1.0.15(@atcute/client@2.0.9))(@atcute/client@2.0.9)
       '@atcute/client': 2.0.9
+
+  blurhash@2.0.5: {}
 
   boolbase@1.0.0: {}
 

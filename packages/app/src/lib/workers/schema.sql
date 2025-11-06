@@ -94,14 +94,6 @@ create table if not exists comp_override_meta (
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
 
-create table if not exists comp_media (
-  entity blob primary key references entities(ulid) on delete cascade,
-  uri text not null,
-  mime_type text not null,
-  created_at integer not null default (unixepoch() * 1000),
-  updated_at integer not null default (unixepoch() * 1000)
-) strict;
-
 -- This is a component, attached to a page room entity,
 -- but because it has multiple values ( a page can have multiple edits )
 -- it has it's own primary key, the ID of the edit, and a separate column
@@ -114,8 +106,61 @@ create table if not exists comp_page_edits(
   entity blob references entities(ulid) on delete cascade,
   mime_type text not null,
   data blob not null,
-  user_id not null
+  user_id blob not null
   -- We don't need a created_at date because that is in the ULID
   -- and we don't need an updated_at date because the diff will
   -- never, itself, be edited.
-)
+) strict;
+
+create table if not exists comp_comment (
+  entity blob primary key references entities(ulid) on delete cascade,
+  version blob references comp_page_edits(edit_id) on delete cascade,
+  idx_from integer not null,
+  idx_to integer not null,
+  created_at integer not null default (unixepoch() * 1000),
+  updated_at integer not null default (unixepoch() * 1000)
+) strict;
+
+create table if not exists comp_image (
+  entity blob primary key references entities(ulid) on delete cascade,
+  uri text not null,
+  mime_type text not null,
+  size integer,
+  width integer,
+  height integer,
+  blurhash text,
+  created_at integer not null default (unixepoch() * 1000),
+  updated_at integer not null default (unixepoch() * 1000)
+) strict;
+
+create table if not exists comp_video (
+  entity blob primary key references entities(ulid) on delete cascade,
+  uri text not null,
+  mime_type text not null,
+  size integer,
+  width integer,
+  height integer,
+  length integer,
+  blurhash text,
+  created_at integer not null default (unixepoch() * 1000),
+  updated_at integer not null default (unixepoch() * 1000)
+) strict;
+
+create table if not exists comp_file (
+  entity blob primary key references entities(ulid) on delete cascade,
+  uri text not null,
+  mime_type text not null,
+  size integer,
+  name text,
+  created_at integer not null default (unixepoch() * 1000),
+  updated_at integer not null default (unixepoch() * 1000)
+) strict;
+
+create table if not exists comp_link (
+  entity blob primary key references entities(ulid) on delete cascade,
+  uri text not null,
+  show_preview integer check(show_preview in (0, 1)) default 1,
+  created_at integer not null default (unixepoch() * 1000),
+  updated_at integer not null default (unixepoch() * 1000)
+) strict;
+  

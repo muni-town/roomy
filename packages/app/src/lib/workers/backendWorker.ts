@@ -858,7 +858,6 @@ class StreamMaterializer {
 
         // Backfill events
         console.time(`finishedBackfill-${this.#streamId}`);
-        console.log("Backfilling stream:", this.#streamId);
 
         const fetchChannel = new AsyncChannel<StreamEvent[]>();
 
@@ -866,6 +865,12 @@ class StreamMaterializer {
         const latestEventBeforeBackfill = this.#latestEvent;
         (async () => {
           let fetchCursor = latestEventBeforeBackfill + 1;
+          console.log(
+            "Backfilling stream:",
+            this.#streamId,
+            "from fetchCursor",
+            fetchCursor,
+          );
           console.time(`fetchAllBatches-${this.#streamId}`);
 
           while (true) {
@@ -941,6 +946,8 @@ class StreamMaterializer {
     if (!state.leafClient) throw "No Leaf client";
     if (this.#latestEvent == undefined) throw "latest event not initialized";
 
+    console.log("materialising for", this.streamId, batches);
+
     const sqlChannel = this.#materializer(
       sqliteWorker,
       state.agent,
@@ -949,6 +956,7 @@ class StreamMaterializer {
     );
 
     for await (const { sqlStatements, latestEvent } of sqlChannel) {
+      console.log("latestEvent", latestEvent);
       try {
         console.time("runMaterializedSql");
         await sqliteWorker.runSavepoint({

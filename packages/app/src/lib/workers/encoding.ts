@@ -20,7 +20,11 @@ import {
   _void,
   Struct,
   u64,
+  u32,
+  u16,
   compact,
+  Vector,
+  bool,
 } from "scale-ts";
 import { createCodec, str, Tuple } from "scale-ts";
 
@@ -365,6 +369,52 @@ export const eventVariantCodec = Kinds({
   "space.roomy.message.create.0": Struct({
     content: Content,
     replyTo: Option(Ulid),
+  }),
+  /** Create a new chat message, v1.
+   * This version adds support for extensible fields:
+   *
+   */
+  "space.roomy.message.create.1": Struct({
+    content: Content,
+    extensions: Vector(
+      Kinds2({
+        "space.roomy.replyTo.0": Ulid,
+        "space.roomy.comment.0": Struct({
+          version: Ulid,
+          from: u32, // document index
+          to: u32, // document index
+        }),
+        "space.roomy.overrideAuthorDid.0": str,
+        "space.roomy.overrideTimestamp.0": u64, // unix
+        "space.roomy.image.0": Struct({
+          uri: str,
+          mimeType: str,
+          height: Option(u16), // pixels
+          width: Option(u16), // pixels
+          blurhash: Option(str),
+          size: Option(u32), // bytes
+        }),
+        "space.roomy.video.0": Struct({
+          uri: str,
+          mimeType: str,
+          height: Option(u16), // pixels
+          width: Option(u16), // pixels
+          length: Option(u16), // seconds
+          blurhash: Option(str), // thumbnail
+          size: Option(u32), // bytes
+        }),
+        "space.roomy.file.0": Struct({
+          uri: str,
+          mimeType: str,
+          name: Option(str),
+          size: Option(u32), // bytes
+        }),
+        "space.roomy.link.0": Struct({
+          uri: str,
+          showPreview: bool,
+        }),
+      }),
+    ),
   }),
   /** Edit a previously sent message */
   "space.roomy.message.edit.0": Struct({
