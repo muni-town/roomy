@@ -129,6 +129,7 @@ create table if not exists comp_image (
   width integer,
   height integer,
   blurhash text,
+  alt text,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
@@ -142,6 +143,7 @@ create table if not exists comp_video (
   height integer,
   length integer,
   blurhash text,
+  alt text,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;

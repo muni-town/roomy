@@ -386,11 +386,12 @@ const materializers: {
         if (img.data instanceof Uint8Array) return; // Skip unknown variants
 
         statements.push(sql`
-          insert into comp_image (entity, uri, mime_type, width, height, blurhash)
+          insert into comp_image (entity, uri, mime_type, alt, width, height, blurhash)
           values (
             ${id(event.ulid)},
             ${img.data.uri},
             ${img.data.mimeType},
+            ${img.data.alt},
             ${img.data.width ? Number(img.data.width) : null},
             ${img.data.height ? Number(img.data.height) : null},
             ${img.data.blurhash || null}
@@ -405,11 +406,12 @@ const materializers: {
         if (vid.data instanceof Uint8Array) return; // Skip unknown variants
 
         statements.push(sql`
-          insert into comp_video (entity, uri, mime_type, width, height, length)
+          insert into comp_video (entity, uri, mime_type, alt, width, height, length)
           values (
             ${id(event.ulid)},
             ${vid.data.uri},
             ${vid.data.mimeType},
+            ${vid.data.alt},
             ${vid.data.width ? Number(vid.data.width) : null},
             ${vid.data.height ? Number(vid.data.height) : null},
             ${vid.data.length ? Number(vid.data.length) : null}

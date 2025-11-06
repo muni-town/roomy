@@ -389,6 +389,7 @@ export const eventVariantCodec = Kinds({
         "space.roomy.image.0": Struct({
           uri: str,
           mimeType: str,
+          alt: Option(str),
           height: Option(u16), // pixels
           width: Option(u16), // pixels
           blurhash: Option(str),
@@ -397,6 +398,7 @@ export const eventVariantCodec = Kinds({
         "space.roomy.video.0": Struct({
           uri: str,
           mimeType: str,
+          alt: Option(str),
           height: Option(u16), // pixels
           width: Option(u16), // pixels
           length: Option(u16), // seconds
