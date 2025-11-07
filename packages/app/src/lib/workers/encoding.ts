@@ -91,7 +91,12 @@ Kinds.dec = kindsDec;
 
 /** Custom 'Kinds' codec: encoding function
  * extensible kinds, adds length prefix so data
- * that compose unknown kinds can be decoded */
+ * that compose unknown kinds can be decoded
+ *
+ * NOTE: This encoder was fixed to properly concatenate bytes. Previous versions
+ * used Tuple() which created malformed output. Data encoded with the old version
+ * cannot be decoded and requires a cache reset.
+ */
 const kinds2Enc = <O extends { [key: string]: Encoder<any> }>(
   inner: O,
 ): Encoder<
@@ -107,13 +112,19 @@ const kinds2Enc = <O extends { [key: string]: Encoder<any> }>(
     // Encode the data first to get its size
     const encodedData = kindEncoder(data);
 
-    // Use Tuple to encode: [kind_string, data_size, data_bytes]
-    // We encode the data as raw bytes since it's already encoded
-    return Tuple(str, compact, Bytes(encodedData.length)).enc([
-      kind,
-      encodedData.length,
-      encodedData,
-    ]);
+    // Manually concatenate: kind_string + compact_size + data_bytes
+    const kindBytes = str.enc(kind);
+    const sizeBytes = compact.enc(encodedData.length);
+
+    // Concatenate all parts
+    const result = new Uint8Array(
+      kindBytes.length + sizeBytes.length + encodedData.length,
+    );
+    result.set(kindBytes, 0);
+    result.set(sizeBytes, kindBytes.length);
+    result.set(encodedData, kindBytes.length + sizeBytes.length);
+
+    return result;
   };
 };
 
@@ -137,6 +148,13 @@ const kinds2Dec = <O extends { [key: string]: Decoder<any> }>(
     // Decode the data size
     const dataSize = compact.dec(bytes) as number;
 
+    // Validate dataSize is reasonable
+    if (dataSize < 0 || dataSize > 100_000_000) {
+      throw new Error(
+        `Invalid dataSize ${dataSize} for kind "${kind}". This suggests data corruption or encoding/decoding mismatch.`,
+      );
+    }
+
     // Check if we have a decoder for this kind
     const valueDecoder = inner[kind] as O[keyof O] | undefined;
 
@@ -150,8 +168,11 @@ const kinds2Dec = <O extends { [key: string]: Decoder<any> }>(
     }
 
     // Known kind: decode the data normally
-    // We need to create a view of just the data bytes for this variant
-    const variantBytes = Bytes(dataSize).dec(bytes);
+    // Extract the bytes for this variant
+    const rawBytes = Bytes(dataSize).dec(bytes);
+    // Create a completely fresh Uint8Array with its own ArrayBuffer to avoid DataView issues
+    // Using Uint8Array.from ensures we get a new buffer, not a view
+    const variantBytes = Uint8Array.from(rawBytes);
     const data = valueDecoder(variantBytes);
 
     return {

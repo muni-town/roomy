@@ -50,9 +50,29 @@ export function materializer(
       // reset ensured flags for each new batch
       ensuredProfiles = new Set();
 
-      const decodedEvents = events.map(
-        (e) => [e, eventCodec.dec(e.payload)] as const,
-      );
+      const decodedEvents = events
+        .map((e) => {
+          try {
+            // Convert ArrayBuffer to Uint8Array for decoding
+            const payloadBytes = new Uint8Array(e.payload);
+            return [e, eventCodec.dec(payloadBytes)] as const;
+          } catch (error) {
+            const payloadBytes = new Uint8Array(e.payload);
+            console.warn(
+              `Skipping malformed event (index ${e.index}): Failed to decode ${payloadBytes.length} bytes.`,
+              `This is likely from an older buggy encoder. Error:`,
+              error instanceof Error ? error.message : error,
+            );
+            // Return null to filter out this event
+            return null;
+          }
+        })
+        .filter((e) => e !== null) as Array<
+        readonly [
+          event: { index: number; user: string; payload: ArrayBuffer },
+          decoded: any,
+        ]
+      >;
 
       // Make sure all of the profiles we need are downloaded and inserted
       const neededProfiles = new Set<string>();

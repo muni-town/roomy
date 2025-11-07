@@ -1,6 +1,6 @@
 import { assert, expect, test, describe } from "vitest";
 
-import { Hash, id, IdCodec, Ulid, Kinds2 } from "./encoding";
+import { Hash, id, IdCodec, Ulid, Kinds2, eventCodec } from "./encoding";
 import { monotonicFactory, ulid } from "ulidx";
 import { Struct, str, u32, _void } from "scale-ts";
 
@@ -181,5 +181,211 @@ describe("Kinds codec", () => {
 
     expect(decoded.kind).toBe("test.string");
     expect(decoded.data).toBe(largeString);
+  });
+});
+
+describe("space.roomy.message.create.1 codec", () => {
+  test("message with image extension round-trip", () => {
+    const messageId = ulid();
+    const event = {
+      ulid: messageId,
+      parent: undefined,
+      variant: {
+        kind: "space.roomy.message.create.1" as const,
+        data: {
+          content: {
+            mimeType: "text/plain",
+            content: new TextEncoder().encode("Hello world!"),
+          },
+          extensions: [
+            {
+              kind: "space.roomy.image.0" as const,
+              data: {
+                uri: "https://example.com/image.jpg",
+                mimeType: "image/jpeg",
+                alt: "A test image",
+                height: 1080,
+                width: 1920,
+                blurhash: "LEHV6nWB2yk8pyo0adR*.7kCMdnj",
+                size: 524288,
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    const encoded = eventCodec.enc(event);
+    console.log(`Encoded message size: ${encoded.length} bytes`);
+    console.log("First 50 bytes:", Array.from(encoded.slice(0, 50)));
+
+    const decoded = eventCodec.dec(encoded);
+
+    expect(decoded.ulid).toBe(messageId);
+    expect(decoded.parent).toBeUndefined();
+    expect(decoded.variant.kind).toBe("space.roomy.message.create.1");
+
+    // Type narrowing
+    if (decoded.variant.kind !== "space.roomy.message.create.1") {
+      throw new Error("Wrong variant kind");
+    }
+
+    expect(decoded.variant.data.extensions).toHaveLength(1);
+    expect(decoded.variant.data.extensions[0]?.kind).toBe(
+      "space.roomy.image.0",
+    );
+    expect(decoded.variant.data.extensions[0]?.data).toEqual({
+      uri: "https://example.com/image.jpg",
+      mimeType: "image/jpeg",
+      alt: "A test image",
+      height: 1080,
+      width: 1920,
+      blurhash: "LEHV6nWB2yk8pyo0adR*.7kCMdnj",
+      size: 524288,
+    });
+  });
+
+  test("message with video extension round-trip", () => {
+    const messageId = ulid();
+    const event = {
+      ulid: messageId,
+      parent: undefined,
+      variant: {
+        kind: "space.roomy.message.create.1" as const,
+        data: {
+          content: {
+            mimeType: "text/plain",
+            content: new TextEncoder().encode("Check this out!"),
+          },
+          extensions: [
+            {
+              kind: "space.roomy.video.0" as const,
+              data: {
+                uri: "https://example.com/video.mp4",
+                mimeType: "video/mp4",
+                alt: "A test video",
+                height: 720,
+                width: 1280,
+                length: 120,
+                blurhash: "LEHV6nWB2yk8pyo0adR*.7kCMdnj",
+                size: 10485760,
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    const encoded = eventCodec.enc(event);
+    const decoded = eventCodec.dec(encoded);
+
+    expect(decoded.variant.kind).toBe("space.roomy.message.create.1");
+
+    // Type narrowing
+    if (decoded.variant.kind !== "space.roomy.message.create.1") {
+      throw new Error("Wrong variant kind");
+    }
+
+    expect(decoded.variant.data.extensions[0]?.kind).toBe(
+      "space.roomy.video.0",
+    );
+  });
+
+  test("message with multiple extensions round-trip", () => {
+    const messageId = ulid();
+    const event = {
+      ulid: messageId,
+      parent: undefined,
+      variant: {
+        kind: "space.roomy.message.create.1" as const,
+        data: {
+          content: {
+            mimeType: "text/plain",
+            content: new TextEncoder().encode("Multiple attachments"),
+          },
+          extensions: [
+            {
+              kind: "space.roomy.image.0" as const,
+              data: {
+                uri: "https://example.com/image1.jpg",
+                mimeType: "image/jpeg",
+                alt: undefined,
+                height: 1080,
+                width: 1920,
+                blurhash: undefined,
+                size: 524288,
+              },
+            },
+            {
+              kind: "space.roomy.link.0" as const,
+              data: {
+                uri: "https://example.com",
+                showPreview: true,
+              },
+            },
+            {
+              kind: "space.roomy.file.0" as const,
+              data: {
+                uri: "https://example.com/document.pdf",
+                mimeType: "application/pdf",
+                name: "document.pdf",
+                size: 1048576,
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    const encoded = eventCodec.enc(event);
+    console.log(
+      `Encoded message with multiple extensions size: ${encoded.length} bytes`,
+    );
+
+    const decoded = eventCodec.dec(encoded);
+
+    expect(decoded.variant.kind).toBe("space.roomy.message.create.1");
+
+    // Type narrowing
+    if (decoded.variant.kind !== "space.roomy.message.create.1") {
+      throw new Error("Wrong variant kind");
+    }
+
+    expect(decoded.variant.data.extensions).toHaveLength(3);
+    expect(decoded.variant.data.extensions[0]?.kind).toBe(
+      "space.roomy.image.0",
+    );
+    expect(decoded.variant.data.extensions[1]?.kind).toBe("space.roomy.link.0");
+    expect(decoded.variant.data.extensions[2]?.kind).toBe("space.roomy.file.0");
+  });
+
+  test("message with empty extensions array", () => {
+    const messageId = ulid();
+    const event = {
+      ulid: messageId,
+      parent: undefined,
+      variant: {
+        kind: "space.roomy.message.create.1" as const,
+        data: {
+          content: {
+            mimeType: "text/plain",
+            content: new TextEncoder().encode("No extensions"),
+          },
+          extensions: [],
+        },
+      },
+    };
+
+    const encoded = eventCodec.enc(event);
+    const decoded = eventCodec.dec(encoded);
+
+    expect(decoded.variant.kind).toBe("space.roomy.message.create.1");
+
+    // Type narrowing
+    if (decoded.variant.kind !== "space.roomy.message.create.1") {
+      throw new Error("Wrong variant kind");
+    }
+
+    expect(decoded.variant.data.extensions).toHaveLength(0);
   });
 });

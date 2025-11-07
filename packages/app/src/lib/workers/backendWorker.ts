@@ -946,8 +946,6 @@ class StreamMaterializer {
     if (!state.leafClient) throw "No Leaf client";
     if (this.#latestEvent == undefined) throw "latest event not initialized";
 
-    console.log("materialising for", this.streamId, batches);
-
     const sqlChannel = this.#materializer(
       sqliteWorker,
       state.agent,
@@ -956,7 +954,6 @@ class StreamMaterializer {
     );
 
     for await (const { sqlStatements, latestEvent } of sqlChannel) {
-      console.log("latestEvent", latestEvent);
       try {
         console.time("runMaterializedSql");
         await sqliteWorker.runSavepoint({
