@@ -386,14 +386,17 @@ export const eventVariantCodec = Kinds({
     access: ReadOrWrite,
     reason: Option(str),
   }),
-  /** Create a new chat message. */
+  /** DEPRECATED - replaced by space.roomy.message.create.1
+   * Create a new chat message. */
   "space.roomy.message.create.0": Struct({
     content: Content,
     replyTo: Option(Ulid),
   }),
   /** Create a new chat message, v1.
-   * This version adds support for extensible fields:
-   *
+   * This version adds support for extensible fields,
+   * using backwards compatible Kinds2 codec
+   * Attachments, etc are now encapsulated within the message event,
+   * do not require separate 'media.create' events
    */
   "space.roomy.message.create.1": Struct({
     content: Content,
@@ -499,7 +502,8 @@ export const eventVariantCodec = Kinds({
     reaction: str,
     reactingUser: str,
   }),
-  /** Create new media that can, for example, be attached to messages. */
+  /** DEPRECATED - replaced by space.roomy.message.create.1
+   * Create new media that can, for example, be attached to messages. */
   "space.roomy.media.create.0": Struct({
     /** For now all media is external and we use a URI to load it. */
     uri: str,
