@@ -665,11 +665,10 @@ const materializers: {
 
   // Media
   "space.roomy.media.create.0": async ({ streamId, event, data }) => {
-    const statements = [ensureEntity(streamId, event.ulid, event.parent)];
-
     const mimeType = data.mimeType.toLowerCase();
 
     const uriWithUlidQuery = data.uri + "?message=" + event.parent;
+    const statements = [ensureEntity(streamId, uriWithUlidQuery, event.parent)];
 
     if (mimeType.startsWith("image/")) {
       statements.push(sql`
