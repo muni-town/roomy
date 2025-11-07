@@ -122,8 +122,7 @@ create table if not exists comp_comment (
 ) strict;
 
 create table if not exists comp_image (
-  entity blob primary key references entities(ulid) on delete cascade,
-  uri text not null,
+  entity blob primary key references entities(ulid) on delete cascade, -- URI
   mime_type text not null,
   size integer,
   width integer,
@@ -135,8 +134,7 @@ create table if not exists comp_image (
 ) strict;
 
 create table if not exists comp_video (
-  entity blob primary key references entities(ulid) on delete cascade,
-  uri text not null,
+  entity blob primary key references entities(ulid) on delete cascade, -- URI
   mime_type text not null,
   size integer,
   width integer,
@@ -149,8 +147,7 @@ create table if not exists comp_video (
 ) strict;
 
 create table if not exists comp_file (
-  entity blob primary key references entities(ulid) on delete cascade,
-  uri text not null,
+  entity blob primary key references entities(ulid) on delete cascade, -- URI
   mime_type text not null,
   size integer,
   name text,
@@ -159,8 +156,7 @@ create table if not exists comp_file (
 ) strict;
 
 create table if not exists comp_link (
-  entity blob primary key references entities(ulid) on delete cascade,
-  uri text not null,
+  entity blob primary key references entities(ulid) on delete cascade, -- URI
   show_preview integer check(show_preview in (0, 1)) default 1,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)

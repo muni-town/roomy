@@ -395,76 +395,90 @@ const materializers: {
     }
 
     // Handle image extensions - comp_image
-    data.extensions
-      .filter((ext) => ext.kind === "space.roomy.image.0")
-      .forEach((img) => {
-        if (img.data instanceof Uint8Array) return; // Skip unknown variants
-
-        statements.push(sql`
-          insert into comp_image (entity, uri, mime_type, alt, width, height, blurhash)
+    // Each image becomes a separate child entity with deterministic hash-based ID
+    for (const img of data.extensions.filter(
+      (ext) => ext.kind === "space.roomy.image.0",
+    )) {
+      if (img.data instanceof Uint8Array) continue; // Skip unknown variants
+      const uriWithUlidQuery = img.data.uri + "?message=" + event.ulid;
+      statements.push(
+        ensureEntity(streamId, uriWithUlidQuery, event.ulid),
+        sql`
+          insert or replace into comp_image (entity, mime_type, alt, width, height, blurhash, size)
           values (
-            ${id(event.ulid)},
-            ${img.data.uri},
+            ${id(uriWithUlidQuery)},
             ${img.data.mimeType},
             ${img.data.alt},
             ${img.data.width ? Number(img.data.width) : null},
             ${img.data.height ? Number(img.data.height) : null},
-            ${img.data.blurhash || null}
+            ${img.data.blurhash || null},
+            ${img.data.size ? Number(img.data.size) : null}
           )
-        `);
-      });
+        `,
+      );
+    }
 
     // Handle video extensions - comp_video
-    data.extensions
-      .filter((ext) => ext.kind === "space.roomy.video.0")
-      .forEach((vid) => {
-        if (vid.data instanceof Uint8Array) return; // Skip unknown variants
-
-        statements.push(sql`
-          insert into comp_video (entity, uri, mime_type, alt, width, height, length)
+    // Each video becomes a separate child entity with deterministic hash-based ID
+    for (const vid of data.extensions.filter(
+      (ext) => ext.kind === "space.roomy.video.0",
+    )) {
+      if (vid.data instanceof Uint8Array) continue; // Skip unknown variants
+      const uriWithUlidQuery = vid.data.uri + "?message=" + event.ulid;
+      statements.push(
+        ensureEntity(streamId, uriWithUlidQuery, event.ulid),
+        sql`
+          insert or replace into comp_video (entity, mime_type, alt, width, height, length, blurhash, size)
           values (
-            ${id(event.ulid)},
-            ${vid.data.uri},
+            ${id(uriWithUlidQuery)},
             ${vid.data.mimeType},
             ${vid.data.alt},
             ${vid.data.width ? Number(vid.data.width) : null},
             ${vid.data.height ? Number(vid.data.height) : null},
-            ${vid.data.length ? Number(vid.data.length) : null}
+            ${vid.data.length ? Number(vid.data.length) : null},
+            ${vid.data.blurhash || null},
+            ${vid.data.size ? Number(vid.data.size) : null}
           )
-        `);
-      });
+        `,
+      );
+    }
 
     // Handle file extensions - comp_file
-    data.extensions
-      .filter((ext) => ext.kind === "space.roomy.file.0")
-      .forEach((file) => {
-        if (file.data instanceof Uint8Array) return; // Skip unknown variants
-
-        statements.push(sql`
-          insert into comp_file (entity, uri, mime_type, name, size)
+    // Each file becomes a separate child entity with deterministic hash-based ID
+    for (const file of data.extensions.filter(
+      (ext) => ext.kind === "space.roomy.file.0",
+    )) {
+      if (file.data instanceof Uint8Array) continue; // Skip unknown variants
+      const uriWithUlidQuery = file.data.uri + "?message=" + event.ulid;
+      statements.push(
+        ensureEntity(streamId, uriWithUlidQuery, event.ulid),
+        sql`
+          insert or replace into comp_file (entity, mime_type, name, size)
           values (
-            ${id(event.ulid)},
-            ${file.data.uri},
+            ${id(uriWithUlidQuery)},
             ${file.data.mimeType},
             ${file.data.name || null},
             ${file.data.size ? Number(file.data.size) : null}
           )
-        `);
-      });
+        `,
+      );
+    }
     // Handle link extensions - comp_link
     data.extensions
       .filter((ext) => ext.kind === "space.roomy.link.0")
       .forEach((link) => {
         if (link.data instanceof Uint8Array) return; // Skip unknown variants
-
-        statements.push(sql`
-          insert into comp_link (entity, uri, show_preview)
+        const uriWithUlidQuery = link.data.uri + "?message=" + event.ulid;
+        statements.push(
+          ensureEntity(streamId, uriWithUlidQuery, event.ulid),
+          sql`
+          insert into comp_link (entity, show_preview)
           values (
-            ${id(event.ulid)},
-            ${link.data.uri},
+            ${id(uriWithUlidQuery)},
             ${link.data.showPreview ? 1 : 0}
           )
-        `);
+        `,
+        );
       });
 
     return statements;
@@ -655,31 +669,30 @@ const materializers: {
 
     const mimeType = data.mimeType.toLowerCase();
 
+    const uriWithUlidQuery = data.uri + "?message=" + event.parent;
+
     if (mimeType.startsWith("image/")) {
       statements.push(sql`
-        insert into comp_image (entity, uri, mime_type)
+        insert into comp_image (entity, mime_type)
         values (
-          ${id(event.ulid)},
-          ${data.uri},
+          ${id(uriWithUlidQuery)},
           ${data.mimeType}
         )
       `);
     } else if (mimeType.startsWith("video/")) {
       statements.push(sql`
-        insert into comp_video (entity, uri, mime_type)
+        insert into comp_video (entity, mime_type)
         values (
-          ${id(event.ulid)},
-          ${data.uri},
+          ${id(uriWithUlidQuery)},
           ${data.mimeType}
         )
       `);
     } else {
       // Default to file for everything else
       statements.push(sql`
-        insert into comp_file (entity, uri, mime_type)
+        insert into comp_file (entity, mime_type)
         values (
-          ${id(event.ulid)},
-          ${data.uri},
+          ${id(uriWithUlidQuery)},
           ${data.mimeType}
         )
       `);

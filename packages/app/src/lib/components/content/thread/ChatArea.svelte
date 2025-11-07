@@ -90,12 +90,12 @@
         'media', (
           select json_group_array(json_object(
             'mimeType', coalesce(i.mime_type, v.mime_type, f.mime_type),
-            'uri', coalesce(i.uri, v.uri, f.uri),
+            'uri', id(coalesce(i.entity, v.entity, f.entity)),
             'width', coalesce(i.width, v.width),
             'height', coalesce(i.height, v.height),
             'blurhash', coalesce(i.blurhash, v.blurhash),
             'length', v.length,
-            'size', coalesce(v.size, f.size),
+            'size', coalesce(i.size, v.size, f.size),
             'name', f.name
           ))
           from entities me
@@ -107,7 +107,7 @@
         ),
         'links', (
           select json_group_array(json_object(
-            'uri', l.uri,
+            'uri', l.entity,
             'showPreview', l.show_preview
           ))
           from comp_link l
