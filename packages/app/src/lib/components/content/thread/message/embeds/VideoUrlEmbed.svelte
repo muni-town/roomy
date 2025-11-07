@@ -40,6 +40,7 @@
 <video
   class="w-72 max-w-full h-auto max-h-64 object-contain"
   controls
+  aria-label={video.alt}
   use:hls={video.uri?.endsWith(".m3u8")
     ? {
         playlist: video.uri,

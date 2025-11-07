@@ -60,6 +60,8 @@
   <!-- Error Loading (no blurhash available) -->
   <div
     class="w-40 h-28 flex items-center justify-center bg-base-200 dark:bg-base-800 rounded"
+    aria-label={"Image failed to load: " +
+      (image.alt || "No alt text available")}
   >
     <IconLucideImageOff class="shrink-0" />
   </div>
@@ -75,7 +77,7 @@
     {#if blurhashDataUrl && !isLoaded}
       <img
         src={blurhashDataUrl}
-        alt=""
+        alt={image.alt}
         class="absolute inset-0 w-full h-full object-cover rounded blur-sm"
         aria-hidden="true"
       />
@@ -87,7 +89,7 @@
       <div class="relative">
         <img
           src={blurhashDataUrl}
-          alt=""
+          alt={image.alt}
           class="rounded blur-sm"
           style={image.width && image.height
             ? `width: ${Math.min(image.width, 240)}px; aspect-ratio: ${aspectRatio}`
