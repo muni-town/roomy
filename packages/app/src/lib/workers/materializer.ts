@@ -59,7 +59,7 @@ export function materializer(
           } catch (error) {
             const payloadBytes = new Uint8Array(e.payload);
             console.warn(
-              `Skipping malformed event (index ${e.index}): Failed to decode ${payloadBytes.length} bytes.`,
+              `Skipping malformed event (idx ${e.idx}): Failed to decode ${payloadBytes.length} bytes.`,
               `This is likely from an older buggy encoder. Error:`,
               error instanceof Error ? error.message : error,
             );
@@ -67,12 +67,7 @@ export function materializer(
             return null;
           }
         })
-        .filter((e) => e !== null) as Array<
-        readonly [
-          event: { index: number; user: string; payload: ArrayBuffer },
-          decoded: any,
-        ]
-      >;
+        .filter((e): e is Exclude<typeof e, null> => e !== null);
 
       // Make sure all of the profiles we need are downloaded and inserted
       const neededProfiles = new Set<string>();
