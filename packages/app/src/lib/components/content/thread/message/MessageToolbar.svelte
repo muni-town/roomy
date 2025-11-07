@@ -4,7 +4,7 @@
   import Tooltip from "$lib/components/helper/Tooltip.svelte";
   import { Button, buttonVariants } from "@fuxui/base";
   import { PopoverEmojiPicker } from "@fuxui/social";
-  import { setReplyTo } from "../TimelineView.svelte";
+  import { messagingState } from "../TimelineView.svelte";
   import type { Message } from "../ChatArea.svelte";
 
   import IconLucideSmilePlus from "~icons/lucide/smile-plus";
@@ -135,7 +135,7 @@
   <div class="flex flex-col gap-4 w-full">
     <Button
       onclick={() => {
-        setReplyTo(message);
+        messagingState.setReplyTo(message);
         isDrawerOpen = false;
       }}
       class="dz-join-item dz-btn w-full"
@@ -264,7 +264,7 @@
 
     <Tooltip tip="Reply">
       <Toolbar.Button
-        onclick={() => setReplyTo(message)}
+        onclick={() => messagingState.setReplyTo(message)}
         class={[
           buttonVariants({ variant: "ghost", size: "iconSm" }),
           "backdrop-blur-none",

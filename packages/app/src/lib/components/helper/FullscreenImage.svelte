@@ -1,4 +1,8 @@
 <script lang="ts" module>
+  // DEPRECATED: This global state pattern is being phased out in favor of
+  // FullscreenImageOverlay.svelte which uses hash-based routing and provides
+  // better zoom controls. New code should use FullscreenImageOverlay instead.
+  // See: /lib/components/content/thread/message/embeds/FullscreenImageOverlay.svelte
   export let fullscreenImage = $state({
     src: "https://placehold.co/1000x1000",
     show: false,

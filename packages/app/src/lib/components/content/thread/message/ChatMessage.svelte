@@ -4,7 +4,7 @@
 
 <script lang="ts">
   import { patchMake, patchToText } from "diff-match-patch-es";
-  import { Avatar, Checkbox, Portal } from "bits-ui";
+  import { Avatar, Checkbox } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
   import MessageToolbar from "./MessageToolbar.svelte";
@@ -18,10 +18,9 @@
   import { backend, backendStatus } from "$lib/workers";
   import { decodeTime, ulid } from "ulidx";
   import { current } from "$lib/queries.svelte";
-  import { ScrollArea, toast } from "@fuxui/base";
-  import { cdnImageUrl } from "$lib/utils.svelte";
-  import IconLucideImageOff from "~icons/lucide/image-off";
+  import { toast } from "@fuxui/base";
   import type { MessagingState } from "../TimelineView.svelte";
+  import MediaEmbed from "./embeds/MediaEmbed.svelte";
 
   let {
     message,
@@ -34,6 +33,10 @@
     startThreading: (message?: Message) => void;
     toggleSelect: (message: Message) => void;
   } = $props();
+
+  // log messages sent in last 2.7hours
+  // if (decodeTime(message.id) > Date.now() - 10000000)
+  console.log("message", message.content, message);
 
   const threading = $derived.by(() => {
     if (!messagingState) return null;
@@ -82,14 +85,6 @@
     return defaultInfo;
   });
 
-  let mediaWithErrors = $state<string[]>([]);
-
-  function markMediaError(uri: string) {
-    if (!mediaWithErrors.includes(uri)) {
-      mediaWithErrors = [...mediaWithErrors, uri];
-    }
-  }
-
   let messageByMe = $derived(message.authorDid == backendStatus.did);
 
   let isDrawerOpen = $state(false);
@@ -97,8 +92,6 @@
   let isSelected = $derived(
     threading?.selectedMessages.find((x) => x.id == message.id) ? true : false,
   );
-
-  let imageZooming = $state(false);
 
   function editMessage() {
     editingMessage.id = message.id;
@@ -292,42 +285,9 @@
         <!-- Media -->
         {#if message.media.length}
           <div class="flex flex-wrap gap-4 my-3">
-            {#each message.media.filter( (x) => x.mimeType.startsWith("image"), ) as media}
-              {#if mediaWithErrors.includes(media.uri)}
-                <!-- Error Loading -->
-                <div
-                  class="w-40 h-28 flex items-center justify-center bg-base-200 dark:bg-base-800 rounded"
-                >
-                  <IconLucideImageOff class="shrink-0" />
-                </div>
-              {:else}
-                <a
-                  href={`#${encodeURIComponent(media.uri)}`}
-                  aria-label="image full screen"
-                >
-                  <!-- TODO: support input and rendering of alt text. Also, store image size (and blur hash?), so we can pre-render loading states without layout shift -->
-
-                  <img
-                    src={cdnImageUrl(media.uri, { size: "thumbnail" })}
-                    class="max-w-[15em] rounded"
-                    onerror={() => markMediaError(media.uri)}
-                  />
-                </a>
-              {/if}
+            {#each message.media as media}
+              <MediaEmbed {media} />
             {/each}
-
-            <!-- TODO: display videos from Bluesky CDN. -->
-
-            <!-- <div class="pl-11 md:pl-13 max-w-full flex flex-wrap gap-2 z-10">
-              {#each embeds.current?.embeds ?? [] as embed}
-                {#if embed?.type === "imageUrl"}
-                  <ImageUrlEmbed embedId={embed.embedId} />
-                {/if}
-                {#if embed?.type === "videoUrl"}
-                  <VideoUrlEmbed embedId={embed.embedId} />
-                {/if}
-              {/each}
-            </div> -->
           </div>
         {/if}
       </div>
@@ -363,92 +323,9 @@
   </div>
 </div>
 
-<Portal>
-  {#each message.media.filter((x) => x.mimeType.startsWith("image")) as media}
-    <!-- TODO: convert to native HTML dialog modal -->
-    <div
-      id={encodeURIComponent(media.uri)}
-      class="media-overlay"
-      tabindex="0"
-      aria-label="Dismiss image zoom"
-      onclick={() => {
-        imageZooming = false;
-        window.location.href = "#";
-      }}
-      onkeydown={(e) => {
-        if (e.key == " ") {
-          imageZooming = !imageZooming;
-        } else if (e.key == "Escape") {
-          window.location.href = "#";
-          imageZooming = false;
-        }
-      }}
-    >
-      <a
-        class="flex justify-center items-center absolute top-8 right-8 font-bold size-12 py-3 rounded-full bg-black/50"
-        href="#"
-        onclick={() => {
-          imageZooming = false;
-        }}
-      >
-        X
-      </a>
-      <ScrollArea orientation="both" class="m-auto max-w-full max-h-full">
-        <button
-          aria-label="Toggle image zoom"
-          onclick={(e) => {
-            e.stopPropagation();
-            imageZooming = !imageZooming;
-          }}
-        >
-          <img
-            src={cdnImageUrl(media.uri)}
-            class="transition-all duration-100 ease-linear"
-            class:no-zoom={!imageZooming}
-            onload={(e) => {
-              const img = e.currentTarget as HTMLImageElement;
-              img.setAttribute(
-                "style",
-                `max-width: ${img.naturalWidth}px; max-height: ${img.naturalHeight}px`,
-              );
-            }}
-          />
-        </button>
-      </ScrollArea>
-    </div>
-  {/each}
-</Portal>
-
 {#snippet timestamp(date: Date)}
   {@const formattedDate = isToday(date) ? "Today" : format(date, "P")}
   <time class="text-xs text-base-700 dark:text-base-400">
     {formattedDate}, {format(date, "pp")}
   </time>
 {/snippet}
-
-<style>
-  .media-overlay {
-    display: flex;
-    position: fixed;
-    top: 0px;
-    bottom: 0px;
-    right: 0px;
-    left: 0px;
-    transition: all 0.5s;
-    pointer-events: none;
-    box-sizing: border-box;
-    background-color: hsla(0, 0%, 0%, 0.86);
-    opacity: 0;
-    align-items: center;
-    justify-content: center;
-    overflow: auto;
-  }
-  .media-overlay:target {
-    pointer-events: initial;
-    opacity: 1;
-  }
-  .no-zoom {
-    max-width: 90vw !important;
-    max-height: 90vh !important;
-  }
-</style>

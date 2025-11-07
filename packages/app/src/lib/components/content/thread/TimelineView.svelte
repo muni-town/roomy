@@ -34,43 +34,103 @@
 
   export type MessagingState = Normal | Replying | Threading | Commenting;
 
-  let messagingState: MessagingState = $state({
-    kind: "normal",
-    input: "",
-    files: [],
-  });
-
-  export function setReplyTo(message: Message) {
-    messagingState = {
-      ...messagingState,
-      kind: "replying",
-      replyTo: message,
-      files: "files" in messagingState ? messagingState.files : [],
-      input: "input" in messagingState ? messagingState.input : "",
-    };
-    setInputFocus();
-  }
-
-  export function setCommenting(comment: Comment) {
-    messagingState = {
-      ...messagingState,
-      kind: "commenting",
-      comment,
-      files: [],
-      input: "input" in messagingState ? messagingState.input : "",
-    };
-    console.log("Commenting", comment);
-    setInputFocus();
-  }
-
-  export function setNormal() {
-    messagingState = {
+  class MessagingStateManager {
+    private state: MessagingState = $state({
       kind: "normal",
-      input: "input" in messagingState ? messagingState.input : "",
-      files: "files" in messagingState ? messagingState.files : [],
-    };
-    setInputFocus();
+      input: "",
+      files: [],
+    });
+
+    get current(): MessagingState {
+      return this.state;
+    }
+
+    set(newState: MessagingState) {
+      this.state = newState;
+    }
+
+    get input(): string {
+      return "input" in this.state ? this.state.input : "";
+    }
+
+    set input(value: string) {
+      if ("input" in this.state) {
+        this.state.input = value;
+      }
+    }
+
+    get name(): string {
+      return this.state.kind === "threading" ? this.state.name : "";
+    }
+
+    set name(value: string) {
+      if (this.state.kind === "threading") {
+        this.state.name = value;
+      }
+    }
+
+    get files(): File[] {
+      return "files" in this.state ? this.state.files : [];
+    }
+
+    addFile(file: File) {
+      if ("files" in this.state) {
+        this.state.files.push(file);
+      }
+    }
+
+    removeFile(index: number) {
+      if ("files" in this.state) {
+        this.state.files = this.state.files.filter((_, i) => i !== index);
+      }
+    }
+
+    setReplyTo(message: Message) {
+      this.state = {
+        ...this.state,
+        kind: "replying",
+        replyTo: message,
+        files: "files" in this.state ? this.state.files : [],
+        input: "input" in this.state ? this.state.input : "",
+      };
+      setInputFocus();
+    }
+
+    setCommenting(comment: Comment) {
+      this.state = {
+        ...this.state,
+        kind: "commenting",
+        comment,
+        files: [],
+        input: "input" in this.state ? this.state.input : "",
+      };
+      console.log("Commenting", comment);
+      setInputFocus();
+    }
+
+    setNormal() {
+      this.state = {
+        kind: "normal",
+        input: "input" in this.state ? this.state.input : "",
+        files: "files" in this.state ? this.state.files : [],
+      };
+      setInputFocus();
+    }
+
+    toggleMessageSelection(message: Message) {
+      if (this.state.kind !== "threading") return;
+      const messageIdx = this.state.selectedMessages.findIndex(
+        (x) => x.id == message.id,
+      );
+      if (messageIdx != -1) {
+        this.state.selectedMessages.splice(messageIdx, 1);
+      } else {
+        this.state.selectedMessages.push(message);
+      }
+    }
   }
+
+  export const messagingState = new MessagingStateManager();
 </script>
 
 <script lang="ts">
@@ -78,34 +138,37 @@
   import ChatInputArea from "./ChatInputArea.svelte";
   import { setInputFocus } from "./ChatInput.svelte";
 
+  $effect(() => {
+    console.log("messaging state", messagingState.current);
+  });
+
   function startThreading(message?: Message) {
-    messagingState = {
-      ...messagingState,
+    const currentState = messagingState.current;
+    messagingState.set({
+      ...currentState,
       kind: "threading",
       name: message ? `Thread: ${message.authorName}` : "Thread",
       selectedMessages: message ? [message] : [],
-    };
-    message && messagingState.selectedMessages.push(message);
+    });
+    if (message && messagingState.current.kind === "threading") {
+      messagingState.current.selectedMessages.push(message);
+    }
     setInputFocus();
   }
 
   function toggleSelect(message: Message) {
-    if (messagingState.kind !== "threading") return;
-    let messageIdx = messagingState.selectedMessages.findIndex(
-      (x) => x.id == message.id,
-    );
-    if (messageIdx != -1) {
-      messagingState.selectedMessages.splice(messageIdx, 1);
-    } else {
-      messagingState.selectedMessages.push(message);
-    }
+    messagingState.toggleMessageSelection(message);
   }
 </script>
 
 <div class="flex flex-col flex-1 h-full min-h-0 justify-stretch">
-  <ChatArea {messagingState} {startThreading} {toggleSelect} />
+  <ChatArea
+    messagingState={messagingState.current}
+    {startThreading}
+    {toggleSelect}
+  />
 
   <div class="shrink-0 mt-auto">
-    <ChatInputArea bind:messagingState />
+    <ChatInputArea />
   </div>
 </div>

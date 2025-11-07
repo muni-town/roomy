@@ -16,8 +16,10 @@
 
   import IconTablerCheck from "~icons/tabler/check";
   import IconTablerPencil from "~icons/tabler/pencil";
-  import TimelineView, { setNormal } from "../thread/TimelineView.svelte";
-  import { setCommenting, type Comment } from "../thread/TimelineView.svelte";
+  import TimelineView, {
+    messagingState,
+    type Comment,
+  } from "../thread/TimelineView.svelte";
   import { ensureShowPageChat } from "$lib/../routes/(app)/[space=hash]/[object=ulid]/+page.svelte";
 
   let isEditing = $state(false);
@@ -99,10 +101,10 @@
         to,
       };
 
-      setCommenting(comment);
+      messagingState.setCommenting(comment);
     } else {
       // If no text is selected, revert to normal mode
-      setNormal();
+      messagingState.setNormal();
     }
   }
 </script>

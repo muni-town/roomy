@@ -1,15 +1,20 @@
 <script lang="ts">
   import { hls } from "$lib/actions/hls";
-  import { VideoUrlEmbed } from "@roomy-chat/sdk";
-  import { CoState } from "jazz-tools/svelte";
 
   let {
-    embedId,
+    video,
   }: {
-    embedId: string;
+    video: {
+      uri: string;
+      mimeType: string;
+      alt?: string;
+      width?: number;
+      height?: number;
+      blurhash?: string;
+      length?: number;
+      size?: number;
+    };
   } = $props();
-
-  let embed = $derived(new CoState(VideoUrlEmbed, embedId));
 
   // optional handlers
   function handleError(e: Error | null) {
@@ -23,6 +28,11 @@
   function handleLoading(v: boolean) {
     console.log("HLS loading:", v);
   }
+
+  const aspectRatio =
+    video.width && video.height
+      ? `aspect-ratio: ${(video.width || 1) / (video.height || 1)}`
+      : "";
 </script>
 
 <!-- hls should handle captions dynamically -->
@@ -30,13 +40,14 @@
 <video
   class="w-72 max-w-full h-auto max-h-64 object-contain"
   controls
-  use:hls={embed.current?.url?.endsWith(".m3u8")
+  use:hls={video.uri?.endsWith(".m3u8")
     ? {
-        playlist: embed.current.url,
+        playlist: video.uri,
         onError: handleError,
         onHasSubtitleTrack: handleHasSubtitleTrack,
         onLoading: handleLoading,
       }
     : undefined}
+  style={aspectRatio}
 >
 </video>

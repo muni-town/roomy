@@ -14,7 +14,7 @@
   import { navigate } from "$lib/utils.svelte";
   import type { EventType } from "$lib/workers/materializer";
   import {
-    setNormal,
+    messagingState,
     type Commenting,
     type MessagingState,
     type Threading,
@@ -22,18 +22,14 @@
   import { markCommentForRemoval } from "$lib/components/richtext/RichTextEditor.svelte";
   import { getMediaPreloadData } from "$lib/utils/media";
 
-  let {
-    messagingState = $bindable({
-      kind: "normal",
-      input: "",
-      files: [],
-    }),
-  }: { messagingState: MessagingState } = $props();
-
   let messageInputEl: null | HTMLInputElement = $state(null);
   let isSendingMessage = $state(false);
 
   let previewImages: string[] = $state([]);
+
+  $effect(() => {
+    console.log("messaging state", messagingState.current);
+  });
 
   function getVideoThumbnail(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -66,13 +62,13 @@
   }
 
   function processImageFile(file: File) {
-    if (messagingState.kind === "threading") {
+    if (messagingState.current.kind === "threading") {
       toast.error("Cannot send files while creating a thread.", {
         position: "bottom-right",
       });
       return;
     }
-    messagingState.files.push(file);
+    messagingState.addFile(file);
 
     if (file.type.startsWith("video/")) {
       getVideoThumbnail(file).then((thumbnail) => {
@@ -84,7 +80,7 @@
   }
 
   function removeImageFile(index: number) {
-    if (messagingState.kind === "threading") {
+    if (messagingState.current.kind === "threading") {
       toast.error(
         "It shouldn't be possible to have (or remove) files while threading...",
         {
@@ -94,7 +90,7 @@
       return;
     }
     let previewImage = previewImages[index];
-    messagingState.files = messagingState.files.filter((_, i) => i !== index);
+    messagingState.removeFile(index);
     previewImages = previewImages.filter((_, i) => i !== index);
 
     if (previewImage) {
@@ -104,12 +100,12 @@
 
   async function handleCreateThread() {
     if (!current.space?.id) return;
-    if (messagingState.kind !== "threading") return;
-    if ((messagingState as Threading).selectedMessages.length == 0) return;
+    const state = messagingState.current;
+    if (state.kind !== "threading") return;
+    if ((state as Threading).selectedMessages.length == 0) return;
     const ulid = monotonicFactory();
     const threadName =
-      messagingState.name ||
-      messagingState.selectedMessages[0]?.content.slice(0, 50) + "...";
+      state.name || state.selectedMessages[0]?.content.slice(0, 50) + "...";
 
     const threadId = ulid();
     await backend.sendEvent(current.space.id, {
@@ -143,7 +139,7 @@
       },
     });
 
-    for (const message of messagingState.selectedMessages) {
+    for (const message of state.selectedMessages) {
       await backend.sendEvent(current.space.id, {
         ulid: ulid(),
         parent: message.id,
@@ -161,32 +157,43 @@
 
   async function sendMessage(e: SubmitEvent) {
     e.preventDefault();
-    if (messagingState.kind === "threading") return;
-    if (!messagingState.input && messagingState.files.length == 0) return;
+    const state = messagingState.current;
+    if (state.kind === "threading") return;
+    if (!state.input && state.files.length == 0) return;
     if (!current.space) return;
 
     isSendingMessage = true;
 
-    const message = messagingState.input;
-    const filesToUpload = [...messagingState.files];
-    const replyToId =
-      "replyTo" in messagingState ? messagingState.replyTo?.id : undefined;
+    console.log("sending with messaging state", state);
+
+    const message = state.input;
+    const filesToUpload = [...state.files];
+    const replyToId = "replyTo" in state ? state.replyTo?.id : undefined;
 
     const uploadedFiles: {
       uri: string;
       mimeType: string;
+      alt?: string;
       height?: number;
       width?: number;
+      size: number;
       blurhash?: string;
     }[] = [];
     for (const media of filesToUpload) {
+      console.log("uploading", media);
       const { uri } = await backend.uploadToPds(await media.arrayBuffer(), {
         mimeType: media.type,
       });
       const dimensions = await getMediaPreloadData(media);
 
-      uploadedFiles.push({ uri, mimeType: media.type, ...dimensions });
+      uploadedFiles.push({
+        uri,
+        mimeType: media.type,
+        size: media.size,
+        ...dimensions,
+      });
     }
+    console.log("uploaded", uploadedFiles);
 
     try {
       const ulid = monotonicFactory();
@@ -204,8 +211,10 @@
         data: {
           uri: data.uri,
           mimeType: data.mimeType,
+          alt: data.alt,
           width: data.width,
           height: data.height,
+          size: data.size,
           blurhash: data.blurhash,
         },
       }));
@@ -217,7 +226,7 @@
         });
       }
 
-      events.push({
+      const messageEvent = {
         ulid: messageId,
         parent: page.params.object,
         variant: {
@@ -230,158 +239,179 @@
             extensions,
           },
         },
-      });
+      } as const;
+
+      console.log("sending message", messageEvent);
+
+      events.push(messageEvent);
 
       await backend.sendEventBatch(current.space.id, events);
     } catch (e: any) {
       console.error(e);
       toast.error("Failed to send message.", { position: "bottom-right" });
     } finally {
-      messagingState = { kind: "normal", input: "", files: [] };
+      messagingState.set({ kind: "normal", input: "", files: [] });
       isSendingMessage = false;
       previewImages = [];
     }
   }
 </script>
 
-<div
-  class="flex-none pt-2 pb-2 pr-2 border-t border-base-100 dark:border-base-900"
->
-  <!-- Message context: reply, threading, or comment -->
+{#snippet messagingStateContext()}
+  {@const state = messagingState.current}
   <div
-    class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
+    class="flex-none pt-2 pb-2 pr-2 border-t border-base-100 dark:border-base-900"
   >
-    {#if messagingState.kind === "replying"}
-      <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
-        <span class="shrink-0 text-base-900 dark:text-base-100"
-          >Replying to</span
+    <!-- Message context: reply, threading, or comment -->
+    <div
+      class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
+    >
+      {#if state.kind === "replying"}
+        <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
+          <span class="shrink-0 text-base-900 dark:text-base-100"
+            >Replying to</span
+          >
+          <MessageContext context={state} />
+        </div>
+        <Button
+          variant="ghost"
+          onclick={() => messagingState.setNormal()}
+          class="flex-shrink-0"
         >
-        <MessageContext bind:context={messagingState} />
-      </div>
-      <Button variant="ghost" onclick={() => setNormal()} class="flex-shrink-0">
-        <IconMdiCloseCircle />
-      </Button>
-    {:else if messagingState.kind === "threading"}
-      <div
-        class="px-2 flex flex-wrap items-center gap-1 overflow-hidden text-xs w-full"
-      >
-        <span class="shrink-0 text-base-900 dark:text-base-100"
-          >Creating thread with</span
+          <IconMdiCloseCircle />
+        </Button>
+      {:else if state.kind === "threading"}
+        <div
+          class="px-2 flex flex-wrap items-center gap-1 overflow-hidden text-xs w-full"
         >
-        {#if messagingState.selectedMessages[0]}
-          <div class="max-w-[28rem]">
-            <MessageContext bind:context={messagingState} />
+          <span class="shrink-0 text-base-900 dark:text-base-100"
+            >Creating thread with</span
+          >
+          {#if state.selectedMessages[0]}
+            <div class="max-w-[28rem]">
+              <MessageContext context={state} />
+            </div>
+          {/if}
+          {#if state.selectedMessages.length > 1}
+            <span class="shrink-0 text-base-900 dark:text-base-100"
+              >and {state.selectedMessages.length - 1} other message{state
+                .selectedMessages.length > 2
+                ? "s"
+                : ""}</span
+            >
+          {:else if state.selectedMessages.length === 0}
+            <span class="shrink-0 text-base-900 dark:text-base-100"
+              >no messages</span
+            >
+          {/if}
+        </div>
+        <Button
+          variant="ghost"
+          onclick={() => messagingState.setNormal()}
+          class="flex-shrink-0"
+        >
+          <IconMdiCloseCircle />
+        </Button>
+      {:else if state.kind === "commenting"}
+        <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
+          <MessageContext context={state} />
+        </div>
+        <Button
+          variant="ghost"
+          onclick={() => {
+            markCommentForRemoval((state as Commenting).comment);
+            messagingState.setNormal();
+          }}
+          class="flex-shrink-0"
+        >
+          <IconMdiCloseCircle />
+        </Button>
+      {/if}
+    </div>
+
+    <div class="w-full py-1">
+      <div class="prose-a:text-primary prose-a:underline relative isolate">
+        {#if previewImages.length > 0}
+          <div class="flex gap-2 my-2 overflow-x-auto w-full px-2">
+            {#each previewImages as previewImage, index (previewImage)}
+              <div
+                class={[
+                  "size-24 relative shrink-0",
+                  isSendingMessage ? "opacity-60" : "",
+                ]}
+              >
+                <img
+                  src={previewImage}
+                  alt="Preview"
+                  class="absolute inset-0 w-full h-full object-cover"
+                />
+
+                <Button
+                  disabled={isSendingMessage}
+                  variant="ghost"
+                  class="absolute p-0.5 top-1 right-1 bg-base-100 hover:bg-base-200 dark:bg-base-900 dark:hover:bg-base-800 rounded-full disabled:hidden"
+                  onclick={() => removeImageFile(index)}
+                >
+                  <IconTablerX class="size-4" />
+                </Button>
+              </div>
+            {/each}
           </div>
         {/if}
-        {#if messagingState.selectedMessages.length > 1}
-          <span class="shrink-0 text-base-900 dark:text-base-100"
-            >and {messagingState.selectedMessages.length - 1} other message{messagingState
-              .selectedMessages.length > 2
-              ? "s"
-              : ""}</span
-          >
-        {:else if messagingState.selectedMessages.length === 0}
-          <span class="shrink-0 text-base-900 dark:text-base-100"
-            >no messages</span
-          >
-        {/if}
-      </div>
-      <Button variant="ghost" onclick={() => setNormal()} class="flex-shrink-0">
-        <IconMdiCloseCircle />
-      </Button>
-    {:else if messagingState.kind === "commenting"}
-      <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
-        <MessageContext bind:context={messagingState} />
-      </div>
-      <Button
-        variant="ghost"
-        onclick={() => {
-          markCommentForRemoval((messagingState as Commenting).comment);
-          setNormal();
-        }}
-        class="flex-shrink-0"
-      >
-        <IconMdiCloseCircle />
-      </Button>
-    {/if}
-  </div>
 
-  <div class="w-full py-1">
-    <div class="prose-a:text-primary prose-a:underline relative isolate">
-      {#if previewImages.length > 0}
-        <div class="flex gap-2 my-2 overflow-x-auto w-full px-2">
-          {#each previewImages as previewImage, index (previewImage)}
-            <div
-              class={[
-                "size-24 relative shrink-0",
-                isSendingMessage ? "opacity-60" : "",
-              ]}
-            >
-              <img
-                src={previewImage}
-                alt="Preview"
-                class="absolute inset-0 w-full h-full object-cover"
+        <div class="flex w-full pl-2 gap-2">
+          {#if state.kind === "threading"}
+            <form onsubmit={handleCreateThread} class="flex w-full gap-2">
+              <label for="thread-name" class="pl-4 py-2 text-xs font-medium"
+                >Thread name (optional):</label
+              >
+              <Input
+                disabled={isSendingMessage}
+                value={state.name}
+                oninput={(e) => (messagingState.name = e.currentTarget.value)}
+                id="thread-name"
+                class="grow ml-2 disabled:opacity-50"
               />
 
-              <Button
-                disabled={isSendingMessage}
-                variant="ghost"
-                class="absolute p-0.5 top-1 right-1 bg-base-100 hover:bg-base-200 dark:bg-base-900 dark:hover:bg-base-800 rounded-full disabled:hidden"
-                onclick={() => removeImageFile(index)}
+              <Button type="submit"
+                ><IconTablerNeedleThread />Create Thread</Button
               >
-                <IconTablerX class="size-4" />
-              </Button>
-            </div>
-          {/each}
-        </div>
-      {/if}
-
-      <div class="flex w-full pl-2 gap-2">
-        {#if messagingState.kind === "threading"}
-          <form onsubmit={handleCreateThread} class="flex w-full gap-2">
-            <label for="thread-name" class="pl-4 py-2 text-xs font-medium"
-              >Thread name (optional):</label
-            >
-            <Input
-              disabled={isSendingMessage}
-              bind:value={messagingState.name}
-              id="thread-name"
-              class="grow ml-2 disabled:opacity-50"
-            />
-
-            <Button type="submit"
-              ><IconTablerNeedleThread />Create Thread</Button
-            >
-          </form>
-        {:else}
-          {#if isSendingMessage}
-            <div class="flex items-center justify-center py-2">Sending...</div>
+            </form>
           {:else}
-            <UploadFileButton {processImageFile} />
-          {/if}
+            {#if isSendingMessage}
+              <div class="flex items-center justify-center py-2">
+                Sending...
+              </div>
+            {:else}
+              <UploadFileButton {processImageFile} />
+            {/if}
 
-          <form onsubmit={sendMessage} class="w-full">
-            <Input
-              disabled={isSendingMessage}
-              bind:ref={messageInputEl}
-              bind:value={messagingState.input}
-              placeholder="Send a message..."
-              class="w-full font-normal text-base-800 dark:text-base-200 disabled:opacity-50"
-            />
-          </form>
+            <form onsubmit={sendMessage} class="w-full">
+              <Input
+                disabled={isSendingMessage}
+                bind:ref={messageInputEl}
+                value={state.input}
+                oninput={(e) => (messagingState.input = e.currentTarget.value)}
+                placeholder="Send a message..."
+                class="w-full font-normal text-base-800 dark:text-base-200 disabled:opacity-50"
+              />
+            </form>
 
-          <!-- {#key users.length + context.length} -->
-          <!-- <ChatInput
+            <!-- {#key users.length + context.length} -->
+            <!-- <ChatInput
               bind:content={messageInput}
               {users}
               {context}
               onEnter={sendMessage}
               {processImageFile}
             /> -->
-          <!-- {/key} -->
-        {/if}
+            <!-- {/key} -->
+          {/if}
+        </div>
+        <FullscreenImageDropper {processImageFile} />
       </div>
-      <FullscreenImageDropper {processImageFile} />
     </div>
   </div>
-</div>
+{/snippet}
+
+{@render messagingStateContext()}
