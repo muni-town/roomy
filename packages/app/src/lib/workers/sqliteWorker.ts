@@ -212,18 +212,34 @@ globalThis.onmessage = (ev) => {
 async function runSavepoint(savepoint: Savepoint, depth = 0) {
   const exec = async () => {
     await executeQuery({ sql: `savepoint ${savepoint.name}` });
-    try {
-      for (const savepointOrStatement of savepoint.items) {
+    let hadError = false;
+    for (const savepointOrStatement of savepoint.items) {
+      try {
         if ("sql" in savepointOrStatement) {
           await executeQuery(savepointOrStatement);
         } else {
           await runSavepoint(savepointOrStatement, depth + 1);
         }
+      } catch (e) {
+        // Log the error but continue executing other statements
+        console.warn(
+          `Error executing individual statement in savepoint ${savepoint.name}:`,
+          e,
+        );
+        if (savepointOrStatement && "sql" in savepointOrStatement) {
+          console.warn(`Failed SQL:`, savepointOrStatement.sql);
+          console.warn(`Failed params:`, savepointOrStatement.params);
+        }
+        hadError = true;
       }
-    } catch (e) {
-      console.error(`Error executing savepoint: ${savepoint.name}`, e);
-      await executeQuery({ sql: `rollback to ${savepoint.name}` });
     }
+
+    if (hadError) {
+      console.warn(
+        `Savepoint ${savepoint.name} completed with ${hadError ? "errors" : "no errors"}`,
+      );
+    }
+
     await executeQuery({ sql: `release ${savepoint.name}` });
   };
 
