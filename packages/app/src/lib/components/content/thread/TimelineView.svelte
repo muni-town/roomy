@@ -19,7 +19,7 @@
   };
 
   export type Comment = {
-    snippet: string; // limit length
+    snippet?: string; // limit length
     docVersion: string; // ULID of the edit version
     from: number;
     to: number;

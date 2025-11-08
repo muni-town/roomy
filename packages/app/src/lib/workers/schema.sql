@@ -115,6 +115,7 @@ create table if not exists comp_page_edits(
 create table if not exists comp_comment (
   entity blob primary key references entities(ulid) on delete cascade,
   version blob references comp_page_edits(edit_id) on delete cascade,
+  snippet text not null,
   idx_from integer not null,
   idx_to integer not null,
   created_at integer not null default (unixepoch() * 1000),

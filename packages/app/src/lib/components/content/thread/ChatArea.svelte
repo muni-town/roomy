@@ -49,6 +49,12 @@
       uri: string;
       showPreview: boolean;
     }[];
+    comment: {
+      snippet?: string;
+      version: string;
+      from: number;
+      to: number;
+    };
   };
 
   let {
@@ -73,7 +79,7 @@
         'authorAvatar', i.avatar,
         'masqueradeAuthor', id(o.author),
         'masqueradeTimestamp', o.timestamp,
-        'replyTo', id(e.tail),
+        'replyTo', id(ed.tail),
         'masqueradeAuthorName', oai.name,
         'masqueradeAuthorAvatar', oai.avatar,
         'masqueradeAuthorHandle', oau.handle,
@@ -112,6 +118,14 @@
           ))
           from comp_link l
           where l.entity = e.id
+        ),
+        'comment', (
+          select json_object(
+            'snippet', cc.snippet,
+            'version', id(cc.version),
+            'from', cc.idx_from,
+            'to', cc.idx_to
+          )
         )
       ) as json
       from entities e
@@ -122,7 +136,8 @@
         left join comp_override_meta o on o.entity = e.id
         left join comp_info oai on oai.entity = o.author
         left join comp_user oau on oau.did = o.author
-        left join edges e on e.head = c.entity and e.label = 'reply'
+        left join edges ed on ed.head = c.entity and ed.label = 'reply'
+        left join comp_comment cc on cc.entity = e.id
       where
         e.parent = ${page.params.object && id(page.params.object)}
       order by e.id desc

@@ -364,10 +364,11 @@ const materializers: {
       .forEach((comment) => {
         statements.push(
           sql`
-          insert into comp_comment (entity, version, idx_from, idx_to, updated_at)
+          insert into comp_comment (entity, version, snippet, idx_from, idx_to, updated_at)
           values (
             ${id(event.ulid)},
-            ${comment.data.version},
+            ${id(comment.data.version)},
+            ${comment.data.snippet || ""},
             ${comment.data.from},
             ${comment.data.to},
             (unixepoch() * 1000)

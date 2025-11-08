@@ -405,6 +405,7 @@ export const eventVariantCodec = Kinds({
         "space.roomy.replyTo.0": Ulid,
         "space.roomy.comment.0": Struct({
           version: Ulid,
+          snippet: str,
           from: u32, // document index
           to: u32, // document index
         }),

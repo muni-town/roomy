@@ -182,19 +182,28 @@
   <div
     class={[
       `relative group w-full h-fit flex flex-col gap-2 px-2 pt-2 pb-1 ${isSelected ? "bg-accent-100/50 dark:bg-accent-900/50 hover:bg-accent-100/75 dark:hover:bg-accent-900/75" : " hover:bg-base-100/50  dark:hover:bg-base-400/5"}`,
-      !message.mergeWithPrevious && "pt-3",
+      message.mergeWithPrevious ? "" : "pt-3",
     ]}
   >
-    {#if message.replyTo}
-      <MessageContext
-        context={{
-          kind: "replying",
-          replyTo: { id: message.replyTo },
-          input: "",
-          files: [],
-        }}
-      />
-    {/if}
+    <div class={message.mergeWithPrevious ? "pl-12" : ""}>
+      {#if message.replyTo}
+        <MessageContext
+          context={{
+            kind: "replying",
+            messageId: message.id,
+            replyTo: { id: message.replyTo },
+          }}
+        />
+      {:else if message.comment.version}
+        <MessageContext
+          context={{
+            kind: "commenting",
+            messageId: message.id,
+            comment: message.comment,
+          }}
+        />
+      {/if}
+    </div>
 
     <div class="group relative flex w-full justify-start gap-3">
       <!-- Avatar, or left margin -->

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Button, Input, toast } from "@fuxui/base";
-  import MessageContext from "./message/MessageContext.svelte";
+  import MessageContext, {
+    type MessageContext as MessageContextType,
+  } from "./message/MessageContext.svelte";
   import FullscreenImageDropper from "$lib/components/helper/FullscreenImageDropper.svelte";
 
   import IconMdiCloseCircle from "~icons/mdi/close-circle";
@@ -16,7 +18,6 @@
   import {
     messagingState,
     type Commenting,
-    type MessagingState,
     type Threading,
   } from "./TimelineView.svelte";
   import { markCommentForRemoval } from "$lib/components/richtext/RichTextEditor.svelte";
@@ -168,7 +169,6 @@
 
     const message = state.input;
     const filesToUpload = [...state.files];
-    const replyToId = "replyTo" in state ? state.replyTo?.id : undefined;
 
     const uploadedFiles: {
       uri: string;
@@ -219,10 +219,22 @@
         },
       }));
 
-      if (replyToId) {
+      if (state.kind === "replying") {
         extensions.push({
           kind: "space.roomy.replyTo.0",
-          data: replyToId,
+          data: state.replyTo.id,
+        });
+      }
+
+      if (state.kind === "commenting") {
+        extensions.push({
+          kind: "space.roomy.comment.0",
+          data: {
+            version: state.comment.docVersion,
+            snippet: state.comment.snippet || "",
+            from: state.comment.from,
+            to: state.comment.to,
+          },
         });
       }
 
@@ -259,19 +271,41 @@
 
 {#snippet messagingStateContext()}
   {@const state = messagingState.current}
+  {@const messageContext = (() => {
+    if (state.kind === "replying") {
+      return {
+        kind: "replying",
+        replyTo: state.replyTo,
+      } satisfies MessageContextType;
+    } else if (state.kind === "threading") {
+      return {
+        kind: "threading",
+        selectedMessages: state.selectedMessages,
+      } satisfies MessageContextType;
+    } else if (state.kind === "commenting") {
+      return {
+        kind: "commenting",
+        messageId: undefined,
+        comment: {
+          snippet: state.comment.snippet,
+          version: state.comment.docVersion,
+          from: state.comment.from,
+          to: state.comment.to,
+        },
+      } satisfies MessageContextType;
+    }
+    return null;
+  })()}
   <div
     class="flex-none pt-2 pb-2 pr-2 border-t border-base-100 dark:border-base-900"
   >
     <!-- Message context: reply, threading, or comment -->
     <div
-      class="flex justify-between bg-secondary text-secondary-content rounded-t-lg px-4 py-2"
+      class="flex justify-between bg-secondary text-secondary-content rounded-t-lg p-2 gap-2 pr-0"
     >
-      {#if state.kind === "replying"}
+      {#if state.kind === "replying" && messageContext}
         <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
-          <span class="shrink-0 text-base-900 dark:text-base-100"
-            >Replying to</span
-          >
-          <MessageContext context={state} />
+          <MessageContext context={messageContext} />
         </div>
         <Button
           variant="ghost"
@@ -280,7 +314,7 @@
         >
           <IconMdiCloseCircle />
         </Button>
-      {:else if state.kind === "threading"}
+      {:else if state.kind === "threading" && messageContext}
         <div
           class="px-2 flex flex-wrap items-center gap-1 overflow-hidden text-xs w-full"
         >
@@ -289,7 +323,7 @@
           >
           {#if state.selectedMessages[0]}
             <div class="max-w-[28rem]">
-              <MessageContext context={state} />
+              <MessageContext context={messageContext} />
             </div>
           {/if}
           {#if state.selectedMessages.length > 1}
@@ -312,9 +346,9 @@
         >
           <IconMdiCloseCircle />
         </Button>
-      {:else if state.kind === "commenting"}
+      {:else if state.kind === "commenting" && messageContext}
         <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
-          <MessageContext context={state} />
+          <MessageContext context={messageContext} />
         </div>
         <Button
           variant="ghost"
