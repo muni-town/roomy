@@ -21,7 +21,7 @@
     type Threading,
   } from "./TimelineView.svelte";
   import { markCommentForRemoval } from "$lib/components/richtext/RichTextEditor.svelte";
-  import { getMediaPreloadData } from "$lib/utils/media";
+  import { getImagePreloadData } from "$lib/utils/media";
 
   let messageInputEl: null | HTMLInputElement = $state(null);
   let isSendingMessage = $state(false);
@@ -181,10 +181,15 @@
     }[] = [];
     for (const media of filesToUpload) {
       console.log("uploading", media);
-      const { uri } = await backend.uploadToPds(await media.arrayBuffer(), {
-        mimeType: media.type,
-      });
-      const dimensions = await getMediaPreloadData(media);
+      const { cleanedFile, ...dimensions } = await getImagePreloadData(media);
+      if (!cleanedFile)
+        throw new Error("Could not strip EXIF metadata for " + media.name);
+      const { uri } = await backend.uploadToPds(
+        await cleanedFile.arrayBuffer(),
+        {
+          mimeType: media.type,
+        },
+      );
 
       uploadedFiles.push({
         uri,

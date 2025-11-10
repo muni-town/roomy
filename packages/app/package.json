@@ -35,6 +35,7 @@
     "@tiptap/extension-underline": "^3.9.0",
     "blurhash": "^2.0.5",
     "hls.js": "^1.6.12",
+    "piexifjs": "^1.0.6",
     "socket.io-msgpack-parser": "^3.0.2",
     "tippy.js": "^6.3.7"
   },
@@ -84,6 +85,7 @@
     "@tiptap/starter-kit": "^2.26.1",
     "@tiptap/suggestion": "^2.26.1",
     "@types/node": "^24.8.1",
+    "@types/piexifjs": "^1.0.0",
     "@types/sanitize-html": "^2.16.0",
     "@types/turndown": "^5.0.5",
     "@types/underscore": "^1.13.0",

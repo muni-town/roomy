@@ -17,6 +17,7 @@ test-results
 playwright-report
 playwright-browserstack-sdk.config.temp.json
 browserstackSetupConfig.json
+**/*.spec.ts-snapshots
 
 # Logs
 local.log
