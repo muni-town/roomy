@@ -42,18 +42,18 @@
         </section>
       {/if} -->
 
-      {#if spaces.result?.length || 0 > 0}
+      {#if spaces.list.length || 0 > 0}
         <h2 class="text-3xl font-bold text-base-900 dark:text-base-100">
           Your Spaces
         </h2>
         <section
           class="flex flex-row gap-8 mx-8 justify-center flex-wrap max-w-5xl"
         >
-          {#each spaces.result || [] as space}
+          {#each spaces.list as space}
             <SpaceButton {space} />
           {/each}
         </section>
-      {:else if spaces.result?.length || 0 == 0}
+      {:else if spaces.list.length || 0 == 0}
         <p class="text-lg font-medium text-center">
           You don't have any spaces yet. Create one to get started!
         </p>

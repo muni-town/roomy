@@ -44,15 +44,27 @@
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
 
+  let spaceFromHandleResp = $derived(
+    !current.space?.id && page.params.space?.includes(".")
+      ? backend.resolveSpaceFromHandleOrDid(page.params.space)
+      : current.space?.id
+        ? { spaceId: current.space.id }
+        : undefined,
+  );
+
   async function joinSpace() {
-    if (!backendStatus.personalStreamId || !page.params.space) return;
+    const resp = await spaceFromHandleResp;
+    if (!resp || !backendStatus.personalStreamId) {
+      toast.error("Could not join space. It's possible it does not exist.");
+      return;
+    }
     await backend.sendEvent(backendStatus.personalStreamId, {
       ulid: ulid(),
       parent: undefined,
       variant: {
         kind: "space.roomy.space.join.0",
         data: {
-          spaceId: page.params.space,
+          spaceId: resp.spaceId,
         },
       },
     });
@@ -86,7 +98,7 @@
   async function createPage() {
     const pageName = createPageName;
     const ulid = monotonicFactory();
-    if (!current.space || !page.params.space || !object) return;
+    if (!current.space || !object) return;
 
     promoteChannelDialogOpen = false;
 
@@ -162,7 +174,7 @@
   async function promoteToChannel() {
     const channelName = promoteChannelName;
     const ulid = monotonicFactory();
-    if (!current.space || !page.params.space || !object) return;
+    if (!current.space || !object) return;
 
     // Unmark the thread as a thread
     await backend.sendEvent(current.space.id, {
@@ -217,7 +229,7 @@
   }
 
   async function convertToThread() {
-    if (!current.space || !page.params.space || !object) return;
+    if (!current.space || !object) return;
 
     const ulid = monotonicFactory();
     const events: EventType[] = [
@@ -241,7 +253,7 @@
     await backend.sendEventBatch(current.space.id, events);
   }
   async function convertToPage() {
-    if (!current.space || !page.params.space || !object) return;
+    if (!current.space || !object) return;
 
     const ulid = monotonicFactory();
     const events: EventType[] = [

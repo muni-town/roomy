@@ -6,7 +6,7 @@
   import { SelectThemePopover } from "@fuxui/colors";
   import UserProfileButton from "../user/UserProfileButton.svelte";
   import { backendStatus } from "$lib/workers";
-  import { spaces } from "$lib/queries.svelte";
+  import { current, spaces } from "$lib/queries.svelte";
   import { dev } from "$app/environment";
 
   import IconTablerPlus from "~icons/tabler/plus";
@@ -15,7 +15,7 @@
 
   let {}: {} = $props();
 
-  let openSpace = $derived(page.params.space);
+  let openSpace = $derived(current.space?.id);
   let isOpenSpaceJoined = $derived(true);
 </script>
 
@@ -71,7 +71,7 @@
 
   <ScrollArea class="h-full overflow-y-auto overflow-x-hidden">
     <div class="flex flex-col px-0 items-center gap-2 py-4">
-      {#each spaces.result || [] as space (space.id)}
+      {#each spaces.list as space (space.id)}
         <SidebarSpace {...space} />
       {/each}
     </div>

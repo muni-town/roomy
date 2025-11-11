@@ -1,30 +1,23 @@
 <script lang="ts">
   import { navigate, navigateSync } from "$lib/utils.svelte";
-  import { page } from "$app/state";
   import { Tooltip } from "@fuxui/base";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
+  import { current, type SpaceMeta } from "$lib/queries.svelte";
 
-  type Props = {
-    name?: string;
-    avatar?: string;
-    id: string;
-    hasJoined?: boolean;
-  };
+  const space: SpaceMeta & { hasJoined?: boolean } = $props();
 
-  const { name, avatar, id, hasJoined = true }: Props = $props();
-
-  let isActive = $derived(page.params.space == id);
+  let isActive = $derived(current.space?.id == space.id);
 </script>
 
 <Tooltip
-  text={name}
+  text={space.name}
   delayDuration={0}
   contentProps={{ side: "right", sideOffset: 5 }}
 >
   {#snippet child({ props })}
     <a
       {...props}
-      href={navigateSync({ space: id })}
+      href={navigateSync({ space: space.handle || space.id })}
       class={[
         "size-10 rounded-full relative group",
         isActive
@@ -34,7 +27,7 @@
       ]}
       onmousedown={() => {
         if (isActive) return;
-        navigate({ space: id });
+        navigate({ space: space.handle || space.id });
       }}
       onclick={(e) => {
         if (!isActive) return;
@@ -45,10 +38,10 @@
       <div
         class={[
           "flex items-center justify-center overflow-hidden",
-          !hasJoined && "filter grayscale",
+          space.hasJoined == false && "filter grayscale",
         ]}
       >
-        <SpaceAvatar imageUrl={avatar} {id} size={40} />
+        <SpaceAvatar imageUrl={space.avatar} id={space.id} size={40} />
       </div>
     </a>
   {/snippet}

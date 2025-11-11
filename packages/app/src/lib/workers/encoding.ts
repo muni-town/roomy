@@ -328,6 +328,19 @@ export const eventVariantCodec = Kinds({
     adminId: str,
   }),
   /**
+   * This event sets the ATProto account did that should be used as the handle for this space.
+   *
+   * For this to be verified that account also has to have a `space.roomy.stream` PDS record with an
+   * rkey of `handle` and an `id` value that is set to this streams ID.
+   *
+   * When both the stream points to the ATProto account, and the ATProto account points to the
+   * stream ID, then that makes a verified Roomy space handle so you can visit the space at
+   * `https://roomy.space/example.handle`.
+   */
+  "space.roomy.stream.handle.account.0": Struct({
+    did: Option(str),
+  }),
+  /**
    * Set some entity's basic info. This is used for Rooms and possibly other things, too
    */
   "space.roomy.info.0": Struct({

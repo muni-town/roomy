@@ -4,7 +4,6 @@ import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 
 const config = {
   preprocess: vitePreprocess(),
-
   kit: {
     serviceWorker: {
       register: process.env.MODE !== "tauri",
@@ -12,11 +11,11 @@ const config = {
     adapter:
       process.env.NETLIFY == "true"
         ? adapterNetlify({
-            fallback: "index.html",
-          })
+          fallback: "index.html",
+        })
         : adapterStatic({
-            fallback: "index.html",
-          }),
+          fallback: "index.html",
+        }),
   },
 };
 

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { LiveQuery } from "$lib/liveQuery.svelte";
+  import { current } from "$lib/queries.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { id } from "$lib/workers/encoding";
   import BoardView from "./BoardView.svelte";
@@ -53,7 +54,7 @@
             join entities e on e.id = r.entity
             join comp_info ci on ci.entity = e.parent
           where
-            e.stream_id = ${page.params.space && id(page.params.space)}
+            e.stream_id = ${current.space?.id && id(current.space.id)}
               and
             e.parent = ${page.params.object && id(page.params.object)}
               and

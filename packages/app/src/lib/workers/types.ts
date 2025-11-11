@@ -54,6 +54,15 @@ export type BackendInterface = {
   setActiveSqliteWorker(port: MessagePort): Promise<void>;
   pauseSubscription(streamId: string): Promise<void>;
   unpauseSubscription(streamId: string): Promise<void>;
+  resolveHandleForSpace(
+    spaceId: string,
+    handleAccountDid: string,
+  ): Promise<string | undefined>;
+  resolveSpaceFromHandleOrDid(
+    handle: string,
+  ): Promise<{ spaceId: string; handleDid: string } | undefined>;
+  createStreamHandleRecord(spaceId: string): Promise<void>;
+  removeStreamHandleRecord(): Promise<void>;
   createStream(
     ulid: string,
     moduleId: string,

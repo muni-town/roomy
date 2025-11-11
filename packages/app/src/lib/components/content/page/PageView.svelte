@@ -20,7 +20,7 @@
     messagingState,
     type Comment,
   } from "../thread/TimelineView.svelte";
-  import { ensureShowPageChat } from "$lib/../routes/(app)/[space=hash]/[object=ulid]/+page.svelte";
+  import { ensureShowPageChat } from "$lib/../routes/(app)/[space=hashOrDomain]/[object=ulid]/+page.svelte";
 
   let isEditing = $state(false);
   let contentInitialised = $state(false);

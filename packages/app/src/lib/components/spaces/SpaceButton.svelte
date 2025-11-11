@@ -20,7 +20,7 @@
 
   {#if space}
     <a
-      href={`/${space.id}`}
+      href={`/${space.handle || space.id}`}
       class="absolute -inset-2 hover:bg-accent-500/5 rounded-xl"
     >
       <span class="sr-only">Go to {space.name}</span>

@@ -41,6 +41,7 @@ create index if not exists idx_edges_label_tail on edges(label, tail);
 create table if not exists comp_space (
   entity blob primary key references entities(id) on delete cascade,
   hidden integer not null default 0 check(hidden in (0, 1)),
+  handle_account text,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;

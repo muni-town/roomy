@@ -159,6 +159,13 @@ const materializers: {
     `,
   ],
 
+  "space.roomy.stream.handle.account.0": async ({ streamId, data }) => [
+    sql`
+      update comp_space set handle_account = ${data.did || null}
+      where entity = ${id(streamId)}
+    `,
+  ],
+
   // Admin
   "space.roomy.admin.add.0": async ({ streamId, data }) => {
     return [

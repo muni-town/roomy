@@ -109,7 +109,7 @@
 
         <Button
           class="w-full"
-          href={`/${current.space?.id}/settings`}
+          href={`/${page.params.space}/settings`}
           variant="secondary"
         >
           <IconLucideSettings class="size-4" /> Space settings

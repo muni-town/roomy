@@ -6,6 +6,6 @@ export const match = ((param: string) => {
     Hash.dec(param);
     return true;
   } catch (_) {
-    return false;
+    return param.includes(".");
   }
 }) satisfies ParamMatcher;

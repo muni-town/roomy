@@ -12,22 +12,34 @@
   import { sql } from "$lib/utils/sqlTemplate";
   import { backend, backendStatus } from "$lib/workers";
   import { id } from "$lib/workers/encoding";
-  import { Box, Button } from "@fuxui/base";
+  import { Box, Button, toast } from "@fuxui/base";
   import { fade } from "svelte/transition";
   import { ulid } from "ulidx";
 
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
 
+  let spaceFromHandleResp = $derived(
+    !current.space?.id && page.params.space?.includes(".")
+      ? backend.resolveSpaceFromHandleOrDid(page.params.space)
+      : current.space?.id
+        ? { spaceId: current.space.id }
+        : undefined,
+  );
+
   async function joinSpace() {
-    if (!backendStatus.personalStreamId || !page.params.space) return;
+    const resp = await spaceFromHandleResp;
+    if (!resp || !backendStatus.personalStreamId) {
+      toast.error("Could not join space. It's possible it does not exist.");
+      return;
+    }
     await backend.sendEvent(backendStatus.personalStreamId, {
       ulid: ulid(),
       parent: undefined,
       variant: {
         kind: "space.roomy.space.join.0",
         data: {
-          spaceId: page.params.space,
+          spaceId: resp.spaceId,
         },
       },
     });
@@ -79,7 +91,7 @@
             join comp_info i on i.entity = r.entity
             join entities e on e.id = r.entity
           where
-            e.stream_id = ${page.params.space ? id(page.params.space) : null}
+            e.stream_id = ${current.space?.id ? id(current.space.id) : null}
               and
             r.label = 'page'
 
@@ -119,7 +131,7 @@
             join entities e on e.id = r.entity
             join comp_info ci on ci.entity = e.parent
           where
-            e.stream_id = ${page.params.space ? id(page.params.space) : null}
+            e.stream_id = ${current.space?.id ? id(current.space.id) : null}
               and
             r.label = 'thread'
         )

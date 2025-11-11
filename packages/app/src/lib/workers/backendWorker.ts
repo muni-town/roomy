@@ -21,7 +21,7 @@ import {
   type OAuthClientMetadataInput,
   type OAuthSession,
 } from "@atproto/oauth-client-browser";
-import { OAuthClient } from "@atproto/oauth-client";
+import { isDid, OAuthClient } from "@atproto/oauth-client";
 import { Agent } from "@atproto/api";
 import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 import Dexie, { type EntityTable } from "dexie";
@@ -338,11 +338,7 @@ function connectMessagePort(port: MessagePortApi) {
     await clearPersonalStreamIdCache();
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-  const consoleInterface = messagePortInterface<
-    BackendInterface,
-    ConsoleInterface
-  >(port, {
+  const backendInterface: BackendInterface = {
     async login(handle) {
       if (!state.oauth) throw "OAuth not initialized";
       const url = await state.oauth.authorize(handle, {
@@ -527,7 +523,83 @@ function connectMessagePort(port: MessagePortApi) {
     async unpauseSubscription(streamId) {
       await state.openSpacesMaterializer?.unpauseSubscription(streamId);
     },
-  });
+    async resolveHandleForSpace(spaceId, handleAccountDid) {
+      await state.ready;
+      if (!state.agent) throw "Agent not ready";
+      try {
+        const resp1 = await state.agent.getProfile({
+          actor: handleAccountDid,
+        });
+        const handle = resp1.data.handle;
+        const did = handleAccountDid;
+        const resolvedSpaceId = (
+          await backendInterface.resolveSpaceFromHandleOrDid(did)
+        )?.spaceId;
+        if (resolvedSpaceId == spaceId) {
+          return handle;
+        }
+      } catch (e) {
+        console.warn("error while resolving handle for space", e);
+        return undefined;
+      }
+    },
+    async resolveSpaceFromHandleOrDid(handleOrDid) {
+      await state.ready;
+      if (!state.agent) throw "Agent not ready";
+      try {
+        const did = isDid(handleOrDid)
+          ? handleOrDid
+          : (
+              await state.agent.getProfile({
+                actor: handleOrDid,
+              })
+            ).data.did;
+
+        const resp = await state.agent.com.atproto.repo.getRecord({
+          collection: CONFIG.streamHandleNsid,
+          repo: did,
+          rkey: "self",
+        });
+        return resp.data.value?.id
+          ? {
+              spaceId: resp.data.value.id as string,
+              handleDid: did,
+            }
+          : undefined;
+      } catch (_) {
+        return undefined;
+      }
+    },
+    async createStreamHandleRecord(space) {
+      await state.ready;
+      if (!state.agent) throw "Agent not ready";
+      const resp = await state.agent.com.atproto.repo.putRecord({
+        collection: CONFIG.streamHandleNsid,
+        repo: state.agent.assertDid,
+        rkey: "self",
+        record: {
+          id: space,
+        },
+      });
+      if (!resp.success) throw "Error creating stream handle record on PDS";
+    },
+    async removeStreamHandleRecord() {
+      await state.ready;
+      if (!state.agent) throw "Agent not ready";
+      const resp = await state.agent.com.atproto.repo.deleteRecord({
+        collection: CONFIG.streamHandleNsid,
+        repo: state.agent.assertDid,
+        rkey: "self",
+      });
+      if (!resp.success) throw "Error deleting stream handle record on PDS";
+    },
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+  const consoleInterface = messagePortInterface<
+    BackendInterface,
+    ConsoleInterface
+  >(port, backendInterface);
 
   // Set up console forwarding to main thread for debugging
   // This intercepts console.log/warn/error/info/debug calls in the SharedWorker

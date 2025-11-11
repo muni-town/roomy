@@ -1,13 +1,15 @@
 import { page } from "$app/state";
 import { LiveQuery } from "./liveQuery.svelte";
 import { sql } from "./utils/sqlTemplate";
-import { backendStatus } from "./workers";
+import { backend, backendStatus } from "./workers";
 import { id } from "./workers/encoding";
 
 export type SpaceMeta = {
   id: string;
   name?: string;
   avatar?: string;
+  handle_account?: string;
+  handle?: string;
   description?: string;
   permissions: [string, "read" | "post" | "admin"][];
 };
@@ -39,7 +41,8 @@ type ThreadTreeItem = Extract<SpaceTreeItem, { type: "thread" }>;
 type PageTreeItem = Extract<SpaceTreeItem, { type: "page" }>;
 
 /** The space list. */
-export let spaces: LiveQuery<SpaceMeta>;
+let spacesQuery: LiveQuery<SpaceMeta>;
+export let spaces: { list: SpaceMeta[] } = $state({ list: [] });
 
 /** The sidebar tree for the currently selected space. */
 export let spaceTree: LiveQuery<SpaceTreeItem>;
@@ -53,13 +56,14 @@ export let current = $state({
 // All of our queries have to be made in the scope of an effect root but we can't export them from
 // within the scope.
 $effect.root(() => {
-  spaces = new LiveQuery(
+  spacesQuery = new LiveQuery(
     () => sql`-- spaces
       select json_object(
           'id', id(cs.entity),
           'name', ci.name,
           'avatar', ci.avatar,
           'description', ci.description,
+          'handle_account', cs.handle_account,
           'permissions', (
             select json_group_array(
               json_array(id(cu.did), json_extract(e.payload, '$.can')))
@@ -179,13 +183,50 @@ $effect.root(() => {
     (row) => row.json && JSON.parse(row.json),
   );
 
-  // Update current values
+  // Update spaces list, loading the space handle if it has one.
   $effect(() => {
-    // console.log("Checking current space for ", page.params.space)
-    current.space = page.params.space
-      ? spaces.result?.find((x) => x.id == page.params.space)
-      : undefined;
+    Promise.all(
+      spacesQuery.result?.map(async (x) => ({
+        ...x,
+        handle: x.handle_account
+          ? await backend.resolveHandleForSpace(x.id, x.handle_account)
+          : undefined,
+      })) || [],
+    ).then((s) => (spaces.list = s));
   });
+
+  // Update the current.space
+  $effect(() => {
+    if (page.params.space) {
+      spacesQuery.result;
+      if (page.params.space.includes(".")) {
+        // Resolve the space handle to a space ID
+        backend
+          .resolveSpaceFromHandleOrDid(page.params.space)
+          .then(async (resp) => {
+            if (!resp) return undefined;
+            // Get the matching space locally
+            const matchingSpace = resp.spaceId
+              ? spacesQuery.result?.find((x) => x.id == resp.spaceId)
+              : undefined;
+
+            // Make sure that the space actually has a handle
+            const handleAccount = matchingSpace?.handle_account;
+            if (!handleAccount) return;
+
+            // Validate that the DID of the handle matches our handle account
+            if (handleAccount != resp.handleDid) return undefined;
+
+            current.space = matchingSpace;
+          });
+      } else {
+        current.space = page.params.space
+          ? spacesQuery.result?.find((x) => x.id == page.params.space)
+          : undefined;
+      }
+    }
+  });
+  // Update current.isSpaceAdmin
   $effect(() => {
     if (backendStatus.did) {
       current.isSpaceAdmin =
@@ -195,6 +236,8 @@ $effect.root(() => {
         ) || false;
     }
   });
+
+  // Update current.roomId
   $effect(() => {
     current.roomId = page.params.object;
   });

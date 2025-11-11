@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { current } from "$lib/queries.svelte";
-  import { backend } from "$lib/workers";
+  import { backend, backendStatus } from "$lib/workers";
   import { Button, Input, Textarea, toast } from "@fuxui/base";
   import { ulid } from "ulidx";
 
@@ -68,6 +70,21 @@
     }
   }
 
+  let updateSpaceHandle = $state(1);
+  let spaceForCurrentAccountHandleResp = $derived(
+    updateSpaceHandle && backendStatus.did
+      ? backend.resolveSpaceFromHandleOrDid(backendStatus.did)
+      : undefined,
+  );
+  let handleForCurrentSpace = $derived(
+    current.space?.handle_account
+      ? backend.resolveHandleForSpace(
+          current.space.id,
+          current.space.handle_account,
+        )
+      : undefined,
+  );
+
   async function handleAvatarSelect(event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
@@ -76,6 +93,53 @@
         avatarFile = file;
         avatarUrl = URL.createObjectURL(file);
       }
+    }
+  }
+
+  async function useHandleForSpace() {
+    if (!current.space) return;
+    try {
+      await backend.sendEvent(current.space.id, {
+        ulid: ulid(),
+        parent: undefined,
+        variant: {
+          kind: "space.roomy.stream.handle.account.0",
+          data: {
+            did: backendStatus.did,
+          },
+        },
+      });
+      await backend.createStreamHandleRecord(current.space.id);
+      updateSpaceHandle += 1;
+      toast.success("Successfully updated handle");
+      if (backendStatus.profile?.handle)
+        goto(`/${backendStatus.profile?.handle}/settings/general`);
+    } catch (e) {
+      console.error(e);
+      toast.error(`Could not set handle: ${e}`);
+    }
+  }
+
+  async function removeHandleForSpace() {
+    if (!current.space) return;
+    try {
+      await backend.removeStreamHandleRecord();
+      await backend.sendEvent(current.space.id, {
+        ulid: ulid(),
+        parent: undefined,
+        variant: {
+          kind: "space.roomy.stream.handle.account.0",
+          data: {
+            did: undefined,
+          },
+        },
+      });
+      updateSpaceHandle += 1;
+      toast.success("Successfully updated handle");
+      goto(`/${current.space.id}/settings/general`);
+    } catch (e) {
+      console.error(e);
+      toast.error(`Could not set handle: ${e}`);
     }
   }
 
@@ -153,5 +217,70 @@
         {/if}
       </Button>
     </div>
+  </div>
+</form>
+
+<form>
+  <h2 class="text-xl font-bold">Space Handle</h2>
+
+  <div class="gap-2 flex flex-col my-3 p-3">
+    <p>
+      You can pick one space that you allow to use your ATProto handle to get a
+      nicer URL.
+    </p>
+    <p>
+      For example, because you are the admin of this space, you may choose to
+      use your handle to make this space accessible at:
+    </p>
+    <div class="font-bold text-center m-3 font-mono">
+      {page.url.host}/{backendStatus.profile?.handle}
+    </div>
+
+    {#await spaceForCurrentAccountHandleResp then resp}
+      {#await handleForCurrentSpace then handleForSpace}
+        {#if handleForSpace != backendStatus.profile?.handle}
+          <Button onclick={useHandleForSpace}
+            >Use My Handle For This Space</Button
+          >
+        {/if}
+
+        {#if resp && resp.spaceId == current.space?.id}
+          <Button onclick={removeHandleForSpace}
+            >Remove Your Handle From This Space</Button
+          >
+        {/if}
+      {/await}
+    {/await}
+  </div>
+
+  <div class="my-3 flex flex-col gap-2">
+    {#await handleForCurrentSpace then handle}
+      <div>
+        <strong>Current Handle for This Space:</strong>
+        {#if handle}
+          <a
+            href={`${page.url.protocol}//${page.url.host}/${handle}`}
+            class="text-blue-400"
+          >
+            {handle}
+          </a>
+        {:else}
+          None
+        {/if}
+      </div>
+    {/await}
+    {#await spaceForCurrentAccountHandleResp then resp}
+      {#if resp && resp.spaceId != current.space?.id}
+        <div>
+          Your handle is currently being used for
+          <a
+            href={`${page.url.protocol}//${page.url.host}/${resp.spaceId}`}
+            class="text-blue-400"
+          >
+            another space.
+          </a> Using it for this space will mean it can't be used for the other space.
+        </div>
+      {/if}
+    {/await}
   </div>
 </form>
