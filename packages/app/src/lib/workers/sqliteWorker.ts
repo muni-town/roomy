@@ -16,6 +16,7 @@ import {
 } from "./setupSqlite";
 import { messagePortInterface, reactiveWorkerState } from "./workerMessaging";
 import Dexie, { type EntityTable } from "dexie";
+import { CONFIG } from "$lib/config";
 
 console.log("Started sqlite worker");
 
@@ -131,7 +132,7 @@ globalThis.onmessage = (ev) => {
     globalThis.addEventListener("unhandledrejection", cleanup);
 
     try {
-      await initializeDatabase("/mini.db");
+      await initializeDatabase(`/roomy-${CONFIG.moduleVersion}.db`);
       status.vfsType = getVfsType() || undefined;
       console.log("SQLite Worker using VFS:", status.vfsType);
 
