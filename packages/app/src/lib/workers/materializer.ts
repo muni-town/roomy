@@ -312,6 +312,7 @@ const materializers: {
 
   // Message
   "space.roomy.message.create.0": async ({ streamId, user, event, data }) => {
+    if (!event.parent) throw new Error("No room for message");
     const statements = [
       ensureEntity(streamId, event.ulid, event.parent),
       sql`
@@ -328,6 +329,16 @@ const materializers: {
           ${data.content.mimeType},
           ${data.content.content}
         )`,
+      sql`
+        insert into comp_last_read (entity, timestamp, unread_count)
+        values (${id(event.parent)}, 1, 1)
+        on conflict(entity) do update set
+          unread_count = case
+            when ${id(event.ulid)} > timestamp_to_ulid(comp_last_read.timestamp)
+            then comp_last_read.unread_count + 1
+            else comp_last_read.unread_count
+          end,
+          updated_at = (unixepoch() * 1000)`,
     ];
 
     if (data.replyTo) {
@@ -346,6 +357,7 @@ const materializers: {
 
   // Message v1
   "space.roomy.message.create.1": async ({ streamId, user, event, data }) => {
+    if (!event.parent) throw new Error("No room for message");
     const statements = [
       ensureEntity(streamId, event.ulid, event.parent),
       sql`
@@ -362,6 +374,17 @@ const materializers: {
           ${data.content.mimeType},
           ${data.content.content}
         )`,
+      sql`
+        insert into comp_last_read (entity, timestamp, unread_count)
+          values (${id(event.parent)}, 1, 1)
+          on conflict(entity) do update set
+            unread_count = case
+              when ${id(event.ulid)} > timestamp_to_ulid(comp_last_read.timestamp)
+              then comp_last_read.unread_count + 1
+              else comp_last_read.unread_count
+            end,
+            updated_at = (unixepoch() * 1000)
+      `,
     ];
 
     // Handle replyTo extensions
@@ -812,6 +835,32 @@ const materializers: {
       sql`update comp_room set label = null where entity = ${id(event.parent)} and label = 'page'`,
     ];
   },
+
+  /**
+   * Mark a room as read. This event is sent to the user's personal stream.
+   * The event ULID timestamp indicates when the room was last read.
+   * We ensure the room entity exists using the streamId from the event data,
+   * not the wrapper streamId (which would be the user's personal stream).
+   */
+  "space.roomy.room.lastRead.0": async ({ event, data }) => {
+    // Extract timestamp from the event's ULID
+    const timestamp = decodeTime(event.ulid);
+
+    return [
+      // Ensure the room entity exists in the target stream
+      // Note: we use data.streamId here, not the wrapper's streamId
+      ensureEntity(data.streamId, data.roomId),
+      // Insert or update the last read timestamp
+      sql`
+        insert into comp_last_read (entity, timestamp, unread_count)
+        values (${id(data.roomId)}, ${timestamp}, 0)
+        on conflict(entity) do update set
+          timestamp = excluded.timestamp,
+          updated_at = excluded.timestamp,
+          unread_count = excluded.unread_count
+      `,
+    ];
+  },
 };
 
 // UTILS
@@ -836,7 +885,13 @@ function ensureEntity(
       ${parent ? id(parent) : undefined},
       ${unixTimeMs}
     )
-    on conflict(id) do nothing
+    on conflict(id) do update set
+      parent = coalesce(entities.parent, excluded.parent),
+      updated_at = case 
+        when entities.parent is null and excluded.parent is not null 
+        then excluded.updated_at 
+        else entities.updated_at 
+      end
   `;
   return statement;
 }
@@ -922,7 +977,7 @@ async function ensureProfiles(
   }
 }
 
-function edgePayload<EdgeLabel extends "reaction" | "member" | "ban">(
+function edgePayload<EdgeLabel extends keyof EdgesWithPayload>(
   payload: EdgesMap[EdgeLabel],
 ) {
   return JSON.stringify(payload);
@@ -936,7 +991,6 @@ export type EdgeLabel =
   | "ban"
   | "hide"
   | "pin"
-  | "last_read"
   | "embed"
   | "reply"
   | "link"
@@ -961,13 +1015,15 @@ export interface EdgeMember {
   can: "read" | "post" | "admin";
 }
 
-export type EdgesMap = {
-  [K in Exclude<EdgeLabel, "reaction" | "member" | "ban">]: null;
-} & {
+interface EdgesWithPayload {
   reaction: EdgeReaction;
   ban: EdgeBan;
   member: EdgeMember;
-};
+}
+
+export type EdgesMap = {
+  [K in Exclude<EdgeLabel, keyof EdgesWithPayload>]: null;
+} & EdgesWithPayload;
 
 /** Given a tuple of edge names, produces a record whose keys are exactly
  * those edge names and whose values are arrays of the corresponding edge types.

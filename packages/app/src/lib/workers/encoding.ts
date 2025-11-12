@@ -478,6 +478,7 @@ export const eventVariantCodec = Kinds({
     handle: str,
   }),
   /**
+   * DEPRECATED - replaced by space.roomy.message.create.1
    * Set an override for the author and timestamp of a previously sent message. This is used by chat
    * bridges, to send messages as remote users. */
   "space.roomy.message.overrideMeta.0": Struct({
@@ -551,6 +552,17 @@ export const eventVariantCodec = Kinds({
   "space.roomy.page.mark.0": _void,
   /** Unmark a room as a thread. */
   "space.roomy.page.unmark.0": _void,
+  /**
+   * Mark a room as read by the user. This event is sent to the user's personal stream
+   * to track when they last visited/read a room. The ULID timestamp encodes when the
+   * room was last read.
+   */
+  "space.roomy.room.lastRead.0": Struct({
+    /** The ID of the room being marked as read (channel, thread, page, etc). */
+    roomId: Ulid,
+    /** The stream ID that contains the room. */
+    streamId: Hash,
+  }),
 });
 
 export const eventCodec = Struct({
