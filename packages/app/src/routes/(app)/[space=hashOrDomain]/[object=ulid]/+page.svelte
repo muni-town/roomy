@@ -5,7 +5,6 @@
   }
   export function ensureShowPageChat() {
     if (!showPageChat) {
-      console.log("Does it ensure??");
       showPageChat = true;
     }
   }
@@ -346,7 +345,7 @@
   const object = $derived(objectQuery.result?.[0]);
 
   $effect(() => {
-    console.log("object", object);
+    object;
   });
 
   let sentLastReadMarker = $state(false); // flag to ensure lastRead event is only sent once per page load
@@ -362,7 +361,6 @@
   });
 
   async function setPageReadMarker() {
-    console.log("setPageReadMarker running");
     if (
       !backendStatus.personalStreamId ||
       !page.params.space ||
@@ -370,7 +368,6 @@
       sentLastReadMarker === true
     )
       return;
-    console.log("Sending page read marker");
     sentLastReadMarker = true;
     await backend.sendEvent(backendStatus.personalStreamId, {
       ulid: ulid(),
@@ -393,7 +390,6 @@
       !object?.lastRead
     )
       return;
-    console.log("will the lastRead marker be sent??");
     backend.runQuery(
       sql`update comp_last_read set unread_count = 0 where entity = ${id(page.params.object)}`,
     );

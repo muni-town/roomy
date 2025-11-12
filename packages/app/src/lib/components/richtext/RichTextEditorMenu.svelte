@@ -55,7 +55,7 @@
   }
 
   $effect(() => {
-    console.log("menu - editable?", editable);
+    editable;
   });
 
   let _fileInput = $state<HTMLInputElement | null>(null);

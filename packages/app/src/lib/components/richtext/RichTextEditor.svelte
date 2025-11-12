@@ -60,7 +60,6 @@
   } = $props();
 
   $effect(() => {
-    console.log("editor is editable?", editable);
     if (editor?.isEditable !== editable) {
       editor?.setEditable(editable);
     }
@@ -157,8 +156,6 @@
       // 	];
       // }
 
-      console.log("attrs", attrs);
-
       // For regular images, just return the img tag
       return ["img", attrs];
     },
@@ -209,7 +206,6 @@
             !editor.isActive("link") &&
             !editor.isActive("imageUpload");
           if (shouldShow) {
-            console.log("should show?");
             menu?.classList.remove("hidden");
           }
           return shouldShow;
@@ -226,7 +222,6 @@
             editor.isActive("link") &&
             !editor.view.state.selection.empty;
           if (shouldShow) {
-            console.log("should show link menu?");
             menuLink?.classList.remove("hidden");
           }
           return shouldShow;
@@ -250,7 +245,7 @@
       Typography.configure(),
       ImageUploadNode.configure({
         upload: async (file, onProgress, _abortSignal) => {
-          console.log("uploading image", file);
+          console.log("fake uploading image", file);
           // wait 2 seconds
           for (let i = 0; i < 10; i++) {
             await new Promise((resolve) => setTimeout(resolve, 200));
