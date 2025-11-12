@@ -35,6 +35,11 @@ export const config: MaterializerConfig = {
   materializer,
 };
 
+const newUserSignals = [
+  "space.roomy.message.create.0",
+  "space.roomy.message.create.1",
+];
+
 /** Map a batch of incoming events to SQL that applies the event to the entities,
  * components and edges, then execute them all as a single transaction.
  */
@@ -80,7 +85,7 @@ export function materializer(
       // Make sure all of the profiles we need are downloaded and inserted
       const neededProfiles = new Set<string>();
       decodedEvents.forEach(([i, ev]) =>
-        ev.variant.kind == "space.roomy.message.create.0"
+        newUserSignals.includes(ev.variant.kind)
           ? neededProfiles.add(i.user)
           : undefined,
       );
@@ -117,7 +122,7 @@ export function materializer(
 
           batch.push(...statements);
         } catch (e) {
-          console.error(e);
+          console.warn("Event materialisation failed: " + e);
         }
       }
       sqlChannel.push({ sqlStatements: batch, latestEvent });
