@@ -110,7 +110,7 @@
                 'latestTimestamp', max(timestamp)
               ) from (
                 select
-                  coalesce(author_override_info.avatar, author_info.avatar) as avatar,
+                  case when override.entity is not null then null else coalesce(author_override_info.avatar, author_info.avatar) end as avatar,
                   coalesce(author_override_info.name, author_info.name) as author,
                   coalesce(override.timestamp, ulid_timestamp(me.id)) as timestamp
                 from comp_content mc
