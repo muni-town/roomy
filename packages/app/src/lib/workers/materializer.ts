@@ -13,7 +13,15 @@ import type { Agent } from "@atproto/api";
 import type { LeafClient } from "@muni-town/leaf-client";
 import { AsyncChannel } from "./asyncChannel";
 
-export type EventType = ReturnType<(typeof eventCodec)["dec"]>;
+type RawEvent = ReturnType<(typeof eventCodec)["dec"]>;
+type EventKind = RawEvent["variant"]["kind"];
+
+export type EventType<TVariant extends EventKind | undefined = undefined> =
+  TVariant extends undefined
+    ? RawEvent
+    : Omit<RawEvent, "variant"> & {
+        variant: Extract<RawEvent["variant"], { kind: TVariant }>;
+      };
 
 /** Database materializer config. */
 export const config: MaterializerConfig = {

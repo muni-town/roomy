@@ -36,7 +36,7 @@
 
   // log messages sent in last 2.7hours
   // if (decodeTime(message.id) > Date.now() - 10000000)
-  console.log("message", message.content, message);
+  // console.log("message", message.content, message);
 
   const threading = $derived.by(() => {
     if (!messagingState) return null;
