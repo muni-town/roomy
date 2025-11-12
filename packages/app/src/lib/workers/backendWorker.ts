@@ -555,18 +555,28 @@ function connectMessagePort(port: MessagePortApi) {
               })
             ).data.did;
 
-        const resp = await state.agent.com.atproto.repo.getRecord({
-          collection: CONFIG.streamHandleNsid,
-          repo: did,
-          rkey: "self",
-        });
-        return resp.data.value?.id
+        const resp = await state.agent.com.atproto.repo.getRecord(
+          {
+            collection: CONFIG.streamHandleNsid,
+            repo: did,
+            rkey: "self",
+          },
+          {
+            headers: {
+              "atproto-proxy": `${did}#atproto_pds`,
+            },
+          },
+        );
+
+        const result = resp.data.value?.id
           ? {
               spaceId: resp.data.value.id as string,
               handleDid: did,
             }
           : undefined;
-      } catch (_) {
+        return result;
+      } catch (e) {
+        console.warn("Error resolving space from handle", e);
         return undefined;
       }
     },

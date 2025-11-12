@@ -44,30 +44,30 @@
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
 
-  let spaceFromHandleResp = $derived(
-    !current.space?.id && page.params.space?.includes(".")
-      ? backend.resolveSpaceFromHandleOrDid(page.params.space)
-      : current.space?.id
-        ? { spaceId: current.space.id }
-        : undefined,
-  );
-
   async function joinSpace() {
-    const resp = await spaceFromHandleResp;
-    if (!resp || !backendStatus.personalStreamId) {
-      toast.error("Could not join space. It's possible it does not exist.");
-      return;
-    }
-    await backend.sendEvent(backendStatus.personalStreamId, {
-      ulid: ulid(),
-      parent: undefined,
-      variant: {
-        kind: "space.roomy.space.join.0",
-        data: {
-          spaceId: resp.spaceId,
+    try {
+      const spaceId = page.params.space?.includes(".")
+        ? (await backend.resolveSpaceFromHandleOrDid(page.params.space))
+            ?.spaceId
+        : page.params.space;
+      if (!spaceId || !backendStatus.personalStreamId) {
+        toast.error("Could not join space. It's possible it does not exist.");
+        return;
+      }
+      await backend.sendEvent(backendStatus.personalStreamId, {
+        ulid: ulid(),
+        parent: undefined,
+        variant: {
+          kind: "space.roomy.space.join.0",
+          data: {
+            spaceId,
+          },
         },
-      },
-    });
+      });
+    } catch (e) {
+      console.error(e);
+      toast.error("Could not join space. It's possible it does not exist.");
+    }
   }
 
   const ref = $derived($scrollContainerRef);
