@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS edges (
     edge_id integer primary key autoincrement,
     head BLOB NOT NULL,
     tail BLOB NOT NULL,
-    label TEXT NOT NULL, -- CHECK(label IN ('child', 'parent', 'subscribe', 'member', 'ban', 'hide', 'pin', 'last_read', 'embed', 'reply', 'link', 'author', 'reorder', 'source', 'avatar')),
+    label TEXT NOT NULL, -- CHECK(label IN ('child', 'parent', 'subscribe', 'member', 'ban', 'hide', 'pin', 'embed', 'reply', 'link', 'author', 'reorder', 'source', 'avatar')),
     payload TEXT,
     created_at integer not null default (unixepoch() * 1000),
     updated_at integer not null default (unixepoch() * 1000),
@@ -163,4 +163,14 @@ create table if not exists comp_link (
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
+
+create table if not exists comp_last_read (
+  entity blob primary key references entities(id) on delete cascade,
+  timestamp integer not null,
+  unread_count integer,
+  created_at integer not null default (unixepoch() * 1000),
+  updated_at integer not null default (unixepoch() * 1000)
+) strict;
+
+create index if not exists idx_comp_last_read_timestamp on comp_last_read(timestamp);
   
