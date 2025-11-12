@@ -202,7 +202,6 @@
 
     try {
       const ulid = monotonicFactory();
-      const events: EventType[] = [];
 
       const messageId = ulid();
 

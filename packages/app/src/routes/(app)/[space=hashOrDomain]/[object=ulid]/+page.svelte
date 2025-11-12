@@ -74,11 +74,6 @@
   let shouldShowPageTitle = $state(false);
 
   $effect(() => {
-    console.log("showPageChat", showPageChat);
-  });
-
-  $effect(() => {
-    console.log("ref changed", ref);
     if (!ref) return;
 
     function handleScroll() {
@@ -320,6 +315,7 @@
     name: string;
     kind: string;
     parent?: { id: string; name: string; kind: string; parent: string | null };
+    lastRead: number;
   }>(
     () => sql`
     select json_object(
@@ -336,16 +332,75 @@
           join comp_room pr on pe.id = pr.entity
           where pe.id = e.parent
       ),
-      'kind', r.label
+      'kind', r.label,
+      'lastRead', coalesce(l.timestamp, 1)
     ) as json
     from entities e
       join comp_info i on i.entity = e.id
       join comp_room r on r.entity = e.id
+      left join comp_last_read l on l.entity = e.id
     where e.id = ${page.params.object && id(page.params.object)}
   `,
     (row) => JSON.parse(row.json),
   );
   const object = $derived(objectQuery.result?.[0]);
+
+  $effect(() => {
+    console.log("object", object);
+  });
+
+  let sentLastReadMarker = $state(false); // flag to ensure lastRead event is only sent once per page load
+
+  $effect(() => {
+    page.params.object;
+    // User navigated to a new page
+    sentLastReadMarker = false;
+    return () => {
+      // Also send the marker when navigating away
+      setPageReadMarker();
+    };
+  });
+
+  async function setPageReadMarker() {
+    console.log("setPageReadMarker running");
+    if (
+      !backendStatus.personalStreamId ||
+      !page.params.space ||
+      !page.params.object ||
+      sentLastReadMarker === true
+    )
+      return;
+    console.log("Sending page read marker");
+    sentLastReadMarker = true;
+    await backend.sendEvent(backendStatus.personalStreamId, {
+      ulid: ulid(),
+      parent: undefined,
+      variant: {
+        kind: "space.roomy.room.lastRead.0",
+        data: {
+          streamId: page.params.space,
+          roomId: page.params.object,
+        },
+      },
+    });
+  }
+
+  $effect(() => {
+    if (
+      !backendStatus.personalStreamId ||
+      !page.params.space ||
+      !page.params.object ||
+      !object?.lastRead
+    )
+      return;
+    console.log("will the lastRead marker be sent??");
+    backend.runQuery(
+      sql`update comp_last_read set unread_count = 0 where entity = ${id(page.params.object)}`,
+    );
+    const elapsed = Date.now() - object.lastRead;
+    if (elapsed < 1000 * 60 * 5) return;
+    setTimeout(setPageReadMarker, 1000);
+  });
 </script>
 
 <MainLayout>

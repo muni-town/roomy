@@ -1,4 +1,5 @@
 import { page } from "$app/state";
+import { decodeTime } from "ulidx";
 import { LiveQuery } from "./liveQuery.svelte";
 import { sql } from "./utils/sqlTemplate";
 import { backend, backendStatus } from "./workers";
@@ -18,6 +19,9 @@ export type SpaceTreeItem = {
   id: string;
   name: string;
   parent?: string;
+  lastRead: number;
+  latestEntity: number;
+  unreadCount: number;
 } & (
   | {
       type: "category";
@@ -45,13 +49,77 @@ let spacesQuery: LiveQuery<SpaceMeta>;
 export let spaces: { list: SpaceMeta[] } = $state({ list: [] });
 
 /** The sidebar tree for the currently selected space. */
-export let spaceTree: LiveQuery<SpaceTreeItem>;
+export let spaceTree: LiveQuery<SpaceTreeItem> | { result?: SpaceTreeItem[] } =
+  $state({ result: undefined });
 
 export let current = $state({
   space: undefined as SpaceMeta | undefined,
   roomId: undefined as string | undefined,
   isSpaceAdmin: false,
 });
+
+/**
+ * Build a tree structure from flat SQL results.
+ * The SQL query returns all rooms in a flat list with parent references.
+ * This function reconstructs the hierarchical tree structure.
+ */
+function buildTree(
+  rows: Array<{
+    id: string;
+    parent: string | null;
+    type: "category" | "channel" | "thread" | "page";
+    name: string;
+    lastRead: number;
+    latestEntity: string | null;
+    unreadCount: number;
+    depth: number;
+  }>,
+): SpaceTreeItem[] {
+  if (!rows || rows.length === 0) return [];
+
+  // Build a map of id -> node for quick lookups
+  // Using any here because TypeScript can't track the dynamic children types properly
+  const nodeMap = new Map<string, any>();
+
+  // First pass: create all nodes
+  for (const row of rows) {
+    const node: any = {
+      id: row.id,
+      name: row.name,
+      parent: row.parent || undefined,
+      type: row.type,
+      lastRead: row.lastRead,
+      latestEntity: row.latestEntity ? decodeTime(row.latestEntity) : undefined,
+      unreadCount: row.unreadCount,
+    };
+
+    // Add children array for non-page types
+    if (row.type !== "page") {
+      node.children = [];
+    }
+
+    nodeMap.set(row.id, node);
+  }
+
+  // Second pass: build parent-child relationships
+  const rootNodes: SpaceTreeItem[] = [];
+
+  for (const row of rows) {
+    const node = nodeMap.get(row.id)!;
+
+    if (row.parent) {
+      const parent = nodeMap.get(row.parent);
+      if (parent && parent.children) {
+        parent.children.push(node);
+      }
+    } else {
+      // Top-level node
+      rootNodes.push(node);
+    }
+  }
+
+  return rootNodes;
+}
 
 // All of our queries have to be made in the scope of an effect root but we can't export them from
 // within the scope.
@@ -83,105 +151,78 @@ $effect.root(() => {
   //
   // was in above query json bit --'admins', (select json_group_array(admin_id) from space_admins where space_id = id)
 
-  spaceTree = new LiveQuery(
-    () => sql`-- spaceTree
-      select json_object(
-        'id', id(e.id),
-        'name', i.name,
-        'type', 'category',
-        'children', (
-          select json_group_array(
-            json_object(
-              'id', id(c1.id),
-              'type', case
-                when r1.label = 'channel' then 'channel'
-                when r1.label = 'page' then 'page'
-              end,
-              'parent', id(c1.parent),
-              'name', i1.name,
-              'children', (
-                select json_group_array(
-                  json_object(
-                    'id', id(c2.id),
-                    'type', case
-                      when r2.label = 'thread' then 'thread'
-                      when r2.label = 'page' then 'page'
-                    end,
-                    'parent', id(c2.parent),
-                    'name', i2.name
-                  )
-                )
-                from entities c2
-                  join comp_room r2 on c2.id = r2.entity
-                  join comp_info i2 on c2.id = i2.entity
-                where c2.parent = c1.id
-              )
-            )
-          )
-          from entities c1
-            join comp_room r1 on c1.id = r1.entity
-            join comp_info i1 on c1.id = i1.entity
-          where c1.parent = e.id
-        )
-      ) as json
-      from entities e
-        join comp_room r on e.id = r.entity
-        join comp_info i on e.id = i.entity
-      where
-        e.stream_id = ${current.space?.id && id(current.space.id)}
-        and r.label = 'category'
-      
-      union
-      
-      select json_object(
-        'id', id(e.id),
-        'name', i.name,
-        'type', 'channel',
-        'parent', id(e.parent),
-        'children', (
-          select json_group_array(
-            json_object(
-              'id', id(c.id),
-              'type', case
-                when r1.label = 'thread' then 'thread'
-                when r1.label = 'page' then 'page'
-              end,
-              'parent', id(c.parent),
-              'name', i1.name
-            )
-          )
-          from entities c
-            join comp_room r1 on c.id = r1.entity
-            join comp_info i1 on c.id = i1.entity
-          where c.parent = e.id
-        )
-      ) as json
-      from entities e
-        join comp_room r on e.id = r.entity
-        join comp_info i on e.id = i.entity
-      where
-        e.stream_id = ${current.space?.id && id(current.space.id)}
-        and r.label = 'channel'
-        and e.parent is null
-      
-      union
-      
-      select json_object(
-        'id', id(e.id),
-        'name', i.name,
-        'type', 'page',
-        'parent', id(e.parent)
-      ) as json
-      from entities e
-        join comp_room r on e.id = r.entity
-        join comp_info i on e.id = i.entity
-      where
-        e.stream_id = ${current.space?.id && id(current.space.id)}
-        and r.label = 'page'
-        and e.parent is null
+  // spaceTree uses a custom live query that processes all rows into a tree structure
+  const flatTreeQuery = new LiveQuery<{
+    id: string;
+    parent: string | null;
+    type: "category" | "channel" | "thread" | "page";
+    name: string;
+    lastRead: number;
+    latestEntity: string | null;
+    unreadCount: number;
+    depth: number;
+  }>(
+    () => sql`-- spaceTree (recursive CTE)
+      with recursive room_tree as (
+        -- Base case: top-level rooms (categories, channels, pages without parents)
+        select 
+          e.id,
+          e.parent,
+          r.label as type,
+          i.name,
+          coalesce(l.timestamp, 1) as lastRead,
+          (select max(id) from entities where parent = e.id) as latestEntity,
+          coalesce(l.unread_count, 0) as unreadCount,
+          0 as depth
+        from entities e
+          join comp_room r on e.id = r.entity
+          join comp_info i on e.id = i.entity
+          left join comp_last_read l on e.id = l.entity
+        where e.stream_id = ${current.space?.id && id(current.space.id)}
+          and e.parent is null
+        
+        union all
+        
+        -- Recursive case: children of rooms
+        select 
+          e.id,
+          e.parent,
+          r.label as type,
+          i.name,
+          coalesce(l.timestamp, 1) as lastRead,
+          (select max(id) from entities where parent = e.id) as latestEntity,
+          coalesce(l.unread_count, 0) as unreadCount,
+          rt.depth + 1 as depth
+        from entities e
+          join comp_room r on e.id = r.entity
+          join comp_info i on e.id = i.entity
+          left join comp_last_read l on e.id = l.entity
+          join room_tree rt on e.parent = rt.id
+        where e.stream_id = ${current.space?.id && id(current.space.id)}
+      )
+      select 
+        id(id) as id,
+        id(parent) as parent,
+        type,
+        name,
+        lastRead,
+        id(latestEntity) as latestEntity,
+        unreadCount,
+        depth
+      from room_tree
+      order by depth, type, name
   `,
-    (row) => row.json && JSON.parse(row.json),
   );
+
+  // Build tree structure reactively from flat results
+  $effect(() => {
+    if (flatTreeQuery.result) {
+      console.log("flatTree", flatTreeQuery.result);
+      spaceTree.result = buildTree(flatTreeQuery.result);
+    } else {
+      spaceTree.result = undefined;
+    }
+  });
 
   // Update spaces list, loading the space handle if it has one.
   $effect(() => {

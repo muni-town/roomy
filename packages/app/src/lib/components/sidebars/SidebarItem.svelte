@@ -34,6 +34,8 @@
   let isSubthread = $state(false);
   let notificationCount = 0;
 
+  let current = $derived(page.params.object === item.id);
+
   // let bannedAccounts = $derived(
   //   new CoState(BansComponent, space?.components?.[BansComponent.id]),
   // );
@@ -97,6 +99,12 @@
     >
       <IconLucidePencil class="size-4" />
     </Button>
+  {:else if item.type === "category"}{:else if !current && item.unreadCount > 0}
+    <Badge>
+      {item.unreadCount}
+    </Badge>
+  {:else if !current && item.lastRead === 1 && item.unreadCount > 0}
+    <Badge>🌟</Badge>
   {/if}
 {/snippet}
 
@@ -198,11 +206,7 @@
         <span class="truncate whitespace-nowrap overflow-hidden min-w-0"
           >{object.name || "..."}</span
         >
-        {#if notificationCount && !isEditing}
-          <Badge>
-            {notificationCount}
-          </Badge>
-        {/if}
+
       </Button>
       {@render editButton?.()}
     </div>
@@ -284,7 +288,7 @@
 {:else if item.type == "channel" && level < 2}
   <div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink">
     <div
-      class="inline-flex items-start justify-between gap-2 w-full min-w-0 group"
+      class="inline-flex items-center justify-between gap-2 w-full min-w-0 group"
     >
       <Button
         href={navigateSync({
@@ -308,11 +312,6 @@
             level > 1 ? "font-normal" : "font-semibold",
           ]}>{item.name}</span
         >
-        {#if notificationCount && !isEditing}
-          <Badge>
-            {notificationCount}
-          </Badge>
-        {/if}
       </Button>
       {@render editButton?.()}
     </div>
@@ -373,7 +372,7 @@
   </div>
 {:else if item.type == "page"}
   <div
-    class="inline-flex items-start justify-between gap-2 w-full min-w-0 group"
+    class="inline-flex items-center justify-between gap-2 w-full min-w-0 group"
   >
     <Button
       href={navigateSync({
