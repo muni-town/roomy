@@ -178,7 +178,7 @@ export async function initializeDatabase(dbName: string): Promise<void> {
     // Create a ULID from a timestamp (for range queries using the index)
     db.createFunction("timestamp_to_ulid", (_ctx, timestamp) => {
       if (typeof timestamp === "number") {
-        // Create a ULID with the given timestamp (random component will be zeros)
+        // Create a ULID with the given timestamp
         const generatedUlid = ulid(timestamp);
         // Encode it to binary blob format for comparison with indexed entity IDs
         return IdCodec.enc(generatedUlid);

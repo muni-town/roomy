@@ -334,7 +334,7 @@ const materializers: {
         values (${id(event.parent)}, 1, 1)
         on conflict(entity) do update set
           unread_count = case
-            when ${id(event.ulid)} > timestamp_to_ulid(comp_last_read.timestamp)
+            when ${decodeTime(event.ulid)} > comp_last_read.timestamp
             then comp_last_read.unread_count + 1
             else comp_last_read.unread_count
           end,
@@ -379,7 +379,7 @@ const materializers: {
           values (${id(event.parent)}, 1, 1)
           on conflict(entity) do update set
             unread_count = case
-              when ${id(event.ulid)} > timestamp_to_ulid(comp_last_read.timestamp)
+              when ${decodeTime(event.ulid)} > comp_last_read.timestamp
               then comp_last_read.unread_count + 1
               else comp_last_read.unread_count
             end,
