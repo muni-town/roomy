@@ -1,38 +1,35 @@
 <script lang="ts">
-  import { page } from "$app/state";
-  import SettingsUser from "$lib/components/settings/SettingsUser.svelte";
+  import { LiveQuery } from "$lib/liveQuery.svelte";
+  import { current } from "$lib/queries.svelte";
+  import { sql } from "$lib/utils/sqlTemplate";
+  import { id } from "$lib/workers/encoding";
+  import { Avatar } from "bits-ui";
+  import { AvatarBeam } from "svelte-boring-avatars";
 
-  // let space = $derived(
-  //   new CoState(RoomyEntity, page.params.space, {
-  //     resolve: {
-  //       components: {
-  //         $each: true,
-  //         $onError: null,
-  //       },
-  //     },
-  //   }),
-  // );
-
-  // const me = new AccountCoState(RoomyAccount);
-
-  // let members = $derived(
-  //   new CoState(
-  //     AllMembersComponent,
-  //     space.current?.components?.[AllMembersComponent.id],
-  //   ),
-  // );
-
-  // let users = $derived(
-  //   Object.values(members.current?.perAccount ?? {})
-  //     .filter((a) => a && !a.value?.softDeleted)
-  //     .flat()
-  //     .map((a) => a.value) || [],
-  // );
-
-  // let bans = $derived(
-  //   new CoState(BansComponent, space.current?.components?.[BansComponent.id]),
-  // );
-  // let banSet = $derived(new Set(bans.current ?? []));
+  const users = new LiveQuery<{
+    id: string;
+    name: string | null;
+    avatar: string | null;
+    info: { can: "admin" | "post" };
+  }>(
+    () => sql`
+    select
+      id(tail) as id,
+      payload as info,
+      i.name as name,
+      i.avatar as avatar
+    from edges
+      left join comp_info i on i.entity = tail
+    where
+      label = 'member'
+        and
+      head = ${current.space?.id && id(current.space.id)}
+  `,
+    (row) => ({
+      ...row,
+      info: JSON.parse(row.info),
+    }),
+  );
 </script>
 
 <div class="space-y-12 pt-4 overflow-y-auto">
@@ -41,18 +38,20 @@
       Members
     </h2>
 
-    <div class="flex flex-col gap-2">
-      {#each users as member}
-        {#if member?.account?.profile?.id}
-          <SettingsUser
-            space={space.current}
-            isMe={me.current?.id === member?.id}
-            accountId={member?.account?.id}
-            isAdmin={false}
-            isBanned={banSet.has(member?.account?.id)}
-          />
-        {/if}
+    <ul class="flex flex-col gap-2">
+      {#each users.result || [] as member}
+        <li>
+          <a class="flex row gap-3 items-center" href={`/user/${member.id}`}>
+            <Avatar.Root class="size-8 sm:size-10">
+              <Avatar.Image src={member.avatar} class="rounded-full" />
+              <Avatar.Fallback>
+                <AvatarBeam name={member.id} />
+              </Avatar.Fallback>
+            </Avatar.Root>
+            {member.name}</a
+          >
+        </li>
       {/each}
-    </div>
+    </ul>
   </div>
 </div>

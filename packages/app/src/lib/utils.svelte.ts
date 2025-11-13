@@ -3,6 +3,9 @@ import { decodeBase32 } from "./utils/base32";
 import { goto } from "$app/navigation";
 import type { JSONContent } from "@tiptap/core";
 import { writable } from "svelte/store";
+import { backend, backendStatus } from "./workers";
+import { toast } from "@fuxui/base";
+import { ulid } from "ulidx";
 
 /** Cleans a handle string by removing any characters not valid for a domain. */
 export function cleanHandle(handle: string): string {
@@ -100,31 +103,6 @@ export function parseMessageContent(bodyJson: string | undefined): JSONContent {
   }
 }
 
-/**
- * Helper that allows you to do something similar to the `$derive` rune but for a function returning
- * a promise.
- *
- * @param default_value The initial value to set the reactive state to before the promise has
- * resolved.
- * @param get A reactive closure that returns a promise with the target value. This will be re-run
- * if any reactive state that it depends on has changed, just like `$derive`.
- * */
-export function derivePromise<T>(
-  default_value: T,
-  get: () => Promise<T>,
-): {
-  /** Accessor for the inner, reactive value. */
-  value: T;
-} {
-  let state = $state({ value: default_value });
-  $effect(() => {
-    get().then((v) => {
-      state.value = v;
-    });
-  });
-  return state;
-}
-
 export const Toggle = ({
   value: init,
   key,
@@ -178,28 +156,43 @@ export function cdnImageUrl(
   }
 }
 
-// export function unreadCount<Channel>(
-//   doc: Doc<Channel>,
-//   viewedHeads: Automerge.Heads,
-// ): number {
-//   let count = 0;
-//   try {
-//     const patches = Automerge.diff(doc, viewedHeads, Automerge.getHeads(doc));
-//     for (const patch of patches) {
-//       if (
-//         patch.action == "put" &&
-//         patch.path.length == 2 &&
-//         patch.path[0] == "messages"
-//       ) {
-//         count += 1;
-//       }
-//     }
-//   } catch (e) {
-//     console.error("Error getting unread count:", e);
-//   }
-//   return count;
-// }
+/**
+ * Join a space.
+ */
+export async function joinSpace(spaceIdOrHandle: string) {
+  try {
+    const spaceId = spaceIdOrHandle.includes(".")
+      ? (await backend.resolveSpaceFromHandleOrDid(spaceIdOrHandle))?.spaceId
+      : spaceIdOrHandle;
+    if (!spaceId || !backendStatus.personalStreamId) {
+      toast.error("Could not join space. It's possible it does not exist.");
+      return;
+    }
+    // Add the space to the personal list of joined spaces
+    await backend.sendEvent(backendStatus.personalStreamId, {
+      ulid: ulid(),
+      parent: undefined,
+      variant: {
+        kind: "space.roomy.space.join.0",
+        data: {
+          spaceId,
+        },
+      },
+    });
+    // Tell the space that we joined.
+    await backend.sendEvent(spaceId, {
+      ulid: ulid(),
+      parent: undefined,
+      variant: {
+        kind: "space.roomy.room.join.0",
+        data: undefined,
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    toast.error("Could not join space. It's possible it does not exist.");
+  }
+}
 
 // For global access to a ref on scrollable div
-
 export const scrollContainerRef = writable<HTMLDivElement | null>(null);

@@ -38,6 +38,7 @@ export const config: MaterializerConfig = {
 const newUserSignals = [
   "space.roomy.message.create.0",
   "space.roomy.message.create.1",
+  "space.roomy.room.join.0",
 ];
 
 /** Map a batch of incoming events to SQL that applies the event to the entities,
@@ -171,7 +172,59 @@ const materializers: {
       where entity = ${id(data.spaceId)}
     `,
   ],
-
+  "space.roomy.room.join.0": async ({ streamId, user, event }) => [
+    sql`
+      insert or replace into edges (head, tail, label, payload)
+      values (
+        ${event.parent ? id(event.parent) : id(streamId)},
+        ${id(user)},
+        'member',
+        ${edgePayload({
+          can: "post",
+        })}
+      )
+    `,
+    // Create a virtual message announcing the member joining
+    sql`
+    insert into entities (id, stream_id, parent)
+    values (
+      ${id(event.ulid)},
+      ${id(streamId)},
+      (
+        select entity
+          from comp_room join entities e on e.id = entity
+          where label = 'channel' and deleted = 0 and e.stream_id = ${id(streamId)}
+          order by entity
+          limit 1
+      )
+    )
+  `,
+    sql`
+        insert into edges (head, tail, label)
+        select 
+          ${id(event.ulid)},
+          ${id(streamId)},
+          'author'
+      `,
+    sql`
+      insert or replace into comp_content (entity, mime_type, data)
+      values (
+        ${id(event.ulid)},
+        'text/markdown',
+        cast(('[@' || (select handle from comp_user where did = ${id(user)}) || '](/user/' || ${user} || ') joined the space.') as blob)
+    )`,
+  ],
+  "space.roomy.room.leave.0": async ({ streamId, user, event }) => [
+    sql`
+      delete from edges
+      where 
+        head = ${event.parent ? id(event.parent) : id(streamId)}
+          and
+        tail = ${id(user)}
+          and
+        label = 'member'
+    `,
+  ],
   "space.roomy.stream.handle.account.0": async ({ streamId, data }) => [
     sql`
       update comp_space set handle_account = ${data.did || null}

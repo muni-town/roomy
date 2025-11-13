@@ -25,7 +25,7 @@
   import { Box, Button } from "@fuxui/base";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { monotonicFactory, ulid } from "ulidx";
-  import { scrollContainerRef } from "$lib/utils.svelte";
+  import { joinSpace, scrollContainerRef } from "$lib/utils.svelte";
   import { fade } from "svelte/transition";
 
   import IconHeroiconsChevronRight from "~icons/heroicons/chevron-right";
@@ -42,32 +42,6 @@
 
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
-
-  async function joinSpace() {
-    try {
-      const spaceId = page.params.space?.includes(".")
-        ? (await backend.resolveSpaceFromHandleOrDid(page.params.space))
-            ?.spaceId
-        : page.params.space;
-      if (!spaceId || !backendStatus.personalStreamId) {
-        toast.error("Could not join space. It's possible it does not exist.");
-        return;
-      }
-      await backend.sendEvent(backendStatus.personalStreamId, {
-        ulid: ulid(),
-        parent: undefined,
-        variant: {
-          kind: "space.roomy.space.join.0",
-          data: {
-            spaceId,
-          },
-        },
-      });
-    } catch (e) {
-      console.error(e);
-      toast.error("Could not join space. It's possible it does not exist.");
-    }
-  }
 
   const ref = $derived($scrollContainerRef);
   let shouldShowPageTitle = $state(false);
@@ -576,7 +550,9 @@
             <h1 class="font-bold text-xl">{inviteSpaceName}</h1>
           {/if}
         </div>
-        <Button size="lg" onclick={joinSpace}>Join Space</Button>
+        <Button size="lg" onclick={() => joinSpace(page.params.space!)}
+          >Join Space</Button
+        >
       </Box>
     </div>
   {:else if object?.kind == "channel"}

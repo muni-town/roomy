@@ -9,41 +9,16 @@
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { LiveQuery } from "$lib/liveQuery.svelte";
   import { current } from "$lib/queries.svelte";
+  import { joinSpace } from "$lib/utils.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { backend, backendStatus } from "$lib/workers";
+  import { backendStatus } from "$lib/workers";
   import { id } from "$lib/workers/encoding";
-  import { Box, Button, toast } from "@fuxui/base";
+  import { Box, Button } from "@fuxui/base";
   import { fade } from "svelte/transition";
-  import { ulid } from "ulidx";
 
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
 
-  async function joinSpace() {
-    try {
-      const spaceId = page.params.space?.includes(".")
-        ? (await backend.resolveSpaceFromHandleOrDid(page.params.space))
-            ?.spaceId
-        : page.params.space;
-      if (!spaceId || !backendStatus.personalStreamId) {
-        toast.error("Could not join space. It's possible it does not exist.");
-        return;
-      }
-      await backend.sendEvent(backendStatus.personalStreamId, {
-        ulid: ulid(),
-        parent: undefined,
-        variant: {
-          kind: "space.roomy.space.join.0",
-          data: {
-            spaceId,
-          },
-        },
-      });
-    } catch (e) {
-      console.error(e);
-      toast.error("Could not join space. It's possible it does not exist.");
-    }
-  }
   const threadsList = new LiveQuery<ThreadInfo>(
     () =>
       sql`
@@ -183,7 +158,9 @@
             <h1 class="font-bold text-xl">{inviteSpaceName}</h1>
           {/if}
         </div>
-        <Button size="lg" onclick={joinSpace}>Join Space</Button>
+        <Button size="lg" onclick={() => joinSpace(page.params.space!)}
+          >Join Space</Button
+        >
       </Box>
     </div>
   {:else if threadsList.result}

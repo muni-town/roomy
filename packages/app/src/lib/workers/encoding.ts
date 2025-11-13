@@ -328,6 +328,15 @@ export const eventVariantCodec = Kinds({
     adminId: str,
   }),
   /**
+   * The parent of the event indicates which room is being joined.
+   *
+   * When the parent is undefined, then that means that the user is publicly announcing that they
+   * are joining the space.
+  */
+  "space.roomy.room.join.0": _void,
+  /** The parent of the event indicates which room is being left. */
+  "space.roomy.room.leave.0": _void,
+  /**
    * This event sets the ATProto account did that should be used as the handle for this space.
    *
    * For this to be verified that account also has to have a `space.roomy.stream` PDS record with an

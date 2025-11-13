@@ -6,6 +6,21 @@
 
   import IconLucideArrowLeft from "~icons/lucide/arrow-left";
 
+  let sidebarLinks = [
+    {
+      label: "General",
+      slug: "general",
+    },
+    {
+      label: "Members",
+      slug: "members",
+    },
+    {
+      label: "Discord Import",
+      slug: "discord-import",
+    },
+  ] as const;
+
   let { children } = $props();
 </script>
 
@@ -19,22 +34,25 @@
         Back to space
       </Button>
 
-      <Button
-        variant="ghost"
-        class="w-full justify-start"
-        href={`/${page.params.space}/settings/general`}
-        data-current={page.url.pathname.endsWith("general")}
-      >
-        General
-      </Button>
-      <Button
+      {#each sidebarLinks as link}
+        <Button
+          variant="ghost"
+          class="w-full justify-start"
+          href={`/${page.params.space}/settings/${link.slug}`}
+          data-current={page.url.pathname.endsWith(link.slug)}
+        >
+          {link.label}
+        </Button>
+      {/each}
+
+      <!-- <Button
         variant="ghost"
         class="w-full justify-start"
         href={`/${page.params.space}/settings/discord-import`}
         data-current={page.url.pathname.endsWith("discord-import")}
       >
         Discord Import
-      </Button>
+      </Button> -->
       <!-- <Button
         variant="ghost"
         class="w-full justify-start"
