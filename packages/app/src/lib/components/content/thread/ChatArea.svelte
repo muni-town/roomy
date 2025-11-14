@@ -317,26 +317,37 @@
             assigned, so that it's scroll integration works properly.
           -->
           {#key viewport}
-            <Virtualizer
-              bind:this={virtualizer}
-              data={timeline}
-              scrollRef={viewport}
-              overscan={5}
-              shift={isShifting}
-              getKey={(x) => x.id}
-              onscroll={(o) => {
-                if (o < 100) showLastN += 50;
-              }}
-            >
-              {#snippet children(message: Message)}
-                <ChatMessage
-                  {message}
-                  {messagingState}
-                  {startThreading}
-                  {toggleSelect}
-                />
-              {/snippet}
-            </Virtualizer>
+            {#if timeline.length > 0}
+              <Virtualizer
+                bind:this={virtualizer}
+                data={timeline}
+                scrollRef={viewport}
+                overscan={5}
+                shift={isShifting}
+                getKey={(x) => {
+                  // Note: for some reason, sometimes `x` and `message` below are
+                  // undefined, so we have to use the conditionals to make sure we
+                  // don't try access properties of `undefined`.
+                  // 
+                  // It might be good to figure out the root cause and fix that sometime.
+                  return x?.id;
+                }}
+                onscroll={(o) => {
+                  if (o < 100) showLastN += 50;
+                }}
+              >
+                {#snippet children(message?: Message)}
+                  {#if message}
+                    <ChatMessage
+                      {message}
+                      {messagingState}
+                      {startThreading}
+                      {toggleSelect}
+                    />
+                  {/if}
+                {/snippet}
+              </Virtualizer>
+            {/if}
           {/key}
         </ol>
       </div>

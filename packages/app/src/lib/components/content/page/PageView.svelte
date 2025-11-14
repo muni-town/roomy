@@ -23,7 +23,6 @@
   import { ensureShowPageChat } from "$lib/../routes/(app)/[space=hashOrDomain]/[object=ulid]/+page.svelte";
 
   let isEditing = $state(false);
-  let contentInitialised = $state(false);
 
   let { showPageChat = $bindable(false) } = $props();
 
@@ -48,20 +47,14 @@
   );
   let pageMarkdown = $derived(pageQuery.result?.[0]?.content);
   let latestEditId = $derived(pageQuery.result?.[0]?.latestEditId);
-  let pageHTML = $state("");
-
-  $effect(() => {
-    if (!contentInitialised && pageMarkdown) {
-      pageHTML = renderMarkdownSanitized(pageMarkdown);
-      contentInitialised = true;
-    }
-  });
+  let savedHtml = $derived(renderMarkdownSanitized(pageMarkdown || ""));
+  let editedHtml = $state("");
 
   async function savePage() {
     if (!current.space?.id || !page.params.object) return;
 
     isEditing = false;
-    const newMarkdown = new Turndown().turndown(pageHTML);
+    const newMarkdown = new Turndown().turndown(editedHtml);
     if (pageMarkdown == newMarkdown) return;
     const patch = patchToText(patchMake(pageMarkdown || "", newMarkdown));
     await backend.sendEvent(current.space.id, {
@@ -136,15 +129,22 @@
     </div>
     <div class="max-w-2xl mx-auto w-full px-4 pb-8">
       <Prose>
-        {#if pageHTML}
-          <RichTextEditor
-            content={pageHTML}
-            bind:editable={isEditing}
-            onupdate={(_c, ctx) => {
-              pageHTML = ctx.editor.getHTML();
-            }}
-            oncomment={setComment}
-          />
+        {#if savedHtml}
+          <!--
+          This key block will make sure that the text editor is recrated whenever the page changes.
+          This fixes an issue where merely updating the rendered HTML returned by the new page query
+          is not actually updating the rich text area.
+          -->
+          {#key savedHtml}
+            <RichTextEditor
+              content={savedHtml}
+              bind:editable={isEditing}
+              onupdate={(_c, ctx) => {
+                editedHtml = ctx.editor.getHTML();
+              }}
+              oncomment={setComment}
+            />
+          {/key}
         {:else}
           Loading...
         {/if}
