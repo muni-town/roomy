@@ -9,7 +9,7 @@
   import { backend } from "$lib/workers";
   import { current } from "$lib/queries.svelte";
   import { monotonicFactory } from "ulidx";
-  import type { EventType } from "$lib/workers/materializer";
+  import type { EventType } from "$lib/workers/types";
   import { sql } from "$lib/utils/sqlTemplate";
   import { formatDate } from "date-fns";
 

@@ -4,7 +4,7 @@ import type {
   Savepoint,
   SqliteStatus,
   SqliteWorkerInterface,
-} from "./types";
+} from "../types";
 import {
   initializeDatabase,
   executeQuery,
@@ -13,9 +13,9 @@ import {
   disableLiveQueries,
   enableLiveQueries,
   getVfsType,
-} from "./setupSqlite";
-import { messagePortInterface, reactiveWorkerState } from "./workerMessaging";
-import Dexie, { type EntityTable } from "dexie";
+} from "./setup";
+import { messagePortInterface, reactiveWorkerState } from "../workerMessaging";
+import { db } from "../idb";
 
 console.log("Started sqlite worker");
 
@@ -24,22 +24,6 @@ const HEARTBEAT_KEY = "sqlite-worker-heartbeat";
 const LOCK_TIMEOUT_MS = 8000; // 30 seconds
 
 const workerId = crypto.randomUUID();
-
-interface KeyValue {
-  key: string;
-  value: string;
-}
-const db = new Dexie("mini-shared-worker-db") as Dexie & {
-  kv: EntityTable<KeyValue, "key">;
-  streamCursors: EntityTable<
-    { streamId: string; latestEvent: number },
-    "streamId"
-  >;
-};
-db.version(1).stores({
-  kv: `key`,
-  streamCursors: `streamId`,
-});
 
 // Add connection health monitoring
 let isConnectionHealthy = true;

@@ -4,8 +4,8 @@ import initSqlite3, {
   type Sqlite3Static,
   type PreparedStatement,
 } from "@sqlite.org/sqlite-wasm";
-import { IdCodec } from "./encoding";
-import type { SqlStatement } from "./backendWorker";
+import { IdCodec } from "../encoding";
+import type { SqlStatement } from "../types";
 import { decodeTime, isValid as isValidUlid, ulid } from "ulidx";
 import { patchApply, patchFromText } from "diff-match-patch-es";
 
@@ -67,37 +67,7 @@ export async function initializeDatabase(dbName: string): Promise<void> {
       }
     }
 
-    // Strategy 2: Fall back to regular OPFS VFS (requires COOP/COEP headers)
-    // if (!db && sqlite3.capi.sqlite3_vfs_find("opfs")) {
-    //   console.warn(
-    //     "OpfsSAHPoolVfs failed, attempting regular OPFS VFS...",
-    //     lastErr,
-    //   );
-    //   try {
-    //     // Check if cross-origin isolation is available
-    //     if (
-    //       typeof crossOriginIsolated !== "undefined" &&
-    //       !crossOriginIsolated
-    //     ) {
-    //       console.warn(
-    //         "Cross-origin isolation not available - OPFS VFS may not work",
-    //       );
-    //     }
-
-    //     // The regular OPFS VFS is available - try to use it
-    //     db = new sqlite3.oo1.OpfsDb(dbName);
-    //     db.exec(`pragma locking_mode = exclusive`);
-    //     db.exec(`pragma synchronous = normal`);
-    //     db.exec(`pragma journal_mode = wal`);
-    //     vfsType = "opfs";
-    //     lastErr = null; // Clear the error since we succeeded
-    //   } catch (e) {
-    //     console.error("Regular OPFS VFS also failed:", e);
-    //     lastErr = e;
-    //   }
-    // }
-
-    // Strategy 3: Fall back to in-memory database (for testing environments like Playwright)
+    // Fall back to in-memory database
     if (!db) {
       console.warn(
         "All persistent storage options failed, falling back to in-memory database...",

@@ -1,5 +1,5 @@
 import { messagePortInterface, reactiveWorkerState } from "./workerMessaging";
-import backendWorkerUrl from "./backendWorker.ts?worker&url";
+import backendWorkerUrl from "./backend/worker.ts?worker&url";
 import type {
   BackendInterface,
   BackendStatus,
@@ -73,10 +73,14 @@ export const backend = messagePortInterface<ConsoleInterface, BackendInterface>(
 // Start a sqlite worker for this tab.
 const sqliteWorkerChannel = new MessageChannel();
 backend.addClient(sqliteWorkerChannel.port1);
-const sqliteWorker = new Worker(new URL("./sqliteWorker.ts", import.meta.url), {
-  name: "roomy-sqlite-worker",
-  type: "module",
-});
+const sqliteWorker = new Worker(
+  new URL("./sqlite/worker.ts", import.meta.url),
+  {
+    name: "roomy-sqlite-worker",
+    type: "module",
+  },
+);
+
 sqliteWorker.postMessage(
   {
     backendPort: sqliteWorkerChannel.port2,
@@ -87,6 +91,14 @@ sqliteWorker.postMessage(
 
 // for running in console REPL
 (window as any).debugWorkers = {
+  async enableLogForwarding() {
+    await backend.enableLogForwarding();
+  },
+
+  async disableLogForwarding() {
+    await backend.disableLogForwarding();
+  },
+
   async pingBackend() {
     try {
       const result = await backend.ping();

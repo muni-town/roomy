@@ -14,7 +14,7 @@
   import { monotonicFactory } from "ulidx";
   import { page } from "$app/state";
   import { navigate } from "$lib/utils.svelte";
-  import type { EventType } from "$lib/workers/materializer";
+  import type { EventType } from "$lib/workers/types";
   import {
     messagingState,
     type Commenting,

@@ -35,7 +35,7 @@
   import IconHeroiconsChatBubbleLeftRight from "~icons/heroicons/chat-bubble-left-right";
   import ChannelBoardView from "$lib/components/content/thread/boardView/ChannelBoardView.svelte";
   import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
-  import type { EventType } from "$lib/workers/materializer";
+  import type { EventType } from "$lib/workers/types";
   import PageView from "$lib/components/content/page/PageView.svelte";
   import PageHistory from "$lib/components/content/page/PageHistory.svelte";
   import { navigate } from "$lib/utils.svelte";

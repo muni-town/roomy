@@ -7,13 +7,16 @@ import {
   type ConsoleInterface,
   type BackendStatus,
   type SqliteWorkerInterface,
+  type EventType,
   consoleLogLevels,
-} from "./types";
+  type StreamEvent,
+  type SqlStatement,
+} from "../types";
 import {
   messagePortInterface,
   reactiveWorkerState,
   type MessagePortApi,
-} from "./workerMessaging";
+} from "../workerMessaging";
 
 import {
   atprotoLoopbackClientMetadata,
@@ -24,19 +27,18 @@ import {
 import { isDid, OAuthClient } from "@atproto/oauth-client";
 import { Agent } from "@atproto/api";
 import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
-import Dexie, { type EntityTable } from "dexie";
 
-import { lexicons } from "../lexicons";
-import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
-import { config as materializerConfig, type EventType } from "./materializer";
+import { lexicons } from "../../lexicons";
+import { config as materializerConfig } from "./materializer";
 import { workerOauthClient } from "./oauth";
-import type { LiveQueryMessage } from "$lib/workers/setupSqlite";
-import { eventCodec, id, streamParamsCodec } from "./encoding";
+import type { LiveQueryMessage } from "$lib/workers/sqlite/setup";
+import { eventCodec, id, streamParamsCodec } from "../encoding";
 import { sql } from "$lib/utils/sqlTemplate";
 import { ulid } from "ulidx";
-import { LEAF_MODULE_PERSONAL } from "../moduleUrls";
+import { LEAF_MODULE_PERSONAL } from "../../moduleUrls";
 import { CONFIG } from "$lib/config";
-import { AsyncChannel } from "./asyncChannel";
+import { AsyncChannel } from "../asyncChannel";
+import { db, personalStream, prevStream } from "../idb";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -48,6 +50,15 @@ import { AsyncChannel } from "./asyncChannel";
  * dedicated worker instead of a shared worker.
  * */
 const isSharedWorker = "SharedWorkerGlobalScope" in globalThis;
+
+/**
+ * SharedWorker logs are not accessible in all browsers.
+ *
+ * For Chrome, go to chrome://inspect/#workers and click 'inspect' under roomy-backend
+ * For browsers that don't have this feature, call this.debugWorkers.enableLogForwarding()
+ * from the main thread to see worker logs there
+ * */
+let consoleForwardingSetup = false;
 
 // Generate unique ID for this worker instance
 const backendWorkerId = crypto.randomUUID();
@@ -64,54 +75,6 @@ const statusStartBackfillingStream = () => {
 const statusDoneBackfillingStream = () => {
   if (!status.loadingSpaces) return;
   status.loadingSpaces -= 1;
-};
-
-const atprotoOauthScope = "atproto transition:generic transition:chat.bsky";
-
-interface KeyValue {
-  key: string;
-  value: string;
-}
-const db = new Dexie("mini-shared-worker-db") as Dexie & {
-  kv: EntityTable<KeyValue, "key">;
-  streamCursors: EntityTable<
-    { streamId: string; latestEvent: number },
-    "streamId"
-  >;
-};
-db.version(1).stores({
-  kv: `key`,
-  streamCursors: `streamId`,
-});
-
-// Helpers for caching the personal stream ID in the key-value store.
-const getPersonalStreamIdCache = async (
-  did: string,
-): Promise<string | undefined> => {
-  return (
-    await db.kv.get(`personalStreamId-${CONFIG.streamSchemaVersion}-${did}`)
-  )?.value;
-};
-const setPersonalStreamIdCache = async (
-  did: string,
-  value: string,
-): Promise<void> => {
-  await db.kv.put({
-    key: `personalStreamId-${CONFIG.streamSchemaVersion}-${did}`,
-    value,
-  });
-};
-const clearPersonalStreamIdCache = async () => {
-  await db.kv.filter((x) => x.key.startsWith("personalStreamId-")).delete();
-};
-// Helpers for getting/setting the previous stream schema version in the key-value store.
-const getPreviousStreamSchemaVersion = async (): Promise<
-  string | undefined
-> => {
-  return (await db.kv.get("previousStreamSchemaVersion"))?.value;
-};
-const setPreviousStreamSchemaVersion = async (version: string) => {
-  await db.kv.put({ key: "previousStreamSchemaVersion", value: version });
 };
 
 export let sqliteWorker: SqliteWorkerInterface | undefined;
@@ -254,13 +217,12 @@ class Backend {
 }
 
 const state = new Backend();
-(globalThis as any).state = state;
+(globalThis as any).state = state; // TODO: remove?
 
 // Track connected ports to prevent duplicate connections and for broadcasting
 const connectedPorts = new WeakMap<MessagePortApi, string>();
 const activePorts = new Set<MessagePortApi>();
 let connectionCounter = 0;
-let consoleForwardingSetup = false;
 
 if (isSharedWorker) {
   (globalThis as any).onconnect = async ({
@@ -335,14 +297,14 @@ function connectMessagePort(port: MessagePortApi) {
     await sqliteWorker.runQuery(sql`vacuum`);
     await sqliteWorker.runQuery(sql`pragma integrity_check`);
     await db.streamCursors.clear();
-    await clearPersonalStreamIdCache();
+    await personalStream.clearIdCache();
   };
 
   const backendInterface: BackendInterface = {
     async login(handle) {
       if (!state.oauth) throw "OAuth not initialized";
       const url = await state.oauth.authorize(handle, {
-        scope: atprotoOauthScope,
+        scope: CONFIG.atprotoOauthScope,
       });
       return url.href;
     },
@@ -405,12 +367,12 @@ function connectMessagePort(port: MessagePortApi) {
       );
 
       if (firstUpdate) {
-        const previousSchemaVersion = await getPreviousStreamSchemaVersion();
+        const previousSchemaVersion = await prevStream.getSchemaVersion();
         if (previousSchemaVersion != CONFIG.streamSchemaVersion) {
           // Reset the local database cache when the schema version changes.
           await resetLocalDatabase();
         }
-        await setPreviousStreamSchemaVersion(CONFIG.streamSchemaVersion);
+        await prevStream.setSchemaVersion(CONFIG.streamSchemaVersion);
       }
 
       setSqliteWorkerReady();
@@ -431,6 +393,12 @@ function connectMessagePort(port: MessagePortApi) {
         timestamp: Date.now(),
         workerId: backendWorkerId,
       };
+    },
+    async enableLogForwarding() {
+      consoleForwardingSetup = true;
+    },
+    async disableLogForwarding() {
+      consoleForwardingSetup = false;
     },
     async createStream(ulid, moduleId, moduleUrl, params): Promise<string> {
       if (!state.leafClient) throw new Error("Leaf client not initialized");
@@ -620,30 +588,32 @@ function connectMessagePort(port: MessagePortApi) {
     const normalLog = globalThis.console[level];
     globalThis.console[level] = (...args) => {
       normalLog(...args);
-      consoleInterface.log(level, args);
+      if (consoleForwardingSetup) {
+        consoleInterface.log(level, args);
+      }
     };
   }
 }
 
 // Add periodic health check function
-let healthCheckInterval: NodeJS.Timeout | null = null;
+// let healthCheckInterval: NodeJS.Timeout | null = null;
 
-function setupSqliteHealthCheck() {
-  if (healthCheckInterval) {
-    clearInterval(healthCheckInterval);
-  }
+// function setupSqliteHealthCheck() {
+//   if (healthCheckInterval) {
+//     clearInterval(healthCheckInterval);
+//   }
 
-  healthCheckInterval = setInterval(async () => {
-    if (!sqliteWorker) return;
+//   healthCheckInterval = setInterval(async () => {
+//     if (!sqliteWorker) return;
 
-    try {
-      await sqliteWorker.ping();
-    } catch (error) {
-      console.error("Backend: SQLite health check failed", error);
-      // Could trigger reconnection logic here
-    }
-  }, 10000); // Check every 10 seconds
-}
+//     try {
+//       await sqliteWorker.ping();
+//     } catch (error) {
+//       console.error("Backend: SQLite health check failed", error);
+//       // Could trigger reconnection logic here
+//     }
+//   }, 10000); // Check every 10 seconds
+// }
 
 async function createOauthClient(): Promise<OAuthClient> {
   // Build the client metadata
@@ -660,10 +630,10 @@ async function createOauthClient(): Promise<OAuthClient> {
     clientMetadata = {
       ...atprotoLoopbackClientMetadata(buildLoopbackClientId(baseUrl)),
       redirect_uris: [redirectUri],
-      scope: atprotoOauthScope,
+      scope: CONFIG.atprotoOauthScope,
       client_id: `http://localhost?redirect_uri=${encodeURIComponent(
         redirectUri,
-      )}&scope=${encodeURIComponent(atprotoOauthScope)}`,
+      )}&scope=${encodeURIComponent(CONFIG.atprotoOauthScope)}`,
     };
   } else {
     // In prod, we fetch the `/oauth-client.json` which is expected to be deployed alongside the
@@ -698,7 +668,7 @@ async function initializeLeafClient(client: LeafClient) {
     console.log("Now looking for personal stream id");
     // Get the user's personal space ID
 
-    const id = await getPersonalStreamIdCache(did);
+    const id = await personalStream.getIdCache(did);
     if (id) {
       status.personalStreamId = id;
     } else {
@@ -710,7 +680,7 @@ async function initializeLeafClient(client: LeafClient) {
         });
         const existingRecord = resp1.data.value as { id: string };
         status.personalStreamId = existingRecord.id;
-        await setPersonalStreamIdCache(did, existingRecord.id);
+        await personalStream.setIdCache(did, existingRecord.id);
         console.log("Found existing stream ID from PDS:", existingRecord.id);
       } catch (_) {
         // this catch block creating a new stream needs to be refactored
@@ -745,7 +715,7 @@ async function initializeLeafClient(client: LeafClient) {
           });
         }
         status.personalStreamId = personalStreamId;
-        await setPersonalStreamIdCache(did, personalStreamId);
+        await personalStream.setIdCache(did, personalStreamId);
       }
     }
 
@@ -867,21 +837,6 @@ class OpenSpacesMaterializer {
     sqliteWorker?.deleteLiveQuery(this.#liveQueryId);
   }
 }
-
-export type SqlStatement = {
-  sql: string;
-  params?: BindingSpec;
-  /** If this is true, the query will not be pre-compiled and cached. Use this when you have to
-   * substitute strings into the sql query instead of using params, because that will mess up the
-   * cache which must be indexed by the SQL. */
-  cache?: boolean;
-};
-
-export type StreamEvent = {
-  idx: number;
-  user: string;
-  payload: ArrayBuffer;
-};
 
 type SqlMaterializer = (
   sqliteWorker: SqliteWorkerInterface,

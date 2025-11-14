@@ -1,27 +1,19 @@
-import type {
-  SqlStatement,
-  StreamEvent,
-  MaterializerConfig,
-} from "./backendWorker";
-import { _void, type CodecType } from "scale-ts";
-import { eventCodec, eventVariantCodec, id } from "./encoding";
+import type { MaterializerConfig } from "./worker";
+import { type CodecType } from "scale-ts";
+import { eventCodec, eventVariantCodec, id } from "../encoding";
 import schemaSql from "./schema.sql?raw";
 import { decodeTime } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
-import type { SqliteWorkerInterface } from "./types";
+import type {
+  EdgesMap,
+  EdgesWithPayload,
+  SqliteWorkerInterface,
+  SqlStatement,
+  StreamEvent,
+} from "../types";
 import type { Agent } from "@atproto/api";
 import type { LeafClient } from "@muni-town/leaf-client";
-import { AsyncChannel } from "./asyncChannel";
-
-type RawEvent = ReturnType<(typeof eventCodec)["dec"]>;
-type EventKind = RawEvent["variant"]["kind"];
-
-export type EventType<TVariant extends EventKind | undefined = undefined> =
-  TVariant extends undefined
-    ? RawEvent
-    : Omit<RawEvent, "variant"> & {
-        variant: Extract<RawEvent["variant"], { kind: TVariant }>;
-      };
+import { AsyncChannel } from "../asyncChannel";
 
 /** Database materializer config. */
 export const config: MaterializerConfig = {
@@ -931,7 +923,7 @@ async function ensureProfiles(
       `,
       params: dids.map(id),
     });
-    const missingDids = missingProfilesResp.rows?.map((x) => x.did) || [];
+    const missingDids = missingProfilesResp.rows?.map((x: any) => x.did) || [];
     if (missingDids.length == 0) return [];
 
     const statements = [];
@@ -982,52 +974,3 @@ function edgePayload<EdgeLabel extends keyof EdgesWithPayload>(
 ) {
   return JSON.stringify(payload);
 }
-
-export type EdgeLabel =
-  | "child"
-  | "parent"
-  | "subscribe"
-  | "member"
-  | "ban"
-  | "hide"
-  | "pin"
-  | "embed"
-  | "reply"
-  | "link"
-  | "author"
-  | "reorder"
-  | "source"
-  | "avatar"
-  | "reaction";
-
-type EntityId = string;
-export interface EdgeReaction {
-  reaction: string;
-}
-
-export interface EdgeBan {
-  reason: string;
-  banned_by: EntityId;
-}
-
-export interface EdgeMember {
-  // delegation?: string;
-  can: "read" | "post" | "admin";
-}
-
-interface EdgesWithPayload {
-  reaction: EdgeReaction;
-  ban: EdgeBan;
-  member: EdgeMember;
-}
-
-export type EdgesMap = {
-  [K in Exclude<EdgeLabel, keyof EdgesWithPayload>]: null;
-} & EdgesWithPayload;
-
-/** Given a tuple of edge names, produces a record whose keys are exactly
- * those edge names and whose values are arrays of the corresponding edge types.
- */
-export type EdgesRecord<TRequired extends readonly EdgeLabel[]> = {
-  [K in TRequired[number]]: [EdgesMap[K], EntityId];
-};

@@ -5,7 +5,7 @@
   import { navigate } from "$lib/utils.svelte";
   import { backend, backendStatus } from "$lib/workers";
   import { streamParamsCodec } from "$lib/workers/encoding";
-  import type { EventType } from "$lib/workers/materializer";
+  import type { EventType } from "$lib/workers/types";
   import { Button, Checkbox, Input, Label, Textarea, toast } from "@fuxui/base";
   import { ulid } from "ulidx";
 
