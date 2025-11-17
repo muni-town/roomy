@@ -18,19 +18,13 @@ import {
   type MessagePortApi,
 } from "../workerMessaging";
 
-import {
-  atprotoLoopbackClientMetadata,
-  buildLoopbackClientId,
-  type OAuthClientMetadataInput,
-  type OAuthSession,
-} from "@atproto/oauth-client-browser";
+import { type OAuthSession } from "@atproto/oauth-client-browser";
 import { isDid, OAuthClient } from "@atproto/oauth-client";
 import { Agent } from "@atproto/api";
 import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 
 import { lexicons } from "../../lexicons";
 import { config as materializerConfig } from "./materializer";
-import { workerOauthClient } from "./oauth";
 import type { LiveQueryMessage } from "$lib/workers/sqlite/setup";
 import { eventCodec, id, streamParamsCodec } from "../encoding";
 import { sql } from "$lib/utils/sqlTemplate";
@@ -39,6 +33,7 @@ import { LEAF_MODULE_PERSONAL } from "../../moduleUrls";
 import { CONFIG } from "$lib/config";
 import { AsyncChannel } from "../asyncChannel";
 import { db, personalStream, prevStream } from "../idb";
+import { createOauthClient } from "./oauth";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -217,7 +212,7 @@ class Backend {
 }
 
 const state = new Backend();
-(globalThis as any).state = state; // TODO: remove?
+// (globalThis as any).state = state; // TODO: remove?
 
 // Track connected ports to prevent duplicate connections and for broadcasting
 const connectedPorts = new WeakMap<MessagePortApi, string>();
@@ -614,40 +609,6 @@ function connectMessagePort(port: MessagePortApi) {
 //     }
 //   }, 10000); // Check every 10 seconds
 // }
-
-async function createOauthClient(): Promise<OAuthClient> {
-  // Build the client metadata
-  let clientMetadata: OAuthClientMetadataInput;
-  if (import.meta.env.DEV) {
-    // Get the base URL and redirect URL for this deployment
-    if (globalThis.location.hostname == "localhost")
-      throw new Error("hostname must be 127.0.0.1 if local");
-    const baseUrl = new URL(`http://127.0.0.1:${globalThis.location.port}`);
-    baseUrl.hash = "";
-    baseUrl.pathname = "/";
-    const redirectUri = baseUrl.href + "oauth/callback";
-    // In dev, we build a development metadata
-    clientMetadata = {
-      ...atprotoLoopbackClientMetadata(buildLoopbackClientId(baseUrl)),
-      redirect_uris: [redirectUri],
-      scope: CONFIG.atprotoOauthScope,
-      client_id: `http://localhost?redirect_uri=${encodeURIComponent(
-        redirectUri,
-      )}&scope=${encodeURIComponent(CONFIG.atprotoOauthScope)}`,
-    };
-  } else {
-    // In prod, we fetch the `/oauth-client.json` which is expected to be deployed alongside the
-    // static build.
-    // native client metadata is not reuqired to be on the same domin as client_id,
-    // so it can always use the deployed metadata
-    const resp = await fetch(`/oauth-client.json`, {
-      headers: [["accept", "application/json"]],
-    });
-    clientMetadata = await resp.json();
-  }
-
-  return workerOauthClient(clientMetadata);
-}
 
 async function initializeLeafClient(client: LeafClient) {
   client.on("connect", async () => {

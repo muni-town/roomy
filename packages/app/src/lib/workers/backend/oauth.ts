@@ -6,8 +6,13 @@ import {
   type OAuthClientMetadataInput,
   type RuntimeLock,
 } from "@atproto/oauth-client";
+import {
+  atprotoLoopbackClientMetadata,
+  buildLoopbackClientId,
+} from "@atproto/oauth-client-browser";
 import { Dexie, type EntityTable } from "dexie";
 import { JoseKey } from "@atproto/jwk-jose";
+import { CONFIG } from "$lib/config";
 
 // TODO: implement cleanup of old db state and session values?
 const db = new Dexie("atproto-oauth") as Dexie & {
@@ -135,3 +140,37 @@ export const workerOauthClient = (clientMetadata: OAuthClientMetadataInput) =>
     fetch,
     allowHttp: true,
   });
+
+export async function createOauthClient(): Promise<OAuthClient> {
+  // Build the client metadata
+  let clientMetadata: OAuthClientMetadataInput;
+  if (import.meta.env.DEV) {
+    // Get the base URL and redirect URL for this deployment
+    if (globalThis.location.hostname == "localhost")
+      throw new Error("hostname must be 127.0.0.1 if local");
+    const baseUrl = new URL(`http://127.0.0.1:${globalThis.location.port}`);
+    baseUrl.hash = "";
+    baseUrl.pathname = "/";
+    const redirectUri = baseUrl.href + "oauth/callback";
+    // In dev, we build a development metadata
+    clientMetadata = {
+      ...atprotoLoopbackClientMetadata(buildLoopbackClientId(baseUrl)),
+      redirect_uris: [redirectUri],
+      scope: CONFIG.atprotoOauthScope,
+      client_id: `http://localhost?redirect_uri=${encodeURIComponent(
+        redirectUri,
+      )}&scope=${encodeURIComponent(CONFIG.atprotoOauthScope)}`,
+    };
+  } else {
+    // In prod, we fetch the `/oauth-client.json` which is expected to be deployed alongside the
+    // static build.
+    // native client metadata is not reuqired to be on the same domin as client_id,
+    // so it can always use the deployed metadata
+    const resp = await fetch(`/oauth-client.json`, {
+      headers: [["accept", "application/json"]],
+    });
+    clientMetadata = await resp.json();
+  }
+
+  return workerOauthClient(clientMetadata);
+}
