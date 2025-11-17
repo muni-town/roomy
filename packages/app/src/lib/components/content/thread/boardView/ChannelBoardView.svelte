@@ -8,7 +8,6 @@
   import type { ThreadInfo } from "./types";
 
   let {
-    objectType = "thread",
     emptyMessage,
   }: { objectType?: string; emptyMessage?: string } = $props();
 
@@ -58,7 +57,7 @@
               and
             e.parent = ${page.params.object && id(page.params.object)}
               and
-            r.label = ${objectType} 
+            (r.label = 'thread' or r.label = 'page')
         )
         order by activity ->> 'latestTimestamp' desc
       `,
