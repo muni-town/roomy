@@ -405,12 +405,33 @@ function connectMessagePort(port: MessagePortApi) {
       );
 
       if (firstUpdate) {
-        const previousSchemaVersion = await getPreviousStreamSchemaVersion();
-        if (previousSchemaVersion != CONFIG.streamSchemaVersion) {
-          // Reset the local database cache when the schema version changes.
+        // Reset the local database cache when the stream schema version changes.
+        const previousStreamSchemaVersion =
+          await getPreviousStreamSchemaVersion();
+        if (previousStreamSchemaVersion != CONFIG.streamSchemaVersion) {
           await resetLocalDatabase();
         }
         await setPreviousStreamSchemaVersion(CONFIG.streamSchemaVersion);
+
+        // Reset the local database cache when the database schema version changes
+        const createSchemaVersionTable = sql`
+          create table if not exists roomy_schema_version (
+            id integer primary key check (id = 1),
+            version text not null
+          ) strict;
+        `;
+        await sqliteWorker.runQuery(createSchemaVersionTable);
+        const result = await sqliteWorker.runQuery<{ version: string }>(
+          sql`select version from roomy_schema_version`,
+        );
+        if (result.rows?.[0]?.version != CONFIG.databaseSchemaVersion) {
+          await resetLocalDatabase();
+          await sqliteWorker.runQuery(createSchemaVersionTable);
+          await sqliteWorker.runQuery(sql`
+            insert into roomy_schema_version
+            (id, version) values (1, ${CONFIG.databaseSchemaVersion})
+          `);
+        }
       }
 
       setSqliteWorkerReady();
