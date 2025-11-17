@@ -1,7 +1,7 @@
 import type { MaterializerConfig } from "./worker";
 import { type CodecType } from "scale-ts";
 import { eventCodec, eventVariantCodec, id } from "../encoding";
-import schemaSql from "./schema.sql?raw";
+
 import { decodeTime } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
 import type {
@@ -17,13 +17,6 @@ import { AsyncChannel } from "../asyncChannel";
 
 /** Database materializer config. */
 export const config: MaterializerConfig = {
-  initSql: schemaSql
-    .split("\n")
-    .filter((x) => !x.startsWith("--"))
-    .join("\n")
-    .split(";\n\n")
-    .filter((x) => !!x.replace("\n", ""))
-    .map((sql) => ({ sql })),
   materializer,
 };
 

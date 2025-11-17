@@ -4,10 +4,8 @@ import initSqlite3, {
   type Sqlite3Static,
   type PreparedStatement,
 } from "@sqlite.org/sqlite-wasm";
-import { IdCodec } from "../encoding";
 import type { SqlStatement } from "../types";
-import { decodeTime, isValid as isValidUlid, ulid } from "ulidx";
-import { patchApply, patchFromText } from "diff-match-patch-es";
+import { udfs } from "./udf";
 
 let sqlite3: Sqlite3Static | null = null;
 let db: OpfsSAHPoolDatabase | Database | null = null;
@@ -102,70 +100,12 @@ export async function initializeDatabase(dbName: string): Promise<void> {
     // Set an authorizer function that will allow us to track reads and writes to the database
     sqlite3.capi.sqlite3_set_authorizer(db, authorizer, 0);
 
-    // Parse a binary ID to it's string representation
-    db.createFunction("id", (_ctx, blob) => {
-      if (blob instanceof Uint8Array) {
-        return IdCodec.dec(blob);
-      } else {
-        return blob;
-      }
-    });
-    // Format a string ID to it's binary format
-    db.createFunction(
-      "print",
-      (_ctx, ...args) => {
-        console.log("%c[sqlite log]", "color: green", ...args);
-        return null;
-      },
-      { arity: -1, deterministic: false },
+    // Register User Defined Functions (UDFs) for using within SQL
+    udfs.forEach((udf) =>
+      udf.opts
+        ? db?.createFunction(udf.name, udf.f, udf.opts)
+        : db?.createFunction(udf.name, udf.f),
     );
-    // Format a string ID to it's binary format
-    db.createFunction("make_id", (_ctx, id) => {
-      if (typeof id == "string") {
-        return IdCodec.enc(id);
-      } else {
-        return id;
-      }
-    });
-    db.createFunction("is_ulid", (_ctx, id) => {
-      if (typeof id == "string") {
-        return isValidUlid(id) ? 1 : 0;
-      } else if (id instanceof Uint8Array) {
-        return isValidUlid(IdCodec.dec(id)) ? 1 : 0;
-      } else {
-        return 0;
-      }
-    });
-    db.createFunction("ulid_timestamp", (_ctx, id) => {
-      if (typeof id == "string") {
-        return decodeTime(id);
-      } else if (id instanceof Uint8Array) {
-        return decodeTime(IdCodec.dec(id));
-      } else {
-        return id;
-      }
-    });
-    // Create a ULID from a timestamp (for range queries using the index)
-    db.createFunction("timestamp_to_ulid", (_ctx, timestamp) => {
-      if (typeof timestamp === "number") {
-        // Create a ULID with the given timestamp
-        const generatedUlid = ulid(timestamp);
-        // Encode it to binary blob format for comparison with indexed entity IDs
-        return IdCodec.enc(generatedUlid);
-      }
-      return null;
-    });
-    db.createFunction("apply_dmp_patch", (_ctx, content, patch) => {
-      if (!(typeof content == "string" && typeof patch == "string"))
-        throw "Expected two string arguments to apply_dpm_patch()";
-
-      const [patched, _successful] = patchApply(
-        patchFromText(patch),
-        content,
-      ) as [string, boolean[]];
-
-      return patched;
-    });
   })();
   await initPromise;
 }

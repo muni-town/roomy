@@ -16,6 +16,15 @@ import {
 } from "./setup";
 import { messagePortInterface, reactiveWorkerState } from "../workerMessaging";
 import { db } from "../idb";
+import schemaSql from "./schema.sql?raw";
+
+const initSql = schemaSql
+  .split("\n")
+  .filter((x) => !x.startsWith("--"))
+  .join("\n")
+  .split(";\n\n")
+  .filter((x) => !!x.replace("\n", ""))
+  .map((sql) => ({ sql }));
 
 console.log("Started sqlite worker");
 
@@ -116,6 +125,12 @@ globalThis.onmessage = (ev) => {
 
     try {
       await initializeDatabase("/mini.db");
+
+      // initialise DB schema (should be idempotent)
+      console.time("initSql");
+      await runSavepoint({ name: "init", items: initSql });
+      console.timeEnd("initSql");
+
       status.vfsType = getVfsType() || undefined;
       console.log("SQLite Worker using VFS:", status.vfsType);
 

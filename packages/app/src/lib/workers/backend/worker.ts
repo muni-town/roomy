@@ -785,8 +785,9 @@ type SqlMaterializer = (
   streamId: string,
   events: AsyncChannel<StreamEvent[]>,
 ) => AsyncChannel<{ sqlStatements: SqlStatement[]; latestEvent: number }>;
+
 export type MaterializerConfig = {
-  initSql: SqlStatement[];
+  // initSql: SqlStatement[];
   materializer: SqlMaterializer;
 };
 
@@ -811,11 +812,6 @@ class StreamMaterializer {
     state.leafClient.subscribe(this.#streamId);
 
     if (!sqliteWorker) throw "No Sqlite worker";
-
-    // Initialize the database schema. This is assumed to be idempotent.
-    console.time("initSql");
-    sqliteWorker.runSavepoint({ name: "init", items: config.initSql });
-    console.timeEnd("initSql");
 
     // Start backfilling the stream events
     this.backfillEvents();
