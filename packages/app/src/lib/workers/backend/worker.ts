@@ -21,7 +21,6 @@ import {
 import { type OAuthSession } from "@atproto/oauth-client-browser";
 import { isDid, OAuthClient } from "@atproto/oauth-client";
 import { Agent } from "@atproto/api";
-import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 
 import { lexicons } from "../../lexicons";
 import { config as materializerConfig } from "./materializer";
@@ -86,7 +85,6 @@ class Backend {
   #oauth: OAuthClient | undefined;
   #agent: Agent | undefined;
   #session: OAuthSession | undefined;
-  #profile: ProfileViewDetailed | undefined;
   #leafClient: LeafClient | undefined;
   personalSpaceMaterializer: StreamMaterializer | undefined;
   openSpacesMaterializer: OpenSpacesMaterializer | undefined;
@@ -180,10 +178,9 @@ class Backend {
   }
 
   get profile() {
-    return this.#profile;
+    return status.profile;
   }
   set profile(profile) {
-    this.#profile = profile;
     status.profile = profile;
   }
 
@@ -234,23 +231,6 @@ if (isSharedWorker) {
 const liveQueries: Map<string, { port: MessagePort; statement: SqlStatement }> =
   new Map();
 (globalThis as any).liveQueries = liveQueries;
-
-export async function getProfile(
-  did: string,
-): Promise<ProfileViewDetailed | undefined> {
-  await state.ready;
-  if (!did || did == state.agent?.did) {
-    return state.profile;
-  }
-  const resp = await state.agent?.getProfile({
-    actor: did || state.agent.assertDid,
-  });
-  if (!resp?.data && !resp?.success) {
-    console.error("error fetching profile", resp, state.agent);
-    throw new Error("Error fetching profile:" + resp?.toString());
-  }
-  return resp.data;
-}
 
 function connectMessagePort(port: MessagePortApi) {
   // Prevent duplicate connections - only connect once per port
