@@ -118,6 +118,8 @@ function buildTree(
     }
   }
 
+  rootNodes.sort((a, b) => decodeTime(a.id) - decodeTime(b.id));
+
   return rootNodes;
 }
 
