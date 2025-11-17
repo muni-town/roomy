@@ -37,6 +37,7 @@ jobs:
         run: echo "APP_VERSION=$(jq -r .version packages/app/src-tauri/tauri.conf.json)" >> $GITHUB_ENV
 
       - name: Validate app version matches tag
+        shell: bash
         run: |
           TAG_VERSION="${GITHUB_REF#refs/tags/v}"
           if [ "$APP_VERSION" != "$TAG_VERSION" ]; then
