@@ -15,11 +15,6 @@ import type { Agent } from "@atproto/api";
 import type { LeafClient } from "@muni-town/leaf-client";
 import { AsyncChannel } from "../asyncChannel";
 
-/** Database materializer config. */
-export const config: MaterializerConfig = {
-  materializer,
-};
-
 const newUserSignals = [
   "space.roomy.message.create.0",
   "space.roomy.message.create.1",

@@ -23,7 +23,7 @@ import { isDid, OAuthClient } from "@atproto/oauth-client";
 import { Agent } from "@atproto/api";
 
 import { lexicons } from "../../lexicons";
-import { config as materializerConfig } from "./materializer";
+import { materializer } from "./materializer";
 import type { LiveQueryMessage } from "$lib/workers/sqlite/setup";
 import { eventCodec, id, streamParamsCodec } from "../encoding";
 import { sql } from "$lib/utils/sqlTemplate";
@@ -667,7 +667,6 @@ async function initializeLeafClient(client: LeafClient) {
 
     state.personalSpaceMaterializer = new StreamMaterializer(
       status.personalStreamId,
-      materializerConfig,
     );
     state.openSpacesMaterializer = new OpenSpacesMaterializer(
       status.personalStreamId,
@@ -757,7 +756,7 @@ class OpenSpacesMaterializer {
     for (const spaceToOpen of spacesToOpen) {
       this.#spaceMaterializers.set(
         spaceToOpen,
-        new StreamMaterializer(spaceToOpen, materializerConfig),
+        new StreamMaterializer(spaceToOpen),
       );
       state.leafClient?.subscribe(spaceToOpen);
     }
@@ -802,12 +801,12 @@ class StreamMaterializer {
     return this.#streamId;
   }
 
-  constructor(streamId: string, config: MaterializerConfig) {
+  constructor(streamId: string) {
     console.log("new materializer for ", streamId);
     if (!state.leafClient) throw "No leaf client";
     if (!status.personalStreamId) throw new Error("No personal stream id");
     this.#streamId = streamId;
-    this.#materializer = config.materializer;
+    this.#materializer = materializer;
 
     state.leafClient.subscribe(this.#streamId);
 
