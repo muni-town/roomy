@@ -1,12 +1,13 @@
 packages:
   - packages/app
   - packages/tsconfig
+
 onlyBuiltDependencies:
+  - '@parcel/watcher'
   - '@swc/core'
   - '@tailwindcss/oxide'
+  - better-sqlite3
   - cbor-extract
   - core-js
   - esbuild
   - node
-# patchedDependencies:
-#   "@discordeno/gateway": patches/@discordeno__gateway.patch

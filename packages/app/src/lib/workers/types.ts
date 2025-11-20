@@ -58,6 +58,9 @@ export type BackendInterface = {
     spaceId: string,
     handleAccountDid: string,
   ): Promise<string | undefined>;
+  resolveHandleToDid(
+    handleOrDid: string,
+  ): Promise<string | undefined>;
   resolveSpaceFromHandleOrDid(
     handle: string,
   ): Promise<{ spaceId: string; handleDid: string } | undefined>;

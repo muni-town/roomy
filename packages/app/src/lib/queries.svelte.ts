@@ -247,20 +247,33 @@ $effect.root(() => {
         backend
           .resolveSpaceFromHandleOrDid(page.params.space)
           .then(async (resp) => {
-            if (!resp) return undefined;
-            // Get the matching space locally
-            const matchingSpace = resp.spaceId
-              ? spacesQuery.result?.find((x) => x.id == resp.spaceId)
-              : undefined;
+            if (resp) {
+              // Get the matching space locally
+              const matchingSpace = resp.spaceId
+                ? spacesQuery.result?.find((x) => x.id == resp.spaceId)
+                : undefined;
 
-            // Make sure that the space actually has a handle
-            const handleAccount = matchingSpace?.handle_account;
-            if (!handleAccount) return;
+              // Make sure that the space actually has a handle
+              const handleAccount = matchingSpace?.handle_account;
+              if (!handleAccount) return;
 
-            // Validate that the DID of the handle matches our handle account
-            if (handleAccount != resp.handleDid) return undefined;
+              // Validate that the DID of the handle matches our handle account
+              if (handleAccount != resp.handleDid) return undefined;
 
-            current.space = matchingSpace;
+              current.space = matchingSpace;
+              return;
+            }
+
+            // Fallback: if ATProto record doesn't exist, try to find space locally by handle account DID
+            const handleDid = await backend.resolveHandleToDid(page.params.space);
+            if (handleDid) {
+              const matchingSpace = spacesQuery.result?.find(
+                (x) => x.handle_account === handleDid,
+              );
+              if (matchingSpace) {
+                current.space = matchingSpace;
+              }
+            }
           });
       } else {
         current.space = page.params.space

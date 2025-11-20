@@ -108,4 +108,16 @@ sqliteWorker.postMessage(
       throw error;
     }
   },
+
+  logBackendStatus() {
+    console.log("📊 [backendStatus] Current state:", {
+      did: backendStatus.did,
+      leafConnected: backendStatus.leafConnected,
+      personalStreamId: backendStatus.personalStreamId,
+      authLoaded: backendStatus.authLoaded,
+      loadingSpaces: backendStatus.loadingSpaces,
+      fullObject: { ...backendStatus },
+    });
+    return backendStatus;
+  },
 };

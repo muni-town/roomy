@@ -29,9 +29,11 @@ export const config: MaterializerConfig = {
     .split("\n")
     .filter((x) => !x.startsWith("--"))
     .join("\n")
-    .split(";\n\n")
-    .filter((x) => !!x.replace("\n", ""))
-    .map((sql) => ({ sql })),
+    // Split by semicolon followed by newline(s), handling both single and double newlines
+    .split(/;\n+/)
+    .map((sql) => sql.trim())
+    .filter((sql) => sql.length > 0)
+    .map((sql) => ({ sql: sql + ";" })),
   materializer,
 };
 
