@@ -1,10 +1,18 @@
 /***
  * AsyncChannel is a producer-consumer queue that bridges synchronous push operations with
  * asynchronous iteration. Producers call `push(item)` to add data to a queue, which can
- * separatedly be processed by the consumer by iterating over the instance with `for await...of`
+ * separatedly be processed by the consumer by iterating over the instance with `for await..of`
  * syntax. An instance of AsyncChannel can 'accumulate' items and act as a buffer, enabling
  * processing (consumption) to happen at a different rate to production, and for both to continue
- * indefinitely as long as the reference is held - hence, 'channel'.
+ * indefinitely as long as the loop runs or it hasn't been closed with `finish` - hence, 'channel'.
+ *
+ * If the `for await..of` loop gets to the end of the queue and there is nothing left, it pushes a
+ * resolver to the 'resolvers' queue. This makes it possible to have multiple concurrent consumers,
+ * ready to compute when work comes in.
+ *
+ * A new update adds priority queuing. Now, items pushed to the queue can optionally be marked as
+ * 'background' priority - this simply means that it will only be delivered to the iterator once
+ * the normal queue is empty, so as not to block more urgent work.ß
  *
  * A note on syntax:
  *
@@ -27,14 +35,20 @@
  */
 export class AsyncChannel<T> {
   #queue: (T | typeof END)[] = [];
+  #backgroundQueue: (T | typeof END)[] = [];
   #resolvers: ((next: T | typeof END) => void)[] = [];
 
-  push(item: T | typeof END): void {
+  push(
+    item: T | typeof END,
+    priority: "normal" | "background" = "normal",
+  ): void {
     const resolver = this.#resolvers.shift();
     if (resolver) {
       resolver(item);
-    } else {
+    } else if (priority === "normal") {
       this.#queue.push(item);
+    } else if (priority === "background") {
+      this.#backgroundQueue.push(item);
     }
   }
 
@@ -53,9 +67,14 @@ export class AsyncChannel<T> {
     const inQueue = this.#queue.shift();
     if (inQueue) {
       return inQueue;
-    } else {
-      return new Promise((r) => this.#resolvers.push(r));
     }
+
+    const inBackgroundQueue = this.#backgroundQueue.shift();
+    if (inBackgroundQueue) {
+      return inBackgroundQueue;
+    }
+
+    return new Promise((r) => this.#resolvers.push(r));
   }
 
   async *[Symbol.asyncIterator]() {
