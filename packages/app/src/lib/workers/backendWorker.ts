@@ -66,7 +66,41 @@ const statusDoneBackfillingStream = () => {
   status.loadingSpaces -= 1;
 };
 
-const atprotoOauthScope = "atproto transition:generic transition:chat.bsky";
+const leafServerDid = `did:web:${new URL(CONFIG.leafUrl).hostname}`;
+const atprotoOauthScope = [
+  `atproto`, // Required just to login to atproto
+
+  `rpc:app.bsky.actor.getProfile?aud=did:web:api.bsky.app%23bsky_appview`, // Access to query the Bluesky profile
+  ...[
+    "chat.bsky.actor.deleteAccount",
+    "chat.bsky.actor.exportAccountData",
+    "chat.bsky.convo.acceptConvo",
+    "chat.bsky.convo.deleteMessageForSelf",
+    "chat.bsky.convo.getConvoAvailability",
+    "chat.bsky.convo.getConvoForMembers",
+    "chat.bsky.convo.getConvo",
+    "chat.bsky.convo.getLog",
+    "chat.bsky.convo.leaveConvo",
+    "chat.bsky.convo.listConvos",
+    "chat.bsky.convo.muteConvo",
+    "chat.bsky.convo.removeReaction",
+    "chat.bsky.convo.sendMessageBatch",
+    "chat.bsky.convo.unmuteConvo",
+    "chat.bsky.convo.addReaction",
+    "chat.bsky.convo.updateAllRead",
+    "chat.bsky.convo.updateRead",
+    "chat.bsky.moderation.getActorMetadata",
+    "chat.bsky.moderation.getMessageContext",
+    "chat.bsky.moderation.updateActorAccess",
+  ].map((lxm) => `rpc:${lxm}?aud=did:web:api.bsky.chat%23bsky_chat`),
+
+  `repo:${CONFIG.streamNsid}`, // Access to the stream collection
+  `repo:${CONFIG.streamHandleNsid}`, // Access to the stream handle collection
+
+  // TODO: For some reason I can't get this to work with a non-wildcard audience. In the future we
+  // should be able to set the audience to the `leafServerDid`.
+  `rpc:town.muni.leaf.authenticate?aud=*`, // Access to authenticate to the leaf server
+].join(" ");
 
 interface KeyValue {
   key: string;
@@ -207,7 +241,8 @@ class Backend {
         this.setLeafClient(
           new LeafClient(CONFIG.leafUrl, async () => {
             const resp = await this.agent?.com.atproto.server.getServiceAuth({
-              aud: `did:web:${new URL(CONFIG.leafUrl).host}`,
+              aud: leafServerDid,
+              lxm: "town.muni.leaf.authenticate",
             });
             if (!resp) throw "Error authenticating for leaf server";
             return resp.data.token;
