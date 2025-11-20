@@ -204,15 +204,32 @@ class Backend {
       });
 
       if (!this.#leafClient) {
-        this.setLeafClient(
-          new LeafClient(CONFIG.leafUrl, async () => {
-            const resp = await this.agent?.com.atproto.server.getServiceAuth({
-              aud: `did:web:${new URL(CONFIG.leafUrl).host}`,
-            });
-            if (!resp) throw "Error authenticating for leaf server";
-            return resp.data.token;
-          }),
-        );
+        // Ensure the URL has the correct protocol
+        const leafUrl = CONFIG.leafUrl.startsWith("http://") || CONFIG.leafUrl.startsWith("https://") || CONFIG.leafUrl.startsWith("ws://") || CONFIG.leafUrl.startsWith("wss://")
+          ? CONFIG.leafUrl
+          : `wss://${CONFIG.leafUrl}`;
+        
+        const authCallback = async () => {
+          const resp = await this.agent?.com.atproto.server.getServiceAuth({
+            aud: `did:web:${new URL(leafUrl).host}`,
+          });
+          if (!resp) throw "Error authenticating for leaf server";
+          return resp.data.token;
+        };
+        
+        // Create LeafClient - it might auto-connect, so we need to register handlers immediately
+        const leafClient = new LeafClient(leafUrl, authCallback);
+        
+        // Register authenticated handler early to catch events that fire synchronously
+        leafClient.on("authenticated", async (did) => {
+          try {
+            await handleEarlyAuthentication(leafClient, did);
+          } catch (e) {
+            console.error("[Backend] Error in early authentication handler:", e);
+          }
+        });
+        
+        this.setLeafClient(leafClient);
       }
     } else {
       this.profile = undefined;
@@ -234,11 +251,16 @@ class Backend {
   }
   setLeafClient(client: LeafClient | undefined) {
     if (client) {
-      initializeLeafClient(client);
+      // Store client first so early handlers can access it
+      this.#leafClient = client;
+      // Initialize asynchronously - don't await to avoid blocking
+      initializeLeafClient(client).catch((e) => {
+        console.error(`[Backend] Error in initializeLeafClient:`, e);
+      });
     } else {
       this.#leafClient?.disconnect();
+      this.#leafClient = undefined;
     }
-    this.#leafClient = client;
   }
 
   async oauthCallback(params: URLSearchParams) {
@@ -432,6 +454,19 @@ function connectMessagePort(port: MessagePortApi) {
             (id, version) values (1, ${CONFIG.databaseSchemaVersion})
           `);
         }
+
+        // Initialize the database schema early so queries can run even before Leaf client connects
+        // This is idempotent (uses CREATE TABLE IF NOT EXISTS)
+        console.log("Initializing database schema...");
+        try {
+          await sqliteWorker.runSavepoint({
+            name: "init_schema",
+            items: materializerConfig.initSql,
+          });
+          console.log("Database schema initialized successfully");
+        } catch (e) {
+          console.error("Error initializing database schema:", e);
+        }
       }
 
       setSqliteWorkerReady();
@@ -564,6 +599,22 @@ function connectMessagePort(port: MessagePortApi) {
         return undefined;
       }
     },
+    async resolveHandleToDid(handleOrDid) {
+      await state.ready;
+      if (!state.agent) throw "Agent not ready";
+      try {
+        if (isDid(handleOrDid)) {
+          return handleOrDid;
+        }
+        const resp = await state.agent.getProfile({
+          actor: handleOrDid,
+        });
+        return resp.data.did;
+      } catch (e) {
+        console.warn("Error resolving handle to DID", e);
+        return undefined;
+      }
+    },
     async resolveSpaceFromHandleOrDid(handleOrDid) {
       await state.ready;
       if (!state.agent) throw "Agent not ready";
@@ -576,26 +627,84 @@ function connectMessagePort(port: MessagePortApi) {
               })
             ).data.did;
 
-        const resp = await state.agent.com.atproto.repo.getRecord(
-          {
-            collection: CONFIG.streamHandleNsid,
-            repo: did,
-            rkey: "self",
-          },
-          {
-            headers: {
-              "atproto-proxy": `${did}#atproto_pds`,
+        // Try the configured NSID first
+        let foundValidRecord = false;
+        try {
+          const resp = await state.agent.com.atproto.repo.getRecord(
+            {
+              collection: CONFIG.streamHandleNsid,
+              repo: did,
+              rkey: "self",
             },
-          },
-        );
+            {
+              headers: {
+                "atproto-proxy": `${did}#atproto_pds`,
+              },
+            },
+          );
 
-        const result = resp.data.value?.id
-          ? {
+          if (resp.data.value?.id) {
+            console.log(
+              `Found space handle record in ${CONFIG.streamHandleNsid}:`,
+              resp.data.value.id,
+            );
+            return {
               spaceId: resp.data.value.id as string,
               handleDid: did,
+            };
+          }
+          // Record exists but has no id - this shouldn't happen, but continue to try fallback
+          foundValidRecord = false;
+        } catch (e) {
+          // Record not found in configured NSID
+          console.log(
+            `Record not found in ${CONFIG.streamHandleNsid}, trying fallback...`,
+            e,
+          );
+          foundValidRecord = false;
+        }
+
+        // If we didn't find a valid record and it's the dev NSID, try production NSID as fallback
+        if (
+          !foundValidRecord &&
+          CONFIG.streamHandleNsid === "space.roomy.stream.handle.dev"
+        ) {
+          try {
+            console.log("Trying production NSID: space.roomy.stream.handle");
+            const resp = await state.agent.com.atproto.repo.getRecord(
+              {
+                collection: "space.roomy.stream.handle",
+                repo: did,
+                rkey: "self",
+              },
+              {
+                headers: {
+                  "atproto-proxy": `${did}#atproto_pds`,
+                },
+              },
+            );
+
+            if (resp.data.value?.id) {
+              console.log(
+                "Found space handle record in production NSID:",
+                resp.data.value.id,
+              );
+              return {
+                spaceId: resp.data.value.id as string,
+                handleDid: did,
+              };
+            } else {
+              console.log(
+                "Production NSID record exists but has no id field",
+              );
             }
-          : undefined;
-        return result;
+          } catch (e2) {
+            console.log("Production NSID also failed:", e2);
+            // Production NSID also failed, continue to return undefined
+          }
+        }
+
+        return undefined;
       } catch (e) {
         console.warn("Error resolving space from handle", e);
         return undefined;
@@ -700,91 +809,100 @@ async function createOauthClient(): Promise<OAuthClient> {
   return workerOauthClient(clientMetadata);
 }
 
+// Extract authentication logic to be callable from early handler
+async function handleEarlyAuthentication(client: LeafClient, did: string) {
+  if (!state.agent) {
+    throw new Error("ATProto agent not initialized");
+  }
+
+  // Get the user's personal space ID
+  const id = await getPersonalStreamIdCache(did);
+  if (id) {
+    status.personalStreamId = id;
+  } else {
+    try {
+      const resp1 = await state.agent.com.atproto.repo.getRecord({
+        collection: CONFIG.streamNsid,
+        repo: did,
+        rkey: CONFIG.streamSchemaVersion,
+      });
+      const existingRecord = resp1.data.value as { id: string };
+      status.personalStreamId = existingRecord.id;
+      await setPersonalStreamIdCache(did, existingRecord.id);
+    } catch (_) {
+      // Create a new stream if one doesn't exist
+      const personalStreamUlid = ulid();
+      const personalStreamId = await client.createStreamFromModuleUrl(
+        personalStreamUlid,
+        LEAF_MODULE_PERSONAL.id,
+        LEAF_MODULE_PERSONAL.url,
+        streamParamsCodec.enc({
+          streamType: "space.roomy.stream.personal",
+          schemaVersion: CONFIG.streamSchemaVersion,
+        }).buffer as ArrayBuffer,
+      );
+
+      const resp2 = await state.agent.com.atproto.repo.putRecord({
+        collection: CONFIG.streamNsid,
+        record: { id: personalStreamId },
+        repo: state.agent.assertDid,
+        rkey: CONFIG.streamSchemaVersion,
+      });
+      if (!resp2.success) {
+        throw new Error("Could not create PDS record for personal stream", {
+          cause: JSON.stringify(resp2.data),
+        });
+      }
+      status.personalStreamId = personalStreamId;
+      await setPersonalStreamIdCache(did, personalStreamId);
+    }
+  }
+
+  client.subscribe(status.personalStreamId);
+
+  await sqliteWorkerReady;
+
+  state.personalSpaceMaterializer = new StreamMaterializer(
+    status.personalStreamId,
+    materializerConfig,
+  );
+  state.openSpacesMaterializer = new OpenSpacesMaterializer(
+    status.personalStreamId,
+  );
+
+  status.leafConnected = true;
+}
+
 async function initializeLeafClient(client: LeafClient) {
+  console.log(`[Leaf] Initializing Leaf client, URL: ${CONFIG.leafUrl}`);
+  
+  // Register event handlers
   client.on("connect", async () => {
-    console.log("Leaf: connected");
+    console.log("[Leaf] Connected successfully");
   });
   client.on("disconnect", () => {
-    console.log("Leaf: disconnected");
+    console.log("[Leaf] Disconnected");
     status.leafConnected = false;
     state.personalSpaceMaterializer = undefined;
     state.openSpacesMaterializer?.close();
     state.openSpacesMaterializer = undefined;
   });
+  client.on("error", (error) => {
+    console.error("[Leaf] Client error:", error);
+  });
+  
+  // Register authenticated handler (may have already fired, but this ensures we catch it)
   client.on("authenticated", async (did) => {
-    console.log("Leaf: authenticated as", did);
-
-    if (!state.agent) throw new Error("ATProto agent not initialized");
-
-    console.log("Now looking for personal stream id");
-    // Get the user's personal space ID
-
-    const id = await getPersonalStreamIdCache(did);
-    if (id) {
-      status.personalStreamId = id;
-    } else {
+    // Only process if personalStreamId isn't already set (early handler may have set it)
+    if (!status.personalStreamId) {
       try {
-        const resp1 = await state.agent.com.atproto.repo.getRecord({
-          collection: CONFIG.streamNsid,
-          repo: did,
-          rkey: CONFIG.streamSchemaVersion,
-        });
-        const existingRecord = resp1.data.value as { id: string };
-        status.personalStreamId = existingRecord.id;
-        await setPersonalStreamIdCache(did, existingRecord.id);
-        console.log("Found existing stream ID from PDS:", existingRecord.id);
-      } catch (_) {
-        // this catch block creating a new stream needs to be refactored
-        // so that it only happens when there definitely is no record
-        console.log(
-          "Could not find existing stream ID on PDS. Creating new stream!",
-        );
-
-        // create a new stream on leaf server
-        const personalStreamUlid = ulid();
-        const personalStreamId = await client.createStreamFromModuleUrl(
-          personalStreamUlid,
-          LEAF_MODULE_PERSONAL.id,
-          LEAF_MODULE_PERSONAL.url,
-          streamParamsCodec.enc({
-            streamType: "space.roomy.stream.personal",
-            schemaVersion: CONFIG.streamSchemaVersion,
-          }).buffer as ArrayBuffer,
-        );
-        console.log("Created new stream:", personalStreamId);
-
-        // put the stream ID in a record
-        const resp2 = await state.agent.com.atproto.repo.putRecord({
-          collection: CONFIG.streamNsid,
-          record: { id: personalStreamId },
-          repo: state.agent.assertDid,
-          rkey: CONFIG.streamSchemaVersion,
-        });
-        if (!resp2.success) {
-          throw new Error("Could not create PDS record for personal stream", {
-            cause: JSON.stringify(resp2.data),
-          });
-        }
-        status.personalStreamId = personalStreamId;
-        await setPersonalStreamIdCache(did, personalStreamId);
+        await handleEarlyAuthentication(client, did);
+      } catch (e) {
+        console.error("[Leaf] Error handling authentication:", e);
       }
     }
-
-    client.subscribe(status.personalStreamId);
-    console.log("Subscribed to stream:", status.personalStreamId);
-
-    await sqliteWorkerReady;
-
-    state.personalSpaceMaterializer = new StreamMaterializer(
-      status.personalStreamId,
-      materializerConfig,
-    );
-    state.openSpacesMaterializer = new OpenSpacesMaterializer(
-      status.personalStreamId,
-    );
-
-    status.leafConnected = true;
   });
+  
   client.on("event", (event) => {
     if (event.stream == state.personalSpaceMaterializer?.streamId) {
       state.personalSpaceMaterializer.handleEvents(

@@ -6,6 +6,8 @@ import { writable } from "svelte/store";
 import { backend, backendStatus } from "./workers";
 import { toast } from "@fuxui/base";
 import { ulid } from "ulidx";
+import { sql } from "./utils/sqlTemplate";
+import { id } from "./workers/encoding";
 
 /** Cleans a handle string by removing any characters not valid for a domain. */
 export function cleanHandle(handle: string): string {
@@ -157,16 +159,113 @@ export function cdnImageUrl(
 }
 
 /**
+ * Wait for backend to be ready (personalStreamId to be set)
+ */
+async function waitForBackendReady(maxWaitMs = 15000): Promise<boolean> {
+  if (backendStatus.personalStreamId) {
+    return true;
+  }
+
+  if (!backendStatus.did) {
+    console.warn("User not logged in - cannot join space");
+    return false;
+  }
+
+  const startTime = Date.now();
+  return new Promise((resolve) => {
+    const checkInterval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      if (backendStatus.personalStreamId) {
+        clearInterval(checkInterval);
+        resolve(true);
+      } else if (elapsed > maxWaitMs) {
+        clearInterval(checkInterval);
+        console.error(
+          `Backend not ready after ${elapsed}ms. Status:`,
+          {
+            did: backendStatus.did,
+            leafConnected: backendStatus.leafConnected,
+            personalStreamId: backendStatus.personalStreamId,
+            authLoaded: backendStatus.authLoaded,
+          },
+        );
+        resolve(false);
+      }
+    }, 100);
+  });
+}
+
+/**
  * Join a space.
  */
 export async function joinSpace(spaceIdOrHandle: string) {
   try {
-    const spaceId = spaceIdOrHandle.includes(".")
-      ? (await backend.resolveSpaceFromHandleOrDid(spaceIdOrHandle))?.spaceId
-      : spaceIdOrHandle;
-    if (!spaceId || !backendStatus.personalStreamId) {
-      toast.error("Could not join space. It's possible it does not exist.");
+    let spaceId: string | undefined;
+    if (spaceIdOrHandle.includes(".")) {
+      // Try to resolve via ATProto record first
+      console.log("Attempting to resolve handle:", spaceIdOrHandle);
+      const resp = await backend.resolveSpaceFromHandleOrDid(spaceIdOrHandle);
+      console.log("Resolution result:", resp);
+      if (resp?.spaceId) {
+        spaceId = resp.spaceId;
+        console.log("Resolved space ID:", spaceId);
+      } else {
+        // Fallback: resolve handle to DID and find space locally
+        const handleDid = await backend.resolveHandleToDid(spaceIdOrHandle);
+        if (handleDid) {
+          try {
+            // Query local spaces to find one with matching handle_account
+            const spaces = await backend.runQuery(
+              sql`-- find space by handle account
+                select json_object(
+                  'id', id(cs.entity)
+                ) as json
+                from comp_space cs
+                where cs.handle_account = ${handleDid}
+                  and hidden = 0
+                limit 1
+              `,
+            );
+            if (spaces.rows && spaces.rows.length > 0) {
+              const space = JSON.parse(spaces.rows[0].json as string);
+              spaceId = space.id;
+            }
+          } catch (e) {
+            // Database might not be initialized yet or space not in local DB
+            // This is expected if the user hasn't joined the space yet
+            console.warn("Could not find space locally by handle account", e);
+          }
+        }
+      }
+    } else {
+      spaceId = spaceIdOrHandle;
+    }
+    console.log("Space ID resolved:", spaceId);
+    if (!spaceId) {
+      console.error("Cannot join space - space ID not resolved");
+      toast.error(
+        "Could not join space. The space handle record may not exist yet. Please ask the space admin to set up the handle record, or use the space ID directly.",
+      );
       return;
+    }
+
+    // Wait for backend to be ready if it's not already
+    if (!backendStatus.personalStreamId) {
+      console.log("Waiting for backend to be ready...");
+      const backendReady = await waitForBackendReady();
+      if (!backendReady) {
+        console.error(
+          "Cannot join space - backend not initialized after waiting",
+        );
+        toast.error(
+          "Cannot join space. The backend is not ready yet. Please wait a moment and try again, or refresh the page.",
+        );
+        return;
+      }
+      console.log(
+        "Backend is now ready, personalStreamId:",
+        backendStatus.personalStreamId,
+      );
     }
     // Add the space to the personal list of joined spaces
     await backend.sendEvent(backendStatus.personalStreamId, {
