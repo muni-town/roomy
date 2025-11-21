@@ -122,13 +122,13 @@ sqliteWorker.postMessage(
   },
 
   async diagnoseRoom(roomId: string) {
+    const { id } = await import("./encoding");
+    const { sql } = await import("../utils/sqlTemplate");
     try {
-      // Use make_id function that's already defined in SQLite
-      // Escape single quotes in roomId for SQL safety
-      const escapedRoomId = roomId.replace(/'/g, "''");
-      const diagnosticQuery = `
+      const encodedRoomId = id(roomId);
+      const diagnosticQuery = sql`
         select json_object(
-          'roomId', '${escapedRoomId}',
+          'roomId', ${encodedRoomId},
           'existsInEntities', case when e.id is not null then 1 else 0 end,
           'streamId', id(e.stream_id),
           'parent', id(e.parent),
@@ -155,27 +155,29 @@ sqliteWorker.postMessage(
             else 'UNKNOWN'
           end
         ) as diagnostic
-        from (select make_id('${escapedRoomId}') as room_id)
-        left join entities e on e.id = make_id('${escapedRoomId}')
-        left join comp_room r on r.entity = make_id('${escapedRoomId}')
-        left join comp_info i on i.entity = make_id('${escapedRoomId}')
+        from (select ${encodedRoomId} as room_id)
+        left join entities e on e.id = ${encodedRoomId}
+        left join comp_room r on r.entity = ${encodedRoomId}
+        left join comp_info i on i.entity = ${encodedRoomId}
         left join entities parent_e on parent_e.id = e.parent
         left join comp_room parent_r on parent_r.entity = e.parent
         left join comp_info parent_i on parent_i.entity = e.parent
       `;
-      
-      const result = await backend.runQuery({ sql: diagnosticQuery });
-      const diagnostic = result.rows?.[0] ? JSON.parse(result.rows[0].diagnostic as string) : null;
-      
+
+      const result = await backend.runQuery(diagnosticQuery);
+      const diagnostic = result.rows?.[0]
+        ? JSON.parse(result.rows[0].diagnostic as string)
+        : null;
+
       console.log("🔍 Room Diagnostic for", roomId + ":", diagnostic);
-      
+
       // Also check if parent would appear in sidebar
       if (diagnostic?.parent) {
         const parentDiagnostic = await this.diagnoseRoom(diagnostic.parent);
         console.log("🔍 Parent Category Diagnostic:", parentDiagnostic);
         diagnostic.parentDiagnostic = parentDiagnostic;
       }
-      
+
       return diagnostic;
     } catch (error) {
       console.error("Main thread: Room diagnostic failed", error);
@@ -187,36 +189,35 @@ sqliteWorker.postMessage(
     try {
       const { current } = await import("../queries.svelte");
       const { id } = await import("./encoding");
+      const { sql } = await import("../utils/sqlTemplate");
+
       const actualSpaceId = spaceId || current.space?.id;
-      
+
       if (!actualSpaceId) {
         console.log("❌ No space ID available");
         return { error: "No space ID available" };
       }
-      
-      const escapedSpaceId = actualSpaceId.replace(/'/g, "''");
-      const spaceIdBlob = id(actualSpaceId);
-      const spaceIdHex = Array.from(new Uint8Array(spaceIdBlob))
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join('');
-      
-      const diagnosticQuery = `
+
+      const encodedSpaceId = id(actualSpaceId);
+
+      const diagnosticQuery = sql`
         select json_object(
-          'spaceId', '${escapedSpaceId}',
-          'spaceIdHex', '${spaceIdHex}',
-          'currentSpaceId', '${escapedSpaceId}',
-          'totalRooms', (select count(*) from entities e join comp_room r on r.entity = e.id where e.stream_id = make_id('${escapedSpaceId}')),
-          'topLevelRooms', (select count(*) from entities e join comp_room r on r.entity = e.id join comp_info i on i.entity = e.id where e.stream_id = make_id('${escapedSpaceId}') and e.parent is null and (r.deleted = 0 or r.deleted is null)),
-          'categories', (select count(*) from entities e join comp_room r on r.entity = e.id join comp_info i on i.entity = e.id where e.stream_id = make_id('${escapedSpaceId}') and r.label = 'category' and (r.deleted = 0 or r.deleted is null)),
-          'channels', (select count(*) from entities e join comp_room r on r.entity = e.id join comp_info i on i.entity = e.id where e.stream_id = make_id('${escapedSpaceId}') and r.label = 'channel' and (r.deleted = 0 or r.deleted is null)),
+          'spaceId', '${actualSpaceId}',
+          'currentSpaceId', '${current.space?.id}',
+          'totalRooms', (select count(*) from entities e join comp_room r on r.entity = e.id where e.stream_id = ${encodedSpaceId}),
+          'topLevelRooms', (select count(*) from entities e join comp_room r on r.entity = e.id join comp_info i on i.entity = e.id where e.stream_id = ${encodedSpaceId} and e.parent is null and (r.deleted = 0 or r.deleted is null)),
+          'categories', (select count(*) from entities e join comp_room r on r.entity = e.id join comp_info i on i.entity = e.id where e.stream_id = ${encodedSpaceId} and r.label = 'category' and (r.deleted = 0 or r.deleted is null)),
+          'channels', (select count(*) from entities e join comp_room r on r.entity = e.id join comp_info i on i.entity = e.id where e.stream_id = ${encodedSpaceId} and r.label = 'channel' and (r.deleted = 0 or r.deleted is null)),
           'roomsWithStreamId0ace', (select count(*) from entities e join comp_room r on r.entity = e.id where hex(e.stream_id) = '0ace'),
           'sampleRoomStreamIds', (select json_group_array(id(e.stream_id)) from entities e join comp_room r on r.entity = e.id limit 5)
         ) as diagnostic
       `;
-      
-      const result = await backend.runQuery({ sql: diagnosticQuery });
-      const diagnostic = result.rows?.[0] ? JSON.parse(result.rows[0].diagnostic as string) : null;
-      
+
+      const result = await backend.runQuery(diagnosticQuery);
+      const diagnostic = result.rows?.[0]
+        ? JSON.parse(result.rows[0].diagnostic as string)
+        : null;
+
       console.log("🔍 Space Tree Diagnostic:", diagnostic);
       console.log("📊 Current space from queries:", current.space);
       return diagnostic;

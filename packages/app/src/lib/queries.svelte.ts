@@ -166,8 +166,9 @@ $effect.root(() => {
     latestEntity: string | null;
     unreadCount: number;
     depth: number;
-  }>(
-    () => sql`-- spaceTree (recursive CTE)
+  }>(() => {
+    const spaceId = current.space?.id && id(current.space.id);
+    return sql`-- spaceTree (recursive CTE)
       with recursive room_tree as (
         -- Base case: top-level rooms (categories, channels, pages without parents)
         select 
@@ -183,7 +184,7 @@ $effect.root(() => {
           join comp_room r on e.id = r.entity
           join comp_info i on e.id = i.entity
           left join comp_last_read l on e.id = l.entity
-        where e.stream_id = ${current.space?.id && id(current.space.id)}
+        where e.stream_id = ${spaceId}
           and e.parent is null
           and (r.deleted = 0 or r.deleted is null)
         
@@ -204,7 +205,7 @@ $effect.root(() => {
           join comp_info i on e.id = i.entity
           left join comp_last_read l on e.id = l.entity
           left join comp_room parent_room on parent_room.entity = e.parent
-        where e.stream_id = ${current.space?.id && id(current.space.id)}
+        where e.stream_id = ${spaceId}
           and e.parent is not null
           and (r.deleted = 0 or r.deleted is null)
           and (parent_room.entity is null or parent_room.deleted = 1)
@@ -227,10 +228,10 @@ $effect.root(() => {
           join comp_info i on e.id = i.entity
           left join comp_last_read l on e.id = l.entity
           join entities parent_e on parent_e.id = e.parent
-        where parent_e.stream_id = ${current.space?.id && id(current.space.id)}
+        where parent_e.stream_id = ${spaceId}
           and e.parent is not null
           and (r.deleted = 0 or r.deleted is null)
-          and e.stream_id != ${current.space?.id && id(current.space.id)}
+          and e.stream_id != ${spaceId}
           -- Make sure parent exists and is not deleted
           and exists (
             select 1 from comp_room parent_r 
@@ -255,7 +256,7 @@ $effect.root(() => {
           join comp_info i on e.id = i.entity
           left join comp_last_read l on e.id = l.entity
           join room_tree rt on e.parent = rt.id
-        where e.stream_id = ${current.space?.id && id(current.space.id)}
+        where e.stream_id = ${spaceId}
           and (r.deleted = 0 or r.deleted is null)
       )
       select 
@@ -269,8 +270,8 @@ $effect.root(() => {
         depth
       from room_tree
       order by depth, type, name
-  `,
-  );
+  `;
+  });
 
   // Build tree structure reactively from flat results
   $effect(() => {
