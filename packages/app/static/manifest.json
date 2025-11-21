@@ -19,7 +19,7 @@
   "lang": "en-US",
   "name": "Roomy",
   "short_name": "Roomy",
-  "start_url": "https://roomy.space/home",
+  "start_url": "/home",
   "description": "A shared web space for digital gardening.",
   "id": "com.roomy.chat"
 }
