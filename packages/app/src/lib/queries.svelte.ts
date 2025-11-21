@@ -212,6 +212,10 @@ $effect.root(() => {
         
         union all
         
+        -- TODO: Remove this section: we currently have a bug that is causing rooms to be created
+        -- with the wrong stream ID from the read events in the personal stream, but this is a fine
+        -- workaround until that is fixed.
+        --
         -- Base case: rooms with parents in the correct stream (handle stream_id mismatches)
         -- This catches rooms that have a different stream_id but whose parent is in the correct stream
         select 
