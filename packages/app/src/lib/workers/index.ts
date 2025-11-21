@@ -108,4 +108,121 @@ sqliteWorker.postMessage(
       throw error;
     }
   },
+
+  logBackendStatus() {
+    console.log("📊 [backendStatus] Current state:", {
+      did: backendStatus.did,
+      leafConnected: backendStatus.leafConnected,
+      personalStreamId: backendStatus.personalStreamId,
+      authLoaded: backendStatus.authLoaded,
+      loadingSpaces: backendStatus.loadingSpaces,
+      fullObject: { ...backendStatus },
+    });
+    return backendStatus;
+  },
+
+  async diagnoseRoom(roomId: string) {
+    try {
+      // Use make_id function that's already defined in SQLite
+      // Escape single quotes in roomId for SQL safety
+      const escapedRoomId = roomId.replace(/'/g, "''");
+      const diagnosticQuery = `
+        select json_object(
+          'roomId', '${escapedRoomId}',
+          'existsInEntities', case when e.id is not null then 1 else 0 end,
+          'streamId', id(e.stream_id),
+          'parent', id(e.parent),
+          'hasCompRoom', case when r.entity is not null then 1 else 0 end,
+          'roomLabel', r.label,
+          'roomDeleted', r.deleted,
+          'hasCompInfo', case when i.entity is not null then 1 else 0 end,
+          'roomName', i.name,
+          'parentExists', case when parent_e.id is not null then 1 else 0 end,
+          'parentDeleted', parent_r.deleted,
+          'parentLabel', parent_r.label,
+          'parentName', parent_i.name,
+          'parentStreamId', id(parent_e.stream_id),
+          'parentHasCompRoom', case when parent_r.entity is not null then 1 else 0 end,
+          'parentHasCompInfo', case when parent_i.entity is not null then 1 else 0 end,
+          'wouldAppearInSidebar', case 
+            when e.id is null then 'NO: Room does not exist in entities'
+            when r.entity is null then 'NO: Missing comp_room entry'
+            when i.entity is null then 'NO: Missing comp_info entry'
+            when r.deleted = 1 then 'NO: Room is deleted'
+            when e.parent is not null and (parent_r.entity is null or parent_r.deleted = 1) then 'MAYBE: Parent is deleted (should show as orphaned)'
+            when e.parent is null then 'YES: Top-level room'
+            when parent_r.entity is not null and parent_r.deleted = 0 then 'YES: Child of valid parent'
+            else 'UNKNOWN'
+          end
+        ) as diagnostic
+        from (select make_id('${escapedRoomId}') as room_id)
+        left join entities e on e.id = make_id('${escapedRoomId}')
+        left join comp_room r on r.entity = make_id('${escapedRoomId}')
+        left join comp_info i on i.entity = make_id('${escapedRoomId}')
+        left join entities parent_e on parent_e.id = e.parent
+        left join comp_room parent_r on parent_r.entity = e.parent
+        left join comp_info parent_i on parent_i.entity = e.parent
+      `;
+      
+      const result = await backend.runQuery({ sql: diagnosticQuery });
+      const diagnostic = result.rows?.[0] ? JSON.parse(result.rows[0].diagnostic as string) : null;
+      
+      console.log("🔍 Room Diagnostic for", roomId + ":", diagnostic);
+      
+      // Also check if parent would appear in sidebar
+      if (diagnostic?.parent) {
+        const parentDiagnostic = await this.diagnoseRoom(diagnostic.parent);
+        console.log("🔍 Parent Category Diagnostic:", parentDiagnostic);
+        diagnostic.parentDiagnostic = parentDiagnostic;
+      }
+      
+      return diagnostic;
+    } catch (error) {
+      console.error("Main thread: Room diagnostic failed", error);
+      throw error;
+    }
+  },
+
+  async diagnoseSpaceTree(spaceId?: string) {
+    try {
+      const { current } = await import("../queries.svelte");
+      const { id } = await import("./encoding");
+      const actualSpaceId = spaceId || current.space?.id;
+      
+      if (!actualSpaceId) {
+        console.log("❌ No space ID available");
+        return { error: "No space ID available" };
+      }
+      
+      const escapedSpaceId = actualSpaceId.replace(/'/g, "''");
+      const spaceIdBlob = id(actualSpaceId);
+      const spaceIdHex = Array.from(new Uint8Array(spaceIdBlob))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+      
+      const diagnosticQuery = `
+        select json_object(
+          'spaceId', '${escapedSpaceId}',
+          'spaceIdHex', '${spaceIdHex}',
+          'currentSpaceId', '${escapedSpaceId}',
+          'totalRooms', (select count(*) from entities e join comp_room r on r.entity = e.id where e.stream_id = make_id('${escapedSpaceId}')),
+          'topLevelRooms', (select count(*) from entities e join comp_room r on r.entity = e.id join comp_info i on i.entity = e.id where e.stream_id = make_id('${escapedSpaceId}') and e.parent is null and (r.deleted = 0 or r.deleted is null)),
+          'categories', (select count(*) from entities e join comp_room r on r.entity = e.id join comp_info i on i.entity = e.id where e.stream_id = make_id('${escapedSpaceId}') and r.label = 'category' and (r.deleted = 0 or r.deleted is null)),
+          'channels', (select count(*) from entities e join comp_room r on r.entity = e.id join comp_info i on i.entity = e.id where e.stream_id = make_id('${escapedSpaceId}') and r.label = 'channel' and (r.deleted = 0 or r.deleted is null)),
+          'roomsWithStreamId0ace', (select count(*) from entities e join comp_room r on r.entity = e.id where hex(e.stream_id) = '0ace'),
+          'sampleRoomStreamIds', (select json_group_array(id(e.stream_id)) from entities e join comp_room r on r.entity = e.id limit 5)
+        ) as diagnostic
+      `;
+      
+      const result = await backend.runQuery({ sql: diagnosticQuery });
+      const diagnostic = result.rows?.[0] ? JSON.parse(result.rows[0].diagnostic as string) : null;
+      
+      console.log("🔍 Space Tree Diagnostic:", diagnostic);
+      console.log("📊 Current space from queries:", current.space);
+      return diagnostic;
+    } catch (error) {
+      console.error("Main thread: Space tree diagnostic failed", error);
+      throw error;
+    }
+  },
 };

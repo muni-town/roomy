@@ -111,6 +111,9 @@ function buildTree(
       const parent = nodeMap.get(row.parent);
       if (parent && parent.children) {
         parent.children.push(node);
+      } else {
+        // Orphaned room: parent doesn't exist or is deleted, show as top-level
+        rootNodes.push(node);
       }
     } else {
       // Top-level node
@@ -182,6 +185,58 @@ $effect.root(() => {
           left join comp_last_read l on e.id = l.entity
         where e.stream_id = ${current.space?.id && id(current.space.id)}
           and e.parent is null
+          and (r.deleted = 0 or r.deleted is null)
+        
+        union all
+        
+        -- Base case: orphaned rooms (rooms whose parent rooms are deleted or don't exist)
+        select 
+          e.id,
+          e.parent,
+          r.label as type,
+          i.name,
+          coalesce(l.timestamp, 1) as lastRead,
+          (select max(id) from entities where parent = e.id) as latestEntity,
+          coalesce(l.unread_count, 0) as unreadCount,
+          0 as depth
+        from entities e
+          join comp_room r on e.id = r.entity
+          join comp_info i on e.id = i.entity
+          left join comp_last_read l on e.id = l.entity
+          left join comp_room parent_room on parent_room.entity = e.parent
+        where e.stream_id = ${current.space?.id && id(current.space.id)}
+          and e.parent is not null
+          and (r.deleted = 0 or r.deleted is null)
+          and (parent_room.entity is null or parent_room.deleted = 1)
+        
+        union all
+        
+        -- Base case: rooms with parents in the correct stream (handle stream_id mismatches)
+        -- This catches rooms that have a different stream_id but whose parent is in the correct stream
+        select 
+          e.id,
+          e.parent,
+          r.label as type,
+          i.name,
+          coalesce(l.timestamp, 1) as lastRead,
+          (select max(id) from entities where parent = e.id) as latestEntity,
+          coalesce(l.unread_count, 0) as unreadCount,
+          0 as depth
+        from entities e
+          join comp_room r on e.id = r.entity
+          join comp_info i on e.id = i.entity
+          left join comp_last_read l on e.id = l.entity
+          join entities parent_e on parent_e.id = e.parent
+        where parent_e.stream_id = ${current.space?.id && id(current.space.id)}
+          and e.parent is not null
+          and (r.deleted = 0 or r.deleted is null)
+          and e.stream_id != ${current.space?.id && id(current.space.id)}
+          -- Make sure parent exists and is not deleted
+          and exists (
+            select 1 from comp_room parent_r 
+            where parent_r.entity = e.parent 
+            and (parent_r.deleted = 0 or parent_r.deleted is null)
+          )
         
         union all
         
@@ -201,6 +256,7 @@ $effect.root(() => {
           left join comp_last_read l on e.id = l.entity
           join room_tree rt on e.parent = rt.id
         where e.stream_id = ${current.space?.id && id(current.space.id)}
+          and (r.deleted = 0 or r.deleted is null)
       )
       select 
         id(id) as id,
