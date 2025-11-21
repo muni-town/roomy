@@ -1,4 +1,3 @@
-import type { MaterializerConfig } from "./worker";
 import { type CodecType } from "scale-ts";
 import { eventCodec, eventVariantCodec, id } from "../encoding";
 
@@ -7,112 +6,10 @@ import { sql } from "$lib/utils/sqlTemplate";
 import type {
   EdgesMap,
   EdgesWithPayload,
-  SqliteWorkerInterface,
   SqlStatement,
-  StreamEvent,
+  StatementBundle,
+  Ulid,
 } from "../types";
-import type { Agent } from "@atproto/api";
-import type { LeafClient } from "@muni-town/leaf-client";
-import { AsyncChannel } from "../asyncChannel";
-
-const newUserSignals = [
-  "space.roomy.message.create.0",
-  "space.roomy.message.create.1",
-];
-
-/** Map a batch of incoming events to SQL that applies the event to the entities,
- * components and edges, then execute them all as a single transaction.
- */
-export function materializer(
-  sqliteWorker: SqliteWorkerInterface,
-  agent: Agent,
-  streamId: string,
-  eventChannel: AsyncChannel<StreamEvent[]>,
-): AsyncChannel<{ sqlStatements: SqlStatement[]; latestEvent: number }> {
-  const sqlChannel = new AsyncChannel<{
-    sqlStatements: SqlStatement[];
-    latestEvent: number;
-  }>();
-
-  (async () => {
-    for await (const events of eventChannel) {
-      const batch: SqlStatement[] = [];
-
-      console.time("convert-events-to-sql");
-
-      // reset ensured flags for each new batch
-      ensuredProfiles = new Set();
-
-      const decodedEvents = events
-        .map((e) => {
-          try {
-            // Convert ArrayBuffer to Uint8Array for decoding
-            const payloadBytes = new Uint8Array(e.payload);
-            return [e, eventCodec.dec(payloadBytes)] as const;
-          } catch (error) {
-            const payloadBytes = new Uint8Array(e.payload);
-            console.warn(
-              `Skipping malformed event (idx ${e.idx}): Failed to decode ${payloadBytes.length} bytes.`,
-              `This is likely from an older buggy encoder. Error:`,
-              error instanceof Error ? error.message : error,
-            );
-            // Return null to filter out this event
-            return null;
-          }
-        })
-        .filter((e): e is Exclude<typeof e, null> => e !== null);
-
-      // Make sure all of the profiles we need are downloaded and inserted
-      const neededProfiles = new Set<string>();
-      decodedEvents.forEach(([i, ev]) =>
-        newUserSignals.includes(ev.variant.kind)
-          ? neededProfiles.add(i.user)
-          : undefined,
-      );
-
-      batch.push(
-        ...(await ensureProfiles(
-          streamId,
-          neededProfiles,
-          sqliteWorker,
-          agent,
-        )),
-      );
-
-      let latestEvent = 0;
-      for (const [incoming, event] of decodedEvents) {
-        latestEvent = Math.max(latestEvent, incoming.idx);
-        try {
-          // Get the SQL statements to be executed for this event
-          const statements = await materializers[event.variant.kind]({
-            sqliteWorker,
-            streamId,
-            agent,
-            user: incoming.user,
-            event,
-            data: event.variant.data,
-          } as never);
-
-          statements.push(sql`
-            update events set applied = 1 
-            where stream_id = ${id(streamId)} 
-              and
-            idx = ${incoming.idx}
-          `);
-
-          batch.push(...statements);
-        } catch (e) {
-          console.warn("Event materialisation failed: " + e);
-        }
-      }
-      sqlChannel.push({ sqlStatements: batch, latestEvent });
-      console.timeEnd("convert-events-to-sql");
-    }
-    sqlChannel.finish();
-  })();
-
-  return sqlChannel;
-}
 
 type Event = CodecType<typeof eventCodec>;
 type EventVariants = CodecType<typeof eventVariantCodec>;
@@ -122,17 +19,20 @@ type EventVariant<K extends EventVariantStr> = Extract<
   { kind: K }
 >["data"];
 
-/** SQL mapping for each event variant */
-const materializers: {
-  [K in EventVariantStr]: (opts: {
-    sqliteWorker: SqliteWorkerInterface;
-    leafClient: LeafClient;
-    streamId: string;
-    agent: Agent;
-    user: string;
-    event: Event;
-    data: EventVariant<K>;
-  }) => Promise<SqlStatement[]>;
+interface StatementMapOpts<K extends EventVariantStr> {
+  streamId: string;
+  user: string;
+  event: Event;
+  data: EventVariant<K>;
+}
+
+type StatementMap<K extends EventVariantStr> = (
+  opts: StatementMapOpts<K>,
+) => Promise<SqlStatement[]> | SqlStatement[];
+
+/** Pure SQL statement generation for each event variant */
+const statementMap: {
+  [K in EventVariantStr]: StatementMap<K>;
 } = {
   // Space
   "space.roomy.space.join.0": async ({ streamId, data }) => {
@@ -145,19 +45,23 @@ const materializers: {
       `,
     ];
   },
-  "space.roomy.space.leave.0": async ({ data }) => [
-    sql`
+  "space.roomy.space.leave.0": async ({ data }) => {
+    return [
+      sql`
       update comp_space set hidden = 1
       where entity = ${id(data.spaceId)}
     `,
-  ],
+    ];
+  },
 
-  "space.roomy.stream.handle.account.0": async ({ streamId, data }) => [
-    sql`
+  "space.roomy.stream.handle.account.0": async ({ streamId, data }) => {
+    return [
+      sql`
       update comp_space set handle_account = ${data.did || null}
       where entity = ${id(streamId)}
     `,
-  ],
+    ];
+  },
 
   // Admin
   "space.roomy.admin.add.0": async ({ streamId, data }) => {
@@ -248,21 +152,15 @@ const materializers: {
   // TODO
   "space.roomy.room.member.add.0": async (
     {
-      // sqliteWorker,
       // streamId,
       // event,
-      // agent,
       // data,
-      // leafClient,
     },
   ) => [
     // ensureEntity(streamId, event.ulid, event.parent),
     // ...(await ensureProfile(
-    //   sqliteWorker,
-    //   agent,
     //   data.member_id,
     //   streamId,
-    //   leafClient,
     // )),
     // {
     //   sql: event.parent
@@ -841,11 +739,37 @@ const materializers: {
       `,
     ];
   },
-};
+} as const;
 
 // UTILS
 
-function ensureEntity(
+/**
+ * Helper to wrap materializer logic and automatically create success/error bundles.
+ * This eliminates the repetitive bundle-wrapping code in each materializer.
+ */
+function bundleSuccess(
+  event: Event,
+  statements: SqlStatement | SqlStatement[],
+): StatementBundle {
+  return {
+    eventId: event.ulid as Ulid,
+    status: "success",
+    statements: Array.isArray(statements) ? statements : [statements],
+  };
+}
+
+/**
+ * Helper to create an error bundle with a consistent format.
+ */
+function bundleError(event: Event, error: Error | string): StatementBundle {
+  return {
+    eventId: event.ulid as Ulid,
+    status: "error",
+    message: typeof error === "string" ? error : error.message,
+  };
+}
+
+export function ensureEntity(
   streamId: string,
   entityId: string,
   parent?: string,
@@ -876,89 +800,39 @@ function ensureEntity(
   return statement;
 }
 
-/** When mapping incoming events to SQL, 'ensureProfile' checks whether a DID
- * exists in the profiles table. If not, it makes an API call to bsky to get some
- * basic info, and then returns SQL to add it to the profiles table. Rather than
- * inserting it immediately and breaking transaction atomicity, this is just a set
- * of flags to indicate that the profile doesn't need to be re-fetched.
- */
-let ensuredProfiles = new Set<string>();
-
-async function ensureProfiles(
-  streamId: string,
-  profileDids: Set<string>,
-  sqliteWorker: SqliteWorkerInterface,
-  agent: Agent,
-): Promise<SqlStatement[]> {
-  try {
-    // This only knows how to fetch Bluesky DIDs for now
-    const dids = [...profileDids].filter(
-      (x) =>
-        x.startsWith("did:plc:") ||
-        x.startsWith("did:web:") ||
-        ensuredProfiles.has(x),
-    );
-    if (dids.length == 0) return [];
-
-    const missingProfilesResp = await sqliteWorker.runQuery<{ did: string }>({
-      sql: `with existing(did) as (
-        values ${dids.map((_) => `(?)`).join(",")}
-      )
-      select id(did) as did
-      from existing
-      left join entities ent on ent.id = existing.did
-      where ent.id is null
-      `,
-      params: dids.map(id),
-    });
-    const missingDids = missingProfilesResp.rows?.map((x: any) => x.did) || [];
-    if (missingDids.length == 0) return [];
-
-    const statements = [];
-
-    for (const did of missingDids) {
-      ensuredProfiles.add(did);
-
-      const profile = await agent.getProfile({ actor: did });
-      if (!profile.success) continue;
-
-      statements.push(
-        ...[
-          sql`
-          insert into entities (id, stream_id)
-          values (${id(did)}, ${id(streamId)})
-          on conflict(id) do nothing
-        `,
-          sql`
-          insert into comp_user (did, handle)
-          values (
-            ${id(did)},
-            ${profile.data.handle}
-          )
-          on conflict(did) do nothing
-        `,
-          sql`
-          insert into comp_info (entity, name, avatar)
-          values (
-            ${id(did)},
-            ${profile.data.displayName || profile.data.handle},
-            ${profile.data.avatar}
-          )
-          on conflict(entity) do nothing
-        `,
-        ],
-      );
-    }
-
-    return statements;
-  } catch (e) {
-    console.error("Could not ensure profile", e);
-    return [];
-  }
-}
-
 function edgePayload<EdgeLabel extends keyof EdgesWithPayload>(
   payload: EdgesMap[EdgeLabel],
 ) {
   return JSON.stringify(payload);
 }
+
+// Type-safe materializer dispatcher that maintains the relationship between
+// event variant kind and its data type
+export async function materialize(
+  event: Event,
+  opts: Omit<StatementMapOpts<any>, "event" | "data">,
+): Promise<StatementBundle> {
+  const kind = event.variant.kind;
+  const data = event.variant.data;
+
+  try {
+    const materializer = statementMap[kind];
+    if (!materializer) {
+      throw new Error(`No materializer found for event kind: ${kind}`);
+    }
+
+    const statements = await materializer({
+      ...opts,
+      event,
+      data,
+    } as any);
+
+    return bundleSuccess(event, statements);
+  } catch (error) {
+    console.error(`Error materializing event ${event.ulid}:`, error);
+    return bundleError(event, error instanceof Error ? error : String(error));
+  }
+}
+
+// Legacy export for backwards compatibility if needed
+export const materializers = statementMap;

@@ -1,5 +1,6 @@
 import { CONFIG } from "$lib/config";
 import Dexie, { type EntityTable } from "dexie";
+import type { StreamHashId } from "./types";
 
 interface KeyValue {
   key: string;
@@ -19,12 +20,12 @@ db.version(1).stores({
 
 // Helpers for caching the personal stream ID in the key-value store.
 export const personalStream = {
-  async getIdCache(did: string): Promise<string | undefined> {
+  async getIdCache(did: string): Promise<StreamHashId | undefined> {
     return (
       await db.kv.get(`personalStreamId-${CONFIG.streamSchemaVersion}-${did}`)
-    )?.value;
+    )?.value as StreamHashId;
   },
-  async setIdCache(did: string, value: string): Promise<void> {
+  async setIdCache(did: string, value: StreamHashId): Promise<void> {
     await db.kv.put({
       key: `personalStreamId-${CONFIG.streamSchemaVersion}-${did}`,
       value,

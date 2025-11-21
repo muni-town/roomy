@@ -91,7 +91,10 @@ export const workerOauthClient = (clientMetadata: OAuthClientMetadataInput) =>
         });
       },
       async get(key: string): Promise<InternalStateData | undefined> {
-        const data = JSON.parse((await db.state.get(key))?.data || "undefined");
+        const entry = await db.state.get(key);
+        if (!entry)
+          throw new Error("Could not find key in ATProto OAuth iDB: " + key);
+        const data = JSON.parse(entry.data || "undefined");
         if (data) {
           data.dpopKey = await decodeKey(data.dpopKey as any);
         }

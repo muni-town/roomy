@@ -8,7 +8,7 @@
   let profile = $state(undefined) as Profile | undefined;
   $effect(() => {
     if (page.params.user) {
-      backend.loadProfile(page.params.user || "").then((p) => (profile = p));
+      backend.getProfile(page.params.user || "").then((p) => (profile = p));
     }
   });
 </script>

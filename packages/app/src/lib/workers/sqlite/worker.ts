@@ -1,9 +1,19 @@
 /* eslint-disable @typescript-eslint/no-empty-object-type */
-import type {
-  BackendInterface,
-  Savepoint,
-  SqliteStatus,
-  SqliteWorkerInterface,
+import {
+  type ApplyResultError,
+  type ApplyResultBatch,
+  type ApplyResultBundle,
+  type BackendInterface,
+  type EventBatch,
+  type Savepoint,
+  type SqliteStatus,
+  type SqliteWorkerInterface,
+  type StatementBatch,
+  type StatementBundle,
+  type StatementSuccessBundle,
+  type StreamHashId,
+  type StreamIndex,
+  type TaskPriority,
 } from "../types";
 import {
   initializeDatabase,
@@ -13,10 +23,18 @@ import {
   disableLiveQueries,
   enableLiveQueries,
   getVfsType,
+  type QueryResult,
 } from "./setup";
 import { messagePortInterface, reactiveWorkerState } from "../workerMessaging";
 import { db } from "../idb";
 import schemaSql from "./schema.sql?raw";
+import { isDid, type Agent, type Did } from "@atproto/api";
+import { sql } from "$lib/utils/sqlTemplate";
+import { eventCodec, id } from "../encoding";
+import { materialize } from "./materializer";
+import { AsyncChannel } from "../asyncChannel";
+
+console.log("Started sqlite worker");
 
 const initSql = schemaSql
   .split("\n")
@@ -25,78 +43,156 @@ const initSql = schemaSql
   .split(";\n\n")
   .filter((x) => !!x.replace("\n", ""))
   .map((sql) => ({ sql }));
-
-console.log("Started sqlite worker");
-
 const QUERY_LOCK = "sqliteQueryLock";
 const HEARTBEAT_KEY = "sqlite-worker-heartbeat";
 const LOCK_TIMEOUT_MS = 8000; // 30 seconds
+const newUserSignals = [
+  "space.roomy.message.create.0",
+  "space.roomy.message.create.1",
+];
 
-const workerId = crypto.randomUUID();
+class SqliteWorkerSupervisor {
+  // Private state
+  #workerId: string;
+  #isConnectionHealthy: boolean = true;
+  // Heartbeat mechanism to prove this worker is alive
+  #heartbeatInterval: NodeJS.Timeout | null = null;
+  #status: Partial<SqliteStatus> = {};
+  #backend: BackendInterface | null = null;
+  #ensuredProfiles = new Set<string>();
+  #eventChannel: AsyncChannel<EventBatch>;
+  #statementChannel = new AsyncChannel<StatementBatch>();
+  #resultChannel = new AsyncChannel<ApplyResultBatch>();
+  #pendingBatches = new Map<string, (result: ApplyResultBatch) => void>();
 
-// Add connection health monitoring
-let isConnectionHealthy = true;
-
-// Heartbeat mechanism to prove this worker is alive
-let heartbeatInterval: NodeJS.Timeout | null = null;
-
-function startHeartbeat() {
-  if (heartbeatInterval) clearInterval(heartbeatInterval);
-
-  heartbeatInterval = setInterval(() => {
-    // Store heartbeat with current timestamp
-    try {
-      db.kv.put({
-        key: HEARTBEAT_KEY,
-        value: JSON.stringify({
-          workerId,
-          timestamp: Date.now(),
-        }),
-      });
-    } catch (e) {
-      console.warn("SQLite worker: Failed to update heartbeat", e);
-    }
-  }, 5000); // Update every 5 seconds
-}
-
-function stopHeartbeat() {
-  if (heartbeatInterval) {
-    clearInterval(heartbeatInterval);
-    heartbeatInterval = null;
+  constructor() {
+    this.#workerId = crypto.randomUUID();
+    this.#eventChannel = new AsyncChannel();
   }
-}
 
-globalThis.onmessage = (ev) => {
-  console.log("SqliteWorker received message", ev);
-  const ports: { backendPort: MessagePort; statusPort: MessagePort } = ev.data;
+  initialize(ports: { backendPort: MessagePort; statusPort: MessagePort }) {
+    // Monitor port health
+    ports.backendPort.onmessageerror = (error) => {
+      console.error("SQLite worker: Backend port message error", error);
+      this.#isConnectionHealthy = false;
+    };
 
-  // Monitor port health
-  ports.backendPort.onmessageerror = (error) => {
-    console.error("SQLite worker: Backend port message error", error);
-    isConnectionHealthy = false;
-  };
+    ports.statusPort.onmessageerror = (error) => {
+      console.error("SQLite worker: Status port message error", error);
+      this.#isConnectionHealthy = false;
+    };
 
-  ports.statusPort.onmessageerror = (error) => {
-    console.error("SQLite worker: Status port message error", error);
-    isConnectionHealthy = false;
-  };
+    this.#status = reactiveWorkerState<SqliteStatus>(ports.statusPort, true);
 
-  const status = reactiveWorkerState<SqliteStatus>(ports.statusPort, true);
+    this.#backend = messagePortInterface<{}, BackendInterface>(
+      ports.backendPort,
+      {},
+    );
 
-  const backend = messagePortInterface<{}, BackendInterface>(
-    ports.backendPort,
-    {},
-  );
+    this.#status.workerId = this.#workerId;
+    this.#status.isActiveWorker = false; // Initialize to false for reactive state tracking
+    this.#status.vfsType = undefined; // Will be set after database initialization
+    console.log("SQLite Worker id", this.#workerId);
 
-  status.workerId = workerId;
-  status.isActiveWorker = false; // Initialize to false for reactive state tracking
-  status.vfsType = undefined; // Will be set after database initialization
-  console.log("SQLite Worker id", workerId);
+    const callback = async () => {
+      console.log(
+        "Sqlite worker lock obtained: Active worker id:",
+        this.#workerId,
+      );
+      this.#status.isActiveWorker = true;
+      this.startHeartbeat();
 
-  function cleanup() {
+      globalThis.addEventListener("error", this.cleanup);
+      globalThis.addEventListener("unhandledrejection", this.cleanup);
+
+      try {
+        await initializeDatabase("/mini.db");
+
+        // initialise DB schema (should be idempotent)
+        console.time("initSql");
+        await this.runSavepoint({ name: "init", items: initSql });
+        console.timeEnd("initSql");
+
+        this.#status.vfsType = getVfsType() || undefined;
+        console.log("SQLite Worker using VFS:", this.#status.vfsType);
+
+        const sqliteChannel = new MessageChannel();
+        messagePortInterface<SqliteWorkerInterface, {}>(
+          sqliteChannel.port1,
+          this.getSqliteInterface(),
+        );
+        this.#backend?.setActiveSqliteWorker(sqliteChannel.port2);
+        this.materializer();
+        this.listenStatements();
+        this.listenResults();
+        await new Promise(() => {});
+      } catch (e) {
+        console.error("SQLite worker: Fatal error", e);
+        this.cleanup();
+        throw e;
+      }
+    };
+
+    navigator.locks
+      .request(
+        "sqlite-worker-lock",
+        { mode: "exclusive", signal: AbortSignal.timeout(LOCK_TIMEOUT_MS) },
+        callback,
+      )
+      .catch(async (error) => {
+        if (error.name === "TimeoutError") {
+          console.warn("SQLite worker: Lock timeout, attempting steal");
+          await this.attemptLockSteal(callback);
+        }
+      });
+  }
+
+  listenStatements() {
+    (async () => {
+      for await (const batch of this.#statementChannel) {
+        // apply statements
+        try {
+          const result = await this.runStatementBatch(batch);
+          console.log(
+            "Ran statements, got result",
+            result,
+            "pushing to resultChannel",
+          );
+          this.#resultChannel.push(result);
+        } catch (error) {
+          console.error("Error running statement batch", batch, error);
+        }
+      }
+    })();
+  }
+
+  listenResults() {
+    (async () => {
+      for await (const batch of this.#resultChannel) {
+        console.log("Got result", batch, "trying to resolve");
+        // resolve promises
+        try {
+          const resolver = this.#pendingBatches.get(batch.batchId);
+          if (resolver) {
+            resolver(batch);
+            this.#pendingBatches.delete(batch.batchId);
+          } else {
+            throw new Error("Lost the resolver 😬");
+          }
+        } catch (error) {
+          console.error("Error running statement batch", batch, error);
+        }
+      }
+    })();
+  }
+
+  private cleanup() {
     console.log("SQLite worker: Cleaning up...");
-    stopHeartbeat();
-    status.isActiveWorker = false;
+    this.stopHeartbeat();
+    this.#status.isActiveWorker = false;
+    this.#eventChannel.finish();
+    this.#statementChannel.finish();
+    this.#resultChannel.finish();
 
     // Clear our heartbeat
 
@@ -105,7 +201,7 @@ globalThis.onmessage = (ev) => {
       .then((heartbeatData) => {
         if (heartbeatData) {
           const { workerId: storedWorkerId } = JSON.parse(heartbeatData.value);
-          if (storedWorkerId === workerId) {
+          if (storedWorkerId === this.#workerId) {
             db.kv.delete(HEARTBEAT_KEY);
           }
         }
@@ -115,189 +211,454 @@ globalThis.onmessage = (ev) => {
       );
   }
 
-  const callback = async () => {
-    console.log("Sqlite worker lock obtained: Active worker id:", workerId);
-    status.isActiveWorker = true;
-    startHeartbeat();
+  private startHeartbeat() {
+    if (this.#heartbeatInterval) clearInterval(this.#heartbeatInterval);
 
-    globalThis.addEventListener("error", cleanup);
-    globalThis.addEventListener("unhandledrejection", cleanup);
+    this.#heartbeatInterval = setInterval(() => {
+      // Store heartbeat with current timestamp
+      try {
+        db.kv.put({
+          key: HEARTBEAT_KEY,
+          value: JSON.stringify({
+            workerId: this.#workerId,
+            timestamp: Date.now(),
+          }),
+        });
+      } catch (e) {
+        console.warn("SQLite worker: Failed to update heartbeat", e);
+      }
+    }, 5000); // Update every 5 seconds
+  }
 
+  private stopHeartbeat() {
+    if (this.#heartbeatInterval) {
+      clearInterval(this.#heartbeatInterval);
+      this.#heartbeatInterval = null;
+    }
+  }
+
+  private async attemptLockSteal(callback: () => Promise<void>) {
     try {
-      await initializeDatabase("/mini.db");
+      // Check if there's a recent heartbeat from another worker
+      const heartbeatData = await db.kv.get(HEARTBEAT_KEY);
+      if (heartbeatData) {
+        const { timestamp, workerId: otherWorkerId } = JSON.parse(
+          heartbeatData.value,
+        );
+        const age = Date.now() - timestamp;
 
-      // initialise DB schema (should be idempotent)
-      console.time("initSql");
-      await runSavepoint({ name: "init", items: initSql });
-      console.timeEnd("initSql");
+        if (age < LOCK_TIMEOUT_MS && otherWorkerId !== this.#workerId) {
+          console.log(
+            "SQLite worker: Another active worker detected, backing off",
+          );
+          return;
+        }
+      }
 
-      status.vfsType = getVfsType() || undefined;
-      console.log("SQLite Worker using VFS:", status.vfsType);
+      console.log(
+        "SQLite worker: No recent heartbeat detected, attempting to acquire lock",
+      );
 
-      const sqliteChannel = new MessageChannel();
-      messagePortInterface<SqliteWorkerInterface, {}>(sqliteChannel.port1, {
-        async runQuery(statement) {
-          // This lock makes sure that the JS tasks don't interleave some other query executions in while we
-          // are trying to compose a bulk transaction.
-          return navigator.locks.request(QUERY_LOCK, async () => {
-            try {
-              return await executeQuery(statement);
-            } catch (e) {
-              throw new Error(
-                `Error running SQL query \`${statement.sql}\`: ${e}`,
-              );
-            }
-          });
+      // Try to acquire lock with ifAvailable first
+      const lockAcquired = await navigator.locks.request(
+        "sqlite-worker-lock-backup",
+        { mode: "exclusive", ifAvailable: true },
+        async (lock) => {
+          if (!lock) return false;
+
+          console.log("SQLite worker: Successfully stole abandoned lock");
+          await callback();
+          return true;
         },
-        async createLiveQuery(id, port, statement) {
-          createLiveQuery(id, port, statement);
-        },
-        async deleteLiveQuery(id) {
-          deleteLiveQuery(id);
-        },
-        async ping() {
-          console.log("SQLite worker: Ping received");
+      );
 
-          // Check lock status
-          const lockInfo = await navigator.locks.query();
-          const sqliteLocks = lockInfo?.held?.filter(
+      if (!lockAcquired) {
+        console.warn(
+          "SQLite worker: Could not steal lock, another worker may be active",
+        );
+      }
+    } catch (error) {
+      console.error("SQLite worker: Lock steal attempt failed", error);
+    }
+  }
+
+  private getSqliteInterface(): SqliteWorkerInterface {
+    return {
+      materializeBatch: async (eventsBatch, priority) => {
+        console.log("Running materialiseBatch in SqliteWorkerInterface", this);
+        return this.materializeBatch(eventsBatch, priority);
+      },
+      runQuery: async (statement) => {
+        // This lock makes sure that the JS tasks don't interleave some other query executions in while we
+        // are trying to compose a bulk transaction.
+        return navigator.locks.request(QUERY_LOCK, async () => {
+          try {
+            return await executeQuery(statement);
+          } catch (e) {
+            throw new Error(
+              `Error running SQL query \`${statement.sql}\`: ${e}`,
+            );
+          }
+        });
+      },
+      createLiveQuery: async (id, port, statement) =>
+        createLiveQuery(id, port, statement),
+      deleteLiveQuery: async (id) => {
+        deleteLiveQuery(id);
+      },
+      ping: async () => {
+        console.log("SQLite worker: Ping received");
+
+        // Check lock status
+        const lockInfo = await navigator.locks.query();
+        const sqliteLocks = lockInfo?.held?.filter(
+          (lock) =>
+            lock.name === "sqlite-worker-lock" || lock.name === QUERY_LOCK,
+        );
+
+        if (!this.#isConnectionHealthy) {
+          console.warn("SQLite worker: Connection is unhealthy.");
+        }
+        if (!this.#isConnectionHealthy) {
+          console.warn("SQLite worker: Connection is unhealthy.");
+        }
+        return {
+          timestamp: Date.now(),
+          workerId: this.#workerId,
+          isActive: this.#status.isActiveWorker || false,
+          locks: sqliteLocks,
+          locksPending: lockInfo?.pending?.filter(
             (lock) =>
               lock.name === "sqlite-worker-lock" || lock.name === QUERY_LOCK,
-          );
+          ),
+        };
+      },
+      runSavepoint: async (savepoint) => this.runSavepoint(savepoint),
+    };
+  }
 
-          if (!isConnectionHealthy) {
-            console.warn("SQLite worker: Connection is unhealthy.");
-          }
-          if (!isConnectionHealthy) {
-            console.warn("SQLite worker: Connection is unhealthy.");
-          }
-          return {
-            timestamp: Date.now(),
-            workerId,
-            isActive: status.isActiveWorker || false,
-            locks: sqliteLocks,
-            locksPending: lockInfo?.pending?.filter(
-              (lock) =>
-                lock.name === "sqlite-worker-lock" || lock.name === QUERY_LOCK,
-            ),
-          };
-        },
-        runSavepoint,
-      });
-      backend.setActiveSqliteWorker(sqliteChannel.port2);
-      await new Promise(() => {});
-    } catch (e) {
-      console.error("SQLite worker: Fatal error", e);
-      cleanup();
-      throw e;
-    }
-  };
+  private async runStatementBatch(batch: StatementBatch) {
+    const exec = async () => {
+      await executeQuery({ sql: `savepoint batch${batch.batchId}` });
 
-  navigator.locks
-    .request(
-      "sqlite-worker-lock",
-      { mode: "exclusive", signal: AbortSignal.timeout(LOCK_TIMEOUT_MS) },
-      callback,
-    )
-    .catch(async (error) => {
-      if (error.name === "TimeoutError") {
-        console.warn("SQLite worker: Lock timeout, attempting steal");
-        await attemptLockSteal(callback);
-      }
-    });
-  // status.isActiveWorker = false;
-};
+      const results: ApplyResultBundle[] = [];
 
-async function runSavepoint(savepoint: Savepoint, depth = 0) {
-  const exec = async () => {
-    await executeQuery({ sql: `savepoint ${savepoint.name}` });
-    let hadError = false;
-    for (const savepointOrStatement of savepoint.items) {
-      try {
-        if ("sql" in savepointOrStatement) {
-          await executeQuery(savepointOrStatement);
-        } else {
-          await runSavepoint(savepointOrStatement, depth + 1);
+      for (const bundle of batch.bundles) {
+        if (bundle.status === "success") {
+          results.push(await this.runStatementBundle(bundle));
         }
-      } catch (e) {
-        // Log the error but continue executing other statements
-        console.warn(
-          `Error executing individual statement in savepoint ${savepoint.name}:`,
-          e,
-        );
-        if (savepointOrStatement && "sql" in savepointOrStatement) {
-          console.warn(`Failed SQL:`, savepointOrStatement.sql);
-          console.warn(`Failed params:`, savepointOrStatement.params);
-        }
-        hadError = true;
       }
-    }
 
-    if (hadError) {
-      console.warn(
-        `Savepoint ${savepoint.name} completed with ${hadError ? "errors" : "no errors"}`,
-      );
-    }
+      await executeQuery({ sql: `release batch${batch.batchId}` });
+      return {
+        batchId: batch.batchId,
+        status: "applied",
+        results,
+      };
+    };
 
-    await executeQuery({ sql: `release ${savepoint.name}` });
-  };
-
-  if (depth == 0) {
-    console.log("runSavepoint", savepoint);
+    console.log("runSavepoint", batch);
     disableLiveQueries();
 
     // This lock makes sure that the JS tasks don't interleave some other query executions in while we
     // are trying to compose a bulk transaction.
-    const result = await navigator.locks.request(QUERY_LOCK, exec);
+    const result: ApplyResultBatch = await navigator.locks.request(
+      QUERY_LOCK,
+      exec,
+    );
 
     await enableLiveQueries();
+    await db.streamCursors.put({
+      streamId: batch.streamId,
+      latestEvent: batch.latestEvent,
+    });
     return result;
-  } else {
-    return exec();
   }
-}
 
-async function attemptLockSteal(callback: () => Promise<void>) {
-  try {
-    // Check if there's a recent heartbeat from another worker
-    const heartbeatData = await db.kv.get(HEARTBEAT_KEY);
-    if (heartbeatData) {
-      const { timestamp, workerId: otherWorkerId } = JSON.parse(
-        heartbeatData.value,
-      );
-      const age = Date.now() - timestamp;
-
-      if (age < LOCK_TIMEOUT_MS && otherWorkerId !== workerId) {
-        console.log(
-          "SQLite worker: Another active worker detected, backing off",
+  private async runStatementBundle(
+    bundle: StatementSuccessBundle,
+  ): Promise<ApplyResultBundle> {
+    await executeQuery({ sql: `savepoint event${bundle.eventId}` });
+    const queryResults: (QueryResult | ApplyResultError)[] = [];
+    for (const statement of bundle.statements) {
+      try {
+        queryResults.push(await executeQuery(statement));
+      } catch (e) {
+        console.warn(
+          `Error executing individual statement in savepoint event${bundle.eventId}:`,
+          e,
         );
-        return;
+        if (statement && "sql" in statement) {
+          console.warn(`Failed SQL:`, statement.sql);
+          console.warn(`Failed params:`, statement.params);
+        }
+        queryResults.push({
+          type: "error",
+          statement,
+          message: e instanceof Error ? e.message : (e as string),
+        });
       }
     }
 
-    console.log(
-      "SQLite worker: No recent heartbeat detected, attempting to acquire lock",
-    );
+    await executeQuery({ sql: `release event${bundle.eventId}` });
 
-    // Try to acquire lock with ifAvailable first
-    const lockAcquired = await navigator.locks.request(
-      "sqlite-worker-lock-backup",
-      { mode: "exclusive", ifAvailable: true },
-      async (lock) => {
-        if (!lock) return false;
+    return {
+      eventId: bundle.eventId,
+      result: "applied",
+      output: queryResults,
+    };
+  }
 
-        console.log("SQLite worker: Successfully stole abandoned lock");
-        await callback();
-        return true;
-      },
-    );
+  private async runSavepoint(savepoint: Savepoint, depth = 0) {
+    const exec: () => Promise<QueryResult[]> = async () => {
+      await executeQuery({ sql: `savepoint ${savepoint.name}` });
+      let hadError = false;
+      const queryResults: QueryResult[] = [];
+      for (const savepointOrStatement of savepoint.items) {
+        try {
+          if ("sql" in savepointOrStatement) {
+            queryResults.push(await executeQuery(savepointOrStatement));
+          } else {
+            queryResults.push(
+              await this.runSavepoint(savepointOrStatement, depth + 1),
+            );
+          }
+        } catch (e) {
+          // Log the error but continue executing other statements
+          console.warn(
+            `Error executing individual statement in savepoint ${savepoint.name}:`,
+            e,
+          );
+          if (savepointOrStatement && "sql" in savepointOrStatement) {
+            console.warn(`Failed SQL:`, savepointOrStatement.sql);
+            console.warn(`Failed params:`, savepointOrStatement.params);
+          }
+          hadError = true;
+        }
+      }
 
-    if (!lockAcquired) {
-      console.warn(
-        "SQLite worker: Could not steal lock, another worker may be active",
-      );
+      if (hadError) {
+        console.warn(
+          `Savepoint ${savepoint.name} completed with ${hadError ? "errors" : "no errors"}`,
+        );
+      }
+
+      await executeQuery({ sql: `release ${savepoint.name}` });
+      return queryResults;
+    };
+
+    if (depth == 0) {
+      console.log("runSavepoint", savepoint);
+      disableLiveQueries();
+
+      // This lock makes sure that the JS tasks don't interleave some other query executions in while we
+      // are trying to compose a bulk transaction.
+      const result = await navigator.locks.request(QUERY_LOCK, exec);
+
+      await enableLiveQueries();
+      return result;
+    } else {
+      return exec();
     }
-  } catch (error) {
-    console.error("SQLite worker: Lock steal attempt failed", error);
+  }
+
+  /** Map a batch of incoming events to SQL that applies the event to the entities,
+   * components and edges, then execute them all as a single transaction.
+   */
+  materializer() {
+    (async () => {
+      for await (const batch of this.#eventChannel) {
+        const bundles: StatementBundle[] = [];
+
+        console.time("convert-events-to-sql");
+
+        // reset ensured flags for each new batch
+        this.#ensuredProfiles = new Set();
+
+        const decodedEvents = batch.events
+          .map((e) => {
+            try {
+              // Convert ArrayBuffer to Uint8Array for decoding
+              const payloadBytes = new Uint8Array(e.payload);
+              return [e, eventCodec.dec(payloadBytes)] as const;
+            } catch (error) {
+              const payloadBytes = new Uint8Array(e.payload);
+              console.warn(
+                `Skipping malformed event (idx ${e.idx}): Failed to decode ${payloadBytes.length} bytes.`,
+                `This is likely from an older buggy encoder. Error:`,
+                error instanceof Error ? error.message : error,
+              );
+              // Return null to filter out this event
+              return null;
+            }
+          })
+          .filter((e): e is Exclude<typeof e, null> => e !== null);
+
+        // Make sure all of the profiles we need are downloaded and inserted
+        const neededProfiles = new Set<Did>();
+        decodedEvents.forEach(([i, ev]) =>
+          newUserSignals.includes(ev.variant.kind)
+            ? isDid(i.user)
+              ? neededProfiles.add(i.user)
+              : console.warn("Found invalid user id", i.user)
+            : undefined,
+        );
+
+        bundles.push(await this.ensureProfiles(batch.streamId, neededProfiles));
+
+        let latestEvent = 0;
+        for (const [incoming, event] of decodedEvents) {
+          latestEvent = Math.max(latestEvent, incoming.idx);
+          try {
+            // Get the SQL statements to be executed for this event
+            const bundle: StatementBundle = await materialize(event, {
+              streamId: batch.streamId,
+              user: incoming.user,
+            });
+
+            bundles.push(bundle);
+
+            if (bundle.status === "success") {
+              bundle.statements.push(sql`
+                update events set applied = 1 
+                where stream_id = ${id(batch.streamId)} 
+                  and
+                idx = ${incoming.idx}
+              `);
+            }
+          } catch (e) {
+            console.warn("Event materialisation failed: " + e);
+          }
+        }
+        this.#statementChannel.push(
+          {
+            status: "transformed",
+            batchId: batch.batchId,
+            streamId: batch.streamId,
+            bundles: bundles,
+            latestEvent: latestEvent as StreamIndex,
+            priority: batch.priority,
+          },
+          batch.priority,
+        );
+        console.timeEnd("convert-events-to-sql");
+      }
+    })();
+  }
+
+  /** When mapping incoming events to SQL, 'ensureProfile' checks whether a DID
+   * exists in the profiles table. If not, it makes an API call to bsky to get some
+   * basic info, and then returns SQL to add it to the profiles table. Rather than
+   * inserting it immediately and breaking transaction atomicity, this is just a set
+   * of flags to indicate that the profile doesn't need to be re-fetched.
+   */
+
+  async ensureProfiles(
+    streamId: StreamHashId,
+    profileDids: Set<Did>,
+  ): Promise<StatementBundle> {
+    try {
+      // This only knows how to fetch Bluesky DIDs for now
+      const dids = [...profileDids].filter(
+        (x) =>
+          x.startsWith("did:plc:") ||
+          x.startsWith("did:web:") ||
+          this.#ensuredProfiles.has(x),
+      );
+      if (dids.length == 0)
+        return {
+          status: "profiles",
+          dids: [],
+          statements: [],
+        };
+
+      const missingProfilesResp = (await executeQuery({
+        sql: `with existing(did) as (
+          values ${dids.map((_) => `(?)`).join(",")}
+        )
+        select id(did) as did
+        from existing
+        left join entities ent on ent.id = existing.did
+        where ent.id is null
+        `,
+        params: dids.map(id),
+      })) as QueryResult<{ did: string }>; // i think
+      const missingDids =
+        missingProfilesResp.rows?.map((x: any) => x.did) || [];
+      if (missingDids.length == 0)
+        return {
+          status: "profiles",
+          dids: [],
+          statements: [],
+        };
+
+      const statements = [];
+
+      for (const did of missingDids) {
+        this.#ensuredProfiles.add(did);
+
+        const profile = await this.#backend?.getProfile(did);
+        if (!profile) continue;
+
+        statements.push(
+          ...[
+            sql`
+            insert into entities (id, stream_id)
+            values (${id(did)}, ${id(streamId)})
+            on conflict(id) do nothing
+          `,
+            sql`
+            insert into comp_user (did, handle)
+            values (
+              ${id(did)},
+              ${profile.handle}
+            )
+            on conflict(did) do nothing
+          `,
+            sql`
+            insert into comp_info (entity, name, avatar)
+            values (
+              ${id(did)},
+              ${profile.displayName || profile.handle},
+              ${profile.avatar}
+            )
+            on conflict(entity) do nothing
+          `,
+          ],
+        );
+      }
+
+      return {
+        status: "profiles",
+        dids: missingDids,
+        statements,
+      };
+    } catch (e) {
+      console.error("Could not ensure profile", e);
+      return {
+        status: "profileError",
+        dids: profileDids,
+        message: "Could not ensure profile: " + e,
+      };
+    }
+  }
+
+  private async materializeBatch(
+    eventsBatch: EventBatch,
+    priority: TaskPriority = "background",
+  ) {
+    // so this is where we need to coordinate across the chain of channels
+    console.log("Materialising events batch", eventsBatch.batchId);
+    const resultPromise = new Promise<ApplyResultBatch>((resolve) => {
+      this.#pendingBatches.set(eventsBatch.batchId, resolve);
+    });
+    this.#eventChannel.push(eventsBatch, priority);
+    return resultPromise;
   }
 }
+
+const worker = new SqliteWorkerSupervisor();
+
+globalThis.onmessage = (ev) => {
+  worker.initialize(ev.data);
+};

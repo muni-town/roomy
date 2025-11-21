@@ -4,20 +4,20 @@ import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
 import type { QueryResult } from "./sqlite/setup";
 import type { IncomingEvent } from "@muni-town/leaf-client";
 import type { eventCodec } from "./encoding";
+import type { ReactiveAuthState } from "./backend/worker";
+import type { AsyncChannel } from "./asyncChannel";
+import type { Did } from "@atproto/api";
+import type { Deferred } from "$lib/utils/deferred";
 
 export interface BackendStatus {
-  workerRunning: boolean | undefined;
-  authLoaded: boolean | undefined;
-  did: string | undefined;
-  profile: ProfileViewDetailed | undefined;
-  leafConnected: boolean | undefined;
-  personalStreamId: string | undefined;
-  loadingSpaces: number | undefined;
+  authState: ReactiveAuthState;
+  profile: Profile;
+  loadingSpaces: number;
 }
 export interface SqliteStatus {
-  isActiveWorker: boolean | undefined;
-  workerId: string | undefined;
-  vfsType: string | undefined;
+  isActiveWorker: boolean;
+  workerId: string;
+  vfsType: string;
 }
 export interface Profile {
   id: string;
@@ -32,12 +32,12 @@ export type BackendInterface = {
   login(username: string): Promise<string>;
   logout(): Promise<void>;
   oauthCallback(searchParams: string): Promise<void>;
-  runQuery(statement: SqlStatement): Promise<QueryResult>;
-  loadProfile(did: string): Promise<Profile | undefined>;
+  runQuery(statement: SqlStatement): Promise<QueryResult<unknown>>;
+  getProfile(did: string): Promise<Profile | undefined>;
   dangerousCompletelyDestroyDatabase(opts: {
     yesIAmSure: true;
   }): Promise<unknown>;
-  ping(): Promise<{ timestamp: number; workerId: string }>;
+  ping(): Promise<{ timestamp: number }>;
   enableLogForwarding(): Promise<void>;
   disableLogForwarding(): Promise<void>;
   createLiveQuery(
@@ -73,7 +73,7 @@ export type BackendInterface = {
   ): Promise<string>;
   uploadToPds(
     bytes: ArrayBuffer,
-    opts?: { alt?: string; mimeType?: string },
+    opts?: { alt?: string; mimetype?: string },
   ): Promise<{
     blob: ReturnType<BlobRef["toJSON"]>;
     uri: string;
@@ -81,6 +81,24 @@ export type BackendInterface = {
   /** Adds a new message port connection to the backend that can call the backend interface. */
   addClient(port: MessagePort): Promise<void>;
 };
+
+export type SqliteWorkerInterface = {
+  materializeBatch(
+    events: EventBatch,
+    priority: "normal" | "background",
+  ): Promise<StatementBatch | ApplyResultBatch>;
+  runQuery<Row>(statement: SqlStatement): Promise<QueryResult<Row>>;
+  createLiveQuery(
+    id: string,
+    port: MessagePort,
+    statement: SqlStatement,
+  ): Promise<void>;
+  deleteLiveQuery(id: string): Promise<void>;
+  ping(): Promise<{ timestamp: number; workerId: string; isActive: boolean }>;
+  runSavepoint(savepoint: Savepoint): Promise<void>;
+};
+
+export type MaterializeResult = {};
 
 export const consoleLogLevels = [
   "trace",
@@ -95,37 +113,25 @@ export type ConsoleInterface = {
   log(level: ConsoleLogLevel, ...args: any[]): Promise<void>;
 };
 
-export type SqlStatement = {
+export interface SqlStatement {
   sql: string;
   params?: BindingSpec;
   /** If this is true, the query will not be pre-compiled and cached. Use this when you have to
    * substitute strings into the sql query instead of using params, because that will mess up the
    * cache which must be indexed by the SQL. */
   cache?: boolean;
-};
+}
 
-export type StreamEvent = {
-  idx: number;
+export interface StreamEvent {
+  idx: StreamIndex;
   user: string;
   payload: ArrayBuffer;
-};
+}
 
-export type Savepoint = {
+export interface Savepoint {
   name: string;
   items: (SqlStatement | Savepoint)[];
-};
-
-export type SqliteWorkerInterface = {
-  createLiveQuery(
-    id: string,
-    port: MessagePort,
-    statement: SqlStatement,
-  ): Promise<void>;
-  deleteLiveQuery(id: string): Promise<void>;
-  runQuery<Row>(statement: SqlStatement): Promise<QueryResult<Row>>;
-  runSavepoint(savepoint: Savepoint): Promise<void>;
-  ping(): Promise<{ timestamp: number; workerId: string; isActive: boolean }>;
-};
+}
 
 type RawEvent = ReturnType<(typeof eventCodec)["dec"]>;
 type EventKind = RawEvent["variant"]["kind"];
@@ -185,3 +191,185 @@ export type EdgesMap = {
 export type EdgesRecord<TRequired extends readonly EdgeLabel[]> = {
   [K in TRequired[number]]: [EdgesMap[K], EntityId];
 };
+
+export type StreamHashId = string & { __brand: "streamHashId" };
+
+export type StreamConnectionStatus =
+  | ConnectionError
+  | Offline
+  | InitialisingStreams
+  | LoadingPersonalStream
+  | ConnectedStreams;
+
+interface ConnectionError {
+  __brand: "connectionError";
+  status: "error";
+  message: string;
+}
+
+interface Offline {
+  status: "offline";
+}
+
+interface InitialisingStreams {
+  status: "initialising";
+}
+
+export interface LoadingPersonalStream {
+  status: "loadingPersonalStream";
+  personalStream: ConnectedStream;
+  eventChannel: AsyncChannel<EventBatch>;
+}
+
+export interface ConnectedStreams {
+  status: "connected";
+  personalStream: ConnectedStream;
+  eventChannel: AsyncChannel<EventBatch>;
+  streams: Map<StreamHashId, ConnectedStream>;
+}
+
+export interface ConnectedStream {
+  id: StreamHashId;
+  pin: PinState;
+}
+
+type PinState = PinRooms | PinSpace;
+
+interface PinRooms {
+  type: "rooms";
+  rooms: Set<BackfillStatus>;
+}
+
+interface PinSpace {
+  type: "space";
+  backfill: BackfillStatus;
+}
+
+export type BackfillStatus =
+  | BackfillError
+  | BackfillPriority
+  | BackfillBackground
+  | BackfillSuspended;
+
+interface BackfillError {
+  __brand: "backfillError";
+  status: "error";
+  message: string;
+}
+
+interface BackfillPriority {
+  status: "priority";
+  upToEventId: number;
+  completed: Deferred;
+}
+
+interface BackfillBackground {
+  status: "background";
+  upToEventId: number;
+  completed: Deferred;
+}
+
+interface BackfillSuspended {
+  status: "suspended";
+  upToEventId: number;
+}
+
+export type Ulid = string & { __brand: "ulid" };
+
+export type StreamIndex = number & { __brand: "streamIndex" };
+
+export type TaskPriority = "normal" | "background";
+
+export interface EventFetchBatch {
+  status: "fetched";
+  batchId: Ulid;
+  streamId: StreamHashId;
+  events: StreamEvent[];
+  priority: TaskPriority;
+}
+
+export interface EventPushedBatch {
+  status: "pushed";
+  batchId: Ulid;
+  streamId: StreamHashId;
+  events: [StreamEvent];
+  priority: TaskPriority;
+}
+
+export type EventBatch = EventFetchBatch | EventPushedBatch;
+
+/** For a given batch of incoming events, certain event kinds trigger checks to
+ * ensureProfile so we can make sure we have the user for that event. These
+ * async requests are bundled together as an optimisation. */
+interface StatementProfileBundle {
+  status: "profiles";
+  dids: Did[];
+  statements: SqlStatement[];
+}
+
+interface StatementProfileErrorBundle {
+  status: "profileError";
+  dids: Set<Did>;
+  message: string;
+}
+
+export interface StatementSuccessBundle {
+  status: "success";
+  eventId: Ulid;
+  statements: SqlStatement[];
+}
+
+interface StatementErrorBundle {
+  status: "error";
+  eventId: Ulid;
+  message: string;
+}
+
+export type StatementBundle =
+  | StatementSuccessBundle
+  | StatementProfileBundle
+  | StatementProfileErrorBundle
+  | StatementErrorBundle;
+
+export interface StatementBatch {
+  status: "transformed";
+  batchId: Ulid;
+  streamId: StreamHashId;
+  bundles: StatementBundle[];
+  latestEvent: StreamIndex;
+  priority: TaskPriority;
+}
+
+export interface ApplyResultError {
+  type: "error";
+  statement: SqlStatement;
+  message: string;
+}
+
+export interface ApplyResultBundle {
+  result: "applied";
+  eventId: Ulid;
+  output: (QueryResult | ApplyResultError)[];
+}
+
+interface ApplyErrorMissingDependency {
+  type: "missingDependency";
+  dependency: Ulid;
+}
+
+type ApplyError = ApplyErrorMissingDependency;
+
+interface ApplyErrorBundle {
+  result: "error";
+  eventId: Ulid;
+  error: ApplyError;
+}
+
+export interface ApplyResultBatch {
+  status: "applied";
+  batchId: Ulid;
+  results: (ApplyResultBundle | ApplyErrorBundle)[];
+  priority: TaskPriority;
+}
+
+type Batch = EventBatch | StatementBatch | ApplyResultBatch;

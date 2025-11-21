@@ -29,7 +29,7 @@
     class="w-full justify-start"
     size="lg"
     onclick={() => {
-      backend.logout();
+      backend.logout().then(() => window.location.reload());
       open = false;
     }}
   >

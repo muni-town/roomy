@@ -19,6 +19,8 @@ export const backendStatus = reactiveWorkerState<BackendStatus>(
 );
 (globalThis as any).backendStatus = backendStatus;
 
+console.log("backendStatus", backendStatus);
+
 const workerStatusChannel = new MessageChannel();
 
 /** Reactive status of the sqlite worker for this tab. */
@@ -67,6 +69,8 @@ export const backend = messagePortInterface<ConsoleInterface, BackendInterface>(
     },
   },
 );
+
+backend.ping();
 
 (globalThis as any).backend = backend;
 

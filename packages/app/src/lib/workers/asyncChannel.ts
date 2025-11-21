@@ -1,3 +1,5 @@
+import type { TaskPriority } from "./types";
+
 /***
  * AsyncChannel is a producer-consumer queue that bridges synchronous push operations with
  * asynchronous iteration. Producers call `push(item)` to add data to a queue, which can
@@ -38,10 +40,7 @@ export class AsyncChannel<T> {
   #backgroundQueue: (T | typeof END)[] = [];
   #resolvers: ((next: T | typeof END) => void)[] = [];
 
-  push(
-    item: T | typeof END,
-    priority: "normal" | "background" = "normal",
-  ): void {
+  push(item: T | typeof END, priority: TaskPriority = "normal"): void {
     const resolver = this.#resolvers.shift();
     if (resolver) {
       resolver(item);
