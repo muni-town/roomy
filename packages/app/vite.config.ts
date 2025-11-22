@@ -5,6 +5,11 @@ import wasm from "vite-plugin-wasm";
 import topLevelAwait from "vite-plugin-top-level-await";
 import Icons from "unplugin-icons/vite";
 import { FileSystemIconLoader } from "unplugin-icons/loaders";
+import { fileURLToPath } from "url";
+import { dirname, resolve } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export default defineConfig({
   plugins: [
@@ -43,5 +48,15 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ["@sqlite.org/sqlite-wasm"],
+  },
+  resolve: {
+    alias: {
+      // Provide empty stubs for Node.js modules used by postcss (dependency of sanitize-html)
+      // These modules are not needed in the browser and postcss won't actually use them
+      path: resolve(__dirname, "src/lib/stubs/path.ts"),
+      fs: resolve(__dirname, "src/lib/stubs/fs.ts"),
+      url: resolve(__dirname, "src/lib/stubs/url.ts"),
+      "source-map-js": resolve(__dirname, "src/lib/stubs/source-map-js.ts"),
+    },
   },
 });

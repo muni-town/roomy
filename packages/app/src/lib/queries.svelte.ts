@@ -296,7 +296,9 @@ $effect.root(() => {
           ? await backend.resolveHandleForSpace(x.id, x.handle_account)
           : undefined,
       })) || [],
-    ).then((s) => (spaces.list = s));
+    ).then((s) => {
+      spaces.list = s;
+    });
   });
 
   // Update the current.space

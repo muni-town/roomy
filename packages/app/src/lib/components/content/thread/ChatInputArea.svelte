@@ -29,7 +29,7 @@
   let previewImages: string[] = $state([]);
 
   $effect(() => {
-    console.log("messaging state", messagingState.current);
+    $inspect(messagingState.current);
   });
 
   function getVideoThumbnail(file: File): Promise<string> {

@@ -139,7 +139,7 @@
   import { setInputFocus } from "./ChatInput.svelte";
 
   $effect(() => {
-    console.log("messaging state", messagingState.current);
+    $inspect(messagingState.current);
   });
 
   function startThreading(message?: Message) {
