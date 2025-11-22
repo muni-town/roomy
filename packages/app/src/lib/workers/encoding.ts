@@ -209,7 +209,63 @@ export const Kinds2 = <O extends { [key: string]: Codec<any> }>(
 Kinds2.enc = kinds2Enc;
 Kinds2.dec = kinds2Dec;
 
-export const Hash = enhanceCodec(Bytes(32), hex.decode, hex.encode);
+// Safe hex decoder that handles odd-length hex strings by padding with a leading zero
+function safeHexDecode(hexString: string): Uint8Array {
+  // Handle null/undefined
+  if (hexString == null) {
+    throw new Error(`Expected hex string, got ${hexString}`);
+  }
+  
+  if (typeof hexString !== "string") {
+    throw new Error(`Expected hex string, got ${typeof hexString}: ${hexString}`);
+  }
+  
+  // Remove any whitespace and convert to lowercase for consistency
+  let cleaned = hexString.trim().toLowerCase();
+  
+  // Remove common hex prefixes if present
+  if (cleaned.startsWith("0x") || cleaned.startsWith("0X")) {
+    cleaned = cleaned.slice(2);
+  }
+  
+  // Remove any non-hex characters (keep only 0-9, a-f)
+  // Use a more explicit regex to ensure we only get ASCII hex characters
+  cleaned = cleaned.replace(/[^0-9a-f]/g, "");
+  
+  // If empty after cleaning, throw an error
+  if (cleaned.length === 0) {
+    throw new Error(`Invalid hex string: "${hexString}" (no valid hex characters found)`);
+  }
+  
+  // Ensure we have only valid ASCII hex characters (double-check)
+  if (!/^[0-9a-f]*$/.test(cleaned)) {
+    throw new Error(`Invalid hex string contains non-hex characters: "${hexString}" -> "${cleaned}"`);
+  }
+  
+  // Pad with leading zero if odd length
+  const padded = cleaned.length % 2 === 1 ? "0" + cleaned : cleaned;
+  
+  // Final validation: ensure padded string is valid hex and even length
+  if (padded.length % 2 !== 0) {
+    throw new Error(`Hex string has odd length after padding (this should not happen): "${hexString}" -> "${padded}" (length: ${padded.length})`);
+  }
+  
+  if (!/^[0-9a-f]+$/.test(padded)) {
+    throw new Error(`Invalid hex string after cleaning: "${hexString}" -> "${padded}"`);
+  }
+  
+  try {
+    return hex.decode(padded);
+  } catch (error: any) {
+    // Provide more context in the error message
+    const errorMsg = error?.message || String(error);
+    throw new Error(
+      `Failed to decode hex string "${hexString}" (cleaned: "${padded}", length: ${padded.length}): ${errorMsg}`
+    );
+  }
+}
+
+export const Hash = enhanceCodec(Bytes(32), safeHexDecode, hex.encode);
 
 export const Ulid = enhanceCodec(Bytes(16), crockfordDecode, crockfordEncode);
 
