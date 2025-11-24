@@ -1,17 +1,13 @@
-import type {
-  SqlStatement,
-  StreamEvent,
-  MaterializerConfig,
-} from "./backendWorker";
+import type { StreamEvent } from "../types";
 import { _void, type CodecType } from "scale-ts";
-import { eventCodec, eventVariantCodec, id } from "./encoding";
+import { eventCodec, eventVariantCodec, id } from "../encoding";
 import schemaSql from "./schema.sql?raw";
 import { decodeTime } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
 import type { SqliteWorkerInterface } from "./types";
 import type { Agent } from "@atproto/api";
 import type { LeafClient } from "@muni-town/leaf-client";
-import { AsyncChannel } from "./asyncChannel";
+import { AsyncChannel } from "../asyncChannel";
 
 type RawEvent = ReturnType<(typeof eventCodec)["dec"]>;
 type EventKind = RawEvent["variant"]["kind"];
@@ -22,18 +18,6 @@ export type EventType<TVariant extends EventKind | undefined = undefined> =
     : Omit<RawEvent, "variant"> & {
         variant: Extract<RawEvent["variant"], { kind: TVariant }>;
       };
-
-/** Database materializer config. */
-export const config: MaterializerConfig = {
-  initSql: schemaSql
-    .split("\n")
-    .filter((x) => !x.startsWith("--"))
-    .join("\n")
-    .split(";\n\n")
-    .filter((x) => !!x.replace("\n", ""))
-    .map((sql) => ({ sql })),
-  materializer,
-};
 
 const newUserSignals = [
   "space.roomy.message.create.0",
@@ -290,7 +274,7 @@ const materializers: {
     ensureEntity(streamId, event.ulid, event.parent),
     sql`
       insert into comp_room ( entity )
-      values ( ${id(event.ulid)} )
+      values ( ${id(event.ulid)} ) on conflict do nothing
     `,
   ],
   "space.roomy.room.delete.0": async ({ event }) => {
