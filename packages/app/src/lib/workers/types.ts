@@ -110,7 +110,11 @@ export namespace Batch {
   export interface ApplyResult {
     status: "applied";
     batchId: Ulid;
-    results: (Bundle.ApplyResult | Bundle.ApplyError)[];
+    results: (
+      | Bundle.ApplyResult
+      | Bundle.ProfileApplyResult
+      | Bundle.ApplyError
+    )[];
     priority: TaskPriority;
   }
 }
@@ -133,7 +137,7 @@ export namespace Bundle {
   /** For a given batch of incoming events, certain event kinds trigger checks to
    * ensureProfile so we can make sure we have the user for that event. These
    * async requests are bundled together as an optimisation. */
-  interface StatementProfile {
+  export interface StatementProfile {
     status: "profiles";
     dids: Did[];
     statements: SqlStatement[];
@@ -162,6 +166,12 @@ export namespace Bundle {
     | StatementProfile
     | StatementProfileError
     | StatementError;
+
+  export interface ProfileApplyResult {
+    result: "appliedProfiles";
+    firstDid?: Did;
+    output: (QueryResult | ApplyResultError)[];
+  }
 
   export interface ApplyResult {
     result: "applied";

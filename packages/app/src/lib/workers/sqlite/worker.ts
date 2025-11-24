@@ -44,6 +44,7 @@ const LOCK_TIMEOUT_MS = 8000; // 30 seconds
 const newUserSignals = [
   "space.roomy.message.create.0",
   "space.roomy.message.create.1",
+  "space.roomy.room.join.0",
 ];
 
 class SqliteWorkerSupervisor {
@@ -374,10 +375,10 @@ class SqliteWorkerSupervisor {
     const exec = async () => {
       await executeQuery({ sql: `savepoint batch${batch.batchId}` });
 
-      const results: Bundle.ApplyResult[] = [];
+      const results: Batch.ApplyResult["results"] = [];
 
       for (const bundle of batch.bundles) {
-        if (bundle.status === "success") {
+        if (bundle.status === "success" || bundle.status === "profiles") {
           results.push(await this.runStatementBundle(bundle));
         }
       }
@@ -414,16 +415,20 @@ class SqliteWorkerSupervisor {
   }
 
   private async runStatementBundle(
-    bundle: Bundle.StatementSuccess,
-  ): Promise<Bundle.ApplyResult> {
-    await executeQuery({ sql: `savepoint event${bundle.eventId}` });
+    bundle: Bundle.StatementSuccess | Bundle.StatementProfile,
+  ): Promise<Bundle.ApplyResult | Bundle.ProfileApplyResult> {
+    const bundleId =
+      bundle.status === "success"
+        ? bundle.eventId
+        : bundle.dids[0]?.replaceAll(":", "");
+    await executeQuery({ sql: `savepoint event${bundleId}` });
     const queryResults: (QueryResult | ApplyResultError)[] = [];
     for (const statement of bundle.statements) {
       try {
         queryResults.push(await executeQuery(statement));
       } catch (e) {
         console.warn(
-          `Error executing individual statement in savepoint event${bundle.eventId}:`,
+          `Error executing individual statement in savepoint event${bundleId}:`,
           e,
         );
         if (statement && "sql" in statement) {
@@ -438,13 +443,19 @@ class SqliteWorkerSupervisor {
       }
     }
 
-    await executeQuery({ sql: `release event${bundle.eventId}` });
+    await executeQuery({ sql: `release event${bundleId}` });
 
-    return {
-      eventId: bundle.eventId,
-      result: "applied",
-      output: queryResults,
-    };
+    return bundle.status === "success"
+      ? {
+          result: "applied",
+          eventId: bundle.eventId,
+          output: queryResults,
+        }
+      : {
+          result: "appliedProfiles",
+          firstDid: bundle.dids[0],
+          output: queryResults,
+        };
   }
 
   private async runSavepoint(savepoint: Savepoint, depth = 0) {
@@ -584,13 +595,12 @@ class SqliteWorkerSupervisor {
     })();
   }
 
-  /** When mapping incoming events to SQL, 'ensureProfile' checks whether a DID
+  /** When mapping incoming events to SQL, 'ensureProfiles' checks whether a DID
    * exists in the profiles table. If not, it makes an API call to bsky to get some
    * basic info, and then returns SQL to add it to the profiles table. Rather than
    * inserting it immediately and breaking transaction atomicity, this is just a set
    * of flags to indicate that the profile doesn't need to be re-fetched.
    */
-
   async ensureProfiles(
     streamId: StreamHashId,
     profileDids: Set<Did>,
@@ -666,11 +676,15 @@ class SqliteWorkerSupervisor {
         );
       }
 
-      return {
+      const bundle = {
         status: "profiles",
         dids: missingDids,
         statements,
-      };
+      } as const;
+
+      console.log("ensureProfiles bundle", bundle);
+
+      return bundle;
     } catch (e) {
       console.error("Could not ensure profile", e);
       return {

@@ -127,14 +127,7 @@ sqliteWorker.postMessage(
   },
 
   logBackendStatus() {
-    console.log("📊 [backendStatus] Current state:", {
-      did: backendStatus.did,
-      leafConnected: backendStatus.leafConnected,
-      personalStreamId: backendStatus.personalStreamId,
-      authLoaded: backendStatus.authLoaded,
-      loadingSpaces: backendStatus.loadingSpaces,
-      fullObject: { ...backendStatus },
-    });
+    console.log("📊 [backendStatus] Current state:", backendStatus);
     return backendStatus;
   },
 
@@ -183,7 +176,7 @@ sqliteWorker.postMessage(
 
       const result = await backend.runQuery(diagnosticQuery);
       const diagnostic = result.rows?.[0]
-        ? JSON.parse(result.rows[0].diagnostic as string)
+        ? JSON.parse((result.rows[0] as any).diagnostic as string)
         : null;
 
       console.log("🔍 Room Diagnostic for", roomId + ":", diagnostic);
@@ -232,7 +225,7 @@ sqliteWorker.postMessage(
 
       const result = await backend.runQuery(diagnosticQuery);
       const diagnostic = result.rows?.[0]
-        ? JSON.parse(result.rows[0].diagnostic as string)
+        ? JSON.parse((result.rows[0] as any).diagnostic as string)
         : null;
 
       console.log("🔍 Space Tree Diagnostic:", diagnostic);
