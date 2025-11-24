@@ -27,6 +27,7 @@ import { materialize } from "./materializer";
 import { AsyncChannel } from "../asyncChannel";
 import type { Savepoint, SqliteStatus, SqliteWorkerInterface } from "./types";
 import type { BackendInterface } from "../backend/types";
+import { Deferred } from "$lib/utils/deferred";
 
 console.log("Started sqlite worker");
 
@@ -58,36 +59,64 @@ class SqliteWorkerSupervisor {
   #statementChannel = new AsyncChannel<Batch.Statement>();
   #resultChannel = new AsyncChannel<Batch.ApplyResult>();
   #pendingBatches = new Map<string, (result: Batch.ApplyResult) => void>();
+  #authenticated = new Deferred();
 
   constructor() {
     this.#workerId = crypto.randomUUID();
     this.#eventChannel = new AsyncChannel();
   }
 
-  initialize(ports: { backendPort: MessagePort; statusPort: MessagePort }) {
+  initialize(params: {
+    backendPort: MessagePort;
+    statusPort: MessagePort;
+    dbName: string;
+  }) {
     // Monitor port health
-    ports.backendPort.onmessageerror = (error) => {
+    params.backendPort.onmessageerror = (error) => {
       console.error("SQLite worker: Backend port message error", error);
       this.#isConnectionHealthy = false;
     };
 
-    ports.statusPort.onmessageerror = (error) => {
+    params.statusPort.onmessageerror = (error) => {
       console.error("SQLite worker: Status port message error", error);
       this.#isConnectionHealthy = false;
     };
 
-    this.#status = reactiveWorkerState<SqliteStatus>(ports.statusPort, true);
+    this.#status = reactiveWorkerState<SqliteStatus>(params.statusPort, true);
 
     this.#backend = messagePortInterface<{}, BackendInterface>(
-      ports.backendPort,
+      params.backendPort,
       {},
     );
 
     this.#status.workerId = this.#workerId;
     this.#status.isActiveWorker = false; // Initialize to false for reactive state tracking
     this.#status.vfsType = undefined; // Will be set after database initialization
-    console.log("SQLite Worker id", this.#workerId);
+    console.log("SQLite Worker id", this.#workerId, "dbName", params.dbName);
 
+    // initially load only in-memory
+    this.loadDb(params.dbName, false).then(() => {
+      try {
+        const sqliteChannel = new MessageChannel();
+        messagePortInterface<SqliteWorkerInterface, {}>(
+          sqliteChannel.port1,
+          this.getSqliteInterface(),
+        );
+        this.#backend?.setActiveSqliteWorker(sqliteChannel.port2);
+        this.materializer();
+        this.listenStatements();
+        this.listenResults();
+        console.log("Finished initialising SQLite Worker", this.#status);
+      } catch (error) {
+        console.error("SQLite worker initialisation: Fatal error", error);
+        this.cleanup();
+        throw error;
+      }
+    });
+  }
+
+  private async loadDb(dbName: string, persistent: boolean) {
+    console.log("Calling loadDb with dbName", dbName);
     const callback = async () => {
       console.log(
         "Sqlite worker lock obtained: Active worker id:",
@@ -100,34 +129,28 @@ class SqliteWorkerSupervisor {
       globalThis.addEventListener("unhandledrejection", this.cleanup);
 
       try {
-        await initializeDatabase("/mini.db");
+        await initializeDatabase(dbName, persistent);
 
         this.#status.vfsType = getVfsType() || undefined;
-        console.log("SQLite Worker using VFS:", this.#status.vfsType);
+        console.log(
+          "SQLite Worker",
+          dbName,
+          "using VFS:",
+          this.#status.vfsType,
+        );
 
         // initialise DB schema (should be idempotent)
         console.time("initSql");
         await this.runSavepoint({ name: "init", items: initSql });
         console.timeEnd("initSql");
-
-        const sqliteChannel = new MessageChannel();
-        messagePortInterface<SqliteWorkerInterface, {}>(
-          sqliteChannel.port1,
-          this.getSqliteInterface(),
-        );
-        this.#backend?.setActiveSqliteWorker(sqliteChannel.port2);
-        this.materializer();
-        this.listenStatements();
-        this.listenResults();
-        await new Promise(() => {});
       } catch (e) {
-        console.error("SQLite worker: Fatal error", e);
+        console.error("SQLite worker loadDb: Fatal error", e);
         this.cleanup();
         throw e;
       }
     };
 
-    navigator.locks
+    return navigator.locks
       .request(
         "sqlite-worker-lock",
         { mode: "exclusive", signal: AbortSignal.timeout(LOCK_TIMEOUT_MS) },
@@ -137,6 +160,8 @@ class SqliteWorkerSupervisor {
         if (error.name === "TimeoutError") {
           console.warn("SQLite worker: Lock timeout, attempting steal");
           await this.attemptLockSteal(callback);
+        } else {
+          throw error;
         }
       });
   }
@@ -278,8 +303,13 @@ class SqliteWorkerSupervisor {
 
   private getSqliteInterface(): SqliteWorkerInterface {
     return {
+      authenticate: async (did) => {
+        await this.loadDb(did, true);
+        this.#status.authenticated = did;
+        this.#authenticated.resolve();
+        console.log("✅ Authenticated SQLite Worker with did:", did);
+      },
       materializeBatch: async (eventsBatch, priority) => {
-        console.log("Running materialiseBatch in SqliteWorkerInterface", this);
         return this.materializeBatch(eventsBatch, priority);
       },
       runQuery: async (statement) => {
@@ -295,9 +325,14 @@ class SqliteWorkerSupervisor {
           }
         });
       },
-      createLiveQuery: async (id, port, statement) =>
-        createLiveQuery(id, port, statement),
+      createLiveQuery: async (id, port, statement) => {
+        await this.#authenticated.promise;
+        if (!this.#status.authenticated) throw new Error("Not authenticated");
+        createLiveQuery(id, port, statement);
+      },
       deleteLiveQuery: async (id) => {
+        await this.#authenticated.promise;
+        if (!this.#status.authenticated) throw new Error("Not authenticated");
         deleteLiveQuery(id);
       },
       ping: async () => {
@@ -327,11 +362,15 @@ class SqliteWorkerSupervisor {
           ),
         };
       },
-      runSavepoint: async (savepoint) => this.runSavepoint(savepoint),
+      runSavepoint: async (savepoint) => {
+        if (!this.#status.authenticated) throw new Error("Not authenticated");
+        return this.runSavepoint(savepoint);
+      },
     };
   }
 
   private async runStatementBatch(batch: Batch.Statement) {
+    console.log("Running Statement Batch", batch);
     const exec = async () => {
       await executeQuery({ sql: `savepoint batch${batch.batchId}` });
 
@@ -351,7 +390,7 @@ class SqliteWorkerSupervisor {
       };
     };
 
-    console.log("runSavepoint", batch);
+    console.log("runStatementBatch", batch);
     disableLiveQueries();
 
     // This lock makes sure that the JS tasks don't interleave some other query executions in while we
@@ -366,6 +405,11 @@ class SqliteWorkerSupervisor {
       streamId: batch.streamId,
       latestEvent: batch.latestEvent,
     });
+
+    console.log(
+      "Ran statement batch, updated streamCursors to:",
+      batch.latestEvent,
+    );
     return result;
   }
 
@@ -479,7 +523,7 @@ class SqliteWorkerSupervisor {
               const payloadBytes = new Uint8Array(e.payload);
               console.warn(
                 `Skipping malformed event (idx ${e.idx}): Failed to decode ${payloadBytes.length} bytes.`,
-                `This is likely from an older buggy encoder. Error:`,
+                `Error:`,
                 error instanceof Error ? error.message : error,
               );
               // Return null to filter out this event

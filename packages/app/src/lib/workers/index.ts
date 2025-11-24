@@ -89,6 +89,7 @@ sqliteWorker.postMessage(
   {
     backendPort: sqliteWorkerChannel.port2,
     statusPort: workerStatusChannel.port2,
+    dbName: "temp",
   },
   [sqliteWorkerChannel.port2, workerStatusChannel.port2],
 );

@@ -1,14 +1,17 @@
 import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
 import type { Batch } from "../types";
 import type { QueryResult } from "./setup";
+import type { Did } from "@atproto/api";
 
 export interface SqliteStatus {
   isActiveWorker: boolean;
+  authenticated: string;
   workerId: string;
   vfsType: string;
 }
 
 export type SqliteWorkerInterface = {
+  authenticate(did: Did): Promise<void>;
   materializeBatch(
     events: Batch.Event,
     priority: "normal" | "background",

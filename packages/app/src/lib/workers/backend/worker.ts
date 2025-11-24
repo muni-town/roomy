@@ -28,6 +28,7 @@ import type {
   SqliteWorkerInterface,
   SqlStatement,
 } from "../sqlite/types";
+import { isDid, type Did } from "@atproto/api";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -87,41 +88,49 @@ class WorkerSupervisor {
       sqlStatements: SqlStatement[];
       latestEvent: number;
     }>();
-    if (!did) throw new Error("DID not defined on client");
+    if (!did || !isDid(did)) throw new Error("DID not defined on client");
 
-    // try to fetch or create the personal stream
-    const loading = { state: "loading" } as const;
-    this.#auth = loading;
-    this.#status.authState = loading;
+    console.log("Authenticating SQLite worker with did", did);
 
-    client
-      .ensurePersonalStream(did)
-      .then((personalStream) => {
-        console.log("Got personalStreamId", personalStream);
-        client.ready.then((readyState) => {
-          this.#auth = {
-            state: "authenticated",
-            client,
-            eventChannel: readyState.eventChannel,
-            statementChannel,
-          };
-          this.#status.authState = {
-            state: "authenticated",
-            did,
-            personalStream,
-          };
-          this.runMaterializer();
+    this.sqlite
+      .authenticate(did)
+      .then(() => {
+        console.log("Authenticated Sqlite worker");
+        // try to fetch or create the personal stream
+        const loading = { state: "loading" } as const;
+        this.#auth = loading;
+        this.#status.authState = loading;
 
-          client.personalStreamFetched.promise.then(() => {
-            this.loadStreams();
+        client
+          .ensurePersonalStream(did)
+          .then((personalStream) => {
+            console.log("Got personalStreamId", personalStream);
+            client.ready.then((readyState) => {
+              this.#auth = {
+                state: "authenticated",
+                client,
+                eventChannel: readyState.eventChannel,
+                statementChannel,
+              };
+              this.#status.authState = {
+                state: "authenticated",
+                did,
+                personalStream,
+              };
+              this.runMaterializer();
+
+              client.personalStreamFetched.promise.then(() => {
+                this.loadStreams();
+              });
+            });
+          })
+          .catch((e) => {
+            const error = { state: "error", error: e } as const;
+            this.#auth = error;
+            this.#status.authState = error;
           });
-        });
       })
-      .catch((e) => {
-        const error = { state: "error", error: e } as const;
-        this.#auth = error;
-        this.#status.authState = error;
-      });
+      .catch((e) => console.error("Failed to authenticate sqlite worker", e));
   }
 
   private async runMaterializer() {
@@ -428,23 +437,24 @@ class SqliteSupervisor {
     return this.#state.state === "ready";
   }
 
-  get proxy() {
+  get sqliteWorker() {
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialised");
     return this.#state.sqliteWorker;
   }
 
+  async authenticate(did: Did) {
+    await this.#ready.promise;
+    return await this.sqliteWorker.authenticate(did);
+  }
+
   async setReady(proxy: SqliteWorkerInterface) {
-    console.log("SQLite Supervisor setReady");
     const previousSchemaVersion = await prevStream.getSchemaVersion();
     console.log(
       "SQLite Supervisor setReady got schemaVersion",
       previousSchemaVersion,
     );
 
-    console.log("SQLite Supervisor setReady setting schemaVersion");
-
-    console.log("SQLite Supervisor setReady setting state/resolving");
     this.#state = {
       state: "ready",
       sqliteWorker: proxy,
@@ -455,8 +465,8 @@ class SqliteSupervisor {
       // Reset the local database cache when the schema version changes.
       await this.resetLocalDatabase();
     }
+
     await prevStream.setSchemaVersion(CONFIG.streamSchemaVersion);
-    console.log("SQLite Supervisor setReady resolved");
   }
 
   async materializeBatch(
@@ -478,6 +488,7 @@ class SqliteSupervisor {
   async runQuery<T = unknown>(statement: SqlStatement) {
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialized.");
+    console.log("runQuery", statement);
     return this.#state.sqliteWorker.runQuery(statement) as Promise<
       QueryResult<T>
     >;

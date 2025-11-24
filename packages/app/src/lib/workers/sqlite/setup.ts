@@ -9,7 +9,7 @@ import { udfs } from "./udf";
 
 let sqlite3: Sqlite3Static | null = null;
 let db: OpfsSAHPoolDatabase | Database | null = null;
-let initPromise: Promise<void> | null = null;
+let initPromises: Map<string, Promise<void>> = new Map();
 let vfsType: string | null = null;
 
 export function isDatabaseReady(): boolean {
@@ -35,9 +35,21 @@ const authorizer: Parameters<
   return 0;
 };
 
-export async function initializeDatabase(dbName: string): Promise<void> {
-  if (initPromise) return initPromise;
-  initPromise = (async () => {
+(globalThis as any).deleteDBs = async () => {
+  const pool = await sqlite3!.installOpfsSAHPoolVfs({
+    initialCapacity: 5,
+  });
+  await pool.wipeFiles();
+  console.log("Wiped all db files");
+};
+
+export async function initializeDatabase(
+  dbName: string,
+  persistent: boolean,
+): Promise<void> {
+  const promise = initPromises.get(dbName);
+  if (promise) return promise;
+  const newPromise = (async () => {
     if (!sqlite3) {
       sqlite3 = await initSqlite3({
         print: console.log,
@@ -47,30 +59,38 @@ export async function initializeDatabase(dbName: string): Promise<void> {
 
     let lastErr: unknown = null;
 
-    // Strategy 1: Try OpfsSAHPoolVfs (best performance, no COOP/COEP required)
-    // Retry a few times because SAH Pool can transiently fail during context handoff
-    console.log("Attempting to initialize with OpfsSAHPoolVfs...");
-    for (let attempt = 0; attempt < 6; attempt++) {
-      try {
-        const pool = await sqlite3.installOpfsSAHPoolVfs({});
-        db = new pool.OpfsSAHPoolDb(dbName);
-        db.exec(`pragma locking_mode = exclusive`);
-        db.exec(`pragma synchronous = normal`);
-        db.exec(`pragma journal_mode = wal`);
-        vfsType = "opfs-sahpool";
-        break;
-      } catch (e) {
-        lastErr = e;
-        await new Promise((r) => setTimeout(r, 100 * Math.pow(2, attempt)));
+    if (persistent) {
+      // Strategy 1: Try OpfsSAHPoolVfs (best performance, no COOP/COEP required)
+      // Retry a few times because SAH Pool can transiently fail during context handoff
+      console.log("Attempting to initialize with OpfsSAHPoolVfs...");
+      for (let attempt = 0; attempt < 6; attempt++) {
+        try {
+          const pool = await sqlite3.installOpfsSAHPoolVfs({
+            initialCapacity: 5,
+          });
+          db = new pool.OpfsSAHPoolDb(dbName);
+          db.exec(`pragma locking_mode = exclusive`);
+          db.exec(`pragma synchronous = normal`);
+          db.exec(`pragma journal_mode = wal`);
+          vfsType = "opfs-sahpool";
+          break;
+        } catch (e) {
+          lastErr = e;
+          // if we run into 'SAH Pool is full' errors again, we can call
+          // await globalThis.deleteDBs()
+          await new Promise((r) => setTimeout(r, 100 * Math.pow(2, attempt)));
+        }
       }
+
+      if (!db)
+        console.warn(
+          "Failed to init persistent DB, will fall back to in-memory",
+        );
     }
 
     // Fall back to in-memory database
     if (!db) {
-      console.warn(
-        "All persistent storage options failed, falling back to in-memory database...",
-        lastErr,
-      );
+      console.log("Loading in-memory database...", lastErr);
       try {
         db = new sqlite3.oo1.DB(":memory:");
         db.exec(`pragma locking_mode = exclusive`);
@@ -107,7 +127,8 @@ export async function initializeDatabase(dbName: string): Promise<void> {
         : db?.createFunction(udf.name, udf.f),
     );
   })();
-  await initPromise;
+  initPromises.set(dbName, newPromise);
+  await newPromise;
 }
 
 export type QueryResult<Row = { [key: string]: unknown }> = {
@@ -116,10 +137,11 @@ export type QueryResult<Row = { [key: string]: unknown }> = {
 } & {
   actions: Action[];
 };
+
 export async function executeQuery(
   statement: SqlStatement,
 ): Promise<QueryResult> {
-  if (!db && initPromise) await initPromise;
+  if (!db && initPromises) await initPromises;
   if (!db || !sqlite3) throw new Error("database_not_initialized");
 
   try {
@@ -142,7 +164,7 @@ const preparedSqlCache: Map<string, PreparedStatement> = new Map();
 async function prepareSql(
   statement: SqlStatement,
 ): Promise<{ prepared: PreparedStatement; actions: Action[] }> {
-  if (!db && initPromise) await initPromise;
+  if (!db && initPromises) await initPromises;
   if (!db || !sqlite3) throw new Error("database_not_initialized");
 
   authorizerQueue = [];
@@ -219,6 +241,7 @@ export async function createLiveQuery(
   port: MessagePort,
   statement: SqlStatement,
 ) {
+  console.log("Creating live query", id, statement);
   liveQueries.set(id, { port, status: { kind: "unprepared", statement } });
   await updateLiveQuery(id);
 }
