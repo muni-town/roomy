@@ -1,4 +1,4 @@
-import type { StreamEvent } from "../types";
+import type { StreamEvent, Bundle, Ulid } from "../types";
 import { _void, type CodecType } from "scale-ts";
 import { eventCodec, eventVariantCodec, id } from "../encoding";
 import schemaSql from "./schema.sql?raw";
@@ -901,6 +901,62 @@ const materializers: {
 };
 
 // UTILS
+
+/**
+ * Helper to wrap materializer logic and automatically create success/error bundles.
+ * This eliminates the repetitive bundle-wrapping code in each materializer.
+ */
+function bundleSuccess(
+  event: Event,
+  statements: SqlStatement | SqlStatement[],
+): Bundle.Statement {
+  return {
+    eventId: event.ulid as Ulid,
+    status: "success",
+    statements: Array.isArray(statements) ? statements : [statements],
+  };
+}
+
+/**
+ * Helper to create an error bundle with a consistent format.
+ */
+function bundleError(event: Event, error: Error | string): Bundle.Statement {
+  return {
+    eventId: event.ulid as Ulid,
+    status: "error",
+    message: typeof error === "string" ? error : error.message,
+  };
+}
+
+/**
+ * Main materialize function called by the sqlite worker for each event.
+ * This provides a simpler interface than the full materializer pipeline.
+ */
+export async function materialize(
+  event: Event,
+  opts: { streamId: string; user: string },
+): Promise<Bundle.Statement> {
+  const kind = event.variant.kind;
+  const data = event.variant.data;
+
+  try {
+    const handler = materializers[kind];
+    if (!handler) {
+      throw new Error(`No materializer found for event kind: ${kind}`);
+    }
+
+    const statements = await handler({
+      ...opts,
+      event,
+      data,
+    } as any);
+
+    return bundleSuccess(event, statements);
+  } catch (error) {
+    console.error(`Error materializing event ${event.ulid}:`, error);
+    return bundleError(event, error instanceof Error ? error : String(error));
+  }
+}
 
 function ensureEntity(
   streamId: string,
