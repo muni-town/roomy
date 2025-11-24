@@ -2,10 +2,11 @@
   import { PopoverEmojiPicker } from "@fuxui/social";
   import { Button, Toggle, Tooltip } from "@fuxui/base";
   import IconLucideSmilePlus from "~icons/lucide/smile-plus";
-  import { backend, backendStatus } from "$lib/workers";
+  import { backend } from "$lib/workers";
   import { current } from "$lib/queries.svelte";
   import { ulid } from "ulidx";
   import type { Message } from "../ChatArea.svelte";
+  import { did } from "$lib/status.svelte";
 
   let {
     message,
@@ -31,9 +32,7 @@
 
     // If we haven't already made this reaction to this post.
     if (
-      !message.reactions.find(
-        (x) => x.userId == backendStatus.did && x.reaction == emoji,
-      )
+      !message.reactions.find((x) => x.userId == did() && x.reaction == emoji)
     ) {
       backend.sendEvent(current.space.id, {
         ulid: ulid(),
@@ -55,9 +54,7 @@
 
     // If we haven't already made this reaction to this post.
     if (
-      !message.reactions.find(
-        (x) => x.userId == backendStatus.did && x.reaction == emoji,
-      )
+      !message.reactions.find((x) => x.userId == did() && x.reaction == emoji)
     ) {
       backend.sendEvent(current.space.id, {
         ulid: ulid(),
@@ -97,7 +94,7 @@
         {#snippet child({ props })}
           <Toggle
             {...props}
-            pressed={backendStatus.did! in users}
+            pressed={did()! in users}
             onclick={() => onEmojiButtonClick(emoji)}
             class="px-2 h-7 data-[state=on]:bg-accent-400/20 dark:data-[state=on]:bg-accent-500/15"
           >

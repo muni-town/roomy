@@ -187,7 +187,7 @@
       const { uri } = await backend.uploadToPds(
         await cleanedFile.arrayBuffer(),
         {
-          mimeType: media.type,
+          mimetype: media.type,
         },
       );
 
