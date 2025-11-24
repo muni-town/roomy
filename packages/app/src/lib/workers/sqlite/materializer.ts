@@ -116,7 +116,7 @@ const statementMap: {
     ensureEntity(streamId, event.ulid, event.parent),
     sql`
       insert into comp_room ( entity )
-      values ( ${id(event.ulid)} )
+      values ( ${id(event.ulid)} ) on conflict do nothing
     `,
   ],
   "space.roomy.room.delete.0": async ({ event }) => {
