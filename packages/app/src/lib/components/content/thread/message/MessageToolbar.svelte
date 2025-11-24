@@ -39,7 +39,10 @@
   });
 
   let canEditAndDelete = $derived(
-    current.isSpaceAdmin || message.authorDid == backendStatus.did,
+    backendStatus.authState &&
+      backendStatus.authState.state === "authenticated" &&
+      (current.isSpaceAdmin ||
+        message.authorDid == backendStatus.authState.did),
   );
 
   async function deleteMessage() {

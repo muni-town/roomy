@@ -21,8 +21,9 @@
   } = $props();
 
   async function leaveSpace() {
-    if (!current.space || !backendStatus.personalStreamId) return;
-    await backend.sendEvent(backendStatus.personalStreamId, {
+    if (backendStatus.authState?.state !== "authenticated") return;
+    if (!current.space || !backendStatus.authState.personalStream) return;
+    await backend.sendEvent(backendStatus.authState.personalStream, {
       ulid: ulid(),
       parent: undefined,
       variant: {

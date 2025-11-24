@@ -49,11 +49,15 @@
         ? (await backend.resolveSpaceFromHandleOrDid(page.params.space))
             ?.spaceId
         : page.params.space;
-      if (!spaceId || !backendStatus.personalStreamId) {
+      if (backendStatus.authState?.state !== "authenticated") {
+        toast.error("It doesn't look like you're logged in");
+        return;
+      }
+      if (!spaceId || !backendStatus.authState.personalStream) {
         toast.error("Could not join space. It's possible it does not exist.");
         return;
       }
-      await backend.sendEvent(backendStatus.personalStreamId, {
+      await backend.sendEvent(backendStatus.authState.personalStream, {
         ulid: ulid(),
         parent: undefined,
         variant: {
@@ -362,14 +366,14 @@
 
   async function setPageReadMarker() {
     if (
-      !backendStatus.personalStreamId ||
+      backendStatus.authState?.state !== "authenticated" ||
       !page.params.space ||
       !page.params.object ||
       sentLastReadMarker === true
     )
       return;
     sentLastReadMarker = true;
-    await backend.sendEvent(backendStatus.personalStreamId, {
+    await backend.sendEvent(backendStatus.authState.personalStream, {
       ulid: ulid(),
       parent: undefined,
       variant: {
@@ -384,7 +388,7 @@
 
   $effect(() => {
     if (
-      !backendStatus.personalStreamId ||
+      backendStatus.authState?.state !== "authenticated" ||
       !page.params.space ||
       !page.params.object ||
       !object?.lastRead

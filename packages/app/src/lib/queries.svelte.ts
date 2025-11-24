@@ -4,6 +4,7 @@ import { LiveQuery } from "./liveQuery.svelte";
 import { sql } from "./utils/sqlTemplate";
 import { backend, backendStatus } from "./workers";
 import { id } from "./workers/encoding";
+import type { AuthStates } from "./workers/backend/types";
 
 export type SpaceMeta = {
   id: string;
@@ -51,6 +52,17 @@ export let spaces: { list: SpaceMeta[] } = $state({ list: [] });
 /** The sidebar tree for the currently selected space. */
 export let spaceTree: LiveQuery<SpaceTreeItem> | { result?: SpaceTreeItem[] } =
   $state({ result: undefined });
+
+let flatTreeQuery: LiveQuery<{
+  id: string;
+  parent: string | null;
+  type: "category" | "channel" | "thread" | "page";
+  name: string;
+  lastRead: number;
+  latestEntity: string | null;
+  unreadCount: number;
+  depth: number;
+}>;
 
 export let current = $state({
   space: undefined as SpaceMeta | undefined,
@@ -124,8 +136,19 @@ function buildTree(
 // All of our queries have to be made in the scope of an effect root but we can't export them from
 // within the scope.
 $effect.root(() => {
-  spacesQuery = new LiveQuery(
-    () => sql`-- spaces
+  $effect(() => {
+    console.log("authState", backendStatus.authState);
+  });
+
+  $effect(() => {
+    if (backendStatus.authState?.state !== "authenticated") {
+      console.warn(
+        "Tried to query with personal stream ID but not authenticated yet",
+      );
+      return;
+    }
+    spacesQuery = new LiveQuery(
+      () => sql`-- spaces
       select json_object(
           'id', id(cs.entity),
           'name', ci.name,
@@ -142,82 +165,77 @@ $effect.root(() => {
       from comp_space cs
       join comp_info ci on cs.entity = ci.entity
       join entities e on e.id = cs.entity
-      where e.stream_id = ${backendStatus.personalStreamId && id(backendStatus.personalStreamId)} 
+      where e.stream_id = ${backendStatus.authState && id((backendStatus.authState as AuthStates.ReactiveAuthenticated).personalStream)} 
         and hidden = 0
     `,
-    (row) => JSON.parse(row.json),
-  );
+      (row) => JSON.parse(row.json),
+    );
+  });
 
   //
   // was in above query json bit --'admins', (select json_group_array(admin_id) from space_admins where space_id = id)
 
   // spaceTree uses a custom live query that processes all rows into a tree structure
-  const flatTreeQuery = new LiveQuery<{
-    id: string;
-    parent: string | null;
-    type: "category" | "channel" | "thread" | "page";
-    name: string;
-    lastRead: number;
-    latestEntity: string | null;
-    unreadCount: number;
-    depth: number;
-  }>(
-    () => sql`-- spaceTree (recursive CTE)
-      with recursive room_tree as (
-        -- Base case: top-level rooms (categories, channels, pages without parents)
+
+  $effect(() => {
+    flatTreeQuery = new LiveQuery(
+      () => sql`-- spaceTree (recursive CTE)
+        with recursive room_tree as (
+          -- Base case: top-level rooms (categories, channels, pages without parents)
+          select 
+            e.id,
+            e.parent,
+            r.label as type,
+            i.name,
+            coalesce(l.timestamp, 1) as lastRead,
+            (select max(id) from entities where parent = e.id) as latestEntity,
+            coalesce(l.unread_count, 0) as unreadCount,
+            0 as depth
+          from entities e
+            join comp_room r on e.id = r.entity
+            join comp_info i on e.id = i.entity
+            left join comp_last_read l on e.id = l.entity
+          where e.stream_id = ${current.space?.id && id(current.space.id)}
+            and e.parent is null
+          
+          union all
+          
+          -- Recursive case: children of rooms
+          select 
+            e.id,
+            e.parent,
+            r.label as type,
+            i.name,
+            coalesce(l.timestamp, 1) as lastRead,
+            (select max(id) from entities where parent = e.id) as latestEntity,
+            coalesce(l.unread_count, 0) as unreadCount,
+            rt.depth + 1 as depth
+          from entities e
+            join comp_room r on e.id = r.entity
+            join comp_info i on e.id = i.entity
+            left join comp_last_read l on e.id = l.entity
+            join room_tree rt on e.parent = rt.id
+          where e.stream_id = ${current.space?.id && id(current.space.id)}
+        )
         select 
-          e.id,
-          e.parent,
-          r.label as type,
-          i.name,
-          coalesce(l.timestamp, 1) as lastRead,
-          (select max(id) from entities where parent = e.id) as latestEntity,
-          coalesce(l.unread_count, 0) as unreadCount,
-          0 as depth
-        from entities e
-          join comp_room r on e.id = r.entity
-          join comp_info i on e.id = i.entity
-          left join comp_last_read l on e.id = l.entity
-        where e.stream_id = ${current.space?.id && id(current.space.id)}
-          and e.parent is null
-        
-        union all
-        
-        -- Recursive case: children of rooms
-        select 
-          e.id,
-          e.parent,
-          r.label as type,
-          i.name,
-          coalesce(l.timestamp, 1) as lastRead,
-          (select max(id) from entities where parent = e.id) as latestEntity,
-          coalesce(l.unread_count, 0) as unreadCount,
-          rt.depth + 1 as depth
-        from entities e
-          join comp_room r on e.id = r.entity
-          join comp_info i on e.id = i.entity
-          left join comp_last_read l on e.id = l.entity
-          join room_tree rt on e.parent = rt.id
-        where e.stream_id = ${current.space?.id && id(current.space.id)}
-      )
-      select 
-        id(id) as id,
-        id(parent) as parent,
-        type,
-        name,
-        lastRead,
-        id(latestEntity) as latestEntity,
-        unreadCount,
-        depth
-      from room_tree
-      order by depth, type, name
-  `,
-  );
+          id(id) as id,
+          id(parent) as parent,
+          type,
+          name,
+          lastRead,
+          id(latestEntity) as latestEntity,
+          unreadCount,
+          depth
+        from room_tree
+        order by depth, type, name
+    `,
+    );
+  });
 
   // Build tree structure reactively from flat results
   $effect(() => {
     if (flatTreeQuery.result) {
-      console.log("flatTree", flatTreeQuery.result);
+      // console.log("flatTree", flatTreeQuery.result);
       spaceTree.result = buildTree(flatTreeQuery.result);
     } else {
       spaceTree.result = undefined;
@@ -233,13 +251,15 @@ $effect.root(() => {
           ? await backend.resolveHandleForSpace(x.id, x.handle_account)
           : undefined,
       })) || [],
-    ).then((s) => (spaces.list = s));
+    ).then((s) => {
+      spaces.list = s;
+    });
   });
 
   // Update the current.space
   $effect(() => {
-    if (page.params.space) {
-      spacesQuery.result;
+    console.log("searching for current space", page.params.space);
+    if (page.params.space && spacesQuery.result) {
       if (page.params.space.includes(".")) {
         // Resolve the space handle to a space ID
         backend
@@ -264,16 +284,26 @@ $effect.root(() => {
         current.space = page.params.space
           ? spacesQuery.result?.find((x) => x.id == page.params.space)
           : undefined;
+        console.log("current.space", current.space);
       }
     }
   });
   // Update current.isSpaceAdmin
   $effect(() => {
-    if (backendStatus.did) {
+    if (backendStatus.authState?.state !== "authenticated") {
+      console.warn(
+        "Tried to query with personal stream ID but not authenticated yet",
+      );
+      return;
+    }
+    console.log("Updating current.isSpaceAdmin");
+    if (backendStatus.authState.did) {
       current.isSpaceAdmin =
         current.space?.permissions?.some(
           (permission) =>
-            permission[0] === backendStatus.did && permission[1] === "admin",
+            permission[0] ===
+              (backendStatus.authState as AuthStates.ReactiveAuthenticated)
+                .did && permission[1] === "admin",
         ) || false;
     }
   });

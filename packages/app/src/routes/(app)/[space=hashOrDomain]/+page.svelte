@@ -19,17 +19,26 @@
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
 
+  $effect(() => {
+    $state.snapshot(current);
+  });
+
   async function joinSpace() {
     try {
       const spaceId = page.params.space?.includes(".")
         ? (await backend.resolveSpaceFromHandleOrDid(page.params.space))
             ?.spaceId
         : page.params.space;
-      if (!spaceId || !backendStatus.personalStreamId) {
+      if (backendStatus.authState?.state !== "authenticated") {
+        toast.error("It doesn't look like you're logged in");
+        return;
+      }
+
+      if (!spaceId) {
         toast.error("Could not join space. It's possible it does not exist.");
         return;
       }
-      await backend.sendEvent(backendStatus.personalStreamId, {
+      await backend.sendEvent(backendStatus.authState.personalStream, {
         ulid: ulid(),
         parent: undefined,
         variant: {

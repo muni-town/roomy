@@ -85,7 +85,11 @@
     return defaultInfo;
   });
 
-  let messageByMe = $derived(message.authorDid == backendStatus.did);
+  let messageByMe = $derived(
+    backendStatus.authState &&
+      "did" in backendStatus.authState &&
+      message.authorDid == backendStatus.authState.did,
+  );
 
   let isDrawerOpen = $state(false);
 
