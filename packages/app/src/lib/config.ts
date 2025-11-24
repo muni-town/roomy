@@ -4,5 +4,6 @@ export const CONFIG = {
   streamHandleNsid:
     import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.stream.handle.dev",
   streamSchemaVersion: "1",
+  databaseSchemaVersion: "1",
   atprotoOauthScope: "atproto transition:generic transition:chat.bsky",
 };

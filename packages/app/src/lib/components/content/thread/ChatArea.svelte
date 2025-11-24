@@ -23,7 +23,7 @@
   export type Message = {
     id: string;
     content: string;
-    authorDid: string;
+    authorDid: string | null;
     authorName: string | null;
     authorHandle: string | null;
     authorAvatar: string | null;
@@ -131,7 +131,7 @@
       from entities e
         join comp_content c on c.entity = e.id
         join edges author_edge on author_edge.head = e.id and author_edge.label = 'author'
-        join comp_user u on u.did = author_edge.tail
+        left join comp_user u on u.did = author_edge.tail
         join comp_info i on i.entity = author_edge.tail
         left join comp_override_meta o on o.entity = e.id
         left join comp_info oai on oai.entity = o.author
@@ -180,7 +180,8 @@
       // Calculate mergeWithPrevious
       let mergeWithPrevious =
         prevMessageNorm?.author == messageNorm.author &&
-        messageNorm.timestamp - prevMessageNorm.timestamp < 1000 * 60 * 5;
+        messageNorm.timestamp - (prevMessageNorm?.timestamp || 0) <
+          1000 * 60 * 5;
 
       return {
         ...message,
@@ -316,26 +317,37 @@
             assigned, so that it's scroll integration works properly.
           -->
           {#key viewport}
-            <Virtualizer
-              bind:this={virtualizer}
-              data={timeline}
-              scrollRef={viewport}
-              overscan={5}
-              shift={isShifting}
-              getKey={(x) => x.id}
-              onscroll={(o) => {
-                if (o < 100) showLastN += 50;
-              }}
-            >
-              {#snippet children(message: Message)}
-                <ChatMessage
-                  {message}
-                  {messagingState}
-                  {startThreading}
-                  {toggleSelect}
-                />
-              {/snippet}
-            </Virtualizer>
+            {#if timeline.length > 0}
+              <Virtualizer
+                bind:this={virtualizer}
+                data={timeline}
+                scrollRef={viewport}
+                overscan={5}
+                shift={isShifting}
+                getKey={(x) => {
+                  // Note: for some reason, sometimes `x` and `message` below are
+                  // undefined, so we have to use the conditionals to make sure we
+                  // don't try access properties of `undefined`.
+                  // 
+                  // It might be good to figure out the root cause and fix that sometime.
+                  return x?.id;
+                }}
+                onscroll={(o) => {
+                  if (o < 100) showLastN += 50;
+                }}
+              >
+                {#snippet children(message?: Message)}
+                  {#if message}
+                    <ChatMessage
+                      {message}
+                      {messagingState}
+                      {startThreading}
+                      {toggleSelect}
+                    />
+                  {/if}
+                {/snippet}
+              </Virtualizer>
+            {/if}
           {/key}
         </ol>
       </div>

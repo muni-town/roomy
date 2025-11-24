@@ -51,7 +51,7 @@
   // re-hash this in the UI.
   let authorCanMasquerade = $derived(true);
   let metadata: {
-    id: string;
+    id: string | null;
     name?: string;
     handle?: string;
     avatarUrl?: string;
@@ -226,7 +226,7 @@
             <Avatar.Root class="size-8 sm:size-10">
               <Avatar.Image src={metadata.avatarUrl} class="rounded-full" />
               <Avatar.Fallback>
-                <AvatarBeam name={metadata.id} />
+                <AvatarBeam name={metadata.id || 'system'} />
               </Avatar.Fallback>
             </Avatar.Root>
           </button>

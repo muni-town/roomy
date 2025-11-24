@@ -33,6 +33,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
+      - name: Get app version
+        shell: bash
+        run: echo "APP_VERSION=$(jq -r .version packages/app/src-tauri/tauri.conf.json)" >> $GITHUB_ENV
+
+      - name: Validate app version matches tag
+        shell: bash
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          if [ "$APP_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Version mismatch: tauri.conf.json=$APP_VERSION, tag=$TAG_VERSION"
+            exit 1
+          fi
+          echo "Version $APP_VERSION validated"
+
       - name: Install pnpm
         uses: pnpm/action-setup@v4
       - name: setup node
@@ -50,6 +64,38 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: '.packages/app/src-tauri -> target'
+
+        # Windows MSI requires numeric-only pre-release identifiers
+      - name: Patch version for Windows MSI
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        run: |
+          CURRENT_VERSION=$(jq -r .version packages/app/src-tauri/tauri.conf.json)
+          echo "Original version: $CURRENT_VERSION"
+
+          # Convert non-numeric suffixes to numeric (alpha->1, beta->2, rc->3, fallback->1)
+          if [[ "$CURRENT_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-(.+)$ ]]; then
+            BASE="${BASH_REMATCH[1]}"
+            SUFFIX="${BASH_REMATCH[2]}"
+
+            if [[ "$SUFFIX" =~ ^[0-9]+$ ]] && [ "$SUFFIX" -le 65535 ]; then
+              NEW_VERSION="$CURRENT_VERSION"
+            else
+              case "$SUFFIX" in
+                alpha*) NUMERIC_SUFFIX="1" ;;
+                beta*) NUMERIC_SUFFIX="2" ;;
+                rc*) NUMERIC_SUFFIX="3" ;;
+                *) NUMERIC_SUFFIX="1" ;;
+              esac
+              NEW_VERSION="$BASE-$NUMERIC_SUFFIX"
+            fi
+          else
+            NEW_VERSION="$CURRENT_VERSION"
+          fi
+
+          echo "Patched version for Windows MSI: $NEW_VERSION"
+          jq --arg version "$NEW_VERSION" '.version = $version' packages/app/src-tauri/tauri.conf.json > tmp.json
+          mv tmp.json packages/app/src-tauri/tauri.conf.json
 
       - name: Generate Build Assets
         run: |
@@ -73,10 +119,6 @@ jobs:
         with:
           ndk-version: r25b
           local-cache: true
-
-      - name: Get app version
-        if: ${{ matrix.android }}
-        run: echo "APP_VERSION=$(jq -r .version packages/app/src-tauri/tauri.conf.json)" >> $GITHUB_ENV
 
       - name: Setup Android Signing
         if: ${{ matrix.android }}
@@ -107,6 +149,7 @@ jobs:
           files: |
             ${{ github.workspace }}/packages/app/src-tauri/gen/android/app/build/outputs/apk/universal/release/roomy-chat_*.apk
           append_body: true
+          prerelease: true
           name: ${{ env.APP_VERSION }}
           token: ${{ secrets.GITHUB_TOKEN }}
 

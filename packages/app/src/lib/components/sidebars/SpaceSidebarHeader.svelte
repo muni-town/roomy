@@ -23,6 +23,18 @@
   async function leaveSpace() {
     if (backendStatus.authState?.state !== "authenticated") return;
     if (!current.space || !backendStatus.authState.personalStream) return;
+
+    // Tell the space that we are leaving the member list
+    await backend.sendEvent(current.space.id, {
+      ulid: ulid(),
+      parent: undefined,
+      variant: {
+        kind: "space.roomy.room.leave.0",
+        data: undefined,
+      },
+    });
+
+    // Remove the space from our personal space list
     await backend.sendEvent(backendStatus.authState.personalStream, {
       ulid: ulid(),
       parent: undefined,
