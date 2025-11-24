@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import UserProfile from "$lib/components/user/UserProfile.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
-  import type { Profile } from "$lib/workers/types";
+  import type { Profile } from "$lib/workers/Profile";
   import { backend } from "$lib/workers";
 
   let profile = $state(undefined) as Profile | undefined;

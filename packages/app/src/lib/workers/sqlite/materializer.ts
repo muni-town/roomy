@@ -3,13 +3,8 @@ import { eventCodec, eventVariantCodec, id } from "../encoding";
 
 import { decodeTime } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
-import type {
-  EdgesMap,
-  EdgesWithPayload,
-  SqlStatement,
-  StatementBundle,
-  Ulid,
-} from "../types";
+import type { EdgesMap, EdgesWithPayload, Ulid, Bundle } from "../types";
+import type { SqlStatement } from "./types";
 
 type Event = CodecType<typeof eventCodec>;
 type EventVariants = CodecType<typeof eventVariantCodec>;
@@ -750,7 +745,7 @@ const statementMap: {
 function bundleSuccess(
   event: Event,
   statements: SqlStatement | SqlStatement[],
-): StatementBundle {
+): Bundle.Statement {
   return {
     eventId: event.ulid as Ulid,
     status: "success",
@@ -761,7 +756,7 @@ function bundleSuccess(
 /**
  * Helper to create an error bundle with a consistent format.
  */
-function bundleError(event: Event, error: Error | string): StatementBundle {
+function bundleError(event: Event, error: Error | string): Bundle.Statement {
   return {
     eventId: event.ulid as Ulid,
     status: "error",
@@ -811,7 +806,7 @@ function edgePayload<EdgeLabel extends keyof EdgesWithPayload>(
 export async function materialize(
   event: Event,
   opts: Omit<StatementMapOpts<any>, "event" | "data">,
-): Promise<StatementBundle> {
+): Promise<Bundle.Statement> {
   const kind = event.variant.kind;
   const data = event.variant.data;
 
@@ -833,6 +828,3 @@ export async function materialize(
     return bundleError(event, error instanceof Error ? error : String(error));
   }
 }
-
-// Legacy export for backwards compatibility if needed
-export const materializers = statementMap;

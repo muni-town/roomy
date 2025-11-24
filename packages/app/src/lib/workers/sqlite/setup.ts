@@ -4,7 +4,7 @@ import initSqlite3, {
   type Sqlite3Static,
   type PreparedStatement,
 } from "@sqlite.org/sqlite-wasm";
-import type { SqlStatement } from "../types";
+import type { SqlStatement } from "./types";
 import { udfs } from "./udf";
 
 let sqlite3: Sqlite3Static | null = null;

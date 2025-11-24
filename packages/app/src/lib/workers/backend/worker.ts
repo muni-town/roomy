@@ -1,21 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /// <reference lib="webworker" />
 
-import { Agent } from "@atproto/api";
-import {
-  type BackendInterface,
-  type ConsoleInterface,
-  type BackendStatus,
-  type SqliteWorkerInterface,
-  type EventType,
-  consoleLogLevels,
-  type StreamEvent,
-  type SqlStatement,
-  type Savepoint,
-  type EventBatch,
-  type TaskPriority,
-  type StreamHashId,
-} from "../types";
+import { type Batch, type EventType, type StreamHashId } from "../types";
 import {
   messagePortInterface,
   reactiveWorkerState,
@@ -28,6 +14,20 @@ import { db, personalStream, prevStream } from "../idb";
 import { Client } from "./client";
 import { Deferred } from "$lib/utils/deferred";
 import type { QueryResult } from "../sqlite/setup";
+import {
+  type WorkerConfig,
+  type AuthState,
+  type ConnectionState,
+  type BackendStatus,
+  type BackendInterface,
+  type ConsoleInterface,
+  consoleLogLevels,
+} from "./types";
+import type {
+  Savepoint,
+  SqliteWorkerInterface,
+  SqlStatement,
+} from "../sqlite/types";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -405,7 +405,7 @@ type SqlitePending = {
 
 type SqliteReady = {
   state: "ready";
-  proxy: SqliteWorkerInterface;
+  sqliteWorker: SqliteWorkerInterface;
 };
 
 type SqliteState = SqlitePending | SqliteReady;
@@ -431,7 +431,7 @@ class SqliteSupervisor {
   get proxy() {
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialised");
-    return this.#state.proxy;
+    return this.#state.sqliteWorker;
   }
 
   async setReady(proxy: SqliteWorkerInterface) {
@@ -447,7 +447,7 @@ class SqliteSupervisor {
     console.log("SQLite Supervisor setReady setting state/resolving");
     this.#state = {
       state: "ready",
-      proxy,
+      sqliteWorker: proxy,
     };
     this.#ready.resolve();
 
@@ -460,7 +460,7 @@ class SqliteSupervisor {
   }
 
   async materializeBatch(
-    events: EventBatch,
+    events: Batch.Event,
     priority: "normal" | "background",
   ) {
     console.log("SQLite Supervisor materializeBatch");
@@ -471,20 +471,22 @@ class SqliteSupervisor {
       "SQLite Supervisor calling proxy materializeBatch with",
       events,
     );
-    return this.#state.proxy.materializeBatch(events, priority);
+    return this.#state.sqliteWorker.materializeBatch(events, priority);
   }
 
   // Type assertion for convenience. Todo: use Zod/Arktype for sql output validation?
   async runQuery<T = unknown>(statement: SqlStatement) {
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialized.");
-    return this.#state.proxy.runQuery(statement) as Promise<QueryResult<T>>;
+    return this.#state.sqliteWorker.runQuery(statement) as Promise<
+      QueryResult<T>
+    >;
   }
 
   async runSavepoint(savepoint: Savepoint) {
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialized.");
-    return this.#state.proxy.runSavepoint(savepoint);
+    return this.#state.sqliteWorker.runSavepoint(savepoint);
   }
 
   createLiveQueryChannel(port: MessagePort) {
@@ -503,14 +505,14 @@ class SqliteSupervisor {
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialized.");
     this.liveQueries.set(id, { port, statement });
-    await this.#state.proxy.createLiveQuery(id, port, statement);
+    await this.#state.sqliteWorker.createLiveQuery(id, port, statement);
   }
 
   async deleteLiveQuery(id: string) {
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialized.");
     this.liveQueries.delete(id);
-    await this.#state.proxy.deleteLiveQuery(id);
+    await this.#state.sqliteWorker.deleteLiveQuery(id);
   }
 
   async resetLocalDatabase() {
@@ -520,70 +522,14 @@ class SqliteSupervisor {
     });
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialized when resetting database.");
-    await this.#state.proxy.runQuery(sql`pragma writable_schema = 1`);
-    await this.#state.proxy.runQuery(sql`delete from sqlite_master`);
-    await this.#state.proxy.runQuery(sql`vacuum`);
-    await this.#state.proxy.runQuery(sql`pragma integrity_check`);
+    await this.#state.sqliteWorker.runQuery(sql`pragma writable_schema = 1`);
+    await this.#state.sqliteWorker.runQuery(sql`delete from sqlite_master`);
+    await this.#state.sqliteWorker.runQuery(sql`vacuum`);
+    await this.#state.sqliteWorker.runQuery(sql`pragma integrity_check`);
     await db.streamCursors.clear();
     await personalStream.clearIdCache();
   }
 }
 
 const worker = new WorkerSupervisor();
-(globalThis as any).worker = worker; // TODO: remove?
-
-interface Unauthenticated {
-  state: "unauthenticated";
-} // implies workerRunning, authLoaded
-
-interface AuthLoading {
-  state: "loading";
-}
-
-interface OAuthRedirecting {
-  state: "redirecting";
-}
-
-interface Authenticated {
-  state: "authenticated";
-  client: Client;
-  eventChannel: AsyncChannel<EventBatch>;
-  statementChannel: AsyncChannel<{
-    sqlStatements: SqlStatement[];
-    latestEvent: number;
-  }>;
-} // implies leafConnected, has personalStreamId
-
-interface AuthError {
-  state: "error";
-  error: string;
-}
-
-type AuthState =
-  | Unauthenticated
-  | AuthLoading
-  | OAuthRedirecting
-  | Authenticated
-  | AuthError;
-
-interface ReactiveAuthenticated {
-  state: "authenticated";
-  did: string;
-  personalStream: string;
-}
-
-export type ReactiveAuthState =
-  | Unauthenticated
-  | AuthLoading
-  | OAuthRedirecting
-  | ReactiveAuthenticated
-  | AuthError;
-
-interface ConnectionState {
-  ports: WeakMap<MessagePortApi, string>;
-  count: number;
-}
-
-interface WorkerConfig {
-  consoleForwarding: boolean;
-}
+(globalThis as any).worker = worker; // For debugging only !!

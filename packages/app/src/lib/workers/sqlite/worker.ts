@@ -1,16 +1,8 @@
 /* eslint-disable @typescript-eslint/no-empty-object-type */
 import {
   type ApplyResultError,
-  type ApplyResultBatch,
-  type ApplyResultBundle,
-  type BackendInterface,
-  type EventBatch,
-  type Savepoint,
-  type SqliteStatus,
-  type SqliteWorkerInterface,
-  type StatementBatch,
-  type StatementBundle,
-  type StatementSuccessBundle,
+  type Batch,
+  type Bundle,
   type StreamHashId,
   type StreamIndex,
   type TaskPriority,
@@ -28,11 +20,13 @@ import {
 import { messagePortInterface, reactiveWorkerState } from "../workerMessaging";
 import { db } from "../idb";
 import schemaSql from "./schema.sql?raw";
-import { isDid, type Agent, type Did } from "@atproto/api";
+import { isDid, type Did } from "@atproto/api";
 import { sql } from "$lib/utils/sqlTemplate";
 import { eventCodec, id } from "../encoding";
 import { materialize } from "./materializer";
 import { AsyncChannel } from "../asyncChannel";
+import type { Savepoint, SqliteStatus, SqliteWorkerInterface } from "./types";
+import type { BackendInterface } from "../backend/types";
 
 console.log("Started sqlite worker");
 
@@ -60,10 +54,10 @@ class SqliteWorkerSupervisor {
   #status: Partial<SqliteStatus> = {};
   #backend: BackendInterface | null = null;
   #ensuredProfiles = new Set<string>();
-  #eventChannel: AsyncChannel<EventBatch>;
-  #statementChannel = new AsyncChannel<StatementBatch>();
-  #resultChannel = new AsyncChannel<ApplyResultBatch>();
-  #pendingBatches = new Map<string, (result: ApplyResultBatch) => void>();
+  #eventChannel: AsyncChannel<Batch.Event>;
+  #statementChannel = new AsyncChannel<Batch.Statement>();
+  #resultChannel = new AsyncChannel<Batch.ApplyResult>();
+  #pendingBatches = new Map<string, (result: Batch.ApplyResult) => void>();
 
   constructor() {
     this.#workerId = crypto.randomUUID();
@@ -108,13 +102,13 @@ class SqliteWorkerSupervisor {
       try {
         await initializeDatabase("/mini.db");
 
+        this.#status.vfsType = getVfsType() || undefined;
+        console.log("SQLite Worker using VFS:", this.#status.vfsType);
+
         // initialise DB schema (should be idempotent)
         console.time("initSql");
         await this.runSavepoint({ name: "init", items: initSql });
         console.timeEnd("initSql");
-
-        this.#status.vfsType = getVfsType() || undefined;
-        console.log("SQLite Worker using VFS:", this.#status.vfsType);
 
         const sqliteChannel = new MessageChannel();
         messagePortInterface<SqliteWorkerInterface, {}>(
@@ -337,11 +331,11 @@ class SqliteWorkerSupervisor {
     };
   }
 
-  private async runStatementBatch(batch: StatementBatch) {
+  private async runStatementBatch(batch: Batch.Statement) {
     const exec = async () => {
       await executeQuery({ sql: `savepoint batch${batch.batchId}` });
 
-      const results: ApplyResultBundle[] = [];
+      const results: Bundle.ApplyResult[] = [];
 
       for (const bundle of batch.bundles) {
         if (bundle.status === "success") {
@@ -362,7 +356,7 @@ class SqliteWorkerSupervisor {
 
     // This lock makes sure that the JS tasks don't interleave some other query executions in while we
     // are trying to compose a bulk transaction.
-    const result: ApplyResultBatch = await navigator.locks.request(
+    const result: Batch.ApplyResult = await navigator.locks.request(
       QUERY_LOCK,
       exec,
     );
@@ -376,8 +370,8 @@ class SqliteWorkerSupervisor {
   }
 
   private async runStatementBundle(
-    bundle: StatementSuccessBundle,
-  ): Promise<ApplyResultBundle> {
+    bundle: Bundle.StatementSuccess,
+  ): Promise<Bundle.ApplyResult> {
     await executeQuery({ sql: `savepoint event${bundle.eventId}` });
     const queryResults: (QueryResult | ApplyResultError)[] = [];
     for (const statement of bundle.statements) {
@@ -468,7 +462,7 @@ class SqliteWorkerSupervisor {
   materializer() {
     (async () => {
       for await (const batch of this.#eventChannel) {
-        const bundles: StatementBundle[] = [];
+        const bundles: Bundle.Statement[] = [];
 
         console.time("convert-events-to-sql");
 
@@ -511,7 +505,7 @@ class SqliteWorkerSupervisor {
           latestEvent = Math.max(latestEvent, incoming.idx);
           try {
             // Get the SQL statements to be executed for this event
-            const bundle: StatementBundle = await materialize(event, {
+            const bundle: Bundle.Statement = await materialize(event, {
               streamId: batch.streamId,
               user: incoming.user,
             });
@@ -556,7 +550,7 @@ class SqliteWorkerSupervisor {
   async ensureProfiles(
     streamId: StreamHashId,
     profileDids: Set<Did>,
-  ): Promise<StatementBundle> {
+  ): Promise<Bundle.Statement> {
     try {
       // This only knows how to fetch Bluesky DIDs for now
       const dids = [...profileDids].filter(
@@ -644,12 +638,12 @@ class SqliteWorkerSupervisor {
   }
 
   private async materializeBatch(
-    eventsBatch: EventBatch,
+    eventsBatch: Batch.Event,
     priority: TaskPriority = "background",
   ) {
     // so this is where we need to coordinate across the chain of channels
     console.log("Materialising events batch", eventsBatch.batchId);
-    const resultPromise = new Promise<ApplyResultBatch>((resolve) => {
+    const resultPromise = new Promise<Batch.ApplyResult>((resolve) => {
       this.#pendingBatches.set(eventsBatch.batchId, resolve);
     });
     this.#eventChannel.push(eventsBatch, priority);

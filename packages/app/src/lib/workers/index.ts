@@ -4,8 +4,8 @@ import type {
   BackendInterface,
   BackendStatus,
   ConsoleInterface,
-  SqliteStatus,
-} from "./types";
+} from "./backend/types";
+import type { SqliteStatus } from "./sqlite/types";
 
 // Force page reload when hot reloading this file to avoid confusion if the workers get mixed up.
 if (import.meta.hot && !(window as any).__playwright) {

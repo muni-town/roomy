@@ -7,37 +7,30 @@ import { LeafClient, type IncomingEvent } from "@muni-town/leaf-client";
 import { CONFIG } from "$lib/config";
 import { LEAF_MODULE_PERSONAL } from "../../moduleUrls";
 import {
-  type ConnectedStreams,
-  type ConnectedStream,
   type EventType,
-  type Profile,
-  type LoadingPersonalStream,
-  type StreamConnectionStatus,
-  type StreamEvent,
   type StreamHashId,
-  type EventBatch,
   type Ulid,
   type StreamIndex,
-  type BackfillStatus,
+  type TaskPriority,
+  type Batch,
 } from "../types";
+import { type Profile } from "$lib/types/profile";
 import { eventCodec, streamParamsCodec } from "../encoding";
 import { ulid } from "ulidx";
 import { Deferred } from "$lib/utils/deferred";
 import { AsyncChannel } from "../asyncChannel";
-
-interface LeafHandlers {
-  connect: () => Promise<void>;
-  disconnect: () => void;
-  authenticated: (did: string) => Promise<void>;
-  event: (event: IncomingEvent) => void;
-}
+import type {
+  StreamConnectionStatus,
+  ConnectionStates,
+  ConnectedStream,
+} from "./types";
 
 export class Client {
   agent: Agent;
   leaf: LeafClient;
   #streamConnection: StreamConnectionStatus;
-  #ready = new Deferred<LoadingPersonalStream>();
-  #connected = new Deferred<ConnectedStreams>();
+  #ready = new Deferred<ConnectionStates.LoadingPersonalStream>();
+  #connected = new Deferred<ConnectionStates.ConnectedStreams>();
 
   constructor(agent: Agent, leaf: LeafClient) {
     this.agent = agent;
@@ -65,7 +58,7 @@ export class Client {
     console.log("setReadyToConnect");
     if (this.#streamConnection.status === "loadingPersonalStream")
       return this.#streamConnection.eventChannel;
-    const eventChannel = new AsyncChannel<EventBatch>();
+    const eventChannel = new AsyncChannel<Batch.Event>();
     this.#streamConnection = {
       status: "loadingPersonalStream",
       personalStream: {
@@ -300,82 +293,46 @@ export class Client {
 
   async backfillPersonalStream() {
     // start fetching all the events
-    if (!this.personalStreamId)
+    if (!this.personalStreamId || !this.personalStream)
       throw new Error("No personal stream to backfill");
-    let fetchCursor = await this.upToEventId(this.personalStreamId);
-    console.log("Personal stream backfilled to", fetchCursor);
 
-    while (true) {
-      console.time("fetchBatch");
-
-      const batchSize = 2500;
-      const newEvents = (
-        await this.fetchEvents(
-          this.personalStreamId,
-          fetchCursor + 1,
-          batchSize,
-        )
-      ).map((ev) => {
-        return {
-          idx: ev.idx as StreamIndex,
-          user: ev.user,
-          payload: ev.payload,
-        };
-      });
-
-      if (newEvents.length == 0) {
-        if (
-          this.personalStream?.pin.type !== "space" ||
-          this.personalStream.pin.backfill.status !== "priority"
-        )
-          throw new Error("Personal Stream should backfill entire stream");
-
-        // mark backfill state suspended
-        this.personalStreamFetched.resolve();
-        this.personalStream.pin.backfill = {
-          status: "suspended",
-          upToEventId: fetchCursor,
-        };
-        break;
-      }
-      this.eventChannel.push({
-        status: "fetched",
-        batchId: ulid() as Ulid,
-        streamId: this.personalStreamId,
-        events: newEvents,
-        priority: "normal",
-      });
-
-      // IDB Stream Cursor is updated in the SQLite worker when materialisation done
-
-      fetchCursor += batchSize;
-      console.timeEnd("fetchBatch");
-    }
+    this.backfillStream(this.personalStream, "normal");
   }
 
-  async backfillStream(streamId: StreamHashId) {
+  async backfillStreamById(
+    streamId: StreamHashId,
+    priority: TaskPriority = "background",
+  ) {
     if (this.#streamConnection.status !== "connected")
       throw new Error("Client must be connected to backfill");
-    const backfillStatus = this.#streamConnection.streams.get(streamId);
-    if (!backfillStatus) throw new Error("Could not find stream " + streamId);
-    // start fetching all the events
-    let fetchCursor = await this.upToEventId(streamId);
-    console.log(`stream ${streamId} backfilled to ${fetchCursor}`);
+    const stream = this.#streamConnection.streams.get(streamId);
+    if (!stream) throw new Error("Could not find stream " + streamId);
+
+    this.backfillStream(stream, priority);
+  }
+
+  private async backfillStream(
+    stream: ConnectedStream,
+    priority: TaskPriority,
+  ) {
+    let fetchCursor = await this.upToEventId(stream.id);
+    console.log(`stream ${stream.id} backfilled to ${fetchCursor}`);
 
     while (true) {
-      console.time("fetchBatch-" + streamId);
+      console.time("fetchBatch-" + stream.id);
 
       if (
-        backfillStatus.pin.type !== "space" ||
-        backfillStatus.pin.backfill.status !== "background"
+        stream.pin.type !== "space" ||
+        stream.pin.backfill.status !== priority
       )
         throw new Error(
-          "Pin type & backfill status status expected to be 'space' and 'background'",
+          "Pin type & backfill status status expected to be 'space' and " +
+            priority,
         );
 
       const batchSize = 2500;
       const newEvents = (
-        await this.fetchEvents(streamId, fetchCursor + 1, batchSize)
+        await this.fetchEvents(stream.id, fetchCursor + 1, batchSize)
       ).map((ev) => {
         return {
           idx: ev.idx as StreamIndex,
@@ -386,9 +343,9 @@ export class Client {
 
       if (newEvents.length == 0) {
         // mark backfill state suspended
-        this.personalStreamFetched.resolve();
-        backfillStatus.pin.backfill = {
-          status: "suspended",
+        stream.pin.backfill.completed.resolve();
+        stream.pin.backfill = {
+          status: "idle",
           upToEventId: fetchCursor,
         };
         break;
@@ -396,15 +353,15 @@ export class Client {
       this.eventChannel.push({
         status: "fetched",
         batchId: ulid() as Ulid,
-        streamId,
+        streamId: stream.id,
         events: newEvents,
-        priority: backfillStatus.pin.backfill.status,
+        priority: stream.pin.backfill.status,
       });
 
       // IDB Stream Cursor is updated in the SQLite worker when materialisation done
 
       fetchCursor += batchSize;
-      console.timeEnd("fetchBatch-" + streamId);
+      console.timeEnd("fetchBatch-" + stream.id);
     }
   }
 
@@ -419,7 +376,7 @@ export class Client {
 
     const promises = [...streams.values()].map((stream) => {
       try {
-        return this.backfillStream(stream.id);
+        return this.backfillStreamById(stream.id);
       } catch (error) {
         console.error("Backfill error for", stream);
       }
