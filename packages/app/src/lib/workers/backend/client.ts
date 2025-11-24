@@ -48,7 +48,7 @@ export class Client {
   get personalStreamFetched() {
     if (
       this.personalStream?.pin.type !== "space" ||
-      this.personalStream.pin.backfill.status !== "priority"
+      this.personalStream.pin.backfill.status !== "normal"
     )
       throw new Error("Personal Stream should backfill entire stream");
     return this.personalStream.pin.backfill.completed;
@@ -66,7 +66,7 @@ export class Client {
         pin: {
           type: "space",
           backfill: {
-            status: "priority",
+            status: "normal",
             upToEventId: 0,
             completed: new Deferred(),
           },

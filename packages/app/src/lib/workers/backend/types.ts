@@ -82,7 +82,7 @@ export type ConsoleInterface = {
   log(level: ConsoleLogLevel, ...args: any[]): Promise<void>;
 };
 
-namespace AuthStates {
+export namespace AuthStates {
   export interface Unauthenticated {
     state: "unauthenticated";
   } // implies workerRunning, authLoaded
@@ -196,7 +196,7 @@ namespace PinStates {
 
 export type BackfillStatus =
   | BackfillStates.Error
-  | BackfillStates.Priority
+  | BackfillStates.Normal
   | BackfillStates.Background
   | BackfillStates.Idle;
 
@@ -207,8 +207,8 @@ namespace BackfillStates {
     message: string;
   }
 
-  export interface Priority {
-    status: "priority";
+  export interface Normal {
+    status: "normal";
     upToEventId: number;
     completed: Deferred;
   }

@@ -43,7 +43,6 @@
 
   $effect(() => {
     console.log("authState", backendStatus.authState);
-    console.log("profile", backendStatus.profile);
   });
 
   // The loading icon, though, should only show up if auth loading takes more than a short time, so
