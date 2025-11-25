@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2.0.0-rc",
-  "productName": "Roomy Chat",
+  "productName": "Roomy",
   "version": "0.1.0-alpha-6",
-  "identifier": "chat.roomy.app",
+  "identifier": "space.roomy",
   "build": {
     "frontendDist": "../build",
     "devUrl": "http://localhost:5173",
@@ -37,11 +37,14 @@
     "deep-link": {
       "mobile": [
         {
-          "host": "roomy.chat"
+          "host": "space.roomy"
         }
       ],
       "desktop": {
-        "schemes": ["chat.roomy", "roomy"]
+        "schemes": [
+          "space.roomy",
+          "roomy"
+        ]
       }
     }
   }
