@@ -118,6 +118,9 @@ class SqliteWorkerSupervisor {
 
   private async loadDb(dbName: string, persistent: boolean) {
     console.log("Calling loadDb with dbName", dbName);
+
+    const deferred = new Deferred<void>();
+
     const callback = async () => {
       console.log(
         "Sqlite worker lock obtained: Active worker id:",
@@ -144,27 +147,40 @@ class SqliteWorkerSupervisor {
         console.time("initSql");
         await this.runSavepoint({ name: "init", items: initSql });
         console.timeEnd("initSql");
+
+        deferred.resolve();
       } catch (e) {
         console.error("SQLite worker loadDb: Fatal error", e);
         this.cleanup();
+        deferred.reject(e);
         throw e;
       }
     };
 
-    return navigator.locks
-      .request(
-        "sqlite-worker-lock",
-        { mode: "exclusive", signal: AbortSignal.timeout(LOCK_TIMEOUT_MS) },
-        callback,
-      )
-      .catch(async (error) => {
-        if (error.name === "TimeoutError") {
+    const attemptLock = async (): Promise<void> => {
+      try {
+        await navigator.locks.request(
+          "sqlite-worker-lock",
+          { mode: "exclusive", signal: AbortSignal.timeout(LOCK_TIMEOUT_MS) },
+          callback,
+        );
+      } catch (error) {
+        if (error instanceof Error && error.name === "TimeoutError") {
           console.warn("SQLite worker: Lock timeout, attempting steal");
           await this.attemptLockSteal(callback);
+          // If lock steal didn't succeed, try again
+          if (!deferred.promise) {
+            await attemptLock();
+          }
         } else {
+          deferred.reject(error);
           throw error;
         }
-      });
+      }
+    };
+
+    attemptLock();
+    return deferred.promise;
   }
 
   listenStatements() {
