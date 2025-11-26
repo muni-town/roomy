@@ -33,7 +33,7 @@
     masqueradeAuthorName: string | null;
     masqueradeAuthorAvatar: string | null;
     mergeWithPrevious: boolean | null;
-    replyTo: string | null;
+    replyTo: string[];
     reactions: { reaction: string; userId: string; userName: string }[];
     media: {
       uri: string;
@@ -72,14 +72,18 @@
   let query = new LiveQuery<Message>(
     () => sql`
       select json_object(
-        'id', id(c.entity),
+        'id', id(e.id),
         'content', cast(c.data as text),
         'authorDid', id(u.did),
         'authorName', i.name,
         'authorAvatar', i.avatar,
         'masqueradeAuthor', id(o.author),
         'masqueradeTimestamp', o.timestamp,
-        'replyTo', id(ed.tail),
+        'replyTo', coalesce((
+          select json_group_array(id(ed.tail))
+          from edges ed
+          where ed.head = e.id and ed.label = 'reply'
+        ), json_array()),
         'masqueradeAuthorName', oai.name,
         'masqueradeAuthorAvatar', oai.avatar,
         'masqueradeAuthorHandle', oau.handle,
@@ -127,7 +131,7 @@
             'to', cc.idx_to
           )
         )
-      ) as json
+      ) as json, author_edge.*
       from entities e
         join comp_content c on c.entity = e.id
         join edges author_edge on author_edge.head = e.id and author_edge.label = 'author'
@@ -136,14 +140,16 @@
         left join comp_override_meta o on o.entity = e.id
         left join comp_info oai on oai.entity = o.author
         left join comp_user oau on oau.did = o.author
-        left join edges ed on ed.head = c.entity and ed.label = 'reply'
         left join comp_comment cc on cc.entity = e.id
       where
         e.parent = ${page.params.object && id(page.params.object)}
       order by e.id desc
       limit ${showLastN}
     `,
-    (row) => JSON.parse(row.json),
+    (row) => {
+      console.log(row);
+      return JSON.parse(row.json);
+    },
   );
 
   let showLastN = $state(50);
@@ -157,6 +163,7 @@
     if (!query.result) return [];
     // return query.result;
 
+    console.log("query result itself", query.result);
     const mapped = query.result.reverse().map((message, index) => {
       // Get the previous message (if it exists)
       const prevMessage = index > 0 ? query.result![index - 1] : null;
@@ -188,6 +195,8 @@
         mergeWithPrevious,
       };
     });
+
+    console.log("timeline mapped", mapped);
     return mapped;
   });
   let slicedTimeline = $derived(timeline.slice(-showLastN));
@@ -225,6 +234,10 @@
       toast.error("Message not found");
     }
   }
+
+  $effect(() => {
+    console.log("timeline", timeline);
+  });
 
   setContext("scrollToMessage", scrollToMessage);
 
@@ -328,7 +341,7 @@
                   // Note: for some reason, sometimes `x` and `message` below are
                   // undefined, so we have to use the conditionals to make sure we
                   // don't try access properties of `undefined`.
-                  // 
+                  //
                   // It might be good to figure out the root cause and fix that sometime.
                   return x?.id;
                 }}

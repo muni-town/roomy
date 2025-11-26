@@ -29,7 +29,9 @@ export class Client {
   agent: Agent;
   leaf: LeafClient;
   #streamConnection: StreamConnectionStatus;
-  #ready = new Deferred<ConnectionStates.LoadingPersonalStream>();
+  #leafAuthenticated = new Deferred();
+  #personalStreamIdReady =
+    new Deferred<ConnectionStates.LoadingPersonalStream>();
   #connected = new Deferred<ConnectionStates.ConnectedStreams>();
 
   constructor(agent: Agent, leaf: LeafClient) {
@@ -39,25 +41,80 @@ export class Client {
       status: "initialising",
     };
     this.setLeafHandlers();
+    this.ensurePersonalStream();
+  }
+
+  // get a URL for redirecting to the ATProto PDS for login
+  static async login(handle: string) {
+    const oauth = await createOauthClient();
+    const url = await oauth.authorize(handle, {
+      scope: CONFIG.atprotoOauthScope,
+    });
+    return url.href;
+  }
+
+  // restore previous session
+  static async new() {
+    const oauthClient = await createOauthClient();
+
+    // if there's a stored DID and no session yet, try to restore the session
+    const didEntry = await db.kv.get("did");
+    if (!didEntry) throw new Error("Failed to retrieve DID from IndexedDB");
+
+    const restoredSession = await oauthClient.restore(didEntry.value);
+    return Client.fromSession(restoredSession);
+  }
+
+  // create new session from query params
+  static async oauthCallback(params: URLSearchParams) {
+    const oauth = await createOauthClient();
+    const response = await oauth.callback(params);
+    return Client.fromSession(response.session);
+  }
+
+  static async fromSession(session: OAuthSession) {
+    try {
+      await db.kv.put({ key: "did", value: session.did });
+
+      const agent = new Agent(session);
+
+      lexicons.forEach((l) => agent.lex.add(l as any));
+
+      const leaf = new LeafClient(CONFIG.leafUrl, async () => {
+        const resp = await agent?.com.atproto.server.getServiceAuth({
+          aud: `did:web:${new URL(CONFIG.leafUrl).host}`,
+        });
+        if (!resp) throw "Error authenticating for leaf server";
+        return resp.data.token;
+      });
+
+      return new Client(agent, leaf);
+    } catch (e) {
+      console.error(e);
+      // db.kv.delete("did");
+      throw new Error("Failed to create client");
+    }
   }
 
   get ready() {
-    return this.#ready.promise;
+    return this.#personalStreamIdReady.promise;
   }
 
   get personalStreamFetched() {
     if (
       this.personalStream?.pin.type !== "space" ||
-      this.personalStream.pin.backfill.status !== "normal"
+      this.personalStream.pin.backfill.status !== "priority"
     )
       throw new Error("Personal Stream should backfill entire stream");
     return this.personalStream.pin.backfill.completed;
   }
 
-  loadPersonalStream(personalStreamId: StreamHashId) {
+  loadPersonalStream(personalStreamId: StreamHashId, upToEventId: StreamIndex) {
     console.log("setReadyToConnect");
+
     if (this.#streamConnection.status === "loadingPersonalStream")
       return this.#streamConnection.eventChannel;
+
     const eventChannel = new AsyncChannel<Batch.Event>();
     this.#streamConnection = {
       status: "loadingPersonalStream",
@@ -66,8 +123,8 @@ export class Client {
         pin: {
           type: "space",
           backfill: {
-            status: "normal",
-            upToEventId: 0,
+            status: "priority",
+            upToEventId,
             completed: new Deferred(),
           },
         },
@@ -75,7 +132,7 @@ export class Client {
       eventChannel,
     };
     this.backfillPersonalStream();
-    this.#ready.resolve(this.#streamConnection);
+    this.#personalStreamIdReady.resolve(this.#streamConnection);
     return eventChannel;
   }
 
@@ -154,13 +211,12 @@ export class Client {
     this.leaf.on("authenticated", async (did) => {
       console.log("Leaf: authenticated as", did);
 
-      // Get the user's personal space ID
-      console.log("Now looking for personal stream id");
-      const personalStreamId = await this.ensurePersonalStream(did);
-      this.leaf.subscribe(personalStreamId);
-      console.log("Subscribed to stream:", personalStreamId);
+      this.#leafAuthenticated.resolve();
 
-      this.loadPersonalStream(personalStreamId);
+      const state = await this.#personalStreamIdReady.promise;
+
+      this.leaf.subscribe(state.personalStream.id);
+      console.log("Subscribed to stream:", state.personalStream.id);
     });
     this.leaf.on("event", (event) => {
       this.eventChannel.push({
@@ -174,7 +230,7 @@ export class Client {
             payload: event.payload,
           },
         ],
-        priority: "normal",
+        priority: "priority",
       });
     });
   }
@@ -201,6 +257,7 @@ export class Client {
     moduleUrl: string,
     params?: ArrayBuffer,
   ): Promise<string> {
+    await this.#leafAuthenticated.promise;
     return await this.leaf.createStreamFromModuleUrl(
       ulid,
       moduleId,
@@ -227,6 +284,7 @@ export class Client {
 
   async createPersonalStream() {
     const personalStreamUlid = ulid();
+    await this.#leafAuthenticated.promise;
     return (await this.leaf.createStreamFromModuleUrl(
       personalStreamUlid,
       LEAF_MODULE_PERSONAL.id,
@@ -238,57 +296,54 @@ export class Client {
     )) as StreamHashId;
   }
 
-  async ensurePersonalStream(did: string) {
+  async ensurePersonalStream() {
     if (this.personalStreamId) return this.personalStreamId;
 
-    const id = await personalStream.getIdCache(did);
-    if (id) {
-      return id;
-    }
+    console.log("Now looking for personal stream id");
 
-    try {
-      const resp1 = await this.agent.com.atproto.repo.getRecord({
-        collection: CONFIG.streamNsid,
-        repo: did,
-        rkey: CONFIG.streamSchemaVersion,
-      });
-      const existingRecord = resp1.data.value as { id: StreamHashId };
-      await personalStream.setIdCache(did, existingRecord.id);
-      console.log("Found existing stream ID from PDS:", existingRecord.id);
-      return existingRecord.id;
-    } catch (_) {
-      // this catch block creating a new stream needs to be refactored
-      // so that it only happens when there definitely is no record
-      console.log(
-        "Could not find existing stream ID on PDS. Creating new stream!",
-      );
-
-      // create a new stream on leaf server
-      const personalStreamId = await this.createPersonalStream();
-      console.log("Created new stream:", personalStreamId);
-
-      // put the stream ID in a record
-      const resp2 = await this.agent.com.atproto.repo.putRecord({
-        collection: CONFIG.streamNsid,
-        record: { id: personalStreamId },
-        repo: this.agent.assertDid,
-        rkey: CONFIG.streamSchemaVersion,
-      });
-      if (!resp2.success) {
-        throw new Error("Could not create PDS record for personal stream", {
-          cause: JSON.stringify(resp2.data),
+    let id = await personalStream.getIdCache(this.agent.assertDid);
+    if (!id) {
+      try {
+        const resp1 = await this.agent.com.atproto.repo.getRecord({
+          collection: CONFIG.streamNsid,
+          repo: this.agent.assertDid,
+          rkey: CONFIG.streamSchemaVersion,
         });
-      }
-      // status.personalStreamId = personalStreamId;
-      await personalStream.setIdCache(did, personalStreamId);
-      return personalStreamId;
-    }
-  }
+        const existingRecord = resp1.data.value as { id: StreamHashId };
+        await personalStream.setIdCache(
+          this.agent.assertDid,
+          existingRecord.id,
+        );
+        console.log("Found existing stream ID from PDS:", existingRecord.id);
+        id = existingRecord.id;
+      } catch (_) {
+        // this catch block creating a new stream needs to be refactored
+        // so that it only happens when there definitely is no record
+        console.log(
+          "Could not find existing stream ID on PDS. Creating new stream!",
+        );
 
-  async upToEventId(streamId: StreamHashId) {
-    const entry = await db.streamCursors.get(streamId);
-    if (entry) return entry.latestEvent;
-    return 0;
+        // create a new stream on leaf server
+        id = await this.createPersonalStream();
+        console.log("Created new stream:", id);
+
+        // put the stream ID in a record
+        const resp2 = await this.agent.com.atproto.repo.putRecord({
+          collection: CONFIG.streamNsid,
+          record: { id },
+          repo: this.agent.assertDid,
+          rkey: CONFIG.streamSchemaVersion,
+        });
+        if (!resp2.success) {
+          throw new Error("Could not create PDS record for personal stream", {
+            cause: JSON.stringify(resp2.data),
+          });
+        }
+        // status.personalStreamId = personalStreamId;
+        await personalStream.setIdCache(this.agent.assertDid, id);
+      }
+    }
+    return id;
   }
 
   async backfillPersonalStream() {
@@ -296,7 +351,7 @@ export class Client {
     if (!this.personalStreamId || !this.personalStream)
       throw new Error("No personal stream to backfill");
 
-    this.backfillStream(this.personalStream, "normal");
+    return this.backfillStream(this.personalStream, "priority");
   }
 
   async backfillStreamById(
@@ -308,27 +363,25 @@ export class Client {
     const stream = this.#streamConnection.streams.get(streamId);
     if (!stream) throw new Error("Could not find stream " + streamId);
 
-    this.backfillStream(stream, priority);
+    return this.backfillStream(stream, priority);
   }
 
   private async backfillStream(
     stream: ConnectedStream,
     priority: TaskPriority,
   ) {
-    let fetchCursor = await this.upToEventId(stream.id);
+    if (stream.pin.type !== "space" || stream.pin.backfill.status !== priority)
+      throw new Error(
+        "Pin type & backfill status status expected to be 'space' and " +
+          priority,
+      );
+
+    let fetchCursor = stream.pin.backfill.upToEventId;
+
     console.log(`stream ${stream.id} backfilled to ${fetchCursor}`);
 
     while (true) {
       console.time("fetchBatch-" + stream.id);
-
-      if (
-        stream.pin.type !== "space" ||
-        stream.pin.backfill.status !== priority
-      )
-        throw new Error(
-          "Pin type & backfill status status expected to be 'space' and " +
-            priority,
-        );
 
       const batchSize = 2500;
       const newEvents = (
@@ -342,7 +395,7 @@ export class Client {
       });
 
       if (newEvents.length == 0) {
-        // mark backfill state suspended
+        // mark backfill state idle
         stream.pin.backfill.completed.resolve();
         stream.pin.backfill = {
           status: "idle",
@@ -358,7 +411,7 @@ export class Client {
         priority: stream.pin.backfill.status,
       });
 
-      // IDB Stream Cursor is updated in the SQLite worker when materialisation done
+      // Persisted backfilled_to cursor is updated in SQLite after each batch is applied
 
       fetchCursor += batchSize;
       console.timeEnd("fetchBatch-" + stream.id);
@@ -387,6 +440,7 @@ export class Client {
   }
 
   async sendEvent(streamId: string, event: EventType) {
+    await this.#leafAuthenticated.promise;
     await this.leaf.sendEvent(
       streamId,
       eventCodec.enc(event).buffer as ArrayBuffer,
@@ -394,6 +448,7 @@ export class Client {
   }
 
   async sendEventBatch(streamId: string, payloads: EventType[]) {
+    await this.#leafAuthenticated.promise;
     const encodedPayloads = payloads.map((x) => {
       try {
         return eventCodec.enc(x).buffer as ArrayBuffer;
@@ -412,6 +467,7 @@ export class Client {
     offset: number,
     limit: number,
   ): Promise<IncomingEvent[]> {
+    await this.#leafAuthenticated.promise;
     const events = (
       await this.leaf?.fetchEvents(streamId, { offset, limit })
     )?.map((x) => ({
@@ -534,54 +590,5 @@ export class Client {
 
   logout() {
     db.kv.delete("did");
-  }
-
-  static async fromSession(session: OAuthSession) {
-    try {
-      await db.kv.put({ key: "did", value: session.did });
-
-      const agent = new Agent(session);
-
-      lexicons.forEach((l) => agent.lex.add(l as any));
-
-      const leaf = new LeafClient(CONFIG.leafUrl, async () => {
-        const resp = await agent?.com.atproto.server.getServiceAuth({
-          aud: `did:web:${new URL(CONFIG.leafUrl).host}`,
-        });
-        if (!resp) throw "Error authenticating for leaf server";
-        return resp.data.token;
-      });
-
-      return new Client(agent, leaf);
-    } catch (e) {
-      console.error(e);
-      // db.kv.delete("did");
-      throw new Error("Failed to create client");
-    }
-  }
-
-  static async new() {
-    const client = await createOauthClient();
-
-    // if there's a stored DID and no session yet, try to restore the session
-    const didEntry = await db.kv.get("did");
-    if (!didEntry) throw new Error("Failed to retrieve DID from IndexedDB");
-
-    const restoredSession = await client.restore(didEntry.value);
-    return Client.fromSession(restoredSession);
-  }
-
-  static async oauthCallback(params: URLSearchParams) {
-    const oauth = await createOauthClient();
-    const response = await oauth.callback(params);
-    return Client.fromSession(response.session);
-  }
-
-  static async login(handle: string) {
-    const oauth = await createOauthClient();
-    const url = await oauth.authorize(handle, {
-      scope: CONFIG.atprotoOauthScope,
-    });
-    return url.href;
   }
 }

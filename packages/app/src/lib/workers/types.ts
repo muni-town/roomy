@@ -69,7 +69,7 @@ export type Ulid = string & { __brand: "ulid" };
 
 export type StreamIndex = number & { __brand: "streamIndex" };
 
-export type TaskPriority = "normal" | "background";
+export type TaskPriority = "priority" | "background";
 
 export interface StreamEvent {
   idx: StreamIndex;

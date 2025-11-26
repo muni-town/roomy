@@ -36,16 +36,16 @@ import type { TaskPriority } from "./types";
  * the desugared `async *` generator auto-implements `next()`, `return(value)` and `throw(exception)`.
  */
 export class AsyncChannel<T> {
-  #queue: (T | typeof END)[] = [];
+  #priorityQueue: (T | typeof END)[] = [];
   #backgroundQueue: (T | typeof END)[] = [];
   #resolvers: ((next: T | typeof END) => void)[] = [];
 
-  push(item: T | typeof END, priority: TaskPriority = "normal"): void {
+  push(item: T | typeof END, priority: TaskPriority = "priority"): void {
     const resolver = this.#resolvers.shift();
     if (resolver) {
       resolver(item);
-    } else if (priority === "normal") {
-      this.#queue.push(item);
+    } else if (priority === "priority") {
+      this.#priorityQueue.push(item);
     } else if (priority === "background") {
       this.#backgroundQueue.push(item);
     }
@@ -63,9 +63,9 @@ export class AsyncChannel<T> {
   }
 
   async #next(): Promise<T | typeof END> {
-    const inQueue = this.#queue.shift();
-    if (inQueue) {
-      return inQueue;
+    const inPriorityQueue = this.#priorityQueue.shift();
+    if (inPriorityQueue) {
+      return inPriorityQueue;
     }
 
     const inBackgroundQueue = this.#backgroundQueue.shift();

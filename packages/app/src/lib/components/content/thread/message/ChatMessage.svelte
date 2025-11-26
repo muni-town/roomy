@@ -122,7 +122,7 @@
             mimeType: "text/x-dmp-patch",
             content: new TextEncoder().encode(contentPatch),
           },
-          replyTo: message.replyTo || undefined,
+          replyTo: message.replyTo[0], // This event needs updating to support multiple replies and other changes to extensions
         },
       },
     });
@@ -190,12 +190,13 @@
     ]}
   >
     <div class={message.mergeWithPrevious ? "pl-12" : ""}>
-      {#if message.replyTo}
+      {#if message.replyTo[0]}
+        <!-- TODO: support multiple replies; multiple contexts? -->
         <MessageContext
           context={{
             kind: "replying",
             messageId: message.id,
-            replyTo: { id: message.replyTo },
+            replyTo: { id: message.replyTo[0] },
           }}
         />
       {:else if message.comment.version}
@@ -226,7 +227,7 @@
             <Avatar.Root class="size-8 sm:size-10">
               <Avatar.Image src={metadata.avatarUrl} class="rounded-full" />
               <Avatar.Fallback>
-                <AvatarBeam name={metadata.id || 'system'} />
+                <AvatarBeam name={metadata.id || "system"} />
               </Avatar.Fallback>
             </Avatar.Root>
           </button>

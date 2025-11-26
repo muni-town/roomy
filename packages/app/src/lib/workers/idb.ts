@@ -8,14 +8,9 @@ interface KeyValue {
 }
 export const db = new Dexie("mini-shared-worker-db") as Dexie & {
   kv: EntityTable<KeyValue, "key">;
-  streamCursors: EntityTable<
-    { streamId: string; latestEvent: number },
-    "streamId"
-  >;
 };
 db.version(1).stores({
   kv: `key`,
-  streamCursors: `streamId`,
 });
 
 // Helpers for caching the personal stream ID in the key-value store.

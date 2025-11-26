@@ -23,7 +23,7 @@ export type BackendInterface = {
   getProfile(did: string): Promise<Profile | undefined>;
   dangerousCompletelyDestroyDatabase(opts: {
     yesIAmSure: true;
-  }): Promise<unknown>;
+  }): Promise<{ done: true } | { done: false; error: string }>;
   ping(): Promise<{ timestamp: number }>;
   enableLogForwarding(): Promise<void>;
   disableLogForwarding(): Promise<void>;
@@ -196,7 +196,7 @@ namespace PinStates {
 
 export type BackfillStatus =
   | BackfillStates.Error
-  | BackfillStates.Normal
+  | BackfillStates.Priority
   | BackfillStates.Background
   | BackfillStates.Idle;
 
@@ -205,10 +205,11 @@ namespace BackfillStates {
     __brand: "backfillError";
     status: "error";
     message: string;
+    upToEventId?: number;
   }
 
-  export interface Normal {
-    status: "normal";
+  export interface Priority {
+    status: "priority";
     upToEventId: number;
     completed: Deferred;
   }

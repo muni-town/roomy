@@ -55,6 +55,7 @@ const materializers: {
     `,
   ],
   "space.roomy.room.join.0": async ({ streamId, user, event }) => [
+    // if event has parent, it's for joining a room; if not, it's for joining the space
     sql`
       insert or replace into edges (head, tail, label, payload)
       values (
@@ -81,6 +82,7 @@ const materializers: {
       )
     )
   `,
+    // Set author on the virtual message to be the stream itself
     sql`
         insert into edges (head, tail, label)
         select 
@@ -323,36 +325,43 @@ const materializers: {
     ];
 
     // Handle replyTo extensions
-    data.extensions
-      .filter((ext) => ext.kind === "space.roomy.replyTo.0")
-      .forEach((reply) => {
-        statements.push(sql`
-        insert into edges (head, tail, label)
-        values (
-          ${id(event.ulid)},
-          ${id(reply.data)},
-          'reply'
-        )
-      `);
-      });
+    const replies = data.extensions.filter(
+      (ext) => ext.kind === "space.roomy.replyTo.0",
+    );
+
+    // at an event encoding level we support messages replying to multiple messages;
+    // TODO: redesign schema to support materialising multiple replies
+    if (replies[0]) {
+      statements.push(sql`
+      insert into edges (head, tail, label)
+      values (
+        ${id(event.ulid)},
+        ${id(replies[0].data)},
+        'reply'
+      )
+    `);
+    }
 
     // Handle comment extensions - comp_comment
-    data.extensions
-      .filter((ext) => ext.kind === "space.roomy.comment.0")
-      .forEach((comment) => {
-        statements.push(
-          sql`
+    const comments = data.extensions.filter(
+      (ext) => ext.kind === "space.roomy.comment.0",
+    );
+
+    // TODO: redesign schema to support materialising multiple comments
+    if (comments[0]) {
+      statements.push(
+        sql`
           insert into comp_comment (entity, version, snippet, idx_from, idx_to, updated_at)
           values (
             ${id(event.ulid)},
-            ${id(comment.data.version)},
-            ${comment.data.snippet || ""},
-            ${comment.data.from},
-            ${comment.data.to},
+            ${id(comments[0].data.version)},
+            ${comments[0].data.snippet || ""},
+            ${comments[0].data.from},
+            ${comments[0].data.to},
             (unixepoch() * 1000)
           )`,
-        );
-      });
+      );
+    }
 
     // Handle overrideAuthorDid, overrideTimestamp extensions - comp_override_meta
     const overrideAuthorExt = data.extensions.find(
@@ -374,7 +383,7 @@ const materializers: {
     }
 
     // Handle image extensions - comp_image
-    // Each image becomes a separate child entity with deterministic hash-based ID
+    // Each image becomes a separate child entity with URI ID, including query with message ID to differentiate
     for (const img of data.extensions.filter(
       (ext) => ext.kind === "space.roomy.image.0",
     )) {
@@ -398,7 +407,7 @@ const materializers: {
     }
 
     // Handle video extensions - comp_video
-    // Each video becomes a separate child entity with deterministic hash-based ID
+    // Each video becomes a separate child entity with URI + query ID
     for (const vid of data.extensions.filter(
       (ext) => ext.kind === "space.roomy.video.0",
     )) {
@@ -423,7 +432,7 @@ const materializers: {
     }
 
     // Handle file extensions - comp_file
-    // Each file becomes a separate child entity with deterministic hash-based ID
+    // Each file becomes a separate child entity with URI + query ID
     for (const file of data.extensions.filter(
       (ext) => ext.kind === "space.roomy.file.0",
     )) {
@@ -442,7 +451,7 @@ const materializers: {
         `,
       );
     }
-    // Handle link extensions - comp_link
+    // Handle link extensions - comp_link - URI + query ID
     data.extensions
       .filter((ext) => ext.kind === "space.roomy.link.0")
       .forEach((link) => {
@@ -584,11 +593,10 @@ const materializers: {
   "space.roomy.reaction.create.0": async ({ data, user }) => {
     return [
       sql`
-        insert into edges (head, tail, label, payload)
+        insert into comp_reaction (entity, user, reaction)
         values (
-          ${id(user)},
           ${id(data.reactionTo)},
-          'reaction',
+          ${id(user)},
           ${data.reaction}
         )
       `,
@@ -601,12 +609,11 @@ const materializers: {
     }
     return [
       sql`
-      delete from edges
+      delete from comp_reaction
       where
-        head = ${id(user)} and
-        label = 'reaction' and
-        tail = ${id(data.reaction_to)} and
-        payload = ${data.reaction}
+        entity = ${id(data.reaction_to)} and
+        user = ${id(user)} and
+        reaction = ${data.reaction}
     `,
     ];
   },
@@ -615,11 +622,10 @@ const materializers: {
   "space.roomy.reaction.bridged.create.0": async ({ data }) => {
     return [
       sql`
-        insert into edges (head, tail, label, payload)
+        insert into comp_reaction (entity, user, reaction)
         values (
           ${id(data.reactingUser)},
           ${id(data.reactionTo)},
-          'reaction',
           ${data.reaction}
         )
       `,
@@ -632,12 +638,11 @@ const materializers: {
     }
     return [
       sql`
-      delete from edges
+      delete from comp_reaction
       where
-        head = ${id(data.reactingUser)} and
-        label = 'reaction' and
-        tail = ${id(data.reaction_to)} and
-        payload = ${data.reaction}
+        entity = ${id(data.reaction_to)} and
+        user = ${id(data.reactingUser)} and
+        reaction = ${data.reaction}
     `,
     ];
   },
@@ -907,13 +912,9 @@ export type EdgeLabel =
   | "author"
   | "reorder"
   | "source"
-  | "avatar"
-  | "reaction";
+  | "avatar";
 
 type EntityId = string;
-export interface EdgeReaction {
-  reaction: string;
-}
 
 export interface EdgeBan {
   reason: string;
@@ -926,7 +927,6 @@ export interface EdgeMember {
 }
 
 interface EdgesWithPayload {
-  reaction: EdgeReaction;
   ban: EdgeBan;
   member: EdgeMember;
 }

@@ -1,7 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /// <reference lib="webworker" />
 
-import { type Batch, type EventType, type StreamHashId } from "../types";
+import {
+  type Batch,
+  type EventType,
+  type StreamHashId,
+  type StreamIndex,
+  type TaskPriority,
+} from "../types";
 import {
   messagePortInterface,
   reactiveWorkerState,
@@ -29,6 +35,7 @@ import type {
   SqlStatement,
 } from "../sqlite/types";
 import { isDid, type Did } from "@atproto/api";
+import { id } from "../encoding";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -73,15 +80,17 @@ class WorkerSupervisor {
       new BroadcastChannel("backend-status"),
       true,
     );
+
     this.#auth = { state: "loading" };
     this.#status.authState = this.#auth; // in general prefer setAuthState
+
     this.#connection = { ports: new WeakMap(), count: 0 };
     this.connectRPC();
 
     this.refreshSession();
   }
 
-  setAuthenticated(client: Client) {
+  async setAuthenticated(client: Client) {
     // 'authenticated' reactive state has did and personalStream, not client
     const did = client.agent.did;
     const statementChannel = new AsyncChannel<{
@@ -92,45 +101,60 @@ class WorkerSupervisor {
 
     console.log("Authenticating SQLite worker with did", did);
 
-    this.sqlite
+    await this.sqlite
       .authenticate(did)
-      .then(() => {
-        console.log("Authenticated Sqlite worker");
-        // try to fetch or create the personal stream
-        const loading = { state: "loading" } as const;
-        this.#auth = loading;
-        this.#status.authState = loading;
-
-        client
-          .ensurePersonalStream(did)
-          .then((personalStream) => {
-            console.log("Got personalStreamId", personalStream);
-            client.ready.then((readyState) => {
-              this.#auth = {
-                state: "authenticated",
-                client,
-                eventChannel: readyState.eventChannel,
-                statementChannel,
-              };
-              this.#status.authState = {
-                state: "authenticated",
-                did,
-                personalStream,
-              };
-              this.runMaterializer();
-
-              client.personalStreamFetched.promise.then(() => {
-                this.loadStreams();
-              });
-            });
-          })
-          .catch((e) => {
-            const error = { state: "error", error: e } as const;
-            this.#auth = error;
-            this.#status.authState = error;
-          });
-      })
       .catch((e) => console.error("Failed to authenticate sqlite worker", e));
+
+    console.log("Authenticated Sqlite worker");
+    // try to fetch or create the personal stream
+    const loading = { state: "loading" } as const;
+    this.#auth = loading;
+    this.#status.authState = loading;
+
+    const personalStream = await client.ensurePersonalStream().catch((e) => {
+      const error = { state: "error", error: e } as const;
+      this.#auth = error;
+      this.#status.authState = error;
+      throw error;
+    });
+
+    await this.sqlite.untilReady;
+
+    const upToEventIdQuery = await this.sqlite
+      .runQuery<{
+        backfilled_to: StreamIndex;
+      }>(
+        sql`select backfilled_to from comp_space where entity = ${id(personalStream)}`,
+      )
+      .catch((e) => console.warn("Error getting backfilled_to", e));
+
+    const upToEventId =
+      (upToEventIdQuery &&
+        upToEventIdQuery.rows?.length &&
+        upToEventIdQuery.rows[0]?.backfilled_to) ||
+      (0 as StreamIndex);
+
+    console.log("upToEventId", upToEventIdQuery);
+
+    const eventChannel = client.loadPersonalStream(personalStream, upToEventId);
+    console.log("Got personalStreamId", personalStream);
+
+    this.#auth = {
+      state: "authenticated",
+      client,
+      eventChannel,
+      statementChannel,
+    };
+    this.#status.authState = {
+      state: "authenticated",
+      did,
+      personalStream,
+    };
+    this.runMaterializer();
+
+    client.personalStreamFetched.promise.then(() => {
+      this.loadStreams();
+    });
   }
 
   private async runMaterializer() {
@@ -149,7 +173,7 @@ class WorkerSupervisor {
       // personal stream backfill is always high priority, other streams can be in background
       if (batch.streamId === this.client.personalStreamId) {
         console.log("materialising events batch for personal stream", batch);
-        const result = await this.sqlite.materializeBatch(batch, "normal");
+        const result = await this.sqlite.materializeBatch(batch, "priority");
         console.log("result", result);
       } else {
         console.log("materialising events batch for space stream", batch);
@@ -251,10 +275,6 @@ class WorkerSupervisor {
     await Client.oauthCallback(params);
   }
 
-  private get authenticated() {
-    return this.#auth.state === "authenticated";
-  }
-
   private get consoleForwarding() {
     return this.#config.consoleForwarding;
   }
@@ -269,13 +289,6 @@ class WorkerSupervisor {
 
   private get sqlite() {
     return this.#sqlite;
-  }
-
-  private get profile() {
-    return this.#status.profile;
-  }
-  private set profile(profile) {
-    this.#status.profile = profile;
   }
 
   private async enableLogForwarding() {
@@ -329,7 +342,7 @@ class WorkerSupervisor {
       },
       dangerousCompletelyDestroyDatabase: async ({ yesIAmSure }) => {
         if (!yesIAmSure) throw "You need to be sure";
-        this.sqlite.resetLocalDatabase();
+        return await this.sqlite.resetLocalDatabase();
       },
       setActiveSqliteWorker: async (messagePort) => {
         console.log("Setting active SQLite worker");
@@ -338,16 +351,6 @@ class WorkerSupervisor {
         await this.sqlite.setReady(
           messagePortInterface<{}, SqliteWorkerInterface>(messagePort, {}),
         );
-
-        // When a new SQLite worker is created we need to make sure that we re-create all of the
-        // live queries that were active on the old worker.
-        for (const [
-          id,
-          { port, statement },
-        ] of this.sqlite.liveQueries.entries()) {
-          const channel = this.sqlite.createLiveQueryChannel(port);
-          this.sqlite.createLiveQuery(id, channel.port2, statement);
-        }
       },
       async ping() {
         console.log("Backend: Ping received");
@@ -379,10 +382,10 @@ class WorkerSupervisor {
         return this.client.uploadToPDS(bytes, opts);
       },
       addClient: async (port) => this.connectMessagePort(port),
-      pauseSubscription: async (streamId) => {
+      pauseSubscription: async (_streamId) => {
         // await this.openSpacesMaterializer?.pauseSubscription(streamId);
       },
-      unpauseSubscription: async (streamId) => {
+      unpauseSubscription: async (_streamId) => {
         // await this.openSpacesMaterializer?.unpauseSubscription(streamId);
       },
       resolveHandleForSpace: async (spaceId, handleAccountDid) =>
@@ -410,6 +413,7 @@ class WorkerSupervisor {
 
 type SqlitePending = {
   state: "pending";
+  readyPromise: Deferred<void>;
 };
 
 type SqliteReady = {
@@ -421,16 +425,17 @@ type SqliteState = SqlitePending | SqliteReady;
 
 class SqliteSupervisor {
   #state: SqliteState;
-  #ready = new Deferred();
   liveQueries: Map<string, { port: MessagePort; statement: SqlStatement }>;
 
   constructor() {
-    this.#state = { state: "pending" };
+    this.#state = { state: "pending", readyPromise: new Deferred() };
     this.liveQueries = new Map();
   }
 
   get untilReady() {
-    return this.#ready.promise;
+    if (this.#state.state === "pending")
+      return this.#state.readyPromise.promise;
+    else return;
   }
 
   get ready() {
@@ -444,48 +449,59 @@ class SqliteSupervisor {
   }
 
   async authenticate(did: Did) {
-    await this.#ready.promise;
+    await this.untilReady;
     return await this.sqliteWorker.authenticate(did);
   }
 
-  async setReady(proxy: SqliteWorkerInterface) {
-    const previousSchemaVersion = await prevStream.getSchemaVersion();
-    console.log(
-      "SQLite Supervisor setReady got schemaVersion",
-      previousSchemaVersion,
-    );
+  async setReady(workerInterface: SqliteWorkerInterface) {
+    if (this.#state.state === "pending") {
+      const previousSchemaVersion = await prevStream.getSchemaVersion();
+      console.log(
+        "SQLite Supervisor setReady got schemaVersion",
+        previousSchemaVersion,
+      );
+      if (previousSchemaVersion != CONFIG.streamSchemaVersion) {
+        // Reset the local database cache when the schema version changes.
+        await this.resetLocalDatabase();
+      }
 
+      await prevStream.setSchemaVersion(CONFIG.streamSchemaVersion);
+
+      // Reset the local database cache when the database schema version changes
+      (async () => {
+        const result = await this.runQuery<{ version: string }>(
+          sql`select version from roomy_schema_version`,
+        );
+        if (result.rows?.[0]?.version !== CONFIG.databaseSchemaVersion) {
+          await this.resetLocalDatabase();
+        }
+      })();
+
+      // When a new SQLite worker is created we need to make sure that we re-create all of the
+      // live queries that were active on the old worker.
+      for (const [id, { port, statement }] of this.liveQueries.entries()) {
+        const channel = this.createLiveQueryChannel(port);
+        this.createLiveQuery(id, channel.port2, statement);
+      }
+
+      this.#state.readyPromise.resolve();
+    }
     this.#state = {
       state: "ready",
-      sqliteWorker: proxy,
+      sqliteWorker: workerInterface,
     };
-    this.#ready.resolve();
-
-    if (previousSchemaVersion != CONFIG.streamSchemaVersion) {
-      // Reset the local database cache when the schema version changes.
-      await this.resetLocalDatabase();
-    }
-
-    await prevStream.setSchemaVersion(CONFIG.streamSchemaVersion);
   }
 
-  async materializeBatch(
-    events: Batch.Event,
-    priority: "normal" | "background",
-  ) {
-    console.log("SQLite Supervisor materializeBatch");
+  async materializeBatch(events: Batch.Event, priority: TaskPriority) {
     await this.untilReady;
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialized.");
-    console.log(
-      "SQLite Supervisor calling proxy materializeBatch with",
-      events,
-    );
     return this.#state.sqliteWorker.materializeBatch(events, priority);
   }
 
   // Type assertion for convenience. Todo: use Zod/Arktype for sql output validation?
   async runQuery<T = unknown>(statement: SqlStatement) {
+    await this.untilReady;
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialized.");
     console.log("runQuery", statement);
@@ -495,6 +511,7 @@ class SqliteSupervisor {
   }
 
   async runSavepoint(savepoint: Savepoint) {
+    await this.untilReady;
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialized.");
     return this.#state.sqliteWorker.runSavepoint(savepoint);
@@ -513,6 +530,7 @@ class SqliteSupervisor {
     port: MessagePort,
     statement: SqlStatement,
   ) {
+    await this.untilReady;
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialized.");
     this.liveQueries.set(id, { port, statement });
@@ -520,6 +538,7 @@ class SqliteSupervisor {
   }
 
   async deleteLiveQuery(id: string) {
+    await this.untilReady;
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialized.");
     this.liveQueries.delete(id);
@@ -528,17 +547,31 @@ class SqliteSupervisor {
 
   async resetLocalDatabase() {
     console.warn("Resetting local database");
-    await this.untilReady.catch((error) => {
+    await this.untilReady?.catch((error) => {
       console.error("Database did not initialise", error);
     });
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialized when resetting database.");
-    await this.#state.sqliteWorker.runQuery(sql`pragma writable_schema = 1`);
-    await this.#state.sqliteWorker.runQuery(sql`delete from sqlite_master`);
-    await this.#state.sqliteWorker.runQuery(sql`vacuum`);
-    await this.#state.sqliteWorker.runQuery(sql`pragma integrity_check`);
-    await db.streamCursors.clear();
-    await personalStream.clearIdCache();
+    try {
+      await this.#state.sqliteWorker.runQuery(sql`pragma writable_schema = 1`);
+      await this.#state.sqliteWorker.runQuery(sql`delete from sqlite_master`);
+      await this.#state.sqliteWorker.runQuery(sql`vacuum`);
+      await this.#state.sqliteWorker.runQuery(sql`pragma integrity_check`);
+      await personalStream.clearIdCache();
+      return { done: true } as const;
+    } catch (error) {
+      console.error("Database reset failed", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Unknown error";
+      return {
+        done: false,
+        error: message,
+      } as const;
+    }
   }
 }
 

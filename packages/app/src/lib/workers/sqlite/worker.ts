@@ -28,6 +28,7 @@ import { AsyncChannel } from "../asyncChannel";
 import type { Savepoint, SqliteStatus, SqliteWorkerInterface } from "./types";
 import type { BackendInterface } from "../backend/types";
 import { Deferred } from "$lib/utils/deferred";
+import { CONFIG } from "$lib/config";
 
 console.log("Started sqlite worker");
 
@@ -147,6 +148,12 @@ class SqliteWorkerSupervisor {
         console.time("initSql");
         await this.runSavepoint({ name: "init", items: initSql });
         console.timeEnd("initSql");
+
+        // Set current schema version
+        await executeQuery(sql`
+          insert or replace into roomy_schema_version
+          (id, version) values (1, ${CONFIG.databaseSchemaVersion})
+          `);
 
         deferred.resolve();
       } catch (e) {
@@ -387,7 +394,6 @@ class SqliteWorkerSupervisor {
   }
 
   private async runStatementBatch(batch: Batch.Statement) {
-    console.log("Running Statement Batch", batch);
     const exec = async () => {
       await executeQuery({ sql: `savepoint batch${batch.batchId}` });
 
@@ -399,6 +405,12 @@ class SqliteWorkerSupervisor {
         }
       }
 
+      await executeQuery(
+        sql`update comp_space set backfilled_to = ${batch.latestEvent} where entity = ${id(batch.streamId)}`,
+      );
+
+      console.log("Updated backfilled_to to", batch.latestEvent);
+
       await executeQuery({ sql: `release batch${batch.batchId}` });
       return {
         batchId: batch.batchId,
@@ -407,7 +419,6 @@ class SqliteWorkerSupervisor {
       };
     };
 
-    console.log("runStatementBatch", batch);
     disableLiveQueries();
 
     // This lock makes sure that the JS tasks don't interleave some other query executions in while we
@@ -418,15 +429,7 @@ class SqliteWorkerSupervisor {
     );
 
     await enableLiveQueries();
-    await db.streamCursors.put({
-      streamId: batch.streamId,
-      latestEvent: batch.latestEvent,
-    });
 
-    console.log(
-      "Ran statement batch, updated streamCursors to:",
-      batch.latestEvent,
-    );
     return result;
   }
 

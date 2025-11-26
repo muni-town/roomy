@@ -1,5 +1,5 @@
 import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
-import type { Batch } from "../types";
+import type { Batch, TaskPriority } from "../types";
 import type { QueryResult } from "./setup";
 import type { Did } from "@atproto/api";
 
@@ -14,7 +14,7 @@ export type SqliteWorkerInterface = {
   authenticate(did: Did): Promise<void>;
   materializeBatch(
     events: Batch.Event,
-    priority: "normal" | "background",
+    priority: TaskPriority,
   ): Promise<Batch.Statement | Batch.ApplyResult>;
   runQuery<Row>(statement: SqlStatement): Promise<QueryResult<Row>>;
   createLiveQuery(
