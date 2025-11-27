@@ -102,6 +102,10 @@ export class Client {
     return this.#personalStreamIdReady.promise;
   }
 
+  get status() {
+    return this.#streamConnection.status;
+  }
+
   get personalStreamFetched() {
     if (
       this.personalStream?.pin.type !== "space" ||

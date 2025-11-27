@@ -114,6 +114,7 @@ export namespace AuthStates {
     state: "authenticated";
     did: string;
     personalStream: string;
+    clientStatus: StreamConnectionStatus["status"];
   }
 }
 

@@ -35,13 +35,20 @@
   import IconTablerClick from "~icons/tabler/click";
   import ChannelBoardView from "$lib/components/content/thread/boardView/ChannelBoardView.svelte";
   import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
-  import type { EventType } from "$lib/workers/materializer";
   import PageView from "$lib/components/content/page/PageView.svelte";
   import PageHistory from "$lib/components/content/page/PageHistory.svelte";
   import { navigate } from "$lib/utils.svelte";
+  import type { EventType } from "$lib/workers/sqlite/materializer";
 
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
+
+  let notMemberOfSpace = $derived(
+    backendStatus.authState?.state === "unauthenticated" ||
+      (backendStatus.authState?.state === "authenticated" &&
+        backendStatus.authState.clientStatus === "connected" &&
+        !current.space),
+  );
 
   const ref = $derived($scrollContainerRef);
   let shouldShowPageTitle = $state(false);
@@ -334,14 +341,15 @@
 
   async function setPageReadMarker() {
     if (
-      !backendStatus.personalStreamId ||
+      !backendStatus.authState ||
+      backendStatus.authState.state !== "authenticated" ||
       !page.params.space ||
       !page.params.object ||
       sentLastReadMarker === true
     )
       return;
     sentLastReadMarker = true;
-    await backend.sendEvent(backendStatus.personalStreamId, {
+    await backend.sendEvent(backendStatus.authState.personalStream, {
       ulid: ulid(),
       parent: undefined,
       variant: {
@@ -356,7 +364,8 @@
 
   $effect(() => {
     if (
-      !backendStatus.personalStreamId ||
+      !backendStatus.authState ||
+      backendStatus.authState.state !== "authenticated" ||
       !page.params.space ||
       !page.params.object ||
       !object?.lastRead
@@ -530,7 +539,7 @@
     {/if}
   {/snippet}
 
-  {#if !current.space}
+  {#if notMemberOfSpace}
     <div class="flex items-center justify-center h-full">
       <Box class="w-[20em] flex flex-col">
         <div class="mb-5 flex justify-center items-center gap-3">
@@ -548,6 +557,11 @@
           >Join Space</Button
         >
       </Box>
+    </div>
+  {:else if !object || !current.space}
+    <!-- TODO loading spinner -->
+    <div class="h-full w-full flex">
+      <div class="m-auto">Loading...</div>
     </div>
   {:else if object?.kind == "channel"}
     {#if channelActiveTab == "Chat"}
