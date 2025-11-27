@@ -380,7 +380,7 @@
     <div class="relative w-full">
       <div class="flex items-center gap-2 w-full max-w-full">
         <h2
-          class="mr-2 max-w-full truncate font-regular shrink py-4 text-base-900 dark:text-base-100 flex items-center gap-2 transition-all duration-300"
+          class="mr-2 w-full max-w-full truncate font-regular py-4 text-base-900 dark:text-base-100 flex items-center gap-2 transition-all duration-300"
         >
           {#if object?.kind === "channel" || object?.kind === "thread"}
             <div>
@@ -411,11 +411,13 @@
           {#if object?.kind !== "page"}
             <span class="truncate">{object?.name}</span>
           {:else if shouldShowPageTitle}
-            <span
-              class="truncate"
-              in:fade={{ duration: 300 }}
-              out:fade={{ duration: 100 }}>{object?.name}</span
-            >
+            <div class="grow w-full">
+              <span
+                class="truncate"
+                in:fade={{ duration: 300 }}
+                out:fade={{ duration: 100 }}>{object?.name}</span
+              >
+            </div>
           {/if}
         </h2>
 
@@ -467,7 +469,7 @@
             active={channelActiveTab}
           />
 
-          <div class="grow"></div>
+          <div class="grow w-1/2"></div>
 
           <Popover>
             {#snippet child({ props })}
@@ -509,7 +511,7 @@
             }))}
             active={pageActiveTab}
           />
-          <span class="grow"></span>
+          <span class="grow w-2/3"></span>
 
           {#if pageActiveTab == "Page"}
             <Button
