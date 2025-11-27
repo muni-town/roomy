@@ -1,6 +1,6 @@
 
 :80 {
-  handle /oauth-client.json {
+  handle /oauth-client-metadata.json {
     respond `{$OAUTH_CLIENT_JSON}`
   }
 

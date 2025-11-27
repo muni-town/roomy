@@ -21,7 +21,7 @@ fi
 
 # Add oauth-client configuration
 echo "{
-  \"client_id\": \"$target_url/oauth-client.json\",
+  \"client_id\": \"$target_url/oauth-client-metadata.json\",
   \"client_name\": \"Roomy\",
   \"client_uri\": \"$target_url\",
   \"logo_uri\": \"$target_url/favicon.png\",
@@ -34,6 +34,6 @@ echo "{
   \"token_endpoint_auth_method\": \"none\",
   \"application_type\": \"web\",
   \"dpop_bound_access_tokens\": true
-}" > packages/app/dist/oauth-client.json
+}" > packages/app/dist/oauth-client-metadata.json
 
 mv packages/app/dist .
