@@ -154,6 +154,7 @@ export class Client {
     console.log("Client connecting", streamList);
     const streams = new Map(
       [...streamList.entries()].map(([stream, upToEventId]) => {
+        this.leaf.subscribe(stream);
         return [
           stream,
           {
