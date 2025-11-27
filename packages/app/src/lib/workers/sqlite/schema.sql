@@ -1,13 +1,20 @@
+-- Remember to update lib/config.ts schema version if you change this <3
+
 pragma foreign_keys = on;
 
+create table if not exists roomy_schema_version (
+  id integer primary key check (id = 1),
+  version text not null
+) strict;
+
 CREATE TABLE IF NOT EXISTS events (
-  idx INTEGER NOT NULL,
-  stream_id BLOB NOT NULL,
-  entity_ulid BLOB REFERENCES entities(ulid) ON DELETE CASCADE,
-  payload BLOB,
-  created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
-  applied INTEGER DEFAULT 0,
-  PRIMARY KEY (idx, stream_id)
+  idx integer not null,
+  stream_id blob not null,
+  entity_ulid blob references entities(ulid) on delete cascade,
+  payload blob,
+  created_at integer not null default (unixepoch() * 1000),
+  applied integer default 0,
+  primary key (idx, stream_id)
 ) STRICT;
 
 create table if not exists entities (
@@ -24,7 +31,6 @@ create index if not exists idx_entities_stream_id on entities (stream_id);
 create index if not exists idx_entities_parent on entities (parent, id desc);
 
 CREATE TABLE IF NOT EXISTS edges (
-    edge_id integer primary key autoincrement,
     head BLOB NOT NULL,
     tail BLOB NOT NULL,
     label TEXT NOT NULL, -- CHECK(label IN ('child', 'parent', 'subscribe', 'member', 'ban', 'hide', 'pin', 'embed', 'reply', 'link', 'author', 'reorder', 'source', 'avatar')),
@@ -32,7 +38,8 @@ CREATE TABLE IF NOT EXISTS edges (
     created_at integer not null default (unixepoch() * 1000),
     updated_at integer not null default (unixepoch() * 1000),
     FOREIGN KEY (head) REFERENCES entities(id) ON DELETE CASCADE,
-    FOREIGN KEY (tail) REFERENCES entities(id) ON DELETE CASCADE
+    FOREIGN KEY (tail) REFERENCES entities(id) ON DELETE CASCADE,
+    primary key (head, tail, label)
 ) STRICT;
 create index if not exists idx_edges_label on edges(label);
 create index if not exists idx_edges_label_head on edges(label, head);
@@ -42,6 +49,8 @@ create table if not exists comp_space (
   entity blob primary key references entities(id) on delete cascade,
   hidden integer not null default 0 check(hidden in (0, 1)),
   handle_account text,
+  backfill_status text default 'idle', -- "priority" | "background" | "idle"
+  backfilled_to integer references events(idx) default 0,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
@@ -169,6 +178,15 @@ create table if not exists comp_last_read (
   unread_count integer,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
+) strict;
+
+create table if not exists comp_reaction (
+  entity blob references entities(id) on delete cascade,
+  user blob references entities(id) on delete cascade,
+  reaction text not null,
+  created_at integer not null default (unixepoch() * 1000),
+  updated_at integer not null default (unixepoch() * 1000),
+  primary key (entity, user, reaction)
 ) strict;
 
 create index if not exists idx_comp_last_read_timestamp on comp_last_read(timestamp);

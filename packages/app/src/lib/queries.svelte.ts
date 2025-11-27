@@ -4,9 +4,18 @@ import { LiveQuery } from "./liveQuery.svelte";
 import { sql } from "./utils/sqlTemplate";
 import { backend, backendStatus } from "./workers";
 import { id } from "./workers/encoding";
+import type { AuthStates } from "./workers/backend/types";
+
+// Helper to get personal stream ID from refactored structure
+function getPersonalStreamId() {
+  return backendStatus.authState?.state === "authenticated"
+    ? backendStatus.authState.personalStream
+    : undefined;
+}
 
 export type SpaceMeta = {
   id: string;
+  backfill_status: "priority" | "background" | "idle";
   name?: string;
   avatar?: string;
   handle_account?: string;
@@ -133,6 +142,7 @@ $effect.root(() => {
     () => sql`-- spaces
       select json_object(
           'id', id(cs.entity),
+          'backfill_status', cs.backfill_status,
           'name', ci.name,
           'avatar', ci.avatar,
           'description', ci.description,
@@ -145,9 +155,9 @@ $effect.root(() => {
             where e.head = cs.entity and e.label = 'member'
         )) as json
       from comp_space cs
-      join comp_info ci on cs.entity = ci.entity
       join entities e on e.id = cs.entity
-      where e.stream_id = ${backendStatus.personalStreamId && id(backendStatus.personalStreamId)} 
+      left join comp_info ci on cs.entity = ci.entity
+      where e.stream_id = ${getPersonalStreamId() && id(getPersonalStreamId()!)} 
         and hidden = 0
     `,
     (row) => JSON.parse(row.json),
@@ -280,7 +290,6 @@ $effect.root(() => {
   // Build tree structure reactively from flat results
   $effect(() => {
     if (flatTreeQuery.result) {
-      console.log("flatTree", flatTreeQuery.result);
       spaceTree.result = buildTree(flatTreeQuery.result);
     } else {
       spaceTree.result = undefined;
@@ -332,11 +341,19 @@ $effect.root(() => {
   });
   // Update current.isSpaceAdmin
   $effect(() => {
-    if (backendStatus.did) {
+    if (backendStatus.authState?.state !== "authenticated") {
+      console.warn(
+        "Tried to query with personal stream ID but not authenticated yet",
+      );
+      return;
+    }
+    if (backendStatus.authState.did) {
       current.isSpaceAdmin =
         current.space?.permissions?.some(
           (permission) =>
-            permission[0] === backendStatus.did && permission[1] === "admin",
+            permission[0] ===
+              (backendStatus.authState as AuthStates.ReactiveAuthenticated)
+                .did && permission[1] === "admin",
         ) || false;
     }
   });

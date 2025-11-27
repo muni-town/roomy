@@ -21,7 +21,8 @@
   } = $props();
 
   async function leaveSpace() {
-    if (!current.space || !backendStatus.personalStreamId) return;
+    if (backendStatus.authState?.state !== "authenticated") return;
+    if (!current.space || !backendStatus.authState.personalStream) return;
 
     // Tell the space that we are leaving the member list
     await backend.sendEvent(current.space.id, {
@@ -34,7 +35,7 @@
     });
 
     // Remove the space from our personal space list
-    await backend.sendEvent(backendStatus.personalStreamId, {
+    await backend.sendEvent(backendStatus.authState.personalStream, {
       ulid: ulid(),
       parent: undefined,
       variant: {

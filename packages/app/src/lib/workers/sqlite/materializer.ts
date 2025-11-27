@@ -1,178 +1,58 @@
-import type {
-  SqlStatement,
-  StreamEvent,
-  MaterializerConfig,
-} from "./backendWorker";
+import type { Bundle, Ulid } from "../types";
 import { _void, type CodecType } from "scale-ts";
-import { eventCodec, eventVariantCodec, id } from "./encoding";
-import schemaSql from "./schema.sql?raw";
+import { eventCodec, eventVariantCodec, id } from "../encoding";
 import { decodeTime } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
-import type { SqliteWorkerInterface } from "./types";
-import type { Agent } from "@atproto/api";
-import type { LeafClient } from "@muni-town/leaf-client";
-import { AsyncChannel } from "./asyncChannel";
+import type { SqlStatement } from "./types";
 
-type RawEvent = ReturnType<(typeof eventCodec)["dec"]>;
-type EventKind = RawEvent["variant"]["kind"];
+type DecodedEventPayload = ReturnType<(typeof eventCodec)["dec"]>;
+type EventKind = DecodedEventPayload["variant"]["kind"];
 
 export type EventType<TVariant extends EventKind | undefined = undefined> =
   TVariant extends undefined
-    ? RawEvent
-    : Omit<RawEvent, "variant"> & {
-        variant: Extract<RawEvent["variant"], { kind: TVariant }>;
+    ? DecodedEventPayload
+    : Omit<DecodedEventPayload, "variant"> & {
+        variant: Extract<DecodedEventPayload["variant"], { kind: TVariant }>;
       };
 
-/** Database materializer config. */
-export const config: MaterializerConfig = {
-  initSql: schemaSql
-    .split("\n")
-    .filter((x) => !x.startsWith("--"))
-    .join("\n")
-    .split(";\n\n")
-    .filter((x) => !!x.replace("\n", ""))
-    .map((sql) => ({ sql })),
-  materializer,
-};
-
-const newUserSignals = [
-  "space.roomy.message.create.0",
-  "space.roomy.message.create.1",
-  "space.roomy.room.join.0",
-];
-
-/** Map a batch of incoming events to SQL that applies the event to the entities,
- * components and edges, then execute them all as a single transaction.
- */
-export function materializer(
-  sqliteWorker: SqliteWorkerInterface,
-  agent: Agent,
-  streamId: string,
-  eventChannel: AsyncChannel<StreamEvent[]>,
-): AsyncChannel<{ sqlStatements: SqlStatement[]; latestEvent: number }> {
-  const sqlChannel = new AsyncChannel<{
-    sqlStatements: SqlStatement[];
-    latestEvent: number;
-  }>();
-
-  (async () => {
-    for await (const events of eventChannel) {
-      const batch: SqlStatement[] = [];
-
-      console.time("convert-events-to-sql");
-
-      // reset ensured flags for each new batch
-      ensuredProfiles = new Set();
-
-      const decodedEvents = events
-        .map((e) => {
-          try {
-            // Convert ArrayBuffer to Uint8Array for decoding
-            const payloadBytes = new Uint8Array(e.payload);
-            return [e, eventCodec.dec(payloadBytes)] as const;
-          } catch (error) {
-            const payloadBytes = new Uint8Array(e.payload);
-            console.warn(
-              `Skipping malformed event (idx ${e.idx}): Failed to decode ${payloadBytes.length} bytes.`,
-              `This is likely from an older buggy encoder. Error:`,
-              error instanceof Error ? error.message : error,
-            );
-            // Return null to filter out this event
-            return null;
-          }
-        })
-        .filter((e): e is Exclude<typeof e, null> => e !== null);
-
-      // Make sure all of the profiles we need are downloaded and inserted
-      const neededProfiles = new Set<string>();
-      decodedEvents.forEach(([i, ev]) =>
-        newUserSignals.includes(ev.variant.kind)
-          ? neededProfiles.add(i.user)
-          : undefined,
-      );
-
-      batch.push(
-        ...(await ensureProfiles(
-          streamId,
-          neededProfiles,
-          sqliteWorker,
-          agent,
-        )),
-      );
-
-      let latestEvent = 0;
-      for (const [incoming, event] of decodedEvents) {
-        latestEvent = Math.max(latestEvent, incoming.idx);
-        try {
-          // Get the SQL statements to be executed for this event
-          const statements = await materializers[event.variant.kind]({
-            sqliteWorker,
-            streamId,
-            agent,
-            user: incoming.user,
-            event,
-            data: event.variant.data,
-          } as never);
-
-          statements.push(sql`
-            update events set applied = 1 
-            where stream_id = ${id(streamId)} 
-              and
-            idx = ${incoming.idx}
-          `);
-
-          batch.push(...statements);
-        } catch (e) {
-          console.warn("Event materialisation failed: " + e);
-        }
-      }
-      sqlChannel.push({ sqlStatements: batch, latestEvent });
-      console.timeEnd("convert-events-to-sql");
-    }
-    sqlChannel.finish();
-  })();
-
-  return sqlChannel;
-}
-
-type Event = CodecType<typeof eventCodec>;
-type EventVariants = CodecType<typeof eventVariantCodec>;
-type EventVariantStr = EventVariants["kind"];
-type EventVariant<K extends EventVariantStr> = Extract<
-  EventVariants,
+type StreamEvent = CodecType<typeof eventCodec>;
+type StreamEventVariants = CodecType<typeof eventVariantCodec>;
+type StreamEventVariantStr = StreamEventVariants["kind"];
+type StreamEventVariant<K extends StreamEventVariantStr> = Extract<
+  StreamEventVariants,
   { kind: K }
 >["data"];
 
 /** SQL mapping for each event variant */
 const materializers: {
-  [K in EventVariantStr]: (opts: {
-    sqliteWorker: SqliteWorkerInterface;
-    leafClient: LeafClient;
+  [K in StreamEventVariantStr]: (opts: {
     streamId: string;
-    agent: Agent;
     user: string;
-    event: Event;
-    data: EventVariant<K>;
+    event: StreamEvent;
+    data: StreamEventVariant<K>;
   }) => Promise<SqlStatement[]>;
 } = {
   // Space
   "space.roomy.space.join.0": async ({ streamId, data }) => {
     return [
       ensureEntity(streamId, data.spaceId),
+      // because we are materialising a non-personal-stream space, we infer that we are backfilling in the background
       sql`
-        insert into comp_space (entity)
-        values (${id(data.spaceId)})
+        insert into comp_space (entity, backfill_status)
+        values (${id(data.spaceId)}, 'background')
         on conflict do update set hidden = 0
       `,
     ];
   },
   "space.roomy.space.leave.0": async ({ data }) => [
     sql`
-      update comp_space set hidden = 1
+      update comp_space set hidden = 1,
+      backfill_status = 'idle'
       where entity = ${id(data.spaceId)}
     `,
   ],
   "space.roomy.room.join.0": async ({ streamId, user, event }) => [
+    // if event has parent, it's for joining a room; if not, it's for joining the space
     sql`
       insert or replace into edges (head, tail, label, payload)
       values (
@@ -199,6 +79,7 @@ const materializers: {
       )
     )
   `,
+    // Set author on the virtual message to be the stream itself
     sql`
         insert into edges (head, tail, label)
         select 
@@ -290,7 +171,7 @@ const materializers: {
     ensureEntity(streamId, event.ulid, event.parent),
     sql`
       insert into comp_room ( entity )
-      values ( ${id(event.ulid)} )
+      values ( ${id(event.ulid)} ) on conflict do nothing
     `,
   ],
   "space.roomy.room.delete.0": async ({ event }) => {
@@ -414,7 +295,7 @@ const materializers: {
     const statements = [
       ensureEntity(streamId, event.ulid, event.parent),
       sql`
-        insert into edges (head, tail, label)
+        insert or replace into edges (head, tail, label)
         select 
           ${id(event.ulid)},
           ${id(user)},
@@ -441,36 +322,43 @@ const materializers: {
     ];
 
     // Handle replyTo extensions
-    data.extensions
-      .filter((ext) => ext.kind === "space.roomy.replyTo.0")
-      .forEach((reply) => {
-        statements.push(sql`
-        insert into edges (head, tail, label)
-        values (
-          ${id(event.ulid)},
-          ${id(reply.data)},
-          'reply'
-        )
-      `);
-      });
+    const replies = data.extensions.filter(
+      (ext) => ext.kind === "space.roomy.replyTo.0",
+    );
+
+    // at an event encoding level we support messages replying to multiple messages;
+    // TODO: redesign schema to support materialising multiple replies
+    if (replies[0]) {
+      statements.push(sql`
+      insert into edges (head, tail, label)
+      values (
+        ${id(event.ulid)},
+        ${id(replies[0].data)},
+        'reply'
+      )
+    `);
+    }
 
     // Handle comment extensions - comp_comment
-    data.extensions
-      .filter((ext) => ext.kind === "space.roomy.comment.0")
-      .forEach((comment) => {
-        statements.push(
-          sql`
+    const comments = data.extensions.filter(
+      (ext) => ext.kind === "space.roomy.comment.0",
+    );
+
+    // TODO: redesign schema to support materialising multiple comments
+    if (comments[0]) {
+      statements.push(
+        sql`
           insert into comp_comment (entity, version, snippet, idx_from, idx_to, updated_at)
           values (
             ${id(event.ulid)},
-            ${id(comment.data.version)},
-            ${comment.data.snippet || ""},
-            ${comment.data.from},
-            ${comment.data.to},
+            ${id(comments[0].data.version)},
+            ${comments[0].data.snippet || ""},
+            ${comments[0].data.from},
+            ${comments[0].data.to},
             (unixepoch() * 1000)
           )`,
-        );
-      });
+      );
+    }
 
     // Handle overrideAuthorDid, overrideTimestamp extensions - comp_override_meta
     const overrideAuthorExt = data.extensions.find(
@@ -492,7 +380,7 @@ const materializers: {
     }
 
     // Handle image extensions - comp_image
-    // Each image becomes a separate child entity with deterministic hash-based ID
+    // Each image becomes a separate child entity with URI ID, including query with message ID to differentiate
     for (const img of data.extensions.filter(
       (ext) => ext.kind === "space.roomy.image.0",
     )) {
@@ -516,7 +404,7 @@ const materializers: {
     }
 
     // Handle video extensions - comp_video
-    // Each video becomes a separate child entity with deterministic hash-based ID
+    // Each video becomes a separate child entity with URI + query ID
     for (const vid of data.extensions.filter(
       (ext) => ext.kind === "space.roomy.video.0",
     )) {
@@ -541,7 +429,7 @@ const materializers: {
     }
 
     // Handle file extensions - comp_file
-    // Each file becomes a separate child entity with deterministic hash-based ID
+    // Each file becomes a separate child entity with URI + query ID
     for (const file of data.extensions.filter(
       (ext) => ext.kind === "space.roomy.file.0",
     )) {
@@ -560,7 +448,7 @@ const materializers: {
         `,
       );
     }
-    // Handle link extensions - comp_link
+    // Handle link extensions - comp_link - URI + query ID
     data.extensions
       .filter((ext) => ext.kind === "space.roomy.link.0")
       .forEach((link) => {
@@ -702,11 +590,10 @@ const materializers: {
   "space.roomy.reaction.create.0": async ({ data, user }) => {
     return [
       sql`
-        insert into edges (head, tail, label, payload)
+        insert into comp_reaction (entity, user, reaction)
         values (
-          ${id(user)},
           ${id(data.reactionTo)},
-          'reaction',
+          ${id(user)},
           ${data.reaction}
         )
       `,
@@ -719,12 +606,11 @@ const materializers: {
     }
     return [
       sql`
-      delete from edges
+      delete from comp_reaction
       where
-        head = ${id(user)} and
-        label = 'reaction' and
-        tail = ${id(data.reaction_to)} and
-        payload = ${data.reaction}
+        entity = ${id(data.reaction_to)} and
+        user = ${id(user)} and
+        reaction = ${data.reaction}
     `,
     ];
   },
@@ -733,11 +619,10 @@ const materializers: {
   "space.roomy.reaction.bridged.create.0": async ({ data }) => {
     return [
       sql`
-        insert into edges (head, tail, label, payload)
+        insert into comp_reaction (entity, user, reaction)
         values (
           ${id(data.reactingUser)},
           ${id(data.reactionTo)},
-          'reaction',
           ${data.reaction}
         )
       `,
@@ -750,12 +635,11 @@ const materializers: {
     }
     return [
       sql`
-      delete from edges
+      delete from comp_reaction
       where
-        head = ${id(data.reactingUser)} and
-        label = 'reaction' and
-        tail = ${id(data.reaction_to)} and
-        payload = ${data.reaction}
+        entity = ${id(data.reaction_to)} and
+        user = ${id(data.reactingUser)} and
+        reaction = ${data.reaction}
     `,
     ];
   },
@@ -918,7 +802,66 @@ const materializers: {
 
 // UTILS
 
-function ensureEntity(
+/**
+ * Helper to wrap materializer logic and automatically create success/error bundles.
+ * This eliminates the repetitive bundle-wrapping code in each materializer.
+ */
+function bundleSuccess(
+  event: StreamEvent,
+  statements: SqlStatement | SqlStatement[],
+): Bundle.Statement {
+  return {
+    eventId: event.ulid as Ulid,
+    status: "success",
+    statements: Array.isArray(statements) ? statements : [statements],
+  };
+}
+
+/**
+ * Helper to create an error bundle with a consistent format.
+ */
+function bundleError(
+  event: StreamEvent,
+  error: Error | string,
+): Bundle.StatementError {
+  return {
+    eventId: event ? (event.ulid as Ulid) : undefined,
+    status: "error",
+    message: typeof error === "string" ? error : error.message,
+  };
+}
+
+/**
+ * Main materialize function called by the sqlite worker for each event.
+ * This provides a simpler interface than the full materializer pipeline.
+ */
+export async function materialize(
+  event: StreamEvent,
+  opts: { streamId: string; user: string },
+): Promise<Bundle.Statement> {
+  const kind = event.variant.kind;
+  const data = event.variant.data;
+
+  try {
+    const handler = materializers[kind];
+    if (!handler) {
+      throw new Error(`No materializer found for event kind: ${kind}`);
+    }
+
+    const statements = await handler({
+      ...opts,
+      event,
+      data,
+    } as any);
+
+    return bundleSuccess(event, statements);
+  } catch (error) {
+    console.error(`Error materializing event ${event.ulid}:`, error);
+    return bundleError(event, error instanceof Error ? error : String(error));
+  }
+}
+
+export function ensureEntity(
   streamId: string,
   entityId: string,
   parent?: string,
@@ -949,87 +892,6 @@ function ensureEntity(
   return statement;
 }
 
-/** When mapping incoming events to SQL, 'ensureProfile' checks whether a DID
- * exists in the profiles table. If not, it makes an API call to bsky to get some
- * basic info, and then returns SQL to add it to the profiles table. Rather than
- * inserting it immediately and breaking transaction atomicity, this is just a set
- * of flags to indicate that the profile doesn't need to be re-fetched.
- */
-let ensuredProfiles = new Set<string>();
-
-async function ensureProfiles(
-  streamId: string,
-  profileDids: Set<string>,
-  sqliteWorker: SqliteWorkerInterface,
-  agent: Agent,
-): Promise<SqlStatement[]> {
-  try {
-    // This only knows how to fetch Bluesky DIDs for now
-    const dids = [...profileDids].filter(
-      (x) =>
-        x.startsWith("did:plc:") ||
-        x.startsWith("did:web:") ||
-        ensuredProfiles.has(x),
-    );
-    if (dids.length == 0) return [];
-
-    const missingProfilesResp = await sqliteWorker.runQuery<{ did: string }>({
-      sql: `with existing(did) as (
-        values ${dids.map((_) => `(?)`).join(",")}
-      )
-      select id(did) as did
-      from existing
-      left join entities ent on ent.id = existing.did
-      where ent.id is null
-      `,
-      params: dids.map(id),
-    });
-    const missingDids = missingProfilesResp.rows?.map((x) => x.did) || [];
-    if (missingDids.length == 0) return [];
-
-    const statements = [];
-
-    for (const did of missingDids) {
-      ensuredProfiles.add(did);
-
-      const profile = await agent.getProfile({ actor: did });
-      if (!profile.success) continue;
-
-      statements.push(
-        ...[
-          sql`
-          insert into entities (id, stream_id)
-          values (${id(did)}, ${id(streamId)})
-          on conflict(id) do nothing
-        `,
-          sql`
-          insert into comp_user (did, handle)
-          values (
-            ${id(did)},
-            ${profile.data.handle}
-          )
-          on conflict(did) do nothing
-        `,
-          sql`
-          insert into comp_info (entity, name, avatar)
-          values (
-            ${id(did)},
-            ${profile.data.displayName || profile.data.handle},
-            ${profile.data.avatar}
-          )
-          on conflict(entity) do nothing
-        `,
-        ],
-      );
-    }
-
-    return statements;
-  } catch (e) {
-    console.error("Could not ensure profile", e);
-    return [];
-  }
-}
-
 function edgePayload<EdgeLabel extends keyof EdgesWithPayload>(
   payload: EdgesMap[EdgeLabel],
 ) {
@@ -1050,13 +912,9 @@ export type EdgeLabel =
   | "author"
   | "reorder"
   | "source"
-  | "avatar"
-  | "reaction";
+  | "avatar";
 
 type EntityId = string;
-export interface EdgeReaction {
-  reaction: string;
-}
 
 export interface EdgeBan {
   reason: string;
@@ -1069,7 +927,6 @@ export interface EdgeMember {
 }
 
 interface EdgesWithPayload {
-  reaction: EdgeReaction;
   ban: EdgeBan;
   member: EdgeMember;
 }

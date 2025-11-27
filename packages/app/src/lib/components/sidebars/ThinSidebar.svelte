@@ -5,13 +5,13 @@
   import { Button, ThemeToggle, ScrollArea } from "@fuxui/base";
   import { SelectThemePopover } from "@fuxui/colors";
   import UserProfileButton from "../user/UserProfileButton.svelte";
-  import { backendStatus } from "$lib/workers";
   import { current, spaces } from "$lib/queries.svelte";
   import { dev } from "$app/environment";
 
   import IconTablerPlus from "~icons/tabler/plus";
   import IconTablerHome from "~icons/tabler/home";
   import IconMdiSqlQuery from "~icons/mdi/sql-query";
+  import { did } from "$lib/status.svelte";
 
   let {}: {} = $props();
 
@@ -30,7 +30,7 @@
     <IconTablerHome font-size="1.75em" />
   </Button>
 
-  {#if backendStatus.did}
+  {#if did()}
     <!-- Messages Button -->
     <!-- <Button
         href="/messages"
