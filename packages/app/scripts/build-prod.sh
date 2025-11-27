@@ -19,4 +19,4 @@ echo "{
   \"token_endpoint_auth_method\": \"none\",
   \"application_type\": \"web\",
   \"dpop_bound_access_tokens\": true
-}" > build/oauth-client.json
+}" > build/oauth-client-metadata.json
