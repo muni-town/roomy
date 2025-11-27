@@ -4,14 +4,12 @@ import initSqlite3, {
   type Sqlite3Static,
   type PreparedStatement,
 } from "@sqlite.org/sqlite-wasm";
-import { IdCodec } from "./encoding";
-import type { SqlStatement } from "./backendWorker";
-import { decodeTime, isValid as isValidUlid, ulid } from "ulidx";
-import { patchApply, patchFromText } from "diff-match-patch-es";
+import type { SqlStatement } from "./types";
+import { udfs } from "./udf";
 
 let sqlite3: Sqlite3Static | null = null;
 let db: OpfsSAHPoolDatabase | Database | null = null;
-let initPromise: Promise<void> | null = null;
+let initPromises: Map<string, Promise<void>> = new Map();
 let vfsType: string | null = null;
 
 export function isDatabaseReady(): boolean {
@@ -37,9 +35,21 @@ const authorizer: Parameters<
   return 0;
 };
 
-export async function initializeDatabase(dbName: string): Promise<void> {
-  if (initPromise) return initPromise;
-  initPromise = (async () => {
+(globalThis as any).deleteDBs = async () => {
+  const pool = await sqlite3!.installOpfsSAHPoolVfs({
+    initialCapacity: 5,
+  });
+  await pool.wipeFiles();
+  console.log("Wiped all db files");
+};
+
+export async function initializeDatabase(
+  dbName: string,
+  persistent: boolean,
+): Promise<void> {
+  const promise = initPromises.get(dbName);
+  if (promise) return promise;
+  const newPromise = (async () => {
     if (!sqlite3) {
       sqlite3 = await initSqlite3({
         print: console.log,
@@ -49,60 +59,38 @@ export async function initializeDatabase(dbName: string): Promise<void> {
 
     let lastErr: unknown = null;
 
-    // Strategy 1: Try OpfsSAHPoolVfs (best performance, no COOP/COEP required)
-    // Retry a few times because SAH Pool can transiently fail during context handoff
-    console.log("Attempting to initialize with OpfsSAHPoolVfs...");
-    for (let attempt = 0; attempt < 6; attempt++) {
-      try {
-        const pool = await sqlite3.installOpfsSAHPoolVfs({});
-        db = new pool.OpfsSAHPoolDb(dbName);
-        db.exec(`pragma locking_mode = exclusive`);
-        db.exec(`pragma synchronous = normal`);
-        db.exec(`pragma journal_mode = wal`);
-        vfsType = "opfs-sahpool";
-        break;
-      } catch (e) {
-        lastErr = e;
-        await new Promise((r) => setTimeout(r, 100 * Math.pow(2, attempt)));
+    if (persistent) {
+      // Strategy 1: Try OpfsSAHPoolVfs (best performance, no COOP/COEP required)
+      // Retry a few times because SAH Pool can transiently fail during context handoff
+      console.log("Attempting to initialize with OpfsSAHPoolVfs...");
+      for (let attempt = 0; attempt < 6; attempt++) {
+        try {
+          const pool = await sqlite3.installOpfsSAHPoolVfs({
+            initialCapacity: 5,
+          });
+          db = new pool.OpfsSAHPoolDb(dbName);
+          db.exec(`pragma locking_mode = exclusive`);
+          db.exec(`pragma synchronous = normal`);
+          db.exec(`pragma journal_mode = wal`);
+          vfsType = "opfs-sahpool";
+          break;
+        } catch (e) {
+          lastErr = e;
+          // if we run into 'SAH Pool is full' errors again, we can call
+          // await globalThis.deleteDBs()
+          await new Promise((r) => setTimeout(r, 100 * Math.pow(2, attempt)));
+        }
       }
+
+      if (!db)
+        console.warn(
+          "Failed to init persistent DB, will fall back to in-memory",
+        );
     }
 
-    // Strategy 2: Fall back to regular OPFS VFS (requires COOP/COEP headers)
-    // if (!db && sqlite3.capi.sqlite3_vfs_find("opfs")) {
-    //   console.warn(
-    //     "OpfsSAHPoolVfs failed, attempting regular OPFS VFS...",
-    //     lastErr,
-    //   );
-    //   try {
-    //     // Check if cross-origin isolation is available
-    //     if (
-    //       typeof crossOriginIsolated !== "undefined" &&
-    //       !crossOriginIsolated
-    //     ) {
-    //       console.warn(
-    //         "Cross-origin isolation not available - OPFS VFS may not work",
-    //       );
-    //     }
-
-    //     // The regular OPFS VFS is available - try to use it
-    //     db = new sqlite3.oo1.OpfsDb(dbName);
-    //     db.exec(`pragma locking_mode = exclusive`);
-    //     db.exec(`pragma synchronous = normal`);
-    //     db.exec(`pragma journal_mode = wal`);
-    //     vfsType = "opfs";
-    //     lastErr = null; // Clear the error since we succeeded
-    //   } catch (e) {
-    //     console.error("Regular OPFS VFS also failed:", e);
-    //     lastErr = e;
-    //   }
-    // }
-
-    // Strategy 3: Fall back to in-memory database (for testing environments like Playwright)
+    // Fall back to in-memory database
     if (!db) {
-      console.warn(
-        "All persistent storage options failed, falling back to in-memory database...",
-        lastErr,
-      );
+      console.log("Loading in-memory database...", lastErr);
       try {
         db = new sqlite3.oo1.DB(":memory:");
         db.exec(`pragma locking_mode = exclusive`);
@@ -132,72 +120,15 @@ export async function initializeDatabase(dbName: string): Promise<void> {
     // Set an authorizer function that will allow us to track reads and writes to the database
     sqlite3.capi.sqlite3_set_authorizer(db, authorizer, 0);
 
-    // Parse a binary ID to it's string representation
-    db.createFunction("id", (_ctx, blob) => {
-      if (blob instanceof Uint8Array) {
-        return IdCodec.dec(blob);
-      } else {
-        return blob;
-      }
-    });
-    // Format a string ID to it's binary format
-    db.createFunction(
-      "print",
-      (_ctx, ...args) => {
-        console.log("%c[sqlite log]", "color: green", ...args);
-        return null;
-      },
-      { arity: -1, deterministic: false },
+    // Register User Defined Functions (UDFs) for using within SQL
+    udfs.forEach((udf) =>
+      udf.opts
+        ? db?.createFunction(udf.name, udf.f, udf.opts)
+        : db?.createFunction(udf.name, udf.f),
     );
-    // Format a string ID to it's binary format
-    db.createFunction("make_id", (_ctx, id) => {
-      if (typeof id == "string") {
-        return IdCodec.enc(id);
-      } else {
-        return id;
-      }
-    });
-    db.createFunction("is_ulid", (_ctx, id) => {
-      if (typeof id == "string") {
-        return isValidUlid(id) ? 1 : 0;
-      } else if (id instanceof Uint8Array) {
-        return isValidUlid(IdCodec.dec(id)) ? 1 : 0;
-      } else {
-        return 0;
-      }
-    });
-    db.createFunction("ulid_timestamp", (_ctx, id) => {
-      if (typeof id == "string") {
-        return decodeTime(id);
-      } else if (id instanceof Uint8Array) {
-        return decodeTime(IdCodec.dec(id));
-      } else {
-        return id;
-      }
-    });
-    // Create a ULID from a timestamp (for range queries using the index)
-    db.createFunction("timestamp_to_ulid", (_ctx, timestamp) => {
-      if (typeof timestamp === "number") {
-        // Create a ULID with the given timestamp
-        const generatedUlid = ulid(timestamp);
-        // Encode it to binary blob format for comparison with indexed entity IDs
-        return IdCodec.enc(generatedUlid);
-      }
-      return null;
-    });
-    db.createFunction("apply_dmp_patch", (_ctx, content, patch) => {
-      if (!(typeof content == "string" && typeof patch == "string"))
-        throw "Expected two string arguments to apply_dpm_patch()";
-
-      const [patched, _successful] = patchApply(
-        patchFromText(patch),
-        content,
-      ) as [string, boolean[]];
-
-      return patched;
-    });
   })();
-  await initPromise;
+  initPromises.set(dbName, newPromise);
+  await newPromise;
 }
 
 export type QueryResult<Row = { [key: string]: unknown }> = {
@@ -206,10 +137,11 @@ export type QueryResult<Row = { [key: string]: unknown }> = {
 } & {
   actions: Action[];
 };
+
 export async function executeQuery(
   statement: SqlStatement,
 ): Promise<QueryResult> {
-  if (!db && initPromise) await initPromise;
+  if (!db && initPromises) await initPromises;
   if (!db || !sqlite3) throw new Error("database_not_initialized");
 
   try {
@@ -232,7 +164,7 @@ const preparedSqlCache: Map<string, PreparedStatement> = new Map();
 async function prepareSql(
   statement: SqlStatement,
 ): Promise<{ prepared: PreparedStatement; actions: Action[] }> {
-  if (!db && initPromise) await initPromise;
+  if (!db && initPromises) await initPromises;
   if (!db || !sqlite3) throw new Error("database_not_initialized");
 
   authorizerQueue = [];
