@@ -169,7 +169,7 @@ export async function createOauthClient(): Promise<OAuthClient> {
     // static build.
     // native client metadata is not reuqired to be on the same domin as client_id,
     // so it can always use the deployed metadata
-    const resp = await fetch(`/oauth-client.json`, {
+    const resp = await fetch(`/oauth-client-metadata.json`, {
       headers: [["accept", "application/json"]],
     });
     clientMetadata = await resp.json();

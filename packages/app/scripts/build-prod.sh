@@ -6,7 +6,7 @@ target_url=https://roomy.space
 
 # Add oauth-client configuration
 echo "{
-  \"client_id\": \"$target_url/oauth-client.json\",
+  \"client_id\": \"$target_url/oauth-client-metadata.json\",
   \"client_name\": \"Roomy\",
   \"client_uri\": \"$target_url\",
   \"logo_uri\": \"$target_url/favicon.png\",
