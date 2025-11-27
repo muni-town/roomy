@@ -1,7 +1,7 @@
 import type { OAuthSession } from "@atproto/oauth-client";
 import { createOauthClient } from "./oauth";
 import { db, personalStream } from "../idb";
-import { Agent, BlobRef, isDid } from "@atproto/api";
+import { Agent, BlobRef, isDid, type Did } from "@atproto/api";
 import { lexicons } from "$lib/lexicons";
 import { LeafClient, type IncomingEvent } from "@muni-town/leaf-client";
 import { CONFIG } from "$lib/config";
@@ -33,6 +33,8 @@ export class Client {
   #personalStreamIdReady =
     new Deferred<ConnectionStates.LoadingPersonalStream>();
   #connected = new Deferred<ConnectionStates.ConnectedStreams>();
+  #agentStreamHandleCache = new Map<Did, { result: any }>();
+  #agentProfileCache = new Map<string, { result: any }>();
 
   constructor(agent: Agent, leaf: LeafClient) {
     this.agent = agent;
@@ -140,13 +142,13 @@ export class Client {
     return this.#connected.promise;
   }
 
-  async connect(streamList: Set<StreamHashId>) {
+  async connect(streamList: Map<StreamHashId, StreamIndex>) {
     if (!this.personalStream)
       throw new Error("Client must have personal stream to connect");
 
     console.log("Client connecting", streamList);
     const streams = new Map(
-      [...streamList].map((stream) => {
+      [...streamList.entries()].map(([stream, upToEventId]) => {
         return [
           stream,
           {
@@ -155,7 +157,7 @@ export class Client {
               type: "space", // we currently only support full backfill for everything
               backfill: {
                 status: "background",
-                upToEventId: 0,
+                upToEventId,
                 completed: new Deferred(),
               },
             } as const,
@@ -167,6 +169,8 @@ export class Client {
     this.setConnected(streams);
     this.runBackfill();
     console.log("Client connected", this);
+
+    return streams;
   }
 
   setConnected(streams: Map<StreamHashId, ConnectedStream>) {
@@ -411,11 +415,16 @@ export class Client {
         priority: stream.pin.backfill.status,
       });
 
-      // Persisted backfilled_to cursor is updated in SQLite after each batch is applied
+      // comp_space.backfilled_to cursor is updated in SQLite after each batch is applied
 
       fetchCursor += batchSize;
       console.timeEnd("fetchBatch-" + stream.id);
+
+      // slow down backfill for debugging
+      // await new Promise(() => {});
     }
+
+    console.log("Finished backfill for stream", stream.id);
   }
 
   async runBackfill() {
@@ -519,14 +528,24 @@ export class Client {
     if (!resp.success) throw "Error deleting stream handle record on PDS";
   }
 
+  async getProfileCached(actor: string) {
+    const cached = this.#agentProfileCache.get(actor);
+    if (cached) return cached.result;
+
+    const resp = await this.agent.getProfile({
+      actor,
+    });
+    this.#agentProfileCache.set(actor, { result: resp });
+
+    return resp;
+  }
+
   async resolveHandleForSpace(
     spaceId: string,
     handleAccountDid: string,
   ): Promise<string | undefined> {
     try {
-      const resp = await this.agent.getProfile({
-        actor: handleAccountDid,
-      });
+      const resp = await this.getProfileCached(handleAccountDid);
       const handle = resp.data.handle;
       const did = handleAccountDid;
       const resolvedSpaceId = (await this.resolveSpaceFromHandleOrDid(did))
@@ -550,6 +569,19 @@ export class Client {
             })
           ).data.did;
 
+      const result = this.getStreamHandleRecordCached(did as Did);
+      return result;
+    } catch (e) {
+      console.warn("Error resolving space from handle", e);
+      return undefined;
+    }
+  }
+
+  private async getStreamHandleRecordCached(did: Did) {
+    const cached = this.#agentStreamHandleCache.get(did);
+    if (cached) return cached.result;
+
+    try {
       const resp = await this.agent.com.atproto.repo.getRecord(
         {
           collection: CONFIG.streamHandleNsid,
@@ -569,9 +601,15 @@ export class Client {
             handleDid: did,
           }
         : undefined;
+
+      this.#agentStreamHandleCache.set(did, { result });
       return result;
     } catch (e) {
-      console.warn("Error resolving space from handle", e);
+      console.warn(
+        "Could not get stream handle record, most likely does not exist",
+        e,
+      );
+      this.#agentStreamHandleCache.set(did, { result: undefined });
       return undefined;
     }
   }
