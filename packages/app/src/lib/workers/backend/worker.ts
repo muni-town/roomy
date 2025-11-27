@@ -36,6 +36,7 @@ import type {
 } from "../sqlite/types";
 import { isDid, type Did } from "@atproto/api";
 import { id } from "../encoding";
+import { ensureEntity } from "../sqlite/materializer";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -111,7 +112,7 @@ class WorkerSupervisor {
     this.#auth = loading;
     this.#status.authState = loading;
 
-    const personalStream = await client.ensurePersonalStream().catch((e) => {
+    const personalStreamId = await client.ensurePersonalStream().catch((e) => {
       const error = { state: "error", error: e } as const;
       this.#auth = error;
       this.#status.authState = error;
@@ -120,24 +121,41 @@ class WorkerSupervisor {
 
     await this.sqlite.untilReady;
 
+    // Ensure personal stream space entity exists
+    await this.sqlite.runQuery(
+      ensureEntity(personalStreamId, personalStreamId),
+    );
+    await this.sqlite.runQuery(sql`
+      insert into comp_space (entity, hidden, backfill_status)
+      values (${id(personalStreamId)}, 1, 'priority') 
+      on conflict (entity) do update set backfill_status = 'priority'
+    `);
+
     const upToEventIdQuery = await this.sqlite
       .runQuery<{
         backfilled_to: StreamIndex;
       }>(
-        sql`select backfilled_to from comp_space where entity = ${id(personalStream)}`,
+        sql`select backfilled_to from comp_space where entity = ${id(personalStreamId)}`,
       )
       .catch((e) => console.warn("Error getting backfilled_to", e));
 
     const upToEventId =
-      (upToEventIdQuery &&
-        upToEventIdQuery.rows?.length &&
-        upToEventIdQuery.rows[0]?.backfilled_to) ||
-      (0 as StreamIndex);
+      upToEventIdQuery &&
+      upToEventIdQuery.rows?.length &&
+      upToEventIdQuery.rows[0]?.backfilled_to;
+
+    if (typeof upToEventId !== "number")
+      throw new Error(
+        "Could not correctly initialise personal stream space with backfilled_to",
+      );
 
     console.log("upToEventId", upToEventIdQuery);
 
-    const eventChannel = client.loadPersonalStream(personalStream, upToEventId);
-    console.log("Got personalStreamId", personalStream);
+    const eventChannel = client.loadPersonalStream(
+      personalStreamId,
+      upToEventId as StreamIndex,
+    );
+    console.log("Got personalStreamId", personalStreamId);
 
     this.#auth = {
       state: "authenticated",
@@ -148,11 +166,15 @@ class WorkerSupervisor {
     this.#status.authState = {
       state: "authenticated",
       did,
-      personalStream,
+      personalStream: personalStreamId,
+      clientStatus: client.status,
     };
     this.runMaterializer();
 
     client.personalStreamFetched.promise.then(() => {
+      this.sqlite.runQuery(sql`
+        update comp_space set backfill_status = 'idle' 
+        where entity = ${id(personalStreamId)}`);
       this.loadStreams();
     });
   }
@@ -305,15 +327,27 @@ class WorkerSupervisor {
     // get streams from SQLite
     const result = await this.sqlite.runQuery<{
       id: StreamHashId;
+      backfilled_to: StreamIndex;
     }>(sql`-- backend space list
-      select id(e.id) as id from entities e join comp_space on e.id = comp_space.entity
+      select id(e.id) as id, cs.backfilled_to from entities e join comp_space cs on e.id = cs.entity
       where hidden = 0
     `);
 
     console.log("spaces...", result);
     // pass them to the client
-    const streams = new Set(result.rows?.map((row) => row.id) || []);
-    await this.client.connect(streams);
+    const streamIdsAndCursors = new Map(
+      result.rows?.map((row) => [row.id, row.backfilled_to]) || [],
+    );
+
+    const streams = await this.client.connect(streamIdsAndCursors);
+    for (const stream of streams.values()) {
+      (async () => {
+        await stream.pin.backfill.completed.promise;
+        await this.sqlite.runQuery(sql`
+          update comp_space set backfill_status = 'idle' 
+          where entity = ${id(stream.id)}`);
+      })();
+    }
   }
 
   private getBackendInterface(): BackendInterface {
