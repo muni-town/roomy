@@ -71,7 +71,7 @@ export type StreamIndex = number & { __brand: "streamIndex" };
 
 export type TaskPriority = "priority" | "background";
 
-export interface StreamEvent {
+export interface EncodedStreamEvent {
   idx: StreamIndex;
   user: string;
   payload: ArrayBuffer;
@@ -85,7 +85,7 @@ export namespace Batch {
     status: "fetched";
     batchId: Ulid;
     streamId: StreamHashId;
-    events: StreamEvent[];
+    events: EncodedStreamEvent[];
     priority: TaskPriority;
   }
 
@@ -93,7 +93,7 @@ export namespace Batch {
     status: "pushed";
     batchId: Ulid;
     streamId: StreamHashId;
-    events: [StreamEvent];
+    events: [EncodedStreamEvent];
     priority: TaskPriority;
   }
   export type Event = EventFetch | EventPushed;
@@ -155,9 +155,9 @@ export namespace Bundle {
     statements: SqlStatement[];
   }
 
-  interface StatementError {
+  export interface StatementError {
     status: "error";
-    eventId: Ulid;
+    eventId?: Ulid;
     message: string;
   }
 

@@ -3,54 +3,51 @@ import { _void, type CodecType } from "scale-ts";
 import { eventCodec, eventVariantCodec, id } from "../encoding";
 import { decodeTime } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
-import type { SqliteWorkerInterface, SqlStatement } from "./types";
-import type { Agent } from "@atproto/api";
-import type { LeafClient } from "@muni-town/leaf-client";
+import type { SqlStatement } from "./types";
 
-type RawEvent = ReturnType<(typeof eventCodec)["dec"]>;
-type EventKind = RawEvent["variant"]["kind"];
+type DecodedEventPayload = ReturnType<(typeof eventCodec)["dec"]>;
+type EventKind = DecodedEventPayload["variant"]["kind"];
 
 export type EventType<TVariant extends EventKind | undefined = undefined> =
   TVariant extends undefined
-    ? RawEvent
-    : Omit<RawEvent, "variant"> & {
-        variant: Extract<RawEvent["variant"], { kind: TVariant }>;
+    ? DecodedEventPayload
+    : Omit<DecodedEventPayload, "variant"> & {
+        variant: Extract<DecodedEventPayload["variant"], { kind: TVariant }>;
       };
 
-type Event = CodecType<typeof eventCodec>;
-type EventVariants = CodecType<typeof eventVariantCodec>;
-type EventVariantStr = EventVariants["kind"];
-type EventVariant<K extends EventVariantStr> = Extract<
-  EventVariants,
+type StreamEvent = CodecType<typeof eventCodec>;
+type StreamEventVariants = CodecType<typeof eventVariantCodec>;
+type StreamEventVariantStr = StreamEventVariants["kind"];
+type StreamEventVariant<K extends StreamEventVariantStr> = Extract<
+  StreamEventVariants,
   { kind: K }
 >["data"];
 
 /** SQL mapping for each event variant */
 const materializers: {
-  [K in EventVariantStr]: (opts: {
-    sqliteWorker: SqliteWorkerInterface;
-    leafClient: LeafClient;
+  [K in StreamEventVariantStr]: (opts: {
     streamId: string;
-    agent: Agent;
     user: string;
-    event: Event;
-    data: EventVariant<K>;
+    event: StreamEvent;
+    data: StreamEventVariant<K>;
   }) => Promise<SqlStatement[]>;
 } = {
   // Space
   "space.roomy.space.join.0": async ({ streamId, data }) => {
     return [
       ensureEntity(streamId, data.spaceId),
+      // because we are materialising a non-personal-stream space, we infer that we are backfilling in the background
       sql`
-        insert into comp_space (entity)
-        values (${id(data.spaceId)})
+        insert into comp_space (entity, backfill_status)
+        values (${id(data.spaceId)}, 'background')
         on conflict do update set hidden = 0
       `,
     ];
   },
   "space.roomy.space.leave.0": async ({ data }) => [
     sql`
-      update comp_space set hidden = 1
+      update comp_space set hidden = 1,
+      backfill_status = 'idle'
       where entity = ${id(data.spaceId)}
     `,
   ],
@@ -810,7 +807,7 @@ const materializers: {
  * This eliminates the repetitive bundle-wrapping code in each materializer.
  */
 function bundleSuccess(
-  event: Event,
+  event: StreamEvent,
   statements: SqlStatement | SqlStatement[],
 ): Bundle.Statement {
   return {
@@ -823,9 +820,12 @@ function bundleSuccess(
 /**
  * Helper to create an error bundle with a consistent format.
  */
-function bundleError(event: Event, error: Error | string): Bundle.Statement {
+function bundleError(
+  event: StreamEvent,
+  error: Error | string,
+): Bundle.StatementError {
   return {
-    eventId: event.ulid as Ulid,
+    eventId: event ? (event.ulid as Ulid) : undefined,
     status: "error",
     message: typeof error === "string" ? error : error.message,
   };
@@ -836,7 +836,7 @@ function bundleError(event: Event, error: Error | string): Bundle.Statement {
  * This provides a simpler interface than the full materializer pipeline.
  */
 export async function materialize(
-  event: Event,
+  event: StreamEvent,
   opts: { streamId: string; user: string },
 ): Promise<Bundle.Statement> {
   const kind = event.variant.kind;
@@ -861,7 +861,7 @@ export async function materialize(
   }
 }
 
-function ensureEntity(
+export function ensureEntity(
   streamId: string,
   entityId: string,
   parent?: string,
