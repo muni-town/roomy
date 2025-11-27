@@ -241,7 +241,6 @@ export async function createLiveQuery(
   port: MessagePort,
   statement: SqlStatement,
 ) {
-  console.log("Creating live query", id, statement);
   liveQueries.set(id, { port, status: { kind: "unprepared", statement } });
   await updateLiveQuery(id);
 }

@@ -147,7 +147,6 @@
       limit ${showLastN}
     `,
     (row) => {
-      console.log(row);
       return JSON.parse(row.json);
     },
   );
@@ -163,7 +162,6 @@
     if (!query.result) return [];
     // return query.result;
 
-    console.log("query result itself", query.result);
     const mapped = query.result.reverse().map((message, index) => {
       // Get the previous message (if it exists)
       const prevMessage = index > 0 ? query.result![index - 1] : null;
@@ -196,7 +194,6 @@
       };
     });
 
-    console.log("timeline mapped", mapped);
     return mapped;
   });
   let slicedTimeline = $derived(timeline.slice(-showLastN));
@@ -234,10 +231,6 @@
       toast.error("Message not found");
     }
   }
-
-  $effect(() => {
-    console.log("timeline", timeline);
-  });
 
   setContext("scrollToMessage", scrollToMessage);
 

@@ -41,10 +41,6 @@
     }
   });
 
-  $effect(() => {
-    console.log("authState", backendStatus.authState);
-  });
-
   // The loading icon, though, should only show up if auth loading takes more than a short time, so
   // that it doesn't show up and disappear immediately which looks weirder than a nice fade-in.
   let showLoadingIcon = $state(false);
