@@ -84,7 +84,8 @@ export class Client {
 
       const leaf = new LeafClient(CONFIG.leafUrl, async () => {
         const resp = await agent?.com.atproto.server.getServiceAuth({
-          aud: `did:web:${new URL(CONFIG.leafUrl).host}`,
+          aud: CONFIG.leafServerDid,
+          lxm: "town.muni.leaf.authenticate",
         });
         if (!resp) throw "Error authenticating for leaf server";
         return resp.data.token;
