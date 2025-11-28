@@ -1,6 +1,6 @@
 {
   "name": "@roomy-chat/sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "MPL-2.0",
   "type": "module",
   "packageManager": "pnpm@10.10.0",
@@ -24,14 +24,9 @@
     ".": {
       "development": "./src/index.ts",
       "import": "./dist/index.js"
-    },
-    "./utils/invites": {
-      "development": "./src/utils/invites.ts",
-      "import": "./dist/utils/invites.js"
     }
   },
   "devDependencies": {
-    "jazz-tools": "0.15",
     "beachball": "^2.54.0",
     "pkgroll": "^2.12.2",
     "turbo": "^2.5.2",
