@@ -9,6 +9,10 @@ export type Event<A extends string, B extends string> =
   | ({ type: "register" } & { [K in A | B]: string })
   | ({ type: "unregister" } & { [K in A | B]: string })
   | { type: "clear" };
+
+/** Given two values, atomically creates lookup table entries for each to the other.
+ * Allows subscribing to `register`, `unregister` and `clear` events.
+ */
 export type BidirectionalSublevelMap<A extends string, B extends string> = {
   register: (entry: { [K in A | B]: string }) => Promise<void>;
   unregister: (entry: { [K in A | B]: string }) => Promise<void>;
@@ -133,15 +137,20 @@ function createBidirectionalSublevelMap<A extends string, B extends string>(
   } as any;
 }
 
+/** 2-way Map between guildIds and spaceIds */
 export const registeredBridges = createBidirectionalSublevelMap(
   "registeredBridges",
   "guildId",
   "spaceId",
 );
 
-export type LatestMessages = ReturnType<
-  typeof discordLatestMessageInChannelForBridge
->;
+/** Access a KV store for a Discord guild-Roomy space mapping for latest messages.
+ *
+ * A `discordLatestMessageInChannelForBridge` instance for the
+ * specific RoomySpace-DiscordGuild mapping, `latestMessagesInChannel`
+ * is returned by `getGuildContext`, and this is used in
+ * `messageCreate()` and `backfill()`
+ */
 export const discordLatestMessageInChannelForBridge = ({
   discordGuildId,
   roomySpaceId,
@@ -153,6 +162,16 @@ export const discordLatestMessageInChannelForBridge = ({
     `discordLatestMessageInChannel:${discordGuildId.toString()}:${roomySpaceId}`,
   );
 
+export type LatestMessages = ReturnType<
+  typeof discordLatestMessageInChannelForBridge
+>;
+
+/** Access a KV store for a Discord guild-Roomy space mapping for webhook tokens.
+ *
+ * Webhook tokens are created and used in `syncMessageFromRoomyToDiscord()` in the
+ * `roomy` watcher, used in `syncDiscordMessageToRoomy()` in `discordBot` and
+ * cleared in `slashCommands` where disconnecting the bot is handled.
+ */
 export const discordWebhookTokensForBridge = ({
   discordGuildId,
   roomySpaceId,
@@ -165,6 +184,13 @@ export const discordWebhookTokensForBridge = ({
   );
 
 export type SyncedIds = ReturnType<typeof syncedIdsForBridge>;
+
+/** 2-way Map of IDs between Discord and Roomy.
+ * At first I thought this was just for users, but I'm pretty sure it
+ * also maps between other entities, like Discord channels - Roomy
+ * threads/rooms. For users we shouldn't need it as we now have
+ * did-style `discord:12345` IDs which use the ID directly.
+ */
 export const syncedIdsForBridge = ({
   discordGuildId,
   roomySpaceId,
