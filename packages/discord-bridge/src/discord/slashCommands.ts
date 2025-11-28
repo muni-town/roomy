@@ -10,15 +10,15 @@ import {
   SetupDesiredProps,
 } from "@discordeno/bot";
 
-import { co, isSpaceAdmin, RoomyEntity } from "@roomy-chat/sdk";
+// import { co, isSpaceAdmin, RoomyEntity } from "@roomy-chat/sdk";
 import {
   discordLatestMessageInChannelForBridge,
   discordWebhookTokensForBridge,
   registeredBridges,
   syncedIdsForBridge,
 } from "../db.js";
-import { jazz } from "../jazz.js";
-import { desiredProperties } from "../discordBot.js";
+// import { jazz } from "../jazz.js";
+import { desiredProperties } from "../discord/bot.js";
 
 export const slashCommands = [
   {
@@ -83,45 +83,46 @@ export async function handleSlashCommandInteraction(
         (x) => x.name == "space-id",
       )?.value as string;
 
-      let space: co.loaded<typeof RoomyEntity> | null = null;
-      space = await RoomyEntity.load(spaceId, {
-        resolve: {
-          components: {
-            $each: true,
-          },
-        },
-      });
+      // let space: co.loaded<typeof RoomyEntity> | null = null;
+      // space = await RoomyEntity.load(spaceId, {
+      //   resolve: {
+      //     components: {
+      //       $each: true,
+      //     },
+      //   },
+      // });
 
-      if (!space) {
-        interaction.respond({
-          flags: MessageFlags.Ephemeral,
-          content: "🛑 Could not find a space with that ID. 😕",
-        });
-        return;
-      }
+      // if (!space) {
+      //   interaction.respond({
+      //     flags: MessageFlags.Ephemeral,
+      //     content: "🛑 Could not find a space with that ID. 😕",
+      //   });
+      //   return;
+      // }
 
-      const hasPermissions = await isSpaceAdmin(jazz, space);
-      if (!hasPermissions) {
-        interaction.respond({
-          flags: MessageFlags.Ephemeral,
-          content:
-            "🛑 The Discord bot is missing permissions to your Roomy space. " +
-            "Don't worry that's easy to fix!\n\nClick \"Grant Access\" in the Discord bridge " +
-            "settings page for your space in Roomy, then come back and try to connect again.",
-        });
-        return;
-      }
+      // const hasPermissions = await isSpaceAdmin(jazz, space);
+      // if (!hasPermissions) {
+      //   interaction.respond({
+      //     flags: MessageFlags.Ephemeral,
+      //     content:
+      //       "🛑 The Discord bot is missing permissions to your Roomy space. " +
+      //       "Don't worry that's easy to fix!\n\nClick \"Grant Access\" in the Discord bridge " +
+      //       "settings page for your space in Roomy, then come back and try to connect again.",
+      //   });
+      //   return;
+      // }
 
       const existingRegistration = await registeredBridges.get_spaceId(
         guildId.toString(),
       );
       if (existingRegistration) {
-        interaction.respond({
-          flags: MessageFlags.Ephemeral,
-          content:
-            `🛑 This Discord server is already bridge to another Roomy [space](https://roomy.space/${existingRegistration}).` +
-            " If you want to connect to a new space, first disconnect it using the `/disconnect-roomy-space` command.",
-        });
+        console.log("Existing registration", existingRegistration);
+        // interaction.respond({
+        //   flags: MessageFlags.Ephemeral,
+        //   content:
+        //     `🛑 This Discord server is already bridge to another Roomy [space](https://roomy.space/${existingRegistration}).` +
+        //     " If you want to connect to a new space, first disconnect it using the `/disconnect-roomy-space` command.",
+        // });
         return;
       }
 

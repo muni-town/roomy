@@ -1,8 +1,8 @@
 import "./httpProxy.js";
 import "./otel.js";
 import "dotenv/config";
-import { startBot } from "./discordBot.js";
-import { startRoomyWatcher } from "./roomy.js";
+import { startBot } from "./discord/bot.js";
+// import { startRoomyWatcher } from "./roomy/from.js";
 import { startApi } from "./api.js";
 import { trace } from "@opentelemetry/api";
 
@@ -25,4 +25,4 @@ console.log("Connecting to Discord...");
 const discordBot = await startBot();
 
 console.log("Starting Roomy Syncer");
-startRoomyWatcher(discordBot);
+// startRoomyWatcher(discordBot);

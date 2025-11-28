@@ -1,10 +1,10 @@
 import { AutoRouter, cors, error, json } from "itty-router";
-import { jazz } from "./jazz.js";
+// import { jazz } from "./jazz.js";
 import { registeredBridges } from "./db.js";
 import { createServerAdapter } from "@whatwg-node/server";
 import { createServer } from "http";
 import { PORT } from "./env.js";
-import { botState } from "./discordBot.js";
+import { botState } from "./discord/bot.js";
 import { trace } from "@opentelemetry/api";
 
 const tracer = trace.getTracer("api");
@@ -22,7 +22,7 @@ export function startApi() {
       if (botState.appId)
         return json({
           discordAppId: botState.appId,
-          jazzAccountId: jazz.id,
+          // jazzAccountId: jazz.id,
         });
       return error(500, "Discord bot still starting");
     });

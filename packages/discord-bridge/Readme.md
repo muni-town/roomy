@@ -15,7 +15,7 @@ The Discord Bridge consists of:
 Create `.env` file in the discord-bridge package:
 ```bash
 # Discord Bridge Service
-PORT=3001
+PORT=3301
 
 # Jazz Integration (for syncing with Roomy spaces)
 JAZZ_WORKER_ACCOUNT=your_worker_account_id
@@ -30,7 +30,7 @@ npm install
 npm run dev
 ```
 
-Service will start on http://localhost:3001
+Service will start on http://localhost:3301
 
 ## Usage
 
