@@ -1,7 +1,11 @@
-import type { IncomingEvent } from "@muni-town/leaf-client";
 import type { AsyncChannel } from "../asyncChannel";
 import type { QueryResult } from "../sqlite/setup";
-import type { Batch, EventType, StreamHashId } from "../types";
+import type {
+  Batch,
+  EncodedStreamEvent,
+  EventType,
+  StreamHashId,
+} from "../types";
 import type { Profile } from "../../types/profile";
 import type { MessagePortApi } from "../workerMessaging";
 import type { Client } from "./client";
@@ -38,7 +42,7 @@ export type BackendInterface = {
     streamId: string,
     offset: number,
     limit: number,
-  ): Promise<IncomingEvent[]>;
+  ): Promise<EncodedStreamEvent[]>;
   previewSpace(streamId: string): Promise<{ name: string }>;
   setActiveSqliteWorker(port: MessagePort): Promise<void>;
   pauseSubscription(streamId: string): Promise<void>;
@@ -52,12 +56,7 @@ export type BackendInterface = {
   ): Promise<{ spaceId: string; handleDid: string } | undefined>;
   createStreamHandleRecord(spaceId: string): Promise<void>;
   removeStreamHandleRecord(): Promise<void>;
-  createStream(
-    ulid: string,
-    moduleId: string,
-    moduleUrl: string,
-    params?: ArrayBuffer,
-  ): Promise<string>;
+  createSpaceStream(): Promise<string>;
   uploadToPds(
     bytes: ArrayBuffer,
     opts?: { alt?: string; mimetype?: string },

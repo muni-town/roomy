@@ -3,7 +3,7 @@ const CONFIG = {
   streamNsid: import.meta.env.VITE_STREAM_NSID || "space.roomy.stream.dev",
   streamHandleNsid:
     import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.stream.handle.dev",
-  streamSchemaVersion: "1",
+  streamSchemaVersion: "2",
   databaseSchemaVersion: "2",
   leafServerDid: "",
   atprotoOauthScope: "",

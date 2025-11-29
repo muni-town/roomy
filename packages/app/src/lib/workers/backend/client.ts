@@ -3,9 +3,8 @@ import { createOauthClient } from "./oauth";
 import { db, personalStream } from "../idb";
 import { Agent, BlobRef, isDid, type Did } from "@atproto/api";
 import { lexicons } from "$lib/lexicons";
-import { LeafClient, type IncomingEvent } from "@muni-town/leaf-client";
+import { LeafClient, type SqlRows } from "@muni-town/leaf-client";
 import { CONFIG } from "$lib/config";
-import { LEAF_MODULE_PERSONAL } from "../../moduleUrls";
 import {
   type EventType,
   type StreamHashId,
@@ -13,9 +12,10 @@ import {
   type StreamIndex,
   type TaskPriority,
   type Batch,
+  type EncodedStreamEvent,
 } from "../types";
 import { type Profile } from "$lib/types/profile";
-import { eventCodec, streamParamsCodec } from "../encoding";
+import { eventCodec } from "../encoding";
 import { ulid } from "ulidx";
 import { Deferred } from "$lib/utils/deferred";
 import { AsyncChannel } from "../asyncChannel";
@@ -24,6 +24,70 @@ import type {
   ConnectionStates,
   ConnectedStream,
 } from "./types";
+
+const personalModule = LeafClient.encodeBasicModule({
+  init_sql: `
+    create table if not exists stream_info as select
+      (select creator from stream) as creator, 
+      'space.roomy.stream.personal' as type,
+      '2' as schema_version;
+  `,
+  authorizer: `
+    select unauthorized("Only stream owner can add events")
+      where (select creator from stream_info) != (select user from event);
+  `,
+  materializer: ``,
+  queries: [
+    {
+      name: "stream_info",
+      sql: `select * from stream_info;`,
+      limits: [],
+      params: [],
+    },
+    {
+      name: "events",
+      sql: `
+        select unauthorized('only the strema creator can read its events')
+          where $requesting_user != (select creator from stream_info);
+
+        select id, user, payload from events.events
+          where id >= $start limit $limit;
+      `,
+      limits: [],
+      params: [],
+    },
+  ],
+});
+console.info("Personal module ID:", personalModule.moduleId);
+
+const spaceModule = LeafClient.encodeBasicModule({
+  init_sql: `
+    create table if not exists stream_info as select
+      (select creator from stream) as creator, 
+      'space.roomy.stream.space' as type,
+      '2' as schema_version;
+  `,
+  authorizer: ``,
+  materializer: ``,
+  queries: [
+    {
+      name: "stream_info",
+      sql: `select * from stream_info;`,
+      limits: [],
+      params: [],
+    },
+    {
+      name: "events",
+      sql: `
+        select id, user, payload from events.events
+          where id >= $start limit $limit;
+      `,
+      limits: [],
+      params: [],
+    },
+  ],
+});
+console.info("Space module ID:", spaceModule.moduleId);
 
 export class Client {
   agent: Agent;
@@ -35,6 +99,7 @@ export class Client {
   #connected = new Deferred<ConnectionStates.ConnectedStreams>();
   #agentStreamHandleCache = new Map<Did, { result: any }>();
   #agentProfileCache = new Map<string, { result: any }>();
+  #streamUnsubscribers = new Map<string, () => Promise<void>>();
 
   constructor(agent: Agent, leaf: LeafClient) {
     this.agent = agent;
@@ -91,6 +156,7 @@ export class Client {
         return resp.data.token;
       });
 
+      console.log("Initialized leaf client");
       return new Client(agent, leaf);
     } catch (e) {
       console.error(e);
@@ -154,7 +220,6 @@ export class Client {
     console.log("Client connecting", streamList);
     const streams = new Map(
       [...streamList.entries()].map(([stream, upToEventId]) => {
-        this.leaf.subscribe(stream);
         return [
           stream,
           {
@@ -225,23 +290,40 @@ export class Client {
 
       const state = await this.#personalStreamIdReady.promise;
 
-      this.leaf.subscribe(state.personalStream.id);
+      await this.leaf.subscribe(
+        state.personalStream.id,
+        {
+          query_name: "events",
+          requesting_user: this.agent.assertDid,
+          params: [],
+          start:
+            state.personalStream.pin.type == "space"
+              ? BigInt((state.personalStream.pin.backfill.upToEventId || 0) + 1)
+              : 1n,
+          limit: 1n,
+        },
+        (result) => {
+          if (result.success) {
+            const events = parseEvents(result.value);
+            for (const event of events) {
+              this.eventChannel.push({
+                status: "pushed",
+                batchId: ulid() as Ulid,
+                streamId: state.personalStream.id as StreamHashId,
+                events: [
+                  {
+                    idx: event.idx as StreamIndex,
+                    user: event.user,
+                    payload: event.payload,
+                  },
+                ],
+                priority: "priority",
+              });
+            }
+          }
+        },
+      );
       console.log("Subscribed to stream:", state.personalStream.id);
-    });
-    this.leaf.on("event", (event) => {
-      this.eventChannel.push({
-        status: "pushed",
-        batchId: ulid() as Ulid,
-        streamId: event.stream as StreamHashId,
-        events: [
-          {
-            idx: event.idx as StreamIndex,
-            user: event.user,
-            payload: event.payload,
-          },
-        ],
-        priority: "priority",
-      });
     });
   }
 
@@ -261,19 +343,17 @@ export class Client {
       : undefined;
   }
 
-  async createStream(
-    ulid: string,
-    moduleId: string,
-    moduleUrl: string,
-    params?: ArrayBuffer,
-  ): Promise<string> {
+  async createSpaceStream(): Promise<string> {
     await this.#leafAuthenticated.promise;
-    return await this.leaf.createStreamFromModuleUrl(
-      ulid,
-      moduleId,
-      moduleUrl,
-      params || new ArrayBuffer(),
-    );
+    const moduleId = await this.leaf.uploadModule(spaceModule.encoded.buffer);
+
+    const streamId = await this.leaf.createStream({
+      stamp: ulid(),
+      creator: this.agent.assertDid,
+      module: moduleId,
+      options: [],
+    });
+    return streamId as StreamHashId;
   }
 
   get personalStream() {
@@ -293,17 +373,20 @@ export class Client {
   }
 
   async createPersonalStream() {
-    const personalStreamUlid = ulid();
     await this.#leafAuthenticated.promise;
-    return (await this.leaf.createStreamFromModuleUrl(
-      personalStreamUlid,
-      LEAF_MODULE_PERSONAL.id,
-      LEAF_MODULE_PERSONAL.url,
-      streamParamsCodec.enc({
-        streamType: "space.roomy.stream.personal",
-        schemaVersion: CONFIG.streamSchemaVersion,
-      }).buffer as ArrayBuffer,
-    )) as StreamHashId;
+    const moduleId = await this.leaf.uploadModule(
+      personalModule.encoded.buffer,
+    );
+    console.log("uploaded personal module:", moduleId);
+
+    const streamId = await this.leaf.createStream({
+      stamp: ulid(),
+      creator: this.agent.assertDid,
+      module: moduleId,
+      options: [],
+    });
+    console.log("created personal stream:", streamId);
+    return streamId as StreamHashId;
   }
 
   async ensurePersonalStream() {
@@ -312,6 +395,7 @@ export class Client {
     console.log("Now looking for personal stream id");
 
     let id = await personalStream.getIdCache(this.agent.assertDid);
+
     if (!id) {
       try {
         const resp1 = await this.agent.com.atproto.repo.getRecord({
@@ -335,7 +419,6 @@ export class Client {
 
         // create a new stream on leaf server
         id = await this.createPersonalStream();
-        console.log("Created new stream:", id);
 
         // put the stream ID in a record
         const resp2 = await this.agent.com.atproto.repo.putRecord({
@@ -353,6 +436,26 @@ export class Client {
         await personalStream.setIdCache(this.agent.assertDid, id);
       }
     }
+
+    // Get the module id for this stream to check whether or not we need to update the module.
+    const streamInfo = await this.leaf.streamInfo(id);
+    if (streamInfo.moduleId != personalModule.moduleId) {
+      console.log(
+        "Personal stream's module doesn't match our current personal module version",
+      );
+      const alreadyHasModule = await this.leaf.hasModule(
+        personalModule.moduleId,
+      );
+      if (!alreadyHasModule) {
+        console.log(
+          "The leaf server doesn't have our module yet: uploading...",
+        );
+        await this.leaf.uploadModule(personalModule.encoded.buffer);
+      }
+      console.log("Updating module for personal stream to our current version");
+      await this.leaf.updateModule(id, personalModule.moduleId);
+    }
+
     return id;
   }
 
@@ -385,6 +488,10 @@ export class Client {
         "Pin type & backfill status status expected to be 'space' and " +
           priority,
       );
+
+    // Unsubscribe from the stream during backfill if we have a subscription already
+    this.#streamUnsubscribers.get(stream.id)?.();
+    this.#streamUnsubscribers.delete(stream.id);
 
     let fetchCursor = stream.pin.backfill.upToEventId;
 
@@ -423,12 +530,46 @@ export class Client {
 
       // comp_space.backfilled_to cursor is updated in SQLite after each batch is applied
 
-      fetchCursor += batchSize;
+      fetchCursor += newEvents.length;
       console.timeEnd("fetchBatch-" + stream.id);
 
       // slow down backfill for debugging
       // await new Promise(() => {});
     }
+
+    this.#streamUnsubscribers.set(
+      stream.id,
+      await this.leaf.subscribe(
+        stream.id,
+        {
+          query_name: "events",
+          requesting_user: this.agent.assertDid,
+          params: [],
+          start: BigInt(fetchCursor + 1),
+          limit: 1n,
+        },
+        (result) => {
+          if (result.success) {
+            const events = parseEvents(result.value);
+            for (const event of events) {
+              this.eventChannel.push({
+                status: "pushed",
+                batchId: ulid() as Ulid,
+                streamId: stream.id as StreamHashId,
+                events: [
+                  {
+                    idx: event.idx as StreamIndex,
+                    user: event.user,
+                    payload: event.payload,
+                  },
+                ],
+                priority: "priority",
+              });
+            }
+          }
+        },
+      ),
+    );
 
     console.log("Finished backfill for stream", stream.id);
   }
@@ -456,17 +597,17 @@ export class Client {
 
   async sendEvent(streamId: string, event: EventType) {
     await this.#leafAuthenticated.promise;
-    await this.leaf.sendEvent(
-      streamId,
-      eventCodec.enc(event).buffer as ArrayBuffer,
-    );
+    await this.leaf.sendEvent(streamId, {
+      user: this.agent.assertDid,
+      payload: eventCodec.enc(event),
+    });
   }
 
   async sendEventBatch(streamId: string, payloads: EventType[]) {
     await this.#leafAuthenticated.promise;
     const encodedPayloads = payloads.map((x) => {
       try {
-        return eventCodec.enc(x).buffer as ArrayBuffer;
+        return eventCodec.enc(x);
       } catch (e) {
         throw new Error(
           `Could not encode event: ${JSON.stringify(x, null, "  ")}`,
@@ -474,21 +615,29 @@ export class Client {
         );
       }
     });
-    await this.leaf.sendEvents(streamId, encodedPayloads);
+    await this.leaf.sendEvents(
+      streamId,
+      encodedPayloads.map((payload) => ({
+        user: this.agent.assertDid,
+        payload,
+      })),
+    );
   }
 
   async fetchEvents(
     streamId: string,
-    offset: number,
+    start: number,
     limit: number,
-  ): Promise<IncomingEvent[]> {
+  ): Promise<EncodedStreamEvent[]> {
     await this.#leafAuthenticated.promise;
-    const events = (
-      await this.leaf?.fetchEvents(streamId, { offset, limit })
-    )?.map((x) => ({
-      ...x,
-      stream: streamId,
-    }));
+    const resp = await this.leaf?.query(streamId, {
+      query_name: "events",
+      limit: BigInt(limit),
+      start: BigInt(start),
+      params: [],
+      requesting_user: this.agent.assertDid,
+    });
+    const events = parseEvents(resp);
     return events;
   }
 
@@ -635,4 +784,30 @@ export class Client {
   logout() {
     db.kv.delete("did");
   }
+}
+
+function parseEvents(rows: SqlRows): EncodedStreamEvent[] {
+  const columnNamesAreValid =
+    rows.column_names[0] == "id" &&
+    rows.column_names[1] == "user" &&
+    rows.column_names[2] == "payload";
+  if (!columnNamesAreValid)
+    throw new Error("Invalid column names for events response");
+
+  return rows.rows.map((x) => {
+    if (
+      x.values[0]?.tag != "integer" ||
+      x.values[1]?.tag != "text" ||
+      x.values[2]?.tag != "blob"
+    )
+      throw new Error(
+        `Invalid column type for events response: ${JSON.stringify(x, (_key, value) => (typeof value == "bigint" ? value.toString() : value))}`,
+      );
+
+    return {
+      idx: Number(x.values[0].value) as StreamIndex,
+      user: x.values[1].value,
+      payload: x.values[2].value.buffer,
+    };
+  });
 }
