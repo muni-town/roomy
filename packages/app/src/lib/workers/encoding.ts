@@ -332,7 +332,7 @@ export const eventVariantCodec = Kinds({
    *
    * When the parent is undefined, then that means that the user is publicly announcing that they
    * are joining the space.
-  */
+   */
   "space.roomy.room.join.0": _void,
   /** The parent of the event indicates which room is being left. */
   "space.roomy.room.leave.0": _void,
