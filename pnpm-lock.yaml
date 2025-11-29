@@ -116,8 +116,8 @@ importers:
         specifier: ^1.2.23
         version: 1.2.23
       '@muni-town/leaf-client':
-        specifier: 0.1.0-alpha.5
-        version: 0.1.0-alpha.5
+        specifier: 0.1.0-alpha.8
+        version: 0.1.0-alpha.8
       '@playwright/test':
         specifier: ^1.40.0
         version: 1.56.1
@@ -877,8 +877,8 @@ packages:
   '@mixmark-io/domino@2.2.0':
     resolution: {integrity: sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw==}
 
-  '@muni-town/leaf-client@0.1.0-alpha.5':
-    resolution: {integrity: sha512-18L8iZIgtRxHMD5tPhkmXMnI8oz+aiJ0VWe2EPJaHCt7wp6CNV5Vsm36TmzQdlFuPRtj0dnL0602Q4YTpF33Ug==}
+  '@muni-town/leaf-client@0.1.0-alpha.8':
+    resolution: {integrity: sha512-U1s8x6APbVdKNJ6LzaQ2/kuQTGe5SByzQ5iCla4V7cQ/3bB4orwRg0WsjHpzSdDSiXATJAILj/yo9TmRrRjeBw==}
 
   '@noble/ciphers@1.3.0':
     resolution: {integrity: sha512-2I0gnIVPtfnMw9ee9h1dJG7tp81+8Ob3OJb3Mv37rx5L40/b0i7djjCVvGOVqc9AEIQyvyu1i6ypKdFw8R8gQw==}
@@ -891,6 +891,10 @@ packages:
   '@noble/hashes@1.8.0':
     resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
     engines: {node: ^14.21.3 || >=16}
+
+  '@noble/hashes@2.0.1':
+    resolution: {integrity: sha512-XlOlEbQcE9fmuXxrVTXCTlG2nlRXa9Rj3rr5Ue/+tX+nmkgbX720YHh0VR3hBF9xDvwnb8D2shVGOwNx+ulArw==}
+    engines: {node: '>= 20.19.0'}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -4510,8 +4514,11 @@ snapshots:
 
   '@mixmark-io/domino@2.2.0': {}
 
-  '@muni-town/leaf-client@0.1.0-alpha.5':
+  '@muni-town/leaf-client@0.1.0-alpha.8':
     dependencies:
+      '@noble/hashes': 2.0.1
+      '@scure/base': 2.0.0
+      scale-ts: 1.6.1
       socket.io-client: 4.8.1
       socket.io-msgpack-parser: 3.0.2
     transitivePeerDependencies:
@@ -4526,6 +4533,8 @@ snapshots:
       '@noble/hashes': 1.8.0
 
   '@noble/hashes@1.8.0': {}
+
+  '@noble/hashes@2.0.1': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:

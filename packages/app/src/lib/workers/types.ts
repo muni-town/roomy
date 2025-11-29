@@ -74,7 +74,7 @@ export type TaskPriority = "priority" | "background";
 export interface EncodedStreamEvent {
   idx: StreamIndex;
   user: string;
-  payload: ArrayBuffer;
+  payload: ArrayBufferLike;
 }
 
 /** SqliteWorker handles a pipeline of batched computations, transforming

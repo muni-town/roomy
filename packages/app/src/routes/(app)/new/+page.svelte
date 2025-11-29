@@ -1,10 +1,7 @@
 <script lang="ts">
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
-  import { CONFIG } from "$lib/config";
-  import { LEAF_MODULE_PUBLIC_READ_WRITE } from "$lib/moduleUrls";
   import { navigate } from "$lib/utils.svelte";
   import { backend, backendStatus } from "$lib/workers";
-  import { streamParamsCodec } from "$lib/workers/encoding";
   import type { EventType } from "$lib/workers/types";
   import { Button, Checkbox, Input, Label, Textarea, toast } from "@fuxui/base";
   import { ulid } from "ulidx";
@@ -33,7 +30,7 @@
 
   async function createSpaceSubmit(evt: Event) {
     evt.preventDefault();
-    if (!backendStatus.personalStreamId || !backendStatus.did) return;
+    if (backendStatus.authState?.state != "authenticated") return;
 
     try {
       isSaving = true;
@@ -49,18 +46,10 @@
       }
 
       // Create a new stream for the space
-      const spaceId = await backend.createStream(
-        ulid(),
-        LEAF_MODULE_PUBLIC_READ_WRITE.id,
-        LEAF_MODULE_PUBLIC_READ_WRITE.url,
-        streamParamsCodec.enc({
-          streamType: "space.roomy.stream.space",
-          schemaVersion: CONFIG.streamSchemaVersion,
-        }).buffer as ArrayBuffer,
-      );
+      const spaceId = await backend.createSpaceStream();
 
       // Join the space
-      await backend.sendEvent(backendStatus.personalStreamId, {
+      await backend.sendEvent(backendStatus.authState.personalStream, {
         ulid: ulid(),
         parent: undefined,
         variant: {
@@ -104,7 +93,7 @@
         variant: {
           kind: "space.roomy.admin.add.0",
           data: {
-            adminId: backendStatus.did,
+            adminId: backendStatus.authState.did,
           },
         },
       });

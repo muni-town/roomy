@@ -35,7 +35,7 @@ import type {
   SqlStatement,
 } from "../sqlite/types";
 import { isDid, type Did } from "@atproto/api";
-import { id } from "../encoding";
+import { eventCodec, id } from "../encoding";
 import { ensureEntity } from "../sqlite/materializer";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
@@ -394,8 +394,7 @@ class WorkerSupervisor {
       },
       enableLogForwarding: () => this.enableLogForwarding(),
       disableLogForwarding: () => this.disableLogForwarding(),
-      createStream: async (ulid, moduleId, moduleUrl, params) =>
-        this.client.createStream(ulid, moduleId, moduleUrl, params),
+      createSpaceStream: async () => this.client.createSpaceStream(),
       sendEvent: async (streamId: string, event: EventType) => {
         await this.client.sendEvent(streamId, event);
       },
@@ -442,6 +441,22 @@ class WorkerSupervisor {
     } else {
       console.warn("Already logged out");
     }
+  }
+
+  async debugFetchPersonalStream(): Promise<EventType[]> {
+    if (this.#status.authState?.state != "authenticated") {
+      throw "Not authenticated";
+    }
+    return this.debugFetchStream(this.#status.authState.personalStream);
+  }
+
+  async debugFetchStream(streamId: string): Promise<EventType[]> {
+    if (this.#status.authState?.state != "authenticated") {
+      throw "Not authenticated";
+    }
+    const resp = await this.client.fetchEvents(streamId, 0, 1e10);
+
+    return resp.map((e) => eventCodec.dec(new Uint8Array(e.payload)));
   }
 }
 
@@ -496,6 +511,8 @@ class SqliteSupervisor {
       );
       if (previousSchemaVersion != CONFIG.streamSchemaVersion) {
         // Reset the local database cache when the schema version changes.
+        
+        // This is freezing for some reason
         await this.resetLocalDatabase();
       }
 
