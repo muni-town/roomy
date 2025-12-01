@@ -5,7 +5,7 @@ npm run build-web-app
 target_url=${OAUTH_HOST:-https://roomy.space}
 
 # Add oauth-client configuration
-echo "{
+oauth_config="{
   \"client_id\": \"$target_url/oauth-client-metadata.json\",
   \"client_name\": \"Roomy\",
   \"client_uri\": \"$target_url\",
@@ -19,4 +19,10 @@ echo "{
   \"token_endpoint_auth_method\": \"none\",
   \"application_type\": \"web\",
   \"dpop_bound_access_tokens\": true
-}" > build/oauth-client-metadata.json
+}"
+
+# Log for debugging
+echo "$oauth_config"
+
+# Write to 'oauth-client-metadata.json' file for clean OAuth login page
+echo "$oauth_config" > build/oauth-client-metadata.json
