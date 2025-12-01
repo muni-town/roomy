@@ -2,10 +2,10 @@
 
 npm run build-web-app
 
-target_url=${APP_URL:-https://roomy.space}
+target_url=${OAUTH_HOST:-https://roomy.space}
 
 echo "Generating OAuth client configuration..."
-echo "App URL: $APP_URL"
+echo "OAuth Host URL: $OAUTH_HOST"
 echo "Target URL: $target_url"
 
 # Add oauth-client configuration
