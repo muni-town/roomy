@@ -1,0 +1,20 @@
+# Robot Framework outputs
+tests/robot/results/
+log.html
+report.html
+output.xml
+playwright-log.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.uv/
+uv.lock
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
