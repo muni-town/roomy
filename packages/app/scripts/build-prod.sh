@@ -2,7 +2,7 @@
 
 npm run build-web-app
 
-target_url=https://roomy.space
+target_url=${OAUTH_HOST:-https://roomy.space}
 
 # Add oauth-client configuration
 echo "{
