@@ -21,7 +21,11 @@
     onclick={() => {
       backend
         .dangerousCompletelyDestroyDatabase({ yesIAmSure: true })
-        .then(() => window.location.reload());
+        .then((result) =>
+          result.done
+            ? window.location.reload()
+            : console.error("Could not reset cache:", result.error),
+        );
     }}>Reset Local Cache</Button
   >
   <h2 class="text-lg font-bold">Account</h2>
@@ -29,7 +33,7 @@
     class="w-full justify-start"
     size="lg"
     onclick={() => {
-      backend.logout();
+      backend.logout().then(() => window.location.reload());
       open = false;
     }}
   >

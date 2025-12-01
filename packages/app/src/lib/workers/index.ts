@@ -1,11 +1,11 @@
 import { messagePortInterface, reactiveWorkerState } from "./workerMessaging";
-import backendWorkerUrl from "./backendWorker.ts?worker&url";
+import backendWorkerUrl from "./backend/worker.ts?worker&url";
 import type {
   BackendInterface,
   BackendStatus,
   ConsoleInterface,
-  SqliteStatus,
-} from "./types";
+} from "./backend/types";
+import type { SqliteStatus } from "./sqlite/types";
 
 // Force page reload when hot reloading this file to avoid confusion if the workers get mixed up.
 if (import.meta.hot && !(window as any).__playwright) {
@@ -18,6 +18,8 @@ export const backendStatus = reactiveWorkerState<BackendStatus>(
   false,
 );
 (globalThis as any).backendStatus = backendStatus;
+
+console.log("backendStatus", backendStatus);
 
 const workerStatusChannel = new MessageChannel();
 
@@ -68,25 +70,40 @@ export const backend = messagePortInterface<ConsoleInterface, BackendInterface>(
   },
 );
 
+backend.ping();
+
 (globalThis as any).backend = backend;
 
 // Start a sqlite worker for this tab.
 const sqliteWorkerChannel = new MessageChannel();
 backend.addClient(sqliteWorkerChannel.port1);
-const sqliteWorker = new Worker(new URL("./sqliteWorker.ts", import.meta.url), {
-  name: "roomy-sqlite-worker",
-  type: "module",
-});
+const sqliteWorker = new Worker(
+  new URL("./sqlite/worker.ts", import.meta.url),
+  {
+    name: "roomy-sqlite-worker",
+    type: "module",
+  },
+);
+
 sqliteWorker.postMessage(
   {
     backendPort: sqliteWorkerChannel.port2,
     statusPort: workerStatusChannel.port2,
+    dbName: "temp",
   },
   [sqliteWorkerChannel.port2, workerStatusChannel.port2],
 );
 
 // for running in console REPL
 (window as any).debugWorkers = {
+  async enableLogForwarding() {
+    await backend.enableLogForwarding();
+  },
+
+  async disableLogForwarding() {
+    await backend.disableLogForwarding();
+  },
+
   async pingBackend() {
     try {
       const result = await backend.ping();
@@ -110,14 +127,7 @@ sqliteWorker.postMessage(
   },
 
   logBackendStatus() {
-    console.log("📊 [backendStatus] Current state:", {
-      did: backendStatus.did,
-      leafConnected: backendStatus.leafConnected,
-      personalStreamId: backendStatus.personalStreamId,
-      authLoaded: backendStatus.authLoaded,
-      loadingSpaces: backendStatus.loadingSpaces,
-      fullObject: { ...backendStatus },
-    });
+    console.log("📊 [backendStatus] Current state:", backendStatus);
     return backendStatus;
   },
 
@@ -166,7 +176,7 @@ sqliteWorker.postMessage(
 
       const result = await backend.runQuery(diagnosticQuery);
       const diagnostic = result.rows?.[0]
-        ? JSON.parse(result.rows[0].diagnostic as string)
+        ? JSON.parse((result.rows[0] as any).diagnostic as string)
         : null;
 
       console.log("🔍 Room Diagnostic for", roomId + ":", diagnostic);
@@ -215,7 +225,7 @@ sqliteWorker.postMessage(
 
       const result = await backend.runQuery(diagnosticQuery);
       const diagnostic = result.rows?.[0]
-        ? JSON.parse(result.rows[0].diagnostic as string)
+        ? JSON.parse((result.rows[0] as any).diagnostic as string)
         : null;
 
       console.log("🔍 Space Tree Diagnostic:", diagnostic);

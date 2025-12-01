@@ -41,7 +41,12 @@
           space.hasJoined == false && "filter grayscale",
         ]}
       >
-        <SpaceAvatar imageUrl={space.avatar} id={space.id} size={40} />
+        <SpaceAvatar
+          imageUrl={space.avatar}
+          id={space.id}
+          size={40}
+          loading={space.backfill_status !== "idle"}
+        />
       </div>
     </a>
   {/snippet}

@@ -37,6 +37,8 @@
     try {
       const redirect = await backend.login(handle);
 
+      console.log("redirect", redirect);
+
       window.location.href = redirect;
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
@@ -54,6 +56,8 @@
     xrpc: string,
     opts?: { query?: { [key: string]: string }; body?: any; admin?: boolean },
   ): Promise<T> {
+    if (!env.PUBLIC_PDS) throw new Error("No public PDS defined");
+
     const url = new URL(env.PUBLIC_PDS);
     url.pathname = `/xrpc/${xrpc}`;
     if (opts?.query) {

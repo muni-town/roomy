@@ -1,4 +1,4 @@
-import type { SqlStatement } from "$lib/workers/backendWorker";
+import type { SqlStatement } from "$lib/workers/sqlite/types";
 
 /** Tagged template that returns a SQL statement for a SQLite query */
 export function sql(

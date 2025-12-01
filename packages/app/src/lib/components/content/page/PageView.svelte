@@ -26,9 +26,6 @@
 
   let { showPageChat = $bindable(false) } = $props();
 
-  $effect(() => {
-    console.log("showPageChat", showPageChat);
-  });
   let pageQuery = new LiveQuery<{ content: string; latestEditId: string }>(
     () => sql`
     select 
@@ -76,12 +73,10 @@
 
   // Sync the ref to the store
   $effect(() => {
-    console.log("Setting scroll container ref", ref);
     scrollContainerRef.set(ref);
   });
 
   function setComment(selectedText: string, from: number, to: number) {
-    console.log("Running setComment", selectedText, from);
     // Ensure the chat is visible
     ensureShowPageChat();
 

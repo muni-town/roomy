@@ -1,111 +1,187 @@
-import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
-import type { EventType } from "./materializer";
-import type { BlobRef } from "@atproto/lexicon";
-import type { QueryResult } from "./setupSqlite";
-import type { SqlStatement } from "./backendWorker";
-import type { IncomingEvent } from "@muni-town/leaf-client";
+import type { QueryResult } from "./sqlite/setup";
+import type { eventCodec } from "./encoding";
+import type { Did } from "@atproto/api";
+import type { SqlStatement } from "./sqlite/types";
 
-export interface BackendStatus {
-  workerRunning: boolean | undefined;
-  authLoaded: boolean | undefined;
-  did: string | undefined;
-  profile: ProfileViewDetailed | undefined;
-  leafConnected: boolean | undefined;
-  personalStreamId: string | undefined;
-  loadingSpaces: number | undefined;
+type RawEvent = ReturnType<(typeof eventCodec)["dec"]>;
+type EventKind = RawEvent["variant"]["kind"];
+
+export type EventType<TVariant extends EventKind | undefined = undefined> =
+  TVariant extends undefined
+    ? RawEvent
+    : Omit<RawEvent, "variant"> & {
+        variant: Extract<RawEvent["variant"], { kind: TVariant }>;
+      };
+
+export type EdgeLabel =
+  | "child"
+  | "parent"
+  | "subscribe"
+  | "member"
+  | "ban"
+  | "hide"
+  | "pin"
+  | "embed"
+  | "reply"
+  | "link"
+  | "author"
+  | "reorder"
+  | "source"
+  | "avatar"
+  | "reaction";
+
+type EntityId = string & { __brand: "entityId" };
+
+export interface EdgeReaction {
+  reaction: string;
 }
-export interface SqliteStatus {
-  isActiveWorker: boolean | undefined;
-  workerId: string | undefined;
-  vfsType: string | undefined;
-}
-export interface Profile {
-  id: string;
-  handle?: string;
-  avatar?: string;
-  displayName?: string;
-  banner?: string;
-  description?: string;
+
+export interface EdgeBan {
+  reason: string;
+  banned_by: EntityId;
 }
 
-export type BackendInterface = {
-  login(username: string): Promise<string>;
-  logout(): Promise<void>;
-  oauthCallback(searchParams: string): Promise<void>;
-  runQuery(statement: SqlStatement): Promise<QueryResult>;
-  loadProfile(did: string): Promise<Profile | undefined>;
-  dangerousCompletelyDestroyDatabase(opts: {
-    yesIAmSure: true;
-  }): Promise<unknown>;
-  ping(): Promise<{ timestamp: number; workerId: string }>;
-  createLiveQuery(
-    id: string,
-    port: MessagePort,
-    statement: SqlStatement,
-  ): Promise<void>;
-  sendEvent(streamId: string, payload: EventType): Promise<void>;
-  sendEventBatch(streamId: string, payloads: EventType[]): Promise<void>;
-  fetchEvents(
-    streamId: string,
-    offset: number,
-    limit: number,
-  ): Promise<IncomingEvent[]>;
-  previewSpace(streamId: string): Promise<{ name: string }>;
-  setActiveSqliteWorker(port: MessagePort): Promise<void>;
-  pauseSubscription(streamId: string): Promise<void>;
-  unpauseSubscription(streamId: string): Promise<void>;
-  resolveHandleForSpace(
-    spaceId: string,
-    handleAccountDid: string,
-  ): Promise<string | undefined>;
-  resolveSpaceFromHandleOrDid(
-    handle: string,
-  ): Promise<{ spaceId: string; handleDid: string } | undefined>;
-  createStreamHandleRecord(spaceId: string): Promise<void>;
-  removeStreamHandleRecord(): Promise<void>;
-  createStream(
-    ulid: string,
-    moduleId: string,
-    moduleUrl: string,
-    params?: ArrayBuffer,
-  ): Promise<string>;
-  uploadToPds(
-    bytes: ArrayBuffer,
-    opts?: { alt?: string; mimeType?: string },
-  ): Promise<{
-    blob: ReturnType<BlobRef["toJSON"]>;
-    uri: string;
-  }>;
-  /** Adds a new message port connection to the backend that can call the backend interface. */
-  addClient(port: MessagePort): Promise<void>;
+export interface EdgeMember {
+  // delegation?: string;
+  can: "read" | "post" | "admin";
+}
+
+export interface EdgesWithPayload {
+  reaction: EdgeReaction;
+  ban: EdgeBan;
+  member: EdgeMember;
+}
+
+export type EdgesMap = {
+  [K in Exclude<EdgeLabel, keyof EdgesWithPayload>]: null;
+} & EdgesWithPayload;
+
+/** Given a tuple of edge names, produces a record whose keys are exactly
+ * those edge names and whose values are arrays of the corresponding edge types.
+ */
+export type EdgesRecord<TRequired extends readonly EdgeLabel[]> = {
+  [K in TRequired[number]]: [EdgesMap[K], EntityId];
 };
 
-export const consoleLogLevels = [
-  "trace",
-  "debug",
-  "log",
-  "info",
-  "warn",
-  "error",
-] as const;
-export type ConsoleLogLevel = (typeof consoleLogLevels)[number];
-export type ConsoleInterface = {
-  log(level: ConsoleLogLevel, ...args: any[]): Promise<void>;
-};
+export type StreamHashId = string & { __brand: "streamHashId" };
 
-export type Savepoint = {
-  name: string;
-  items: (SqlStatement | Savepoint)[];
-};
+export type Ulid = string & { __brand: "ulid" };
 
-export type SqliteWorkerInterface = {
-  createLiveQuery(
-    id: string,
-    port: MessagePort,
-    statement: SqlStatement,
-  ): Promise<void>;
-  deleteLiveQuery(id: string): Promise<void>;
-  runQuery<Row>(statement: SqlStatement): Promise<QueryResult<Row>>;
-  runSavepoint(savepoint: Savepoint): Promise<void>;
-  ping(): Promise<{ timestamp: number; workerId: string; isActive: boolean }>;
-};
+export type StreamIndex = number & { __brand: "streamIndex" };
+
+export type TaskPriority = "priority" | "background";
+
+export interface EncodedStreamEvent {
+  idx: StreamIndex;
+  user: string;
+  payload: ArrayBuffer;
+}
+
+/** SqliteWorker handles a pipeline of batched computations, transforming
+ * batches from Events to SQL Statements to Results
+ */
+export namespace Batch {
+  export interface EventFetch {
+    status: "fetched";
+    batchId: Ulid;
+    streamId: StreamHashId;
+    events: EncodedStreamEvent[];
+    priority: TaskPriority;
+  }
+
+  export interface EventPushed {
+    status: "pushed";
+    batchId: Ulid;
+    streamId: StreamHashId;
+    events: [EncodedStreamEvent];
+    priority: TaskPriority;
+  }
+  export type Event = EventFetch | EventPushed;
+
+  export interface Statement {
+    status: "transformed";
+    batchId: Ulid;
+    streamId: StreamHashId;
+    bundles: Bundle.Statement[];
+    latestEvent: StreamIndex;
+    priority: TaskPriority;
+  }
+
+  export interface ApplyResult {
+    status: "applied";
+    batchId: Ulid;
+    results: (
+      | Bundle.ApplyResult
+      | Bundle.ProfileApplyResult
+      | Bundle.ApplyError
+    )[];
+    priority: TaskPriority;
+  }
+}
+
+export interface ApplyResultError {
+  type: "error";
+  statement: SqlStatement;
+  message: string;
+}
+
+interface ApplyErrorMissingDependency {
+  type: "missingDependency";
+  dependency: Ulid;
+}
+
+type ApplyErrorType = ApplyErrorMissingDependency;
+
+/** Bundles are the units of data (events, statements, results) in batches */
+export namespace Bundle {
+  /** For a given batch of incoming events, certain event kinds trigger checks to
+   * ensureProfile so we can make sure we have the user for that event. These
+   * async requests are bundled together as an optimisation. */
+  export interface StatementProfile {
+    status: "profiles";
+    dids: Did[];
+    statements: SqlStatement[];
+  }
+
+  interface StatementProfileError {
+    status: "profileError";
+    dids: Set<Did>;
+    message: string;
+  }
+
+  export interface StatementSuccess {
+    status: "success";
+    eventId: Ulid;
+    statements: SqlStatement[];
+  }
+
+  export interface StatementError {
+    status: "error";
+    eventId?: Ulid;
+    message: string;
+  }
+
+  export type Statement =
+    | StatementSuccess
+    | StatementProfile
+    | StatementProfileError
+    | StatementError;
+
+  export interface ProfileApplyResult {
+    result: "appliedProfiles";
+    firstDid?: Did;
+    output: (QueryResult | ApplyResultError)[];
+  }
+
+  export interface ApplyResult {
+    result: "applied";
+    eventId: Ulid;
+    output: (QueryResult | ApplyResultError)[];
+  }
+
+  export interface ApplyError {
+    result: "error";
+    eventId: Ulid;
+    error: ApplyErrorType;
+  }
+}

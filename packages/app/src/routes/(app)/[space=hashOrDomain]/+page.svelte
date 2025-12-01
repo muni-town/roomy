@@ -19,6 +19,13 @@
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
 
+  let notMemberOfSpace = $derived(
+    backendStatus.authState?.state === "unauthenticated" ||
+      (backendStatus.authState?.state === "authenticated" &&
+        backendStatus.authState.clientStatus === "connected" &&
+        !current.space),
+  );
+
   const threadsList = new LiveQuery<ThreadInfo>(
     () =>
       sql`
@@ -114,6 +121,12 @@
     (row) => JSON.parse(row.json),
   );
 
+  let threadsLoading = $derived(
+    !threadsList.result ||
+      !current.space ||
+      (!threadsList.result.length && current.space?.backfill_status !== "idle"),
+  );
+
   onNavigate(() => (threadsList.result = undefined));
 </script>
 
@@ -144,7 +157,7 @@
     </div>
   {/snippet}
 
-  {#if !current.space}
+  {#if notMemberOfSpace}
     <div class="flex items-center justify-center h-full">
       <Box class="w-[20em] flex flex-col">
         <div class="mb-5 flex justify-center items-center gap-3">
@@ -163,6 +176,11 @@
         >
       </Box>
     </div>
+  {:else if threadsLoading}
+    <!-- TODO loading spinner -->
+    <div class="h-full w-full flex">
+      <div class="m-auto">Loading...</div>
+    </div>
   {:else if threadsList.result}
     <div
       transition:fade={{ duration: 200 }}
@@ -172,10 +190,5 @@
     </div>
   {:else if threadsList.error}
     Error loading: {threadsList.error}
-  {:else}
-    <!-- TODO loading spinner -->
-    <div class="h-full w-full flex">
-      <div class="m-auto">Loading...</div>
-    </div>
   {/if}
 </MainLayout>

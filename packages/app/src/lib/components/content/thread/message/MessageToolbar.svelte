@@ -15,6 +15,7 @@
   import { backend, backendStatus } from "$lib/workers";
   import { current } from "$lib/queries.svelte";
   import { ulid } from "ulidx";
+  import { did } from "$lib/status.svelte";
 
   let {
     editMessage,
@@ -39,7 +40,10 @@
   });
 
   let canEditAndDelete = $derived(
-    current.isSpaceAdmin || message.authorDid == backendStatus.did,
+    backendStatus.authState &&
+      backendStatus.authState.state === "authenticated" &&
+      (current.isSpaceAdmin ||
+        message.authorDid == backendStatus.authState.did),
   );
 
   async function deleteMessage() {
@@ -62,9 +66,7 @@
 
     // If we haven't already made this reaction to this post.
     if (
-      !message.reactions.find(
-        (x) => x.userId == backendStatus.did && x.reaction == emoji,
-      )
+      !message.reactions.find((x) => x.userId == did() && x.reaction == emoji)
     ) {
       backend.sendEvent(current.space.id, {
         ulid: ulid(),

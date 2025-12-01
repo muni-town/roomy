@@ -15,7 +15,7 @@
   } = $props();
 </script>
 
-<div class="hidden md:block">
+<div class="hidden md:block shrink-0">
   <Tabs.Root bind:value={active}>
     <Tabs.List
       class="rounded-[12px] bg-base-200/50 dark:bg-base-900/50 grid grid-cols-{items.length} p-[2px] text-sm border border-base-800/10 dark:border-base-100/10"
@@ -33,7 +33,7 @@
     </Tabs.List>
   </Tabs.Root>
 </div>
-<div class="block md:hidden">
+<div class="block md:hidden shrink-0">
   <Select.Root
     bind:value={active}
     onValueChange={(name) => {

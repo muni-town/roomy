@@ -35,13 +35,20 @@
   import IconTablerClick from "~icons/tabler/click";
   import ChannelBoardView from "$lib/components/content/thread/boardView/ChannelBoardView.svelte";
   import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
-  import type { EventType } from "$lib/workers/materializer";
   import PageView from "$lib/components/content/page/PageView.svelte";
   import PageHistory from "$lib/components/content/page/PageHistory.svelte";
   import { navigate } from "$lib/utils.svelte";
+  import type { EventType } from "$lib/workers/sqlite/materializer";
 
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
+
+  let notMemberOfSpace = $derived(
+    backendStatus.authState?.state === "unauthenticated" ||
+      (backendStatus.authState?.state === "authenticated" &&
+        backendStatus.authState.clientStatus === "connected" &&
+        !current.space),
+  );
 
   const ref = $derived($scrollContainerRef);
   let shouldShowPageTitle = $state(false);
@@ -334,14 +341,15 @@
 
   async function setPageReadMarker() {
     if (
-      !backendStatus.personalStreamId ||
+      !backendStatus.authState ||
+      backendStatus.authState.state !== "authenticated" ||
       !page.params.space ||
       !page.params.object ||
       sentLastReadMarker === true
     )
       return;
     sentLastReadMarker = true;
-    await backend.sendEvent(backendStatus.personalStreamId, {
+    await backend.sendEvent(backendStatus.authState.personalStream, {
       ulid: ulid(),
       parent: undefined,
       variant: {
@@ -356,7 +364,8 @@
 
   $effect(() => {
     if (
-      !backendStatus.personalStreamId ||
+      !backendStatus.authState ||
+      backendStatus.authState.state !== "authenticated" ||
       !page.params.space ||
       !page.params.object ||
       !object?.lastRead
@@ -380,7 +389,7 @@
     <div class="relative w-full">
       <div class="flex items-center gap-2 w-full max-w-full">
         <h2
-          class="mr-2 max-w-full truncate font-regular shrink py-4 text-base-900 dark:text-base-100 flex items-center gap-2 transition-all duration-300"
+          class="mr-2 w-full max-w-full truncate font-regular py-4 text-base-900 dark:text-base-100 flex items-center gap-2 transition-all duration-300"
         >
           {#if object?.kind === "channel" || object?.kind === "thread"}
             <div>
@@ -411,11 +420,13 @@
           {#if object?.kind !== "page"}
             <span class="truncate">{object?.name}</span>
           {:else if shouldShowPageTitle}
-            <span
-              class="truncate"
-              in:fade={{ duration: 300 }}
-              out:fade={{ duration: 100 }}>{object?.name}</span
-            >
+            <div class="grow w-full">
+              <span
+                class="truncate"
+                in:fade={{ duration: 300 }}
+                out:fade={{ duration: 100 }}>{object?.name}</span
+              >
+            </div>
           {/if}
         </h2>
 
@@ -467,7 +478,7 @@
             active={channelActiveTab}
           />
 
-          <div class="grow"></div>
+          <div class="grow w-1/2"></div>
 
           <Popover>
             {#snippet child({ props })}
@@ -509,7 +520,7 @@
             }))}
             active={pageActiveTab}
           />
-          <span class="grow"></span>
+          <span class="grow w-2/3"></span>
 
           {#if pageActiveTab == "Page"}
             <Button
@@ -528,7 +539,7 @@
     {/if}
   {/snippet}
 
-  {#if !current.space}
+  {#if notMemberOfSpace}
     <div class="flex items-center justify-center h-full">
       <Box class="w-[20em] flex flex-col">
         <div class="mb-5 flex justify-center items-center gap-3">
@@ -546,6 +557,11 @@
           >Join Space</Button
         >
       </Box>
+    </div>
+  {:else if !object || !current.space}
+    <!-- TODO loading spinner -->
+    <div class="h-full w-full flex">
+      <div class="m-auto">Loading...</div>
     </div>
   {:else if object?.kind == "channel"}
     {#if channelActiveTab == "Chat"}
