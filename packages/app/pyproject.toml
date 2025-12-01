@@ -1,0 +1,14 @@
+[project]
+name = "roomy-tests"
+version = "0.1.0"
+description = "Robot Framework tests for Roomy app"
+requires-python = ">=3.11"
+dependencies = [
+    "robotframework>=7.0",
+    "robotframework-browser>=18.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.4.0",
+]
