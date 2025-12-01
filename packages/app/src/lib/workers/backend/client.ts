@@ -394,8 +394,13 @@ export class Client {
 
     console.log("Now looking for personal stream id");
 
-    let id = await personalStream.getIdCache(this.agent.assertDid);
+    // TODO: Caching the personal stream ID causes problems when it gets cached and the PDS record
+    // has changed because the app will just get stuck loading forever trying to get the stream that
+    // doesn't exist. For now we just disable loading the stream ID from cache. I don't think it's
+    // unreasonable to just fetch this on startup for now.
 
+    // let id = await personalStream.getIdCache(this.agent.assertDid);
+    let id;
     if (!id) {
       try {
         const resp1 = await this.agent.com.atproto.repo.getRecord({
