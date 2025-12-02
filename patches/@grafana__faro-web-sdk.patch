@@ -1,0 +1,834 @@
+diff --git a/dist/cjs/config/makeCoreConfig.js b/dist/cjs/config/makeCoreConfig.js
+index f0d3f590e5de7f8484b272166240112b15761654..74c0092cf4c0c44bfa86af39f99f5720a69cba86 100644
+--- a/dist/cjs/config/makeCoreConfig.js
++++ b/dist/cjs/config/makeCoreConfig.js
+@@ -103,7 +103,7 @@ function createDefaultMetas(browserConfig) {
+         metas_1.browserMeta,
+         (0, page_1.createPageMeta)({ generatePageId: generatePageId, initialPageMeta: page })
+     ], ((_b = browserConfig.metas) !== null && _b !== void 0 ? _b : []), true);
+-    var isK6BrowserSession = (0, faro_core_1.isObject)(window === null || window === void 0 ? void 0 : window.k6);
++    var isK6BrowserSession = (0, faro_core_1.isObject)(globalThis === null || globalThis === void 0 ? void 0 : globalThis.k6);
+     if (isK6BrowserSession) {
+         return __spreadArray(__spreadArray([], initialMetas, true), [k6_1.k6Meta], false);
+     }
+diff --git a/dist/cjs/instrumentations/_internal/monitors/httpRequestMonitor.js b/dist/cjs/instrumentations/_internal/monitors/httpRequestMonitor.js
+index 2f6429ed468a8a251c6a3837ea7fc9738d5746ed..853ac5776326a365babd445ddbd425905ff3da0e 100644
+--- a/dist/cjs/instrumentations/_internal/monitors/httpRequestMonitor.js
++++ b/dist/cjs/instrumentations/_internal/monitors/httpRequestMonitor.js
+@@ -82,9 +82,9 @@ function monitorXhr(_a) {
+ function monitorFetch(_a) {
+     var onRequestEnd = _a.onRequestEnd, onRequestStart = _a.onRequestStart;
+     if (!originalFetchFn) {
+-        originalFetchFn = window.fetch;
++        originalFetchFn = globalThis.fetch;
+     }
+-    window.fetch = function () {
++    globalThis.fetch = function () {
+         var _a, _b;
+         var url = (_a = (0, url_1.getUrlFromResource)(arguments[0])) !== null && _a !== void 0 ? _a : '';
+         var isIgnoredUrl = (0, url_1.isUrlIgnored)(url);
+@@ -115,7 +115,7 @@ function __resetHttpRequestMonitorForTests() {
+         XMLHttpRequest.prototype.open = originalXhrOpen;
+     }
+     if (originalFetchFn) {
+-        window.fetch = originalFetchFn;
++        globalThis.fetch = originalFetchFn;
+     }
+     httpRequestObservable = undefined;
+     isInstrumented = false;
+diff --git a/dist/cjs/instrumentations/_internal/monitors/interactionMonitor.js b/dist/cjs/instrumentations/_internal/monitors/interactionMonitor.js
+index 1cda92b21d22da142e7dd8c7fb44791493f27bbb..5a9378b3437d9697b2175d54f5411a7acc728892 100644
+--- a/dist/cjs/instrumentations/_internal/monitors/interactionMonitor.js
++++ b/dist/cjs/instrumentations/_internal/monitors/interactionMonitor.js
+@@ -17,7 +17,7 @@ function monitorInteractions(eventNames) {
+             var handler = function () {
+                 interactionObservable.notify({ type: exports.MESSAGE_TYPE_INTERACTION, name: eventName });
+             };
+-            window.addEventListener(eventName, handler);
++            globalThis.addEventListener(eventName, handler);
+             registeredEventNames.add(eventName);
+             eventNameToHandler.set(eventName, handler);
+         }
+@@ -27,7 +27,7 @@ function monitorInteractions(eventNames) {
+ // Test-only utility to reset state between tests
+ function __resetInteractionMonitorForTests() {
+     eventNameToHandler.forEach(function (handler, eventName) {
+-        window.removeEventListener(eventName, handler);
++        globalThis.removeEventListener(eventName, handler);
+     });
+     eventNameToHandler.clear();
+     registeredEventNames.clear();
+diff --git a/dist/cjs/instrumentations/_internal/monitors/urlChangeMonitor.js b/dist/cjs/instrumentations/_internal/monitors/urlChangeMonitor.js
+index dffdf0f85b2348fa28dcfb78ebbcfcc857332f47..4e15c72e5786e4c910fe54dd2d4c41cf0ee9adcb 100644
+--- a/dist/cjs/instrumentations/_internal/monitors/urlChangeMonitor.js
++++ b/dist/cjs/instrumentations/_internal/monitors/urlChangeMonitor.js
+@@ -27,7 +27,7 @@ function monitorUrlChanges() {
+         }
+     }
+     if (!isInstrumented) {
+-        var hasNavigation = 'navigation' in window && 'NavigateEvent' in window;
++        var hasNavigation = 'navigation' in globalThis && 'NavigateEvent' in globalThis;
+         if (hasNavigation) {
+             // Prefer Navigation API when supported: do not patch history or add popstate/hashchange listeners
+             onNavigateHandler = function (e) {
+@@ -41,8 +41,8 @@ function monitorUrlChanges() {
+                     // Swallow to avoid impacting host app
+                 }
+             };
+-            window.navigation.addEventListener('navigate', onNavigateHandler);
+-            var NavigateEventConstructor = window.NavigateEvent;
++            globalThis.navigation.addEventListener('navigate', onNavigateHandler);
++            var NavigateEventConstructor = globalThis.NavigateEvent;
+             if (NavigateEventConstructor &&
+                 NavigateEventConstructor.prototype &&
+                 typeof NavigateEventConstructor.prototype.intercept === 'function') {
+@@ -72,33 +72,33 @@ function monitorUrlChanges() {
+         else {
+             // Fallback: history API patching + popstate/hashchange
+             if (!originalPushState) {
+-                originalPushState = window.history.pushState;
++                originalPushState = globalThis.history.pushState;
+             }
+-            window.history.pushState = function () {
++            globalThis.history.pushState = function () {
+                 var args = [];
+                 for (var _i = 0; _i < arguments.length; _i++) {
+                     args[_i] = arguments[_i];
+                 }
+-                var result = originalPushState.apply(window.history, args);
++                var result = originalPushState.apply(globalThis.history, args);
+                 emit('pushState');
+                 return result;
+             };
+             if (!originalReplaceState) {
+-                originalReplaceState = window.history.replaceState;
++                originalReplaceState = globalThis.history.replaceState;
+             }
+-            window.history.replaceState = function () {
++            globalThis.history.replaceState = function () {
+                 var args = [];
+                 for (var _i = 0; _i < arguments.length; _i++) {
+                     args[_i] = arguments[_i];
+                 }
+-                var result = originalReplaceState.apply(window.history, args);
++                var result = originalReplaceState.apply(globalThis.history, args);
+                 emit('replaceState');
+                 return result;
+             };
+             onPopStateHandler = function () { return emit('popstate'); };
+             onHashChangeHandler = function () { return emit('hashchange'); };
+-            window.addEventListener('popstate', onPopStateHandler);
+-            window.addEventListener('hashchange', onHashChangeHandler);
++            globalThis.addEventListener('popstate', onPopStateHandler);
++            globalThis.addEventListener('hashchange', onHashChangeHandler);
+             isInstrumented = true;
+         }
+     }
+@@ -108,22 +108,22 @@ function monitorUrlChanges() {
+ function __resetUrlChangeMonitorForTests() {
+     var _a, _b;
+     if (onPopStateHandler) {
+-        window.removeEventListener('popstate', onPopStateHandler);
++        globalThis.removeEventListener('popstate', onPopStateHandler);
+     }
+     if (onHashChangeHandler) {
+-        window.removeEventListener('hashchange', onHashChangeHandler);
++        globalThis.removeEventListener('hashchange', onHashChangeHandler);
+     }
+-    if (onNavigateHandler && ((_a = window.navigation) === null || _a === void 0 ? void 0 : _a.removeEventListener)) {
+-        window.navigation.removeEventListener('navigate', onNavigateHandler);
++    if (onNavigateHandler && ((_a = globalThis.navigation) === null || _a === void 0 ? void 0 : _a.removeEventListener)) {
++        globalThis.navigation.removeEventListener('navigate', onNavigateHandler);
+     }
+     if (originalPushState) {
+-        window.history.pushState = originalPushState;
++        globalThis.history.pushState = originalPushState;
+     }
+     if (originalReplaceState) {
+-        window.history.replaceState = originalReplaceState;
++        globalThis.history.replaceState = originalReplaceState;
+     }
+-    if (originalNavigateEventIntercept && ((_b = window.NavigateEvent) === null || _b === void 0 ? void 0 : _b.prototype)) {
+-        window.NavigateEvent.prototype.intercept = originalNavigateEventIntercept;
++    if (originalNavigateEventIntercept && ((_b = globalThis.NavigateEvent) === null || _b === void 0 ? void 0 : _b.prototype)) {
++        globalThis.NavigateEvent.prototype.intercept = originalNavigateEventIntercept;
+     }
+     urlChangeObservable = undefined;
+     isInstrumented = false;
+diff --git a/dist/cjs/instrumentations/errors/registerOnerror.js b/dist/cjs/instrumentations/errors/registerOnerror.js
+index 001e7d719b750f90e5834834581b9aaa46d66ed3..97b75d52605eb8fd769fe35d8bd3dee5a0cea908 100644
+--- a/dist/cjs/instrumentations/errors/registerOnerror.js
++++ b/dist/cjs/instrumentations/errors/registerOnerror.js
+@@ -3,8 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.registerOnerror = registerOnerror;
+ var getErrorDetails_1 = require("./getErrorDetails");
+ function registerOnerror(api) {
+-    var oldOnerror = window.onerror;
+-    window.onerror = function () {
++    var oldOnerror = globalThis.onerror;
++    globalThis.onerror = function () {
+         var args = [];
+         for (var _i = 0; _i < arguments.length; _i++) {
+             args[_i] = arguments[_i];
+@@ -21,7 +21,7 @@ function registerOnerror(api) {
+             }
+         }
+         finally {
+-            oldOnerror === null || oldOnerror === void 0 ? void 0 : oldOnerror.apply(window, args);
++            oldOnerror === null || oldOnerror === void 0 ? void 0 : oldOnerror.apply(globalThis, args);
+         }
+     };
+ }
+diff --git a/dist/cjs/instrumentations/errors/registerOnunhandledrejection.js b/dist/cjs/instrumentations/errors/registerOnunhandledrejection.js
+index baeec64dfa3d703ec54f55bfa9fda22830b74288..cceac2335576aa07c610ccf6c8f42355f58d7094 100644
+--- a/dist/cjs/instrumentations/errors/registerOnunhandledrejection.js
++++ b/dist/cjs/instrumentations/errors/registerOnunhandledrejection.js
+@@ -5,7 +5,7 @@ var faro_core_1 = require("@grafana/faro-core");
+ var const_1 = require("./const");
+ var getErrorDetails_1 = require("./getErrorDetails");
+ function registerOnunhandledrejection(api) {
+-    window.addEventListener('unhandledrejection', function (evt) {
++    globalThis.addEventListener('unhandledrejection', function (evt) {
+         var _a;
+         var _b, _c;
+         var error = evt;
+diff --git a/dist/cjs/instrumentations/errors/stackFrames/buildStackFrame.js b/dist/cjs/instrumentations/errors/stackFrames/buildStackFrame.js
+index 61a49f8c6c6f55d08b90d455da2f0ef7c5ba1040..a1c205d7cdbe48430f1ae8f965e0ba2a003084ec 100644
+--- a/dist/cjs/instrumentations/errors/stackFrames/buildStackFrame.js
++++ b/dist/cjs/instrumentations/errors/stackFrames/buildStackFrame.js
+@@ -4,7 +4,7 @@ exports.buildStackFrame = buildStackFrame;
+ var const_1 = require("./const");
+ function buildStackFrame(filename, func, lineno, colno) {
+     var stackFrame = {
+-        filename: filename || document.location.href,
++        filename: filename || globalThis.document?.location.href,
+         function: func || const_1.unknownSymbolString,
+     };
+     if (lineno !== undefined) {
+diff --git a/dist/cjs/instrumentations/performance/performanceUtils.js b/dist/cjs/instrumentations/performance/performanceUtils.js
+index 3de82e310b2f38add4be1bcc474182cbf3707016..86b25832c3a778cb36928ec98f5d6e558a31d59d 100644
+--- a/dist/cjs/instrumentations/performance/performanceUtils.js
++++ b/dist/cjs/instrumentations/performance/performanceUtils.js
+@@ -41,17 +41,17 @@ function performanceObserverSupported() {
+     return 'PerformanceObserver' in window;
+ }
+ function onDocumentReady(handleReady) {
+-    if (document.readyState === 'complete') {
++    if (globalThis.document?.readyState === 'complete') {
+         handleReady();
+     }
+     else {
+         var readyStateCompleteHandler_1 = function () {
+-            if (document.readyState === 'complete') {
++            if (globalThis.document?.readyState === 'complete') {
+                 handleReady();
+-                document.removeEventListener('readystatechange', readyStateCompleteHandler_1);
++                globalThis.document?.removeEventListener('readystatechange', readyStateCompleteHandler_1);
+             }
+         };
+-        document.addEventListener('readystatechange', readyStateCompleteHandler_1);
++        globalThis.document?.addEventListener('readystatechange', readyStateCompleteHandler_1);
+     }
+ }
+ function includePerformanceEntry(performanceEntryJSON, allowProps) {
+@@ -92,7 +92,7 @@ function createFaroResourceTiming(resourceEntryRaw) {
+         renderBlockingStatus: toFaroPerformanceTimingString(rbs),
+         protocol: nextHopProtocol,
+         initiatorType: initiatorType,
+-        visibilityState: document.visibilityState,
++        visibilityState: globalThis.document?.visibilityState,
+         ttfb: toFaroPerformanceTimingString(responseStart - requestStart),
+         transferSize: toFaroPerformanceTimingString(transferSize),
+         // TODO: add in future iteration, ideally after nested objects are supported by the collector.
+@@ -130,7 +130,7 @@ function createFaroNavigationTiming(navigationEntryRaw) {
+ function getDocumentParsingTime() {
+     var _a;
+     if (((_a = performance.timing) === null || _a === void 0 ? void 0 : _a.domLoading) != null) {
+-        // the browser is about to start parsing the first received bytes of the HTML document.
++        // the browser is about to start parsing the first received bytes of the HTML globalThis.document?.
+         // This property is deprecated but there isn't a really good alternative atm.
+         // For now we stick with domLoading and keep researching a better alternative.
+         return performance.timing.domLoading - performance.timeOrigin;
+diff --git a/dist/cjs/instrumentations/session/sessionManager/PersistentSessionsManager.js b/dist/cjs/instrumentations/session/sessionManager/PersistentSessionsManager.js
+index 1998f93da8d98dde921e70629ea08e79569a8221..68707cdedd9882d68664e7d5237fc217533c9d11 100644
+--- a/dist/cjs/instrumentations/session/sessionManager/PersistentSessionsManager.js
++++ b/dist/cjs/instrumentations/session/sessionManager/PersistentSessionsManager.js
+@@ -31,7 +31,7 @@ var PersistentSessionsManager = /** @class */ (function () {
+     };
+     PersistentSessionsManager.prototype.init = function () {
+         var _this = this;
+-        document.addEventListener('visibilitychange', function () {
++        globalThis.document?.addEventListener('visibilitychange', function () {
+             if (document.visibilityState === 'visible') {
+                 _this.updateSession();
+             }
+diff --git a/dist/cjs/instrumentations/session/sessionManager/VolatileSessionManager.js b/dist/cjs/instrumentations/session/sessionManager/VolatileSessionManager.js
+index 2512c9f1b86ac2967e9a0041222984e0f07de8a1..b8be62aca4382caf4c387609f8eaa57ca861712a 100644
+--- a/dist/cjs/instrumentations/session/sessionManager/VolatileSessionManager.js
++++ b/dist/cjs/instrumentations/session/sessionManager/VolatileSessionManager.js
+@@ -31,7 +31,7 @@ var VolatileSessionsManager = /** @class */ (function () {
+     };
+     VolatileSessionsManager.prototype.init = function () {
+         var _this = this;
+-        document.addEventListener('visibilitychange', function () {
++        globalThis.document?.addEventListener('visibilitychange', function () {
+             if (document.visibilityState === 'visible') {
+                 _this.updateSession();
+             }
+diff --git a/dist/cjs/instrumentations/userActions/instrumentation.js b/dist/cjs/instrumentations/userActions/instrumentation.js
+index 7320e6fe0617b4492d9d79a5da366bd09df13704..05514af0cccd316e845512e37f9609ac6fb6985e 100644
+--- a/dist/cjs/instrumentations/userActions/instrumentation.js
++++ b/dist/cjs/instrumentations/userActions/instrumentation.js
+@@ -28,8 +28,8 @@ var UserActionInstrumentation = /** @class */ (function (_super) {
+     }
+     UserActionInstrumentation.prototype.initialize = function () {
+         var _a = (0, processUserActionEventHandler_1.getUserEventHandler)(faro_core_1.faro), processUserEvent = _a.processUserEvent, processUserActionStarted = _a.processUserActionStarted;
+-        window.addEventListener('pointerdown', processUserEvent);
+-        window.addEventListener('keydown', function (ev) {
++        globalThis.addEventListener('pointerdown', processUserEvent);
++        globalThis.addEventListener('keydown', function (ev) {
+             if ([' ', 'Enter'].includes(ev.key)) {
+                 processUserEvent(ev);
+             }
+diff --git a/dist/cjs/metas/browser/meta.js b/dist/cjs/metas/browser/meta.js
+index 03ce9ef765e721526ad375b8069815d4decfb621..0d688e1a56678fcc3a65246c5d78a6a0fdf6c5ad 100644
+--- a/dist/cjs/metas/browser/meta.js
++++ b/dist/cjs/metas/browser/meta.js
+@@ -20,8 +20,8 @@ var browserMeta = function () {
+             language: language !== null && language !== void 0 ? language : faro_core_1.unknownString,
+             mobile: mobile,
+             brands: brands !== null && brands !== void 0 ? brands : faro_core_1.unknownString,
+-            viewportWidth: "".concat(window.innerWidth),
+-            viewportHeight: "".concat(window.innerHeight),
++            viewportWidth: "".concat(globalThis.innerWidth),
++            viewportHeight: "".concat(globalThis.innerHeight),
+         },
+     };
+     function getBrands() {
+diff --git a/dist/cjs/metas/k6/meta.js b/dist/cjs/metas/k6/meta.js
+index e646b8cbab06b8ec3df18e6285c6cf7e98df09a1..70b750fe8d17e28fbadbfde224c2b82778c234c1 100644
+--- a/dist/cjs/metas/k6/meta.js
++++ b/dist/cjs/metas/k6/meta.js
+@@ -13,7 +13,7 @@ var __assign = (this && this.__assign) || function () {
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.k6Meta = void 0;
+ var k6Meta = function () {
+-    var k6Properties = window.k6;
++    var k6Properties = globalThis.k6;
+     return {
+         k6: __assign({ 
+             // we only add the k6 meta if Faro is running inside a k6 environment, so this is always true
+diff --git a/dist/esm/config/makeCoreConfig.js b/dist/esm/config/makeCoreConfig.js
+index 0f449c783a6b7e776d1abd86296f74c924375234..836f7a638e04f8d80e1a5d8029c96720f528c1f8 100644
+--- a/dist/esm/config/makeCoreConfig.js
++++ b/dist/esm/config/makeCoreConfig.js
+@@ -1,13 +1,13 @@
+ var __rest = (this && this.__rest) || function (s, e) {
+-    var t = {};
+-    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+-        t[p] = s[p];
+-    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+-        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+-            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+-                t[p[i]] = s[p[i]];
+-        }
+-    return t;
++  var t = {};
++  for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
++    t[p] = s[p];
++  if (s != null && typeof Object.getOwnPropertySymbols === "function")
++    for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
++      if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
++        t[p[i]] = s[p[i]];
++    }
++  return t;
+ };
+ import { createInternalLogger, defaultBatchingConfig, defaultGlobalObjectKey, defaultInternalLoggerLevel, defaultLogArgsSerializer, defaultUnpatchedConsole, isBoolean, isEmpty, isObject, } from '@grafana/faro-core';
+ import { defaultEventDomain } from '../consts';
+@@ -20,93 +20,95 @@ import { createPageMeta } from '../metas/page';
+ import { FetchTransport } from '../transports';
+ import { getWebInstrumentations } from './getWebInstrumentations';
+ export function makeCoreConfig(browserConfig) {
+-    var _a, _b, _c, _d, _e;
+-    const transports = [];
+-    const internalLogger = createInternalLogger(browserConfig.unpatchedConsole, browserConfig.internalLoggerLevel);
+-    if (browserConfig.transports) {
+-        if (browserConfig.url || browserConfig.apiKey) {
+-            internalLogger.error('if "transports" is defined, "url" and "apiKey" should not be defined');
+-        }
+-        transports.push(...browserConfig.transports);
+-    }
+-    else if (browserConfig.url) {
+-        transports.push(new FetchTransport({
+-            url: browserConfig.url,
+-            apiKey: browserConfig.apiKey,
+-        }));
++  var _a, _b, _c, _d, _e;
++  const transports = [];
++  const internalLogger = createInternalLogger(browserConfig.unpatchedConsole, browserConfig.internalLoggerLevel);
++  if (browserConfig.transports) {
++    if (browserConfig.url || browserConfig.apiKey) {
++      internalLogger.error('if "transports" is defined, "url" and "apiKey" should not be defined');
+     }
+-    else {
+-        internalLogger.error('either "url" or "transports" must be defined');
+-    }
+-    const { 
++    transports.push(...browserConfig.transports);
++  }
++  else if (browserConfig.url) {
++    transports.push(new FetchTransport({
++      url: browserConfig.url,
++      apiKey: browserConfig.apiKey,
++    }));
++  }
++  else {
++    internalLogger.error('either "url" or "transports" must be defined');
++  }
++  const {
+     // properties with default values
+-    dedupe = true, eventDomain = defaultEventDomain, globalObjectKey = defaultGlobalObjectKey, instrumentations = getWebInstrumentations(), internalLoggerLevel = defaultInternalLoggerLevel, isolate = false, logArgsSerializer = defaultLogArgsSerializer, metas = createDefaultMetas(browserConfig), paused = false, preventGlobalExposure = false, unpatchedConsole = defaultUnpatchedConsole, url: browserConfigUrl, experimental } = browserConfig, 
++    dedupe = true, eventDomain = defaultEventDomain, globalObjectKey = defaultGlobalObjectKey, instrumentations = getWebInstrumentations(), internalLoggerLevel = defaultInternalLoggerLevel, isolate = false, logArgsSerializer = defaultLogArgsSerializer, metas = createDefaultMetas(browserConfig), paused = false, preventGlobalExposure = false, unpatchedConsole = defaultUnpatchedConsole, url: browserConfigUrl, experimental } = browserConfig,
+     // Properties without default values or which aren't used to create derived config
+     restProperties = __rest(browserConfig, ["dedupe", "eventDomain", "globalObjectKey", "instrumentations", "internalLoggerLevel", "isolate", "logArgsSerializer", "metas", "paused", "preventGlobalExposure", "unpatchedConsole", "url", "experimental"]);
+-    // Extract experimental features with defaults
+-    const trackNavigation = (_a = experimental === null || experimental === void 0 ? void 0 : experimental.trackNavigation) !== null && _a !== void 0 ? _a : false;
+-    // Extract user actions instrumentation with defaults
+-    const userActionsInstrumentation = {
+-        dataAttributeName: (_c = (_b = browserConfig.userActionsInstrumentation) === null || _b === void 0 ? void 0 : _b.dataAttributeName) !== null && _c !== void 0 ? _c : userActionDataAttribute,
+-        excludeItem: (_d = browserConfig.userActionsInstrumentation) === null || _d === void 0 ? void 0 : _d.excludeItem,
+-    };
+-    return Object.assign(Object.assign({}, restProperties), { batching: Object.assign(Object.assign({}, defaultBatchingConfig), browserConfig.batching), dedupe: dedupe, globalObjectKey, instrumentations: getFilteredInstrumentations(instrumentations, browserConfig), internalLoggerLevel,
+-        isolate,
+-        logArgsSerializer,
+-        metas,
+-        parseStacktrace,
+-        paused,
+-        preventGlobalExposure,
+-        transports,
+-        unpatchedConsole,
+-        eventDomain, ignoreUrls: [
+-            ...((_e = browserConfig.ignoreUrls) !== null && _e !== void 0 ? _e : []),
+-            // ignore configured cloud collector url by default
+-            ...(browserConfigUrl ? [browserConfigUrl] : []),
+-            // Try our best to exclude collector URLs form other Faro instances. By default these are URLs ending with /collect or /collect/ followed by alphanumeric characters.
+-            /\/collect(?:\/[\w]*)?$/,
+-        ], sessionTracking: Object.assign(Object.assign(Object.assign({}, defaultSessionTrackingConfig), browserConfig.sessionTracking), crateSessionMeta({
+-            trackGeolocation: browserConfig.trackGeolocation,
+-            sessionTracking: browserConfig.sessionTracking,
+-        })), userActionsInstrumentation, experimental: {
+-            trackNavigation,
+-        } });
++  // Extract experimental features with defaults
++  const trackNavigation = (_a = experimental === null || experimental === void 0 ? void 0 : experimental.trackNavigation) !== null && _a !== void 0 ? _a : false;
++  // Extract user actions instrumentation with defaults
++  const userActionsInstrumentation = {
++    dataAttributeName: (_c = (_b = browserConfig.userActionsInstrumentation) === null || _b === void 0 ? void 0 : _b.dataAttributeName) !== null && _c !== void 0 ? _c : userActionDataAttribute,
++    excludeItem: (_d = browserConfig.userActionsInstrumentation) === null || _d === void 0 ? void 0 : _d.excludeItem,
++  };
++  return Object.assign(Object.assign({}, restProperties), {
++    batching: Object.assign(Object.assign({}, defaultBatchingConfig), browserConfig.batching), dedupe: dedupe, globalObjectKey, instrumentations: getFilteredInstrumentations(instrumentations, browserConfig), internalLoggerLevel,
++    isolate,
++    logArgsSerializer,
++    metas,
++    parseStacktrace,
++    paused,
++    preventGlobalExposure,
++    transports,
++    unpatchedConsole,
++    eventDomain, ignoreUrls: [
++      ...((_e = browserConfig.ignoreUrls) !== null && _e !== void 0 ? _e : []),
++      // ignore configured cloud collector url by default
++      ...(browserConfigUrl ? [browserConfigUrl] : []),
++      // Try our best to exclude collector URLs form other Faro instances. By default these are URLs ending with /collect or /collect/ followed by alphanumeric characters.
++      /\/collect(?:\/[\w]*)?$/,
++    ], sessionTracking: Object.assign(Object.assign(Object.assign({}, defaultSessionTrackingConfig), browserConfig.sessionTracking), crateSessionMeta({
++      trackGeolocation: browserConfig.trackGeolocation,
++      sessionTracking: browserConfig.sessionTracking,
++    })), userActionsInstrumentation, experimental: {
++      trackNavigation,
++    }
++  });
+ }
+ function getFilteredInstrumentations(instrumentations, { experimental }) {
+-    var _a;
+-    const trackNavigation = (_a = experimental === null || experimental === void 0 ? void 0 : experimental.trackNavigation) !== null && _a !== void 0 ? _a : false;
+-    return instrumentations.filter((instr) => {
+-        if (instr.name === '@grafana/faro-web-sdk:instrumentation-navigation' && !trackNavigation) {
+-            return false;
+-        }
+-        return true;
+-    });
++  var _a;
++  const trackNavigation = (_a = experimental === null || experimental === void 0 ? void 0 : experimental.trackNavigation) !== null && _a !== void 0 ? _a : false;
++  return instrumentations.filter((instr) => {
++    if (instr.name === '@grafana/faro-web-sdk:instrumentation-navigation' && !trackNavigation) {
++      return false;
++    }
++    return true;
++  });
+ }
+ function createDefaultMetas(browserConfig) {
+-    var _a, _b;
+-    const { page, generatePageId } = (_a = browserConfig === null || browserConfig === void 0 ? void 0 : browserConfig.pageTracking) !== null && _a !== void 0 ? _a : {};
+-    const initialMetas = [
+-        browserMeta,
+-        createPageMeta({ generatePageId, initialPageMeta: page }),
+-        ...((_b = browserConfig.metas) !== null && _b !== void 0 ? _b : []),
+-    ];
+-    const isK6BrowserSession = isObject(window === null || window === void 0 ? void 0 : window.k6);
+-    if (isK6BrowserSession) {
+-        return [...initialMetas, k6Meta];
+-    }
+-    return initialMetas;
++  var _a, _b;
++  const { page, generatePageId } = (_a = browserConfig === null || browserConfig === void 0 ? void 0 : browserConfig.pageTracking) !== null && _a !== void 0 ? _a : {};
++  const initialMetas = [
++    browserMeta,
++    createPageMeta({ generatePageId, initialPageMeta: page }),
++    ...((_b = browserConfig.metas) !== null && _b !== void 0 ? _b : []),
++  ];
++  const isK6BrowserSession = isObject(globalThis === null || globalThis === void 0 ? void 0 : globalThis.k6);
++  if (isK6BrowserSession) {
++    return [...initialMetas, k6Meta];
++  }
++  return initialMetas;
+ }
+ function crateSessionMeta({ trackGeolocation, sessionTracking, }) {
+-    var _a;
+-    const overrides = {};
+-    if (isBoolean(trackGeolocation)) {
+-        overrides.geoLocationTrackingEnabled = trackGeolocation;
+-    }
+-    if (isEmpty(overrides)) {
+-        return {};
+-    }
+-    return {
+-        session: Object.assign(Object.assign({}, ((_a = sessionTracking === null || sessionTracking === void 0 ? void 0 : sessionTracking.session) !== null && _a !== void 0 ? _a : {})), { overrides }),
+-    };
++  var _a;
++  const overrides = {};
++  if (isBoolean(trackGeolocation)) {
++    overrides.geoLocationTrackingEnabled = trackGeolocation;
++  }
++  if (isEmpty(overrides)) {
++    return {};
++  }
++  return {
++    session: Object.assign(Object.assign({}, ((_a = sessionTracking === null || sessionTracking === void 0 ? void 0 : sessionTracking.session) !== null && _a !== void 0 ? _a : {})), { overrides }),
++  };
+ }
+ //# sourceMappingURL=makeCoreConfig.js.map
+\ No newline at end of file
+diff --git a/dist/esm/instrumentations/_internal/monitors/httpRequestMonitor.js b/dist/esm/instrumentations/_internal/monitors/httpRequestMonitor.js
+index 3ae15f319e9408492f680d4b57a7fe56a1e4e8df..3b3350d9c739f2cc41718c2fab3d1a40c3fa1f6c 100644
+--- a/dist/esm/instrumentations/_internal/monitors/httpRequestMonitor.js
++++ b/dist/esm/instrumentations/_internal/monitors/httpRequestMonitor.js
+@@ -76,9 +76,9 @@ function monitorXhr({ onRequestStart, onRequestEnd, }) {
+ }
+ function monitorFetch({ onRequestEnd, onRequestStart, }) {
+     if (!originalFetchFn) {
+-        originalFetchFn = window.fetch;
++        originalFetchFn = globalThis.fetch;
+     }
+-    window.fetch = function () {
++    globalThis.fetch = function () {
+         var _a, _b;
+         const url = (_a = getUrlFromResource(arguments[0])) !== null && _a !== void 0 ? _a : '';
+         const isIgnoredUrl = isUrlIgnored(url);
+@@ -109,7 +109,7 @@ export function __resetHttpRequestMonitorForTests() {
+         XMLHttpRequest.prototype.open = originalXhrOpen;
+     }
+     if (originalFetchFn) {
+-        window.fetch = originalFetchFn;
++        globalThis.fetch = originalFetchFn;
+     }
+     httpRequestObservable = undefined;
+     isInstrumented = false;
+diff --git a/dist/esm/instrumentations/_internal/monitors/interactionMonitor.js b/dist/esm/instrumentations/_internal/monitors/interactionMonitor.js
+index 3a4b97c466074b14fe7aff3f73d3e84ef0b09e6e..1263d5eb6a1b17a06225c93f50df2ae37e5b8aa4 100644
+--- a/dist/esm/instrumentations/_internal/monitors/interactionMonitor.js
++++ b/dist/esm/instrumentations/_internal/monitors/interactionMonitor.js
+@@ -12,7 +12,7 @@ export function monitorInteractions(eventNames) {
+             const handler = () => {
+                 interactionObservable.notify({ type: MESSAGE_TYPE_INTERACTION, name: eventName });
+             };
+-            window.addEventListener(eventName, handler);
++            globalThis.addEventListener(eventName, handler);
+             registeredEventNames.add(eventName);
+             eventNameToHandler.set(eventName, handler);
+         }
+@@ -22,7 +22,7 @@ export function monitorInteractions(eventNames) {
+ // Test-only utility to reset state between tests
+ export function __resetInteractionMonitorForTests() {
+     eventNameToHandler.forEach((handler, eventName) => {
+-        window.removeEventListener(eventName, handler);
++        globalThis.removeEventListener(eventName, handler);
+     });
+     eventNameToHandler.clear();
+     registeredEventNames.clear();
+diff --git a/dist/esm/instrumentations/_internal/monitors/urlChangeMonitor.js b/dist/esm/instrumentations/_internal/monitors/urlChangeMonitor.js
+index 1bd84c4068581c342225a484ff61ba2f7170b775..c78cbc05cb2e136e042e5ecd6df4c814d485b239 100644
+--- a/dist/esm/instrumentations/_internal/monitors/urlChangeMonitor.js
++++ b/dist/esm/instrumentations/_internal/monitors/urlChangeMonitor.js
+@@ -22,7 +22,7 @@ export function monitorUrlChanges() {
+         }
+     }
+     if (!isInstrumented) {
+-        const hasNavigation = 'navigation' in window && 'NavigateEvent' in window;
++        const hasNavigation = 'navigation' in globalThis && 'NavigateEvent' in globalThis;
+         if (hasNavigation) {
+             // Prefer Navigation API when supported: do not patch history or add popstate/hashchange listeners
+             onNavigateHandler = (e) => {
+@@ -36,8 +36,8 @@ export function monitorUrlChanges() {
+                     // Swallow to avoid impacting host app
+                 }
+             };
+-            window.navigation.addEventListener('navigate', onNavigateHandler);
+-            const NavigateEventConstructor = window.NavigateEvent;
++            globalThis.navigation.addEventListener('navigate', onNavigateHandler);
++            const NavigateEventConstructor = globalThis.NavigateEvent;
+             if (NavigateEventConstructor &&
+                 NavigateEventConstructor.prototype &&
+                 typeof NavigateEventConstructor.prototype.intercept === 'function') {
+@@ -67,25 +67,25 @@ export function monitorUrlChanges() {
+         else {
+             // Fallback: history API patching + popstate/hashchange
+             if (!originalPushState) {
+-                originalPushState = window.history.pushState;
++                originalPushState = globalThis.history.pushState;
+             }
+-            window.history.pushState = function (...args) {
+-                const result = originalPushState.apply(window.history, args);
++            globalThis.history.pushState = function (...args) {
++                const result = originalPushState.apply(globalThis.history, args);
+                 emit('pushState');
+                 return result;
+             };
+             if (!originalReplaceState) {
+-                originalReplaceState = window.history.replaceState;
++                originalReplaceState = globalThis.history.replaceState;
+             }
+-            window.history.replaceState = function (...args) {
+-                const result = originalReplaceState.apply(window.history, args);
++            globalThis.history.replaceState = function (...args) {
++                const result = originalReplaceState.apply(globalThis.history, args);
+                 emit('replaceState');
+                 return result;
+             };
+             onPopStateHandler = () => emit('popstate');
+             onHashChangeHandler = () => emit('hashchange');
+-            window.addEventListener('popstate', onPopStateHandler);
+-            window.addEventListener('hashchange', onHashChangeHandler);
++            globalThis.addEventListener('popstate', onPopStateHandler);
++            globalThis.addEventListener('hashchange', onHashChangeHandler);
+             isInstrumented = true;
+         }
+     }
+@@ -95,22 +95,22 @@ export function monitorUrlChanges() {
+ export function __resetUrlChangeMonitorForTests() {
+     var _a, _b;
+     if (onPopStateHandler) {
+-        window.removeEventListener('popstate', onPopStateHandler);
++        globalThis.removeEventListener('popstate', onPopStateHandler);
+     }
+     if (onHashChangeHandler) {
+-        window.removeEventListener('hashchange', onHashChangeHandler);
++        globalThis.removeEventListener('hashchange', onHashChangeHandler);
+     }
+-    if (onNavigateHandler && ((_a = window.navigation) === null || _a === void 0 ? void 0 : _a.removeEventListener)) {
+-        window.navigation.removeEventListener('navigate', onNavigateHandler);
++    if (onNavigateHandler && ((_a = globalThis.navigation) === null || _a === void 0 ? void 0 : _a.removeEventListener)) {
++        globalThis.navigation.removeEventListener('navigate', onNavigateHandler);
+     }
+     if (originalPushState) {
+-        window.history.pushState = originalPushState;
++        globalThis.history.pushState = originalPushState;
+     }
+     if (originalReplaceState) {
+-        window.history.replaceState = originalReplaceState;
++        globalThis.history.replaceState = originalReplaceState;
+     }
+-    if (originalNavigateEventIntercept && ((_b = window.NavigateEvent) === null || _b === void 0 ? void 0 : _b.prototype)) {
+-        window.NavigateEvent.prototype.intercept = originalNavigateEventIntercept;
++    if (originalNavigateEventIntercept && ((_b = globalThis.NavigateEvent) === null || _b === void 0 ? void 0 : _b.prototype)) {
++        globalThis.NavigateEvent.prototype.intercept = originalNavigateEventIntercept;
+     }
+     urlChangeObservable = undefined;
+     isInstrumented = false;
+diff --git a/dist/esm/instrumentations/csp/instrumentation.js b/dist/esm/instrumentations/csp/instrumentation.js
+index 55dd36ded0a97e67e1b99746854348d8571426fc..26f1cf840a7122d8beb7bc45c4f30a6f77f7ff9e 100644
+--- a/dist/esm/instrumentations/csp/instrumentation.js
++++ b/dist/esm/instrumentations/csp/instrumentation.js
+@@ -6,10 +6,10 @@ export class CSPInstrumentation extends BaseInstrumentation {
+         this.version = VERSION;
+     }
+     initialize() {
+-        document.addEventListener('securitypolicyviolation', this.securitypolicyviolationHandler.bind(this));
++        globalThis.document?.addEventListener('securitypolicyviolation', this.securitypolicyviolationHandler.bind(this));
+     }
+     destroy() {
+-        document.removeEventListener('securitypolicyviolation', this.securitypolicyviolationHandler);
++        globalThis.document?.removeEventListener('securitypolicyviolation', this.securitypolicyviolationHandler);
+     }
+     securitypolicyviolationHandler(ev) {
+         this.api.pushEvent('securitypolicyviolation', stringifyObjectValues(ev));
+diff --git a/dist/esm/instrumentations/errors/registerOnerror.js b/dist/esm/instrumentations/errors/registerOnerror.js
+index 6764b671eb457f9ad0a494ec3d8cd7f2fcc373c6..8639c7f8d392b898e08b8b3bc5a03f96020a8670 100644
+--- a/dist/esm/instrumentations/errors/registerOnerror.js
++++ b/dist/esm/instrumentations/errors/registerOnerror.js
+@@ -1,7 +1,7 @@
+ import { getDetailsFromErrorArgs } from './getErrorDetails';
+ export function registerOnerror(api) {
+-    const oldOnerror = window.onerror;
+-    window.onerror = (...args) => {
++    const oldOnerror = globalThis.onerror;
++    globalThis.onerror = (...args) => {
+         try {
+             const { value, type, stackFrames } = getDetailsFromErrorArgs(args);
+             const originalError = args[4];
+@@ -14,7 +14,7 @@ export function registerOnerror(api) {
+             }
+         }
+         finally {
+-            oldOnerror === null || oldOnerror === void 0 ? void 0 : oldOnerror.apply(window, args);
++            oldOnerror === null || oldOnerror === void 0 ? void 0 : oldOnerror.apply(globalThis, args);
+         }
+     };
+ }
+diff --git a/dist/esm/instrumentations/errors/registerOnunhandledrejection.js b/dist/esm/instrumentations/errors/registerOnunhandledrejection.js
+index 10414b4f32a30fb0bd2934c44f3e95ed89849d75..c0376140f9b3d196a6f4468d76465b3751b6464d 100644
+--- a/dist/esm/instrumentations/errors/registerOnunhandledrejection.js
++++ b/dist/esm/instrumentations/errors/registerOnunhandledrejection.js
+@@ -2,7 +2,7 @@ import { isPrimitive } from '@grafana/faro-core';
+ import { primitiveUnhandledType, primitiveUnhandledValue } from './const';
+ import { getErrorDetails } from './getErrorDetails';
+ export function registerOnunhandledrejection(api) {
+-    window.addEventListener('unhandledrejection', (evt) => {
++    globalThis.addEventListener('unhandledrejection', (evt) => {
+         var _a, _b;
+         let error = evt;
+         if (error.reason) {
+diff --git a/dist/esm/instrumentations/errors/stackFrames/buildStackFrame.js b/dist/esm/instrumentations/errors/stackFrames/buildStackFrame.js
+index 5c2466cdd767fb6a9c41b9b297563d9c483e93f8..e8ddc275f0dc84b84ca71120f2b5db1297ddad6d 100644
+--- a/dist/esm/instrumentations/errors/stackFrames/buildStackFrame.js
++++ b/dist/esm/instrumentations/errors/stackFrames/buildStackFrame.js
+@@ -1,7 +1,7 @@
+ import { unknownSymbolString } from './const';
+ export function buildStackFrame(filename, func, lineno, colno) {
+     const stackFrame = {
+-        filename: filename || document.location.href,
++        filename: filename || globalThis.document?.location.href,
+         function: func || unknownSymbolString,
+     };
+     if (lineno !== undefined) {
+diff --git a/dist/esm/instrumentations/performance/performanceUtils.js b/dist/esm/instrumentations/performance/performanceUtils.js
+index e2f626031f26834ef2622e98fa1fa1684b0aad28..769ecae0d664843260675fd9ae133fa489654015 100644
+--- a/dist/esm/instrumentations/performance/performanceUtils.js
++++ b/dist/esm/instrumentations/performance/performanceUtils.js
+@@ -17,20 +17,20 @@ export function getSpanContextFromServerTiming(serverTimings = []) {
+     return undefined;
+ }
+ export function performanceObserverSupported() {
+-    return 'PerformanceObserver' in window;
++    return 'PerformanceObserver' in globalThis;
+ }
+ export function onDocumentReady(handleReady) {
+-    if (document.readyState === 'complete') {
++    if (globalThis.document?.readyState === 'complete') {
+         handleReady();
+     }
+     else {
+         const readyStateCompleteHandler = () => {
+-            if (document.readyState === 'complete') {
++            if (globalThis.document?.readyState === 'complete') {
+                 handleReady();
+-                document.removeEventListener('readystatechange', readyStateCompleteHandler);
++                globalThis.document?.removeEventListener('readystatechange', readyStateCompleteHandler);
+             }
+         };
+-        document.addEventListener('readystatechange', readyStateCompleteHandler);
++        globalThis.document?.addEventListener('readystatechange', readyStateCompleteHandler);
+     }
+ }
+ export function includePerformanceEntry(performanceEntryJSON, allowProps = {}) {
+@@ -69,7 +69,7 @@ export function createFaroResourceTiming(resourceEntryRaw) {
+         renderBlockingStatus: toFaroPerformanceTimingString(rbs),
+         protocol: nextHopProtocol,
+         initiatorType: initiatorType,
+-        visibilityState: document.visibilityState,
++        visibilityState: globalThis.document?.visibilityState,
+         ttfb: toFaroPerformanceTimingString(responseStart - requestStart),
+         transferSize: toFaroPerformanceTimingString(transferSize),
+         // TODO: add in future iteration, ideally after nested objects are supported by the collector.
+diff --git a/dist/esm/instrumentations/session/sessionManager/PersistentSessionsManager.js b/dist/esm/instrumentations/session/sessionManager/PersistentSessionsManager.js
+index a8628315a74dca7ccf69d1204bf3edd525cca42f..c6d7c029fc3498d634c98d2dc877140a1d3cc505 100644
+--- a/dist/esm/instrumentations/session/sessionManager/PersistentSessionsManager.js
++++ b/dist/esm/instrumentations/session/sessionManager/PersistentSessionsManager.js
+@@ -26,8 +26,8 @@ export class PersistentSessionsManager {
+         return null;
+     }
+     init() {
+-        document.addEventListener('visibilitychange', () => {
+-            if (document.visibilityState === 'visible') {
++        globalThis.document?.addEventListener('visibilitychange', () => {
++            if (globalThis.document?.visibilityState === 'visible') {
+                 this.updateSession();
+             }
+         });
+diff --git a/dist/esm/instrumentations/session/sessionManager/VolatileSessionManager.js b/dist/esm/instrumentations/session/sessionManager/VolatileSessionManager.js
+index a06a5e9f723ab8cf429e0fdd0169dedb2027f1c3..58e5ae59bf9c9095066cd550a5cbbd6d0edb6b86 100644
+--- a/dist/esm/instrumentations/session/sessionManager/VolatileSessionManager.js
++++ b/dist/esm/instrumentations/session/sessionManager/VolatileSessionManager.js
+@@ -26,8 +26,8 @@ export class VolatileSessionsManager {
+         return null;
+     }
+     init() {
+-        document.addEventListener('visibilitychange', () => {
+-            if (document.visibilityState === 'visible') {
++        globalThis.document?.addEventListener('visibilitychange', () => {
++            if (globalThis.document?.visibilityState === 'visible') {
+                 this.updateSession();
+             }
+         });
+diff --git a/dist/esm/instrumentations/userActions/instrumentation.js b/dist/esm/instrumentations/userActions/instrumentation.js
+index 4b958faf7929d2be9989848f56692a2bdff94cda..f26a8fb9652931e6a3557f256c712eb433866a53 100644
+--- a/dist/esm/instrumentations/userActions/instrumentation.js
++++ b/dist/esm/instrumentations/userActions/instrumentation.js
+@@ -8,8 +8,8 @@ export class UserActionInstrumentation extends BaseInstrumentation {
+     }
+     initialize() {
+         const { processUserEvent, processUserActionStarted } = getUserEventHandler(faro);
+-        window.addEventListener('pointerdown', processUserEvent);
+-        window.addEventListener('keydown', (ev) => {
++        globalThis.addEventListener('pointerdown', processUserEvent);
++        globalThis.addEventListener('keydown', (ev) => {
+             if ([' ', 'Enter'].includes(ev.key)) {
+                 processUserEvent(ev);
+             }
+diff --git a/dist/esm/metas/browser/meta.js b/dist/esm/metas/browser/meta.js
+index 79db1dcef0856eae820911a818e2281a38b85d1a..7865ea7f8da96fdcf1017d90fbbdf920686e20fe 100644
+--- a/dist/esm/metas/browser/meta.js
++++ b/dist/esm/metas/browser/meta.js
+@@ -17,8 +17,8 @@ export const browserMeta = () => {
+             language: language !== null && language !== void 0 ? language : unknownString,
+             mobile,
+             brands: brands !== null && brands !== void 0 ? brands : unknownString,
+-            viewportWidth: `${window.innerWidth}`,
+-            viewportHeight: `${window.innerHeight}`,
++            viewportWidth: `${globalThis.innerWidth}`,
++            viewportHeight: `${globalThis.innerHeight}`,
+         },
+     };
+     function getBrands() {
+diff --git a/dist/esm/metas/k6/meta.js b/dist/esm/metas/k6/meta.js
+index 61b64e5294ec2edfcd8f807835967a4a0da6e0e9..0d6bd7105caff9428eb69ccfacacf08769f02a5d 100644
+--- a/dist/esm/metas/k6/meta.js
++++ b/dist/esm/metas/k6/meta.js
+@@ -1,5 +1,5 @@
+ export const k6Meta = () => {
+-    const k6Properties = window.k6;
++    const k6Properties = globalThis.k6;
+     return {
+         k6: Object.assign({ 
+             // we only add the k6 meta if Faro is running inside a k6 environment, so this is always true

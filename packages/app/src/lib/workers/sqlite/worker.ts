@@ -29,8 +29,20 @@ import type { Savepoint, SqliteStatus, SqliteWorkerInterface } from "./types";
 import type { BackendInterface } from "../backend/types";
 import { Deferred } from "$lib/utils/deferred";
 import { CONFIG } from "$lib/config";
+import { initializeFaro } from "$lib/otel";
 
-console.log("Started sqlite worker");
+const faro = initializeFaro({ worker: "sqlite" });
+
+faro.api
+  .getOTEL()!
+  .trace.getTracer("roomy-worker", __APP_VERSION__)
+  .startActiveSpan("sqlite span", (span) => {
+    span.setAttribute("hello", "world");
+    console.info("Tracing!!!");
+    span.end();
+  });
+
+console.info("Started sqlite worker", { test: 3 });
 
 const initSql = schemaSql
   .split("\n")
@@ -94,7 +106,7 @@ class SqliteWorkerSupervisor {
     this.#status.workerId = this.#workerId;
     this.#status.isActiveWorker = false; // Initialize to false for reactive state tracking
     this.#status.vfsType = undefined; // Will be set after database initialization
-    console.log("SQLite Worker id", this.#workerId, "dbName", params.dbName);
+    console.info("SQLite Worker id", this.#workerId, "dbName", params.dbName);
 
     // initially load only in-memory
     this.loadDb(params.dbName, false).then(() => {
