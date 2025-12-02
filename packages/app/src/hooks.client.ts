@@ -1,4 +1,5 @@
 import { dev } from "$app/environment";
+import { initializeFaro } from "$lib/otel";
 import type { HandleClientError } from "@sveltejs/kit";
 import posthog from "posthog-js";
 
@@ -16,12 +17,30 @@ window.navigator.serviceWorker.getRegistrations().then((registrations) => {
   if (hadRegistration) window.location.reload();
 });
 
+initializeFaro({ worker: "main" });
+
+window.faro.api
+  .getOTEL()!
+  .trace.getTracer("frontend")
+  .startActiveSpan("hello world", (span) => {
+    // send a log message
+    window.faro.api.pushLog(["hello world"]);
+    span.end();
+  });
+
 export const handleError: HandleClientError = async ({
   error,
   event,
   status,
   message,
 }) => {
+  window.faro.api.pushError({
+    message: `message=${message} status=${status} ${Object.entries(event.params)
+      .map(([k, v]) => `params.${k}=${v}`)
+      .join(" ")} url=${event.url} route.id=${event.route.id}`,
+    name: "Svelte client error",
+  });
+
   if (status !== 404) {
     console.error(error, status, event, message);
     posthog.captureException(error, { status, event, message });

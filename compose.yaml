@@ -1,0 +1,384 @@
+# This compose file is meant as development support, not production deployment. It runs the
+# monitoring stack primarily.
+
+services:
+  pyroscope:
+    image: grafana/pyroscope:latest
+    ports:
+      - "4040:4040"
+
+  tempo:
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo.yaml"]
+    configs:
+      - source: tempo-config
+        target: /etc/tempo.yaml
+    ports:
+      - "3200:3200"
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    configs:
+      - source: loki-config
+        target: /etc/loki/local-config.yaml
+
+  mimir:
+    image: grafana/mimir:latest
+    ports:
+      - 9009:9009
+    configs:
+      - source: mimir-config
+        target: /etc/mimir/demo.yaml
+    command: --config.file=/etc/mimir/demo.yaml
+
+  alloy:
+    image: grafana/alloy:latest
+    command: run --server.http.listen-addr=0.0.0.0:5005 /etc/alloy/config.alloy
+    ports:
+      - 5005:5005   # Alloy
+      - 12345:12345 # Faro
+      - 4317:4317   # OTLP
+    configs:
+      - source: alloy-config
+        target: /etc/alloy/config.alloy
+
+  grafana:
+    image: grafana/grafana:12.0.0
+    configs:
+      - source: grafana-datasources
+        target: /etc/grafana/provisioning/datasources/datasources.yaml
+    volumes:
+      - ./gitignore/ca-certificates.crt:/usr/local/share/ca-certificates/cert.crt
+    environment:
+      - http_proxy
+      - https_proxy
+      - no_proxy=pyroscope,tempo,mimir,loki
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor
+      - GF_INSTALL_PLUGINS=grafana-pyroscope-app
+    user: root
+    entrypoint:
+      - bash
+      - -c
+      - update-ca-certificates && exec bash /run.sh
+    ports:
+      - "3000:3000"
+
+configs:
+  loki-config:
+    content: |
+      # This is a complete configuration to deploy Loki backed by the filesystem.
+      # The index will be shipped to the storage via tsdb-shipper.
+
+      auth_enabled: false
+
+      server:
+        http_listen_port: 3100
+
+      common:
+        ring:
+          instance_addr: 127.0.0.1
+          kvstore:
+            store: inmemory
+        replication_factor: 1
+        path_prefix: /tmp/loki
+
+      schema_config:
+        configs:
+        - from: 2020-05-15
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+
+      storage_config:
+        filesystem:
+          directory: /tmp/loki/chunks
+
+  mimir-config:
+    content: |
+      multitenancy_enabled: false
+
+      blocks_storage:
+        backend: filesystem
+        bucket_store:
+          sync_dir: /tmp/mimir/tsdb-sync
+        filesystem:
+          dir: /tmp/mimir/data/tsdb
+        tsdb:
+          dir: /tmp/mimir/tsdb
+
+      compactor:
+        data_dir: /tmp/mimir/compactor
+        sharding_ring:
+          kvstore:
+            store: memberlist
+
+      distributor:
+        ring:
+          instance_addr: 127.0.0.1
+          kvstore:
+            store: memberlist
+
+      ingester:
+        ring:
+          instance_addr: 127.0.0.1
+          kvstore:
+            store: memberlist
+          replication_factor: 1
+
+      ruler_storage:
+        backend: filesystem
+        filesystem:
+          dir: /tmp/mimir/rules
+
+      server:
+        http_listen_port: 9009
+        log_level: info
+
+      store_gateway:
+        sharding_ring:
+          replication_factor: 1
+
+  alloy-config:
+    content: |
+      // Write metrics to mimir
+      prometheus.remote_write "mimir" {
+          endpoint {
+              name = "default"
+              url  = "http://mimir:9009/api/v1/push"
+              queue_config { }
+              metadata_config { }
+          }
+      }
+
+      // Write traces to tempo
+      otelcol.exporter.otlp "tempo" {
+          retry_on_failure {
+              max_elapsed_time = "1m0s"
+          }
+
+          client {
+              endpoint = "tempo:4317"
+              tls {
+                insecure             = true
+                insecure_skip_verify = true
+              }
+          }
+      }
+
+      // Write logs to loki
+      loki.write "loki" {
+          endpoint {
+              url = "http://loki:3100/loki/api/v1/push"
+          }
+      }
+
+      loki.process "frontend" {
+          forward_to = [loki.write.loki.receiver]
+
+          stage.logfmt {
+              mapping = { "service_name" = "app_name", kind = "" }
+          }
+
+          stage.labels {
+              values = { "kind" = "kind", "service_name" = "service_name", "app" = "service_name" }
+          }
+
+          // Make sure exceptions are logged at an error level instead of "unknown"
+          stage.match {
+              selector = "{kind=\"exception\"}"
+
+              stage.template {
+                source = "const_error"
+                template = "error"
+              }
+
+              stage.structured_metadata {
+                  values = {
+                      "level" = "const_error",
+                  }
+              }
+          }
+      }
+
+
+      logging {
+          level = "info"
+      }
+
+      // Receive logs & traces from faro agent
+      faro.receiver "frontend" {
+          server {
+              listen_address           = "0.0.0.0"
+              listen_port              = 12345
+              cors_allowed_origins     = ["http://127.0.0.1:5173"]
+              api_key                  = "bad_api_key"
+              max_allowed_payload_size = "10MiB"
+
+              rate_limiting {
+                  rate = 100
+              }
+          }
+
+          sourcemaps { }
+
+          output {
+              logs   = [loki.process.frontend.receiver]
+              traces = [otelcol.exporter.otlp.tempo.input]
+          }
+      }
+
+      // Recieve OTLP data
+      otelcol.receiver.otlp "default" {
+          grpc {
+              include_metadata = true
+          }
+
+          output {
+              // Batch metrics
+              metrics = [otelcol.processor.batch.default.input]
+
+              // Convert logs to loki
+              logs = [otelcol.exporter.loki.default.input]
+
+              // Send traces to tempo
+              traces  = [otelcol.exporter.otlp.tempo.input]
+          }
+      }
+
+      // Batch metrics
+      otelcol.processor.batch "default" {
+        output {
+          // Convert batched metrics to prometheus
+          metrics = [otelcol.exporter.prometheus.default.input]
+        }
+      }
+
+      // Convert metrics to prometheus
+      otelcol.exporter.prometheus "default" {
+        forward_to = [prometheus.remote_write.mimir.receiver]
+      }
+
+      // Convert logs to loki
+      otelcol.exporter.loki "default" {
+        forward_to = [loki.write.loki.receiver]
+      }
+
+  tempo-config:
+    content: |
+      stream_over_http_enabled: true
+      server:
+        http_listen_port: 3200
+        log_level: info
+
+      query_frontend:
+        search:
+          duration_slo: 5s
+          throughput_bytes_slo: 1.073741824e+09
+          metadata_slo:
+            duration_slo: 5s
+            throughput_bytes_slo: 1.073741824e+09
+        trace_by_id:
+          duration_slo: 5s
+
+      distributor:
+       receivers:
+         otlp:
+           protocols:
+             grpc:
+               endpoint: "tempo:4317"
+
+      ingester:
+        max_block_duration: 5m # cut the headblock when this much time passes. this is being set for demo purposes and should probably be left alone normally
+
+      compactor:
+        compaction:
+          block_retention: 1h # overall Tempo trace retention. set for demo purposes
+
+      metrics_generator:
+        registry:
+          external_labels:
+            source: tempo
+            cluster: docker-compose
+        storage:
+          path: /var/tempo/generator/wal
+          remote_write:
+            - url: http://prometheus:9090/api/v1/write
+              send_exemplars: true
+        traces_storage:
+          path: /var/tempo/generator/traces
+
+      storage:
+        trace:
+          backend: local # backend configuration to use
+          wal:
+            path: /var/tempo/wal # where to store the wal locally
+          local:
+            path: /var/tempo/blocks
+
+      overrides:
+        defaults:
+          metrics_generator:
+            processors: [service-graphs, span-metrics, local-blocks] # enables metrics generator
+            generate_native_histograms: both
+
+  grafana-datasources:
+    content: |
+      apiVersion: 1
+      datasources:
+        - name: Pyroscope
+          uid: pyroscope
+          type: grafana-pyroscope-datasource
+          typeName: Pyroscope
+          access: proxy
+          url: http://pyroscope:4040
+        - name: Mimir
+          uid: mimir
+          type: prometheus
+          typeName: Prometheus
+          access: proxy
+          url: http://mimir:9009/prometheus
+          basicAuth: false
+          readOnly: true
+        - name: Loki
+          type: loki
+          access: proxy
+          uid: loki
+          url: http://loki:3100
+          basicAuth: false
+          version: 1
+          editable: false
+        - name: Tempo
+          type: tempo
+          access: proxy
+          orgId: 1
+          url: http://tempo:3200
+          basicAuth: false
+          isDefault: true
+          version: 1
+          editable: false
+          apiVersion: 1
+          uid: tempo
+          jsonData:
+            {
+              "streamingEnabled": {
+                "metrics": true,
+                "search": true
+              },
+              "tracesToMetrics": {
+                "datasourceUid": "mimir"
+              },
+              "tracesToProfiles":
+                {
+                  "datasourceUid": "pyroscope",
+                  "profileTypeId": "process_cpu:cpu:nanoseconds:cpu:nanoseconds",
+                },
+            }
