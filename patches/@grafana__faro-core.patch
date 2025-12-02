@@ -1,0 +1,22 @@
+diff --git a/dist/esm/transports/batchExecutor.js b/dist/esm/transports/batchExecutor.js
+index 7d7e8e49a12a1cbd5de3b1a96e01ec772229efb7..52531bb3a03c49b1809bf63d286415461ccbe96a 100644
+--- a/dist/esm/transports/batchExecutor.js
++++ b/dist/esm/transports/batchExecutor.js
+@@ -14,7 +14,7 @@ export class BatchExecutor {
+         }
+         // Send batched/buffered data when user navigates to new page, switches or closes the tab, minimizes or closes the browser.
+         // If on mobile, it also sends data if user switches from the browser to a different app.
+-        document.addEventListener('visibilitychange', () => {
++        if (globalThis.document) document.addEventListener('visibilitychange', () => {
+             if (document.visibilityState === 'hidden') {
+                 this.flush();
+             }
+@@ -32,7 +32,7 @@ export class BatchExecutor {
+     start() {
+         this.paused = false;
+         if (this.sendTimeout > 0) {
+-            this.flushInterval = window.setInterval(() => this.flush(), this.sendTimeout);
++            this.flushInterval = globalThis.setInterval(() => this.flush(), this.sendTimeout);
+         }
+     }
+     pause() {

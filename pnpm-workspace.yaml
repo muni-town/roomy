@@ -1,6 +1,7 @@
 packages:
   - packages/app
   - packages/tsconfig
+
 onlyBuiltDependencies:
   - '@swc/core'
   - '@tailwindcss/oxide'
@@ -8,5 +9,7 @@ onlyBuiltDependencies:
   - core-js
   - esbuild
   - node
-# patchedDependencies:
-#   "@discordeno/gateway": patches/@discordeno__gateway.patch
+
+patchedDependencies:
+  '@grafana/faro-core': patches/@grafana__faro-core.patch
+  '@grafana/faro-web-sdk': patches/@grafana__faro-web-sdk.patch
