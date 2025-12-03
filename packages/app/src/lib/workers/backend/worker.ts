@@ -360,7 +360,7 @@ class WorkerSupervisor {
       logout: async () => this.logout(),
       getProfile: async (did) => this.client.getProfile(did),
       runQuery: async (statement) => {
-        await this.sqlite.untilReady;
+
         return this.sqlite.runQuery(statement);
       },
       createLiveQuery: async (id, port, statement) => {
