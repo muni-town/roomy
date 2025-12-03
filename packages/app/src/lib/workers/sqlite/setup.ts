@@ -141,7 +141,6 @@ export type QueryResult<Row = { [key: string]: unknown }> = {
 export async function executeQuery(
   statement: SqlStatement,
 ): Promise<QueryResult> {
-  if (!db && initPromises) await initPromises;
   if (!db || !sqlite3) throw new Error("database_not_initialized");
 
   try {
@@ -164,7 +163,6 @@ const preparedSqlCache: Map<string, PreparedStatement> = new Map();
 async function prepareSql(
   statement: SqlStatement,
 ): Promise<{ prepared: PreparedStatement; actions: Action[] }> {
-  if (!db && initPromises) await initPromises;
   if (!db || !sqlite3) throw new Error("database_not_initialized");
 
   authorizerQueue = [];
@@ -225,6 +223,8 @@ export function disableLiveQueries() {
   liveQueriesEnabled = false;
   db && sqlite3 && sqlite3.capi.sqlite3_set_authorizer(db, null as any, 0);
   authorizerQueue = [];
+  // Clear prepared statement cache to avoid stale results
+  preparedSqlCache.clear();
 }
 export async function enableLiveQueries() {
   if (!liveQueriesEnabled) {

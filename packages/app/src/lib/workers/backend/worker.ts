@@ -28,6 +28,7 @@ import {
   type BackendInterface,
   type ConsoleInterface,
   consoleLogLevels,
+  type SqliteState,
 } from "./types";
 import type {
   Savepoint,
@@ -118,6 +119,9 @@ class WorkerSupervisor {
       this.#status.authState = error;
       throw error;
     });
+
+    if (!personalStreamId)
+      throw new Error("Personal Stream ID must be defined");
 
     await this.sqlite.untilReady;
 
@@ -460,18 +464,6 @@ class WorkerSupervisor {
   }
 }
 
-type SqlitePending = {
-  state: "pending";
-  readyPromise: Deferred<void>;
-};
-
-type SqliteReady = {
-  state: "ready";
-  sqliteWorker: SqliteWorkerInterface;
-};
-
-type SqliteState = SqlitePending | SqliteReady;
-
 class SqliteSupervisor {
   #state: SqliteState;
   liveQueries: Map<string, { port: MessagePort; statement: SqlStatement }>;
@@ -484,7 +476,7 @@ class SqliteSupervisor {
   get untilReady() {
     if (this.#state.state === "pending")
       return this.#state.readyPromise.promise;
-    else return;
+    else return undefined;
   }
 
   get ready() {
@@ -508,12 +500,12 @@ class SqliteSupervisor {
       console.log(
         "SQLite Supervisor setReady got schemaVersion",
         previousSchemaVersion,
+        "current",
+        CONFIG.streamSchemaVersion,
       );
       if (previousSchemaVersion != CONFIG.streamSchemaVersion) {
-        // Reset the local database cache when the schema version changes.
-        
-        // This is freezing for some reason
-        await this.resetLocalDatabase();
+        // Reset the local database cache when the stream schema version changes.
+        (async () => this.resetLocalDatabase())();
       }
 
       await prevStream.setSchemaVersion(CONFIG.streamSchemaVersion);
@@ -555,7 +547,6 @@ class SqliteSupervisor {
     await this.untilReady;
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialized.");
-    console.log("runQuery", statement);
     return this.#state.sqliteWorker.runQuery(statement) as Promise<
       QueryResult<T>
     >;

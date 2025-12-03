@@ -25,7 +25,12 @@ import { sql } from "$lib/utils/sqlTemplate";
 import { eventCodec, id } from "../encoding";
 import { materialize } from "./materializer";
 import { AsyncChannel } from "../asyncChannel";
-import type { Savepoint, SqliteStatus, SqliteWorkerInterface } from "./types";
+import type {
+  Savepoint,
+  SqliteStatus,
+  SqliteWorkerInterface,
+  SqlStatement,
+} from "./types";
 import type { BackendInterface } from "../backend/types";
 import { Deferred } from "$lib/utils/deferred";
 import { CONFIG } from "$lib/config";
@@ -348,12 +353,12 @@ class SqliteWorkerSupervisor {
       materializeBatch: async (eventsBatch, priority) => {
         return this.materializeBatch(eventsBatch, priority);
       },
-      runQuery: async (statement) => {
+      runQuery: async <Row>(statement: SqlStatement) => {
         // This lock makes sure that the JS tasks don't interleave some other query executions in while we
         // are trying to compose a bulk transaction.
         return navigator.locks.request(QUERY_LOCK, async () => {
           try {
-            return await executeQuery(statement);
+            return (await executeQuery(statement)) as QueryResult<Row>;
           } catch (e) {
             throw new Error(
               `Error running SQL query \`${statement.sql}\`: ${e}`,
@@ -426,9 +431,10 @@ class SqliteWorkerSupervisor {
       await executeQuery({ sql: `release batch${batch.batchId}` });
       return {
         batchId: batch.batchId,
+        priority: batch.priority,
         status: "applied",
         results,
-      };
+      } as const;
     };
 
     disableLiveQueries();
@@ -499,7 +505,7 @@ class SqliteWorkerSupervisor {
           if ("sql" in savepointOrStatement) {
             queryResults.push(await executeQuery(savepointOrStatement));
           } else {
-            queryResults.push(
+            queryResults.concat(
               await this.runSavepoint(savepointOrStatement, depth + 1),
             );
           }
