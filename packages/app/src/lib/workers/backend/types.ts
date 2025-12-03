@@ -11,7 +11,7 @@ import type { MessagePortApi } from "../workerMessaging";
 import type { Client } from "./client";
 import type { BlobRef } from "@atproto/lexicon";
 import type { Deferred } from "$lib/utils/deferred";
-import type { SqlStatement } from "../sqlite/types";
+import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
 
 export interface BackendStatus {
   authState: ReactiveAuthState;
@@ -225,3 +225,15 @@ namespace BackfillStates {
     upToEventId: number;
   }
 }
+
+type SqlitePending = {
+  state: "pending";
+  readyPromise: Deferred<void>;
+};
+
+type SqliteReady = {
+  state: "ready";
+  sqliteWorker: SqliteWorkerInterface;
+};
+
+export type SqliteState = SqlitePending | SqliteReady;

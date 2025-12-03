@@ -24,7 +24,7 @@ export type SqliteWorkerInterface = {
   ): Promise<void>;
   deleteLiveQuery(id: string): Promise<void>;
   ping(): Promise<{ timestamp: number; workerId: string; isActive: boolean }>;
-  runSavepoint(savepoint: Savepoint): Promise<void>;
+  runSavepoint(savepoint: Savepoint): Promise<QueryResult[]>;
 };
 
 export interface SqlStatement {
