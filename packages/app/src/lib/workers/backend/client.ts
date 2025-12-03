@@ -415,30 +415,34 @@ export class Client {
         );
         console.log("Found existing stream ID from PDS:", existingRecord.id);
         id = existingRecord.id;
-      } catch (_) {
-        // this catch block creating a new stream needs to be refactored
-        // so that it only happens when there definitely is no record
-        console.log(
-          "Could not find existing stream ID on PDS. Creating new stream!",
-        );
+      } catch (e) {
+        if ((e as any).error === "RecordNotFound") {
+          console.log(
+            "Could not find existing stream ID on PDS. Creating new stream!",
+          );
 
-        // create a new stream on leaf server
-        id = await this.createPersonalStream();
+          // create a new stream on leaf server
+          id = await this.createPersonalStream();
 
-        // put the stream ID in a record
-        const resp2 = await this.agent.com.atproto.repo.putRecord({
-          collection: CONFIG.streamNsid,
-          record: { id },
-          repo: this.agent.assertDid,
-          rkey: CONFIG.streamSchemaVersion,
-        });
-        if (!resp2.success) {
-          throw new Error("Could not create PDS record for personal stream", {
-            cause: JSON.stringify(resp2.data),
+          console.log("Putting record");
+
+          // put the stream ID in a record
+          const resp2 = await this.agent.com.atproto.repo.putRecord({
+            collection: CONFIG.streamNsid,
+            record: { id },
+            repo: this.agent.assertDid,
+            rkey: CONFIG.streamSchemaVersion,
           });
+          if (!resp2.success) {
+            throw new Error("Could not create PDS record for personal stream", {
+              cause: JSON.stringify(resp2.data),
+            });
+          }
+          // status.personalStreamId = personalStreamId;
+          await personalStream.setIdCache(this.agent.assertDid, id);
+        } else {
+          console.error("Error while fetching personal stream record:", e);
         }
-        // status.personalStreamId = personalStreamId;
-        await personalStream.setIdCache(this.agent.assertDid, id);
       }
     }
 
