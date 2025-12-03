@@ -164,12 +164,12 @@ export async function joinSpace(spaceIdOrHandle: string) {
     const spaceId = spaceIdOrHandle.includes(".")
       ? (await backend.resolveSpaceFromHandleOrDid(spaceIdOrHandle))?.spaceId
       : spaceIdOrHandle;
-    if (!spaceId || !backendStatus.personalStreamId) {
+    if (!spaceId || backendStatus.authState?.state !== "authenticated") {
       toast.error("Could not join space. It's possible it does not exist.");
       return;
     }
     // Add the space to the personal list of joined spaces
-    await backend.sendEvent(backendStatus.personalStreamId, {
+    await backend.sendEvent(backendStatus.authState.personalStream, {
       ulid: ulid(),
       parent: undefined,
       variant: {
