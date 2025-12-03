@@ -374,6 +374,8 @@ Database Should Initialize And Handle Basic Operations
     
     ${lifecycle}=    Track Worker Lifecycle
     
+    Log    ${lifecycle}
+    
     # Verify all lifecycle stages were reached
     ${has_initial}=    Has Lifecycle Stage    ${lifecycle}    initial
     ${has_initialized}=    Has Lifecycle Stage    ${lifecycle}    worker-initialized
@@ -718,12 +720,14 @@ Track Worker Lifecycle
 Has Lifecycle Stage
     [Documentation]    Check if a specific lifecycle stage exists in timeline
     [Arguments]    ${lifecycle}    ${stage_name}
+    ${args}=    Create Dictionary    lifecycle=${lifecycle}    stageName=${stage_name}
     ${has_stage}=    Evaluate JavaScript    ${None}
-    ...    (lifecycle, stageName) => {
+    ...    (args) => {
+    ...        const { lifecycle, stageName } = args;
     ...        if (!lifecycle || !Array.isArray(lifecycle)) return false;
     ...        return lifecycle.some(item => item && item.stage === stageName);
     ...    }
-    ...    ${lifecycle}    ${stage_name}
+    ...    arg=${args}
     RETURN    ${has_stage}
 
 Open Test Page
