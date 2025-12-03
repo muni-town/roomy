@@ -72,9 +72,9 @@ uv run pabot --processes 4 tests/robot
 
 ```
 tests/robot/
-├── smoke.robot          # Smoke tests (critical functionality)
-├── responsive.robot     # Responsive design tests
-└── README.md           # This file
+├── smoke.robot           # Smoke tests (critical functionality)
+├── initialization.robot  # Worker system initialization tests
+└── README.md            # This file
 ```
 
 ## Test Files
@@ -90,14 +90,27 @@ Core smoke tests covering:
 
 **Tags**: `smoke`, `critical`, `workers`, `backend`, `sqlite`, `browser-compatibility`
 
-### responsive.robot
+### initialization.robot
 
-Responsive design tests covering:
-- Mobile viewport (390x844)
-- Tablet viewport (820x1180)
-- Desktop viewport (1920x1080)
+Comprehensive worker system initialization tests migrated from `tests/e2e/workers.spec.ts`:
+- SharedWorker initialization with fallback
+- SQLite worker lock acquisition
+- Multi-tab lock management
+- Worker heartbeat and health monitoring
+- Concurrent SQLite operations
+- MessageChannel/MessagePort communication
+- Worker error handling
+- IndexedDB support
+- Navigator.locks API support
+- Database initialization and operations
+- Diagnostic tests for worker lifecycle
+- Reactive state synchronization tests
 
-**Tags**: `responsive`, `mobile`, `tablet`, `desktop`
+**Tags**: `initialization`, `workers`, `sqlite`, `locks`, `critical`, `multi-tab`, `heartbeat`, `monitoring`, `concurrency`, `browser-api`, `messageport`, `error-handling`, `indexeddb`, `database`, `diagnostics`, `lifecycle`, `reactive-state`
+
+**Note**: 
+- Some tests are skipped on Safari/WebKit due to incomplete OPFS support in the test environment.
+- Multi-tab tests are currently skipped because Robot Framework Browser library creates isolated browser contexts per page, preventing shared `navigator.locks` between tabs. This is a limitation of the test environment, not the application. For multi-tab testing, use the Playwright tests in `tests/e2e/workers.spec.ts` which properly share browser contexts.
 
 ## Writing Tests
 
