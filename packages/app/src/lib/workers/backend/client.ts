@@ -239,7 +239,7 @@ export class Client {
 
     this.setConnected(streams);
     this.runBackfill();
-    console.log("Client connected", this);
+    console.log("Client connected");
 
     return streams;
   }
@@ -591,7 +591,7 @@ export class Client {
 
     const streams = this.#streamConnection.streams;
 
-    console.log("Running backfill for streams", streams);
+    console.log("Running backfill for streams");
 
     const promises = [...streams.values()].map((stream) => {
       try {
