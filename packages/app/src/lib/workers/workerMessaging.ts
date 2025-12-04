@@ -110,7 +110,7 @@ type ReactiveWorkerStateMessage = ["need", string] | ["update", string, any];
 export function reactiveWorkerState<T extends { [key: string]: any }>(
   channel: MessagePortApi,
   provider: boolean,
-): Partial<T> {
+) {
   const state = {
     channel,
     props: {} as {
@@ -139,6 +139,11 @@ export function reactiveWorkerState<T extends { [key: string]: any }>(
   return new Proxy(state, {
     get(state, prop) {
       if (typeof prop == "symbol") throw "Symbols not supported";
+
+      if (prop === "current") {
+        return { ...state.props };
+      }
+
       let subscribe = state.propSubscribe[prop];
       if (!subscribe) {
         subscribe = createSubscriber(
@@ -173,5 +178,5 @@ export function reactiveWorkerState<T extends { [key: string]: any }>(
 
       return true;
     },
-  }) as unknown as T;
+  }) as unknown as Partial<T> & { current: { [key: string]: any | undefined } };
 }
