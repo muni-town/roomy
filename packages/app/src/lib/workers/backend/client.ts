@@ -400,7 +400,7 @@ export class Client {
     // unreasonable to just fetch this on startup for now.
 
     // let id = await personalStream.getIdCache(this.agent.assertDid);
-    let id;
+    let id: StreamHashId | undefined;
     if (!id) {
       try {
         const resp1 = await this.agent.com.atproto.repo.getRecord({
@@ -442,6 +442,7 @@ export class Client {
           await personalStream.setIdCache(this.agent.assertDid, id);
         } else {
           console.error("Error while fetching personal stream record:", e);
+          throw e;
         }
       }
     }
