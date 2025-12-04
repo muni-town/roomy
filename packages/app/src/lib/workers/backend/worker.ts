@@ -505,7 +505,7 @@ class SqliteSupervisor {
       if (previousSchemaVersion != CONFIG.streamSchemaVersion) {
         // Reset the local database cache when the stream schema version changes.
         // Asynchronous, but has to wait until readyPromise is resolved, so we can't await it here.
-        this.resetLocalDatabase();
+        this.resetLocalDatabase().catch(console.error);
       }
 
       await prevStream.setSchemaVersion(CONFIG.streamSchemaVersion);
