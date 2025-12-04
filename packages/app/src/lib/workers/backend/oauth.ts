@@ -28,7 +28,11 @@ db.version(1).stores({
 
 const requestLock: undefined | RuntimeLock = navigator.locks?.request
   ? <T>(name: string, fn: () => T | PromiseLike<T>): Promise<T> =>
-      navigator.locks.request(name, { mode: "exclusive" }, async () => fn())
+      navigator.locks.request(
+        name,
+        { mode: "exclusive" },
+        async () => await fn(),
+      )
   : undefined;
 
 function encodeKey(key: Key): unknown {
