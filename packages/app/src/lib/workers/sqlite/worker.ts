@@ -36,16 +36,21 @@ import { Deferred } from "$lib/utils/deferred";
 import { CONFIG } from "$lib/config";
 import { initializeFaro } from "$lib/otel";
 
-const faro = initializeFaro({ worker: "sqlite" });
+let faro;
+try {
+  faro = initializeFaro({ worker: "sqlite" });
 
-faro.api
-  .getOTEL()!
-  .trace.getTracer("roomy-worker", __APP_VERSION__)
-  .startActiveSpan("sqlite span", (span) => {
-    span.setAttribute("hello", "world");
-    console.info("Tracing!!!");
-    span.end();
-  });
+  faro.api
+    .getOTEL()!
+    .trace.getTracer("roomy-worker", __APP_VERSION__)
+    .startActiveSpan("sqlite span", (span) => {
+      span.setAttribute("hello", "world");
+      console.info("Tracing!!!");
+      span.end();
+    });
+} catch (e) {
+  console.error("Failed to initialize Faro in sqlite worker", e);
+}
 
 console.info("Started sqlite worker", { test: 3 });
 
