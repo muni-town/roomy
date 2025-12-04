@@ -188,11 +188,10 @@ class WorkerSupervisor {
       throw new Error("Tried to handle events while unauthenticated");
     }
 
-    console.log("Waiting for Client to connect");
-
+    console.log("Waiting for Client to be ready...");
     await this.client.ready;
+    console.log("Client ready!");
 
-    console.log("Client connected!");
     const eventChannel = await this.client.getEventChannel();
 
     for await (const batch of eventChannel) {
@@ -328,6 +327,8 @@ class WorkerSupervisor {
   }
 
   private async loadStreams() {
+    if (this.#status.authState?.state !== "authenticated")
+      throw new Error("Not authenticated");
     // get streams from SQLite
     const result = await this.sqlite.runQuery<{
       id: StreamHashId;
@@ -344,6 +345,15 @@ class WorkerSupervisor {
     );
 
     const streams = await this.client.connect(streamIdsAndCursors);
+
+    // need to reassign the whole object to trigger reactive update
+    this.#status.authState = {
+      clientStatus: "connected",
+      did: this.#status.authState.did,
+      personalStream: this.#status.authState.personalStream,
+      state: "authenticated",
+    };
+
     for (const stream of streams.values()) {
       (async () => {
         await stream.pin.backfill.completed.promise;
