@@ -364,7 +364,6 @@ class WorkerSupervisor {
       logout: async () => this.logout(),
       getProfile: async (did) => this.client.getProfile(did),
       runQuery: async (statement) => {
-
         return this.sqlite.runQuery(statement);
       },
       createLiveQuery: async (id, port, statement) => {
@@ -505,7 +504,8 @@ class SqliteSupervisor {
       );
       if (previousSchemaVersion != CONFIG.streamSchemaVersion) {
         // Reset the local database cache when the stream schema version changes.
-        (async () => this.resetLocalDatabase())();
+        // Asynchronous, but has to wait until readyPromise is resolved, so we can't await it here.
+        this.resetLocalDatabase();
       }
 
       await prevStream.setSchemaVersion(CONFIG.streamSchemaVersion);
