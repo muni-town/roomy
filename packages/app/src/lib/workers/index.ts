@@ -126,9 +126,9 @@ sqliteWorker.postMessage(
     }
   },
 
-  logBackendStatus() {
-    console.log("📊 [backendStatus] Current state:", backendStatus);
-    return backendStatus;
+  logWorkerStatus() {
+    console.log("📊 [backendStatus] Current state:", backendStatus.current);
+    console.log("🗃️ [sqliteStatus] Current state:", sqliteStatus.current);
   },
 
   async diagnoseRoom(roomId: string) {
