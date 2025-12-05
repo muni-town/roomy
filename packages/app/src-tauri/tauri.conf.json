@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2.0.0-rc",
-  "productName": "Roomy Chat",
+  "productName": "Roomy",
   "version": "0.1.0-alpha-6",
-  "identifier": "chat.roomy.app",
+  "identifier": "space.roomy",
   "build": {
     "frontendDist": "../build",
     "devUrl": "http://localhost:5173",
@@ -31,17 +31,37 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "android": {
+      "versionCode": 60
+    }
   },
   "plugins": {
     "deep-link": {
       "mobile": [
         {
-          "host": "roomy.chat"
+          "scheme": [
+            "space.roomy"
+          ],
+          "host": "space.roomy",
+          "appLink": false
+        },
+        {
+          "scheme": [
+            "https"
+          ],
+          "pathPrefix": [
+            "/oauth/callback"
+          ],
+          "host": "space.roomy",
+          "appLink": true
         }
       ],
       "desktop": {
-        "schemes": ["chat.roomy", "roomy"]
+        "schemes": [
+          "space.roomy",
+          "roomy"
+        ]
       }
     }
   }

@@ -1,9 +1,11 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
-      "package_name": "chat.roomy.app",
+      "package_name": "space.roomy",
       "sha256_cert_fingerprints": [
         "35:41:AB:DA:AA:B0:DB:0D:79:6B:F6:C7:10:D8:26:57:E9:6A:C7:02:4F:C3:C9:1C:67:68:67:14:C1:58:74:5C"
       ]
