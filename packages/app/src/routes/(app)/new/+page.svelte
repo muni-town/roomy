@@ -1,27 +1,52 @@
 <script lang="ts">
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
+  import { createSpace } from "$lib/mutations/space";
+  import type { AsyncStateWithIdle } from "$lib/types/asyncState";
   import { navigate } from "$lib/utils.svelte";
-  import { backend, backendStatus } from "$lib/workers";
-  import type { EventType } from "$lib/workers/types";
-  import { Button, Checkbox, Input, Label, Textarea, toast } from "@fuxui/base";
-  import { ulid } from "ulidx";
+  import { backendStatus } from "$lib/workers";
+  import type { StreamHashId } from "$lib/workers/types";
+  import IconHeroiconsXMark from "~icons/heroicons/x-mark";
+  import {
+    Alert,
+    Button,
+    // Checkbox,
+    Input,
+    // Label,
+    Textarea,
+    toast,
+  } from "@fuxui/base";
 
-  let spaceName = $state("");
-  let avatarUrl = $state("");
-  let spaceDescription = $state("");
-  let isDiscoverable = $state(true);
+  type SpaceCreationState = AsyncStateWithIdle<{ spaceId: StreamHashId }>;
 
-  let avatarFile = $state<File | null>(null);
+  let form = $state<{
+    spaceName: string;
+    spaceDescription: string;
+    isDiscoverable: boolean;
+    avatarFile: File | null;
+    dismissAlert: boolean;
+  }>({
+    spaceName: "",
+    spaceDescription: "",
+    isDiscoverable: true,
+    avatarFile: null,
+    dismissAlert: false,
+  });
 
-  let isSaving = $state(false);
+  let avatarUrl = $derived.by(() => {
+    if (form.avatarFile) {
+      return URL.createObjectURL(form.avatarFile);
+    }
+    return undefined;
+  });
+
+  let spaceCreationState = $state<SpaceCreationState>({ status: "idle" });
 
   async function handleAvatarSelect(event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
       const file = input.files[0];
       if (file) {
-        avatarFile = file;
-        avatarUrl = URL.createObjectURL(file);
+        form.avatarFile = file;
       }
     }
   }
@@ -33,210 +58,19 @@
     if (backendStatus.authState?.state != "authenticated") return;
 
     try {
-      isSaving = true;
+      spaceCreationState = { status: "loading" };
 
-      let currentSpaceName = spaceName;
-      let currentSpaceDescription = spaceDescription;
-
-      if (!currentSpaceName) {
-        toast.error("Please enter a name for the space", {
-          position: "bottom-right",
-        });
-        return;
-      }
-
-      // Create a new stream for the space
-      const spaceId = await backend.createSpaceStream();
-
-      // Join the space
-      await backend.sendEvent(backendStatus.authState.personalStream, {
-        ulid: ulid(),
-        parent: undefined,
-        variant: {
-          kind: "space.roomy.space.join.0",
-          data: {
-            spaceId,
-          },
+      const { spaceId } = await createSpace({
+        spaceName: form.spaceName,
+        spaceDescription: form.spaceDescription || undefined,
+        avatarFile: form.avatarFile || undefined,
+        creator: {
+          did: backendStatus.authState.did,
+          personalStreamId: backendStatus.authState.personalStream,
         },
       });
 
-      const avatarUpload =
-        avatarFile &&
-        (await backend.uploadToPds(await avatarFile.arrayBuffer()));
-
-      const batch: EventType[] = [];
-
-      // Update space info
-      batch.push({
-        ulid: ulid(),
-        parent: undefined,
-        variant: {
-          kind: "space.roomy.info.0",
-          data: {
-            avatar: avatarUpload?.uri
-              ? { set: avatarUpload.uri }
-              : { ignore: undefined },
-            name: currentSpaceName
-              ? { set: currentSpaceName }
-              : { ignore: undefined },
-            description: currentSpaceDescription
-              ? { set: currentSpaceDescription }
-              : { ignore: undefined },
-          },
-        },
-      });
-
-      // Make this user and admin
-      batch.push({
-        ulid: ulid(),
-        parent: undefined,
-        variant: {
-          kind: "space.roomy.admin.add.0",
-          data: {
-            adminId: backendStatus.authState.did,
-          },
-        },
-      });
-
-      // Create the "system" user as the space itself
-      batch.push({
-        ulid: ulid(),
-        parent: undefined,
-        variant: {
-          kind: "space.roomy.user.overrideMeta.0",
-          data: {
-            handle: "system",
-          },
-        },
-      });
-
-      const categoryId = ulid();
-      batch.push({
-        ulid: categoryId,
-        parent: undefined,
-        variant: {
-          kind: "space.roomy.room.create.0",
-          data: undefined,
-        },
-      });
-      batch.push({
-        ulid: ulid(),
-        parent: categoryId,
-        variant: {
-          kind: "space.roomy.info.0",
-          data: {
-            name: { set: "Uncategorized" },
-            avatar: { ignore: undefined },
-            description: { ignore: undefined },
-          },
-        },
-      });
-      batch.push({
-        ulid: ulid(),
-        parent: categoryId,
-        variant: {
-          kind: "space.roomy.category.mark.0",
-          data: undefined,
-        },
-      });
-      const generalChannelId = ulid();
-      batch.push({
-        ulid: generalChannelId,
-        parent: categoryId,
-        variant: {
-          kind: "space.roomy.room.create.0",
-          data: undefined,
-        },
-      });
-      batch.push({
-        ulid: ulid(),
-        parent: generalChannelId,
-        variant: {
-          kind: "space.roomy.info.0",
-          data: {
-            name: { set: "general" },
-            avatar: { ignore: undefined },
-            description: { ignore: undefined },
-          },
-        },
-      });
-      batch.push({
-        ulid: ulid(),
-        parent: generalChannelId,
-        variant: {
-          kind: "space.roomy.channel.mark.0",
-          data: undefined,
-        },
-      });
-      batch.push({
-        ulid: ulid(),
-        parent: generalChannelId,
-        variant: {
-          kind: "space.roomy.channel.mark.0",
-          data: undefined,
-        },
-      });
-      const welcomeThreadId = ulid();
-      batch.push({
-        ulid: welcomeThreadId,
-        parent: generalChannelId,
-        variant: {
-          kind: "space.roomy.room.create.0",
-          data: undefined,
-        },
-      });
-      batch.push({
-        ulid: ulid(),
-        parent: welcomeThreadId,
-        variant: {
-          kind: "space.roomy.info.0",
-          data: {
-            name: { set: `Welcome to ${currentSpaceName}!` },
-            avatar: { ignore: undefined },
-            description: { ignore: undefined },
-          },
-        },
-      });
-      batch.push({
-        ulid: ulid(),
-        parent: welcomeThreadId,
-        variant: {
-          kind: "space.roomy.thread.mark.0",
-          data: undefined,
-        },
-      });
-      const welcomeMessageId = ulid();
-      batch.push({
-        ulid: welcomeMessageId,
-        parent: welcomeThreadId,
-        variant: {
-          kind: "space.roomy.message.create.0",
-          data: {
-            replyTo: undefined,
-            content: {
-              mimeType: "text/markdown",
-              content: new TextEncoder().encode(
-                `Welcome to your new Roomy space!`,
-              ),
-            },
-          },
-        },
-      });
-      batch.push({
-        ulid: ulid(),
-        parent: welcomeMessageId,
-        variant: {
-          kind: "space.roomy.message.overrideMeta.0",
-          data: {
-            author: spaceId,
-            timestamp: BigInt(Date.now()),
-          },
-        },
-      });
-
-      await backend.sendEventBatch(spaceId, batch);
-
-      isSaving = false;
+      spaceCreationState = { status: "success", data: { spaceId } };
       toast.success("Space created successfully", {
         position: "bottom-right",
       });
@@ -247,10 +81,17 @@
       //   await addToDiscoverableSpacesFeed(space.id);
       // }
 
-      navigate({ space: spaceId });
+      // navigate({ space: spaceId });
     } catch (e) {
       console.error("Error creating space:", e);
-      toast.error("Error creating space", {
+      const stringError =
+        e instanceof Error
+          ? ": " + e.message
+          : typeof e === "string"
+            ? ": " + e
+            : "";
+      spaceCreationState = { status: "error", message: stringError };
+      toast.error("Error creating space" + stringError, {
         position: "bottom-right",
       });
     }
@@ -258,12 +99,35 @@
 </script>
 
 <form class="pt-4" onsubmit={createSpaceSubmit}>
-  <div class="space-y-12">
+  <div class="space-y-8">
     <h2 class="text-base/7 font-semibold text-base-900 dark:text-base-100">
       Create a new space
     </h2>
+    {#if !form.dismissAlert}
+      <Alert type="info" class="text-sm flex items-start gap-2"
+        ><div class="space-y-2 grow">
+          <p>
+            Spaces are a way to organize related rooms, pages, and members. You
+            can think of them as communities or groups within the platform.
+          </p>
+          <p>
+            <strong>We currently only support public spaces</strong>, meaning
+            anyone can find and join them.
+          </p>
+        </div>
+        <div>
+          <Button
+            class="hover:bg-blue-400/30 hover:text-black p-1.5"
+            type="button"
+            variant="ghost"
+            onclick={() => (form.dismissAlert = true)}
+            ><IconHeroiconsXMark /></Button
+          >
+        </div>
+      </Alert>
+    {/if}
 
-    <div class="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
+    <div class=" grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
       <div class="sm:col-span-4">
         <label
           for="name"
@@ -271,7 +135,7 @@
           >Name</label
         >
         <div class="mt-2">
-          <Input id="name" bind:value={spaceName} class="w-full" />
+          <Input id="name" bind:value={form.spaceName} class="w-full" />
         </div>
       </div>
 
@@ -305,11 +169,16 @@
           >Description (optional)</label
         >
         <div class="mt-2">
-          <Textarea bind:value={spaceDescription} class="w-full" rows={4} />
+          <Textarea
+            bind:value={form.spaceDescription}
+            class="w-full"
+            rows={4}
+          />
         </div>
       </div>
 
-      <div class="sm:col-span-full">
+      <!-- <div class="sm:col-span-full">
+        Spaces are currently publicly discoverable by default.
         <label
           for="username"
           class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
@@ -320,7 +189,7 @@
             id="discovery"
             aria-labelledby="discovery-label"
             variant="secondary"
-            checked={isDiscoverable}
+            checked={form.isDiscoverable}
             disabled={true}
           />
           <Label
@@ -331,14 +200,17 @@
             Allow space to be publicly discoverable.
           </Label>
         </div>
-      </div>
+      </div> -->
     </div>
   </div>
 
   <div class="mt-6 flex items-center justify-end gap-x-6">
     <div>
-      <Button type="submit" disabled={!spaceName || isSaving}>
-        {#if isSaving}
+      <Button
+        type="submit"
+        disabled={!form.spaceName || spaceCreationState.status !== "idle"}
+      >
+        {#if spaceCreationState.status === "loading"}
           Creating...
         {:else}
           Create Space
