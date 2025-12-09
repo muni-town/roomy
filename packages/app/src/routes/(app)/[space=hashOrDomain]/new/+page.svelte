@@ -32,7 +32,7 @@
   );
   const categories = $derived(categoriesQuery.result || []);
 
-  async function createObject() {
+  async function createRoom() {
     if (!spaceId) return;
 
     const ulid = monotonicFactory();
@@ -101,7 +101,7 @@
   <ScrollArea>
     <form
       class="px-4 flex flex-col gap-8 py-8 max-w-3xl mx-auto w-full"
-      onsubmit={createObject}
+      onsubmit={createRoom}
     >
       <div>
         <h1 class="text-xl font-bold mb-2">New</h1>
