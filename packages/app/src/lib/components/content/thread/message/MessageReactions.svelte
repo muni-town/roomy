@@ -6,7 +6,6 @@
   import { current } from "$lib/queries";
   import { ulid } from "ulidx";
   import type { Message } from "../ChatArea.svelte";
-  import { did } from "$lib/status.svelte";
 
   let {
     message,
@@ -34,7 +33,9 @@
 
     // If we haven't already made this reaction to this post.
     if (
-      !message.reactions.find((x) => x.userId == did() && x.reaction == emoji)
+      !message.reactions.find(
+        (x) => x.userId == current.did && x.reaction == emoji,
+      )
     ) {
       backend.sendEvent(spaceId, {
         ulid: ulid(),
@@ -56,7 +57,9 @@
 
     // If we haven't already made this reaction to this post.
     if (
-      !message.reactions.find((x) => x.userId == did() && x.reaction == emoji)
+      !message.reactions.find(
+        (x) => x.userId == current.did && x.reaction == emoji,
+      )
     ) {
       backend.sendEvent(spaceId, {
         ulid: ulid(),
@@ -96,7 +99,7 @@
         {#snippet child({ props })}
           <Toggle
             {...props}
-            pressed={did()! in users}
+            pressed={current.did! in users}
             onclick={() => onEmojiButtonClick(emoji)}
             class="px-2 h-7 data-[state=on]:bg-accent-400/20 dark:data-[state=on]:bg-accent-500/15"
           >

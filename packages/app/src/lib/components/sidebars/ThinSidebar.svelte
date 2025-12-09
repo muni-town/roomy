@@ -11,7 +11,6 @@
   import IconTablerPlus from "~icons/tabler/plus";
   import IconTablerHome from "~icons/tabler/home";
   import IconMdiSqlQuery from "~icons/mdi/sql-query";
-  import { did } from "$lib/status.svelte";
 
   let openSpace = $derived(current.joinedSpace?.id);
   let isOpenSpaceJoined = $derived(true);
@@ -28,7 +27,7 @@
     <IconTablerHome font-size="1.75em" />
   </Button>
 
-  {#if did()}
+  {#if current.did}
     <!-- Messages Button -->
     <!-- <Button
         href="/messages"
