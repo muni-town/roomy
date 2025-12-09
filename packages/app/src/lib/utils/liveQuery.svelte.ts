@@ -1,28 +1,10 @@
+import type { AsyncState } from "$lib/types/asyncState";
 import { backend } from "$lib/workers";
 import type { LiveQueryMessage } from "$lib/workers/sqlite/setup";
 import type { SqlStatement } from "$lib/workers/sqlite/types";
 
-interface LiveQueryLoadingState {
-  status: "loading";
-}
-
-interface LiveQueryErrorState {
-  status: "error";
-  message: string;
-}
-
-interface LiveQuerySuccessState<T> {
-  status: "success";
-  data: T;
-}
-
-export type LiveQueryState<T> =
-  | LiveQueryLoadingState
-  | LiveQueryErrorState
-  | LiveQuerySuccessState<T>;
-
 export class LiveQuery<Row extends { [key: string]: unknown }> {
-  current: LiveQueryState<Row[]> = $state.raw({ status: "loading" });
+  current: AsyncState<Row[]> = $state.raw({ status: "loading" });
   #statement: SqlStatement = { sql: "" };
 
   constructor(statement: () => SqlStatement, mapper?: (row: any) => Row) {
