@@ -2,6 +2,7 @@ import { page } from "$app/state";
 import { backend, backendStatus } from "$lib/workers";
 import type { AuthStates } from "$lib/workers/backend/types";
 import type { SpaceIdOrHandle, StreamHashId } from "$lib/workers/types";
+import type { Did } from "@atproto/api";
 import { joinedSpaces } from "./spaces.svelte";
 import type { SpaceMeta } from "./types";
 
@@ -19,11 +20,15 @@ type SpaceStatus =
 export const current = $state<{
   space: SpaceStatus;
   roomId: string | undefined;
+  did: Did | undefined;
+
+  // derived from space
   joinedSpace: SpaceMeta | undefined;
   isSpaceAdmin: boolean;
 }>({
   space: { status: "loading" },
   roomId: undefined,
+  did: undefined,
   joinedSpace: undefined,
   isSpaceAdmin: false,
 });
@@ -78,19 +83,6 @@ async function getCurrentSpace(spaceId: SpaceIdOrHandle) {
 }
 
 $effect.root(() => {
-  $effect(() => {
-    console.log("page.params", page.params);
-  });
-  $effect(() => {
-    console.log("current space", current.space);
-  });
-
-  // Update current.roomId whenever page params change
-  $effect(() => {
-    page.params.object;
-    current.roomId = page.params.object;
-  });
-
   // Update current.space whenever page.params.space or joinedSpaces change
   $effect(() => {
     page.params.space; // depend on page.params.space
@@ -115,5 +107,18 @@ $effect.root(() => {
         current.isSpaceAdmin = isSpaceAdmin;
       })
       .catch(error);
+  });
+
+  // Update current.roomId whenever page params change
+  $effect(() => {
+    page.params.object;
+    current.roomId = page.params.object;
+  });
+
+  $effect(() => {
+    current.did =
+      backendStatus.authState?.state === "authenticated"
+        ? backendStatus.authState.did
+        : undefined;
   });
 });

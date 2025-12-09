@@ -15,7 +15,6 @@
   import { backend, backendStatus } from "$lib/workers";
   import { current } from "$lib/queries";
   import { ulid } from "ulidx";
-  import { did } from "$lib/status.svelte";
 
   let {
     editMessage,
@@ -68,7 +67,9 @@
 
     // If we haven't already made this reaction to this post.
     if (
-      !message.reactions.find((x) => x.userId == did() && x.reaction == emoji)
+      !message.reactions.find(
+        (x) => x.userId == current.did && x.reaction == emoji,
+      )
     ) {
       backend.sendEvent(spaceId, {
         ulid: ulid(),
