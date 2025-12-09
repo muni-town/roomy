@@ -4,7 +4,7 @@
   import { Badge, Button } from "@fuxui/base";
   // import { atprotoFeedService } from "$lib/services/atprotoFeedService";
   import SidebarItemList from "./SidebarItemList.svelte";
-  import type { SpaceTreeItem } from "$lib/queries.svelte";
+  import type { SpaceTreeItem } from "$lib/queries";
 
   import IconLucidePencil from "~icons/lucide/pencil";
   import IconHeroiconsChevronDown from "~icons/heroicons/chevron-down";

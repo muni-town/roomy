@@ -2,7 +2,7 @@
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import IconMdiReply from "~icons/mdi/reply";
-  import { LiveQuery } from "$lib/liveQuery.svelte";
+  import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { id } from "$lib/workers/encoding";
   import type { Message } from "../ChatArea.svelte";

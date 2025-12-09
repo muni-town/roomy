@@ -1,6 +1,6 @@
 <script lang="ts">
   import SpaceAvatar from "./SpaceAvatar.svelte";
-  import type { SpaceMeta } from "$lib/queries.svelte";
+  import type { SpaceMeta } from "$lib/queries";
 
   let { space }: { space: SpaceMeta | undefined } = $props();
 </script>

@@ -11,6 +11,7 @@
   import { TooltipProvider } from "@fuxui/base";
 
   import IconMdiLoading from "~icons/mdi/loading";
+  import Error from "$lib/components/modals/Error.svelte";
 
   onMount(async () => {
     // Initialize PostHog for analytics
@@ -98,27 +99,7 @@
 {/if}
 
 {#if backendStatus.authState?.state === "error"}
-  <div class="w-full h-screen flex items-center justify-center">
-    <Alert title="Authentication Error" type="error" class="max-w-sm">
-      <h6>Something went wrong trying to get you logged in.</h6>
-      <pre class="my-2 opacity-80">{backendStatus.authState?.error}</pre>
-      <span
-        >You can let us know on <a
-          href="https://github.com/muni-town/roomy/issues/new"
-          class="text-accent-600 dark:text-accent-200">Github</a
-        >,
-        <a
-          href="https://discord.gg/bGMESxp7ff"
-          class="text-accent-600 dark:text-accent-200">Discord</a
-        >
-        or
-        <a
-          href="https://bsky.app/profile/roomy.space"
-          class="text-accent-600 dark:text-accent-200">Bluesky</a
-        ></span
-      >
-    </Alert>
-  </div>
+  <Error message={backendStatus.authState.error} />
 {/if}
 
 <FxUIToaster />

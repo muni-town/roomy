@@ -94,6 +94,12 @@ sqliteWorker.postMessage(
   [sqliteWorkerChannel.port2, workerStatusChannel.port2],
 );
 
+export function getPersonalStreamId() {
+  return backendStatus.authState?.state === "authenticated"
+    ? backendStatus.authState.personalStream
+    : undefined;
+}
+
 // for running in console REPL
 (window as any).debugWorkers = {
   async enableLogForwarding() {
@@ -197,11 +203,11 @@ sqliteWorker.postMessage(
 
   async diagnoseSpaceTree(spaceId?: string) {
     try {
-      const { current } = await import("../queries.svelte");
+      const { current } = await import("../queries");
       const { id } = await import("./encoding");
       const { sql } = await import("../utils/sqlTemplate");
 
-      const actualSpaceId = spaceId || current.space?.id;
+      const actualSpaceId = spaceId || current.joinedSpace?.id;
 
       if (!actualSpaceId) {
         console.log("❌ No space ID available");
@@ -213,7 +219,7 @@ sqliteWorker.postMessage(
       const diagnosticQuery = sql`
         select json_object(
           'spaceId', '${actualSpaceId}',
-          'currentSpaceId', '${current.space?.id}',
+          'currentSpaceId', '${current.joinedSpace?.id}',
           'totalRooms', (select count(*) from entities e join comp_room r on r.entity = e.id where e.stream_id = ${encodedSpaceId}),
           'topLevelRooms', (select count(*) from entities e join comp_room r on r.entity = e.id join comp_info i on i.entity = e.id where e.stream_id = ${encodedSpaceId} and e.parent is null and (r.deleted = 0 or r.deleted is null)),
           'categories', (select count(*) from entities e join comp_room r on r.entity = e.id join comp_info i on i.entity = e.id where e.stream_id = ${encodedSpaceId} and r.label = 'category' and (r.deleted = 0 or r.deleted is null)),
@@ -229,7 +235,7 @@ sqliteWorker.postMessage(
         : null;
 
       console.log("🔍 Space Tree Diagnostic:", diagnostic);
-      console.log("📊 Current space from queries:", current.space);
+      console.log("📊 Current space from queries:", current.joinedSpace);
       return diagnostic;
     } catch (error) {
       console.error("Main thread: Space tree diagnostic failed", error);

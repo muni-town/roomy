@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { LiveQuery } from "$lib/liveQuery.svelte";
+  import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { id } from "$lib/workers/encoding";
   import { Button, ScrollArea } from "@fuxui/base";
@@ -35,16 +35,23 @@
   `,
   );
 
-  let pointsInTime: {
+  type PointInTime = {
     date: Date;
     diffs: Diff[];
     authorName?: string;
     authorAvatar?: string;
-  }[] = $derived.by(() => {
-    const pointsInTime = [];
+  };
+
+  let pointsInTime: PointInTime[] = $derived.by(() => {
+    const pointsInTime: PointInTime[] = [];
 
     let previousContent = "";
-    for (const edit of historyQuery.result || []) {
+
+    if (historyQuery.current.status !== "success") {
+      return pointsInTime;
+    }
+
+    for (const edit of historyQuery.current.data || []) {
       const date = new Date(decodeTime(edit.edit_id));
 
       if (edit.mime_type == "text/x-dmp-patch") {

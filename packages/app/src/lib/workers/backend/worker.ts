@@ -68,6 +68,7 @@ class WorkerSupervisor {
   #status: Partial<BackendStatus>;
   #auth: AuthState;
   #connection: ConnectionState; // tabs connected to shared worker
+  #authenticated = new Deferred<void>();
 
   constructor() {
     this.#config = {
@@ -181,6 +182,7 @@ class WorkerSupervisor {
         where entity = ${id(personalStreamId)}`);
       this.loadStreams();
     });
+    this.#authenticated.resolve();
   }
 
   private async runMaterializer() {
@@ -340,11 +342,20 @@ class WorkerSupervisor {
 
     console.log("spaces...", result);
     // pass them to the client
-    const streamIdsAndCursors = new Map(
-      result.rows?.map((row) => [row.id, row.backfilled_to]) || [],
-    );
+    const streamIdsAndCursors = result.rows
+      ? result.rows.map(async (row) => {
+          const exists = await this.client.checkStreamExists(row.id);
+          if (!exists) return null;
+          return [row.id, row.backfilled_to];
+        })
+      : [];
 
-    const streams = await this.client.connect(streamIdsAndCursors);
+    // check that each stream exists first
+    const existingStreams = (await Promise.all(streamIdsAndCursors)).filter(
+      (s) => s !== null,
+    ) as [StreamHashId, StreamIndex][];
+
+    const streams = await this.client.connect(new Map(existingStreams));
 
     // need to reassign the whole object to trigger reactive update
     this.#status.authState = {
@@ -436,8 +447,12 @@ class WorkerSupervisor {
       },
       resolveHandleForSpace: async (spaceId, handleAccountDid) =>
         this.client.resolveHandleForSpace(spaceId, handleAccountDid),
-      resolveSpaceFromHandleOrDid: async (handleOrDid) =>
-        this.client.resolveSpaceFromHandleOrDid(handleOrDid),
+      resolveSpaceId: async (handleOrDid) => {
+        await this.#authenticated.promise;
+        return await this.client.resolveSpaceId(handleOrDid);
+      },
+      checkSpaceExists: async (spaceId) =>
+        this.client.checkStreamExists(spaceId),
       createStreamHandleRecord: async (spaceId) => {
         await this.client.createStreamHandleRecord(spaceId);
       },

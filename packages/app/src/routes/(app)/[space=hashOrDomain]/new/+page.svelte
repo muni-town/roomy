@@ -1,8 +1,8 @@
 <script lang="ts">
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
-  import { LiveQuery } from "$lib/liveQuery.svelte";
-  import { current } from "$lib/queries.svelte";
+  import { LiveQuery } from "$lib/utils/liveQuery.svelte";
+  import { current } from "$lib/queries";
   import { navigate } from "$lib/utils.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { backend } from "$lib/workers";
@@ -14,6 +14,8 @@
   let type = $state("Channel") as (typeof types)[number];
   let name = $state("");
 
+  const spaceId = current.joinedSpace?.id;
+
   let selectedCategory = $state("");
 
   let categoriesQuery = new LiveQuery<{ name: string; id: string }>(
@@ -23,7 +25,7 @@
         inner join comp_room r on e.id = r.entity
         inner join comp_info i on e.id = i.entity
       where
-        e.stream_id = ${current.space?.id && id(current.space.id)}
+        e.stream_id = ${spaceId && id(spaceId)}
           and
         r.label = 'category' 
     `,
@@ -31,13 +33,13 @@
   const categories = $derived(categoriesQuery.result || []);
 
   async function createObject() {
-    if (!current.space) return;
+    if (!spaceId) return;
 
     const ulid = monotonicFactory();
 
     // Create a new room
     const roomId = ulid();
-    await backend.sendEvent(current.space.id, {
+    await backend.sendEvent(spaceId, {
       ulid: roomId,
       parent:
         type != "Category" && selectedCategory ? selectedCategory : undefined,
@@ -48,7 +50,7 @@
     });
 
     // Set the room info
-    await backend.sendEvent(current.space.id, {
+    await backend.sendEvent(spaceId, {
       ulid: ulid(),
       parent: roomId,
       variant: {
@@ -65,7 +67,7 @@
 
     if (type == "Channel") {
       // Mark the room as a channel
-      await backend.sendEvent(current.space.id, {
+      await backend.sendEvent(spaceId, {
         ulid: ulid(),
         parent: roomId,
         variant: {
@@ -74,10 +76,10 @@
         },
       });
 
-      navigate({ space: current.space.id, object: roomId });
+      navigate({ space: spaceId, object: roomId });
     } else if (type == "Category") {
       // Mark the room as a category
-      await backend.sendEvent(current.space.id, {
+      await backend.sendEvent(spaceId, {
         ulid: ulid(),
         parent: roomId,
         variant: {
@@ -86,7 +88,7 @@
         },
       });
 
-      navigate({ space: current.space.id });
+      navigate({ space: spaceId });
     }
   }
 </script>

@@ -13,6 +13,7 @@ import {
   type TaskPriority,
   type Batch,
   type EncodedStreamEvent,
+  type Handle,
 } from "../types";
 import { type Profile } from "$lib/types/profile";
 import { eventCodec } from "../encoding";
@@ -150,11 +151,41 @@ export class Client {
     return this.#connected.promise;
   }
 
+  async checkStreamExists(streamId: StreamHashId) {
+    try {
+      const streamInfo = await this.leaf.streamInfo(streamId);
+      if (!streamInfo) return false;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   async connect(streamList: Map<StreamHashId, StreamIndex>) {
     if (!this.personalStream)
       throw new Error("Client must have personal stream to connect");
 
     console.log("Client connecting", streamList);
+
+    const keys = [...streamList.keys()];
+    console.log("StreamIds", keys);
+
+    // ideally we want to check that streams exist first
+    for await (const streamId of keys) {
+      try {
+        console.log("Getting streamInfo for ", streamId);
+        const streamInfo = await this.leaf.streamInfo(streamId);
+        if (!streamInfo)
+          console.error(
+            "Stream does not exist (on this Leaf server)!",
+            streamId,
+          );
+        console.log("StreamInfo", streamInfo);
+      } catch (e) {
+        console.error("Error fetching stream info for", streamId, e);
+      }
+    }
+
     const streams = new Map(
       [...streamList.entries()].map(([stream, upToEventId]) => {
         return [
@@ -264,7 +295,7 @@ export class Client {
     });
   }
 
-  async getProfile(did?: string): Promise<Profile | undefined> {
+  async getProfile(did?: Did): Promise<Profile | undefined> {
     const targetDid = did || this.agent.did;
     if (!targetDid) throw new Error("ATProto client doesn't have a DID");
     const resp = await this.agent.getProfile({ actor: targetDid });
@@ -280,7 +311,7 @@ export class Client {
       : undefined;
   }
 
-  async createSpaceStream(): Promise<string> {
+  async createSpaceStream() {
     await this.#leafAuthenticated.promise;
     const moduleId = await this.leaf.uploadModule(spaceModule.encoded.buffer);
 
@@ -643,15 +674,14 @@ export class Client {
   }
 
   async resolveHandleForSpace(
-    spaceId: string,
-    handleAccountDid: string,
-  ): Promise<string | undefined> {
+    spaceId: StreamHashId,
+    handleAccountDid: Did,
+  ): Promise<Handle | undefined> {
     try {
       const resp = await this.getProfileCached(handleAccountDid);
-      const handle = resp.data.handle;
+      const handle = resp.data.handle as Handle;
       const did = handleAccountDid;
-      const resolvedSpaceId = (await this.resolveSpaceFromHandleOrDid(did))
-        ?.spaceId;
+      const resolvedSpaceId = (await this.resolveSpaceId(did))?.spaceId;
       if (resolvedSpaceId == spaceId) {
         return handle;
       }
@@ -661,25 +691,77 @@ export class Client {
     }
   }
 
-  async resolveSpaceFromHandleOrDid(handleOrDid: string) {
-    try {
-      const did = isDid(handleOrDid)
-        ? handleOrDid
-        : (
-            await this.agent.getProfile({
-              actor: handleOrDid,
-            })
-          ).data.did;
-
-      const result = this.getStreamHandleRecordCached(did as Did);
-      return result;
-    } catch (e) {
-      console.warn("Error resolving space from handle", e);
-      return undefined;
+  private resolveIdType(spaceIdOrHandleOrDid: StreamHashId | Handle | Did) {
+    if (spaceIdOrHandleOrDid.includes(".")) {
+      return "handle";
+    } else if (isDid(spaceIdOrHandleOrDid)) {
+      return "did";
+    } else {
+      return "streamId";
     }
   }
 
-  private async getStreamHandleRecordCached(did: Did) {
+  private async resolveDidFromHandleOrDid(
+    handleOrDid: Handle | Did,
+  ): Promise<Did> {
+    const type = this.resolveIdType(handleOrDid);
+    switch (type) {
+      case "handle":
+        try {
+          const profile = await this.getProfileCached(handleOrDid as Handle);
+          return profile.data.did;
+        } catch (e) {
+          console.warn("Error resolving DID from handle", handleOrDid, e);
+          throw e;
+        }
+      case "did":
+        return handleOrDid as Did;
+      default:
+        throw new Error("Invalid type for DID resolution");
+    }
+  }
+
+  async resolveSpaceId(
+    spaceIdOrHandleOrDid: StreamHashId | Handle | Did,
+  ): Promise<{
+    spaceId: StreamHashId;
+    handle?: Handle;
+    did?: Did;
+  }> {
+    const type = this.resolveIdType(spaceIdOrHandleOrDid);
+
+    if (type === "handle" || type === "did") {
+      try {
+        const did = await this.resolveDidFromHandleOrDid(
+          spaceIdOrHandleOrDid as Handle | Did,
+        );
+        const spaceIdFromHandle = await this.getStreamHandleRecordCached(did);
+        if (!spaceIdFromHandle) throw "Could not resolve space ID from handle";
+        return {
+          spaceId: spaceIdFromHandle!,
+          handle:
+            type === "handle" ? (spaceIdOrHandleOrDid as Handle) : undefined,
+          did,
+        };
+      } catch (e) {
+        console.warn(
+          "Error resolving space from identifier",
+          spaceIdOrHandleOrDid,
+          e,
+        );
+        throw e;
+      }
+    } else {
+      return { spaceId: spaceIdOrHandleOrDid as StreamHashId };
+    }
+  }
+
+  /** Some streams have a handle configured as an alias via a PDS record that verifies the mapping.
+   * This method fetches that record, with caching, and returns the associated stream ID and DID.
+   */
+  private async getStreamHandleRecordCached(
+    did: Did,
+  ): Promise<StreamHashId | undefined> {
     const cached = this.#agentStreamHandleCache.get(did);
     if (cached) return cached.result;
 
@@ -697,15 +779,23 @@ export class Client {
         },
       );
 
-      const result = resp.data.value?.id
-        ? {
-            spaceId: resp.data.value.id as string,
-            handleDid: did,
-          }
+      const verifiedSpaceId = resp.data.value?.id
+        ? (resp.data.value.id as StreamHashId)
         : undefined;
 
-      this.#agentStreamHandleCache.set(did, { result });
-      return result;
+      if (verifiedSpaceId) {
+        const exists = await this.checkStreamExists(verifiedSpaceId);
+        if (!exists) {
+          console.warn(
+            "Stream handle record points to non-existing stream, returning undefined",
+          );
+          this.#agentStreamHandleCache.set(did, { result: undefined });
+          return undefined;
+        }
+      }
+
+      this.#agentStreamHandleCache.set(did, { result: verifiedSpaceId });
+      return verifiedSpaceId;
     } catch (e) {
       console.warn(
         "Could not get stream handle record, most likely does not exist",

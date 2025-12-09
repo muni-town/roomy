@@ -2,34 +2,37 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
-  import { current } from "$lib/queries.svelte";
+  import { current } from "$lib/queries";
   import { backend, backendStatus } from "$lib/workers";
   import { Button, Input, Textarea, toast } from "@fuxui/base";
   import { ulid } from "ulidx";
 
-  let spaceName = $derived(current.space?.name ?? "");
-  let avatarUrl = $derived(current.space?.avatar ?? "");
-  let spaceDescription = $derived(current.space?.description ?? "");
+  let currentSpace = $derived(current.joinedSpace);
+  let spaceId = $derived(currentSpace?.id);
+  let handleAccount = $derived(currentSpace?.handle_account);
+  let spaceName = $derived(currentSpace?.name ?? "");
+  let avatarUrl = $derived(currentSpace?.avatar ?? "");
+  let spaceDescription = $derived(currentSpace?.description ?? "");
 
   let avatarFile = $state<File | null>(null);
 
   let isSaving = $state(false);
 
-  let nameChanged = $derived(spaceName != current.space?.name);
-  let avatarChanged = $derived(avatarUrl != current.space?.avatar);
+  let nameChanged = $derived(spaceName != currentSpace?.name);
+  let avatarChanged = $derived(avatarUrl != currentSpace?.avatar);
   let descriptionChanged = $derived(
-    spaceDescription != current.space?.description,
+    spaceDescription != currentSpace?.description,
   );
   let hasChanged = $derived(nameChanged || avatarChanged || descriptionChanged);
 
   function resetData() {
-    spaceName = current.space?.name ?? "";
-    avatarUrl = current.space?.avatar ?? "";
+    spaceName = currentSpace?.name ?? "";
+    avatarUrl = currentSpace?.avatar ?? "";
     avatarFile = null;
   }
 
   async function save() {
-    if (!current.space) return;
+    if (!spaceId) return;
 
     try {
       isSaving = true;
@@ -39,7 +42,7 @@
         (await backend.uploadToPds(await avatarFile.arrayBuffer()));
 
       // Update space info
-      await backend.sendEvent(current.space.id, {
+      await backend.sendEvent(spaceId, {
         ulid: ulid(),
         parent: undefined,
         variant: {
@@ -72,16 +75,13 @@
 
   let updateSpaceHandle = $state(1);
   let spaceForCurrentAccountHandleResp = $derived(
-    updateSpaceHandle && backendStatus.did
-      ? backend.resolveSpaceFromHandleOrDid(backendStatus.did)
+    updateSpaceHandle && backendStatus.authState?.state === "authenticated"
+      ? backend.resolveSpaceId(backendStatus.authState.did)
       : undefined,
   );
   let handleForCurrentSpace = $derived(
-    current.space?.handle_account
-      ? backend.resolveHandleForSpace(
-          current.space.id,
-          current.space.handle_account,
-        )
+    spaceId && handleAccount
+      ? backend.resolveHandleForSpace(spaceId, handleAccount)
       : undefined,
   );
 
@@ -97,19 +97,19 @@
   }
 
   async function useHandleForSpace() {
-    if (!current.space) return;
+    if (!spaceId || backendStatus.authState?.state !== "authenticated") return;
     try {
-      await backend.sendEvent(current.space.id, {
+      await backend.sendEvent(spaceId, {
         ulid: ulid(),
         parent: undefined,
         variant: {
           kind: "space.roomy.stream.handle.account.0",
           data: {
-            did: backendStatus.did,
+            did: backendStatus.authState.did,
           },
         },
       });
-      await backend.createStreamHandleRecord(current.space.id);
+      await backend.createStreamHandleRecord(spaceId);
       updateSpaceHandle += 1;
       toast.success("Successfully updated handle");
       if (backendStatus.profile?.handle)
@@ -121,10 +121,10 @@
   }
 
   async function removeHandleForSpace() {
-    if (!current.space) return;
+    if (!spaceId) return;
     try {
       await backend.removeStreamHandleRecord();
-      await backend.sendEvent(current.space.id, {
+      await backend.sendEvent(spaceId, {
         ulid: ulid(),
         parent: undefined,
         variant: {
@@ -136,7 +136,7 @@
       });
       updateSpaceHandle += 1;
       toast.success("Successfully updated handle");
-      goto(`/${current.space.id}/settings/general`);
+      goto(`/${spaceId}/settings/general`);
     } catch (e) {
       console.error(e);
       toast.error(`Could not set handle: ${e}`);
@@ -160,7 +160,7 @@
           >Avatar</label
         >
         <div class="mt-2 flex items-center gap-x-3">
-          <SpaceAvatar imageUrl={avatarUrl} id={current.space?.id} size={64} />
+          <SpaceAvatar imageUrl={avatarUrl} id={spaceId} size={64} />
 
           <input
             type="file"
@@ -244,7 +244,7 @@
           >
         {/if}
 
-        {#if resp && resp.spaceId == current.space?.id}
+        {#if resp && resp.spaceId == spaceId}
           <Button onclick={removeHandleForSpace}
             >Remove Your Handle From This Space</Button
           >
@@ -270,7 +270,7 @@
       </div>
     {/await}
     {#await spaceForCurrentAccountHandleResp then resp}
-      {#if resp && resp.spaceId != current.space?.id}
+      {#if resp && resp.spaceId != spaceId}
         <div>
           Your handle is currently being used for
           <a

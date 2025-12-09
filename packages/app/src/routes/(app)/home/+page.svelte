@@ -3,7 +3,7 @@
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SpaceButton from "$lib/components/spaces/SpaceButton.svelte";
   import EarlyAlphaWarning from "$lib/components/helper/EarlyAlphaWarning.svelte";
-  import { spaces } from "$lib/queries.svelte";
+  import { joinedSpaces } from "$lib/queries";
 </script>
 
 <MainLayout>
@@ -42,18 +42,18 @@
         </section>
       {/if} -->
 
-      {#if spaces.list.length || 0 > 0}
+      {#if joinedSpaces.list.length || 0 > 0}
         <h2 class="text-3xl font-bold text-base-900 dark:text-base-100">
           Your Spaces
         </h2>
         <section
           class="flex flex-row gap-8 mx-8 justify-center flex-wrap max-w-5xl"
         >
-          {#each spaces.list as space}
+          {#each joinedSpaces.list as space}
             <SpaceButton {space} />
           {/each}
         </section>
-      {:else if spaces.list.length || 0 == 0}
+      {:else if joinedSpaces.list.length || 0 == 0}
         <p class="text-lg font-medium text-center">
           You don't have any spaces yet. Create one to get started!
         </p>

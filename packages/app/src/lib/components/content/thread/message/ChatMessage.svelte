@@ -13,11 +13,11 @@
   import ChatInput from "../ChatInput.svelte";
   import IconTablerCheck from "~icons/tabler/check";
   import { goto } from "$app/navigation";
-  import { renderMarkdownSanitized } from "$lib/markdown";
+  import { renderMarkdownSanitized } from "$lib/utils/markdown";
   import type { Message } from "../ChatArea.svelte";
   import { backend, backendStatus } from "$lib/workers";
   import { decodeTime, ulid } from "ulidx";
-  import { current } from "$lib/queries.svelte";
+  import { current } from "$lib/queries";
   import { toast } from "@fuxui/base";
   import type { MessagingState } from "../TimelineView.svelte";
   import MediaEmbed from "./embeds/MediaEmbed.svelte";
@@ -103,7 +103,8 @@
 
   async function saveEditedMessage(newContent: string) {
     editingMessage.id = "";
-    if (!current.space) return;
+    const spaceId = current.joinedSpace?.id;
+    if (!spaceId) return;
 
     // If the content is the same, don't save
     if (message.content == newContent) {
@@ -112,7 +113,7 @@
     }
     let contentPatch = patchToText(patchMake(message.content, newContent));
 
-    await backend.sendEvent(current.space.id, {
+    await backend.sendEvent(spaceId, {
       ulid: ulid(),
       parent: message.id,
       variant: {

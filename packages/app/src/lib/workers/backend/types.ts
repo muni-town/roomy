@@ -4,6 +4,7 @@ import type {
   Batch,
   EncodedStreamEvent,
   EventType,
+  Handle,
   StreamHashId,
 } from "../types";
 import type { Profile } from "../../types/profile";
@@ -12,6 +13,7 @@ import type { Client } from "./client";
 import type { BlobRef } from "@atproto/lexicon";
 import type { Deferred } from "$lib/utils/deferred";
 import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
+import type { Did } from "@atproto/api";
 
 export interface BackendStatus {
   authState: ReactiveAuthState;
@@ -24,7 +26,7 @@ export type BackendInterface = {
   logout(): Promise<void>;
   oauthCallback(searchParams: string): Promise<void>;
   runQuery(statement: SqlStatement): Promise<QueryResult<unknown>>;
-  getProfile(did: string): Promise<Profile | undefined>;
+  getProfile(did: Did): Promise<Profile | undefined>;
   dangerousCompletelyDestroyDatabase(opts: {
     yesIAmSure: true;
   }): Promise<{ done: true } | { done: false; error: string }>;
@@ -36,27 +38,30 @@ export type BackendInterface = {
     port: MessagePort,
     statement: SqlStatement,
   ): Promise<void>;
-  sendEvent(streamId: string, payload: EventType): Promise<void>;
-  sendEventBatch(streamId: string, payloads: EventType[]): Promise<void>;
+  sendEvent(streamId: StreamHashId, payload: EventType): Promise<void>;
+  sendEventBatch(streamId: StreamHashId, payloads: EventType[]): Promise<void>;
   fetchEvents(
-    streamId: string,
+    streamId: StreamHashId,
     offset: number,
     limit: number,
   ): Promise<EncodedStreamEvent[]>;
-  previewSpace(streamId: string): Promise<{ name: string }>;
+  previewSpace(streamId: StreamHashId): Promise<{ name: string }>;
   setActiveSqliteWorker(port: MessagePort): Promise<void>;
-  pauseSubscription(streamId: string): Promise<void>;
-  unpauseSubscription(streamId: string): Promise<void>;
+  pauseSubscription(streamId: StreamHashId): Promise<void>;
+  unpauseSubscription(streamId: StreamHashId): Promise<void>;
   resolveHandleForSpace(
-    spaceId: string,
-    handleAccountDid: string,
-  ): Promise<string | undefined>;
-  resolveSpaceFromHandleOrDid(
-    handle: string,
-  ): Promise<{ spaceId: string; handleDid: string } | undefined>;
-  createStreamHandleRecord(spaceId: string): Promise<void>;
+    spaceId: StreamHashId,
+    handleAccountDid: Did,
+  ): Promise<Handle | undefined>;
+  resolveSpaceId(spaceIdOrHandleOrDid: StreamHashId | Handle | Did): Promise<{
+    spaceId: StreamHashId;
+    handle?: Handle;
+    did?: Did;
+  }>;
+  checkSpaceExists(spaceId: StreamHashId): Promise<boolean>;
+  createStreamHandleRecord(spaceId: StreamHashId): Promise<void>;
   removeStreamHandleRecord(): Promise<void>;
-  createSpaceStream(): Promise<string>;
+  createSpaceStream(): Promise<StreamHashId>;
   uploadToPds(
     bytes: ArrayBuffer,
     opts?: { alt?: string; mimetype?: string },
@@ -111,8 +116,8 @@ export namespace AuthStates {
 
   export interface ReactiveAuthenticated {
     state: "authenticated";
-    did: string;
-    personalStream: string;
+    did: Did;
+    personalStream: StreamHashId;
     clientStatus: StreamConnectionStatus["status"];
   }
 }

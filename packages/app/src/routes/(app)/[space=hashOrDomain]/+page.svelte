@@ -1,30 +1,24 @@
 <script lang="ts">
-  import { onNavigate } from "$app/navigation";
-  import { page } from "$app/state";
-  import BoardView from "$lib/components/content/thread/boardView/BoardView.svelte";
-  import type { ThreadInfo } from "$lib/components/content/thread/boardView/types";
-  import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
-  import MainLayout from "$lib/components/layout/MainLayout.svelte";
-  import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
-  import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
-  import { LiveQuery } from "$lib/liveQuery.svelte";
-  import { current } from "$lib/queries.svelte";
-  import { joinSpace } from "$lib/utils.svelte";
-  import { sql } from "$lib/utils/sqlTemplate";
-  import { backendStatus } from "$lib/workers";
-  import { id } from "$lib/workers/encoding";
-  import { Box, Button } from "@fuxui/base";
   import { fade } from "svelte/transition";
 
-  let inviteSpaceName = $derived(page.url.searchParams.get("name"));
-  let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
+  import { current } from "$lib/queries";
+  import { backendStatus } from "$lib/workers";
+  // import { onNavigate } from "$app/navigation";
 
-  let notMemberOfSpace = $derived(
-    backendStatus.authState?.state === "unauthenticated" ||
-      (backendStatus.authState?.state === "authenticated" &&
-        backendStatus.authState.clientStatus === "connected" &&
-        !current.space),
-  );
+  import { LiveQuery } from "$lib/utils/liveQuery.svelte";
+  import { sql } from "$lib/utils/sqlTemplate";
+  import { id } from "$lib/workers/encoding";
+
+  import BoardView from "$lib/components/content/thread/boardView/BoardView.svelte";
+  import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
+  import MainLayout from "$lib/components/layout/MainLayout.svelte";
+  import JoinSpaceModal from "$lib/components/modals/JoinSpaceModal.svelte";
+  import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
+
+  import type { ThreadInfo } from "$lib/components/content/thread/boardView/types";
+  import Error from "$lib/components/modals/Error.svelte";
+
+  const spaceId = current.joinedSpace?.id;
 
   const threadsList = new LiveQuery<ThreadInfo>(
     () =>
@@ -72,7 +66,7 @@
             join comp_info i on i.entity = r.entity
             join entities e on e.id = r.entity
           where
-            e.stream_id = ${current.space?.id ? id(current.space.id) : null}
+            e.stream_id = ${spaceId ? id(spaceId) : null}
               and
             r.label = 'page'
 
@@ -112,7 +106,7 @@
             join entities e on e.id = r.entity
             join comp_info ci on ci.entity = e.parent
           where
-            e.stream_id = ${current.space?.id ? id(current.space.id) : null}
+            e.stream_id = ${spaceId ? id(spaceId) : null}
               and
             r.label = 'thread'
         )
@@ -121,74 +115,72 @@
     (row) => JSON.parse(row.json),
   );
 
-  let threadsLoading = $derived(
-    !threadsList.result ||
-      !current.space ||
-      (!threadsList.result.length && current.space?.backfill_status !== "idle"),
+  const roomLoading = $derived(
+    current.space.status === "loading" ||
+      threadsList.current.status === "loading",
   );
 
-  onNavigate(() => (threadsList.result = undefined));
+  // let threadsLoading = $derived(
+  //   !threadsList.result ||
+  //     current.space.status !== "joined" ||
+  //     (!threadsList.result.length &&
+  //       current.joinedSpace?.backfill_status !== "idle"),
+  // );
+
+  // not sure what this was for, commenting out for now
+  // onNavigate(() => (threadsList.result = undefined));
 </script>
 
 {#snippet sidebar()}
   <SidebarMain />
 {/snippet}
 
-<MainLayout sidebar={current.space ? (sidebar as any) : undefined}>
-  {#snippet navbar()}
-    <div class="relative w-full">
-      <div class="flex flex-col items-center justify-between w-full px-2">
-        <h2
-          class="w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
-        >
-          <div class="ml-2 font-bold grow text-center text-lg">Index</div>
+{#snippet navbar()}
+  <div class="relative w-full">
+    <div class="flex flex-col items-center justify-between w-full px-2">
+      <h2
+        class="w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
+      >
+        <div class="ml-2 font-bold grow text-center text-lg">Index</div>
 
-          {#if current.space?.id && backendStatus.loadingSpaces}
-            <div class="dark:!text-base-400 !text-base-600">
-              Downloading Entire Space...
-            </div>
-          {/if}
-        </h2>
+        {#if current.joinedSpace?.id && backendStatus.loadingSpaces}
+          <div class="dark:!text-base-400 !text-base-600">
+            Downloading Entire Space...
+          </div>
+        {/if}
+      </h2>
+    </div>
+
+    {#if current.joinedSpace?.id && backendStatus.loadingSpaces}
+      <LoadingLine />
+    {/if}
+  </div>
+{/snippet}
+
+{#if current.space.status === "error"}
+  <MainLayout>
+    <Error message={current.space.message} />
+  </MainLayout>
+{:else if current.space.status === "invited"}
+  <MainLayout>
+    <JoinSpaceModal />
+  </MainLayout>
+{:else}
+  <MainLayout {sidebar} {navbar}>
+    {#if roomLoading}
+      <!-- TODO loading spinner -->
+      <div class="h-full w-full flex">
+        <div class="m-auto">Loading...</div>
       </div>
-
-      {#if current.space?.id && backendStatus.loadingSpaces}
-        <LoadingLine />
-      {/if}
-    </div>
-  {/snippet}
-
-  {#if notMemberOfSpace}
-    <div class="flex items-center justify-center h-full">
-      <Box class="w-[20em] flex flex-col">
-        <div class="mb-5 flex justify-center items-center gap-3">
-          <SpaceAvatar
-            imageUrl={inviteSpaceAvatar ?? ""}
-            id={page.params.space}
-            name={inviteSpaceName ?? ""}
-            size={50}
-          />
-          {#if inviteSpaceName}
-            <h1 class="font-bold text-xl">{inviteSpaceName}</h1>
-          {/if}
-        </div>
-        <Button size="lg" onclick={() => joinSpace(page.params.space!)}
-          >Join Space</Button
-        >
-      </Box>
-    </div>
-  {:else if threadsLoading}
-    <!-- TODO loading spinner -->
-    <div class="h-full w-full flex">
-      <div class="m-auto">Loading...</div>
-    </div>
-  {:else if threadsList.result}
-    <div
-      transition:fade={{ duration: 200 }}
-      class="flex flex-col justify-center h-full w-full"
-    >
-      <BoardView threads={threadsList.result || []} />
-    </div>
-  {:else if threadsList.error}
-    Error loading: {threadsList.error}
-  {/if}
-</MainLayout>
+    {:else if threadsList.result}
+      <div
+        transition:fade={{ duration: 200 }}
+        class="flex flex-col justify-center h-full w-full"
+      >
+        <BoardView threads={threadsList.result || []} />
+      </div>
+    {:else if threadsList.error}
+      <Error message={threadsList.error} />
+    {/if}
+  </MainLayout>
+{/if}

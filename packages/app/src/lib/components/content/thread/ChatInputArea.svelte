@@ -10,7 +10,7 @@
   import IconTablerX from "~icons/tabler/x";
   import UploadFileButton from "$lib/components/helper/UploadFileButton.svelte";
   import { backend } from "$lib/workers";
-  import { current } from "$lib/queries.svelte";
+  import { current } from "$lib/queries";
   import { monotonicFactory } from "ulidx";
   import { page } from "$app/state";
   import { navigate } from "$lib/utils.svelte";
@@ -23,6 +23,7 @@
   import { markCommentForRemoval } from "$lib/components/richtext/RichTextEditor.svelte";
   import { getImagePreloadData } from "$lib/utils/media";
 
+  let spaceId = $derived(current.joinedSpace?.id);
   let messageInputEl: null | HTMLInputElement = $state(null);
   let isSendingMessage = $state(false);
 
@@ -100,7 +101,7 @@
   }
 
   async function handleCreateThread() {
-    if (!current.space?.id) return;
+    if (!spaceId) return;
     const state = messagingState.current;
     if (state.kind !== "threading") return;
     if ((state as Threading).selectedMessages.length == 0) return;
@@ -109,7 +110,7 @@
       state.name || state.selectedMessages[0]?.content.slice(0, 50) + "...";
 
     const threadId = ulid();
-    await backend.sendEvent(current.space.id, {
+    await backend.sendEvent(spaceId, {
       ulid: threadId,
       parent: current.roomId,
       variant: {
@@ -118,7 +119,7 @@
       },
     });
 
-    await backend.sendEvent(current.space.id, {
+    await backend.sendEvent(spaceId, {
       ulid: ulid(),
       parent: threadId,
       variant: {
@@ -127,7 +128,7 @@
       },
     });
 
-    await backend.sendEvent(current.space.id, {
+    await backend.sendEvent(spaceId, {
       ulid: ulid(),
       parent: threadId,
       variant: {
@@ -141,7 +142,7 @@
     });
 
     for (const message of state.selectedMessages) {
-      await backend.sendEvent(current.space.id, {
+      await backend.sendEvent(spaceId, {
         ulid: ulid(),
         parent: message.id,
         variant: {
@@ -159,9 +160,10 @@
   async function sendMessage(e: SubmitEvent) {
     e.preventDefault();
     const state = messagingState.current;
+
     if (state.kind === "threading") return;
     if (!state.input && state.files.length == 0) return;
-    if (!current.space) return;
+    if (!spaceId) return;
 
     isSendingMessage = true;
 
@@ -257,7 +259,7 @@
 
       console.log("sending message", messageEvent);
 
-      await backend.sendEvent(current.space.id, messageEvent);
+      await backend.sendEvent(spaceId, messageEvent);
     } catch (e: any) {
       console.error(e);
       toast.error("Failed to send message.", { position: "bottom-right" });
