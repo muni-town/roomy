@@ -3,7 +3,7 @@
   import { Button, Toggle, Tooltip } from "@fuxui/base";
   import IconLucideSmilePlus from "~icons/lucide/smile-plus";
   import { backend } from "$lib/workers";
-  import { current } from "$lib/queries.svelte";
+  import { current } from "$lib/queries";
   import { ulid } from "ulidx";
   import type { Message } from "../ChatArea.svelte";
   import { did } from "$lib/status.svelte";
@@ -13,6 +13,8 @@
   }: {
     message: Message;
   } = $props();
+
+  let spaceId = $derived(current.joinedSpace?.id);
 
   let sortedReactions = $derived(
     message.reactions.reduce(
@@ -28,13 +30,13 @@
   );
 
   function onEmojiPick(emoji: string) {
-    if (!current.space) return;
+    if (!spaceId) return;
 
     // If we haven't already made this reaction to this post.
     if (
       !message.reactions.find((x) => x.userId == did() && x.reaction == emoji)
     ) {
-      backend.sendEvent(current.space.id, {
+      backend.sendEvent(spaceId, {
         ulid: ulid(),
         parent: current.roomId,
         variant: {
@@ -50,13 +52,13 @@
   }
 
   function onEmojiButtonClick(emoji: string) {
-    if (!current.space) return;
+    if (!spaceId) return;
 
     // If we haven't already made this reaction to this post.
     if (
       !message.reactions.find((x) => x.userId == did() && x.reaction == emoji)
     ) {
-      backend.sendEvent(current.space.id, {
+      backend.sendEvent(spaceId, {
         ulid: ulid(),
         parent: current.roomId,
         variant: {
@@ -70,7 +72,7 @@
 
       // If we want to remove our reaction on this post
     } else {
-      backend.sendEvent(current.space.id, {
+      backend.sendEvent(spaceId, {
         ulid: ulid(),
         parent: current.roomId,
         variant: {

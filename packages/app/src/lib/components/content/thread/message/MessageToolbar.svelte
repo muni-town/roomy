@@ -13,7 +13,7 @@
   import IconTablerEdit from "~icons/tabler/edit";
   import IconTablerTrash from "~icons/tabler/trash";
   import { backend, backendStatus } from "$lib/workers";
-  import { current } from "$lib/queries.svelte";
+  import { current } from "$lib/queries";
   import { ulid } from "ulidx";
   import { did } from "$lib/status.svelte";
 
@@ -47,9 +47,10 @@
   );
 
   async function deleteMessage() {
-    if (!current.space) return;
+    const spaceId = current.joinedSpace?.id;
+    if (!spaceId) return;
     if (!canEditAndDelete) return;
-    await backend.sendEvent(current.space.id, {
+    await backend.sendEvent(spaceId, {
       ulid: ulid(),
       parent: message.id,
       variant: {
@@ -62,13 +63,14 @@
   }
 
   function onEmojiPick(emoji: string) {
-    if (!current.space) return;
+    const spaceId = current.joinedSpace?.id;
+    if (!spaceId) return;
 
     // If we haven't already made this reaction to this post.
     if (
       !message.reactions.find((x) => x.userId == did() && x.reaction == emoji)
     ) {
-      backend.sendEvent(current.space.id, {
+      backend.sendEvent(spaceId, {
         ulid: ulid(),
         parent: current.roomId,
         variant: {

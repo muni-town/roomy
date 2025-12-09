@@ -2,11 +2,11 @@
   import { navigate, navigateSync } from "$lib/utils.svelte";
   import { Tooltip } from "@fuxui/base";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
-  import { current, type SpaceMeta } from "$lib/queries.svelte";
+  import { current, type SpaceMeta } from "$lib/queries";
 
   const space: SpaceMeta & { hasJoined?: boolean } = $props();
 
-  let isActive = $derived(current.space?.id == space.id);
+  let isActive = $derived(current.joinedSpace?.id == space.id);
 </script>
 
 <Tooltip

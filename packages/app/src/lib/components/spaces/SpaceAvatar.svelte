@@ -30,7 +30,10 @@
       class="object-cover object-center h-full w-full"
     />
   {:else if id}
-    <AvatarMarble name={id} {size} />
+    <!-- Ensure a rerender on id change -->
+    {#key id}
+      <AvatarMarble name={id} {size} />
+    {/key}
   {/if}
   {#if loading}
     <div

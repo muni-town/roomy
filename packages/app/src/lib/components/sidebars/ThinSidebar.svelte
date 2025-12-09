@@ -5,7 +5,7 @@
   import { Button, ThemeToggle, ScrollArea } from "@fuxui/base";
   import { SelectThemePopover } from "@fuxui/colors";
   import UserProfileButton from "../user/UserProfileButton.svelte";
-  import { current, spaces } from "$lib/queries.svelte";
+  import { current, joinedSpaces } from "$lib/queries";
   import { dev } from "$app/environment";
 
   import IconTablerPlus from "~icons/tabler/plus";
@@ -13,9 +13,7 @@
   import IconMdiSqlQuery from "~icons/mdi/sql-query";
   import { did } from "$lib/status.svelte";
 
-  let {}: {} = $props();
-
-  let openSpace = $derived(current.space?.id);
+  let openSpace = $derived(current.joinedSpace?.id);
   let isOpenSpaceJoined = $derived(true);
 </script>
 
@@ -71,7 +69,7 @@
 
   <ScrollArea class="h-full overflow-y-auto overflow-x-hidden">
     <div class="flex flex-col px-0 items-center gap-2 py-4">
-      {#each spaces.list as space (space.id)}
+      {#each joinedSpaces.list as space (space.id)}
         <SidebarSpace {...space} />
       {/each}
     </div>

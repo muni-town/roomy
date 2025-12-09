@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { LiveQuery } from "$lib/liveQuery.svelte";
-  import { current } from "$lib/queries.svelte";
+  import { LiveQuery } from "$lib/utils/liveQuery.svelte";
+  import { current } from "$lib/queries";
   import { sql } from "$lib/utils/sqlTemplate";
   import { backend, backendStatus } from "$lib/workers";
   import { id } from "$lib/workers/encoding";
@@ -8,6 +8,8 @@
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { ulid } from "ulidx";
+
+  const spaceId = $derived(current.joinedSpace?.id);
 
   const users = new LiveQuery<{
     id: string;
@@ -26,7 +28,7 @@
     where
       label = 'member'
         and
-      head = ${current.space?.id && id(current.space.id)}
+      head = ${spaceId && id(spaceId)}
   `,
     (row) => ({
       ...row,
@@ -35,9 +37,9 @@
   );
 
   async function addAdmin(userId: string) {
-    if (!current.space?.id) return;
+    if (!spaceId) return;
 
-    await backend.sendEvent(current.space?.id, {
+    await backend.sendEvent(spaceId, {
       ulid: ulid(),
       parent: undefined,
       variant: {
@@ -50,9 +52,9 @@
   }
 
   async function removeAdmin(userId: string) {
-    if (!current.space?.id) return;
+    if (!spaceId) return;
 
-    await backend.sendEvent(current.space?.id, {
+    await backend.sendEvent(spaceId, {
       ulid: ulid(),
       parent: undefined,
       variant: {
@@ -83,9 +85,9 @@
             </Avatar.Root>
             {member.name}</a
           >
-          {#if current.space?.permissions.find(([user, perm]) => user == member.id && perm != "admin")}
+          {#if current.joinedSpace?.permissions.find(([user, perm]) => user == member.id && perm != "admin")}
             <Button onclick={() => addAdmin(member.id)}>Make Admin</Button>
-          {:else if member.id != backendStatus.did}
+          {:else if backendStatus.authState?.state === "authenticated" && member.id != backendStatus.authState.did}
             <Button onclick={() => removeAdmin(member.id)}>Demote Admin</Button>
           {/if}
         </li>

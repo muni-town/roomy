@@ -3,7 +3,7 @@
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
-  import { current } from "$lib/queries.svelte";
+  import { current } from "$lib/queries";
   import { backend, backendStatus } from "$lib/workers";
   import { ulid } from "ulidx";
 
@@ -21,11 +21,12 @@
   } = $props();
 
   async function leaveSpace() {
+    const spaceId = current.joinedSpace?.id;
     if (backendStatus.authState?.state !== "authenticated") return;
-    if (!current.space || !backendStatus.authState.personalStream) return;
+    if (!spaceId || !backendStatus.authState.personalStream) return;
 
     // Tell the space that we are leaving the member list
-    await backend.sendEvent(current.space.id, {
+    await backend.sendEvent(spaceId, {
       ulid: ulid(),
       parent: undefined,
       variant: {
@@ -41,7 +42,7 @@
       variant: {
         kind: "space.roomy.space.leave.0",
         data: {
-          spaceId: current.space.id,
+          spaceId: spaceId,
         },
       },
     });
@@ -69,14 +70,14 @@
       >
         <div class="flex items-center gap-4 max-w-full">
           <SpaceAvatar
-            imageUrl={current.space?.avatar}
-            id={current.space?.id}
+            imageUrl={current.joinedSpace?.avatar}
+            id={current.joinedSpace?.id}
           />
 
           <h1
             class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full flex-grow"
           >
-            {current.space?.name ?? ""}
+            {current.joinedSpace?.name ?? ""}
           </h1>
         </div>
         <IconLucideChevronDown
@@ -91,7 +92,7 @@
       <Button
         onclick={() => {
           navigator.clipboard.writeText(
-            `${page.url.href}?name=${encodeURIComponent(current.space?.name ?? "")}&avatar=${encodeURIComponent(current.space?.avatar ?? "")}`,
+            `${page.url.href}?name=${encodeURIComponent(current.joinedSpace?.name ?? "")}&avatar=${encodeURIComponent(current.joinedSpace?.avatar ?? "")}`,
           );
           toast.success("Invite link copied to clipboard");
         }}
@@ -103,7 +104,7 @@
       {#if current.isSpaceAdmin}
         <Button
           class="w-full"
-          href={`/${current.space?.id}/new`}
+          href={`/${current.joinedSpace?.id}/new`}
           variant="secondary"
         >
           <IconLucidePlus class="size-4" /> New

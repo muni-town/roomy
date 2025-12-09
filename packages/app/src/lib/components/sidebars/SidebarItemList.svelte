@@ -6,7 +6,7 @@
   //   dragHandle,
   //   type Item,
   // } from "svelte-dnd-action";
-  import { type SpaceTreeItem } from "$lib/queries.svelte";
+  import { type SpaceTreeItem } from "$lib/queries";
   import SidebarItem from "./SidebarItem.svelte";
 
   let {

@@ -1,15 +1,16 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { LiveQuery } from "$lib/liveQuery.svelte";
-  import { current } from "$lib/queries.svelte";
+  import { LiveQuery } from "$lib/utils/liveQuery.svelte";
+  import { current } from "$lib/queries";
   import { sql } from "$lib/utils/sqlTemplate";
   import { id } from "$lib/workers/encoding";
   import BoardView from "./BoardView.svelte";
   import type { ThreadInfo } from "./types";
 
-  let {
-    emptyMessage,
-  }: { objectType?: string; emptyMessage?: string } = $props();
+  let { emptyMessage }: { objectType?: string; emptyMessage?: string } =
+    $props();
+
+  const spaceId = current.joinedSpace?.id;
 
   const threadsList = new LiveQuery<ThreadInfo>(
     () =>
@@ -53,7 +54,7 @@
             join entities e on e.id = r.entity
             join comp_info ci on ci.entity = e.parent
           where
-            e.stream_id = ${current.space?.id && id(current.space.id)}
+            e.stream_id = ${spaceId}
               and
             e.parent = ${page.params.object && id(page.params.object)}
               and

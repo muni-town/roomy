@@ -260,6 +260,7 @@ async function updateLiveQuery(id: string) {
   if (!query) throw `No Live query with ID: ${id}`;
   const { port, status } = query;
   let preparedStatement: PreparedStatement | undefined;
+
   if (status.kind == "unprepared") {
     try {
       const { prepared: prepared, actions } = await prepareSql(

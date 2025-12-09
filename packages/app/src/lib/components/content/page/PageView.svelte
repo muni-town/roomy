@@ -1,8 +1,8 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { LiveQuery } from "$lib/liveQuery.svelte";
-  import { renderMarkdownSanitized } from "$lib/markdown";
-  import { current } from "$lib/queries.svelte";
+  import { LiveQuery } from "$lib/utils/liveQuery.svelte";
+  import { renderMarkdownSanitized } from "$lib/utils/markdown";
+  import { current } from "$lib/queries";
   import { sql } from "$lib/utils/sqlTemplate";
   import { backend } from "$lib/workers";
   import { id } from "$lib/workers/encoding";
@@ -23,6 +23,7 @@
   import { ensureShowPageChat } from "$lib/../routes/(app)/[space=hashOrDomain]/[object=ulid]/+page.svelte";
 
   let isEditing = $state(false);
+  const spaceId = $derived(current.joinedSpace?.id);
 
   let { showPageChat = $bindable(false) } = $props();
 
@@ -48,13 +49,13 @@
   let editedHtml = $state("");
 
   async function savePage() {
-    if (!current.space?.id || !page.params.object) return;
+    if (!spaceId || !page.params.object) return;
 
     isEditing = false;
     const newMarkdown = new Turndown().turndown(editedHtml);
     if (pageMarkdown == newMarkdown) return;
     const patch = patchToText(patchMake(pageMarkdown || "", newMarkdown));
-    await backend.sendEvent(current.space.id, {
+    await backend.sendEvent(spaceId, {
       ulid: ulid(),
       parent: page.params.object,
       variant: {

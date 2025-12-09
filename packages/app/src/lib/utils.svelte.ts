@@ -3,9 +3,6 @@ import { decodeBase32 } from "./utils/base32";
 import { goto } from "$app/navigation";
 import type { JSONContent } from "@tiptap/core";
 import { writable } from "svelte/store";
-import { backend, backendStatus } from "./workers";
-import { toast } from "@fuxui/base";
-import { ulid } from "ulidx";
 
 /** Cleans a handle string by removing any characters not valid for a domain. */
 export function cleanHandle(handle: string): string {
@@ -153,44 +150,6 @@ export function cdnImageUrl(
     return `https://cdn.bsky.app/img/${opts?.size == "thumbnail" ? "feed_thumbnail" : "feed_fullsize"}/plain/${did}/${cid}`;
   } else {
     return uri;
-  }
-}
-
-/**
- * Join a space.
- */
-export async function joinSpace(spaceIdOrHandle: string) {
-  try {
-    const spaceId = spaceIdOrHandle.includes(".")
-      ? (await backend.resolveSpaceFromHandleOrDid(spaceIdOrHandle))?.spaceId
-      : spaceIdOrHandle;
-    if (!spaceId || backendStatus.authState?.state !== "authenticated") {
-      toast.error("Could not join space. It's possible it does not exist.");
-      return;
-    }
-    // Add the space to the personal list of joined spaces
-    await backend.sendEvent(backendStatus.authState.personalStream, {
-      ulid: ulid(),
-      parent: undefined,
-      variant: {
-        kind: "space.roomy.space.join.0",
-        data: {
-          spaceId,
-        },
-      },
-    });
-    // Tell the space that we joined.
-    await backend.sendEvent(spaceId, {
-      ulid: ulid(),
-      parent: undefined,
-      variant: {
-        kind: "space.roomy.room.join.0",
-        data: undefined,
-      },
-    });
-  } catch (e) {
-    console.error(e);
-    toast.error("Could not join space. It's possible it does not exist.");
   }
 }
 

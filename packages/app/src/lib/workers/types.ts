@@ -67,6 +67,10 @@ export type StreamHashId = string & { __brand: "streamHashId" };
 
 export type Ulid = string & { __brand: "ulid" };
 
+export type Handle = string & { __brand: "handle" };
+
+export type SpaceIdOrHandle = StreamHashId | Handle;
+
 export type StreamIndex = number & { __brand: "streamIndex" };
 
 export type TaskPriority = "priority" | "background";

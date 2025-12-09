@@ -7,11 +7,13 @@
 
   import * as zip from "@zip-js/zip-js";
   import { backend } from "$lib/workers";
-  import { current } from "$lib/queries.svelte";
+  import { current } from "$lib/queries";
   import { monotonicFactory } from "ulidx";
   import type { EventType } from "$lib/workers/types";
   import { sql } from "$lib/utils/sqlTemplate";
   import { formatDate } from "date-fns";
+
+  const spaceId = $derived(current.joinedSpace?.id);
 
   let cutoffDateInput = $state("");
   let cutoffDate = $derived.by(() => {
@@ -54,7 +56,7 @@
   async function importZip() {
     const ulid = monotonicFactory();
 
-    if (!current.space) return;
+    if (!spaceId) return;
     const file = files?.item(0);
     if (!file) {
       toast.error("Please select a file to import.", { position: "top-right" });
@@ -67,7 +69,7 @@
     let batch: EventType[] = [];
     let batchMessageCount = 0;
 
-    await backend.pauseSubscription(current.space.id);
+    await backend.pauseSubscription(spaceId);
 
     const existingDiscordUsers = new Set();
 
@@ -278,7 +280,7 @@
           batchMessageCount += 1;
 
           if (batch.length >= batchSize) {
-            await backend.sendEventBatch(current.space.id, batch);
+            await backend.sendEventBatch(spaceId, batch);
             finishedMessages.value += batchMessageCount;
             batch = [];
             batchMessageCount = 0;
@@ -289,13 +291,13 @@
         finishedMessages.value = 0;
       }
 
-      await backend.sendEventBatch(current.space.id, batch);
+      await backend.sendEventBatch(spaceId, batch);
 
       launchConfetti();
       importFinished = true;
       stopwatch.stop();
 
-      await backend.unpauseSubscription(current.space.id);
+      await backend.unpauseSubscription(spaceId);
     } catch (e) {
       console.error(e);
       toast.error(`Error while importing Discord archive: ${e}`, {

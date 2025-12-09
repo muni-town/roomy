@@ -13,7 +13,7 @@
   import { Button, toast } from "@fuxui/base";
 
   import IconTablerArrowDown from "~icons/tabler/arrow-down";
-  import { LiveQuery } from "$lib/liveQuery.svelte";
+  import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { id } from "$lib/workers/encoding";
   import { decodeTime } from "ulidx";
