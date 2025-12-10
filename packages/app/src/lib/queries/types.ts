@@ -3,7 +3,7 @@ import type { Did } from "@atproto/api";
 
 export type SpaceMeta = {
   id: StreamHashId;
-  backfill_status: "priority" | "background" | "idle";
+  backfill_status: "loading" | "idle" | "error";
   joined?: boolean;
   name?: string;
   avatar?: string;

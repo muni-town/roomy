@@ -18,7 +18,7 @@ import type { Did } from "@atproto/api";
 export interface BackendStatus {
   authState: ReactiveAuthState;
   profile: Profile;
-  loadingSpaces: number;
+  spaces: Record<StreamHashId, "loading" | "idle" | "error">;
 }
 
 export type BackendInterface = {

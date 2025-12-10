@@ -1,6 +1,6 @@
 import { LiveQuery } from "$lib/utils/liveQuery.svelte";
 import { sql } from "$lib/utils/sqlTemplate";
-import { backend, getPersonalStreamId } from "$lib/workers";
+import { backend, backendStatus, getPersonalStreamId } from "$lib/workers";
 import { id } from "$lib/workers/encoding";
 import type { SpaceMeta } from "./types";
 
@@ -20,7 +20,6 @@ $effect.root(() => {
     () => sql`-- spaces
       select json_object(
           'id', id(cs.entity),
-          'backfill_status', cs.backfill_status,
           'name', ci.name,
           'avatar', ci.avatar,
           'description', ci.description,
@@ -47,11 +46,15 @@ $effect.root(() => {
     joinedSpaces.error = "";
     joinedSpaces.list = [];
     Promise.all(
-      spacesQuery.result?.map(async (x) => ({
-        ...x,
-        handle: x.handle_account
-          ? await backend.resolveHandleForSpace(x.id, x.handle_account)
+      spacesQuery.result?.map(async (spaceRow) => ({
+        ...spaceRow,
+        handle: spaceRow.handle_account
+          ? await backend.resolveHandleForSpace(
+              spaceRow.id,
+              spaceRow.handle_account,
+            )
           : undefined,
+        backfill_status: backendStatus.spaces?.[spaceRow.id] || "error",
       })) || [],
     )
       .then((s) => {

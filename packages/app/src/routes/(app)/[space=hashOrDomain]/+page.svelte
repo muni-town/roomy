@@ -120,13 +120,6 @@
       threadsList.current.status === "loading",
   );
 
-  // let threadsLoading = $derived(
-  //   !threadsList.result ||
-  //     current.space.status !== "joined" ||
-  //     (!threadsList.result.length &&
-  //       current.joinedSpace?.backfill_status !== "idle"),
-  // );
-
   // not sure what this was for, commenting out for now
   // onNavigate(() => (threadsList.result = undefined));
 </script>

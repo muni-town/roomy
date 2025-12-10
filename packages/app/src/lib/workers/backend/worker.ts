@@ -130,10 +130,11 @@ class WorkerSupervisor {
     await this.sqlite.runQuery(
       ensureEntity(personalStreamId, personalStreamId),
     );
+    // Mark personal stream space as hidden
     await this.sqlite.runQuery(sql`
-      insert into comp_space (entity, hidden, backfill_status)
-      values (${id(personalStreamId)}, 1, 'priority') 
-      on conflict (entity) do update set backfill_status = 'priority'
+      insert into comp_space (entity, hidden)
+      values (${id(personalStreamId)}, 1) 
+      on conflict (entity) do nothing
     `);
 
     const upToEventIdQuery = await this.sqlite
@@ -147,7 +148,7 @@ class WorkerSupervisor {
     const upToEventId =
       upToEventIdQuery &&
       upToEventIdQuery.rows?.length &&
-      upToEventIdQuery.rows[0]?.backfilled_to;
+      upToEventIdQuery.rows[0]!.backfilled_to;
 
     if (typeof upToEventId !== "number")
       throw new Error(
@@ -176,10 +177,11 @@ class WorkerSupervisor {
     };
     this.runMaterializer();
 
-    client.personalStreamFetched.promise.then(() => {
-      this.sqlite.runQuery(sql`
-        update comp_space set backfill_status = 'idle' 
-        where entity = ${id(personalStreamId)}`);
+    client.personalStream!.pin.backfill.completed.then(() => {
+      this.#status.spaces = {
+        ...this.#status.spaces,
+        [personalStreamId]: "idle",
+      };
       this.loadStreams();
     });
     this.#authenticated.resolve();
@@ -331,6 +333,7 @@ class WorkerSupervisor {
   private async loadStreams() {
     if (this.#status.authState?.state !== "authenticated")
       throw new Error("Not authenticated");
+
     // get streams from SQLite
     const result = await this.sqlite.runQuery<{
       id: StreamHashId;
@@ -340,22 +343,19 @@ class WorkerSupervisor {
       where hidden = 0
     `);
 
-    console.log("spaces...", result);
     // pass them to the client
-    const streamIdsAndCursors = result.rows
-      ? result.rows.map(async (row) => {
-          const exists = await this.client.checkStreamExists(row.id);
-          if (!exists) return null;
-          return [row.id, row.backfilled_to];
-        })
-      : [];
+    const streamIdsAndCursors = (result.rows || []).map((row) => {
+      return [row.id, row.backfilled_to] as const;
+    });
 
-    // check that each stream exists first
-    const existingStreams = (await Promise.all(streamIdsAndCursors)).filter(
-      (s) => s !== null,
-    ) as [StreamHashId, StreamIndex][];
+    // set all spaces to 'loading' in reactive status
+    this.#status.spaces = {
+      ...Object.fromEntries(
+        streamIdsAndCursors.map(([spaceId]) => [spaceId, "loading"]),
+      ),
+    };
 
-    const streams = await this.client.connect(new Map(existingStreams));
+    const streams = await this.client.connect(new Map(streamIdsAndCursors));
 
     // need to reassign the whole object to trigger reactive update
     this.#status.authState = {
@@ -367,10 +367,11 @@ class WorkerSupervisor {
 
     for (const stream of streams.values()) {
       (async () => {
-        await stream.pin.backfill.completed.promise;
-        await this.sqlite.runQuery(sql`
-          update comp_space set backfill_status = 'idle' 
-          where entity = ${id(stream.id)}`);
+        await stream.pin.backfill.completed;
+        this.#status.spaces = {
+          ...this.#status.spaces,
+          [stream.id]: "idle",
+        };
       })();
     }
   }
