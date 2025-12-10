@@ -59,6 +59,8 @@ export async function createSpace(opts: {
   // Create a new stream for the space
   const spaceId = await backend.createSpaceStream();
 
+  console.log("created space", spaceId);
+
   // Join the space
   await backend.sendEvent(opts.creator.personalStreamId, {
     ulid: ulid(),
@@ -70,6 +72,8 @@ export async function createSpace(opts: {
       },
     },
   });
+
+  console.log("sent join space event to personal stream");
 
   const avatarUpload =
     opts.avatarFile &&
@@ -244,6 +248,8 @@ export async function createSpace(opts: {
   });
 
   await backend.sendEventBatch(spaceId, batch);
+
+  console.log("sent events batch");
 
   return { spaceId };
 }

@@ -14,6 +14,7 @@ import type { BlobRef } from "@atproto/lexicon";
 import type { Deferred } from "$lib/utils/deferred";
 import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
 import type { Did } from "@atproto/api";
+import type { ConnectedStream } from "./stream";
 
 export interface BackendStatus {
   authState: ReactiveAuthState;
@@ -103,10 +104,6 @@ export namespace AuthStates {
     state: "authenticated";
     client: Client;
     eventChannel: AsyncChannel<Batch.Event>;
-    statementChannel: AsyncChannel<{
-      sqlStatements: SqlStatement[];
-      latestEvent: number;
-    }>;
   } // implies leafConnected, has personalStreamId
 
   export interface AuthError {
@@ -148,7 +145,6 @@ export type StreamConnectionStatus =
   | ConnectionStates.Error
   | ConnectionStates.Offline
   | ConnectionStates.InitialisingStreams
-  | ConnectionStates.LoadingPersonalStream
   | ConnectionStates.ConnectedStreams;
 
 export namespace ConnectionStates {
@@ -166,68 +162,11 @@ export namespace ConnectionStates {
     status: "initialising";
   }
 
-  export interface LoadingPersonalStream {
-    status: "loadingPersonalStream";
-    personalStream: ConnectedStream;
-    eventChannel: AsyncChannel<Batch.Event>;
-  }
-
   export interface ConnectedStreams {
     status: "connected";
     personalStream: ConnectedStream;
     eventChannel: AsyncChannel<Batch.Event>;
     streams: Map<StreamHashId, ConnectedStream>;
-  }
-}
-
-export interface ConnectedStream {
-  id: StreamHashId;
-  pin: PinState;
-}
-
-type PinState = PinStates.Rooms | PinStates.Space;
-
-namespace PinStates {
-  export interface Rooms {
-    type: "rooms";
-    rooms: Map<StreamHashId, BackfillStatus>;
-  }
-
-  export interface Space {
-    type: "space";
-    backfill: BackfillStatus;
-  }
-}
-
-export type BackfillStatus =
-  | BackfillStates.Error
-  | BackfillStates.Priority
-  | BackfillStates.Background
-  | BackfillStates.Idle;
-
-namespace BackfillStates {
-  export interface Error {
-    __brand: "backfillError";
-    status: "error";
-    message: string;
-    upToEventId?: number;
-  }
-
-  export interface Priority {
-    status: "priority";
-    upToEventId: number;
-    completed: Deferred;
-  }
-
-  export interface Background {
-    status: "background";
-    upToEventId: number;
-    completed: Deferred;
-  }
-
-  export interface Idle {
-    status: "idle";
-    upToEventId: number;
   }
 }
 
