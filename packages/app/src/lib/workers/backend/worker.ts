@@ -38,6 +38,7 @@ import type {
 import { isDid, type Did } from "@atproto/api";
 import { eventCodec, id } from "../encoding";
 import { ensureEntity } from "../sqlite/materializer";
+import type { ConnectedStream } from "./stream";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -93,13 +94,11 @@ class WorkerSupervisor {
     this.refreshSession();
   }
 
+  /** Where most of the initialisation happens. Backfill the personal
+   * stream from the stored cursor, then set up the other streams.
+   */
   async setAuthenticated(client: Client) {
-    // 'authenticated' reactive state has did and personalStream, not client
     const did = client.agent.did;
-    const statementChannel = new AsyncChannel<{
-      sqlStatements: SqlStatement[];
-      latestEvent: number;
-    }>();
     if (!did || !isDid(did)) throw new Error("DID not defined on client");
 
     console.log("Authenticating SQLite worker with did", did);
@@ -108,92 +107,116 @@ class WorkerSupervisor {
       .authenticate(did)
       .catch((e) => console.error("Failed to authenticate sqlite worker", e));
 
-    console.log("Authenticated Sqlite worker");
     // try to fetch or create the personal stream
-    const loading = { state: "loading" } as const;
-    this.#auth = loading;
-    this.#status.authState = loading;
+    this.setAuthState({ state: "loading" });
 
-    const personalStreamId = await client.ensurePersonalStream().catch((e) => {
-      const error = { state: "error", error: e } as const;
-      this.#auth = error;
-      this.#status.authState = error;
-      throw error;
-    });
+    const eventChannel = new AsyncChannel<Batch.Event>();
 
-    if (!personalStreamId)
-      throw new Error("Personal Stream ID must be defined");
-
-    await this.sqlite.untilReady;
+    const personalStream = await client
+      .ensurePersonalStream(eventChannel)
+      .catch((e) => {
+        const error = { state: "error", error: e } as const;
+        this.#auth = error;
+        this.#status.authState = error;
+        throw error;
+      });
 
     // Ensure personal stream space entity exists
     await this.sqlite.runQuery(
-      ensureEntity(personalStreamId, personalStreamId),
+      ensureEntity(personalStream.id, personalStream.id),
     );
     // Mark personal stream space as hidden
     await this.sqlite.runQuery(sql`
       insert into comp_space (entity, hidden)
-      values (${id(personalStreamId)}, 1) 
+      values (${id(personalStream.id)}, 1) 
       on conflict (entity) do nothing
     `);
 
-    const upToEventIdQuery = await this.sqlite
-      .runQuery<{
-        backfilled_to: StreamIndex;
-      }>(
-        sql`select backfilled_to from comp_space where entity = ${id(personalStreamId)}`,
-      )
-      .catch((e) => console.warn("Error getting backfilled_to", e));
-
-    const upToEventId =
-      upToEventIdQuery &&
-      upToEventIdQuery.rows?.length &&
-      upToEventIdQuery.rows[0]!.backfilled_to;
-
-    if (typeof upToEventId !== "number")
-      throw new Error(
-        "Could not correctly initialise personal stream space with backfilled_to",
-      );
-
-    console.log("upToEventId", upToEventIdQuery);
-
-    const eventChannel = client.loadPersonalStream(
-      personalStreamId,
-      upToEventId as StreamIndex,
+    personalStream.updateStreamCursor(
+      await this.sqlite.getStreamCursor(personalStream.id),
     );
-    console.log("Got personalStreamId", personalStreamId);
 
     this.#auth = {
       state: "authenticated",
       client,
       eventChannel,
-      statementChannel,
     };
     this.#status.authState = {
       state: "authenticated",
       did,
-      personalStream: personalStreamId,
+      personalStream: personalStream.id,
       clientStatus: client.status,
     };
-    this.runMaterializer();
 
-    client.personalStream!.pin.backfill.completed.then(() => {
-      this.#status.spaces = {
-        ...this.#status.spaces,
-        [personalStreamId]: "idle",
-      };
-      this.loadStreams();
+    this.startMaterializer();
+
+    await personalStream.backfill();
+
+    this.#status.spaces = {
+      ...this.#status.spaces,
+      [personalStream.id]: "idle",
+    };
+
+    if (this.#status.authState?.state !== "authenticated")
+      throw new Error("Not authenticated");
+
+    // get streams from SQLite
+    const streamsResult = await this.sqlite.runQuery<{
+      id: StreamHashId;
+      backfilled_to: StreamIndex;
+    }>(sql`-- backend space list
+      select id(e.id) as id, cs.backfilled_to from entities e join comp_space cs on e.id = cs.entity
+      where hidden = 0
+    `);
+
+    // pass them to the client
+    const streamIdsAndCursors = (streamsResult.rows || []).map((row) => {
+      return [row.id, row.backfilled_to] as const;
     });
+
+    // set all spaces to 'loading' in reactive status
+    this.#status.spaces = {
+      ...Object.fromEntries(
+        streamIdsAndCursors.map(([spaceId]) => [spaceId, "loading"]),
+      ),
+    };
+
+    const { streams, failed } = await this.client.connect(
+      personalStream,
+      new Map(streamIdsAndCursors),
+    );
+
+    if (failed.length) console.warn("Some streams didn't connect", failed);
+    // TODO: clean up nonexistent streams from db
+
+    // need to reassign the whole object to trigger reactive update
+    this.#status.authState = {
+      clientStatus: "connected",
+      did: this.#status.authState.did,
+      personalStream: this.#status.authState.personalStream,
+      state: "authenticated",
+    };
+
+    for (const stream of streams.values()) {
+      (async () => {
+        await stream.pin.backfill.completed;
+        this.#status.spaces = {
+          ...this.#status.spaces,
+          [stream.id]: "idle",
+        };
+      })();
+    }
+
     this.#authenticated.resolve();
   }
 
-  private async runMaterializer() {
+  private async startMaterializer() {
     if (this.#auth.state !== "authenticated") {
       throw new Error("Tried to handle events while unauthenticated");
     }
 
     console.log("Waiting for Client to be ready...");
-    await this.client.ready;
+    await this.client.connected;
     console.log("Client ready!");
 
     const eventChannel = await this.client.getEventChannel();
@@ -330,52 +353,6 @@ class WorkerSupervisor {
     this.#config.consoleForwarding = false;
   }
 
-  private async loadStreams() {
-    if (this.#status.authState?.state !== "authenticated")
-      throw new Error("Not authenticated");
-
-    // get streams from SQLite
-    const result = await this.sqlite.runQuery<{
-      id: StreamHashId;
-      backfilled_to: StreamIndex;
-    }>(sql`-- backend space list
-      select id(e.id) as id, cs.backfilled_to from entities e join comp_space cs on e.id = cs.entity
-      where hidden = 0
-    `);
-
-    // pass them to the client
-    const streamIdsAndCursors = (result.rows || []).map((row) => {
-      return [row.id, row.backfilled_to] as const;
-    });
-
-    // set all spaces to 'loading' in reactive status
-    this.#status.spaces = {
-      ...Object.fromEntries(
-        streamIdsAndCursors.map(([spaceId]) => [spaceId, "loading"]),
-      ),
-    };
-
-    const streams = await this.client.connect(new Map(streamIdsAndCursors));
-
-    // need to reassign the whole object to trigger reactive update
-    this.#status.authState = {
-      clientStatus: "connected",
-      did: this.#status.authState.did,
-      personalStream: this.#status.authState.personalStream,
-      state: "authenticated",
-    };
-
-    for (const stream of streams.values()) {
-      (async () => {
-        await stream.pin.backfill.completed;
-        this.#status.spaces = {
-          ...this.#status.spaces,
-          [stream.id]: "idle",
-        };
-      })();
-    }
-  }
-
   private getBackendInterface(): BackendInterface {
     return {
       login: async (handle) => Client.login(handle),
@@ -419,7 +396,14 @@ class WorkerSupervisor {
       },
       enableLogForwarding: () => this.enableLogForwarding(),
       disableLogForwarding: () => this.disableLogForwarding(),
-      createSpaceStream: async () => this.client.createSpaceStream(),
+      createSpaceStream: async () => {
+        const streamId = await this.client.createSpaceStream();
+        this.#status.spaces = {
+          ...this.#status.spaces,
+          [streamId]: "idle",
+        };
+        return streamId;
+      },
       sendEvent: async (streamId: string, event: EventType) => {
         await this.client.sendEvent(streamId, event);
       },
@@ -516,7 +500,8 @@ class SqliteSupervisor {
 
   async authenticate(did: Did) {
     await this.untilReady;
-    return await this.sqliteWorker.authenticate(did);
+    await this.sqliteWorker.authenticate(did);
+    console.log("SQLite Worker authenticated:", did);
   }
 
   async setReady(workerInterface: SqliteWorkerInterface) {
@@ -640,6 +625,24 @@ class SqliteSupervisor {
         error: message,
       } as const;
     }
+  }
+
+  async getStreamCursor(streamId: StreamHashId) {
+    const upToEventIdQuery = await this.runQuery<{
+      backfilled_to: StreamIndex;
+    }>(
+      sql`select backfilled_to from comp_space where entity = ${id(streamId)}`,
+    ).catch((e) => console.warn("Error getting backfilled_to", e));
+
+    const upToEventId =
+      upToEventIdQuery &&
+      upToEventIdQuery.rows?.length &&
+      upToEventIdQuery.rows[0]!.backfilled_to;
+
+    if (typeof upToEventId !== "number")
+      throw new Error("Could not get backfilled_to for stream: " + streamId);
+
+    return upToEventId as StreamIndex;
   }
 }
 

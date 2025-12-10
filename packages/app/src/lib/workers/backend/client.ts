@@ -3,41 +3,34 @@ import { createOauthClient } from "./oauth";
 import { db, personalStream } from "../idb";
 import { Agent, BlobRef, isDid, type Did } from "@atproto/api";
 import { lexicons } from "$lib/lexicons";
-import { LeafClient, type SqlRows } from "@muni-town/leaf-client";
+import { LeafClient } from "@muni-town/leaf-client";
 import { CONFIG } from "$lib/config";
 import {
   type EventType,
   type StreamHashId,
-  type Ulid,
   type StreamIndex,
-  type TaskPriority,
   type Batch,
   type EncodedStreamEvent,
   type Handle,
 } from "../types";
 import { type Profile } from "$lib/types/profile";
 import { eventCodec } from "../encoding";
-import { ulid } from "ulidx";
 import { Deferred } from "$lib/utils/deferred";
 import { AsyncChannel } from "../asyncChannel";
-import type {
-  StreamConnectionStatus,
-  ConnectionStates,
-  ConnectedStream,
-} from "./types";
-import { personalModule, spaceModule } from "./modules";
+import type { StreamConnectionStatus, ConnectionStates } from "./types";
+import { personalModule } from "./modules";
+import { ConnectedStream, parseEvents } from "./stream";
 
+/** Handles interaction with ATProto and Leaf, manages state for connection to both,
+ * including connecting to and backfilling streams */
 export class Client {
   agent: Agent;
   leaf: LeafClient;
   #streamConnection: StreamConnectionStatus;
   #leafAuthenticated = new Deferred();
-  #personalStreamIdReady =
-    new Deferred<ConnectionStates.LoadingPersonalStream>();
   #connected = new Deferred<ConnectionStates.ConnectedStreams>();
   #agentStreamHandleCache = new Map<Did, { result: any }>();
   #agentProfileCache = new Map<string, { result: any }>();
-  #streamUnsubscribers = new Map<string, () => Promise<void>>();
 
   constructor(agent: Agent, leaf: LeafClient) {
     this.agent = agent;
@@ -46,7 +39,6 @@ export class Client {
       status: "initialising",
     };
     this.setLeafHandlers();
-    this.ensurePersonalStream();
   }
 
   // get a URL for redirecting to the ATProto PDS for login
@@ -103,49 +95,33 @@ export class Client {
     }
   }
 
-  get ready() {
-    return this.#personalStreamIdReady.promise;
-  }
-
   get status() {
     return this.#streamConnection.status;
   }
 
-  get personalStreamFetched() {
-    if (
-      this.personalStream?.pin.type !== "space" ||
-      this.personalStream.pin.backfill.status !== "priority"
-    )
-      throw new Error("Personal Stream should backfill entire stream");
-    return this.personalStream.pin.backfill.completed;
-  }
+  // loadPersonalStream(personalStreamId: StreamHashId, upToEventId: StreamIndex) {
+  //   console.log("setReadyToConnect");
 
-  loadPersonalStream(personalStreamId: StreamHashId, upToEventId: StreamIndex) {
-    console.log("setReadyToConnect");
+  //   if (this.#streamConnection.status === "loadingPersonalStream")
+  //     return this.#streamConnection.eventChannel;
 
-    if (this.#streamConnection.status === "loadingPersonalStream")
-      return this.#streamConnection.eventChannel;
-
-    const eventChannel = new AsyncChannel<Batch.Event>();
-    this.#streamConnection = {
-      status: "loadingPersonalStream",
-      personalStream: {
-        id: personalStreamId,
-        pin: {
-          type: "space",
-          backfill: {
-            status: "priority",
-            upToEventId,
-            completed: new Deferred(),
-          },
-        },
-      },
-      eventChannel,
-    };
-    this.backfillPersonalStream();
-    this.#personalStreamIdReady.resolve(this.#streamConnection);
-    return eventChannel;
-  }
+  //   const eventChannel = new AsyncChannel<Batch.Event>();
+  //   this.#streamConnection = {
+  //     status: "loadingPersonalStream",
+  //     personalStream: ConnectedStream.assert({
+  //       user: this.agent.assertDid as Did,
+  //       leaf: this.leaf,
+  //       id: personalStreamId,
+  //       idx: upToEventId,
+  //       eventChannel,
+  //       priority: "priority",
+  //     }),
+  //     eventChannel,
+  //   };
+  //   this.personalStream!.backfill();
+  //   this.#personalStreamIdReady.resolve(this.#streamConnection);
+  //   return eventChannel;
+  // }
 
   get connected() {
     return this.#connected.promise;
@@ -161,77 +137,47 @@ export class Client {
     }
   }
 
-  async connect(streamList: Map<StreamHashId, StreamIndex>) {
-    if (!this.personalStream)
-      throw new Error("Client must have personal stream to connect");
-
+  async connect(
+    personalStream: ConnectedStream,
+    streamList: Map<StreamHashId, StreamIndex>,
+  ) {
     console.log("Client connecting", streamList);
 
-    const keys = [...streamList.keys()];
-    console.log("StreamIds", keys);
+    const streams = new Map<StreamHashId, ConnectedStream>();
+    const failed: StreamHashId[] = [];
 
-    // ideally we want to check that streams exist first
-    for await (const streamId of keys) {
+    for await (const [streamId, upToEventId] of streamList.entries()) {
       try {
-        console.log("Getting streamInfo for ", streamId);
-        const streamInfo = await this.leaf.streamInfo(streamId);
-        if (!streamInfo)
-          console.error(
-            "Stream does not exist (on this Leaf server)!",
-            streamId,
-          );
-        console.log("StreamInfo", streamInfo);
+        const stream = await ConnectedStream.new({
+          user: this.agent.assertDid as Did,
+          leaf: this.leaf,
+          id: streamId,
+          idx: upToEventId,
+          eventChannel: personalStream.eventChannel,
+        });
+        streams.set(streamId, stream);
       } catch (e) {
-        console.error("Error fetching stream info for", streamId, e);
+        console.error("Stream may not exist:", streamId, e);
+        failed.push(streamId);
       }
     }
 
-    const streams = new Map(
-      [...streamList.entries()].map(([stream, upToEventId]) => {
-        return [
-          stream,
-          {
-            id: stream,
-            pin: {
-              type: "space", // we currently only support full backfill for everything
-              backfill: {
-                status: "background",
-                upToEventId,
-                completed: new Deferred(),
-              },
-            } as const,
-          },
-        ];
-      }),
-    );
-
-    this.setConnected(streams);
-    this.runBackfill();
-    console.log("Client connected");
-
-    return streams;
-  }
-
-  setConnected(streams: Map<StreamHashId, ConnectedStream>) {
-    if (
-      this.#streamConnection.status !== "loadingPersonalStream" ||
-      !this.personalStreamId
-    )
-      throw new Error("Client not ready to connect");
     this.#streamConnection = {
       status: "connected",
-      personalStream: this.#streamConnection.personalStream,
-      eventChannel: this.#streamConnection.eventChannel,
+      personalStream: personalStream,
+      eventChannel: personalStream.eventChannel,
       streams,
     };
     this.#connected.resolve(this.#streamConnection);
+
+    this.runBackfill();
+    console.log("Client connected");
+
+    return { streams, failed };
   }
 
-  get eventChannel() {
-    if (
-      this.#streamConnection.status !== "connected" &&
-      this.#streamConnection.status !== "loadingPersonalStream"
-    )
+  private get eventChannel() {
+    if (this.#streamConnection.status !== "connected")
       throw new Error(
         "Client is not connected. Status: " + this.#streamConnection.status,
       );
@@ -239,7 +185,6 @@ export class Client {
   }
 
   async getEventChannel() {
-    await this.ready;
     return this.eventChannel;
   }
 
@@ -256,42 +201,11 @@ export class Client {
 
       this.#leafAuthenticated.resolve();
 
-      const state = await this.#personalStreamIdReady.promise;
+      // const state = await this.#personalStreamIdReady.promise;
 
-      await this.leaf.subscribe(
-        state.personalStream.id,
-        {
-          query_name: "events",
-          requesting_user: this.agent.assertDid,
-          params: [],
-          start:
-            state.personalStream.pin.type == "space"
-              ? BigInt((state.personalStream.pin.backfill.upToEventId || 0) + 1)
-              : 1n,
-          limit: 1n,
-        },
-        (result) => {
-          if (result.success) {
-            const events = parseEvents(result.value);
-            for (const event of events) {
-              this.eventChannel.push({
-                status: "pushed",
-                batchId: ulid() as Ulid,
-                streamId: state.personalStream.id as StreamHashId,
-                events: [
-                  {
-                    idx: event.idx as StreamIndex,
-                    user: event.user,
-                    payload: event.payload,
-                  },
-                ],
-                priority: "priority",
-              });
-            }
-          }
-        },
-      );
-      console.log("Subscribed to stream:", state.personalStream.id);
+      // await state.personalStream.subscribe();
+
+      // console.log("Subscribed to stream:", state.personalStream.id);
     });
   }
 
@@ -312,55 +226,55 @@ export class Client {
   }
 
   async createSpaceStream() {
+    if (this.#streamConnection.status !== "connected")
+      throw new Error("Client must be connected to add new space stream");
     await this.#leafAuthenticated.promise;
-    const moduleId = await this.leaf.uploadModule(spaceModule.encoded.buffer);
 
-    const streamId = await this.leaf.createStream({
-      stamp: ulid(),
-      creator: this.agent.assertDid,
-      module: moduleId,
-      options: [],
+    console.log("Creating space stream");
+    const newStream = await ConnectedStream.createSpace({
+      user: this.agent.assertDid as Did,
+      leaf: this.leaf,
+      eventChannel: this.eventChannel,
     });
-    return streamId as StreamHashId;
+
+    await newStream.backfill();
+
+    console.log("Successfully created space stream:", newStream.id);
+
+    // add to stream connection map
+    this.#streamConnection.streams.set(newStream.id, newStream);
+
+    return newStream.id as StreamHashId;
   }
 
   get personalStream() {
-    if (this.#streamConnection.status === "loadingPersonalStream")
-      return this.#streamConnection.personalStream;
-    else if (this.#streamConnection.status === "connected")
+    if (this.#streamConnection.status === "connected")
       return this.#streamConnection.personalStream;
     else return undefined;
   }
 
   get personalStreamId() {
-    if (this.#streamConnection.status === "loadingPersonalStream")
-      return this.#streamConnection.personalStream.id;
-    else if (this.#streamConnection.status === "connected")
+    if (this.#streamConnection.status === "connected")
       return this.#streamConnection.personalStream.id;
     else return undefined;
   }
 
-  async createPersonalStream() {
+  async createPersonalStream(): Promise<ConnectedStream> {
     await this.#leafAuthenticated.promise;
-    const moduleId = await this.leaf.uploadModule(
-      personalModule.encoded.buffer,
-    );
-    console.log("uploaded personal module:", moduleId);
 
-    const streamId = await this.leaf.createStream({
-      stamp: ulid(),
-      creator: this.agent.assertDid,
-      module: moduleId,
-      options: [],
+    return await ConnectedStream.createPersonal({
+      user: this.agent.assertDid as Did,
+      leaf: this.leaf,
+      eventChannel: this.eventChannel,
     });
-    console.log("created personal stream:", streamId);
-    return streamId as StreamHashId;
   }
 
-  async ensurePersonalStream() {
-    if (this.personalStreamId) return this.personalStreamId;
+  async ensurePersonalStream(
+    eventChannel: AsyncChannel<Batch.Event>,
+  ): Promise<ConnectedStream> {
+    if (this.personalStream) return this.personalStream;
 
-    console.log("Now looking for personal stream id");
+    console.log("Looking for personal stream id");
 
     // TODO: Caching the personal stream ID causes problems when it gets cached and the PDS record
     // has changed because the app will just get stuck loading forever trying to get the stream that
@@ -368,8 +282,8 @@ export class Client {
     // unreasonable to just fetch this on startup for now.
 
     // let id = await personalStream.getIdCache(this.agent.assertDid);
-    let id: StreamHashId | undefined;
-    if (!id) {
+    let stream: ConnectedStream | null = null;
+    if (!stream) {
       try {
         const resp1 = await this.agent.com.atproto.repo.getRecord({
           collection: CONFIG.streamNsid,
@@ -382,7 +296,13 @@ export class Client {
           existingRecord.id,
         );
         console.log("Found existing stream ID from PDS:", existingRecord.id);
-        id = existingRecord.id;
+        stream = await ConnectedStream.new({
+          user: this.agent.assertDid as Did,
+          leaf: this.leaf,
+          id: existingRecord.id as StreamHashId,
+          idx: 0 as StreamIndex,
+          eventChannel,
+        });
       } catch (e) {
         if ((e as any).error === "RecordNotFound") {
           console.log(
@@ -390,14 +310,14 @@ export class Client {
           );
 
           // create a new stream on leaf server
-          id = await this.createPersonalStream();
+          stream = await this.createPersonalStream();
 
           console.log("Putting record");
 
           // put the stream ID in a record
           const resp2 = await this.agent.com.atproto.repo.putRecord({
             collection: CONFIG.streamNsid,
-            record: { id },
+            record: { id: stream.id },
             repo: this.agent.assertDid,
             rkey: CONFIG.streamSchemaVersion,
           });
@@ -407,7 +327,7 @@ export class Client {
             });
           }
           // status.personalStreamId = personalStreamId;
-          await personalStream.setIdCache(this.agent.assertDid, id);
+          await personalStream.setIdCache(this.agent.assertDid, stream.id);
         } else {
           console.error("Error while fetching personal stream record:", e);
           throw e;
@@ -416,7 +336,8 @@ export class Client {
     }
 
     // Get the module id for this stream to check whether or not we need to update the module.
-    const streamInfo = await this.leaf.streamInfo(id);
+    const streamInfo = await this.leaf.streamInfo(stream.id);
+
     if (streamInfo.moduleId != personalModule.moduleId) {
       console.log(
         "Personal stream's module doesn't match our current personal module version",
@@ -431,125 +352,20 @@ export class Client {
         await this.leaf.uploadModule(personalModule.encoded.buffer);
       }
       console.log("Updating module for personal stream to our current version");
-      await this.leaf.updateModule(id, personalModule.moduleId);
+      await this.leaf.updateModule(stream.id, personalModule.moduleId);
     }
 
-    return id;
+    return stream;
   }
 
-  async backfillPersonalStream() {
-    // start fetching all the events
-    if (!this.personalStreamId || !this.personalStream)
-      throw new Error("No personal stream to backfill");
-
-    return this.backfillStream(this.personalStream, "priority");
-  }
-
-  async backfillStreamById(
-    streamId: StreamHashId,
-    priority: TaskPriority = "background",
-  ) {
+  async backfillStreamById(streamId: StreamHashId) {
     if (this.#streamConnection.status !== "connected")
       throw new Error("Client must be connected to backfill");
+
     const stream = this.#streamConnection.streams.get(streamId);
     if (!stream) throw new Error("Could not find stream " + streamId);
 
-    return this.backfillStream(stream, priority);
-  }
-
-  private async backfillStream(
-    stream: ConnectedStream,
-    priority: TaskPriority,
-  ) {
-    if (stream.pin.type !== "space" || stream.pin.backfill.status !== priority)
-      throw new Error(
-        "Pin type & backfill status status expected to be 'space' and " +
-          priority,
-      );
-
-    // Unsubscribe from the stream during backfill if we have a subscription already
-    this.#streamUnsubscribers.get(stream.id)?.();
-    this.#streamUnsubscribers.delete(stream.id);
-
-    let fetchCursor = stream.pin.backfill.upToEventId;
-
-    console.log(`stream ${stream.id} backfilled to ${fetchCursor}`);
-
-    while (true) {
-      console.time("fetchBatch-" + stream.id);
-
-      const batchSize = 2500;
-      const newEvents = (
-        await this.fetchEvents(stream.id, fetchCursor + 1, batchSize)
-      ).map((ev) => {
-        return {
-          idx: ev.idx as StreamIndex,
-          user: ev.user,
-          payload: ev.payload,
-        };
-      });
-
-      if (newEvents.length == 0) {
-        // mark backfill state idle
-        stream.pin.backfill.completed.resolve();
-        stream.pin.backfill = {
-          status: "idle",
-          upToEventId: fetchCursor,
-        };
-        break;
-      }
-      this.eventChannel.push({
-        status: "fetched",
-        batchId: ulid() as Ulid,
-        streamId: stream.id,
-        events: newEvents,
-        priority: stream.pin.backfill.status,
-      });
-
-      // comp_space.backfilled_to cursor is updated in SQLite after each batch is applied
-
-      fetchCursor += newEvents.length;
-      console.timeEnd("fetchBatch-" + stream.id);
-
-      // slow down backfill for debugging
-      // await new Promise(() => {});
-    }
-
-    this.#streamUnsubscribers.set(
-      stream.id,
-      await this.leaf.subscribe(
-        stream.id,
-        {
-          query_name: "events",
-          requesting_user: this.agent.assertDid,
-          params: [],
-          start: BigInt(fetchCursor + 1),
-          limit: 1n,
-        },
-        (result) => {
-          if (result.success) {
-            const events = parseEvents(result.value);
-            for (const event of events) {
-              this.eventChannel.push({
-                status: "pushed",
-                batchId: ulid() as Ulid,
-                streamId: stream.id as StreamHashId,
-                events: [
-                  {
-                    idx: event.idx as StreamIndex,
-                    user: event.user,
-                    payload: event.payload,
-                  },
-                ],
-                priority: "priority",
-              });
-            }
-          }
-        },
-      ),
-    );
-
-    console.log("Finished backfill for stream", stream.id);
+    return stream.backfill();
   }
 
   async runBackfill() {
@@ -661,7 +477,7 @@ export class Client {
     if (!resp.success) throw "Error deleting stream handle record on PDS";
   }
 
-  async getProfileCached(actor: string) {
+  private async getProfileCached(actor: string) {
     const cached = this.#agentProfileCache.get(actor);
     if (cached) return cached.result;
 
@@ -821,30 +637,4 @@ export class Client {
   logout() {
     db.kv.delete("did");
   }
-}
-
-function parseEvents(rows: SqlRows): EncodedStreamEvent[] {
-  const columnNamesAreValid =
-    rows.column_names[0] == "id" &&
-    rows.column_names[1] == "user" &&
-    rows.column_names[2] == "payload";
-  if (!columnNamesAreValid)
-    throw new Error("Invalid column names for events response");
-
-  return rows.rows.map((x) => {
-    if (
-      x.values[0]?.tag != "integer" ||
-      x.values[1]?.tag != "text" ||
-      x.values[2]?.tag != "blob"
-    )
-      throw new Error(
-        `Invalid column type for events response: ${JSON.stringify(x, (_key, value) => (typeof value == "bigint" ? value.toString() : value))}`,
-      );
-
-    return {
-      idx: Number(x.values[0].value) as StreamIndex,
-      user: x.values[1].value,
-      payload: x.values[2].value.buffer,
-    };
-  });
 }
