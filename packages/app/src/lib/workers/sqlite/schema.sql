@@ -49,7 +49,6 @@ create table if not exists comp_space (
   entity blob primary key references entities(id) on delete cascade,
   hidden integer not null default 0 check(hidden in (0, 1)),
   handle_account text, -- did
-  backfill_status text default 'idle', -- "priority" | "background" | "idle"
   backfilled_to integer references events(idx) default 0,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)

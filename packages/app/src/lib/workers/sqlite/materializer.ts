@@ -38,8 +38,8 @@ const materializers: {
       ensureEntity(streamId, data.spaceId),
       // because we are materialising a non-personal-stream space, we infer that we are backfilling in the background
       sql`
-        insert into comp_space (entity, backfill_status)
-        values (${id(data.spaceId)}, 'background')
+        insert into comp_space (entity)
+        values (${id(data.spaceId)})
         on conflict do update set hidden = 0
       `,
     ];
@@ -47,7 +47,6 @@ const materializers: {
   "space.roomy.space.leave.0": async ({ data }) => [
     sql`
       update comp_space set hidden = 1,
-      backfill_status = 'idle'
       where entity = ${id(data.spaceId)}
     `,
   ],
