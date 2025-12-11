@@ -81,7 +81,7 @@
       //   await addToDiscoverableSpacesFeed(space.id);
       // }
 
-      // navigate({ space: spaceId });
+      navigate({ space: spaceId });
     } catch (e) {
       console.error("Error creating space:", e);
       const stringError =

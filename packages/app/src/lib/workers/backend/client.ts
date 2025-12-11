@@ -99,30 +99,6 @@ export class Client {
     return this.#streamConnection.status;
   }
 
-  // loadPersonalStream(personalStreamId: StreamHashId, upToEventId: StreamIndex) {
-  //   console.log("setReadyToConnect");
-
-  //   if (this.#streamConnection.status === "loadingPersonalStream")
-  //     return this.#streamConnection.eventChannel;
-
-  //   const eventChannel = new AsyncChannel<Batch.Event>();
-  //   this.#streamConnection = {
-  //     status: "loadingPersonalStream",
-  //     personalStream: ConnectedStream.assert({
-  //       user: this.agent.assertDid as Did,
-  //       leaf: this.leaf,
-  //       id: personalStreamId,
-  //       idx: upToEventId,
-  //       eventChannel,
-  //       priority: "priority",
-  //     }),
-  //     eventChannel,
-  //   };
-  //   this.personalStream!.backfill();
-  //   this.#personalStreamIdReady.resolve(this.#streamConnection);
-  //   return eventChannel;
-  // }
-
   get connected() {
     return this.#connected.promise;
   }
@@ -198,14 +174,7 @@ export class Client {
     });
     this.leaf.on("authenticated", async (did) => {
       console.log("Leaf: authenticated as", did);
-
       this.#leafAuthenticated.resolve();
-
-      // const state = await this.#personalStreamIdReady.promise;
-
-      // await state.personalStream.subscribe();
-
-      // console.log("Subscribed to stream:", state.personalStream.id);
     });
   }
 
