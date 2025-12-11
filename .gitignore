@@ -1,9 +1,8 @@
+# Generated
 build
 node_modules
 .svelte-kit/
 .turbo/
-
-# Output
 .output
 .vercel
 .netlify
@@ -11,6 +10,8 @@ node_modules
 /.svelte-kit
 /dist
 **/dist
+**/.llm.**
+**/.claude/*
 
 # Testing
 test-results

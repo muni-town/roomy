@@ -1,7 +1,7 @@
 import type { OAuthSession } from "@atproto/oauth-client";
 import { createOauthClient } from "./oauth";
 import { db, personalStream } from "../idb";
-import { Agent, BlobRef, isDid, type Did } from "@atproto/api";
+import { Agent, AtpAgent, BlobRef, isDid, type Did } from "@atproto/api";
 import { lexicons } from "$lib/lexicons";
 import { LeafClient } from "@muni-town/leaf-client";
 import { CONFIG } from "$lib/config";
@@ -50,8 +50,48 @@ export class Client {
     return url.href;
   }
 
+  // authenticate using app password (testing only)
+  static async loginWithAppPassword(handle: string, appPassword: string) {
+    console.log(
+      "Client.loginWithAppPassword: Starting authentication for",
+      handle,
+    );
+    const atpAgent = new AtpAgent({ service: "https://bsky.social" });
+
+    try {
+      await atpAgent.login({
+        identifier: handle,
+        password: appPassword,
+      });
+      console.log("Client.loginWithAppPassword: Login successful");
+    } catch (error) {
+      console.error("Client.loginWithAppPassword: Login failed", error);
+      throw error;
+    }
+
+    if (!atpAgent.did) {
+      throw new Error("Failed to authenticate with app password");
+    }
+
+    console.log("Client.loginWithAppPassword: Storing DID", atpAgent.did);
+    // Store DID for consistency with OAuth flow
+    await db.kv.put({ key: "did", value: atpAgent.did });
+
+    console.log("Client.loginWithAppPassword: Creating client from agent");
+    return Client.fromAgent(atpAgent);
+  }
+
   // restore previous session
   static async new() {
+    if (CONFIG.testingAppPassword && CONFIG.testingHandle) {
+      console.log("Using app password authentication for testing");
+      return Client.loginWithAppPassword(
+        CONFIG.testingHandle,
+        CONFIG.testingAppPassword,
+      );
+    }
+
+    // Standard OAuth flow
     const oauthClient = await createOauthClient();
 
     // if there's a stored DID and no session yet, try to restore the session
@@ -69,12 +109,8 @@ export class Client {
     return Client.fromSession(response.session);
   }
 
-  static async fromSession(session: OAuthSession) {
+  private static async fromAgent(agent: Agent) {
     try {
-      await db.kv.put({ key: "did", value: session.did });
-
-      const agent = new Agent(session);
-
       lexicons.forEach((l) => agent.lex.add(l as any));
 
       const leaf = new LeafClient(CONFIG.leafUrl, async () => {
@@ -90,8 +126,19 @@ export class Client {
       return new Client(agent, leaf);
     } catch (e) {
       console.error(e);
-      // db.kv.delete("did");
       throw new Error("Failed to create client");
+    }
+  }
+
+  static async fromSession(session: OAuthSession) {
+    try {
+      await db.kv.put({ key: "did", value: session.did });
+      const agent = new Agent(session);
+      return Client.fromAgent(agent);
+    } catch (e) {
+      console.error(e);
+      // db.kv.delete("did");
+      throw new Error("Failed to create client from session");
     }
   }
 
