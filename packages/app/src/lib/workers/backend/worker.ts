@@ -219,7 +219,7 @@ class WorkerSupervisor {
     await this.client.connected;
     console.log("Client ready!");
 
-    const eventChannel = await this.client.getEventChannel();
+    const eventChannel = this.#auth.eventChannel;
 
     for await (const batch of eventChannel) {
       // personal stream backfill is always high priority, other streams can be in background
@@ -309,15 +309,18 @@ class WorkerSupervisor {
   }
 
   private async refreshSession() {
+    console.log("WorkerSupervisor: Starting refreshSession");
     Client.new()
       .then((client) => {
+        console.log("WorkerSupervisor: Client created successfully");
         this.setAuthenticated(client);
         client.getProfile().then((profile) => {
           this.#status.profile = profile;
         });
       })
       .catch((error) => {
-        console.warn("Could not restore session", error);
+        console.error("WorkerSupervisor: Could not restore session", error);
+        console.error("WorkerSupervisor: Error stack:", error.stack);
         this.setAuthState({ state: "unauthenticated" });
       });
   }
