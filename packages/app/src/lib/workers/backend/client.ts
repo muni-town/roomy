@@ -155,13 +155,10 @@ export class Client {
   private get eventChannel() {
     if (this.#streamConnection.status !== "connected")
       throw new Error(
-        "Client is not connected. Status: " + this.#streamConnection.status,
+        "No event channel: Client is not connected. Status: " +
+          this.#streamConnection.status,
       );
     return this.#streamConnection.eventChannel;
-  }
-
-  async getEventChannel() {
-    return this.eventChannel;
   }
 
   setLeafHandlers() {
@@ -228,13 +225,15 @@ export class Client {
     else return undefined;
   }
 
-  async createPersonalStream(): Promise<ConnectedStream> {
+  async createPersonalStream(
+    eventChannel: AsyncChannel<Batch.Event>,
+  ): Promise<ConnectedStream> {
     await this.#leafAuthenticated.promise;
 
     return await ConnectedStream.createPersonal({
       user: this.agent.assertDid as Did,
       leaf: this.leaf,
-      eventChannel: this.eventChannel,
+      eventChannel,
     });
   }
 
@@ -279,7 +278,7 @@ export class Client {
           );
 
           // create a new stream on leaf server
-          stream = await this.createPersonalStream();
+          stream = await this.createPersonalStream(eventChannel);
 
           console.log("Putting record");
 
