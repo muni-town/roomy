@@ -7,6 +7,8 @@ const CONFIG = {
   databaseSchemaVersion: "2" as const,
   leafServerDid: "",
   atprotoOauthScope: "",
+  testingAppPassword: import.meta.env.VITE_TESTING_APP_PASSWORD,
+  testingHandle: import.meta.env.VITE_TESTING_HANDLE,
 };
 
 CONFIG.leafServerDid = `did:web:${new URL(CONFIG.leafUrl).hostname}`;
