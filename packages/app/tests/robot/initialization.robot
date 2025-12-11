@@ -2,22 +2,18 @@
 Documentation     Worker System Initialization Tests
 ...               Validates that the Roomy app initializes correctly with proper
 ...               worker setup, lock management, and browser API support.
-...               
+...
 ...               These tests are based on the Playwright workers.spec.ts test suite
 ...               and focus on cross-browser compatibility and initialization scenarios.
 
-Library           Browser
+Resource          resources/common.robot
 Test Setup        Open Test Page
 Test Teardown     Close Current Page If Open
 Suite Setup       Setup Browser
 Suite Teardown    Close Browser
 
 *** Variables ***
-${BROWSER}        chromium
-${HEADLESS}       True
-${BASE_URL}       http://127.0.0.1:5173
 ${TIMEOUT}        20s
-${POLL_INTERVAL}  100ms
 ${MAX_ATTEMPTS}   50
 
 *** Test Cases ***
@@ -461,10 +457,6 @@ Database Should Initialize And Handle Basic Operations
     Should Be True    ${state_info}[workerIdConsistent]    msg=Worker ID not consistent
 
 *** Keywords ***
-Setup Browser
-    New Browser    browser=${BROWSER}    headless=${HEADLESS}
-    Set Browser Timeout    ${TIMEOUT}
-
 Wait For Workers To Initialize
     [Documentation]    Wait for worker system to initialize and return worker info
     ${worker_info}=    Evaluate JavaScript    ${None}
@@ -734,8 +726,3 @@ Open Test Page
     [Documentation]    Open a new page for test (used in Test Setup)
     New Page    ${BASE_URL}
     Wait For Load State    domcontentloaded    timeout=${TIMEOUT}
-
-Close Current Page If Open
-    [Documentation]    Close the current page if one is open (used in Test Teardown)
-    ${page_count}=    Run Keyword And Return Status    Get Page Ids
-    Run Keyword If    ${page_count}    Run Keyword And Ignore Error    Close Page
