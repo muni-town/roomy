@@ -1,13 +1,10 @@
 *** Settings ***
 Documentation     Smoke tests for Roomy app using Robot Framework
-Library           Browser
+Resource          resources/common.robot
 Suite Setup       Setup Browser
 Suite Teardown    Close Browser
 
 *** Variables ***
-${BROWSER}        chromium
-${HEADLESS}       True
-${BASE_URL}       http://127.0.0.1:5173
 ${TIMEOUT}        15s
 
 *** Test Cases ***
@@ -24,23 +21,8 @@ Workers Should Initialize
     [Tags]    smoke    workers
     New Page    ${BASE_URL}
     Wait For Load State    domcontentloaded    timeout=${TIMEOUT}
-    
-    # Wait for workers to be available
-    ${has_backend}=    Evaluate JavaScript    ${None}    
-    ...    () => new Promise((resolve) => {
-    ...        const checkBackend = () => {
-    ...            if (window.backend && window.backendStatus) {
-    ...                resolve(true);
-    ...            } else if (Date.now() - startTime < 15000) {
-    ...                setTimeout(checkBackend, 100);
-    ...            } else {
-    ...                resolve(false);
-    ...            }
-    ...        };
-    ...        const startTime = Date.now();
-    ...        checkBackend();
-    ...    })
-    
+
+    ${has_backend}=    Wait For Backend To Initialize    timeout=${TIMEOUT}
     Should Be Equal    ${has_backend}    ${True}    msg=Workers did not initialize within timeout
 
 Backend Worker Should Respond To Ping
@@ -48,23 +30,8 @@ Backend Worker Should Respond To Ping
     [Tags]    smoke    workers    backend
     New Page    ${BASE_URL}
     Wait For Load State    domcontentloaded    timeout=${TIMEOUT}
-    
-    # Wait for debug helpers
-    ${has_debug}=    Evaluate JavaScript    ${None}
-    ...    () => new Promise((resolve) => {
-    ...        const checkDebug = () => {
-    ...            if (window.debugWorkers) {
-    ...                resolve(true);
-    ...            } else if (Date.now() - startTime < 15000) {
-    ...                setTimeout(checkDebug, 100);
-    ...            } else {
-    ...                resolve(false);
-    ...            }
-    ...        };
-    ...        const startTime = Date.now();
-    ...        checkDebug();
-    ...    })
-    
+
+    ${has_debug}=    Wait For Debug Workers    timeout=${TIMEOUT}
     Should Be Equal    ${has_debug}    ${True}    msg=Debug helpers not available
     
     # Test ping
@@ -85,23 +52,8 @@ SQLite Worker Should Connect
     [Tags]    smoke    workers    sqlite
     New Page    ${BASE_URL}
     Wait For Load State    domcontentloaded    timeout=${TIMEOUT}
-    
-    # Wait for debug helpers to be available
-    ${has_debug}=    Evaluate JavaScript    ${None}
-    ...    () => new Promise((resolve) => {
-    ...        const check = () => {
-    ...            if (window.debugWorkers) {
-    ...                resolve(true);
-    ...            } else if (Date.now() - start < 20000) {
-    ...                setTimeout(check, 100);
-    ...            } else {
-    ...                resolve(false);
-    ...            }
-    ...        };
-    ...        const start = Date.now();
-    ...        check();
-    ...    })
-    
+
+    ${has_debug}=    Wait For Debug Workers    timeout=${TIMEOUT}
     Should Be Equal    ${has_debug}    ${True}    msg=Debug helpers not available
     
     # Verify SQLite test function exists
@@ -131,8 +83,3 @@ Required Browser APIs Should Be Available
     Should Be Equal    ${api_support}[locks]    ${True}    msg=Web Locks API not available
     Should Be Equal    ${api_support}[messageChannel]    ${True}    msg=MessageChannel not available
     Should Be Equal    ${api_support}[fetch]    ${True}    msg=Fetch API not available
-
-*** Keywords ***
-Setup Browser
-    New Browser    browser=${BROWSER}    headless=${HEADLESS}
-    Set Browser Timeout    ${TIMEOUT}
