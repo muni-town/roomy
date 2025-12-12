@@ -5,8 +5,12 @@
 </script>
 
 <div class="w-full h-screen flex items-center justify-center">
-  <Alert title="Error" type="error" class="max-w-sm">
-    <h6 class="mb-2">{message}</h6>
+  <Alert
+    title="Error"
+    type="error"
+    class="max-w-sm text-ellipsis overflow-x-clip"
+  >
+    <h6 class="mb-2 max-w-full text-ellipsis overflow-hidden">{message}</h6>
     <span
       >You can let us know on <a
         href="https://github.com/muni-town/roomy/issues/new"
