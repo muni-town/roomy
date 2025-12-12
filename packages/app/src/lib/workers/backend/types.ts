@@ -63,6 +63,12 @@ export type BackendInterface = {
   createStreamHandleRecord(spaceId: StreamHashId): Promise<void>;
   removeStreamHandleRecord(): Promise<void>;
   createSpaceStream(): Promise<StreamHashId>;
+  /** Testing: Get personal stream record from PDS */
+  getStreamRecord(): Promise<{ id: string } | null>;
+  /** Testing: Delete personal stream record from PDS */
+  deleteStreamRecord(): Promise<void>;
+  /** Testing: Trigger personal stream creation */
+  ensurePersonalStream(): Promise<void>;
   uploadToPds(
     bytes: ArrayBuffer,
     opts?: { alt?: string; mimetype?: string },

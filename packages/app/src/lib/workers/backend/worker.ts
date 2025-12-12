@@ -38,7 +38,6 @@ import type {
 import { isDid, type Did } from "@atproto/api";
 import { eventCodec, id } from "../encoding";
 import { ensureEntity } from "../sqlite/materializer";
-import type { ConnectedStream } from "./stream";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -131,7 +130,7 @@ class WorkerSupervisor {
       values (${id(personalStream.id)}, 1) 
       on conflict (entity) do nothing
     `);
-
+    // StreamConnection doesn't have access to sqlite, so we need to update the stream cursor before backfill
     personalStream.updateStreamCursor(
       await this.sqlite.getStreamCursor(personalStream.id),
     );
@@ -447,6 +446,9 @@ class WorkerSupervisor {
       removeStreamHandleRecord: async () => {
         await this.client.removeStreamHandleRecord();
       },
+      getStreamRecord: async () => this.getStreamRecord(),
+      deleteStreamRecord: async () => this.deleteStreamRecord(),
+      ensurePersonalStream: async () => this.ensurePersonalStream(),
     };
   }
 
@@ -473,6 +475,47 @@ class WorkerSupervisor {
     const resp = await this.client.fetchEvents(streamId, 0, 1e10);
 
     return resp.map((e) => eventCodec.dec(new Uint8Array(e.payload)));
+  }
+
+  /** Testing: Get personal stream record from PDS */
+  async getStreamRecord(): Promise<{ id: string } | null> {
+    try {
+      const response = await this.client.agent.api.com.atproto.repo.getRecord({
+        repo: this.client.agent.did!,
+        collection: CONFIG.streamNsid,
+        rkey: CONFIG.streamSchemaVersion,
+      });
+      return response.data.value as { id: string };
+    } catch (error: any) {
+      if (error.message?.includes("RecordNotFound")) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /** Testing: Delete personal stream record from PDS */
+  async deleteStreamRecord(): Promise<void> {
+    try {
+      await this.client.agent.api.com.atproto.repo.deleteRecord({
+        repo: this.client.agent.did!,
+        collection: CONFIG.streamNsid,
+        rkey: CONFIG.streamSchemaVersion,
+      });
+    } catch (error: any) {
+      // Ignore RecordNotFound errors
+      if (!error.message?.includes("RecordNotFound")) {
+        throw error;
+      }
+    }
+  }
+
+  /** Testing: Trigger personal stream creation */
+  async ensurePersonalStream(): Promise<void> {
+    if (this.#auth.state !== "authenticated") {
+      throw new Error("Cannot ensure personal stream: not authenticated");
+    }
+    await this.client.ensurePersonalStream(this.#auth.eventChannel);
   }
 }
 
