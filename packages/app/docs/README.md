@@ -13,3 +13,7 @@ As mentioned above Roomy builds on ATProto for user identity. When a user logs i
 ## Build
 
 We use `pnpm` as a package manager and turborepo as a build system. `pnpm turbo build-web-app-prod` builds the web app for production, running `vite build` in the roomy package, then running a shell script `build-prod.sh` to generate an OAuth client metadata manifest.
+
+## Testing
+
+Our current focus is on using Robot Framework for integration testing. All tests can be run with `pnpm test:robot`, or specific tests by tag with `pnpm test:robot:tag <tag> tests/robot`.
