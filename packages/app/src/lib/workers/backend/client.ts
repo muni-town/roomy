@@ -288,6 +288,7 @@ export class Client {
     eventChannel: AsyncChannel<Batch.Event>,
   ): Promise<ConnectedStream> {
     if (this.personalStream) return this.personalStream;
+    await this.#leafAuthenticated.promise;
 
     console.log("Looking for personal stream id");
 
@@ -297,15 +298,19 @@ export class Client {
     // unreasonable to just fetch this on startup for now.
 
     // let id = await personalStream.getIdCache(this.agent.assertDid);
+
+    let attempts = 0;
+    let errors: any[] = [];
     let stream: ConnectedStream | null = null;
-    if (!stream) {
+    while (!stream) {
+      if (attempts > 2) throw errors;
       try {
-        const resp1 = await this.agent.com.atproto.repo.getRecord({
+        const getResponse = await this.agent.com.atproto.repo.getRecord({
           collection: CONFIG.streamNsid,
           repo: this.agent.assertDid,
           rkey: CONFIG.streamSchemaVersion,
         });
-        const existingRecord = resp1.data.value as { id: StreamHashId };
+        const existingRecord = getResponse.data.value as { id: StreamHashId };
         await personalStream.setIdCache(
           this.agent.assertDid,
           existingRecord.id,
@@ -330,22 +335,46 @@ export class Client {
           console.log("Putting record");
 
           // put the stream ID in a record
-          const resp2 = await this.agent.com.atproto.repo.putRecord({
+          const putResponse = await this.agent.com.atproto.repo.putRecord({
             collection: CONFIG.streamNsid,
             record: { id: stream.id },
             repo: this.agent.assertDid,
             rkey: CONFIG.streamSchemaVersion,
           });
-          if (!resp2.success) {
-            throw new Error("Could not create PDS record for personal stream", {
-              cause: JSON.stringify(resp2.data),
-            });
+          if (!putResponse.success) {
+            errors.push(
+              new Error("Could not create PDS record for personal stream", {
+                cause: JSON.stringify(putResponse.data),
+              }),
+            );
           }
-          // status.personalStreamId = personalStreamId;
+
           await personalStream.setIdCache(this.agent.assertDid, stream.id);
+        } else if ((e as Error).message.includes("Stream does not exist")) {
+          console.log("Stream does not exist");
+
+          // delete record on PDS
+          const deleteResponse = await this.agent.com.atproto.repo.deleteRecord(
+            {
+              collection: CONFIG.streamNsid,
+              repo: this.agent.assertDid,
+              rkey: CONFIG.streamSchemaVersion,
+            },
+          );
+          if (!deleteResponse.success) {
+            errors.push(
+              new Error("Could not delete PDS record for personal stream", {
+                cause: JSON.stringify(deleteResponse.data),
+              }),
+            );
+          }
+          errors.push(e);
+
+          // should create stream on retry
         } else {
+          if (e instanceof Error) console.error(e);
           console.error("Error while fetching personal stream record:", e);
-          throw e;
+          errors.push(e);
         }
       }
     }

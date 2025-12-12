@@ -57,12 +57,15 @@ export class ConnectedStream {
 
   /** Async factory that checks for stream existence */
   static async new(opts: ConnectedStreamOpts) {
-    const streamInfo = await opts.leaf.streamInfo(opts.id);
-    if (!streamInfo)
+    try {
+      await opts.leaf.streamInfo(opts.id);
+      return ConnectedStream.assert(opts);
+    } catch (e) {
+      console.error("stream info error:", e);
       throw new Error(
-        "Stream does not exist (on this Leaf server): " + opts.id,
+        "Stream does not exist (on this Leaf server). Stream ID: " + opts.id,
       );
-    return ConnectedStream.assert(opts);
+    }
   }
 
   static async createSpace(opts: Omit<ConnectedStreamOpts, "id" | "idx">) {
