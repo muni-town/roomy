@@ -79,6 +79,7 @@ class SqliteWorkerSupervisor {
   #status: Partial<SqliteStatus> = {};
   #backend: BackendInterface | null = null;
   #ensuredProfiles = new Set<string>();
+  #knownStreams = new Set<StreamHashId>();
   #eventChannel: AsyncChannel<Batch.Event>;
   #statementChannel = new AsyncChannel<Batch.Statement>();
   #resultChannel = new AsyncChannel<Batch.ApplyResult>();
@@ -610,6 +611,22 @@ class SqliteWorkerSupervisor {
             bundles.push(bundle);
 
             if (bundle.status === "success") {
+              if (event.variant.kind === "space.roomy.space.join.0") {
+                const knownStream = this.#knownStreams.has(
+                  event.variant.data.spaceId as StreamHashId,
+                );
+                if (!knownStream) {
+                  this.#knownStreams.add(
+                    event.variant.data.spaceId as StreamHashId,
+                  );
+                  this.#backend?.connectSpaceStream(
+                    event.variant.data.spaceId as StreamHashId,
+                    0 as StreamIndex,
+                  );
+                }
+              }
+
+              // slightly pre-emptive as application hasn't happened yet
               bundle.statements.push(sql`
                 update events set applied = 1 
                 where stream_id = ${id(batch.streamId)} 
@@ -621,6 +638,15 @@ class SqliteWorkerSupervisor {
             console.warn("Event materialisation failed: " + e);
           }
         }
+
+        console.log(
+          "materialised bundles",
+          bundles,
+          "for batch id",
+          batch.batchId,
+          "awaiting application",
+        );
+
         this.#statementChannel.push(
           {
             status: "transformed",
