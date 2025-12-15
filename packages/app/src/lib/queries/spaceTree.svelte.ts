@@ -5,9 +5,21 @@ import { current } from "./current.svelte";
 import { id } from "$lib/workers/encoding";
 import { sql } from "$lib/utils/sqlTemplate";
 
+let flatTreeQuery: LiveQuery<{
+  id: string;
+  parent: string | null;
+  type: "category" | "channel" | "thread" | "page";
+  name: string;
+  lastRead: number;
+  latestEntity: string | null;
+  unreadCount: number;
+  depth: number;
+}>;
+
 /** The sidebar tree for the currently selected space. */
-export let spaceTree: LiveQuery<SpaceTreeItem> | { result?: SpaceTreeItem[] } =
-  $state({ result: undefined });
+export const spaceTree = $state<{ result?: SpaceTreeItem[] }>({
+  result: undefined,
+});
 
 /**
  * Build a tree structure from flat SQL results.
@@ -79,7 +91,7 @@ function buildTree(
 
 $effect.root(() => {
   // spaceTree uses a custom live query that processes all rows into a tree structure
-  const flatTreeQuery = new LiveQuery<{
+  flatTreeQuery = new LiveQuery<{
     id: string;
     parent: string | null;
     type: "category" | "channel" | "thread" | "page";
@@ -168,7 +180,7 @@ $effect.root(() => {
       union all
       
       -- Recursive case: children of rooms
-      select 
+      select
         e.id,
         e.parent,
         r.label as type,
@@ -182,8 +194,7 @@ $effect.root(() => {
         join comp_info i on e.id = i.entity
         left join comp_last_read l on e.id = l.entity
         join room_tree rt on e.parent = rt.id
-      where e.stream_id = ${spaceId}
-        and (r.deleted = 0 or r.deleted is null)
+      where (r.deleted = 0 or r.deleted is null)
     )
     select 
       id(id) as id,
@@ -202,6 +213,7 @@ $effect.root(() => {
   // Build tree structure reactively from flat results
   $effect(() => {
     if (flatTreeQuery.result) {
+      console.log("flat tree query result", flatTreeQuery.result);
       spaceTree.result = buildTree(flatTreeQuery.result);
     } else {
       spaceTree.result = undefined;
