@@ -2,12 +2,14 @@ import type { FunctionOptions, SqlValue } from "@sqlite.org/sqlite-wasm";
 import { patchApply, patchFromText } from "diff-match-patch-es";
 import { decodeTime, ulid, isValid as isValidUlid } from "ulidx";
 import { IdCodec } from "../encoding";
+import { str } from "scale-ts";
 
 export const udfs: {
   name: string;
   f: (ctx: number, ...args: SqlValue[]) => SqlValue;
   opts?: FunctionOptions;
 }[] = [
+  // Decode an ID blob to human readable string
   {
     name: "id",
     f: (_ctx, blob) => {
@@ -18,7 +20,17 @@ export const udfs: {
       }
     },
   },
-  // Format a string ID to it's binary format
+  // decode text blob to string
+  {
+    name: "text",
+    f: (_ctx, blob) => {
+      if (blob instanceof Uint8Array) {
+        return new TextDecoder().decode(blob);
+      } else {
+        return blob;
+      }
+    },
+  },
   {
     name: "print",
     f: (_ctx, ...args) => {
