@@ -703,7 +703,7 @@ const materializers: {
     const kind = kindMap[data.kind];
     return [
       sql`
-      update comp_room set label = '${kind}' where entity = ${id(event.parent)}
+      update comp_room set label = ${kind} where entity = ${id(event.parent)}
       `,
     ];
   },
@@ -844,7 +844,7 @@ function bundleError(
   error: Error | string,
 ): Bundle.StatementError {
   return {
-    eventId: event ? (event.ulid as Ulid) : undefined,
+    eventId: event.ulid as Ulid,
     status: "error",
     message: typeof error === "string" ? error : error.message,
   };
