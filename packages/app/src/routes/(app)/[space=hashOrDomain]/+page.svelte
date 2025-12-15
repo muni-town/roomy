@@ -3,7 +3,7 @@
 
   import { current } from "$lib/queries";
   import { backendStatus } from "$lib/workers";
-  // import { onNavigate } from "$app/navigation";
+  import { onNavigate } from "$app/navigation";
 
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
@@ -18,11 +18,11 @@
   import type { ThreadInfo } from "$lib/components/content/thread/boardView/types";
   import Error from "$lib/components/modals/Error.svelte";
 
-  const spaceId = current.joinedSpace?.id;
+  const spaceId = $derived(current.joinedSpace?.id);
 
-  const threadsList = new LiveQuery<ThreadInfo>(
-    () =>
-      sql`
+  let threadsQuery = new LiveQuery<ThreadInfo>(
+    () => {
+      return sql`
         select json_object(
           'id', id(id), 
           'name', name,
@@ -111,17 +111,25 @@
             r.label = 'thread'
         )
         order by activity ->> 'latestTimestamp' desc
-      `,
+      `;
+    },
     (row) => JSON.parse(row.json),
   );
 
+  const threads = $state<{ list: ThreadInfo[] }>({ list: [] });
+
+  $effect(() => {
+    threads.list = threadsQuery.result || [];
+  });
+
   const roomLoading = $derived(
     current.space.status === "loading" ||
-      threadsList.current.status === "loading",
+      threadsQuery.current.status === "loading",
   );
 
-  // not sure what this was for, commenting out for now
-  // onNavigate(() => (threadsList.result = undefined));
+  onNavigate(() => {
+    threads.list = [];
+  });
 </script>
 
 {#snippet sidebar()}
@@ -136,7 +144,7 @@
       >
         <div class="ml-2 font-bold grow text-center text-lg">Index</div>
 
-        {#if current.joinedSpace?.id && backendStatus.loadingSpaces}
+        {#if current.joinedSpace?.id && backendStatus.authState?.state === "loading"}
           <div class="dark:!text-base-400 !text-base-600">
             Downloading Entire Space...
           </div>
@@ -144,7 +152,7 @@
       </h2>
     </div>
 
-    {#if current.joinedSpace?.id && backendStatus.loadingSpaces}
+    {#if current.joinedSpace?.id && backendStatus.authState?.state === "loading"}
       <LoadingLine />
     {/if}
   </div>
@@ -165,15 +173,15 @@
       <div class="h-full w-full flex">
         <div class="m-auto">Loading...</div>
       </div>
-    {:else if threadsList.result}
+    {:else if threads}
       <div
         transition:fade={{ duration: 200 }}
         class="flex flex-col justify-center h-full w-full"
       >
-        <BoardView threads={threadsList.result || []} />
+        <BoardView threads={threads.list} />
       </div>
-    {:else if threadsList.error}
-      <Error message={threadsList.error} />
+    {:else if threadsQuery.error}
+      <Error message={threadsQuery.error} />
     {/if}
   </MainLayout>
 {/if}
