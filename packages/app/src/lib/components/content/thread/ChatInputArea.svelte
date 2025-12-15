@@ -123,8 +123,11 @@
       ulid: ulid(),
       parent: threadId,
       variant: {
-        kind: "space.roomy.thread.mark.0",
-        data: undefined,
+        kind: "space.roomy.room.kind.0",
+        data: {
+          kind: "space.roomy.thread.0",
+          data: undefined,
+        },
       },
     });
 

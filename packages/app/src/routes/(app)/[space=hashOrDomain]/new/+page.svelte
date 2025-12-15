@@ -71,8 +71,11 @@
         ulid: ulid(),
         parent: roomId,
         variant: {
-          kind: "space.roomy.channel.mark.0",
-          data: undefined,
+          kind: "space.roomy.room.kind.0",
+          data: {
+            kind: "space.roomy.channel.0",
+            data: undefined,
+          },
         },
       });
 
@@ -83,8 +86,11 @@
         ulid: ulid(),
         parent: roomId,
         variant: {
-          kind: "space.roomy.category.mark.0",
-          data: undefined,
+          kind: "space.roomy.room.kind.0",
+          data: {
+            kind: "space.roomy.category.0",
+            data: undefined,
+          },
         },
       });
 

@@ -169,13 +169,16 @@
           ulid: ulid(),
           parent: room.roomyId,
           variant: {
-            kind:
-              room.kind == "category"
-                ? "space.roomy.category.mark.0"
-                : room.kind == "channel"
-                  ? "space.roomy.channel.mark.0"
-                  : "space.roomy.thread.mark.0",
-            data: undefined,
+            kind: "space.roomy.room.kind.0",
+            data: {
+              kind:
+                room.kind == "category"
+                  ? "space.roomy.category.0"
+                  : room.kind == "channel"
+                    ? "space.roomy.channel.0"
+                    : "space.roomy.thread.0",
+              data: undefined,
+            },
           },
         });
       }
