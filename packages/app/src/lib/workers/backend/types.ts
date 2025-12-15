@@ -6,6 +6,7 @@ import type {
   EventType,
   Handle,
   StreamHashId,
+  StreamIndex,
 } from "../types";
 import type { Profile } from "../../types/profile";
 import type { MessagePortApi } from "../workerMessaging";
@@ -62,6 +63,7 @@ export type BackendInterface = {
   checkSpaceExists(spaceId: StreamHashId): Promise<boolean>;
   createStreamHandleRecord(spaceId: StreamHashId): Promise<void>;
   removeStreamHandleRecord(): Promise<void>;
+  connectSpaceStream(spaceId: StreamHashId, idx: StreamIndex): Promise<void>;
   createSpaceStream(): Promise<StreamHashId>;
   /** Testing: Get personal stream record from PDS */
   getStreamRecord(): Promise<{ id: string } | null>;

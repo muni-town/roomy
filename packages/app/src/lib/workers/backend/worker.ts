@@ -398,6 +398,13 @@ class WorkerSupervisor {
       },
       enableLogForwarding: () => this.enableLogForwarding(),
       disableLogForwarding: () => this.disableLogForwarding(),
+      connectSpaceStream: async (streamId, idx) => {
+        await this.client.connectSpaceStream(streamId, idx);
+        this.#status.spaces = {
+          ...this.#status.spaces,
+          [streamId]: "idle",
+        };
+      },
       createSpaceStream: async () => {
         const streamId = await this.client.createSpaceStream();
         this.#status.spaces = {

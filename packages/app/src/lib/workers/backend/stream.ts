@@ -56,7 +56,7 @@ export class ConnectedStream {
   }
 
   /** Async factory that checks for stream existence */
-  static async new(opts: ConnectedStreamOpts) {
+  static async connect(opts: ConnectedStreamOpts) {
     try {
       await opts.leaf.streamInfo(opts.id);
       return ConnectedStream.assert(opts);
@@ -77,7 +77,7 @@ export class ConnectedStream {
       module: moduleId,
       options: [],
     });
-    return await ConnectedStream.new({
+    return await ConnectedStream.connect({
       ...opts,
       id: streamId as StreamHashId,
       idx: 0 as StreamIndex,

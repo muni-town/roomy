@@ -171,7 +171,7 @@ export class Client {
 
     for await (const [streamId, upToEventId] of streamList.entries()) {
       try {
-        const stream = await ConnectedStream.new({
+        const stream = await ConnectedStream.connect({
           user: this.agent.assertDid as Did,
           leaf: this.leaf,
           id: streamId,
@@ -236,6 +236,35 @@ export class Client {
           handle: resp.data.handle,
         }
       : undefined;
+  }
+
+  async connectSpaceStream(streamId: StreamHashId, idx: StreamIndex) {
+    if (this.#streamConnection.status !== "connected")
+      throw new Error("Client must be connected to add new space stream");
+    await this.#leafAuthenticated.promise;
+
+    console.log("Connecting to space stream", streamId, idx);
+
+    const alreadyConnected = this.#streamConnection.streams.get(streamId);
+    if (alreadyConnected) {
+      console.log("Already connected");
+      return;
+    }
+
+    const stream = await ConnectedStream.connect({
+      user: this.agent.assertDid as Did,
+      leaf: this.leaf,
+      id: streamId,
+      idx,
+      eventChannel: this.eventChannel,
+    });
+
+    await stream.backfill();
+    this.#streamConnection.streams.set(streamId, stream);
+
+    console.log("Successfully connected to stream");
+
+    return;
   }
 
   async createSpaceStream() {
@@ -316,7 +345,7 @@ export class Client {
           existingRecord.id,
         );
         console.log("Found existing stream ID from PDS:", existingRecord.id);
-        stream = await ConnectedStream.new({
+        stream = await ConnectedStream.connect({
           user: this.agent.assertDid as Did,
           leaf: this.leaf,
           id: existingRecord.id as StreamHashId,
