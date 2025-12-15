@@ -821,6 +821,17 @@ const materializers: {
 
 // UTILS
 
+const dependentEvents = [
+  "space.roomy.message.edit.0",
+  "space.roomy.page.edit.0",
+  "space.roomy.message.delete.0",
+  "space.roomy.reaction.create.0",
+  "space.roomy.reaction.bridged.create.0",
+  "space.roomy.reaction.delete.0",
+  "space.roomy.reaction.bridged.delete.0",
+  "space.roomy.media.delete.0",
+];
+
 /**
  * Helper to wrap materializer logic and automatically create success/error bundles.
  * This eliminates the repetitive bundle-wrapping code in each materializer.
@@ -828,11 +839,13 @@ const materializers: {
 function bundleSuccess(
   event: StreamEvent,
   statements: SqlStatement | SqlStatement[],
+  dependsOn: Ulid | null,
 ): Bundle.Statement {
   return {
     eventId: event.ulid as Ulid,
     status: "success",
     statements: Array.isArray(statements) ? statements : [statements],
+    dependsOn,
   };
 }
 
@@ -873,7 +886,11 @@ export async function materialize(
       data,
     } as any);
 
-    return bundleSuccess(event, statements);
+    const dependsOn = dependentEvents.includes(kind)
+      ? (event.parent as Ulid)
+      : null;
+
+    return bundleSuccess(event, statements, dependsOn);
   } catch (error) {
     console.error(`Error materializing event ${event.ulid}:`, error);
     return bundleError(event, error instanceof Error ? error : String(error));
