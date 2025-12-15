@@ -157,6 +157,7 @@ export namespace Bundle {
     status: "success";
     eventId: Ulid;
     statements: SqlStatement[];
+    dependsOn: Ulid | null;
   }
 
   export interface StatementError {

@@ -423,8 +423,10 @@ class SqliteWorkerSupervisor {
       const results: Batch.ApplyResult["results"] = [];
 
       for (const bundle of batch.bundles) {
-        if (bundle.status === "success" || bundle.status === "profiles") {
+        if (bundle.status === "success") {
           results.push(await this.runStatementBundle(bundle));
+        } else if (bundle.status === "profiles") {
+          results.push(await this.runStatementProfileBundle(bundle));
         }
       }
 
@@ -457,21 +459,15 @@ class SqliteWorkerSupervisor {
     return result;
   }
 
-  private async runStatementBundle(
-    bundle: Bundle.StatementSuccess | Bundle.StatementProfile,
-  ): Promise<Bundle.ApplyResult | Bundle.ProfileApplyResult> {
-    const bundleId =
-      bundle.status === "success"
-        ? bundle.eventId
-        : bundle.dids[0]?.replaceAll(":", "");
-    await executeQuery({ sql: `savepoint event${bundleId}` });
+  private async runBundleStatements(id: string, statements: SqlStatement[]) {
+    await executeQuery({ sql: `savepoint event${id}` });
     const queryResults: (QueryResult | ApplyResultError)[] = [];
-    for (const statement of bundle.statements) {
+    for (const statement of statements) {
       try {
         queryResults.push(await executeQuery(statement));
       } catch (e) {
         console.warn(
-          `Error executing individual statement in savepoint event${bundleId}:`,
+          `Error executing individual statement in savepoint event${id}:`,
           e,
         );
         if (statement && "sql" in statement) {
@@ -486,19 +482,42 @@ class SqliteWorkerSupervisor {
       }
     }
 
-    await executeQuery({ sql: `release event${bundleId}` });
+    await executeQuery({ sql: `release event${id}` });
+    return queryResults;
+  }
 
-    return bundle.status === "success"
-      ? {
-          result: "applied",
-          eventId: bundle.eventId,
-          output: queryResults,
-        }
-      : {
-          result: "appliedProfiles",
-          firstDid: bundle.dids[0],
-          output: queryResults,
-        };
+  private async runStatementProfileBundle(
+    bundle: Bundle.StatementProfile,
+  ): Promise<Bundle.ProfileApplyResult> {
+    const bundleId = bundle.dids[0]?.replaceAll(":", "");
+    const queryResults = bundleId
+      ? await this.runBundleStatements(bundleId, bundle.statements)
+      : [];
+
+    return {
+      result: "appliedProfiles",
+      firstDid: bundle.dids[0],
+      output: queryResults,
+    };
+  }
+
+  private async runStatementBundle(
+    bundle: Bundle.StatementSuccess,
+  ): Promise<Bundle.ApplyResult> {
+    const bundleId = bundle.eventId;
+
+    // TODO: check if we have the bundle.dependsOn event, and run the statements only if we do, otherwise stash
+
+    const queryResults = await this.runBundleStatements(
+      bundleId,
+      bundle.statements,
+    );
+
+    return {
+      result: "applied",
+      eventId: bundle.eventId,
+      output: queryResults,
+    };
   }
 
   private async runSavepoint(savepoint: Savepoint, depth = 0) {
@@ -611,6 +630,7 @@ class SqliteWorkerSupervisor {
             bundles.push(bundle);
 
             if (bundle.status === "success") {
+              // side effect: trigger connecting to streams for joined spaces in worker
               if (event.variant.kind === "space.roomy.space.join.0") {
                 const knownStream = this.#knownStreams.has(
                   event.variant.data.spaceId as StreamHashId,
