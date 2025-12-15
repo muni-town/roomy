@@ -573,6 +573,22 @@ class SqliteWorkerSupervisor {
     }
   }
 
+  async connectSpaceStream(spaceId: StreamHashId) {
+    const knownStream = this.#knownStreams.has(spaceId);
+    if (!knownStream) {
+      const maybeSpace = await executeQuery(sql`
+        select backfilled_to, hidden from comp_space 
+        where id(entity) = ${spaceId}`);
+
+      const backfilledToIdx = (
+        maybeSpace.rows?.length ? maybeSpace.rows[0]!.backfilled_to : 0
+      ) as StreamIndex;
+
+      this.#knownStreams.add(spaceId);
+      await this.#backend?.connectSpaceStream(spaceId, backfilledToIdx);
+    }
+  }
+
   /** Map a batch of incoming events to SQL that applies the event to the entities,
    * components and edges, then execute them all as a single transaction.
    */
@@ -632,18 +648,9 @@ class SqliteWorkerSupervisor {
             if (bundle.status === "success") {
               // side effect: trigger connecting to streams for joined spaces in worker
               if (event.variant.kind === "space.roomy.space.join.0") {
-                const knownStream = this.#knownStreams.has(
+                this.connectSpaceStream(
                   event.variant.data.spaceId as StreamHashId,
                 );
-                if (!knownStream) {
-                  this.#knownStreams.add(
-                    event.variant.data.spaceId as StreamHashId,
-                  );
-                  this.#backend?.connectSpaceStream(
-                    event.variant.data.spaceId as StreamHashId,
-                    0 as StreamIndex,
-                  );
-                }
               }
 
               // slightly pre-emptive as application hasn't happened yet
