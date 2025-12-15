@@ -31,6 +31,13 @@ export const sqliteStatus = reactiveWorkerState<SqliteStatus>(
 );
 
 (globalThis as any).sqliteStatus = sqliteStatus;
+
+// Expose query state for debugging
+import { current, spaceTree, joinedSpaces } from "../queries";
+(globalThis as any).current = current;
+(globalThis as any).spaceTree = spaceTree;
+(globalThis as any).joinedSpaces = joinedSpaces;
+
 // console.log(
 //   "Main thread: sqliteStatus created, workerId:",
 //   sqliteStatus.workerId,
