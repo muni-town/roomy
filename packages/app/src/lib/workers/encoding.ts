@@ -408,12 +408,6 @@ export const eventVariantCodec = Kinds({
     access: ReadOrWrite,
     reason: Option(str),
   }),
-  /** DEPRECATED - replaced by space.roomy.message.create.1
-   * Create a new chat message. */
-  "space.roomy.message.create.0": Struct({
-    content: Content,
-    replyTo: Option(Ulid),
-  }),
   /** Create a new chat message, v1.
    * This version adds support for extensible fields,
    * using backwards compatible Kinds2 codec
@@ -486,16 +480,6 @@ export const eventVariantCodec = Kinds({
     /** The original handle of the user account on whatever platform it came from. */
     handle: str,
   }),
-  /**
-   * DEPRECATED - replaced by space.roomy.message.create.1
-   * Set an override for the author and timestamp of a previously sent message. This is used by chat
-   * bridges, to send messages as remote users. */
-  "space.roomy.message.overrideMeta.0": Struct({
-    /** The override for the author ID. */
-    author: str,
-    /** The override for the unix timestamp in milliseconds. */
-    timestamp: u64,
-  }),
   /** Delete a message. */
   "space.roomy.message.delete.0": Struct({
     reason: Option(str),
@@ -526,13 +510,6 @@ export const eventVariantCodec = Kinds({
     reaction: str,
     reactingUser: str,
   }),
-  /** DEPRECATED - replaced by space.roomy.message.create.1
-   * Create new media that can, for example, be attached to messages. */
-  "space.roomy.media.create.0": Struct({
-    /** For now all media is external and we use a URI to load it. */
-    uri: str,
-    mimeType: str,
-  }),
   "space.roomy.page.edit.0": Struct({
     /**
      * This content contains a mime-type and the actual content of the edit.
@@ -545,22 +522,6 @@ export const eventVariantCodec = Kinds({
     content: Content,
   }),
   "space.roomy.media.delete.0": _void,
-  /** Mark a room as a channel. */
-  "space.roomy.channel.mark.0": _void,
-  /** Unmark a room as a channel. */
-  "space.roomy.channel.unmark.0": _void,
-  /** Mark a room as a category. */
-  "space.roomy.category.mark.0": _void,
-  /** Unmark a room as a category. */
-  "space.roomy.category.unmark.0": _void,
-  /** Mark a room as a thread. */
-  "space.roomy.thread.mark.0": _void,
-  /** Unmark a room as a thread. */
-  "space.roomy.thread.unmark.0": _void,
-  /** Mark a room as a page. */
-  "space.roomy.page.mark.0": _void,
-  /** Unmark a room as a thread. */
-  "space.roomy.page.unmark.0": _void,
   /**
    * Mark a room as read by the user. This event is sent to the user's personal stream
    * to track when they last visited/read a room. The ULID timestamp encodes when the
@@ -571,6 +532,58 @@ export const eventVariantCodec = Kinds({
     roomId: Ulid,
     /** The stream ID that contains the room. */
     streamId: Hash,
+  }),
+  /** Set a 'kind' for a room */
+  "space.roomy.room.kind.0": Kinds2({
+    "space.roomy.channel.0": _void,
+    "space.roomy.category.0": _void,
+    "space.roomy.thread.0": _void,
+    "space.roomy.page.0": _void,
+  }),
+  /**
+   *
+   * Deprecated Events
+   *
+   */
+  /** Mark/unmark events are replaced by "space.roomy.room.kind.0" */
+  /** DEPRECATED - Mark a room as a channel. */
+  "space.roomy.channel.mark.0": _void,
+  /** DEPRECATED - Unmark a room as a channel. */
+  "space.roomy.channel.unmark.0": _void,
+  /** DEPRECATED - Mark a room as a category. */
+  "space.roomy.category.mark.0": _void,
+  /** DEPRECATED - Unmark a room as a category. */
+  "space.roomy.category.unmark.0": _void,
+  /** DEPRECATED - Mark a room as a thread. */
+  "space.roomy.thread.mark.0": _void,
+  /** DEPRECATED - Unmark a room as a thread. */
+  "space.roomy.thread.unmark.0": _void,
+  /** DEPRECATED - Mark a room as a page. */
+  "space.roomy.page.mark.0": _void,
+  /** DEPRECATED - Unmark a room as a thread. */
+  "space.roomy.page.unmark.0": _void,
+  /** DEPRECATED - replaced by space.roomy.message.create.1
+   * Create a new chat message. */
+  "space.roomy.message.create.0": Struct({
+    content: Content,
+    replyTo: Option(Ulid),
+  }),
+  /**
+   * DEPRECATED - replaced by space.roomy.message.create.1
+   * Set an override for the author and timestamp of a previously sent message. This is used by chat
+   * bridges, to send messages as remote users. */
+  "space.roomy.message.overrideMeta.0": Struct({
+    /** The override for the author ID. */
+    author: str,
+    /** The override for the unix timestamp in milliseconds. */
+    timestamp: u64,
+  }),
+  /** DEPRECATED - replaced by space.roomy.message.create.1
+   * Create new media that can, for example, be attached to messages. */
+  "space.roomy.media.create.0": Struct({
+    /** For now all media is external and we use a URI to load it. */
+    uri: str,
+    mimeType: str,
   }),
 });
 

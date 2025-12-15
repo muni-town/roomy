@@ -27,8 +27,11 @@ export async function createPage(opts: {
     ulid: ulid(),
     parent: pageId,
     variant: {
-      kind: "space.roomy.page.mark.0",
-      data: undefined,
+      kind: "space.roomy.room.kind.0",
+      data: {
+        kind: "space.roomy.page.0",
+        data: undefined,
+      },
     },
   });
 
@@ -85,23 +88,13 @@ export async function promoteToChannel(opts: {
 
   const events: EventType[] = [];
 
-  // Unmark the thread as a thread
-  events.push({
-    ulid: ulid(),
-    parent: opts.room.id,
-    variant: {
-      kind: "space.roomy.thread.unmark.0",
-      data: undefined,
-    },
-  });
-
   // Mark the thread as a channel
   events.push({
     ulid: ulid(),
     parent: opts.room.id,
     variant: {
-      kind: "space.roomy.channel.mark.0",
-      data: undefined,
+      kind: "space.roomy.room.kind.0",
+      data: { kind: "space.roomy.channel.0", data: undefined },
     },
   });
 
@@ -146,16 +139,11 @@ export async function convertToThread(opts: {
       ulid: ulid(),
       parent: opts.roomId,
       variant: {
-        kind: "space.roomy.channel.unmark.0",
-        data: undefined,
-      },
-    },
-    {
-      ulid: ulid(),
-      parent: opts.roomId,
-      variant: {
-        kind: "space.roomy.thread.mark.0",
-        data: undefined,
+        kind: "space.roomy.room.kind.0",
+        data: {
+          kind: "space.roomy.thread.0",
+          data: undefined,
+        },
       },
     },
   ];
@@ -171,16 +159,11 @@ export async function convertToPage(opts: {
       ulid: ulid(),
       parent: opts.room.id,
       variant: {
-        kind: "space.roomy.channel.unmark.0",
-        data: undefined,
-      },
-    },
-    {
-      ulid: ulid(),
-      parent: opts.room.id,
-      variant: {
-        kind: "space.roomy.page.mark.0",
-        data: undefined,
+        kind: "space.roomy.room.kind.0",
+        data: {
+          kind: "space.roomy.page.0",
+          data: undefined,
+        },
       },
     },
     {

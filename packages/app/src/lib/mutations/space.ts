@@ -150,8 +150,11 @@ export async function createSpace(opts: {
     ulid: ulid(),
     parent: categoryId,
     variant: {
-      kind: "space.roomy.category.mark.0",
-      data: undefined,
+      kind: "space.roomy.room.kind.0",
+      data: {
+        kind: "space.roomy.category.0",
+        data: undefined,
+      },
     },
   });
   const generalChannelId = ulid();
@@ -179,16 +182,11 @@ export async function createSpace(opts: {
     ulid: ulid(),
     parent: generalChannelId,
     variant: {
-      kind: "space.roomy.channel.mark.0",
-      data: undefined,
-    },
-  });
-  batch.push({
-    ulid: ulid(),
-    parent: generalChannelId,
-    variant: {
-      kind: "space.roomy.channel.mark.0",
-      data: undefined,
+      kind: "space.roomy.room.kind.0",
+      data: {
+        kind: "space.roomy.channel.0",
+        data: undefined,
+      },
     },
   });
   const welcomeThreadId = ulid();
@@ -216,8 +214,11 @@ export async function createSpace(opts: {
     ulid: ulid(),
     parent: welcomeThreadId,
     variant: {
-      kind: "space.roomy.thread.mark.0",
-      data: undefined,
+      kind: "space.roomy.room.kind.0",
+      data: {
+        kind: "space.roomy.thread.0",
+        data: undefined,
+      },
     },
   });
   const welcomeMessageId = ulid();

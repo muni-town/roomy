@@ -688,6 +688,26 @@ const materializers: {
     return [sql`delete from entities where id = ${id(event.parent)}`];
   },
 
+  // Room Kinds
+  "space.roomy.room.kind.0": async ({ event, data }) => {
+    if (!event.parent) {
+      console.warn("Missing target for room kind mark.");
+      return [];
+    }
+    const kindMap = {
+      "space.roomy.channel.0": "channel",
+      "space.roomy.category.0": "category",
+      "space.roomy.page.0": "page",
+      "space.roomy.thread.0": "thread",
+    } as const;
+    const kind = kindMap[data.kind];
+    return [
+      sql`
+      update comp_room set label = '${kind}' where entity = ${id(event.parent)}
+      `,
+    ];
+  },
+
   // Channels
   "space.roomy.channel.mark.0": async ({ event }) => {
     if (!event.parent) {
