@@ -7,6 +7,7 @@ import { joinedSpaces } from "./spaces.svelte";
 import type { SpaceMeta } from "./types";
 
 type SpaceStatus =
+  | { status: "no-current-space" }
   | { status: "loading"; spaceId?: SpaceIdOrHandle }
   | { status: "invited"; spaceId: StreamHashId }
   | { status: "joined"; space: SpaceMeta; isSpaceAdmin: boolean }
@@ -86,7 +87,9 @@ $effect.root(() => {
     if (joinedSpaces.loading) return; // wait until spaces are loaded
 
     if (!page.params.space) {
-      error("No space ID or handle provided");
+      current.space = { status: "no-current-space" };
+      current.joinedSpace = undefined;
+      current.isSpaceAdmin = false;
       return;
     }
 
