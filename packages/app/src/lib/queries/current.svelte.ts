@@ -54,13 +54,7 @@ async function getCurrentSpace(spaceId: SpaceIdOrHandle) {
     ? joinedSpaces.list?.find((x) => x.id == resp.spaceId)
     : undefined;
   if (!matchingSpace) {
-    current.space = {
-      status: "invited",
-      spaceId: resp.spaceId,
-    };
-    current.joinedSpace = undefined;
-    current.isSpaceAdmin = false;
-    throw "You have not joined this space yet.";
+    return { matchingSpace, spaceId: resp.spaceId, isSpaceAdmin: false };
   }
 
   // Make sure that the space actually has a handle
@@ -79,7 +73,7 @@ async function getCurrentSpace(spaceId: SpaceIdOrHandle) {
           (backendStatus.authState as AuthStates.ReactiveAuthenticated).did &&
         permission[1] === "admin",
     ) || false;
-  return { matchingSpace, isSpaceAdmin };
+  return { matchingSpace, spaceId: resp.spaceId, isSpaceAdmin };
 }
 
 $effect.root(() => {
@@ -97,12 +91,17 @@ $effect.root(() => {
     }
 
     getCurrentSpace(page.params.space as SpaceIdOrHandle)
-      .then(({ matchingSpace, isSpaceAdmin }) => {
-        current.space = {
-          status: "joined",
-          space: matchingSpace,
-          isSpaceAdmin,
-        };
+      .then(({ matchingSpace, isSpaceAdmin, spaceId }) => {
+        current.space = matchingSpace
+          ? {
+              status: "joined",
+              space: matchingSpace,
+              isSpaceAdmin,
+            }
+          : {
+              status: "invited",
+              spaceId: spaceId,
+            };
         current.joinedSpace = matchingSpace;
         current.isSpaceAdmin = isSpaceAdmin;
       })
