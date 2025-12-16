@@ -250,7 +250,7 @@ export async function createSpace(opts: {
 
   await backend.sendEventBatch(spaceId, batch);
 
-  console.log("sent events batch");
+  console.log("sent events batch", batch);
 
   return { spaceId };
 }
