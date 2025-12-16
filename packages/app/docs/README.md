@@ -17,3 +17,11 @@ We use `pnpm` as a package manager and turborepo as a build system. `pnpm turbo 
 ## Testing
 
 Our current focus is on using Robot Framework for integration testing. All tests can be run with `pnpm test:robot`, or specific tests by tag with `pnpm test:robot:tag <tag> tests/robot`.
+
+## Debugging
+
+As long as we have a persistent database, some problems are solved by clearing it. You can click your avatar in the bottom left corner for a modal with 'Reset Local Cache'. A more serious issue may require setting your browser console REPL to the sqlite worker and running `this.deleteDBs()`. 
+
+If your problem is about having too many spaces connected or you otherwise want to clear your personal stream, you can in your main REPL run `this.backend.deleteStreamRecord()` which will trigger a new one being created for you on reload.
+
+There are other methods exposed on the global object for debugging purposes, generally found in `workers/index.ts`.
