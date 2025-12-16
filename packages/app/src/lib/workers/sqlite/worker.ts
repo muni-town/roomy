@@ -225,6 +225,17 @@ class SqliteWorkerSupervisor {
             "pushing to resultChannel",
           );
           this.#resultChannel.push(result);
+
+          // Connect spaces AFTER batch is applied and committed
+          if (batch.spacesToConnect && batch.spacesToConnect.length > 0) {
+            console.log(
+              `Connecting ${batch.spacesToConnect.length} space(s) after batch commit:`,
+              batch.spacesToConnect,
+            );
+            for (const spaceId of batch.spacesToConnect) {
+              this.connectSpaceStream(spaceId);
+            }
+          }
         } catch (error) {
           console.error("Error running statement batch", batch, error);
         }
@@ -424,7 +435,7 @@ class SqliteWorkerSupervisor {
 
       for (const bundle of batch.bundles) {
         if (bundle.status === "success") {
-          results.push(await this.runStatementBundle(bundle));
+          results.push(await this.runStatementBundle(bundle, batch.streamId));
         } else if (bundle.status === "profiles") {
           results.push(await this.runStatementProfileBundle(bundle));
         }
@@ -459,15 +470,24 @@ class SqliteWorkerSupervisor {
     return result;
   }
 
-  private async runBundleStatements(id: string, statements: SqlStatement[]) {
-    await executeQuery({ sql: `savepoint event${id}` });
+  private async runBundleStatements(
+    bundleId: string,
+    statements: SqlStatement[],
+    eventMeta?: {
+      streamId: StreamHashId;
+      idx: StreamIndex;
+    },
+  ) {
+    await executeQuery({ sql: `savepoint bundle${bundleId}` });
     const queryResults: (QueryResult | ApplyResultError)[] = [];
+    let hadError = false;
     for (const statement of statements) {
       try {
         queryResults.push(await executeQuery(statement));
       } catch (e) {
+        hadError = true;
         console.warn(
-          `Error executing individual statement in savepoint event${id}:`,
+          `Error executing individual statement in savepoint bundle${bundleId}:`,
           e,
         );
         if (statement && "sql" in statement) {
@@ -482,7 +502,25 @@ class SqliteWorkerSupervisor {
       }
     }
 
-    await executeQuery({ sql: `release event${id}` });
+    if (eventMeta && !hadError) {
+      const updateEvent = sql`
+        update events set applied = 1
+        where stream_id = ${id(eventMeta.streamId)}
+          and
+        idx = ${eventMeta.idx}
+        `;
+      queryResults.push(
+        await executeQuery(updateEvent).catch((e) => {
+          return {
+            type: "error",
+            statement: updateEvent,
+            message: e instanceof Error ? e.message : (e as string),
+          };
+        }),
+      );
+    }
+
+    await executeQuery({ sql: `release bundle${bundleId}` });
     return queryResults;
   }
 
@@ -503,6 +541,7 @@ class SqliteWorkerSupervisor {
 
   private async runStatementBundle(
     bundle: Bundle.StatementSuccess,
+    streamId: StreamHashId,
   ): Promise<Bundle.ApplyResult> {
     const bundleId = bundle.eventId;
 
@@ -511,6 +550,7 @@ class SqliteWorkerSupervisor {
     const queryResults = await this.runBundleStatements(
       bundleId,
       bundle.statements,
+      { streamId, idx: bundle.eventIdx },
     );
 
     return {
@@ -634,32 +674,29 @@ class SqliteWorkerSupervisor {
         bundles.push(await this.ensureProfiles(batch.streamId, neededProfiles));
 
         let latestEvent = 0;
+        const spacesToConnect: StreamHashId[] = [];
         for (const [incoming, event] of decodedEvents) {
           latestEvent = Math.max(latestEvent, incoming.idx);
           try {
             // Get the SQL statements to be executed for this event
-            const bundle: Bundle.Statement = await materialize(event, {
-              streamId: batch.streamId,
-              user: incoming.user,
-            });
+            const bundle: Bundle.Statement = await materialize(
+              event,
+              {
+                streamId: batch.streamId,
+                user: incoming.user,
+              },
+              incoming.idx,
+            );
 
             bundles.push(bundle);
 
             if (bundle.status === "success") {
-              // side effect: trigger connecting to streams for joined spaces in worker
+              // Collect space IDs to connect AFTER batch is applied
               if (event.variant.kind === "space.roomy.space.join.0") {
-                this.connectSpaceStream(
+                spacesToConnect.push(
                   event.variant.data.spaceId as StreamHashId,
                 );
               }
-
-              // slightly pre-emptive as application hasn't happened yet
-              bundle.statements.push(sql`
-                update events set applied = 1 
-                where stream_id = ${id(batch.streamId)} 
-                  and
-                idx = ${incoming.idx}
-              `);
             }
           } catch (e) {
             console.warn("Event materialisation failed: " + e);
@@ -682,6 +719,7 @@ class SqliteWorkerSupervisor {
             bundles: bundles,
             latestEvent: latestEvent as StreamIndex,
             priority: batch.priority,
+            spacesToConnect,
           },
           batch.priority,
         );

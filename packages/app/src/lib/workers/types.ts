@@ -109,6 +109,7 @@ export namespace Batch {
     bundles: Bundle.Statement[];
     latestEvent: StreamIndex;
     priority: TaskPriority;
+    spacesToConnect: StreamHashId[];
   }
 
   export interface ApplyResult {
@@ -156,6 +157,7 @@ export namespace Bundle {
   export interface StatementSuccess {
     status: "success";
     eventId: Ulid;
+    eventIdx: StreamIndex;
     statements: SqlStatement[];
     dependsOn: Ulid | null;
   }
