@@ -1,4 +1,4 @@
-import type { Bundle, Ulid } from "../types";
+import type { Bundle, StreamIndex, Ulid } from "../types";
 import { _void, type CodecType } from "scale-ts";
 import { eventCodec, eventVariantCodec, id } from "../encoding";
 import { decodeTime } from "ulidx";
@@ -838,12 +838,14 @@ const dependentEvents = [
  */
 function bundleSuccess(
   event: StreamEvent,
+  idx: StreamIndex,
   statements: SqlStatement | SqlStatement[],
   dependsOn: Ulid | null,
 ): Bundle.Statement {
   return {
-    eventId: event.ulid as Ulid,
     status: "success",
+    eventId: event.ulid as Ulid,
+    eventIdx: idx,
     statements: Array.isArray(statements) ? statements : [statements],
     dependsOn,
   };
@@ -865,11 +867,11 @@ function bundleError(
 
 /**
  * Main materialize function called by the sqlite worker for each event.
- * This provides a simpler interface than the full materializer pipeline.
  */
 export async function materialize(
   event: StreamEvent,
   opts: { streamId: string; user: string },
+  idx: StreamIndex,
 ): Promise<Bundle.Statement> {
   const kind = event.variant.kind;
   const data = event.variant.data;
@@ -886,11 +888,13 @@ export async function materialize(
       data,
     } as any);
 
+    // statements.push(sql`insert into events ...`) // TODO: insert event into events table here
+
     const dependsOn = dependentEvents.includes(kind)
       ? (event.parent as Ulid)
       : null;
 
-    return bundleSuccess(event, statements, dependsOn);
+    return bundleSuccess(event, idx, statements, dependsOn);
   } catch (error) {
     console.error(`Error materializing event ${event.ulid}:`, error);
     return bundleError(event, error instanceof Error ? error : String(error));
