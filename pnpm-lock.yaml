@@ -87,6 +87,9 @@ importers:
       '@atcute/cbor':
         specifier: ^2.2.8
         version: 2.2.8
+      '@atcute/lexicon-doc':
+        specifier: ^2.0.5
+        version: 2.0.5
       '@atproto/api':
         specifier: ^0.14.22
         version: 0.14.22
@@ -394,6 +397,15 @@ packages:
   '@atcute/client@2.0.9':
     resolution: {integrity: sha512-QNDm9gMP6x9LY77ArwY+urQOBtQW74/onEAz42c40JxRm6Rl9K9cU4ROvNKJ+5cpVmEm1sthEWVRmDr5CSZENA==}
 
+  '@atcute/identity@1.1.3':
+    resolution: {integrity: sha512-oIqPoI8TwWeQxvcLmFEZLdN2XdWcaLVtlm8pNk0E72As9HNzzD9pwKPrLr3rmTLRIoULPPFmq9iFNsTeCIU9ng==}
+
+  '@atcute/lexicon-doc@2.0.5':
+    resolution: {integrity: sha512-fNCp94ehGjWFZMIqP6pWD1F9MOJogNCyqsaMVZluPSIclZ+lDL528iXB56aW4u0eSiD6Y9WJB1OI/lElG39cSA==}
+
+  '@atcute/lexicons@1.2.5':
+    resolution: {integrity: sha512-9yO9WdgxW8jZ7SbzUycH710z+JmsQ9W9n5S6i6eghYju32kkluFmgBeS47r8e8p2+Dv4DemS7o/3SUGsX9FR5Q==}
+
   '@atcute/multibase@1.1.6':
     resolution: {integrity: sha512-HBxuCgYLKPPxETV0Rot4VP9e24vKl8JdzGCZOVsDaOXJgbRZoRIF67Lp0H/OgnJeH/Xpva8Z5ReoTNJE5dn3kg==}
 
@@ -473,6 +485,10 @@ packages:
   '@babel/helper-validator-identifier@7.27.1':
     resolution: {integrity: sha512-D2hP9eA+Sqx1kBZgzxZh0y1trbuU+JoDkiEwqhQ36nodYqJwyEIhPSdMNd7lOm/4io72luTPWH20Yda0xOuUow==}
     engines: {node: '>=6.9.0'}
+
+  '@badrap/valita@0.4.6':
+    resolution: {integrity: sha512-4kdqcjyxo/8RQ8ayjms47HCWZIF5981oE5nIenbfThKDxWXtEHKipAOWlflpPJzZx9y/JWYQkp18Awr7VuepFg==}
+    engines: {node: '>= 18'}
 
   '@effect/cli@0.41.5':
     resolution: {integrity: sha512-6/4M73wi3q/AJqEQlWxLOGM2GSQbnsj8lNEXHZcm2SLREIqB9uw2TSduFODmKq4mnVGOghq8wj/prPPUdaZ/uA==}
@@ -4170,6 +4186,22 @@ snapshots:
 
   '@atcute/client@2.0.9': {}
 
+  '@atcute/identity@1.1.3':
+    dependencies:
+      '@atcute/lexicons': 1.2.5
+      '@badrap/valita': 0.4.6
+
+  '@atcute/lexicon-doc@2.0.5':
+    dependencies:
+      '@atcute/identity': 1.1.3
+      '@atcute/lexicons': 1.2.5
+      '@badrap/valita': 0.4.6
+
+  '@atcute/lexicons@1.2.5':
+    dependencies:
+      '@standard-schema/spec': 1.0.0
+      esm-env: 1.2.2
+
   '@atcute/multibase@1.1.6':
     dependencies:
       '@atcute/uint8array': 1.0.6
@@ -4325,6 +4357,8 @@ snapshots:
       picocolors: 1.1.1
 
   '@babel/helper-validator-identifier@7.27.1': {}
+
+  '@badrap/valita@0.4.6': {}
 
   '@effect/cli@0.41.5(@effect/platform@0.62.5(@effect/schema@0.71.4(effect@3.16.13))(effect@3.16.13))(@effect/printer-ansi@0.34.8(@effect/typeclass@0.25.8(effect@3.16.13))(effect@3.16.13))(@effect/printer@0.34.8(@effect/typeclass@0.25.8(effect@3.16.13))(effect@3.16.13))(@effect/schema@0.71.4(effect@3.16.13))(effect@3.16.13)':
     dependencies:
