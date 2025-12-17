@@ -686,6 +686,7 @@ class SqliteWorkerSupervisor {
                 user: incoming.user,
               },
               incoming.idx,
+              incoming.payload,
             );
 
             bundles.push(bundle);

@@ -872,6 +872,7 @@ export async function materialize(
   event: StreamEvent,
   opts: { streamId: string; user: string },
   idx: StreamIndex,
+  payload: ArrayBufferLike,
 ): Promise<Bundle.Statement> {
   const kind = event.variant.kind;
   const data = event.variant.data;
@@ -888,7 +889,11 @@ export async function materialize(
       data,
     } as any);
 
-    // statements.push(sql`insert into events ...`) // TODO: insert event into events table here
+    // Insert event into events table
+    statements.push(sql`
+      INSERT INTO events (idx, stream_id, entity_ulid, payload, applied)
+      VALUES (${idx}, ${id(opts.streamId)}, ${id(event.ulid)}, ${payload}, 0)
+    `);
 
     const dependsOn = dependentEvents.includes(kind)
       ? (event.parent as Ulid)
