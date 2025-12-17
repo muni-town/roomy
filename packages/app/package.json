@@ -34,6 +34,7 @@
     "lint-staged": "lint-staged"
   },
   "dependencies": {
+    "@ark/util": "^0.56.0",
     "@tiptap/extension-bubble-menu": "^3.9.0",
     "@tiptap/extension-typography": "^3.9.0",
     "@tiptap/extension-underline": "^3.9.0",
@@ -45,6 +46,7 @@
     "tippy.js": "^6.3.7"
   },
   "devDependencies": {
+    "@atcute/cbor": "^2.2.8",
     "@atproto/api": "^0.14.22",
     "@atproto/jwk-jose": "^0.1.10",
     "@atproto/lexicon": "^0.4.14",
@@ -103,6 +105,7 @@
     "@types/turndown": "^5.0.5",
     "@types/underscore": "^1.13.0",
     "@zip-js/zip-js": "jsr:2.7.59",
+    "arktype": "^2.1.29",
     "base32-decode": "^1.0.0",
     "base32-encode": "^2.0.0",
     "bits-ui": "^1.8.0",
@@ -116,7 +119,6 @@
     "posthog-js": "^1.266.0",
     "prettier": "3.5.3",
     "prettier-plugin-svelte": "3.3.3",
-    "scale-ts": "1.6.1",
     "svelte": "^5.38.10",
     "svelte-boring-avatars": "^1.2.6",
     "svelte-check": "^4.3.1",
