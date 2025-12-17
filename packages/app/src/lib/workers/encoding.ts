@@ -4,338 +4,118 @@
  * It lets you specify a mapping between the kind string and the type of data that should follow it.
  */
 
-import { hex } from "@scure/base";
-import {
-  Bytes,
-  enhanceCodec,
-  type Codec,
-  type CodecType,
-  type Decoder,
-  type DecoderType,
-  type Encoder,
-  type EncoderType,
-  createDecoder,
-  Option,
-  Enum,
-  _void,
-  Struct,
-  u64,
-  u32,
-  u16,
-  compact,
-  Vector,
-  bool,
-} from "scale-ts";
-import { createCodec, str, Tuple } from "scale-ts";
+import { type } from "arktype";
+import { isDid } from "@atproto/oauth-client";
+import { isValid as isValidUlid } from "ulidx";
+import { type Bytes as BytesLink } from "@atcute/cbor";
 
-/** encoding -
- * old version for compatibility,
- * but should be removed when Leaf changes hit */
-const kindsEnc = <O extends { [key: string]: Encoder<any> }>(
-  inner: O,
-): Encoder<
-  {
-    [K in keyof O]: { kind: K; data: EncoderType<O[K]> };
-  }[keyof O]
-> => {
-  return ({ kind, data }) => {
-    if (typeof kind !== "string") throw "key must be string";
-    const kindEncoder = inner[kind];
-    if (!kindEncoder) throw `Unknown kind: ${kind}`;
-    return Tuple(str, [kindEncoder] as any).enc([kind, data]);
-  };
-};
+export const Ulid = type.string.narrow((v, ctx) =>
+  isValidUlid(v) ? true : ctx.mustBe("a valid ULID"),
+).brand("ulid");
+export type Ulid = typeof Ulid.infer;
 
-/** decoding -
- * old version for compatibility,
- * but should be removed when Leaf changes hit */
-const kindsDec = <O extends { [key: string]: Decoder<any> }>(
-  inner: O,
-): Decoder<
-  {
-    [K in keyof O]: { kind: K; data: DecoderType<O[K]> };
-  }[keyof O]
-> => {
-  return createDecoder((bytes) => {
-    const kind = str.dec(bytes);
-    const valueDecoder = inner[kind] as O[keyof O];
-    if (!valueDecoder) throw `Unknown event kind: ${kind}`;
-    return {
-      kind,
-      data: valueDecoder(bytes),
-    };
-  });
-};
+export const Did = type.string.narrow((v, ctx) =>
+  isDid(v) ? true : ctx.mustBe("a valid DID"),
+).brand("did");
+export type Did = typeof Did.infer;
 
-/** Kinds codec creator -
- * old version for compatibility,
- * but should be removed when Leaf changes hit */
-export const Kinds = <O extends { [key: string]: Codec<any> }>(
-  inner: O,
-): Codec<
-  {
-    [K in keyof O]: { kind: K; data: CodecType<O[K]> };
-  }[keyof O]
-> => {
-  const e = Object.fromEntries(
-    Object.entries(inner).map(([k, v]) => [k, v.enc]),
-  );
-  const d = Object.fromEntries(
-    Object.entries(inner).map(([k, v]) => [k, v.dec]),
-  );
-  return createCodec(kindsEnc(e), kindsDec(d)) as any;
-};
+export type Bytes = BytesLink;
+export const Bytes = type({ $bytes: "string.base64" });
 
-Kinds.enc = kindsEnc;
-Kinds.dec = kindsDec;
 
-/** Custom 'Kinds' codec: encoding function
- * extensible kinds, adds length prefix so data
- * that compose unknown kinds can be decoded
- *
- * NOTE: This encoder was fixed to properly concatenate bytes. Previous versions
- * used Tuple() which created malformed output. Data encoded with the old version
- * cannot be decoded and requires a cache reset.
- */
-const kinds2Enc = <O extends { [key: string]: Encoder<any> }>(
-  inner: O,
-): Encoder<
-  {
-    [K in keyof O]: { kind: K; data: EncoderType<O[K]> };
-  }[keyof O]
-> => {
-  return ({ kind, data }) => {
-    if (typeof kind !== "string") throw "key must be string";
-    const kindEncoder = inner[kind];
-    if (!kindEncoder) throw `Unknown kind: ${kind}`;
+// export const ValueUpdate = <T>(ty: Codec<T>) =>
+//   inlineTagged(
+//     Enum({
+//       set: ty,
+//       ignore: _void,
+//     }),
+//   );
 
-    // Encode the data first to get its size
-    const encodedData = kindEncoder(data);
+// /** Read permission or write permission */
+// export const ReadOrWrite = Enum({
+//   read: _void,
+//   write: _void,
+// });
 
-    // Manually concatenate: kind_string + compact_size + data_bytes
-    const kindBytes = str.enc(kind);
-    const sizeBytes = compact.enc(encodedData.length);
+// /** Codec for a member in a group. */
+// export const GroupMember = Enum({
+//   /** Everybody, including unauthenticated users. */
+//   anonymous: _void,
+//   /** Authenticated users that have joined the space. */
+//   authenticated: _void,
+//   /** A user ID. */
+//   user: str,
+//   /** The ID of another room to use as a group. That room's member list will be used. */
+//   room: Ulid,
+// });
 
-    // Concatenate all parts
-    const result = new Uint8Array(
-      kindBytes.length + sizeBytes.length + encodedData.length,
-    );
-    result.set(kindBytes, 0);
-    result.set(sizeBytes, kindBytes.length);
-    result.set(encodedData, kindBytes.length + sizeBytes.length);
+// /** Content encoding. */
+// export const Content = Struct({
+//   /** The Mime type of the message content */
+//   mimeType: str,
+//   /**
+//    * The actual content. This is usually going to be text, but we allow freeform binary data here
+//    * just in case.
+//    *
+//    * The mime type will specify the precise encoding.
+//    * */
+//   content: Bytes(),
+// });
 
-    return result;
-  };
-};
+export const StringUpdate = type.or({
+  "$type": "'space.roomy.setProperty.value'",
+  "value": "string | null"
+}, {
+  "$type": "'space.roomy.setProperty.ignore'"
+})
 
-/** Custom 'Kinds' codec: decoding function
- * Unknown kinds can still be decoded as raw bytes,
- * meaning kinds can safely be extended in the future
- * with backward compatibility
- */
-const kinds2Dec = <O extends { [key: string]: Decoder<any> }>(
-  inner: O,
-): Decoder<
-  | {
-      [K in keyof O]: { kind: K; data: DecoderType<O[K]> };
-    }[keyof O]
-  | { kind: string; data: Uint8Array }
-> => {
-  return createDecoder((bytes) => {
-    // Decode the kind string
-    const kind = str.dec(bytes);
-
-    // Decode the data size
-    const dataSize = compact.dec(bytes) as number;
-
-    // Validate dataSize is reasonable
-    if (dataSize < 0 || dataSize > 100_000_000) {
-      throw new Error(
-        `Invalid dataSize ${dataSize} for kind "${kind}". This suggests data corruption or encoding/decoding mismatch.`,
-      );
-    }
-
-    // Check if we have a decoder for this kind
-    const valueDecoder = inner[kind] as O[keyof O] | undefined;
-
-    if (!valueDecoder) {
-      // Unknown kind: read the raw bytes and return them
-      const rawData = Bytes(dataSize).dec(bytes);
-      return {
-        kind,
-        data: rawData,
-      };
-    }
-
-    // Known kind: decode the data normally
-    // Extract the bytes for this variant
-    const rawBytes = Bytes(dataSize).dec(bytes);
-    // Create a completely fresh Uint8Array with its own ArrayBuffer to avoid DataView issues
-    // Using Uint8Array.from ensures we get a new buffer, not a view
-    const variantBytes = Uint8Array.from(rawBytes);
-    const data = valueDecoder(variantBytes);
-
-    return {
-      kind,
-      data,
-    };
-  });
-};
-
-/** 'Kinds' codec creator
- * Kinds is like an enum, but SCALE enums by default use a numeric index
- * to indicate the variant. Kinds uses a string identifier instead.
- *
- * This version supports unknown kinds by encoding the data size
- * before the data, allowing future extensions while maintaining
- * backward compatibility.
- */
-export const Kinds2 = <O extends { [key: string]: Codec<any> }>(
-  inner: O,
-): Codec<
-  {
-    [K in keyof O]: { kind: K; data: CodecType<O[K]> };
-  }[keyof O]
-> => {
-  const e = Object.fromEntries(
-    Object.entries(inner).map(([k, v]) => [k, v.enc]),
-  );
-  const d = Object.fromEntries(
-    Object.entries(inner).map(([k, v]) => [k, v.dec]),
-  );
-  return createCodec(kinds2Enc(e), kinds2Dec(d)) as any;
-};
-
-Kinds2.enc = kinds2Enc;
-Kinds2.dec = kinds2Dec;
-
-export const Hash = enhanceCodec(Bytes(32), hex.decode, hex.encode);
-
-export const Ulid = enhanceCodec(Bytes(16), crockfordDecode, crockfordEncode);
-
-type InlineTagged<C extends Codec<any>> =
-  CodecType<C> extends { tag: infer Tag; value: infer Value }
-    ? Tag extends string
-      ? { [K in Tag]: Value }
-      : never
-    : never;
-const inlineTagged = <C extends Codec<any>>(codec: C) =>
-  enhanceCodec<CodecType<C>, InlineTagged<C>>(
-    codec,
-    (id) => {
-      const entry = Object.entries(id)[0];
-      if (!entry) throw "Invalid ID type";
-      return { tag: entry[0], value: entry[1] } as any;
-    },
-    (id) => {
-      return { [id.tag]: id.value } as any;
-    },
-  );
-
-const rawIdCodec = Enum({
-  unknown: str,
-  ulid: Ulid,
-  hash: Hash,
-  did: enhanceCodec<string, string>(
-    str,
-    (s) => {
-      if (s.startsWith("did:")) {
-        return s;
-      } else {
-        throw new Error(`DID is not valid: ${s}`);
-      }
-    },
-    (s) => {
-      if (s.startsWith("did:")) {
-        return s;
-      } else {
-        throw new Error(`DID is not valid: ${s}`);
-      }
-    },
-  ),
-});
-export const IdCodec = enhanceCodec<CodecType<typeof rawIdCodec>, string>(
-  rawIdCodec,
-  (id: string) => {
-    if (id.startsWith("did:")) {
-      return { tag: "did", value: id };
-    } else if (id.match(/^[A-Fa-f0-9]{64}$/)) {
-      return { tag: "hash", value: id };
-    } else if (id.match(/^[\da-hjkmnp-tv-z]{26}$/iu)) {
-      return { tag: "ulid", value: id };
-    } else {
-      return { tag: "unknown", value: id };
-    }
-  },
-  ({ value }) => value,
-);
-
-/** Encode an ID to it's binary format */
-export const id = IdCodec.enc;
-
-export const ValueUpdate = <T>(ty: Codec<T>) =>
-  inlineTagged(
-    Enum({
-      set: ty,
-      ignore: _void,
-    }),
-  );
-
-/** Read permission or write permission */
-export const ReadOrWrite = Enum({
-  read: _void,
-  write: _void,
-});
-
-/** Codec for a member in a group. */
-export const GroupMember = Enum({
-  /** Everybody, including unauthenticated users. */
-  anonymous: _void,
-  /** Authenticated users that have joined the space. */
-  authenticated: _void,
-  /** A user ID. */
-  user: str,
-  /** The ID of another room to use as a group. That room's member list will be used. */
-  room: Ulid,
-});
-
-/** Content encoding. */
-export const Content = Struct({
+export const Content = type({
   /** The Mime type of the message content */
-  mimeType: str,
+  mimeType: "string",
   /**
    * The actual content. This is usually going to be text, but we allow freeform binary data here
    * just in case.
    *
    * The mime type will specify the precise encoding.
    * */
-  content: Bytes(),
+  content: Bytes,
 });
 
-export const eventVariantCodec = Kinds({
-  /** Join a Roomy space: used to track joined spaces in the user's personal space. */
-  "space.roomy.space.join.0": Struct({
-    spaceId: Hash,
-  }),
-  /** Leave a Roomy space: used to track joined spaces in the users personal space. */
-  "space.roomy.space.leave.0": Struct({
-    spaceId: Hash,
-  }),
-  "space.roomy.admin.add.0": Struct({
-    adminId: str,
-  }),
-  "space.roomy.admin.remove.0": Struct({
-    adminId: str,
-  }),
+export const eventVariantCodec = type.or(
+  {
+    /** Join a Roomy space: used to track joined spaces in the user's personal space. */
+    "space.roomy.space.join.0": {
+      spaceDid: Did,
+    },
+  },
+
+    {
+
+    /** Leave a Roomy space: used to track joined spaces in the users personal space. */
+    "space.roomy.space.leave.0": {
+      spaceDid: Did,
+    },
+    },
+    {
+      "space.roomy.admin.add.0": {
+        userDid: Did,
+      }
+    },
+    {
+
+  "space.roomy.admin.remove.0": {
+    userDid: Did,
+  }
+    },
   /**
    * The parent of the event indicates which room is being joined.
    *
    * When the parent is undefined, then that means that the user is publicly announcing that they
    * are joining the space.
    */
-  "space.roomy.room.join.0": _void,
+  "space.roomy.room.join.0",
   /** The parent of the event indicates which room is being left. */
-  "space.roomy.room.leave.0": _void,
+  "space.roomy.room.leave.0",
   /**
    * This event sets the ATProto account did that should be used as the handle for this space.
    *
@@ -346,17 +126,23 @@ export const eventVariantCodec = Kinds({
    * stream ID, then that makes a verified Roomy space handle so you can visit the space at
    * `https://roomy.space/example.handle`.
    */
-  "space.roomy.stream.handle.account.0": Struct({
-    did: Option(str),
-  }),
+  {
+
+  "space.roomy.stream.handle.account.0": {
+    "did?": Did,
+  }
+  },
+  {
+
   /**
    * Set some entity's basic info. This is used for Rooms and possibly other things, too
    */
-  "space.roomy.info.0": Struct({
-    name: ValueUpdate(Option(str)),
-    avatar: ValueUpdate(Option(str)),
-    description: ValueUpdate(Option(str)),
-  }),
+  "space.roomy.info.0": {
+    name: StringUpdate,
+    avatar: StringUpdate,
+    description: StringUpdate,
+  }
+  },
   // TODO: It might make sense to move these parent events up out of the event variant and into the
   // envelope because they are fundamental and will need to be read by the auth implementation,
   // while all the other event variants are informative, indifferent to auth, and possibly
@@ -382,13 +168,16 @@ export const eventVariantCodec = Kinds({
    * For example, chat message, when sent, can have edit and overrideMeta events sent by the
    * messages author that have the original message event as it's parent.
    * */
-  "space.roomy.room.create.0": _void,
+  "space.roomy.room.create.0",
   /** Delete a room */
-  "space.roomy.room.delete.0": _void,
+  "space.roomy.room.delete.0",
   /** Change the parent of a room. */
-  "space.roomy.parent.update.0": Struct({
-    parent: Option(IdCodec),
-  }),
+  {
+
+  "space.roomy.parent.update.0": {
+    parent: type.string.optional(),
+  }
+  },
   /**
    * Add a member to the Room's member list. Each room has a member list, and some Rooms are created
    * intentionally to use as groups, so that their member list is all they are used for.
@@ -585,7 +374,7 @@ export const eventVariantCodec = Kinds({
     uri: str,
     mimeType: str,
   }),
-});
+);
 
 export const eventCodec = Struct({
   /** The ULID here serves to uniquely represent the event and provide a timestamp. */
@@ -595,59 +384,3 @@ export const eventCodec = Struct({
   /** The event variant. */
   variant: eventVariantCodec,
 });
-
-export const streamParamsCodec = Struct({
-  /** The type of stream as an NSID. */
-  streamType: str,
-  /** The stream schema version from $lib/config.ts CONFIG.streamSchemaVersion. */
-  schemaVersion: str,
-});
-
-// Code from https://github.com/perry-mitchell/ulidx/blob/5043c511406fb9b836ddf126583c80ffb90cbb73/source/crockford.ts
-// We already use ulidx but encoding is not exposed so we copy the functions here.
-const B32_CHARACTERS = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-export function crockfordEncode(input: Uint8Array): string {
-  const output: number[] = [];
-  let bitsRead = 0;
-  let buffer = 0;
-  const reversedInput = new Uint8Array(input.slice().reverse());
-  for (const byte of reversedInput) {
-    buffer |= byte << bitsRead;
-    bitsRead += 8;
-
-    while (bitsRead >= 5) {
-      output.unshift(buffer & 0x1f);
-      buffer >>>= 5;
-      bitsRead -= 5;
-    }
-  }
-  if (bitsRead > 0) {
-    output.unshift(buffer & 0x1f);
-  }
-  return output.map((byte) => B32_CHARACTERS.charAt(byte)).join("");
-}
-export function crockfordDecode(input: string): Uint8Array {
-  const sanitizedInput = input.toUpperCase().split("").reverse().join("");
-  const output: number[] = [];
-  let bitsRead = 0;
-  let buffer = 0;
-  for (const character of sanitizedInput) {
-    const byte = B32_CHARACTERS.indexOf(character);
-    if (byte === -1) {
-      throw new Error(
-        `Invalid base 32 character found in string: ${character}`,
-      );
-    }
-    buffer |= byte << bitsRead;
-    bitsRead += 5;
-    while (bitsRead >= 8) {
-      output.unshift(buffer & 0xff);
-      buffer >>>= 8;
-      bitsRead -= 8;
-    }
-  }
-  if (bitsRead >= 5 || buffer > 0) {
-    output.unshift(buffer & 0xff);
-  }
-  return new Uint8Array(output);
-}

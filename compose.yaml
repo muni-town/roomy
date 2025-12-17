@@ -36,7 +36,7 @@ services:
 
   alloy:
     image: grafana/alloy:latest
-    command: run --server.http.listen-addr=0.0.0.0:5005 /etc/alloy/config.alloy
+    command: run --disable-reporting --server.http.listen-addr=0.0.0.0:5005 /etc/alloy/config.alloy
     ports:
       - 5005:5005   # Alloy
       - 12345:12345 # Faro
