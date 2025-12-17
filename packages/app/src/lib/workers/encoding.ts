@@ -22,15 +22,6 @@ export type Did = typeof Did.infer;
 export type Bytes = BytesLink;
 export const Bytes = type({ $bytes: "string.base64" });
 
-
-// export const ValueUpdate = <T>(ty: Codec<T>) =>
-//   inlineTagged(
-//     Enum({
-//       set: ty,
-//       ignore: _void,
-//     }),
-//   );
-
 // /** Read permission or write permission */
 // export const ReadOrWrite = Enum({
 //   read: _void,
@@ -49,21 +40,9 @@ export const Bytes = type({ $bytes: "string.base64" });
 //   room: Ulid,
 // });
 
-// /** Content encoding. */
-// export const Content = Struct({
-//   /** The Mime type of the message content */
-//   mimeType: str,
-//   /**
-//    * The actual content. This is usually going to be text, but we allow freeform binary data here
-//    * just in case.
-//    *
-//    * The mime type will specify the precise encoding.
-//    * */
-//   content: Bytes(),
-// });
-
-export const StringUpdate = type.or({
-  "$type": "'space.roomy.setProperty.value'",
+export const StringUpdate = type.or(
+  {
+  "$type": "'space.roomy.defs.setProperty.value'",
   "value": "string | null"
 }, {
   "$type": "'space.roomy.setProperty.ignore'"

@@ -47,6 +47,7 @@
   },
   "devDependencies": {
     "@atcute/cbor": "^2.2.8",
+    "@atcute/lexicon-doc": "^2.0.5",
     "@atproto/api": "^0.14.22",
     "@atproto/jwk-jose": "^0.1.10",
     "@atproto/lexicon": "^0.4.14",
