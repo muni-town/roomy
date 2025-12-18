@@ -19,14 +19,14 @@ $effect.root(() => {
   spacesQuery = new LiveQuery(
     () => sql`-- spaces
       select json_object(
-          'id', id(cs.entity),
+          'id', cs.entity,
           'name', ci.name,
           'avatar', ci.avatar,
           'description', ci.description,
           'handle_account', cs.handle_account,
           'permissions', (
             select json_group_array(
-              json_array(id(cu.did), json_extract(e.payload, '$.can')))
+              json_array(cu.did, json_extract(e.payload, '$.can')))
             from edges e 
             join comp_user cu on cu.did = e.tail
             where e.head = cs.entity and e.label = 'member'
