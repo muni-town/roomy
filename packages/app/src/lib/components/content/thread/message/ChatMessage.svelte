@@ -16,11 +16,13 @@
   import { renderMarkdownSanitized } from "$lib/utils/markdown";
   import type { Message } from "../ChatArea.svelte";
   import { backend, backendStatus } from "$lib/workers";
-  import { decodeTime, ulid } from "ulidx";
+  import { decodeTime } from "ulidx";
   import { current } from "$lib/queries";
   import { toast } from "@fuxui/base";
   import type { MessagingState } from "../TimelineView.svelte";
   import MediaEmbed from "./embeds/MediaEmbed.svelte";
+  import { newUlid, toBytes, ulid } from "$lib/schema";
+  import { page } from "$app/state";
 
   let {
     message,
@@ -114,17 +116,16 @@
     let contentPatch = patchToText(patchMake(message.content, newContent));
 
     await backend.sendEvent(spaceId, {
-      ulid: newUlid(),
-      parent: message.id,
+      id: newUlid(),
+      room: ulid.assert(page.params.object),
       variant: {
-        kind: "space.roomy.message.edit.v0",
-        data: {
-          content: {
-            mimeType: "text/x-dmp-patch",
-            content: new TextEncoder().encode(contentPatch),
-          },
-          replyTo: message.replyTo[0], // This event needs updating to support multiple replies and other changes to extensions
+        $type: "space.roomy.message.edit.v0",
+        target: ulid.assert(message.id),
+        content: {
+          mimeType: "text/x-dmp-patch",
+          content: toBytes(new TextEncoder().encode(contentPatch)),
         },
+        replyTo: ulid.assert(message.replyTo[0]), // This event needs updating to support multiple replies and other changes to extensions
       },
     });
 
@@ -196,15 +197,15 @@
         <MessageContext
           context={{
             kind: "replying",
-            messageId: message.id,
-            replyTo: { id: message.replyTo[0] },
+            messageId: ulid.assert(message.id),
+            replyTo: { id: ulid.assert(message.replyTo[0]) },
           }}
         />
       {:else if message.comment.version}
         <MessageContext
           context={{
             kind: "commenting",
-            messageId: message.id,
+            messageId: ulid.assert(message.id),
             comment: message.comment,
           }}
         />

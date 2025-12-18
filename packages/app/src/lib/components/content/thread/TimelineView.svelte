@@ -8,7 +8,7 @@
   export type Replying = {
     kind: "replying";
     input: string;
-    replyTo: Message | { id: string };
+    replyTo: Message | { id: Ulid };
     files: File[];
   };
 
@@ -20,7 +20,7 @@
 
   export type Comment = {
     snippet?: string; // limit length
-    docVersion: string; // ULID of the edit version
+    docVersion: Ulid; // ULID of the edit version
     from: number;
     to: number;
   };
@@ -137,6 +137,7 @@
   import ChatArea, { type Message } from "./ChatArea.svelte";
   import ChatInputArea from "./ChatInputArea.svelte";
   import { setInputFocus } from "./ChatInput.svelte";
+  import type { Ulid } from "$lib/schema";
 
   $effect(() => {
     console.log("messaging state", messagingState.current);

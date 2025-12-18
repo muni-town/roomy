@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "@ark/util": "^0.56.0",
+    "@atcute/cid": "^2.2.6",
     "@tiptap/extension-bubble-menu": "^3.9.0",
     "@tiptap/extension-typography": "^3.9.0",
     "@tiptap/extension-underline": "^3.9.0",

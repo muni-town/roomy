@@ -2,7 +2,6 @@ import { LiveQuery } from "$lib/utils/liveQuery.svelte";
 import { decodeTime } from "ulidx";
 import type { SpaceTreeItem } from "./types";
 import { current } from "./current.svelte";
-import { id } from "$lib/workers/encoding";
 import { sql } from "$lib/utils/sqlTemplate";
 
 let flatTreeQuery: LiveQuery<{
@@ -118,7 +117,7 @@ $effect.root(() => {
         join comp_room r on e.id = r.entity
         join comp_info i on e.id = i.entity
         left join comp_last_read l on e.id = l.entity
-      where e.stream_id = ${spaceId && id(spaceId)}
+      where e.stream_id = ${spaceId}
         and e.parent is null
         and (r.deleted = 0 or r.deleted is null)
       
