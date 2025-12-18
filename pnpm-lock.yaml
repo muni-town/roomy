@@ -56,6 +56,9 @@ importers:
       '@ark/util':
         specifier: ^0.56.0
         version: 0.56.0
+      '@atcute/cid':
+        specifier: ^2.2.6
+        version: 2.2.6
       '@tiptap/extension-bubble-menu':
         specifier: ^3.9.0
         version: 3.9.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)

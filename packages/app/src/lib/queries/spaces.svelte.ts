@@ -1,7 +1,7 @@
+import { did } from "$lib/schema";
 import { LiveQuery } from "$lib/utils/liveQuery.svelte";
 import { sql } from "$lib/utils/sqlTemplate";
 import { backend, backendStatus, getPersonalStreamId } from "$lib/workers";
-import { id } from "$lib/workers/encoding";
 import type { SpaceMeta } from "./types";
 
 /** The space list. */
@@ -34,7 +34,7 @@ $effect.root(() => {
       from comp_space cs
       join entities e on e.id = cs.entity
       left join comp_info ci on cs.entity = ci.entity
-      where e.stream_id = ${getPersonalStreamId() && id(getPersonalStreamId()!)} 
+      where e.stream_id = ${getPersonalStreamId()} 
         and hidden = 0
     `,
     (row) => JSON.parse(row.json),
@@ -51,7 +51,7 @@ $effect.root(() => {
         handle: spaceRow.handle_account
           ? await backend.resolveHandleForSpace(
               spaceRow.id,
-              spaceRow.handle_account,
+              did.assert(spaceRow.handle_account),
             )
           : undefined,
         backfill_status: backendStatus.spaces?.[spaceRow.id] || "error",
