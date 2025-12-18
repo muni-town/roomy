@@ -7,7 +7,6 @@
 
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { id } from "$lib/workers/encoding";
 
   import BoardView from "$lib/components/content/thread/boardView/BoardView.svelte";
   import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
@@ -66,7 +65,7 @@
             join comp_info i on i.entity = r.entity
             join entities e on e.id = r.entity
           where
-            e.stream_id = ${spaceId ? id(spaceId) : null}
+            e.stream_id = ${spaceId}
               and
             r.label = 'page'
 
@@ -106,7 +105,7 @@
             join entities e on e.id = r.entity
             join comp_info ci on ci.entity = e.parent
           where
-            e.stream_id = ${spaceId ? id(spaceId) : null}
+            e.stream_id = ${spaceId}
               and
             r.label = 'thread'
         )

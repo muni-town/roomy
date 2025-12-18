@@ -3,7 +3,6 @@
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { current } from "$lib/queries";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { id } from "$lib/workers/encoding";
   import BoardView from "./BoardView.svelte";
   import type { ThreadInfo } from "./types";
 
@@ -56,7 +55,7 @@
           where
             e.stream_id = ${spaceId}
               and
-            e.parent = ${page.params.object && id(page.params.object)}
+            e.parent = ${page.params.object}
               and
             (r.label = 'thread' or r.label = 'page')
         )
