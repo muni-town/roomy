@@ -7,7 +7,12 @@ import type {
   TaskPriority,
 } from "../types";
 import type { AsyncChannel } from "../asyncChannel";
-import { personalModule, spaceModule } from "./modules";
+import {
+  personalModule,
+  personalModuleDef,
+  spaceModule,
+  spaceModuleDef,
+} from "./modules";
 import { didStream, newUlid, type DidStream, type DidUser } from "$lib/schema";
 
 interface ConnectedStreamOpts {
@@ -66,11 +71,15 @@ export class ConnectedStream {
   }
 
   static async createSpace(opts: Omit<ConnectedStreamOpts, "id" | "idx">) {
-    const moduleId = await opts.leaf.uploadModule(spaceModule.encoded.buffer);
+    const hasModule = await opts.leaf.hasModule(spaceModule.moduleCid);
 
-    const streamId = await opts.leaf.createStream({
-      $link: moduleId.moduleCid.$link,
-    });
+    console.log("uploaded personal module:", hasModule);
+
+    if (!hasModule.module_exists) {
+      await opts.leaf.uploadModule(spaceModuleDef);
+    }
+
+    const streamId = await opts.leaf.createStream(spaceModule.moduleCid);
     return await ConnectedStream.connect({
       ...opts,
       id: didStream.assert(streamId),
@@ -81,15 +90,16 @@ export class ConnectedStream {
   static async createPersonal(
     opts: Omit<ConnectedStreamOpts, "id" | "idx" | "priority">,
   ) {
-    const moduleId = await opts.leaf.uploadModule(
-      personalModule.encoded.buffer,
-    );
+    console.log("Creating personal stream");
+    const hasModule = await opts.leaf.hasModule(personalModule.moduleCid);
 
-    console.log("uploaded personal module:", moduleId);
+    console.log("uploaded personal module:", hasModule);
 
-    const streamId = await opts.leaf.createStream({
-      $link: moduleId.moduleCid.$link,
-    });
+    if (!hasModule.module_exists) {
+      await opts.leaf.uploadModule(personalModuleDef);
+    }
+
+    const streamId = await opts.leaf.createStream(personalModule.moduleCid);
 
     console.log("created personal stream:", streamId);
 
@@ -112,8 +122,8 @@ export class ConnectedStream {
         limit: 1,
       },
       async (result) => {
-        if ("success" in result) {
-          const events = parseEvents(result.value);
+        if ("Ok" in result) {
+          const events = parseEvents(result.Ok);
           for (const event of events) {
             this.eventChannel.push({
               status: "pushed",
@@ -349,6 +359,8 @@ export function parseEvents(rows: SqlRows): EncodedStreamEvent[] {
     rows.column_names[2] == "payload";
   if (!columnNamesAreValid)
     throw new Error("Invalid column names for events response");
+
+  console.log("Trying to parse rows", rows);
 
   return rows.rows.map((x) => {
     if (
