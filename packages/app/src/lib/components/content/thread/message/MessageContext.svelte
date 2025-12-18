@@ -3,22 +3,22 @@
 
   type MessageContextReplying = {
     kind: "replying";
-    messageId?: string;
-    replyTo: { id: string };
+    messageId?: Ulid;
+    replyTo: { id: Ulid };
   };
 
   export type MessageContextThreading = {
     kind: "threading";
-    messageId?: string;
+    messageId?: Ulid;
     selectedMessages: Message[];
   };
 
   export type MessageContextCommenting = {
     kind: "commenting";
-    messageId?: string;
+    messageId?: Ulid;
     comment: {
       snippet?: string;
-      version: string; // ULID of the edit version
+      version: Ulid; // ULID of the edit version
       from: number;
       to: number;
     };
@@ -36,6 +36,7 @@
 
   import IconHeroiconsChatBubbleBottomCenterText from "~icons/heroicons/chat-bubble-bottom-center-text";
   import MessageContextReply from "./MessageContextReply.svelte";
+  import type { Ulid } from "$lib/schema";
 
   let {
     context = $bindable(undefined),

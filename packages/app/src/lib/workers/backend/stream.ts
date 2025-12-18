@@ -8,7 +8,7 @@ import type {
 } from "../types";
 import type { AsyncChannel } from "../asyncChannel";
 import { personalModule, spaceModule } from "./modules";
-import { newUlid, type DidStream, type DidUser } from "$lib/schema";
+import { didStream, newUlid, type DidStream, type DidUser } from "$lib/schema";
 
 interface ConnectedStreamOpts {
   user: DidUser;
@@ -69,14 +69,11 @@ export class ConnectedStream {
     const moduleId = await opts.leaf.uploadModule(spaceModule.encoded.buffer);
 
     const streamId = await opts.leaf.createStream({
-      stamp: newUlid(),
-      creator: opts.user,
-      module: moduleId,
-      options: [],
+      $link: moduleId.moduleCid.$link,
     });
     return await ConnectedStream.connect({
       ...opts,
-      id: streamId as DidStream,
+      id: didStream.assert(streamId),
       idx: 0 as StreamIndex,
     });
   }
@@ -91,17 +88,14 @@ export class ConnectedStream {
     console.log("uploaded personal module:", moduleId);
 
     const streamId = await opts.leaf.createStream({
-      stamp: newUlid(),
-      creator: opts.user,
-      module: moduleId,
-      options: [],
+      $link: moduleId.moduleCid.$link,
     });
 
     console.log("created personal stream:", streamId);
 
     return ConnectedStream.assert({
       ...opts,
-      id: streamId as DidStream,
+      id: didStream.assert(streamId),
       idx: 0 as StreamIndex,
       priority: "priority",
     });
@@ -111,14 +105,14 @@ export class ConnectedStream {
     this.unsubscribeFn = await this.leaf.subscribe(
       this.id,
       {
-        query_name: "events",
-        requesting_user: this.user,
+        name: "events",
+        user: this.user,
         params: [],
-        start: BigInt(this.pin.backfill.upToEventId + 1),
-        limit: 1n,
+        start: this.pin.backfill.upToEventId + 1,
+        limit: 1,
       },
       async (result) => {
-        if (result.success) {
+        if ("success" in result) {
           const events = parseEvents(result.value);
           for (const event of events) {
             this.eventChannel.push({
@@ -152,11 +146,11 @@ export class ConnectedStream {
     limit: number,
   ): Promise<EncodedStreamEvent[]> {
     const resp = await this.leaf?.query(this.id, {
-      query_name: "events",
-      limit: BigInt(limit),
-      start: BigInt(start),
+      name: "events",
+      user: this.user,
       params: [],
-      requesting_user: this.user,
+      limit,
+      start,
     });
     const events = parseEvents(resp);
     return events;

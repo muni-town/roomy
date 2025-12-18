@@ -15,15 +15,15 @@
   import IconTablerArrowDown from "~icons/tabler/arrow-down";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { id } from "$lib/workers/encoding";
   import { decodeTime } from "ulidx";
   import { onNavigate } from "$app/navigation";
   import type { MessagingState } from "./TimelineView.svelte";
+  import type { Did, Ulid } from "$lib/schema";
 
   export type Message = {
-    id: string;
+    id: Ulid;
     content: string;
-    authorDid: string | null;
+    authorDid: Did | null;
     authorName: string | null;
     authorHandle: string | null;
     authorAvatar: string | null;
@@ -33,7 +33,7 @@
     masqueradeAuthorName: string | null;
     masqueradeAuthorAvatar: string | null;
     mergeWithPrevious: boolean | null;
-    replyTo: string[];
+    replyTo: Ulid[];
     reactions: { reaction: string; userId: string; userName: string }[];
     media: {
       uri: string;
@@ -51,7 +51,7 @@
     }[];
     comment: {
       snippet?: string;
-      version: string;
+      version: Ulid;
       from: number;
       to: number;
     };
@@ -142,7 +142,7 @@
         left join comp_user oau on oau.did = o.author
         left join comp_comment cc on cc.entity = e.id
       where
-        e.parent = ${page.params.object && id(page.params.object)}
+        e.parent = ${page.params.object}
       order by e.id desc
       limit ${showLastN}
     `,

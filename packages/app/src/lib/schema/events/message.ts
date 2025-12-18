@@ -20,6 +20,7 @@ export const messageEdit = type({
    * New content. If mimeType is text/x-dmp-diff, this is a
    * diff-match-patch diff to apply to the previous content.
    */
+  target: ulid,
   content,
   /** Updated reply target, if changing */
   "replyTo?": ulid.or("null"),

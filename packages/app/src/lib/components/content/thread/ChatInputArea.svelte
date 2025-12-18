@@ -11,10 +11,8 @@
   import UploadFileButton from "$lib/components/helper/UploadFileButton.svelte";
   import { backend } from "$lib/workers";
   import { current } from "$lib/queries";
-  import { monotonicFactory } from "ulidx";
   import { page } from "$app/state";
   import { navigate } from "$lib/utils.svelte";
-  import type { EventType } from "$lib/workers/types";
   import {
     messagingState,
     type Commenting,
@@ -22,6 +20,8 @@
   } from "./TimelineView.svelte";
   import { markCommentForRemoval } from "$lib/components/richtext/RichTextEditor.svelte";
   import { getImagePreloadData } from "$lib/utils/media";
+  import { newUlid, toBytes, ulid, type Event } from "$lib/schema";
+  import type { MessageExtension } from "$lib/schema/extensions/message";
 
   let spaceId = $derived(current.joinedSpace?.id);
   let messageInputEl: null | HTMLInputElement = $state(null);
@@ -105,54 +105,45 @@
     const state = messagingState.current;
     if (state.kind !== "threading") return;
     if ((state as Threading).selectedMessages.length == 0) return;
-    const ulid = monotonicFactory();
     const threadName =
       state.name || state.selectedMessages[0]?.content.slice(0, 50) + "...";
 
     const threadId = newUlid();
     await backend.sendEvent(spaceId, {
-      ulid: threadId,
-      parent: current.roomId,
+      id: threadId,
+      room: ulid.assert(current.roomId),
       variant: {
-        kind: "space.roomy.room.create.v0",
-        data: undefined,
+        $type: "space.roomy.room.create.v0",
       },
     });
 
     await backend.sendEvent(spaceId, {
-      ulid: newUlid(),
-      parent: threadId,
+      id: newUlid(),
+      room: threadId,
       variant: {
-        kind: "space.roomy.room.kind.v0",
-        data: {
-          kind: "space.roomy.thread.v0",
-          data: undefined,
-        },
+        $type: "space.roomy.room.setKind.v0",
+        kind: "thread",
       },
     });
 
     await backend.sendEvent(spaceId, {
-      ulid: newUlid(),
-      parent: threadId,
+      id: newUlid(),
+      room: threadId,
       variant: {
-        kind: "space.roomy.info.v0",
-        data: {
-          name: { set: threadName },
-          description: { ignore: undefined },
-          avatar: { ignore: undefined },
-        },
+        $type: "space.roomy.info.set.v0",
+        name: { $type: "space.roomy.defs#set", value: threadName },
+        description: { $type: "space.roomy.defs#ignore" },
+        avatar: { $type: "space.roomy.defs#ignore" },
       },
     });
 
     for (const message of state.selectedMessages) {
       await backend.sendEvent(spaceId, {
-        ulid: newUlid(),
-        parent: message.id,
+        id: newUlid(),
+        room: ulid.assert(message.id),
         variant: {
-          kind: "space.roomy.parent.update.v0",
-          data: {
-            parent: threadId,
-          },
+          $type: "space.roomy.room.updateParent.v0",
+          parent: threadId,
         },
       });
     }
@@ -206,57 +197,46 @@
     console.log("uploaded", uploadedFiles);
 
     try {
-      const ulid = monotonicFactory();
-
       const messageId = newUlid();
 
-      type MessageExtensions =
-        EventType<"space.roomy.message.create.v1">["variant"]["data"]["extensions"];
-
-      const extensions: MessageExtensions = uploadedFiles.map((data) => ({
-        kind: "space.roomy.image.v0",
-        data: {
-          uri: data.uri,
-          mimeType: data.mimeType,
-          alt: data.alt,
-          width: data.width,
-          height: data.height,
-          size: data.size,
-          blurhash: data.blurhash,
-        },
+      const extensions: MessageExtension[] = uploadedFiles.map((data) => ({
+        $type: "space.roomy.extension.image.v0",
+        uri: data.uri,
+        mimeType: data.mimeType,
+        alt: data.alt,
+        width: data.width,
+        height: data.height,
+        size: data.size,
+        blurhash: data.blurhash,
       }));
 
       if (state.kind === "replying") {
         extensions.push({
-          kind: "space.roomy.replyTo.v0",
-          data: state.replyTo.id,
+          $type: "space.roomy.extension.replyTo.v0",
+          target: ulid.assert(state.replyTo.id),
         });
       }
 
       if (state.kind === "commenting") {
         extensions.push({
-          kind: "space.roomy.comment.v0",
-          data: {
-            version: state.comment.docVersion,
-            snippet: state.comment.snippet || "",
-            from: state.comment.from,
-            to: state.comment.to,
-          },
+          $type: "space.roomy.extension.comment.v0",
+          version: ulid.assert(state.comment.docVersion),
+          snippet: state.comment.snippet || "",
+          from: state.comment.from,
+          to: state.comment.to,
         });
       }
 
-      const messageEvent: EventType<"space.roomy.message.create.v1"> = {
-        ulid: messageId,
-        parent: page.params.object,
+      const messageEvent: Event<"space.roomy.message.create.v1"> = {
+        id: messageId,
+        room: ulid.assert(page.params.object),
         variant: {
-          kind: "space.roomy.message.create.v1",
-          data: {
-            content: {
-              content: new TextEncoder().encode(message),
-              mimeType: "text/markdown",
-            },
-            extensions,
+          $type: "space.roomy.message.create.v1",
+          content: {
+            content: toBytes(new TextEncoder().encode(message)),
+            mimeType: "text/markdown",
           },
+          extensions,
         },
       };
 

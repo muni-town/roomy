@@ -92,6 +92,8 @@ export const messageExtension = replyTo
   .or(file)
   .or(link);
 
+export type MessageExtension = typeof messageExtension.infer;
+
 // Export individual types for the registry
 export const extensions = {
   "space.roomy.extension.replyTo.v0": replyTo,

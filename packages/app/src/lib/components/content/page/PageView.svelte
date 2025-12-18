@@ -5,13 +5,12 @@
   import { current } from "$lib/queries";
   import { sql } from "$lib/utils/sqlTemplate";
   import { backend } from "$lib/workers";
-  import { id } from "$lib/workers/encoding";
   import { Button, Prose } from "@fuxui/base";
   import ScrollArea from "$lib/components/layout/ScrollArea.svelte";
   import { RichTextEditor } from "$lib/components/richtext";
   import { patchMake, patchToText } from "diff-match-patch-es";
   import Turndown from "turndown";
-  import { newUlid } from "$lib/schema";
+  import { newUlid, toBytes, ulid } from "$lib/schema";
   import { scrollContainerRef } from "$lib/utils.svelte";
 
   import IconTablerCheck from "~icons/tabler/check";
@@ -34,13 +33,13 @@
       (
         select id(edit_id)
         from comp_page_edits
-        where entity = ${page.params.object && id(page.params.object)}
+        where entity = ${page.params.object}
         order by edit_id desc
         limit 1
       ) as latestEditId
     from comp_content
     where
-      entity = ${page.params.object && id(page.params.object)}
+      entity = ${page.params.object}
     `,
   );
   let pageMarkdown = $derived(pageQuery.result?.[0]?.content);
@@ -56,15 +55,13 @@
     if (pageMarkdown == newMarkdown) return;
     const patch = patchToText(patchMake(pageMarkdown || "", newMarkdown));
     await backend.sendEvent(spaceId, {
-      ulid: newUlid(),
-      parent: page.params.object,
+      id: newUlid(),
+      room: ulid.assert(page.params.object),
       variant: {
-        kind: "space.roomy.page.edit.v0",
-        data: {
-          content: {
-            mimeType: "text/x-dmp-patch",
-            content: new TextEncoder().encode(patch),
-          },
+        $type: "space.roomy.page.edit.v0",
+        content: {
+          mimeType: "text/x-dmp-patch",
+          content: toBytes(new TextEncoder().encode(patch)),
         },
       },
     });

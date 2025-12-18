@@ -45,8 +45,8 @@ export type EventType = (typeof eventVariant.infer)["$type"];
 /** Event envelope with room, id and variant. Optionally accepts an EventType parameter,
  * which narrows to the given event type */
 export type Event<K = undefined> = K extends EventType
-  ? Omit<Event, "event"> & {
-      event: Extract<EventVariant, { $type: K }>;
+  ? Omit<Event, "variant"> & {
+      variant: Extract<EventVariant, { $type: K }>;
     }
   : typeof event.infer;
 

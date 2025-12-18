@@ -2,7 +2,6 @@
   import { page } from "$app/state";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { id } from "$lib/workers/encoding";
   import { Button, ScrollArea } from "@fuxui/base";
   import { decodeTime } from "ulidx";
   import {
@@ -31,7 +30,7 @@
     from comp_page_edits
     join comp_info user_info on user_info.entity = user_id
     where
-      comp_page_edits.entity = ${page.params.object && id(page.params.object)}
+      comp_page_edits.entity = ${page.params.object}
   `,
   );
 
