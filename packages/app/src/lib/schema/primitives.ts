@@ -4,37 +4,47 @@
  *
  * Lexicon mapping notes:
  * - ulid -> { type: 'string' } (no ulid format in lexicons)
- * - hash -> { type: 'string' } (could use description to note it's hex)
  * - did -> { type: 'string', format: 'did' }
- * - cid -> { type: 'cid' } (lexicons have native cid support)
  */
 
-import { type, Type } from "arktype";
+import { type } from "arktype";
 import { type Bytes as BytesLink } from "@atcute/cbor";
 import { isDid } from "@atproto/oauth-client";
-import { isValid as isValidUlid } from "ulidx";
+import { isValid as isValidUlid, ulid as generateUlid } from "ulidx";
 
 export type Bytes = BytesLink;
 export const Bytes = type({ $bytes: "string.base64" });
+export { toBytes, fromBytes } from "@atcute/cbor";
 
 export const ulid = type.string
   .narrow((v, ctx) => (isValidUlid(v) ? true : ctx.mustBe("a valid ULID")))
   .brand("ulid");
 export type Ulid = typeof ulid.infer;
 
+export const newUlid = () => generateUlid() as Ulid;
+
 export const did = type.string
   .narrow((v, ctx) => (isDid(v) ? true : ctx.mustBe("a valid DID")))
   .brand("did");
 export type Did = typeof did.infer;
 
-// Hash: 64 hex characters (SHA-256)
-// In DRISL this is 32 bytes, decoded to hex string
-export const hash = type(/^[A-Fa-f0-9]{64}$/, "@", "hash");
+export const didUser = did.brand("didUser");
+export type DidUser = typeof didUser.infer;
 
-// CID: Content Identifier (IPFS-style)
-// Lexicons have native 'cid' format support
-// This is a simplified pattern - real CIDs have more structure
-export const cid = type(/^b[a-z2-7]+$/, "@", "cid");
+export const didStream = did.brand("didStream");
+export type DidStream = typeof didStream.infer;
+
+/** essentially checking if it's a valid-ish domain name. DNS segments can't be longer than 63 chars */
+export const isAtProtoHandle = (v: string): boolean => {
+  return /^[a-z0-9][a-z0-9-]{0,62}(\.[a-z0-9-]+)+$/.test(v);
+};
+
+export const handle = type.string
+  .narrow((v, ctx) =>
+    isAtProtoHandle(v) ? true : ctx.mustBe("a valid ATProto Handle"),
+  )
+  .brand("handle");
+export type Handle = typeof handle.infer;
 
 // Content block: mime type + payload
 // In DRISL, content will be bytes; we may want to decode text types
@@ -49,16 +59,17 @@ export const content = type({
 export const timestamp = type("number.integer>0", "@", "timestamp");
 
 /**
- * Value update wrapper - either set a value or ignore (don't change).
+ * Either set a string value or ignore (don't change).
  *
  * Usage:
  * - { set: "new name" } → update to "new name"
  * - { set: null } → clear the value
  * - { ignore: null } → leave unchanged
  */
-export const stringUpdate = type({ set: "string | null" }).or({
-  ignore: "null",
-});
+export const setProperty = type({
+  $type: "'space.roomy.defs#set'",
+  value: "string | null",
+}).or({ $type: "'space.roomy.defs#ignore'" });
 
 // Re-export the type helper for use in other modules
 export { type };

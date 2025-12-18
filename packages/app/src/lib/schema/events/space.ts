@@ -2,34 +2,34 @@
  * Space-level events: join, leave, admin management, handle linking
  */
 
-import { type, hash } from "../primitives";
+import { did, didStream, didUser, type } from "../primitives";
 
-// Join a Roomy space (used in user's personal stream)
+// Join a Roomy space (only valid in user's personal stream)
 export const spaceJoin = type({
-  $type: "'space.roomy.event.space.join'",
+  $type: "'space.roomy.space.join.v0'",
   /** The space being joined */
-  spaceId: hash,
+  spaceId: didStream,
 });
 
-// Leave a Roomy space
+// Leave a Roomy space (only valid in user's personal stream)
 export const spaceLeave = type({
-  $type: "'space.roomy.event.space.leave'",
+  $type: "'space.roomy.space.leave.v0'",
   /** The space being left */
-  spaceId: hash,
+  spaceId: didStream,
 });
 
 // Add an admin to the space
 export const adminAdd = type({
-  $type: "'space.roomy.event.admin.add'",
+  $type: "'space.roomy.admin.add.v0'",
   /** DID of the user being made admin */
-  adminId: "string",
+  userId: didUser,
 });
 
 // Remove an admin from the space
 export const adminRemove = type({
-  $type: "'space.roomy.event.admin.remove'",
+  $type: "'space.roomy.admin.remove.v0'",
   /** DID of the user being removed as admin */
-  adminId: "string",
+  userId: didUser,
 });
 
 /**
@@ -40,9 +40,9 @@ export const adminRemove = type({
  * back to this stream's ID.
  */
 export const streamHandleAccount = type({
-  $type: "'space.roomy.event.stream.handleAccount'",
+  $type: "'space.roomy.stream.handleAccount.v0'",
   /** The ATProto DID, or null to unset */
-  "did?": "string",
+  "did?": did,
 });
 
 // All space events
@@ -54,23 +54,23 @@ export const spaceEvent = spaceJoin
 
 // Export for registry
 export const events = {
-  "space.roomy.event.space.join": {
+  "space.roomy.space.join.v0": {
     type: spaceJoin,
     description: "Join a Roomy space (tracked in user's personal stream)",
   },
-  "space.roomy.event.space.leave": {
+  "space.roomy.space.leave.v0": {
     type: spaceLeave,
     description: "Leave a Roomy space",
   },
-  "space.roomy.event.admin.add": {
+  "space.roomy.admin.add.v0": {
     type: adminAdd,
     description: "Add an admin to the space",
   },
-  "space.roomy.event.admin.remove": {
+  "space.roomy.admin.remove.v0": {
     type: adminRemove,
     description: "Remove an admin from the space",
   },
-  "space.roomy.event.stream.handleAccount": {
+  "space.roomy.stream.handleAccount.v0": {
     type: streamHandleAccount,
     description: "Set the ATProto account for the space's handle",
   },

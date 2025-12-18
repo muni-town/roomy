@@ -107,7 +107,7 @@ Create Space With Name
     ...                - name: Space name (required)
     ...                - description: Space description (optional, default: empty string)
     ...
-    ...                Returns: Space ID (StreamHashId)
+    ...                Returns: Space ID (DidStream)
 
     [Arguments]    ${name}    ${description}=${EMPTY}
 
@@ -128,17 +128,17 @@ Create Space With Name
     ...            if (!personalStreamId) throw new Error('Personal stream ID not found');
     ...            // Join the space
     ...            await window.backend.sendEvent(personalStreamId, {
-    ...                ulid: ulid(),
+    ...                ulid: newUlid(),
     ...                parent: undefined,
-    ...                variant: { kind: 'space.roomy.space.join.0', data: { spaceId } }
+    ...                variant: { kind: 'space.roomy.space.join.v0', data: { spaceId } }
     ...            });
     ...            console.log('Sent join event');
     ...            // Build event batch for room structure
     ...            const batch = [];
     ...            // Space info
     ...            batch.push({
-    ...                ulid: ulid(), parent: undefined,
-    ...                variant: { kind: 'space.roomy.info.0', data: {
+    ...                ulid: newUlid(), parent: undefined,
+    ...                variant: { kind: 'space.roomy.info.v0', data: {
     ...                    name: spaceName ? { set: spaceName } : { ignore: undefined },
     ...                    description: spaceDescription ? { set: spaceDescription } : { ignore: undefined },
     ...                    avatar: { ignore: undefined }
@@ -147,59 +147,59 @@ Create Space With Name
     ...            // Make user admin
     ...            const userDid = window.backendStatus?.current?.authState?.did;
     ...            if (userDid) {
-    ...                batch.push({ ulid: ulid(), parent: undefined,
-    ...                    variant: { kind: 'space.roomy.admin.add.0', data: { adminId: userDid } }
+    ...                batch.push({ ulid: newUlid(), parent: undefined,
+    ...                    variant: { kind: 'space.roomy.admin.add.v0', data: { adminId: userDid } }
     ...                });
     ...            }
     ...            // System user
-    ...            batch.push({ ulid: ulid(), parent: undefined,
-    ...                variant: { kind: 'space.roomy.user.overrideMeta.0', data: { handle: 'system' } }
+    ...            batch.push({ ulid: newUlid(), parent: undefined,
+    ...                variant: { kind: 'space.roomy.user.overrideMeta.v0', data: { handle: 'system' } }
     ...            });
     ...            // Category
-    ...            const categoryId = ulid();
+    ...            const categoryId = newUlid();
     ...            batch.push({ ulid: categoryId, parent: undefined,
-    ...                variant: { kind: 'space.roomy.room.create.0', data: undefined } });
-    ...            batch.push({ ulid: ulid(), parent: categoryId,
-    ...                variant: { kind: 'space.roomy.info.0', data: {
+    ...                variant: { kind: 'space.roomy.room.create.v0', data: undefined } });
+    ...            batch.push({ ulid: newUlid(), parent: categoryId,
+    ...                variant: { kind: 'space.roomy.info.v0', data: {
     ...                    name: { set: 'Uncategorized' }, avatar: { ignore: undefined }, description: { ignore: undefined }
     ...                }}});
-    ...            batch.push({ ulid: ulid(), parent: categoryId,
-    ...                variant: { kind: 'space.roomy.room.kind.0', data: {
-    ...                    kind: 'space.roomy.category.0', data: undefined
+    ...            batch.push({ ulid: newUlid(), parent: categoryId,
+    ...                variant: { kind: 'space.roomy.room.kind.v0', data: {
+    ...                    kind: 'space.roomy.category.v0', data: undefined
     ...                }}});
     ...            // Channel
-    ...            const channelId = ulid();
+    ...            const channelId = newUlid();
     ...            batch.push({ ulid: channelId, parent: categoryId,
-    ...                variant: { kind: 'space.roomy.room.create.0', data: undefined } });
-    ...            batch.push({ ulid: ulid(), parent: channelId,
-    ...                variant: { kind: 'space.roomy.info.0', data: {
+    ...                variant: { kind: 'space.roomy.room.create.v0', data: undefined } });
+    ...            batch.push({ ulid: newUlid(), parent: channelId,
+    ...                variant: { kind: 'space.roomy.info.v0', data: {
     ...                    name: { set: 'general' }, avatar: { ignore: undefined }, description: { ignore: undefined }
     ...                }}});
-    ...            batch.push({ ulid: ulid(), parent: channelId,
-    ...                variant: { kind: 'space.roomy.room.kind.0', data: {
-    ...                    kind: 'space.roomy.channel.0', data: undefined
+    ...            batch.push({ ulid: newUlid(), parent: channelId,
+    ...                variant: { kind: 'space.roomy.room.kind.v0', data: {
+    ...                    kind: 'space.roomy.channel.v0', data: undefined
     ...                }}});
     ...            // Thread
-    ...            const threadId = ulid();
+    ...            const threadId = newUlid();
     ...            batch.push({ ulid: threadId, parent: channelId,
-    ...                variant: { kind: 'space.roomy.room.create.0', data: undefined } });
-    ...            batch.push({ ulid: ulid(), parent: threadId,
-    ...                variant: { kind: 'space.roomy.info.0', data: {
+    ...                variant: { kind: 'space.roomy.room.create.v0', data: undefined } });
+    ...            batch.push({ ulid: newUlid(), parent: threadId,
+    ...                variant: { kind: 'space.roomy.info.v0', data: {
     ...                    name: { set: `Welcome to \${spaceName}!` }, avatar: { ignore: undefined }, description: { ignore: undefined }
     ...                }}});
-    ...            batch.push({ ulid: ulid(), parent: threadId,
-    ...                variant: { kind: 'space.roomy.room.kind.0', data: {
-    ...                    kind: 'space.roomy.thread.0', data: undefined
+    ...            batch.push({ ulid: newUlid(), parent: threadId,
+    ...                variant: { kind: 'space.roomy.room.kind.v0', data: {
+    ...                    kind: 'space.roomy.thread.v0', data: undefined
     ...                }}});
     ...            // Welcome message
-    ...            const messageId = ulid();
+    ...            const messageId = newUlid();
     ...            batch.push({ ulid: messageId, parent: threadId,
-    ...                variant: { kind: 'space.roomy.message.create.0', data: {
+    ...                variant: { kind: 'space.roomy.message.create.v0', data: {
     ...                    replyTo: undefined,
     ...                    content: { mimeType: 'text/markdown', content: new TextEncoder().encode('Welcome to your new Roomy space!') }
     ...                }}});
-    ...            batch.push({ ulid: ulid(), parent: messageId,
-    ...                variant: { kind: 'space.roomy.message.overrideMeta.0', data: {
+    ...            batch.push({ ulid: newUlid(), parent: messageId,
+    ...                variant: { kind: 'space.roomy.message.overrideMeta.v0', data: {
     ...                    author: spaceId, timestamp: BigInt(Date.now())
     ...                }}});
     ...            // Send batch
@@ -319,7 +319,7 @@ Send Space Join Event
     ...            ulid: ulid,
     ...            parent: undefined,
     ...            variant: {
-    ...                kind: 'space.roomy.space.join.0',
+    ...                kind: 'space.roomy.space.join.v0',
     ...                data: {
     ...                    spaceId: spaceId
     ...                }
@@ -568,7 +568,7 @@ Get Personal Stream ID
     ...                | ${personal_stream}= | Get Personal Stream ID |
     ...                | Should Not Be Empty | ${personal_stream} |
     ...
-    ...                Returns: Personal stream ID (StreamHashId)
+    ...                Returns: Personal stream ID (DidStream)
 
     ${personal_stream}=    Evaluate JavaScript    ${None}
     ...    () => {

@@ -109,33 +109,33 @@
     const threadName =
       state.name || state.selectedMessages[0]?.content.slice(0, 50) + "...";
 
-    const threadId = ulid();
+    const threadId = newUlid();
     await backend.sendEvent(spaceId, {
       ulid: threadId,
       parent: current.roomId,
       variant: {
-        kind: "space.roomy.room.create.0",
+        kind: "space.roomy.room.create.v0",
         data: undefined,
       },
     });
 
     await backend.sendEvent(spaceId, {
-      ulid: ulid(),
+      ulid: newUlid(),
       parent: threadId,
       variant: {
-        kind: "space.roomy.room.kind.0",
+        kind: "space.roomy.room.kind.v0",
         data: {
-          kind: "space.roomy.thread.0",
+          kind: "space.roomy.thread.v0",
           data: undefined,
         },
       },
     });
 
     await backend.sendEvent(spaceId, {
-      ulid: ulid(),
+      ulid: newUlid(),
       parent: threadId,
       variant: {
-        kind: "space.roomy.info.0",
+        kind: "space.roomy.info.v0",
         data: {
           name: { set: threadName },
           description: { ignore: undefined },
@@ -146,10 +146,10 @@
 
     for (const message of state.selectedMessages) {
       await backend.sendEvent(spaceId, {
-        ulid: ulid(),
+        ulid: newUlid(),
         parent: message.id,
         variant: {
-          kind: "space.roomy.parent.update.0",
+          kind: "space.roomy.parent.update.v0",
           data: {
             parent: threadId,
           },
@@ -208,13 +208,13 @@
     try {
       const ulid = monotonicFactory();
 
-      const messageId = ulid();
+      const messageId = newUlid();
 
       type MessageExtensions =
-        EventType<"space.roomy.message.create.1">["variant"]["data"]["extensions"];
+        EventType<"space.roomy.message.create.v1">["variant"]["data"]["extensions"];
 
       const extensions: MessageExtensions = uploadedFiles.map((data) => ({
-        kind: "space.roomy.image.0",
+        kind: "space.roomy.image.v0",
         data: {
           uri: data.uri,
           mimeType: data.mimeType,
@@ -228,14 +228,14 @@
 
       if (state.kind === "replying") {
         extensions.push({
-          kind: "space.roomy.replyTo.0",
+          kind: "space.roomy.replyTo.v0",
           data: state.replyTo.id,
         });
       }
 
       if (state.kind === "commenting") {
         extensions.push({
-          kind: "space.roomy.comment.0",
+          kind: "space.roomy.comment.v0",
           data: {
             version: state.comment.docVersion,
             snippet: state.comment.snippet || "",
@@ -245,11 +245,11 @@
         });
       }
 
-      const messageEvent: EventType<"space.roomy.message.create.1"> = {
+      const messageEvent: EventType<"space.roomy.message.create.v1"> = {
         ulid: messageId,
         parent: page.params.object,
         variant: {
-          kind: "space.roomy.message.create.1",
+          kind: "space.roomy.message.create.v1",
           data: {
             content: {
               content: new TextEncoder().encode(message),
