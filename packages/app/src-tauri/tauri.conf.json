@@ -4,7 +4,7 @@
   "version": "0.1.0-alpha-6",
   "identifier": "space.roomy",
   "build": {
-    "frontendDist": "../build-tmp",
+    "frontendDist": "./build-tmp",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "pnpm dev"
   },
