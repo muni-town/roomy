@@ -1,8 +1,8 @@
-import type { Handle, StreamHashId } from "$lib/workers/types";
+import type { Handle, DidStream } from "$lib/workers/types";
 import type { Did } from "@atproto/api";
 
 export type SpaceMeta = {
-  id: StreamHashId;
+  id: DidStream;
   backfill_status: "loading" | "idle" | "error";
   joined?: boolean;
   name?: string;

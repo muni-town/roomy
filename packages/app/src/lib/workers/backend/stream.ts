@@ -3,37 +3,34 @@ import type { LeafClient, SqlRows } from "@muni-town/leaf-client";
 import type {
   Batch,
   EncodedStreamEvent,
-  StreamHashId,
   StreamIndex,
   TaskPriority,
-  Ulid,
 } from "../types";
 import type { AsyncChannel } from "../asyncChannel";
-import type { Did } from "@atproto/api";
-import { ulid } from "ulidx";
 import { personalModule, spaceModule } from "./modules";
+import { newUlid, type DidStream, type DidUser } from "$lib/schema";
 
 interface ConnectedStreamOpts {
-  user: Did;
+  user: DidUser;
   leaf: LeafClient;
-  id: StreamHashId;
+  id: DidStream;
   idx: StreamIndex;
   eventChannel: AsyncChannel<Batch.Event>;
   priority?: TaskPriority;
 }
 
 export class ConnectedStream {
-  user: Did;
+  user: DidUser;
   leaf: LeafClient;
-  id: StreamHashId;
+  id: DidStream;
   pin: PinState;
   eventChannel: AsyncChannel<Batch.Event>;
   unsubscribeFn: (() => Promise<void>) | null = null;
 
   private constructor(opts: {
-    user: Did;
+    user: DidUser;
     leaf: LeafClient;
-    id: StreamHashId;
+    id: DidStream;
     pin: PinState;
     eventChannel: AsyncChannel<Batch.Event>;
   }) {
@@ -72,14 +69,14 @@ export class ConnectedStream {
     const moduleId = await opts.leaf.uploadModule(spaceModule.encoded.buffer);
 
     const streamId = await opts.leaf.createStream({
-      stamp: ulid(),
+      stamp: newUlid(),
       creator: opts.user,
       module: moduleId,
       options: [],
     });
     return await ConnectedStream.connect({
       ...opts,
-      id: streamId as StreamHashId,
+      id: streamId as DidStream,
       idx: 0 as StreamIndex,
     });
   }
@@ -94,7 +91,7 @@ export class ConnectedStream {
     console.log("uploaded personal module:", moduleId);
 
     const streamId = await opts.leaf.createStream({
-      stamp: ulid(),
+      stamp: newUlid(),
       creator: opts.user,
       module: moduleId,
       options: [],
@@ -104,7 +101,7 @@ export class ConnectedStream {
 
     return ConnectedStream.assert({
       ...opts,
-      id: streamId as StreamHashId,
+      id: streamId as DidStream,
       idx: 0 as StreamIndex,
       priority: "priority",
     });
@@ -126,8 +123,8 @@ export class ConnectedStream {
           for (const event of events) {
             this.eventChannel.push({
               status: "pushed",
-              batchId: ulid() as Ulid,
-              streamId: this.id as StreamHashId,
+              batchId: newUlid(),
+              streamId: this.id as DidStream,
               events: [
                 {
                   idx: event.idx as StreamIndex,
@@ -185,7 +182,7 @@ export class ConnectedStream {
       (events: EncodedStreamEvent[], priority) => {
         this.eventChannel.push({
           status: "fetched",
-          batchId: ulid() as Ulid,
+          batchId: newUlid(),
           streamId: this.id,
           events,
           priority,
@@ -206,7 +203,7 @@ type PinState = PinStates.Space; // Currently only full-space pinning supported
 namespace PinStates {
   export interface Rooms {
     type: "rooms";
-    rooms: Map<StreamHashId, BackfillState>;
+    rooms: Map<DidStream, BackfillState>;
   }
 
   export interface Space {

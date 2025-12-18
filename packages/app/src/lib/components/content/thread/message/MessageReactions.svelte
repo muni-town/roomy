@@ -4,7 +4,7 @@
   import IconLucideSmilePlus from "~icons/lucide/smile-plus";
   import { backend } from "$lib/workers";
   import { current } from "$lib/queries";
-  import { ulid } from "ulidx";
+  import { newUlid } from "$lib/schema";
   import type { Message } from "../ChatArea.svelte";
 
   let {
@@ -38,10 +38,10 @@
       )
     ) {
       backend.sendEvent(spaceId, {
-        ulid: ulid(),
+        ulid: newUlid(),
         parent: current.roomId,
         variant: {
-          kind: "space.roomy.reaction.create.0",
+          kind: "space.roomy.reaction.create.v0",
           data: {
             reactionTo: message.id,
             reaction: emoji,
@@ -62,10 +62,10 @@
       )
     ) {
       backend.sendEvent(spaceId, {
-        ulid: ulid(),
+        ulid: newUlid(),
         parent: current.roomId,
         variant: {
-          kind: "space.roomy.reaction.create.0",
+          kind: "space.roomy.reaction.create.v0",
           data: {
             reactionTo: message.id,
             reaction: emoji,
@@ -76,10 +76,10 @@
       // If we want to remove our reaction on this post
     } else {
       backend.sendEvent(spaceId, {
-        ulid: ulid(),
+        ulid: newUlid(),
         parent: current.roomId,
         variant: {
-          kind: "space.roomy.reaction.delete.0",
+          kind: "space.roomy.reaction.delete.v0",
           data: {
             reaction_to: message.id,
             reaction: emoji,

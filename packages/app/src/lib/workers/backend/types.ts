@@ -1,34 +1,27 @@
 import type { AsyncChannel } from "../asyncChannel";
 import type { QueryResult } from "../sqlite/setup";
-import type {
-  Batch,
-  EncodedStreamEvent,
-  EventType,
-  Handle,
-  StreamHashId,
-  StreamIndex,
-} from "../types";
+import type { Batch, EncodedStreamEvent, StreamIndex } from "../types";
 import type { Profile } from "../../types/profile";
 import type { MessagePortApi } from "../workerMessaging";
 import type { Client } from "./client";
 import type { BlobRef } from "@atproto/lexicon";
 import type { Deferred } from "$lib/utils/deferred";
 import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
-import type { Did } from "@atproto/api";
 import type { ConnectedStream } from "./stream";
+import type { Did, DidStream, DidUser, Event, Handle } from "$lib/schema";
 
 export interface BackendStatus {
   authState: ReactiveAuthState;
   profile: Profile;
-  spaces: Record<StreamHashId, "loading" | "idle" | "error">;
+  spaces: Record<DidStream, "loading" | "idle" | "error">;
 }
 
 export type BackendInterface = {
-  login(username: string): Promise<string>;
+  login(username: Handle): Promise<string>;
   logout(): Promise<void>;
   oauthCallback(searchParams: string): Promise<void>;
   runQuery(statement: SqlStatement): Promise<QueryResult<unknown>>;
-  getProfile(did: Did): Promise<Profile | undefined>;
+  getProfile(did: DidUser): Promise<Profile | undefined>;
   dangerousCompletelyDestroyDatabase(opts: {
     yesIAmSure: true;
   }): Promise<{ done: true } | { done: false; error: string }>;
@@ -40,31 +33,31 @@ export type BackendInterface = {
     port: MessagePort,
     statement: SqlStatement,
   ): Promise<void>;
-  sendEvent(streamId: StreamHashId, payload: EventType): Promise<void>;
-  sendEventBatch(streamId: StreamHashId, payloads: EventType[]): Promise<void>;
+  sendEvent(streamId: DidStream, payload: Event): Promise<void>;
+  sendEventBatch(streamId: DidStream, payloads: Event[]): Promise<void>;
   fetchEvents(
-    streamId: StreamHashId,
+    streamId: DidStream,
     offset: number,
     limit: number,
   ): Promise<EncodedStreamEvent[]>;
-  previewSpace(streamId: StreamHashId): Promise<{ name: string }>;
+  previewSpace(streamId: DidStream): Promise<{ name: string }>;
   setActiveSqliteWorker(port: MessagePort): Promise<void>;
-  pauseSubscription(streamId: StreamHashId): Promise<void>;
-  unpauseSubscription(streamId: StreamHashId): Promise<void>;
+  pauseSubscription(streamId: DidStream): Promise<void>;
+  unpauseSubscription(streamId: DidStream): Promise<void>;
   resolveHandleForSpace(
-    spaceId: StreamHashId,
+    spaceId: DidStream,
     handleAccountDid: Did,
   ): Promise<Handle | undefined>;
-  resolveSpaceId(spaceIdOrHandleOrDid: StreamHashId | Handle | Did): Promise<{
-    spaceId: StreamHashId;
+  resolveSpaceId(spaceIdOrHandle: DidStream | Handle): Promise<{
+    spaceId: DidStream;
     handle?: Handle;
     did?: Did;
   }>;
-  checkSpaceExists(spaceId: StreamHashId): Promise<boolean>;
-  createStreamHandleRecord(spaceId: StreamHashId): Promise<void>;
+  checkSpaceExists(spaceId: DidStream): Promise<boolean>;
+  createStreamHandleRecord(spaceId: DidStream): Promise<void>;
   removeStreamHandleRecord(): Promise<void>;
-  connectSpaceStream(spaceId: StreamHashId, idx: StreamIndex): Promise<void>;
-  createSpaceStream(): Promise<StreamHashId>;
+  connectSpaceStream(spaceId: DidStream, idx: StreamIndex): Promise<void>;
+  createSpaceStream(): Promise<DidStream>;
   /** Testing: Get personal stream record from PDS */
   getStreamRecord(): Promise<{ id: string } | null>;
   /** Testing: Delete personal stream record from PDS */
@@ -121,8 +114,8 @@ export namespace AuthStates {
 
   export interface ReactiveAuthenticated {
     state: "authenticated";
-    did: Did;
-    personalStream: StreamHashId;
+    did: DidUser;
+    personalStream: DidStream;
     clientStatus: StreamConnectionStatus["status"];
   }
 }
@@ -174,7 +167,7 @@ export namespace ConnectionStates {
     status: "connected";
     personalStream: ConnectedStream;
     eventChannel: AsyncChannel<Batch.Event>;
-    streams: Map<StreamHashId, ConnectedStream>;
+    streams: Map<DidStream, ConnectedStream>;
   }
 }
 

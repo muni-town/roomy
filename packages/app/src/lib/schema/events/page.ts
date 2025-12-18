@@ -12,7 +12,7 @@ import { type, content } from "../primitives";
  * diff to apply to the previous content.
  */
 export const pageEdit = type({
-  $type: "'space.roomy.event.page.edit'",
+  $type: "'space.roomy.page.edit.v0'",
   /** The edit content (full replacement or diff) */
   content,
 });
@@ -22,7 +22,7 @@ export const pageEvent = pageEdit;
 
 // Export for registry
 export const events = {
-  "space.roomy.event.page.edit": {
+  "space.roomy.page.edit.v0": {
     type: pageEdit,
     description:
       "Edit a page document (full replacement or diff-match-patch diff)",

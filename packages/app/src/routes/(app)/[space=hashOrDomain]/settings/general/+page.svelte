@@ -5,7 +5,7 @@
   import { current } from "$lib/queries";
   import { backend, backendStatus } from "$lib/workers";
   import { Button, Input, Textarea, toast } from "@fuxui/base";
-  import { ulid } from "ulidx";
+  import { newUlid } from "$lib/schema";
 
   let currentSpace = $derived(current.joinedSpace);
   let spaceId = $derived(currentSpace?.id);
@@ -43,10 +43,10 @@
 
       // Update space info
       await backend.sendEvent(spaceId, {
-        ulid: ulid(),
+        ulid: newUlid(),
         parent: undefined,
         variant: {
-          kind: "space.roomy.info.0",
+          kind: "space.roomy.info.v0",
           data: {
             avatar:
               avatarChanged && avatarUpload
@@ -100,10 +100,10 @@
     if (!spaceId || backendStatus.authState?.state !== "authenticated") return;
     try {
       await backend.sendEvent(spaceId, {
-        ulid: ulid(),
+        ulid: newUlid(),
         parent: undefined,
         variant: {
-          kind: "space.roomy.stream.handle.account.0",
+          kind: "space.roomy.stream.handle.account.v0",
           data: {
             did: backendStatus.authState.did,
           },
@@ -125,10 +125,10 @@
     try {
       await backend.removeStreamHandleRecord();
       await backend.sendEvent(spaceId, {
-        ulid: ulid(),
+        ulid: newUlid(),
         parent: undefined,
         variant: {
-          kind: "space.roomy.stream.handle.account.0",
+          kind: "space.roomy.stream.handle.account.v0",
           data: {
             did: undefined,
           },

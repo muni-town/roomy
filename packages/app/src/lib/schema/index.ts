@@ -25,7 +25,7 @@
  */
 
 // Primitives
-export { ulid, hash, did, cid, content, timestamp, type } from "./primitives";
+export * from "./primitives";
 
 // Events
 export {
@@ -46,12 +46,11 @@ export {
 export { messageExtension, extensions } from "./extensions/message";
 
 // Envelope
-export { event, eventVariant, type Event, type EventVariant } from "./envelope";
-
-// Registry and parsing
 export {
-  eventSchemas,
-  extensionSchemas,
-  allSchemas,
+  event,
+  eventVariant,
   parseEvent,
-} from "./registry";
+  type Event,
+  type EventVariant,
+  type EventType,
+} from "./envelope";

@@ -10,13 +10,13 @@ import { type, ulid } from "../primitives";
 
 // Reply reference
 export const replyTo = type({
-  $type: "'space.roomy.extension.replyTo'",
+  $type: "'space.roomy.extension.replyTo.v0'",
   target: ulid,
 });
 
 // Comment/annotation on a document
 export const comment = type({
-  $type: "'space.roomy.extension.comment'",
+  $type: "'space.roomy.extension.comment.v0'",
   /** Version of the document being commented on */
   version: ulid,
   /** Text snippet being referenced */
@@ -29,20 +29,20 @@ export const comment = type({
 
 // Override author (for bridged messages)
 export const overrideAuthor = type({
-  $type: "'space.roomy.extension.overrideAuthor'",
+  $type: "'space.roomy.extension.overrideAuthor.v0'",
   did: "string",
 });
 
 // Override timestamp (for bridged messages)
 export const overrideTimestamp = type({
-  $type: "'space.roomy.extension.overrideTimestamp'",
+  $type: "'space.roomy.extension.overrideTimestamp.v0'",
   /** Unix timestamp in milliseconds */
   timestamp: "number.integer>0",
 });
 
 // Image attachment
 export const image = type({
-  $type: "'space.roomy.extension.image'",
+  $type: "'space.roomy.extension.image.v0'",
   uri: "string",
   mimeType: "string",
   "alt?": "string",
@@ -54,7 +54,7 @@ export const image = type({
 
 // Video attachment
 export const video = type({
-  $type: "'space.roomy.extension.video'",
+  $type: "'space.roomy.extension.video.v0'",
   uri: "string",
   mimeType: "string",
   "alt?": "string",
@@ -68,7 +68,7 @@ export const video = type({
 
 // File attachment
 export const file = type({
-  $type: "'space.roomy.extension.file'",
+  $type: "'space.roomy.extension.file.v0'",
   uri: "string",
   mimeType: "string",
   "name?": "string",
@@ -77,7 +77,7 @@ export const file = type({
 
 // Link with optional preview
 export const link = type({
-  $type: "'space.roomy.extension.link'",
+  $type: "'space.roomy.extension.link.v0'",
   uri: "string",
   showPreview: "boolean",
 });
@@ -94,12 +94,12 @@ export const messageExtension = replyTo
 
 // Export individual types for the registry
 export const extensions = {
-  "space.roomy.extension.replyTo": replyTo,
-  "space.roomy.extension.comment": comment,
-  "space.roomy.extension.overrideAuthor": overrideAuthor,
-  "space.roomy.extension.overrideTimestamp": overrideTimestamp,
-  "space.roomy.extension.image": image,
-  "space.roomy.extension.video": video,
-  "space.roomy.extension.file": file,
-  "space.roomy.extension.link": link,
+  "space.roomy.extension.replyTo.v0": replyTo,
+  "space.roomy.extension.comment.v0": comment,
+  "space.roomy.extension.overrideAuthor.v0": overrideAuthor,
+  "space.roomy.extension.overrideTimestamp.v0": overrideTimestamp,
+  "space.roomy.extension.image.v0": image,
+  "space.roomy.extension.video.v0": video,
+  "space.roomy.extension.file.v0": file,
+  "space.roomy.extension.link.v0": link,
 } as const;

@@ -3,7 +3,6 @@ import {
   type ApplyResultError,
   type Batch,
   type Bundle,
-  type StreamHashId,
   type StreamIndex,
   type TaskPriority,
 } from "../types";
@@ -20,9 +19,8 @@ import {
 import { messagePortInterface, reactiveWorkerState } from "../workerMessaging";
 import { db } from "../idb";
 import schemaSql from "./schema.sql?raw";
-import { isDid, type Did } from "@atproto/api";
 import { sql } from "$lib/utils/sqlTemplate";
-import { eventCodec, id } from "../encoding";
+import { didUser, parseEvent, type DidStream, type DidUser } from "$lib/schema";
 import { materialize } from "./materializer";
 import { AsyncChannel } from "../asyncChannel";
 import type {
@@ -35,6 +33,7 @@ import type { BackendInterface } from "../backend/types";
 import { Deferred } from "$lib/utils/deferred";
 import { CONFIG } from "$lib/config";
 import { initializeFaro } from "$lib/otel";
+import { decode } from "@atcute/cbor";
 
 let faro;
 try {
@@ -65,9 +64,9 @@ const QUERY_LOCK = "sqliteQueryLock";
 const HEARTBEAT_KEY = "sqlite-worker-heartbeat";
 const LOCK_TIMEOUT_MS = 8000; // 30 seconds
 const newUserSignals = [
-  "space.roomy.message.create.0",
-  "space.roomy.message.create.1",
-  "space.roomy.room.join.0",
+  "space.roomy.message.create.v0",
+  "space.roomy.message.create.v1",
+  "space.roomy.room.join.v0",
 ];
 
 class SqliteWorkerSupervisor {
@@ -79,7 +78,7 @@ class SqliteWorkerSupervisor {
   #status: Partial<SqliteStatus> = {};
   #backend: BackendInterface | null = null;
   #ensuredProfiles = new Set<string>();
-  #knownStreams = new Set<StreamHashId>();
+  #knownStreams = new Set<DidStream>();
   #eventChannel: AsyncChannel<Batch.Event>;
   #statementChannel = new AsyncChannel<Batch.Statement>();
   #resultChannel = new AsyncChannel<Batch.ApplyResult>();
@@ -442,7 +441,7 @@ class SqliteWorkerSupervisor {
       }
 
       await executeQuery(
-        sql`update comp_space set backfilled_to = ${batch.latestEvent} where entity = ${id(batch.streamId)}`,
+        sql`update comp_space set backfilled_to = ${batch.latestEvent} where entity = ${batch.streamId}`,
       );
 
       console.log("Updated backfilled_to to", batch.latestEvent);
@@ -474,7 +473,7 @@ class SqliteWorkerSupervisor {
     bundleId: string,
     statements: SqlStatement[],
     eventMeta?: {
-      streamId: StreamHashId;
+      streamId: DidStream;
       idx: StreamIndex;
     },
   ) {
@@ -505,7 +504,7 @@ class SqliteWorkerSupervisor {
     if (eventMeta && !hadError) {
       const updateEvent = sql`
         update events set applied = 1
-        where stream_id = ${id(eventMeta.streamId)}
+        where stream_id = ${eventMeta.streamId}
           and
         idx = ${eventMeta.idx}
         `;
@@ -541,7 +540,7 @@ class SqliteWorkerSupervisor {
 
   private async runStatementBundle(
     bundle: Bundle.StatementSuccess,
-    streamId: StreamHashId,
+    streamId: DidStream,
   ): Promise<Bundle.ApplyResult> {
     const bundleId = bundle.eventId;
 
@@ -613,7 +612,7 @@ class SqliteWorkerSupervisor {
     }
   }
 
-  async connectSpaceStream(spaceId: StreamHashId) {
+  async connectSpaceStream(spaceId: DidStream) {
     const knownStream = this.#knownStreams.has(spaceId);
     if (!knownStream) {
       const maybeSpace = await executeQuery(sql`
@@ -647,7 +646,11 @@ class SqliteWorkerSupervisor {
             try {
               // Convert ArrayBuffer to Uint8Array for decoding
               const payloadBytes = new Uint8Array(e.payload);
-              return [e, eventCodec.dec(payloadBytes)] as const;
+              const decoded = decode(payloadBytes);
+              const result = parseEvent(decoded);
+              if (result.success) {
+                return [e, result.data] as const;
+              } else throw result.error;
             } catch (error) {
               const payloadBytes = new Uint8Array(e.payload);
               console.warn(
@@ -662,11 +665,11 @@ class SqliteWorkerSupervisor {
           .filter((e): e is Exclude<typeof e, null> => e !== null);
 
         // Make sure all of the profiles we need are downloaded and inserted
-        const neededProfiles = new Set<Did>();
+        const neededProfiles = new Set<DidUser>();
         decodedEvents.forEach(([i, ev]) =>
-          newUserSignals.includes(ev.variant.kind)
-            ? isDid(i.user)
-              ? neededProfiles.add(i.user)
+          newUserSignals.includes(ev.variant.$type)
+            ? didUser.allows(i.user)
+              ? neededProfiles.add(didUser.assert(i.user))
               : console.warn("Found invalid user id", i.user)
             : undefined,
         );
@@ -674,7 +677,7 @@ class SqliteWorkerSupervisor {
         bundles.push(await this.ensureProfiles(batch.streamId, neededProfiles));
 
         let latestEvent = 0;
-        const spacesToConnect: StreamHashId[] = [];
+        const spacesToConnect: DidStream[] = [];
         for (const [incoming, event] of decodedEvents) {
           latestEvent = Math.max(latestEvent, incoming.idx);
           try {
@@ -686,17 +689,14 @@ class SqliteWorkerSupervisor {
                 user: incoming.user,
               },
               incoming.idx,
-              incoming.payload,
             );
 
             bundles.push(bundle);
 
             if (bundle.status === "success") {
               // Collect space IDs to connect AFTER batch is applied
-              if (event.variant.kind === "space.roomy.space.join.0") {
-                spacesToConnect.push(
-                  event.variant.data.spaceId as StreamHashId,
-                );
+              if (event.variant.$type === "space.roomy.space.join.v0") {
+                spacesToConnect.push(event.variant.spaceId);
               }
             }
           } catch (e) {
@@ -736,8 +736,8 @@ class SqliteWorkerSupervisor {
    * of flags to indicate that the profile doesn't need to be re-fetched.
    */
   async ensureProfiles(
-    streamId: StreamHashId,
-    profileDids: Set<Did>,
+    streamId: DidStream,
+    profileDids: Set<DidUser>,
   ): Promise<Bundle.Statement> {
     try {
       // This only knows how to fetch Bluesky DIDs for now
@@ -758,12 +758,12 @@ class SqliteWorkerSupervisor {
         sql: `with existing(did) as (
           values ${dids.map((_) => `(?)`).join(",")}
         )
-        select id(did) as did
+        select did
         from existing
         left join entities ent on ent.id = existing.did
         where ent.id is null
         `,
-        params: dids.map(id),
+        params: dids,
       })) as QueryResult<{ did: string }>; // i think
       const missingDids =
         missingProfilesResp.rows?.map((x: any) => x.did) || [];
@@ -786,13 +786,13 @@ class SqliteWorkerSupervisor {
           ...[
             sql`
             insert into entities (id, stream_id)
-            values (${id(did)}, ${id(streamId)})
+            values (${did}, ${streamId})
             on conflict(id) do nothing
           `,
             sql`
             insert into comp_user (did, handle)
             values (
-              ${id(did)},
+              ${did},
               ${profile.handle}
             )
             on conflict(did) do nothing
@@ -800,7 +800,7 @@ class SqliteWorkerSupervisor {
             sql`
             insert into comp_info (entity, name, avatar)
             values (
-              ${id(did)},
+              ${did},
               ${profile.displayName || profile.handle},
               ${profile.avatar}
             )

@@ -1,7 +1,7 @@
 import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
 import type { Batch, TaskPriority } from "../types";
 import type { QueryResult } from "./setup";
-import type { Did } from "@atproto/api";
+import type { DidUser } from "$lib/schema";
 
 export interface SqliteStatus {
   isActiveWorker: boolean;
@@ -11,7 +11,7 @@ export interface SqliteStatus {
 }
 
 export type SqliteWorkerInterface = {
-  authenticate(did: Did): Promise<void>;
+  authenticate(did: DidUser): Promise<void>;
   materializeBatch(
     events: Batch.Event,
     priority: TaskPriority,

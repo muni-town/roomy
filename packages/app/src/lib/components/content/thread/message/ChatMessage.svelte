@@ -114,10 +114,10 @@
     let contentPatch = patchToText(patchMake(message.content, newContent));
 
     await backend.sendEvent(spaceId, {
-      ulid: ulid(),
+      ulid: newUlid(),
       parent: message.id,
       variant: {
-        kind: "space.roomy.message.edit.0",
+        kind: "space.roomy.message.edit.v0",
         data: {
           content: {
             mimeType: "text/x-dmp-patch",

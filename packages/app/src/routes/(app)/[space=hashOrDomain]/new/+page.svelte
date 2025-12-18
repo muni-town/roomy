@@ -38,23 +38,23 @@
     const ulid = monotonicFactory();
 
     // Create a new room
-    const roomId = ulid();
+    const roomId = newUlid();
     await backend.sendEvent(spaceId, {
       ulid: roomId,
       parent:
         type != "Category" && selectedCategory ? selectedCategory : undefined,
       variant: {
-        kind: "space.roomy.room.create.0",
+        kind: "space.roomy.room.create.v0",
         data: undefined,
       },
     });
 
     // Set the room info
     await backend.sendEvent(spaceId, {
-      ulid: ulid(),
+      ulid: newUlid(),
       parent: roomId,
       variant: {
-        kind: "space.roomy.info.0",
+        kind: "space.roomy.info.v0",
         data: {
           name: {
             set: name,
@@ -68,12 +68,12 @@
     if (type == "Channel") {
       // Mark the room as a channel
       await backend.sendEvent(spaceId, {
-        ulid: ulid(),
+        ulid: newUlid(),
         parent: roomId,
         variant: {
-          kind: "space.roomy.room.kind.0",
+          kind: "space.roomy.room.kind.v0",
           data: {
-            kind: "space.roomy.channel.0",
+            kind: "space.roomy.channel.v0",
             data: undefined,
           },
         },
@@ -83,12 +83,12 @@
     } else if (type == "Category") {
       // Mark the room as a category
       await backend.sendEvent(spaceId, {
-        ulid: ulid(),
+        ulid: newUlid(),
         parent: roomId,
         variant: {
-          kind: "space.roomy.room.kind.0",
+          kind: "space.roomy.room.kind.v0",
           data: {
-            kind: "space.roomy.category.0",
+            kind: "space.roomy.category.v0",
             data: undefined,
           },
         },
