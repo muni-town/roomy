@@ -26,7 +26,6 @@
   } from "$lib/mutations/room";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { id } from "$lib/workers/encoding";
   import { navigate, scrollContainerRef } from "$lib/utils.svelte";
 
   import { Input, Modal, Popover, Button, toast } from "@fuxui/base";
@@ -46,7 +45,6 @@
   import IconHeroiconsChatBubbleLeftRight from "~icons/heroicons/chat-bubble-left-right";
   import IconTablerClick from "~icons/tabler/click";
 
-  import { type Ulid } from "$lib/workers/types";
   import Error from "$lib/components/modals/Error.svelte";
 
   let createPageDialogOpen = $state(false);
@@ -91,7 +89,7 @@
       join comp_info i on i.entity = e.id
       join comp_room r on r.entity = e.id
       left join comp_last_read l on l.entity = e.id
-    where e.id = ${page.params.object && id(page.params.object)}
+    where e.id = ${page.params.object}
   `,
     (row) => JSON.parse(row.json),
   );
@@ -112,7 +110,7 @@
     setPageReadMarker({
       personalStreamId: backendStatus.authState.personalStream,
       streamId: spaceId,
-      roomId: page.params.object as Ulid,
+      roomId: page.params.object,
     });
   };
 
@@ -181,7 +179,7 @@
     )
       return;
     backend.runQuery(
-      sql`update comp_last_read set unread_count = 0 where entity = ${id(page.params.object)}`,
+      sql`update comp_last_read set unread_count = 0 where entity = ${page.params.object}`,
     );
     const elapsed = Date.now() - room.lastRead;
     if (elapsed < 1000 * 60 * 5) return;
@@ -238,7 +236,7 @@
         {/if}
       </h2>
 
-      {#if spaceId && backendStatus.loadingSpaces}
+      {#if spaceId && backendStatus.authState?.state === "loading"}
         <div class="dark:!text-base-400 !text-base-600 mx-3">
           Downloading Entire Space...
         </div>
@@ -267,7 +265,7 @@
               await promoteToChannel({
                 spaceId: spaceId!,
                 room: {
-                  id: page.params.object as Ulid,
+                  id: page.params.object,
                   name: room.name,
                   parent: room.parent,
                 },
@@ -315,7 +313,7 @@
                 if (!spaceId) return;
                 await convertToThread({
                   spaceId,
-                  roomId: page.params.object as Ulid,
+                  roomId: page.params.object,
                 });
               }}>Convert to Thread</Button
             >
@@ -325,7 +323,7 @@
                 await convertToPage({
                   spaceId,
                   room: {
-                    id: page.params.object as Ulid,
+                    id: page.params.object,
                     name: room.name,
                   },
                 });
@@ -343,7 +341,7 @@
                 const roomId = page.params.object;
                 const pageId = await createPage({
                   spaceId: spaceId!,
-                  roomId: roomId as Ulid,
+                  roomId: roomId,
                   pageName: createPageName,
                 });
                 toast.success(`Created page: ${createPageName}`);
@@ -388,7 +386,7 @@
     </div>
   </div>
 
-  {#if spaceId && backendStatus.loadingSpaces}
+  {#if spaceId && backendStatus.authState?.state === "loading"}
     <LoadingLine />
   {/if}
 {/snippet}

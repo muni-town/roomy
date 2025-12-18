@@ -196,12 +196,12 @@ $effect.root(() => {
       where (r.deleted = 0 or r.deleted is null)
     )
     select 
-      id(id) as id,
-      id(parent) as parent,
+      id,
+      parent,
       type,
       name,
       lastRead,
-      id(latestEntity) as latestEntity,
+      latestEntity,
       unreadCount,
       depth
     from room_tree
