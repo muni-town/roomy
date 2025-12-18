@@ -14,7 +14,7 @@
   import IconTablerTrash from "~icons/tabler/trash";
   import { backend, backendStatus } from "$lib/workers";
   import { current } from "$lib/queries";
-  import { ulid } from "ulidx";
+  import { newUlid } from "$lib/schema";
 
   let {
     editMessage,
@@ -50,10 +50,10 @@
     if (!spaceId) return;
     if (!canEditAndDelete) return;
     await backend.sendEvent(spaceId, {
-      ulid: ulid(),
+      ulid: newUlid(),
       parent: message.id,
       variant: {
-        kind: "space.roomy.message.delete.0",
+        kind: "space.roomy.message.delete.v0",
         data: {
           reason: undefined,
         },
@@ -72,10 +72,10 @@
       )
     ) {
       backend.sendEvent(spaceId, {
-        ulid: ulid(),
+        ulid: newUlid(),
         parent: current.roomId,
         variant: {
-          kind: "space.roomy.reaction.create.0",
+          kind: "space.roomy.reaction.create.v0",
           data: {
             reactionTo: message.id,
             reaction: emoji,

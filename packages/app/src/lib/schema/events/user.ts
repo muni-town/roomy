@@ -2,7 +2,7 @@
  * User events: metadata overrides (for bridged accounts) and read tracking
  */
 
-import { type, ulid, hash } from "../primitives";
+import { didStream, type, ulid } from "../primitives";
 
 /**
  * Override user metadata.
@@ -10,7 +10,7 @@ import { type, ulid, hash } from "../primitives";
  * retrieve the handle from the ID.
  */
 export const userOverrideMeta = type({
-  $type: "'space.roomy.event.user.overrideMeta'",
+  $type: "'space.roomy.user.overrideMeta.v0'",
   /** The original handle from the bridged platform */
   handle: "string",
 });
@@ -21,11 +21,11 @@ export const userOverrideMeta = type({
  * The event's ULID timestamp encodes when the room was read.
  */
 export const roomLastRead = type({
-  $type: "'space.roomy.event.room.lastRead'",
+  $type: "'space.roomy.room.lastRead.v0'",
   /** The room being marked as read */
   roomId: ulid,
   /** The stream containing the room */
-  streamId: hash,
+  streamId: didStream,
 });
 
 // All user events
@@ -33,11 +33,11 @@ export const userEvent = userOverrideMeta.or(roomLastRead);
 
 // Export for registry
 export const events = {
-  "space.roomy.event.user.overrideMeta": {
+  "space.roomy.user.overrideMeta.v0": {
     type: userOverrideMeta,
     description: "Override user metadata for bridged accounts",
   },
-  "space.roomy.event.room.lastRead": {
+  "space.roomy.room.lastRead.v0": {
     type: roomLastRead,
     description: "Mark a room as read (tracked in user's personal stream)",
   },

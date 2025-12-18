@@ -1,35 +1,35 @@
 import { backend } from "$lib/workers";
-import type { EventType, StreamHashId, Ulid } from "$lib/workers/types";
+import type { EventType, DidStream, Ulid } from "$lib/workers/types";
 import { monotonicFactory } from "ulidx";
 
 const ulid = monotonicFactory();
 
 export async function createPage(opts: {
-  spaceId: StreamHashId;
+  spaceId: DidStream;
   roomId: Ulid;
   pageName: string;
 }) {
   const events: EventType[] = [];
 
   // Create a new room for the page
-  const pageId = ulid();
+  const pageId = newUlid();
   events.push({
     ulid: pageId,
     parent: opts.roomId,
     variant: {
-      kind: "space.roomy.room.create.0",
+      kind: "space.roomy.room.create.v0",
       data: undefined,
     },
   });
 
   // Mark the room as a page
   events.push({
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: pageId,
     variant: {
-      kind: "space.roomy.room.kind.0",
+      kind: "space.roomy.room.kind.v0",
       data: {
-        kind: "space.roomy.page.0",
+        kind: "space.roomy.page.v0",
         data: undefined,
       },
     },
@@ -37,10 +37,10 @@ export async function createPage(opts: {
 
   // Set the page name
   events.push({
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: pageId,
     variant: {
-      kind: "space.roomy.info.0",
+      kind: "space.roomy.info.v0",
       data: {
         name: { set: opts.pageName },
         avatar: { ignore: undefined },
@@ -50,10 +50,10 @@ export async function createPage(opts: {
   });
 
   events.push({
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: pageId,
     variant: {
-      kind: "space.roomy.page.edit.0",
+      kind: "space.roomy.page.edit.v0",
       data: {
         content: {
           content: new TextEncoder().encode(
@@ -70,7 +70,7 @@ export async function createPage(opts: {
 }
 
 export async function promoteToChannel(opts: {
-  spaceId: StreamHashId;
+  spaceId: DidStream;
   room: {
     id: Ulid;
     name: string;
@@ -90,20 +90,20 @@ export async function promoteToChannel(opts: {
 
   // Mark the thread as a channel
   events.push({
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: opts.room.id,
     variant: {
-      kind: "space.roomy.room.kind.0",
-      data: { kind: "space.roomy.channel.0", data: undefined },
+      kind: "space.roomy.room.kind.v0",
+      data: { kind: "space.roomy.channel.v0", data: undefined },
     },
   });
 
   // Make the thread a sibling of it's parent channel
   events.push({
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: opts.room.id,
     variant: {
-      kind: "space.roomy.parent.update.0",
+      kind: "space.roomy.parent.update.v0",
       data: {
         parent: opts.room.parent?.parent || undefined,
       },
@@ -114,10 +114,10 @@ export async function promoteToChannel(opts: {
   if (channelName != opts.room.name) {
     // Rename it
     events.push({
-      ulid: ulid(),
+      ulid: newUlid(),
       parent: opts.room.id,
       variant: {
-        kind: "space.roomy.info.0",
+        kind: "space.roomy.info.v0",
         data: {
           name: { set: channelName },
           avatar: { ignore: undefined },
@@ -131,17 +131,17 @@ export async function promoteToChannel(opts: {
 }
 
 export async function convertToThread(opts: {
-  spaceId: StreamHashId;
+  spaceId: DidStream;
   roomId: Ulid;
 }) {
   const events: EventType[] = [
     {
-      ulid: ulid(),
+      ulid: newUlid(),
       parent: opts.roomId,
       variant: {
-        kind: "space.roomy.room.kind.0",
+        kind: "space.roomy.room.kind.v0",
         data: {
-          kind: "space.roomy.thread.0",
+          kind: "space.roomy.thread.v0",
           data: undefined,
         },
       },
@@ -151,26 +151,26 @@ export async function convertToThread(opts: {
 }
 
 export async function convertToPage(opts: {
-  spaceId: StreamHashId;
+  spaceId: DidStream;
   room: { id: Ulid; name: string };
 }) {
   const events: EventType[] = [
     {
-      ulid: ulid(),
+      ulid: newUlid(),
       parent: opts.room.id,
       variant: {
-        kind: "space.roomy.room.kind.0",
+        kind: "space.roomy.room.kind.v0",
         data: {
-          kind: "space.roomy.page.0",
+          kind: "space.roomy.page.v0",
           data: undefined,
         },
       },
     },
     {
-      ulid: ulid(),
+      ulid: newUlid(),
       parent: opts.room.id,
       variant: {
-        kind: "space.roomy.page.edit.0",
+        kind: "space.roomy.page.edit.v0",
         data: {
           content: {
             content: new TextEncoder().encode(
@@ -186,15 +186,15 @@ export async function convertToPage(opts: {
 }
 
 export async function setPageReadMarker(opts: {
-  personalStreamId: StreamHashId;
-  streamId: StreamHashId;
+  personalStreamId: DidStream;
+  streamId: DidStream;
   roomId: Ulid;
 }) {
   await backend.sendEvent(opts.personalStreamId, {
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: undefined,
     variant: {
-      kind: "space.roomy.room.lastRead.0",
+      kind: "space.roomy.room.lastRead.v0",
       data: {
         streamId: opts.streamId,
         roomId: opts.roomId,

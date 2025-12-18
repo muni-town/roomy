@@ -4,7 +4,7 @@
   import type { AsyncStateWithIdle } from "$lib/types/asyncState";
   import { navigate } from "$lib/utils.svelte";
   import { backendStatus } from "$lib/workers";
-  import type { StreamHashId } from "$lib/workers/types";
+  import type { DidStream } from "$lib/workers/types";
   import IconHeroiconsXMark from "~icons/heroicons/x-mark";
   import {
     Alert,
@@ -16,7 +16,7 @@
     toast,
   } from "@fuxui/base";
 
-  type SpaceCreationState = AsyncStateWithIdle<{ spaceId: StreamHashId }>;
+  type SpaceCreationState = AsyncStateWithIdle<{ spaceId: DidStream }>;
 
   let form = $state<{
     spaceName: string;

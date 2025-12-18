@@ -1,17 +1,7 @@
+import type { Did, Ulid } from "$lib/schema";
+import type { DidStream, Handle } from "$lib/schema/primitives";
 import type { QueryResult } from "./sqlite/setup";
-import type { eventCodec } from "./encoding";
-import type { Did } from "@atproto/api";
 import type { SqlStatement } from "./sqlite/types";
-
-type RawEvent = ReturnType<(typeof eventCodec)["dec"]>;
-type EventKind = RawEvent["variant"]["kind"];
-
-export type EventType<TVariant extends EventKind | undefined = undefined> =
-  TVariant extends undefined
-    ? RawEvent
-    : Omit<RawEvent, "variant"> & {
-        variant: Extract<RawEvent["variant"], { kind: TVariant }>;
-      };
 
 export type EdgeLabel =
   | "child"
@@ -30,15 +20,13 @@ export type EdgeLabel =
   | "avatar"
   | "reaction";
 
-type EntityId = string & { __brand: "entityId" };
-
 export interface EdgeReaction {
   reaction: string;
 }
 
 export interface EdgeBan {
   reason: string;
-  banned_by: EntityId;
+  banned_by: Did;
 }
 
 export interface EdgeMember {
@@ -60,16 +48,10 @@ export type EdgesMap = {
  * those edge names and whose values are arrays of the corresponding edge types.
  */
 export type EdgesRecord<TRequired extends readonly EdgeLabel[]> = {
-  [K in TRequired[number]]: [EdgesMap[K], EntityId];
+  [K in TRequired[number]]: [EdgesMap[K], Did | Ulid];
 };
 
-export type StreamHashId = string & { __brand: "streamHashId" };
-
-export type Ulid = string & { __brand: "ulid" };
-
-export type Handle = string & { __brand: "handle" };
-
-export type SpaceIdOrHandle = StreamHashId | Handle;
+export type SpaceIdOrHandle = DidStream | Handle;
 
 export type StreamIndex = number & { __brand: "streamIndex" };
 
@@ -88,7 +70,7 @@ export namespace Batch {
   export interface EventFetch {
     status: "fetched";
     batchId: Ulid;
-    streamId: StreamHashId;
+    streamId: DidStream;
     events: EncodedStreamEvent[];
     priority: TaskPriority;
   }
@@ -96,7 +78,7 @@ export namespace Batch {
   export interface EventPushed {
     status: "pushed";
     batchId: Ulid;
-    streamId: StreamHashId;
+    streamId: DidStream;
     events: [EncodedStreamEvent];
     priority: TaskPriority;
   }
@@ -105,11 +87,11 @@ export namespace Batch {
   export interface Statement {
     status: "transformed";
     batchId: Ulid;
-    streamId: StreamHashId;
+    streamId: DidStream;
     bundles: Bundle.Statement[];
     latestEvent: StreamIndex;
     priority: TaskPriority;
-    spacesToConnect: StreamHashId[];
+    spacesToConnect: DidStream[];
   }
 
   export interface ApplyResult {

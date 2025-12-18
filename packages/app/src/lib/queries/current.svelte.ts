@@ -1,7 +1,7 @@
 import { page } from "$app/state";
 import { backend, backendStatus } from "$lib/workers";
 import type { AuthStates } from "$lib/workers/backend/types";
-import type { SpaceIdOrHandle, StreamHashId } from "$lib/workers/types";
+import type { SpaceIdOrHandle, DidStream } from "$lib/workers/types";
 import type { Did } from "@atproto/api";
 import { joinedSpaces } from "./spaces.svelte";
 import type { SpaceMeta } from "./types";
@@ -9,7 +9,7 @@ import type { SpaceMeta } from "./types";
 type SpaceStatus =
   | { status: "no-current-space" }
   | { status: "loading"; spaceId?: SpaceIdOrHandle }
-  | { status: "invited"; spaceId: StreamHashId }
+  | { status: "invited"; spaceId: DidStream }
   | { status: "joined"; space: SpaceMeta; isSpaceAdmin: boolean }
   | {
       status: "error";

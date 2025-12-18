@@ -1,13 +1,13 @@
 import { backend, backendStatus } from "$lib/workers";
-import type { EventType, StreamHashId } from "$lib/workers/types";
+import type { EventType, DidStream } from "$lib/workers/types";
 import type { Did } from "@atproto/api";
 import { toast } from "@fuxui/base";
-import { ulid } from "ulidx";
+import { newUlid } from "$lib/schema";
 
 /**
  * Join a space.
  */
-export async function joinSpace(spaceId: StreamHashId) {
+export async function joinSpace(spaceId: DidStream) {
   try {
     if (backendStatus.authState?.state !== "authenticated") {
       toast.error("Could not join space. It's possible it does not exist.");
@@ -16,10 +16,10 @@ export async function joinSpace(spaceId: StreamHashId) {
 
     // Add the space to the personal list of joined spaces
     await backend.sendEvent(backendStatus.authState.personalStream, {
-      ulid: ulid(),
+      ulid: newUlid(),
       parent: undefined,
       variant: {
-        kind: "space.roomy.space.join.0",
+        kind: "space.roomy.space.join.v0",
         data: {
           spaceId: spaceId,
         },
@@ -27,10 +27,10 @@ export async function joinSpace(spaceId: StreamHashId) {
     });
     // Tell the space that we joined.
     await backend.sendEvent(spaceId, {
-      ulid: ulid(),
+      ulid: newUlid(),
       parent: undefined,
       variant: {
-        kind: "space.roomy.room.join.0",
+        kind: "space.roomy.room.join.v0",
         data: undefined,
       },
     });
@@ -46,7 +46,7 @@ export async function createSpace(opts: {
   avatarFile?: File;
   creator: {
     did: Did;
-    personalStreamId: StreamHashId;
+    personalStreamId: DidStream;
   };
 }) {
   let currentSpaceName = opts.spaceName;
@@ -63,10 +63,10 @@ export async function createSpace(opts: {
 
   // Join the space
   await backend.sendEvent(opts.creator.personalStreamId, {
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: undefined,
     variant: {
-      kind: "space.roomy.space.join.0",
+      kind: "space.roomy.space.join.v0",
       data: {
         spaceId,
       },
@@ -83,10 +83,10 @@ export async function createSpace(opts: {
 
   // Update space info
   batch.push({
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: undefined,
     variant: {
-      kind: "space.roomy.info.0",
+      kind: "space.roomy.info.v0",
       data: {
         avatar: avatarUpload?.uri
           ? { set: avatarUpload.uri }
@@ -103,10 +103,10 @@ export async function createSpace(opts: {
 
   // Make this user and admin
   batch.push({
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: undefined,
     variant: {
-      kind: "space.roomy.admin.add.0",
+      kind: "space.roomy.admin.add.v0",
       data: {
         adminId: opts.creator.did,
       },
@@ -115,30 +115,30 @@ export async function createSpace(opts: {
 
   // Create the "system" user as the space itself
   batch.push({
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: undefined,
     variant: {
-      kind: "space.roomy.user.overrideMeta.0",
+      kind: "space.roomy.user.overrideMeta.v0",
       data: {
         handle: "system",
       },
     },
   });
 
-  const categoryId = ulid();
+  const categoryId = newUlid();
   batch.push({
     ulid: categoryId,
     parent: undefined,
     variant: {
-      kind: "space.roomy.room.create.0",
+      kind: "space.roomy.room.create.v0",
       data: undefined,
     },
   });
   batch.push({
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: categoryId,
     variant: {
-      kind: "space.roomy.info.0",
+      kind: "space.roomy.info.v0",
       data: {
         name: { set: "Uncategorized" },
         avatar: { ignore: undefined },
@@ -147,30 +147,30 @@ export async function createSpace(opts: {
     },
   });
   batch.push({
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: categoryId,
     variant: {
-      kind: "space.roomy.room.kind.0",
+      kind: "space.roomy.room.kind.v0",
       data: {
-        kind: "space.roomy.category.0",
+        kind: "space.roomy.category.v0",
         data: undefined,
       },
     },
   });
-  const generalChannelId = ulid();
+  const generalChannelId = newUlid();
   batch.push({
     ulid: generalChannelId,
     parent: categoryId,
     variant: {
-      kind: "space.roomy.room.create.0",
+      kind: "space.roomy.room.create.v0",
       data: undefined,
     },
   });
   batch.push({
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: generalChannelId,
     variant: {
-      kind: "space.roomy.info.0",
+      kind: "space.roomy.info.v0",
       data: {
         name: { set: "general" },
         avatar: { ignore: undefined },
@@ -179,30 +179,30 @@ export async function createSpace(opts: {
     },
   });
   batch.push({
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: generalChannelId,
     variant: {
-      kind: "space.roomy.room.kind.0",
+      kind: "space.roomy.room.kind.v0",
       data: {
-        kind: "space.roomy.channel.0",
+        kind: "space.roomy.channel.v0",
         data: undefined,
       },
     },
   });
-  const welcomeThreadId = ulid();
+  const welcomeThreadId = newUlid();
   batch.push({
     ulid: welcomeThreadId,
     parent: generalChannelId,
     variant: {
-      kind: "space.roomy.room.create.0",
+      kind: "space.roomy.room.create.v0",
       data: undefined,
     },
   });
   batch.push({
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: welcomeThreadId,
     variant: {
-      kind: "space.roomy.info.0",
+      kind: "space.roomy.info.v0",
       data: {
         name: { set: `Welcome to ${currentSpaceName}!` },
         avatar: { ignore: undefined },
@@ -211,22 +211,22 @@ export async function createSpace(opts: {
     },
   });
   batch.push({
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: welcomeThreadId,
     variant: {
-      kind: "space.roomy.room.kind.0",
+      kind: "space.roomy.room.kind.v0",
       data: {
-        kind: "space.roomy.thread.0",
+        kind: "space.roomy.thread.v0",
         data: undefined,
       },
     },
   });
-  const welcomeMessageId = ulid();
+  const welcomeMessageId = newUlid();
   batch.push({
     ulid: welcomeMessageId,
     parent: welcomeThreadId,
     variant: {
-      kind: "space.roomy.message.create.0",
+      kind: "space.roomy.message.create.v0",
       data: {
         replyTo: undefined,
         content: {
@@ -237,10 +237,10 @@ export async function createSpace(opts: {
     },
   });
   batch.push({
-    ulid: ulid(),
+    ulid: newUlid(),
     parent: welcomeMessageId,
     variant: {
-      kind: "space.roomy.message.overrideMeta.0",
+      kind: "space.roomy.message.overrideMeta.v0",
       data: {
         author: spaceId,
         timestamp: BigInt(Date.now()),

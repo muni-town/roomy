@@ -11,7 +11,7 @@
   import { RichTextEditor } from "$lib/components/richtext";
   import { patchMake, patchToText } from "diff-match-patch-es";
   import Turndown from "turndown";
-  import { ulid } from "ulidx";
+  import { newUlid } from "$lib/schema";
   import { scrollContainerRef } from "$lib/utils.svelte";
 
   import IconTablerCheck from "~icons/tabler/check";
@@ -56,10 +56,10 @@
     if (pageMarkdown == newMarkdown) return;
     const patch = patchToText(patchMake(pageMarkdown || "", newMarkdown));
     await backend.sendEvent(spaceId, {
-      ulid: ulid(),
+      ulid: newUlid(),
       parent: page.params.object,
       variant: {
-        kind: "space.roomy.page.edit.0",
+        kind: "space.roomy.page.edit.v0",
         data: {
           content: {
             mimeType: "text/x-dmp-patch",

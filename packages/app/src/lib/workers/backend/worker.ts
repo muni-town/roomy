@@ -1,13 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /// <reference lib="webworker" />
 
-import {
-  type Batch,
-  type EventType,
-  type StreamHashId,
-  type StreamIndex,
-  type TaskPriority,
-} from "../types";
+import { type Batch, type StreamIndex, type TaskPriority } from "../types";
 import {
   messagePortInterface,
   reactiveWorkerState,
@@ -35,9 +29,17 @@ import type {
   SqliteWorkerInterface,
   SqlStatement,
 } from "../sqlite/types";
-import { isDid, type Did } from "@atproto/api";
-import { eventCodec, id } from "../encoding";
 import { ensureEntity } from "../sqlite/materializer";
+import {
+  did,
+  didUser,
+  event,
+  parseEvent,
+  type DidStream,
+  type DidUser,
+  type Event,
+} from "$lib/schema";
+import { decode } from "@atcute/cbor";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -97,13 +99,14 @@ class WorkerSupervisor {
    * stream from the stored cursor, then set up the other streams.
    */
   async setAuthenticated(client: Client) {
-    const did = client.agent.did;
-    if (!did || !isDid(did)) throw new Error("DID not defined on client");
+    const userDid = client.agent.did;
+    if (!userDid || !didUser.allows(userDid))
+      throw new Error("DID not defined on client");
 
-    console.log("Authenticating SQLite worker with did", did);
+    console.log("Authenticating SQLite worker with did", userDid);
 
     await this.sqlite
-      .authenticate(did)
+      .authenticate(didUser.assert(userDid))
       .catch((e) => console.error("Failed to authenticate sqlite worker", e));
 
     // try to fetch or create the personal stream
@@ -127,7 +130,7 @@ class WorkerSupervisor {
     // Mark personal stream space as hidden
     await this.sqlite.runQuery(sql`
       insert into comp_space (entity, hidden)
-      values (${id(personalStream.id)}, 1) 
+      values (${personalStream.id}, 1) 
       on conflict (entity) do nothing
     `);
     // StreamConnection doesn't have access to sqlite, so we need to update the stream cursor before backfill
@@ -142,7 +145,7 @@ class WorkerSupervisor {
     };
     this.#status.authState = {
       state: "authenticated",
-      did,
+      did: didUser.assert(userDid),
       personalStream: personalStream.id,
       clientStatus: client.status,
     };
@@ -161,7 +164,7 @@ class WorkerSupervisor {
 
     // get streams from SQLite
     const streamsResult = await this.sqlite.runQuery<{
-      id: StreamHashId;
+      id: DidStream;
       backfilled_to: StreamIndex;
     }>(sql`-- backend space list
       select id(e.id) as id, cs.backfilled_to from entities e join comp_space cs on e.id = cs.entity
@@ -413,7 +416,7 @@ class WorkerSupervisor {
         };
         return streamId;
       },
-      sendEvent: async (streamId: string, event: EventType) => {
+      sendEvent: async (streamId: string, event: Event) => {
         await this.client.sendEvent(streamId, event);
       },
       sendEventBatch: async (streamId, payloads) => {
@@ -468,26 +471,29 @@ class WorkerSupervisor {
     }
   }
 
-  async debugFetchPersonalStream(): Promise<EventType[]> {
+  async debugFetchPersonalStream(): Promise<Event[]> {
     if (this.#status.authState?.state != "authenticated") {
       throw "Not authenticated";
     }
     return this.debugFetchStream(this.#status.authState.personalStream);
   }
 
-  async debugFetchStream(streamId: string): Promise<EventType[]> {
+  async debugFetchStream(streamId: string): Promise<Event[]> {
     if (this.#status.authState?.state != "authenticated") {
       throw "Not authenticated";
     }
     const resp = await this.client.fetchEvents(streamId, 0, 1e10);
 
-    return resp.map((e) => eventCodec.dec(new Uint8Array(e.payload)));
+    return resp
+      .map((e) => parseEvent(decode(new Uint8Array(e.payload))))
+      .filter((e) => "success" in e)
+      .map((e) => e.data!);
   }
 
   /** Testing: Get personal stream record from PDS */
   async getStreamRecord(): Promise<{ id: string } | null> {
     try {
-      const response = await this.client.agent.api.com.atproto.repo.getRecord({
+      const response = await this.client.agent.com.atproto.repo.getRecord({
         repo: this.client.agent.did!,
         collection: CONFIG.streamNsid,
         rkey: CONFIG.streamSchemaVersion,
@@ -551,7 +557,7 @@ class SqliteSupervisor {
     return this.#state.sqliteWorker;
   }
 
-  async authenticate(did: Did) {
+  async authenticate(did: DidUser) {
     await this.untilReady;
     await this.sqliteWorker.authenticate(did);
     console.log("SQLite Worker authenticated:", did);
@@ -680,11 +686,11 @@ class SqliteSupervisor {
     }
   }
 
-  async getStreamCursor(streamId: StreamHashId) {
+  async getStreamCursor(streamId: DidStream) {
     const upToEventIdQuery = await this.runQuery<{
       backfilled_to: StreamIndex;
     }>(
-      sql`select backfilled_to from comp_space where entity = ${id(streamId)}`,
+      sql`select backfilled_to from comp_space where entity = ${streamId}`,
     ).catch((e) => console.warn("Error getting backfilled_to", e));
 
     const upToEventId =

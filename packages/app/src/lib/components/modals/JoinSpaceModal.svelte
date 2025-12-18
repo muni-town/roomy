@@ -3,7 +3,7 @@
   import { Box, Button } from "@fuxui/base";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { joinSpace } from "$lib/mutations/space";
-  import { type SpaceIdOrHandle, type StreamHashId } from "$lib/workers/types";
+  import { type SpaceIdOrHandle, type DidStream } from "$lib/workers/types";
   import { backend } from "$lib/workers";
 
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
@@ -11,7 +11,7 @@
 
   type JoinStatus =
     | { status: "loading" }
-    | { status: "ready"; spaceId: StreamHashId }
+    | { status: "ready"; spaceId: DidStream }
     | { status: "joining" }
     | { status: "success" }
     | {

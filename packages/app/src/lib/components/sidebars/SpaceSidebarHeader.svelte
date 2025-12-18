@@ -5,7 +5,7 @@
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { current } from "$lib/queries";
   import { backend, backendStatus } from "$lib/workers";
-  import { ulid } from "ulidx";
+  import { newUlid } from "$lib/schema";
 
   import IconLucideChevronDown from "~icons/lucide/chevron-down";
   import IconLucideShare from "~icons/lucide/share";
@@ -27,20 +27,20 @@
 
     // Tell the space that we are leaving the member list
     await backend.sendEvent(spaceId, {
-      ulid: ulid(),
+      ulid: newUlid(),
       parent: undefined,
       variant: {
-        kind: "space.roomy.room.leave.0",
+        kind: "space.roomy.room.leave.v0",
         data: undefined,
       },
     });
 
     // Remove the space from our personal space list
     await backend.sendEvent(backendStatus.authState.personalStream, {
-      ulid: ulid(),
+      ulid: newUlid(),
       parent: undefined,
       variant: {
-        kind: "space.roomy.space.leave.0",
+        kind: "space.roomy.space.leave.v0",
         data: {
           spaceId: spaceId,
         },

@@ -1,62 +1,50 @@
-import type { Bundle, StreamIndex, Ulid } from "../types";
-import { _void, type CodecType } from "scale-ts";
-import { eventCodec, eventVariantCodec, id } from "../encoding";
+import type { Bundle, StreamIndex } from "../types";
 import { decodeTime } from "ulidx";
 import { sql } from "$lib/utils/sqlTemplate";
 import type { SqlStatement } from "./types";
-
-type DecodedEventPayload = ReturnType<(typeof eventCodec)["dec"]>;
-type EventKind = DecodedEventPayload["variant"]["kind"];
-
-export type EventType<TVariant extends EventKind | undefined = undefined> =
-  TVariant extends undefined
-    ? DecodedEventPayload
-    : Omit<DecodedEventPayload, "variant"> & {
-        variant: Extract<DecodedEventPayload["variant"], { kind: TVariant }>;
-      };
-
-type StreamEvent = CodecType<typeof eventCodec>;
-type StreamEventVariants = CodecType<typeof eventVariantCodec>;
-type StreamEventVariantStr = StreamEventVariants["kind"];
-type StreamEventVariant<K extends StreamEventVariantStr> = Extract<
-  StreamEventVariants,
-  { kind: K }
->["data"];
+import {
+  type Event,
+  type Did,
+  type EventVariant,
+  type EventType,
+  fromBytes,
+  type Ulid,
+} from "$lib/schema";
 
 /** SQL mapping for each event variant */
 const materializers: {
-  [K in StreamEventVariantStr]: (opts: {
-    streamId: string;
-    user: string;
-    event: StreamEvent;
-    data: StreamEventVariant<K>;
+  [K in EventType]: (opts: {
+    streamId: Did;
+    user: Did;
+    event: Event<K>;
+    data: EventVariant<K>;
   }) => Promise<SqlStatement[]>;
 } = {
   // Space
-  "space.roomy.space.join.0": async ({ streamId, data }) => {
+  "space.roomy.space.join.v0": async ({ streamId, data }) => {
     return [
       ensureEntity(streamId, data.spaceId),
       // because we are materialising a non-personal-stream space, we infer that we are backfilling in the background
       sql`
         insert into comp_space (entity)
-        values (${id(data.spaceId)})
+        values (${data.spaceId})
         on conflict do update set hidden = 0
       `,
     ];
   },
-  "space.roomy.space.leave.0": async ({ data }) => [
+  "space.roomy.space.leave.v0": async ({ data }) => [
     sql`
       update comp_space set hidden = 1,
-      where entity = ${id(data.spaceId)}
+      where entity = ${data.spaceId}
     `,
   ],
-  "space.roomy.room.join.0": async ({ streamId, user, event }) => [
+  "space.roomy.room.join.v0": async ({ streamId, user, event }) => [
     // if event has parent, it's for joining a room; if not, it's for joining the space
     sql`
       insert or replace into edges (head, tail, label, payload)
       values (
-        ${event.parent ? id(event.parent) : id(streamId)},
-        ${id(user)},
+        ${event.room ? event.room : streamId},
+        ${user},
         'member',
         ${edgePayload({
           can: "post",
@@ -67,12 +55,12 @@ const materializers: {
     sql`
     insert into entities (id, stream_id, parent)
     values (
-      ${id(event.ulid)},
-      ${id(streamId)},
+      ${event.id},
+      ${streamId},
       (
         select entity
           from comp_room join entities e on e.id = entity
-          where label = 'channel' and deleted = 0 and e.stream_id = ${id(streamId)}
+          where label = 'channel' and deleted = 0 and e.stream_id = ${streamId}
           order by entity
           limit 1
       )
@@ -82,44 +70,44 @@ const materializers: {
     sql`
         insert into edges (head, tail, label)
         select 
-          ${id(event.ulid)},
-          ${id(streamId)},
+          ${event.id},
+          ${streamId},
           'author'
       `,
     sql`
       insert or replace into comp_content (entity, mime_type, data)
       values (
-        ${id(event.ulid)},
+        ${event.id},
         'text/markdown',
-        cast(('[@' || (select handle from comp_user where did = ${id(user)}) || '](/user/' || ${user} || ') joined the space.') as blob)
+        cast(('[@' || (select handle from comp_user where did = ${user}) || '](/user/' || ${user} || ') joined the space.') as blob)
     )`,
   ],
-  "space.roomy.room.leave.0": async ({ streamId, user, event }) => [
+  "space.roomy.room.leave.v0": async ({ streamId, user, event }) => [
     sql`
       delete from edges
       where 
-        head = ${event.parent ? id(event.parent) : id(streamId)}
+        head = ${event.room ? event.room : streamId}
           and
-        tail = ${id(user)}
+        tail = ${user}
           and
         label = 'member'
     `,
   ],
-  "space.roomy.stream.handle.account.0": async ({ streamId, data }) => [
+  "space.roomy.stream.handleAccount.v0": async ({ streamId, data }) => [
     sql`
       update comp_space set handle_account = ${data.did || null}
-      where entity = ${id(streamId)}
+      where entity = ${streamId}
     `,
   ],
 
   // Admin
-  "space.roomy.admin.add.0": async ({ streamId, data }) => {
+  "space.roomy.admin.add.v0": async ({ streamId, data }) => {
     return [
       sql`
       insert or replace into edges (head, tail, label, payload)
       values (
-        ${id(streamId)},
-        ${id(data.adminId)},
+        ${streamId},
+        ${data.userId},
         'member',
         ${edgePayload({
           can: "admin",
@@ -128,20 +116,20 @@ const materializers: {
     `,
     ];
   },
-  "space.roomy.admin.remove.0": async ({ streamId, data }) => [
+  "space.roomy.admin.remove.v0": async ({ streamId, data }) => [
     sql`
       update edges set payload = (${JSON.stringify({ can: "post" })})
       where 
-        head = ${id(streamId)}
+        head = ${streamId}
           and
-        tail = ${id(data.adminId)}
+        tail = ${data.userId}
           and
         label = 'member'
     `,
   ],
 
   // Info
-  "space.roomy.info.0": async ({ streamId, event, data }) => {
+  "space.roomy.info.set.v0": async ({ streamId, event, data }) => {
     const updates = [
       { key: "name", ...data.name },
       { key: "avatar", ...data.avatar },
@@ -149,16 +137,16 @@ const materializers: {
     ];
     const setUpdates = updates.filter((x) => "set" in x);
 
-    const entityId = event.parent ? event.parent : streamId;
+    const entityId = event.room ? event.room : streamId;
 
     return [
-      ensureEntity(streamId, event.ulid),
+      ensureEntity(streamId, event.id),
       {
         sql: `insert into comp_info (entity, ${setUpdates.map((x) => `${x.key}`).join(", ")})
             VALUES (:entity, ${setUpdates.map((x) => `:${x.key}`)})
             on conflict do update set ${[...setUpdates].map((x) => `${x.key} = :${x.key}`)}`,
         params: Object.fromEntries([
-          [":entity", id(entityId)],
+          [":entity", entityId],
           ...setUpdates.map((x) => [":" + x.key, x.set]),
         ]),
       },
@@ -166,15 +154,15 @@ const materializers: {
   },
 
   // Room
-  "space.roomy.room.create.0": async ({ streamId, event }) => [
-    ensureEntity(streamId, event.ulid, event.parent),
+  "space.roomy.room.create.v0": async ({ streamId, event }) => [
+    ensureEntity(streamId, event.id, event.room),
     sql`
       insert into comp_room ( entity )
-      values ( ${id(event.ulid)} ) on conflict do nothing
+      values ( ${event.id} ) on conflict do nothing
     `,
   ],
-  "space.roomy.room.delete.0": async ({ event }) => {
-    if (!event.parent) {
+  "space.roomy.room.delete.v0": async ({ event }) => {
+    if (!event.room) {
       console.warn("Delete room missing parent");
       return [];
     }
@@ -182,24 +170,24 @@ const materializers: {
       sql`
         update comp_room
         set deleted = 1
-        where id = ${id(event.parent)}
+        where id = ${event.room}
       `,
     ];
   },
-  "space.roomy.parent.update.0": async ({ event, data }) => {
-    if (!event.parent) {
+  "space.roomy.room.updateParent.v0": async ({ event, data }) => {
+    if (!event.room) {
       console.warn("Update room parent missing parent");
       return [];
     }
     return [
       sql`
-        update entities set parent = ${data.parent ? id(data.parent) : null}
-        where id = ${id(event.parent)}
+        update entities set parent = ${data.parent ? data.parent : null}
+        where id = ${event.room}
       `,
     ];
   },
   // TODO
-  "space.roomy.room.member.add.0": async (
+  "space.roomy.room.member.add.v0": async (
     {
       // sqliteWorker,
       // streamId,
@@ -209,7 +197,7 @@ const materializers: {
       // leafClient,
     },
   ) => [
-    // ensureEntity(streamId, event.ulid, event.parent),
+    // ensureEntity(streamId, event.id, event.room),
     // ...(await ensureProfile(
     //   sqliteWorker,
     //   agent,
@@ -218,101 +206,103 @@ const materializers: {
     //   leafClient,
     // )),
     // {
-    //   sql: event.parent
+    //   sql: event.room
     //     ? `insert into comp_room_members (room, member, access) values (?, ?, ?)`
     //     : `insert into space_members (space_id, member, access) values (?, ?, ?)`,
     //   params: [
-    //     event.parent ? Ulid.enc(event.parent) : Hash.enc(streamId),
+    //     event.room ? Ulid.enc(event.room) : Hash.enc(streamId),
     //     GroupMember.enc(data.member_id),
     //     ReadOrWrite.enc(data.access),
     //   ],
     // },
   ],
   // TODO
-  "space.roomy.room.member.remove.0": async ({}) => [
-    // ensureEntity(streamId, event.ulid, event.parent),
+  "space.roomy.room.member.update.v0": async ({}) => [],
+  // TODO
+  "space.roomy.room.member.remove.v0": async ({}) => [
+    // ensureEntity(streamId, event.id, event.room),
     // {
-    //   sql: event.parent
+    //   sql: event.room
     //     ? "delete from comp_room_members where room = ? and member = ? and access = ?"
     //     : "delete from space_members where space_id = ? and member = ? and access = ?",
     //   params: [
-    //     event.parent ? Ulid.enc(event.parent) : Hash.enc(streamId),
+    //     event.room ? Ulid.enc(event.room) : Hash.enc(streamId),
     //     GroupMember.enc(data.member_id),
     //     ReadOrWrite.enc(data.access),
     //   ],
     // },
   ],
 
-  // Message
-  "space.roomy.message.create.0": async ({ streamId, user, event, data }) => {
-    if (!event.parent) throw new Error("No room for message");
-    const statements = [
-      ensureEntity(streamId, event.ulid, event.parent),
-      sql`
-        insert into edges (head, tail, label)
-        select 
-          ${id(event.ulid)},
-          ${id(user)},
-          'author'
-      `,
-      sql`
-        insert or replace into comp_content (entity, mime_type, data)
-        values (
-          ${id(event.ulid)},
-          ${data.content.mimeType},
-          ${data.content.content}
-        )`,
-      sql`
-        insert into comp_last_read (entity, timestamp, unread_count)
-        values (${id(event.parent)}, 1, 1)
-        on conflict(entity) do update set
-          unread_count = case
-            when ${decodeTime(event.ulid)} > comp_last_read.timestamp
-            then comp_last_read.unread_count + 1
-            else comp_last_read.unread_count
-          end,
-          updated_at = (unixepoch() * 1000)`,
-    ];
+  // Message v0 - deprecated
+  // "space.roomy.message.create.v0": async ({ streamId, user, event, data }) => {
+  //   if (!event.room) throw new Error("No room for message");
+  //   const statements = [
+  //     ensureEntity(streamId, event.id, event.room),
+  //     sql`
+  //       insert into edges (head, tail, label)
+  //       select
+  //         ${event.id},
+  //         ${user},
+  //         'author'
+  //     `,
+  //     sql`
+  //       insert or replace into comp_content (entity, mime_type, data)
+  //       values (
+  //         ${event.id},
+  //         ${data.content.mimeType},
+  //         ${data.content.content}
+  //       )`,
+  //     sql`
+  //       insert into comp_last_read (entity, timestamp, unread_count)
+  //       values (${event.room}, 1, 1)
+  //       on conflict(entity) do update set
+  //         unread_count = case
+  //           when ${decodeTime(event.id)} > comp_last_read.timestamp
+  //           then comp_last_read.unread_count + 1
+  //           else comp_last_read.unread_count
+  //         end,
+  //         updated_at = (unixepoch() * 1000)`,
+  //   ];
 
-    if (data.replyTo) {
-      statements.push(sql`
-        insert into edges (head, tail, label)
-        values (
-          ${id(event.ulid)},
-          ${id(data.replyTo)},
-          'reply'
-        )
-      `);
-    }
+  //   if (data.replyTo) {
+  //     statements.push(sql`
+  //       insert into edges (head, tail, label)
+  //       values (
+  //         ${event.id},
+  //         ${data.replyTo},
+  //         'reply'
+  //       )
+  //     `);
+  //   }
 
-    return statements;
-  },
+  //   return statements;
+  // },
 
   // Message v1
-  "space.roomy.message.create.1": async ({ streamId, user, event, data }) => {
-    if (!event.parent) throw new Error("No room for message");
+  "space.roomy.message.create.v1": async ({ streamId, user, event, data }) => {
+    if (!event.room) throw new Error("No room for message");
     const statements = [
-      ensureEntity(streamId, event.ulid, event.parent),
+      ensureEntity(streamId, event.id, event.room),
       sql`
         insert or replace into edges (head, tail, label)
         select 
-          ${id(event.ulid)},
-          ${id(user)},
+          ${event.id},
+          ${user},
           'author'
       `,
       sql`
         insert or replace into comp_content (entity, mime_type, data)
         values (
-          ${id(event.ulid)},
+          ${event.id},
           ${data.content.mimeType},
           ${data.content.content}
         )`,
       sql`
         insert into comp_last_read (entity, timestamp, unread_count)
-          values (${id(event.parent)}, 1, 1)
+          values (${event.room}, 1, 1)
           on conflict(entity) do update set
             unread_count = case
-              when ${decodeTime(event.ulid)} > comp_last_read.timestamp
+              when ${decodeTime(event.id)} > comp_last_read.timestamp
               then comp_last_read.unread_count + 1
               else comp_last_read.unread_count
             end,
@@ -322,7 +312,7 @@ const materializers: {
 
     // Handle replyTo extensions
     const replies = data.extensions.filter(
-      (ext) => ext.kind === "space.roomy.replyTo.0",
+      (ext) => ext.$type === "space.roomy.extension.replyTo.v0",
     );
 
     // at an event encoding level we support messages replying to multiple messages;
@@ -331,8 +321,8 @@ const materializers: {
       statements.push(sql`
       insert into edges (head, tail, label)
       values (
-        ${id(event.ulid)},
-        ${id(replies[0].data)},
+        ${event.id},
+        ${replies[0].target},
         'reply'
       )
     `);
@@ -340,7 +330,7 @@ const materializers: {
 
     // Handle comment extensions - comp_comment
     const comments = data.extensions.filter(
-      (ext) => ext.kind === "space.roomy.comment.0",
+      (ext) => ext.$type === "space.roomy.extension.comment.v0",
     );
 
     // TODO: redesign schema to support materialising multiple comments
@@ -349,11 +339,11 @@ const materializers: {
         sql`
           insert into comp_comment (entity, version, snippet, idx_from, idx_to, updated_at)
           values (
-            ${id(event.ulid)},
-            ${id(comments[0].data.version)},
-            ${comments[0].data.snippet || ""},
-            ${comments[0].data.from},
-            ${comments[0].data.to},
+            ${event.id},
+            ${comments[0].version},
+            ${comments[0].snippet || ""},
+            ${comments[0].from},
+            ${comments[0].to},
             (unixepoch() * 1000)
           )`,
       );
@@ -361,19 +351,19 @@ const materializers: {
 
     // Handle overrideAuthorDid, overrideTimestamp extensions - comp_override_meta
     const overrideAuthorExt = data.extensions.find(
-      (ext) => ext.kind === "space.roomy.overrideAuthorDid.0",
+      (ext) => ext.$type === "space.roomy.extension.overrideAuthor.v0",
     );
     const overrideTimestampExt = data.extensions.find(
-      (ext) => ext.kind === "space.roomy.overrideTimestamp.0",
+      (ext) => ext.$type === "space.roomy.extension.overrideTimestamp.v0",
     );
 
     if (overrideAuthorExt || overrideTimestampExt) {
       statements.push(sql`
         insert or replace into comp_override_meta (entity, author, timestamp)
         values (
-          ${id(event.ulid)},
-          ${overrideAuthorExt ? id(overrideAuthorExt.data as string) : null},
-          ${overrideTimestampExt ? Number(overrideTimestampExt.data) : null}
+          ${event.id},
+          ${overrideAuthorExt ? (overrideAuthorExt.did as string) : null},
+          ${overrideTimestampExt ? Number(overrideTimestampExt.timestamp) : null}
         )
       `);
     }
@@ -381,22 +371,21 @@ const materializers: {
     // Handle image extensions - comp_image
     // Each image becomes a separate child entity with URI ID, including query with message ID to differentiate
     for (const img of data.extensions.filter(
-      (ext) => ext.kind === "space.roomy.image.0",
+      (ext) => ext.$type === "space.roomy.extension.image.v0",
     )) {
-      if (img.data instanceof Uint8Array) continue; // Skip unknown variants
-      const uriWithUlidQuery = img.data.uri + "?message=" + event.ulid;
+      const uriWithUlidQuery = img.uri + "?message=" + event.id;
       statements.push(
-        ensureEntity(streamId, uriWithUlidQuery, event.ulid),
+        ensureEntity(streamId, uriWithUlidQuery, event.id),
         sql`
           insert or replace into comp_image (entity, mime_type, alt, width, height, blurhash, size)
           values (
-            ${id(uriWithUlidQuery)},
-            ${img.data.mimeType},
-            ${img.data.alt},
-            ${img.data.width ? Number(img.data.width) : null},
-            ${img.data.height ? Number(img.data.height) : null},
-            ${img.data.blurhash || null},
-            ${img.data.size ? Number(img.data.size) : null}
+            ${uriWithUlidQuery},
+            ${img.mimeType},
+            ${img.alt},
+            ${img.width ? Number(img.width) : null},
+            ${img.height ? Number(img.height) : null},
+            ${img.blurhash || null},
+            ${img.size ? Number(img.size) : null}
           )
         `,
       );
@@ -405,23 +394,22 @@ const materializers: {
     // Handle video extensions - comp_video
     // Each video becomes a separate child entity with URI + query ID
     for (const vid of data.extensions.filter(
-      (ext) => ext.kind === "space.roomy.video.0",
+      (ext) => ext.$type === "space.roomy.extension.video.v0",
     )) {
-      if (vid.data instanceof Uint8Array) continue; // Skip unknown variants
-      const uriWithUlidQuery = vid.data.uri + "?message=" + event.ulid;
+      const uriWithUlidQuery = vid.uri + "?message=" + event.id;
       statements.push(
-        ensureEntity(streamId, uriWithUlidQuery, event.ulid),
+        ensureEntity(streamId, uriWithUlidQuery, event.id),
         sql`
           insert or replace into comp_video (entity, mime_type, alt, width, height, length, blurhash, size)
           values (
-            ${id(uriWithUlidQuery)},
-            ${vid.data.mimeType},
-            ${vid.data.alt},
-            ${vid.data.width ? Number(vid.data.width) : null},
-            ${vid.data.height ? Number(vid.data.height) : null},
-            ${vid.data.length ? Number(vid.data.length) : null},
-            ${vid.data.blurhash || null},
-            ${vid.data.size ? Number(vid.data.size) : null}
+            ${uriWithUlidQuery},
+            ${vid.mimeType},
+            ${vid.alt},
+            ${vid.width ? Number(vid.width) : null},
+            ${vid.height ? Number(vid.height) : null},
+            ${vid.length ? Number(vid.length) : null},
+            ${vid.blurhash || null},
+            ${vid.size ? Number(vid.size) : null}
           )
         `,
       );
@@ -430,36 +418,34 @@ const materializers: {
     // Handle file extensions - comp_file
     // Each file becomes a separate child entity with URI + query ID
     for (const file of data.extensions.filter(
-      (ext) => ext.kind === "space.roomy.file.0",
+      (ext) => ext.$type === "space.roomy.extension.file.v0",
     )) {
-      if (file.data instanceof Uint8Array) continue; // Skip unknown variants
-      const uriWithUlidQuery = file.data.uri + "?message=" + event.ulid;
+      const uriWithUlidQuery = file.uri + "?message=" + event.id;
       statements.push(
-        ensureEntity(streamId, uriWithUlidQuery, event.ulid),
+        ensureEntity(streamId, uriWithUlidQuery, event.id),
         sql`
           insert or replace into comp_file (entity, mime_type, name, size)
           values (
-            ${id(uriWithUlidQuery)},
-            ${file.data.mimeType},
-            ${file.data.name || null},
-            ${file.data.size ? Number(file.data.size) : null}
+            ${uriWithUlidQuery},
+            ${file.mimeType},
+            ${file.name || null},
+            ${file.size ? Number(file.size) : null}
           )
         `,
       );
     }
     // Handle link extensions - comp_link - URI + query ID
     data.extensions
-      .filter((ext) => ext.kind === "space.roomy.link.0")
+      .filter((ext) => ext.$type === "space.roomy.extension.link.v0")
       .forEach((link) => {
-        if (link.data instanceof Uint8Array) return; // Skip unknown variants
-        const uriWithUlidQuery = link.data.uri + "?message=" + event.ulid;
+        const uriWithUlidQuery = link.uri + "?message=" + event.id;
         statements.push(
-          ensureEntity(streamId, uriWithUlidQuery, event.ulid),
+          ensureEntity(streamId, uriWithUlidQuery, event.id),
           sql`
           insert into comp_link (entity, show_preview)
           values (
-            ${id(uriWithUlidQuery)},
-            ${link.data.showPreview ? 1 : 0}
+            ${uriWithUlidQuery},
+            ${link.showPreview ? 1 : 0}
           )
         `,
         );
@@ -468,22 +454,22 @@ const materializers: {
     return statements;
   },
 
-  "space.roomy.message.edit.0": async ({ streamId, event, data }) => {
-    if (!event.parent) {
+  "space.roomy.message.edit.v0": async ({ streamId, event, data }) => {
+    if (!event.room) {
       console.warn("Edit event missing parent");
       return [];
     }
 
     return [
-      ensureEntity(streamId, event.ulid, event.parent),
+      ensureEntity(streamId, event.id, event.room),
       data.content.mimeType == "text/x-dmp-patch"
         ? // If this is a patch, apply the patch using our SQL user-defined-function
           sql`
           update comp_content
           set 
-            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(data.content.content)}) as blob)
+            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(fromBytes(data.content.content))}) as blob)
           where
-            entity = ${id(event.parent)}
+            entity = ${event.room}
               and
             mime_type like 'text/%'
         `
@@ -494,26 +480,26 @@ const materializers: {
             mime_type = ${data.content.mimeType}
             data = ${data.content.content}
           where
-            entity = ${id(event.parent)}
+            entity = ${event.room}
         `,
     ];
   },
-  "space.roomy.page.edit.0": async ({ user, streamId, event, data }) => {
-    if (!event.parent) {
+  "space.roomy.page.edit.v0": async ({ user, streamId, event, data }) => {
+    if (!event.room) {
       console.warn("Edit event missing parent");
       return [];
     }
 
     return [
-      ensureEntity(streamId, event.ulid, event.parent),
+      ensureEntity(streamId, event.id, event.room),
       sql`
         insert into comp_page_edits (edit_id, entity, mime_type, data, user_id) 
         values (
-          ${id(event.ulid)},
-          ${id(event.parent)},
+          ${event.id},
+          ${event.room},
           ${data.content.mimeType},
           ${data.content.content},
-          ${id(user)}
+          ${user}
         )
       `,
       data.content.mimeType == "text/x-dmp-patch"
@@ -521,18 +507,18 @@ const materializers: {
           sql`
           insert into comp_content (entity, mime_type, data)
           values (
-            ${id(event.parent)},
+            ${event.room},
             'text/markdown',
-            cast(apply_dmp_patch('', ${new TextDecoder().decode(data.content.content)}) as blob)
+            cast(apply_dmp_patch('', ${new TextDecoder().decode(fromBytes(data.content.content))}) as blob)
           )
           on conflict do update set
-            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(data.content.content)}) as blob)
+            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(fromBytes(data.content.content))}) as blob)
         `
         : // If this is not a patch, just replace the previous value
           sql`
           insert into comp_content (entity, mime_type, data)
           values (
-            ${id(event.parent)},
+            ${event.room},
             ${data.content.mimeType},
             ${data.content.content}
           )
@@ -541,14 +527,14 @@ const materializers: {
             mime_type = ${data.content.mimeType},
             data = ${data.content.content}
           where
-            entity = ${id(event.parent)}
+            entity = ${event.room}
         `,
     ];
   },
 
   // TODO: make sure there is valid permission to send override metadata
-  "space.roomy.user.overrideMeta.0": async ({ event, data }) => {
-    if (!event.parent) {
+  "space.roomy.user.overrideMeta.v0": async ({ event, data }) => {
+    if (!event.room) {
       console.warn("Missing target for message meta override.");
       return [];
     }
@@ -556,50 +542,50 @@ const materializers: {
       sql`
         insert into comp_user (did, handle)
         values (
-          ${id(event.parent)},
+          ${event.room},
           ${data.handle}
         )
         on conflict(did) do update set handle = ${data.handle}
       `,
     ];
   },
-  "space.roomy.message.overrideMeta.0": async ({ streamId, event, data }) => {
+  "space.roomy.message.overrideMeta.v0": async ({ streamId, event, data }) => {
     // Note using the stream ID is kind of a special case for a "system" user if you want to have
     // the space itself be able to send messages.
-    const userId = event.parent || streamId;
+    const userId = event.room || streamId;
     return [
       sql`
         insert or replace into comp_override_meta (entity, author, timestamp)
         values (
-          ${id(userId)},
-          ${id(data.author)},
+          ${userId},
+          ${data.author},
           ${Number(data.timestamp)}
         )`,
     ];
   },
-  "space.roomy.message.delete.0": async ({ event }) => {
-    if (!event.parent) {
+  "space.roomy.message.delete.v0": async ({ event }) => {
+    if (!event.room) {
       console.warn("Missing target for message meta override.");
       return [];
     }
-    return [sql`delete from entities where id = ${id(event.parent)}`];
+    return [sql`delete from entities where id = ${event.room}`];
   },
 
   // Reaction
-  "space.roomy.reaction.create.0": async ({ data, user }) => {
+  "space.roomy.reaction.create.v0": async ({ data, user }) => {
     return [
       sql`
         insert into comp_reaction (entity, user, reaction)
         values (
-          ${id(data.reactionTo)},
-          ${id(user)},
+          ${data.target},
+          ${user},
           ${data.reaction}
         )
       `,
     ];
   },
-  "space.roomy.reaction.delete.0": async ({ event, user, data }) => {
-    if (!event.parent) {
+  "space.roomy.reaction.delete.v0": async ({ event, user, data }) => {
+    if (!event.room) {
       console.warn("Delete reaction missing parent");
       return [];
     }
@@ -607,28 +593,28 @@ const materializers: {
       sql`
       delete from comp_reaction
       where
-        entity = ${id(data.reaction_to)} and
-        user = ${id(user)} and
+        entity = ${data.target} and
+        user = ${user} and
         reaction = ${data.reaction}
     `,
     ];
   },
 
   // TODO: make sure there is valid permission to send bridged reaction
-  "space.roomy.reaction.bridged.create.0": async ({ data }) => {
+  "space.roomy.reaction.bridged.create.v0": async ({ data }) => {
     return [
       sql`
         insert into comp_reaction (entity, user, reaction)
         values (
-          ${id(data.reactingUser)},
-          ${id(data.reactionTo)},
+          ${data.reactingUser},
+          ${data.target},
           ${data.reaction}
         )
       `,
     ];
   },
-  "space.roomy.reaction.bridged.delete.0": async ({ event, data }) => {
-    if (!event.parent) {
+  "space.roomy.reaction.bridged.delete.v0": async ({ event, data }) => {
+    if (!event.room) {
       console.warn("Delete reaction missing parent");
       return [];
     }
@@ -636,161 +622,155 @@ const materializers: {
       sql`
       delete from comp_reaction
       where
-        entity = ${id(data.reaction_to)} and
-        user = ${id(data.reactingUser)} and
+        entity = ${data.target} and
+        user = ${data.reactingUser} and
         reaction = ${data.reaction}
     `,
     ];
   },
 
   // Media
-  "space.roomy.media.create.0": async ({ streamId, event, data }) => {
-    const mimeType = data.mimeType.toLowerCase();
+  // "space.roomy.media.create.v0": async ({ streamId, event, data }) => {
+  //   const mimeType = data.mimeType.toLowerCase();
 
-    const uriWithUlidQuery = data.uri + "?message=" + event.parent;
-    const statements = [ensureEntity(streamId, uriWithUlidQuery, event.parent)];
+  //   const uriWithUlidQuery = data.uri + "?message=" + event.room;
+  //   const statements = [ensureEntity(streamId, uriWithUlidQuery, event.room)];
 
-    if (mimeType.startsWith("image/")) {
-      statements.push(sql`
-        insert into comp_image (entity, mime_type)
-        values (
-          ${id(uriWithUlidQuery)},
-          ${data.mimeType}
-        )
-      `);
-    } else if (mimeType.startsWith("video/")) {
-      statements.push(sql`
-        insert into comp_video (entity, mime_type)
-        values (
-          ${id(uriWithUlidQuery)},
-          ${data.mimeType}
-        )
-      `);
-    } else {
-      // Default to file for everything else
-      statements.push(sql`
-        insert into comp_file (entity, mime_type)
-        values (
-          ${id(uriWithUlidQuery)},
-          ${data.mimeType}
-        )
-      `);
-    }
+  //   if (mimeType.startsWith("image/")) {
+  //     statements.push(sql`
+  //       insert into comp_image (entity, mime_type)
+  //       values (
+  //         ${uriWithUlidQuery},
+  //         ${data.mimeType}
+  //       )
+  //     `);
+  //   } else if (mimeType.startsWith("video/")) {
+  //     statements.push(sql`
+  //       insert into comp_video (entity, mime_type)
+  //       values (
+  //         ${uriWithUlidQuery},
+  //         ${data.mimeType}
+  //       )
+  //     `);
+  //   } else {
+  //     // Default to file for everything else
+  //     statements.push(sql`
+  //       insert into comp_file (entity, mime_type)
+  //       values (
+  //         ${uriWithUlidQuery},
+  //         ${data.mimeType}
+  //       )
+  //     `);
+  //   }
 
-    return statements;
-  },
+  //   return statements;
+  // },
 
-  "space.roomy.media.delete.0": async ({ event }) => {
-    if (!event.parent) {
-      console.warn("Missing target for media delete.");
-      return [];
-    }
-    return [sql`delete from entities where id = ${id(event.parent)}`];
-  },
+  // deprecated
+  // "space.roomy.media.delete.v0": async ({ event }) => {
+  //   if (!event.room) {
+  //     console.warn("Missing target for media delete.");
+  //     return [];
+  //   }
+  //   return [sql`delete from entities where id = ${event.room}`];
+  // },
 
   // Room Kinds
-  "space.roomy.room.kind.0": async ({ event, data }) => {
-    if (!event.parent) {
+  "space.roomy.room.setKind.v0": async ({ event, data }) => {
+    if (!event.room) {
       console.warn("Missing target for room kind mark.");
       return [];
     }
-    const kindMap = {
-      "space.roomy.channel.0": "channel",
-      "space.roomy.category.0": "category",
-      "space.roomy.page.0": "page",
-      "space.roomy.thread.0": "thread",
-    } as const;
-    const kind = kindMap[data.kind];
     return [
       sql`
-      update comp_room set label = ${kind} where entity = ${id(event.parent)}
+      update comp_room set label = ${data.kind} where entity = ${event.room}
       `,
     ];
   },
 
   // Channels
-  "space.roomy.channel.mark.0": async ({ event }) => {
-    if (!event.parent) {
-      console.warn("Missing target for channel mark.");
-      return [];
-    }
-    return [
-      sql`
-      update comp_room set label = 'channel' where entity = ${id(event.parent)}
-      `,
-    ];
-  },
-  "space.roomy.channel.unmark.0": async ({ event }) => {
-    if (!event.parent) {
-      console.warn("Missing target for channel unmark.");
-      return [];
-    }
-    return [
-      sql`update comp_room set label = null where entity = ${id(event.parent)} and label = 'channel'`,
-    ];
-  },
+  // "space.roomy.channel.mark.v0": async ({ event }) => {
+  //   if (!event.room) {
+  //     console.warn("Missing target for channel mark.");
+  //     return [];
+  //   }
+  //   return [
+  //     sql`
+  //     update comp_room set label = 'channel' where entity = ${event.room}
+  //     `,
+  //   ];
+  // },
+  // "space.roomy.channel.unmark.v0": async ({ event }) => {
+  //   if (!event.room) {
+  //     console.warn("Missing target for channel unmark.");
+  //     return [];
+  //   }
+  //   return [
+  //     sql`update comp_room set label = null where entity = ${event.room} and label = 'channel'`,
+  //   ];
+  // },
 
-  // Threads
-  "space.roomy.thread.mark.0": async ({ event }) => {
-    if (!event.parent) {
-      console.warn("Missing target for thread mark.");
-      return [];
-    }
-    return [
-      sql`
-      update comp_room set label = 'thread' where entity = ${id(event.parent)}
-      `,
-    ];
-  },
-  "space.roomy.thread.unmark.0": async ({ event }) => {
-    if (!event.parent) {
-      console.warn("Missing target for thread unmark.");
-      return [];
-    }
-    return [
-      sql`update comp_room set label = null where entity = ${id(event.parent)} and label = 'thread'`,
-    ];
-  },
+  // // Threads
+  // "space.roomy.thread.mark.v0": async ({ event }) => {
+  //   if (!event.room) {
+  //     console.warn("Missing target for thread mark.");
+  //     return [];
+  //   }
+  //   return [
+  //     sql`
+  //     update comp_room set label = 'thread' where entity = ${event.room}
+  //     `,
+  //   ];
+  // },
+  // "space.roomy.thread.unmark.v0": async ({ event }) => {
+  //   if (!event.room) {
+  //     console.warn("Missing target for thread unmark.");
+  //     return [];
+  //   }
+  //   return [
+  //     sql`update comp_room set label = null where entity = ${event.room} and label = 'thread'`,
+  //   ];
+  // },
 
-  // Categories
-  "space.roomy.category.mark.0": async ({ event }) => {
-    if (!event.parent) {
-      console.warn("Missing target for category mark.");
-      return [];
-    }
-    return [
-      sql`update comp_room set label = 'category' where entity = ${id(event.parent)}`,
-    ];
-  },
-  "space.roomy.category.unmark.0": async ({ event }) => {
-    if (!event.parent) {
-      console.warn("Missing target for category unmark.");
-      return [];
-    }
-    return [
-      sql`update comp_room set label = null where entity = ${id(event.parent)} and label = 'category'`,
-    ];
-  },
+  // // Categories
+  // "space.roomy.category.mark.v0": async ({ event }) => {
+  //   if (!event.room) {
+  //     console.warn("Missing target for category mark.");
+  //     return [];
+  //   }
+  //   return [
+  //     sql`update comp_room set label = 'category' where entity = ${event.room}`,
+  //   ];
+  // },
+  // "space.roomy.category.unmark.v0": async ({ event }) => {
+  //   if (!event.room) {
+  //     console.warn("Missing target for category unmark.");
+  //     return [];
+  //   }
+  //   return [
+  //     sql`update comp_room set label = null where entity = ${event.room} and label = 'category'`,
+  //   ];
+  // },
 
-  // Pages
-  "space.roomy.page.mark.0": async ({ event }) => {
-    if (!event.parent) {
-      console.warn("Missing target for page mark.");
-      return [];
-    }
-    return [
-      sql`update comp_room set label = 'page' where entity = ${id(event.parent)}`,
-    ];
-  },
-  "space.roomy.page.unmark.0": async ({ event }) => {
-    if (!event.parent) {
-      console.warn("Missing target for page unmark.");
-      return [];
-    }
-    return [
-      sql`update comp_room set label = null where entity = ${id(event.parent)} and label = 'page'`,
-    ];
-  },
+  // // Pages
+  // "space.roomy.page.mark.v0": async ({ event }) => {
+  //   if (!event.room) {
+  //     console.warn("Missing target for page mark.");
+  //     return [];
+  //   }
+  //   return [
+  //     sql`update comp_room set label = 'page' where entity = ${event.room}`,
+  //   ];
+  // },
+  // "space.roomy.page.unmark.v0": async ({ event }) => {
+  //   if (!event.room) {
+  //     console.warn("Missing target for page unmark.");
+  //     return [];
+  //   }
+  //   return [
+  //     sql`update comp_room set label = null where entity = ${event.room} and label = 'page'`,
+  //   ];
+  // },
 
   /**
    * Mark a room as read. This event is sent to the user's personal stream.
@@ -798,9 +778,9 @@ const materializers: {
    * We ensure the room entity exists using the streamId from the event data,
    * not the wrapper streamId (which would be the user's personal stream).
    */
-  "space.roomy.room.lastRead.0": async ({ event, data }) => {
+  "space.roomy.room.lastRead.v0": async ({ event, data }) => {
     // Extract timestamp from the event's ULID
-    const timestamp = decodeTime(event.ulid);
+    const timestamp = decodeTime(event.id);
 
     return [
       // Ensure the room entity exists in the target stream
@@ -809,7 +789,7 @@ const materializers: {
       // Insert or update the last read timestamp
       sql`
         insert into comp_last_read (entity, timestamp, unread_count)
-        values (${id(data.roomId)}, ${timestamp}, 0)
+        values (${data.roomId}, ${timestamp}, 0)
         on conflict(entity) do update set
           timestamp = excluded.timestamp,
           updated_at = excluded.timestamp,
@@ -822,14 +802,14 @@ const materializers: {
 // UTILS
 
 const dependentEvents = [
-  "space.roomy.message.edit.0",
-  "space.roomy.page.edit.0",
-  "space.roomy.message.delete.0",
-  "space.roomy.reaction.create.0",
-  "space.roomy.reaction.bridged.create.0",
-  "space.roomy.reaction.delete.0",
-  "space.roomy.reaction.bridged.delete.0",
-  "space.roomy.media.delete.0",
+  "space.roomy.message.edit.v0",
+  "space.roomy.page.edit.v0",
+  "space.roomy.message.delete.v0",
+  "space.roomy.reaction.create.v0",
+  "space.roomy.reaction.bridged.create.v0",
+  "space.roomy.reaction.delete.v0",
+  "space.roomy.reaction.bridged.delete.v0",
+  "space.roomy.media.delete.v0",
 ];
 
 /**
@@ -837,14 +817,14 @@ const dependentEvents = [
  * This eliminates the repetitive bundle-wrapping code in each materializer.
  */
 function bundleSuccess(
-  event: StreamEvent,
+  event: Event,
   idx: StreamIndex,
   statements: SqlStatement | SqlStatement[],
   dependsOn: Ulid | null,
 ): Bundle.Statement {
   return {
     status: "success",
-    eventId: event.ulid as Ulid,
+    eventId: event.id,
     eventIdx: idx,
     statements: Array.isArray(statements) ? statements : [statements],
     dependsOn,
@@ -855,11 +835,11 @@ function bundleSuccess(
  * Helper to create an error bundle with a consistent format.
  */
 function bundleError(
-  event: StreamEvent,
+  event: Event,
   error: Error | string,
 ): Bundle.StatementError {
   return {
-    eventId: event.ulid as Ulid,
+    eventId: event.id,
     status: "error",
     message: typeof error === "string" ? error : error.message,
   };
@@ -869,13 +849,12 @@ function bundleError(
  * Main materialize function called by the sqlite worker for each event.
  */
 export async function materialize(
-  event: StreamEvent,
+  event: Event,
   opts: { streamId: string; user: string },
   idx: StreamIndex,
-  payload: ArrayBufferLike,
 ): Promise<Bundle.Statement> {
-  const kind = event.variant.kind;
-  const data = event.variant.data;
+  const kind = event.variant.$type;
+  const data = event.variant;
 
   try {
     const handler = materializers[kind];
@@ -892,16 +871,17 @@ export async function materialize(
     // Insert event into events table
     statements.push(sql`
       INSERT INTO events (idx, stream_id, entity_ulid, payload, applied)
-      VALUES (${idx}, ${id(opts.streamId)}, ${id(event.ulid)}, ${payload}, 0)
+      VALUES (${idx}, ${opts.streamId}, ${event.id}, ${event}, 0)
     `);
 
-    const dependsOn = dependentEvents.includes(kind)
-      ? (event.parent as Ulid)
-      : null;
+    // TODO: these are probably all wrong now we have room instead of parent
+    // on the envelope, since dependencies on rooms are unproblematic for
+    // partial loading
+    const dependsOn = dependentEvents.includes(kind) ? event.room : null;
 
     return bundleSuccess(event, idx, statements, dependsOn);
   } catch (error) {
-    console.error(`Error materializing event ${event.ulid}:`, error);
+    console.error(`Error materializing event ${event.id}:`, error);
     return bundleError(event, error instanceof Error ? error : String(error));
   }
 }
@@ -921,9 +901,9 @@ export function ensureEntity(
   const statement = sql`
     insert into entities (id, stream_id, parent, created_at)
     values (
-      ${id(entityId)},
-      ${id(streamId)},
-      ${parent ? id(parent) : undefined},
+      ${entityId},
+      ${streamId},
+      ${parent ? parent : undefined},
       ${unixTimeMs}
     )
     on conflict(id) do update set

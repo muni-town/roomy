@@ -34,9 +34,44 @@ export const event = type({
   /** Parent room. Null for space-level events. */
   room: ulid,
   /** The event payload (discriminated by $type) */
-  event: eventVariant,
+  variant: eventVariant,
 });
 
 // Type exports for TypeScript consumers
-export type EventVariant = typeof eventVariant.infer;
-export type Event = typeof event.infer;
+
+/** NSID $type key specifying an event variant */
+export type EventType = (typeof eventVariant.infer)["$type"];
+
+/** Event envelope with room, id and variant. Optionally accepts an EventType parameter,
+ * which narrows to the given event type */
+export type Event<K = undefined> = K extends EventType
+  ? Omit<Event, "event"> & {
+      event: Extract<EventVariant, { $type: K }>;
+    }
+  : typeof event.infer;
+
+/** The inner data inside an event envelope. Optionally accepts an EventType parameter,
+ * which narrows to the given event type */
+export type EventVariant<K = undefined> = K extends EventType
+  ? Extract<EventVariant, { $type: K }>
+  : typeof eventVariant.infer;
+
+/**
+ * Parse an event variant by looking up its $type.
+ *
+ * Usage:
+ * ```ts
+ * const decoded = drisl.decode(bytes);
+ * const result = parseEvent(decoded);
+ * if (result.success) {
+ *   // result.data is fully typed
+ * }
+ * ```
+ */
+export function parseEvent(data: unknown) {
+  const result = event(data);
+  if (result instanceof type.errors) {
+    return { success: false as const, error: result.summary };
+  }
+  return { success: true as const, data: result };
+}

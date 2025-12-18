@@ -147,13 +147,11 @@ export function getPersonalStreamId() {
   },
 
   async diagnoseRoom(roomId: string) {
-    const { id } = await import("./encoding");
     const { sql } = await import("../utils/sqlTemplate");
     try {
-      const encodedRoomId = id(roomId);
       const diagnosticQuery = sql`
         select json_object(
-          'roomId', ${encodedRoomId},
+          'roomId', ${roomId},
           'existsInEntities', case when e.id is not null then 1 else 0 end,
           'streamId', id(e.stream_id),
           'parent', id(e.parent),
@@ -180,10 +178,10 @@ export function getPersonalStreamId() {
             else 'UNKNOWN'
           end
         ) as diagnostic
-        from (select ${encodedRoomId} as room_id)
-        left join entities e on e.id = ${encodedRoomId}
-        left join comp_room r on r.entity = ${encodedRoomId}
-        left join comp_info i on i.entity = ${encodedRoomId}
+        from (select ${roomId} as room_id)
+        left join entities e on e.id = ${roomId}
+        left join comp_room r on r.entity = ${roomId}
+        left join comp_info i on i.entity = ${roomId}
         left join entities parent_e on parent_e.id = e.parent
         left join comp_room parent_r on parent_r.entity = e.parent
         left join comp_info parent_i on parent_i.entity = e.parent
@@ -213,7 +211,6 @@ export function getPersonalStreamId() {
   async diagnoseSpaceTree(spaceId?: string) {
     try {
       const { current } = await import("../queries");
-      const { id } = await import("./encoding");
       const { sql } = await import("../utils/sqlTemplate");
 
       const actualSpaceId = spaceId || current.joinedSpace?.id;
@@ -223,7 +220,7 @@ export function getPersonalStreamId() {
         return { error: "No space ID available" };
       }
 
-      const encodedSpaceId = id(actualSpaceId);
+      const encodedSpaceId = actualSpaceId;
 
       const diagnosticQuery = sql`
         select json_object(

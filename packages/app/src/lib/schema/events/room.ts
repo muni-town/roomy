@@ -2,7 +2,7 @@
  * Room events: create, delete, join, leave, member management
  */
 
-import { type, ulid } from "../primitives";
+import { didUser, type, ulid } from "../primitives";
 
 // Room kinds (replaces the mark/unmark pattern)
 export const roomKind = type("'channel' | 'category' | 'thread' | 'page'");
@@ -12,63 +12,74 @@ export const accessLevel = type("'read' | 'write'");
 
 // Group member identifier
 export const groupMember = type({
-  $type: "'space.roomy.member.anonymous'",
+  /** Anyone, including unauthenticated users */
+  $type: "'space.roomy.member.anonymous.v0'",
 })
   .or({
-    $type: "'space.roomy.member.authenticated'",
+    /** Authenticated users that have joined the space. */
+    $type: "'space.roomy.member.authenticated.v0'",
   })
   .or({
-    $type: "'space.roomy.member.user'",
-    id: "string",
+    $type: "'space.roomy.member.user.v0'",
+    /** A user ID. */
+    id: didUser,
   })
   .or({
-    $type: "'space.roomy.member.room'",
-    /** Room whose member list to use as a group */
+    $type: "'space.roomy.member.room.v0'",
+    /** The ID of another room to use as a group. That room's member list will be used. */
     roomId: ulid,
   });
 
-// Create a room
+// Create a room. Sent at top level (no room), or in parent room. The ulid of this event becomes the id of the room.
 export const roomCreate = type({
-  $type: "'space.roomy.room.create'",
+  $type: "'space.roomy.room.create.v0'",
 });
 
-// Delete a room
+// Delete a room. Sent at top level or in parent room.
 export const roomDelete = type({
-  $type: "'space.roomy.room.delete'",
+  $type: "'space.roomy.room.delete.v0'",
+  roomId: ulid, // the room to delete
 });
 
-// Join a room (author joins the room specified by parent)
+// Join a room. Author joins the room specified in envelope. If no room specified, the event is an announcement on joining a space.
 export const roomJoin = type({
-  $type: "'space.roomy.room.join'",
+  $type: "'space.roomy.room.join.v0'",
 });
 
 // Leave a room
 export const roomLeave = type({
-  $type: "'space.roomy.room.leave'",
+  $type: "'space.roomy.room.leave.v0'",
 });
 
 // Set room kind
 export const roomSetKind = type({
-  $type: "'space.roomy.room.setKind'",
+  $type: "'space.roomy.room.setKind.v0'",
   kind: roomKind,
 });
 
 // Update room parent
 export const roomUpdateParent = type({
-  $type: "'space.roomy.room.updateParent'",
+  $type: "'space.roomy.room.updateParent.v0'",
   "parent?": ulid,
 });
 
 // Add a member to a room
 export const roomMemberAdd = type({
-  $type: "'space.roomy.room.member.add'",
+  $type: "'space.roomy.room.member.add.v0'",
   member: groupMember,
   access: accessLevel,
 });
 
+export const roomMemberUpdate = type({
+  $type: "'space.roomy.room.member.update.v0'",
+  member: groupMember,
+  access: accessLevel,
+  "reason?": "string",
+});
+
 // Remove a member from a room
 export const roomMemberRemove = type({
-  $type: "'space.roomy.room.member.remove'",
+  $type: "'space.roomy.room.member.remove.v0'",
   member: groupMember,
   access: accessLevel,
   "reason?": "string",
@@ -82,40 +93,46 @@ export const roomEvent = roomCreate
   .or(roomSetKind)
   .or(roomUpdateParent)
   .or(roomMemberAdd)
+  .or(roomMemberUpdate)
   .or(roomMemberRemove);
 
 // Export for registry
 export const events = {
-  "space.roomy.room.create": {
+  "space.roomy.room.create.v0": {
     type: roomCreate,
     description:
       "Create a new room. Sub-rooms are created by sending this in another room.",
   },
-  "space.roomy.room.delete": {
+  "space.roomy.room.delete.v0": {
     type: roomDelete,
     description: "Delete a room",
   },
-  "space.roomy.room.join": {
+  "space.roomy.room.join.v0": {
     type: roomJoin,
-    description: "Join the room specified by the event's parent",
+    description:
+      "Join the room specified in envelope. If no room specified, the event is an announcement on joining a space.",
   },
-  "space.roomy.room.leave": {
+  "space.roomy.room.leave.v0": {
     type: roomLeave,
     description: "Leave a room",
   },
-  "space.roomy.room.setKind": {
+  "space.roomy.room.setKind.v0": {
     type: roomSetKind,
     description: "Set the kind of a room (channel, category, thread, or page)",
   },
-  "space.roomy.room.updateParent": {
+  "space.roomy.room.updateParent.v0": {
     type: roomUpdateParent,
     description: "Change the parent of a room",
   },
-  "space.roomy.room.member.add": {
+  "space.roomy.room.member.add.v0": {
     type: roomMemberAdd,
     description: "Add a member to the room's access list",
   },
-  "space.roomy.room.member.remove": {
+  "space.roomy.room.member.update.v0": {
+    type: roomMemberUpdate,
+    description: "Change a room member's access permissions",
+  },
+  "space.roomy.room.member.remove.v0": {
     type: roomMemberRemove,
     description: "Remove a member from the room's access list",
   },

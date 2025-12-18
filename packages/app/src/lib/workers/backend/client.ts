@@ -1,25 +1,31 @@
 import type { OAuthSession } from "@atproto/oauth-client";
 import { createOauthClient } from "./oauth";
 import { db, personalStream } from "../idb";
-import { Agent, AtpAgent, BlobRef, isDid, type Did } from "@atproto/api";
+import { Agent, AtpAgent, BlobRef } from "@atproto/api";
 import { lexicons } from "$lib/lexicons";
 import { LeafClient } from "@muni-town/leaf-client";
 import { CONFIG } from "$lib/config";
 import {
-  type EventType,
-  type StreamHashId,
   type StreamIndex,
   type Batch,
   type EncodedStreamEvent,
-  type Handle,
 } from "../types";
 import { type Profile } from "$lib/types/profile";
-import { eventCodec } from "../encoding";
 import { Deferred } from "$lib/utils/deferred";
 import { AsyncChannel } from "../asyncChannel";
 import type { StreamConnectionStatus, ConnectionStates } from "./types";
 import { personalModule } from "./modules";
 import { ConnectedStream, parseEvents } from "./stream";
+import {
+  did,
+  didUser,
+  handle,
+  type Did,
+  type DidStream,
+  type Event,
+  type Handle,
+} from "$lib/schema";
+import { encode } from "@atcute/cbor";
 
 /** Handles interaction with ATProto and Leaf, manages state for connection to both,
  * including connecting to and backfilling streams */
@@ -150,7 +156,7 @@ export class Client {
     return this.#connected.promise;
   }
 
-  async checkStreamExists(streamId: StreamHashId) {
+  async checkStreamExists(streamId: DidStream) {
     try {
       const streamInfo = await this.leaf.streamInfo(streamId);
       if (!streamInfo) return false;
@@ -162,17 +168,17 @@ export class Client {
 
   async connect(
     personalStream: ConnectedStream,
-    streamList: Map<StreamHashId, StreamIndex>,
+    streamList: Map<DidStream, StreamIndex>,
   ) {
     console.log("Client connecting", streamList);
 
-    const streams = new Map<StreamHashId, ConnectedStream>();
-    const failed: StreamHashId[] = [];
+    const streams = new Map<DidStream, ConnectedStream>();
+    const failed: DidStream[] = [];
 
     for await (const [streamId, upToEventId] of streamList.entries()) {
       try {
         const stream = await ConnectedStream.connect({
-          user: this.agent.assertDid as Did,
+          user: didUser.assert(this.agent.assertDid),
           leaf: this.leaf,
           id: streamId,
           idx: upToEventId,
@@ -238,7 +244,7 @@ export class Client {
       : undefined;
   }
 
-  async connectSpaceStream(streamId: StreamHashId, idx: StreamIndex) {
+  async connectSpaceStream(streamId: DidStream, idx: StreamIndex) {
     if (this.#streamConnection.status !== "connected")
       throw new Error("Client must be connected to add new space stream");
     await this.#leafAuthenticated.promise;
@@ -252,7 +258,7 @@ export class Client {
     }
 
     const stream = await ConnectedStream.connect({
-      user: this.agent.assertDid as Did,
+      user: didUser.assert(this.agent.assertDid),
       leaf: this.leaf,
       id: streamId,
       idx,
@@ -274,7 +280,7 @@ export class Client {
 
     console.log("Creating space stream");
     const newStream = await ConnectedStream.createSpace({
-      user: this.agent.assertDid as Did,
+      user: didUser.assert(this.agent.assertDid),
       leaf: this.leaf,
       eventChannel: this.eventChannel,
     });
@@ -286,7 +292,7 @@ export class Client {
     // add to stream connection map
     this.#streamConnection.streams.set(newStream.id, newStream);
 
-    return newStream.id as StreamHashId;
+    return newStream.id as DidStream;
   }
 
   get personalStream() {
@@ -307,7 +313,7 @@ export class Client {
     await this.#leafAuthenticated.promise;
 
     return await ConnectedStream.createPersonal({
-      user: this.agent.assertDid as Did,
+      user: didUser.assert(this.agent.assertDid),
       leaf: this.leaf,
       eventChannel,
     });
@@ -339,16 +345,16 @@ export class Client {
           repo: this.agent.assertDid,
           rkey: CONFIG.streamSchemaVersion,
         });
-        const existingRecord = getResponse.data.value as { id: StreamHashId };
+        const existingRecord = getResponse.data.value as { id: DidStream };
         await personalStream.setIdCache(
           this.agent.assertDid,
           existingRecord.id,
         );
         console.log("Found existing stream ID from PDS:", existingRecord.id);
         stream = await ConnectedStream.connect({
-          user: this.agent.assertDid as Did,
+          user: didUser.assert(this.agent.assertDid),
           leaf: this.leaf,
-          id: existingRecord.id as StreamHashId,
+          id: existingRecord.id as DidStream,
           idx: 0 as StreamIndex,
           eventChannel,
         });
@@ -431,7 +437,7 @@ export class Client {
     return stream;
   }
 
-  async backfillStreamById(streamId: StreamHashId) {
+  async backfillStreamById(streamId: DidStream) {
     if (this.#streamConnection.status !== "connected")
       throw new Error("Client must be connected to backfill");
 
@@ -462,19 +468,19 @@ export class Client {
     console.log("Backfill fetching done");
   }
 
-  async sendEvent(streamId: string, event: EventType) {
+  async sendEvent(streamId: string, event: Event) {
     await this.#leafAuthenticated.promise;
     await this.leaf.sendEvent(streamId, {
       user: this.agent.assertDid,
-      payload: eventCodec.enc(event),
+      payload: encode(event),
     });
   }
 
-  async sendEventBatch(streamId: string, payloads: EventType[]) {
+  async sendEventBatch(streamId: string, payloads: Event[]) {
     await this.#leafAuthenticated.promise;
     const encodedPayloads = payloads.map((x) => {
       try {
-        return eventCodec.enc(x);
+        return encode(x);
       } catch (e) {
         throw new Error(
           `Could not encode event: ${JSON.stringify(x, null, "  ")}`,
@@ -527,14 +533,14 @@ export class Client {
 
     // Create a record that links to the blob
     const record = {
-      $type: "space.roomy.upload",
+      $type: "space.roomy.upload.v0",
       image: blobRef,
       alt: opts?.alt,
     };
     // Put the record in the repository
     await this.agent.com.atproto.repo.putRecord({
       repo: this.agent.assertDid,
-      collection: "space.roomy.upload",
+      collection: "space.roomy.upload.v0",
       rkey: `${Date.now()}`, // Using timestamp as a unique key
       record: record,
     });
@@ -563,7 +569,7 @@ export class Client {
   }
 
   async resolveHandleForSpace(
-    spaceId: StreamHashId,
+    spaceId: DidStream,
     handleAccountDid: Did,
   ): Promise<Handle | undefined> {
     try {
@@ -580,10 +586,10 @@ export class Client {
     }
   }
 
-  private resolveIdType(spaceIdOrHandleOrDid: StreamHashId | Handle | Did) {
-    if (spaceIdOrHandleOrDid.includes(".")) {
+  private resolveIdType(spaceIdOrHandleOrDid: DidStream | Handle | Did) {
+    if (handle.allows(spaceIdOrHandleOrDid)) {
       return "handle";
-    } else if (isDid(spaceIdOrHandleOrDid)) {
+    } else if (did.allows(spaceIdOrHandleOrDid)) {
       return "did";
     } else {
       return "streamId";
@@ -611,9 +617,9 @@ export class Client {
   }
 
   async resolveSpaceId(
-    spaceIdOrHandleOrDid: StreamHashId | Handle | Did,
+    spaceIdOrHandleOrDid: DidStream | Handle | Did,
   ): Promise<{
-    spaceId: StreamHashId;
+    spaceId: DidStream;
     handle?: Handle;
     did?: Did;
   }> {
@@ -641,7 +647,7 @@ export class Client {
         throw e;
       }
     } else {
-      return { spaceId: spaceIdOrHandleOrDid as StreamHashId };
+      return { spaceId: spaceIdOrHandleOrDid as DidStream };
     }
   }
 
@@ -650,7 +656,7 @@ export class Client {
    */
   private async getStreamHandleRecordCached(
     did: Did,
-  ): Promise<StreamHashId | undefined> {
+  ): Promise<DidStream | undefined> {
     const cached = this.#agentStreamHandleCache.get(did);
     if (cached) return cached.result;
 
@@ -669,7 +675,7 @@ export class Client {
       );
 
       const verifiedSpaceId = resp.data.value?.id
-        ? (resp.data.value.id as StreamHashId)
+        ? (resp.data.value.id as DidStream)
         : undefined;
 
       if (verifiedSpaceId) {

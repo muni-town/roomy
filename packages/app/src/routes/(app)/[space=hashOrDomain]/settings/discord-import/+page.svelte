@@ -123,7 +123,7 @@
                 ? "channel"
                 : "category",
             name: entry.channel.category,
-            roomyId: ulid(),
+            roomyId: newUlid(),
           });
         }
 
@@ -133,7 +133,7 @@
           kind:
             entry.channel.type == "GuildPublicThread" ? "thread" : "channel",
           name: entry.channel.name,
-          roomyId: existingChannelInfo?.roomyId || ulid(),
+          roomyId: existingChannelInfo?.roomyId || newUlid(),
           topic: entry.channel.topic,
         });
       }
@@ -145,15 +145,15 @@
           ulid: room.roomyId,
           parent: roomyParentId,
           variant: {
-            kind: "space.roomy.room.create.0",
+            kind: "space.roomy.room.create.v0",
             data: undefined,
           },
         });
         batch.push({
-          ulid: ulid(),
+          ulid: newUlid(),
           parent: room.roomyId,
           variant: {
-            kind: "space.roomy.info.0",
+            kind: "space.roomy.info.v0",
             data: {
               name: {
                 set: room.name,
@@ -166,17 +166,17 @@
           },
         });
         batch.push({
-          ulid: ulid(),
+          ulid: newUlid(),
           parent: room.roomyId,
           variant: {
-            kind: "space.roomy.room.kind.0",
+            kind: "space.roomy.room.kind.v0",
             data: {
               kind:
                 room.kind == "category"
-                  ? "space.roomy.category.0"
+                  ? "space.roomy.category.v0"
                   : room.kind == "channel"
-                    ? "space.roomy.channel.0"
-                    : "space.roomy.thread.0",
+                    ? "space.roomy.channel.v0"
+                    : "space.roomy.thread.v0",
               data: undefined,
             },
           },
@@ -198,12 +198,12 @@
             continue;
           }
 
-          const messageId = ulid();
+          const messageId = newUlid();
           batch.push({
             ulid: messageId,
             parent: roomId,
             variant: {
-              kind: "space.roomy.message.create.0",
+              kind: "space.roomy.message.create.v0",
               data: {
                 content: {
                   mimeType: "text/markdown",
@@ -217,10 +217,10 @@
           for (const reaction of message.reactions) {
             for (const user of reaction.users) {
               batch.push({
-                ulid: ulid(),
+                ulid: newUlid(),
                 parent: roomId,
                 variant: {
-                  kind: "space.roomy.reaction.bridged.create.0",
+                  kind: "space.roomy.reaction.bridged.create.v0",
                   data: {
                     reactingUser: `did:discord:${user.id}`,
                     reaction: reaction.emoji.name,
@@ -240,10 +240,10 @@
           const author = `did:discord:${message.author.id}`;
           if (!existingDiscordUsers.has(author)) {
             batch.push({
-              ulid: ulid(),
+              ulid: newUlid(),
               parent: author,
               variant: {
-                kind: "space.roomy.info.0",
+                kind: "space.roomy.info.v0",
                 data: {
                   name: { set: message.author.nickname },
                   avatar: {
@@ -254,10 +254,10 @@
               },
             });
             batch.push({
-              ulid: ulid(),
+              ulid: newUlid(),
               parent: author,
               variant: {
-                kind: "space.roomy.user.overrideMeta.0",
+                kind: "space.roomy.user.overrideMeta.v0",
                 data: {
                   handle: message.author.name,
                 },
@@ -267,10 +267,10 @@
           }
 
           batch.push({
-            ulid: ulid(),
+            ulid: newUlid(),
             parent: messageId,
             variant: {
-              kind: "space.roomy.message.overrideMeta.0",
+              kind: "space.roomy.message.overrideMeta.v0",
               data: {
                 author,
                 timestamp: BigInt(
