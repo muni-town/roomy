@@ -1,8 +1,8 @@
 import { backend, backendStatus } from "$lib/workers";
-import type { EventType, DidStream } from "$lib/workers/types";
+import type { Event, DidStream } from "$lib/schema";
 import type { Did } from "@atproto/api";
 import { toast } from "@fuxui/base";
-import { newUlid } from "$lib/schema";
+import { didUser, ignore, newUlid, set, toBytes } from "$lib/schema";
 
 /**
  * Join a space.
@@ -16,22 +16,19 @@ export async function joinSpace(spaceId: DidStream) {
 
     // Add the space to the personal list of joined spaces
     await backend.sendEvent(backendStatus.authState.personalStream, {
-      ulid: newUlid(),
-      parent: undefined,
+      id: newUlid(),
+      room: undefined,
       variant: {
-        kind: "space.roomy.personal.joinSpace.v0",
-        data: {
-          spaceId: spaceId,
-        },
+        $type: "space.roomy.personal.joinSpace.v0",
+        spaceId: spaceId,
       },
     });
     // Tell the space that we joined.
     await backend.sendEvent(spaceId, {
-      ulid: newUlid(),
-      parent: undefined,
+      id: newUlid(),
+      room: undefined,
       variant: {
-        kind: "space.roomy.room.joinRoom.v0",
-        data: undefined,
+        $type: "space.roomy.room.joinRoom.v0",
       },
     });
   } catch (e) {
@@ -63,13 +60,11 @@ export async function createSpace(opts: {
 
   // Join the space
   await backend.sendEvent(opts.creator.personalStreamId, {
-    ulid: newUlid(),
-    parent: undefined,
+    id: newUlid(),
+    room: undefined,
     variant: {
-      kind: "space.roomy.personal.joinSpace.v0",
-      data: {
-        spaceId,
-      },
+      $type: "space.roomy.personal.joinSpace.v0",
+      spaceId,
     },
   });
 
@@ -79,172 +74,142 @@ export async function createSpace(opts: {
     opts.avatarFile &&
     (await backend.uploadToPds(await opts.avatarFile.arrayBuffer()));
 
-  const batch: EventType[] = [];
+  const batch: Event[] = [];
 
   // Update space info
   batch.push({
-    ulid: newUlid(),
-    parent: undefined,
+    id: newUlid(),
+    room: undefined,
     variant: {
-      kind: "space.roomy.info.v0",
-      data: {
-        avatar: avatarUpload?.uri
-          ? { set: avatarUpload.uri }
-          : { ignore: undefined },
-        name: currentSpaceName
-          ? { set: currentSpaceName }
-          : { ignore: undefined },
-        description: currentSpaceDescription
-          ? { set: currentSpaceDescription }
-          : { ignore: undefined },
-      },
+      $type: "space.roomy.common.setInfo.v0",
+      avatar: avatarUpload?.uri ? set(avatarUpload.uri) : ignore,
+      name: currentSpaceName ? set(currentSpaceName) : ignore,
+      description: currentSpaceDescription
+        ? set(currentSpaceDescription)
+        : ignore,
     },
   });
 
   // Make this user and admin
   batch.push({
-    ulid: newUlid(),
-    parent: undefined,
+    id: newUlid(),
+    room: undefined,
     variant: {
-      kind: "space.roomy.space.addAdmin.v0",
-      data: {
-        adminId: opts.creator.did,
-      },
+      $type: "space.roomy.space.addAdmin.v0",
+      userId: didUser.assert(opts.creator.did),
     },
   });
 
   // Create the "system" user as the space itself
   batch.push({
-    ulid: newUlid(),
-    parent: undefined,
+    id: newUlid(),
+    room: undefined,
     variant: {
-      kind: "space.roomy.space.overrideUserMeta.v0",
-      data: {
-        handle: "system",
-      },
+      $type: "space.roomy.space.overrideUserMeta.v0",
+      handle: "system",
     },
   });
 
   const categoryId = newUlid();
   batch.push({
-    ulid: categoryId,
-    parent: undefined,
+    id: categoryId,
+    room: undefined,
     variant: {
-      kind: "space.roomy.room.createRoom.v0",
-      data: undefined,
+      $type: "space.roomy.room.createRoom.v0",
     },
   });
   batch.push({
-    ulid: newUlid(),
-    parent: categoryId,
+    id: newUlid(),
+    room: categoryId,
     variant: {
-      kind: "space.roomy.info.v0",
-      data: {
-        name: { set: "Uncategorized" },
-        avatar: { ignore: undefined },
-        description: { ignore: undefined },
-      },
+      $type: "space.roomy.common.setInfo.v0",
+      name: set("Uncategorized"),
+      avatar: ignore,
+      description: ignore,
     },
   });
   batch.push({
-    ulid: newUlid(),
-    parent: categoryId,
+    id: newUlid(),
+    room: categoryId,
     variant: {
-      kind: "space.roomy.room.kind.v0",
-      data: {
-        kind: "space.roomy.category.v0",
-        data: undefined,
-      },
+      $type: "space.roomy.room.setKind.v0",
+      kind: "category",
     },
   });
   const generalChannelId = newUlid();
   batch.push({
-    ulid: generalChannelId,
-    parent: categoryId,
+    id: generalChannelId,
+    room: categoryId,
     variant: {
-      kind: "space.roomy.room.createRoom.v0",
-      data: undefined,
+      $type: "space.roomy.room.createRoom.v0",
     },
   });
   batch.push({
-    ulid: newUlid(),
-    parent: generalChannelId,
+    id: newUlid(),
+    room: generalChannelId,
     variant: {
-      kind: "space.roomy.info.v0",
-      data: {
-        name: { set: "general" },
-        avatar: { ignore: undefined },
-        description: { ignore: undefined },
-      },
+      $type: "space.roomy.common.setInfo.v0",
+      name: set("general"),
+      avatar: ignore,
+      description: ignore,
     },
   });
   batch.push({
-    ulid: newUlid(),
-    parent: generalChannelId,
+    id: newUlid(),
+    room: generalChannelId,
     variant: {
-      kind: "space.roomy.room.kind.v0",
-      data: {
-        kind: "space.roomy.channel.v0",
-        data: undefined,
-      },
+      $type: "space.roomy.room.setKind.v0",
+      kind: "channel",
     },
   });
   const welcomeThreadId = newUlid();
   batch.push({
-    ulid: welcomeThreadId,
-    parent: generalChannelId,
+    id: welcomeThreadId,
+    room: generalChannelId,
     variant: {
-      kind: "space.roomy.room.createRoom.v0",
-      data: undefined,
+      $type: "space.roomy.room.createRoom.v0",
     },
   });
   batch.push({
-    ulid: newUlid(),
-    parent: welcomeThreadId,
+    id: newUlid(),
+    room: welcomeThreadId,
     variant: {
-      kind: "space.roomy.info.v0",
-      data: {
-        name: { set: `Welcome to ${currentSpaceName}!` },
-        avatar: { ignore: undefined },
-        description: { ignore: undefined },
-      },
+      $type: "space.roomy.common.setInfo.v0",
+      name: set(`Welcome to ${currentSpaceName}!`),
+      avatar: ignore,
+      description: ignore,
     },
   });
   batch.push({
-    ulid: newUlid(),
-    parent: welcomeThreadId,
+    id: newUlid(),
+    room: welcomeThreadId,
     variant: {
-      kind: "space.roomy.room.kind.v0",
-      data: {
-        kind: "space.roomy.thread.v0",
-        data: undefined,
-      },
+      $type: "space.roomy.room.setKind.v0",
+      kind: "thread",
     },
   });
   const welcomeMessageId = newUlid();
   batch.push({
-    ulid: welcomeMessageId,
-    parent: welcomeThreadId,
+    id: welcomeMessageId,
+    room: welcomeThreadId,
     variant: {
-      kind: "space.roomy.room.sendMessage.v0",
-      data: {
-        replyTo: undefined,
-        content: {
-          mimeType: "text/markdown",
-          content: new TextEncoder().encode(`Welcome to your new Roomy space!`),
-        },
+      $type: "space.roomy.room.sendMessage.v1",
+      content: {
+        mimeType: "text/markdown",
+        content: toBytes(
+          new TextEncoder().encode(`Welcome to your new Roomy space!`),
+        ),
       },
+      extensions: [],
     },
   });
   batch.push({
-    ulid: newUlid(),
-    parent: welcomeMessageId,
+    id: newUlid(),
+    room: welcomeMessageId,
     variant: {
-      kind: "space.roomy.message.overrideMeta.v0",
-      data: {
-        author: spaceId,
-        timestamp: BigInt(Date.now()),
-      },
+      $type: "space.roomy.message.overrideMeta.v0",
+      author: spaceId,
+      timestamp: Date.now(),
     },
   });
 
