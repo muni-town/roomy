@@ -15,7 +15,7 @@
     () =>
       sql`
         select json_object(
-          'id', id(id), 
+          'id', id, 
           'name', name,
           'activity', json(activity)
         ) as json

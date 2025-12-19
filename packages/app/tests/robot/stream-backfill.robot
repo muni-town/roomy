@@ -105,7 +105,7 @@ Reload And Wait For Backfill
     Log    comp_space table has ${comp_space_count['rows'][0]['count']} rows after reload
 
     # Check backfilled_to for our space
-    ${backfilled_sql}=    Set Variable    SELECT backfilled_to FROM comp_space WHERE id(entity) = '${space_id}'
+    ${backfilled_sql}=    Set Variable    SELECT backfilled_to FROM comp_space WHERE entity = '${space_id}'
     ${backfilled_result}=    Execute SQL Query    ${backfilled_sql}
     Log    backfilled_to query result: ${backfilled_result}
 
@@ -161,7 +161,7 @@ Verify Event Count In SQLite
 
     [Arguments]    ${stream_id}    ${expected_count}
 
-    ${sql}=    Set Variable    SELECT COUNT(*) as count FROM events WHERE id(stream_id) = '${stream_id}'
+    ${sql}=    Set Variable    SELECT COUNT(*) as count FROM events WHERE stream_id = '${stream_id}'
     ${result}=    Execute SQL Query    ${sql}
 
     ${actual_count}=    Set Variable    ${result['rows'][0]['count']}
@@ -180,11 +180,11 @@ Verify Event Ordering
     [Arguments]    ${stream_id}    ${expected_count}
 
     # Get first and last event idx
-    ${first_sql}=    Set Variable    SELECT idx FROM events WHERE id(stream_id) = '${stream_id}' ORDER BY idx ASC LIMIT 1
+    ${first_sql}=    Set Variable    SELECT idx FROM events WHERE stream_id = '${stream_id}' ORDER BY idx ASC LIMIT 1
     ${first_result}=    Execute SQL Query    ${first_sql}
     ${first_idx}=    Set Variable    ${first_result['rows'][0]['idx']}
 
-    ${last_sql}=    Set Variable    SELECT idx FROM events WHERE id(stream_id) = '${stream_id}' ORDER BY idx DESC LIMIT 1
+    ${last_sql}=    Set Variable    SELECT idx FROM events WHERE stream_id = '${stream_id}' ORDER BY idx DESC LIMIT 1
     ${last_result}=    Execute SQL Query    ${last_sql}
     ${last_idx}=    Set Variable    ${last_result['rows'][0]['idx']}
 
@@ -197,7 +197,7 @@ Verify Event Ordering
     ...    msg=Last event has idx=${last_idx}, expected ${expected_count}
 
     # Verify no gaps: count distinct idx values should equal expected_count
-    ${distinct_sql}=    Set Variable    SELECT COUNT(DISTINCT idx) as count FROM events WHERE id(stream_id) = '${stream_id}'
+    ${distinct_sql}=    Set Variable    SELECT COUNT(DISTINCT idx) as count FROM events WHERE stream_id = '${stream_id}'
     ${distinct_result}=    Execute SQL Query    ${distinct_sql}
     ${distinct_count}=    Set Variable    ${distinct_result['rows'][0]['count']}
 
@@ -320,7 +320,7 @@ Verify No Duplicate Events
     # Verify no duplicate idx values
     ${duplicate_sql}=    Catenate    SEPARATOR=${SPACE}
     ...    SELECT idx, COUNT(*) as count FROM events
-    ...    WHERE id(stream_id) = '${space_id}'
+    ...    WHERE stream_id = '${space_id}'
     ...    GROUP BY idx HAVING count > 1
     ${duplicate_result}=    Execute SQL Query    ${duplicate_sql}
 
@@ -341,7 +341,7 @@ Verify Event Indices Monotonic
     Reload And Wait For Backfill    ${space_id}    timeout=60s
 
     # Get all idx values in order
-    ${sql}=    Set Variable    SELECT idx FROM events WHERE id(stream_id) = '${space_id}' ORDER BY idx ASC
+    ${sql}=    Set Variable    SELECT idx FROM events WHERE stream_id = '${space_id}' ORDER BY idx ASC
     ${result}=    Execute SQL Query    ${sql}
 
     # Verify strictly increasing

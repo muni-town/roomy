@@ -74,7 +74,7 @@
     const existingDiscordUsers = new Set();
 
     const existingInDb = await backend.runQuery(
-      sql`select id(did) as did from comp_user where id(did) like 'did:discord:%';`,
+      sql`select did as did from comp_user where did like 'did:discord:%';`,
     );
     for (const row of existingInDb.rows || []) {
       existingDiscordUsers.add(row.id);

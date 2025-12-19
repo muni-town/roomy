@@ -617,7 +617,7 @@ class SqliteWorkerSupervisor {
     if (!knownStream) {
       const maybeSpace = await executeQuery(sql`
         select backfilled_to, hidden from comp_space 
-        where id(entity) = ${spaceId}`);
+        where entity = ${spaceId}`);
 
       const backfilledToIdx = (
         maybeSpace.rows?.length ? maybeSpace.rows[0]!.backfilled_to : 0

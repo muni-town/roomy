@@ -44,11 +44,11 @@ Test Tags           space    creation
 
     # Check if space exists in personal stream (for joinedSpaces query)
     ${personal_space_sql}=    Catenate    SEPARATOR=${SPACE}
-    ...    SELECT id(e.id) as id, id(e.stream_id) as stream_id
+    ...    SELECT e.id as id, e.stream_id as stream_id
     ...    FROM entities e
     ...    JOIN comp_space cs ON cs.entity = e.id
-    ...    WHERE id(e.stream_id) = '${personal_stream}'
-    ...    AND id(e.id) = '${space_id}'
+    ...    WHERE e.stream_id = '${personal_stream}'
+    ...    AND e.id = '${space_id}'
     ${personal_space}=    Execute SQL Query    ${personal_space_sql}
     Log    Space in personal stream (needed for joinedSpaces): ${personal_space['rows']}
 

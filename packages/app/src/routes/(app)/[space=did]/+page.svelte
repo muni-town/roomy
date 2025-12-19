@@ -23,7 +23,7 @@
     () => {
       return sql`
         select json_object(
-          'id', id(id), 
+          'id', id, 
           'name', name,
           'channel', channel,
           'activity', json(activity),
@@ -40,7 +40,7 @@
                 'members', json_group_array(json_object(
                   'avatar', avatar,
                   'name', author,
-                  'id', id(author_id)
+                  'id', author_id
                 )),
                 'latestTimestamp', max(timestamp),
                 'test', json_group_array(id(id))

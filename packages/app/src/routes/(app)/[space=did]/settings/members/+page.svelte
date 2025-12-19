@@ -19,7 +19,7 @@
   }>(
     () => sql`
     select
-      id(tail) as id,
+      tail as id,
       payload as info,
       i.name as name,
       i.avatar as avatar
@@ -28,7 +28,7 @@
     where
       label = 'member'
         and
-      head = ${spaceId && id(spaceId)}
+      head = ${spaceId}
   `,
     (row) => ({
       ...row,

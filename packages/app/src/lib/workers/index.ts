@@ -153,8 +153,8 @@ export function getPersonalStreamId() {
         select json_object(
           'roomId', ${roomId},
           'existsInEntities', case when e.id is not null then 1 else 0 end,
-          'streamId', id(e.stream_id),
-          'parent', id(e.parent),
+          'streamId', e.stream_id,
+          'parent', e.parent,
           'hasCompRoom', case when r.entity is not null then 1 else 0 end,
           'roomLabel', r.label,
           'roomDeleted', r.deleted,
@@ -164,7 +164,7 @@ export function getPersonalStreamId() {
           'parentDeleted', parent_r.deleted,
           'parentLabel', parent_r.label,
           'parentName', parent_i.name,
-          'parentStreamId', id(parent_e.stream_id),
+          'parentStreamId', parent_e.stream_id,
           'parentHasCompRoom', case when parent_r.entity is not null then 1 else 0 end,
           'parentHasCompInfo', case when parent_i.entity is not null then 1 else 0 end,
           'wouldAppearInSidebar', case 

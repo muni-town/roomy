@@ -20,12 +20,12 @@
 
   let categoriesQuery = new LiveQuery<{ name: string; id: string }>(
     () => sql`
-      select i.name, id(e.id) as id
+      select i.name, e.id as id
       from entities e
         inner join comp_room r on e.id = r.entity
         inner join comp_info i on e.id = i.entity
       where
-        e.stream_id = ${spaceId && id(spaceId)}
+        e.stream_id = ${spaceId}
           and
         r.label = 'category' 
     `,

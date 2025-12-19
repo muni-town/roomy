@@ -16,12 +16,12 @@
   let query = new LiveQuery<Message>(
     () => sql`
       select
-        id(c.entity) as id,
+        c.entity as id,
         cast(c.data as text) as content,
-        id(u.did) as authorDid,
+        u.did as authorDid,
         i.name as authorName,
         i.avatar as authorAvatar,
-        id(o.author) as masqueradeAuthor,
+        o.author as masqueradeAuthor,
         oi.name as masqueradeAuthorName,
         oi.avatar as masqueradeAuthorAvatar,
         o.timestamp as masqueradeTimestamp

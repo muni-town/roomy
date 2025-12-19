@@ -23,7 +23,7 @@
     () => sql`
     select
       cast(data as text) as content,
-      id(edit_id) as edit_id,
+      edit_id as edit_id,
       mime_type,
       user_info.name as authorName,
       user_info.avatar as authorAvatar
