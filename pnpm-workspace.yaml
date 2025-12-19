@@ -10,9 +10,6 @@ onlyBuiltDependencies:
   - esbuild
   - node
 
-overrides:
-  '@muni-town/leaf-client': link:../leaf/clients/typescript
-
 patchedDependencies:
   '@grafana/faro-core': patches/@grafana__faro-core.patch
   '@grafana/faro-web-sdk': patches/@grafana__faro-web-sdk.patch

@@ -114,7 +114,7 @@ export namespace AuthStates {
 
   export interface ReactiveAuthenticated {
     state: "authenticated";
-    did: DidUser;
+    did: Did;
     personalStream: DidStream;
     clientStatus: StreamConnectionStatus["status"];
   }

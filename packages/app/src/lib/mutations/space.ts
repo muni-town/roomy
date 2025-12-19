@@ -1,6 +1,5 @@
 import { backend, backendStatus } from "$lib/workers";
-import type { Event, DidStream } from "$lib/schema";
-import type { Did } from "@atproto/api";
+import type { Event, DidStream, Did } from "$lib/schema";
 import { toast } from "@fuxui/base";
 import { didUser, ignore, newUlid, set, toBytes } from "$lib/schema";
 
