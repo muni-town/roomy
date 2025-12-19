@@ -1,5 +1,4 @@
-import type { Did, Ulid } from "$lib/schema";
-import type { DidStream, Handle } from "$lib/schema/primitives";
+import type { Did, Ulid, StreamIndex, DidStream, Handle } from "$lib/schema";
 import type { QueryResult } from "./sqlite/setup";
 import type { SqlStatement } from "./sqlite/types";
 
@@ -40,6 +39,8 @@ export interface EdgesWithPayload {
   member: EdgeMember;
 }
 
+export { type StreamIndex };
+
 export type EdgesMap = {
   [K in Exclude<EdgeLabel, keyof EdgesWithPayload>]: null;
 } & EdgesWithPayload;
@@ -52,8 +53,6 @@ export type EdgesRecord<TRequired extends readonly EdgeLabel[]> = {
 };
 
 export type SpaceIdOrHandle = DidStream | Handle;
-
-export type StreamIndex = number & { __brand: "streamIndex" };
 
 export type TaskPriority = "priority" | "background";
 
