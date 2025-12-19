@@ -14,7 +14,7 @@ import { type Profile } from "$lib/types/profile";
 import { Deferred } from "$lib/utils/deferred";
 import { AsyncChannel } from "../asyncChannel";
 import type { StreamConnectionStatus, ConnectionStates } from "./types";
-import { personalModule } from "./modules";
+import { personalModule, personalModuleCid } from "./modules";
 import { ConnectedStream, parseEvents } from "./stream";
 import {
   did,
@@ -418,23 +418,23 @@ export class Client {
     const streamInfo = await this.leaf.streamInfo(stream.id);
     console.log("Client.ensurePersonalStream StreamInfo", streamInfo);
 
-    // not sure if this is necessary atm
-    // if (streamInfo.moduleCid != personalModule.moduleCid) {
-    //   console.log(
-    //     "Personal stream's module doesn't match our current personal module version",
-    //   );
-    //   const alreadyHasModule = await this.leaf.hasModule(
-    //     personalModule.moduleId,
-    //   );
-    //   if (!alreadyHasModule) {
-    //     console.log(
-    //       "The leaf server doesn't have our module yet: uploading...",
-    //     );
-    //     await this.leaf.uploadModule(personalModule.encoded.buffer);
-    //   }
-    //   console.log("Updating module for personal stream to our current version");
-    //   await this.leaf.updateModule(stream.id, personalModule.moduleId);
-    // }
+    // Update the personal stream's module if it doesn't match this Roomy version's module.
+    if (streamInfo.moduleCid != (await personalModuleCid)) {
+      console.log(
+        "Personal stream's module doesn't match our current personal module version",
+      );
+      const alreadyHasModule = await this.leaf.hasModule(
+        await personalModuleCid,
+      );
+      if (!alreadyHasModule) {
+        console.log(
+          "The leaf server doesn't have our module yet: uploading...",
+        );
+        await this.leaf.uploadModule(personalModule);
+      }
+      console.log("Updating module for personal stream to our current version");
+      await this.leaf.updateModule(stream.id, await personalModuleCid);
+    }
 
     return stream;
   }

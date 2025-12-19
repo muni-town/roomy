@@ -1,5 +1,5 @@
 import { sql } from "$lib/utils/sqlTemplate";
-import { type BasicModule } from "@muni-town/leaf-client";
+import { LeafClient, type BasicModule } from "@muni-town/leaf-client";
 
 export const personalModule: BasicModule = {
   $type: "muni.town.leaf.module.basic.v0" as const,
@@ -34,10 +34,9 @@ export const personalModule: BasicModule = {
       select drisl_extract(payload, '.variant.$type') as event_type from event
     )
     -- other events must be from admin
-    select unauthorized('not authorized')
+    select unauthorized('only the admin can add events to this stream:' % (select admin from stream_info))
     where (select admin from stream_info) is not null
-      and (select event_type from event_info) is not 'space.roomy.space.addAdmin.v0'
-      and (select drisl_extract(payload, '.variant.author') from event) is not (select admin from stream_info);
+      and (select user from event) is not (select admin from stream_info);
   `.sql,
   materializer: sql`
     -- Set admin from admin.add event
@@ -64,6 +63,8 @@ export const personalModule: BasicModule = {
     },
   ],
 };
+export const personalModuleCid: Promise<string> =
+  LeafClient.moduleCid(personalModule);
 
 export const spaceModule: BasicModule = {
   $type: "muni.town.leaf.module.basic.v0" as const,
@@ -173,3 +174,5 @@ export const spaceModule: BasicModule = {
     },
   ],
 };
+export const spaceModuleCid: Promise<string> =
+  LeafClient.moduleCid(spaceModule);

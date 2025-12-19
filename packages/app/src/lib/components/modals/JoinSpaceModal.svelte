@@ -3,8 +3,9 @@
   import { Box, Button } from "@fuxui/base";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { joinSpace } from "$lib/mutations/space";
-  import { type SpaceIdOrHandle, type DidStream } from "$lib/workers/types";
+  import { type SpaceIdOrHandle } from "$lib/workers/types";
   import { backend } from "$lib/workers";
+  import type { DidStream } from "$lib/schema";
 
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));

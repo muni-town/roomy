@@ -4,7 +4,7 @@
   import type { AsyncStateWithIdle } from "$lib/types/asyncState";
   import { navigate } from "$lib/utils.svelte";
   import { backendStatus } from "$lib/workers";
-  import type { DidStream } from "$lib/workers/types";
+  import type { DidStream } from "$lib/schema";
   import IconHeroiconsXMark from "~icons/heroicons/x-mark";
   import {
     Alert,

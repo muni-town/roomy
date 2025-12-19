@@ -8,13 +8,19 @@
  */
 
 import { type } from "arktype";
-import { type Bytes as BytesLink } from "@atcute/cbor";
+import { BytesWrapper, type Bytes as BytesLink } from "@atcute/cbor";
 import { isDid } from "@atproto/oauth-client";
 import { isValid as isValidUlid, ulid as generateUlid } from "ulidx";
 
 export type Bytes = BytesLink;
 export const Bytes = type({ $bytes: "string.base64" });
-export { toBytes, fromBytes } from "@atcute/cbor";
+export { fromBytes } from "@atcute/cbor";
+
+export function toBytes(buf: Uint8Array): BytesLink {
+  // Since the BytesWrapper class won't go across the worker boundary correctly, we convert to the
+  // plain JSON version.
+  return new BytesWrapper(buf).toJSON();
+}
 
 export const ulid = type.string
   .narrow((v, ctx) => (isValidUlid(v) ? true : ctx.mustBe("a valid ULID")))
