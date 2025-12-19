@@ -43,7 +43,7 @@
       ulid: newUlid(),
       parent: undefined,
       variant: {
-        kind: "space.roomy.admin.add.v0",
+        kind: "space.roomy.space.addAdmin.v0",
         data: {
           adminId: userId,
         },
@@ -58,7 +58,7 @@
       ulid: newUlid(),
       parent: undefined,
       variant: {
-        kind: "space.roomy.admin.remove.v0",
+        kind: "space.roomy.space.removeAdmin.v0",
         data: {
           adminId: userId,
         },

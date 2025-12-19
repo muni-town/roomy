@@ -44,7 +44,7 @@
       parent:
         type != "Category" && selectedCategory ? selectedCategory : undefined,
       variant: {
-        kind: "space.roomy.room.create.v0",
+        kind: "space.roomy.room.createRoom.v0",
         data: undefined,
       },
     });

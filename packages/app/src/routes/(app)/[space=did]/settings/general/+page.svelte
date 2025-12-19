@@ -103,7 +103,7 @@
         ulid: newUlid(),
         parent: undefined,
         variant: {
-          kind: "space.roomy.stream.handle.account.v0",
+          kind: "space.roomy.space.setHandleAccount.v0",
           data: {
             did: backendStatus.authState.did,
           },
@@ -128,7 +128,7 @@
         ulid: newUlid(),
         parent: undefined,
         variant: {
-          kind: "space.roomy.stream.handle.account.v0",
+          kind: "space.roomy.space.setHandleAccount.v0",
           data: {
             did: undefined,
           },

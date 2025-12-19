@@ -40,7 +40,7 @@
       ulid: newUlid(),
       parent: undefined,
       variant: {
-        kind: "space.roomy.space.leave.v0",
+        kind: "space.roomy.personal.leaveSpace.v0",
         data: {
           spaceId: spaceId,
         },

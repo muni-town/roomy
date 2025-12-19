@@ -6,7 +6,7 @@ import { didUser, type, ulid } from "../primitives";
 
 // Create a reaction
 export const reactionCreate = type({
-  $type: "'space.roomy.reaction.create.v0'",
+  $type: "'space.roomy.room.addReaction.v0'",
   /** The message being reacted to */
   target: ulid,
   /** Unicode emoji or URI describing the reaction */
@@ -15,7 +15,7 @@ export const reactionCreate = type({
 
 // Delete a reaction
 export const reactionDelete = type({
-  $type: "'space.roomy.reaction.delete.v0'",
+  $type: "'space.roomy.room.removeReaction.v0'",
   /** The message the reaction was on */
   target: ulid,
   /** The reaction being removed */
@@ -24,7 +24,7 @@ export const reactionDelete = type({
 
 // Bridged reaction create (for external platforms like Discord)
 export const reactionBridgedCreate = type({
-  $type: "'space.roomy.reaction.bridged.create.v0'",
+  $type: "'space.roomy.room.addBridgedReaction.v0'",
   /** The message being reacted to */
   target: ulid,
   /** Unicode emoji or URI describing the reaction */
@@ -35,7 +35,7 @@ export const reactionBridgedCreate = type({
 
 // Bridged reaction delete
 export const reactionBridgedDelete = type({
-  $type: "'space.roomy.reaction.bridged.delete.v0'",
+  $type: "'space.roomy.room.removeBridgedReaction.v0'",
   /** The message the reaction was on */
   target: ulid,
   /** The reaction being removed */
@@ -52,19 +52,19 @@ export const reactionEvent = reactionCreate
 
 // Export for registry
 export const events = {
-  "space.roomy.reaction.create.v0": {
+  "space.roomy.room.addReaction.v0": {
     type: reactionCreate,
     description: "Create a reaction to a message",
   },
-  "space.roomy.reaction.delete.v0": {
+  "space.roomy.room.removeReaction.v0": {
     type: reactionDelete,
     description: "Delete a reaction from a message",
   },
-  "space.roomy.reaction.bridged.create.v0": {
+  "space.roomy.room.addBridgedReaction.v0": {
     type: reactionBridgedCreate,
     description: "Create a bridged reaction (from external platform)",
   },
-  "space.roomy.reaction.bridged.delete.v0": {
+  "space.roomy.room.removeBridgedReaction.v0": {
     type: reactionBridgedDelete,
     description: "Delete a bridged reaction",
   },
