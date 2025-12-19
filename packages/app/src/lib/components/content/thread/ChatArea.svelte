@@ -72,12 +72,12 @@
   let query = new LiveQuery<Message>(
     () => sql`
       select json_object(
-        'id', id(e.id),
+        'id', e.id,
         'content', cast(c.data as text),
-        'authorDid', id(u.did),
+        'authorDid', u.did,
         'authorName', i.name,
         'authorAvatar', i.avatar,
-        'masqueradeAuthor', id(o.author),
+        'masqueradeAuthor', o.author,
         'masqueradeTimestamp', o.timestamp,
         'replyTo', coalesce((
           select json_group_array(id(ed.tail))
@@ -90,7 +90,7 @@
         'reactions', (
           select json_group_array(json_object(
             'reaction', ed.payload,
-            'userId', id(ed.head),
+            'userId', ed.head,
             'userName', i.name
           ))
           from edges ed
@@ -100,7 +100,7 @@
         'media', (
           select json_group_array(json_object(
             'mimeType', coalesce(i.mime_type, v.mime_type, f.mime_type),
-            'uri', id(coalesce(i.entity, v.entity, f.entity)),
+            'uri', coalesce(i.entity, v.entity, f.entity),
             'width', coalesce(i.width, v.width),
             'height', coalesce(i.height, v.height),
             'blurhash', coalesce(i.blurhash, v.blurhash),
@@ -126,7 +126,7 @@
         'comment', (
           select json_object(
             'snippet', cc.snippet,
-            'version', id(cc.version),
+            'version', cc.version,
             'from', cc.idx_from,
             'to', cc.idx_to
           )
