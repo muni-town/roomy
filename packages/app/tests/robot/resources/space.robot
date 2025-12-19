@@ -138,7 +138,7 @@ Create Space With Name
     ...            // Space info
     ...            batch.push({
     ...                ulid: newUlid(), parent: undefined,
-    ...                variant: { kind: 'space.roomy.info.v0', data: {
+    ...                variant: { kind: 'space.roomy.common.setInfo.v0', data: {
     ...                    name: spaceName ? { set: spaceName } : { ignore: undefined },
     ...                    description: spaceDescription ? { set: spaceDescription } : { ignore: undefined },
     ...                    avatar: { ignore: undefined }
@@ -160,36 +160,36 @@ Create Space With Name
     ...            batch.push({ ulid: categoryId, parent: undefined,
     ...                variant: { kind: 'space.roomy.room.createRoom.v0', data: undefined } });
     ...            batch.push({ ulid: newUlid(), parent: categoryId,
-    ...                variant: { kind: 'space.roomy.info.v0', data: {
+    ...                variant: { kind: 'space.roomy.common.setInfo.v0', data: {
     ...                    name: { set: 'Uncategorized' }, avatar: { ignore: undefined }, description: { ignore: undefined }
     ...                }}});
     ...            batch.push({ ulid: newUlid(), parent: categoryId,
-    ...                variant: { kind: 'space.roomy.room.kind.v0', data: {
-    ...                    kind: 'space.roomy.category.v0', data: undefined
+    ...                variant: { kind: 'space.roomy.room.setKind.v0', data: {
+    ...                    kind: 'category', data: undefined
     ...                }}});
     ...            // Channel
     ...            const channelId = newUlid();
     ...            batch.push({ ulid: channelId, parent: categoryId,
     ...                variant: { kind: 'space.roomy.room.createRoom.v0', data: undefined } });
     ...            batch.push({ ulid: newUlid(), parent: channelId,
-    ...                variant: { kind: 'space.roomy.info.v0', data: {
+    ...                variant: { kind: 'space.roomy.common.setInfo.v0', data: {
     ...                    name: { set: 'general' }, avatar: { ignore: undefined }, description: { ignore: undefined }
     ...                }}});
     ...            batch.push({ ulid: newUlid(), parent: channelId,
-    ...                variant: { kind: 'space.roomy.room.kind.v0', data: {
-    ...                    kind: 'space.roomy.channel.v0', data: undefined
+    ...                variant: { kind: 'space.roomy.room.setKind.v0', data: {
+    ...                    kind: 'channel', data: undefined
     ...                }}});
     ...            // Thread
     ...            const threadId = newUlid();
     ...            batch.push({ ulid: threadId, parent: channelId,
     ...                variant: { kind: 'space.roomy.room.createRoom.v0', data: undefined } });
     ...            batch.push({ ulid: newUlid(), parent: threadId,
-    ...                variant: { kind: 'space.roomy.info.v0', data: {
+    ...                variant: { kind: 'space.roomy.common.setInfo.v0', data: {
     ...                    name: { set: `Welcome to \${spaceName}!` }, avatar: { ignore: undefined }, description: { ignore: undefined }
     ...                }}});
     ...            batch.push({ ulid: newUlid(), parent: threadId,
-    ...                variant: { kind: 'space.roomy.room.kind.v0', data: {
-    ...                    kind: 'space.roomy.thread.v0', data: undefined
+    ...                variant: { kind: 'space.roomy.room.setKind.v0', data: {
+    ...                    kind: 'thread', data: undefined
     ...                }}});
     ...            // Welcome message
     ...            const messageId = newUlid();

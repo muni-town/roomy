@@ -54,7 +54,7 @@
       ulid: newUlid(),
       parent: roomId,
       variant: {
-        kind: "space.roomy.info.v0",
+        kind: "space.roomy.common.setInfo.v0",
         data: {
           name: {
             set: name,
@@ -71,9 +71,9 @@
         ulid: newUlid(),
         parent: roomId,
         variant: {
-          kind: "space.roomy.room.kind.v0",
+          kind: "space.roomy.room.setKind.v0",
           data: {
-            kind: "space.roomy.channel.v0",
+            kind: "channel",
             data: undefined,
           },
         },
@@ -86,9 +86,9 @@
         ulid: newUlid(),
         parent: roomId,
         variant: {
-          kind: "space.roomy.room.kind.v0",
+          kind: "space.roomy.room.setKind.v0",
           data: {
-            kind: "space.roomy.category.v0",
+            kind: "category",
             data: undefined,
           },
         },

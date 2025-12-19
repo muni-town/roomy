@@ -32,7 +32,7 @@ export const event = type({
   /** Unique event ID, also encodes timestamp */
   id: ulid,
   /** Parent room. Null for space-level events. */
-  room: ulid,
+  "room?": ulid,
   /** The event payload (discriminated by $type) */
   variant: eventVariant,
 });
