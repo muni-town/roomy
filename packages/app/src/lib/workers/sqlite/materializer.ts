@@ -21,7 +21,7 @@ const materializers: {
   }) => Promise<SqlStatement[]>;
 } = {
   // Space
-  "space.roomy.space.join.v0": async ({ streamId, data }) => {
+  "space.roomy.personal.joinSpace.v0": async ({ streamId, data }) => {
     return [
       ensureEntity(streamId, data.spaceId),
       // because we are materialising a non-personal-stream space, we infer that we are backfilling in the background
@@ -32,13 +32,13 @@ const materializers: {
       `,
     ];
   },
-  "space.roomy.space.leave.v0": async ({ data }) => [
+  "space.roomy.personal.leaveSpace.v0": async ({ data }) => [
     sql`
       update comp_space set hidden = 1,
       where entity = ${data.spaceId}
     `,
   ],
-  "space.roomy.room.join.v0": async ({ streamId, user, event }) => [
+  "space.roomy.room.joinRoom.v0": async ({ streamId, user, event }) => [
     // if event has parent, it's for joining a room; if not, it's for joining the space
     sql`
       insert or replace into edges (head, tail, label, payload)
@@ -101,7 +101,7 @@ const materializers: {
   ],
 
   // Admin
-  "space.roomy.admin.add.v0": async ({ streamId, data }) => {
+  "space.roomy.space.addAdmin.v0": async ({ streamId, data }) => {
     return [
       sql`
       insert or replace into edges (head, tail, label, payload)
@@ -116,7 +116,7 @@ const materializers: {
     `,
     ];
   },
-  "space.roomy.admin.remove.v0": async ({ streamId, data }) => [
+  "space.roomy.space.removeAdmin.v0": async ({ streamId, data }) => [
     sql`
       update edges set payload = (${JSON.stringify({ can: "post" })})
       where 
@@ -129,7 +129,7 @@ const materializers: {
   ],
 
   // Info
-  "space.roomy.info.set.v0": async ({ streamId, event, data }) => {
+  "space.roomy.common.setInfo.v0": async ({ streamId, event, data }) => {
     const updates = [
       { key: "name", ...data.name },
       { key: "avatar", ...data.avatar },
@@ -154,14 +154,14 @@ const materializers: {
   },
 
   // Room
-  "space.roomy.room.create.v0": async ({ streamId, event }) => [
+  "space.roomy.room.createRoom.v0": async ({ streamId, event }) => [
     ensureEntity(streamId, event.id, event.room),
     sql`
       insert into comp_room ( entity )
       values ( ${event.id} ) on conflict do nothing
     `,
   ],
-  "space.roomy.room.delete.v0": async ({ event }) => {
+  "space.roomy.room.deleteRoom.v0": async ({ event }) => {
     if (!event.room) {
       console.warn("Delete room missing parent");
       return [];
@@ -187,7 +187,7 @@ const materializers: {
     ];
   },
   // TODO
-  "space.roomy.room.member.add.v0": async (
+  "space.roomy.room.addMember.v0": async (
     {
       // sqliteWorker,
       // streamId,
@@ -217,9 +217,9 @@ const materializers: {
     // },
   ],
   // TODO
-  "space.roomy.room.member.update.v0": async ({}) => [],
+  "space.roomy.room.updateMember.v0": async ({}) => [],
   // TODO
-  "space.roomy.room.member.remove.v0": async ({}) => [
+  "space.roomy.room.removeMember.v0": async ({}) => [
     // ensureEntity(streamId, event.id, event.room),
     // {
     //   sql: event.room
@@ -234,7 +234,7 @@ const materializers: {
   ],
 
   // Message v0 - deprecated
-  // "space.roomy.message.create.v0": async ({ streamId, user, event, data }) => {
+  // "space.roomy.room.sendMessage.v0": async ({ streamId, user, event, data }) => {
   //   if (!event.room) throw new Error("No room for message");
   //   const statements = [
   //     ensureEntity(streamId, event.id, event.room),
@@ -279,7 +279,12 @@ const materializers: {
   // },
 
   // Message v1
-  "space.roomy.message.create.v1": async ({ streamId, user, event, data }) => {
+  "space.roomy.room.sendMessage.v1": async ({
+    streamId,
+    user,
+    event,
+    data,
+  }) => {
     if (!event.room) throw new Error("No room for message");
     const statements = [
       ensureEntity(streamId, event.id, event.room),
@@ -454,7 +459,7 @@ const materializers: {
     return statements;
   },
 
-  "space.roomy.message.edit.v0": async ({ streamId, event, data }) => {
+  "space.roomy.room.editMessage.v0": async ({ streamId, event, data }) => {
     if (!event.room) {
       console.warn("Edit event missing parent");
       return [];
@@ -484,7 +489,7 @@ const materializers: {
         `,
     ];
   },
-  "space.roomy.page.edit.v0": async ({ user, streamId, event, data }) => {
+  "space.roomy.room.editPage.v0": async ({ user, streamId, event, data }) => {
     if (!event.room) {
       console.warn("Edit event missing parent");
       return [];
@@ -533,7 +538,7 @@ const materializers: {
   },
 
   // TODO: make sure there is valid permission to send override metadata
-  "space.roomy.user.overrideMeta.v0": async ({ event, data }) => {
+  "space.roomy.space.overrideUserMeta.v0": async ({ event, data }) => {
     if (!event.room) {
       console.warn("Missing target for message meta override.");
       return [];
@@ -563,7 +568,7 @@ const materializers: {
         )`,
     ];
   },
-  "space.roomy.message.delete.v0": async ({ event }) => {
+  "space.roomy.room.deleteMessage.v0": async ({ event }) => {
     if (!event.room) {
       console.warn("Missing target for message meta override.");
       return [];
@@ -572,7 +577,7 @@ const materializers: {
   },
 
   // Reaction
-  "space.roomy.reaction.create.v0": async ({ data, user }) => {
+  "space.roomy.room.addReaction.v0": async ({ data, user }) => {
     return [
       sql`
         insert into comp_reaction (entity, user, reaction)
@@ -584,7 +589,7 @@ const materializers: {
       `,
     ];
   },
-  "space.roomy.reaction.delete.v0": async ({ event, user, data }) => {
+  "space.roomy.room.removeReaction.v0": async ({ event, user, data }) => {
     if (!event.room) {
       console.warn("Delete reaction missing parent");
       return [];
@@ -601,7 +606,7 @@ const materializers: {
   },
 
   // TODO: make sure there is valid permission to send bridged reaction
-  "space.roomy.reaction.bridged.create.v0": async ({ data }) => {
+  "space.roomy.room.addBridgedReaction.v0": async ({ data }) => {
     return [
       sql`
         insert into comp_reaction (entity, user, reaction)
@@ -613,7 +618,7 @@ const materializers: {
       `,
     ];
   },
-  "space.roomy.reaction.bridged.delete.v0": async ({ event, data }) => {
+  "space.roomy.room.removeBridgedReaction.v0": async ({ event, data }) => {
     if (!event.room) {
       console.warn("Delete reaction missing parent");
       return [];
@@ -778,7 +783,7 @@ const materializers: {
    * We ensure the room entity exists using the streamId from the event data,
    * not the wrapper streamId (which would be the user's personal stream).
    */
-  "space.roomy.room.lastRead.v0": async ({ event, data }) => {
+  "space.roomy.room.setLastRead.v0": async ({ event, data }) => {
     // Extract timestamp from the event's ULID
     const timestamp = decodeTime(event.id);
 
@@ -802,13 +807,13 @@ const materializers: {
 // UTILS
 
 const dependentEvents = [
-  "space.roomy.message.edit.v0",
-  "space.roomy.page.edit.v0",
-  "space.roomy.message.delete.v0",
-  "space.roomy.reaction.create.v0",
-  "space.roomy.reaction.bridged.create.v0",
-  "space.roomy.reaction.delete.v0",
-  "space.roomy.reaction.bridged.delete.v0",
+  "space.roomy.room.editMessage.v0",
+  "space.roomy.room.editPage.v0",
+  "space.roomy.room.deleteMessage.v0",
+  "space.roomy.room.addReaction.v0",
+  "space.roomy.room.addBridgedReaction.v0",
+  "space.roomy.room.removeReaction.v0",
+  "space.roomy.room.removeBridgedReaction.v0",
   "space.roomy.media.delete.v0",
 ];
 

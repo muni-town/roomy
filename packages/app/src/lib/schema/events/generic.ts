@@ -9,7 +9,7 @@ import { type, setProperty } from "../primitives";
 
 // Set entity info (rooms, spaces, etc.)
 export const infoSet = type({
-  $type: "'space.roomy.info.set.v0'",
+  $type: "'space.roomy.common.setInfo.v0'",
   /** New name, or clear, or ignore */
   "name?": setProperty,
   /** New avatar URI, or clear, or ignore */
@@ -23,7 +23,7 @@ export const genericEvent = infoSet;
 
 // Export for registry
 export const events = {
-  "space.roomy.info.set.v0": {
+  "space.roomy.common.setInfo.v0": {
     type: infoSet,
     description: "Set name, avatar, and/or description for an entity",
   },

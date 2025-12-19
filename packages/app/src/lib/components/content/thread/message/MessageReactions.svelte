@@ -41,7 +41,7 @@
         ulid: newUlid(),
         parent: current.roomId,
         variant: {
-          kind: "space.roomy.reaction.create.v0",
+          kind: "space.roomy.room.addReaction.v0",
           data: {
             reactionTo: message.id,
             reaction: emoji,
@@ -65,7 +65,7 @@
         ulid: newUlid(),
         parent: current.roomId,
         variant: {
-          kind: "space.roomy.reaction.create.v0",
+          kind: "space.roomy.room.addReaction.v0",
           data: {
             reactionTo: message.id,
             reaction: emoji,
@@ -79,7 +79,7 @@
         ulid: newUlid(),
         parent: current.roomId,
         variant: {
-          kind: "space.roomy.reaction.delete.v0",
+          kind: "space.roomy.room.removeReaction.v0",
           data: {
             reaction_to: message.id,
             reaction: emoji,

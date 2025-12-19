@@ -32,18 +32,18 @@ export const groupMember = type({
 
 // Create a room. Sent at top level (no room), or in parent room. The ulid of this event becomes the id of the room.
 export const roomCreate = type({
-  $type: "'space.roomy.room.create.v0'",
+  $type: "'space.roomy.room.createRoom.v0'",
 });
 
 // Delete a room. Sent at top level or in parent room.
 export const roomDelete = type({
-  $type: "'space.roomy.room.delete.v0'",
+  $type: "'space.roomy.room.deleteRoom.v0'",
   roomId: ulid, // the room to delete
 });
 
 // Join a room. Author joins the room specified in envelope. If no room specified, the event is an announcement on joining a space.
 export const roomJoin = type({
-  $type: "'space.roomy.room.join.v0'",
+  $type: "'space.roomy.room.joinRoom.v0'",
 });
 
 // Leave a room
@@ -65,13 +65,13 @@ export const roomUpdateParent = type({
 
 // Add a member to a room
 export const roomMemberAdd = type({
-  $type: "'space.roomy.room.member.add.v0'",
+  $type: "'space.roomy.room.addMember.v0'",
   member: groupMember,
   access: accessLevel,
 });
 
 export const roomMemberUpdate = type({
-  $type: "'space.roomy.room.member.update.v0'",
+  $type: "'space.roomy.room.updateMember.v0'",
   member: groupMember,
   access: accessLevel,
   "reason?": "string",
@@ -79,7 +79,7 @@ export const roomMemberUpdate = type({
 
 // Remove a member from a room
 export const roomMemberRemove = type({
-  $type: "'space.roomy.room.member.remove.v0'",
+  $type: "'space.roomy.room.removeMember.v0'",
   member: groupMember,
   access: accessLevel,
   "reason?": "string",
@@ -98,16 +98,16 @@ export const roomEvent = roomCreate
 
 // Export for registry
 export const events = {
-  "space.roomy.room.create.v0": {
+  "space.roomy.room.createRoom.v0": {
     type: roomCreate,
     description:
       "Create a new room. Sub-rooms are created by sending this in another room.",
   },
-  "space.roomy.room.delete.v0": {
+  "space.roomy.room.deleteRoom.v0": {
     type: roomDelete,
     description: "Delete a room",
   },
-  "space.roomy.room.join.v0": {
+  "space.roomy.room.joinRoom.v0": {
     type: roomJoin,
     description:
       "Join the room specified in envelope. If no room specified, the event is an announcement on joining a space.",
@@ -124,15 +124,15 @@ export const events = {
     type: roomUpdateParent,
     description: "Change the parent of a room",
   },
-  "space.roomy.room.member.add.v0": {
+  "space.roomy.room.addMember.v0": {
     type: roomMemberAdd,
     description: "Add a member to the room's access list",
   },
-  "space.roomy.room.member.update.v0": {
+  "space.roomy.room.updateMember.v0": {
     type: roomMemberUpdate,
     description: "Change a room member's access permissions",
   },
-  "space.roomy.room.member.remove.v0": {
+  "space.roomy.room.removeMember.v0": {
     type: roomMemberRemove,
     description: "Remove a member from the room's access list",
   },

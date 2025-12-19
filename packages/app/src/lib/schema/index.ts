@@ -15,7 +15,7 @@
  * const result = parseEvent(decoded.event);
  * if (result.success) {
  *   switch (result.data.$type) {
- *     case 'space.roomy.message.create':
+ *     case 'space.roomy.room.sendMessage':
  *       // TypeScript knows the shape here
  *       console.log(result.data.content);
  *       break;

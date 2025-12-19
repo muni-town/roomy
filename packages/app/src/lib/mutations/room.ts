@@ -17,7 +17,7 @@ export async function createPage(opts: {
     ulid: pageId,
     parent: opts.roomId,
     variant: {
-      kind: "space.roomy.room.create.v0",
+      kind: "space.roomy.room.createRoom.v0",
       data: undefined,
     },
   });
@@ -53,7 +53,7 @@ export async function createPage(opts: {
     ulid: newUlid(),
     parent: pageId,
     variant: {
-      kind: "space.roomy.page.edit.v0",
+      kind: "space.roomy.room.editPage.v0",
       data: {
         content: {
           content: new TextEncoder().encode(
@@ -170,7 +170,7 @@ export async function convertToPage(opts: {
       ulid: newUlid(),
       parent: opts.room.id,
       variant: {
-        kind: "space.roomy.page.edit.v0",
+        kind: "space.roomy.room.editPage.v0",
         data: {
           content: {
             content: new TextEncoder().encode(
@@ -194,7 +194,7 @@ export async function setPageReadMarker(opts: {
     ulid: newUlid(),
     parent: undefined,
     variant: {
-      kind: "space.roomy.room.lastRead.v0",
+      kind: "space.roomy.room.setLastRead.v0",
       data: {
         streamId: opts.streamId,
         roomId: opts.roomId,

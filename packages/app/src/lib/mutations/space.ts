@@ -19,7 +19,7 @@ export async function joinSpace(spaceId: DidStream) {
       ulid: newUlid(),
       parent: undefined,
       variant: {
-        kind: "space.roomy.space.join.v0",
+        kind: "space.roomy.personal.joinSpace.v0",
         data: {
           spaceId: spaceId,
         },
@@ -30,7 +30,7 @@ export async function joinSpace(spaceId: DidStream) {
       ulid: newUlid(),
       parent: undefined,
       variant: {
-        kind: "space.roomy.room.join.v0",
+        kind: "space.roomy.room.joinRoom.v0",
         data: undefined,
       },
     });
@@ -66,7 +66,7 @@ export async function createSpace(opts: {
     ulid: newUlid(),
     parent: undefined,
     variant: {
-      kind: "space.roomy.space.join.v0",
+      kind: "space.roomy.personal.joinSpace.v0",
       data: {
         spaceId,
       },
@@ -106,7 +106,7 @@ export async function createSpace(opts: {
     ulid: newUlid(),
     parent: undefined,
     variant: {
-      kind: "space.roomy.admin.add.v0",
+      kind: "space.roomy.space.addAdmin.v0",
       data: {
         adminId: opts.creator.did,
       },
@@ -118,7 +118,7 @@ export async function createSpace(opts: {
     ulid: newUlid(),
     parent: undefined,
     variant: {
-      kind: "space.roomy.user.overrideMeta.v0",
+      kind: "space.roomy.space.overrideUserMeta.v0",
       data: {
         handle: "system",
       },
@@ -130,7 +130,7 @@ export async function createSpace(opts: {
     ulid: categoryId,
     parent: undefined,
     variant: {
-      kind: "space.roomy.room.create.v0",
+      kind: "space.roomy.room.createRoom.v0",
       data: undefined,
     },
   });
@@ -162,7 +162,7 @@ export async function createSpace(opts: {
     ulid: generalChannelId,
     parent: categoryId,
     variant: {
-      kind: "space.roomy.room.create.v0",
+      kind: "space.roomy.room.createRoom.v0",
       data: undefined,
     },
   });
@@ -194,7 +194,7 @@ export async function createSpace(opts: {
     ulid: welcomeThreadId,
     parent: generalChannelId,
     variant: {
-      kind: "space.roomy.room.create.v0",
+      kind: "space.roomy.room.createRoom.v0",
       data: undefined,
     },
   });
@@ -226,7 +226,7 @@ export async function createSpace(opts: {
     ulid: welcomeMessageId,
     parent: welcomeThreadId,
     variant: {
-      kind: "space.roomy.message.create.v0",
+      kind: "space.roomy.room.sendMessage.v0",
       data: {
         replyTo: undefined,
         content: {

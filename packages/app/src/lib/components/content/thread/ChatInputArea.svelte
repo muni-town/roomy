@@ -113,7 +113,7 @@
       id: threadId,
       room: ulid.assert(current.roomId),
       variant: {
-        $type: "space.roomy.room.create.v0",
+        $type: "space.roomy.room.createRoom.v0",
       },
     });
 
@@ -130,7 +130,7 @@
       id: newUlid(),
       room: threadId,
       variant: {
-        $type: "space.roomy.info.set.v0",
+        $type: "space.roomy.common.setInfo.v0",
         name: { $type: "space.roomy.defs#set", value: threadName },
         description: { $type: "space.roomy.defs#ignore" },
         avatar: { $type: "space.roomy.defs#ignore" },
@@ -227,11 +227,11 @@
         });
       }
 
-      const messageEvent: Event<"space.roomy.message.create.v1"> = {
+      const messageEvent: Event<"space.roomy.room.sendMessage.v1"> = {
         id: messageId,
         room: ulid.assert(page.params.object),
         variant: {
-          $type: "space.roomy.message.create.v1",
+          $type: "space.roomy.room.sendMessage.v1",
           content: {
             content: toBytes(new TextEncoder().encode(message)),
             mimeType: "text/markdown",
