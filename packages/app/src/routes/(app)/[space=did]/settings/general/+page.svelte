@@ -46,7 +46,7 @@
         ulid: newUlid(),
         parent: undefined,
         variant: {
-          kind: "space.roomy.info.v0",
+          kind: "space.roomy.common.setInfo.v0",
           data: {
             avatar:
               avatarChanged && avatarUpload
