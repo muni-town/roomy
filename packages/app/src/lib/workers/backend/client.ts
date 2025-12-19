@@ -416,23 +416,25 @@ export class Client {
 
     // Get the module id for this stream to check whether or not we need to update the module.
     const streamInfo = await this.leaf.streamInfo(stream.id);
+    console.log("Client.ensurePersonalStream StreamInfo", streamInfo);
 
-    if (streamInfo.moduleId != personalModule.moduleId) {
-      console.log(
-        "Personal stream's module doesn't match our current personal module version",
-      );
-      const alreadyHasModule = await this.leaf.hasModule(
-        personalModule.moduleId,
-      );
-      if (!alreadyHasModule) {
-        console.log(
-          "The leaf server doesn't have our module yet: uploading...",
-        );
-        await this.leaf.uploadModule(personalModule.encoded.buffer);
-      }
-      console.log("Updating module for personal stream to our current version");
-      await this.leaf.updateModule(stream.id, personalModule.moduleId);
-    }
+    // not sure if this is necessary atm
+    // if (streamInfo.moduleCid != personalModule.moduleCid) {
+    //   console.log(
+    //     "Personal stream's module doesn't match our current personal module version",
+    //   );
+    //   const alreadyHasModule = await this.leaf.hasModule(
+    //     personalModule.moduleId,
+    //   );
+    //   if (!alreadyHasModule) {
+    //     console.log(
+    //       "The leaf server doesn't have our module yet: uploading...",
+    //     );
+    //     await this.leaf.uploadModule(personalModule.encoded.buffer);
+    //   }
+    //   console.log("Updating module for personal stream to our current version");
+    //   await this.leaf.updateModule(stream.id, personalModule.moduleId);
+    // }
 
     return stream;
   }
@@ -470,10 +472,7 @@ export class Client {
 
   async sendEvent(streamId: string, event: Event) {
     await this.#leafAuthenticated.promise;
-    await this.leaf.sendEvent(streamId, {
-      user: this.agent.assertDid,
-      payload: encode(event),
-    });
+    await this.leaf.sendEvent(streamId, encode(event));
   }
 
   async sendEventBatch(streamId: string, payloads: Event[]) {
@@ -488,13 +487,7 @@ export class Client {
         );
       }
     });
-    await this.leaf.sendEvents(
-      streamId,
-      encodedPayloads.map((payload) => ({
-        user: this.agent.assertDid,
-        payload,
-      })),
-    );
+    await this.leaf.sendEvents(streamId, encodedPayloads);
   }
 
   async fetchEvents(
@@ -504,11 +497,10 @@ export class Client {
   ): Promise<EncodedStreamEvent[]> {
     await this.#leafAuthenticated.promise;
     const resp = await this.leaf?.query(streamId, {
-      query_name: "events",
-      limit: BigInt(limit),
-      start: BigInt(start),
-      params: [],
-      requesting_user: this.agent.assertDid,
+      name: "events",
+      params: {},
+      limit,
+      start,
     });
     const events = parseEvents(resp);
     return events;
