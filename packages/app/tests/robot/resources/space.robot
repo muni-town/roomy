@@ -24,8 +24,8 @@ Dump Database State For Space
 
     # Dump entities table
     ${entities_sql}=    Catenate    SEPARATOR=${SPACE}
-    ...    SELECT id(id) as id, id(stream_id) as stream_id, id(parent) as parent
-    ...    FROM entities WHERE id(stream_id) = '${spaceId}'
+    ...    SELECT id, stream_id, parent
+    ...    FROM entities WHERE stream_id = '${spaceId}'
     ...    ORDER BY id
     ${entities}=    Execute SQL Query    ${entities_sql}
     Log    ENTITIES (${entities['rows'].__len__()} rows):
@@ -35,10 +35,10 @@ Dump Database State For Space
 
     # Dump comp_room table
     ${rooms_sql}=    Catenate    SEPARATOR=${SPACE}
-    ...    SELECT id(r.entity) as entity, r.label, r.deleted
+    ...    SELECT r.entity as entity, r.label, r.deleted
     ...    FROM comp_room r
     ...    JOIN entities e ON e.id = r.entity
-    ...    WHERE id(e.stream_id) = '${spaceId}'
+    ...    WHERE e.stream_id = '${spaceId}'
     ${rooms}=    Execute SQL Query    ${rooms_sql}
     Log    COMP_ROOM (${rooms['rows'].__len__()} rows):
     FOR    ${row}    IN    @{rooms['rows']}
@@ -47,10 +47,10 @@ Dump Database State For Space
 
     # Dump comp_info table
     ${info_sql}=    Catenate    SEPARATOR=${SPACE}
-    ...    SELECT id(i.entity) as entity, i.name
+    ...    SELECT i.entity as entity, i.name
     ...    FROM comp_info i
     ...    JOIN entities e ON e.id = i.entity
-    ...    WHERE id(e.stream_id) = '${spaceId}'
+    ...    WHERE e.stream_id = '${spaceId}'
     ${info}=    Execute SQL Query    ${info_sql}
     Log    COMP_INFO (${info['rows'].__len__()} rows):
     FOR    ${row}    IN    @{info['rows']}
@@ -60,7 +60,7 @@ Dump Database State For Space
     # Dump events count
     ${events_sql}=    Catenate    SEPARATOR=${SPACE}
     ...    SELECT COUNT(*) as count FROM events
-    ...    WHERE id(stream_id) = '${spaceId}'
+    ...    WHERE stream_id = '${spaceId}'
     ${events}=    Execute SQL Query    ${events_sql}
     Log    EVENTS COUNT: ${events['rows'][0]['count']}
 
@@ -349,14 +349,14 @@ Query Space Metadata
     # Prepare the SQL query with the space ID
     ${sql}=    Catenate    SEPARATOR=${SPACE}
     ...    SELECT
-    ...    id(cs.entity) as id,
+    ...    cs.entity as id,
     ...    ci.name,
     ...    ci.avatar,
     ...    ci.description,
     ...    cs.hidden
     ...    FROM comp_space cs
     ...    LEFT JOIN comp_info ci ON ci.entity = cs.entity
-    ...    WHERE id(cs.entity) = '${spaceId}'
+    ...    WHERE cs.entity = '${spaceId}'
 
     ${results}=    Execute SQL Query    ${sql}
 
@@ -384,15 +384,15 @@ Query Space Rooms
 
     ${sql}=    Catenate    SEPARATOR=${SPACE}
     ...    SELECT
-    ...    id(e.id) as id,
+    ...    e.id as id,
     ...    r.label as type,
     ...    i.name,
-    ...    id(e.parent) as parent,
+    ...    e.parent as parent,
     ...    r.deleted
     ...    FROM entities e
     ...    JOIN comp_room r ON r.entity = e.id
     ...    LEFT JOIN comp_info i ON i.entity = e.id
-    ...    WHERE id(e.stream_id) = '${spaceId}'
+    ...    WHERE e.stream_id = '${spaceId}'
     ...    ORDER BY e.id
 
     # If expectedCount is provided, retry for up to 5 seconds
@@ -439,7 +439,7 @@ Count Rooms By Type
     ...    COUNT(*) as count
     ...    FROM entities e
     ...    JOIN comp_room r ON r.entity = e.id
-    ...    WHERE id(e.stream_id) = '${spaceId}'
+    ...    WHERE e.stream_id = '${spaceId}'
     ...    AND (r.deleted = 0 OR r.deleted IS NULL)
     ...    GROUP BY r.label
 
@@ -534,13 +534,13 @@ Verify Welcome Message Exists
     # Query for message in the thread (with retry for materialization)
     ${sql}=    Catenate    SEPARATOR=${SPACE}
     ...    SELECT
-    ...    id(e.id) as message_id,
+    ...    e.id as message_id,
     ...    c.data,
-    ...    id(om.author) as author
+    ...    om.author as author
     ...    FROM entities e
     ...    JOIN comp_content c ON c.entity = e.id
     ...    LEFT JOIN comp_override_meta om ON om.entity = e.id
-    ...    WHERE id(e.parent) = '${thread_id}'
+    ...    WHERE e.parent = '${thread_id}'
     ...    ORDER BY e.id
     ...    LIMIT 1
 

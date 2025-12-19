@@ -167,7 +167,7 @@ class WorkerSupervisor {
       id: DidStream;
       backfilled_to: StreamIndex;
     }>(sql`-- backend space list
-      select id(e.id) as id, cs.backfilled_to from entities e join comp_space cs on e.id = cs.entity
+      select e.id as id, cs.backfilled_to from entities e join comp_space cs on e.id = cs.entity
       where hidden = 0
     `);
 

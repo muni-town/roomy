@@ -31,7 +31,7 @@
     select 
       cast(data as text) as content,
       (
-        select id(edit_id)
+        select edit_id
         from comp_page_edits
         where entity = ${page.params.object}
         order by edit_id desc

@@ -72,10 +72,10 @@
       'name', name,
       'parent', (
         select json_object(
-          'id', id(pe.id),
+          'id', pe.id,
           'name', pi.name,
           'kind', pr.label,
-          'parent', id(pe.parent)
+          'parent', pe.parent
         )
         from comp_info pi
           join entities pe on pe.id = pi.entity
