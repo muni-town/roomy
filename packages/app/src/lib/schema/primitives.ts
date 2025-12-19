@@ -66,10 +66,22 @@ export const timestamp = type("number.integer>0", "@", "timestamp");
  * - { set: null } → clear the value
  * - { ignore: null } → leave unchanged
  */
-export const setProperty = type({
+const setVariant = type({
   $type: "'space.roomy.defs#set'",
   value: "string | null",
-}).or({ $type: "'space.roomy.defs#ignore'" });
+});
+type SetVariant = typeof setVariant.infer;
+const ignoreVariant = type({ $type: "'space.roomy.defs#ignore'" });
+type IgnoreVariant = typeof ignoreVariant.infer;
+export const setProperty = setVariant.or(ignoreVariant);
+export type SetPropety = typeof setProperty.infer;
+
+export const set = (value: string) =>
+  ({ $type: "space.roomy.defs#set", value }) satisfies SetVariant;
+
+export const ignore = {
+  $type: "space.roomy.defs#ignore",
+} satisfies IgnoreVariant;
 
 // Re-export the type helper for use in other modules
 export { type };
