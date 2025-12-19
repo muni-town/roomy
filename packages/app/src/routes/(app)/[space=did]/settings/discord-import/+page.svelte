@@ -145,7 +145,7 @@
           ulid: room.roomyId,
           parent: roomyParentId,
           variant: {
-            kind: "space.roomy.room.create.v0",
+            kind: "space.roomy.room.createRoom.v0",
             data: undefined,
           },
         });
@@ -203,7 +203,7 @@
             ulid: messageId,
             parent: roomId,
             variant: {
-              kind: "space.roomy.message.create.v0",
+              kind: "space.roomy.room.sendMessage.v0",
               data: {
                 content: {
                   mimeType: "text/markdown",
@@ -220,7 +220,7 @@
                 ulid: newUlid(),
                 parent: roomId,
                 variant: {
-                  kind: "space.roomy.reaction.bridged.create.v0",
+                  kind: "space.roomy.room.addBridgedReaction.v0",
                   data: {
                     reactingUser: `did:discord:${user.id}`,
                     reaction: reaction.emoji.name,
@@ -257,7 +257,7 @@
               ulid: newUlid(),
               parent: author,
               variant: {
-                kind: "space.roomy.user.overrideMeta.v0",
+                kind: "space.roomy.space.overrideUserMeta.v0",
                 data: {
                   handle: message.author.name,
                 },

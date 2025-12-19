@@ -64,9 +64,9 @@ const QUERY_LOCK = "sqliteQueryLock";
 const HEARTBEAT_KEY = "sqlite-worker-heartbeat";
 const LOCK_TIMEOUT_MS = 8000; // 30 seconds
 const newUserSignals = [
-  "space.roomy.message.create.v0",
-  "space.roomy.message.create.v1",
-  "space.roomy.room.join.v0",
+  "space.roomy.room.sendMessage.v0",
+  "space.roomy.room.sendMessage.v1",
+  "space.roomy.room.joinRoom.v0",
 ];
 
 class SqliteWorkerSupervisor {
@@ -695,7 +695,7 @@ class SqliteWorkerSupervisor {
 
             if (bundle.status === "success") {
               // Collect space IDs to connect AFTER batch is applied
-              if (event.variant.$type === "space.roomy.space.join.v0") {
+              if (event.variant.$type === "space.roomy.personal.joinSpace.v0") {
                 spacesToConnect.push(event.variant.spaceId);
               }
             }

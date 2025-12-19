@@ -7,7 +7,7 @@ import { messageExtension } from "../extensions/message";
 
 // Create a new message
 export const messageCreate = type({
-  $type: "'space.roomy.message.create.v1'",
+  $type: "'space.roomy.room.sendMessage.v1'",
   content,
   /** Extensible fields: replies, attachments, overrides */
   extensions: messageExtension.array(),
@@ -15,7 +15,7 @@ export const messageCreate = type({
 
 // Edit an existing message
 export const messageEdit = type({
-  $type: "'space.roomy.message.edit.v0'",
+  $type: "'space.roomy.room.editMessage.v0'",
   /**
    * New content. If mimeType is text/x-dmp-diff, this is a
    * diff-match-patch diff to apply to the previous content.
@@ -28,7 +28,7 @@ export const messageEdit = type({
 
 // Delete a message
 export const messageDelete = type({
-  $type: "'space.roomy.message.delete.v0'",
+  $type: "'space.roomy.room.deleteMessage.v0'",
   "reason?": "string",
 });
 
@@ -47,16 +47,16 @@ export const messageEvent = messageCreate
 
 // Export for registry
 export const events = {
-  "space.roomy.message.create.v0": {
+  "space.roomy.room.sendMessage.v0": {
     type: messageCreate,
     description:
       "Create a new chat message with optional attachments and metadata",
   },
-  "space.roomy.message.edit.v0": {
+  "space.roomy.room.editMessage.v0": {
     type: messageEdit,
     description: "Edit a previously sent message",
   },
-  "space.roomy.message.delete.v0": {
+  "space.roomy.room.deleteMessage.v0": {
     type: messageDelete,
     description: "Delete a message",
   },

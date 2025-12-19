@@ -58,7 +58,7 @@
       id: newUlid(),
       room: ulid.assert(page.params.object),
       variant: {
-        $type: "space.roomy.page.edit.v0",
+        $type: "space.roomy.room.editPage.v0",
         content: {
           mimeType: "text/x-dmp-patch",
           content: toBytes(new TextEncoder().encode(patch)),

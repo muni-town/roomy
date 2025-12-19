@@ -130,7 +130,7 @@ Create Space With Name
     ...            await window.backend.sendEvent(personalStreamId, {
     ...                ulid: newUlid(),
     ...                parent: undefined,
-    ...                variant: { kind: 'space.roomy.space.join.v0', data: { spaceId } }
+    ...                variant: { kind: 'space.roomy.personal.joinSpace.v0', data: { spaceId } }
     ...            });
     ...            console.log('Sent join event');
     ...            // Build event batch for room structure
@@ -148,17 +148,17 @@ Create Space With Name
     ...            const userDid = window.backendStatus?.current?.authState?.did;
     ...            if (userDid) {
     ...                batch.push({ ulid: newUlid(), parent: undefined,
-    ...                    variant: { kind: 'space.roomy.admin.add.v0', data: { adminId: userDid } }
+    ...                    variant: { kind: 'space.roomy.space.addAdmin.v0', data: { adminId: userDid } }
     ...                });
     ...            }
     ...            // System user
     ...            batch.push({ ulid: newUlid(), parent: undefined,
-    ...                variant: { kind: 'space.roomy.user.overrideMeta.v0', data: { handle: 'system' } }
+    ...                variant: { kind: 'space.roomy.space.overrideUserMeta.v0', data: { handle: 'system' } }
     ...            });
     ...            // Category
     ...            const categoryId = newUlid();
     ...            batch.push({ ulid: categoryId, parent: undefined,
-    ...                variant: { kind: 'space.roomy.room.create.v0', data: undefined } });
+    ...                variant: { kind: 'space.roomy.room.createRoom.v0', data: undefined } });
     ...            batch.push({ ulid: newUlid(), parent: categoryId,
     ...                variant: { kind: 'space.roomy.info.v0', data: {
     ...                    name: { set: 'Uncategorized' }, avatar: { ignore: undefined }, description: { ignore: undefined }
@@ -170,7 +170,7 @@ Create Space With Name
     ...            // Channel
     ...            const channelId = newUlid();
     ...            batch.push({ ulid: channelId, parent: categoryId,
-    ...                variant: { kind: 'space.roomy.room.create.v0', data: undefined } });
+    ...                variant: { kind: 'space.roomy.room.createRoom.v0', data: undefined } });
     ...            batch.push({ ulid: newUlid(), parent: channelId,
     ...                variant: { kind: 'space.roomy.info.v0', data: {
     ...                    name: { set: 'general' }, avatar: { ignore: undefined }, description: { ignore: undefined }
@@ -182,7 +182,7 @@ Create Space With Name
     ...            // Thread
     ...            const threadId = newUlid();
     ...            batch.push({ ulid: threadId, parent: channelId,
-    ...                variant: { kind: 'space.roomy.room.create.v0', data: undefined } });
+    ...                variant: { kind: 'space.roomy.room.createRoom.v0', data: undefined } });
     ...            batch.push({ ulid: newUlid(), parent: threadId,
     ...                variant: { kind: 'space.roomy.info.v0', data: {
     ...                    name: { set: `Welcome to \${spaceName}!` }, avatar: { ignore: undefined }, description: { ignore: undefined }
@@ -194,7 +194,7 @@ Create Space With Name
     ...            // Welcome message
     ...            const messageId = newUlid();
     ...            batch.push({ ulid: messageId, parent: threadId,
-    ...                variant: { kind: 'space.roomy.message.create.v0', data: {
+    ...                variant: { kind: 'space.roomy.room.sendMessage.v0', data: {
     ...                    replyTo: undefined,
     ...                    content: { mimeType: 'text/markdown', content: new TextEncoder().encode('Welcome to your new Roomy space!') }
     ...                }}});
@@ -292,7 +292,7 @@ Get Space Status
     RETURN    ${status}
 
 Send Space Join Event
-    [Documentation]    Send space.roomy.space.join.0 event to personal stream
+    [Documentation]    Send space.roomy.personal.joinSpace.0 event to personal stream
     ...                Makes the authenticated user join the specified space
     ...
     ...                Example:
@@ -319,7 +319,7 @@ Send Space Join Event
     ...            ulid: ulid,
     ...            parent: undefined,
     ...            variant: {
-    ...                kind: 'space.roomy.space.join.v0',
+    ...                kind: 'space.roomy.personal.joinSpace.v0',
     ...                data: {
     ...                    spaceId: spaceId
     ...                }
