@@ -69,7 +69,7 @@
     "@iconify-json/mdi": "^1.2.3",
     "@iconify-json/prime": "^1.2.4",
     "@iconify-json/tabler": "^1.2.23",
-    "@muni-town/leaf-client": "0.1.0-alpha.8",
+    "@muni-town/leaf-client": "0.1.0-alpha.14",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/context-zone": "^2.2.0",
     "@opentelemetry/instrumentation": "^0.208.0",
