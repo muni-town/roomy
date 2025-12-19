@@ -58,6 +58,9 @@ export const content = type({
 // Lexicons use integer for this
 export const timestamp = type("number.integer>0", "@", "timestamp");
 
+export const streamIndex = type("number.integer").brand("stream-index");
+export type StreamIndex = typeof streamIndex.infer;
+
 /**
  * Either set a string value or ignore (don't change).
  *
