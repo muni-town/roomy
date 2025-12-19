@@ -14,7 +14,7 @@ export const personalModule: BasicModule = {
   authorizer: `
     -- Get event type once
     with event_info as (
-      select drisl_extract(payload, '.$type') as event_type from event
+      select drisl_extract(payload, '.variant.$type') as event_type from event
     )
     -- no admin set yet - only allow admin.add events
     select unauthorized('stream not initialized - only admin.add allowed')
@@ -22,7 +22,7 @@ export const personalModule: BasicModule = {
       and (select event_type from event_info) is not 'space.roomy.space.addAdmin.v0';
   
     with event_info as (
-      select drisl_extract(payload, '.$type') as event_type from event
+      select drisl_extract(payload, '.variant.$type') as event_type from event
     )
     -- admin already set - reject admin.add (only one admin allowed)
     select unauthorized('admin already set')
@@ -30,19 +30,19 @@ export const personalModule: BasicModule = {
       and (select event_type from event_info) = 'space.roomy.space.addAdmin.v0';
   
     with event_info as (
-      select drisl_extract(payload, '.$type') as event_type from event
+      select drisl_extract(payload, '.variant.$type') as event_type from event
     )
     -- other events must be from admin
     select unauthorized('not authorized')
     where (select admin from stream_info) is not null
       and (select event_type from event_info) is not 'space.roomy.space.addAdmin.v0'
-      and (select drisl_extract(payload, '$.author') from event) is not (select admin from stream_info);
+      and (select drisl_extract(payload, '.variant.author') from event) is not (select admin from stream_info);
   `,
   materializer: `
     -- Set admin from admin.add event
     update stream_info
-    set admin = (select drisl_extract(payload, '$.subject') from event)
-    where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.addAdmin.v0';
+    set admin = (select drisl_extract(payload, '.variant.userId') from event)
+    where (select drisl_extract(payload, '.variant.$type') from event) = 'space.roomy.space.addAdmin.v0';
   `,
   queries: [
     {
@@ -82,8 +82,8 @@ export const spaceModule: BasicModule = {
   authorizer: `
     with event_info as (
       select 
-        drisl_extract(payload, '.$type') as event_type,
-        drisl_extract(payload, '$.author') as author
+        drisl_extract(payload, '.variant.$type') as event_type,
+        user as author
       from event
     ),
     admin_count as (
@@ -94,12 +94,30 @@ export const spaceModule: BasicModule = {
     where (select cnt from admin_count) = 0
       and (select event_type from event_info) is not 'space.roomy.space.addAdmin.v0';
 
+    with event_info as (
+      select 
+        drisl_extract(payload, '.variant.$type') as event_type,
+        user as author
+      from event
+    ),
+    admin_count as (
+      select count(*) as cnt from admins
+    )
     -- Case 2: Admins exist - author must be an admin for admin management
     select unauthorized('must be admin to manage admins')
     where (select cnt from admin_count) > 0
       and (select event_type from event_info) in ('space.roomy.space.addAdmin.v0', 'space.roomy.space.removeAdmin.v0')
       and not exists (select 1 from admins where user_id = (select author from event_info));
 
+    with event_info as (
+      select 
+        drisl_extract(payload, '.variant.$type') as event_type,
+        user as author
+      from event
+    ),
+    admin_count as (
+      select count(*) as cnt from admins
+    )
     -- Case 3: For other events, also require admin (adjust this based on your needs)
     -- You might want different rules for members vs admins here
     select unauthorized('not authorized')
@@ -110,13 +128,13 @@ export const spaceModule: BasicModule = {
   materializer: `
     -- Add admin
     insert or ignore into admins (user_id)
-    select drisl_extract(payload, '$.subject') from event
-    where drisl_extract(payload, '.$type') = 'space.roomy.space.addAdmin.v0';
+    select drisl_extract(payload, '.variant.userId') from event
+    where drisl_extract(payload, '.variant.$type') = 'space.roomy.space.addAdmin.v0';
 
     -- Remove admin
     delete from admins
-    where user_id = (select drisl_extract(payload, '$.subject') from event)
-      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.removeAdmin.v0';
+    where user_id = (select drisl_extract(payload, '.variant.userId') from event)
+      and (select drisl_extract(payload, '.variant.$type') from event) = 'space.roomy.space.removeAdmin.v0';
     
   `,
   queries: [
