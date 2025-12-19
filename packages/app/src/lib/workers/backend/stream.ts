@@ -11,10 +11,13 @@ import { personalModule, spaceModule } from "./modules";
 import {
   didStream,
   newUlid,
+  streamIndex,
   type,
   type DidStream,
   type DidUser,
+  type Event,
 } from "$lib/schema";
+import { encode } from "@atcute/cbor";
 
 interface ConnectedStreamOpts {
   user: DidUser;
@@ -86,21 +89,39 @@ export class ConnectedStream {
   static async createPersonal(
     opts: Omit<ConnectedStreamOpts, "id" | "idx" | "priority">,
   ) {
-    console.log("Creating personal stream", opts);
-    const personalModuleResp = await opts.leaf.uploadModule(personalModule);
+    try {
+      console.log("Creating personal stream", opts);
+      const personalModuleResp = await opts.leaf.uploadModule(personalModule);
 
-    const streamId = await opts.leaf.createStream(personalModuleResp.moduleCid);
+      const { streamDid } = await opts.leaf.createStream(
+        personalModuleResp.moduleCid,
+      );
 
-    console.log("created personal stream:", streamId);
+      console.log("created personal stream:", streamDid);
 
-    // Now send an admin.add event
+      // Now send an addAdmin event
+      await opts.leaf.sendEvent(
+        streamDid,
+        encode({
+          id: newUlid(),
+          room: undefined,
+          variant: {
+            $type: "space.roomy.space.addAdmin.v0",
+            userId: opts.user,
+          },
+        } satisfies Event),
+      );
 
-    return ConnectedStream.assert({
-      ...opts,
-      id: didStream.assert(streamId.streamDid),
-      idx: 0 as StreamIndex,
-      priority: "priority",
-    });
+      return ConnectedStream.assert({
+        ...opts,
+        id: didStream.assert(streamDid),
+        idx: 0 as StreamIndex,
+        priority: "priority",
+      });
+    } catch (e) {
+      console.error("Error creating personal stream", e);
+      throw e;
+    }
   }
 
   async subscribe() {
@@ -345,13 +366,16 @@ class BackfillState {
 }
 
 const encodedStreamEvent = type({
-  idx: { $type: "'muni.town.sqliteValue.integer'", value: "number" },
+  idx: { $type: "'muni.town.sqliteValue.integer'", value: streamIndex },
   user: { $type: "'muni.town.sqliteValue.text'", value: "string" },
-  payload: { $type: "'muni.town.sqliteValue.blob'", value: "ArrayBuffer" },
+  payload: {
+    $type: "'muni.town.sqliteValue.blob'",
+    value: type.instanceOf(Uint8Array),
+  },
 });
 
 export function parseEvents(rows: SqlRows): EncodedStreamEvent[] {
-  console.error("Trying to parse rows", rows);
+  console.log("Trying to parse rows", rows);
 
   return rows.map((row) => {
     const result = encodedStreamEvent(row);
@@ -363,8 +387,8 @@ export function parseEvents(rows: SqlRows): EncodedStreamEvent[] {
 
     return {
       idx: Number(result.idx.value) as StreamIndex,
-      user: result.user!.value as string,
-      payload: result.payload?.value as ArrayBuffer,
+      user: result.user!.value,
+      payload: result.payload?.value.buffer,
     };
   });
 }
