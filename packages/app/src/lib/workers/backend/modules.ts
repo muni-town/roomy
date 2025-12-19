@@ -1,69 +1,137 @@
-import { LeafClient } from "@muni-town/leaf-client";
+import { type BasicModule } from "@muni-town/leaf-client";
 
-export const personalModuleDef = {
-  $type: "space.roomy.module.basic.0" as const,
-  def: {
-    init_sql: `
-    create table if not exists stream_info as select
-      (select creator from stream) as creator, 
-      'space.roomy.stream.personal' as type,
-      '2' as schema_version;
+export const personalModule: BasicModule = {
+  $type: "muni.town.leaf.module.basic.v0" as const,
+  initSql: `
+    create table if not exists stream_info (
+      admin text,
+      type text not null default 'space.roomy.stream.personal',
+      schema_version text not null default '2'
+    );
+    
+    insert into stream_info (admin) select null where not exists (select 1 from stream_info);
   `,
-    authorizer: `
-    select unauthorized("Only stream owner can add events")
-      where (select creator from stream_info) != (select user from event);
+  authorizer: `
+    -- Get event type once
+    with event_info as (
+      select drisl_extract(payload, '.$type') as event_type from event
+    )
+    -- no admin set yet - only allow admin.add events
+    select unauthorized('stream not initialized - only admin.add allowed')
+    where (select admin from stream_info) is null
+      and (select event_type from event_info) is not 'space.roomy.admin.add.v0';
+  
+    with event_info as (
+      select drisl_extract(payload, '.$type') as event_type from event
+    )
+    -- admin already set - reject admin.add (only one admin allowed)
+    select unauthorized('admin already set')
+    where (select admin from stream_info) is not null
+      and (select event_type from event_info) = 'space.roomy.admin.add.v0';
+  
+    with event_info as (
+      select drisl_extract(payload, '.$type') as event_type from event
+    )
+    -- other events must be from admin
+    select unauthorized('not authorized')
+    where (select admin from stream_info) is not null
+      and (select event_type from event_info) is not 'space.roomy.admin.add.v0'
+      and (select drisl_extract(payload, '$.author') from event) is not (select admin from stream_info);
   `,
-    materializer: ``,
-    queries: [
-      {
-        name: "stream_info",
-        sql: `select * from stream_info;`,
-        params: [],
-      },
-      {
-        name: "events",
-        sql: `
+  materializer: `
+    -- Set admin from admin.add event
+    update stream_info
+    set admin = (select drisl_extract(payload, '$.subject') from event)
+    where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.admin.add.v0';
+  `,
+  queries: [
+    {
+      name: "stream_info",
+      sql: `select * from stream_info;`,
+      params: [],
+    },
+    {
+      name: "events",
+      sql: `
         select unauthorized('only the stream creator can read its events')
-          where $requesting_user != (select creator from stream_info);
+          where $requesting_user != (select admin from stream_info);
 
-        select id, user, payload from events.events
-          where id >= $start limit $limit;
+        select idx, user, payload from events.events
+          where idx >= $start limit $limit;
       `,
-        params: [],
-      },
-    ],
-  },
+      params: [],
+    },
+  ],
 };
-export const personalModule = await LeafClient.encodeModule(personalModuleDef);
-console.info("Personal module ID:", personalModule.moduleCid);
 
-export const spaceModuleDef = {
-  $type: "space.roomy.module.basic.0" as const,
-  def: {
-    init_sql: `
-    create table if not exists stream_info as select
-      (select creator from stream) as creator, 
-      'space.roomy.stream.space' as type,
-      '2' as schema_version;
+export const spaceModule: BasicModule = {
+  $type: "muni.town.leaf.module.basic.v0" as const,
+  initSql: `
+    create table if not exists stream_info (
+      type text not null default 'space.roomy.stream.space',
+      schema_version text not null default '2'
+    );
+    
+    insert into stream_info (type) select 'space.roomy.stream.space' 
+      where not exists (select 1 from stream_info);
+      
+    create table if not exists admins (
+      user_id text primary key
+    );
   `,
-    authorizer: ``,
-    materializer: ``,
-    queries: [
-      {
-        name: "stream_info",
-        sql: `select * from stream_info;`,
-        params: [],
-      },
-      {
-        name: "events",
-        sql: `
+  authorizer: `
+    with event_info as (
+      select 
+        drisl_extract(payload, '.$type') as event_type,
+        drisl_extract(payload, '$.author') as author
+      from event
+    ),
+    admin_count as (
+      select count(*) as cnt from admins
+    )
+    -- Case 1: No admins yet - only allow admin.add (bootstrap)
+    select unauthorized('space not initialized - need admin.add')
+    where (select cnt from admin_count) = 0
+      and (select event_type from event_info) is not 'space.roomy.admin.add.v0';
+
+    -- Case 2: Admins exist - author must be an admin for admin management
+    select unauthorized('must be admin to manage admins')
+    where (select cnt from admin_count) > 0
+      and (select event_type from event_info) in ('space.roomy.admin.add.v0', 'space.roomy.admin.remove.v0')
+      and not exists (select 1 from admins where user_id = (select author from event_info));
+
+    -- Case 3: For other events, also require admin (adjust this based on your needs)
+    -- You might want different rules for members vs admins here
+    select unauthorized('not authorized')
+    where (select cnt from admin_count) > 0
+      and (select event_type from event_info) not in ('space.roomy.admin.add.v0', 'space.roomy.admin.remove.v0')
+      and not exists (select 1 from admins where user_id = (select author from event_info));
+  `,
+  materializer: `
+    -- Add admin
+    insert or ignore into admins (user_id)
+    select drisl_extract(payload, '$.subject') from event
+    where drisl_extract(payload, '.$type') = 'space.roomy.admin.add.v0';
+
+    -- Remove admin
+    delete from admins
+    where user_id = (select drisl_extract(payload, '$.subject') from event)
+      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.admin.remove.v0';
+    
+  `,
+  queries: [
+    {
+      name: "stream_info",
+      sql: `select * from stream_info;`,
+      params: [],
+    },
+    {
+      name: "events",
+      sql: `
         select id, user, payload from events.events
           where id >= $start limit $limit;
       `,
-        params: [],
-      },
-    ],
-  },
+      params: [],
+    },
+  ],
 };
-export const spaceModule = await LeafClient.encodeModule(spaceModuleDef);
-console.info("Space module ID:", spaceModule.moduleCid);

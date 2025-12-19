@@ -1,5 +1,5 @@
 import { Deferred } from "$lib/utils/deferred";
-import type { LeafClient, SqlRows } from "@muni-town/leaf-client";
+import type { LeafClient, SqlRows, SqlValueRaw } from "@muni-town/leaf-client";
 import type {
   Batch,
   EncodedStreamEvent,
@@ -7,13 +7,14 @@ import type {
   TaskPriority,
 } from "../types";
 import type { AsyncChannel } from "../asyncChannel";
+import { personalModule, spaceModule } from "./modules";
 import {
-  personalModule,
-  personalModuleDef,
-  spaceModule,
-  spaceModuleDef,
-} from "./modules";
-import { didStream, newUlid, type DidStream, type DidUser } from "$lib/schema";
+  didStream,
+  newUlid,
+  type,
+  type DidStream,
+  type DidUser,
+} from "$lib/schema";
 
 interface ConnectedStreamOpts {
   user: DidUser;
@@ -71,15 +72,10 @@ export class ConnectedStream {
   }
 
   static async createSpace(opts: Omit<ConnectedStreamOpts, "id" | "idx">) {
-    const hasModule = await opts.leaf.hasModule(spaceModule.moduleCid);
+    console.log("Creating space stream", opts);
+    const spaceModuleResp = await opts.leaf.uploadModule(spaceModule);
 
-    console.log("uploaded personal module:", hasModule);
-
-    if (!hasModule.module_exists) {
-      await opts.leaf.uploadModule(spaceModuleDef);
-    }
-
-    const streamId = await opts.leaf.createStream(spaceModule.moduleCid);
+    const streamId = await opts.leaf.createStream(spaceModuleResp.moduleCid);
     return await ConnectedStream.connect({
       ...opts,
       id: didStream.assert(streamId),
@@ -90,22 +86,18 @@ export class ConnectedStream {
   static async createPersonal(
     opts: Omit<ConnectedStreamOpts, "id" | "idx" | "priority">,
   ) {
-    console.log("Creating personal stream");
-    const hasModule = await opts.leaf.hasModule(personalModule.moduleCid);
+    console.log("Creating personal stream", opts);
+    const personalModuleResp = await opts.leaf.uploadModule(personalModule);
 
-    console.log("uploaded personal module:", hasModule);
-
-    if (!hasModule.module_exists) {
-      await opts.leaf.uploadModule(personalModuleDef);
-    }
-
-    const streamId = await opts.leaf.createStream(personalModule.moduleCid);
+    const streamId = await opts.leaf.createStream(personalModuleResp.moduleCid);
 
     console.log("created personal stream:", streamId);
 
+    // Now send an admin.add event
+
     return ConnectedStream.assert({
       ...opts,
-      id: didStream.assert(streamId),
+      id: didStream.assert(streamId.streamDid),
       idx: 0 as StreamIndex,
       priority: "priority",
     });
@@ -116,8 +108,7 @@ export class ConnectedStream {
       this.id,
       {
         name: "events",
-        user: this.user,
-        params: [],
+        params: {},
         start: this.pin.backfill.upToEventId + 1,
         limit: 1,
       },
@@ -139,6 +130,8 @@ export class ConnectedStream {
               priority: "priority",
             });
           }
+        } else {
+          console.error("Subscribed query error:", result.Err);
         }
       },
     );
@@ -157,8 +150,7 @@ export class ConnectedStream {
   ): Promise<EncodedStreamEvent[]> {
     const resp = await this.leaf?.query(this.id, {
       name: "events",
-      user: this.user,
-      params: [],
+      params: {},
       limit,
       start,
     });
@@ -352,30 +344,27 @@ class BackfillState {
   }
 }
 
+const encodedStreamEvent = type({
+  idx: { $type: "'muni.town.sqliteValue.integer'", value: "number" },
+  user: { $type: "'muni.town.sqliteValue.text'", value: "string" },
+  payload: { $type: "'muni.town.sqliteValue.blob'", value: "ArrayBuffer" },
+});
+
 export function parseEvents(rows: SqlRows): EncodedStreamEvent[] {
-  const columnNamesAreValid =
-    rows.column_names[0] == "id" &&
-    rows.column_names[1] == "user" &&
-    rows.column_names[2] == "payload";
-  if (!columnNamesAreValid)
-    throw new Error("Invalid column names for events response");
+  console.error("Trying to parse rows", rows);
 
-  console.log("Trying to parse rows", rows);
+  return rows.map((row) => {
+    const result = encodedStreamEvent(row);
 
-  return rows.rows.map((x) => {
-    if (
-      x.values[0]?.tag != "integer" ||
-      x.values[1]?.tag != "text" ||
-      x.values[2]?.tag != "blob"
-    )
-      throw new Error(
-        `Invalid column type for events response: ${JSON.stringify(x, (_key, value) => (typeof value == "bigint" ? value.toString() : value))}`,
-      );
+    if (result instanceof type.errors) {
+      console.error("Could not parse event", result);
+      throw new Error("Invalid column names for events response");
+    }
 
     return {
-      idx: Number(x.values[0].value) as StreamIndex,
-      user: x.values[1].value,
-      payload: x.values[2].value.buffer,
+      idx: Number(result.idx.value) as StreamIndex,
+      user: result.user!.value as string,
+      payload: result.payload?.value as ArrayBuffer,
     };
   });
 }
