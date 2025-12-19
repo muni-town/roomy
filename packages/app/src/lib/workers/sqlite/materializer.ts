@@ -882,7 +882,8 @@ export async function materialize(
     // TODO: these are probably all wrong now we have room instead of parent
     // on the envelope, since dependencies on rooms are unproblematic for
     // partial loading
-    const dependsOn = dependentEvents.includes(kind) ? event.room : null;
+    const dependsOn =
+      dependentEvents.includes(kind) && event.room ? event.room : null;
 
     return bundleSuccess(event, idx, statements, dependsOn);
   } catch (error) {
