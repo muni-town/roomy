@@ -80,6 +80,10 @@ export const spaceModule: BasicModule = {
     create table if not exists admins (
       user_id text primary key -- did
     );
+    
+    create table if not exists metadata_events (
+      idx integer primary key
+    );
   `.sql,
 
   authorizer: sql`
@@ -117,6 +121,24 @@ export const spaceModule: BasicModule = {
     where user_id = (select drisl_extract(payload, '.variant.userId') from event)
       and (select drisl_extract(payload, '.variant.$type') from event) = 'space.roomy.space.removeAdmin.v0';
     
+    -- Mark metadata events
+    insert into metadata_events (idx)
+    select idx from event
+    where drisl_extract(payload, '.variant.$type') in (
+      'space.roomy.personal.joinSpace.v0',
+      'space.roomy.personal.leaveSpace.v0',
+      'space.roomy.space.setHandleAccount.v0',
+      'space.roomy.space.addAdmin.v0',
+      'space.roomy.space.removeAdmin.v0',
+      'space.roomy.common.setInfo.v0',
+      'space.roomy.room.createRoom.v0',
+      'space.roomy.room.deleteRoom.v0',
+      'space.roomy.room.updateParent.v0',
+      'space.roomy.room.addMember.v0',
+      'space.roomy.room.removeMember.v0',
+      'space.roomy.space.overrideUserMeta.v0',
+      'space.roomy.room.setKind.v0'
+    );
   `.sql,
 
   queries: [
@@ -135,6 +157,17 @@ export const spaceModule: BasicModule = {
       sql: `
         select idx, user, payload from events.events
           where idx >= $start limit $limit;
+      `,
+      params: [],
+    },
+    {
+      name: "metadata",
+      sql: `
+        select e.idx, e.user, e.payload 
+        from events.events e
+        inner join metadata_events m on e.idx = m.idx
+        where e.idx >= $start 
+        limit $limit;
       `,
       params: [],
     },
