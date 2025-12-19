@@ -75,15 +75,38 @@ export class ConnectedStream {
   }
 
   static async createSpace(opts: Omit<ConnectedStreamOpts, "id" | "idx">) {
-    console.log("Creating space stream", opts);
-    const spaceModuleResp = await opts.leaf.uploadModule(spaceModule);
+    try {
+      console.log("Creating space stream", opts);
+      const spaceModuleResp = await opts.leaf.uploadModule(spaceModule);
 
-    const streamId = await opts.leaf.createStream(spaceModuleResp.moduleCid);
-    return await ConnectedStream.connect({
-      ...opts,
-      id: didStream.assert(streamId),
-      idx: 0 as StreamIndex,
-    });
+      const { streamDid } = await opts.leaf.createStream(
+        spaceModuleResp.moduleCid,
+      );
+
+      console.log("created space stream:", streamDid);
+
+      // Now send an addAdmin event
+      await opts.leaf.sendEvent(
+        streamDid,
+        encode({
+          id: newUlid(),
+          room: undefined,
+          variant: {
+            $type: "space.roomy.space.addAdmin.v0",
+            userId: opts.user,
+          },
+        } satisfies Event),
+      );
+
+      return await ConnectedStream.connect({
+        ...opts,
+        id: didStream.assert(streamDid),
+        idx: 0 as StreamIndex,
+      });
+    } catch (e) {
+      console.error("Error creating space stream", e);
+      throw e;
+    }
   }
 
   static async createPersonal(
