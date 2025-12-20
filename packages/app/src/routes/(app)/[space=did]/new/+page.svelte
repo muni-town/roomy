@@ -6,7 +6,6 @@
   import { navigate } from "$lib/utils.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { backend } from "$lib/workers";
-  import { id } from "$lib/workers/encoding";
   import { Button, Input, ScrollArea, Select } from "@fuxui/base";
   import { monotonicFactory } from "ulidx";
 

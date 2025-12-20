@@ -3,7 +3,6 @@
   import { current } from "$lib/queries";
   import { sql } from "$lib/utils/sqlTemplate";
   import { backend, backendStatus } from "$lib/workers";
-  import { id } from "$lib/workers/encoding";
   import { Button } from "@fuxui/base";
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
