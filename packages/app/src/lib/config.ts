@@ -47,7 +47,6 @@ CONFIG.atprotoOauthScope = [
   "repo:space.roomy.upload", // And creating roomy upload records
 
   `repo:${CONFIG.streamNsid}`, // Access to the stream collection
-  `repo:${CONFIG.streamNsid}?action=create`,
   `repo:${CONFIG.streamHandleNsid}`, // Access to the stream handle collection
 
   // TODO: For some reason I can't get this to work with a non-wildcard audience. In the future we
