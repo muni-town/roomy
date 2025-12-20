@@ -1,9 +1,9 @@
-import { type, ulid } from "$lib/schema";
+import { type, Ulid } from "$lib/schema";
 import type { ParamMatcher } from "@sveltejs/kit";
 
 export const match = ((param: string) => {
   try {
-    const result = ulid(param);
+    const result = Ulid(param);
     if (result instanceof type.errors) return false;
     else return true;
   } catch (_) {

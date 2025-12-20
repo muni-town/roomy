@@ -13,7 +13,10 @@ import { isDid } from "@atproto/oauth-client";
 import { isValid as isValidUlid, ulid as generateUlid } from "ulidx";
 
 export type Bytes = BytesLink;
-export const Bytes = type({ $bytes: "string.base64" });
+export const Bytes = type.or(
+  type.instanceOf(BytesWrapper),
+  type({ $bytes: "string.base64" }),
+);
 export { fromBytes } from "@atcute/cbor";
 
 export function toBytes(buf: Uint8Array): BytesLink {
@@ -22,75 +25,72 @@ export function toBytes(buf: Uint8Array): BytesLink {
   return new BytesWrapper(buf).toJSON();
 }
 
-export const ulid = type.string
+export const Ulid = type.string
   .narrow((v, ctx) => (isValidUlid(v) ? true : ctx.mustBe("a valid ULID")))
   .brand("ulid");
-export type Ulid = typeof ulid.infer;
+export type Ulid = typeof Ulid.infer;
 
 export const newUlid = () => generateUlid() as Ulid;
 
-export const did = type.string
+export const Did = type.string
   .narrow((v, ctx) => (isDid(v) ? true : ctx.mustBe("a valid DID")))
   .brand("did");
-export type Did = typeof did.infer;
+export type Did = typeof Did.infer;
 
-export const didUser = did.brand("didUser");
-export type DidUser = typeof didUser.infer;
+export const UserDid = Did.brand("didUser");
+export type UserDid = typeof UserDid.infer;
 
-export const didStream = did.brand("didStream");
-export type DidStream = typeof didStream.infer;
+export const StreamDid = Did.brand("didStream");
+export type StreamDid = typeof StreamDid.infer;
 
 /** essentially checking if it's a valid-ish domain name. DNS segments can't be longer than 63 chars */
 export const isAtProtoHandle = (v: string): boolean => {
   return /^[a-z0-9][a-z0-9-]{0,62}(\.[a-z0-9-]+)+$/.test(v);
 };
 
-export const handle = type.string
+export const Handle = type.string
   .narrow((v, ctx) =>
     isAtProtoHandle(v) ? true : ctx.mustBe("a valid ATProto Handle"),
   )
   .brand("handle");
-export type Handle = typeof handle.infer;
+export type Handle = typeof Handle.infer;
 
 // Content block: mime type + payload
 // In DRISL, content will be bytes; we may want to decode text types
-export const content = type({
+export const Content = type({
   mimeType: "string",
   // For now, keep as bytes. Could refine based on mimeType.
-  content: Bytes,
+  data: Bytes,
 });
 
 // Timestamp: microseconds since Unix epoch
 // Lexicons use integer for this
-export const timestamp = type("number.integer>0", "@", "timestamp");
+export const Timestamp = type("number.integer>0", "@", "timestamp");
 
-export const streamIndex = type("number.integer").brand("stream-index");
-export type StreamIndex = typeof streamIndex.infer;
+export const StreamIndex = type("number.integer").brand("stream-index");
+export type StreamIndex = typeof StreamIndex.infer;
 
 /**
  * Either set a string value or ignore (don't change).
  *
  * Usage:
- * - { set: "new name" } → update to "new name"
- * - { set: null } → clear the value
- * - { ignore: null } → leave unchanged
+ * - { $type: "'space.roomy.defs#set'", value: "myvalue" } → update to "new name"
+ * - { $type: "'space.roomy.defs#set'", value: null } → update to "new name"
+ * - { $type: "'space.roomy.defs#ignore'" } → leave unchanged
  */
-const setVariant = type({
-  $type: "'space.roomy.defs#set'",
-  value: "string | null",
+export const SetProperty = type.or(
+  { $type: "'space.roomy.defs#ignore'" },
+  {
+    $type: "'space.roomy.defs#set'",
+    value: "string | null",
+  },
+);
+export type SetProperty = typeof SetProperty.infer;
+export const set: (v: string) => SetProperty = (value) => ({
+  $type: "space.roomy.defs#set",
+  value,
 });
-type SetVariant = typeof setVariant.infer;
-const ignoreVariant = type({ $type: "'space.roomy.defs#ignore'" });
-type IgnoreVariant = typeof ignoreVariant.infer;
-export const setProperty = setVariant.or(ignoreVariant);
-export type SetPropety = typeof setProperty.infer;
-
-export const set = (value: string) =>
-  ({ $type: "space.roomy.defs#set", value }) satisfies SetVariant;
-
-export const ignore = {
-  $type: "space.roomy.defs#ignore",
-} satisfies IgnoreVariant;
+export const ignore: SetProperty = { $type: "space.roomy.defs#ignore" };
 
 // Re-export the type helper for use in other modules
 export { type };

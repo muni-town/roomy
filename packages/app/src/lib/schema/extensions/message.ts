@@ -6,19 +6,19 @@
  * be referenced via union.
  */
 
-import { type, ulid } from "../primitives";
+import { type, Ulid } from "../primitives";
 
 // Reply reference
 export const replyTo = type({
   $type: "'space.roomy.extension.replyTo.v0'",
-  target: ulid,
+  target: Ulid,
 });
 
 // Comment/annotation on a document
 export const comment = type({
   $type: "'space.roomy.extension.comment.v0'",
   /** Version of the document being commented on */
-  version: ulid,
+  version: Ulid,
   /** Text snippet being referenced */
   snippet: "string",
   /** Start index in document */

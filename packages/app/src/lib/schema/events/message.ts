@@ -2,13 +2,13 @@
  * Message events: create, edit, delete
  */
 
-import { type, ulid, content, didUser, timestamp } from "../primitives";
+import { type, Ulid, Content, UserDid, Timestamp } from "../primitives";
 import { messageExtension } from "../extensions/message";
 
 // Create a new message
 export const messageCreate = type({
   $type: "'space.roomy.room.sendMessage.v1'",
-  content,
+  body: Content,
   /** Extensible fields: replies, attachments, overrides */
   extensions: messageExtension.array(),
 });
@@ -20,10 +20,10 @@ export const messageEdit = type({
    * New content. If mimeType is text/x-dmp-diff, this is a
    * diff-match-patch diff to apply to the previous content.
    */
-  target: ulid,
-  content,
+  target: Ulid,
+  body: Content,
   /** Updated reply target, if changing */
-  "replyTo?": ulid.or("null"),
+  "replyTo?": Ulid,
 });
 
 // Delete a message
@@ -35,8 +35,8 @@ export const messageDelete = type({
 // Change the author or timestamp of a native message. Intended for bridge puppeting.
 export const messageOverrideMeta = type({
   $type: "'space.roomy.message.overrideMeta.v0'",
-  author: didUser,
-  timestamp,
+  author: UserDid,
+  timestamp: Timestamp,
 });
 
 // All message events

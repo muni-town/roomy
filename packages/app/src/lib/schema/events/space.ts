@@ -2,34 +2,34 @@
  * Space-level events: join, leave, admin management, handle linking
  */
 
-import { did, didStream, didUser, type } from "../primitives";
+import { Did, StreamDid, UserDid, type } from "../primitives";
 
 // Join a Roomy space (only valid in user's personal stream)
 export const spaceJoin = type({
   $type: "'space.roomy.personal.joinSpace.v0'",
   /** The space being joined */
-  spaceId: didStream,
+  spaceId: StreamDid,
 });
 
 // Leave a Roomy space (only valid in user's personal stream)
 export const spaceLeave = type({
   $type: "'space.roomy.personal.leaveSpace.v0'",
   /** The space being left */
-  spaceId: didStream,
+  spaceId: StreamDid,
 });
 
 // Add an admin to the space
 export const adminAdd = type({
   $type: "'space.roomy.space.addAdmin.v0'",
   /** DID of the user being made admin */
-  userId: didUser,
+  userId: UserDid,
 });
 
 // Remove an admin from the space
 export const adminRemove = type({
   $type: "'space.roomy.space.removeAdmin.v0'",
   /** DID of the user being removed as admin */
-  userId: didUser,
+  userId: UserDid,
 });
 
 /**
@@ -42,7 +42,7 @@ export const adminRemove = type({
 export const streamHandleAccount = type({
   $type: "'space.roomy.stream.handleAccount.v0'",
   /** The ATProto DID, or null to unset */
-  "did?": did,
+  "did?": Did,
 });
 
 // All space events

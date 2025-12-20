@@ -20,7 +20,7 @@ import { messagePortInterface, reactiveWorkerState } from "../workerMessaging";
 import { db } from "../idb";
 import schemaSql from "./schema.sql?raw";
 import { sql } from "$lib/utils/sqlTemplate";
-import { didUser, parseEvent, type DidStream, type DidUser } from "$lib/schema";
+import { StreamDid, UserDid, parseEvent } from "$lib/schema";
 import { materialize } from "./materializer";
 import { AsyncChannel } from "../asyncChannel";
 import type {
@@ -78,8 +78,8 @@ class SqliteWorkerSupervisor {
   #status: Partial<SqliteStatus> = {};
   #backend: BackendInterface | null = null;
   #ensuredProfiles = new Set<string>();
-  #knownStreams = new Set<DidStream>();
-  #eventChannel: AsyncChannel<Batch.Event>;
+  #knownStreams = new Set<StreamDid>();
+  #eventChannel: AsyncChannel<Batch.Events>;
   #statementChannel = new AsyncChannel<Batch.Statement>();
   #resultChannel = new AsyncChannel<Batch.ApplyResult>();
   #pendingBatches = new Map<string, (result: Batch.ApplyResult) => void>();
@@ -361,7 +361,7 @@ class SqliteWorkerSupervisor {
   private getSqliteInterface(): SqliteWorkerInterface {
     return {
       authenticate: async (did) => {
-        await this.loadDb(did, true);
+        await this.loadDb(did, false);
         this.#status.authenticated = did;
         this.#authenticated.resolve();
         console.log("✅ Authenticated SQLite Worker with did:", did);
@@ -473,7 +473,7 @@ class SqliteWorkerSupervisor {
     bundleId: string,
     statements: SqlStatement[],
     eventMeta?: {
-      streamId: DidStream;
+      streamId: StreamDid;
       idx: StreamIndex;
     },
   ) {
@@ -540,7 +540,7 @@ class SqliteWorkerSupervisor {
 
   private async runStatementBundle(
     bundle: Bundle.StatementSuccess,
-    streamId: DidStream,
+    streamId: StreamDid,
   ): Promise<Bundle.ApplyResult> {
     const bundleId = bundle.eventId;
 
@@ -612,7 +612,7 @@ class SqliteWorkerSupervisor {
     }
   }
 
-  async connectSpaceStream(spaceId: DidStream) {
+  async connectSpaceStream(spaceId: StreamDid) {
     const knownStream = this.#knownStreams.has(spaceId);
     if (!knownStream) {
       const maybeSpace = await executeQuery(sql`
@@ -665,11 +665,11 @@ class SqliteWorkerSupervisor {
           .filter((e): e is Exclude<typeof e, null> => e !== null);
 
         // Make sure all of the profiles we need are downloaded and inserted
-        const neededProfiles = new Set<DidUser>();
+        const neededProfiles = new Set<UserDid>();
         decodedEvents.forEach(([i, ev]) =>
           newUserSignals.includes(ev.variant.$type)
-            ? didUser.allows(i.user)
-              ? neededProfiles.add(didUser.assert(i.user))
+            ? UserDid.allows(i.user)
+              ? neededProfiles.add(UserDid.assert(i.user))
               : console.warn("Found invalid user id", i.user)
             : undefined,
         );
@@ -677,7 +677,7 @@ class SqliteWorkerSupervisor {
         bundles.push(await this.ensureProfiles(batch.streamId, neededProfiles));
 
         let latestEvent = 0;
-        const spacesToConnect: DidStream[] = [];
+        const spacesToConnect: StreamDid[] = [];
         for (const [incoming, event] of decodedEvents) {
           latestEvent = Math.max(latestEvent, incoming.idx);
           try {
@@ -736,8 +736,8 @@ class SqliteWorkerSupervisor {
    * of flags to indicate that the profile doesn't need to be re-fetched.
    */
   async ensureProfiles(
-    streamId: DidStream,
-    profileDids: Set<DidUser>,
+    streamId: StreamDid,
+    profileDids: Set<UserDid>,
   ): Promise<Bundle.Statement> {
     try {
       // This only knows how to fetch Bluesky DIDs for now
@@ -830,7 +830,7 @@ class SqliteWorkerSupervisor {
   }
 
   private async materializeBatch(
-    eventsBatch: Batch.Event,
+    eventsBatch: Batch.Events,
     priority: TaskPriority = "background",
   ) {
     // so this is where we need to coordinate across the chain of channels

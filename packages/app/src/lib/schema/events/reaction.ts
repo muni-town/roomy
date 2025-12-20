@@ -2,13 +2,13 @@
  * Reaction events: create, delete (including bridged variants)
  */
 
-import { didUser, type, ulid } from "../primitives";
+import { UserDid, type, Ulid } from "../primitives";
 
 // Create a reaction
 export const reactionCreate = type({
   $type: "'space.roomy.room.addReaction.v0'",
   /** The message being reacted to */
-  target: ulid,
+  target: Ulid,
   /** Unicode emoji or URI describing the reaction */
   reaction: "string",
 });
@@ -17,7 +17,7 @@ export const reactionCreate = type({
 export const reactionDelete = type({
   $type: "'space.roomy.room.removeReaction.v0'",
   /** The message the reaction was on */
-  target: ulid,
+  target: Ulid,
   /** The reaction being removed */
   reaction: "string",
 });
@@ -26,22 +26,22 @@ export const reactionDelete = type({
 export const reactionBridgedCreate = type({
   $type: "'space.roomy.room.addBridgedReaction.v0'",
   /** The message being reacted to */
-  target: ulid,
+  target: Ulid,
   /** Unicode emoji or URI describing the reaction */
   reaction: "string",
   /** The external user ID doing the reacting */
-  reactingUser: didUser,
+  reactingUser: UserDid,
 });
 
 // Bridged reaction delete
 export const reactionBridgedDelete = type({
   $type: "'space.roomy.room.removeBridgedReaction.v0'",
   /** The message the reaction was on */
-  target: ulid,
+  target: Ulid,
   /** The reaction being removed */
   reaction: "string",
   /** The external user ID whose reaction is being removed */
-  reactingUser: didUser,
+  reactingUser: UserDid,
 });
 
 // All reaction events

@@ -1,4 +1,4 @@
-import type { Did, Ulid, StreamIndex, DidStream, Handle } from "$lib/schema";
+import type { Did, Ulid, StreamIndex, StreamDid, Handle } from "$lib/schema";
 import type { QueryResult } from "./sqlite/setup";
 import type { SqlStatement } from "./sqlite/types";
 
@@ -52,45 +52,35 @@ export type EdgesRecord<TRequired extends readonly EdgeLabel[]> = {
   [K in TRequired[number]]: [EdgesMap[K], Did | Ulid];
 };
 
-export type SpaceIdOrHandle = DidStream | Handle;
+export type SpaceIdOrHandle = StreamDid | Handle;
 
 export type TaskPriority = "priority" | "background";
 
 export interface EncodedStreamEvent {
   idx: StreamIndex;
   user: string;
-  payload: ArrayBufferLike;
+  payload: Uint8Array;
 }
 
 /** SqliteWorker handles a pipeline of batched computations, transforming
  * batches from Events to SQL Statements to Results
  */
 export namespace Batch {
-  export interface EventFetch {
-    status: "fetched";
+  export interface Events {
     batchId: Ulid;
-    streamId: DidStream;
+    streamId: StreamDid;
     events: EncodedStreamEvent[];
     priority: TaskPriority;
   }
 
-  export interface EventPushed {
-    status: "pushed";
-    batchId: Ulid;
-    streamId: DidStream;
-    events: [EncodedStreamEvent];
-    priority: TaskPriority;
-  }
-  export type Event = EventFetch | EventPushed;
-
   export interface Statement {
     status: "transformed";
     batchId: Ulid;
-    streamId: DidStream;
+    streamId: StreamDid;
     bundles: Bundle.Statement[];
     latestEvent: StreamIndex;
     priority: TaskPriority;
-    spacesToConnect: DidStream[];
+    spacesToConnect: StreamDid[];
   }
 
   export interface ApplyResult {

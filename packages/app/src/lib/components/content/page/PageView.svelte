@@ -10,7 +10,7 @@
   import { RichTextEditor } from "$lib/components/richtext";
   import { patchMake, patchToText } from "diff-match-patch-es";
   import Turndown from "turndown";
-  import { newUlid, toBytes, ulid } from "$lib/schema";
+  import { newUlid, toBytes, Ulid } from "$lib/schema";
   import { scrollContainerRef } from "$lib/utils.svelte";
 
   import IconTablerCheck from "~icons/tabler/check";
@@ -19,7 +19,7 @@
     messagingState,
     type Comment,
   } from "../thread/TimelineView.svelte";
-  import { ensureShowPageChat } from "$lib/../routes/(app)/[space=hashOrDomain]/[object=ulid]/+page.svelte";
+  import { ensureShowPageChat } from "../../../../routes/(app)/[space=did]/[object=ulid]/+page.svelte";
 
   let isEditing = $state(false);
   const spaceId = $derived(current.joinedSpace?.id);
@@ -56,12 +56,12 @@
     const patch = patchToText(patchMake(pageMarkdown || "", newMarkdown));
     await backend.sendEvent(spaceId, {
       id: newUlid(),
-      room: ulid.assert(page.params.object),
+      room: Ulid.assert(page.params.object),
       variant: {
         $type: "space.roomy.room.editPage.v0",
-        content: {
+        body: {
           mimeType: "text/x-dmp-patch",
-          content: toBytes(new TextEncoder().encode(patch)),
+          data: toBytes(new TextEncoder().encode(patch)),
         },
       },
     });
@@ -82,7 +82,7 @@
       // Create the comment with the selected text and latest edit ID
       const comment: Comment = {
         snippet: selectedText.slice(0, 200), // limit to 200 chars
-        docVersion: latestEditId || "",
+        docVersion: Ulid.assert(latestEditId!),
         from,
         to,
       };

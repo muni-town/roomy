@@ -43,7 +43,7 @@
                   'id', author_id
                 )),
                 'latestTimestamp', max(timestamp),
-                'test', json_group_array(id(id))
+                'test', json_group_array(id)
               ) from (
                 select
                   ulid_timestamp(edits.edit_id) as timestamp,

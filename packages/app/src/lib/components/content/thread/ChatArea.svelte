@@ -80,7 +80,7 @@
         'masqueradeAuthor', o.author,
         'masqueradeTimestamp', o.timestamp,
         'replyTo', coalesce((
-          select json_group_array(id(ed.tail))
+          select json_group_array(ed.tail)
           from edges ed
           where ed.head = e.id and ed.label = 'reply'
         ), json_array()),

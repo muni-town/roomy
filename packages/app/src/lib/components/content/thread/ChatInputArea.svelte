@@ -20,7 +20,7 @@
   } from "./TimelineView.svelte";
   import { markCommentForRemoval } from "$lib/components/richtext/RichTextEditor.svelte";
   import { getImagePreloadData } from "$lib/utils/media";
-  import { newUlid, toBytes, ulid, type Event } from "$lib/schema";
+  import { newUlid, toBytes, Ulid, type Event } from "$lib/schema";
   import type { MessageExtension } from "$lib/schema/extensions/message";
 
   let spaceId = $derived(current.joinedSpace?.id);
@@ -111,7 +111,7 @@
     const threadId = newUlid();
     await backend.sendEvent(spaceId, {
       id: threadId,
-      room: ulid.assert(current.roomId),
+      room: Ulid.assert(current.roomId),
       variant: {
         $type: "space.roomy.room.createRoom.v0",
       },
@@ -140,7 +140,7 @@
     for (const message of state.selectedMessages) {
       await backend.sendEvent(spaceId, {
         id: newUlid(),
-        room: ulid.assert(message.id),
+        room: Ulid.assert(message.id),
         variant: {
           $type: "space.roomy.room.updateParent.v0",
           parent: threadId,
@@ -213,14 +213,14 @@
       if (state.kind === "replying") {
         extensions.push({
           $type: "space.roomy.extension.replyTo.v0",
-          target: ulid.assert(state.replyTo.id),
+          target: Ulid.assert(state.replyTo.id),
         });
       }
 
       if (state.kind === "commenting") {
         extensions.push({
           $type: "space.roomy.extension.comment.v0",
-          version: ulid.assert(state.comment.docVersion),
+          version: Ulid.assert(state.comment.docVersion),
           snippet: state.comment.snippet || "",
           from: state.comment.from,
           to: state.comment.to,
@@ -229,11 +229,11 @@
 
       const messageEvent: Event<"space.roomy.room.sendMessage.v1"> = {
         id: messageId,
-        room: ulid.assert(page.params.object),
+        room: Ulid.assert(page.params.object),
         variant: {
           $type: "space.roomy.room.sendMessage.v1",
-          content: {
-            content: toBytes(new TextEncoder().encode(message)),
+          body: {
+            data: toBytes(new TextEncoder().encode(message)),
             mimeType: "text/markdown",
           },
           extensions,

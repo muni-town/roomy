@@ -21,7 +21,7 @@
   import { toast } from "@fuxui/base";
   import type { MessagingState } from "../TimelineView.svelte";
   import MediaEmbed from "./embeds/MediaEmbed.svelte";
-  import { newUlid, toBytes, ulid } from "$lib/schema";
+  import { newUlid, toBytes, Ulid } from "$lib/schema";
   import { page } from "$app/state";
 
   let {
@@ -117,15 +117,15 @@
 
     await backend.sendEvent(spaceId, {
       id: newUlid(),
-      room: ulid.assert(page.params.object),
+      room: Ulid.assert(page.params.object),
       variant: {
         $type: "space.roomy.room.editMessage.v0",
-        target: ulid.assert(message.id),
-        content: {
+        target: Ulid.assert(message.id),
+        body: {
           mimeType: "text/x-dmp-patch",
-          content: toBytes(new TextEncoder().encode(contentPatch)),
+          data: toBytes(new TextEncoder().encode(contentPatch)),
         },
-        replyTo: ulid.assert(message.replyTo[0]), // This event needs updating to support multiple replies and other changes to extensions
+        replyTo: Ulid.assert(message.replyTo[0]), // This event needs updating to support multiple replies and other changes to extensions
       },
     });
 
@@ -197,15 +197,15 @@
         <MessageContext
           context={{
             kind: "replying",
-            messageId: ulid.assert(message.id),
-            replyTo: { id: ulid.assert(message.replyTo[0]) },
+            messageId: Ulid.assert(message.id),
+            replyTo: { id: Ulid.assert(message.replyTo[0]) },
           }}
         />
       {:else if message.comment.version}
         <MessageContext
           context={{
             kind: "commenting",
-            messageId: ulid.assert(message.id),
+            messageId: Ulid.assert(message.id),
             comment: message.comment,
           }}
         />
