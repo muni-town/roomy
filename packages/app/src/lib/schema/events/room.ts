@@ -2,7 +2,7 @@
  * Room events: create, delete, join, leave, member management
  */
 
-import { didUser, type, ulid } from "../primitives";
+import { UserDid, type, Ulid } from "../primitives";
 
 // Room kinds (replaces the mark/unmark pattern)
 export const roomKind = type("'channel' | 'category' | 'thread' | 'page'");
@@ -22,12 +22,12 @@ export const groupMember = type({
   .or({
     $type: "'space.roomy.member.user.v0'",
     /** A user ID. */
-    id: didUser,
+    id: UserDid,
   })
   .or({
     $type: "'space.roomy.member.room.v0'",
     /** The ID of another room to use as a group. That room's member list will be used. */
-    roomId: ulid,
+    roomId: Ulid,
   });
 
 // Create a room. Sent at top level (no room), or in parent room. The ulid of this event becomes the id of the room.
@@ -38,7 +38,7 @@ export const roomCreate = type({
 // Delete a room. Sent at top level or in parent room.
 export const roomDelete = type({
   $type: "'space.roomy.room.deleteRoom.v0'",
-  roomId: ulid, // the room to delete
+  roomId: Ulid, // the room to delete
 });
 
 // Join a room. Author joins the room specified in envelope. If no room specified, the event is an announcement on joining a space.
@@ -60,7 +60,7 @@ export const roomSetKind = type({
 // Update room parent
 export const roomUpdateParent = type({
   $type: "'space.roomy.room.updateParent.v0'",
-  "parent?": ulid,
+  "parent?": Ulid,
 });
 
 // Add a member to a room

@@ -8,12 +8,12 @@ import type { BlobRef } from "@atproto/lexicon";
 import type { Deferred } from "$lib/utils/deferred";
 import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
 import type { ConnectedStream } from "./stream";
-import type { Did, DidStream, DidUser, Event, Handle } from "$lib/schema";
+import type { Did, StreamDid, UserDid, Event, Handle } from "$lib/schema";
 
 export interface BackendStatus {
   authState: ReactiveAuthState;
   profile: Profile;
-  spaces: Record<DidStream, "loading" | "idle" | "error">;
+  spaces: Record<StreamDid, "loading" | "idle" | "error">;
 }
 
 export type BackendInterface = {
@@ -21,7 +21,7 @@ export type BackendInterface = {
   logout(): Promise<void>;
   oauthCallback(searchParams: string): Promise<void>;
   runQuery(statement: SqlStatement): Promise<QueryResult<unknown>>;
-  getProfile(did: DidUser): Promise<Profile | undefined>;
+  getProfile(did: UserDid): Promise<Profile | undefined>;
   dangerousCompletelyDestroyDatabase(opts: {
     yesIAmSure: true;
   }): Promise<{ done: true } | { done: false; error: string }>;
@@ -33,31 +33,31 @@ export type BackendInterface = {
     port: MessagePort,
     statement: SqlStatement,
   ): Promise<void>;
-  sendEvent(streamId: DidStream, payload: Event): Promise<void>;
-  sendEventBatch(streamId: DidStream, payloads: Event[]): Promise<void>;
+  sendEvent(streamId: StreamDid, payload: Event): Promise<void>;
+  sendEventBatch(streamId: StreamDid, payloads: Event[]): Promise<void>;
   fetchEvents(
-    streamId: DidStream,
+    streamId: StreamDid,
     offset: number,
     limit: number,
   ): Promise<EncodedStreamEvent[]>;
-  previewSpace(streamId: DidStream): Promise<{ name: string }>;
+  previewSpace(streamId: StreamDid): Promise<{ name: string }>;
   setActiveSqliteWorker(port: MessagePort): Promise<void>;
-  pauseSubscription(streamId: DidStream): Promise<void>;
-  unpauseSubscription(streamId: DidStream): Promise<void>;
+  pauseSubscription(streamId: StreamDid): Promise<void>;
+  unpauseSubscription(streamId: StreamDid): Promise<void>;
   resolveHandleForSpace(
-    spaceId: DidStream,
+    spaceId: StreamDid,
     handleAccountDid: Did,
   ): Promise<Handle | undefined>;
-  resolveSpaceId(spaceIdOrHandle: DidStream | Handle): Promise<{
-    spaceId: DidStream;
+  resolveSpaceId(spaceIdOrHandle: StreamDid | Handle): Promise<{
+    spaceId: StreamDid;
     handle?: Handle;
     did?: Did;
   }>;
-  checkSpaceExists(spaceId: DidStream): Promise<boolean>;
-  createStreamHandleRecord(spaceId: DidStream): Promise<void>;
+  checkSpaceExists(spaceId: StreamDid): Promise<boolean>;
+  createStreamHandleRecord(spaceId: StreamDid): Promise<void>;
   removeStreamHandleRecord(): Promise<void>;
-  connectSpaceStream(spaceId: DidStream, idx: StreamIndex): Promise<void>;
-  createSpaceStream(): Promise<DidStream>;
+  connectSpaceStream(spaceId: StreamDid, idx: StreamIndex): Promise<void>;
+  createSpaceStream(): Promise<StreamDid>;
   /** Testing: Get personal stream record from PDS */
   getStreamRecord(): Promise<{ id: string } | null>;
   /** Testing: Delete personal stream record from PDS */
@@ -104,7 +104,7 @@ export namespace AuthStates {
   export interface Authenticated {
     state: "authenticated";
     client: Client;
-    eventChannel: AsyncChannel<Batch.Event>;
+    eventChannel: AsyncChannel<Batch.Events>;
   } // implies leafConnected, has personalStreamId
 
   export interface AuthError {
@@ -115,7 +115,7 @@ export namespace AuthStates {
   export interface ReactiveAuthenticated {
     state: "authenticated";
     did: Did;
-    personalStream: DidStream;
+    personalStream: StreamDid;
     clientStatus: StreamConnectionStatus["status"];
   }
 }
@@ -166,8 +166,8 @@ export namespace ConnectionStates {
   export interface ConnectedStreams {
     status: "connected";
     personalStream: ConnectedStream;
-    eventChannel: AsyncChannel<Batch.Event>;
-    streams: Map<DidStream, ConnectedStream>;
+    eventChannel: AsyncChannel<Batch.Events>;
+    streams: Map<StreamDid, ConnectedStream>;
   }
 }
 

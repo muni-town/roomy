@@ -1,12 +1,12 @@
 import { backend, backendStatus } from "$lib/workers";
-import type { Event, DidStream, Did } from "$lib/schema";
+import type { Event, StreamDid, Did } from "$lib/schema";
 import { toast } from "@fuxui/base";
-import { didUser, ignore, newUlid, set, toBytes } from "$lib/schema";
+import { UserDid, ignore, newUlid, set, toBytes } from "$lib/schema";
 
 /**
  * Join a space.
  */
-export async function joinSpace(spaceId: DidStream) {
+export async function joinSpace(spaceId: StreamDid) {
   try {
     if (backendStatus.authState?.state !== "authenticated") {
       toast.error("Could not join space. It's possible it does not exist.");
@@ -42,7 +42,7 @@ export async function createSpace(opts: {
   avatarFile?: File;
   creator: {
     did: Did;
-    personalStreamId: DidStream;
+    personalStreamId: StreamDid;
   };
 }) {
   let currentSpaceName = opts.spaceName;
@@ -95,7 +95,7 @@ export async function createSpace(opts: {
     room: undefined,
     variant: {
       $type: "space.roomy.space.addAdmin.v0",
-      userId: didUser.assert(opts.creator.did),
+      userId: UserDid.assert(opts.creator.did),
     },
   });
 
@@ -193,9 +193,9 @@ export async function createSpace(opts: {
     room: welcomeThreadId,
     variant: {
       $type: "space.roomy.room.sendMessage.v1",
-      content: {
+      body: {
         mimeType: "text/markdown",
-        content: toBytes(
+        data: toBytes(
           new TextEncoder().encode(`Welcome to your new Roomy space!`),
         ),
       },

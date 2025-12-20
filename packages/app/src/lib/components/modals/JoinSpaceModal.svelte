@@ -5,14 +5,14 @@
   import { joinSpace } from "$lib/mutations/space";
   import { type SpaceIdOrHandle } from "$lib/workers/types";
   import { backend } from "$lib/workers";
-  import type { DidStream } from "$lib/schema";
+  import type { StreamDid } from "$lib/schema";
 
   let inviteSpaceName = $derived(page.url.searchParams.get("name"));
   let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
 
   type JoinStatus =
     | { status: "loading" }
-    | { status: "ready"; spaceId: DidStream }
+    | { status: "ready"; spaceId: StreamDid }
     | { status: "joining" }
     | { status: "success" }
     | {

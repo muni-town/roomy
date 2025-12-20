@@ -2,7 +2,7 @@
  * Page events: editing collaborative documents
  */
 
-import { type, content } from "../primitives";
+import { type, Content } from "../primitives";
 
 /**
  * Edit a page/document.
@@ -14,7 +14,7 @@ import { type, content } from "../primitives";
 export const pageEdit = type({
   $type: "'space.roomy.room.editPage.v0'",
   /** The edit content (full replacement or diff) */
-  content,
+  body: Content,
 });
 
 // All page events

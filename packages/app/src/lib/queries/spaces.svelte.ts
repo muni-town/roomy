@@ -1,4 +1,4 @@
-import { did } from "$lib/schema";
+import { Did } from "$lib/schema";
 import { LiveQuery } from "$lib/utils/liveQuery.svelte";
 import { sql } from "$lib/utils/sqlTemplate";
 import { backend, backendStatus, getPersonalStreamId } from "$lib/workers";
@@ -51,7 +51,7 @@ $effect.root(() => {
         handle: spaceRow.handle_account
           ? await backend.resolveHandleForSpace(
               spaceRow.id,
-              did.assert(spaceRow.handle_account),
+              Did.assert(spaceRow.handle_account),
             )
           : undefined,
         backfill_status: backendStatus.spaces?.[spaceRow.id] || "error",

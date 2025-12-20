@@ -5,7 +5,7 @@
  * with the specific event data discriminated by $type.
  */
 
-import { type, ulid } from "./primitives";
+import { type, Ulid } from "./primitives";
 import { messageEvent } from "./events/message";
 import { roomEvent } from "./events/room";
 import { reactionEvent } from "./events/reaction";
@@ -30,9 +30,9 @@ export const eventVariant = type.or(
 // This is what gets encoded to DRISL and sent over the wire
 export const event = type({
   /** Unique event ID, also encodes timestamp */
-  id: ulid,
+  id: Ulid,
   /** Parent room. Null for space-level events. */
-  "room?": ulid,
+  "room?": Ulid,
   /** The event payload (discriminated by $type) */
   variant: eventVariant,
 });
