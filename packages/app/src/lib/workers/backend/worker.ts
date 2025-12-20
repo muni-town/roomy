@@ -30,15 +30,7 @@ import type {
   SqlStatement,
 } from "../sqlite/types";
 import { ensureEntity } from "../sqlite/materializer";
-import {
-  did,
-  didUser,
-  event,
-  parseEvent,
-  type DidStream,
-  type DidUser,
-  type Event,
-} from "$lib/schema";
+import { UserDid, parseEvent, type StreamDid, type Event } from "$lib/schema";
 import { decode } from "@atcute/cbor";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
@@ -100,19 +92,19 @@ class WorkerSupervisor {
    */
   async setAuthenticated(client: Client) {
     const userDid = client.agent.did;
-    if (!userDid || !didUser.allows(userDid))
+    if (!userDid || !UserDid.allows(userDid))
       throw new Error("DID not defined on client");
 
     console.log("Authenticating SQLite worker with did", userDid);
 
     await this.sqlite
-      .authenticate(didUser.assert(userDid))
+      .authenticate(UserDid.assert(userDid))
       .catch((e) => console.error("Failed to authenticate sqlite worker", e));
 
     // try to fetch or create the personal stream
     this.setAuthState({ state: "loading" });
 
-    const eventChannel = new AsyncChannel<Batch.Event>();
+    const eventChannel = new AsyncChannel<Batch.Events>();
 
     const personalStream = await client
       .ensurePersonalStream(eventChannel)
@@ -127,16 +119,13 @@ class WorkerSupervisor {
     await this.sqlite.runQuery(
       ensureEntity(personalStream.id, personalStream.id),
     );
+
     // Mark personal stream space as hidden
     await this.sqlite.runQuery(sql`
       insert into comp_space (entity, hidden)
       values (${personalStream.id}, 1) 
       on conflict (entity) do nothing
     `);
-    // StreamConnection doesn't have access to sqlite, so we need to update the stream cursor before backfill
-    personalStream.updateStreamCursor(
-      await this.sqlite.getStreamCursor(personalStream.id),
-    );
 
     this.#auth = {
       state: "authenticated",
@@ -145,14 +134,14 @@ class WorkerSupervisor {
     };
     this.#status.authState = {
       state: "authenticated",
-      did: didUser.assert(userDid),
+      did: UserDid.assert(userDid),
       personalStream: personalStream.id,
       clientStatus: client.status,
     };
 
     this.startMaterializer();
 
-    await personalStream.backfill();
+    await personalStream.doneBackfilling;
 
     this.#status.spaces = {
       ...this.#status.spaces,
@@ -164,7 +153,7 @@ class WorkerSupervisor {
 
     // get streams from SQLite
     const streamsResult = await this.sqlite.runQuery<{
-      id: DidStream;
+      id: StreamDid;
       backfilled_to: StreamIndex;
     }>(sql`-- backend space list
       select e.id as id, cs.backfilled_to from entities e join comp_space cs on e.id = cs.entity
@@ -201,7 +190,7 @@ class WorkerSupervisor {
 
     for (const stream of streams.values()) {
       (async () => {
-        await stream.pin.backfill.completed;
+        await stream.doneBackfilling;
         this.#status.spaces = {
           ...this.#status.spaces,
           [stream.id]: "idle",
@@ -557,7 +546,7 @@ class SqliteSupervisor {
     return this.#state.sqliteWorker;
   }
 
-  async authenticate(did: DidUser) {
+  async authenticate(did: UserDid) {
     await this.untilReady;
     await this.sqliteWorker.authenticate(did);
     console.log("SQLite Worker authenticated:", did);
@@ -605,7 +594,7 @@ class SqliteSupervisor {
     };
   }
 
-  async materializeBatch(events: Batch.Event, priority: TaskPriority) {
+  async materializeBatch(events: Batch.Events, priority: TaskPriority) {
     await this.untilReady;
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialized.");
@@ -686,7 +675,7 @@ class SqliteSupervisor {
     }
   }
 
-  async getStreamCursor(streamId: DidStream) {
+  async getStreamCursor(streamId: StreamDid) {
     const upToEventIdQuery = await this.runQuery<{
       backfilled_to: StreamIndex;
     }>(

@@ -2,7 +2,7 @@
  * User events: metadata overrides (for bridged accounts) and read tracking
  */
 
-import { didStream, type, ulid } from "../primitives";
+import { StreamDid, type, Ulid } from "../primitives";
 
 /**
  * Override user metadata.
@@ -23,9 +23,9 @@ export const userOverrideMeta = type({
 export const roomLastRead = type({
   $type: "'space.roomy.room.setLastRead.v0'",
   /** The room being marked as read */
-  roomId: ulid,
+  roomId: Ulid,
   /** The stream containing the room */
-  streamId: didStream,
+  streamId: StreamDid,
 });
 
 // All user events

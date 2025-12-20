@@ -5,17 +5,17 @@
  * be set to a new value (including null to clear) or ignored.
  */
 
-import { type, setProperty } from "../primitives";
+import { type, SetProperty } from "../primitives";
 
 // Set entity info (rooms, spaces, etc.)
 export const infoSet = type({
   $type: "'space.roomy.common.setInfo.v0'",
   /** New name, or clear, or ignore */
-  "name?": setProperty,
+  "name": SetProperty,
   /** New avatar URI, or clear, or ignore */
-  "avatar?": setProperty,
+  "avatar": SetProperty,
   /** New description, or clear, or ignore */
-  "description?": setProperty,
+  "description": SetProperty,
 });
 
 // All generic events

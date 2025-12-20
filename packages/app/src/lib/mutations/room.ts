@@ -1,10 +1,9 @@
-import { ignore, newUlid, set, toBytes, ulid } from "$lib/schema";
+import { ignore, newUlid, set, toBytes, Ulid } from "$lib/schema";
 import { backend } from "$lib/workers";
-import type { Event, DidStream, Ulid } from "$lib/schema";
-import { monotonicFactory } from "ulidx";
+import type { Event, StreamDid } from "$lib/schema";
 
 export async function createPage(opts: {
-  spaceId: DidStream;
+  spaceId: StreamDid;
   roomId: Ulid;
   pageName: string;
 }) {
@@ -47,8 +46,8 @@ export async function createPage(opts: {
     room: pageId,
     variant: {
       $type: "space.roomy.room.editPage.v0",
-      content: {
-        content: toBytes(
+      body: {
+        data: toBytes(
           new TextEncoder().encode(
             `# ${opts.pageName}\n\nNew page. Fill me with something awesome. ✨`,
           ),
@@ -63,7 +62,7 @@ export async function createPage(opts: {
 }
 
 export async function promoteToChannel(opts: {
-  spaceId: DidStream;
+  spaceId: StreamDid;
   room: {
     id: Ulid;
     name: string;
@@ -97,7 +96,7 @@ export async function promoteToChannel(opts: {
       room: opts.room.id,
       variant: {
         $type: "space.roomy.room.updateParent.v0",
-        parent: ulid.assert(opts.room.parent?.parent),
+        parent: Ulid.assert(opts.room.parent?.parent),
       },
     });
   }
@@ -121,7 +120,7 @@ export async function promoteToChannel(opts: {
 }
 
 export async function convertToThread(opts: {
-  spaceId: DidStream;
+  spaceId: StreamDid;
   roomId: Ulid;
 }) {
   const events: Event[] = [
@@ -138,7 +137,7 @@ export async function convertToThread(opts: {
 }
 
 export async function convertToPage(opts: {
-  spaceId: DidStream;
+  spaceId: StreamDid;
   room: { id: Ulid; name: string };
 }) {
   const events: Event[] = [
@@ -155,8 +154,8 @@ export async function convertToPage(opts: {
       room: opts.room.id,
       variant: {
         $type: "space.roomy.room.editPage.v0",
-        content: {
-          content: toBytes(
+        body: {
+          data: toBytes(
             new TextEncoder().encode(
               `# ${opts.room.name}\n\nConverted channel to page.`,
             ),
@@ -170,8 +169,8 @@ export async function convertToPage(opts: {
 }
 
 export async function setPageReadMarker(opts: {
-  personalStreamId: DidStream;
-  streamId: DidStream;
+  personalStreamId: StreamDid;
+  streamId: StreamDid;
   roomId: Ulid;
 }) {
   await backend.sendEvent(opts.personalStreamId, {

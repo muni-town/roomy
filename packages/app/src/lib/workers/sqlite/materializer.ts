@@ -135,8 +135,8 @@ const materializers: {
       { key: "avatar", ...data.avatar },
       { key: "description", ...data.description },
     ];
-    const setUpdates = updates.filter((x) => "set" in x);
 
+    const setUpdates = updates.filter((x) => x.$type == "space.roomy.defs#set");
     const entityId = event.room ? event.room : streamId;
 
     return [
@@ -147,7 +147,10 @@ const materializers: {
             on conflict do update set ${[...setUpdates].map((x) => `${x.key} = :${x.key}`)}`,
         params: Object.fromEntries([
           [":entity", entityId],
-          ...setUpdates.map((x) => [":" + x.key, x.set]),
+          ...setUpdates.map((x) => [
+            ":" + x.key,
+            "value" in x ? x.value : undefined,
+          ]),
         ]),
       },
     ];
@@ -299,8 +302,8 @@ const materializers: {
         insert or replace into comp_content (entity, mime_type, data)
         values (
           ${event.id},
-          ${data.content.mimeType},
-          ${data.content.content}
+          ${data.body.mimeType},
+          ${fromBytes(data.body.data)}
         )`,
       sql`
         insert into comp_last_read (entity, timestamp, unread_count)
@@ -467,12 +470,12 @@ const materializers: {
 
     return [
       ensureEntity(streamId, event.id, event.room),
-      data.content.mimeType == "text/x-dmp-patch"
+      data.body.mimeType == "text/x-dmp-patch"
         ? // If this is a patch, apply the patch using our SQL user-defined-function
           sql`
           update comp_content
           set 
-            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(fromBytes(data.content.content))}) as blob)
+            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(fromBytes(data.body.data))}) as blob)
           where
             entity = ${event.room}
               and
@@ -482,8 +485,8 @@ const materializers: {
           sql`
           update comp_content
           set
-            mime_type = ${data.content.mimeType}
-            data = ${data.content.content}
+            mime_type = ${data.body.mimeType}
+            data = ${new TextDecoder().decode(fromBytes(data.body.data))}
           where
             entity = ${event.room}
         `,
@@ -502,35 +505,35 @@ const materializers: {
         values (
           ${event.id},
           ${event.room},
-          ${data.content.mimeType},
-          ${data.content.content},
+          ${data.body.mimeType},
+          ${data.body.data},
           ${user}
         )
       `,
-      data.content.mimeType == "text/x-dmp-patch"
+      data.body.mimeType == "text/x-dmp-patch"
         ? // If this is a patch, apply the patch using our SQL user-defined-function
           sql`
           insert into comp_content (entity, mime_type, data)
           values (
             ${event.room},
             'text/markdown',
-            cast(apply_dmp_patch('', ${new TextDecoder().decode(fromBytes(data.content.content))}) as blob)
+            cast(apply_dmp_patch('', ${new TextDecoder().decode(fromBytes(data.body.data))}) as blob)
           )
           on conflict do update set
-            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(fromBytes(data.content.content))}) as blob)
+            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(fromBytes(data.body.data))}) as blob)
         `
         : // If this is not a patch, just replace the previous value
           sql`
           insert into comp_content (entity, mime_type, data)
           values (
             ${event.room},
-            ${data.content.mimeType},
-            ${data.content.content}
+            ${data.body.mimeType},
+            ${data.body.data}
           )
           on conflict do update
           set
-            mime_type = ${data.content.mimeType},
-            data = ${data.content.content}
+            mime_type = ${data.body.mimeType},
+            data = ${data.body.data}
           where
             entity = ${event.room}
         `,
@@ -876,7 +879,7 @@ export async function materialize(
     // Insert event into events table
     statements.push(sql`
       INSERT INTO events (idx, stream_id, entity_ulid, payload, applied)
-      VALUES (${idx}, ${opts.streamId}, ${event.id}, ${event}, 0)
+      VALUES (${idx}, ${opts.streamId}, ${event.id}, ${JSON.stringify(event)}, 0)
     `);
 
     // TODO: these are probably all wrong now we have room instead of parent

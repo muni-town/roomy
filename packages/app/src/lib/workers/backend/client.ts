@@ -16,15 +16,7 @@ import { AsyncChannel } from "../asyncChannel";
 import type { StreamConnectionStatus, ConnectionStates } from "./types";
 import { personalModule, personalModuleCid } from "./modules";
 import { ConnectedStream, parseEvents } from "./stream";
-import {
-  did,
-  didUser,
-  handle,
-  type Did,
-  type DidStream,
-  type Event,
-  type Handle,
-} from "$lib/schema";
+import { Did, UserDid, Handle, type Event, StreamDid } from "$lib/schema";
 import { encode } from "@atcute/cbor";
 
 /** Handles interaction with ATProto and Leaf, manages state for connection to both,
@@ -156,7 +148,7 @@ export class Client {
     return this.#connected.promise;
   }
 
-  async checkStreamExists(streamId: DidStream) {
+  async checkStreamExists(streamId: StreamDid) {
     try {
       const streamInfo = await this.leaf.streamInfo(streamId);
       if (!streamInfo) return false;
@@ -168,17 +160,17 @@ export class Client {
 
   async connect(
     personalStream: ConnectedStream,
-    streamList: Map<DidStream, StreamIndex>,
+    streamList: Map<StreamDid, StreamIndex>,
   ) {
     console.log("Client connecting", streamList);
 
-    const streams = new Map<DidStream, ConnectedStream>();
-    const failed: DidStream[] = [];
+    const streams = new Map<StreamDid, ConnectedStream>();
+    const failed: StreamDid[] = [];
 
     for await (const [streamId, upToEventId] of streamList.entries()) {
       try {
         const stream = await ConnectedStream.connect({
-          user: didUser.assert(this.agent.assertDid),
+          user: UserDid.assert(this.agent.assertDid),
           leaf: this.leaf,
           id: streamId,
           idx: upToEventId,
@@ -199,7 +191,6 @@ export class Client {
     };
     this.#connected.resolve(this.#streamConnection);
 
-    this.runBackfill();
     console.log("Client connected");
 
     return { streams, failed };
@@ -244,7 +235,7 @@ export class Client {
       : undefined;
   }
 
-  async connectSpaceStream(streamId: DidStream, idx: StreamIndex) {
+  async connectSpaceStream(streamId: StreamDid, idx: StreamIndex) {
     if (this.#streamConnection.status !== "connected")
       throw new Error("Client must be connected to add new space stream");
     await this.#leafAuthenticated.promise;
@@ -258,14 +249,14 @@ export class Client {
     }
 
     const stream = await ConnectedStream.connect({
-      user: didUser.assert(this.agent.assertDid),
+      user: UserDid.assert(this.agent.assertDid),
       leaf: this.leaf,
       id: streamId,
       idx,
       eventChannel: this.eventChannel,
     });
 
-    await stream.backfill();
+    await stream.subscribe();
     this.#streamConnection.streams.set(streamId, stream);
 
     console.log("Successfully connected to stream");
@@ -280,19 +271,19 @@ export class Client {
 
     console.log("Creating space stream");
     const newStream = await ConnectedStream.createSpace({
-      user: didUser.assert(this.agent.assertDid),
+      user: UserDid.assert(this.agent.assertDid),
       leaf: this.leaf,
       eventChannel: this.eventChannel,
     });
 
-    await newStream.backfill();
+    await newStream.subscribe();
 
     console.log("Successfully created space stream:", newStream.id);
 
     // add to stream connection map
     this.#streamConnection.streams.set(newStream.id, newStream);
 
-    return newStream.id as DidStream;
+    return newStream.id as StreamDid;
   }
 
   get personalStream() {
@@ -308,19 +299,19 @@ export class Client {
   }
 
   async createPersonalStream(
-    eventChannel: AsyncChannel<Batch.Event>,
+    eventChannel: AsyncChannel<Batch.Events>,
   ): Promise<ConnectedStream> {
     await this.#leafAuthenticated.promise;
 
     return await ConnectedStream.createPersonal({
-      user: didUser.assert(this.agent.assertDid),
+      user: UserDid.assert(this.agent.assertDid),
       leaf: this.leaf,
       eventChannel,
     });
   }
 
   async ensurePersonalStream(
-    eventChannel: AsyncChannel<Batch.Event>,
+    eventChannel: AsyncChannel<Batch.Events>,
   ): Promise<ConnectedStream> {
     if (this.personalStream) return this.personalStream;
     await this.#leafAuthenticated.promise;
@@ -345,19 +336,20 @@ export class Client {
           repo: this.agent.assertDid,
           rkey: CONFIG.streamSchemaVersion,
         });
-        const existingRecord = getResponse.data.value as { id: DidStream };
+        const existingRecord = getResponse.data.value as { id: StreamDid };
         await personalStream.setIdCache(
           this.agent.assertDid,
           existingRecord.id,
         );
         console.log("Found existing stream ID from PDS:", existingRecord.id);
         stream = await ConnectedStream.connect({
-          user: didUser.assert(this.agent.assertDid),
+          user: UserDid.assert(this.agent.assertDid),
           leaf: this.leaf,
-          id: existingRecord.id as DidStream,
+          id: existingRecord.id as StreamDid,
           idx: 0 as StreamIndex,
           eventChannel,
         });
+        stream.subscribe();
       } catch (e) {
         if ((e as any).error === "RecordNotFound") {
           console.log(
@@ -437,37 +429,6 @@ export class Client {
     }
 
     return stream;
-  }
-
-  async backfillStreamById(streamId: DidStream) {
-    if (this.#streamConnection.status !== "connected")
-      throw new Error("Client must be connected to backfill");
-
-    const stream = this.#streamConnection.streams.get(streamId);
-    if (!stream) throw new Error("Could not find stream " + streamId);
-
-    return stream.backfill();
-  }
-
-  async runBackfill() {
-    await this.#connected.promise;
-    if (this.#streamConnection.status !== "connected")
-      throw new Error("Client must be connected to run backfill");
-
-    const streams = this.#streamConnection.streams;
-
-    console.log("Running backfill for streams");
-
-    const promises = [...streams.values()].map((stream) => {
-      try {
-        return this.backfillStreamById(stream.id);
-      } catch (error) {
-        console.error("Backfill error for", stream);
-      }
-    });
-
-    await Promise.allSettled(promises);
-    console.log("Backfill fetching done");
   }
 
   async sendEvent(streamId: string, event: Event) {
@@ -561,7 +522,7 @@ export class Client {
   }
 
   async resolveHandleForSpace(
-    spaceId: DidStream,
+    spaceId: StreamDid,
     handleAccountDid: Did,
   ): Promise<Handle | undefined> {
     try {
@@ -578,13 +539,13 @@ export class Client {
     }
   }
 
-  private resolveIdType(spaceIdOrHandleOrDid: DidStream | Handle | Did) {
-    if (handle.allows(spaceIdOrHandleOrDid)) {
+  private resolveIdType(spaceDidOrHandle: StreamDid | Did | Handle) {
+    if (Handle.allows(spaceDidOrHandle)) {
       return "handle";
-    } else if (did.allows(spaceIdOrHandleOrDid)) {
+    } else if (Did.allows(spaceDidOrHandle)) {
       return "did";
     } else {
-      return "streamId";
+      throw new Error("Invalid ID");
     }
   }
 
@@ -609,19 +570,17 @@ export class Client {
   }
 
   async resolveSpaceId(
-    spaceIdOrHandleOrDid: DidStream | Handle | Did,
+    spaceIdOrHandleOrDid: StreamDid | Handle | Did,
   ): Promise<{
-    spaceId: DidStream;
+    spaceId: StreamDid;
     handle?: Handle;
     did?: Did;
   }> {
     const type = this.resolveIdType(spaceIdOrHandleOrDid);
 
-    if (type === "handle" || type === "did") {
+    if (type === "handle") {
       try {
-        const did = await this.resolveDidFromHandleOrDid(
-          spaceIdOrHandleOrDid as Handle | Did,
-        );
+        const did = await this.resolveDidFromHandleOrDid(spaceIdOrHandleOrDid);
         const spaceIdFromHandle = await this.getStreamHandleRecordCached(did);
         if (!spaceIdFromHandle) throw "Could not resolve space ID from handle";
         return {
@@ -639,7 +598,7 @@ export class Client {
         throw e;
       }
     } else {
-      return { spaceId: spaceIdOrHandleOrDid as DidStream };
+      return { spaceId: spaceIdOrHandleOrDid as StreamDid };
     }
   }
 
@@ -648,7 +607,7 @@ export class Client {
    */
   private async getStreamHandleRecordCached(
     did: Did,
-  ): Promise<DidStream | undefined> {
+  ): Promise<StreamDid | undefined> {
     const cached = this.#agentStreamHandleCache.get(did);
     if (cached) return cached.result;
 
@@ -667,7 +626,7 @@ export class Client {
       );
 
       const verifiedSpaceId = resp.data.value?.id
-        ? (resp.data.value.id as DidStream)
+        ? (resp.data.value.id as StreamDid)
         : undefined;
 
       if (verifiedSpaceId) {
