@@ -19,9 +19,11 @@
 
   type Props = {
     content: string;
+    /** Users who can be mentioned with @mention */
     users?: Item[];
+    /** Rooms in space that can be mentioned with #room */
     context?: Item[];
-    onEnter: (content: string) => void;
+    onEnter: () => Promise<void>;
     placeholder?: string;
     setFocus?: boolean;
     processImageFile?: (file: File) => void;
@@ -46,7 +48,7 @@
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    onEnter(content);
+    onEnter();
   }
 
   onMount(() => {

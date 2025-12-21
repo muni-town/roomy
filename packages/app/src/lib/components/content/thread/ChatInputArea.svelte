@@ -22,11 +22,10 @@
   import { getImagePreloadData } from "$lib/utils/media";
   import { newUlid, toBytes, Ulid, type Event } from "$lib/schema";
   import type { MessageExtension } from "$lib/schema/extensions/message";
+  import ChatInput, { setInputFocus } from "./ChatInput.svelte";
 
   let spaceId = $derived(current.joinedSpace?.id);
-  let messageInputEl: null | HTMLInputElement = $state(null);
   let isSendingMessage = $state(false);
-
   let previewImages: string[] = $state([]);
 
   $effect(() => {
@@ -151,8 +150,7 @@
     navigate({ space: page.params.space, object: threadId });
   }
 
-  async function sendMessage(e: SubmitEvent) {
-    e.preventDefault();
+  async function sendMessage() {
     const state = messagingState.current;
 
     if (state.kind === "threading") return;
@@ -250,6 +248,7 @@
       messagingState.set({ kind: "normal", input: "", files: [] });
       isSendingMessage = false;
       previewImages = [];
+      setInputFocus();
     }
   }
 </script>
@@ -405,25 +404,14 @@
               <UploadFileButton {processImageFile} />
             {/if}
 
-            <form onsubmit={sendMessage} class="w-full">
-              <Input
-                disabled={isSendingMessage}
-                bind:ref={messageInputEl}
-                value={state.input}
-                oninput={(e) => (messagingState.input = e.currentTarget.value)}
-                placeholder="Send a message..."
-                class="w-full font-normal text-base-800 dark:text-base-200 disabled:opacity-50"
-              />
-            </form>
-
-            <!-- {#key users.length + context.length} -->
-            <!-- <ChatInput
-              bind:content={messageInput}
-              {users}
-              {context}
+            <!-- {#key users.length + context.length} TODO: get users + context to pass in -->
+            <ChatInput
+              bind:content={state.input}
+              users={undefined}
+              context={undefined}
               onEnter={sendMessage}
               {processImageFile}
-            /> -->
+            />
             <!-- {/key} -->
           {/if}
         </div>
