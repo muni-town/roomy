@@ -361,7 +361,7 @@ class SqliteWorkerSupervisor {
   private getSqliteInterface(): SqliteWorkerInterface {
     return {
       authenticate: async (did) => {
-        await this.loadDb(did, false);
+        // await this.loadDb(did, false); // there is no special reason to have DID-keyed db when it's in memory only. keeping for future transition back to persistent
         this.#status.authenticated = did;
         this.#authenticated.resolve();
         console.log("✅ Authenticated SQLite Worker with did:", did);
