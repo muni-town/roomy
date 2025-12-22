@@ -300,11 +300,12 @@ const materializers: {
           'author'
       `,
       sql`
-        insert or replace into comp_content (entity, mime_type, data)
+        insert or replace into comp_content (entity, mime_type, data, last_edit)
         values (
           ${event.id},
           ${data.body.mimeType},
-          ${fromBytes(data.body.data)}
+          ${fromBytes(data.body.data)},
+          ${event.id}
         )`,
       sql`
         insert into comp_last_read (entity, timestamp, unread_count)
@@ -476,7 +477,8 @@ const materializers: {
           sql`
           update comp_content
           set 
-            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(fromBytes(data.body.data))}) as blob)
+            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(fromBytes(data.body.data))}) as blob),
+            last_edit = ${event.id}
           where
             entity = ${data.target}
               and
@@ -487,7 +489,8 @@ const materializers: {
           update comp_content
           set
             mime_type = ${data.body.mimeType},
-            data = ${fromBytes(data.body.data)}
+            data = ${fromBytes(data.body.data)},
+            last_edit = ${event.id} -- dependency tracking must ensure this is monotonic
           where
             entity = ${data.target}
         `,
@@ -581,19 +584,20 @@ const materializers: {
   },
 
   // Reaction
-  "space.roomy.room.addReaction.v0": async ({ data, user }) => {
+  "space.roomy.room.addReaction.v0": async ({ data, event, user }) => {
     return [
       sql`
-        insert or replace into comp_reaction (entity, user, reaction)
+        insert or replace into comp_reaction (entity, user, reaction, add_event)
         values (
           ${data.target},
           ${user},
-          ${data.reaction}
+          ${data.reaction},
+          ${event.id}
         )
       `,
     ];
   },
-  "space.roomy.room.removeReaction.v0": async ({ event, user, data }) => {
+  "space.roomy.room.removeReaction.v0": async ({ event, data }) => {
     if (!event.room) {
       console.warn("Delete reaction missing room");
       return [];
@@ -603,8 +607,7 @@ const materializers: {
       delete from comp_reaction
       where
         entity = ${data.target} and
-        user = ${user} and
-        reaction = ${data.reaction}
+        add_event = ${data.parent}
     `,
     ];
   },
@@ -615,8 +618,8 @@ const materializers: {
       sql`
         insert into comp_reaction (entity, user, reaction)
         values (
-          ${data.reactingUser},
           ${data.target},
+          ${data.reactingUser},
           ${data.reaction}
         )
       `,
@@ -632,8 +635,7 @@ const materializers: {
       delete from comp_reaction
       where
         entity = ${data.target} and
-        user = ${data.reactingUser} and
-        reaction = ${data.reaction}
+        add_event = ${data.parent}
     `,
     ];
   },

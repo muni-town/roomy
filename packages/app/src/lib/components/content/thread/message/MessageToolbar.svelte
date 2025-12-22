@@ -58,16 +58,16 @@
     console.log("emoji pick", emoji, spaceId, current.roomId);
     if (!spaceId || !current.roomId) return;
 
+    const reaction = message.reactions.find(
+      (x) => x.userId == current.did && x.reaction == emoji,
+    );
+
     // If we haven't already made this reaction to this post.
-    if (
-      !message.reactions.find(
-        (x) => x.userId == current.did && x.reaction == emoji,
-      )
-    ) {
+    if (!reaction) {
       addReaction(spaceId, current.roomId, message.id, emoji);
     } else {
       // If we want to remove our reaction on this post
-      removeReaction(spaceId, current.roomId, message.id, emoji);
+      removeReaction(spaceId, current.roomId, message.id, reaction.addEvent);
     }
     isEmojiToolbarPickerOpen = false;
     isEmojiDrawerPickerOpen = false;

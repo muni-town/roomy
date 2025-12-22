@@ -22,7 +22,7 @@ export async function removeReaction(
   spaceId: StreamDid,
   roomId: Ulid,
   messageId: Ulid,
-  reaction: string,
+  reactionId: Ulid,
 ) {
   await backend.sendEvent(spaceId, {
     id: newUlid(),
@@ -30,7 +30,7 @@ export async function removeReaction(
     variant: {
       $type: "space.roomy.room.removeReaction.v0",
       target: messageId,
-      reaction,
+      parent: reactionId,
     },
   });
 }

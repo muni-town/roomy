@@ -26,7 +26,7 @@
 
   let { showPageChat = $bindable(false) } = $props();
 
-  let pageQuery = new LiveQuery<{ content: string; latestEditId: string }>(
+  let pageQuery = new LiveQuery<{ content: string; latestEditId: Ulid }>(
     () => sql`
     select 
       cast(data as text) as content,
@@ -59,6 +59,7 @@
       room: Ulid.assert(page.params.object),
       variant: {
         $type: "space.roomy.room.editPage.v0",
+        parent: latestEditId,
         body: {
           mimeType: "text/x-dmp-patch",
           data: toBytes(new TextEncoder().encode(patch)),
