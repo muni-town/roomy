@@ -478,7 +478,7 @@ const materializers: {
           set 
             data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(fromBytes(data.body.data))}) as blob)
           where
-            entity = ${event.room}
+            entity = ${data.target}
               and
             mime_type like 'text/%'
         `
@@ -486,10 +486,10 @@ const materializers: {
           sql`
           update comp_content
           set
-            mime_type = ${data.body.mimeType}
-            data = ${new TextDecoder().decode(fromBytes(data.body.data))}
+            mime_type = ${data.body.mimeType},
+            data = ${fromBytes(data.body.data)}
           where
-            entity = ${event.room}
+            entity = ${data.target}
         `,
     ];
   },
