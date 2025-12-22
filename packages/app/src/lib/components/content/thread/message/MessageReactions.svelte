@@ -2,10 +2,9 @@
   import { PopoverEmojiPicker } from "@fuxui/social";
   import { Button, Toggle, Tooltip } from "@fuxui/base";
   import IconLucideSmilePlus from "~icons/lucide/smile-plus";
-  import { backend } from "$lib/workers";
   import { current } from "$lib/queries";
-  import { newUlid } from "$lib/schema";
   import type { Message } from "../ChatArea.svelte";
+  import { addReaction, removeReaction } from "$lib/mutations/reaction";
 
   let {
     message,
@@ -29,7 +28,7 @@
   );
 
   function onEmojiPick(emoji: string) {
-    if (!spaceId) return;
+    if (!spaceId || !current.roomId) return;
 
     // If we haven't already made this reaction to this post.
     if (
@@ -37,23 +36,13 @@
         (x) => x.userId == current.did && x.reaction == emoji,
       )
     ) {
-      backend.sendEvent(spaceId, {
-        ulid: newUlid(),
-        parent: current.roomId,
-        variant: {
-          kind: "space.roomy.room.addReaction.v0",
-          data: {
-            reactionTo: message.id,
-            reaction: emoji,
-          },
-        },
-      });
+      addReaction(spaceId, current.roomId, message.id, emoji);
     }
     isEmojiRowPickerOpen = false;
   }
 
   function onEmojiButtonClick(emoji: string) {
-    if (!spaceId) return;
+    if (!spaceId || !current.roomId) return;
 
     // If we haven't already made this reaction to this post.
     if (
@@ -61,31 +50,10 @@
         (x) => x.userId == current.did && x.reaction == emoji,
       )
     ) {
-      backend.sendEvent(spaceId, {
-        ulid: newUlid(),
-        parent: current.roomId,
-        variant: {
-          kind: "space.roomy.room.addReaction.v0",
-          data: {
-            reactionTo: message.id,
-            reaction: emoji,
-          },
-        },
-      });
-
-      // If we want to remove our reaction on this post
+      addReaction(spaceId, current.roomId, message.id, emoji);
     } else {
-      backend.sendEvent(spaceId, {
-        ulid: newUlid(),
-        parent: current.roomId,
-        variant: {
-          kind: "space.roomy.room.removeReaction.v0",
-          data: {
-            reaction_to: message.id,
-            reaction: emoji,
-          },
-        },
-      });
+      // If we want to remove our reaction on this post
+      removeReaction(spaceId, current.roomId, message.id, emoji);
     }
   }
 
