@@ -16,11 +16,14 @@ export const messageCreate = type({
 // Edit an existing message
 export const messageEdit = type({
   $type: "'space.roomy.room.editMessage.v0'",
+  /** Id of message being edited */
+  target: Ulid,
+  /** Id of last known edit event, or the message itself */
+  parent: Ulid,
   /**
    * New content. If mimeType is text/x-dmp-diff, this is a
    * diff-match-patch diff to apply to the previous content.
    */
-  target: Ulid,
   body: Content,
   /** Updated reply target, if changing */
   "replyTo?": Ulid,
@@ -29,6 +32,7 @@ export const messageEdit = type({
 // Delete a message
 export const messageDelete = type({
   $type: "'space.roomy.room.deleteMessage.v0'",
+  /** Id of message being deleted */
   target: Ulid,
   "reason?": "string",
 });

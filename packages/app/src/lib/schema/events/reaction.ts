@@ -1,11 +1,11 @@
 /**
- * Reaction events: create, delete (including bridged variants)
+ * Reaction events: add, remove (including bridged variants)
  */
 
 import { UserDid, type, Ulid } from "../primitives";
 
-// Create a reaction
-export const reactionCreate = type({
+// Add a reaction
+export const reactionAdd = type({
   $type: "'space.roomy.room.addReaction.v0'",
   /** The message being reacted to */
   target: Ulid,
@@ -13,17 +13,17 @@ export const reactionCreate = type({
   reaction: "string",
 });
 
-// Delete a reaction
-export const reactionDelete = type({
+// Remove a reaction
+export const reactionRemove = type({
   $type: "'space.roomy.room.removeReaction.v0'",
   /** The message the reaction was on */
   target: Ulid,
-  /** The reaction being removed */
-  reaction: "string",
+  /** The addReaction event */
+  parent: Ulid,
 });
 
-// Bridged reaction create (for external platforms like Discord)
-export const reactionBridgedCreate = type({
+// Bridged reaction add (for external platforms like Discord)
+export const reactionBridgedAdd = type({
   $type: "'space.roomy.room.addBridgedReaction.v0'",
   /** The message being reacted to */
   target: Ulid,
@@ -33,39 +33,39 @@ export const reactionBridgedCreate = type({
   reactingUser: UserDid,
 });
 
-// Bridged reaction delete
-export const reactionBridgedDelete = type({
+// Bridged reaction remove
+export const reactionBridgedRemove = type({
   $type: "'space.roomy.room.removeBridgedReaction.v0'",
   /** The message the reaction was on */
   target: Ulid,
-  /** The reaction being removed */
-  reaction: "string",
+  /** The addBridgedReaction event */
+  parent: Ulid,
   /** The external user ID whose reaction is being removed */
   reactingUser: UserDid,
 });
 
 // All reaction events
-export const reactionEvent = reactionCreate
-  .or(reactionDelete)
-  .or(reactionBridgedCreate)
-  .or(reactionBridgedDelete);
+export const reactionEvent = reactionAdd
+  .or(reactionRemove)
+  .or(reactionBridgedAdd)
+  .or(reactionBridgedRemove);
 
 // Export for registry
 export const events = {
   "space.roomy.room.addReaction.v0": {
-    type: reactionCreate,
-    description: "Create a reaction to a message",
+    type: reactionAdd,
+    description: "Add a reaction to a message",
   },
   "space.roomy.room.removeReaction.v0": {
-    type: reactionDelete,
-    description: "Delete a reaction from a message",
+    type: reactionRemove,
+    description: "Remove a reaction from a message",
   },
   "space.roomy.room.addBridgedReaction.v0": {
-    type: reactionBridgedCreate,
-    description: "Create a bridged reaction (from external platform)",
+    type: reactionBridgedAdd,
+    description: "Add a bridged reaction (from external platform)",
   },
   "space.roomy.room.removeBridgedReaction.v0": {
-    type: reactionBridgedDelete,
-    description: "Delete a bridged reaction",
+    type: reactionBridgedRemove,
+    description: "Remove a bridged reaction",
   },
 } as const;

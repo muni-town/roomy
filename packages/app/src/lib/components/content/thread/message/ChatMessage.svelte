@@ -119,7 +119,8 @@
       room: Ulid.assert(page.params.object),
       variant: {
         $type: "space.roomy.room.editMessage.v0",
-        target: Ulid.assert(message.id),
+        target: message.id,
+        parent: message.lastEdit,
         body: {
           mimeType: "text/x-dmp-patch",
           data: toBytes(new TextEncoder().encode(contentPatch)),

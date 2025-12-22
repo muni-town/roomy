@@ -23,6 +23,7 @@
   export type Message = {
     id: Ulid;
     content: string;
+    lastEdit: Ulid;
     authorDid: UserDid | null;
     authorName: string | null;
     authorHandle: string | null;
@@ -34,7 +35,12 @@
     masqueradeAuthorAvatar: string | null;
     mergeWithPrevious: boolean | null;
     replyTo: Ulid[];
-    reactions: { reaction: string; userId: UserDid; userName: string }[];
+    reactions: {
+      reaction: string;
+      userId: UserDid;
+      userName: string;
+      addEvent: Ulid;
+    }[];
     media: {
       uri: string;
       mimeType: string;
@@ -74,6 +80,7 @@
       select json_object(
         'id', e.id,
         'content', cast(c.data as text),
+        'lastEdit', c.last_edit,
         'authorDid', u.did,
         'authorName', i.name,
         'authorAvatar', i.avatar,
@@ -91,7 +98,8 @@
           select json_group_array(json_object(
             'reaction', rc.reaction,
             'userId', rc.user,
-            'userName', i.name
+            'userName', i.name,
+            'addEvent', rc.add_event
           ))
           from comp_reaction rc
           join comp_info i on i.entity = rc.user
