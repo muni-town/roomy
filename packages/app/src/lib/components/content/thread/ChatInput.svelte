@@ -23,7 +23,7 @@
     users?: Item[];
     /** Rooms in space that can be mentioned with #room */
     context?: Item[];
-    onEnter: () => Promise<void>;
+    onEnter: (content: string) => Promise<void>;
     placeholder?: string;
     setFocus?: boolean;
     processImageFile?: (file: File) => void;
@@ -48,7 +48,7 @@
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    onEnter();
+    onEnter(content);
   }
 
   onMount(() => {
