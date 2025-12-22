@@ -81,7 +81,6 @@ class SqliteWorkerSupervisor {
   #knownStreams = new Set<StreamDid>();
   #eventChannel: AsyncChannel<Batch.Events>;
   #statementChannel = new AsyncChannel<Batch.Statement>();
-  #resultChannel = new AsyncChannel<Batch.ApplyResult>();
   #pendingBatches = new Map<string, (result: Batch.ApplyResult) => void>();
   #authenticated = new Deferred();
 
@@ -127,9 +126,8 @@ class SqliteWorkerSupervisor {
           this.getSqliteInterface(),
         );
         this.#backend?.setActiveSqliteWorker(sqliteChannel.port2);
-        this.materializer();
+        this.listenEvents();
         this.listenStatements();
-        this.listenResults();
         console.log("Finished initialising SQLite Worker", this.#status);
       } catch (error) {
         console.error("SQLite worker initialisation: Fatal error", error);
@@ -212,6 +210,108 @@ class SqliteWorkerSupervisor {
     return deferred.promise;
   }
 
+  /** Map a batch of incoming events to SQL that applies the event to the entities,
+   * components and edges, then execute them all as a single transaction.
+   */
+  listenEvents() {
+    (async () => {
+      for await (const batch of this.#eventChannel) {
+        const bundles: Bundle.Statement[] = [];
+
+        console.time("convert-events-to-sql");
+
+        // reset ensured flags for each new batch
+        this.#ensuredProfiles = new Set();
+
+        const decodedEvents = batch.events
+          .map((e) => {
+            try {
+              // Convert ArrayBuffer to Uint8Array for decoding
+              const payloadBytes = new Uint8Array(e.payload);
+              const decoded = decode(payloadBytes);
+              const result = parseEvent(decoded);
+              if (result.success) {
+                return [e, result.data] as const;
+              } else throw result.error;
+            } catch (error) {
+              const payloadBytes = new Uint8Array(e.payload);
+              console.warn(
+                `Skipping malformed event (idx ${e.idx}): Failed to decode ${payloadBytes.length} bytes.`,
+                `Error:`,
+                error instanceof Error ? error.message : error,
+              );
+              // Return null to filter out this event
+              return null;
+            }
+          })
+          .filter((e): e is Exclude<typeof e, null> => e !== null);
+
+        // Make sure all of the profiles we need are downloaded and inserted
+        const neededProfiles = new Set<UserDid>();
+        decodedEvents.forEach(([i, ev]) =>
+          newUserSignals.includes(ev.variant.$type)
+            ? UserDid.allows(i.user)
+              ? neededProfiles.add(UserDid.assert(i.user))
+              : console.warn("Found invalid user id", i.user)
+            : undefined,
+        );
+
+        bundles.push(await this.ensureProfiles(batch.streamId, neededProfiles));
+
+        let latestEvent = 0;
+        const spacesToConnect: StreamDid[] = [];
+        for (const [incoming, event] of decodedEvents) {
+          latestEvent = Math.max(latestEvent, incoming.idx);
+          try {
+            // Get the SQL statements to be executed for this event
+            const bundle: Bundle.Statement = await materialize(
+              event,
+              {
+                streamId: batch.streamId,
+                user: incoming.user,
+              },
+              incoming.idx,
+            );
+
+            bundles.push(bundle);
+
+            if (bundle.status === "success") {
+              // Collect space IDs to connect AFTER batch is applied
+              if (event.variant.$type === "space.roomy.personal.joinSpace.v0") {
+                spacesToConnect.push(event.variant.spaceId);
+              }
+            }
+          } catch (e) {
+            console.warn("Event materialisation failed: " + e);
+          }
+        }
+
+        console.log(
+          "materialised bundles",
+          bundles,
+          "for batch id",
+          batch.batchId,
+          "awaiting application",
+        );
+
+        this.#statementChannel.push(
+          {
+            status: "transformed",
+            batchId: batch.batchId,
+            streamId: batch.streamId,
+            bundles: bundles,
+            latestEvent: latestEvent as StreamIndex,
+            priority: batch.priority,
+            spacesToConnect,
+          },
+          batch.priority,
+        );
+        console.timeEnd("convert-events-to-sql");
+      }
+    })();
+  }
+
+  /** As batches of materialised events are produced, apply statements to SQLite DB  */
   listenStatements() {
     (async () => {
       for await (const batch of this.#statementChannel) {
@@ -219,11 +319,25 @@ class SqliteWorkerSupervisor {
         try {
           const result = await this.runStatementBatch(batch);
           console.log(
-            "Ran statements, got result",
+            "Ran statements",
+            batch,
+            "got result",
             result,
             "pushing to resultChannel",
           );
-          this.#resultChannel.push(result);
+
+          // resolve promises
+          try {
+            const resolver = this.#pendingBatches.get(batch.batchId);
+            if (resolver) {
+              resolver(result);
+              this.#pendingBatches.delete(batch.batchId);
+            } else {
+              throw new Error("Lost the resolver 😬");
+            }
+          } catch (error) {
+            console.error("Error running statement batch", batch, error);
+          }
 
           // Connect spaces AFTER batch is applied and committed
           if (batch.spacesToConnect && batch.spacesToConnect.length > 0) {
@@ -242,33 +356,12 @@ class SqliteWorkerSupervisor {
     })();
   }
 
-  listenResults() {
-    (async () => {
-      for await (const batch of this.#resultChannel) {
-        console.log("Got result", batch, "trying to resolve");
-        // resolve promises
-        try {
-          const resolver = this.#pendingBatches.get(batch.batchId);
-          if (resolver) {
-            resolver(batch);
-            this.#pendingBatches.delete(batch.batchId);
-          } else {
-            throw new Error("Lost the resolver 😬");
-          }
-        } catch (error) {
-          console.error("Error running statement batch", batch, error);
-        }
-      }
-    })();
-  }
-
   private cleanup() {
     console.log("SQLite worker: Cleaning up...");
     this.stopHeartbeat();
     this.#status.isActiveWorker = false;
     this.#eventChannel.finish();
     this.#statementChannel.finish();
-    this.#resultChannel.finish();
 
     // Clear our heartbeat
 
@@ -626,107 +719,6 @@ class SqliteWorkerSupervisor {
       this.#knownStreams.add(spaceId);
       await this.#backend?.connectSpaceStream(spaceId, backfilledToIdx);
     }
-  }
-
-  /** Map a batch of incoming events to SQL that applies the event to the entities,
-   * components and edges, then execute them all as a single transaction.
-   */
-  materializer() {
-    (async () => {
-      for await (const batch of this.#eventChannel) {
-        const bundles: Bundle.Statement[] = [];
-
-        console.time("convert-events-to-sql");
-
-        // reset ensured flags for each new batch
-        this.#ensuredProfiles = new Set();
-
-        const decodedEvents = batch.events
-          .map((e) => {
-            try {
-              // Convert ArrayBuffer to Uint8Array for decoding
-              const payloadBytes = new Uint8Array(e.payload);
-              const decoded = decode(payloadBytes);
-              const result = parseEvent(decoded);
-              if (result.success) {
-                return [e, result.data] as const;
-              } else throw result.error;
-            } catch (error) {
-              const payloadBytes = new Uint8Array(e.payload);
-              console.warn(
-                `Skipping malformed event (idx ${e.idx}): Failed to decode ${payloadBytes.length} bytes.`,
-                `Error:`,
-                error instanceof Error ? error.message : error,
-              );
-              // Return null to filter out this event
-              return null;
-            }
-          })
-          .filter((e): e is Exclude<typeof e, null> => e !== null);
-
-        // Make sure all of the profiles we need are downloaded and inserted
-        const neededProfiles = new Set<UserDid>();
-        decodedEvents.forEach(([i, ev]) =>
-          newUserSignals.includes(ev.variant.$type)
-            ? UserDid.allows(i.user)
-              ? neededProfiles.add(UserDid.assert(i.user))
-              : console.warn("Found invalid user id", i.user)
-            : undefined,
-        );
-
-        bundles.push(await this.ensureProfiles(batch.streamId, neededProfiles));
-
-        let latestEvent = 0;
-        const spacesToConnect: StreamDid[] = [];
-        for (const [incoming, event] of decodedEvents) {
-          latestEvent = Math.max(latestEvent, incoming.idx);
-          try {
-            // Get the SQL statements to be executed for this event
-            const bundle: Bundle.Statement = await materialize(
-              event,
-              {
-                streamId: batch.streamId,
-                user: incoming.user,
-              },
-              incoming.idx,
-            );
-
-            bundles.push(bundle);
-
-            if (bundle.status === "success") {
-              // Collect space IDs to connect AFTER batch is applied
-              if (event.variant.$type === "space.roomy.personal.joinSpace.v0") {
-                spacesToConnect.push(event.variant.spaceId);
-              }
-            }
-          } catch (e) {
-            console.warn("Event materialisation failed: " + e);
-          }
-        }
-
-        console.log(
-          "materialised bundles",
-          bundles,
-          "for batch id",
-          batch.batchId,
-          "awaiting application",
-        );
-
-        this.#statementChannel.push(
-          {
-            status: "transformed",
-            batchId: batch.batchId,
-            streamId: batch.streamId,
-            bundles: bundles,
-            latestEvent: latestEvent as StreamIndex,
-            priority: batch.priority,
-            spacesToConnect,
-          },
-          batch.priority,
-        );
-        console.timeEnd("convert-events-to-sql");
-      }
-    })();
   }
 
   /** When mapping incoming events to SQL, 'ensureProfiles' checks whether a DID
