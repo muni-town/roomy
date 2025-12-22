@@ -91,6 +91,7 @@ export const set: (v: string) => SetProperty = (value) => ({
   value,
 });
 export const ignore: SetProperty = { $type: "space.roomy.defs#ignore" };
+export const setOrIgnore = (v?: string) => (v ? set(v) : ignore);
 
 // Re-export the type helper for use in other modules
 export { type };

@@ -5,7 +5,8 @@
 import { UserDid, type, Ulid } from "../primitives";
 
 // Room kinds (replaces the mark/unmark pattern)
-export const roomKind = type("'channel' | 'category' | 'thread' | 'page'");
+export const RoomKind = type("'channel' | 'category' | 'thread' | 'page'");
+export type RoomKind = typeof RoomKind.infer;
 
 // Access level for room members
 export const accessLevel = type("'read' | 'write'");
@@ -54,7 +55,7 @@ export const roomLeave = type({
 // Set room kind
 export const roomSetKind = type({
   $type: "'space.roomy.room.setKind.v0'",
-  kind: roomKind,
+  kind: RoomKind,
 });
 
 // Update room parent
