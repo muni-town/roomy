@@ -29,6 +29,7 @@ export const messageEdit = type({
 // Delete a message
 export const messageDelete = type({
   $type: "'space.roomy.room.deleteMessage.v0'",
+  target: Ulid,
   "reason?": "string",
 });
 
