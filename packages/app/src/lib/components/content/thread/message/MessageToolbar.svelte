@@ -14,7 +14,7 @@
   import IconTablerTrash from "~icons/tabler/trash";
   import { backendStatus } from "$lib/workers";
   import { current } from "$lib/queries";
-  import { addReaction } from "$lib/mutations/reaction";
+  import { addReaction, removeReaction } from "$lib/mutations/reaction";
   import { deleteMessage } from "$lib/mutations/message";
 
   let {
@@ -65,6 +65,9 @@
       )
     ) {
       addReaction(spaceId, current.roomId, message.id, emoji);
+    } else {
+      // If we want to remove our reaction on this post
+      removeReaction(spaceId, current.roomId, message.id, emoji);
     }
     isEmojiToolbarPickerOpen = false;
     isEmojiDrawerPickerOpen = false;
