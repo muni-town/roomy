@@ -18,7 +18,7 @@ function setKindEvent(opts: {
   } as const;
 }
 
-function createRoomEvents(opts: {
+interface CreateRoomOpts {
   spaceId: StreamDid;
   parentRoomId?: Ulid;
   kind: RoomKind;
@@ -27,7 +27,9 @@ function createRoomEvents(opts: {
     description?: string;
     avatar?: string;
   };
-}) {
+}
+
+function createRoomEvents(opts: CreateRoomOpts) {
   const newRoomId = newUlid();
   const events: Event[] = [];
   events.push({
@@ -53,11 +55,7 @@ function createRoomEvents(opts: {
   return { roomId: newRoomId, events };
 }
 
-export async function createRoom(opts: {
-  spaceId: StreamDid;
-  parentRoomId?: Ulid;
-  kind: RoomKind;
-}) {
+export async function createRoom(opts: CreateRoomOpts) {
   const { roomId, events } = createRoomEvents(opts);
   await backend.sendEventBatch(opts.spaceId, events);
   return roomId;
