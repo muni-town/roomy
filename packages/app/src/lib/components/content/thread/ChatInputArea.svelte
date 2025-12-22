@@ -23,6 +23,7 @@
   import { newUlid, toBytes, Ulid, type Event } from "$lib/schema";
   import type { MessageExtension } from "$lib/schema/extensions/message";
   import ChatInput, { setInputFocus } from "./ChatInput.svelte";
+  import { createRoom } from "$lib/mutations/room";
 
   let spaceId = $derived(current.joinedSpace?.id);
   let isSendingMessage = $state(false);
@@ -107,22 +108,10 @@
     const threadName =
       state.name || state.selectedMessages[0]?.content.slice(0, 50) + "...";
 
-    const threadId = newUlid();
-    await backend.sendEvent(spaceId, {
-      id: threadId,
-      room: Ulid.assert(current.roomId),
-      variant: {
-        $type: "space.roomy.room.createRoom.v0",
-      },
-    });
-
-    await backend.sendEvent(spaceId, {
-      id: newUlid(),
-      room: threadId,
-      variant: {
-        $type: "space.roomy.room.setKind.v0",
-        kind: "thread",
-      },
+    const threadId = await createRoom({
+      spaceId,
+      parentRoomId: current.roomId,
+      kind: "thread",
     });
 
     await backend.sendEvent(spaceId, {
@@ -139,7 +128,7 @@
     for (const message of state.selectedMessages) {
       await backend.sendEvent(spaceId, {
         id: newUlid(),
-        room: Ulid.assert(message.id),
+        room: message.id,
         variant: {
           $type: "space.roomy.room.updateParent.v0",
           parent: threadId,

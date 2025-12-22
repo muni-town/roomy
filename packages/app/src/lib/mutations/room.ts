@@ -1,43 +1,79 @@
-import { ignore, newUlid, set, toBytes, Ulid } from "$lib/schema";
+import { ignore, newUlid, set, setOrIgnore, toBytes, Ulid } from "$lib/schema";
 import { backend } from "$lib/workers";
 import type { Event, StreamDid } from "$lib/schema";
+import type { RoomKind } from "$lib/schema/events/room";
 
-export async function createPage(opts: {
+function setKindEvent(opts: {
   spaceId: StreamDid;
   roomId: Ulid;
-  pageName: string;
+  kind: RoomKind;
 }) {
-  const events: Event[] = [];
-
-  // Create a new room for the page
-  const pageId = newUlid();
-  events.push({
-    id: pageId,
+  return {
+    id: newUlid(),
     room: opts.roomId,
+    variant: {
+      $type: "space.roomy.room.setKind.v0",
+      kind: opts.kind,
+    },
+  } as const;
+}
+
+function createRoomEvents(opts: {
+  spaceId: StreamDid;
+  parentRoomId?: Ulid;
+  kind: RoomKind;
+  info?: {
+    name?: string;
+    description?: string;
+    avatar?: string;
+  };
+}) {
+  const newRoomId = newUlid();
+  const events: Event[] = [];
+  events.push({
+    id: newRoomId,
+    room: opts.parentRoomId,
     variant: {
       $type: "space.roomy.room.createRoom.v0",
     },
   });
+  events.push(setKindEvent({ ...opts, roomId: newRoomId }));
 
-  // Mark the room as a page
-  events.push({
-    id: newUlid(),
-    room: pageId,
-    variant: {
-      $type: "space.roomy.room.setKind.v0",
-      kind: "page",
-    },
-  });
+  if (opts.info)
+    events.push({
+      id: newUlid(),
+      room: newRoomId,
+      variant: {
+        $type: "space.roomy.common.setInfo.v0",
+        name: setOrIgnore(opts.info.name),
+        avatar: setOrIgnore(opts.info.avatar),
+        description: setOrIgnore(opts.info.description),
+      },
+    });
+  return { roomId: newRoomId, events };
+}
 
-  // Set the page name
-  events.push({
-    id: newUlid(),
-    room: pageId,
-    variant: {
-      $type: "space.roomy.common.setInfo.v0",
-      name: set(opts.pageName),
-      avatar: ignore,
-      description: ignore,
+export async function createRoom(opts: {
+  spaceId: StreamDid;
+  parentRoomId?: Ulid;
+  kind: RoomKind;
+}) {
+  const { roomId, events } = createRoomEvents(opts);
+  await backend.sendEventBatch(opts.spaceId, events);
+  return roomId;
+}
+
+export async function createPage(opts: {
+  spaceId: StreamDid;
+  parentRoomId: Ulid;
+  pageName: string;
+}) {
+  // Create a new room for the page
+  const { roomId: pageId, events } = createRoomEvents({
+    ...opts,
+    kind: "page",
+    info: {
+      name: opts.pageName,
     },
   });
 
@@ -80,14 +116,7 @@ export async function promoteToChannel(opts: {
   const events: Event[] = [];
 
   // Mark the thread as a channel
-  events.push({
-    id: newUlid(),
-    room: opts.room.id,
-    variant: {
-      $type: "space.roomy.room.setKind.v0",
-      kind: "channel",
-    },
-  });
+  events.push(setKindEvent({ ...opts, roomId: opts.room.id, kind: "channel" }));
 
   // Make the thread a sibling of it's parent channel
   if (opts.room.parent?.parent) {
@@ -123,17 +152,10 @@ export async function convertToThread(opts: {
   spaceId: StreamDid;
   roomId: Ulid;
 }) {
-  const events: Event[] = [
-    {
-      id: newUlid(),
-      room: opts.roomId,
-      variant: {
-        $type: "space.roomy.room.setKind.v0",
-        kind: "thread",
-      },
-    },
-  ];
-  await backend.sendEventBatch(opts.spaceId, events);
+  await backend.sendEvent(
+    opts.spaceId,
+    setKindEvent({ ...opts, kind: "thread" }),
+  );
 }
 
 export async function convertToPage(opts: {
@@ -141,14 +163,7 @@ export async function convertToPage(opts: {
   room: { id: Ulid; name: string };
 }) {
   const events: Event[] = [
-    {
-      id: newUlid(),
-      room: opts.room.id,
-      variant: {
-        $type: "space.roomy.room.setKind.v0",
-        kind: "page",
-      },
-    },
+    setKindEvent({ ...opts, roomId: opts.room.id, kind: "page" }),
     {
       id: newUlid(),
       room: opts.room.id,

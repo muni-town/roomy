@@ -46,6 +46,7 @@
   import IconTablerClick from "~icons/tabler/click";
 
   import Error from "$lib/components/modals/Error.svelte";
+  import { Ulid } from "$lib/schema";
 
   let createPageDialogOpen = $state(false);
   let createPageName = $state("");
@@ -110,7 +111,7 @@
     setPageReadMarker({
       personalStreamId: backendStatus.authState.personalStream,
       streamId: spaceId,
-      roomId: page.params.object,
+      roomId: Ulid.assert(page.params.object),
     });
   };
 
@@ -265,7 +266,7 @@
               await promoteToChannel({
                 spaceId: spaceId!,
                 room: {
-                  id: page.params.object,
+                  id: Ulid.assert(page.params.object),
                   name: room.name,
                   parent: room.parent,
                 },
@@ -313,7 +314,7 @@
                 if (!spaceId) return;
                 await convertToThread({
                   spaceId,
-                  roomId: page.params.object,
+                  roomId: Ulid.assert(page.params.object),
                 });
               }}>Convert to Thread</Button
             >
@@ -323,7 +324,7 @@
                 await convertToPage({
                   spaceId,
                   room: {
-                    id: page.params.object,
+                    id: Ulid.assert(page.params.object),
                     name: room.name,
                   },
                 });
@@ -341,7 +342,7 @@
                 const roomId = page.params.object;
                 const pageId = await createPage({
                   spaceId: spaceId!,
-                  roomId: roomId,
+                  parentRoomId: Ulid.assert(roomId),
                   pageName: createPageName,
                 });
                 toast.success(`Created page: ${createPageName}`);
