@@ -2,6 +2,44 @@
 # monitoring stack primarily.
 
 services:
+  leaf-server:
+    image: ghcr.io/muni-town/leaf:sha-549ddac
+    platform: linux/amd64 # no arm64 build available
+    volumes:
+      - leaf-data:/data
+    ports:
+      - 5530:5530
+    environment:
+      http_proxy:
+      https_proxy:
+      DID: did:web:localhost
+      PLC_DIRECTORY: http://plc-directory:3000
+      ENDPOINT: http://locahost:5530
+
+  plc-directory:
+    image: ghcr.io/zicklag/did-plc-server:plc-053ddecb6a12ce0e996d300f9395899adf02dd05
+    platform: linux/amd64 # no arm64 build available
+    command:
+      - node
+      - ../dist/bin.js
+    ports:
+      - 3001:3000
+    environment:
+      NODE_ENV: dev
+      DATABASE_URL: "postgres://postgres:password@plc-db"
+      DEBUG_MODE: 1
+      LOG_ENABLED: "true"
+      LOG_LEVEL: debug
+      LOG_DESTINATION: 1
+
+  plc-db:
+    image: postgres
+    platform: linux/amd64 # no arm64 build available for plc-directory
+    environment:
+      POSTGRES_PASSWORD: password
+    volumes:
+      - plc-db-data:/var/lib/postgresql
+
   pyroscope:
     image: grafana/pyroscope:latest
     ports:
@@ -68,6 +106,10 @@ services:
       - update-ca-certificates && exec bash /run.sh
     ports:
       - "3000:3000"
+
+volumes:
+  leaf-data:
+  plc-db-data:
 
 configs:
   loki-config:
