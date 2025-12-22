@@ -14,10 +14,10 @@ import { type Profile } from "$lib/types/profile";
 import { Deferred } from "$lib/utils/deferred";
 import { AsyncChannel } from "../asyncChannel";
 import type { StreamConnectionStatus, ConnectionStates } from "./types";
-import { personalModule, personalModuleCid } from "./modules";
 import { ConnectedStream, parseEvents } from "./stream";
 import { Did, UserDid, Handle, type Event, StreamDid, type } from "$lib/schema";
 import { encode } from "@atcute/cbor";
+import { modules } from "./modules";
 
 /** Handles interaction with ATProto and Leaf, manages state for connection to both,
  * including connecting to and backfilling streams */
@@ -158,6 +158,7 @@ export class Client {
     }
   }
 
+  /** Connect to the list of spaces. */
   async connect(
     personalStream: ConnectedStream,
     streamList: Map<StreamDid, StreamIndex>,
@@ -175,6 +176,7 @@ export class Client {
           id: streamId,
           idx: upToEventId,
           eventChannel: personalStream.eventChannel,
+          module: modules.space,
         });
         streams.set(streamId, stream);
       } catch (e) {
@@ -254,6 +256,7 @@ export class Client {
       id: streamId,
       idx,
       eventChannel: this.eventChannel,
+      module: modules.space,
     });
 
     await stream.subscribeMetadata();
@@ -270,10 +273,11 @@ export class Client {
     await this.#leafAuthenticated.promise;
 
     console.log("Creating space stream");
-    const newStream = await ConnectedStream.createSpace({
+    const newStream = await ConnectedStream.create({
       user: UserDid.assert(this.agent.assertDid),
       leaf: this.leaf,
       eventChannel: this.eventChannel,
+      module: modules.space,
     });
 
     await newStream.subscribeMetadata();
@@ -303,10 +307,11 @@ export class Client {
   ): Promise<ConnectedStream> {
     await this.#leafAuthenticated.promise;
 
-    return await ConnectedStream.createPersonal({
+    return await ConnectedStream.create({
       user: UserDid.assert(this.agent.assertDid),
       leaf: this.leaf,
       eventChannel,
+      module: modules.personal,
     });
   }
 
@@ -348,6 +353,7 @@ export class Client {
           id: existingRecord.id as StreamDid,
           idx: 0 as StreamIndex,
           eventChannel,
+          module: modules.personal,
         });
         stream.subscribe();
       } catch (e) {
@@ -409,24 +415,6 @@ export class Client {
     // Get the module id for this stream to check whether or not we need to update the module.
     const streamInfo = await this.leaf.streamInfo(stream.id);
     console.log("Client.ensurePersonalStream StreamInfo", streamInfo);
-
-    // Update the personal stream's module if it doesn't match this Roomy version's module.
-    if (streamInfo.moduleCid != (await personalModuleCid)) {
-      console.log(
-        "Personal stream's module doesn't match our current personal module version",
-      );
-      const alreadyHasModule = await this.leaf.hasModule(
-        await personalModuleCid,
-      );
-      if (!alreadyHasModule) {
-        console.log(
-          "The leaf server doesn't have our module yet: uploading...",
-        );
-        await this.leaf.uploadModule(personalModule);
-      }
-      console.log("Updating module for personal stream to our current version");
-      await this.leaf.updateModule(stream.id, await personalModuleCid);
-    }
 
     return stream;
   }

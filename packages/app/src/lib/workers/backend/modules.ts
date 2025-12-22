@@ -1,7 +1,12 @@
 import { sql } from "$lib/utils/sqlTemplate";
 import { LeafClient, type BasicModule } from "@muni-town/leaf-client";
 
-export const personalModule: BasicModule = {
+export type ModuleWithCid = {
+  def: BasicModule;
+  cid: Promise<string>;
+};
+
+const personalModuleDef: BasicModule = {
   $type: "muni.town.leaf.module.basic.v0" as const,
   initSql: sql`
     create table if not exists stream_info (
@@ -63,10 +68,16 @@ export const personalModule: BasicModule = {
     },
   ],
 };
-export const personalModuleCid: Promise<string> =
-  LeafClient.moduleCid(personalModule);
+const personalModuleCid: Promise<string> =
+  LeafClient.moduleCid(personalModuleDef);
 
-export const spaceModule: BasicModule = {
+const personal: ModuleWithCid = {
+  def: personalModuleDef,
+  cid: personalModuleCid,
+};
+personal.cid.then((cid) => console.info("Personal module CID:", cid));
+
+const spaceModuleDef: BasicModule = {
   $type: "muni.town.leaf.module.basic.v0" as const,
 
   initSql: sql`
@@ -174,5 +185,15 @@ export const spaceModule: BasicModule = {
     },
   ],
 };
-export const spaceModuleCid: Promise<string> =
-  LeafClient.moduleCid(spaceModule);
+const spaceModuleCid: Promise<string> = LeafClient.moduleCid(spaceModuleDef);
+
+const space: ModuleWithCid = {
+  def: spaceModuleDef,
+  cid: spaceModuleCid,
+};
+space.cid.then((cid) => console.info("Space module CID:", cid));
+
+export const modules = {
+  personal,
+  space,
+} as const;

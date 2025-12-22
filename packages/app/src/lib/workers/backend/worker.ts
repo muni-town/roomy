@@ -32,6 +32,7 @@ import type {
 import { ensureEntity } from "../sqlite/materializer";
 import { UserDid, parseEvent, type StreamDid, type Event } from "$lib/schema";
 import { decode } from "@atcute/cbor";
+import { modules } from "./modules";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
