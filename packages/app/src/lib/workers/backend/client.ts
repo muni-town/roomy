@@ -256,7 +256,7 @@ export class Client {
       eventChannel: this.eventChannel,
     });
 
-    await stream.subscribe();
+    await stream.subscribeMetadata();
     this.#streamConnection.streams.set(streamId, stream);
 
     console.log("Successfully connected to stream");
@@ -276,7 +276,7 @@ export class Client {
       eventChannel: this.eventChannel,
     });
 
-    await newStream.subscribe();
+    await newStream.subscribeMetadata();
 
     console.log("Successfully created space stream:", newStream.id);
 
