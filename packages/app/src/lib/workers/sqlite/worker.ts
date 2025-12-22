@@ -256,7 +256,10 @@ class SqliteWorkerSupervisor {
             : undefined,
         );
 
-        bundles.push(await this.ensureProfiles(batch.streamId, neededProfiles));
+        if (neededProfiles.size)
+          bundles.push(
+            await this.ensureProfiles(batch.streamId, neededProfiles),
+          );
 
         let latestEvent = 0;
         const spacesToConnect: StreamDid[] = [];
