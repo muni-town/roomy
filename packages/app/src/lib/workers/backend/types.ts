@@ -8,7 +8,7 @@ import type { BlobRef } from "@atproto/lexicon";
 import type { Deferred } from "$lib/utils/deferred";
 import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
 import type { ConnectedStream } from "./stream";
-import type { Did, StreamDid, UserDid, Event, Handle } from "$lib/schema";
+import type { StreamDid, UserDid, Event, Handle } from "$lib/schema";
 
 export interface BackendStatus {
   authState: ReactiveAuthState;
@@ -33,8 +33,8 @@ export type BackendInterface = {
     port: MessagePort,
     statement: SqlStatement,
   ): Promise<void>;
-  sendEvent(streamId: StreamDid, payload: Event): Promise<void>;
-  sendEventBatch(streamId: StreamDid, payloads: Event[]): Promise<void>;
+  sendEvent(streamId: StreamDid, event: Event): Promise<void>;
+  sendEventBatch(streamId: StreamDid, events: Event[]): Promise<void>;
   fetchEvents(
     streamId: StreamDid,
     offset: number,
@@ -46,12 +46,12 @@ export type BackendInterface = {
   unpauseSubscription(streamId: StreamDid): Promise<void>;
   resolveHandleForSpace(
     spaceId: StreamDid,
-    handleAccountDid: Did,
+    handleAccountDid: UserDid,
   ): Promise<Handle | undefined>;
   resolveSpaceId(spaceIdOrHandle: StreamDid | Handle): Promise<{
     spaceId: StreamDid;
     handle?: Handle;
-    did?: Did;
+    did?: UserDid;
   }>;
   checkSpaceExists(spaceId: StreamDid): Promise<boolean>;
   createStreamHandleRecord(spaceId: StreamDid): Promise<void>;
@@ -114,7 +114,7 @@ export namespace AuthStates {
 
   export interface ReactiveAuthenticated {
     state: "authenticated";
-    did: Did;
+    did: UserDid;
     personalStream: StreamDid;
     clientStatus: StreamConnectionStatus["status"];
   }

@@ -16,7 +16,7 @@ import { AsyncChannel } from "../asyncChannel";
 import type { StreamConnectionStatus, ConnectionStates } from "./types";
 import { personalModule, personalModuleCid } from "./modules";
 import { ConnectedStream, parseEvents } from "./stream";
-import { Did, UserDid, Handle, type Event, StreamDid } from "$lib/schema";
+import { Did, UserDid, Handle, type Event, StreamDid, type } from "$lib/schema";
 import { encode } from "@atcute/cbor";
 
 /** Handles interaction with ATProto and Leaf, manages state for connection to both,
@@ -523,7 +523,7 @@ export class Client {
 
   async resolveHandleForSpace(
     spaceId: StreamDid,
-    handleAccountDid: Did,
+    handleAccountDid: UserDid,
   ): Promise<Handle | undefined> {
     try {
       const resp = await this.getProfileCached(handleAccountDid);
@@ -540,65 +540,53 @@ export class Client {
   }
 
   private resolveIdType(spaceDidOrHandle: StreamDid | Did | Handle) {
-    if (Handle.allows(spaceDidOrHandle)) {
-      return "handle";
-    } else if (Did.allows(spaceDidOrHandle)) {
-      return "did";
-    } else {
-      throw new Error("Invalid ID");
-    }
+    const didParsed = Did(spaceDidOrHandle);
+    if (!(didParsed instanceof type.errors)) return "did";
+    const handleParsed = Handle(spaceDidOrHandle);
+    if (!(handleParsed instanceof type.errors)) return "handle";
+    else throw new Error("Invalid ID: " + spaceDidOrHandle);
   }
 
-  private async resolveDidFromHandleOrDid(
-    handleOrDid: Handle | Did,
-  ): Promise<Did> {
-    const type = this.resolveIdType(handleOrDid);
-    switch (type) {
-      case "handle":
-        try {
-          const profile = await this.getProfileCached(handleOrDid as Handle);
-          return profile.data.did;
-        } catch (e) {
-          console.warn("Error resolving DID from handle", handleOrDid, e);
-          throw e;
-        }
-      case "did":
-        return handleOrDid as Did;
-      default:
-        throw new Error("Invalid type for DID resolution");
-    }
+  private async resolveDidFromHandle(handle: Handle): Promise<UserDid> {
+    const type = this.resolveIdType(handle);
+    if (type === "handle") {
+      try {
+        const profile = await this.getProfileCached(handle as Handle);
+        return profile.data.did;
+      } catch (e) {
+        console.warn("Error resolving DID from handle", handle, e);
+        throw e;
+      }
+    } else throw new Error("Invalid type for DID resolution");
   }
 
-  async resolveSpaceId(
-    spaceIdOrHandleOrDid: StreamDid | Handle | Did,
-  ): Promise<{
+  async resolveSpaceId(spaceIdOrHandle: StreamDid | Handle): Promise<{
     spaceId: StreamDid;
     handle?: Handle;
-    did?: Did;
+    did?: UserDid;
   }> {
-    const type = this.resolveIdType(spaceIdOrHandleOrDid);
+    const type = this.resolveIdType(spaceIdOrHandle);
 
     if (type === "handle") {
       try {
-        const did = await this.resolveDidFromHandleOrDid(spaceIdOrHandleOrDid);
+        const did = await this.resolveDidFromHandle(spaceIdOrHandle);
         const spaceIdFromHandle = await this.getStreamHandleRecordCached(did);
         if (!spaceIdFromHandle) throw "Could not resolve space ID from handle";
         return {
           spaceId: spaceIdFromHandle!,
-          handle:
-            type === "handle" ? (spaceIdOrHandleOrDid as Handle) : undefined,
+          handle: type === "handle" ? (spaceIdOrHandle as Handle) : undefined,
           did,
         };
       } catch (e) {
         console.warn(
           "Error resolving space from identifier",
-          spaceIdOrHandleOrDid,
+          spaceIdOrHandle,
           e,
         );
         throw e;
       }
     } else {
-      return { spaceId: spaceIdOrHandleOrDid as StreamDid };
+      return { spaceId: spaceIdOrHandle as StreamDid };
     }
   }
 

@@ -1,15 +1,15 @@
 import { page } from "$app/state";
 import { backend, backendStatus } from "$lib/workers";
-import type { AuthStates } from "$lib/workers/backend/types";
-import type { SpaceIdOrHandle, DidStream } from "$lib/workers/types";
-import type { Did } from "@atproto/api";
 import { joinedSpaces } from "./spaces.svelte";
+import type { AuthStates } from "$lib/workers/backend/types";
+import type { SpaceIdOrHandle } from "$lib/workers/types";
 import type { SpaceMeta } from "./types";
+import { type StreamDid, Ulid, type UserDid } from "$lib/schema";
 
 type SpaceStatus =
   | { status: "no-current-space" }
   | { status: "loading"; spaceId?: SpaceIdOrHandle }
-  | { status: "invited"; spaceId: DidStream }
+  | { status: "invited"; spaceId: StreamDid }
   | { status: "joined"; space: SpaceMeta; isSpaceAdmin: boolean }
   | {
       status: "error";
@@ -20,8 +20,8 @@ type SpaceStatus =
 // mutate properties, never reassign the object itself
 export const current = $state<{
   space: SpaceStatus;
-  roomId: string | undefined;
-  did: Did | undefined;
+  roomId: Ulid | undefined;
+  did: UserDid | undefined;
 
   // derived from space
   joinedSpace: SpaceMeta | undefined;
@@ -82,16 +82,9 @@ $effect.root(() => {
   $effect(() => {
     page.params.space; // depend on page.params.space
 
-    // console.log("current", current.space);
+    console.log("current space", page.params.space);
 
-    if (joinedSpaces.loading) return; // wait until spaces are loaded
-
-    if (!page.params.space) {
-      current.space = { status: "no-current-space" };
-      current.joinedSpace = undefined;
-      current.isSpaceAdmin = false;
-      return;
-    }
+    if (joinedSpaces.loading || !page.params.space) return; // wait until spaces are loaded
 
     getCurrentSpace(page.params.space as SpaceIdOrHandle)
       .then(({ matchingSpace, isSpaceAdmin, spaceId }) => {
@@ -109,12 +102,26 @@ $effect.root(() => {
         current.isSpaceAdmin = isSpaceAdmin;
       })
       .catch(error);
+
+    // reset when space changes
+    return () => {
+      current.space = { status: "no-current-space" };
+      current.joinedSpace = undefined;
+      current.isSpaceAdmin = false;
+    };
   });
 
   // Update current.roomId whenever page params change
   $effect(() => {
     page.params.object;
-    current.roomId = page.params.object;
+    console.log("room", page.params.object);
+    if (!page.params.object || !Ulid.allows(page.params.object)) return;
+    current.roomId = Ulid.assert(page.params.object);
+
+    // reset when room changes
+    return () => {
+      current.roomId = undefined;
+    };
   });
 
   $effect(() => {
