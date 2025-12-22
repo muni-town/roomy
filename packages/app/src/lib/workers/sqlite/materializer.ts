@@ -167,7 +167,7 @@ const materializers: {
   ],
   "space.roomy.room.deleteRoom.v0": async ({ event }) => {
     if (!event.room) {
-      console.warn("Delete room missing parent");
+      console.warn("Delete room missing room");
       return [];
     }
     return [
@@ -180,7 +180,7 @@ const materializers: {
   },
   "space.roomy.room.updateParent.v0": async ({ event, data }) => {
     if (!event.room) {
-      console.warn("Update room parent missing parent");
+      console.warn("Update room parent missing room");
       return [];
     }
     return [
@@ -465,7 +465,7 @@ const materializers: {
 
   "space.roomy.room.editMessage.v0": async ({ streamId, event, data }) => {
     if (!event.room) {
-      console.warn("Edit event missing parent");
+      console.warn("Edit event missing room");
       return [];
     }
 
@@ -495,7 +495,7 @@ const materializers: {
   },
   "space.roomy.room.editPage.v0": async ({ user, streamId, event, data }) => {
     if (!event.room) {
-      console.warn("Edit event missing parent");
+      console.warn("Edit event missing room");
       return [];
     }
 
@@ -584,7 +584,7 @@ const materializers: {
   "space.roomy.room.addReaction.v0": async ({ data, user }) => {
     return [
       sql`
-        insert into comp_reaction (entity, user, reaction)
+        insert or replace into comp_reaction (entity, user, reaction)
         values (
           ${data.target},
           ${user},
@@ -595,7 +595,7 @@ const materializers: {
   },
   "space.roomy.room.removeReaction.v0": async ({ event, user, data }) => {
     if (!event.room) {
-      console.warn("Delete reaction missing parent");
+      console.warn("Delete reaction missing room");
       return [];
     }
     return [
@@ -624,7 +624,7 @@ const materializers: {
   },
   "space.roomy.room.removeBridgedReaction.v0": async ({ event, data }) => {
     if (!event.room) {
-      console.warn("Delete reaction missing parent");
+      console.warn("Delete reaction missing room");
       return [];
     }
     return [
