@@ -37,6 +37,9 @@
       )
     ) {
       addReaction(spaceId, current.roomId, message.id, emoji);
+    } else {
+      // If we want to remove our reaction on this post
+      removeReaction(spaceId, current.roomId, message.id, emoji);
     }
     isEmojiRowPickerOpen = false;
   }
