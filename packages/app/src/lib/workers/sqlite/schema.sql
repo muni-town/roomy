@@ -77,6 +77,7 @@ create table if not exists comp_content (
   entity text primary key references entities(id) on delete cascade,
   mime_type text,
   data blob,
+  last_edit text, -- ID of most recent edit event 
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
@@ -180,9 +181,10 @@ create table if not exists comp_last_read (
 ) strict;
 
 create table if not exists comp_reaction (
-  entity text references entities(id) on delete cascade,
+  entity text references entities(id) on delete cascade, -- id of the message
   user text references entities(id) on delete cascade, -- did
-  reaction text not null,
+  add_event text -- event id that added the reaction
+  reaction text not null, -- generally emoji
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000),
   primary key (entity, user, reaction)
