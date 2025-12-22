@@ -175,6 +175,38 @@ export class ConnectedStream {
     this.backfillStatus = { status: "started" };
   }
 
+  async subscribeMetadata(start: number = 0) {
+    this.unsubscribeFn = await this.leaf.subscribe(
+      this.id,
+      {
+        name: "metadata",
+        params: {},
+        start,
+        limit: 2500,
+      },
+      async (result) => {
+        if ("Ok" in result) {
+          // TODO: WE don't really know at this point that backfiling is done, so we need to refine
+          // this later with a way to get from the server that we have finished.
+          this.backfillStatus = { status: "finished" };
+          this.#doneBackfilling.resolve();
+
+          const events = parseEvents(result.Ok);
+          this.eventChannel.push({
+            batchId: newUlid(),
+            streamId: this.id as StreamDid,
+            events,
+            priority: "priority",
+          });
+        } else {
+          console.error("Subscribed query error:", result.Err);
+          this.backfillStatus = { status: "errored", error: result.Err };
+        }
+      },
+    );
+    this.backfillStatus = { status: "started" };
+  }
+
   get doneBackfilling(): Promise<void> {
     return this.#doneBackfilling.promise;
   }
