@@ -1,7 +1,3 @@
-<script lang="ts" module>
-  export let editingMessage = $state({ id: "" });
-</script>
-
 <script lang="ts">
   import { patchMake, patchToText } from "diff-match-patch-es";
   import { Avatar, Checkbox } from "bits-ui";
@@ -35,6 +31,8 @@
     startThreading: (message?: Message) => void;
     toggleSelect: (message: Message) => void;
   } = $props();
+
+  let editingMessage = $state({ id: "" });
 
   // log messages sent in last 2.7hours
   // if (decodeTime(message.id) > Date.now() - 10000000)
@@ -113,6 +111,7 @@
       editingMessage.id = "";
       return;
     }
+
     let contentPatch = patchToText(patchMake(message.content, newContent));
 
     await backend.sendEvent(spaceId, {
@@ -125,7 +124,9 @@
           mimeType: "text/x-dmp-patch",
           data: toBytes(new TextEncoder().encode(contentPatch)),
         },
-        replyTo: Ulid.assert(message.replyTo[0]), // This event needs updating to support multiple replies and other changes to extensions
+        replyTo: message.replyTo[0]
+          ? Ulid.assert(message.replyTo[0])
+          : undefined, // This event needs updating to support multiple replies and other changes to extensions
       },
     });
 
