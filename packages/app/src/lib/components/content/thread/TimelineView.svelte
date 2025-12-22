@@ -148,7 +148,7 @@
     messagingState.set({
       ...currentState,
       kind: "threading",
-      name: message ? `Thread: ${message.authorName}` : "Thread",
+      name: message ? message.content : "Thread",
       selectedMessages: message ? [message] : [],
     });
     if (message && messagingState.current.kind === "threading") {
