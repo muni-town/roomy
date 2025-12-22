@@ -54,12 +54,13 @@
     const newMarkdown = new Turndown().turndown(editedHtml);
     if (pageMarkdown == newMarkdown) return;
     const patch = patchToText(patchMake(pageMarkdown || "", newMarkdown));
+    const editEventId = newUlid();
     await backend.sendEvent(spaceId, {
-      id: newUlid(),
+      id: editEventId,
       room: Ulid.assert(page.params.object),
       variant: {
         $type: "space.roomy.room.editPage.v0",
-        parent: latestEditId,
+        parent: latestEditId || editEventId,
         body: {
           mimeType: "text/x-dmp-patch",
           data: toBytes(new TextEncoder().encode(patch)),

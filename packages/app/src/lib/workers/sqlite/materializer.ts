@@ -10,7 +10,14 @@ import {
   type Ulid,
   UserDid,
   StreamDid,
+  type,
 } from "$lib/schema";
+import {
+  dependentEventType,
+  DependentEventVariant,
+  WithParent,
+  WithTarget,
+} from "$lib/schema/events/dependencies";
 
 /** SQL mapping for each event variant */
 const materializers: {
@@ -561,7 +568,11 @@ const materializers: {
       `,
     ];
   },
-  "space.roomy.message.overrideMeta.v0": async ({ streamId, event, data }) => {
+  "space.roomy.room.overrideMessageMeta.v0": async ({
+    streamId,
+    event,
+    data,
+  }) => {
     // Note using the stream ID is kind of a special case for a "system" user if you want to have
     // the space itself be able to send messages.
     const userId = event.room || streamId;
@@ -640,52 +651,6 @@ const materializers: {
     ];
   },
 
-  // Media
-  // "space.roomy.media.create.v0": async ({ streamId, event, data }) => {
-  //   const mimeType = data.mimeType.toLowerCase();
-
-  //   const uriWithUlidQuery = data.uri + "?message=" + event.room;
-  //   const statements = [ensureEntity(streamId, uriWithUlidQuery, event.room)];
-
-  //   if (mimeType.startsWith("image/")) {
-  //     statements.push(sql`
-  //       insert into comp_image (entity, mime_type)
-  //       values (
-  //         ${uriWithUlidQuery},
-  //         ${data.mimeType}
-  //       )
-  //     `);
-  //   } else if (mimeType.startsWith("video/")) {
-  //     statements.push(sql`
-  //       insert into comp_video (entity, mime_type)
-  //       values (
-  //         ${uriWithUlidQuery},
-  //         ${data.mimeType}
-  //       )
-  //     `);
-  //   } else {
-  //     // Default to file for everything else
-  //     statements.push(sql`
-  //       insert into comp_file (entity, mime_type)
-  //       values (
-  //         ${uriWithUlidQuery},
-  //         ${data.mimeType}
-  //       )
-  //     `);
-  //   }
-
-  //   return statements;
-  // },
-
-  // deprecated
-  // "space.roomy.media.delete.v0": async ({ event }) => {
-  //   if (!event.room) {
-  //     console.warn("Missing target for media delete.");
-  //     return [];
-  //   }
-  //   return [sql`delete from entities where id = ${event.room}`];
-  // },
-
   // Room Kinds
   "space.roomy.room.setKind.v0": async ({ event, data }) => {
     if (!event.room) {
@@ -698,90 +663,6 @@ const materializers: {
       `,
     ];
   },
-
-  // Channels
-  // "space.roomy.channel.mark.v0": async ({ event }) => {
-  //   if (!event.room) {
-  //     console.warn("Missing target for channel mark.");
-  //     return [];
-  //   }
-  //   return [
-  //     sql`
-  //     update comp_room set label = 'channel' where entity = ${event.room}
-  //     `,
-  //   ];
-  // },
-  // "space.roomy.channel.unmark.v0": async ({ event }) => {
-  //   if (!event.room) {
-  //     console.warn("Missing target for channel unmark.");
-  //     return [];
-  //   }
-  //   return [
-  //     sql`update comp_room set label = null where entity = ${event.room} and label = 'channel'`,
-  //   ];
-  // },
-
-  // // Threads
-  // "space.roomy.thread.mark.v0": async ({ event }) => {
-  //   if (!event.room) {
-  //     console.warn("Missing target for thread mark.");
-  //     return [];
-  //   }
-  //   return [
-  //     sql`
-  //     update comp_room set label = 'thread' where entity = ${event.room}
-  //     `,
-  //   ];
-  // },
-  // "space.roomy.thread.unmark.v0": async ({ event }) => {
-  //   if (!event.room) {
-  //     console.warn("Missing target for thread unmark.");
-  //     return [];
-  //   }
-  //   return [
-  //     sql`update comp_room set label = null where entity = ${event.room} and label = 'thread'`,
-  //   ];
-  // },
-
-  // // Categories
-  // "space.roomy.category.mark.v0": async ({ event }) => {
-  //   if (!event.room) {
-  //     console.warn("Missing target for category mark.");
-  //     return [];
-  //   }
-  //   return [
-  //     sql`update comp_room set label = 'category' where entity = ${event.room}`,
-  //   ];
-  // },
-  // "space.roomy.category.unmark.v0": async ({ event }) => {
-  //   if (!event.room) {
-  //     console.warn("Missing target for category unmark.");
-  //     return [];
-  //   }
-  //   return [
-  //     sql`update comp_room set label = null where entity = ${event.room} and label = 'category'`,
-  //   ];
-  // },
-
-  // // Pages
-  // "space.roomy.page.mark.v0": async ({ event }) => {
-  //   if (!event.room) {
-  //     console.warn("Missing target for page mark.");
-  //     return [];
-  //   }
-  //   return [
-  //     sql`update comp_room set label = 'page' where entity = ${event.room}`,
-  //   ];
-  // },
-  // "space.roomy.page.unmark.v0": async ({ event }) => {
-  //   if (!event.room) {
-  //     console.warn("Missing target for page unmark.");
-  //     return [];
-  //   }
-  //   return [
-  //     sql`update comp_room set label = null where entity = ${event.room} and label = 'page'`,
-  //   ];
-  // },
 
   /**
    * Mark a room as read. This event is sent to the user's personal stream.
@@ -830,13 +711,15 @@ const dependentEvents = [
 function bundleSuccess(
   event: Event,
   idx: StreamIndex,
+  user: UserDid,
   statements: SqlStatement | SqlStatement[],
   dependsOn: Ulid | null,
 ): Bundle.Statement {
   return {
     status: "success",
-    eventId: event.id,
+    event: event,
     eventIdx: idx,
+    user,
     statements: Array.isArray(statements) ? statements : [statements],
     dependsOn,
   };
@@ -861,7 +744,7 @@ function bundleError(
  */
 export async function materialize(
   event: Event,
-  opts: { streamId: string; user: string },
+  opts: { streamId: StreamDid; user: UserDid },
   idx: StreamIndex,
 ): Promise<Bundle.Statement> {
   const kind = event.variant.$type;
@@ -879,19 +762,15 @@ export async function materialize(
       data,
     } as any);
 
-    // Insert event into events table
-    statements.push(sql`
-      INSERT INTO events (idx, stream_id, entity_ulid, payload, applied)
-      VALUES (${idx}, ${opts.streamId}, ${event.id}, ${JSON.stringify(event)}, 0)
-    `);
+    // some types have a chain of dependencies, in which case 'parent' is most recent one.
+    // others just have a target
+    const dependsOn = WithParent.allows(event.variant)
+      ? event.variant.parent
+      : WithTarget.allows(event.variant)
+        ? event.variant.target
+        : null;
 
-    // TODO: these are probably all wrong now we have room instead of parent
-    // on the envelope, since dependencies on rooms are unproblematic for
-    // partial loading
-    const dependsOn =
-      dependentEvents.includes(kind) && event.room ? event.room : null;
-
-    return bundleSuccess(event, idx, statements, dependsOn);
+    return bundleSuccess(event, idx, opts.user, statements, dependsOn);
   } catch (error) {
     console.error(`Error materializing event ${event.id}:`, error);
     return bundleError(event, error instanceof Error ? error : String(error));

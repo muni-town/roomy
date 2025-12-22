@@ -39,7 +39,8 @@ export const messageDelete = type({
 
 // Change the author or timestamp of a native message. Intended for bridge puppeting.
 export const messageOverrideMeta = type({
-  $type: "'space.roomy.message.overrideMeta.v0'",
+  $type: "'space.roomy.room.overrideMessageMeta.v0'",
+  target: Ulid,
   author: UserDid,
   timestamp: Timestamp,
 });

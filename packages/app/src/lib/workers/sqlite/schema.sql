@@ -10,12 +10,21 @@ create table if not exists roomy_schema_version (
 CREATE TABLE IF NOT EXISTS events (
   idx integer not null,
   stream_id text not null,
+  user text not null,
   entity_ulid text references entities(ulid) on delete cascade,
+  depends_on text,
   payload text,  -- json
   created_at integer not null default (unixepoch() * 1000),
   applied integer default 0,
   primary key (idx, stream_id)
 ) STRICT;
+-- Index for efficiently finding stashed events when a dependency is satisfied
+CREATE INDEX IF NOT EXISTS idx_events_depends_on 
+  ON events(depends_on) WHERE applied = 0;
+
+-- Index for checking if a dependency exists and is applied
+CREATE INDEX IF NOT EXISTS idx_events_entity_applied 
+  ON events(entity_ulid, applied);
 
 create table if not exists entities (
   id text primary key, -- did or ulid
