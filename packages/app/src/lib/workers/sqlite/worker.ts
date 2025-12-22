@@ -258,6 +258,11 @@ class SqliteWorkerSupervisor {
                 return [e, e.event] as const;
               });
 
+        console.log(
+          "Materializing decoded events:",
+          decodedEvents.map((x) => x[1]),
+        );
+
         // Make sure all of the profiles we need are downloaded and inserted
         const neededProfiles = new Set<UserDid>();
         decodedEvents.forEach(([i, ev]) =>

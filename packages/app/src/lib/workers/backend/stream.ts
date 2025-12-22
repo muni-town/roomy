@@ -1,7 +1,6 @@
 import type { LeafClient, SqlRows } from "@muni-town/leaf-client";
 import type { Batch, EncodedStreamEvent, TaskPriority } from "../types";
 import type { AsyncChannel } from "../asyncChannel";
-import { personalModule, spaceModule } from "./modules";
 import {
   StreamDid,
   newUlid,
@@ -12,6 +11,7 @@ import {
 } from "$lib/schema";
 import { encode } from "@atcute/cbor";
 import { Deferred } from "$lib/utils/deferred";
+import type { ModuleWithCid } from "./modules";
 
 interface ConnectedStreamOpts {
   user: UserDid;
@@ -19,6 +19,7 @@ interface ConnectedStreamOpts {
   id: StreamDid;
   idx: StreamIndex;
   eventChannel: AsyncChannel<Batch.Events>;
+  module: ModuleWithCid;
   priority?: TaskPriority;
 }
 
@@ -60,7 +61,30 @@ export class ConnectedStream {
   /** Async factory that checks for stream existence */
   static async connect(opts: ConnectedStreamOpts) {
     try {
-      await opts.leaf.streamInfo(opts.id);
+      const { moduleCid } = await opts.leaf.streamInfo(opts.id);
+      if (moduleCid != (await opts.module.cid)) {
+        console.info(
+          `Module for stream ${opts.id} ( ${moduleCid} ) is different than desired module ( ${await opts.module.cid} ) updating...`,
+        );
+
+        if (!(await opts.leaf.hasModule(await opts.module.cid))) {
+          console.log(
+            "The leaf server doesn't have module, uploading:",
+            await opts.module.cid,
+          );
+          await opts.leaf.uploadModule(opts.module.def);
+        }
+        try {
+          await opts.leaf.updateModule(opts.id, await opts.module.cid);
+        } catch (e) {
+          // This may fail if the user is not an admin, which is fine
+          console.warn(
+            "Could not update space module to latest version. \
+            This can be normal if the user is not an admin:",
+            e,
+          );
+        }
+      }
       return ConnectedStream.assert(opts);
     } catch (e) {
       console.error("stream info error:", e);
@@ -70,16 +94,21 @@ export class ConnectedStream {
     }
   }
 
-  static async createSpace(opts: Omit<ConnectedStreamOpts, "id" | "idx">) {
+  static async create(opts: Omit<ConnectedStreamOpts, "id" | "idx">) {
     try {
-      console.log("Creating space stream", opts);
-      const spaceModuleResp = await opts.leaf.uploadModule(spaceModule);
+      console.log("Creating stream", opts);
 
-      const { streamDid } = await opts.leaf.createStream(
-        spaceModuleResp.moduleCid,
-      );
+      if (!(await opts.leaf.hasModule(await opts.module.cid))) {
+        console.info(
+          "Leaf server does not have module yet. Uploading:",
+          await opts.module.cid,
+        );
+        await opts.leaf.uploadModule(opts.module.def);
+      }
 
-      console.log("created space stream:", streamDid);
+      const { streamDid } = await opts.leaf.createStream(await opts.module.cid);
+
+      console.log("created stream:", streamDid);
 
       // Now send an addAdmin event
       await opts.leaf.sendEvent(
@@ -105,44 +134,6 @@ export class ConnectedStream {
     }
   }
 
-  static async createPersonal(
-    opts: Omit<ConnectedStreamOpts, "id" | "idx" | "priority">,
-  ) {
-    try {
-      console.log("Creating personal stream", opts);
-      const personalModuleResp = await opts.leaf.uploadModule(personalModule);
-
-      const { streamDid } = await opts.leaf.createStream(
-        personalModuleResp.moduleCid,
-      );
-
-      console.log("created personal stream:", streamDid);
-
-      // Now send an addAdmin event
-      await opts.leaf.sendEvent(
-        streamDid,
-        encode({
-          id: newUlid(),
-          room: undefined,
-          variant: {
-            $type: "space.roomy.space.addAdmin.v0",
-            userId: opts.user,
-          },
-        } satisfies Event),
-      );
-
-      return ConnectedStream.assert({
-        ...opts,
-        id: StreamDid.assert(streamDid),
-        idx: 0 as StreamIndex,
-        priority: "priority",
-      });
-    } catch (e) {
-      console.error("Error creating personal stream", e);
-      throw e;
-    }
-  }
-
   async subscribe(start: number = 0) {
     this.unsubscribeFn = await this.leaf.subscribe(
       this.id,
@@ -161,7 +152,7 @@ export class ConnectedStream {
 
           const events = parseEvents(result.Ok);
           this.eventChannel.push({
-            status: 'events',
+            status: "events",
             batchId: newUlid(),
             streamId: this.id as StreamDid,
             events,
@@ -194,7 +185,7 @@ export class ConnectedStream {
 
           const events = parseEvents(result.Ok);
           this.eventChannel.push({
-            status: 'events',
+            status: "events",
             batchId: newUlid(),
             streamId: this.id as StreamDid,
             events,
