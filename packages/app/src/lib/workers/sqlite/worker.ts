@@ -20,7 +20,14 @@ import { messagePortInterface, reactiveWorkerState } from "../workerMessaging";
 import { db } from "../idb";
 import schemaSql from "./schema.sql?raw";
 import { sql } from "$lib/utils/sqlTemplate";
-import { StreamDid, UserDid, parseEvent } from "$lib/schema";
+import {
+  StreamDid,
+  Ulid,
+  UserDid,
+  newUlid,
+  parseEvent,
+  type Event,
+} from "$lib/schema";
 import { materialize } from "./materializer";
 import { AsyncChannel } from "../asyncChannel";
 import type {
@@ -79,7 +86,7 @@ class SqliteWorkerSupervisor {
   #backend: BackendInterface | null = null;
   #ensuredProfiles = new Set<string>();
   #knownStreams = new Set<StreamDid>();
-  #eventChannel: AsyncChannel<Batch.Events>;
+  #eventChannel: AsyncChannel<Batch.Events | Batch.Unstash>;
   #statementChannel = new AsyncChannel<Batch.Statement>();
   #pendingBatches = new Map<string, (result: Batch.ApplyResult) => void>();
   #authenticated = new Deferred();
@@ -211,7 +218,7 @@ class SqliteWorkerSupervisor {
   }
 
   /** Map a batch of incoming events to SQL that applies the event to the entities,
-   * components and edges, then execute them all as a single transaction.
+   * components and edges, then forward them to the statements channel for application
    */
   listenEvents() {
     (async () => {
@@ -223,28 +230,33 @@ class SqliteWorkerSupervisor {
         // reset ensured flags for each new batch
         this.#ensuredProfiles = new Set();
 
-        const decodedEvents = batch.events
-          .map((e) => {
-            try {
-              // Convert ArrayBuffer to Uint8Array for decoding
-              const payloadBytes = new Uint8Array(e.payload);
-              const decoded = decode(payloadBytes);
-              const result = parseEvent(decoded);
-              if (result.success) {
-                return [e, result.data] as const;
-              } else throw result.error;
-            } catch (error) {
-              const payloadBytes = new Uint8Array(e.payload);
-              console.warn(
-                `Skipping malformed event (idx ${e.idx}): Failed to decode ${payloadBytes.length} bytes.`,
-                `Error:`,
-                error instanceof Error ? error.message : error,
-              );
-              // Return null to filter out this event
-              return null;
-            }
-          })
-          .filter((e): e is Exclude<typeof e, null> => e !== null);
+        const decodedEvents =
+          batch.status === "events"
+            ? batch.events
+                .map((e) => {
+                  try {
+                    // Convert ArrayBuffer to Uint8Array for decoding
+                    const payloadBytes = new Uint8Array(e.payload);
+                    const decoded = decode(payloadBytes);
+                    const result = parseEvent(decoded);
+                    if (result.success) {
+                      return [e, result.data] as const;
+                    } else throw result.error;
+                  } catch (error) {
+                    const payloadBytes = new Uint8Array(e.payload);
+                    console.warn(
+                      `Skipping malformed event (idx ${e.idx}): Failed to decode ${payloadBytes.length} bytes.`,
+                      `Error:`,
+                      error instanceof Error ? error.message : error,
+                    );
+                    // Return null to filter out this event
+                    return null;
+                  }
+                })
+                .filter((e): e is Exclude<typeof e, null> => e !== null)
+            : batch.events.map((e) => {
+                return [e, e.event] as const;
+              });
 
         // Make sure all of the profiles we need are downloaded and inserted
         const neededProfiles = new Set<UserDid>();
@@ -527,10 +539,42 @@ class SqliteWorkerSupervisor {
       await executeQuery({ sql: `savepoint batch${batch.batchId}` });
 
       const results: Batch.ApplyResult["results"] = [];
+      const appliedInBatch = new Set<Ulid>();
+
+      const allDependencies = new Set(
+        batch.bundles
+          .filter(
+            (b): b is Bundle.StatementSuccess =>
+              b.status === "success" && b.dependsOn !== null,
+          )
+          .map((b) => b.dependsOn!),
+      );
+
+      // Single query for all dependencies
+      const satisfiedDeps = new Set<Ulid>();
+      if (allDependencies.size > 0) {
+        const depsArray = [...allDependencies];
+        const result = await executeQuery({
+          sql: `SELECT entity_ulid FROM events 
+                WHERE entity_ulid IN (${depsArray.map(() => "?").join(",")}) 
+                AND applied = 1`,
+          params: depsArray,
+        });
+        result.rows?.forEach((row) =>
+          satisfiedDeps.add(row.entity_ulid as Ulid),
+        );
+      }
 
       for (const bundle of batch.bundles) {
         if (bundle.status === "success") {
-          results.push(await this.runStatementBundle(bundle, batch.streamId));
+          results.push(
+            await this.runStatementBundle(
+              bundle,
+              batch.streamId,
+              appliedInBatch,
+              satisfiedDeps,
+            ),
+          );
         } else if (bundle.status === "profiles") {
           results.push(await this.runStatementProfileBundle(bundle));
         }
@@ -569,6 +613,7 @@ class SqliteWorkerSupervisor {
     bundleId: string,
     statements: SqlStatement[],
     eventMeta?: {
+      event: Event;
       streamId: StreamDid;
       idx: StreamIndex;
     },
@@ -597,18 +642,17 @@ class SqliteWorkerSupervisor {
       }
     }
 
-    if (eventMeta && !hadError) {
-      const updateEvent = sql`
-        update events set applied = 1
-        where stream_id = ${eventMeta.streamId}
-          and
-        idx = ${eventMeta.idx}
-        `;
+    // insert event to events table
+    if (eventMeta) {
+      const insertEvent = sql`
+        INSERT INTO events (idx, stream_id, entity_ulid, payload, applied)
+        VALUES (${eventMeta.idx}, ${eventMeta.streamId}, ${eventMeta.event.id}, ${JSON.stringify(eventMeta.event)}, ${hadError ? 0 : 1})
+      `;
       queryResults.push(
-        await executeQuery(updateEvent).catch((e) => {
+        await executeQuery(insertEvent).catch((e) => {
           return {
             type: "error",
-            statement: updateEvent,
+            statement: insertEvent,
             message: e instanceof Error ? e.message : (e as string),
           };
         }),
@@ -634,23 +678,82 @@ class SqliteWorkerSupervisor {
     };
   }
 
+  // When triggering unstash, after applying an event:
+  private async triggerUnstash(
+    appliedEventId: Ulid,
+    streamId: StreamDid,
+    user: UserDid,
+    priority: TaskPriority,
+  ) {
+    const stashed = await executeQuery(sql`
+      SELECT idx, entity_ulid, payload
+      FROM events
+      WHERE depends_on = ${appliedEventId} AND applied = 0
+      ORDER BY idx ASC
+    `);
+
+    if (!stashed.rows?.length) return;
+
+    // Create unstash batch and push to channel
+    const unstashBatch: Batch.Unstash = {
+      status: "unstash",
+      batchId: newUlid(),
+      streamId,
+      priority,
+      events: stashed.rows.map((row) => ({
+        idx: row.idx as StreamIndex,
+        event: JSON.parse(row.payload as string) as Event,
+        user /* need to store this too, or derive from event */,
+      })),
+    };
+
+    this.#eventChannel.push(unstashBatch, priority);
+  }
+
   private async runStatementBundle(
     bundle: Bundle.StatementSuccess,
     streamId: StreamDid,
-  ): Promise<Bundle.ApplyResult> {
-    const bundleId = bundle.eventId;
+    appliedInBatch: Set<Ulid>,
+    satisfiedDeps: Set<Ulid>,
+  ): Promise<Bundle.ApplyResult | Bundle.ApplyStashed> {
+    const bundleId = bundle.event.id;
 
-    // TODO: check if we have the bundle.dependsOn event, and run the statements only if we do, otherwise stash
+    const isSatisfied =
+      !bundle.dependsOn ||
+      satisfiedDeps.has(bundle.dependsOn) ||
+      appliedInBatch.has(bundle.dependsOn);
+
+    if (bundle.dependsOn && !isSatisfied) {
+      // STASH: Insert event with applied=0
+      await executeQuery(sql`
+            INSERT INTO events (idx, stream_id, user, entity_ulid, payload, applied, depends_on)
+            VALUES (${bundle.eventIdx}, ${streamId}, ${bundle.user}, ${bundle.event.id}, 
+                    ${JSON.stringify(bundle.event)}, 0, ${bundle.dependsOn})
+            ON CONFLICT(idx, stream_id) DO NOTHING
+          `);
+
+      return {
+        result: "stashed",
+        eventId: bundle.event.id,
+        dependsOn: bundle.dependsOn,
+      };
+    }
 
     const queryResults = await this.runBundleStatements(
       bundleId,
       bundle.statements,
-      { streamId, idx: bundle.eventIdx },
+      { event: bundle.event, streamId, idx: bundle.eventIdx },
     );
+
+    // Track that we applied this
+    appliedInBatch.add(bundle.event.id);
+
+    // Check for stashed events that can now be applied
+    this.triggerUnstash(bundle.event.id, streamId, bundle.user, "priority");
 
     return {
       result: "applied",
-      eventId: bundle.eventId,
+      eventId: bundle.event.id,
       output: queryResults,
     };
   }

@@ -13,8 +13,8 @@ import { type, Content, Ulid } from "../primitives";
  */
 export const pageEdit = type({
   $type: "'space.roomy.room.editPage.v0'",
-  /** Previous edit event. Empty for first edit. */
-  "parent?": Ulid,
+  /** Previous edit event. Same as this event's ulid for first edit. */
+  parent: Ulid,
   /** The edit content (full replacement or diff) */
   body: Content,
 });

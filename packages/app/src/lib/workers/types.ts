@@ -1,4 +1,12 @@
-import type { Did, Ulid, StreamIndex, StreamDid, Handle } from "$lib/schema";
+import type {
+  Did,
+  Ulid,
+  StreamIndex,
+  StreamDid,
+  Handle,
+  Event,
+  UserDid,
+} from "$lib/schema";
 import type { QueryResult } from "./sqlite/setup";
 import type { SqlStatement } from "./sqlite/types";
 
@@ -58,7 +66,7 @@ export type TaskPriority = "priority" | "background";
 
 export interface EncodedStreamEvent {
   idx: StreamIndex;
-  user: string;
+  user: UserDid;
   payload: Uint8Array;
 }
 
@@ -67,10 +75,23 @@ export interface EncodedStreamEvent {
  */
 export namespace Batch {
   export interface Events {
+    status: "events";
     batchId: Ulid;
     streamId: StreamDid;
     events: EncodedStreamEvent[];
     priority: TaskPriority;
+  }
+
+  export interface Unstash {
+    status: "unstash";
+    batchId: Ulid;
+    streamId: StreamDid;
+    priority: TaskPriority;
+    events: Array<{
+      idx: StreamIndex;
+      event: Event; // Already decoded
+      user: UserDid;
+    }>;
   }
 
   export interface Statement {
@@ -90,6 +111,7 @@ export namespace Batch {
       | Bundle.ApplyResult
       | Bundle.ProfileApplyResult
       | Bundle.ApplyError
+      | Bundle.ApplyStashed
     )[];
     priority: TaskPriority;
   }
@@ -127,8 +149,9 @@ export namespace Bundle {
 
   export interface StatementSuccess {
     status: "success";
-    eventId: Ulid;
+    event: Event;
     eventIdx: StreamIndex;
+    user: UserDid;
     statements: SqlStatement[];
     dependsOn: Ulid | null;
   }
@@ -155,6 +178,12 @@ export namespace Bundle {
     result: "applied";
     eventId: Ulid;
     output: (QueryResult | ApplyResultError)[];
+  }
+
+  export interface ApplyStashed {
+    result: "stashed";
+    eventId: Ulid;
+    dependsOn: Ulid;
   }
 
   export interface ApplyError {
