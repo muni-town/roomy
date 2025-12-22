@@ -18,12 +18,12 @@
   import { decodeTime } from "ulidx";
   import { onNavigate } from "$app/navigation";
   import type { MessagingState } from "./TimelineView.svelte";
-  import type { Did, Ulid } from "$lib/schema";
+  import type { Ulid, UserDid } from "$lib/schema";
 
   export type Message = {
     id: Ulid;
     content: string;
-    authorDid: Did | null;
+    authorDid: UserDid | null;
     authorName: string | null;
     authorHandle: string | null;
     authorAvatar: string | null;
@@ -34,7 +34,7 @@
     masqueradeAuthorAvatar: string | null;
     mergeWithPrevious: boolean | null;
     replyTo: Ulid[];
-    reactions: { reaction: string; userId: string; userName: string }[];
+    reactions: { reaction: string; userId: UserDid; userName: string }[];
     media: {
       uri: string;
       mimeType: string;
@@ -89,13 +89,13 @@
         'masqueradeAuthorHandle', oau.handle,
         'reactions', (
           select json_group_array(json_object(
-            'reaction', ed.payload,
-            'userId', ed.head,
+            'reaction', rc.reaction,
+            'userId', rc.user,
             'userName', i.name
           ))
-          from edges ed
-          join comp_info i on i.entity = ed.head
-          where ed.tail = e.id and ed.label = 'reaction'
+          from comp_reaction rc
+          join comp_info i on i.entity = rc.user
+          where rc.entity = e.id 
         ),
         'media', (
           select json_group_array(json_object(
