@@ -7,7 +7,7 @@ import {
   newUlid,
   StreamIndex,
   type,
-  type UserDid,
+  UserDid,
   type Event,
 } from "$lib/schema";
 import { encode } from "@atcute/cbor";
@@ -161,6 +161,7 @@ export class ConnectedStream {
 
           const events = parseEvents(result.Ok);
           this.eventChannel.push({
+            status: 'events',
             batchId: newUlid(),
             streamId: this.id as StreamDid,
             events,
@@ -193,6 +194,7 @@ export class ConnectedStream {
 
           const events = parseEvents(result.Ok);
           this.eventChannel.push({
+            status: 'events',
             batchId: newUlid(),
             streamId: this.id as StreamDid,
             events,
@@ -255,7 +257,7 @@ export function parseEvents(rows: SqlRows): EncodedStreamEvent[] {
 
     return {
       idx: Number(result.idx.value) as StreamIndex,
-      user: result.user!.value,
+      user: UserDid.assert(result.user!.value),
       payload: result.payload?.value,
     };
   });
