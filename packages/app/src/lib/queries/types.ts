@@ -1,13 +1,12 @@
-import type { Handle, DidStream } from "$lib/workers/types";
-import type { Did } from "@atproto/api";
+import type { Handle, StreamDid, UserDid } from "$lib/schema";
 
 export type SpaceMeta = {
-  id: DidStream;
+  id: StreamDid;
   backfill_status: "loading" | "idle" | "error";
   joined?: boolean;
   name?: string;
   avatar?: string;
-  handle_account?: Did;
+  handle_account?: UserDid;
   handle?: Handle;
   description?: string;
   permissions: [string, "read" | "post" | "admin"][];
