@@ -51,7 +51,7 @@
   const scrollToMessage = getContext("scrollToMessage") as (id: string) => void;
 </script>
 
-{#if context.kind === "replying" || (context.kind === "commenting" && context.comment.snippet)}
+{#if context.kind !== "commenting" || (context.kind === "commenting" && context.comment.snippet)}
   <Button.Root
     onclick={() => {
       if (context.kind === "replying") {
@@ -75,6 +75,20 @@
       </div>
       <div class="line-clamp-1 md:basis-auto overflow-hidden italic">
         {context.comment.snippet}
+      </div>
+    {:else if context.kind === "threading"}
+      <div class="flex md:basis-auto gap-2 items-center shrink-0">
+        <IconHeroiconsChatBubbleBottomCenterText width="12px" height="12px" />
+        <span
+          class="font-medium hidden text-ellipsis text-accent-800 dark:text-accent-300"
+          aria-hidden="false"
+          aria-label="Commenting on"
+        >
+          Comment
+        </span>
+      </div>
+      <div class="line-clamp-1 md:basis-auto overflow-hidden italic">
+        {context.selectedMessages[0]?.content}
       </div>
     {/if}
   </Button.Root>
