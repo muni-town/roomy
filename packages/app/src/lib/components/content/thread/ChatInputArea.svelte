@@ -100,6 +100,9 @@
     }
   }
 
+  /** Needs to be called in an anonymous function to preserve messagingStateManager.this binding
+   * see https://svelte.dev/docs/svelte/$state#Classes
+   */
   async function handleCreateThread() {
     if (!spaceId) return;
     const state = messagingState.current;
@@ -112,19 +115,12 @@
       spaceId,
       parentRoomId: current.roomId,
       kind: "thread",
-    });
-
-    await backend.sendEvent(spaceId, {
-      id: newUlid(),
-      room: threadId,
-      variant: {
-        $type: "space.roomy.common.setInfo.v0",
-        name: { $type: "space.roomy.defs#set", value: threadName },
-        description: { $type: "space.roomy.defs#ignore" },
-        avatar: { $type: "space.roomy.defs#ignore" },
+      info: {
+        name: threadName,
       },
     });
 
+    // move selected messages into thread
     for (const message of state.selectedMessages) {
       await backend.sendEvent(spaceId, {
         id: newUlid(),
@@ -135,6 +131,12 @@
         },
       });
     }
+
+    messagingState.set({
+      kind: "normal",
+      input: "",
+      files: [],
+    });
 
     navigate({ space: page.params.space, object: threadId });
   }
@@ -366,11 +368,14 @@
           </div>
         {/if}
 
-        <div class="flex w-full pl-2 gap-2">
+        <div class="flex w-full gap-2">
           {#if state.kind === "threading"}
-            <form onsubmit={handleCreateThread} class="flex w-full gap-2">
+            <form
+              onsubmit={() => handleCreateThread()}
+              class="flex w-full gap-2"
+            >
               <label for="thread-name" class="pl-4 py-2 text-xs font-medium"
-                >Thread name (optional):</label
+                >Thread name:</label
               >
               <Input
                 disabled={isSendingMessage}
