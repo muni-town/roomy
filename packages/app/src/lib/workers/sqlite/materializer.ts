@@ -4,18 +4,19 @@ import { sql } from "$lib/utils/sqlTemplate";
 import type { SqlStatement } from "./types";
 import {
   type Event,
-  type Did,
   type EventVariant,
   type EventType,
   fromBytes,
   type Ulid,
+  UserDid,
+  StreamDid,
 } from "$lib/schema";
 
 /** SQL mapping for each event variant */
 const materializers: {
   [K in EventType]: (opts: {
-    streamId: Did;
-    user: Did;
+    streamId: StreamDid;
+    user: UserDid;
     event: Event<K>;
     data: EventVariant<K>;
   }) => Promise<SqlStatement[]>;
