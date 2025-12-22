@@ -12,9 +12,10 @@
   import IconTablerNeedleThread from "~icons/tabler/needle-thread";
   import IconTablerEdit from "~icons/tabler/edit";
   import IconTablerTrash from "~icons/tabler/trash";
-  import { backend, backendStatus } from "$lib/workers";
+  import { backendStatus } from "$lib/workers";
   import { current } from "$lib/queries";
-  import { newUlid } from "$lib/schema";
+  import { addReaction } from "$lib/mutations/reaction";
+  import { deleteMessage } from "$lib/mutations/message";
 
   let {
     editMessage,
@@ -45,25 +46,17 @@
         message.authorDid == backendStatus.authState.did),
   );
 
-  async function deleteMessage() {
+  async function deleteCurrentMessage() {
     const spaceId = current.joinedSpace?.id;
-    if (!spaceId) return;
+    if (!spaceId || !current.roomId) return;
     if (!canEditAndDelete) return;
-    await backend.sendEvent(spaceId, {
-      ulid: newUlid(),
-      parent: message.id,
-      variant: {
-        kind: "space.roomy.room.deleteMessage.v0",
-        data: {
-          reason: undefined,
-        },
-      },
-    });
+    await deleteMessage(spaceId, current.roomId, message.id);
   }
 
   function onEmojiPick(emoji: string) {
     const spaceId = current.joinedSpace?.id;
-    if (!spaceId) return;
+    console.log("emoji pick", emoji, spaceId, current.roomId);
+    if (!spaceId || !current.roomId) return;
 
     // If we haven't already made this reaction to this post.
     if (
@@ -71,17 +64,7 @@
         (x) => x.userId == current.did && x.reaction == emoji,
       )
     ) {
-      backend.sendEvent(spaceId, {
-        ulid: newUlid(),
-        parent: current.roomId,
-        variant: {
-          kind: "space.roomy.room.addReaction.v0",
-          data: {
-            reactionTo: message.id,
-            reaction: emoji,
-          },
-        },
-      });
+      addReaction(spaceId, current.roomId, message.id, emoji);
     }
     isEmojiToolbarPickerOpen = false;
     isEmojiDrawerPickerOpen = false;
@@ -171,7 +154,7 @@
     {/if}
     {#if canEditAndDelete}
       <Button
-        onclick={() => deleteMessage()}
+        onclick={() => deleteCurrentMessage()}
         class="dz-join-item dz-btn dz-btn-error w-full"
       >
         <IconTablerTrash />
@@ -242,7 +225,7 @@
     {#if canEditAndDelete}
       <Tooltip tip="Delete Message">
         <Toolbar.Button
-          onclick={deleteMessage}
+          onclick={deleteCurrentMessage}
           class={[
             buttonVariants({ variant: "ghost", size: "iconSm" }),
             "backdrop-blur-none",
