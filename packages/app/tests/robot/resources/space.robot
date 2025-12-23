@@ -199,7 +199,7 @@ Create Space With Name
     ...                    content: { mimeType: 'text/markdown', content: new TextEncoder().encode('Welcome to your new Roomy space!') }
     ...                }}});
     ...            batch.push({ ulid: newUlid(), parent: messageId,
-    ...                variant: { kind: 'space.roomy.message.overrideMeta.v0', data: {
+    ...                variant: { kind: 'space.roomy.room.overrideMessageMeta.v0', data: {
     ...                    author: spaceId, timestamp: BigInt(Date.now())
     ...                }}});
     ...            // Send batch

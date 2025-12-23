@@ -270,7 +270,7 @@
             ulid: newUlid(),
             parent: messageId,
             variant: {
-              kind: "space.roomy.message.overrideMeta.v0",
+              kind: "space.roomy.room.overrideMessageMeta.v0",
               data: {
                 author,
                 timestamp: BigInt(
