@@ -426,6 +426,19 @@
                 bind:ref={messageInputEl}
                 value={state.input}
                 oninput={(e) => (messagingState.input = e.currentTarget.value)}
+                onpaste={(e) => {
+                  const items = e.clipboardData?.items;
+                  if (!items) return;
+
+                  for (const item of Array.from(items)) {
+                    if (!item.type.startsWith("image/") && !item.type.startsWith("video/"))
+                      continue;
+                    const file = item.getAsFile();
+                    if (!file) continue;
+                    e.preventDefault();
+                    processImageFile(file);
+                  }
+                }}
                 placeholder="Send a message..."
                 class="w-full font-normal text-base-800 dark:text-base-200 disabled:opacity-50"
               />
