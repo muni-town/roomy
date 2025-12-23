@@ -32,7 +32,6 @@ import type {
 import { ensureEntity } from "../sqlite/materializer";
 import { UserDid, parseEvent, type StreamDid, type Event } from "$lib/schema";
 import { decode } from "@atcute/cbor";
-import { modules } from "./modules";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -414,13 +413,10 @@ class WorkerSupervisor {
       },
       fetchEvents: async (streamId, offset, limit) =>
         this.client.fetchEvents(streamId, offset, limit),
-      previewSpace: async (_streamId) => {
+      fetchRoom: async (streamId, roomId, end) => {
         await this.sqlite.untilReady;
-        // TODO: Replace with partial loads of space.
-
-        return new Promise(() => {
-          name: "test";
-        });
+        console.log("fetching room");
+        return await this.client.fetchRoom(streamId, roomId, end);
       },
       uploadToPds: async (bytes, opts) => {
         return this.client.uploadToPDS(bytes, opts);

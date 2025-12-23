@@ -15,7 +15,15 @@ import { Deferred } from "$lib/utils/deferred";
 import { AsyncChannel } from "../asyncChannel";
 import type { StreamConnectionStatus, ConnectionStates } from "./types";
 import { ConnectedStream, parseEvents } from "./stream";
-import { Did, UserDid, Handle, type Event, StreamDid, type } from "$lib/schema";
+import {
+  Did,
+  UserDid,
+  Handle,
+  type Event,
+  StreamDid,
+  type,
+  Ulid,
+} from "$lib/schema";
 import { encode } from "@atcute/cbor";
 import { modules } from "./modules";
 
@@ -402,6 +410,7 @@ export class Client {
               );
             }
           }
+          errors.push(e);
 
           // should create stream on retry
         } else {
@@ -452,6 +461,20 @@ export class Client {
       start,
     });
     const events = parseEvents(resp);
+    return events;
+  }
+
+  async fetchRoom(streamId: StreamDid, roomId: Ulid, end?: StreamIndex) {
+    await this.#leafAuthenticated.promise;
+    await this.#connected.promise;
+    if (this.#streamConnection.status !== "connected")
+      throw new Error("Stream not connected");
+
+    const stream = this.#streamConnection.streams.get(streamId);
+    if (!stream) throw new Error("Could not find stream in connected streams");
+    const ROOM_FETCH_BATCH_SIZE = 200;
+    const events = await stream.fetchRoom(roomId, ROOM_FETCH_BATCH_SIZE, end);
+
     return events;
   }
 

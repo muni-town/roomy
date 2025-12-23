@@ -8,7 +8,7 @@ import type { BlobRef } from "@atproto/lexicon";
 import type { Deferred } from "$lib/utils/deferred";
 import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
 import type { ConnectedStream } from "./stream";
-import type { StreamDid, UserDid, Event, Handle } from "$lib/schema";
+import type { StreamDid, UserDid, Event, Handle, Ulid } from "$lib/schema";
 
 export interface BackendStatus {
   authState: ReactiveAuthState;
@@ -40,7 +40,11 @@ export type BackendInterface = {
     offset: number,
     limit: number,
   ): Promise<EncodedStreamEvent[]>;
-  previewSpace(streamId: StreamDid): Promise<{ name: string }>;
+  fetchRoom(
+    streamId: StreamDid,
+    roomId: Ulid,
+    end?: StreamIndex,
+  ): Promise<EncodedStreamEvent[]>;
   setActiveSqliteWorker(port: MessagePort): Promise<void>;
   pauseSubscription(streamId: StreamDid): Promise<void>;
   unpauseSubscription(streamId: StreamDid): Promise<void>;
