@@ -96,6 +96,12 @@ const spaceModuleDef: BasicModule = {
     create table if not exists metadata_events (
       idx integer primary key
     );
+    
+    create table if not exists room_events (
+      idx integer primary key,
+      room text not null
+    );
+    create index if not exists room_events_room_idx on room_events(room);
   `.sql,
 
   authorizer: sql`
@@ -151,6 +157,11 @@ const spaceModuleDef: BasicModule = {
       'space.roomy.space.overrideUserMeta.v0',
       'space.roomy.room.setKind.v0'
     );
+    
+    -- Track room membership for events
+    insert or ignore into room_events (idx, room)
+    select idx, drisl_extract(payload, '.room') from event
+    where drisl_extract(payload, '.room') is not null;
   `.sql,
 
   queries: [
@@ -182,6 +193,21 @@ const spaceModuleDef: BasicModule = {
         limit $limit;
       `,
       params: [],
+    },
+    {
+      name: "room",
+      sql: `
+        select e.idx, e.user, e.payload
+        from events.events e
+        inner join room_events r on e.idx = r.idx
+        where r.room = $room and ($end is null or e.idx < $end)
+        order by e.idx desc
+        limit $limit;
+      `,
+      params: [
+        { kind: "text", name: "room", optional: false },
+        { kind: "integer", name: "end", optional: true },
+      ],
     },
   ],
 };

@@ -1,4 +1,4 @@
-import type { LeafClient, SqlRows } from "@muni-town/leaf-client";
+import type { LeafClient, LeafQuery, SqlRows } from "@muni-town/leaf-client";
 import type { Batch, EncodedStreamEvent, TaskPriority } from "../types";
 import type { AsyncChannel } from "../asyncChannel";
 import {
@@ -8,6 +8,7 @@ import {
   type,
   UserDid,
   type Event,
+  Ulid,
 } from "$lib/schema";
 import { encode } from "@atcute/cbor";
 import { Deferred } from "$lib/utils/deferred";
@@ -200,6 +201,25 @@ export class ConnectedStream {
     this.backfillStatus = { status: "started" };
   }
 
+  async fetchRoom(
+    roomId: Ulid,
+    limit: number,
+    end?: StreamIndex,
+  ): Promise<EncodedStreamEvent[]> {
+    const params: LeafQuery["params"] = {
+      room: { $type: "muni.town.sqliteValue.text", value: roomId },
+    };
+    if (end)
+      params["end"] = { $type: "muni.town.sqliteValue.integer", value: end };
+    const resp = await this.leaf?.query(this.id, {
+      name: "room",
+      params,
+      limit,
+    });
+    const events = parseEvents(resp);
+    return events;
+  }
+
   get doneBackfilling(): Promise<void> {
     return this.#doneBackfilling.promise;
   }
@@ -212,7 +232,7 @@ export class ConnectedStream {
   }
 
   async fetchEvents(
-    start: number,
+    start: StreamIndex,
     limit: number,
   ): Promise<EncodedStreamEvent[]> {
     const resp = await this.leaf?.query(this.id, {
