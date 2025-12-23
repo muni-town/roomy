@@ -120,7 +120,7 @@
       variant: {
         $type: "space.roomy.room.editMessage.v0",
         target: message.id,
-        parent: message.lastEdit,
+        previous: message.lastEdit,
         body: {
           mimeType: "text/x-dmp-patch",
           data: toBytes(new TextEncoder().encode(contentPatch)),

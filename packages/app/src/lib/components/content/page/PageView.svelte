@@ -60,7 +60,7 @@
       room: Ulid.assert(page.params.object),
       variant: {
         $type: "space.roomy.room.editPage.v0",
-        parent: latestEditId || editEventId,
+        previous: latestEditId,
         body: {
           mimeType: "text/x-dmp-patch",
           data: toBytes(new TextEncoder().encode(patch)),

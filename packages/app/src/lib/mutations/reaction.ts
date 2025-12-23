@@ -30,7 +30,7 @@ export async function removeReaction(
     variant: {
       $type: "space.roomy.room.removeReaction.v0",
       target: messageId,
-      parent: reactionId,
+      previous: reactionId,
     },
   });
 }

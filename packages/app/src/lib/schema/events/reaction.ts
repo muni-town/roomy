@@ -19,7 +19,7 @@ export const reactionRemove = type({
   /** The message the reaction was on */
   target: Ulid,
   /** The addReaction event */
-  parent: Ulid,
+  "previous?": Ulid,
 });
 
 // Bridged reaction add (for external platforms like Discord)
@@ -39,7 +39,7 @@ export const reactionBridgedRemove = type({
   /** The message the reaction was on */
   target: Ulid,
   /** The addBridgedReaction event */
-  parent: Ulid,
+  "previous?": Ulid,
   /** The external user ID whose reaction is being removed */
   reactingUser: UserDid,
 });
