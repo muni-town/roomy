@@ -267,7 +267,10 @@ export class Client {
       module: modules.space,
     });
 
-    await stream.subscribeMetadata();
+    const latest = await stream.subscribeMetadata();
+    await stream.unsubscribeMetadata();
+    stream.subscribeEvents(latest);
+
     this.#streamConnection.streams.set(streamId, stream);
 
     console.log("Successfully connected to stream");
@@ -288,7 +291,9 @@ export class Client {
       module: modules.space,
     });
 
-    await newStream.subscribeMetadata();
+    const latest = await newStream.subscribeMetadata();
+    await newStream.unsubscribeMetadata();
+    newStream.subscribeEvents(latest);
 
     console.log("Successfully created space stream:", newStream.id);
 
@@ -363,7 +368,7 @@ export class Client {
           eventChannel,
           module: modules.personal,
         });
-        stream.subscribe();
+        stream.subscribeEvents();
       } catch (e) {
         if ((e as any).error === "RecordNotFound") {
           console.log(
@@ -464,7 +469,7 @@ export class Client {
     return events;
   }
 
-  async fetchRoom(streamId: StreamDid, roomId: Ulid, end?: StreamIndex) {
+  async lazyLoadRoom(streamId: StreamDid, roomId: Ulid, end?: StreamIndex) {
     await this.#leafAuthenticated.promise;
     await this.#connected.promise;
     if (this.#streamConnection.status !== "connected")
@@ -472,10 +477,8 @@ export class Client {
 
     const stream = this.#streamConnection.streams.get(streamId);
     if (!stream) throw new Error("Could not find stream in connected streams");
-    const ROOM_FETCH_BATCH_SIZE = 200;
-    const events = await stream.fetchRoom(roomId, ROOM_FETCH_BATCH_SIZE, end);
-
-    return events;
+    const ROOM_FETCH_BATCH_SIZE = 100;
+    await stream.lazyLoadRoom(roomId, ROOM_FETCH_BATCH_SIZE, end);
   }
 
   async uploadToPDS(
