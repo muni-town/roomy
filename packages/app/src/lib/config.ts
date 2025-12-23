@@ -1,6 +1,6 @@
 const CONFIG = {
   leafUrl: import.meta.env.VITE_LEAF_URL || "https://leaf-dev.muni.town",
-  streamNsid: import.meta.env.VITE_STREAM_NSID || "space.roomy.stream.dev",
+  streamNsid: import.meta.env.VITE_STREAM_NSID || "space.roomy.stream.personal.dev",
   streamHandleNsid:
     import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.stream.handle.dev",
   streamSchemaVersion: "2" as const,

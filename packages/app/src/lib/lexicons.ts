@@ -3,7 +3,7 @@ import { type LexiconDoc } from "@atproto/lexicon";
 export const lexicons: LexiconDoc[] = [
   {
     lexicon: 1,
-    id: "space.roomy.stream",
+    id: "space.roomy.stream.personal",
     defs: {
       main: {
         type: "record",
@@ -20,7 +20,7 @@ export const lexicons: LexiconDoc[] = [
   },
   {
     lexicon: 1,
-    id: "space.roomy.stream.dev",
+    id: "space.roomy.stream.personal.dev",
     defs: {
       main: {
         type: "record",
