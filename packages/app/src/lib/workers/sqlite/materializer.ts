@@ -618,7 +618,7 @@ const materializers: {
       delete from comp_reaction
       where
         entity = ${data.target} and
-        add_event = ${data.parent}
+        add_event = ${data.previous}
     `,
     ];
   },
@@ -754,12 +754,12 @@ export async function materialize(
     // some types have a chain of dependencies, in which case 'parent' is most recent one.
     // others just have a target
     const dependsOn = WithParent.allows(event.variant)
-      ? event.variant.parent
+      ? event.variant.previous
       : WithTarget.allows(event.variant)
         ? event.variant.target
         : null;
 
-    return bundleSuccess(event, idx, opts.user, statements, dependsOn);
+    return bundleSuccess(event, idx, opts.user, statements, dependsOn || null);
   } catch (error) {
     console.error(`Error materializing event ${event.id}:`, error);
     return bundleError(event, error instanceof Error ? error : String(error));

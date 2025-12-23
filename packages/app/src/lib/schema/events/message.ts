@@ -19,7 +19,7 @@ export const messageEdit = type({
   /** Id of message being edited */
   target: Ulid,
   /** Id of last known edit event, or the message itself */
-  parent: Ulid,
+  "previous?": Ulid,
   /**
    * New content. If mimeType is text/x-dmp-diff, this is a
    * diff-match-patch diff to apply to the previous content.
