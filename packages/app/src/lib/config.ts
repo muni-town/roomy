@@ -3,8 +3,8 @@ const CONFIG = {
   streamNsid: import.meta.env.VITE_STREAM_NSID || "space.roomy.stream.personal.dev",
   streamHandleNsid:
     import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.stream.handle.dev",
-  streamSchemaVersion: "2" as const,
-  databaseSchemaVersion: "2" as const,
+  streamSchemaVersion: "3" as const,
+  databaseSchemaVersion: "3" as const,
   leafServerDid: "",
   atprotoOauthScope: "",
   testingAppPassword: import.meta.env.VITE_TESTING_APP_PASSWORD,
