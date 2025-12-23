@@ -693,17 +693,6 @@ const materializers: {
 
 // UTILS
 
-const dependentEvents = [
-  "space.roomy.room.editMessage.v0",
-  "space.roomy.room.editPage.v0",
-  "space.roomy.room.deleteMessage.v0",
-  "space.roomy.room.addReaction.v0",
-  "space.roomy.room.addBridgedReaction.v0",
-  "space.roomy.room.removeReaction.v0",
-  "space.roomy.room.removeBridgedReaction.v0",
-  "space.roomy.media.delete.v0",
-];
-
 /**
  * Helper to wrap materializer logic and automatically create success/error bundles.
  * This eliminates the repetitive bundle-wrapping code in each materializer.
