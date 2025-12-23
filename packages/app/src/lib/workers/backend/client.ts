@@ -384,24 +384,24 @@ export class Client {
 
           await personalStream.setIdCache(this.agent.assertDid, stream.id);
         } else if ((e as Error).message.includes("Stream does not exist")) {
-          console.log("Stream does not exist");
-
-          // delete record on PDS
-          const deleteResponse = await this.agent.com.atproto.repo.deleteRecord(
-            {
-              collection: CONFIG.streamNsid,
-              repo: this.agent.assertDid,
-              rkey: CONFIG.streamSchemaVersion,
-            },
-          );
-          if (!deleteResponse.success) {
-            errors.push(
-              new Error("Could not delete PDS record for personal stream", {
-                cause: JSON.stringify(deleteResponse.data),
-              }),
-            );
+          console.warn("Stream does not exist");
+          if (import.meta.env.DEV) {
+            console.warn("Deleting stream record off PDS (dev only)");
+            // delete record on PDS
+            const deleteResponse =
+              await this.agent.com.atproto.repo.deleteRecord({
+                collection: CONFIG.streamNsid,
+                repo: this.agent.assertDid,
+                rkey: CONFIG.streamSchemaVersion,
+              });
+            if (!deleteResponse.success) {
+              errors.push(
+                new Error("Could not delete PDS record for personal stream", {
+                  cause: JSON.stringify(deleteResponse.data),
+                }),
+              );
+            }
           }
-          errors.push(e);
 
           // should create stream on retry
         } else {
