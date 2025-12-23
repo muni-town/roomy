@@ -621,6 +621,7 @@ class SqliteWorkerSupervisor {
       event: Event;
       streamId: StreamDid;
       idx: StreamIndex;
+      user: UserDid;
     },
   ) {
     await executeQuery({ sql: `savepoint bundle${bundleId}` });
@@ -650,9 +651,10 @@ class SqliteWorkerSupervisor {
     // insert event to events table
     if (eventMeta) {
       const insertEvent = sql`
-        INSERT INTO events (idx, stream_id, entity_ulid, payload, applied)
-        VALUES (${eventMeta.idx}, ${eventMeta.streamId}, ${eventMeta.event.id}, ${JSON.stringify(eventMeta.event)}, ${hadError ? 0 : 1})
-      `;
+        INSERT INTO events (idx, stream_id, user, entity_ulid, payload, applied)
+        VALUES (${eventMeta.idx}, ${eventMeta.streamId}, ${eventMeta.user}, ${eventMeta.event.id}, ${JSON.stringify(eventMeta.event)}, ${hadError ? 0 : 1})
+        ON CONFLICT DO NOTHING
+        `;
       queryResults.push(
         await executeQuery(insertEvent).catch((e) => {
           return {
@@ -747,7 +749,12 @@ class SqliteWorkerSupervisor {
     const queryResults = await this.runBundleStatements(
       bundleId,
       bundle.statements,
-      { event: bundle.event, streamId, idx: bundle.eventIdx },
+      {
+        event: bundle.event,
+        streamId,
+        idx: bundle.eventIdx,
+        user: bundle.user,
+      },
     );
 
     // Track that we applied this
