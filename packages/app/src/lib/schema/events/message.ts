@@ -66,7 +66,7 @@ export const events = {
     type: messageDelete,
     description: "Delete a message",
   },
-  "space.roomy.message.overrideMeta.v0": {
+  "space.roomy.room.overrideMessageMeta.v0": {
     type: messageOverrideMeta,
     description:
       "Change the author or timestamp of a native message. Intended for bridge puppeting.",
