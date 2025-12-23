@@ -135,7 +135,7 @@ export class ConnectedStream {
   }
 
   async subscribe(start: number = 0) {
-    this.unsubscribeFn = await this.leaf.subscribe(
+    this.unsubscribeFn = await this.leaf.subscribeEvents(
       this.id,
       {
         name: "events",
@@ -145,12 +145,12 @@ export class ConnectedStream {
       },
       async (result) => {
         if ("Ok" in result) {
-          // TODO: WE don't really know at this point that backfiling is done, so we need to refine
-          // this later with a way to get from the server that we have finished.
-          this.backfillStatus = { status: "finished" };
-          this.#doneBackfilling.resolve();
+          if (!result.Ok.has_more) {
+            this.backfillStatus = { status: "finished" };
+            this.#doneBackfilling.resolve();
+          }
 
-          const events = parseEvents(result.Ok);
+          const events = parseEvents(result.Ok.rows);
           this.eventChannel.push({
             status: "events",
             batchId: newUlid(),
@@ -168,7 +168,7 @@ export class ConnectedStream {
   }
 
   async subscribeMetadata(start: number = 0) {
-    this.unsubscribeFn = await this.leaf.subscribe(
+    this.unsubscribeFn = await this.leaf.subscribeEvents(
       this.id,
       {
         name: "metadata",
@@ -178,12 +178,12 @@ export class ConnectedStream {
       },
       async (result) => {
         if ("Ok" in result) {
-          // TODO: WE don't really know at this point that backfiling is done, so we need to refine
-          // this later with a way to get from the server that we have finished.
-          this.backfillStatus = { status: "finished" };
-          this.#doneBackfilling.resolve();
+          if (!result.Ok.has_more) {
+            this.backfillStatus = { status: "finished" };
+            this.#doneBackfilling.resolve();
+          }
 
-          const events = parseEvents(result.Ok);
+          const events = parseEvents(result.Ok.rows);
           this.eventChannel.push({
             status: "events",
             batchId: newUlid(),

@@ -151,8 +151,8 @@ importers:
         specifier: ^1.2.23
         version: 1.2.23
       '@muni-town/leaf-client':
-        specifier: 0.1.0-alpha.14
-        version: 0.1.0-alpha.14
+        specifier: 0.1.0-alpha.15
+        version: 0.1.0-alpha.15
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -964,8 +964,8 @@ packages:
   '@mixmark-io/domino@2.2.0':
     resolution: {integrity: sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw==}
 
-  '@muni-town/leaf-client@0.1.0-alpha.14':
-    resolution: {integrity: sha512-wx8E587w6AeafG8wbWxtPUjiyNWlj4S1lfJcxvWKxBn6jLSWlslyjZ9rzNE3rP1TMOx5dTvL/Ryg5V0LnHwa3Q==}
+  '@muni-town/leaf-client@0.1.0-alpha.15':
+    resolution: {integrity: sha512-FgTj0R4LcSTbCLanmvAP3E7oJFfSeUfzmZvoYmsMG0Qh6AL9W/0nxX4fktnW17dGSABto4JW53fEDKKLMTYwiA==}
     hasBin: true
 
   '@noble/ciphers@1.3.0':
@@ -4839,7 +4839,7 @@ snapshots:
 
   '@mixmark-io/domino@2.2.0': {}
 
-  '@muni-town/leaf-client@0.1.0-alpha.14':
+  '@muni-town/leaf-client@0.1.0-alpha.15':
     dependencies:
       '@atcute/cbor': 2.2.8
       '@atcute/cid': 2.2.6
