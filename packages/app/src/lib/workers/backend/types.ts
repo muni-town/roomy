@@ -40,11 +40,11 @@ export type BackendInterface = {
     offset: number,
     limit: number,
   ): Promise<EncodedStreamEvent[]>;
-  fetchRoom(
+  lazyLoadRoom(
     streamId: StreamDid,
     roomId: Ulid,
     end?: StreamIndex,
-  ): Promise<EncodedStreamEvent[]>;
+  ): Promise<void>;
   setActiveSqliteWorker(port: MessagePort): Promise<void>;
   pauseSubscription(streamId: StreamDid): Promise<void>;
   unpauseSubscription(streamId: StreamDid): Promise<void>;

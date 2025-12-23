@@ -28,14 +28,19 @@ export class ConnectedStream {
   user: UserDid;
   leaf: LeafClient;
   id: StreamDid;
-  #doneBackfilling = new Deferred();
+  /** oldest 'end' in query for each room */
+  lazyEndIdx: Map<Ulid, StreamIndex> = new Map();
   backfillStatus:
     | { status: "pending" }
     | { status: "started" }
     | { status: "finished" }
     | { status: "errored"; error: string } = { status: "pending" };
   eventChannel: AsyncChannel<Batch.Events>;
-  unsubscribeFn: (() => Promise<void>) | null = null;
+  unsubscribeEventsFn: (() => Promise<void>) | null = null;
+  #doneBackfillingEvents = new Deferred();
+  unsubscribeMetadataFn: (() => Promise<void>) | null = null;
+  // returns the latest event
+  #doneBackfillingMetadata = new Deferred<StreamIndex>();
 
   private constructor(opts: {
     user: UserDid;
@@ -135,8 +140,8 @@ export class ConnectedStream {
     }
   }
 
-  async subscribe(start: number = 0) {
-    this.unsubscribeFn = await this.leaf.subscribeEvents(
+  async subscribeEvents(start: number = 0) {
+    this.unsubscribeEventsFn = await this.leaf.subscribeEvents(
       this.id,
       {
         name: "events",
@@ -148,7 +153,7 @@ export class ConnectedStream {
         if ("Ok" in result) {
           if (!result.Ok.has_more) {
             this.backfillStatus = { status: "finished" };
-            this.#doneBackfilling.resolve();
+            this.#doneBackfillingEvents.resolve();
           }
 
           const events = parseEvents(result.Ok.rows);
@@ -166,10 +171,12 @@ export class ConnectedStream {
       },
     );
     this.backfillStatus = { status: "started" };
+    return this.#doneBackfillingEvents.promise;
   }
 
   async subscribeMetadata(start: number = 0) {
-    this.unsubscribeFn = await this.leaf.subscribeEvents(
+    let latest = 0 as StreamIndex;
+    this.unsubscribeMetadataFn = await this.leaf.subscribeEvents(
       this.id,
       {
         name: "metadata",
@@ -179,11 +186,6 @@ export class ConnectedStream {
       },
       async (result) => {
         if ("Ok" in result) {
-          if (!result.Ok.has_more) {
-            this.backfillStatus = { status: "finished" };
-            this.#doneBackfilling.resolve();
-          }
-
           const events = parseEvents(result.Ok.rows);
           this.eventChannel.push({
             status: "events",
@@ -192,6 +194,16 @@ export class ConnectedStream {
             events,
             priority: "priority",
           });
+
+          const latestEvent = events.sort((a, b) => (a.idx < b.idx ? 1 : -1))[0]
+            ?.idx;
+          latest = latestEvent || latest;
+
+          if (!result.Ok.has_more) {
+            this.backfillStatus = { status: "finished" };
+            console.log("Done backfilling metadata", latest);
+            this.#doneBackfillingMetadata.resolve(latest);
+          }
         } else {
           console.error("Subscribed query error:", result.Err);
           this.backfillStatus = { status: "errored", error: result.Err };
@@ -199,6 +211,18 @@ export class ConnectedStream {
       },
     );
     this.backfillStatus = { status: "started" };
+    return this.#doneBackfillingMetadata.promise;
+  }
+
+  async unsubscribeEvents() {
+    if (!this.unsubscribeEventsFn) throw new Error("Not subscribed to events");
+    await this.unsubscribeEventsFn();
+  }
+
+  async unsubscribeMetadata() {
+    if (!this.unsubscribeMetadataFn)
+      throw new Error("Not subscribed to metadata");
+    await this.unsubscribeMetadataFn();
   }
 
   async fetchRoom(
@@ -220,14 +244,47 @@ export class ConnectedStream {
     return events;
   }
 
+  /** Fetch and apply events in a room in order of recency
+   * @param roomId room to fetch for
+   * @param limit number of events to fetch
+   * @param end fetch in descending order starting at this (most recent) index.
+   *        Defaults to fetching most recent
+   */
+  async lazyLoadRoom(roomId: Ulid, limit: number, end?: StreamIndex) {
+    // no op if has end is more recent than the lazy cursor
+    const lazyEndIdx = this.lazyEndIdx.get(roomId);
+    const alreadyFetched =
+      (!end && lazyEndIdx) || (end && lazyEndIdx && end >= lazyEndIdx);
+
+    if (alreadyFetched) return;
+
+    const oldestEnd = end || lazyEndIdx;
+    if (oldestEnd) this.lazyEndIdx.set(roomId, oldestEnd);
+
+    const events = await this.fetchRoom(roomId, limit, end);
+    // materialise
+    this.eventChannel.push({
+      status: "events",
+      batchId: newUlid(),
+      streamId: this.id as StreamDid,
+      events,
+      priority: "priority",
+    });
+
+    if (end) return;
+    // for the initial case for room load, set cursor to the most recent idx from the returned events
+    const actualEnd = events.sort((a, b) => (a.idx < b.idx ? 1 : -1))[0]?.idx;
+    if (actualEnd) this.lazyEndIdx.set(roomId, actualEnd);
+  }
+
   get doneBackfilling(): Promise<void> {
-    return this.#doneBackfilling.promise;
+    return this.#doneBackfillingEvents.promise;
   }
 
   async unsubscribe() {
-    if (this.unsubscribeFn) {
-      await this.unsubscribeFn();
-      this.unsubscribeFn = null;
+    if (this.unsubscribeEventsFn) {
+      await this.unsubscribeEventsFn();
+      this.unsubscribeEventsFn = null;
     }
   }
 
@@ -256,8 +313,6 @@ const encodedStreamEvent = type({
 });
 
 export function parseEvents(rows: SqlRows): EncodedStreamEvent[] {
-  console.log("Trying to parse rows", rows);
-
   return rows.map((row) => {
     const result = encodedStreamEvent(row);
 

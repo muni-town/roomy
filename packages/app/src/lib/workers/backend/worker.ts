@@ -413,10 +413,10 @@ class WorkerSupervisor {
       },
       fetchEvents: async (streamId, offset, limit) =>
         this.client.fetchEvents(streamId, offset, limit),
-      fetchRoom: async (streamId, roomId, end) => {
+      lazyLoadRoom: async (streamId, roomId, end) => {
         await this.sqlite.untilReady;
         console.log("fetching room");
-        return await this.client.fetchRoom(streamId, roomId, end);
+        return await this.client.lazyLoadRoom(streamId, roomId, end);
       },
       uploadToPds: async (bytes, opts) => {
         return this.client.uploadToPDS(bytes, opts);
