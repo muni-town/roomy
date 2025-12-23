@@ -34,12 +34,12 @@ export const handleError: HandleClientError = async ({
   status,
   message,
 }) => {
-  window.faro.api.pushError({
-    message: `message=${message} status=${status} ${Object.entries(event.params)
-      .map(([k, v]) => `params.${k}=${v}`)
-      .join(" ")} url=${event.url} route.id=${event.route.id}`,
-    name: "Svelte client error",
-  });
+  // window.faro.api.pushError({
+  //   message: `message=${message} status=${status} ${Object.entries(event.params)
+  //     .map(([k, v]) => `params.${k}=${v}`)
+  //     .join(" ")} url=${event.url} route.id=${event.route.id}`,
+  //   name: "Svelte client error",
+  // });
 
   if (status !== 404) {
     console.error(error, status, event, message);
