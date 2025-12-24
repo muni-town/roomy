@@ -195,8 +195,9 @@ export class ConnectedStream {
             priority: "priority",
           });
 
-          const latestEvent = events.sort((a, b) => (a.idx < b.idx ? 1 : -1))[0]
-            ?.idx;
+          const latestEvent = events
+            .map((x) => x.idx)
+            .reduce((x, y) => Math.max(x, y) as StreamIndex);
           latest = latestEvent || latest;
 
           if (!result.Ok.has_more) {
