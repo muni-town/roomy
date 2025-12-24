@@ -37,19 +37,8 @@ export const messageDelete = type({
   "reason?": "string",
 });
 
-// Change the author or timestamp of a native message. Intended for bridge puppeting.
-export const messageOverrideMeta = type({
-  $type: "'space.roomy.room.overrideMessageMeta.v0'",
-  target: Ulid,
-  author: UserDid,
-  timestamp: Timestamp,
-});
-
 // All message events
-export const messageEvent = messageCreate
-  .or(messageEdit)
-  .or(messageDelete)
-  .or(messageOverrideMeta);
+export const messageEvent = messageCreate.or(messageEdit).or(messageDelete);
 
 // Export for registry
 export const events = {
@@ -65,10 +54,5 @@ export const events = {
   "space.roomy.room.deleteMessage.v0": {
     type: messageDelete,
     description: "Delete a message",
-  },
-  "space.roomy.room.overrideMessageMeta.v0": {
-    type: messageOverrideMeta,
-    description:
-      "Change the author or timestamp of a native message. Intended for bridge puppeting.",
   },
 } as const;

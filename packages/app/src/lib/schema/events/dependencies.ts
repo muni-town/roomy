@@ -1,5 +1,5 @@
 import { type } from "../primitives";
-import { messageDelete, messageEdit, messageOverrideMeta } from "./message";
+import { messageDelete, messageEdit } from "./message";
 import {
   reactionAdd,
   reactionBridgedAdd,
@@ -17,7 +17,6 @@ export const WithParent = type.or(
 
 export const WithTarget = type.or(
   messageDelete,
-  messageOverrideMeta,
   reactionAdd,
   reactionBridgedAdd,
 );
@@ -34,7 +33,6 @@ export const dependentEventType: DependentEventType[] = [
   "space.roomy.room.editMessage.v0",
   "space.roomy.room.editPage.v0",
   "space.roomy.room.deleteMessage.v0",
-  "space.roomy.room.overrideMessageMeta.v0",
   "space.roomy.room.addReaction.v0",
   "space.roomy.room.addBridgedReaction.v0",
   "space.roomy.room.removeReaction.v0",

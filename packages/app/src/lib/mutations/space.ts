@@ -189,16 +189,12 @@ export async function createSpace(opts: {
           new TextEncoder().encode(`Welcome to your new Roomy space!`),
         ),
       },
-      extensions: [],
-    },
-  });
-  batch.push({
-    id: newUlid(),
-    room: welcomeMessageId,
-    variant: {
-      $type: "space.roomy.message.overrideMeta.v0",
-      author: spaceId,
-      timestamp: Date.now(),
+      extensions: [
+        {
+          $type: "space.roomy.extension.overrideAuthor.v0",
+          did: spaceId,
+        },
+      ],
     },
   });
 

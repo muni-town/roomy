@@ -10,14 +10,8 @@ import {
   type Ulid,
   UserDid,
   StreamDid,
-  type,
 } from "$lib/schema";
-import {
-  dependentEventType,
-  DependentEventVariant,
-  WithParent,
-  WithTarget,
-} from "$lib/schema/events/dependencies";
+import { WithParent, WithTarget } from "$lib/schema/events/dependencies";
 
 /** SQL mapping for each event variant */
 const materializers: {
@@ -568,24 +562,6 @@ const materializers: {
       `,
     ];
   },
-  "space.roomy.room.overrideMessageMeta.v0": async ({
-    streamId,
-    event,
-    data,
-  }) => {
-    // Note using the stream ID is kind of a special case for a "system" user if you want to have
-    // the space itself be able to send messages.
-    const userId = event.room || streamId;
-    return [
-      sql`
-        insert or replace into comp_override_meta (entity, author, timestamp)
-        values (
-          ${userId},
-          ${data.author},
-          ${Number(data.timestamp)}
-        )`,
-    ];
-  },
   "space.roomy.room.deleteMessage.v0": async ({ event }) => {
     if (!event.room) {
       console.warn("Missing target for message meta override.");
@@ -646,7 +622,7 @@ const materializers: {
       delete from comp_reaction
       where
         entity = ${data.target} and
-        add_event = ${data.parent}
+        add_event = ${data.previous}
     `,
     ];
   },
