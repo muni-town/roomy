@@ -242,6 +242,7 @@ export class ConnectedStream {
       limit,
     });
     const events = parseEvents(resp);
+    events.reverse();
     return events;
   }
 
@@ -274,7 +275,9 @@ export class ConnectedStream {
 
     if (end) return;
     // for the initial case for room load, set cursor to the most recent idx from the returned events
-    const actualEnd = events.sort((a, b) => (a.idx < b.idx ? 1 : -1))[0]?.idx;
+    const actualEnd = events
+      .map((x) => x.idx)
+      .reduce((a, b) => Math.max(a, b) as StreamIndex);
     if (actualEnd) this.lazyEndIdx.set(roomId, actualEnd);
   }
 
