@@ -89,16 +89,6 @@ export async function createSpace(opts: {
     },
   });
 
-  // Make this user and admin
-  batch.push({
-    id: newUlid(),
-    room: undefined,
-    variant: {
-      $type: "space.roomy.space.addAdmin.v0",
-      userId: UserDid.assert(opts.creator.did),
-    },
-  });
-
   // Create the "system" user as the space itself
   batch.push({
     id: newUlid(),
