@@ -1,7 +1,7 @@
 import { backend, backendStatus } from "$lib/workers";
 import type { Event, StreamDid, Did } from "$lib/schema";
 import { toast } from "@fuxui/base";
-import { UserDid, ignore, newUlid, set, toBytes } from "$lib/schema";
+import { ignore, newUlid, set, toBytes } from "$lib/schema";
 
 /**
  * Join a space.
@@ -96,6 +96,7 @@ export async function createSpace(opts: {
     variant: {
       $type: "space.roomy.space.overrideUserMeta.v0",
       handle: "system",
+      target: spaceId,
     },
   });
 
@@ -182,19 +183,18 @@ export async function createSpace(opts: {
     id: welcomeMessageId,
     room: welcomeThreadId,
     variant: {
-      $type: "space.roomy.room.sendMessage.v1",
+      $type: "space.roomy.room.sendMessage.v0",
       body: {
         mimeType: "text/markdown",
         data: toBytes(
           new TextEncoder().encode(`Welcome to your new Roomy space!`),
         ),
       },
-      extensions: [
-        {
-          $type: "space.roomy.extension.overrideAuthor.v0",
+      extensions: {
+        "space.roomy.extension.authorOverride.v0": {
           did: spaceId,
         },
-      ],
+      },
     },
   });
 

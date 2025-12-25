@@ -450,6 +450,7 @@ export class Client {
         );
       }
     });
+    console.log(streamId, payloads, encodedPayloads);
     await this.leaf.sendEvents(streamId, encodedPayloads);
   }
 

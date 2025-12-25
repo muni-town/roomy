@@ -8,12 +8,18 @@
   import * as zip from "@zip-js/zip-js";
   import { backend } from "$lib/workers";
   import { current } from "$lib/queries";
-  import { monotonicFactory } from "ulidx";
-  import type { EventType } from "$lib/workers/types";
   import { sql } from "$lib/utils/sqlTemplate";
   import { formatDate } from "date-fns";
+  import {
+    ulidFactory,
+    UserDid,
+    type Event,
+    type Ulid,
+    toBytes,
+  } from "$lib/schema";
+  import { decode, encode } from "@atcute/cbor";
 
-  const spaceId = $derived(current.joinedSpace?.id);
+  const currentSpaceId = $derived(current.joinedSpace?.id);
 
   let cutoffDateInput = $state("");
   let cutoffDate = $derived.by(() => {
@@ -54,8 +60,9 @@
   };
 
   async function importZip() {
-    const ulid = monotonicFactory();
+    const makeUlid = ulidFactory();
 
+    const spaceId = currentSpaceId;
     if (!spaceId) return;
     const file = files?.item(0);
     if (!file) {
@@ -65,19 +72,19 @@
     importing = true;
     stopwatch.start();
 
-    const batchSize = 500;
-    let batch: EventType[] = [];
+    const batchSize = 1000;
+    let batch: Event[] = [];
     let batchMessageCount = 0;
 
     await backend.pauseSubscription(spaceId);
 
     const existingDiscordUsers = new Set();
 
-    const existingInDb = await backend.runQuery(
+    const existingInDb = await backend.runQuery<{ did: string }>(
       sql`select did as did from comp_user where did like 'did:discord:%';`,
     );
     for (const row of existingInDb.rows || []) {
-      existingDiscordUsers.add(row.id);
+      existingDiscordUsers.add(row.did);
     }
 
     try {
@@ -110,7 +117,7 @@
           name: string;
           discordParentId?: string;
           topic?: string;
-          roomyId: string;
+          roomyId: Ulid;
         }
       > = new Map();
 
@@ -123,7 +130,7 @@
                 ? "channel"
                 : "category",
             name: entry.channel.category,
-            roomyId: newUlid(),
+            roomyId: makeUlid(),
           });
         }
 
@@ -133,52 +140,46 @@
           kind:
             entry.channel.type == "GuildPublicThread" ? "thread" : "channel",
           name: entry.channel.name,
-          roomyId: existingChannelInfo?.roomyId || newUlid(),
+          roomyId: existingChannelInfo?.roomyId || makeUlid(),
           topic: entry.channel.topic,
         });
       }
 
       for (const room of rooms.values()) {
-        const roomyParentId =
-          room.discordParentId && rooms.get(room.discordParentId)?.roomyId;
+        const roomyParentId = room.discordParentId
+          ? rooms.get(room.discordParentId)?.roomyId
+          : undefined;
         batch.push({
-          ulid: room.roomyId,
-          parent: roomyParentId,
+          id: room.roomyId,
+          room: roomyParentId,
           variant: {
-            kind: "space.roomy.room.createRoom.v0",
-            data: undefined,
+            $type: "space.roomy.room.createRoom.v0",
           },
         });
         batch.push({
-          ulid: newUlid(),
-          parent: room.roomyId,
+          id: makeUlid(),
+          room: room.roomyId,
           variant: {
-            kind: "space.roomy.common.setInfo.v0",
-            data: {
-              name: {
-                set: room.name,
-              },
-              avatar: { ignore: undefined },
-              description: room.topic
-                ? { set: room.topic }
-                : { ignore: undefined },
+            $type: "space.roomy.common.setInfo.v0",
+            name: {
+              $type: "space.roomy.defs#set",
+              value: room.name,
             },
+            avatar: { $type: "space.roomy.defs#ignore" },
+            description: { $type: "space.roomy.defs#ignore" },
           },
         });
         batch.push({
-          ulid: newUlid(),
-          parent: room.roomyId,
+          id: makeUlid(),
+          room: room.roomyId,
           variant: {
-            kind: "space.roomy.room.setKind.v0",
-            data: {
-              kind:
-                room.kind == "category"
-                  ? "category"
-                  : room.kind == "channel"
-                    ? "channel"
-                    : "thread",
-              data: undefined,
-            },
+            $type: "space.roomy.room.setKind.v0",
+            kind:
+              room.kind == "category"
+                ? "category"
+                : room.kind == "channel"
+                  ? "channel"
+                  : "thread",
           },
         });
       }
@@ -198,18 +199,25 @@
             continue;
           }
 
-          const messageId = newUlid();
+          const author = UserDid.assert(`did:discord:${message.author.id}`);
+
+          const messageId = makeUlid();
           batch.push({
-            ulid: messageId,
-            parent: roomId,
+            id: messageId,
+            room: roomId,
             variant: {
-              kind: "space.roomy.room.sendMessage.v0",
-              data: {
-                content: {
-                  mimeType: "text/markdown",
-                  content: new TextEncoder().encode(message.content),
+              $type: "space.roomy.room.sendMessage.v0",
+              body: {
+                mimeType: "text/markdown",
+                data: toBytes(new TextEncoder().encode(message.content)),
+              },
+              extensions: {
+                "space.roomy.extension.authorOverride.v0": {
+                  did: author,
                 },
-                replyTo: undefined,
+                "space.roomy.extension.timestampOverride.v0": {
+                  timestamp: Math.round(new Date(message.timestamp).getTime()),
+                },
               },
             },
           });
@@ -217,15 +225,13 @@
           for (const reaction of message.reactions) {
             for (const user of reaction.users) {
               batch.push({
-                ulid: newUlid(),
-                parent: roomId,
+                id: makeUlid(),
+                room: roomId,
                 variant: {
-                  kind: "space.roomy.room.addBridgedReaction.v0",
-                  data: {
-                    reactingUser: `did:discord:${user.id}`,
-                    reaction: reaction.emoji.name,
-                    reactionTo: messageId,
-                  },
+                  $type: "space.roomy.room.addBridgedReaction.v0",
+                  reaction: reaction.emoji.name,
+                  reactingUser: UserDid.assert(`did:discord:${user.id}`),
+                  target: messageId,
                 },
               });
             }
@@ -237,53 +243,42 @@
           );
           const avatarHash = avatarPathSegments[avatarPathSegments.length - 1];
 
-          const author = `did:discord:${message.author.id}`;
           if (!existingDiscordUsers.has(author)) {
             batch.push({
-              ulid: newUlid(),
-              parent: author,
+              id: makeUlid(),
               variant: {
-                kind: "space.roomy.common.setInfo.v0",
-                data: {
-                  name: { set: message.author.nickname },
-                  avatar: {
-                    set: `https://cdn.discordapp.com/avatars/${message.author.id}/${avatarHash}?size=64`,
-                  },
-                  description: { ignore: undefined },
+                $type: "space.roomy.common.setInfo.v0",
+                name: {
+                  $type: "space.roomy.defs#set",
+                  value: message.author.nickname,
                 },
+                avatar: {
+                  $type: "space.roomy.defs#set",
+                  value: `https://cdn.discordapp.com/avatars/${message.author.id}/${avatarHash}?size=64`,
+                },
+                description: { $type: "space.roomy.defs#ignore" },
               },
             });
             batch.push({
-              ulid: newUlid(),
-              parent: author,
+              id: makeUlid(),
               variant: {
-                kind: "space.roomy.space.overrideUserMeta.v0",
-                data: {
-                  handle: message.author.name,
-                },
+                $type: "space.roomy.space.overrideUserMeta.v0",
+                target: author,
+                handle: message.author.name,
               },
             });
             existingDiscordUsers.add(author);
           }
 
-          batch.push({
-            ulid: newUlid(),
-            parent: messageId,
-            variant: {
-              kind: "space.roomy.room.overrideMessageMeta.v0",
-              data: {
-                author,
-                timestamp: BigInt(
-                  Math.round(new Date(message.timestamp).getTime()),
-                ),
-              },
-            },
-          });
-
           batchMessageCount += 1;
 
           if (batch.length >= batchSize) {
-            await backend.sendEventBatch(spaceId, batch);
+            try {
+              await backend.sendEventBatch(spaceId, batch);
+            } catch (e) {
+              console.error(e);
+              throw new Error("Error sending batch");
+            }
             finishedMessages.value += batchMessageCount;
             batch = [];
             batchMessageCount = 0;

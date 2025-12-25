@@ -2,15 +2,15 @@
  * Message events: create, edit, delete
  */
 
-import { type, Ulid, Content, UserDid, Timestamp } from "../primitives";
-import { messageExtension } from "../extensions/message";
+import { MessageExtensionMap } from "../extensions/message";
+import { type, Ulid, Content } from "../primitives";
 
 // Create a new message
 export const messageCreate = type({
-  $type: "'space.roomy.room.sendMessage.v1'",
+  $type: "'space.roomy.room.sendMessage.v0'",
   body: Content,
   /** Extensible fields: replies, attachments, overrides */
-  extensions: messageExtension.array(),
+  extensions: MessageExtensionMap,
 });
 
 // Edit an existing message

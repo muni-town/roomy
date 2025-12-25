@@ -7,10 +7,14 @@
  * - did -> { type: 'string', format: 'did' }
  */
 
-import { type } from "arktype";
+import { Type, type } from "arktype";
 import { BytesWrapper, type Bytes as BytesLink } from "@atcute/cbor";
 import { isDid } from "@atproto/oauth-client";
-import { isValid as isValidUlid, ulid as generateUlid } from "ulidx";
+import {
+  isValid as isValidUlid,
+  ulid as generateUlid,
+  monotonicFactory,
+} from "ulidx";
 
 export type Bytes = BytesLink;
 export const Bytes = type.or(
@@ -31,16 +35,23 @@ export const Ulid = type.string
 export type Ulid = typeof Ulid.infer;
 
 export const newUlid = () => generateUlid() as Ulid;
+/** Factory that produces monotonically increasing ULIDs. */
+export const ulidFactory: () => () => Ulid = () => {
+  const factory = monotonicFactory();
+  return () => {
+    return factory() as Ulid;
+  };
+};
 
 export const Did = type.string
   .narrow((v, ctx) => (isDid(v) ? true : ctx.mustBe("a valid DID")))
   .brand("did");
 export type Did = typeof Did.infer;
 
-export const UserDid = Did.brand("didUser");
+export const UserDid = Did.brand("UserDid");
 export type UserDid = typeof UserDid.infer;
 
-export const StreamDid = Did.brand("didStream");
+export const StreamDid = Did.brand("StreamDid");
 export type StreamDid = typeof StreamDid.infer;
 
 /** essentially checking if it's a valid-ish domain name. DNS segments can't be longer than 63 chars */
@@ -92,6 +103,38 @@ export const set: (v: string) => SetProperty = (value) => ({
 });
 export const ignore: SetProperty = { $type: "space.roomy.defs#ignore" };
 export const setOrIgnore = (v?: string) => (v ? set(v) : ignore);
+
+type TypeIds<T extends { $type: string }> = T["$type"];
+
+type TypeMap<T extends { $type: string }> = {
+  [K in TypeIds<T>]?: Omit<Extract<T, { $type: K }>, "$type">;
+};
+
+export function unionToMap<T extends { $type: string }>(
+  t: Type<T>,
+): Type<TypeMap<T>> {
+  const map = {} as any;
+  for (const variant of t.json as (
+    | {
+        domain: "object";
+        required: { key: string; value: { unit: string } | {} }[];
+      }
+    | {}
+  )[]) {
+    if ("domain" in variant && variant.domain == "object") {
+      for (const required of variant.required) {
+        if (required.key == "$type" && "unit" in required.value) {
+          (globalThis as any).t = t;
+          map[required.value.unit] = (t as any)
+            .extract({ $type: `'${required.value.unit}'` })
+            .omit("$type")
+            .optional();
+        }
+      }
+    }
+  }
+  return type(map) as any;
+}
 
 // Re-export the type helper for use in other modules
 export { type };

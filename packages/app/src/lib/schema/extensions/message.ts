@@ -6,17 +6,30 @@
  * be referenced via union.
  */
 
-import { type, Ulid } from "../primitives";
+import { type, Ulid, unionToMap, UserDid } from "../primitives";
+
+// Override author (for bridged messages)
+export const AuthorOverride = type({
+  $type: "'space.roomy.extension.authorOverride.v0'",
+  did: UserDid,
+});
+
+// Override timestamp (for bridged messages)
+export const TimestampOverride = type({
+  $type: "'space.roomy.extension.timestampOverride.v0'",
+  /** Unix timestamp in milliseconds */
+  timestamp: "number.integer>0",
+});
 
 // Reply reference
-export const replyTo = type({
-  $type: "'space.roomy.extension.replyTo.v0'",
+export const Reply = type({
+  $type: "'space.roomy.attachment.reply.v0'",
   target: Ulid,
 });
 
 // Comment/annotation on a document
-export const comment = type({
-  $type: "'space.roomy.extension.comment.v0'",
+export const Comment = type({
+  $type: "'space.roomy.attachment.comment.v0'",
   /** Version of the document being commented on */
   version: Ulid,
   /** Text snippet being referenced */
@@ -27,22 +40,9 @@ export const comment = type({
   to: "number.integer>=0",
 });
 
-// Override author (for bridged messages)
-export const overrideAuthor = type({
-  $type: "'space.roomy.extension.overrideAuthor.v0'",
-  did: "string",
-});
-
-// Override timestamp (for bridged messages)
-export const overrideTimestamp = type({
-  $type: "'space.roomy.extension.overrideTimestamp.v0'",
-  /** Unix timestamp in milliseconds */
-  timestamp: "number.integer>0",
-});
-
 // Image attachment
-export const image = type({
-  $type: "'space.roomy.extension.image.v0'",
+export const ImageAttachment = type({
+  $type: "'space.roomy.attachment.image.v0'",
   uri: "string",
   mimeType: "string",
   "alt?": "string",
@@ -53,8 +53,8 @@ export const image = type({
 });
 
 // Video attachment
-export const video = type({
-  $type: "'space.roomy.extension.video.v0'",
+export const VideoAttachment = type({
+  $type: "'space.roomy.attachment.video.v0'",
   uri: "string",
   mimeType: "string",
   "alt?": "string",
@@ -67,8 +67,8 @@ export const video = type({
 });
 
 // File attachment
-export const file = type({
-  $type: "'space.roomy.extension.file.v0'",
+export const FileAttachment = type({
+  $type: "'space.roomy.attachment.file.v0'",
   uri: "string",
   mimeType: "string",
   "name?": "string",
@@ -76,32 +76,50 @@ export const file = type({
 });
 
 // Link with optional preview
-export const link = type({
-  $type: "'space.roomy.extension.link.v0'",
+export const LinkAttachment = type({
+  $type: "'space.roomy.attachment.link.v0'",
   uri: "string",
   showPreview: "boolean",
 });
 
+// Override timestamp (for bridged messages)
+export const Attachment = type.or(
+  Reply,
+  Comment,
+  ImageAttachment,
+  VideoAttachment,
+  FileAttachment,
+  LinkAttachment,
+);
+export type Attachment = typeof Attachment.infer;
+
+// Override timestamp (for bridged messages)
+export const Attachments = type({
+  $type: "'space.roomy.extension.attachments.v0'",
+  /** Unix timestamp in milliseconds */
+  attachments: Attachment.array(),
+});
+
 // Union of all message extensions
-export const messageExtension = replyTo
-  .or(comment)
-  .or(overrideAuthor)
-  .or(overrideTimestamp)
-  .or(image)
-  .or(video)
-  .or(file)
-  .or(link);
+export const messageExtension = type.or(
+  AuthorOverride,
+  TimestampOverride,
+  Attachments,
+);
 
 export type MessageExtension = typeof messageExtension.infer;
+export const MessageExtensionMap = unionToMap(messageExtension);
+export type MessageExtensionMap = typeof MessageExtensionMap.infer;
 
 // Export individual types for the registry
 export const extensions = {
-  "space.roomy.extension.replyTo.v0": replyTo,
-  "space.roomy.extension.comment.v0": comment,
-  "space.roomy.extension.overrideAuthor.v0": overrideAuthor,
-  "space.roomy.extension.overrideTimestamp.v0": overrideTimestamp,
-  "space.roomy.extension.image.v0": image,
-  "space.roomy.extension.video.v0": video,
-  "space.roomy.extension.file.v0": file,
-  "space.roomy.extension.link.v0": link,
+  "space.roomy.extension.authorOverride.v0": AuthorOverride,
+  "space.roomy.extension.timestampOverride.v0": TimestampOverride,
+  "space.roomy.extension.attachments.v0": Attachments,
+  "space.roomy.attachment.reply.v0": Reply,
+  "space.roomy.attachment.comment.v0": Comment,
+  "space.roomy.attachment.image.v0": ImageAttachment,
+  "space.roomy.attachment.video.v0": VideoAttachment,
+  "space.roomy.attachment.file.v0": FileAttachment,
+  "space.roomy.attachment.link.v0": LinkAttachment,
 } as const;
