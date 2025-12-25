@@ -21,7 +21,7 @@
   import { markCommentForRemoval } from "$lib/components/richtext/RichTextEditor.svelte";
   import { getImagePreloadData } from "$lib/utils/media";
   import { newUlid, toBytes, Ulid, type Event } from "$lib/schema";
-  import type { MessageExtension } from "$lib/schema/extensions/message";
+  import type { Attachment } from "$lib/schema/extensions/message";
   import ChatInput, { setInputFocus } from "./ChatInput.svelte";
   import { createRoom } from "$lib/mutations/room";
 
@@ -188,8 +188,8 @@
     try {
       const messageId = newUlid();
 
-      const extensions: MessageExtension[] = uploadedFiles.map((data) => ({
-        $type: "space.roomy.extension.image.v0",
+      const attachments: Attachment[] = uploadedFiles.map((data) => ({
+        $type: "space.roomy.attachment.file.v0",
         uri: data.uri,
         mimeType: data.mimeType,
         alt: data.alt,
@@ -200,15 +200,15 @@
       }));
 
       if (state.kind === "replying") {
-        extensions.push({
-          $type: "space.roomy.extension.replyTo.v0",
+        attachments.push({
+          $type: "space.roomy.attachment.reply.v0",
           target: Ulid.assert(state.replyTo.id),
         });
       }
 
       if (state.kind === "commenting") {
-        extensions.push({
-          $type: "space.roomy.extension.comment.v0",
+        attachments.push({
+          $type: "space.roomy.attachment.comment.v0",
           version: Ulid.assert(state.comment.docVersion),
           snippet: state.comment.snippet || "",
           from: state.comment.from,
@@ -216,16 +216,20 @@
         });
       }
 
-      const messageEvent: Event<"space.roomy.room.sendMessage.v1"> = {
+      const messageEvent: Event<"space.roomy.room.sendMessage.v0"> = {
         id: messageId,
         room: Ulid.assert(page.params.object),
         variant: {
-          $type: "space.roomy.room.sendMessage.v1",
+          $type: "space.roomy.room.sendMessage.v0",
           body: {
             data: toBytes(new TextEncoder().encode(message)),
             mimeType: "text/markdown",
           },
-          extensions,
+          extensions: {
+            "space.roomy.extension.attachments.v0": {
+              attachments,
+            },
+          },
         },
       };
 

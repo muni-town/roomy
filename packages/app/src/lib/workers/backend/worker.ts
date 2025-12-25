@@ -31,7 +31,7 @@ import type {
 } from "../sqlite/types";
 import { ensureEntity } from "../sqlite/materializer";
 import { UserDid, parseEvent, type StreamDid, type Event } from "$lib/schema";
-import { decode } from "@atcute/cbor";
+import { decode, encode } from "@atcute/cbor";
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -409,6 +409,8 @@ class WorkerSupervisor {
         await this.client.sendEvent(streamId, event);
       },
       sendEventBatch: async (streamId, payloads) => {
+        console.log(payloads);
+        encode(payloads);
         await this.client.sendEventBatch(streamId, payloads);
       },
       fetchEvents: async (streamId, offset, limit) =>

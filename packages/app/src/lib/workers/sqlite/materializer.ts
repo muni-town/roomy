@@ -238,53 +238,8 @@ const materializers: {
     // },
   ],
 
-  // Message v0 - deprecated
-  // "space.roomy.room.sendMessage.v0": async ({ streamId, user, event, data }) => {
-  //   if (!event.room) throw new Error("No room for message");
-  //   const statements = [
-  //     ensureEntity(streamId, event.id, event.room),
-  //     sql`
-  //       insert into edges (head, tail, label)
-  //       select
-  //         ${event.id},
-  //         ${user},
-  //         'author'
-  //     `,
-  //     sql`
-  //       insert or replace into comp_content (entity, mime_type, data)
-  //       values (
-  //         ${event.id},
-  //         ${data.content.mimeType},
-  //         ${data.content.content}
-  //       )`,
-  //     sql`
-  //       insert into comp_last_read (entity, timestamp, unread_count)
-  //       values (${event.room}, 1, 1)
-  //       on conflict(entity) do update set
-  //         unread_count = case
-  //           when ${decodeTime(event.id)} > comp_last_read.timestamp
-  //           then comp_last_read.unread_count + 1
-  //           else comp_last_read.unread_count
-  //         end,
-  //         updated_at = (unixepoch() * 1000)`,
-  //   ];
-
-  //   if (data.replyTo) {
-  //     statements.push(sql`
-  //       insert into edges (head, tail, label)
-  //       values (
-  //         ${event.id},
-  //         ${data.replyTo},
-  //         'reply'
-  //       )
-  //     `);
-  //   }
-
-  //   return statements;
-  // },
-
-  // Message v1
-  "space.roomy.room.sendMessage.v1": async ({
+  // Message v0
+  "space.roomy.room.sendMessage.v0": async ({
     streamId,
     user,
     event,
@@ -321,146 +276,114 @@ const materializers: {
       `,
     ];
 
-    // Handle replyTo extensions
-    const replies = data.extensions.filter(
-      (ext) => ext.$type === "space.roomy.extension.replyTo.v0",
-    );
-
-    // at an event encoding level we support messages replying to multiple messages;
-    // TODO: redesign schema to support materialising multiple replies
-    if (replies[0]) {
-      statements.push(sql`
-      insert into edges (head, tail, label)
-      values (
-        ${event.id},
-        ${replies[0].target},
-        'reply'
-      )
-    `);
-    }
-
-    // Handle comment extensions - comp_comment
-    const comments = data.extensions.filter(
-      (ext) => ext.$type === "space.roomy.extension.comment.v0",
-    );
-
-    // TODO: redesign schema to support materialising multiple comments
-    if (comments[0]) {
-      statements.push(
-        sql`
+    for (const att of data.extensions["space.roomy.extension.attachments.v0"]
+      ?.attachments || []) {
+      // Handle replies
+      if (att.$type == "space.roomy.attachment.reply.v0") {
+        // TODO: allow multiple replies
+        statements.push(sql`
+          insert or ignore into edges (head, tail, label)
+          values (
+            ${event.id},
+            ${att.target},
+            'reply'
+          )
+        `);
+      } else if (att.$type == "space.roomy.attachment.comment.v0") {
+        statements.push(
+          sql`
           insert into comp_comment (entity, version, snippet, idx_from, idx_to, updated_at)
           values (
             ${event.id},
-            ${comments[0].version},
-            ${comments[0].snippet || ""},
-            ${comments[0].from},
-            ${comments[0].to},
+            ${att.version},
+            ${att.snippet || ""},
+            ${att.from},
+            ${att.to},
             (unixepoch() * 1000)
           )`,
-      );
-    }
-
-    // Handle overrideAuthorDid, overrideTimestamp extensions - comp_override_meta
-    const overrideAuthorExt = data.extensions.find(
-      (ext) => ext.$type === "space.roomy.extension.overrideAuthor.v0",
-    );
-    const overrideTimestampExt = data.extensions.find(
-      (ext) => ext.$type === "space.roomy.extension.overrideTimestamp.v0",
-    );
-
-    if (overrideAuthorExt || overrideTimestampExt) {
-      statements.push(sql`
-        insert or replace into comp_override_meta (entity, author, timestamp)
-        values (
-          ${event.id},
-          ${overrideAuthorExt ? (overrideAuthorExt.did as string) : null},
-          ${overrideTimestampExt ? Number(overrideTimestampExt.timestamp) : null}
-        )
-      `);
-    }
-
-    // Handle image extensions - comp_image
-    // Each image becomes a separate child entity with URI ID, including query with message ID to differentiate
-    for (const img of data.extensions.filter(
-      (ext) => ext.$type === "space.roomy.extension.image.v0",
-    )) {
-      const uriWithUlidQuery = img.uri + "?message=" + event.id;
-      statements.push(
-        ensureEntity(streamId, uriWithUlidQuery, event.id),
-        sql`
-          insert or replace into comp_image (entity, mime_type, alt, width, height, blurhash, size)
-          values (
-            ${uriWithUlidQuery},
-            ${img.mimeType},
-            ${img.alt},
-            ${img.width ? Number(img.width) : null},
-            ${img.height ? Number(img.height) : null},
-            ${img.blurhash || null},
-            ${img.size ? Number(img.size) : null}
-          )
+        );
+      } else if (att.$type == "space.roomy.attachment.image.v0") {
+        const uriWithUlidQuery = att.uri + "?message=" + event.id;
+        // TODO: allow multiple images in the db schema
+        statements.push(
+          ensureEntity(streamId, uriWithUlidQuery, event.id),
+          sql`
+            insert or replace into comp_image (entity, mime_type, alt, width, height, blurhash, size)
+            values (
+              ${uriWithUlidQuery},
+              ${att.mimeType},
+              ${att.alt},
+              ${att.width ? Number(att.width) : null},
+              ${att.height ? Number(att.height) : null},
+              ${att.blurhash || null},
+              ${att.size ? Number(att.size) : null}
+            )
         `,
-      );
-    }
-
-    // Handle video extensions - comp_video
-    // Each video becomes a separate child entity with URI + query ID
-    for (const vid of data.extensions.filter(
-      (ext) => ext.$type === "space.roomy.extension.video.v0",
-    )) {
-      const uriWithUlidQuery = vid.uri + "?message=" + event.id;
-      statements.push(
-        ensureEntity(streamId, uriWithUlidQuery, event.id),
-        sql`
-          insert or replace into comp_video (entity, mime_type, alt, width, height, length, blurhash, size)
-          values (
-            ${uriWithUlidQuery},
-            ${vid.mimeType},
-            ${vid.alt},
-            ${vid.width ? Number(vid.width) : null},
-            ${vid.height ? Number(vid.height) : null},
-            ${vid.length ? Number(vid.length) : null},
-            ${vid.blurhash || null},
-            ${vid.size ? Number(vid.size) : null}
-          )
+        );
+      } else if (att.$type == "space.roomy.attachment.video.v0") {
+        const uriWithUlidQuery = att.uri + "?message=" + event.id;
+        // TODO: allow multiple videos in the db schema
+        statements.push(
+          ensureEntity(streamId, uriWithUlidQuery, event.id),
+          sql`
+            insert or replace into comp_video (entity, mime_type, alt, width, height, length, blurhash, size)
+            values (
+              ${uriWithUlidQuery},
+              ${att.mimeType},
+              ${att.alt},
+              ${att.width ? Number(att.width) : null},
+              ${att.height ? Number(att.height) : null},
+              ${att.length ? Number(att.length) : null},
+              ${att.blurhash || null},
+              ${att.size ? Number(att.size) : null}
+            )
         `,
-      );
-    }
-
-    // Handle file extensions - comp_file
-    // Each file becomes a separate child entity with URI + query ID
-    for (const file of data.extensions.filter(
-      (ext) => ext.$type === "space.roomy.extension.file.v0",
-    )) {
-      const uriWithUlidQuery = file.uri + "?message=" + event.id;
-      statements.push(
-        ensureEntity(streamId, uriWithUlidQuery, event.id),
-        sql`
-          insert or replace into comp_file (entity, mime_type, name, size)
-          values (
-            ${uriWithUlidQuery},
-            ${file.mimeType},
-            ${file.name || null},
-            ${file.size ? Number(file.size) : null}
-          )
+        );
+      } else if (att.$type == "space.roomy.attachment.file.v0") {
+        const uriWithUlidQuery = att.uri + "?message=" + event.id;
+        statements.push(
+          ensureEntity(streamId, uriWithUlidQuery, event.id),
+          sql`
+            insert or replace into comp_file (entity, mime_type, name, size)
+            values (
+              ${uriWithUlidQuery},
+              ${att.mimeType},
+              ${att.name || null},
+              ${att.size ? Number(att.size) : null}
+            )
         `,
-      );
-    }
-    // Handle link extensions - comp_link - URI + query ID
-    data.extensions
-      .filter((ext) => ext.$type === "space.roomy.extension.link.v0")
-      .forEach((link) => {
-        const uriWithUlidQuery = link.uri + "?message=" + event.id;
+        );
+      } else if (att.$type == "space.roomy.attachment.link.v0") {
+        const uriWithUlidQuery = att.uri + "?message=" + event.id;
         statements.push(
           ensureEntity(streamId, uriWithUlidQuery, event.id),
           sql`
           insert into comp_link (entity, show_preview)
           values (
             ${uriWithUlidQuery},
-            ${link.showPreview ? 1 : 0}
+            ${att.showPreview ? 1 : 0}
           )
         `,
         );
-      });
+      }
+    }
+
+    // Handle overrideAuthorDid, overrideTimestamp extensions - comp_override_meta
+    const overrideAuthorExt =
+      data.extensions["space.roomy.extension.authorOverride.v0"]?.did;
+    const overrideTimestampExt =
+      data.extensions["space.roomy.extension.timestampOverride.v0"]?.timestamp;
+
+    if (overrideAuthorExt || overrideTimestampExt) {
+      statements.push(sql`
+        insert or replace into comp_override_meta (entity, author, timestamp)
+        values (
+          ${event.id},
+          ${overrideAuthorExt ? overrideAuthorExt : null},
+          ${overrideTimestampExt ? Number(overrideTimestampExt) : null}
+        )
+      `);
+    }
 
     return statements;
   },

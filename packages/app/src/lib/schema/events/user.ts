@@ -2,7 +2,7 @@
  * User events: metadata overrides (for bridged accounts) and read tracking
  */
 
-import { StreamDid, type, Ulid } from "../primitives";
+import { StreamDid, type, Ulid, UserDid } from "../primitives";
 
 /**
  * Override user metadata.
@@ -11,6 +11,8 @@ import { StreamDid, type, Ulid } from "../primitives";
  */
 export const userOverrideMeta = type({
   $type: "'space.roomy.space.overrideUserMeta.v0'",
+  /** The DID of the user to override the handle for */
+  target: UserDid,
   /** The original handle from the bridged platform */
   handle: "string",
 });
