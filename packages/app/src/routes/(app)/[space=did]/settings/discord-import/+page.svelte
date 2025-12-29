@@ -17,7 +17,6 @@
     type Ulid,
     toBytes,
   } from "$lib/schema";
-  import { decode, encode } from "@atcute/cbor";
 
   const currentSpaceId = $derived(current.joinedSpace?.id);
 
@@ -72,7 +71,7 @@
     importing = true;
     stopwatch.start();
 
-    const batchSize = 1000;
+    const batchSize = 2500;
     let batch: Event[] = [];
     let batchMessageCount = 0;
 
