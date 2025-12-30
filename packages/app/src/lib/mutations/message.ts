@@ -10,7 +10,7 @@ export async function deleteMessage(
     id: newUlid(),
     room: roomId,
     variant: {
-      $type: "space.roomy.room.deleteMessage.v0",
+      $type: "space.roomy.message.deleteMessage.v0",
       target: messageId,
     },
   });

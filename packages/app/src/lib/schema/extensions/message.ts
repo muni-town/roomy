@@ -1,43 +1,34 @@
-/**
- * Message extensions - these are the extensible fields that can be
- * attached to messages (replaces the Kinds2 nested union in SCALE).
- *
- * In ATProto/lexicons, these become separate record types that can
- * be referenced via union.
- */
+import { type } from "arktype";
+import { Timestamp, Ulid, unionToMap, UserDid } from "../primitives";
 
-import { type, Ulid, unionToMap, UserDid } from "../primitives";
-
-// Override author (for bridged messages)
 export const AuthorOverride = type({
   $type: "'space.roomy.extension.authorOverride.v0'",
   did: UserDid,
-});
+}).describe(
+  "An override for the author of the message. \
+This is often used to set the original author of a bridged chat message.",
+);
 
-// Override timestamp (for bridged messages)
 export const TimestampOverride = type({
   $type: "'space.roomy.extension.timestampOverride.v0'",
-  /** Unix timestamp in milliseconds */
-  timestamp: "number.integer>0",
-});
+  timestamp: Timestamp,
+}).describe(
+  "An override for the timestamp of the message. \
+This is often used to set the time that a bridged message was originally sent.",
+);
 
-// Reply reference
 export const Reply = type({
   $type: "'space.roomy.attachment.reply.v0'",
-  target: Ulid,
-});
+  target: Ulid.describe("The ID of the message being replied to."),
+}).describe("Marks the message a reply to the target message.");
 
 // Comment/annotation on a document
 export const Comment = type({
   $type: "'space.roomy.attachment.comment.v0'",
-  /** Version of the document being commented on */
-  version: Ulid,
-  /** Text snippet being referenced */
-  snippet: "string",
-  /** Start index in document */
-  from: "number.integer>=0",
-  /** End index in document */
-  to: "number.integer>=0",
+  version: Ulid.describe("The version of the document being commented on."),
+  snippet: type.string.describe("Text snippet being referenced."),
+  from: type("number.integer>=0").describe("Start index in document."),
+  to: type("number.integer>=0").describe("End index in document."),
 });
 
 // Image attachment
@@ -75,14 +66,12 @@ export const FileAttachment = type({
   "size?": "number.integer>0",
 });
 
-// Link with optional preview
 export const LinkAttachment = type({
   $type: "'space.roomy.attachment.link.v0'",
   uri: "string",
   showPreview: "boolean",
-});
+}).describe("Link with optional preview");
 
-// Override timestamp (for bridged messages)
 export const Attachment = type.or(
   Reply,
   Comment,
@@ -93,12 +82,10 @@ export const Attachment = type.or(
 );
 export type Attachment = typeof Attachment.infer;
 
-// Override timestamp (for bridged messages)
 export const Attachments = type({
   $type: "'space.roomy.extension.attachments.v0'",
-  /** Unix timestamp in milliseconds */
-  attachments: Attachment.array(),
-});
+  attachments: Attachment.array().describe("The list of attachments."),
+}).describe("Attachments to the message, like files, link embeds, or images.");
 
 // Union of all message extensions
 export const messageExtension = type.or(
@@ -108,18 +95,16 @@ export const messageExtension = type.or(
 );
 
 export type MessageExtension = typeof messageExtension.infer;
-export const MessageExtensionMap = unionToMap(messageExtension);
+export const MessageExtensionMap = unionToMap(messageExtension).describe(
+  "A mapping of extensions to add. Each extension is optional.",
+);
 export type MessageExtensionMap = typeof MessageExtensionMap.infer;
 
-// Export individual types for the registry
-export const extensions = {
-  "space.roomy.extension.authorOverride.v0": AuthorOverride,
-  "space.roomy.extension.timestampOverride.v0": TimestampOverride,
-  "space.roomy.extension.attachments.v0": Attachments,
-  "space.roomy.attachment.reply.v0": Reply,
-  "space.roomy.attachment.comment.v0": Comment,
-  "space.roomy.attachment.image.v0": ImageAttachment,
-  "space.roomy.attachment.video.v0": VideoAttachment,
-  "space.roomy.attachment.file.v0": FileAttachment,
-  "space.roomy.attachment.link.v0": LinkAttachment,
-} as const;
+export const MessageExtensionUpdateMap = unionToMap(messageExtension, {
+  makeAllNullable: true,
+}).describe(
+  "A list of extensions to update. \
+Setting an extension to `null` will remove it. \
+Any extension not specified will be left as-is.",
+);
+export type MessageExtensionUpdateMap = typeof MessageExtensionMap.infer;

@@ -18,3 +18,5 @@ uv.lock
 venv/
 ENV/
 env/
+
+lexicons

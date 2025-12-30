@@ -153,32 +153,13 @@
           room: roomyParentId,
           variant: {
             $type: "space.roomy.room.createRoom.v0",
-          },
-        });
-        batch.push({
-          id: makeUlid(),
-          room: room.roomyId,
-          variant: {
-            $type: "space.roomy.common.setInfo.v0",
-            name: {
-              $type: "space.roomy.defs#set",
-              value: room.name,
-            },
-            avatar: { $type: "space.roomy.defs#ignore" },
-            description: { $type: "space.roomy.defs#ignore" },
-          },
-        });
-        batch.push({
-          id: makeUlid(),
-          room: room.roomyId,
-          variant: {
-            $type: "space.roomy.room.setKind.v0",
             kind:
               room.kind == "category"
                 ? "category"
                 : room.kind == "channel"
                   ? "channel"
                   : "thread",
+            name: room.name,
           },
         });
       }
@@ -205,7 +186,7 @@
             id: messageId,
             room: roomId,
             variant: {
-              $type: "space.roomy.room.sendMessage.v0",
+              $type: "space.roomy.message.sendMessage.v0",
               body: {
                 mimeType: "text/markdown",
                 data: toBytes(new TextEncoder().encode(message.content)),
@@ -227,7 +208,7 @@
                 id: makeUlid(),
                 room: roomId,
                 variant: {
-                  $type: "space.roomy.room.addBridgedReaction.v0",
+                  $type: "space.roomy.reaction.addBridgedReaction.v0",
                   reaction: reaction.emoji.name,
                   reactingUser: UserDid.assert(`did:discord:${user.id}`),
                   target: messageId,
@@ -246,23 +227,17 @@
             batch.push({
               id: makeUlid(),
               variant: {
-                $type: "space.roomy.common.setInfo.v0",
-                name: {
-                  $type: "space.roomy.defs#set",
-                  value: message.author.nickname,
-                },
-                avatar: {
-                  $type: "space.roomy.defs#set",
-                  value: `https://cdn.discordapp.com/avatars/${message.author.id}/${avatarHash}?size=64`,
-                },
-                description: { $type: "space.roomy.defs#ignore" },
+                $type: "space.roomy.user.updateProfile.v0",
+                did: author,
+                name: message.author.nickname,
+                avatar: `https://cdn.discordapp.com/avatars/${message.author.id}/${avatarHash}?size=64`,
               },
             });
             batch.push({
               id: makeUlid(),
               variant: {
-                $type: "space.roomy.space.overrideUserMeta.v0",
-                target: author,
+                $type: "space.roomy.user.overrideHandle.v0",
+                did: author,
                 handle: message.author.name,
               },
             });

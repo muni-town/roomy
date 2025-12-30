@@ -23,21 +23,21 @@ const materializers: {
   }) => Promise<SqlStatement[]>;
 } = {
   // Space
-  "space.roomy.personal.joinSpace.v0": async ({ streamId, data }) => {
+  "space.roomy.stream.personal.joinSpace.v0": async ({ streamId, data }) => {
     return [
-      ensureEntity(streamId, data.spaceId),
+      ensureEntity(streamId, data.spaceDid),
       // because we are materialising a non-personal-stream space, we infer that we are backfilling in the background
       sql`
         insert into comp_space (entity)
-        values (${data.spaceId})
+        values (${data.spaceDid})
         on conflict do update set hidden = 0
       `,
     ];
   },
-  "space.roomy.personal.leaveSpace.v0": async ({ data }) => [
+  "space.roomy.stream.personal.leaveSpace.v0": async ({ data }) => [
     sql`
       update comp_space set hidden = 1,
-      where entity = ${data.spaceId}
+      where entity = ${data.spaceDid}
     `,
   ],
   "space.roomy.room.joinRoom.v0": async ({ streamId, user, event }) => [
@@ -84,7 +84,7 @@ const materializers: {
         cast(('[@' || (select handle from comp_user where did = ${user}) || '](/user/' || ${user} || ') joined the space.') as blob)
     )`,
   ],
-  "space.roomy.room.leave.v0": async ({ streamId, user, event }) => [
+  "space.roomy.room.leaveRoom.v0": async ({ streamId, user, event }) => [
     sql`
       delete from edges
       where 
@@ -95,7 +95,7 @@ const materializers: {
         label = 'member'
     `,
   ],
-  "space.roomy.stream.handleAccount.v0": async ({ streamId, data }) => [
+  "space.roomy.stream.setHandleAccount.v0": async ({ streamId, data }) => [
     sql`
       update comp_space set handle_account = ${data.did || null}
       where entity = ${streamId}
@@ -103,13 +103,13 @@ const materializers: {
   ],
 
   // Admin
-  "space.roomy.space.addAdmin.v0": async ({ streamId, data }) => {
+  "space.roomy.stream.addAdmin.v0": async ({ streamId, data }) => {
     return [
       sql`
       insert or replace into edges (head, tail, label, payload)
       values (
         ${streamId},
-        ${data.userId},
+        ${data.userDid},
         'member',
         ${edgePayload({
           can: "admin",
@@ -118,52 +118,88 @@ const materializers: {
     `,
     ];
   },
-  "space.roomy.space.removeAdmin.v0": async ({ streamId, data }) => [
+  "space.roomy.stream.removeAdmin.v0": async ({ streamId, data }) => [
     sql`
       update edges set payload = (${JSON.stringify({ can: "post" })})
       where 
         head = ${streamId}
           and
-        tail = ${data.userId}
+        tail = ${data.userDid}
           and
         label = 'member'
     `,
   ],
 
   // Info
-  "space.roomy.common.setInfo.v0": async ({ streamId, event, data }) => {
+  "space.roomy.stream.updateStreamInfo.v0": async ({
+    streamId,
+    event,
+    data,
+  }) => {
     const updates = [
-      { key: "name", ...data.name },
-      { key: "avatar", ...data.avatar },
-      { key: "description", ...data.description },
+      { key: "name", value: data.name },
+      { key: "avatar", value: data.avatar },
+      { key: "description", value: data.description },
     ];
-
-    const setUpdates = updates.filter((x) => x.$type == "space.roomy.defs#set");
-    const entityId = event.room ? event.room : streamId;
+    const setUpdates = updates.filter((x) => x.value !== undefined);
 
     return [
       ensureEntity(streamId, event.id),
-      {
-        sql: `insert into comp_info (entity, ${setUpdates.map((x) => `${x.key}`).join(", ")})
+      setUpdates.length > 0
+        ? {
+            sql: `insert into comp_info (entity, ${setUpdates.map((x) => `${x.key}`).join(", ")})
             VALUES (:entity, ${setUpdates.map((x) => `:${x.key}`)})
             on conflict do update set ${[...setUpdates].map((x) => `${x.key} = :${x.key}`)}`,
-        params: Object.fromEntries([
-          [":entity", entityId],
-          ...setUpdates.map((x) => [
-            ":" + x.key,
-            "value" in x ? x.value : undefined,
-          ]),
-        ]),
-      },
+            params: Object.fromEntries([
+              [":entity", streamId],
+              ...setUpdates.map((x) => [
+                ":" + x.key,
+                "value" in x ? x.value : undefined,
+              ]),
+            ]),
+          }
+        : undefined,
+    ].filter((x) => !!x);
+  },
+
+  // Info
+  "space.roomy.user.updateProfile.v0": async ({ streamId, event, data }) => {
+    const updates = [
+      { key: "name", value: data.name },
+      { key: "avatar", value: data.avatar },
+      { key: "description", value: data.description },
     ];
+    const setUpdates = updates.filter((x) => x.value !== undefined);
+
+    return [
+      ensureEntity(streamId, event.id),
+      setUpdates.length > 0
+        ? {
+            sql: `insert into comp_info (entity, ${setUpdates.map((x) => `${x.key}`).join(", ")})
+            VALUES (:entity, ${setUpdates.map((x) => `:${x.key}`)})
+            on conflict do update set ${[...setUpdates].map((x) => `${x.key} = :${x.key}`)}`,
+            params: Object.fromEntries([
+              [":entity", data.did],
+              ...setUpdates.map((x) => [
+                ":" + x.key,
+                "value" in x ? x.value : undefined,
+              ]),
+            ]),
+          }
+        : undefined,
+    ].filter((x) => !!x);
   },
 
   // Room
-  "space.roomy.room.createRoom.v0": async ({ streamId, event }) => [
+  "space.roomy.room.createRoom.v0": async ({ streamId, event, data }) => [
     ensureEntity(streamId, event.id, event.room),
     sql`
-      insert into comp_room ( entity )
-      values ( ${event.id} ) on conflict do nothing
+      insert into comp_info ( entity, name, avatar, description)
+      values ( ${event.id}, ${data.name || null}, ${data.avatar || null}, ${data.description || null})
+    `,
+    sql`
+      insert into comp_room ( entity, label )
+      values ( ${event.id}, ${data.kind} ) on conflict do nothing
     `,
   ],
   "space.roomy.room.deleteRoom.v0": async ({ event }) => {
@@ -179,17 +215,54 @@ const materializers: {
       `,
     ];
   },
+
   "space.roomy.room.updateParent.v0": async ({ event, data }) => {
+    // Update the parent room
+    return [
+      sql`
+        update entities set parent = ${data.parent || null}
+        where id = ${event.room}
+        `,
+    ];
+  },
+
+  "space.roomy.room.updateRoom.v0": async ({ event, data }) => {
     if (!event.room) {
       console.warn("Update room parent missing room");
       return [];
     }
-    return [
-      sql`
-        update entities set parent = ${data.parent ? data.parent : null}
-        where id = ${event.room}
-      `,
+
+    const updates = [
+      { key: "name", value: data.name },
+      { key: "avatar", value: data.avatar },
+      { key: "description", value: data.description },
     ];
+    const setUpdates = updates.filter((x) => x.value !== undefined);
+
+    return [
+      // Update the room kind
+      data.kind !== undefined
+        ? sql`
+          update comp_room set label = ${data.kind} where entity = ${event.room}
+          `
+        : undefined,
+
+      // Update the room info
+      setUpdates.length > 0
+        ? {
+            sql: `insert into comp_info (entity, ${setUpdates.map((x) => `${x.key}`).join(", ")})
+            VALUES (:entity, ${setUpdates.map((x) => `:${x.key}`)})
+            on conflict do update set ${[...setUpdates].map((x) => `${x.key} = :${x.key}`)}`,
+            params: Object.fromEntries([
+              [":entity", event.room],
+              ...setUpdates.map((x) => [
+                ":" + x.key,
+                "value" in x ? x.value : undefined,
+              ]),
+            ]),
+          }
+        : undefined,
+    ].filter((x) => !!x);
   },
   // TODO
   "space.roomy.room.addMember.v0": async (
@@ -239,7 +312,7 @@ const materializers: {
   ],
 
   // Message v0
-  "space.roomy.room.sendMessage.v0": async ({
+  "space.roomy.message.sendMessage.v0": async ({
     streamId,
     user,
     event,
@@ -388,12 +461,13 @@ const materializers: {
     return statements;
   },
 
-  "space.roomy.room.editMessage.v0": async ({ streamId, event, data }) => {
+  "space.roomy.message.editMessage.v0": async ({ streamId, event, data }) => {
     if (!event.room) {
       console.warn("Edit event missing room");
       return [];
     }
 
+    // TODO: implement edited extensions like replies / attachments
     return [
       ensureEntity(streamId, event.id, event.room),
       data.body.mimeType == "text/x-dmp-patch"
@@ -420,7 +494,7 @@ const materializers: {
         `,
     ];
   },
-  "space.roomy.room.editPage.v0": async ({ user, streamId, event, data }) => {
+  "space.roomy.page.editPage.v0": async ({ user, streamId, event, data }) => {
     if (!event.room) {
       console.warn("Edit event missing room");
       return [];
@@ -469,23 +543,19 @@ const materializers: {
   },
 
   // TODO: make sure there is valid permission to send override metadata
-  "space.roomy.space.overrideUserMeta.v0": async ({ event, data }) => {
-    if (!event.room) {
-      console.warn("Missing target for message meta override.");
-      return [];
-    }
+  "space.roomy.user.overrideHandle.v0": async ({ data }) => {
     return [
       sql`
         insert into comp_user (did, handle)
         values (
-          ${event.room},
+          ${data.did},
           ${data.handle}
         )
         on conflict(did) do update set handle = ${data.handle}
       `,
     ];
   },
-  "space.roomy.room.deleteMessage.v0": async ({ event }) => {
+  "space.roomy.message.deleteMessage.v0": async ({ event }) => {
     if (!event.room) {
       console.warn("Missing target for message meta override.");
       return [];
@@ -494,7 +564,7 @@ const materializers: {
   },
 
   // Reaction
-  "space.roomy.room.addReaction.v0": async ({ data, event, user }) => {
+  "space.roomy.reaction.addReaction.v0": async ({ data, event, user }) => {
     return [
       sql`
         insert or replace into comp_reaction (entity, user, reaction, add_event)
@@ -507,7 +577,7 @@ const materializers: {
       `,
     ];
   },
-  "space.roomy.room.removeReaction.v0": async ({ event, data }) => {
+  "space.roomy.reaction.removeReaction.v0": async ({ event, data }) => {
     if (!event.room) {
       console.warn("Delete reaction missing room");
       return [];
@@ -523,7 +593,7 @@ const materializers: {
   },
 
   // TODO: make sure there is valid permission to send bridged reaction
-  "space.roomy.room.addBridgedReaction.v0": async ({ data }) => {
+  "space.roomy.reaction.addBridgedReaction.v0": async ({ data }) => {
     return [
       sql`
         insert into comp_reaction (entity, user, reaction)
@@ -535,7 +605,7 @@ const materializers: {
       `,
     ];
   },
-  "space.roomy.room.removeBridgedReaction.v0": async ({ event, data }) => {
+  "space.roomy.reaction.removeBridgedReaction.v0": async ({ event, data }) => {
     if (!event.room) {
       console.warn("Delete reaction missing room");
       return [];
@@ -550,33 +620,20 @@ const materializers: {
     ];
   },
 
-  // Room Kinds
-  "space.roomy.room.setKind.v0": async ({ event, data }) => {
-    if (!event.room) {
-      console.warn("Missing target for room kind mark.");
-      return [];
-    }
-    return [
-      sql`
-      update comp_room set label = ${data.kind} where entity = ${event.room}
-      `,
-    ];
-  },
-
   /**
    * Mark a room as read. This event is sent to the user's personal stream.
    * The event ULID timestamp indicates when the room was last read.
    * We ensure the room entity exists using the streamId from the event data,
    * not the wrapper streamId (which would be the user's personal stream).
    */
-  "space.roomy.room.setLastRead.v0": async ({ event, data }) => {
+  "space.roomy.stream.personal.setLastRead.v0": async ({ event, data }) => {
     // Extract timestamp from the event's ULID
     const timestamp = decodeTime(event.id);
 
     return [
       // Ensure the room entity exists in the target stream
       // Note: we use data.streamId here, not the wrapper's streamId
-      ensureEntity(data.streamId, data.roomId),
+      ensureEntity(data.streamDid, data.roomId),
       // Insert or update the last read timestamp
       sql`
         insert into comp_last_read (entity, timestamp, unread_count)

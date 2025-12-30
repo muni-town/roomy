@@ -16,7 +16,7 @@
     toast,
   } from "@fuxui/base";
 
-  type SpaceCreationState = AsyncStateWithIdle<{ spaceId: StreamDid }>;
+  type SpaceCreationState = AsyncStateWithIdle<{ spaceDid: StreamDid }>;
 
   let form = $state<{
     spaceName: string;
@@ -60,7 +60,7 @@
     try {
       spaceCreationState = { status: "loading" };
 
-      const { spaceId } = await createSpace({
+      const { spaceDid } = await createSpace({
         spaceName: form.spaceName,
         spaceDescription: form.spaceDescription || undefined,
         avatarFile: form.avatarFile || undefined,
@@ -70,7 +70,7 @@
         },
       });
 
-      spaceCreationState = { status: "success", data: { spaceId } };
+      spaceCreationState = { status: "success", data: { spaceDid } };
       toast.success("Space created successfully", {
         position: "bottom-right",
       });
@@ -81,7 +81,7 @@
       //   await addToDiscoverableSpacesFeed(space.id);
       // }
 
-      navigate({ space: spaceId });
+      navigate({ space: spaceDid });
     } catch (e) {
       console.error("Error creating space:", e);
       const stringError =

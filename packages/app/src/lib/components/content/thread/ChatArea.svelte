@@ -144,7 +144,7 @@
         join comp_content c on c.entity = e.id
         join edges author_edge on author_edge.head = e.id and author_edge.label = 'author'
         left join comp_user u on u.did = author_edge.tail
-        join comp_info i on i.entity = author_edge.tail
+        left join comp_info i on i.entity = author_edge.tail
         left join comp_override_meta o on o.entity = e.id
         left join comp_info oai on oai.entity = o.author
         left join comp_user oau on oau.did = o.author

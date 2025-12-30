@@ -123,8 +123,8 @@ export class ConnectedStream {
           id: newUlid(),
           room: undefined,
           variant: {
-            $type: "space.roomy.space.addAdmin.v0",
-            userId: opts.user,
+            $type: "space.roomy.stream.addAdmin.v0",
+            userDid: opts.user,
           },
         } satisfies Event),
       );
@@ -197,7 +197,7 @@ export class ConnectedStream {
 
           const latestEvent = events
             .map((x) => x.idx)
-            .reduce((x, y) => Math.max(x, y) as StreamIndex);
+            .reduce((x, y) => Math.max(x, y) as StreamIndex, 0 as StreamIndex);
           latest = latestEvent || latest;
 
           if (!result.Ok.has_more) {
@@ -277,7 +277,7 @@ export class ConnectedStream {
     // for the initial case for room load, set cursor to the most recent idx from the returned events
     const actualEnd = events
       .map((x) => x.idx)
-      .reduce((a, b) => Math.max(a, b) as StreamIndex);
+      .reduce((a, b) => Math.max(a, b) as StreamIndex, 0 as StreamIndex);
     if (actualEnd) this.lazyEndIdx.set(roomId, actualEnd);
   }
 

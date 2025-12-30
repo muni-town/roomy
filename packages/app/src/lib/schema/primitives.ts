@@ -23,6 +23,9 @@ export const Bytes = type.or(
 );
 export { fromBytes } from "@atcute/cbor";
 
+// Re-export the type helper for use in other modules
+export { type };
+
 export function toBytes(buf: Uint8Array): BytesLink {
   // Since the BytesWrapper class won't go across the worker boundary correctly, we convert to the
   // plain JSON version.
@@ -66,43 +69,21 @@ export const Handle = type.string
   .brand("handle");
 export type Handle = typeof Handle.infer;
 
-// Content block: mime type + payload
+// Content block: mime type + bytes payload
 // In DRISL, content will be bytes; we may want to decode text types
 export const Content = type({
-  mimeType: "string",
+  mimeType: type.string.describe("The mime type of the data field."),
   // For now, keep as bytes. Could refine based on mimeType.
   data: Bytes,
-});
+}).describe("Content block: mime type + bytes payload");
 
-// Timestamp: microseconds since Unix epoch
 // Lexicons use integer for this
-export const Timestamp = type("number.integer>0", "@", "timestamp");
+export const Timestamp = type("number.integer>0", "@", "timestamp").describe(
+  "A timestamp: the milliseconds since the unix epoch.",
+);
 
 export const StreamIndex = type("number.integer").brand("stream-index");
 export type StreamIndex = typeof StreamIndex.infer;
-
-/**
- * Either set a string value or ignore (don't change).
- *
- * Usage:
- * - { $type: "'space.roomy.defs#set'", value: "myvalue" } → update to "new name"
- * - { $type: "'space.roomy.defs#set'", value: null } → update to "new name"
- * - { $type: "'space.roomy.defs#ignore'" } → leave unchanged
- */
-export const SetProperty = type.or(
-  { $type: "'space.roomy.defs#ignore'" },
-  {
-    $type: "'space.roomy.defs#set'",
-    value: "string | null",
-  },
-);
-export type SetProperty = typeof SetProperty.infer;
-export const set: (v: string) => SetProperty = (value) => ({
-  $type: "space.roomy.defs#set",
-  value,
-});
-export const ignore: SetProperty = { $type: "space.roomy.defs#ignore" };
-export const setOrIgnore = (v?: string) => (v ? set(v) : ignore);
 
 type TypeIds<T extends { $type: string }> = T["$type"];
 
@@ -112,29 +93,53 @@ type TypeMap<T extends { $type: string }> = {
 
 export function unionToMap<T extends { $type: string }>(
   t: Type<T>,
+  opts?: { makeAllNullable: boolean },
 ): Type<TypeMap<T>> {
   const map = {} as any;
   for (const variant of t.json as (
     | {
-        domain: "object";
+        domain: string | { domain: string; meta?: string };
         required: { key: string; value: { unit: string } | {} }[];
+        meta?: string;
       }
     | {}
   )[]) {
-    if ("domain" in variant && variant.domain == "object") {
+    if (
+      "domain" in variant &&
+      variant.domain &&
+      (variant.domain == "object" ||
+        (typeof variant.domain == "object" &&
+          variant.domain?.domain == "object"))
+    ) {
       for (const required of variant.required) {
         if (required.key == "$type" && "unit" in required.value) {
           (globalThis as any).t = t;
-          map[required.value.unit] = (t as any)
-            .extract({ $type: `'${required.value.unit}'` })
-            .omit("$type")
-            .optional();
+          const e = (t as any).extract({ $type: `'${required.value.unit}'` });
+          let def = e.omit("$type");
+          if (opts?.makeAllNullable) {
+            def = e.or(type.null);
+          }
+          if (variant.meta) {
+            def = def.describe(variant.meta);
+          }
+          map[required.value.unit] = def.optional();
         }
       }
+    } else {
+      throw "Invalid type for `unionToMap`";
     }
   }
   return type(map) as any;
 }
 
-// Re-export the type helper for use in other modules
-export { type };
+export const BasicInfo = type({
+  "name?": "string",
+  "avatar?": "string",
+  "description?": "string",
+});
+
+export const BasicInfoUpdate = type({
+  "name?": "string | null",
+  "avatar?": "string | null",
+  "description?": "string | null",
+});

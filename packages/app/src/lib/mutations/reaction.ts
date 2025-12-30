@@ -11,7 +11,7 @@ export async function addReaction(
     id: newUlid(),
     room: roomId,
     variant: {
-      $type: "space.roomy.room.addReaction.v0",
+      $type: "space.roomy.reaction.addReaction.v0",
       target: messageId,
       reaction,
     },
@@ -28,7 +28,7 @@ export async function removeReaction(
     id: newUlid(),
     room: roomId,
     variant: {
-      $type: "space.roomy.room.removeReaction.v0",
+      $type: "space.roomy.reaction.removeReaction.v0",
       target: messageId,
       previous: reactionId,
     },

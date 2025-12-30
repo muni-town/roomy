@@ -2,76 +2,58 @@
  * Space-level events: join, leave, admin management, handle linking
  */
 
-import { Did, StreamDid, UserDid, type } from "../primitives";
+import { BasicInfoUpdate, Did, StreamDid, UserDid, type } from "../primitives";
 
-// Join a Roomy space (only valid in user's personal stream)
-export const spaceJoin = type({
-  $type: "'space.roomy.personal.joinSpace.v0'",
-  /** The space being joined */
-  spaceId: StreamDid,
-});
+export const JoinSpace = type({
+  $type: "'space.roomy.stream.personal.joinSpace.v0'",
+  spaceDid: StreamDid.configure("The space being joined."),
+}).describe(
+  "Join a Roomy space. \
+This must be sent in a user's personal stream and is how you update the joined spaces list. \
+Signaling that you have joined a space inside the space you are joining should be done with a room.joinRoom event.",
+);
 
-// Leave a Roomy space (only valid in user's personal stream)
-export const spaceLeave = type({
-  $type: "'space.roomy.personal.leaveSpace.v0'",
-  /** The space being left */
-  spaceId: StreamDid,
-});
+export const LeaveSpace = type({
+  $type: "'space.roomy.stream.personal.leaveSpace.v0'",
+  spaceDid: StreamDid.configure("The space being left."),
+}).configure(
+  "Leave a Roomy space. \
+This must be sent in a user's personal stream and is how you update the joined spaces list.",
+);
 
-// Add an admin to the space
-export const adminAdd = type({
-  $type: "'space.roomy.space.addAdmin.v0'",
-  /** DID of the user being made admin */
-  userId: UserDid,
-});
+export const UpdateStreamInfo = type({
+  $type: "'space.roomy.stream.updateStreamInfo.v0'",
+})
+  .and(BasicInfoUpdate)
+  .describe(
+    "Update a stream's basic info. \
+This is used to set things like the name, icon, and description for a space.",
+  );
 
-// Remove an admin from the space
-export const adminRemove = type({
-  $type: "'space.roomy.space.removeAdmin.v0'",
-  /** DID of the user being removed as admin */
-  userId: UserDid,
-});
+export const AddAdmin = type({
+  $type: "'space.roomy.stream.addAdmin.v0'",
+  userDid: UserDid.describe("The user to add as an admin."),
+}).configure("Add an admin to the space");
 
-/**
- * Set the ATProto account DID for the space handle.
- *
- * For verification, the ATProto account must also have a
- * `space.roomy.stream` PDS record with rkey `handle` pointing
- * back to this stream's ID.
- */
-export const streamHandleAccount = type({
-  $type: "'space.roomy.stream.handleAccount.v0'",
-  /** The ATProto DID, or null to unset */
-  "did?": Did,
-});
+export const RemoveAdmin = type({
+  $type: "'space.roomy.stream.removeAdmin.v0'",
+  userDid: UserDid.describe("The user to remove as an admin."),
+}).configure("Remove an admin from the space");
+
+export const SetHandleAccount = type({
+  $type: "'space.roomy.stream.setHandleAccount.v0'",
+  did: Did.or(type.null).describe("The ATProto DID, or null to unset."),
+}).configure(
+  "Set the ATProto account DID for the space handle. \
+For verification, the ATProto account must also have a `space.roomy.stream` PDS record with rkey `handle` pointing back to this stream's ID.",
+);
 
 // All space events
-export const spaceEvent = spaceJoin
-  .or(spaceLeave)
-  .or(adminAdd)
-  .or(adminRemove)
-  .or(streamHandleAccount);
-
-// Export for registry
-export const events = {
-  "space.roomy.personal.joinSpace.v0": {
-    type: spaceJoin,
-    description: "Join a Roomy space (tracked in user's personal stream)",
-  },
-  "space.roomy.personal.leaveSpace.v0": {
-    type: spaceLeave,
-    description: "Leave a Roomy space",
-  },
-  "space.roomy.space.addAdmin.v0": {
-    type: adminAdd,
-    description: "Add an admin to the space",
-  },
-  "space.roomy.space.removeAdmin.v0": {
-    type: adminRemove,
-    description: "Remove an admin from the space",
-  },
-  "space.roomy.stream.handleAccount.v0": {
-    type: streamHandleAccount,
-    description: "Set the ATProto account for the space's handle",
-  },
-} as const;
+export const SpaceEvent = type.or(
+  JoinSpace,
+  LeaveSpace,
+  AddAdmin,
+  RemoveAdmin,
+  SetHandleAccount,
+  UpdateStreamInfo,
+);

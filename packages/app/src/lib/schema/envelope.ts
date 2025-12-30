@@ -6,55 +6,46 @@
  */
 
 import { type, Ulid } from "./primitives";
-import { messageEvent } from "./events/message";
-import { roomEvent } from "./events/room";
-import { reactionEvent } from "./events/reaction";
-import { spaceEvent } from "./events/space";
-import { genericEvent } from "./events/generic";
-import { pageEvent } from "./events/page";
-import { userEvent } from "./events/user";
+import { MessageEvent } from "./events/message";
+import { RoomEvent } from "./events/room";
+import { ReactionEvent } from "./events/reaction";
+import { SpaceEvent } from "./events/space";
+import { PageEvent } from "./events/page";
+import { UserEvent } from "./events/user";
 
-// Union of all event variants
 // Add new event families here as they're defined
-export const eventVariant = type.or(
-  messageEvent,
-  roomEvent,
-  reactionEvent,
-  spaceEvent,
-  genericEvent,
-  pageEvent,
-  userEvent,
-);
+export const EventVariant = type
+  .or(MessageEvent, RoomEvent, ReactionEvent, SpaceEvent, PageEvent, UserEvent)
+  .describe("Union of all event variants.");
 
 // The full event envelope
 // This is what gets encoded to DRISL and sent over the wire
-export const event = type({
-  /** Unique event ID, also encodes timestamp */
-  id: Ulid,
-  /** Parent room. Null for space-level events. */
-  "room?": Ulid,
-  /** The event payload (discriminated by $type) */
-  variant: eventVariant,
-});
+export const Event = type({
+  id: Ulid.describe("Unique event ID, also encodes timestamp"),
+  "room?": Ulid.describe(
+    "Parent room. This is not set for space-level events.",
+  ),
+  variant: EventVariant,
+}).describe("Roomy's top-level event schema.");
 
 // Type exports for TypeScript consumers
 
 /** NSID $type key specifying an event variant */
-export type EventType = (typeof eventVariant.infer)["$type"];
+export type EventType = (typeof EventVariant.infer)["$type"];
 
 /** Event envelope with room, id and variant. Optionally accepts an EventType parameter,
  * which narrows to the given event type */
 export type Event<K = undefined> = K extends EventType
-  ? Omit<typeof event.infer, "variant"> & {
+  ? Omit<typeof Event.infer, "variant"> & {
       variant: Extract<EventVariant, { $type: K }>;
     }
-  : typeof event.infer;
+  : typeof Event.infer;
 
 /** The inner data inside an event envelope. Optionally accepts an EventType parameter,
  * which narrows to the given event type */
 export type EventVariant<K = undefined> = K extends EventType
   ? Extract<EventVariant, { $type: K }>
-  : typeof eventVariant.infer;
+  : typeof EventVariant.infer;
 
 /**
  * Parse an event variant by looking up its $type.
@@ -69,7 +60,7 @@ export type EventVariant<K = undefined> = K extends EventType
  * ```
  */
 export function parseEvent(data: unknown) {
-  const result = event(data);
+  const result = Event(data);
   if (result instanceof type.errors) {
     return { success: false as const, error: result.summary };
   }
