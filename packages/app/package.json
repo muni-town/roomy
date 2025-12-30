@@ -18,6 +18,7 @@
     "build-web-app": "vite build",
     "build-web-app-prod": "./scripts/build-prod.sh",
     "build:t": "env MODE=tauri vite build --mode tauri",
+    "generate-lexicons": "tsx ./scripts/generate-lexicons2.ts",
     "test": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",

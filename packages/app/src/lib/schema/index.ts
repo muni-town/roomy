@@ -27,30 +27,5 @@
 // Primitives
 export * from "./primitives";
 
-// Events
-export {
-  messageCreate,
-  messageEdit,
-  messageDelete,
-  messageEvent,
-} from "./events/message";
-export {
-  roomCreate,
-  roomDelete,
-  roomJoin,
-  roomLeave,
-  roomEvent,
-} from "./events/room";
-
-// Extensions
-export { messageExtension, extensions } from "./extensions/message";
-
 // Envelope
-export {
-  event,
-  eventVariant,
-  parseEvent,
-  type Event,
-  type EventVariant,
-  type EventType,
-} from "./envelope";
+export { Event, EventVariant, parseEvent, type EventType } from "./envelope";

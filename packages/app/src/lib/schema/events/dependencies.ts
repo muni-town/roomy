@@ -1,24 +1,24 @@
 import { type } from "../primitives";
-import { messageDelete, messageEdit } from "./message";
+import { DeleteMessage, EditMessage } from "./message";
 import {
-  reactionAdd,
-  reactionBridgedAdd,
-  reactionBridgedRemove,
-  reactionRemove,
+  AddReaction,
+  AddBrigedReaction,
+  RemoveReaction,
+  RemoveBrigedReaction,
 } from "./reaction";
-import { pageEdit } from "./page";
+import { EditPage } from "./page";
 
 export const WithParent = type.or(
-  messageEdit,
-  reactionRemove,
-  reactionBridgedRemove,
-  pageEdit,
+  EditMessage,
+  RemoveReaction,
+  RemoveBrigedReaction,
+  EditPage,
 );
 
 export const WithTarget = type.or(
-  messageDelete,
-  reactionAdd,
-  reactionBridgedAdd,
+  DeleteMessage,
+  AddReaction,
+  AddBrigedReaction,
 );
 
 /** Union of all event variants that *depend* on previous events.
@@ -30,11 +30,11 @@ export type DependentEventVariant = typeof DependentEventVariant.infer;
 export type DependentEventType = DependentEventVariant["$type"];
 
 export const dependentEventType: DependentEventType[] = [
-  "space.roomy.room.editMessage.v0",
-  "space.roomy.room.editPage.v0",
-  "space.roomy.room.deleteMessage.v0",
-  "space.roomy.room.addReaction.v0",
-  "space.roomy.room.addBridgedReaction.v0",
-  "space.roomy.room.removeReaction.v0",
-  "space.roomy.room.removeBridgedReaction.v0",
+  "space.roomy.message.editMessage.v0",
+  "space.roomy.page.editPage.v0",
+  "space.roomy.message.deleteMessage.v0",
+  "space.roomy.reaction.addReaction.v0",
+  "space.roomy.reaction.addBridgedReaction.v0",
+  "space.roomy.reaction.removeReaction.v0",
+  "space.roomy.reaction.removeBridgedReaction.v0",
 ];

@@ -2,57 +2,38 @@
  * Message events: create, edit, delete
  */
 
-import { MessageExtensionMap } from "../extensions/message";
 import { type, Ulid, Content } from "../primitives";
+import {
+  MessageExtensionMap,
+  MessageExtensionUpdateMap,
+} from "../extensions/message";
 
-// Create a new message
-export const messageCreate = type({
-  $type: "'space.roomy.room.sendMessage.v0'",
-  body: Content,
-  /** Extensible fields: replies, attachments, overrides */
+export const CreateMessage = type({
+  $type: "'space.roomy.message.sendMessage.v0'",
+  body: Content.describe(
+    "The main content of the chat message. Usually this uses the text/markdown mime type.",
+  ),
   extensions: MessageExtensionMap,
-});
+}).describe("Create a new message.");
 
-// Edit an existing message
-export const messageEdit = type({
-  $type: "'space.roomy.room.editMessage.v0'",
-  /** Id of message being edited */
-  target: Ulid,
-  /** Id of last known edit event, or the message itself */
-  "previous?": Ulid,
-  /**
-   * New content. If mimeType is text/x-dmp-diff, this is a
-   * diff-match-patch diff to apply to the previous content.
-   */
-  body: Content,
-  /** Updated reply target, if changing */
-  "replyTo?": Ulid,
-});
+export const EditMessage = type({
+  $type: "'space.roomy.message.editMessage.v0'",
+  target: Ulid.configure("Id of message being edited."),
+  "previous?": Ulid.configure(
+    "Id of last known edit event, or the message itself.",
+  ),
+  body: Content.describe(
+    "New content. \
+If mimeType is text/x-dmp-diff, this is a diff-match-patch diff to apply to the previous content.",
+  ),
+  "extensions?": MessageExtensionUpdateMap,
+}).describe("Edit a previously sent message.");
 
-// Delete a message
-export const messageDelete = type({
-  $type: "'space.roomy.room.deleteMessage.v0'",
-  /** Id of message being deleted */
-  target: Ulid,
+export const DeleteMessage = type({
+  $type: "'space.roomy.message.deleteMessage.v0'",
+  target: Ulid.describe("The ID of the message being deleted."),
   "reason?": "string",
-});
+}).describe("Delete a message.");
 
 // All message events
-export const messageEvent = messageCreate.or(messageEdit).or(messageDelete);
-
-// Export for registry
-export const events = {
-  "space.roomy.room.sendMessage.v0": {
-    type: messageCreate,
-    description:
-      "Create a new chat message with optional attachments and metadata",
-  },
-  "space.roomy.room.editMessage.v0": {
-    type: messageEdit,
-    description: "Edit a previously sent message",
-  },
-  "space.roomy.room.deleteMessage.v0": {
-    type: messageDelete,
-    description: "Delete a message",
-  },
-} as const;
+export const MessageEvent = type.or(CreateMessage, EditMessage, DeleteMessage);

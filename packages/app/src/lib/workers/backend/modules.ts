@@ -25,7 +25,7 @@ const personalModuleDef: BasicModule = {
     -- no admin set yet - only allow admin.add events
     select unauthorized('stream not initialized - only admin.add allowed')
     where (select admin from stream_info) is null
-      and (select event_type from event_info) is not 'space.roomy.space.addAdmin.v0';
+      and (select event_type from event_info) is not 'space.roomy.stream.addAdmin.v0';
   
     with event_info as (
       select drisl_extract(payload, '.variant.$type') as event_type from event
@@ -33,7 +33,7 @@ const personalModuleDef: BasicModule = {
     -- admin already set - reject admin.add (only one admin allowed)
     select unauthorized('admin already set')
     where (select admin from stream_info) is not null
-      and (select event_type from event_info) = 'space.roomy.space.addAdmin.v0';
+      and (select event_type from event_info) = 'space.roomy.stream.addAdmin.v0';
   
     with event_info as (
       select drisl_extract(payload, '.variant.$type') as event_type from event
@@ -46,8 +46,8 @@ const personalModuleDef: BasicModule = {
   materializer: sql`
     -- Set admin from admin.add event
     update stream_info
-    set admin = (select drisl_extract(payload, '.variant.userId') from event)
-    where (select drisl_extract(payload, '.variant.$type') from event) = 'space.roomy.space.addAdmin.v0';
+    set admin = (select drisl_extract(payload, '.variant.userDid') from event)
+    where (select drisl_extract(payload, '.variant.$type') from event) = 'space.roomy.stream.addAdmin.v0';
   `.sql,
   queries: [
     {
@@ -113,7 +113,7 @@ const spaceModuleDef: BasicModule = {
     )
     select unauthorized('space not initialized - need admin.add')
     where not exists (select 1 from admins)
-      and (select event_type from event_info) is not 'space.roomy.space.addAdmin.v0';
+      and (select event_type from event_info) is not 'space.roomy.stream.addAdmin.v0';
 
     -- Case 2: Admins exist - author must be an admin for admin management
     with event_info as (
@@ -124,38 +124,37 @@ const spaceModuleDef: BasicModule = {
     )
     select unauthorized('must be admin to manage admins')
     where exists (select 1 from admins)
-      and (select event_type from event_info) in ('space.roomy.space.addAdmin.v0', 'space.roomy.space.removeAdmin.v0')
+      and (select event_type from event_info) in ('space.roomy.stream.addAdmin.v0', 'space.roomy.space.removeAdmin.v0')
       and not exists (select 1 from admins where user_id = (select author from event_info));
   `.sql,
 
   materializer: sql`
     -- Add admin
     insert or ignore into admins (user_id)
-    select drisl_extract(payload, '.variant.userId') from event
-    where drisl_extract(payload, '.variant.$type') = 'space.roomy.space.addAdmin.v0';
+    select drisl_extract(payload, '.variant.userDid') from event
+    where drisl_extract(payload, '.variant.$type') = 'space.roomy.stream.addAdmin.v0';
 
     -- Remove admin
     delete from admins
-    where user_id = (select drisl_extract(payload, '.variant.userId') from event)
-      and (select drisl_extract(payload, '.variant.$type') from event) = 'space.roomy.space.removeAdmin.v0';
+    where user_id = (select drisl_extract(payload, '.variant.userDid') from event)
+      and (select drisl_extract(payload, '.variant.$type') from event) = 'space.roomy.stream.removeAdmin.v0';
     
     -- Mark metadata events
     insert into metadata_events (idx)
     select idx from event
     where drisl_extract(payload, '.variant.$type') in (
-      'space.roomy.personal.joinSpace.v0',
-      'space.roomy.personal.leaveSpace.v0',
-      'space.roomy.space.setHandleAccount.v0',
-      'space.roomy.space.addAdmin.v0',
-      'space.roomy.space.removeAdmin.v0',
-      'space.roomy.common.setInfo.v0',
+      'space.roomy.stream.personal.joinSpace.v0',
+      'space.roomy.stream.personal.leaveSpace.v0',
+      'space.roomy.stream.addAdmin.v0',
+      'space.roomy.stream.removeAdmin.v0',
+      'space.roomy.user.setHandleAccount.v0',
+      'space.roomy.stream.updateStreamInfo.v0',
       'space.roomy.room.createRoom.v0',
       'space.roomy.room.deleteRoom.v0',
-      'space.roomy.room.updateParent.v0',
+      'space.roomy.room.updateRoom.v0',
       'space.roomy.room.addMember.v0',
       'space.roomy.room.removeMember.v0',
-      'space.roomy.space.overrideUserMeta.v0',
-      'space.roomy.room.setKind.v0'
+      'space.roomy.user.updateUserProfile.v0'
     );
     
     -- Track room membership for events

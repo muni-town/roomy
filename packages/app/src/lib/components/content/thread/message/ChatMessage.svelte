@@ -118,16 +118,13 @@
       id: newUlid(),
       room: Ulid.assert(page.params.object),
       variant: {
-        $type: "space.roomy.room.editMessage.v0",
+        $type: "space.roomy.message.editMessage.v0",
         target: message.id,
         previous: message.lastEdit,
         body: {
           mimeType: "text/x-dmp-patch",
           data: toBytes(new TextEncoder().encode(contentPatch)),
         },
-        replyTo: message.replyTo[0]
-          ? Ulid.assert(message.replyTo[0])
-          : undefined, // This event needs updating to support multiple replies and other changes to extensions
       },
     });
 

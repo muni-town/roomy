@@ -216,11 +216,11 @@
         });
       }
 
-      const messageEvent: Event<"space.roomy.room.sendMessage.v0"> = {
+      const messageEvent: Event<"space.roomy.message.sendMessage.v0"> = {
         id: messageId,
         room: Ulid.assert(page.params.object),
         variant: {
-          $type: "space.roomy.room.sendMessage.v0",
+          $type: "space.roomy.message.sendMessage.v0",
           body: {
             data: toBytes(new TextEncoder().encode(message)),
             mimeType: "text/markdown",
