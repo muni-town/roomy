@@ -44,14 +44,14 @@
     <div
       class="flex items-center relative -bottom-1 justify-between gap-2 mr-2"
     >
-      {#if thread.kind == "page"}
+      {#if thread.kind == "space.roomy.page"}
         <IconHeroiconsDocument class="shrink-0" />
-      {:else if thread.kind == "thread"}
+      {:else if thread.kind == "space.roomy.thread"}
         <IconHeroiconsHashtag class="shrink-0" />
       {/if}
     </div>
     <div class="text-ellipsis min-w-0 shrink w-full max-w-full">
-      {#if thread.kind == "channel"}
+      {#if thread.kind == "space.roomy.channel"}
         #&nbsp;
       {/if}
       {thread.name}

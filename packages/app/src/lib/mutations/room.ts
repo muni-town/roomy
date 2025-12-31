@@ -45,7 +45,7 @@ export async function createPage(opts: {
   // Create a new room for the page
   const { roomId: pageId, events } = createRoomEvents({
     ...opts,
-    kind: "page",
+    kind: "space.roomy.page",
     info: {
       name: opts.pageName,
     },
@@ -91,7 +91,7 @@ export async function promoteToChannel(opts: {
     room: opts.room.id,
     variant: {
       $type: "space.roomy.room.updateRoom.v0",
-      kind: "channel",
+      kind: "space.roomy.channel",
       name: channelName,
     },
   });
@@ -116,7 +116,7 @@ export async function convertToThread(opts: {
     room: opts.roomId,
     variant: {
       $type: "space.roomy.room.updateRoom.v0",
-      kind: "thread",
+      kind: "space.roomy.thread",
     },
   });
 }
@@ -131,7 +131,7 @@ export async function convertToPage(opts: {
       room: opts.room.id,
       variant: {
         $type: "space.roomy.room.updateRoom.v0",
-        kind: "page",
+        kind: "space.roomy.page",
       },
     },
     {

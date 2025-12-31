@@ -103,7 +103,7 @@ export async function createSpace(opts: {
     room: undefined,
     variant: {
       $type: "space.roomy.room.createRoom.v0",
-      kind: "category",
+      kind: "space.roomy.category",
       // FIXME: we should not have a category named uncategorized, we should just display .
       name: "Uncategorized",
     },
@@ -114,7 +114,7 @@ export async function createSpace(opts: {
     room: categoryId,
     variant: {
       $type: "space.roomy.room.createRoom.v0",
-      kind: "channel",
+      kind: "space.roomy.channel",
       name: "general",
     },
   });

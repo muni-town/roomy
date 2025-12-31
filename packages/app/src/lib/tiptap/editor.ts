@@ -149,7 +149,7 @@ const SpaceContextMentionExtension = Mention.extend({
       mergeAttributes(
         {
           href: `/${space}/${id}`,
-          class: `mention ${type === "thread" ? "thread-mention" : "channel-mention"} !no-underline`,
+          class: `mention ${type === "space.roomy.thread" ? "thread-mention" : "channel-mention"} !no-underline`,
         },
         HTMLAttributes,
       ),
@@ -173,7 +173,7 @@ export const initSpaceContextMention = ({
         "span",
         mergeAttributes(
           {
-            class: `mention ${type === "thread" ? "thread-mention" : "channel-mention"} !no-underline`,
+            class: `mention ${type === "space.roomy.thread" ? "thread-mention" : "channel-mention"} !no-underline`,
           },
           options.HTMLAttributes,
         ),

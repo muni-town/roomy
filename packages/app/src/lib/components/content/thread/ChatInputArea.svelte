@@ -114,7 +114,7 @@
     const threadId = await createRoom({
       spaceId,
       parentRoomId: current.roomId,
-      kind: "thread",
+      kind: "space.roomy.thread",
       info: {
         name: threadName,
       },

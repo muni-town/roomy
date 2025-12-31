@@ -5,7 +5,7 @@
 import { UserDid, type, Ulid, BasicInfo, BasicInfoUpdate } from "../primitives";
 
 export const RoomKind = type(
-  "'channel' | 'category' | 'thread' | 'page'",
+  "'space.roomy.channel' | 'space.roomy.category' | 'space.roomy.thread' | 'space.roomy.page'",
 ).describe("A kind of room, such as a channel, thread, or page.");
 export type RoomKind = typeof RoomKind.infer;
 

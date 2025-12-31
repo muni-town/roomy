@@ -204,7 +204,7 @@
       <h2
         class="mr-2 w-full max-w-full truncate font-regular py-4 text-base-900 dark:text-base-100 flex items-center gap-2 transition-all duration-300"
       >
-        {#if room?.kind === "channel" || room?.kind === "thread"}
+        {#if room?.kind === "space.roomy.channel" || room?.kind === "space.roomy.thread"}
           <div>
             <IconHeroiconsHashtag
               class="w-5 h-5 ml-2 shrink-0 text-base-700 dark:text-base-300"
@@ -212,7 +212,7 @@
           </div>
         {/if}
 
-        {#if room?.kind === "page" && shouldShowPageTitle}
+        {#if room?.kind === "space.roomy.page" && shouldShowPageTitle}
           <div in:fade={{ duration: 300 }} out:fade={{ duration: 100 }}>
             <IconHeroiconsDocument
               class="w-5 h-5 ml-2 shrink-0 text-base-700 dark:text-base-300 mr-1"
@@ -220,9 +220,9 @@
           </div>
         {/if}
 
-        {#if room?.parent && room.parent.kind == "channel" && (room?.kind !== "page" || shouldShowPageTitle)}
+        {#if room?.parent && room.parent.kind == "space.roomy.channel" && (room?.kind !== "space.roomy.page" || shouldShowPageTitle)}
           <a
-            href={`/${page.params.space}/${room.parent.id}${room.kind == "page" ? "#pages" : room.kind == "thread" ? "#threads" : ""}`}
+            href={`/${page.params.space}/${room.parent.id}${room.kind == "space.roomy.page" ? "#pages" : room.kind == "space.roomy.thread" ? "#threads" : ""}`}
             class="hover:underline underline-offset-4"
           >
             {room?.parent?.name}
@@ -230,7 +230,7 @@
           <IconHeroiconsChevronRight class="w-4 h-4 shrink-0" />
         {/if}
 
-        {#if room?.kind !== "page"}
+        {#if room?.kind !== "space.roomy.page"}
           <span class="truncate">{room?.name}</span>
         {:else if shouldShowPageTitle}
           <div class="grow w-full">
@@ -247,7 +247,7 @@
         <div class="dark:!text-base-400 !text-base-600 mx-3">
           Downloading Entire Space...
         </div>
-      {:else if room?.kind == "thread"}
+      {:else if room?.kind == "space.roomy.thread"}
         <span class="grow"></span>
 
         <Popover>
@@ -291,7 +291,7 @@
             </div>
           </form>
         </Modal>
-      {:else if room?.kind == "channel"}
+      {:else if room?.kind == "space.roomy.channel"}
         <span class="grow"></span>
 
         <ToggleTabs
@@ -370,7 +370,7 @@
             </div>
           </form>
         </Modal>
-      {:else if room?.kind == "page"}
+      {:else if room?.kind == "space.roomy.page"}
         <span class="grow"></span>
         <ToggleTabs
           items={pageTabList.map((x) => ({
@@ -413,15 +413,15 @@
       <div class="h-full w-full flex">
         <div class="m-auto">Loading...</div>
       </div>
-    {:else if room?.kind == "channel"}
+    {:else if room?.kind == "space.roomy.channel"}
       {#if channelActiveTab == "Chat"}
         <TimelineView />
       {:else if channelActiveTab == "Threads"}
         <ChannelBoardView />
       {/if}
-    {:else if room?.kind == "thread"}
+    {:else if room?.kind == "space.roomy.thread"}
       <TimelineView />
-    {:else if room?.kind == "page"}
+    {:else if room?.kind == "space.roomy.page"}
       {#if pageActiveTab == "Page"}
         <PageView bind:showPageChat />
       {:else}
