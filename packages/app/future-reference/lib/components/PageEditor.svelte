@@ -107,7 +107,11 @@
   let hashMenuVisible = $state(false);
   let hashMenuPosition = $state({ x: 0, y: 0 });
   let filteredItems = $state<
-    { id: string; name: string; type: "thread" | "channel" }[]
+    {
+      id: string;
+      name: string;
+      type: "space.roomy.thread" | "space.roomy.channel";
+    }[]
   >([]);
   // Commenting out for now because it is unused, but we might want to use it somewhere later.
   // let hashQuery = $state("");
@@ -383,7 +387,7 @@
   function insertHashLink(item: {
     id: string;
     name: string;
-    type: "thread" | "channel";
+    type: "space.roomy.thread" | "space.roomy.channel";
   }) {
     if (!editor) return;
 
@@ -426,7 +430,7 @@
           );
 
           const linkId =
-            item.type === "channel"
+            item.type === "space.roomy.channel"
               ? `/${page.params.space}/${item.id}`
               : `/${page.params.space}/thread/${item.id}`;
           editor.createLink(linkId);
@@ -887,7 +891,7 @@
                         class="w-6 h-6 rounded flex items-center justify-center overflow-hidden"
                       >
                         <Icon
-                          icon={item.type === "channel"
+                          icon={item.type === "space.roomy.channel"
                             ? "tabler:hash"
                             : "tabler:message-circle"}
                           class="text-lg text-primary"

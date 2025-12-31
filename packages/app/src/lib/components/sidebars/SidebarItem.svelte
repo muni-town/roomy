@@ -99,7 +99,7 @@
     >
       <IconLucidePencil class="size-4" />
     </Button>
-  {:else if item.type === "category"}{:else if !current && item.unreadCount > 0}
+  {:else if item.type === "space.roomy.category"}{:else if !current && item.unreadCount > 0}
     <Badge>
       {item.unreadCount}
     </Badge>
@@ -148,7 +148,7 @@
               })}?thread=${encodeURIComponent(bookmark.postUri)}`}
               variant="ghost"
               class="w-full justify-start min-w-0 text-sm font-normal"
-              data-current={page.url?.searchParams?.get("thread") ===
+              data-current={page.url?.searchParams?.get("space.roomy.thread") ===
                 bookmark.postUri}
               onclick={() => {
                 console.log("🔍 Bookmark thread clicked:", bookmark.postUri);
@@ -247,7 +247,7 @@
     </Button>
     {@render editButton?.()}
   </div> -->
-{#if item.type == "category"}
+{#if item.type == "space.roomy.category"}
   <!-- Object is a group/folder -->
   <div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink pb-4">
     <div
@@ -285,7 +285,7 @@
       </div>
     {/if}
   </div>
-{:else if item.type == "channel" && level < 2}
+{:else if item.type == "space.roomy.channel" && level < 2}
   <div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink">
     <div
       class="inline-flex items-center justify-between gap-2 w-full min-w-0 group"
@@ -327,7 +327,7 @@
       </div>
     {/if}
   </div>
-{:else if level >= 2 || item.type == "thread"}
+{:else if level >= 2 || item.type == "space.roomy.thread"}
   <div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink">
     <div
       class="inline-flex items-start justify-between w-full min-w-0 group pl-3"
@@ -363,14 +363,14 @@
             {notificationCount}
           </Badge>
         {/if}
-        <!-- {#if item.type === "page"}<div class="ml-auto">
+        <!-- {#if item.type === "space.roomy.page"}<div class="ml-auto">
             <IconHeroiconsDocument class="opacity-60 shrink" />
           </div>{/if} -->
       </Button>
       {@render editButton?.()}
     </div>
   </div>
-{:else if item.type == "page"}
+{:else if item.type == "space.roomy.page"}
   <div
     class="inline-flex items-center justify-between gap-2 w-full min-w-0 group"
   >

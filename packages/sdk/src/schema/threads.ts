@@ -26,7 +26,7 @@ export const ThreadContent = co.map({
   timeline: Timeline,
 });
 
-export const ThreadComponent = defComponent("thread", ThreadContent);
+export const ThreadComponent = defComponent("space.roomy.thread", ThreadContent);
 
 export const SubThreadsComponent = defComponent(
   "space.roomy.subthreads.v0",

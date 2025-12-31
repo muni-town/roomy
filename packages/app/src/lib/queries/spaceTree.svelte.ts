@@ -7,7 +7,11 @@ import { sql } from "$lib/utils/sqlTemplate";
 let flatTreeQuery: LiveQuery<{
   id: string;
   parent: string | null;
-  type: "category" | "channel" | "thread" | "page";
+  type:
+    | "space.roomy.category"
+    | "space.roomy.channel"
+    | "space.roomy.thread"
+    | "space.roomy.page";
   name: string;
   lastRead: number;
   latestEntity: string | null;
@@ -29,7 +33,11 @@ function buildTree(
   rows: Array<{
     id: string;
     parent: string | null;
-    type: "category" | "channel" | "thread" | "page";
+    type:
+      | "space.roomy.category"
+      | "space.roomy.channel"
+      | "space.roomy.thread"
+      | "space.roomy.page";
     name: string;
     lastRead: number;
     latestEntity: string | null;
@@ -56,7 +64,7 @@ function buildTree(
     };
 
     // Add children array for non-page types
-    if (row.type !== "page") {
+    if (row.type !== "space.roomy.page") {
       node.children = [];
     }
 
@@ -93,7 +101,11 @@ $effect.root(() => {
   flatTreeQuery = new LiveQuery<{
     id: string;
     parent: string | null;
-    type: "category" | "channel" | "thread" | "page";
+    type:
+      | "space.roomy.category"
+      | "space.roomy.channel"
+      | "space.roomy.thread"
+      | "space.roomy.page";
     name: string;
     lastRead: number;
     latestEntity: string | null;

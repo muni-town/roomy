@@ -112,7 +112,10 @@
       const rooms: Map<
         string,
         {
-          kind: "category" | "channel" | "thread";
+          kind:
+            | "space.roomy.category"
+            | "space.roomy.channel"
+            | "space.roomy.thread";
           name: string;
           discordParentId?: string;
           topic?: string;
@@ -126,8 +129,8 @@
           rooms.set(entry.channel.categoryId, {
             kind:
               entry.channel.type == "GuildPublicThread"
-                ? "channel"
-                : "category",
+                ? "space.roomy.channel"
+                : "space.roomy.category",
             name: entry.channel.category,
             roomyId: makeUlid(),
           });
@@ -137,7 +140,9 @@
         rooms.set(entry.channel.id, {
           discordParentId: entry.channel.categoryId,
           kind:
-            entry.channel.type == "GuildPublicThread" ? "thread" : "channel",
+            entry.channel.type == "GuildPublicThread"
+              ? "space.roomy.thread"
+              : "space.roomy.channel",
           name: entry.channel.name,
           roomyId: existingChannelInfo?.roomyId || makeUlid(),
           topic: entry.channel.topic,
@@ -154,11 +159,11 @@
           variant: {
             $type: "space.roomy.room.createRoom.v0",
             kind:
-              room.kind == "category"
-                ? "category"
-                : room.kind == "channel"
-                  ? "channel"
-                  : "thread",
+              room.kind == "space.roomy.category"
+                ? "space.roomy.category"
+                : room.kind == "space.roomy.channel"
+                  ? "space.roomy.channel"
+                  : "space.roomy.thread",
             name: room.name,
           },
         });

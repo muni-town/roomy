@@ -21,22 +21,22 @@ export type SpaceTreeItem = {
   unreadCount: number;
 } & (
   | {
-      type: "category";
+      type: "space.roomy.category";
       children: (ChannelTreeItem | PageTreeItem)[];
     }
   | {
-      type: "channel";
+      type: "space.roomy.channel";
       children?: (ThreadTreeItem | PageTreeItem)[];
     }
   | {
-      type: "thread";
+      type: "space.roomy.thread";
       children?: PageTreeItem[];
     }
   | {
-      type: "page";
+      type: "space.roomy.page";
     }
 );
 
-type ChannelTreeItem = Extract<SpaceTreeItem, { type: "channel" }>;
-type ThreadTreeItem = Extract<SpaceTreeItem, { type: "thread" }>;
-type PageTreeItem = Extract<SpaceTreeItem, { type: "page" }>;
+type ChannelTreeItem = Extract<SpaceTreeItem, { type: "space.roomy.channel" }>;
+type ThreadTreeItem = Extract<SpaceTreeItem, { type: "space.roomy.thread" }>;
+type PageTreeItem = Extract<SpaceTreeItem, { type: "space.roomy.page" }>;

@@ -72,7 +72,7 @@
         variant: {
           kind: "space.roomy.room.setKind.v0",
           data: {
-            kind: "channel",
+            kind: "space.roomy.channel",
             data: undefined,
           },
         },
@@ -87,7 +87,7 @@
         variant: {
           kind: "space.roomy.room.setKind.v0",
           data: {
-            kind: "category",
+            kind: "space.roomy.category",
             data: undefined,
           },
         },

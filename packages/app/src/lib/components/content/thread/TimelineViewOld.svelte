@@ -377,7 +377,7 @@
         value: JSON.stringify({
           id: thread?.id ?? "",
           space: space.current?.id ?? "",
-          type: "thread",
+          type: "space.roomy.thread",
         }),
         label: thread?.name ?? "",
       }))

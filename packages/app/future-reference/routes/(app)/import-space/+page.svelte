@@ -221,7 +221,7 @@
           thread.name = parsed.channel.name;
           // thread.description = parsed.channel.topic;
           timeline = thread.timeline;
-          type = "thread";
+          type = "space.roomy.thread";
           name = thread.name;
           break;
 
@@ -239,7 +239,7 @@
 
           timeline = channel.mainThread.timeline;
           // channel.description = parsed.channel.topic;
-          type = "channel";
+          type = "space.roomy.channel";
           name = channel.name;
           break;
       }
