@@ -216,14 +216,17 @@ const materializers: {
     ];
   },
 
-  "space.roomy.room.updateParent.v0": async ({ event, data }) => {
+  "space.roomy.room.move.v0": async ({ event, data }) => {
     // Update the parent room
     return [
-      sql`
-        update entities set parent = ${data.parent || null}
-        where id = ${event.room}
-        `,
-    ];
+      data.toRoom !== undefined
+        ? sql`
+          update entities set parent = ${data.toRoom || null}
+          where id = ${event.room}
+        `
+        : undefined,
+      // TODO: update sort order if `after` is specified
+    ].filter((x) => !!x);
   },
 
   "space.roomy.room.updateRoom.v0": async ({ event, data }) => {

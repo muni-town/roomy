@@ -99,8 +99,10 @@ export async function promoteToChannel(opts: {
     id: newUlid(),
     room: opts.room.id,
     variant: {
-      $type: "space.roomy.room.updateParent.v0",
-      parent: Ulid.assert(opts.room.parent?.parent),
+      $type: "space.roomy.room.move.v0",
+      toRoom: opts.room.parent?.parent
+        ? Ulid.assert(opts.room.parent.parent)
+        : null,
     },
   });
 

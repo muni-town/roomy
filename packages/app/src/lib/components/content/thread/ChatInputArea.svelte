@@ -126,8 +126,8 @@
         id: newUlid(),
         room: message.id,
         variant: {
-          $type: "space.roomy.room.updateParent.v0",
-          parent: threadId,
+          $type: "space.roomy.room.move.v0",
+          toRoom: threadId,
         },
       });
     }

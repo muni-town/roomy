@@ -46,12 +46,22 @@ This can be sent at the space level ( no room ), or in parent room. \
 The ulid of this event becomes the id of the room.",
   );
 
-export const UpdateParent = type({
-  $type: "'space.roomy.room.updateParent.v0'",
-  "parent?": Ulid.describe(
-    "The new parent room, or undefined if you want to parent to the space",
+export const MoveTo = type({
+  $type: "'space.roomy.room.move.v0'",
+  "toRoom?": Ulid.or(type.null).describe(
+    "The new parent room, or null if you want to parent to the space.",
   ),
-});
+  "after?": Ulid.describe(
+    "If specified, sorts the item immediately after another item in \
+the new room or the current room if there is no new room. \
+If not specified, or if the ID in `after` does not exist, then the event \
+will be sorted at the end of the room. \
+Note: Some materializers will wait to materialize the event until the event \
+in after is found, so if it does not exist, this event may not be materialized.",
+  ),
+}).describe(
+  "Move an item in the room to another room and/or change it's sort order.",
+);
 
 export const UpdateRoom = type({
   $type: "'space.roomy.room.updateRoom.v0'",
@@ -103,7 +113,7 @@ export const RoomEvent = type.or(
   DeleteRoom,
   JoinRoom,
   LeaveRoom,
-  UpdateParent,
+  MoveTo,
   UpdateRoom,
   AddMember,
   UpdateMember,
