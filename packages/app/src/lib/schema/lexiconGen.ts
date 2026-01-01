@@ -40,7 +40,6 @@ const eventLexicons: LexiconDoc[] = [];
  * The lexicon def will automatically be added to the lexicons list.
  * */
 const schemaVariantToNsid = (schema: JsonSchema.NonBooleanBranch): string => {
-  console.log("var", schema);
   if (
     "properties" in schema &&
     schema.properties &&
@@ -85,7 +84,6 @@ const schemaToObjProp = (
   nullable: boolean;
   extraDefs?: LexObject[];
 } => {
-  console.log("prop", schema);
   // Handle unions.
   if ("anyOf" in schema) {
     // It is nullable if null is one of the union variants
@@ -237,7 +235,6 @@ const schemaToLexiconDefs = (
   schema: JsonSchema.NonBooleanBranch,
   defN: number,
 ): { main: LexObject } | Record<string, LexObject> => {
-  console.log("defs", schema);
   if ("type" in schema && schema.type == "object" && "properties" in schema) {
     // If this is an object definition.
 
@@ -290,7 +287,7 @@ const eventDef: LexiconDoc = {
   description: eventJsonSchema.description,
   defs: schemaToLexiconDefs(eventJsonSchema, 0),
 };
-eventLexicons.push(eventDef);
+eventLexicons.unshift(eventDef);
 
 // Return the lexicons and the JSON schema
 export { eventLexicons, eventJsonSchema };
