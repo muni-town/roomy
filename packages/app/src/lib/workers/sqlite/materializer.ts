@@ -36,8 +36,7 @@ const materializers: {
   },
   "space.roomy.stream.personal.leaveSpace.v0": async ({ data }) => [
     sql`
-      update comp_space set hidden = 1,
-      where entity = ${data.spaceDid}
+      delete from comp_space where entity = ${data.spaceDid}
     `,
   ],
   "space.roomy.room.joinRoom.v0": async ({ streamId, user, event }) => [

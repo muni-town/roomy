@@ -58,7 +58,7 @@ try {
   console.error("Failed to initialize Faro in sqlite worker", e);
 }
 
-console.info("Started sqlite worker", { test: 3 });
+console.info("Started sqlite worker");
 
 const initSql = schemaSql
   .split("\n")
@@ -291,7 +291,10 @@ class SqliteWorkerSupervisor {
 
             if (bundle.status === "success") {
               // Collect space IDs to connect AFTER batch is applied
-              if (event.variant.$type === "space.roomy.stream.personal.joinSpace.v0") {
+              if (
+                event.variant.$type ===
+                "space.roomy.stream.personal.joinSpace.v0"
+              ) {
                 spacesToConnect.push(event.variant.spaceDid);
               }
             }
