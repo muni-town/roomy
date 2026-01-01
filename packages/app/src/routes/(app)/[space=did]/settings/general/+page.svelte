@@ -43,20 +43,12 @@
 
       // Update space info
       await backend.sendEvent(spaceId, {
-        ulid: newUlid(),
-        parent: undefined,
+        id: newUlid(),
         variant: {
-          kind: "space.roomy.common.setInfo.v0",
-          data: {
-            avatar:
-              avatarChanged && avatarUpload
-                ? { set: avatarUpload.uri }
-                : { ignore: undefined },
-            name: nameChanged ? { set: spaceName } : { ignore: undefined },
-            description: descriptionChanged
-              ? { set: spaceDescription }
-              : { ignore: undefined },
-          },
+          $type: "space.roomy.stream.updateStreamInfo.v0",
+          avatar: avatarChanged ? avatarUpload?.uri : undefined,
+          name: nameChanged ? spaceName : undefined,
+          description: descriptionChanged ? spaceDescription : undefined,
         },
       });
 
@@ -100,13 +92,10 @@
     if (!spaceId || backendStatus.authState?.state !== "authenticated") return;
     try {
       await backend.sendEvent(spaceId, {
-        ulid: newUlid(),
-        parent: undefined,
+        id: newUlid(),
         variant: {
-          kind: "space.roomy.space.setHandleAccount.v0",
-          data: {
-            did: backendStatus.authState.did,
-          },
+          $type: "space.roomy.stream.setHandleAccount.v0",
+          did: backendStatus.authState.did,
         },
       });
       await backend.createStreamHandleRecord(spaceId);
@@ -125,13 +114,11 @@
     try {
       await backend.removeStreamHandleRecord();
       await backend.sendEvent(spaceId, {
-        ulid: newUlid(),
+        id: newUlid(),
         parent: undefined,
         variant: {
-          kind: "space.roomy.space.setHandleAccount.v0",
-          data: {
-            did: undefined,
-          },
+          $type: "space.roomy.stream.setHandleAccount.v0",
+          did: null,
         },
       });
       updateSpaceHandle += 1;

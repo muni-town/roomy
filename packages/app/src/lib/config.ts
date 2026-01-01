@@ -44,7 +44,7 @@ CONFIG.atprotoOauthScope = [
   // ].map((lxm) => `rpc:${lxm}?aud=did:web:api.bsky.chat%23bsky_chat`),
 
   "blob:*/*", // Allow all blob uploads
-  "repo:space.roomy.upload", // And creating roomy upload records
+  "repo:space.roomy.upload.v0", // And creating roomy upload records
 
   `repo:${CONFIG.streamNsid}`, // Access to the stream collection
   `repo:${CONFIG.streamHandleNsid}`, // Access to the stream handle collection
