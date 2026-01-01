@@ -7,7 +7,7 @@
   import { sql } from "$lib/utils/sqlTemplate";
   import { backend } from "$lib/workers";
   import { Button, Input, ScrollArea, Select } from "@fuxui/base";
-  import { monotonicFactory } from "ulidx";
+  import { Ulid, ulidFactory } from "$lib/schema";
 
   const types = ["Channel", "Category"] as const;
   let type = $state("Channel") as (typeof types)[number];
@@ -15,7 +15,7 @@
 
   const spaceId = current.joinedSpace?.id;
 
-  let selectedCategory = $state("");
+  let selectedCategory = $state("") as Ulid;
 
   let categoriesQuery = new LiveQuery<{ name: string; id: string }>(
     () => sql`
@@ -26,7 +26,7 @@
       where
         e.stream_id = ${spaceId}
           and
-        r.label = 'category' 
+        r.label = 'space.roomy.category' 
     `,
   );
   const categories = $derived(categoriesQuery.result || []);
@@ -34,65 +34,25 @@
   async function createRoom() {
     if (!spaceId) return;
 
-    const ulid = monotonicFactory();
+    const newUlid = ulidFactory();
 
     // Create a new room
     const roomId = newUlid();
     await backend.sendEvent(spaceId, {
-      ulid: roomId,
-      parent:
+      id: roomId,
+      room:
         type != "Category" && selectedCategory ? selectedCategory : undefined,
       variant: {
-        kind: "space.roomy.room.createRoom.v0",
-        data: undefined,
-      },
-    });
-
-    // Set the room info
-    await backend.sendEvent(spaceId, {
-      ulid: newUlid(),
-      parent: roomId,
-      variant: {
-        kind: "space.roomy.common.setInfo.v0",
-        data: {
-          name: {
-            set: name,
-          },
-          avatar: { ignore: undefined },
-          description: { ignore: undefined },
-        },
+        $type: "space.roomy.room.createRoom.v0",
+        kind:
+          type == "Category" ? "space.roomy.category" : "space.roomy.channel",
+        name,
       },
     });
 
     if (type == "Channel") {
-      // Mark the room as a channel
-      await backend.sendEvent(spaceId, {
-        ulid: newUlid(),
-        parent: roomId,
-        variant: {
-          kind: "space.roomy.room.setKind.v0",
-          data: {
-            kind: "space.roomy.channel",
-            data: undefined,
-          },
-        },
-      });
-
       navigate({ space: spaceId, object: roomId });
     } else if (type == "Category") {
-      // Mark the room as a category
-      await backend.sendEvent(spaceId, {
-        ulid: newUlid(),
-        parent: roomId,
-        variant: {
-          kind: "space.roomy.room.setKind.v0",
-          data: {
-            kind: "space.roomy.category",
-            data: undefined,
-          },
-        },
-      });
-
       navigate({ space: spaceId });
     }
   }
@@ -167,7 +127,7 @@
               bind:value={selectedCategory}
               type="single"
               items={[
-                { value: "", label: "None" },
+                { value: "", label: "General" },
                 ...categories.map((x) => ({ value: x.id, label: x.name })),
               ]}
             />

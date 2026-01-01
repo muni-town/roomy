@@ -23,7 +23,7 @@
     item: SpaceTreeItem;
     isEditing: boolean;
     level: number;
-    index: number;
+    index?: number;
   } = $props();
 
   // console.log("sidebar item level", level, item);
