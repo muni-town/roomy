@@ -158,24 +158,21 @@
 
 <div class="flex flex-col w-full">
   {#if level == 0}
-    {#each uncategorized as item, index (item.id)}
-      <div class="flex items-start gap-2 w-full">
-        <SidebarItem
-          bind:isEditing
-          {level}
-          {index}
-          item={{
-            type: "space.roomy.category",
-            id: "general",
-            name: "General",
-            lastRead: 0,
-            latestEntity: 0,
-            unreadCount: 0,
-            children: uncategorized as any,
-          }}
-        />
-      </div>
-    {/each}
+    <div class="flex items-start gap-2 w-full">
+      <SidebarItem
+        bind:isEditing
+        {level}
+        item={{
+          type: "space.roomy.category",
+          id: "general",
+          name: "General",
+          lastRead: 0,
+          latestEntity: 0,
+          unreadCount: 0,
+          children: uncategorized as any,
+        }}
+      />
+    </div>
 
     {#each categories as item, index (item.id)}
       <div class="flex items-start gap-2 w-full">
