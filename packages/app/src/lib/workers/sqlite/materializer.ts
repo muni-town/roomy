@@ -195,6 +195,7 @@ const materializers: {
     sql`
       insert into comp_info ( entity, name, avatar, description)
       values ( ${event.id}, ${data.name || null}, ${data.avatar || null}, ${data.description || null})
+      on conflict do nothing
     `,
     sql`
       insert into comp_room ( entity, label )
@@ -592,14 +593,19 @@ const materializers: {
   },
 
   // TODO: make sure there is valid permission to send bridged reaction
-  "space.roomy.reaction.addBridgedReaction.v0": async ({ data }) => {
+  "space.roomy.reaction.addBridgedReaction.v0": async ({
+    data,
+    user,
+    event,
+  }) => {
     return [
       sql`
-        insert into comp_reaction (entity, user, reaction)
+        insert or replace into comp_reaction (entity, user, reaction, add_event)
         values (
           ${data.target},
-          ${data.reactingUser},
-          ${data.reaction}
+          ${user},
+          ${data.reaction},
+          ${event.id}
         )
       `,
     ];
