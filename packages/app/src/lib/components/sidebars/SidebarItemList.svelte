@@ -15,6 +15,13 @@
     level = 0,
   }: { isEditing: boolean; items: SpaceTreeItem[]; level?: number } = $props();
 
+  let uncategorized: SpaceTreeItem[] = $derived(
+    items.filter((x) => x.type !== "space.roomy.category"),
+  );
+  let categories: SpaceTreeItem[] = $derived(
+    items.filter((x) => x.type == "space.roomy.category"),
+  );
+
   // let {
   //   // children,
   //   // me,
@@ -150,10 +157,37 @@
   {/if} -->
 
 <div class="flex flex-col w-full">
-  {#each items as item, index (item.id)}
-    <div class="flex items-start gap-2 w-full">
-      <SidebarItem bind:isEditing {level} {index} {item} />
-    </div>
-  {/each}
+  {#if level == 0}
+    {#each uncategorized as item, index (item.id)}
+      <div class="flex items-start gap-2 w-full">
+        <SidebarItem
+          bind:isEditing
+          {level}
+          {index}
+          item={{
+            type: "space.roomy.category",
+            id: "uncategorized",
+            name: "Uncategorized",
+            lastRead: 0,
+            latestEntity: 0,
+            unreadCount: 0,
+            children: uncategorized as any,
+          }}
+        />
+      </div>
+    {/each}
+
+    {#each categories as item, index (item.id)}
+      <div class="flex items-start gap-2 w-full">
+        <SidebarItem bind:isEditing {level} {index} {item} />
+      </div>
+    {/each}
+  {:else}
+    {#each items as item, index (item.id)}
+      <div class="flex items-start gap-2 w-full">
+        <SidebarItem bind:isEditing {level} {index} {item} />
+      </div>
+    {/each}
+  {/if}
 </div>
 <!-- {/if} -->

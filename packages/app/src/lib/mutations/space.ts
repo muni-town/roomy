@@ -97,21 +97,9 @@ export async function createSpace(opts: {
     },
   });
 
-  const categoryId = newUlid();
-  batch.push({
-    id: categoryId,
-    room: undefined,
-    variant: {
-      $type: "space.roomy.room.createRoom.v0",
-      kind: "space.roomy.category",
-      // FIXME: we should not have a category named uncategorized, we should just display .
-      name: "Uncategorized",
-    },
-  });
   const generalChannelId = newUlid();
   batch.push({
     id: generalChannelId,
-    room: categoryId,
     variant: {
       $type: "space.roomy.room.createRoom.v0",
       kind: "space.roomy.channel",
