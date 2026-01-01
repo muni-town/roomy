@@ -368,7 +368,6 @@ export class Client {
           eventChannel,
           module: modules.personal,
         });
-        stream.subscribeEvents();
       } catch (e) {
         if ((e as any).error === "RecordNotFound") {
           console.log(
@@ -425,6 +424,8 @@ export class Client {
         }
       }
     }
+
+    stream.subscribeEvents();
 
     // Get the module id for this stream to check whether or not we need to update the module.
     const streamInfo = await this.leaf.streamInfo(stream.id);
