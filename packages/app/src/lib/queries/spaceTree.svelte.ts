@@ -224,7 +224,6 @@ $effect.root(() => {
   // Build tree structure reactively from flat results
   $effect(() => {
     if (flatTreeQuery.result) {
-      console.log("flat tree query result", flatTreeQuery.result);
       spaceTree.result = buildTree(flatTreeQuery.result);
     } else {
       spaceTree.result = undefined;

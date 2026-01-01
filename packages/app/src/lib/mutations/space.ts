@@ -1,7 +1,7 @@
 import { backend, backendStatus } from "$lib/workers";
 import type { Event, StreamDid, Did } from "$lib/schema";
 import { toast } from "@fuxui/base";
-import { newUlid, toBytes } from "$lib/schema";
+import { newUlid } from "$lib/schema";
 
 /**
  * Join a space.
@@ -103,26 +103,7 @@ export async function createSpace(opts: {
     variant: {
       $type: "space.roomy.room.createRoom.v0",
       kind: "space.roomy.channel",
-      name: "general",
-    },
-  });
-  const welcomeMessageId = newUlid();
-  batch.push({
-    id: welcomeMessageId,
-    room: generalChannelId,
-    variant: {
-      $type: "space.roomy.message.sendMessage.v0",
-      body: {
-        mimeType: "text/markdown",
-        data: toBytes(
-          new TextEncoder().encode(`Welcome to your new Roomy space!`),
-        ),
-      },
-      extensions: {
-        "space.roomy.extension.authorOverride.v0": {
-          did: spaceDid,
-        },
-      },
+      name: "lobby",
     },
   });
 

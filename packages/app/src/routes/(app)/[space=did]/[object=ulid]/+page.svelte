@@ -116,10 +116,6 @@
   };
 
   $effect(() => {
-    console.log("current", current);
-  });
-
-  $effect(() => {
     if (!ref) return;
 
     function handleScroll() {

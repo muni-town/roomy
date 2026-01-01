@@ -166,8 +166,8 @@
           {index}
           item={{
             type: "space.roomy.category",
-            id: "uncategorized",
-            name: "Uncategorized",
+            id: "general",
+            name: "General",
             lastRead: 0,
             latestEntity: 0,
             unreadCount: 0,
