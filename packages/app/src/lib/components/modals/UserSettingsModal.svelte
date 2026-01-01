@@ -11,7 +11,7 @@
 
 <Modal bind:open>
   <Heading>User Settings</Heading>
-  <h2 class="text-lg font-bold">Recovery</h2>
+  <!-- <h2 class="text-lg font-bold">Recovery</h2>
   <p>
     Roomy is in alpha and occasionally there may be bugs where resetting the
     local database can fix the issue. This will clear your offline cache, but it
@@ -27,7 +27,7 @@
             : console.error("Could not reset cache:", result.error),
         );
     }}>Reset Local Cache</Button
-  >
+  > -->
   <h2 class="text-lg font-bold">Account</h2>
   <Button
     class="w-full justify-start"

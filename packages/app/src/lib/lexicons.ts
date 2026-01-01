@@ -71,7 +71,7 @@ export const lexicons: LexiconDoc[] = [
   },
   {
     lexicon: 1,
-    id: "space.roomy.upload",
+    id: "space.roomy.upload.v0",
     defs: {
       main: {
         type: "object",
