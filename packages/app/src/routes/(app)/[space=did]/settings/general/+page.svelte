@@ -115,7 +115,6 @@
       await backend.removeStreamHandleRecord();
       await backend.sendEvent(spaceId, {
         id: newUlid(),
-        parent: undefined,
         variant: {
           $type: "space.roomy.stream.setHandleAccount.v0",
           did: null,
