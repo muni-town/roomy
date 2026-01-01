@@ -84,7 +84,16 @@ $effect.root(() => {
 
     console.log("current space", page.params.space);
 
-    if (joinedSpaces.loading || !page.params.space) return; // wait until spaces are loaded
+    // TODO: when we checked if the space was loading right here it would cause a problem when
+    // we start lazy loading a room, because we go from a loaded space to a loading space, and
+    // once the space was loaded it would change the space and trigger another lazy load in an
+    // infinite loop.
+    //
+    // For unknown reasons this mostly happened on threads or rooms without any messages in
+    // them yet.
+
+    // if (joinedSpaces.loading || !page.params.space) return; // wait until spaces are loaded
+    if (!page.params.space) return;
 
     getCurrentSpace(page.params.space as SpaceIdOrHandle)
       .then(({ matchingSpace, isSpaceAdmin, spaceId }) => {
