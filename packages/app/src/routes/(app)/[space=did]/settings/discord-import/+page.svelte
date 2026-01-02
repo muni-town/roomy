@@ -216,7 +216,7 @@
                   $type: "space.roomy.reaction.addBridgedReaction.v0",
                   reaction: reaction.emoji.name,
                   reactingUser: UserDid.assert(`did:discord:${user.id}`),
-                  target: messageId,
+                  reactionTo: messageId,
                 },
               });
             }

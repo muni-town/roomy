@@ -1,40 +1,24 @@
-import { type } from "../primitives";
-import { DeleteMessage, EditMessage } from "./message";
-import {
-  AddReaction,
-  AddBrigedReaction,
-  RemoveReaction,
-  RemoveBrigedReaction,
-} from "./reaction";
-import { EditPage } from "./page";
+import { Ulid } from "../primitives";
+import type { EventType, EventVariant, Event } from "../envelope";
 
-export const WithParent = type.or(
-  EditMessage,
-  RemoveReaction,
-  RemoveBrigedReaction,
-  EditPage,
-);
+const dependencies: Map<
+  string,
+  { events?: (t: any) => Ulid[]; dependsOnAfter?: boolean }
+> = new Map();
 
-export const WithTarget = type.or(
-  DeleteMessage,
-  AddReaction,
-  AddBrigedReaction,
-);
+export function setDependsOn<T extends EventType>(
+  t: T,
+  deps: {
+    events?: (x: EventVariant<T>) => Ulid[];
+    dependsOnAfter?: boolean;
+  },
+) {
+  dependencies.set(t, deps);
+}
 
-/** Union of all event variants that *depend* on previous events.
- * These must not be applied until the parent, or target, has been applied.
- */
-export const DependentEventVariant = type.or(WithParent, WithTarget);
-
-export type DependentEventVariant = typeof DependentEventVariant.infer;
-export type DependentEventType = DependentEventVariant["$type"];
-
-export const dependentEventType: DependentEventType[] = [
-  "space.roomy.message.editMessage.v0",
-  "space.roomy.page.editPage.v0",
-  "space.roomy.message.deleteMessage.v0",
-  "space.roomy.reaction.addReaction.v0",
-  "space.roomy.reaction.addBridgedReaction.v0",
-  "space.roomy.reaction.removeReaction.v0",
-  "space.roomy.reaction.removeBridgedReaction.v0",
-];
+export function getDependsOn(ev: Event): Ulid[] {
+  const config = dependencies.get(ev.variant.$type);
+  if (!config) return [];
+  const events = config.events?.(ev.variant) || [];
+  return [...events, ...(config?.dependsOnAfter && ev.after ? [ev.after] : [])];
+}

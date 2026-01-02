@@ -153,7 +153,7 @@ export namespace Bundle {
     eventIdx: StreamIndex;
     user: UserDid;
     statements: SqlStatement[];
-    dependsOn: Ulid | null;
+    dependsOn: Ulid[];
   }
 
   export interface StatementError {
@@ -183,7 +183,7 @@ export namespace Bundle {
   export interface ApplyStashed {
     result: "stashed";
     eventId: Ulid;
-    dependsOn: Ulid;
+    dependsOn: Ulid[];
   }
 
   export interface ApplyError {

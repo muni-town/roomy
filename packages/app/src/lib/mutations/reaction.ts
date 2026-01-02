@@ -12,7 +12,7 @@ export async function addReaction(
     room: roomId,
     variant: {
       $type: "space.roomy.reaction.addReaction.v0",
-      target: messageId,
+      reactionTo: messageId,
       reaction,
     },
   });
@@ -21,7 +21,6 @@ export async function addReaction(
 export async function removeReaction(
   spaceId: StreamDid,
   roomId: Ulid,
-  messageId: Ulid,
   reactionId: Ulid,
 ) {
   await backend.sendEvent(spaceId, {
@@ -29,8 +28,7 @@ export async function removeReaction(
     room: roomId,
     variant: {
       $type: "space.roomy.reaction.removeReaction.v0",
-      target: messageId,
-      previous: reactionId,
+      reactionId: reactionId,
     },
   });
 }

@@ -11,7 +11,7 @@ import {
   UserDid,
   StreamDid,
 } from "$lib/schema";
-import { WithParent, WithTarget } from "$lib/schema/events/dependencies";
+import { getDependsOn } from "$lib/schema/events/dependencies";
 
 /** SQL mapping for each event variant */
 const materializers: {
@@ -481,7 +481,7 @@ const materializers: {
             data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(fromBytes(data.body.data))}) as blob),
             last_edit = ${event.id}
           where
-            entity = ${data.target}
+            entity = ${data.messageId}
               and
             mime_type like 'text/%'
         `
@@ -493,7 +493,7 @@ const materializers: {
             data = ${fromBytes(data.body.data)},
             last_edit = ${event.id} -- dependency tracking must ensure this is monotonic
           where
-            entity = ${data.target}
+            entity = ${data.messageId}
         `,
     ];
   },
@@ -570,9 +570,9 @@ const materializers: {
   "space.roomy.reaction.addReaction.v0": async ({ data, event, user }) => {
     return [
       sql`
-        insert or replace into comp_reaction (entity, user, reaction, add_event)
+        insert or replace into comp_reaction (entity, user, reaction, reaction_id)
         values (
-          ${data.target},
+          ${data.reactionTo},
           ${user},
           ${data.reaction},
           ${event.id}
@@ -589,8 +589,7 @@ const materializers: {
       sql`
       delete from comp_reaction
       where
-        entity = ${data.target} and
-        add_event = ${data.previous}
+        reaction_id = ${data.reactionId}
     `,
     ];
   },
@@ -603,9 +602,9 @@ const materializers: {
   }) => {
     return [
       sql`
-        insert or replace into comp_reaction (entity, user, reaction, add_event)
+        insert or replace into comp_reaction (entity, user, reaction, reaction_id)
         values (
-          ${data.target},
+          ${data.reactionTo},
           ${user},
           ${data.reaction},
           ${event.id}
@@ -622,8 +621,7 @@ const materializers: {
       sql`
       delete from comp_reaction
       where
-        entity = ${data.target} and
-        add_event = ${data.previous}
+        reaction_id = ${data.reactionId}
     `,
     ];
   },
@@ -666,7 +664,7 @@ function bundleSuccess(
   idx: StreamIndex,
   user: UserDid,
   statements: SqlStatement | SqlStatement[],
-  dependsOn: Ulid | null,
+  dependsOn: Ulid[],
 ): Bundle.Statement {
   return {
     status: "success",
@@ -715,15 +713,10 @@ export async function materialize(
       data,
     } as any);
 
-    // some types have a chain of dependencies, in which case 'parent' is most recent one.
-    // others just have a target
-    const dependsOn = WithParent.allows(event.variant)
-      ? event.variant.previous
-      : WithTarget.allows(event.variant)
-        ? event.variant.target
-        : null;
+    // some events depend on other events which must be materialized first
+    const dependsOn = getDependsOn(event);
 
-    return bundleSuccess(event, idx, opts.user, statements, dependsOn || null);
+    return bundleSuccess(event, idx, opts.user, statements, dependsOn);
   } catch (error) {
     console.error(`Error materializing event ${event.id}:`, error);
     return bundleError(event, error instanceof Error ? error : String(error));
