@@ -15,3 +15,20 @@ export async function deleteMessage(
     },
   });
 }
+
+export async function moveMessage(
+  streamId: StreamDid,
+  roomId: Ulid,
+  messageId: Ulid,
+  moveAfter: Ulid,
+) {
+  await backend.sendEvent(streamId, {
+    id: newUlid(),
+    room: roomId,
+    variant: {
+      $type: "space.roomy.room.move.v0",
+      entity: messageId,
+      after: moveAfter,
+    },
+  });
+}

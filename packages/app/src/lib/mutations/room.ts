@@ -100,6 +100,7 @@ export async function promoteToChannel(opts: {
     room: opts.room.id,
     variant: {
       $type: "space.roomy.room.move.v0",
+      entity: opts.room.id,
       toRoom: opts.room.parent?.parent
         ? Ulid.assert(opts.room.parent.parent)
         : null,

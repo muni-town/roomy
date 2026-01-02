@@ -19,6 +19,7 @@ export type SpaceTreeItem = {
   lastRead: number;
   latestEntity: number;
   unreadCount: number;
+  sortIdx: string;
 } & (
   | {
       type: "space.roomy.category";

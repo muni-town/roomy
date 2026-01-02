@@ -152,6 +152,9 @@ const spaceModuleDef: BasicModule = {
       'space.roomy.room.createRoom.v0',
       'space.roomy.room.deleteRoom.v0',
       'space.roomy.room.updateRoom.v0',
+      -- TODO: this catches message movements, too, which is not ideal,
+      -- but not horrible. We want it to only catch move events when 'toRoom' is set.
+      'space.roomy.room.move.v0',
       'space.roomy.room.addMember.v0',
       'space.roomy.room.removeMember.v0',
       'space.roomy.user.updateUserProfile.v0'

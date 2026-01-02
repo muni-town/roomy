@@ -46,8 +46,11 @@ This can be sent at the space level ( no room ), or in parent room. \
 The ulid of this event becomes the id of the room.",
   );
 
-export const MoveTo = type({
+export const Move = type({
   $type: "'space.roomy.room.move.v0'",
+  entity: Ulid.describe(
+    "The entity to move. This could be a message in a room, or even a room itself.",
+  ),
   "toRoom?": Ulid.or(type.null).describe(
     "The new parent room, or null if you want to parent to the space.",
   ),
@@ -113,7 +116,7 @@ export const RoomEvent = type.or(
   DeleteRoom,
   JoinRoom,
   LeaveRoom,
-  MoveTo,
+  Move,
   UpdateRoom,
   AddMember,
   UpdateMember,

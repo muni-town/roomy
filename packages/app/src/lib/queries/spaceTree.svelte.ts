@@ -17,6 +17,7 @@ let flatTreeQuery: LiveQuery<{
   latestEntity: string | null;
   unreadCount: number;
   depth: number;
+  sortIdx: string;
 }>;
 
 /** The sidebar tree for the currently selected space. */
@@ -43,6 +44,7 @@ function buildTree(
     latestEntity: string | null;
     unreadCount: number;
     depth: number;
+    sortIdx: string;
   }>,
 ): SpaceTreeItem[] {
   if (!rows || rows.length === 0) return [];
@@ -61,6 +63,7 @@ function buildTree(
       lastRead: row.lastRead,
       latestEntity: row.latestEntity ? decodeTime(row.latestEntity) : undefined,
       unreadCount: row.unreadCount,
+      sortIdx: row.sortIdx,
     };
 
     // Add children array for non-page types
@@ -91,27 +94,14 @@ function buildTree(
     }
   }
 
-  rootNodes.sort((a, b) => decodeTime(a.id) - decodeTime(b.id));
+  rootNodes.sort((a, b) => (a.sortIdx < b.sortIdx ? -1 : 1));
 
   return rootNodes;
 }
 
 $effect.root(() => {
   // spaceTree uses a custom live query that processes all rows into a tree structure
-  flatTreeQuery = new LiveQuery<{
-    id: string;
-    parent: string | null;
-    type:
-      | "space.roomy.category"
-      | "space.roomy.channel"
-      | "space.roomy.thread"
-      | "space.roomy.page";
-    name: string;
-    lastRead: number;
-    latestEntity: string | null;
-    unreadCount: number;
-    depth: number;
-  }>(() => {
+  flatTreeQuery = new LiveQuery(() => {
     const spaceId = current.joinedSpace?.id;
     return sql`-- spaceTree (recursive CTE)
     with recursive room_tree as (
@@ -124,7 +114,8 @@ $effect.root(() => {
         coalesce(l.timestamp, 1) as lastRead,
         (select max(id) from entities where parent = e.id) as latestEntity,
         coalesce(l.unread_count, 0) as unreadCount,
-        0 as depth
+        0 as depth,
+        e.sort_idx as sortIdx
       from entities e
         join comp_room r on e.id = r.entity
         join comp_info i on e.id = i.entity
@@ -144,7 +135,8 @@ $effect.root(() => {
         coalesce(l.timestamp, 1) as lastRead,
         (select max(id) from entities where parent = e.id) as latestEntity,
         coalesce(l.unread_count, 0) as unreadCount,
-        0 as depth
+        0 as depth,
+        e.sort_idx as sortIdx
       from entities e
         join comp_room r on e.id = r.entity
         join comp_info i on e.id = i.entity
@@ -171,7 +163,8 @@ $effect.root(() => {
         coalesce(l.timestamp, 1) as lastRead,
         (select max(id) from entities where parent = e.id) as latestEntity,
         coalesce(l.unread_count, 0) as unreadCount,
-        0 as depth
+        0 as depth,
+        e.sort_idx as sortIdx
       from entities e
         join comp_room r on e.id = r.entity
         join comp_info i on e.id = i.entity
@@ -199,7 +192,8 @@ $effect.root(() => {
         coalesce(l.timestamp, 1) as lastRead,
         (select max(id) from entities where parent = e.id) as latestEntity,
         coalesce(l.unread_count, 0) as unreadCount,
-        rt.depth + 1 as depth
+        rt.depth + 1 as depth,
+        e.sort_idx as sortIdx
       from entities e
         join comp_room r on e.id = r.entity
         join comp_info i on e.id = i.entity
@@ -215,9 +209,10 @@ $effect.root(() => {
       lastRead,
       latestEntity,
       unreadCount,
-      depth
+      depth,
+      sortIdx
     from room_tree
-    order by depth, type, name
+    order by depth, type, sortIdx
 `;
   });
 
