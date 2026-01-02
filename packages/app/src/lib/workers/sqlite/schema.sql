@@ -192,7 +192,7 @@ create table if not exists comp_last_read (
 create table if not exists comp_reaction (
   entity text references entities(id) on delete cascade, -- id of the message
   user text references entities(id) on delete cascade, -- did
-  add_event text not null, -- event id that added the reaction
+  reaction_id text not null, -- event id that added the reaction
   reaction text not null, -- generally emoji
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000),

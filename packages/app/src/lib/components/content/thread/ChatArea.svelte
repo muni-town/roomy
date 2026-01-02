@@ -39,7 +39,7 @@
       reaction: string;
       userId: UserDid;
       userName: string;
-      addEvent: Ulid;
+      reactionId: Ulid;
     }[];
     media: {
       uri: string;
@@ -99,7 +99,7 @@
             'reaction', rc.reaction,
             'userId', rc.user,
             'userName', i.name,
-            'addEvent', rc.add_event
+            'reactionId', rc.reaction_id
           ))
           from comp_reaction rc
           join comp_info i on i.entity = rc.user
