@@ -27,6 +27,7 @@ import {
   newUlid,
   parseEvent,
   type Event,
+  type EventType,
 } from "$lib/schema";
 import { materialize } from "./materializer";
 import { AsyncChannel } from "../asyncChannel";
@@ -70,9 +71,10 @@ const initSql = schemaSql
 const QUERY_LOCK = "sqliteQueryLock";
 const HEARTBEAT_KEY = "sqlite-worker-heartbeat";
 const LOCK_TIMEOUT_MS = 8000; // 30 seconds
-const newUserSignals = [
-  "space.roomy.message.sendMessage.v0",
+const newUserSignals: EventType[] = [
+  "space.roomy.stream.addAdmin.v0",
   "space.roomy.room.joinRoom.v0",
+  "space.roomy.message.sendMessage.v0",
 ];
 
 class SqliteWorkerSupervisor {
@@ -549,7 +551,7 @@ class SqliteWorkerSupervisor {
             (b): b is Bundle.StatementSuccess =>
               b.status === "success" && b.dependsOn !== null,
           )
-          .map((b) => b.dependsOn!),
+          .flatMap((b) => b.dependsOn!),
       );
 
       // Single query for all dependencies
@@ -723,16 +725,16 @@ class SqliteWorkerSupervisor {
     const bundleId = bundle.event.id;
 
     const isSatisfied =
-      !bundle.dependsOn ||
-      satisfiedDeps.has(bundle.dependsOn) ||
-      appliedInBatch.has(bundle.dependsOn);
+      bundle.dependsOn.length == 0 ||
+      bundle.dependsOn.every((x) => satisfiedDeps.has(x)) ||
+      bundle.dependsOn.every((x) => appliedInBatch.has(x));
 
     if (bundle.dependsOn && !isSatisfied) {
       // STASH: Insert event with applied=0
       await executeQuery(sql`
             INSERT INTO events (idx, stream_id, user, entity_ulid, payload, applied, depends_on)
             VALUES (${bundle.eventIdx}, ${streamId}, ${bundle.user}, ${bundle.event.id}, 
-                    ${JSON.stringify(bundle.event)}, 0, ${bundle.dependsOn})
+                    ${JSON.stringify(bundle.event)}, 0, ${JSON.stringify(bundle.dependsOn)})
             ON CONFLICT(idx, stream_id) DO NOTHING
           `);
 

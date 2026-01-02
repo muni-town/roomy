@@ -11,7 +11,7 @@ export async function deleteMessage(
     room: roomId,
     variant: {
       $type: "space.roomy.message.deleteMessage.v0",
-      target: messageId,
+      messageId: messageId,
     },
   });
 }
