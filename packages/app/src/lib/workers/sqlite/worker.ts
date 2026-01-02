@@ -714,14 +714,19 @@ class SqliteWorkerSupervisor {
   }): Promise<void> {
     // Determine this entity's sort index
 
+    const existingEntity = (
+      await executeQuery<{
+        id: string;
+        sort_idx: string | null;
+      }>(sql`select id, sort_idx from entities where id = ${ulid}`)
+    ).rows?.[0];
+
+    // Skip completely if the materialization didn't bother to create an entity for this event
+    if (!existingEntity) return;
+
     // Skip completely if this entity already has a sort index
-    if (!update) {
-      const result = (
-        await executeQuery(
-          sql`select sort_idx from entities where id = ${ulid} and sort_idx is not null`,
-        )
-      ).rows;
-      if (result?.length || 0 > 0) return;
+    if (!update && existingEntity.sort_idx) {
+      return;
     }
 
     // First we need to get the closest entity that comes before this one.
