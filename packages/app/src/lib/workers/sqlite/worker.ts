@@ -665,12 +665,32 @@ class SqliteWorkerSupervisor {
         }),
       );
 
-      // Materialize the entity's sort position
-      this.materializeEntitySortPosition({
-        streamId: eventMeta.streamId,
-        ulid: eventMeta.event.id,
-        after: eventMeta.event.after,
-      });
+      // If this event is a move event that modifies the `after` position for another event.
+      if (
+        eventMeta.event.variant.$type == "space.roomy.room.move.v0" &&
+        eventMeta.event.variant.after
+      ) {
+        // We need to update the event's "after" field
+        await executeQuery(
+          sql`update entities set after = ${eventMeta.event.variant.after} where id = ${eventMeta.event.variant.entity}`,
+        );
+
+        // And we need to re-materialize it's sort position
+        await this.materializeEntitySortPosition({
+          streamId: eventMeta.streamId,
+          ulid: eventMeta.event.variant.entity,
+          after: eventMeta.event.variant.after,
+          update: true,
+        });
+      } else {
+        // If this is not a move event
+        // Materialize the entity's sort position
+        await this.materializeEntitySortPosition({
+          streamId: eventMeta.streamId,
+          ulid: eventMeta.event.id,
+          after: eventMeta.event.after,
+        });
+      }
     }
 
     await executeQuery({ sql: `release bundle${bundleId}` });
@@ -678,24 +698,31 @@ class SqliteWorkerSupervisor {
   }
 
   /** Materialize the entity's sort index */
+  // TODO: I think this is nearly working, and seems to be fine for messages, but there also seems
+  // to be problems when moving the same items over and over again in the sidebar. It might have to
+  // do with partial loading but I'm not sure.
   private async materializeEntitySortPosition({
     streamId,
     ulid,
     after,
+    update,
   }: {
     streamId: string;
     ulid: string;
     after?: string;
+    update?: boolean;
   }): Promise<void> {
     // Determine this entity's sort index
 
     // Skip completely if this entity already has a sort index
-    const result = (
-      await executeQuery(
-        sql`select sort_idx from entities where id = ${ulid} and sort_idx is not null`,
-      )
-    ).rows;
-    if (result?.length || 0 > 0) return;
+    if (!update) {
+      const result = (
+        await executeQuery(
+          sql`select sort_idx from entities where id = ${ulid} and sort_idx is not null`,
+        )
+      ).rows;
+      if (result?.length || 0 > 0) return;
+    }
 
     // First we need to get the closest entity that comes before this one.
     let eventBeforeThisOne: { id: string; sort_idx?: string } | undefined;
@@ -711,7 +738,7 @@ class SqliteWorkerSupervisor {
         }>(sql`
           select id, sort_idx
           from entities
-          where stream_id = ${streamId} and after = ${after}
+          where stream_id = ${streamId} and id = ${after}
           limit 1
         `)
       ).rows?.[0];
@@ -769,6 +796,8 @@ class SqliteWorkerSupervisor {
             stream_id = ${streamId}
               and
             sort_idx > ${eventBeforeThisOne.sort_idx}
+              and
+            id != ${ulid}
           order by sort_idx
           limit 1
         `)

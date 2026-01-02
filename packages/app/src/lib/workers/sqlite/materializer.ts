@@ -216,17 +216,18 @@ const materializers: {
     ];
   },
 
-  "space.roomy.room.move.v0": async ({ event, data }) => {
+  "space.roomy.room.move.v0": async ({ data }) => {
     // Update the parent room
     return [
       data.toRoom !== undefined
         ? sql`
           update entities set parent = ${data.toRoom || null}
-          where id = ${event.room}
+          where id = ${data.entity}
         `
         : undefined,
-      // TODO: update sort order if `after` is specified
     ].filter((x) => !!x);
+    // NOTE: handling for updating the sort position of the entity based on this event's `after`
+    // field is not handled here. It is handled in runBundleStatements() in sqlite/worker.ts.
   },
 
   "space.roomy.room.updateRoom.v0": async ({ event, data }) => {

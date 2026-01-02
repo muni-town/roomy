@@ -124,9 +124,10 @@
     for (const message of state.selectedMessages) {
       await backend.sendEvent(spaceId, {
         id: newUlid(),
-        room: message.id,
+        room: current.roomId,
         variant: {
           $type: "space.roomy.room.move.v0",
+          entity: message.id,
           toRoom: threadId,
         },
       });
