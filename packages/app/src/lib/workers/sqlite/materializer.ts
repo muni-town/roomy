@@ -191,7 +191,7 @@ const materializers: {
 
   // Room
   "space.roomy.room.createRoom.v0": async ({ streamId, event, data }) => [
-    ensureEntity(streamId, event.id, event.room),
+    ensureEntity(streamId, event.id, event.room, event.after),
     sql`
       insert into comp_info ( entity, name, avatar, description)
       values ( ${event.id}, ${data.name || null}, ${data.avatar || null}, ${data.description || null})
@@ -323,7 +323,7 @@ const materializers: {
   }) => {
     if (!event.room) throw new Error("No room for message");
     const statements = [
-      ensureEntity(streamId, event.id, event.room),
+      ensureEntity(streamId, event.id, event.room, event.after),
       sql`
         insert or replace into edges (head, tail, label)
         select 
@@ -382,7 +382,7 @@ const materializers: {
         const uriWithUlidQuery = att.uri + "?message=" + event.id;
         // TODO: allow multiple images in the db schema
         statements.push(
-          ensureEntity(streamId, uriWithUlidQuery, event.id),
+          ensureEntity(streamId, uriWithUlidQuery, event.id, event.after),
           sql`
             insert or replace into comp_image (entity, mime_type, alt, width, height, blurhash, size)
             values (
@@ -400,7 +400,7 @@ const materializers: {
         const uriWithUlidQuery = att.uri + "?message=" + event.id;
         // TODO: allow multiple videos in the db schema
         statements.push(
-          ensureEntity(streamId, uriWithUlidQuery, event.id),
+          ensureEntity(streamId, uriWithUlidQuery, event.id, event.after),
           sql`
             insert or replace into comp_video (entity, mime_type, alt, width, height, length, blurhash, size)
             values (
@@ -418,7 +418,7 @@ const materializers: {
       } else if (att.$type == "space.roomy.attachment.file.v0") {
         const uriWithUlidQuery = att.uri + "?message=" + event.id;
         statements.push(
-          ensureEntity(streamId, uriWithUlidQuery, event.id),
+          ensureEntity(streamId, uriWithUlidQuery, event.id, event.after),
           sql`
             insert or replace into comp_file (entity, mime_type, name, size)
             values (
@@ -432,7 +432,7 @@ const materializers: {
       } else if (att.$type == "space.roomy.attachment.link.v0") {
         const uriWithUlidQuery = att.uri + "?message=" + event.id;
         statements.push(
-          ensureEntity(streamId, uriWithUlidQuery, event.id),
+          ensureEntity(streamId, uriWithUlidQuery, event.id, event.after),
           sql`
           insert into comp_link (entity, show_preview)
           values (
@@ -472,7 +472,7 @@ const materializers: {
 
     // TODO: implement edited extensions like replies / attachments
     return [
-      ensureEntity(streamId, event.id, event.room),
+      ensureEntity(streamId, event.id, event.room, event.after),
       data.body.mimeType == "text/x-dmp-patch"
         ? // If this is a patch, apply the patch using our SQL user-defined-function
           sql`
@@ -504,7 +504,7 @@ const materializers: {
     }
 
     return [
-      ensureEntity(streamId, event.id, event.room),
+      ensureEntity(streamId, event.id, event.room, event.after),
       sql`
         insert into comp_page_edits (edit_id, entity, mime_type, data, user_id) 
         values (
@@ -639,7 +639,7 @@ const materializers: {
     return [
       // Ensure the room entity exists in the target stream
       // Note: we use data.streamId here, not the wrapper's streamId
-      ensureEntity(data.streamDid, data.roomId),
+      ensureEntity(data.streamDid, data.roomId, event.after),
       // Insert or update the last read timestamp
       sql`
         insert into comp_last_read (entity, timestamp, unread_count)
@@ -727,6 +727,7 @@ export function ensureEntity(
   streamId: string,
   entityId: string,
   parent?: string,
+  after?: string,
 ): SqlStatement {
   let unixTimeMs = Date.now();
 
@@ -736,11 +737,12 @@ export function ensureEntity(
   } catch (_) {}
 
   const statement = sql`
-    insert into entities (id, stream_id, parent, created_at)
+    insert into entities (id, stream_id, parent, after, created_at)
     values (
       ${entityId},
       ${streamId},
       ${parent ? parent : undefined},
+      ${after ? after : undefined},
       ${unixTimeMs}
     )
     on conflict(id) do update set

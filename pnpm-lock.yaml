@@ -288,6 +288,9 @@ importers:
       diff-match-patch-es:
         specifier: ^1.0.1
         version: 1.0.1
+      fractional-indexing-jittered:
+        specifier: ^1.0.0
+        version: 1.0.0
       layercake:
         specifier: ^10.0.2
         version: 10.0.2(svelte@5.38.10)(typescript@5.9.2)
@@ -2683,6 +2686,9 @@ packages:
 
   focus-trap@7.6.5:
     resolution: {integrity: sha512-7Ke1jyybbbPZyZXFxEftUtxFGLMpE2n6A+z//m4CRDlj0hW+o3iYSmh8nFlYMurOiJVDmJRilUQtJr08KfIxlg==}
+
+  fractional-indexing-jittered@1.0.0:
+    resolution: {integrity: sha512-0tLU0FOedVY7lrvN4LK0DVj6FTuYM0pWDpN97/8UTZE2lx1+OwX8+2uL7IOWc2PmktYTHQjMT6FvZZ3SGCdZdg==}
 
   fs-constants@1.0.0:
     resolution: {integrity: sha512-y6OAwoSIf7FyjMIv94u+b5rdheZEjzR63GTyZJm5qh4Bi+2YgwLCcI/fPFZkL5PSixOt6ZNKm+w+Hfp/Bciwow==}
@@ -6472,6 +6478,8 @@ snapshots:
   focus-trap@7.6.5:
     dependencies:
       tabbable: 6.2.0
+
+  fractional-indexing-jittered@1.0.0: {}
 
   fs-constants@1.0.0: {}
 
