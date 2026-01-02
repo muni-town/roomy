@@ -138,14 +138,14 @@ export type QueryResult<Row = { [key: string]: unknown }> = {
   actions: Action[];
 };
 
-export async function executeQuery(
+export async function executeQuery<Row = { [key: string]: unknown }>(
   statement: SqlStatement,
-): Promise<QueryResult> {
+): Promise<QueryResult<Row>> {
   if (!db || !sqlite3) throw new Error("database_not_initialized");
 
   try {
     const { prepared, actions } = await prepareSql(statement);
-    const result = runPreparedStatement(prepared);
+    const result = runPreparedStatement<Row>(prepared);
 
     await updateLiveQueries(actions);
 
@@ -180,9 +180,9 @@ async function prepareSql(
   return { prepared, actions };
 }
 
-function runPreparedStatement(
+function runPreparedStatement<Row = { [key: string]: unknown }>(
   statement: PreparedStatement,
-): { ok: true } | { rows: { [key: string]: unknown }[] } {
+): { ok: true } | { rows: Row[] } {
   const rows = [];
   const columnCount = statement.columnCount;
   const columnNames = Array.from(Array(columnCount).keys()).map((x) =>

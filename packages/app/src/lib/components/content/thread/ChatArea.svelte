@@ -151,7 +151,7 @@
         left join comp_comment cc on cc.entity = e.id
       where
         e.parent = ${page.params.object}
-      order by e.id desc
+      order by e.sort_idx desc, e.id desc
       limit ${showLastN}
     `,
     (row) => {

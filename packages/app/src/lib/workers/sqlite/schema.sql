@@ -30,10 +30,14 @@ create table if not exists entities (
   id text primary key, -- did or ulid
   stream_id text not null, -- did
   parent text, -- did or ulid, references id
+  after text,
+  sort_idx text,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
 create index if not exists idx_entities_stream_id on entities (stream_id);
+create index if not exists idx_entities_after on entities(after);
+create index if not exists idx_entities_sort_idx on entities(sort_idx);
 
 -- This is an important index because it allows us to query for entities in a thread
 -- with a reverse sort order to get only the latest entities.

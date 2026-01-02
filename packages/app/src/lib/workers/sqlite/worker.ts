@@ -42,6 +42,7 @@ import { Deferred } from "$lib/utils/deferred";
 import { CONFIG } from "$lib/config";
 // import { initializeFaro } from "$lib/otel";
 import { decode } from "@atcute/cbor";
+import { generateJitteredKeyBetween } from "fractional-indexing-jittered";
 
 let faro;
 try {
@@ -663,10 +664,171 @@ class SqliteWorkerSupervisor {
           };
         }),
       );
+
+      // Materialize the entity's sort position
+      this.materializeEntitySortPosition({
+        streamId: eventMeta.streamId,
+        ulid: eventMeta.event.id,
+        after: eventMeta.event.after,
+      });
     }
 
     await executeQuery({ sql: `release bundle${bundleId}` });
     return queryResults;
+  }
+
+  /** Materialize the entity's sort index */
+  private async materializeEntitySortPosition({
+    streamId,
+    ulid,
+    after,
+  }: {
+    streamId: string;
+    ulid: string;
+    after?: string;
+  }): Promise<void> {
+    // Determine this entity's sort index
+
+    // Skip completely if this entity already has a sort index
+    const result = (
+      await executeQuery(
+        sql`select sort_idx from entities where id = ${ulid} and sort_idx is not null`,
+      )
+    ).rows;
+    if (result?.length || 0 > 0) return;
+
+    // First we need to get the closest entity that comes before this one.
+    let eventBeforeThisOne: { id: string; sort_idx?: string } | undefined;
+
+    // If this entity is `after` a specific entity, then we are looking for that entity, or else the one
+    // with the closest preceding ulid, if we haven't materialized the `after` entity yet.
+    if (after) {
+      // Try to get the event this one is after if it exists
+      eventBeforeThisOne = (
+        await executeQuery<{
+          id: string;
+          sort_idx?: string;
+        }>(sql`
+          select id, sort_idx
+          from entities
+          where stream_id = ${streamId} and after = ${after}
+          limit 1
+        `)
+      ).rows?.[0];
+
+      // If that didn't work, just get get the previous event by its ulid
+      if (!eventBeforeThisOne) {
+        eventBeforeThisOne = (
+          await executeQuery<{
+            id: string;
+            sort_idx?: string;
+          }>(sql`
+            select id, sort_idx
+            from entities
+            where 
+              stream_id = ${streamId}
+                and
+              id < ${ulid}
+            order by id desc
+            limit 1
+        `)
+        ).rows?.[0];
+      }
+    } else {
+      // If this event isn't `after` a specific entity, then we are just looking for the closest
+      // preceding entity ulid.
+      eventBeforeThisOne = (
+        await executeQuery<{
+          id: string;
+          sort_idx?: string;
+        }>(sql`
+            select id, sort_idx
+            from entities
+            where 
+              stream_id = ${streamId}
+                and
+              id < ${ulid}
+            order by id desc
+            limit 1
+        `)
+      ).rows?.[0];
+    }
+
+    // Now we need to get the closest entity that comes after this one
+    let eventAfterThisOne: { id: string; sort_idx?: string } | undefined;
+
+    // If this entity is supposed to come after a specific entity, then we want to sort it
+    // _immediately_ after, so we need to find the entity that _currently_ sorts immediately after
+    // it and stick it in between.
+    if (after && eventBeforeThisOne) {
+      eventAfterThisOne = (
+        await executeQuery<{ id: string; sort_idx: string }>(sql`
+          select id, sort_idx
+          from entities
+          where
+            stream_id = ${streamId}
+              and
+            sort_idx > ${eventBeforeThisOne.sort_idx}
+          order by sort_idx
+          limit 1
+        `)
+      ).rows?.[0];
+    } else {
+      // If this entity isn't supposed to come after any specific entity, then we just stick it before
+      // the nearest entity with a higher ulid.
+      eventAfterThisOne = (
+        await executeQuery<{ id: string; sort_idx: string }>(sql`
+          select id, sort_idx
+          from entities
+          where
+            stream_id = ${streamId}
+              and
+            id > ${ulid} 
+          order by id
+          limit 1
+        `)
+      ).rows?.[0];
+    }
+
+    // Finally we can compute the sort index for this entity
+
+    let sortIdx: string | undefined;
+    try {
+      sortIdx = generateJitteredKeyBetween(
+        eventBeforeThisOne?.sort_idx || null,
+        eventAfterThisOne?.sort_idx || null,
+      );
+    } catch (e) {
+      return;
+    }
+
+    // Now we can update the sort index for this entity
+    await executeQuery(
+      sql`update entities set sort_idx = ${sortIdx} where id = ${ulid}`,
+    );
+
+    // Now we get the list of other entities that should be sorted after *this* entity. These are
+    // entities that were supposed to be sorted be after this one, but couldn't be sorted properly
+    // because this entity hadn't been materialized yet.
+    const eventsAfterThisEvent =
+      (
+        await executeQuery<{ id: string }>(
+          sql`select id from entities where after = ${ulid}`,
+        )
+      ).rows?.map((x) => x.id) || [];
+
+    // Calculate the sort index for all of the events after this one. It's OK that they all have the
+    // same sort idx, the ULID is the tie breaker.
+    const sortIdxAfterThisEvent = generateJitteredKeyBetween(
+      sortIdx,
+      eventAfterThisOne?.sort_idx || null,
+    );
+
+    // Update the sort index for all of those events.
+    await executeQuery({
+      sql: `update entities set sort_idx = ? where id in (${eventsAfterThisEvent.map((_) => "?").join(",")})`,
+      params: [sortIdxAfterThisEvent, ...eventsAfterThisEvent],
+    });
   }
 
   private async runStatementProfileBundle(
@@ -732,8 +894,8 @@ class SqliteWorkerSupervisor {
     if (bundle.dependsOn && !isSatisfied) {
       // STASH: Insert event with applied=0
       await executeQuery(sql`
-            INSERT INTO events (idx, stream_id, user, entity_ulid, payload, applied, depends_on)
-            VALUES (${bundle.eventIdx}, ${streamId}, ${bundle.user}, ${bundle.event.id}, 
+            INSERT INTO events (idx, stream_id, user, entity_ulid, after_entity, payload, applied, depends_on)
+            VALUES (${bundle.eventIdx}, ${streamId}, ${bundle.user}, ${bundle.event.id}, ${bundle.event.after || null}
                     ${JSON.stringify(bundle.event)}, 0, ${JSON.stringify(bundle.dependsOn)})
             ON CONFLICT(idx, stream_id) DO NOTHING
           `);
