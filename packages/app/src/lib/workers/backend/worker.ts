@@ -300,10 +300,15 @@ class WorkerSupervisor {
   }
 
   private async refreshSession() {
-    console.log("WorkerSupervisor: Starting refreshSession");
+    console.info("WorkerSupervisor: Starting refreshSession");
     Client.new()
       .then((client) => {
-        console.log("WorkerSupervisor: Client created successfully");
+        if (!client) {
+          console.info("WorkerSupervisor: no previous session found.");
+          this.setAuthState({ state: "unauthenticated" });
+          return;
+        }
+        console.log("WorkerSupervisor: Session restored successfully");
         this.setAuthenticated(client);
         client.getProfile().then((profile) => {
           this.#status.profile = profile;
@@ -311,7 +316,6 @@ class WorkerSupervisor {
       })
       .catch((error) => {
         console.error("WorkerSupervisor: Could not restore session", error);
-        console.error("WorkerSupervisor: Error stack:", error.stack);
         this.setAuthState({ state: "unauthenticated" });
       });
   }

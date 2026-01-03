@@ -98,9 +98,11 @@ export async function initializeDatabase(
         db.exec(`pragma journal_mode = memory`);
         vfsType = "memory";
         lastErr = null; // Clear the error since we succeeded
-        console.warn(
-          "⚠️  Using in-memory database - data will not persist across page reloads",
-        );
+        if (persistent) {
+          console.warn(
+            "⚠️  Using in-memory fallback database - data will not persist across page reloads",
+          );
+        }
       } catch (e) {
         console.error("In-memory database fallback also failed:", e);
         lastErr = e;
