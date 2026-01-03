@@ -87,8 +87,8 @@ export class Client {
     return Client.fromAgent(atpAgent);
   }
 
-  // restore previous session
-  static async new() {
+  // restore previous session or return `undefined` if there was none
+  static async new(): Promise<Client | undefined> {
     if (CONFIG.testingAppPassword && CONFIG.testingHandle) {
       console.log("Using app password authentication for testing");
       return Client.loginWithAppPassword(
@@ -102,7 +102,7 @@ export class Client {
 
     // if there's a stored DID and no session yet, try to restore the session
     const didEntry = await db.kv.get("did");
-    if (!didEntry) throw new Error("Failed to retrieve DID from IndexedDB");
+    if (!didEntry) return;
 
     const restoredSession = await oauthClient.restore(didEntry.value);
     return Client.fromSession(restoredSession);
