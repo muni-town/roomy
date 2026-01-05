@@ -24,6 +24,7 @@ let flatTreeQuery: LiveQuery<{
 export const spaceTree = $state<{ result?: SpaceTreeItem[] }>({
   result: undefined,
 });
+(globalThis as any).spaceTree = spaceTree;
 
 /**
  * Build a tree structure from flat SQL results.

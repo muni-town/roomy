@@ -14,6 +14,7 @@ export const joinedSpaces = $state<{
   loading: boolean;
   error: string;
 }>({ list: [], loading: true, error: "" });
+(globalThis as any).joinedSpaces = joinedSpaces;
 
 $effect.root(() => {
   spacesQuery = new LiveQuery(

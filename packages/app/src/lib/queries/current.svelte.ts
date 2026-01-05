@@ -33,6 +33,7 @@ export const current = $state<{
   joinedSpace: undefined,
   isSpaceAdmin: false,
 });
+(globalThis as any).current = current;
 
 function error(message: string) {
   console.error(message);
