@@ -103,6 +103,10 @@ export function messagePortInterface<
 
 type ReactiveWorkerStateMessage = ["need", string] | ["update", string, any];
 
+export type ReactiveWorkerState<T> = Partial<T> & {
+  current: { [key: string]: any | undefined };
+};
+
 /**
  * Create an object with reactive properties ( shallow reactivity, not deep ), that will reactively
  * update svelte even when updated from a worker.
@@ -110,7 +114,7 @@ type ReactiveWorkerStateMessage = ["need", string] | ["update", string, any];
 export function reactiveWorkerState<T extends { [key: string]: any }>(
   channel: MessagePortApi,
   provider: boolean,
-) {
+): ReactiveWorkerState<T> {
   const state = {
     channel,
     props: {} as {
@@ -178,5 +182,5 @@ export function reactiveWorkerState<T extends { [key: string]: any }>(
 
       return true;
     },
-  }) as unknown as Partial<T> & { current: { [key: string]: any | undefined } };
+  }) as unknown as ReactiveWorkerState<T>;
 }

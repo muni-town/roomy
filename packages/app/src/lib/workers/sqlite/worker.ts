@@ -16,7 +16,11 @@ import {
   getVfsType,
   type QueryResult,
 } from "./setup";
-import { messagePortInterface, reactiveWorkerState } from "../workerMessaging";
+import {
+  messagePortInterface,
+  reactiveWorkerState,
+  type ReactiveWorkerState,
+} from "../workerMessaging";
 import { db } from "../idb";
 import schemaSql from "./schema.sql?raw";
 import { sql } from "$lib/utils/sqlTemplate";
@@ -60,8 +64,6 @@ try {
   console.error("Failed to initialize Faro in sqlite worker", e);
 }
 
-console.info("Started sqlite worker");
-
 const initSql = schemaSql
   .split("\n")
   .filter((x) => !x.startsWith("--"))
@@ -84,7 +86,7 @@ class SqliteWorkerSupervisor {
   #isConnectionHealthy: boolean = true;
   // Heartbeat mechanism to prove this worker is alive
   #heartbeatInterval: NodeJS.Timeout | null = null;
-  #status: Partial<SqliteStatus> = {};
+  #status: ReactiveWorkerState<SqliteStatus> = { current: {} };
   #backend: BackendInterface | null = null;
   #ensuredProfiles = new Set<string>();
   #knownStreams = new Set<StreamDid>();
@@ -124,7 +126,10 @@ class SqliteWorkerSupervisor {
     this.#status.workerId = this.#workerId;
     this.#status.isActiveWorker = false; // Initialize to false for reactive state tracking
     this.#status.vfsType = undefined; // Will be set after database initialization
-    console.info("SQLite Worker id", this.#workerId, "dbName", params.dbName);
+    console.info("SQLite Worker Started", {
+      workderId: this.#workerId,
+      databaseName: params.dbName,
+    });
 
     // initially load only in-memory
     this.loadDb(params.dbName, false).then(() => {
@@ -137,7 +142,7 @@ class SqliteWorkerSupervisor {
         this.#backend?.setActiveSqliteWorker(sqliteChannel.port2);
         this.listenEvents();
         this.listenStatements();
-        console.log("Finished initialising SQLite Worker", this.#status);
+        console.log("SQLite Worker Initialized", this.#status.current);
       } catch (error) {
         console.error("SQLite worker initialisation: Fatal error", error);
         this.cleanup();
@@ -147,15 +152,12 @@ class SqliteWorkerSupervisor {
   }
 
   private async loadDb(dbName: string, persistent: boolean) {
-    console.log("Calling loadDb with dbName", dbName);
-
     const deferred = new Deferred<void>();
 
     const callback = async () => {
-      console.log(
-        "Sqlite worker lock obtained: Active worker id:",
-        this.#workerId,
-      );
+      console.log("Sqlite worker lock obtained", {
+        activeWorkerId: this.#workerId,
+      });
       this.#status.isActiveWorker = true;
       this.startHeartbeat();
 
@@ -166,12 +168,6 @@ class SqliteWorkerSupervisor {
         await initializeDatabase(dbName, persistent);
 
         this.#status.vfsType = getVfsType() || undefined;
-        console.log(
-          "SQLite Worker",
-          dbName,
-          "using VFS:",
-          this.#status.vfsType,
-        );
 
         // initialise DB schema (should be idempotent)
         console.time("initSql");
@@ -477,7 +473,7 @@ class SqliteWorkerSupervisor {
         // await this.loadDb(did, false); // there is no special reason to have DID-keyed db when it's in memory only. keeping for future transition back to persistent
         this.#status.authenticated = did;
         this.#authenticated.resolve();
-        console.log("✅ Authenticated SQLite Worker with did:", did);
+        console.log("Sqlite Worker Authenticated", { did });
       },
       materializeBatch: async (eventsBatch, priority) => {
         return this.materializeBatch(eventsBatch, priority);
@@ -1004,7 +1000,7 @@ class SqliteWorkerSupervisor {
     };
 
     if (depth == 0) {
-      console.log("runSavepoint", savepoint);
+      console.log("Running Savepoint", savepoint);
       disableLiveQueries();
 
       // This lock makes sure that the JS tasks don't interleave some other query executions in while we

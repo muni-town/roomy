@@ -62,7 +62,6 @@ export async function initializeDatabase(
     if (persistent) {
       // Strategy 1: Try OpfsSAHPoolVfs (best performance, no COOP/COEP required)
       // Retry a few times because SAH Pool can transiently fail during context handoff
-      console.log("Attempting to initialize with OpfsSAHPoolVfs...");
       for (let attempt = 0; attempt < 6; attempt++) {
         try {
           const pool = await sqlite3.installOpfsSAHPoolVfs({
@@ -76,6 +75,10 @@ export async function initializeDatabase(
           break;
         } catch (e) {
           lastErr = e;
+          console.warn(
+            `Error initializing database with OPFS with ${6 - attempt} retries remaining:`,
+            e,
+          );
           // if we run into 'SAH Pool is full' errors again, we can call
           // await globalThis.deleteDBs()
           await new Promise((r) => setTimeout(r, 100 * Math.pow(2, attempt)));
@@ -90,7 +93,6 @@ export async function initializeDatabase(
 
     // Fall back to in-memory database
     if (!db) {
-      console.log("Loading in-memory database...", lastErr);
       try {
         db = new sqlite3.oo1.DB(":memory:");
         db.exec(`pragma locking_mode = exclusive`);
@@ -117,7 +119,10 @@ export async function initializeDatabase(
       throw error;
     }
 
-    console.log(`✓ Database initialized successfully using VFS: ${vfsType}`);
+    console.log("SQLite Database initialized", {
+      databaseName: dbName,
+      vfsType,
+    });
 
     // Set an authorizer function that will allow us to track reads and writes to the database
     sqlite3.capi.sqlite3_set_authorizer(db, authorizer, 0);
