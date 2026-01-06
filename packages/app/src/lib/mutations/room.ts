@@ -89,9 +89,9 @@ export async function addRoomToSidebar(opts: {
   // Mark the thread as a channel
   events.push({
     id: newUlid(),
-    room: opts.room.id,
     variant: {
       $type: "space.roomy.room.updateRoom.v0",
+      roomId: opts.room.id,
       kind: "space.roomy.channel",
       name: channelName,
     },
@@ -120,9 +120,9 @@ export async function convertToThread(opts: {
 }) {
   await backend.sendEvent(opts.spaceId, {
     id: newUlid(),
-    room: opts.roomId,
     variant: {
       $type: "space.roomy.room.updateRoom.v0",
+      roomId: opts.roomId,
       kind: "space.roomy.thread",
     },
   });
@@ -135,9 +135,9 @@ export async function convertToPage(opts: {
   const events: Event[] = [
     {
       id: newUlid(),
-      room: opts.room.id,
       variant: {
         $type: "space.roomy.room.updateRoom.v0",
+        roomId: opts.room.id,
         kind: "space.roomy.page",
       },
     },
