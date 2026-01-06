@@ -64,16 +64,16 @@ export const backend = messagePortInterface<ConsoleInterface, BackendInterface>(
   "port" in backendWorker ? backendWorker.port : backendWorker,
   {
     async log(level, args) {
-      const prefixedArgs = ["[SharedWorker]", ...args];
+      const prefixedArgs = ["[BW]", ...args]; // Backend Worker
       console[level](...prefixedArgs);
     },
   },
 );
 
-backend.ping();
-
 (globalThis as any).backend = backend;
 (globalThis as any).CONFIG = CONFIG;
+
+console.debug("(init.1) Backend worker loaded");
 
 // Start a sqlite worker for this tab.
 const sqliteWorkerChannel = new MessageChannel();
@@ -85,6 +85,8 @@ const sqliteWorker = new Worker(
     type: "module",
   },
 );
+
+console.debug("(init.2) Sqlite worker loaded");
 
 sqliteWorker.postMessage(
   {

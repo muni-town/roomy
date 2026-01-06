@@ -102,17 +102,18 @@ export class ConnectedStream {
 
   static async create(opts: Omit<ConnectedStreamOpts, "id" | "idx">) {
     try {
-      console.log("Creating stream", opts);
+      console.log("Creating stream");
 
-      if (!(await opts.leaf.hasModule(await opts.module.cid))) {
-        console.info(
-          "Leaf server does not have module yet. Uploading:",
-          await opts.module.cid,
-        );
+      const cid = await opts.module.cid;
+
+      if (!(await opts.leaf.hasModule(cid))) {
+        console.info("Leaf server does not have module yet. Uploading:", cid);
         await opts.leaf.uploadModule(opts.module.def);
       }
 
-      const { streamDid } = await opts.leaf.createStream(await opts.module.cid);
+      console.debug("Module ready to create stream");
+
+      const { streamDid } = await opts.leaf.createStream(cid);
 
       console.log("created stream:", streamDid);
 

@@ -40,7 +40,7 @@ create index if not exists idx_entities_sort_idx on entities(sort_idx);
 
 -- This is an important index because it allows us to query for entities in a thread
 -- with a reverse sort order to get only the latest entities.
-create index if not exists idx_entities_parent on entities (parent, id desc);
+create index if not exists idx_entities_room on entities (room, id desc);
 
 CREATE TABLE IF NOT EXISTS edges (
     head text NOT NULL, -- did or ulid

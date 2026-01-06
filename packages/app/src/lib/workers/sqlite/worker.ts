@@ -128,7 +128,7 @@ class SqliteWorkerSupervisor {
     this.#status.workerId = this.#workerId;
     this.#status.isActiveWorker = false; // Initialize to false for reactive state tracking
     this.#status.vfsType = undefined; // Will be set after database initialization
-    console.info("SQLite Worker Started", {
+    console.debug("[SqW] (init.1) SQLite Worker Started", {
       workderId: this.#workerId,
       databaseName: params.dbName,
     });
@@ -144,7 +144,10 @@ class SqliteWorkerSupervisor {
         this.#backend?.setActiveSqliteWorker(sqliteChannel.port2);
         this.listenEvents();
         this.listenStatements();
-        console.log("SQLite Worker Initialized", this.#status.current);
+        console.log(
+          "[SqW] (init.4) Set active worker, started listeners",
+          this.#status.current,
+        );
       } catch (error) {
         console.error("SQLite worker initialisation: Fatal error", error);
         this.cleanup();
@@ -157,7 +160,7 @@ class SqliteWorkerSupervisor {
     const deferred = new Deferred<void>();
 
     const callback = async () => {
-      console.log("Sqlite worker lock obtained", {
+      console.debug("[SqW] (init.2) Sqlite worker lock obtained", {
         activeWorkerId: this.#workerId,
       });
       this.#status.isActiveWorker = true;
@@ -174,6 +177,7 @@ class SqliteWorkerSupervisor {
         // initialise DB schema (should be idempotent)
         console.time("initSql");
         await this.runSavepoint({ name: "init", items: initSql });
+        console.debug("[SqW] (init.3) Schema initialised.");
         console.timeEnd("initSql");
 
         // Set current schema version
@@ -475,7 +479,7 @@ class SqliteWorkerSupervisor {
         // await this.loadDb(did, false); // there is no special reason to have DID-keyed db when it's in memory only. keeping for future transition back to persistent
         this.#status.authenticated = did;
         this.#authenticated.resolve();
-        console.log("Sqlite Worker Authenticated", { did });
+        console.debug("[SqW] (init.5) Authenticated", { did });
       },
       materializeBatch: async (eventsBatch, priority) => {
         return this.materializeBatch(eventsBatch, priority);
@@ -917,7 +921,6 @@ class SqliteWorkerSupervisor {
     };
 
     if (depth == 0) {
-      console.log("Running Savepoint", savepoint);
       disableLiveQueries();
 
       // This lock makes sure that the JS tasks don't interleave some other query executions in while we

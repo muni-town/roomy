@@ -334,7 +334,9 @@ export class Client {
     if (this.personalStream) return this.personalStream;
     await this.#leafAuthenticated.promise;
 
-    console.log("Looking for personal stream id");
+    console.debug("Looking for personal stream id with", {
+      rkey: CONFIG.streamSchemaVersion,
+    });
 
     // TODO: Caching the personal stream ID causes problems when it gets cached and the PDS record
     // has changed because the app will just get stuck loading forever trying to get the stream that

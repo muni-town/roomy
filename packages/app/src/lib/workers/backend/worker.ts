@@ -273,8 +273,8 @@ class WorkerSupervisor {
     this.#connection.ports.set(port, connectionId);
 
     // Log connection BEFORE setting up console forwarding to avoid broadcast duplication
-    console.log(
-      `SharedWorker backend connected (ID: ${connectionId}, total: ${this.#connection.count})`,
+    console.debug(
+      `(init.1) SharedWorker backend connected (ID: ${connectionId}, total: ${this.#connection.count})`,
     );
 
     // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -300,22 +300,21 @@ class WorkerSupervisor {
   }
 
   private async refreshSession() {
-    console.info("WorkerSupervisor: Starting refreshSession");
     Client.new()
       .then((client) => {
         if (!client) {
-          console.info("WorkerSupervisor: no previous session found.");
+          console.debug("No previous session found.");
           this.setAuthState({ state: "unauthenticated" });
           return;
         }
-        console.log("WorkerSupervisor: Session restored successfully");
+        console.debug("Session restored successfully");
         this.setAuthenticated(client);
         client.getProfile().then((profile) => {
           this.#status.profile = profile;
         });
       })
       .catch((error) => {
-        console.error("WorkerSupervisor: Could not restore session", error);
+        console.error("Could not restore session", error);
         this.setAuthState({ state: "unauthenticated" });
       });
   }
@@ -379,8 +378,6 @@ class WorkerSupervisor {
         return await this.sqlite.resetLocalDatabase();
       },
       setActiveSqliteWorker: async (messagePort) => {
-        console.log("Setting active SQLite worker");
-
         // eslint-disable-next-line @typescript-eslint/no-empty-object-type
         await this.sqlite.setReady(
           messagePortInterface<{}, SqliteWorkerInterface>(messagePort, {}),
@@ -558,10 +555,10 @@ class SqliteSupervisor {
   async setReady(workerInterface: SqliteWorkerInterface) {
     if (this.#state.state === "pending") {
       const previousSchemaVersion = await prevStream.getSchemaVersion();
-      console.log(
-        "SQLite Supervisor setReady got schemaVersion",
+      console.debug(
+        "(init.2) SQLite Supervisor ready. schemaVersion:",
         previousSchemaVersion,
-        "current",
+        "current:",
         CONFIG.streamSchemaVersion,
       );
       if (previousSchemaVersion != CONFIG.streamSchemaVersion) {

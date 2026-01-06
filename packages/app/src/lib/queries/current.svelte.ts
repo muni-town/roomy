@@ -83,7 +83,7 @@ $effect.root(() => {
   $effect(() => {
     page.params.space; // depend on page.params.space
 
-    console.log("current space", page.params.space);
+    // console.log("current space", page.params.space);
 
     // TODO: when we checked if the space was loading right here it would cause a problem when
     // we start lazy loading a room, because we go from a loaded space to a loading space, and
@@ -124,7 +124,7 @@ $effect.root(() => {
   // Update current.roomId whenever page params change
   $effect(() => {
     page.params.object;
-    console.log("room", page.params.object);
+    // console.log("room", page.params.object);
     if (!page.params.object || !Ulid.allows(page.params.object)) return;
     current.roomId = Ulid.assert(page.params.object);
 
