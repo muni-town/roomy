@@ -94,7 +94,7 @@
       await backend.sendEvent(spaceId, {
         id: newUlid(),
         variant: {
-          $type: "space.roomy.stream.setHandleAccount.v0",
+          $type: "space.roomy.space.setHandleAccount.v0",
           did: backendStatus.authState.did,
         },
       });
@@ -116,7 +116,7 @@
       await backend.sendEvent(spaceId, {
         id: newUlid(),
         variant: {
-          $type: "space.roomy.stream.setHandleAccount.v0",
+          $type: "space.roomy.space.setHandleAccount.v0",
           did: null,
         },
       });

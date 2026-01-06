@@ -6,7 +6,7 @@
   import { Button } from "@fuxui/base";
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import { newUlid } from "$lib/schema";
+  import { newUlid, UserDid } from "$lib/schema";
 
   const spaceId = $derived(current.joinedSpace?.id);
 
@@ -39,13 +39,10 @@
     if (!spaceId) return;
 
     await backend.sendEvent(spaceId, {
-      ulid: newUlid(),
-      parent: undefined,
+      id: newUlid(),
       variant: {
-        kind: "space.roomy.space.addAdmin.v0",
-        data: {
-          adminId: userId,
-        },
+        $type: "space.roomy.space.addAdmin.v0",
+        userDid: UserDid.assert(userId),
       },
     });
   }
@@ -54,13 +51,10 @@
     if (!spaceId) return;
 
     await backend.sendEvent(spaceId, {
-      ulid: newUlid(),
-      parent: undefined,
+      id: newUlid(),
       variant: {
-        kind: "space.roomy.space.removeAdmin.v0",
-        data: {
-          adminId: userId,
-        },
+        $type: "space.roomy.space.removeAdmin.v0",
+        userDid: UserDid.assert(userId),
       },
     });
   }

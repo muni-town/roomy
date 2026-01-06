@@ -54,19 +54,19 @@ const materializers: {
     `,
     // Create a virtual message announcing the member joining
     sql`
-    insert into entities (id, stream_id, parent)
-    values (
-      ${event.id},
-      ${streamId},
-      (
-        select entity
-          from comp_room join entities e on e.id = entity
-          where label = 'channel' and deleted = 0 and e.stream_id = ${streamId}
-          order by entity
-          limit 1
+      insert into entities (id, stream_id, parent)
+      values (
+        ${event.id},
+        ${streamId},
+        (
+          select entity
+            from comp_room join entities e on e.id = entity
+            where label = 'channel' and deleted = 0 and e.stream_id = ${streamId}
+            order by entity
+            limit 1
+        )
       )
-    )
-  `,
+    `,
     // Set author on the virtual message to be the stream itself
     sql`
         insert into edges (head, tail, label)
@@ -83,18 +83,18 @@ const materializers: {
         cast(('[@' || (select handle from comp_user where did = ${user}) || '](/user/' || ${user} || ') joined the space.') as blob)
     )`,
   ],
-  // "space.roomy.room.leaveRoom.v0": async ({ streamId, user, event }) => [
-  //   sql`
-  //     delete from edges
-  //     where
-  //       head = ${event.room ? event.room : streamId}
-  //         and
-  //       tail = ${user}
-  //         and
-  //       label = 'member'
-  //   `,
-  // ],
-  "space.roomy.stream.setHandleAccount.v0": async ({ streamId, data }) => [
+  "space.roomy.space.leaveSpace.v0": async ({ streamId, user }) => [
+    sql`
+      delete from edges
+      where
+        head = ${streamId}
+          and
+        tail = ${user}
+          and
+        label = 'member'
+    `,
+  ],
+  "space.roomy.space.setHandleAccount.v0": async ({ streamId, data }) => [
     sql`
       update comp_space set handle_account = ${data.did || null}
       where entity = ${streamId}

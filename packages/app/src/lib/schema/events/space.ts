@@ -13,10 +13,18 @@ import {
 
 export const JoinSpace = type({
   $type: "'space.roomy.space.joinSpace.v0'",
-  spaceDid: StreamDid.describe("The space being joined."),
 }).describe(
   "Join a Roomy space. \
-This must be sent in the space itself, announcing that you have joined.",
+This must be sent in the space itself, announcing that you have joined. \
+If accepted by the space this will add you to the member list.",
+);
+
+export const LeaveSpace = type({
+  $type: "'space.roomy.space.leaveSpace.v0'",
+}).describe(
+  "Leave a Roomy space. \
+This must be sent in the space itself, announcing that you have left. \
+This will remove you from the member list.",
 );
 
 export const PersonalJoinSpace = type({
@@ -28,7 +36,7 @@ This must be sent in a user's personal stream and is how you update the joined s
 Signaling that you have joined a space inside the space you are joining should be done with a room.joinRoom event.",
 );
 
-export const LeaveSpace = type({
+export const PersonalLeaveSpace = type({
   $type: "'space.roomy.space.personal.leaveSpace.v0'",
   spaceDid: StreamDid.describe("The space being left."),
 }).describe(
@@ -73,7 +81,7 @@ export const RemoveAdmin = type({
 }).describe("Remove an admin from the space");
 
 export const SetHandleAccount = type({
-  $type: "'space.roomy.stream.setHandleAccount.v0'",
+  $type: "'space.roomy.space.setHandleAccount.v0'",
   did: Did.or(type.null).describe("The ATProto DID, or null to unset."),
 }).describe(
   "Set the ATProto account DID for the space handle. \
@@ -83,8 +91,9 @@ For verification, the ATProto account must also have a `space.roomy.stream` PDS 
 // All space events
 export const SpaceEventVariant = type.or(
   JoinSpace,
-  PersonalJoinSpace,
   LeaveSpace,
+  PersonalJoinSpace,
+  PersonalLeaveSpace,
   AddAdmin,
   RemoveAdmin,
   SetHandleAccount,

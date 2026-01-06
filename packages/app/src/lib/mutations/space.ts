@@ -16,7 +16,6 @@ export async function joinSpace(spaceId: StreamDid) {
     // Add the space to the personal list of joined spaces
     await backend.sendEvent(backendStatus.authState.personalStream, {
       id: newUlid(),
-      room: undefined,
       variant: {
         $type: "space.roomy.space.personal.joinSpace.v0",
         spaceDid: spaceId,
@@ -25,9 +24,8 @@ export async function joinSpace(spaceId: StreamDid) {
     // Tell the space that we joined.
     await backend.sendEvent(spaceId, {
       id: newUlid(),
-      room: undefined,
       variant: {
-        $type: "space.roomy.room.joinRoom.v0",
+        $type: "space.roomy.space.joinSpace.v0",
       },
     });
   } catch (e) {
@@ -60,7 +58,6 @@ export async function createSpace(opts: {
   // Join the space
   await backend.sendEvent(opts.creator.personalStreamId, {
     id: newUlid(),
-    room: undefined,
     variant: {
       $type: "space.roomy.space.personal.joinSpace.v0",
       spaceDid: spaceDid,
@@ -89,7 +86,6 @@ export async function createSpace(opts: {
   // Create the "system" user as the space itself
   batch.push({
     id: newUlid(),
-    room: undefined,
     variant: {
       $type: "space.roomy.user.overrideHandle.v0",
       handle: "system",

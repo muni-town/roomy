@@ -8,9 +8,9 @@ export async function deleteMessage(
 ) {
   await backend.sendEvent(spaceId, {
     id: newUlid(),
-    room: roomId,
     variant: {
       $type: "space.roomy.message.deleteMessage.v0",
+      room: roomId,
       messageId: messageId,
     },
   });
@@ -24,9 +24,9 @@ export async function reorderMessage(
 ) {
   await backend.sendEvent(streamId, {
     id: newUlid(),
-    room: roomId,
     variant: {
       $type: "space.roomy.message.reorderMessage.v0",
+      room: roomId,
       messageId,
       after: moveAfter,
     },

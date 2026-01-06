@@ -119,7 +119,7 @@ export async function initializeDatabase(
       throw error;
     }
 
-    console.info("SQLite Database initialized", {
+    console.info("[SqW] (init.3) Database initialized", {
       databaseName: dbName,
       vfsType,
     });

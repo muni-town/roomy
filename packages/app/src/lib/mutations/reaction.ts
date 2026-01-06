@@ -9,8 +9,8 @@ export async function addReaction(
 ) {
   await backend.sendEvent(spaceId, {
     id: newUlid(),
-    room: roomId,
     variant: {
+      room: roomId,
       $type: "space.roomy.reaction.addReaction.v0",
       reactionTo: messageId,
       reaction,
@@ -25,8 +25,8 @@ export async function removeReaction(
 ) {
   await backend.sendEvent(spaceId, {
     id: newUlid(),
-    room: roomId,
     variant: {
+      room: roomId,
       $type: "space.roomy.reaction.removeReaction.v0",
       reactionId: reactionId,
     },

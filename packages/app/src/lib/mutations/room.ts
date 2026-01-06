@@ -5,7 +5,6 @@ import { RoomKind } from "$lib/schema/events/room";
 
 interface CreateRoomOpts {
   spaceId: StreamDid;
-  parentRoomId?: Ulid;
   kind: RoomKind;
   info?: {
     name?: string;
@@ -19,7 +18,6 @@ function createRoomEvents(opts: CreateRoomOpts) {
   const events: Event[] = [];
   events.push({
     id: newRoomId,
-    room: opts.parentRoomId,
     variant: {
       $type: "space.roomy.room.createRoom.v0",
       kind: opts.kind,
@@ -53,9 +51,9 @@ export async function createPage(opts: {
 
   events.push({
     id: newUlid(),
-    room: pageId,
     variant: {
       $type: "space.roomy.page.editPage.v0",
+      room: pageId,
       body: {
         data: toBytes(new TextEncoder().encode(`# ${opts.pageName}\n\n`)),
         mimeType: "text/markdown",
@@ -143,9 +141,9 @@ export async function convertToPage(opts: {
     },
     {
       id: newUlid(),
-      room: opts.room.id,
       variant: {
         $type: "space.roomy.page.editPage.v0",
+        room: opts.room.id,
         body: {
           data: toBytes(
             new TextEncoder().encode(
@@ -167,7 +165,6 @@ export async function setPageReadMarker(opts: {
 }) {
   await backend.sendEvent(opts.personalStreamId, {
     id: newUlid(),
-    room: undefined,
     variant: {
       $type: "space.roomy.stream.personal.setLastRead.v0",
       streamDid: opts.streamId,

@@ -29,25 +29,23 @@ export const SpaceEventVariantUnion = type.or(
   UserEventVariant,
 );
 
-/** Any event variant */
-export const EventVariant = RoomEventVariantUnion.or(SpaceEventVariantUnion);
-
 /** Any event that is sent in a Roomy room.  */
-export const RoomEvent = type({
-  id: Ulid.describe("Unique event ID, also encodes timestamp"),
-  room: Ulid.describe("Parent room."),
-  variant: RoomEventVariantUnion,
-}).describe("Any event that is sent in a Roomy room.");
+export const RoomEvent = RoomEventVariantUnion.and(
+  type({ room: Ulid.describe("The room that this event is sent in.") }),
+);
 
 /** Any event that is sent in the top level of a Roomy space. */
-export const SpaceEvent = type({
-  id: Ulid.describe("Unique event ID, also encodes timestamp"),
-  variant: SpaceEventVariantUnion,
-}).describe("Any event that is sent in the top level of a Roomy space.");
+export const SpaceEvent = SpaceEventVariantUnion;
+
+/** Any event variant */
+export const EventVariant = type.or(RoomEvent, SpaceEvent);
 
 /** The full event envelope
  * This is what gets encoded to DRISL and sent over the wire  */
-export const Event = RoomEvent.or(SpaceEvent);
+export const Event = type({
+  id: Ulid.describe("Unique event ID, also encodes timestamp"),
+  variant: type.or(RoomEvent, SpaceEvent),
+});
 
 // Type exports for TypeScript consumers
 
@@ -62,45 +60,15 @@ export type EventType = RoomEventType | SpaceEventType;
 
 /** The inner data inside a room event envelope. Optionally accepts an EventType parameter,
  * which narrows to the given event type */
-export type RoomEventVariantUnion<K = undefined> = K extends RoomEventType
-  ? Extract<typeof RoomEventVariantUnion.infer, { $type: K }>
-  : typeof RoomEventVariantUnion.infer;
-
-/** The inner data inside a space event envelope. Optionally accepts an EventType parameter,
- * which narrows to the given event type */
-export type SpaceEventVariantUnion<K = undefined> = K extends SpaceEventType
-  ? Extract<typeof SpaceEventVariantUnion.infer, { $type: K }>
-  : typeof SpaceEventVariantUnion.infer;
-
-export type EventVariant<K = undefined> = K extends RoomEventType
-  ? RoomEventVariantUnion<K>
-  : K extends SpaceEventType
-    ? SpaceEventVariantUnion<K>
-    : RoomEventVariantUnion | SpaceEventVariantUnion;
-
-/** Room event envelope with room, id and variant. Optionally accepts an EventType parameter,
- * which narrows to the given event type */
-export type RoomEvent<K = undefined> = K extends RoomEventType
-  ? Omit<typeof RoomEvent.infer, "variant"> & {
-      variant: Extract<typeof RoomEventVariantUnion.infer, { $type: K }>;
-    }
-  : typeof RoomEvent.infer;
-
-/** Space event envelope with room, id and variant. Optionally accepts an EventType parameter,
- * which narrows to the given event type */
-export type SpaceEvent<K = undefined> = K extends SpaceEventType
-  ? Omit<typeof SpaceEvent.infer, "variant"> & {
-      variant: Extract<typeof SpaceEventVariantUnion.infer, { $type: K }>;
-    }
-  : typeof SpaceEvent.infer;
+export type EventVariant<K = undefined> = K extends EventType
+  ? Extract<typeof EventVariant.infer, { $type: K }>
+  : typeof EventVariant.infer;
 
 /** Event envelope with id, room (if room event) and variant. Optionally accepts an EventType parameter,
  * which narrows to the given event type */
-export type Event<K = undefined> = K extends RoomEventType
-  ? RoomEvent<K>
-  : K extends SpaceEventType
-    ? SpaceEvent<K>
-    : RoomEvent | SpaceEvent;
+export type Event<K = undefined> = K extends EventType
+  ? Omit<typeof Event.infer, "variant"> & EventVariant<K>
+  : typeof Event.infer;
 
 /**
  * Parse a room event variant by looking up its $type.

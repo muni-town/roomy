@@ -29,7 +29,7 @@
     await backend.sendEvent(spaceDid, {
       id: newUlid(),
       variant: {
-        $type: "space.roomy.room.leaveRoom.v0",
+        $type: "space.roomy.space.leaveSpace.v0",
       },
     });
 

@@ -40,8 +40,6 @@
     const roomId = newUlid();
     await backend.sendEvent(spaceId, {
       id: roomId,
-      room:
-        type != "Category" && selectedCategory ? selectedCategory : undefined,
       variant: {
         $type: "space.roomy.room.createRoom.v0",
         kind:
