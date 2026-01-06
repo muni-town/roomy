@@ -44,25 +44,22 @@ import type {
 import type { BackendInterface } from "../backend/types";
 import { Deferred } from "$lib/utils/deferred";
 import { CONFIG } from "$lib/config";
-// import { initializeFaro } from "$lib/otel";
+import { initializeFaro } from "$lib/otel";
 import { decode } from "@atcute/cbor";
-import { generateJitteredKeyBetween } from "fractional-indexing-jittered";
 import { decodeTime, ulid } from "ulidx";
+import { type Tracer } from "@opentelemetry/api";
 
 let faro;
-try {
-  // TODO: parameterize enabling faro
-  // faro = initializeFaro({ worker: "sqlite" });
-  // faro.api
-  //   .getOTEL()!
-  //   .trace.getTracer("roomy-worker", __APP_VERSION__)
-  //   .startActiveSpan("sqlite span", (span) => {
-  //     span.setAttribute("hello", "world");
-  //     console.info("Tracing!!!");
-  //     span.end();
-  //   });
-} catch (e) {
-  console.error("Failed to initialize Faro in sqlite worker", e);
+let tracer: Tracer;
+if (CONFIG.faroEndpoint) {
+  try {
+    faro = initializeFaro({ worker: "sqlite" });
+    tracer = faro.api
+      .getOTEL()!
+      .trace.getTracer("roomy-sqlite-worker", __APP_VERSION__);
+  } catch (e) {
+    console.error("Failed to initialize Faro in sqlite worker", e);
+  }
 }
 
 const initSql = schemaSql
@@ -144,7 +141,7 @@ class SqliteWorkerSupervisor {
         this.#backend?.setActiveSqliteWorker(sqliteChannel.port2);
         this.listenEvents();
         this.listenStatements();
-        console.log(
+        console.info(
           "[SqW] (init.4) Set active worker, started listeners",
           this.#status.current,
         );
@@ -160,7 +157,7 @@ class SqliteWorkerSupervisor {
     const deferred = new Deferred<void>();
 
     const callback = async () => {
-      console.debug("[SqW] (init.2) Sqlite worker lock obtained", {
+      console.info("[SqW] (init.2) Sqlite worker lock obtained", {
         activeWorkerId: this.#workerId,
       });
       this.#status.isActiveWorker = true;
@@ -1067,7 +1064,10 @@ class SqliteWorkerSupervisor {
 const worker = new SqliteWorkerSupervisor();
 
 globalThis.onmessage = (ev) => {
-  worker.initialize(ev.data);
+  tracer.startActiveSpan("Initialize SQLite Worker", (span) => {
+    worker.initialize(ev.data);
+    span.end();
+  });
 };
 
 function midpointUlid(earlier: Ulid, later?: Ulid) {

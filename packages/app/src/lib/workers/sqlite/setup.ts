@@ -119,6 +119,11 @@ export async function initializeDatabase(
       throw error;
     }
 
+    console.info("SQLite Database initialized", {
+      databaseName: dbName,
+      vfsType,
+    });
+
     // Set an authorizer function that will allow us to track reads and writes to the database
     sqlite3.capi.sqlite3_set_authorizer(db, authorizer, 0);
 

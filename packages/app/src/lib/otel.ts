@@ -1,11 +1,14 @@
 import {
-  ConsoleInstrumentation,
+  BaseInstrumentation,
+  ErrorsInstrumentation,
   type Faro,
   getWebInstrumentations,
   initializeFaro as init,
+  LogLevel,
 } from "@grafana/faro-web-sdk";
 import { TracingInstrumentation } from "@grafana/faro-web-tracing";
 import type { Tracer } from "@opentelemetry/api";
+import { CONFIG } from "./config";
 
 type WorkerInfo =
   | {
@@ -15,23 +18,54 @@ type WorkerInfo =
       worker: "sqlite";
     };
 
+class CustomConsoleInstrumentation extends BaseInstrumentation {
+  readonly name = "@muni-town/roomy:instrumentation-console";
+  readonly version = "0.1";
+
+  initialize() {
+    const levels = ["info", "warn", "error"] as LogLevel[];
+    const origConsoleFns: { [key: string]: (...args: any[]) => void } = {};
+    levels.forEach((level) => {
+      origConsoleFns[level] = console[level];
+      /* eslint-disable-next-line no-console */
+      console[level] = (...args) => {
+        if (
+          args.length == 2 &&
+          typeof args[0] == "string" &&
+          typeof args[1] == "object"
+        ) {
+          this.api.pushLog([args[0]], {
+            level,
+            context: args[1],
+          });
+        } else {
+          this.api.pushLog(
+            [args.map((x) => (typeof x == "string" ? x : JSON.stringify(x)))],
+            {
+              level,
+            },
+          );
+        }
+        if (level == "info" && typeof args[0] == "string") {
+          origConsoleFns[level]!(
+            ...args.flatMap((x) =>
+              typeof x == "string" ? ["%c" + x, "color:chartreuse"] : [x],
+            ),
+          );
+        } else {
+          origConsoleFns[level]!(...args);
+        }
+      };
+    });
+  }
+}
+
 export function initializeFaro(opts: WorkerInfo): Faro & { tracer: Tracer } {
   const faro = init({
     app: { name: "roomy", version: __APP_VERSION__ },
     apiKey: "bad_api_key",
-    url: "http://localhost:12345/collect",
+    url: CONFIG.faroEndpoint,
     dedupe: false,
-    logArgsSerializer(args) {
-      return args
-        .map((x) => {
-          try {
-            return typeof x == "string" ? x : JSON.stringify(x);
-          } catch (e) {
-            return "[serialization failed]";
-          }
-        })
-        .join(" ");
-    },
     beforeSend(event) {
       if ("context" in event.payload) {
         event.payload.context = {
@@ -50,8 +84,13 @@ export function initializeFaro(opts: WorkerInfo): Faro & { tracer: Tracer } {
     },
     instrumentations: [
       ...(opts.worker == "main"
-        ? getWebInstrumentations()
-        : [new ConsoleInstrumentation()]),
+        ? [
+            ...getWebInstrumentations({
+              captureConsole: false,
+            }),
+            new CustomConsoleInstrumentation(),
+          ]
+        : [new CustomConsoleInstrumentation(), new ErrorsInstrumentation()]),
       new TracingInstrumentation(),
     ],
   });
