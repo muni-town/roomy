@@ -117,7 +117,6 @@
     await backend.sendEvent(spaceId, {
       id: newUlid(),
       room: Ulid.assert(page.params.object),
-      after: message.lastEdit,
       variant: {
         $type: "space.roomy.message.editMessage.v0",
         messageId: message.id,
@@ -125,6 +124,7 @@
           mimeType: "text/x-dmp-patch",
           data: toBytes(new TextEncoder().encode(contentPatch)),
         },
+        previous: message.lastEdit,
       },
     });
 

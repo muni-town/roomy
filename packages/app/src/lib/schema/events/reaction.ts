@@ -56,7 +56,7 @@ setDependsOn("space.roomy.reaction.removeBridgedReaction.v0", {
 });
 
 // All reaction events
-export const ReactionEvent = type.or(
+export const ReactionEventVariant = type.or(
   AddReaction,
   RemoveReaction,
   AddBrigedReaction,

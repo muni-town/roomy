@@ -28,4 +28,13 @@
 export * from "./primitives";
 
 // Envelope
-export { Event, EventVariant, parseEvent, type EventType } from "./envelope";
+export {
+  RoomEvent,
+  SpaceEvent,
+  Event,
+  EventVariant,
+  parseEvent,
+  type RoomEventType,
+  type SpaceEventType,
+  type EventType,
+} from "./envelope";

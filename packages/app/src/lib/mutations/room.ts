@@ -67,8 +67,9 @@ export async function createPage(opts: {
   return pageId;
 }
 
-export async function promoteToChannel(opts: {
+export async function addRoomToSidebar(opts: {
   spaceId: StreamDid;
+  category: string;
   room: {
     id: Ulid;
     name: string;
@@ -95,17 +96,20 @@ export async function promoteToChannel(opts: {
       name: channelName,
     },
   });
-  events.push({
-    id: newUlid(),
-    room: opts.room.id,
-    variant: {
-      $type: "space.roomy.room.move.v0",
-      entity: opts.room.id,
-      toRoom: opts.room.parent?.parent
-        ? Ulid.assert(opts.room.parent.parent)
-        : null,
-    },
-  });
+
+  // TODO: come back to this, work out what 'promoting to channel' (former name for this function) maps to
+
+  // events.push({
+  //   id: newUlid(),
+  //   room: opts.room.parent?.parent,
+  //   variant: {
+  //     $type: "space.roomy.link.createRoomLink.v0",
+  //     room: opts.room.id,
+  //     toParent: opts.room.parent?.parent
+  //       ? Ulid.assert(opts.room.parent.parent)
+  //       : null,
+  //   },
+  // });
 
   await backend.sendEventBatch(opts.spaceId, events);
 }

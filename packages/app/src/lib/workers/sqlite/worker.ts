@@ -47,6 +47,7 @@ import { CONFIG } from "$lib/config";
 // import { initializeFaro } from "$lib/otel";
 import { decode } from "@atcute/cbor";
 import { generateJitteredKeyBetween } from "fractional-indexing-jittered";
+import { decodeTime, ulid } from "ulidx";
 
 let faro;
 try {
@@ -74,10 +75,11 @@ const initSql = schemaSql
 const QUERY_LOCK = "sqliteQueryLock";
 const HEARTBEAT_KEY = "sqlite-worker-heartbeat";
 const LOCK_TIMEOUT_MS = 8000; // 30 seconds
+
 const newUserSignals: EventType[] = [
-  "space.roomy.stream.addAdmin.v0",
-  "space.roomy.room.joinRoom.v0",
-  "space.roomy.message.sendMessage.v0",
+  "space.roomy.space.addAdmin.v0",
+  "space.roomy.space.joinSpace.v0",
+  "space.roomy.message.createMessage.v0",
 ];
 
 class SqliteWorkerSupervisor {
@@ -292,7 +294,7 @@ class SqliteWorkerSupervisor {
               // Collect space IDs to connect AFTER batch is applied
               if (
                 event.variant.$type ===
-                "space.roomy.stream.personal.joinSpace.v0"
+                "space.roomy.space.personal.joinSpace.v0"
               ) {
                 spacesToConnect.push(event.variant.spaceDid);
               }
@@ -610,6 +612,110 @@ class SqliteWorkerSupervisor {
     return result;
   }
 
+  private async runStatementProfileBundle(
+    bundle: Bundle.StatementProfile,
+  ): Promise<Bundle.ProfileApplyResult> {
+    const bundleId = bundle.dids[0]?.replaceAll(":", "");
+    const queryResults = bundleId
+      ? await this.runBundleStatements(bundleId, bundle.statements)
+      : [];
+
+    return {
+      result: "appliedProfiles",
+      firstDid: bundle.dids[0],
+      output: queryResults,
+    };
+  }
+
+  // When triggering unstash, after applying an event:
+  private async triggerUnstash(
+    appliedEventId: Ulid,
+    streamId: StreamDid,
+    user: UserDid,
+    priority: TaskPriority,
+  ) {
+    const stashed = await executeQuery(sql`
+      SELECT idx, entity_ulid, payload
+      FROM events
+      WHERE depends_on = ${appliedEventId} AND applied = 0
+      ORDER BY idx ASC
+    `);
+
+    if (!stashed.rows?.length) return;
+
+    // Create unstash batch and push to channel
+    const unstashBatch: Batch.Unstash = {
+      status: "unstash",
+      batchId: newUlid(),
+      streamId,
+      priority,
+      events: stashed.rows.map((row) => ({
+        idx: row.idx as StreamIndex,
+        event: JSON.parse(row.payload as string) as Event,
+        user /* need to store this too, or derive from event */,
+      })),
+    };
+
+    this.#eventChannel.push(unstashBatch, priority);
+  }
+
+  /** Process a Statement Bundle. The actual statements are handled in runBundleStatements */
+  private async runStatementBundle(
+    bundle: Bundle.StatementSuccess,
+    streamId: StreamDid,
+    appliedInBatch: Set<Ulid>,
+    satisfiedDeps: Set<Ulid>,
+  ): Promise<Bundle.ApplyResult | Bundle.ApplyStashed> {
+    const bundleId = bundle.event.id;
+
+    const isSatisfied =
+      bundle.dependsOn.length == 0 ||
+      bundle.dependsOn.every((x) => satisfiedDeps.has(x)) ||
+      bundle.dependsOn.every((x) => appliedInBatch.has(x));
+
+    if (bundle.dependsOn && !isSatisfied) {
+      // STASH: Insert event with applied=0
+      await executeQuery(sql`
+            INSERT INTO events (idx, stream_id, user, entity_ulid,  payload, applied, depends_on)
+            VALUES (${bundle.eventIdx}, ${streamId}, ${bundle.user}, ${bundle.event.id},
+                    ${JSON.stringify(bundle.event)}, 0, ${JSON.stringify(bundle.dependsOn)})
+            ON CONFLICT(idx, stream_id) DO NOTHING
+          `);
+
+      return {
+        result: "stashed",
+        eventId: bundle.event.id,
+        dependsOn: bundle.dependsOn,
+      };
+    }
+
+    const queryResults = await this.runBundleStatements(
+      bundleId,
+      bundle.statements,
+      {
+        event: bundle.event,
+        streamId,
+        idx: bundle.eventIdx,
+        user: bundle.user,
+      },
+    );
+
+    // Track that we applied this
+    appliedInBatch.add(bundle.event.id);
+
+    // Check for stashed events that can now be applied
+    this.triggerUnstash(bundle.event.id, streamId, bundle.user, "priority");
+
+    return {
+      result: "applied",
+      eventId: bundle.event.id,
+      output: queryResults,
+    };
+  }
+
+  /** Given a bundle of SQL statements (corresponding to a materialised event needing application),
+   * apply those SQL statements to the DB, and insert the event.
+   */
   private async runBundleStatements(
     bundleId: string,
     statements: SqlStatement[],
@@ -661,30 +767,23 @@ class SqliteWorkerSupervisor {
         }),
       );
 
-      // If this event is a move event that modifies the `after` position for another event.
+      // If this event is a reorder event that modifies the `after` position for another event.
       if (
-        eventMeta.event.variant.$type == "space.roomy.room.move.v0" &&
+        eventMeta.event.variant.$type ==
+          "space.roomy.message.reorderMessage.v0" &&
         eventMeta.event.variant.after
       ) {
         // We need to update the event's "after" field
-        await executeQuery(
-          sql`update entities set after = ${eventMeta.event.variant.after} where id = ${eventMeta.event.variant.entity}`,
-        );
+        // await executeQuery(
+        //   sql`update entities set after = ${eventMeta.event.variant.after} where id = ${eventMeta.event.variant.entity}`,
+        // );
 
         // And we need to re-materialize it's sort position
         await this.materializeEntitySortPosition({
           streamId: eventMeta.streamId,
-          ulid: eventMeta.event.variant.entity,
+          ulid: eventMeta.event.variant.messageId,
           after: eventMeta.event.variant.after,
           update: true,
-        });
-      } else {
-        // If this is not a move event
-        // Materialize the entity's sort position
-        await this.materializeEntitySortPosition({
-          streamId: eventMeta.streamId,
-          ulid: eventMeta.event.id,
-          after: eventMeta.event.after,
         });
       }
     }
@@ -693,7 +792,9 @@ class SqliteWorkerSupervisor {
     return queryResults;
   }
 
-  /** Materialize the entity's sort index */
+  /** Adds a sort index to an entity. The sort index is based on the ULID, but mutable via app-level
+   * re-ordering events, which calculates the lexicographic midpoint between the previous event and whichever ULID comes next.
+   */
   // TODO: I think this is nearly working, and seems to be fine for messages, but there also seems
   // to be problems when moving the same items over and over again in the sidebar. It might have to
   // do with partial loading but I'm not sure.
@@ -703,21 +804,19 @@ class SqliteWorkerSupervisor {
     after,
     update,
   }: {
-    streamId: string;
-    ulid: string;
-    after?: string;
+    streamId: StreamDid;
+    ulid: Ulid;
+    after: Ulid;
     update?: boolean;
   }): Promise<void> {
-    // Determine this entity's sort index
-
+    // Check this entity's sort index
     const existingEntity = (
       await executeQuery<{
-        id: string;
         sort_idx: string | null;
-      }>(sql`select id, sort_idx from entities where id = ${ulid}`)
+      }>(sql`select sort_idx from entities where id = ${ulid}`)
     ).rows?.[0];
 
-    // Skip completely if the materialization didn't bother to create an entity for this event
+    // Skip completely if the materialization didn't create an entity for this event
     if (!existingEntity) return;
 
     // Skip completely if this entity already has a sort index
@@ -726,72 +825,27 @@ class SqliteWorkerSupervisor {
     }
 
     // First we need to get the closest entity that comes before this one.
-    let eventBeforeThisOne: { id: string; sort_idx?: string } | undefined;
-
-    // If this entity is `after` a specific entity, then we are looking for that entity, or else the one
-    // with the closest preceding ulid, if we haven't materialized the `after` entity yet.
-    if (after) {
-      // Try to get the event this one is after if it exists
-      eventBeforeThisOne = (
-        await executeQuery<{
-          id: string;
-          sort_idx?: string;
-        }>(sql`
-          select id, sort_idx
+    // Try to get the event this one is after if it exists
+    const eventBeforeThisOne = (
+      await executeQuery<{
+        sort_idx?: string;
+      }>(sql`
+          select coalesce(sort_idx, id) as sort_idx -- fall back to ULID
           from entities
           where stream_id = ${streamId} and id = ${after}
           limit 1
         `)
-      ).rows?.[0];
+    ).rows?.[0];
 
-      // If that didn't work, just get get the previous event by its ulid
-      if (!eventBeforeThisOne) {
-        eventBeforeThisOne = (
-          await executeQuery<{
-            id: string;
-            sort_idx?: string;
-          }>(sql`
-            select id, sort_idx
-            from entities
-            where 
-              stream_id = ${streamId}
-                and
-              id < ${ulid}
-            order by id desc
-            limit 1
-        `)
-        ).rows?.[0];
-      }
-    } else {
-      // If this event isn't `after` a specific entity, then we are just looking for the closest
-      // preceding entity ulid.
-      eventBeforeThisOne = (
-        await executeQuery<{
-          id: string;
-          sort_idx?: string;
-        }>(sql`
-            select id, sort_idx
-            from entities
-            where 
-              stream_id = ${streamId}
-                and
-              id < ${ulid}
-            order by id desc
-            limit 1
-        `)
-      ).rows?.[0];
-    }
+    if (!eventBeforeThisOne)
+      throw new Error("Entity given by 'after' does not exist");
 
     // Now we need to get the closest entity that comes after this one
-    let eventAfterThisOne: { id: string; sort_idx?: string } | undefined;
-
-    // If this entity is supposed to come after a specific entity, then we want to sort it
-    // _immediately_ after, so we need to find the entity that _currently_ sorts immediately after
-    // it and stick it in between.
-    if (after && eventBeforeThisOne) {
-      eventAfterThisOne = (
-        await executeQuery<{ id: string; sort_idx: string }>(sql`
-          select id, sort_idx
+    // We want to sort it _immediately_ after, so we need to find the entity that _currently_
+    // sorts immediately after it and stick it in between.
+    const eventAfterThisOne = (
+      await executeQuery<{ sort_idx: string }>(sql`
+          select sort_idx
           from entities
           where
             stream_id = ${streamId}
@@ -802,163 +856,26 @@ class SqliteWorkerSupervisor {
           order by sort_idx
           limit 1
         `)
-      ).rows?.[0];
-    } else {
-      // If this entity isn't supposed to come after any specific entity, then we just stick it before
-      // the nearest entity with a higher ulid.
-      eventAfterThisOne = (
-        await executeQuery<{ id: string; sort_idx: string }>(sql`
-          select id, sort_idx
-          from entities
-          where
-            stream_id = ${streamId}
-              and
-            id > ${ulid} 
-          order by id
-          limit 1
-        `)
-      ).rows?.[0];
-    }
+    ).rows?.[0];
 
     // Finally we can compute the sort index for this entity
-
-    let sortIdx: string | undefined;
     try {
-      sortIdx = generateJitteredKeyBetween(
-        eventBeforeThisOne?.sort_idx || null,
-        eventAfterThisOne?.sort_idx || null,
+      const sortIdx = midpointUlid(
+        Ulid.assert(eventBeforeThisOne?.sort_idx),
+        (eventAfterThisOne?.sort_idx as Ulid) || undefined,
+      );
+
+      // Now we can update the sort index for this entity
+      await executeQuery(
+        sql`update entities set sort_idx = ${sortIdx} where id = ${ulid}`,
       );
     } catch (e) {
+      console.error(
+        "Could not reorder message. Error getting midpoint ULID:",
+        e,
+      );
       return;
     }
-
-    // Now we can update the sort index for this entity
-    await executeQuery(
-      sql`update entities set sort_idx = ${sortIdx} where id = ${ulid}`,
-    );
-
-    // Now we get the list of other entities that should be sorted after *this* entity. These are
-    // entities that were supposed to be sorted be after this one, but couldn't be sorted properly
-    // because this entity hadn't been materialized yet.
-    const eventsAfterThisEvent =
-      (
-        await executeQuery<{ id: string }>(
-          sql`select id from entities where after = ${ulid}`,
-        )
-      ).rows?.map((x) => x.id) || [];
-
-    // Calculate the sort index for all of the events after this one. It's OK that they all have the
-    // same sort idx, the ULID is the tie breaker.
-    const sortIdxAfterThisEvent = generateJitteredKeyBetween(
-      sortIdx,
-      eventAfterThisOne?.sort_idx || null,
-    );
-
-    // Update the sort index for all of those events.
-    await executeQuery({
-      sql: `update entities set sort_idx = ? where id in (${eventsAfterThisEvent.map((_) => "?").join(",")})`,
-      params: [sortIdxAfterThisEvent, ...eventsAfterThisEvent],
-    });
-  }
-
-  private async runStatementProfileBundle(
-    bundle: Bundle.StatementProfile,
-  ): Promise<Bundle.ProfileApplyResult> {
-    const bundleId = bundle.dids[0]?.replaceAll(":", "");
-    const queryResults = bundleId
-      ? await this.runBundleStatements(bundleId, bundle.statements)
-      : [];
-
-    return {
-      result: "appliedProfiles",
-      firstDid: bundle.dids[0],
-      output: queryResults,
-    };
-  }
-
-  // When triggering unstash, after applying an event:
-  private async triggerUnstash(
-    appliedEventId: Ulid,
-    streamId: StreamDid,
-    user: UserDid,
-    priority: TaskPriority,
-  ) {
-    const stashed = await executeQuery(sql`
-      SELECT idx, entity_ulid, payload
-      FROM events
-      WHERE depends_on = ${appliedEventId} AND applied = 0
-      ORDER BY idx ASC
-    `);
-
-    if (!stashed.rows?.length) return;
-
-    // Create unstash batch and push to channel
-    const unstashBatch: Batch.Unstash = {
-      status: "unstash",
-      batchId: newUlid(),
-      streamId,
-      priority,
-      events: stashed.rows.map((row) => ({
-        idx: row.idx as StreamIndex,
-        event: JSON.parse(row.payload as string) as Event,
-        user /* need to store this too, or derive from event */,
-      })),
-    };
-
-    this.#eventChannel.push(unstashBatch, priority);
-  }
-
-  private async runStatementBundle(
-    bundle: Bundle.StatementSuccess,
-    streamId: StreamDid,
-    appliedInBatch: Set<Ulid>,
-    satisfiedDeps: Set<Ulid>,
-  ): Promise<Bundle.ApplyResult | Bundle.ApplyStashed> {
-    const bundleId = bundle.event.id;
-
-    const isSatisfied =
-      bundle.dependsOn.length == 0 ||
-      bundle.dependsOn.every((x) => satisfiedDeps.has(x)) ||
-      bundle.dependsOn.every((x) => appliedInBatch.has(x));
-
-    if (bundle.dependsOn && !isSatisfied) {
-      // STASH: Insert event with applied=0
-      await executeQuery(sql`
-            INSERT INTO events (idx, stream_id, user, entity_ulid, after_entity, payload, applied, depends_on)
-            VALUES (${bundle.eventIdx}, ${streamId}, ${bundle.user}, ${bundle.event.id}, ${bundle.event.after || null}
-                    ${JSON.stringify(bundle.event)}, 0, ${JSON.stringify(bundle.dependsOn)})
-            ON CONFLICT(idx, stream_id) DO NOTHING
-          `);
-
-      return {
-        result: "stashed",
-        eventId: bundle.event.id,
-        dependsOn: bundle.dependsOn,
-      };
-    }
-
-    const queryResults = await this.runBundleStatements(
-      bundleId,
-      bundle.statements,
-      {
-        event: bundle.event,
-        streamId,
-        idx: bundle.eventIdx,
-        user: bundle.user,
-      },
-    );
-
-    // Track that we applied this
-    appliedInBatch.add(bundle.event.id);
-
-    // Check for stashed events that can now be applied
-    this.triggerUnstash(bundle.event.id, streamId, bundle.user, "priority");
-
-    return {
-      result: "applied",
-      eventId: bundle.event.id,
-      output: queryResults,
-    };
   }
 
   private async runSavepoint(savepoint: Savepoint, depth = 0) {
@@ -1149,3 +1066,13 @@ const worker = new SqliteWorkerSupervisor();
 globalThis.onmessage = (ev) => {
   worker.initialize(ev.data);
 };
+
+function midpointUlid(earlier: Ulid, later?: Ulid) {
+  const earlierTime = decodeTime(earlier);
+
+  // if there's no after event, put it 10ms after the first one
+  const laterTime = later ? decodeTime(later) : decodeTime(earlier + 10);
+
+  const midTimeDiff = (laterTime - earlierTime) / 2;
+  return ulid(earlierTime + midTimeDiff);
+}

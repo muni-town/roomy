@@ -45,7 +45,7 @@
       await backend.sendEvent(spaceId, {
         id: newUlid(),
         variant: {
-          $type: "space.roomy.stream.updateStreamInfo.v0",
+          $type: "space.roomy.space.updateSpaceInfo.v0",
           avatar: avatarChanged ? avatarUpload?.uri : undefined,
           name: nameChanged ? spaceName : undefined,
           description: descriptionChanged ? spaceDescription : undefined,

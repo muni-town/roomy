@@ -191,7 +191,7 @@
             id: messageId,
             room: roomId,
             variant: {
-              $type: "space.roomy.message.sendMessage.v0",
+              $type: "space.roomy.message.createMessage.v0",
               body: {
                 mimeType: "text/markdown",
                 data: toBytes(new TextEncoder().encode(message.content)),

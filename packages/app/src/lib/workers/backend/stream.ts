@@ -123,7 +123,7 @@ export class ConnectedStream {
           id: newUlid(),
           room: undefined,
           variant: {
-            $type: "space.roomy.stream.addAdmin.v0",
+            $type: "space.roomy.space.addAdmin.v0",
             userDid: opts.user,
           },
         } satisfies Event),

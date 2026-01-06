@@ -18,7 +18,7 @@ export async function joinSpace(spaceId: StreamDid) {
       id: newUlid(),
       room: undefined,
       variant: {
-        $type: "space.roomy.stream.personal.joinSpace.v0",
+        $type: "space.roomy.space.personal.joinSpace.v0",
         spaceDid: spaceId,
       },
     });
@@ -62,7 +62,7 @@ export async function createSpace(opts: {
     id: newUlid(),
     room: undefined,
     variant: {
-      $type: "space.roomy.stream.personal.joinSpace.v0",
+      $type: "space.roomy.space.personal.joinSpace.v0",
       spaceDid: spaceDid,
     },
   });
@@ -79,7 +79,7 @@ export async function createSpace(opts: {
   batch.push({
     id: newUlid(),
     variant: {
-      $type: "space.roomy.stream.updateStreamInfo.v0",
+      $type: "space.roomy.space.updateSpaceInfo.v0",
       avatar: avatarUpload?.uri,
       name: currentSpaceName,
       description: currentSpaceDescription,

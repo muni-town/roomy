@@ -37,7 +37,7 @@
     await backend.sendEvent(backendStatus.authState.personalStream, {
       id: newUlid(),
       variant: {
-        $type: "space.roomy.stream.personal.leaveSpace.v0",
+        $type: "space.roomy.space.personal.leaveSpace.v0",
         spaceDid: spaceDid,
       },
     });

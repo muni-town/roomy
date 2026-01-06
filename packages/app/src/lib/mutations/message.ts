@@ -16,7 +16,7 @@ export async function deleteMessage(
   });
 }
 
-export async function moveMessage(
+export async function reorderMessage(
   streamId: StreamDid,
   roomId: Ulid,
   messageId: Ulid,
@@ -26,8 +26,8 @@ export async function moveMessage(
     id: newUlid(),
     room: roomId,
     variant: {
-      $type: "space.roomy.room.move.v0",
-      entity: messageId,
+      $type: "space.roomy.message.reorderMessage.v0",
+      messageId,
       after: moveAfter,
     },
   });

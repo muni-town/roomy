@@ -21,7 +21,7 @@
     convertToPage,
     convertToThread,
     createPage,
-    promoteToChannel,
+    addRoomToSidebar,
     setPageReadMarker,
   } from "$lib/mutations/room";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
@@ -265,7 +265,7 @@
           <form
             class="flex flex-col items-stretch gap-4"
             onsubmit={async () => {
-              await promoteToChannel({
+              await addRoomToSidebar({
                 spaceId: spaceId!,
                 room: {
                   id: Ulid.assert(page.params.object),

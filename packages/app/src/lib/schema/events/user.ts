@@ -35,7 +35,7 @@ The event's ULID timestamp encodes when the room was read.",
 );
 
 // All user events
-export const UserEvent = type.or(
+export const UserEventVariant = type.or(
   SetUserProfile,
   OverrideUserHandle,
   SetLastRead,

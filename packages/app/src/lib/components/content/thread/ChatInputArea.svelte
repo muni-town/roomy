@@ -126,7 +126,7 @@
         id: newUlid(),
         room: current.roomId,
         variant: {
-          $type: "space.roomy.room.move.v0",
+          $type: "space.roomy.link.createRoomLink.v0",
           entity: message.id,
           toRoom: threadId,
         },
@@ -217,11 +217,11 @@
         });
       }
 
-      const messageEvent: Event<"space.roomy.message.sendMessage.v0"> = {
+      const messageEvent: Event<"space.roomy.message.createMessage.v0"> = {
         id: messageId,
         room: Ulid.assert(page.params.object),
         variant: {
-          $type: "space.roomy.message.sendMessage.v0",
+          $type: "space.roomy.message.createMessage.v0",
           body: {
             data: toBytes(new TextEncoder().encode(message)),
             mimeType: "text/markdown",

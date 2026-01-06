@@ -29,9 +29,8 @@ CREATE INDEX IF NOT EXISTS idx_events_entity_applied
 create table if not exists entities (
   id text primary key, -- did or ulid
   stream_id text not null, -- did
-  parent text, -- did or ulid, references id
-  after text,
-  sort_idx text,
+  room text, -- ulid, references room id
+  sort_idx text, -- mutable timeline ordering index based on ULID with jittered fractional indexing
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
