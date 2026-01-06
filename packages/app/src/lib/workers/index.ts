@@ -70,6 +70,10 @@ export const backend = messagePortInterface<ConsoleInterface, BackendInterface>(
   },
 );
 
+faro.api.setSession({
+  id: await backend.getSessionId(),
+});
+
 (globalThis as any).backend = backend;
 (globalThis as any).CONFIG = CONFIG;
 
@@ -93,6 +97,7 @@ sqliteWorker.postMessage(
     backendPort: sqliteWorkerChannel.port2,
     statusPort: workerStatusChannel.port2,
     dbName: "temp",
+    sessionId: faro.api.getSession()!.id,
   },
   [sqliteWorkerChannel.port2, workerStatusChannel.port2],
 );

@@ -6,6 +6,7 @@ import initSqlite3, {
 } from "@sqlite.org/sqlite-wasm";
 import type { SqlStatement } from "./types";
 import { udfs } from "./udf";
+import { trace } from "@opentelemetry/api";
 
 let sqlite3: Sqlite3Static | null = null;
 let db: OpfsSAHPoolDatabase | Database | null = null;
@@ -44,11 +45,12 @@ const authorizer: Parameters<
 };
 
 export async function initializeDatabase(
-  dbName: string,
+  databaseName: string,
   persistent: boolean,
 ): Promise<void> {
-  const promise = initPromises.get(dbName);
+  const promise = initPromises.get(databaseName);
   if (promise) return promise;
+  const span = trace.getActiveSpan();
   const newPromise = (async () => {
     if (!sqlite3) {
       sqlite3 = await initSqlite3({
@@ -67,7 +69,7 @@ export async function initializeDatabase(
           const pool = await sqlite3.installOpfsSAHPoolVfs({
             initialCapacity: 5,
           });
-          db = new pool.OpfsSAHPoolDb(dbName);
+          db = new pool.OpfsSAHPoolDb(databaseName);
           db.exec(`pragma locking_mode = exclusive`);
           db.exec(`pragma synchronous = normal`);
           db.exec(`pragma journal_mode = wal`);
@@ -120,9 +122,11 @@ export async function initializeDatabase(
     }
 
     console.info("[SqW] (init.3) Database initialized", {
-      databaseName: dbName,
+      databaseName,
       vfsType,
     });
+
+    vfsType && span?.setAttributes({ databaseName, vfsType });
 
     // Set an authorizer function that will allow us to track reads and writes to the database
     sqlite3.capi.sqlite3_set_authorizer(db, authorizer, 0);
@@ -134,7 +138,7 @@ export async function initializeDatabase(
         : db?.createFunction(udf.name, udf.f),
     );
   })();
-  initPromises.set(dbName, newPromise);
+  initPromises.set(databaseName, newPromise);
   await newPromise;
 }
 

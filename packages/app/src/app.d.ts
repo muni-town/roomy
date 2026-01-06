@@ -13,6 +13,9 @@ declare global {
     tracer: Tracer;
   }
 
+  declare const faro: Faro;
+  declare const tracer: Tracer;
+
   namespace App {
     // interface Error {}
     // interface Locals {}

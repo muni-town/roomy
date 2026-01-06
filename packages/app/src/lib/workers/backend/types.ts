@@ -17,6 +17,7 @@ export interface BackendStatus {
 }
 
 export type BackendInterface = {
+  getSessionId(): Promise<Ulid>;
   login(username: Handle): Promise<string>;
   logout(): Promise<void>;
   oauthCallback(searchParams: string): Promise<void>;

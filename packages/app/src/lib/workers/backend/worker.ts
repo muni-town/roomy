@@ -30,8 +30,20 @@ import type {
   SqlStatement,
 } from "../sqlite/types";
 import { ensureEntity } from "../sqlite/materializer";
-import { UserDid, parseEvent, type StreamDid, type Event } from "$lib/schema";
+import {
+  UserDid,
+  parseEvent,
+  type StreamDid,
+  type Event,
+  newUlid,
+} from "$lib/schema";
 import { decode, encode } from "@atcute/cbor";
+import { initializeFaro } from "$lib/otel";
+
+const sessionId = newUlid();
+
+initializeFaro({ worker: "backend" });
+faro.api.setSession({ id: sessionId });
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.
@@ -70,7 +82,7 @@ class WorkerSupervisor {
     };
     this.loadStoredConfig();
 
-    console.log("Starting Roomy WorkerSupervisor", this.#config);
+    console.info("Starting Roomy WorkerSupervisor", this.#config);
 
     this.#sqlite = new SqliteSupervisor();
     this.#status = reactiveWorkerState<BackendStatus>(
@@ -352,6 +364,9 @@ class WorkerSupervisor {
 
   private getBackendInterface(): BackendInterface {
     return {
+      getSessionId: async () => {
+        return sessionId;
+      },
       login: async (handle) => Client.login(handle),
       oauthCallback: async (paramsStr) => {
         const params = new URLSearchParams(paramsStr);
@@ -561,7 +576,10 @@ class SqliteSupervisor {
         "current:",
         CONFIG.streamSchemaVersion,
       );
-      if (previousSchemaVersion != CONFIG.streamSchemaVersion) {
+      if (
+        previousSchemaVersion &&
+        previousSchemaVersion != CONFIG.streamSchemaVersion
+      ) {
         // Reset the local database cache when the stream schema version changes.
         // Asynchronous, but has to wait until readyPromise is resolved, so we can't await it here.
         this.resetLocalDatabase().catch(console.error);

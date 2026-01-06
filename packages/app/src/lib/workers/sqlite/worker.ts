@@ -44,23 +44,12 @@ import type {
 import type { BackendInterface } from "../backend/types";
 import { Deferred } from "$lib/utils/deferred";
 import { CONFIG } from "$lib/config";
-import { initializeFaro } from "$lib/otel";
+import { initializeFaro, trackUncaughtExceptions } from "$lib/otel";
 import { decode } from "@atcute/cbor";
 import { decodeTime, ulid } from "ulidx";
-import { type Tracer } from "@opentelemetry/api";
+import { context } from "@opentelemetry/api";
 
-let faro;
-let tracer: Tracer;
-if (CONFIG.faroEndpoint) {
-  try {
-    faro = initializeFaro({ worker: "sqlite" });
-    tracer = faro.api
-      .getOTEL()!
-      .trace.getTracer("roomy-sqlite-worker", __APP_VERSION__);
-  } catch (e) {
-    console.error("Failed to initialize Faro in sqlite worker", e);
-  }
-}
+initializeFaro({ worker: "sqlite" });
 
 const initSql = schemaSql
   .split("\n")
@@ -99,7 +88,7 @@ class SqliteWorkerSupervisor {
     this.#eventChannel = new AsyncChannel();
   }
 
-  initialize(params: {
+  async initialize(params: {
     backendPort: MessagePort;
     statusPort: MessagePort;
     dbName: string;
@@ -131,65 +120,73 @@ class SqliteWorkerSupervisor {
     });
 
     // initially load only in-memory
-    this.loadDb(params.dbName, false).then(() => {
-      try {
-        const sqliteChannel = new MessageChannel();
-        messagePortInterface<SqliteWorkerInterface, {}>(
-          sqliteChannel.port1,
-          this.getSqliteInterface(),
-        );
-        this.#backend?.setActiveSqliteWorker(sqliteChannel.port2);
-        this.listenEvents();
-        this.listenStatements();
-        console.info(
-          "[SqW] (init.4) Set active worker, started listeners",
-          this.#status.current,
-        );
-      } catch (error) {
-        console.error("SQLite worker initialisation: Fatal error", error);
-        this.cleanup();
-        throw error;
-      }
-    });
+    await this.loadDb(params.dbName, false);
+    try {
+      const sqliteChannel = new MessageChannel();
+      messagePortInterface<SqliteWorkerInterface, {}>(
+        sqliteChannel.port1,
+        this.getSqliteInterface(),
+      );
+      this.#backend?.setActiveSqliteWorker(sqliteChannel.port2);
+      this.listenEvents();
+      this.listenStatements();
+      console.debug(
+        "[SqW] (init.5) Set active worker, started listeners",
+        this.#status.current,
+      );
+    } catch (error) {
+      console.error("SQLite worker initialisation: Fatal error", error);
+      this.cleanup();
+      throw error;
+    }
   }
 
   private async loadDb(dbName: string, persistent: boolean) {
-    const deferred = new Deferred<void>();
+    const ctx = context.active();
 
+    const callbackStatus = { finishedSuccess: false };
     const callback = async () => {
-      console.info("[SqW] (init.2) Sqlite worker lock obtained", {
-        activeWorkerId: this.#workerId,
-      });
-      this.#status.isActiveWorker = true;
-      this.startHeartbeat();
+      await context.with(ctx, async () => {
+        console.debug("[SqW] (init.2) Sqlite worker lock obtained", {
+          activeWorkerId: this.#workerId,
+        });
+        this.#status.isActiveWorker = true;
+        this.startHeartbeat();
 
-      globalThis.addEventListener("error", this.cleanup);
-      globalThis.addEventListener("unhandledrejection", this.cleanup);
+        globalThis.addEventListener("error", this.cleanup);
+        globalThis.addEventListener("unhandledrejection", this.cleanup);
 
-      try {
-        await initializeDatabase(dbName, persistent);
+        try {
+          await tracer.startActiveSpan("Open DB", {}, ctx, async (span) => {
+            await initializeDatabase(dbName, persistent);
+            span.end();
+          });
 
-        this.#status.vfsType = getVfsType() || undefined;
+          this.#status.vfsType = getVfsType() || undefined;
 
-        // initialise DB schema (should be idempotent)
-        console.time("initSql");
-        await this.runSavepoint({ name: "init", items: initSql });
-        console.debug("[SqW] (init.3) Schema initialised.");
-        console.timeEnd("initSql");
+          // initialise DB schema (should be idempotent)
+          console.time("initSql");
+          await tracer.startActiveSpan("Init Schema", {}, ctx, async (span) => {
+            await this.runSavepoint({ name: "init", items: initSql });
+            span.end();
+          });
+          console.debug("[SqW] (init.4) Schema initialised.");
+          console.timeEnd("initSql");
 
-        // Set current schema version
-        await executeQuery(sql`
+          // Set current schema version
+          await executeQuery(sql`
           insert or replace into roomy_schema_version
           (id, version) values (1, ${CONFIG.databaseSchemaVersion})
           `);
 
-        deferred.resolve();
-      } catch (e) {
-        console.error("SQLite worker loadDb: Fatal error", e);
-        this.cleanup();
-        deferred.reject(e);
-        throw e;
-      }
+          callbackStatus.finishedSuccess = true;
+          return;
+        } catch (e) {
+          console.error("SQLite worker loadDb: Fatal error", e);
+          this.cleanup();
+          throw e;
+        }
+      });
     };
 
     const attemptLock = async (): Promise<void> => {
@@ -204,18 +201,16 @@ class SqliteWorkerSupervisor {
           console.warn("SQLite worker: Lock timeout, attempting steal");
           await this.attemptLockSteal(callback);
           // If lock steal didn't succeed, try again
-          if (!deferred.promise) {
+          if (!callbackStatus.finishedSuccess) {
             await attemptLock();
           }
         } else {
-          deferred.reject(error);
           throw error;
         }
       }
     };
 
-    attemptLock();
-    return deferred.promise;
+    await attemptLock();
   }
 
   /** Map a batch of incoming events to SQL that applies the event to the entities,
@@ -1064,8 +1059,13 @@ class SqliteWorkerSupervisor {
 const worker = new SqliteWorkerSupervisor();
 
 globalThis.onmessage = (ev) => {
-  tracer.startActiveSpan("Initialize SQLite Worker", (span) => {
-    worker.initialize(ev.data);
+  faro.api.setSession({
+    id: ev.data?.sessionId,
+  });
+  tracer.startActiveSpan("Init SQLite Worker", async (span) => {
+    await trackUncaughtExceptions(async () => {
+      await worker.initialize(ev.data);
+    });
     span.end();
   });
 };
