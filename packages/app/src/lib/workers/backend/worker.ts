@@ -43,7 +43,7 @@ import { initializeFaro } from "$lib/otel";
 const sessionId = newUlid();
 
 initializeFaro({ worker: "backend" });
-faro.api.setSession({ id: sessionId });
+faro.api.setSession({ id: sessionId, attributes: { isSampled: "true" } });
 
 // TODO: figure out why refreshing one tab appears to cause a re-render of the spaces list live
 // query in the other tab.

@@ -72,6 +72,7 @@ export const backend = messagePortInterface<ConsoleInterface, BackendInterface>(
 
 faro.api.setSession({
   id: await backend.getSessionId(),
+  attributes: { isSampled: "true" },
 });
 
 (globalThis as any).backend = backend;

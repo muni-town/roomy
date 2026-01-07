@@ -1061,6 +1061,7 @@ const worker = new SqliteWorkerSupervisor();
 globalThis.onmessage = (ev) => {
   faro.api.setSession({
     id: ev.data?.sessionId,
+    attributes: { isSampled: "true" },
   });
   tracer.startActiveSpan("Init SQLite Worker", async (span) => {
     await trackUncaughtExceptions(async () => {

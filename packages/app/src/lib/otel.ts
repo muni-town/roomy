@@ -153,7 +153,9 @@ export function initializeFaro(opts: WorkerInfo) {
       })
     : undefined;
 
-  (globalThis as any).tracer = faro.api
+  faro?.api.setSession({ attributes: { isSampled: "true" } });
+
+  (globalThis as any).tracer = faro?.api
     .getOTEL()
     ?.trace.getTracer("roomy", __APP_VERSION__);
 }
