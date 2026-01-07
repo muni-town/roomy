@@ -463,8 +463,8 @@ Count Rooms By Type
     Log    Room counts for space ${spaceId}: ${counts}
     RETURN    ${counts}
 
-Query Space Tree
-    [Documentation]    Get the actual spaceTree result from the UI (window.spaceTree.result)
+Query Sidebar
+    [Documentation]    Get the actual sidebar result from the UI (window.sidebar.result)
     ...                This is the EXACT data the UI sidebar uses - no query duplication
     ...                Exposed in workers/index.ts for debugging
     ...
@@ -479,22 +479,22 @@ Query Space Tree
     IF    '${expectedCount}' != '${None}'
         FOR    ${attempt}    IN RANGE    50
             ${tree}=    Evaluate JavaScript    ${None}
-            ...    () => window.spaceTree?.result || []
+            ...    () => window.sidebar?.result || []
             ${count}=    Evaluate    len(${tree})
             IF    ${count} >= ${expectedCount}
-                Log    window.spaceTree.result has ${count} rooms after ${attempt * 200}ms (expected ${expectedCount})
+                Log    window.sidebar.result has ${count} rooms after ${attempt * 200}ms (expected ${expectedCount})
                 RETURN    ${tree}
             END
             Sleep    200ms
         END
-        Log    WARNING: window.spaceTree.result only has ${count} rooms after 10 seconds, expected ${expectedCount}
+        Log    WARNING: window.sidebar.result only has ${count} rooms after 10 seconds, expected ${expectedCount}
         Log    Rooms found: ${tree}
         RETURN    ${tree}
     END
 
     ${tree}=    Evaluate JavaScript    ${None}
-    ...    () => window.spaceTree?.result || []
-    Log    window.spaceTree.result has ${tree.__len__()} rooms
+    ...    () => window.sidebar?.result || []
+    Log    window.sidebar.result has ${tree.__len__()} rooms
     RETURN    ${tree}
 
 Verify Welcome Message Exists

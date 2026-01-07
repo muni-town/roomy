@@ -208,7 +208,7 @@ export function getPersonalStreamId() {
     }
   },
 
-  async diagnoseSpaceTree(spaceId?: string) {
+  async diagnosesidebar(spaceId?: string) {
     try {
       const { current } = await import("../queries");
       const { sql } = await import("../utils/sqlTemplate");
@@ -240,11 +240,11 @@ export function getPersonalStreamId() {
         ? JSON.parse((result.rows[0] as any).diagnostic as string)
         : null;
 
-      console.log("🔍 Space Tree Diagnostic:", diagnostic);
+      console.log("🔍 Sidebar Diagnostic:", diagnostic);
       console.log("📊 Current space from queries:", current.joinedSpace);
       return diagnostic;
     } catch (error) {
-      console.error("Main thread: Space tree diagnostic failed", error);
+      console.error("Main thread: Sidebar diagnostic failed", error);
       throw error;
     }
   },

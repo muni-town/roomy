@@ -6,19 +6,19 @@
   //   dragHandle,
   //   type Item,
   // } from "svelte-dnd-action";
-  import { type SpaceTreeItem } from "$lib/queries";
+  import { type SidebarItem } from "$lib/queries";
   import SidebarItem from "./SidebarItem.svelte";
 
   let {
     isEditing = $bindable(false),
     items,
     level = 0,
-  }: { isEditing: boolean; items: SpaceTreeItem[]; level?: number } = $props();
+  }: { isEditing: boolean; items: SidebarItem[]; level?: number } = $props();
 
-  let uncategorized: SpaceTreeItem[] = $derived(
+  let uncategorized: SidebarItem[] = $derived(
     items.filter((x) => x.type !== "space.roomy.category"),
   );
-  let categories: SpaceTreeItem[] = $derived(
+  let categories: SidebarItem[] = $derived(
     items.filter((x) => x.type == "space.roomy.category"),
   );
 

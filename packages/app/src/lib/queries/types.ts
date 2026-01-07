@@ -12,7 +12,7 @@ export type SpaceMeta = {
   permissions: [string, "read" | "post" | "admin"][];
 };
 
-export type SpaceTreeItem = {
+export type SidebarItem = {
   id: string;
   name: string;
   parent?: string;
@@ -38,6 +38,6 @@ export type SpaceTreeItem = {
     }
 );
 
-type ChannelTreeItem = Extract<SpaceTreeItem, { type: "space.roomy.channel" }>;
-type ThreadTreeItem = Extract<SpaceTreeItem, { type: "space.roomy.thread" }>;
-type PageTreeItem = Extract<SpaceTreeItem, { type: "space.roomy.page" }>;
+type ChannelTreeItem = Extract<SidebarItem, { type: "space.roomy.channel" }>;
+type ThreadTreeItem = Extract<SidebarItem, { type: "space.roomy.thread" }>;
+type PageTreeItem = Extract<SidebarItem, { type: "space.roomy.page" }>;

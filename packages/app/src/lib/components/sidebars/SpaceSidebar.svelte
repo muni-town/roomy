@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { current, spaceTree } from "$lib/queries";
+  import { current, sidebar } from "$lib/queries";
   import SidebarItemList from "./SidebarItemList.svelte";
   import SpaceSidebarHeader from "./SpaceSidebarHeader.svelte";
   // import EditObjectModal from "../modals/EditObjectModal.svelte";
@@ -56,7 +56,7 @@
 
     <hr class="my-2 border-base-800/10 dark:border-base-100/5" />
 
-    <SidebarItemList bind:isEditing items={spaceTree.result || []} />
+    <SidebarItemList bind:isEditing items={sidebar.result || []} />
   </div>
 {/if}
 

@@ -55,15 +55,15 @@ Test Tags           space    creation
     # Dump database state
     Dump Database State For Space    ${space_id}
 
-    # Navigate to the space so window.spaceTree is populated
-    # (spaceTree.svelte.ts uses current.joinedSpace?.id to filter)
+    # Navigate to the space so window.sidebar is populated
+    # (sidebar.svelte.ts uses current.joinedSpace?.id to filter)
     Go To    http://127.0.0.1:5173/${space_id}
     Sleep    1s    # Give UI time to set current.joinedSpace
 
-    # Query spaceTree using the helper keyword (reads from window.spaceTree.result)
-    # Note: window.spaceTree.result is hierarchical - we expect 1 top-level category with nested children
-    ${space_tree}=    Query Space Tree    expectedCount=1
-    Log    window.spaceTree.result (UI sidebar tree structure): ${space_tree}
+    # Query sidebar using the helper keyword (reads from window.sidebar.result)
+    # Note: window.sidebar.result is hierarchical - we expect 1 top-level category with nested children
+    ${space_tree}=    Query Sidebar    expectedCount=1
+    Log    window.sidebar.result (UI sidebar tree structure): ${space_tree}
 
     # Flatten the tree to count all rooms (category + children recursively)
     ${total_rooms}=    Evaluate JavaScript    ${None}
@@ -76,7 +76,7 @@ Test Tags           space    creation
     ...            }
     ...            return count;
     ...        }
-    ...        return countRooms(window.spaceTree?.result || []);
+    ...        return countRooms(window.sidebar?.result || []);
     ...    }
     Log    Total rooms in tree (flattened): ${total_rooms} (should be 3: category + channel + thread)
 
@@ -258,27 +258,27 @@ Create Multiple Spaces
 
     Log    Successfully created and verified two independent spaces
 
-Verify Space Tree Structure
-    [Documentation]    Verify spaceTree query (what UI sidebar uses) returns correct structure
+Verify Sidebar Structure
+    [Documentation]    Verify sidebar query (what UI sidebar uses) returns correct structure
     ...                This validates what the user actually sees in the UI sidebar
-    ...                Tests window.spaceTree.result exposed in workers/index.ts
+    ...                Tests window.sidebar.result exposed in workers/index.ts
     [Tags]    structure    critical    ui
 
     # Create space
-    ${space_id}=    Create Space With Name    SpaceTree Test Space
+    ${space_id}=    Create Space With Name    sidebar Test Space
 
     # Wait for space to finish initializing
     ${reached_idle}=    Wait For Space Status    ${space_id}    timeout=30s
     Should Be True    ${reached_idle}    msg=Space did not reach 'idle' status
 
-    # Navigate to the space so window.spaceTree is populated for this space
+    # Navigate to the space so window.sidebar is populated for this space
     Go To    http://127.0.0.1:5173/${space_id}
-    Sleep    1s    # Give UI time to set current.joinedSpace and update spaceTree
+    Sleep    1s    # Give UI time to set current.joinedSpace and update sidebar
 
-    # Query window.spaceTree.result (what the UI actually uses) - expect 1 top-level category
-    ${space_tree}=    Query Space Tree    expectedCount=1
+    # Query window.sidebar.result (what the UI actually uses) - expect 1 top-level category
+    ${space_tree}=    Query Sidebar    expectedCount=1
     ${tree_count}=    Get Length    ${space_tree}
-    Should Be Equal As Numbers    ${tree_count}    1    msg=spaceTree should have 1 top-level room (category)
+    Should Be Equal As Numbers    ${tree_count}    1    msg=sidebar should have 1 top-level room (category)
 
     # Get the category (first item)
     ${category}=    Set Variable    ${space_tree[0]}
@@ -305,7 +305,7 @@ Verify Space Tree Structure
     Should Be Equal    ${thread['type']}    thread    msg=First child of channel should be thread
     Should Contain    ${thread['name']}    Welcome to    msg=Thread name should contain 'Welcome to'
 
-    Log    window.spaceTree structure validated: Category → Channel → Thread
+    Log    window.sidebar structure validated: Category → Channel → Thread
 
 Verify Welcome Message Creation
     [Documentation]    Verify the welcome message is created in the welcome thread
