@@ -76,12 +76,12 @@
           'id', pe.id,
           'name', pi.name,
           'kind', pr.label,
-          'parent', pe.parent
+          'parent', pe.room
         )
         from comp_info pi
           join entities pe on pe.id = pi.entity
           join comp_room pr on pe.id = pr.entity
-          where pe.id = e.parent
+          where pe.id = e.room
       ),
       'kind', r.label,
       'lastRead', coalesce(l.timestamp, 1)
@@ -265,15 +265,15 @@
           <form
             class="flex flex-col items-stretch gap-4"
             onsubmit={async () => {
-              await addRoomToSidebar({
-                spaceId: spaceId!,
-                room: {
-                  id: Ulid.assert(page.params.object),
-                  name: room.name,
-                  parent: room.parent,
-                },
-                channelName: promoteChannelName,
-              });
+              // await addRoomToSidebar({
+              //   spaceId: spaceId!,
+              //   room: {
+              //     id: Ulid.assert(page.params.object),
+              //     name: room.name,
+              //     parent: room.parent,
+              //   },
+              //   channelName: promoteChannelName,
+              // });
               promoteChannelDialogOpen = false;
             }}
           >

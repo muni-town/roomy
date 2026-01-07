@@ -54,7 +54,7 @@ const materializers: {
     `,
     // Create a virtual message announcing the member joining
     sql`
-      insert into entities (id, stream_id, parent)
+      insert into entities (id, stream_id, room)
       values (
         ${event.id},
         ${streamId},
@@ -214,7 +214,7 @@ const materializers: {
     return []; // [
     //   data.room !== undefined
     //     ? sql`
-    //       update entities set parent = ${data.toParent || null}
+    //       update entities set room = ${data.toParent || null}
     //       where id = ${data.room}
     //     `
     //     : undefined,
@@ -461,7 +461,7 @@ const materializers: {
     // Update the parent room
     return [
       sql`
-          update entities set parent = ${data.roomId || null}
+          update entities set room = ${data.roomId || null}
           where id = ${data.messageId}
         `,
     ].filter((x) => !!x);
