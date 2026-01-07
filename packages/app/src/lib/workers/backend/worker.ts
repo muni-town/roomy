@@ -341,12 +341,18 @@ class WorkerSupervisor {
         }
         console.debug("Session restored successfully");
         this.setAuthenticated(client);
+        faro.api.setSession({
+          id: faro.api.getSession()?.id,
+          attributes: { isSampled: "true", did: client.agent.assertDid },
+        });
+        console.info("Authenticated", { did: client.agent.assertDid });
+
         client.getProfile().then((profile) => {
           this.#status.profile = profile;
         });
       })
       .catch((error) => {
-        console.error("Could not restore session", error);
+        console.error("Could not restore session", { error });
         this.setAuthState({ state: "unauthenticated" });
       });
   }

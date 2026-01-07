@@ -5,6 +5,7 @@ import {
   LogLevel,
 } from "@grafana/faro-web-sdk";
 import { TracingInstrumentation } from "@grafana/faro-web-tracing";
+import { ZoneContextManager } from "@opentelemetry/context-zone";
 import { context, SpanStatusCode, trace } from "@opentelemetry/api";
 import { CONFIG } from "./config";
 
@@ -143,11 +144,7 @@ export function initializeFaro(opts: WorkerInfo) {
             : []),
           new CustomConsoleInstrumentation(),
           new TracingInstrumentation({
-            // contextManager: (() => {
-            //   const m = new ZoneContextManager();
-            //   m.enable();
-            //   return m;
-            // })(),
+            contextManager: new ZoneContextManager(),
           }),
         ],
       })
