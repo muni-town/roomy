@@ -83,7 +83,7 @@ class CustomConsoleInstrumentation extends BaseInstrumentation {
           origConsoleFns[level]!(
             ...args.flatMap((x) =>
               typeof x == "string" && !x.includes("%c")
-                ? ["%c" + x, "color:chartreuse"]
+                ? ["%c" + x, "color:MediumSeaGreen"]
                 : [x],
             ),
           );
