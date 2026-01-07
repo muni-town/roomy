@@ -6,19 +6,23 @@
   //   dragHandle,
   //   type Item,
   // } from "svelte-dnd-action";
-  import { type SidebarItem } from "$lib/queries";
+  import { type SidebarItem as SidebarItemData } from "$lib/queries";
   import SidebarItem from "./SidebarItem.svelte";
 
   let {
     isEditing = $bindable(false),
     items,
     level = 0,
-  }: { isEditing: boolean; items: SidebarItem[]; level?: number } = $props();
+  }: {
+    isEditing: boolean;
+    items: SidebarItemData[];
+    level?: number;
+  } = $props();
 
-  let uncategorized: SidebarItem[] = $derived(
+  let uncategorized: SidebarItemData[] = $derived(
     items.filter((x) => x.type !== "space.roomy.category"),
   );
-  let categories: SidebarItem[] = $derived(
+  let categories: SidebarItemData[] = $derived(
     items.filter((x) => x.type == "space.roomy.category"),
   );
 
@@ -169,6 +173,7 @@
           lastRead: 0,
           latestEntity: 0,
           unreadCount: 0,
+          sortIdx: "",
           children: uncategorized as any,
         }}
       />
