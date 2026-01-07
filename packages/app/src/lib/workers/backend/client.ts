@@ -267,8 +267,7 @@ export class Client {
       module: modules.space,
     });
 
-    const latest = await stream.subscribeMetadata();
-    await stream.unsubscribeMetadata();
+    const latest = await stream.backfillMetadata();
     stream.subscribeEvents(latest);
 
     this.#streamConnection.streams.set(streamId, stream);
@@ -291,9 +290,7 @@ export class Client {
       module: modules.space,
     });
 
-    const latest = await newStream.subscribeMetadata();
-    await newStream.unsubscribeMetadata();
-    newStream.subscribeEvents(latest);
+    await newStream.backfillAndSubscribeAllEvents();
 
     console.log("Successfully created space stream:", newStream.id);
 
@@ -427,7 +424,7 @@ export class Client {
       }
     }
 
-    stream.subscribeEvents();
+    stream.backfillAndSubscribeAllEvents();
 
     // Get the module id for this stream to check whether or not we need to update the module.
     const streamInfo = await this.leaf.streamInfo(stream.id);

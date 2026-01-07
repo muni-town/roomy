@@ -122,7 +122,6 @@ export class ConnectedStream {
         streamDid,
         encode({
           id: newUlid(),
-          room: undefined,
           variant: {
             $type: "space.roomy.space.addAdmin.v0",
             userDid: opts.user,
@@ -141,7 +140,13 @@ export class ConnectedStream {
     }
   }
 
-  async subscribeEvents(start: number = 0) {
+  /** Create a subscription to events in a stream, with backfill from the given stream index.
+   * Received events are pushed to the eventChannel.
+   * If the there are more than 2500 events to backfill, they will be sent in multiple batches.
+   * Leaf server will continue to push batches of events as they arrive.
+   * Call unsubscribeEvents() to stop receiving events.
+   */
+  async subscribeEvents(start: StreamIndex) {
     this.unsubscribeEventsFn = await this.leaf.subscribeEvents(
       this.id,
       {
@@ -175,7 +180,24 @@ export class ConnectedStream {
     return this.#doneBackfillingEvents.promise;
   }
 
-  async subscribeMetadata(start: number = 0) {
+  /** Subscribe to all events in the stream, backfilling from the start */
+  async backfillAndSubscribeAllEvents() {
+    await this.subscribeEvents(0 as StreamIndex);
+  }
+
+  async unsubscribeEvents() {
+    if (!this.unsubscribeEventsFn) throw new Error("Not subscribed to events");
+    await this.unsubscribeEventsFn();
+  }
+
+  /** Create a subscription to metadata events in a stream, with backfill from the given stream index.
+   * Received events are pushed to the eventChannel.
+   * If the there are more than 2500 events to backfill, they will be sent in multiple batches.
+   * Leaf server will continue to push batches of events as they arrive.
+   * Call unsubscribeEvents() to stop receiving events.
+   * Returns the latest event index backfilled.
+   */
+  async subscribeMetadata(start: number): Promise<StreamIndex> {
     let latest = 0 as StreamIndex;
     this.unsubscribeMetadataFn = await this.leaf.subscribeEvents(
       this.id,
@@ -216,9 +238,11 @@ export class ConnectedStream {
     return this.#doneBackfillingMetadata.promise;
   }
 
-  async unsubscribeEvents() {
-    if (!this.unsubscribeEventsFn) throw new Error("Not subscribed to events");
-    await this.unsubscribeEventsFn();
+  /** Subscribe to all events in the stream, backfilling from the start */
+  async backfillMetadata() {
+    const latest = await this.subscribeMetadata(0 as StreamIndex);
+    await this.unsubscribeMetadata();
+    return latest;
   }
 
   async unsubscribeMetadata() {
