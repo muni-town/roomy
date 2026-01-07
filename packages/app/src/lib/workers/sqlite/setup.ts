@@ -121,7 +121,7 @@ export async function initializeDatabase(
       throw error;
     }
 
-    console.info("[SqW] (init.3) Database initialized", {
+    console.debug("[SqW] (init.3) Database initialized", {
       databaseName,
       vfsType,
     });

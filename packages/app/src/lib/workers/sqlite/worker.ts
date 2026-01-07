@@ -300,13 +300,7 @@ class SqliteWorkerSupervisor {
           }
         }
 
-        console.log(
-          "materialised bundles",
-          bundles,
-          "for batch id",
-          batch.batchId,
-          "awaiting application",
-        );
+        console.debug("materialised, awaiting application", { bundles, batch });
 
         this.#statementChannel.push(
           {
@@ -332,7 +326,7 @@ class SqliteWorkerSupervisor {
         // apply statements
         try {
           const result = await this.runStatementBatch(batch);
-          console.log(
+          console.debug(
             "Ran statements",
             batch,
             "got result",
@@ -355,7 +349,7 @@ class SqliteWorkerSupervisor {
 
           // Connect spaces AFTER batch is applied and committed
           if (batch.spacesToConnect && batch.spacesToConnect.length > 0) {
-            console.log(
+            console.debug(
               `Connecting ${batch.spacesToConnect.length} space(s) after batch commit:`,
               batch.spacesToConnect,
             );
@@ -371,7 +365,7 @@ class SqliteWorkerSupervisor {
   }
 
   private cleanup() {
-    console.log("SQLite worker: Cleaning up...");
+    console.debug("SQLite worker: Cleaning up...");
     this.stopHeartbeat();
     this.#status.isActiveWorker = false;
     this.#eventChannel.finish();
@@ -431,14 +425,14 @@ class SqliteWorkerSupervisor {
         const age = Date.now() - timestamp;
 
         if (age < LOCK_TIMEOUT_MS && otherWorkerId !== this.#workerId) {
-          console.log(
+          console.debug(
             "SQLite worker: Another active worker detected, backing off",
           );
           return;
         }
       }
 
-      console.log(
+      console.debug(
         "SQLite worker: No recent heartbeat detected, attempting to acquire lock",
       );
 
@@ -449,7 +443,7 @@ class SqliteWorkerSupervisor {
         async (lock) => {
           if (!lock) return false;
 
-          console.log("SQLite worker: Successfully stole abandoned lock");
+          console.debug("SQLite worker: Successfully stole abandoned lock");
           await callback();
           return true;
         },
@@ -471,7 +465,10 @@ class SqliteWorkerSupervisor {
         // await this.loadDb(did, false); // there is no special reason to have DID-keyed db when it's in memory only. keeping for future transition back to persistent
         this.#status.authenticated = did;
         this.#authenticated.resolve();
-        console.debug("[SqW] (init.5) Authenticated", { did });
+        console.debug(
+          "[SqW] (init.6) Authenticated. Sqlite worker initialised ✅",
+          { did },
+        );
       },
       materializeBatch: async (eventsBatch, priority) => {
         return this.materializeBatch(eventsBatch, priority);
@@ -500,7 +497,7 @@ class SqliteWorkerSupervisor {
         deleteLiveQuery(id);
       },
       ping: async () => {
-        console.log("SQLite worker: Ping received");
+        console.debug("SQLite worker: Ping received");
 
         // Check lock status
         const lockInfo = await navigator.locks.query();
@@ -583,7 +580,7 @@ class SqliteWorkerSupervisor {
         sql`update comp_space set backfilled_to = ${batch.latestEvent} where entity = ${batch.streamId}`,
       );
 
-      console.log("Updated backfilled_to to", batch.latestEvent);
+      console.debug("Updated backfilled_to to", batch.latestEvent);
 
       await executeQuery({ sql: `release batch${batch.batchId}` });
       return {
@@ -1029,7 +1026,7 @@ class SqliteWorkerSupervisor {
         statements,
       } as const;
 
-      console.log("ensureProfiles bundle", bundle);
+      console.debug("ensureProfiles bundle", bundle);
 
       return bundle;
     } catch (e) {
@@ -1047,7 +1044,7 @@ class SqliteWorkerSupervisor {
     priority: TaskPriority = "background",
   ) {
     // so this is where we need to coordinate across the chain of channels
-    console.log("Materialising events batch", eventsBatch.batchId);
+    console.debug("Materialising events batch", eventsBatch.batchId);
     const resultPromise = new Promise<Batch.ApplyResult>((resolve) => {
       this.#pendingBatches.set(eventsBatch.batchId, resolve);
     });
