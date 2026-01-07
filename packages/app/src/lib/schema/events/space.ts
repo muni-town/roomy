@@ -98,4 +98,5 @@ export const SpaceEventVariant = type.or(
   RemoveAdmin,
   SetHandleAccount,
   UpdateSpaceInfo,
+  UpdateSidebar,
 );

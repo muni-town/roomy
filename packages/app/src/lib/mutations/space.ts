@@ -1,7 +1,7 @@
 import { backend, backendStatus } from "$lib/workers";
 import type { Event, StreamDid, Did } from "$lib/schema";
 import { toast } from "@fuxui/base";
-import { newUlid } from "$lib/schema";
+import { newUlid, ulidFactory } from "$lib/schema";
 
 /**
  * Join a space.
@@ -45,6 +45,8 @@ export async function createSpace(opts: {
 }) {
   let currentSpaceName = opts.spaceName;
   let currentSpaceDescription = opts.spaceDescription;
+
+  const newUlid = ulidFactory();
 
   if (!currentSpaceName) {
     throw "Please enter a name for the space";
@@ -100,6 +102,19 @@ export async function createSpace(opts: {
       $type: "space.roomy.room.createRoom.v0",
       kind: "space.roomy.channel",
       name: "lobby",
+    },
+  });
+
+  batch.push({
+    id: newUlid(),
+    variant: {
+      $type: "space.roomy.space.updateSidebar.v0",
+      categories: [
+        {
+          name: "general",
+          children: [generalChannelId],
+        },
+      ],
     },
   });
 

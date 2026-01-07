@@ -26,7 +26,8 @@ const materializers: {
   "space.roomy.space.personal.joinSpace.v0": async ({ streamId, data }) => {
     return [
       ensureEntity(streamId, data.spaceDid),
-      // because we are materialising a non-personal-stream space, we infer that we are backfilling in the background
+      // because we are materializing a non-personal-stream space, we infer that we are backfilling
+      // in the background
       sql`
         insert into comp_space (entity)
         values (${data.spaceDid})
@@ -94,6 +95,16 @@ const materializers: {
         label = 'member'
     `,
   ],
+  "space.roomy.space.updateSidebar.v0": async ({ streamId, data }) => {
+    const configJson = { categories: data.categories };
+    return [
+      sql`
+      update comp_space
+      set sidebar_config = ${JSON.stringify(configJson)}
+      where entity = ${streamId}
+    `,
+    ];
+  },
   "space.roomy.space.setHandleAccount.v0": async ({ streamId, data }) => [
     sql`
       update comp_space set handle_account = ${data.did || null}

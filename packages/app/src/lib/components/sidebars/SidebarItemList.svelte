@@ -19,13 +19,6 @@
     level?: number;
   } = $props();
 
-  let uncategorized: SidebarItemData[] = $derived(
-    items.filter((x) => x.type !== "space.roomy.category"),
-  );
-  let categories: SidebarItemData[] = $derived(
-    items.filter((x) => x.type == "space.roomy.category"),
-  );
-
   // let {
   //   // children,
   //   // me,
@@ -161,35 +154,10 @@
   {/if} -->
 
 <div class="flex flex-col w-full">
-  {#if level == 0}
+  {#each items as item, index (item.id)}
     <div class="flex items-start gap-2 w-full">
-      <SidebarItem
-        bind:isEditing
-        {level}
-        item={{
-          type: "space.roomy.category",
-          id: "general",
-          name: "General",
-          lastRead: 0,
-          latestEntity: 0,
-          unreadCount: 0,
-          sortIdx: "",
-          children: uncategorized as any,
-        }}
-      />
+      <SidebarItem bind:isEditing {level} {index} {item} />
     </div>
-
-    {#each categories as item, index (item.id)}
-      <div class="flex items-start gap-2 w-full">
-        <SidebarItem bind:isEditing {level} {index} {item} />
-      </div>
-    {/each}
-  {:else}
-    {#each items as item, index (item.id)}
-      <div class="flex items-start gap-2 w-full">
-        <SidebarItem bind:isEditing {level} {index} {item} />
-      </div>
-    {/each}
-  {/if}
+  {/each}
 </div>
 <!-- {/if} -->
