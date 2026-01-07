@@ -120,7 +120,7 @@
           left join comp_image i on i.entity = me.id
           left join comp_video v on v.entity = me.id
           left join comp_file f on f.entity = me.id
-          where me.parent = e.id
+          where me.room = e.id
             and (i.entity is not null or v.entity is not null or f.entity is not null)
         ),
         'links', (
@@ -150,7 +150,7 @@
         left join comp_user oau on oau.did = o.author
         left join comp_comment cc on cc.entity = e.id
       where
-        e.parent = ${page.params.object}
+        e.room = ${page.params.object}
       order by e.sort_idx desc, e.id desc
       limit ${showLastN}
     `,
