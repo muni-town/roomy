@@ -46,6 +46,11 @@ $effect.root(() => {
     joinedSpaces.loading = true;
     joinedSpaces.error = "";
     joinedSpaces.list = [];
+    if (
+      backendStatus.authState?.state !== "authenticated" ||
+      backendStatus.authState.clientStatus !== "connected"
+    )
+      return;
     Promise.all(
       spacesQuery.result?.map(async (spaceRow) => ({
         ...spaceRow,

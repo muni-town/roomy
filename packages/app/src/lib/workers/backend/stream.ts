@@ -37,7 +37,7 @@ export class ConnectedStream {
     | { status: "errored"; error: string } = { status: "pending" };
   eventChannel: AsyncChannel<Batch.Events>;
   unsubscribeEventsFn: (() => Promise<void>) | null = null;
-  #doneBackfillingEvents = new Deferred();
+  #doneBackfillingEvents = new Deferred<Ulid>(); // resolve with last batch ID
   unsubscribeMetadataFn: (() => Promise<void>) | null = null;
   // returns the latest event
   #doneBackfillingMetadata = new Deferred<StreamIndex>();
@@ -157,19 +157,20 @@ export class ConnectedStream {
       },
       async (result) => {
         if ("Ok" in result) {
-          if (!result.Ok.has_more) {
-            this.backfillStatus = { status: "finished" };
-            this.#doneBackfillingEvents.resolve();
-          }
-
           const events = parseEvents(result.Ok.rows);
+          const batchId = newUlid();
           this.eventChannel.push({
             status: "events",
-            batchId: newUlid(),
+            batchId,
             streamId: this.id as StreamDid,
             events,
             priority: "priority",
           });
+
+          if (!result.Ok.has_more) {
+            this.backfillStatus = { status: "finished" };
+            this.#doneBackfillingEvents.resolve(batchId);
+          }
         } else {
           console.error("Subscribed query error:", result.Err);
           this.backfillStatus = { status: "errored", error: result.Err };
@@ -306,7 +307,7 @@ export class ConnectedStream {
     if (actualEnd) this.lazyEndIdx.set(roomId, actualEnd);
   }
 
-  get doneBackfilling(): Promise<void> {
+  get doneBackfilling(): Promise<Ulid> {
     return this.#doneBackfillingEvents.promise;
   }
 

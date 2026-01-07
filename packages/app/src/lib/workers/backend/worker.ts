@@ -36,6 +36,7 @@ import {
   type StreamDid,
   type Event,
   newUlid,
+  Ulid,
 } from "$lib/schema";
 import { decode, encode } from "@atcute/cbor";
 import { initializeFaro } from "$lib/otel";
@@ -75,6 +76,13 @@ class WorkerSupervisor {
   #auth: AuthState;
   #connection: ConnectionState; // tabs connected to shared worker
   #authenticated = new Deferred<void>();
+
+  /* To get the result of a materialised batch, create and await a Promise
+  setting the resolver against the Batch ID in this Map */
+  #batchResolvers: Map<
+    Ulid,
+    (value: Batch.Statement | Batch.ApplyResult) => void
+  > = new Map();
 
   constructor() {
     this.#config = {
@@ -153,7 +161,12 @@ class WorkerSupervisor {
 
     this.startMaterializer();
 
-    await personalStream.doneBackfilling;
+    const lastBatchId = await personalStream.doneBackfilling;
+
+    // ensure the backfilled stream is fully materialised
+    const personalStreamMaterialised = new Promise((resolve) => {
+      this.#batchResolvers.set(lastBatchId, resolve);
+    });
 
     this.#status.spaces = {
       ...this.#status.spaces,
@@ -184,6 +197,7 @@ class WorkerSupervisor {
       ),
     };
 
+    // pass the spaces to the client to connect
     const { streams, failed } = await this.client.connect(
       personalStream,
       new Map(streamIdsAndCursors),
@@ -191,6 +205,8 @@ class WorkerSupervisor {
 
     if (failed.length) console.warn("Some streams didn't connect", failed);
     // TODO: clean up nonexistent streams from db
+
+    await personalStreamMaterialised;
 
     // need to reassign the whole object to trigger reactive update
     this.#status.authState = {
@@ -217,26 +233,30 @@ class WorkerSupervisor {
     if (this.#auth.state !== "authenticated") {
       throw new Error("Tried to handle events while unauthenticated");
     }
-
-    console.log("Waiting for Client to be ready...");
     await this.client.connected;
-    console.log("Client ready!");
-
     const eventChannel = this.#auth.eventChannel;
+
+    console.debug("listening on eventChannel...");
 
     for await (const batch of eventChannel) {
       // personal stream backfill is always high priority, other streams can be in background
       if (batch.streamId === this.client.personalStreamId) {
-        console.log("materialising events batch for personal stream", batch);
         const result = await this.sqlite.materializeBatch(batch, "priority");
-        console.log("result", result);
+
+        // If there is a resolver waiting on this batch, resolve it with the result
+        const resolver = this.#batchResolvers.get(batch.batchId);
+        if (resolver) {
+          resolver(result);
+          this.#batchResolvers.delete(batch.batchId);
+        }
+
+        console.debug("materialised (personal):", { batch, result });
       } else {
-        console.log("materialising events batch for space stream", batch);
         const result = await this.sqlite.materializeBatch(
           batch,
           batch.priority,
         );
-        console.log("result", result);
+        console.debug("materialised (space):", { batch, result });
       }
     }
   }
@@ -403,6 +423,10 @@ class WorkerSupervisor {
         return {
           timestamp: Date.now(),
         };
+      },
+      clientConnected: async () => {
+        await this.#authenticated.promise;
+        await this.client.connected;
       },
       enableLogForwarding: () => this.enableLogForwarding(),
       disableLogForwarding: () => this.disableLogForwarding(),

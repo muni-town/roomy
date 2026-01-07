@@ -93,8 +93,12 @@ $effect.root(() => {
     // For unknown reasons this mostly happened on threads or rooms without any messages in
     // them yet.
 
-    // if (joinedSpaces.loading || !page.params.space) return; // wait until spaces are loaded
-    if (!page.params.space) return;
+    if (joinedSpaces.loading || !page.params.space) return; // wait until spaces are loaded
+    if (
+      backendStatus.authState?.state !== "authenticated" ||
+      backendStatus.authState.clientStatus !== "connected"
+    )
+      return;
 
     getCurrentSpace(page.params.space as SpaceIdOrHandle)
       .then(({ matchingSpace, isSpaceAdmin, spaceId }) => {

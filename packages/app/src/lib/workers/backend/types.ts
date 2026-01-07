@@ -27,6 +27,7 @@ export type BackendInterface = {
     yesIAmSure: true;
   }): Promise<{ done: true } | { done: false; error: string }>;
   ping(): Promise<{ timestamp: number }>;
+  clientConnected(): Promise<void>;
   enableLogForwarding(): Promise<void>;
   disableLogForwarding(): Promise<void>;
   createLiveQuery(

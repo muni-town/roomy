@@ -1058,6 +1058,14 @@ class SqliteWorkerSupervisor {
 
 const worker = new SqliteWorkerSupervisor();
 
+// Debugging hooks
+(globalThis as any).worker = worker;
+(globalThis as any).debugSqlite = {
+  disableLiveQueries,
+  enableLiveQueries,
+  executeQuery,
+};
+
 globalThis.onmessage = (ev) => {
   faro.api.setSession({
     id: ev.data?.sessionId,
