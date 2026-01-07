@@ -18,6 +18,10 @@ We use `pnpm` as a package manager and turborepo as a build system. `pnpm turbo 
 
 Our current focus is on using Robot Framework for integration testing. All tests can be run with `pnpm test:robot`, or specific tests by tag with `pnpm test:robot:tag <tag> tests/robot`.
 
+## Tracing
+
+Grafana can be run with `docker compose up -d` in the repo root and accessed at `http://localhost:3000`
+
 ## Debugging
 
 As long as we have a persistent database, some problems are solved by clearing it. You can click your avatar in the bottom left corner for a modal with 'Reset Local Cache'. A more serious issue may require setting your browser console REPL to the sqlite worker and running `this.deleteDBs()`. 

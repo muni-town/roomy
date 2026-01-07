@@ -3,7 +3,7 @@
 
 services:
   leaf-server:
-    image: ghcr.io/muni-town/leaf:sha-549ddac
+    image: ghcr.io/muni-town/leaf:sha-690b899
     platform: linux/amd64 # no arm64 build available
     volumes:
       - leaf-data:/data
@@ -76,9 +76,9 @@ services:
     image: grafana/alloy:latest
     command: run --disable-reporting --server.http.listen-addr=0.0.0.0:5005 /etc/alloy/config.alloy
     ports:
-      - 5005:5005   # Alloy
+      - 5005:5005 # Alloy
       - 12345:12345 # Faro
-      - 4317:4317   # OTLP
+      - 4317:4317 # OTLP
     configs:
       - source: alloy-config
         target: /etc/alloy/config.alloy
