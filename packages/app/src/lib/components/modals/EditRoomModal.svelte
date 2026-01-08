@@ -53,11 +53,11 @@
           id="dialog-title"
           class="text-base font-semibold text-base-900 dark:text-base-100"
         >
-          Edit object
+          Edit room
         </h3>
         <div class="mt-2">
           <p class="text-sm text-base-500 dark:text-base-400">
-            Change the name of the object
+            Change the name of the room
           </p>
         </div>
         <Input bind:value={name} placeholder="Name" type="text" required />
@@ -82,8 +82,7 @@
         </h3>
         <div class="mt-1">
           <p class="text-sm text-base-500 dark:text-base-400">
-            This will also delete all children of this object and cannot be
-            undone
+            This will also delete all children of this room and cannot be undone
           </p>
         </div>
         <div class="flex justify-start">
@@ -100,7 +99,7 @@
             variant="red"
           >
             <IconLucideTrash class="size-4" />
-            Delete object
+            Delete room
           </Button>
         </div>
       </form>
