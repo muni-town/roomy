@@ -192,10 +192,13 @@ export async function setPageReadMarker(opts: {
   streamId: StreamDid;
   roomId: Ulid;
 }) {
-  await backend.sendEvent(opts.personalStreamId, {
-    id: newUlid(),
-    $type: "space.roomy.space.personal.setLastRead.v0",
-    streamDid: opts.streamId,
-    roomId: opts.roomId,
-  });
+  // TODO: temporarily remove for now since unreads aren't calculated yet, and we don't want to
+  // flood the personal space with these when we will be using ephemeral events.
+
+  // await backend.sendEvent(opts.personalStreamId, {
+  //   id: newUlid(),
+  //   $type: "space.roomy.space.personal.setLastRead.v0",
+  //   streamDid: opts.streamId,
+  //   roomId: opts.roomId,
+  // });
 }
