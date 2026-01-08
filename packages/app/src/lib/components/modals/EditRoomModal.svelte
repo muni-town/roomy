@@ -94,6 +94,7 @@
                 spaceId: current.joinedSpace.id,
                 roomId: current.roomId,
               });
+              open = false;
             }}
             class="justify-start"
             variant="red"
