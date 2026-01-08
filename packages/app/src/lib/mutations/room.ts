@@ -6,7 +6,7 @@ import { RoomKind } from "$lib/schema/events/room";
 interface CreateRoomOpts {
   spaceId: StreamDid;
   kind: RoomKind;
-  linkToRoom?: Ulid,
+  linkToRoom?: Ulid;
   info?: {
     name?: string;
     description?: string;
@@ -32,6 +32,24 @@ export async function createRoom(opts: CreateRoomOpts) {
   const { roomId, events } = createRoomEvents(opts);
   await backend.sendEventBatch(opts.spaceId, events);
   return roomId;
+}
+
+export async function createThread(opts: {
+  spaceId: StreamDid;
+  linkToRoom: Ulid;
+  threadName: string;
+}) {
+  // Create a new room for the thread
+  const { roomId: threadId, events } = createRoomEvents({
+    ...opts,
+    kind: "space.roomy.thread",
+    info: {
+      name: opts.threadName,
+    },
+  });
+
+  await backend.sendEventBatch(opts.spaceId, events);
+  return threadId;
 }
 
 export async function createPage(opts: {

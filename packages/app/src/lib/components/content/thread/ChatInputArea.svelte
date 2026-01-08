@@ -23,15 +23,11 @@
   import { newUlid, toBytes, Ulid, type Event } from "$lib/schema";
   import type { Attachment } from "$lib/schema/extensions/message";
   import ChatInput, { setInputFocus } from "./ChatInput.svelte";
-  import { createRoom } from "$lib/mutations/room";
+  import { createThread } from "$lib/mutations/room";
 
   let spaceId = $derived(current.joinedSpace?.id);
   let isSendingMessage = $state(false);
   let previewImages: string[] = $state([]);
-
-  $effect(() => {
-    console.log("messaging state", messagingState.current);
-  });
 
   function getVideoThumbnail(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -111,24 +107,28 @@
     const threadName =
       state.name || state.selectedMessages[0]?.content.slice(0, 50) + "...";
 
-    const threadId = await createRoom({
+    const threadId = await createThread({
       spaceId,
       linkToRoom: current.roomId,
-      kind: "space.roomy.thread",
-      info: {
-        name: threadName,
-      },
+      threadName,
+    });
+
+    console.log("created thread", {
+      threadId,
+      messagesToMove: $state.snapshot(state.selectedMessages),
     });
 
     // move selected messages into thread
     for (const message of state.selectedMessages) {
-      await backend.sendEvent(spaceId, {
+      const event = {
         id: newUlid(),
         room: current.roomId,
         $type: "space.roomy.message.moveMessage.v0",
         messageId: message.id,
         toRoomId: threadId,
-      });
+      } as const;
+      console.log("sending event", { spaceId, event });
+      await backend.sendEvent(spaceId, event);
     }
 
     messagingState.set({
@@ -149,8 +149,6 @@
 
     isSendingMessage = true;
 
-    console.log("sending with messaging state", state);
-
     const message = state.input;
     const filesToUpload = [...state.files];
 
@@ -164,7 +162,7 @@
       blurhash?: string;
     }[] = [];
     for (const media of filesToUpload) {
-      console.log("uploading", media);
+      console.debug("uploading", media);
       const { cleanedFile, ...dimensions } = await getImagePreloadData(media);
       if (!cleanedFile)
         throw new Error("Could not strip EXIF metadata for " + media.name);
@@ -182,7 +180,7 @@
         ...dimensions,
       });
     }
-    console.log("uploaded", uploadedFiles);
+    if (uploadedFiles.length) console.debug("uploaded", uploadedFiles);
 
     try {
       const messageId = newUlid();
@@ -230,7 +228,7 @@
         },
       };
 
-      console.log("sending message", messageEvent);
+      console.debug("sending message", messageEvent);
 
       await backend.sendEvent(spaceId, messageEvent);
     } catch (e: any) {
