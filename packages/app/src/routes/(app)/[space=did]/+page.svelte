@@ -22,7 +22,7 @@
   const spaceId = $derived(current.joinedSpace?.id);
 
   $effect(() => {
-    if (flags.spaceIndex || !current.joinedSpace) return;
+    if (flags.threadsList || !current.joinedSpace) return;
     const firstCategory = sidebarQuery.result?.[0];
     if (firstCategory?.type === "space.roomy.category") {
       const firstChild = firstCategory.children?.[0]?.id;
@@ -192,10 +192,7 @@
         transition:fade={{ duration: 200 }}
         class="flex flex-col justify-center h-full w-full"
       >
-        <BoardView
-          threads={threads.list}
-          emptyMessage="🚧 Forum-like thread view coming soon! 🚧"
-        />
+        <BoardView threads={threads.list} emptyMessage="No threads found." />
       </div>
     {:else if threadsQuery.error}
       <Error message={threadsQuery.error} />

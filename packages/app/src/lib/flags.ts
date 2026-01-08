@@ -1,5 +1,8 @@
+/** Default feature flags, can be overridden per environment with
+ * VITE_FEATURE_FLAGS env var as JSON string.
+ */
 const baseFlags = {
-  spaceIndex: false, // 'Index' (threads list) page for spaces
+  threadsList: false, // 'Index' (threads list) page for spaces
 };
 
 type Flags = typeof baseFlags;

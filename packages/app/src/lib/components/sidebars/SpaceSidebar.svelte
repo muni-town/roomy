@@ -45,7 +45,7 @@
   {/if}
 
   <div class="w-full pt-2 px-2">
-    {#if flags.spaceIndex}
+    {#if flags.threadsList}
       <Button
         class="w-full justify-start mb-2"
         variant="ghost"

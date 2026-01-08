@@ -51,24 +51,27 @@ $effect.root(() => {
       return;
     console.debug("categories", $state.snapshot(categoriesQuery.result));
     if (categoriesQuery.result) {
-      sidebar.result = categoriesQuery.result.map((x) => ({
-        type: "space.roomy.category",
-        id: x.name,
-        name: x.name,
-        lastRead: 0,
-        latestEntity: 0,
-        sortIdx: "",
-        unreadCount: 0,
-        children: x.children.map((x) => ({
-          type: "space.roomy.channel",
-          id: x.id,
-          name: x.name,
-          lastRead: 0,
-          latestEntity: 0,
-          sortIdx: "",
-          unreadCount: 0,
-        })),
-      }));
+      sidebar.result = categoriesQuery.result.map(
+        (x) =>
+          ({
+            type: "space.roomy.category",
+            id: x.name,
+            name: x.name,
+            lastRead: 0,
+            latestEntity: 0,
+            sortIdx: "",
+            unreadCount: 0,
+            children: x.children.map((x) => ({
+              type: "space.roomy.channel",
+              id: x.id,
+              name: x.name,
+              lastRead: 0,
+              latestEntity: 0,
+              sortIdx: "",
+              unreadCount: 0,
+            })),
+          }) satisfies SidebarItem,
+      );
     } else {
       sidebar.result = undefined;
     }

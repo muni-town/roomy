@@ -47,6 +47,7 @@
 
   import Error from "$lib/components/modals/Error.svelte";
   import { Ulid } from "$lib/schema";
+  import { flags } from "$lib/flags";
 
   let createPageDialogOpen = $state(false);
   let createPageName = $state("");
@@ -289,13 +290,15 @@
       {:else if room?.kind == "space.roomy.channel"}
         <span class="grow"></span>
 
-        <ToggleTabs
-          items={channelTabList.map((x) => ({
-            name: x,
-            href: `#${x.toLowerCase()}`,
-          }))}
-          active={channelActiveTab}
-        />
+        {#if flags.threadsList}
+          <ToggleTabs
+            items={channelTabList.map((x) => ({
+              name: x,
+              href: `#${x.toLowerCase()}`,
+            }))}
+            active={channelActiveTab}
+          />
+        {/if}
 
         <div class="grow w-1/2"></div>
 
