@@ -43,9 +43,7 @@
   let name = $derived(room?.name);
 </script>
 
-{#if !room}
-  <div>Loading...</div>
-{:else}
+{#if room}
   <Modal bind:open>
     <div class="max-h-[80vh] overflow-y-auto">
       <form id="createSpace" class="flex flex-col gap-4" onsubmit={save}>
