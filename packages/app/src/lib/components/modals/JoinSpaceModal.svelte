@@ -5,10 +5,18 @@
   import { joinSpace } from "$lib/mutations/space";
   import { type SpaceIdOrHandle } from "$lib/workers/types";
   import { backend } from "$lib/workers";
-  import type { StreamDid } from "$lib/schema";
+  import { StreamDid } from "$lib/schema";
 
-  let inviteSpaceName = $derived(page.url.searchParams.get("name"));
-  let inviteSpaceAvatar = $derived(page.url.searchParams.get("avatar"));
+  let spaceName = $state() as string | undefined;
+  let spaceAvatar = $state() as string | undefined;
+
+  $effect(() => {
+    if (!page.params.space) return;
+    backend.getSpaceInfo(StreamDid.assert(page.params.space)).then((info) => {
+      spaceName = info?.name;
+      spaceAvatar = info?.avatar;
+    });
+  });
 
   type JoinStatus =
     | { status: "loading" }
@@ -57,13 +65,13 @@
     {#if joinStatus.status === "ready" || joinStatus.status === "joining"}
       <div class="mb-5 flex justify-center items-center gap-3">
         <SpaceAvatar
-          imageUrl={inviteSpaceAvatar ?? ""}
+          imageUrl={spaceAvatar ?? ""}
           id={page.params.space}
-          name={inviteSpaceName ?? ""}
+          name={spaceName ?? ""}
           size={50}
         />
-        {#if inviteSpaceName}
-          <h1 class="font-bold text-xl">{inviteSpaceName}</h1>
+        {#if spaceName}
+          <h1 class="font-bold text-xl">{spaceName}</h1>
         {/if}
       </div>
       <Button

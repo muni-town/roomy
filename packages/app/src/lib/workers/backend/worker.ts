@@ -392,6 +392,9 @@ class WorkerSupervisor {
       getSessionId: async () => {
         return sessionId;
       },
+      getSpaceInfo: (streamDid) => {
+        return this.client.getSpaceInfo(streamDid);
+      },
       login: async (handle) => Client.login(handle),
       oauthCallback: async (paramsStr) => {
         const params = new URLSearchParams(paramsStr);

@@ -84,23 +84,30 @@ const spaceModuleDef: BasicModule = {
     create table if not exists stream_info (
       type text not null default 'space.roomy.space.space',
       schema_version text not null default '2'
-    );
+    ) strict;
     
     insert into stream_info (type) select 'space.roomy.space.space' 
       where not exists (select 1 from stream_info);
+
+    create table if not exists space_info (
+      name text,
+      avatar text
+    ) strict;
+    delete from space_info;
+    insert into space_info (name, avatar) values (null, null);
       
     create table if not exists admins (
       user_id text primary key -- did
-    );
+    ) strict;
     
     create table if not exists metadata_events (
       idx integer primary key
-    );
+    ) strict;
     
     create table if not exists room_events (
       idx integer primary key,
       room text not null
-    );
+    ) strict;
     create index if not exists room_events_room_idx on room_events(room);
   `.sql,
 
@@ -138,6 +145,15 @@ const spaceModuleDef: BasicModule = {
     delete from admins
     where user_id = (select drisl_extract(payload, '.userDid') from event)
       and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.removeAdmin.v0';
+
+    -- Update space info
+    update space_info
+    set
+      name = case (select drisl_exists(payload, '.name') from event)
+        when 1 then (select drisl_extract(payload, '.name') from event) else name end,
+      avatar = case (select drisl_exists(payload, '.avatar') from event)
+        when 1 then (select drisl_extract(payload, '.avatar') from event) else avatar end
+    where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.updateSpaceInfo.v0';
     
     -- Mark metadata events
     insert into metadata_events (idx)
@@ -169,6 +185,11 @@ const spaceModuleDef: BasicModule = {
     {
       name: "stream_info",
       sql: `select * from stream_info;`,
+      params: [],
+    },
+    {
+      name: "space_info",
+      sql: `select name, avatar from space_info;`,
       params: [],
     },
     {

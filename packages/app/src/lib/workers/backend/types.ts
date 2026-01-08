@@ -20,6 +20,9 @@ export type BackendInterface = {
   getSessionId(): Promise<Ulid>;
   login(username: Handle): Promise<string>;
   logout(): Promise<void>;
+  getSpaceInfo(
+    streamDid: StreamDid,
+  ): Promise<{ name?: string; avatar?: string } | undefined>;
   oauthCallback(searchParams: string): Promise<void>;
   runQuery<T>(statement: SqlStatement): Promise<QueryResult<T>>;
   getProfile(did: UserDid): Promise<Profile | undefined>;

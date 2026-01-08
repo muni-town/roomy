@@ -561,6 +561,31 @@ export class Client {
     } else throw new Error("Invalid type for DID resolution");
   }
 
+  async getSpaceInfo(
+    streamDid: StreamDid,
+  ): Promise<{ name?: string; avatar?: string } | undefined> {
+    try {
+      const resp = await this.leaf.query(streamDid, {
+        name: "space_info",
+        params: {},
+      });
+      let row = resp[0];
+      if (!row) return;
+      let name =
+        row.name?.$type == "muni.town.sqliteValue.text"
+          ? row.name.value
+          : undefined;
+      let avatar =
+        row.avatar?.$type == "muni.town.sqliteValue.text"
+          ? row.avatar.value
+          : undefined;
+      return { name, avatar };
+    } catch (error) {
+      console.error("Failed to load space info", { streamDid, error });
+      return;
+    }
+  }
+
   async resolveSpaceId(spaceIdOrHandle: StreamDid | Handle): Promise<{
     spaceId: StreamDid;
     handle?: Handle;
