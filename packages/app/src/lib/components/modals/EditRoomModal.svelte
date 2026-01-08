@@ -1,7 +1,6 @@
 <script lang="ts">
   import { renameRoom } from "$lib/mutations/room";
   import { current } from "$lib/queries";
-  import type { Ulid } from "$lib/schema";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { Modal, Input, Button } from "@fuxui/base";

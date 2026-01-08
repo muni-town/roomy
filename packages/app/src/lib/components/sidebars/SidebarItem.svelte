@@ -113,7 +113,7 @@
 </Modal> -->
 
 {#snippet editButton()}
-  {#if isEditing}
+  {#if isEditing && item.type !== "space.roomy.category"}
     <Button
       variant="ghost"
       size="icon"
