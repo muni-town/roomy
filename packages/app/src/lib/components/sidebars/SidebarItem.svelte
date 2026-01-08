@@ -18,18 +18,20 @@
     item,
     isEditing = $bindable(false),
     level = 0,
+    editSidebarItem,
     // index = 0,
   }: {
     item: SidebarItem;
     isEditing: boolean;
     level: number;
     index?: number;
+    editSidebarItem: () => void;
   } = $props();
 
   // console.log("sidebar item level", level, item);
 
-  let showEditModal = $state(false);
-  let editName = $state(item.name);
+  // let showEditModal = $state(false);
+  // let editName = $state(item.name);
   let showGroupChildren = $state(true);
   // TODO: actually handle unreads & subthreads
   let hasUnread = $state(false);
@@ -91,7 +93,7 @@
   // });
 </script>
 
-<Modal bind:open={showEditModal}>
+<!-- <Modal bind:open={showEditModal}>
   <Heading
     >Edit {item.type == "space.roomy.category"
       ? "Category"
@@ -108,14 +110,14 @@
   <div class="flex justify-end">
     <Button onclick={() => {}}>Save</Button>
   </div>
-</Modal>
+</Modal> -->
 
 {#snippet editButton()}
   {#if isEditing}
     <Button
       variant="ghost"
       size="icon"
-      onclick={() => (showEditModal = true)}
+      onclick={editSidebarItem}
       class="group-hover:opacity-100 opacity-0"
     >
       <IconLucidePencil class="size-4" />
@@ -301,6 +303,7 @@
       <div class={"w-full max-w-full shrink min-w-0"}>
         <SidebarItemList
           items={item.children}
+          {editSidebarItem}
           bind:isEditing
           level={level + 1}
         />
@@ -342,6 +345,7 @@
     {#if showGroupChildren && item.children && item.children.length > 0}
       <div class={"w-full max-w-full shrink min-w-0"}>
         <SidebarItemList
+          {editSidebarItem}
           items={item.children}
           bind:isEditing
           level={level + 1}

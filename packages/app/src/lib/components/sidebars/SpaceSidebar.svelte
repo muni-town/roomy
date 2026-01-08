@@ -4,7 +4,7 @@
   import { current, sidebar } from "$lib/queries";
   import SidebarItemList from "./SidebarItemList.svelte";
   import SpaceSidebarHeader from "./SpaceSidebarHeader.svelte";
-  // import EditObjectModal from "../modals/EditObjectModal.svelte";
+  import EditRoomModal from "../modals/EditRoomModal.svelte";
   import { Button } from "@fuxui/base";
 
   import IconBasilCheckSolid from "~icons/basil/check-solid";
@@ -16,13 +16,11 @@
 
   let isEditing = $state(false);
 
-  // let openEditObjectModal = $state(false);
+  function editSidebarItem() {
+    openEditRoomModal = true;
+  }
 
-  // function editEntity(editEntity: co.loaded<typeof RoomyEntity>) {
-  //   console.log("editEntity", editEntity);
-  //   openEditObjectModal = true;
-  //   entity = editEntity;
-  // }
+  let openEditRoomModal = $state(false);
 </script>
 
 <!-- Header -->
@@ -59,8 +57,12 @@
       <hr class="my-2 border-base-800/10 dark:border-base-100/5" />
     {/if}
 
-    <SidebarItemList bind:isEditing items={sidebar.result || []} />
+    <SidebarItemList
+      bind:isEditing
+      {editSidebarItem}
+      items={sidebar.result || []}
+    />
   </div>
 {/if}
 
-<!-- <EditObjectModal bind:open={openEditObjectModal} bind:entity /> -->
+<EditRoomModal bind:open={openEditRoomModal} />

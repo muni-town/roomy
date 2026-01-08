@@ -80,6 +80,19 @@ export async function createPage(opts: {
   return pageId;
 }
 
+export async function renameRoom(opts: {
+  spaceId: StreamDid;
+  roomId: Ulid;
+  newName: string;
+}) {
+  await backend.sendEvent(opts.spaceId, {
+    id: newUlid(),
+    $type: "space.roomy.room.updateRoom.v0",
+    roomId: opts.roomId,
+    name: opts.newName,
+  });
+}
+
 export async function addRoomToSidebar(opts: {
   spaceId: StreamDid;
   category: string;

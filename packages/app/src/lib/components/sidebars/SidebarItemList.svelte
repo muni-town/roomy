@@ -13,8 +13,10 @@
     isEditing = $bindable(false),
     items,
     level = 0,
+    editSidebarItem,
   }: {
     isEditing: boolean;
+    editSidebarItem: () => void;
     items: SidebarItemData[];
     level?: number;
   } = $props();
@@ -156,7 +158,7 @@
 <div class="flex flex-col w-full">
   {#each items as item, index (item.id)}
     <div class="flex items-start gap-2 w-full">
-      <SidebarItem bind:isEditing {level} {index} {item} />
+      <SidebarItem bind:isEditing {level} {editSidebarItem} {index} {item} />
     </div>
   {/each}
 </div>
