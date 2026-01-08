@@ -42,7 +42,7 @@
                   join comp_info author_info on author_info.entity = author_edge.tail
                   left join comp_override_meta override on override.entity = me.id
                   left join comp_info author_override_info on author_override_info.entity = override.author
-                where me.parent = e.id
+                where me.room = e.id
                 group by author
                 order by me.id desc
                 limit 5
@@ -51,11 +51,11 @@
           from comp_room r
             join comp_info i on i.entity = r.entity
             join entities e on e.id = r.entity
-            join comp_info ci on ci.entity = e.parent
+            join comp_info ci on ci.entity = e.room
           where
             e.stream_id = ${spaceId}
               and
-            e.parent = ${page.params.object}
+            e.room = ${page.params.object}
               and
             (r.label = 'thread' or r.label = 'page')
         )
