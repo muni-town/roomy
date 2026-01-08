@@ -177,7 +177,10 @@
         transition:fade={{ duration: 200 }}
         class="flex flex-col justify-center h-full w-full"
       >
-        <BoardView threads={threads.list} />
+        <BoardView
+          threads={threads.list}
+          emptyMessage="🚧 Forum-like thread view coming soon! 🚧"
+        />
       </div>
     {:else if threadsQuery.error}
       <Error message={threadsQuery.error} />
