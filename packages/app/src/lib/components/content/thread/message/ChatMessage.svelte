@@ -19,6 +19,7 @@
   import MediaEmbed from "./embeds/MediaEmbed.svelte";
   import { newUlid, toBytes, Ulid } from "$lib/schema";
   import { page } from "$app/state";
+  import { cdnImageUrl } from "$lib/utils.svelte";
 
   let {
     message,
@@ -224,7 +225,12 @@
             class="rounded-full hover:ring-2 hover:ring-accent-500 transition-all cursor-pointer"
           >
             <Avatar.Root class="size-8 sm:size-10">
-              <Avatar.Image src={metadata.avatarUrl} class="rounded-full" />
+              <Avatar.Image
+                src={metadata.avatarUrl?.startsWith("atblob://")
+                  ? cdnImageUrl(metadata.avatarUrl)
+                  : metadata.avatarUrl}
+                class="rounded-full"
+              />
               <Avatar.Fallback>
                 <AvatarBeam name={metadata.id || "system"} />
               </Avatar.Fallback>

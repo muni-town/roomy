@@ -39,7 +39,6 @@ const materializers: {
     `,
   ],
   "space.roomy.space.joinSpace.v0": async ({ streamId, user, event }) => [
-    // if event has parent, it's for joining a room; if not, it's for joining the space
     sql`
       insert or replace into edges (head, tail, label, payload)
       values (
@@ -60,26 +59,27 @@ const materializers: {
         (
           select entity
             from comp_room join entities e on e.id = entity
-            where label = 'channel' and deleted = 0 and e.stream_id = ${streamId}
+            where label = 'space.roomy.channel' and deleted = 0 and e.stream_id = ${streamId}
             order by entity
             limit 1
         )
-      )
+      ) on conflict do nothing
     `,
     // Set author on the virtual message to be the stream itself
     sql`
-        insert into edges (head, tail, label)
+        insert or replace into edges (head, tail, label)
         select 
           ${event.id},
           ${streamId},
           'author'
       `,
     sql`
-      insert or replace into comp_content (entity, mime_type, data)
+      insert or replace into comp_content (entity, mime_type, data, last_edit)
       values (
         ${event.id},
         'text/markdown',
-        cast(('[@' || (select handle from comp_user where did = ${user}) || '](/user/' || ${user} || ') joined the space.') as blob)
+        cast(('[@' || (select handle from comp_user where did = ${user}) || '](/user/' || ${user} || ') joined the space.') as blob),
+        ${event.id}
     )`,
   ],
   "space.roomy.space.leaveSpace.v0": async ({ streamId, user }) => [
