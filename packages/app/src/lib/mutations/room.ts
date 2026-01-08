@@ -6,6 +6,7 @@ import { RoomKind } from "$lib/schema/events/room";
 interface CreateRoomOpts {
   spaceId: StreamDid;
   kind: RoomKind;
+  linkToRoom?: Ulid,
   info?: {
     name?: string;
     description?: string;
@@ -18,13 +19,11 @@ function createRoomEvents(opts: CreateRoomOpts) {
   const events: Event[] = [];
   events.push({
     id: newRoomId,
-    variant: {
-      $type: "space.roomy.room.createRoom.v0",
-      kind: opts.kind,
-      name: opts.info?.name,
-      avatar: opts.info?.avatar,
-      description: opts.info?.description,
-    },
+    $type: "space.roomy.room.createRoom.v0",
+    kind: opts.kind,
+    name: opts.info?.name,
+    avatar: opts.info?.avatar,
+    description: opts.info?.description,
   });
   return { roomId: newRoomId, events };
 }
@@ -51,13 +50,11 @@ export async function createPage(opts: {
 
   events.push({
     id: newUlid(),
-    variant: {
-      $type: "space.roomy.page.editPage.v0",
-      room: pageId,
-      body: {
-        data: toBytes(new TextEncoder().encode(`# ${opts.pageName}\n\n`)),
-        mimeType: "text/markdown",
-      },
+    $type: "space.roomy.page.editPage.v0",
+    room: pageId,
+    body: {
+      data: toBytes(new TextEncoder().encode(`# ${opts.pageName}\n\n`)),
+      mimeType: "text/markdown",
     },
   });
 
@@ -87,12 +84,10 @@ export async function addRoomToSidebar(opts: {
   // Mark the thread as a channel
   events.push({
     id: newUlid(),
-    variant: {
-      $type: "space.roomy.room.updateRoom.v0",
-      roomId: opts.room.id,
-      kind: "space.roomy.channel",
-      name: channelName,
-    },
+    $type: "space.roomy.room.updateRoom.v0",
+    roomId: opts.room.id,
+    kind: "space.roomy.channel",
+    name: channelName,
   });
 
   // TODO: come back to this, work out what 'promoting to channel' (former name for this function) maps to
@@ -118,11 +113,9 @@ export async function convertToThread(opts: {
 }) {
   await backend.sendEvent(opts.spaceId, {
     id: newUlid(),
-    variant: {
-      $type: "space.roomy.room.updateRoom.v0",
-      roomId: opts.roomId,
-      kind: "space.roomy.thread",
-    },
+    $type: "space.roomy.room.updateRoom.v0",
+    roomId: opts.roomId,
+    kind: "space.roomy.thread",
   });
 }
 
@@ -133,25 +126,21 @@ export async function convertToPage(opts: {
   const events: Event[] = [
     {
       id: newUlid(),
-      variant: {
-        $type: "space.roomy.room.updateRoom.v0",
-        roomId: opts.room.id,
-        kind: "space.roomy.page",
-      },
+      $type: "space.roomy.room.updateRoom.v0",
+      roomId: opts.room.id,
+      kind: "space.roomy.page",
     },
     {
       id: newUlid(),
-      variant: {
-        $type: "space.roomy.page.editPage.v0",
-        room: opts.room.id,
-        body: {
-          data: toBytes(
-            new TextEncoder().encode(
-              `# ${opts.room.name}\n\nConverted channel to page.`,
-            ),
+      $type: "space.roomy.page.editPage.v0",
+      room: opts.room.id,
+      body: {
+        data: toBytes(
+          new TextEncoder().encode(
+            `# ${opts.room.name}\n\nConverted channel to page.`,
           ),
-          mimeType: "text/markdown",
-        },
+        ),
+        mimeType: "text/markdown",
       },
     },
   ];
@@ -165,10 +154,8 @@ export async function setPageReadMarker(opts: {
 }) {
   await backend.sendEvent(opts.personalStreamId, {
     id: newUlid(),
-    variant: {
-      $type: "space.roomy.stream.personal.setLastRead.v0",
-      streamDid: opts.streamId,
-      roomId: opts.roomId,
-    },
+    $type: "space.roomy.space.personal.setLastRead.v0",
+    streamDid: opts.streamId,
+    roomId: opts.roomId,
   });
 }

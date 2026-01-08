@@ -122,10 +122,8 @@ export class ConnectedStream {
         streamDid,
         encode({
           id: newUlid(),
-          variant: {
-            $type: "space.roomy.space.addAdmin.v0",
-            userDid: opts.user,
-          },
+          $type: "space.roomy.space.addAdmin.v0",
+          userDid: opts.user,
         } satisfies Event),
       );
 

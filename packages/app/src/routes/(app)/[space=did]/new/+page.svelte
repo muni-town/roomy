@@ -40,12 +40,9 @@
     const roomId = newUlid();
     await backend.sendEvent(spaceId, {
       id: roomId,
-      variant: {
-        $type: "space.roomy.room.createRoom.v0",
-        kind:
-          type == "Category" ? "space.roomy.category" : "space.roomy.channel",
-        name,
-      },
+      $type: "space.roomy.room.createRoom.v0",
+      kind: type == "Category" ? "space.roomy.category" : "space.roomy.channel",
+      name,
     });
 
     if (type == "Channel") {

@@ -32,7 +32,7 @@ export {
   RoomEvent,
   SpaceEvent,
   Event,
-  EventVariant,
+  Event as EventVariant,
   parseEvent,
   type RoomEventType,
   type SpaceEventType,

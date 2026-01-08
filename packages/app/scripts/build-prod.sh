@@ -10,9 +10,9 @@ echo "Target URL: $target_url"
 
 # Determine which repo scopes to use based on OAUTH_HOST
 if [[ "$OAUTH_HOST" == "https://next.roomy.space" ]]; then
-  repo_scopes="repo:space.roomy.upload.v0 repo:space.roomy.stream.personal.next repo:space.roomy.stream.handle.next"
+  repo_scopes="repo:space.roomy.upload.v0 repo:space.roomy.space.personal.next repo:space.roomy.space.handle.next"
 else
-  repo_scopes="repo:space.roomy.upload.v0 repo:space.roomy.stream repo:space.roomy.stream.handle"
+  repo_scopes="repo:space.roomy.upload.v0 repo:space.roomy.stream repo:space.roomy.space.handle"
 fi
 
 # Add oauth-client configuration

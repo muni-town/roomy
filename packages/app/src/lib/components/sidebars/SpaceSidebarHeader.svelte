@@ -28,18 +28,14 @@
     // Tell the space that we are leaving the member list
     await backend.sendEvent(spaceDid, {
       id: newUlid(),
-      variant: {
-        $type: "space.roomy.space.leaveSpace.v0",
-      },
+      $type: "space.roomy.space.leaveSpace.v0",
     });
 
     // Remove the space from our personal space list
     await backend.sendEvent(backendStatus.authState.personalStream, {
       id: newUlid(),
-      variant: {
-        $type: "space.roomy.space.personal.leaveSpace.v0",
-        spaceDid: spaceDid,
-      },
+      $type: "space.roomy.space.personal.leaveSpace.v0",
+      spaceDid: spaceDid,
     });
 
     navigate("home");

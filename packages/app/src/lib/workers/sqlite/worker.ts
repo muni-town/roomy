@@ -257,7 +257,7 @@ class SqliteWorkerSupervisor {
         // Make sure all of the profiles we need are downloaded and inserted
         const neededProfiles = new Set<UserDid>();
         decodedEvents.forEach(([i, ev]) =>
-          newUserSignals.includes(ev.variant.$type)
+          newUserSignals.includes(ev.$type)
             ? UserDid.allows(i.user)
               ? neededProfiles.add(UserDid.assert(i.user))
               : console.warn("Found invalid user id", i.user)
@@ -289,10 +289,10 @@ class SqliteWorkerSupervisor {
             if (bundle.status === "success") {
               // Collect space IDs to connect AFTER batch is applied
               if (
-                event.variant.$type ===
+                event.$type ===
                 "space.roomy.space.personal.joinSpace.v0"
               ) {
-                spacesToConnect.push(event.variant.spaceDid);
+                spacesToConnect.push(event.spaceDid);
               }
             }
           } catch (e) {
@@ -753,9 +753,9 @@ class SqliteWorkerSupervisor {
 
       // If this event is a reorder event that modifies the `after` position for another event.
       if (
-        eventMeta.event.variant.$type ==
+        eventMeta.event.$type ==
           "space.roomy.message.reorderMessage.v0" &&
-        eventMeta.event.variant.after
+        eventMeta.event.after
       ) {
         // We need to update the event's "after" field
         // await executeQuery(
@@ -765,8 +765,8 @@ class SqliteWorkerSupervisor {
         // And we need to re-materialize it's sort position
         await this.materializeEntitySortPosition({
           streamId: eventMeta.streamId,
-          ulid: eventMeta.event.variant.messageId,
-          after: eventMeta.event.variant.after,
+          ulid: eventMeta.event.messageId,
+          after: eventMeta.event.after,
           update: true,
         });
       }

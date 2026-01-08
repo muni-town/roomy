@@ -58,14 +58,12 @@
     await backend.sendEvent(spaceId, {
       id: editEventId,
       room: Ulid.assert(page.params.object),
-      variant: {
-        $type: "space.roomy.page.editPage.v0",
-        body: {
-          mimeType: "text/x-dmp-patch",
-          data: toBytes(new TextEncoder().encode(patch)),
-        },
-        previous: latestEditId,
+      $type: "space.roomy.page.editPage.v0",
+      body: {
+        mimeType: "text/x-dmp-patch",
+        data: toBytes(new TextEncoder().encode(patch)),
       },
+      previous: latestEditId,
     });
   }
 

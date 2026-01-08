@@ -1,9 +1,10 @@
 const CONFIG = {
   leafUrl: import.meta.env.VITE_LEAF_URL || "https://leaf-dev.muni.town",
   faroEndpoint: import.meta.env.VITE_FARO_ENDPOINT,
-  streamNsid: import.meta.env.VITE_STREAM_NSID || "space.roomy.stream.personal.dev",
+  streamNsid:
+    import.meta.env.VITE_STREAM_NSID || "space.roomy.space.personal.dev",
   streamHandleNsid:
-    import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.stream.handle.dev",
+    import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.space.handle.dev",
   streamSchemaVersion: "4" as const,
   databaseSchemaVersion: "3" as const,
   leafServerDid: "",

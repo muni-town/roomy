@@ -38,16 +38,11 @@ export const RoomEvent = RoomEventVariantUnion.and(
 export const SpaceEvent = SpaceEventVariantUnion;
 
 /** Any event variant */
-export const EventVariant = type.or(RoomEvent, SpaceEvent);
-
-/** The full event envelope
- * This is what gets encoded to DRISL and sent over the wire  */
-export const Event = type({
-  id: Ulid.describe("Unique event ID, also encodes timestamp"),
-  variant: type.or(RoomEvent, SpaceEvent),
-});
-
-// Type exports for TypeScript consumers
+export const Event = type.or(RoomEvent, SpaceEvent).and(
+  type({
+    id: Ulid.describe("Unique event ULID. A ULID is both globally unique and also contains timestamp information"),
+  }),
+);
 
 /** NSID $type key specifying a room event variant */
 export type RoomEventType = (typeof RoomEventVariantUnion.infer)["$type"];
@@ -58,16 +53,10 @@ export type SpaceEventType = (typeof SpaceEventVariantUnion.infer)["$type"];
 /** NSID $type key specifying any Roomy event variant */
 export type EventType = RoomEventType | SpaceEventType;
 
-/** The inner data inside a room event envelope. Optionally accepts an EventType parameter,
- * which narrows to the given event type */
-export type EventVariant<K = undefined> = K extends EventType
-  ? Extract<typeof EventVariant.infer, { $type: K }>
-  : typeof EventVariant.infer;
-
-/** Event envelope with id, room (if room event) and variant. Optionally accepts an EventType parameter,
- * which narrows to the given event type */
+/** A Roomy event. Optionally accepts an EventType parameter, which narrows to the given event type
+ * */
 export type Event<K = undefined> = K extends EventType
-  ? Omit<typeof Event.infer, "variant"> & EventVariant<K>
+  ? Extract<typeof Event.infer, { $type: K }>
   : typeof Event.infer;
 
 /**

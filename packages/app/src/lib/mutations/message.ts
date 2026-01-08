@@ -7,12 +7,10 @@ export async function deleteMessage(
   messageId: Ulid,
 ) {
   await backend.sendEvent(spaceId, {
+    $type: "space.roomy.message.deleteMessage.v0",
     id: newUlid(),
-    variant: {
-      $type: "space.roomy.message.deleteMessage.v0",
-      room: roomId,
-      messageId: messageId,
-    },
+    room: roomId,
+    messageId: messageId,
   });
 }
 
@@ -23,12 +21,10 @@ export async function reorderMessage(
   moveAfter: Ulid,
 ) {
   await backend.sendEvent(streamId, {
+    $type: "space.roomy.message.reorderMessage.v0",
     id: newUlid(),
-    variant: {
-      $type: "space.roomy.message.reorderMessage.v0",
-      room: roomId,
-      messageId,
-      after: moveAfter,
-    },
+    room: roomId,
+    messageId,
+    after: moveAfter,
   });
 }

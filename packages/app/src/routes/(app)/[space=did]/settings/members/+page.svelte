@@ -40,10 +40,8 @@
 
     await backend.sendEvent(spaceId, {
       id: newUlid(),
-      variant: {
-        $type: "space.roomy.space.addAdmin.v0",
-        userDid: UserDid.assert(userId),
-      },
+      $type: "space.roomy.space.addAdmin.v0",
+      userDid: UserDid.assert(userId),
     });
   }
 
@@ -52,10 +50,8 @@
 
     await backend.sendEvent(spaceId, {
       id: newUlid(),
-      variant: {
-        $type: "space.roomy.space.removeAdmin.v0",
-        userDid: UserDid.assert(userId),
-      },
+      $type: "space.roomy.space.removeAdmin.v0",
+      userDid: UserDid.assert(userId),
     });
   }
 </script>

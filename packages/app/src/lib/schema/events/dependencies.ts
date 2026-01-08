@@ -1,5 +1,5 @@
 import { Ulid } from "../primitives";
-import type { EventType, EventVariant } from "../envelope";
+import type { EventType, Event } from "../envelope";
 
 const dependencies: Map<EventType, { events?: (x: EventVariant) => Ulid[] }> =
   new Map();

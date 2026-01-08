@@ -45,7 +45,7 @@ setDependsOn("space.roomy.message.deleteMessage.v0", {
 export const MoveMessage = type({
   $type: "'space.roomy.message.moveMessage.v0'",
   messageId: Ulid.describe("The ID of the message being moved."),
-  roomId: Ulid.describe("The room to which the message should be moved"),
+  toRoomId: Ulid.describe("The room to which the message should be moved"),
 }).describe("Move a message to a different room");
 
 setDependsOn("space.roomy.message.moveMessage.v0", {

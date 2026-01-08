@@ -104,7 +104,7 @@
    * see https://svelte.dev/docs/svelte/$state#Classes
    */
   async function handleCreateThread() {
-    if (!spaceId) return;
+    if (!spaceId || !current.roomId) return;
     const state = messagingState.current;
     if (state.kind !== "threading") return;
     if ((state as Threading).selectedMessages.length == 0) return;
@@ -113,7 +113,7 @@
 
     const threadId = await createRoom({
       spaceId,
-      parentRoomId: current.roomId,
+      linkToRoom: current.roomId,
       kind: "space.roomy.thread",
       info: {
         name: threadName,
@@ -125,11 +125,9 @@
       await backend.sendEvent(spaceId, {
         id: newUlid(),
         room: current.roomId,
-        variant: {
-          $type: "space.roomy.link.createRoomLink.v0",
-          entity: message.id,
-          toRoom: threadId,
-        },
+        $type: "space.roomy.message.moveMessage.v0",
+        messageId: message.id,
+        toRoomId: threadId,
       });
     }
 
@@ -220,16 +218,14 @@
       const messageEvent: Event<"space.roomy.message.createMessage.v0"> = {
         id: messageId,
         room: Ulid.assert(page.params.object),
-        variant: {
-          $type: "space.roomy.message.createMessage.v0",
-          body: {
-            data: toBytes(new TextEncoder().encode(message)),
-            mimeType: "text/markdown",
-          },
-          extensions: {
-            "space.roomy.extension.attachments.v0": {
-              attachments,
-            },
+        $type: "space.roomy.message.createMessage.v0",
+        body: {
+          data: toBytes(new TextEncoder().encode(message)),
+          mimeType: "text/markdown",
+        },
+        extensions: {
+          "space.roomy.extension.attachments.v0": {
+            attachments,
           },
         },
       };

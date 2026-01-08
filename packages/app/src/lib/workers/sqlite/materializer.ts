@@ -220,7 +220,7 @@ const materializers: {
   },
 
   // TODO: fix
-  "space.roomy.link.createRoomLink.v0": async ({ data }) => {
+  "space.roomy.link.createRoomLink.v0": async ({}) => {
     // Update the parent room
     return []; // [
     //   data.room !== undefined
@@ -233,7 +233,7 @@ const materializers: {
   },
 
   // TODO: fix
-  "space.roomy.link.removeRoomLink.v0": async ({ data }) => {
+  "space.roomy.link.removeRoomLink.v0": async ({}) => {
     // Update the parent room
     return [];
   },
@@ -472,7 +472,7 @@ const materializers: {
     // Update the parent room
     return [
       sql`
-          update entities set room = ${data.roomId || null}
+          update entities set room = ${data.toRoomId || null}
           where id = ${data.messageId}
         `,
     ].filter((x) => !!x);
@@ -649,7 +649,7 @@ const materializers: {
    * We ensure the room entity exists using the streamId from the event data,
    * not the wrapper streamId (which would be the user's personal stream).
    */
-  "space.roomy.stream.personal.setLastRead.v0": async ({ event, data }) => {
+  "space.roomy.space.personal.setLastRead.v0": async ({ event, data }) => {
     // Extract timestamp from the event's ULID
     const timestamp = decodeTime(event.id);
 
@@ -715,8 +715,8 @@ export async function materialize(
   opts: { streamId: StreamDid; user: UserDid },
   idx: StreamIndex,
 ): Promise<Bundle.Statement> {
-  const kind = event.variant.$type;
-  const data = event.variant;
+  const kind = event.$type;
+  const data = event;
 
   try {
     const handler = materializers[kind];
@@ -731,7 +731,7 @@ export async function materialize(
     } as any);
 
     // some events depend on other events which must be materialized first
-    const dependsOn = getDependsOn(event.variant);
+    const dependsOn = getDependsOn(event);
 
     return bundleSuccess(event, idx, opts.user, statements, dependsOn);
   } catch (error) {

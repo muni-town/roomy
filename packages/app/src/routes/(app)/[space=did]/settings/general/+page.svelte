@@ -44,12 +44,10 @@
       // Update space info
       await backend.sendEvent(spaceId, {
         id: newUlid(),
-        variant: {
-          $type: "space.roomy.space.updateSpaceInfo.v0",
-          avatar: avatarChanged ? avatarUpload?.uri : undefined,
-          name: nameChanged ? spaceName : undefined,
-          description: descriptionChanged ? spaceDescription : undefined,
-        },
+        $type: "space.roomy.space.updateSpaceInfo.v0",
+        avatar: avatarChanged ? avatarUpload?.uri : undefined,
+        name: nameChanged ? spaceName : undefined,
+        description: descriptionChanged ? spaceDescription : undefined,
       });
 
       toast.success("Space updated successfully", {
@@ -93,10 +91,8 @@
     try {
       await backend.sendEvent(spaceId, {
         id: newUlid(),
-        variant: {
-          $type: "space.roomy.space.setHandleAccount.v0",
-          did: backendStatus.authState.did,
-        },
+        $type: "space.roomy.space.setHandleAccount.v0",
+        did: backendStatus.authState.did,
       });
       await backend.createStreamHandleRecord(spaceId);
       updateSpaceHandle += 1;
@@ -115,10 +111,8 @@
       await backend.removeStreamHandleRecord();
       await backend.sendEvent(spaceId, {
         id: newUlid(),
-        variant: {
-          $type: "space.roomy.space.setHandleAccount.v0",
-          did: null,
-        },
+        $type: "space.roomy.space.setHandleAccount.v0",
+        did: null,
       });
       updateSpaceHandle += 1;
       toast.success("Successfully updated handle");

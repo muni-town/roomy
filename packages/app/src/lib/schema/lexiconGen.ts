@@ -280,14 +280,7 @@ const schemaToLexiconDefs = (
   };
 };
 
-/** The top level event lexicon doc */
-const eventDef: LexiconDoc = {
-  lexicon: 1,
-  id: "space.roomy.event.v0",
-  description: eventJsonSchema.description,
-  defs: schemaToLexiconDefs(eventJsonSchema, 0),
-};
-eventLexicons.unshift(eventDef);
+schemaToObjProp(eventJsonSchema, 0)
 
 // Return the lexicons and the JSON schema
 export { eventLexicons, eventJsonSchema };

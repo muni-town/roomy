@@ -25,7 +25,7 @@ Primarily used for bridged accounts (e.g. Discord) where we can't retrieve the h
 );
 
 export const SetLastRead = type({
-  $type: "'space.roomy.stream.personal.setLastRead.v0'",
+  $type: "'space.roomy.space.personal.setLastRead.v0'",
   streamDid: StreamDid.describe("The stream containing the room"),
   roomId: Ulid.describe("The room being marked as read"),
 }).describe(

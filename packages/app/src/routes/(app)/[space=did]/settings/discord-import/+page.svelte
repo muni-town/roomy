@@ -149,24 +149,23 @@
         });
       }
 
-      for (const room of rooms.values()) {
-        const roomyParentId = room.discordParentId
-          ? rooms.get(room.discordParentId)?.roomyId
-          : undefined;
-        batch.push({
-          id: room.roomyId,
-          room: roomyParentId,
-          variant: {
-            $type: "space.roomy.room.createRoom.v0",
-            kind:
-              room.kind == "space.roomy.category"
-                ? "space.roomy.category"
-                : room.kind == "space.roomy.channel"
-                  ? "space.roomy.channel"
-                  : "space.roomy.thread",
-            name: room.name,
-          },
-        });
+      for (const _room of rooms.values()) {
+        throw new Error("TODO: need to setup sidebar properly");
+        // const roomyParentId = room.discordParentId
+        //   ? rooms.get(room.discordParentId)?.roomyId
+        //   : undefined;
+        // batch.push({
+        //   id: room.roomyId,
+        //   room: roomyParentId,
+        //   $type: "space.roomy.room.createRoom.v0",
+        //   kind:
+        //     room.kind == "space.roomy.category"
+        //       ? "space.roomy.category"
+        //       : room.kind == "space.roomy.channel"
+        //         ? "space.roomy.channel"
+        //         : "space.roomy.thread",
+        //   name: room.name,
+        // });
       }
 
       for (const channel of entries) {
@@ -190,19 +189,17 @@
           batch.push({
             id: messageId,
             room: roomId,
-            variant: {
-              $type: "space.roomy.message.createMessage.v0",
-              body: {
-                mimeType: "text/markdown",
-                data: toBytes(new TextEncoder().encode(message.content)),
+            $type: "space.roomy.message.createMessage.v0",
+            body: {
+              mimeType: "text/markdown",
+              data: toBytes(new TextEncoder().encode(message.content)),
+            },
+            extensions: {
+              "space.roomy.extension.authorOverride.v0": {
+                did: author,
               },
-              extensions: {
-                "space.roomy.extension.authorOverride.v0": {
-                  did: author,
-                },
-                "space.roomy.extension.timestampOverride.v0": {
-                  timestamp: Math.round(new Date(message.timestamp).getTime()),
-                },
+              "space.roomy.extension.timestampOverride.v0": {
+                timestamp: Math.round(new Date(message.timestamp).getTime()),
               },
             },
           });
@@ -212,12 +209,10 @@
               batch.push({
                 id: makeUlid(),
                 room: roomId,
-                variant: {
-                  $type: "space.roomy.reaction.addBridgedReaction.v0",
-                  reaction: reaction.emoji.name,
-                  reactingUser: UserDid.assert(`did:discord:${user.id}`),
-                  reactionTo: messageId,
-                },
+                $type: "space.roomy.reaction.addBridgedReaction.v0",
+                reaction: reaction.emoji.name,
+                reactingUser: UserDid.assert(`did:discord:${user.id}`),
+                reactionTo: messageId,
               });
             }
           }
@@ -231,20 +226,16 @@
           if (!existingDiscordUsers.has(author)) {
             batch.push({
               id: makeUlid(),
-              variant: {
-                $type: "space.roomy.user.updateProfile.v0",
-                did: author,
-                name: message.author.nickname,
-                avatar: `https://cdn.discordapp.com/avatars/${message.author.id}/${avatarHash}?size=64`,
-              },
+              $type: "space.roomy.user.updateProfile.v0",
+              did: author,
+              name: message.author.nickname,
+              avatar: `https://cdn.discordapp.com/avatars/${message.author.id}/${avatarHash}?size=64`,
             });
             batch.push({
               id: makeUlid(),
-              variant: {
-                $type: "space.roomy.user.overrideHandle.v0",
-                did: author,
-                handle: message.author.name,
-              },
+              $type: "space.roomy.user.overrideHandle.v0",
+              did: author,
+              handle: message.author.name,
             });
             existingDiscordUsers.add(author);
           }

@@ -16,17 +16,13 @@ export async function joinSpace(spaceId: StreamDid) {
     // Add the space to the personal list of joined spaces
     await backend.sendEvent(backendStatus.authState.personalStream, {
       id: newUlid(),
-      variant: {
-        $type: "space.roomy.space.personal.joinSpace.v0",
-        spaceDid: spaceId,
-      },
+      $type: "space.roomy.space.personal.joinSpace.v0",
+      spaceDid: spaceId,
     });
     // Tell the space that we joined.
     await backend.sendEvent(spaceId, {
       id: newUlid(),
-      variant: {
-        $type: "space.roomy.space.joinSpace.v0",
-      },
+      $type: "space.roomy.space.joinSpace.v0",
     });
   } catch (e) {
     console.error(e);
@@ -60,10 +56,8 @@ export async function createSpace(opts: {
   // Join the space
   await backend.sendEvent(opts.creator.personalStreamId, {
     id: newUlid(),
-    variant: {
-      $type: "space.roomy.space.personal.joinSpace.v0",
-      spaceDid: spaceDid,
-    },
+    $type: "space.roomy.space.personal.joinSpace.v0",
+    spaceDid: spaceDid,
   });
 
   console.log("sent join space event to personal stream");
@@ -77,45 +71,37 @@ export async function createSpace(opts: {
   // Update space info
   batch.push({
     id: newUlid(),
-    variant: {
-      $type: "space.roomy.space.updateSpaceInfo.v0",
-      avatar: avatarUpload?.uri,
-      name: currentSpaceName,
-      description: currentSpaceDescription,
-    },
+    $type: "space.roomy.space.updateSpaceInfo.v0",
+    avatar: avatarUpload?.uri,
+    name: currentSpaceName,
+    description: currentSpaceDescription,
   });
 
   // Create the "system" user as the space itself
   batch.push({
     id: newUlid(),
-    variant: {
-      $type: "space.roomy.user.overrideHandle.v0",
-      handle: "system",
-      did: spaceDid,
-    },
+    $type: "space.roomy.user.overrideHandle.v0",
+    handle: "system",
+    did: spaceDid,
   });
 
   const generalChannelId = newUlid();
   batch.push({
     id: generalChannelId,
-    variant: {
-      $type: "space.roomy.room.createRoom.v0",
-      kind: "space.roomy.channel",
-      name: "lobby",
-    },
+    $type: "space.roomy.room.createRoom.v0",
+    kind: "space.roomy.channel",
+    name: "lobby",
   });
 
   batch.push({
     id: newUlid(),
-    variant: {
-      $type: "space.roomy.space.updateSidebar.v0",
-      categories: [
-        {
-          name: "general",
-          children: [generalChannelId],
-        },
-      ],
-    },
+    $type: "space.roomy.space.updateSidebar.v0",
+    categories: [
+      {
+        name: "general",
+        children: [generalChannelId],
+      },
+    ],
   });
 
   await backend.sendEventBatch(spaceDid, batch);
