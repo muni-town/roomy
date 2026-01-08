@@ -75,7 +75,7 @@ const personal: ModuleWithCid = {
   def: personalModuleDef,
   cid: personalModuleCid,
 };
-personal.cid.then((cid) => console.log("Personal module CID:", cid));
+personal.cid.then((cid) => console.debug(`Personal module cid: ${cid}`));
 
 const spaceModuleDef: BasicModule = {
   $type: "muni.town.leaf.module.basic.v0" as const,
@@ -217,7 +217,7 @@ const space: ModuleWithCid = {
   def: spaceModuleDef,
   cid: spaceModuleCid,
 };
-space.cid.then((cid) => console.log("Space module CID:", cid));
+space.cid.then((cid) => console.debug(`Space module cid: ${cid}`));
 
 export const modules = {
   personal,

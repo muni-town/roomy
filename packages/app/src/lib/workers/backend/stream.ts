@@ -226,7 +226,10 @@ export class ConnectedStream {
 
           if (!result.Ok.has_more) {
             this.backfillStatus = { status: "finished" };
-            console.log("Done backfilling metadata", latest);
+            console.debug("Done backfilling metadata", {
+              streamId: this.id,
+              latest,
+            });
             this.#doneBackfillingMetadata.resolve(latest);
           }
         } else {

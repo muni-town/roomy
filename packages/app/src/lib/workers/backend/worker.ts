@@ -115,8 +115,6 @@ class WorkerSupervisor {
     if (!userDid || !UserDid.allows(userDid))
       throw new Error("DID not defined on client");
 
-    console.log("Authenticating SQLite worker with did", userDid);
-
     await this.sqlite
       .authenticate(UserDid.assert(userDid))
       .catch((e) => console.error("Failed to authenticate sqlite worker", e));
@@ -295,7 +293,7 @@ class WorkerSupervisor {
     // Prevent duplicate connections - only connect once per port
     if (this.#connection.ports.has(port)) {
       const existingId = this.#connection.ports.get(port);
-      console.log(
+      console.debug(
         `SharedWorker: Port already connected (ID: ${existingId}), skipping duplicate connection`,
       );
       return;
@@ -305,9 +303,10 @@ class WorkerSupervisor {
     this.#connection.ports.set(port, connectionId);
 
     // Log connection BEFORE setting up console forwarding to avoid broadcast duplication
-    console.debug(
-      `(init.1) SharedWorker backend connected (ID: ${connectionId}, total: ${this.#connection.count})`,
-    );
+    console.debug("(init.1) SharedWorker backend connected", {
+      id: connectionId,
+      total: this.#connection.count,
+    });
 
     // eslint-disable-next-line @typescript-eslint/no-empty-object-type
     const consoleInterface = messagePortInterface<
@@ -345,7 +344,7 @@ class WorkerSupervisor {
           id: faro.api.getSession()?.id,
           attributes: { isSampled: "true", did: client.agent.assertDid },
         });
-        console.info("Authenticated", { did: client.agent.assertDid });
+        console.info("ATProto Authenticated", { did: client.agent.assertDid });
 
         client.getProfile().then((profile) => {
           this.#status.profile = profile;
@@ -425,7 +424,7 @@ class WorkerSupervisor {
         );
       },
       async ping() {
-        console.log("Backend: Ping received");
+        console.info("Backend: Ping received");
         return {
           timestamp: Date.now(),
         };
@@ -455,7 +454,6 @@ class WorkerSupervisor {
         await this.client.sendEvent(streamId, event);
       },
       sendEventBatch: async (streamId, payloads) => {
-        console.log(payloads);
         encode(payloads);
         await this.client.sendEventBatch(streamId, payloads);
       },
@@ -463,7 +461,6 @@ class WorkerSupervisor {
         this.client.fetchEvents(streamId, offset, limit),
       lazyLoadRoom: async (streamId, roomId, end) => {
         await this.sqlite.untilReady;
-        console.log("fetching room");
         return await this.client.lazyLoadRoom(streamId, roomId, end);
       },
       uploadToPds: async (bytes, opts) => {
@@ -594,18 +591,16 @@ class SqliteSupervisor {
   async authenticate(did: UserDid) {
     await this.untilReady;
     await this.sqliteWorker.authenticate(did);
-    console.log("SQLite Worker authenticated:", did);
+    console.debug(`SQLite reinitialised with did: ${did}`);
   }
 
   async setReady(workerInterface: SqliteWorkerInterface) {
     if (this.#state.state === "pending") {
       const previousSchemaVersion = await prevStream.getSchemaVersion();
-      console.debug(
-        "(init.2) SQLite Supervisor ready. schemaVersion:",
+      console.debug("(init.2) SQLite Supervisor ready.", {
         previousSchemaVersion,
-        "current:",
-        CONFIG.streamSchemaVersion,
-      );
+        current: CONFIG.streamSchemaVersion,
+      });
       if (
         previousSchemaVersion &&
         previousSchemaVersion != CONFIG.streamSchemaVersion

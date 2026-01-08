@@ -58,10 +58,6 @@ export class Client {
 
   // authenticate using app password (testing only)
   static async loginWithAppPassword(handle: string, appPassword: string) {
-    console.log(
-      "Client.loginWithAppPassword: Starting authentication for",
-      handle,
-    );
     const atpAgent = new AtpAgent({ service: "https://bsky.social" });
 
     try {
@@ -69,7 +65,6 @@ export class Client {
         identifier: handle,
         password: appPassword,
       });
-      console.log("Client.loginWithAppPassword: Login successful");
     } catch (error) {
       console.error("Client.loginWithAppPassword: Login failed", error);
       throw error;
@@ -79,18 +74,16 @@ export class Client {
       throw new Error("Failed to authenticate with app password");
     }
 
-    console.log("Client.loginWithAppPassword: Storing DID", atpAgent.did);
     // Store DID for consistency with OAuth flow
     await db.kv.put({ key: "did", value: atpAgent.did });
 
-    console.log("Client.loginWithAppPassword: Creating client from agent");
     return Client.fromAgent(atpAgent);
   }
 
   // restore previous session or return `undefined` if there was none
   static async new(): Promise<Client | undefined> {
     if (CONFIG.testingAppPassword && CONFIG.testingHandle) {
-      console.log("Using app password authentication for testing");
+      console.debug("Using app password authentication for testing");
       return Client.loginWithAppPassword(
         CONFIG.testingHandle,
         CONFIG.testingAppPassword,
@@ -128,7 +121,6 @@ export class Client {
         return resp.data.token;
       });
 
-      console.log("Initialized leaf client");
       return new Client(agent, leaf);
     } catch (e) {
       console.error(e);
@@ -171,7 +163,7 @@ export class Client {
     personalStream: ConnectedStream,
     streamList: Map<StreamDid, StreamIndex>,
   ) {
-    console.log("Client connecting", streamList);
+    console.debug("Client connecting", streamList);
 
     const streams = new Map<StreamDid, ConnectedStream>();
     const failed: StreamDid[] = [];
@@ -201,7 +193,7 @@ export class Client {
     };
     this.#connected.resolve(this.#streamConnection);
 
-    console.log("Client connected");
+    console.debug("(init.3) Client connected");
 
     return { streams, failed };
   }
@@ -217,14 +209,14 @@ export class Client {
 
   setLeafHandlers() {
     this.leaf.on("connect", async () => {
-      console.log("Leaf: connected");
+      console.info("Leaf: connected");
     });
     this.leaf.on("disconnect", () => {
-      console.log("Leaf: disconnected");
+      console.info("Leaf: disconnected");
       this.#streamConnection = { status: "offline" };
     });
     this.leaf.on("authenticated", async (did) => {
-      console.log("Leaf: authenticated as", did);
+      console.info("Leaf: authenticated as", { did });
       this.#leafAuthenticated.resolve();
     });
   }
@@ -250,13 +242,8 @@ export class Client {
       throw new Error("Client must be connected to add new space stream");
     await this.#leafAuthenticated.promise;
 
-    console.log("Connecting to space stream", streamId, idx);
-
     const alreadyConnected = this.#streamConnection.streams.get(streamId);
-    if (alreadyConnected) {
-      console.log("Already connected");
-      return;
-    }
+    if (alreadyConnected) return;
 
     const stream = await ConnectedStream.connect({
       user: UserDid.assert(this.agent.assertDid),
@@ -272,8 +259,6 @@ export class Client {
 
     this.#streamConnection.streams.set(streamId, stream);
 
-    console.log("Successfully connected to stream");
-
     return;
   }
 
@@ -282,7 +267,6 @@ export class Client {
       throw new Error("Client must be connected to add new space stream");
     await this.#leafAuthenticated.promise;
 
-    console.log("Creating space stream");
     const newStream = await ConnectedStream.create({
       user: UserDid.assert(this.agent.assertDid),
       leaf: this.leaf,
@@ -292,7 +276,7 @@ export class Client {
 
     await newStream.backfillAndSubscribeAllEvents();
 
-    console.log("Successfully created space stream:", newStream.id);
+    console.debug("Successfully created space stream:", newStream.id);
 
     // add to stream connection map
     this.#streamConnection.streams.set(newStream.id, newStream);
@@ -358,7 +342,6 @@ export class Client {
           this.agent.assertDid,
           existingRecord.id,
         );
-        console.log("Found existing stream ID from PDS:", existingRecord.id);
         stream = await ConnectedStream.connect({
           user: UserDid.assert(this.agent.assertDid),
           leaf: this.leaf,
@@ -369,14 +352,14 @@ export class Client {
         });
       } catch (e) {
         if ((e as any).error === "RecordNotFound") {
-          console.log(
+          console.info(
             "Could not find existing stream ID on PDS. Creating new stream!",
           );
 
           // create a new stream on leaf server
           stream = await this.createPersonalStream(eventChannel);
 
-          console.log("Putting record");
+          console.debug("Putting record to PDS");
 
           // put the stream ID in a record
           const putResponse = await this.agent.com.atproto.repo.putRecord({
@@ -428,7 +411,6 @@ export class Client {
 
     // Get the module id for this stream to check whether or not we need to update the module.
     const streamInfo = await this.leaf.streamInfo(stream.id);
-    console.log("Client.ensurePersonalStream StreamInfo", streamInfo);
 
     return stream;
   }
@@ -450,7 +432,11 @@ export class Client {
         );
       }
     });
-    console.log(streamId, payloads, encodedPayloads);
+    console.debug("sending event batch", {
+      streamId,
+      payloads,
+      encodedPayloads,
+    });
     await this.leaf.sendEvents(streamId, encodedPayloads);
   }
 

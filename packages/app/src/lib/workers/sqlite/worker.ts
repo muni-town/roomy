@@ -221,7 +221,7 @@ class SqliteWorkerSupervisor {
       for await (const batch of this.#eventChannel) {
         const bundles: Bundle.Statement[] = [];
 
-        console.time("convert-events-to-sql");
+        // console.time("convert-events-to-sql");
 
         // reset ensured flags for each new batch
         this.#ensuredProfiles = new Set();
@@ -300,8 +300,6 @@ class SqliteWorkerSupervisor {
           }
         }
 
-        console.debug("materialised, awaiting application", { bundles, batch });
-
         this.#statementChannel.push(
           {
             status: "transformed",
@@ -314,7 +312,7 @@ class SqliteWorkerSupervisor {
           },
           batch.priority,
         );
-        console.timeEnd("convert-events-to-sql");
+        // console.timeEnd("convert-events-to-sql");
       }
     })();
   }
@@ -326,13 +324,6 @@ class SqliteWorkerSupervisor {
         // apply statements
         try {
           const result = await this.runStatementBatch(batch);
-          console.debug(
-            "Ran statements",
-            batch,
-            "got result",
-            result,
-            "pushing to resultChannel",
-          );
 
           // resolve promises
           try {
@@ -1044,7 +1035,6 @@ class SqliteWorkerSupervisor {
     priority: TaskPriority = "background",
   ) {
     // so this is where we need to coordinate across the chain of channels
-    console.debug("Materialising events batch", eventsBatch.batchId);
     const resultPromise = new Promise<Batch.ApplyResult>((resolve) => {
       this.#pendingBatches.set(eventsBatch.batchId, resolve);
     });
