@@ -157,13 +157,16 @@ export class ConnectedStream {
         if ("Ok" in result) {
           const events = parseEvents(result.Ok.rows);
           const batchId = newUlid();
-          this.eventChannel.push({
-            status: "events",
-            batchId,
-            streamId: this.id as StreamDid,
-            events,
-            priority: "priority",
-          });
+
+          if (events.length !== 0) {
+            this.eventChannel.push({
+              status: "events",
+              batchId,
+              streamId: this.id as StreamDid,
+              events,
+              priority: "priority",
+            });
+          }
 
           if (!result.Ok.has_more) {
             this.backfillStatus = { status: "finished" };
@@ -209,13 +212,15 @@ export class ConnectedStream {
       async (result) => {
         if ("Ok" in result) {
           const events = parseEvents(result.Ok.rows);
-          this.eventChannel.push({
-            status: "events",
-            batchId: newUlid(),
-            streamId: this.id as StreamDid,
-            events,
-            priority: "priority",
-          });
+          if (events.length !== 0) {
+            this.eventChannel.push({
+              status: "events",
+              batchId: newUlid(),
+              streamId: this.id as StreamDid,
+              events,
+              priority: "priority",
+            });
+          }
 
           const latestEvent = events
             .map((x) => x.idx)
@@ -291,14 +296,17 @@ export class ConnectedStream {
     if (oldestEnd) this.lazyEndIdx.set(roomId, oldestEnd);
 
     const events = await this.fetchRoom(roomId, limit, end);
+
     // materialise
-    this.eventChannel.push({
-      status: "events",
-      batchId: newUlid(),
-      streamId: this.id as StreamDid,
-      events,
-      priority: "priority",
-    });
+    if (events.length !== 0) {
+      this.eventChannel.push({
+        status: "events",
+        batchId: newUlid(),
+        streamId: this.id as StreamDid,
+        events,
+        priority: "priority",
+      });
+    }
 
     if (end) return;
     // for the initial case for room load, set cursor to the most recent idx from the returned events
