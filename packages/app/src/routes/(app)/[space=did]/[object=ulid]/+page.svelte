@@ -305,7 +305,7 @@
 
         <div class="grow w-1/2"></div>
 
-        <Popover>
+        <!-- <Popover>
           {#snippet child({ props })}
             <Button {...props} variant="secondary" size="icon">
               <IconTablerClick class="shrink-0" />
@@ -338,7 +338,7 @@
               }}>Convert to Page</Button
             >
           </div>
-        </Popover>
+        </Popover> -->
 
         {#if current.isSpaceAdmin}
           <Button

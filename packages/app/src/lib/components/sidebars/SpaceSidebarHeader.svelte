@@ -82,9 +82,9 @@
     <div class="flex flex-col items-start justify-stretch gap-2 w-[204px]">
       <Button
         onclick={() => {
-          navigator.clipboard.writeText(
-            `${page.url.href}?name=${encodeURIComponent(current.joinedSpace?.name ?? "")}&avatar=${encodeURIComponent(current.joinedSpace?.avatar ?? "")}`,
-          );
+          const url = new URL(page.url.href);
+          url.pathname = `/${page.params.space}`
+          navigator.clipboard.writeText(url.href);
           toast.success("Invite link copied to clipboard");
         }}
         class="w-full"

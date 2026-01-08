@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dev } from "$app/environment";
   import { page } from "$app/state";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import MainSidebarSpace from "$lib/components/sidebars/SpaceSidebarHeader.svelte";
@@ -15,11 +16,13 @@
       label: "Members",
       slug: "members",
     },
-    {
+  ];
+  if (dev) {
+    sidebarLinks.push({
       label: "Discord Import",
       slug: "discord-import",
-    },
-  ] as const;
+    });
+  }
 
   let { children } = $props();
 </script>
