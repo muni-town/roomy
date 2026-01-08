@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { flags } from "$lib/flags";
   import { current, sidebar } from "$lib/queries";
   import SidebarItemList from "./SidebarItemList.svelte";
   import SpaceSidebarHeader from "./SpaceSidebarHeader.svelte";
@@ -44,17 +45,19 @@
   {/if}
 
   <div class="w-full pt-2 px-2">
-    <Button
-      class="w-full justify-start mb-2"
-      variant="ghost"
-      href={`/${page.params.space}`}
-      data-current={!page.params.object}
-    >
-      <IconHeroiconsHome class="shrink-0" />
-      Index
-    </Button>
+    {#if flags.spaceIndex}
+      <Button
+        class="w-full justify-start mb-2"
+        variant="ghost"
+        href={`/${page.params.space}`}
+        data-current={!page.params.object}
+      >
+        <IconHeroiconsHome class="shrink-0" />
+        Index
+      </Button>
 
-    <hr class="my-2 border-base-800/10 dark:border-base-100/5" />
+      <hr class="my-2 border-base-800/10 dark:border-base-100/5" />
+    {/if}
 
     <SidebarItemList bind:isEditing items={sidebar.result || []} />
   </div>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fade } from "svelte/transition";
 
-  import { current } from "$lib/queries";
+  import { current, sidebar as sidebarQuery } from "$lib/queries";
   import { backendStatus } from "$lib/workers";
   import { onNavigate } from "$app/navigation";
 
@@ -16,8 +16,23 @@
 
   import type { ThreadInfo } from "$lib/components/content/thread/boardView/types";
   import Error from "$lib/components/modals/Error.svelte";
+  import { flags } from "$lib/flags";
+  import { navigate } from "$lib/utils.svelte";
 
   const spaceId = $derived(current.joinedSpace?.id);
+
+  $effect(() => {
+    if (flags.spaceIndex || !current.joinedSpace) return;
+    const firstCategory = sidebarQuery.result?.[0];
+    if (firstCategory?.type === "space.roomy.category") {
+      const firstChild = firstCategory.children?.[0]?.id;
+      if (firstChild)
+        navigate({
+          space: current.joinedSpace.id,
+          channel: firstChild,
+        });
+    }
+  });
 
   let threadsQuery = new LiveQuery<ThreadInfo>(
     () => {
