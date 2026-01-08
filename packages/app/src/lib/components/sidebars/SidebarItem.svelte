@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { navigateSync } from "$lib/utils.svelte";
-  import { Badge, Button } from "@fuxui/base";
+  import { Badge, Button, Heading, Input, Modal, Label } from "@fuxui/base";
   // import { atprotoFeedService } from "$lib/services/atprotoFeedService";
   import SidebarItemList from "./SidebarItemList.svelte";
   import type { SidebarItem } from "$lib/queries";
@@ -28,6 +28,8 @@
 
   // console.log("sidebar item level", level, item);
 
+  let showEditModal = $state(false);
+  let editName = $state(item.name);
   let showGroupChildren = $state(true);
   // TODO: actually handle unreads & subthreads
   let hasUnread = $state(false);
@@ -89,12 +91,31 @@
   // });
 </script>
 
+<Modal bind:open={showEditModal}>
+  <Heading
+    >Edit {item.type == "space.roomy.category"
+      ? "Category"
+      : item.type == "space.roomy.channel"
+        ? "Channel"
+        : "Item"}</Heading
+  >
+
+  <Label>
+    Name
+    <Input bind:value={editName} />
+  </Label>
+
+  <div class="flex justify-end">
+    <Button onclick={() => {}}>Save</Button>
+  </div>
+</Modal>
+
 {#snippet editButton()}
   {#if isEditing}
     <Button
       variant="ghost"
       size="icon"
-      onclick={() => "editEntity?.(object)"}
+      onclick={() => (showEditModal = true)}
       class="group-hover:opacity-100 opacity-0"
     >
       <IconLucidePencil class="size-4" />
@@ -247,6 +268,7 @@
     </Button>
     {@render editButton?.()}
   </div> -->
+
 {#if item.type == "space.roomy.category"}
   <!-- Object is a group/folder -->
   <div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink pb-4">
