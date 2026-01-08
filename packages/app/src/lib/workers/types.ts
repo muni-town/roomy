@@ -70,6 +70,12 @@ export interface EncodedStreamEvent {
   payload: Uint8Array;
 }
 
+export interface DecodedStreamEvent {
+  idx: StreamIndex;
+  event: Event;
+  user: UserDid;
+}
+
 /** SqliteWorker handles a pipeline of batched computations, transforming
  * batches from Events to SQL Statements to Results
  */
@@ -78,7 +84,7 @@ export namespace Batch {
     status: "events";
     batchId: Ulid;
     streamId: StreamDid;
-    events: EncodedStreamEvent[];
+    events: DecodedStreamEvent[];
     priority: TaskPriority;
   }
 
@@ -87,11 +93,7 @@ export namespace Batch {
     batchId: Ulid;
     streamId: StreamDid;
     priority: TaskPriority;
-    events: Array<{
-      idx: StreamIndex;
-      event: Event; // Already decoded
-      user: UserDid;
-    }>;
+    events: Array<DecodedStreamEvent>;
   }
 
   export interface Statement {

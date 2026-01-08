@@ -226,33 +226,9 @@ class SqliteWorkerSupervisor {
         // reset ensured flags for each new batch
         this.#ensuredProfiles = new Set();
 
-        const decodedEvents =
-          batch.status === "events"
-            ? batch.events
-                .map((e) => {
-                  try {
-                    // Convert ArrayBuffer to Uint8Array for decoding
-                    const payloadBytes = new Uint8Array(e.payload);
-                    const decoded = decode(payloadBytes);
-                    const result = parseEvent(decoded);
-                    if (result.success) {
-                      return [e, result.data] as const;
-                    } else throw result.error;
-                  } catch (error) {
-                    const payloadBytes = new Uint8Array(e.payload);
-                    console.warn(
-                      `Skipping malformed event (idx ${e.idx}): Failed to decode ${payloadBytes.length} bytes.`,
-                      `Error:`,
-                      error instanceof Error ? error.message : error,
-                    );
-                    // Return null to filter out this event
-                    return null;
-                  }
-                })
-                .filter((e): e is Exclude<typeof e, null> => e !== null)
-            : batch.events.map((e) => {
-                return [e, e.event] as const;
-              });
+        const decodedEvents = batch.events.map((e) => {
+          return [e, e.event] as const;
+        });
 
         // Make sure all of the profiles we need are downloaded and inserted
         const neededProfiles = new Set<UserDid>();
@@ -288,10 +264,7 @@ class SqliteWorkerSupervisor {
 
             if (bundle.status === "success") {
               // Collect space IDs to connect AFTER batch is applied
-              if (
-                event.$type ===
-                "space.roomy.space.personal.joinSpace.v0"
-              ) {
+              if (event.$type === "space.roomy.space.personal.joinSpace.v0") {
                 spacesToConnect.push(event.spaceDid);
               }
             }
@@ -753,8 +726,7 @@ class SqliteWorkerSupervisor {
 
       // If this event is a reorder event that modifies the `after` position for another event.
       if (
-        eventMeta.event.$type ==
-          "space.roomy.message.reorderMessage.v0" &&
+        eventMeta.event.$type == "space.roomy.message.reorderMessage.v0" &&
         eventMeta.event.after
       ) {
         // We need to update the event's "after" field

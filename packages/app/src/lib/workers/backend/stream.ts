@@ -1,5 +1,10 @@
 import type { LeafClient, LeafQuery, SqlRows } from "@muni-town/leaf-client";
-import type { Batch, EncodedStreamEvent, TaskPriority } from "../types";
+import type {
+  Batch,
+  DecodedStreamEvent,
+  EncodedStreamEvent,
+  TaskPriority,
+} from "../types";
 import type { AsyncChannel } from "../asyncChannel";
 import {
   StreamDid,
@@ -9,8 +14,9 @@ import {
   UserDid,
   type Event,
   Ulid,
+  parseEvent,
 } from "$lib/schema";
-import { encode } from "@atcute/cbor";
+import { decode, encode } from "@atcute/cbor";
 import { Deferred } from "$lib/utils/deferred";
 import type { ModuleWithCid } from "./modules";
 
@@ -155,7 +161,7 @@ export class ConnectedStream {
       },
       async (result) => {
         if ("Ok" in result) {
-          const events = parseEvents(result.Ok.rows);
+          const events = decodeEvents(parseEvents(result.Ok.rows));
           const batchId = newUlid();
 
           if (events.length !== 0) {
@@ -211,7 +217,7 @@ export class ConnectedStream {
       },
       async (result) => {
         if ("Ok" in result) {
-          const events = parseEvents(result.Ok.rows);
+          const events = decodeEvents(parseEvents(result.Ok.rows));
           if (events.length !== 0) {
             this.eventChannel.push({
               status: "events",
@@ -262,7 +268,7 @@ export class ConnectedStream {
     roomId: Ulid,
     limit: number,
     end?: StreamIndex,
-  ): Promise<EncodedStreamEvent[]> {
+  ): Promise<DecodedStreamEvent[]> {
     const params: LeafQuery["params"] = {
       room: { $type: "muni.town.sqliteValue.text", value: roomId },
     };
@@ -273,7 +279,7 @@ export class ConnectedStream {
       params,
       limit,
     });
-    const events = parseEvents(resp);
+    const events = decodeEvents(parseEvents(resp));
     events.reverse();
     return events;
   }
@@ -330,14 +336,14 @@ export class ConnectedStream {
   async fetchEvents(
     start: StreamIndex,
     limit: number,
-  ): Promise<EncodedStreamEvent[]> {
+  ): Promise<DecodedStreamEvent[]> {
     const resp = await this.leaf?.query(this.id, {
       name: "events",
       params: {},
       limit,
       start,
     });
-    const events = parseEvents(resp);
+    const events = decodeEvents(parseEvents(resp));
     return events;
   }
 }
@@ -366,4 +372,31 @@ export function parseEvents(rows: SqlRows): EncodedStreamEvent[] {
       payload: result.payload?.value,
     };
   });
+}
+
+export function decodeEvents(
+  events: EncodedStreamEvent[],
+): DecodedStreamEvent[] {
+  return events
+    .map((e) => {
+      try {
+        // Convert ArrayBuffer to Uint8Array for decoding
+        const payloadBytes = new Uint8Array(e.payload);
+        const decoded = decode(payloadBytes);
+        const result = parseEvent(decoded);
+        if (result.success) {
+          return { idx: e.idx, event: result.data, user: e.user } as const;
+        } else throw result.error;
+      } catch (error) {
+        const payloadBytes = new Uint8Array(e.payload);
+        console.warn(
+          `Skipping malformed event (idx ${e.idx}): Failed to decode ${payloadBytes.length} bytes.`,
+          `Error:`,
+          error instanceof Error ? error.message : error,
+        );
+        // Return null to filter out this event
+        return null;
+      }
+    })
+    .filter((e): e is Exclude<typeof e, null> => e !== null);
 }
