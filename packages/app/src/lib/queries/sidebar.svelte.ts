@@ -36,9 +36,10 @@ $effect.root(() => {
           comp_space space,
           json_each(space.sidebar_config -> 'categories') as categories
         left join json_each(categories.value -> 'children') as children
-        left join
-          comp_info child_info on child_info.entity = children.value
+        left join comp_info child_info on child_info.entity = children.value
+        left join comp_room child_room on child_room.entity = children.value
         where space.entity = ${spaceId}
+          and (child_room.entity is null or child_room.deleted != 1)
         group by categories.value -> 'name'
       `;
     },

@@ -93,6 +93,15 @@ export async function renameRoom(opts: {
   });
 }
 
+export async function deleteRoom(opts: { spaceId: StreamDid; roomId: Ulid }) {
+  await backend.sendEvent(opts.spaceId, {
+    id: newUlid(),
+    $type: "space.roomy.room.deleteRoom.v0",
+    roomId: opts.roomId,
+  });
+  // TODO: remove room from sidebar if in sidebar
+}
+
 export async function addRoomToSidebar(opts: {
   spaceId: StreamDid;
   category: string;

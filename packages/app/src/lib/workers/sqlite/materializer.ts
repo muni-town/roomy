@@ -212,7 +212,7 @@ const materializers: {
       sql`
         update comp_room
         set deleted = 1
-        where id = ${event.roomId}
+        where entity = ${event.roomId}
       `,
     ];
   },

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { renameRoom } from "$lib/mutations/room";
+  import { deleteRoom, renameRoom } from "$lib/mutations/room";
   import { current } from "$lib/queries";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
@@ -41,8 +41,6 @@
   );
   const room = $derived(roomQuery.result?.[0]);
   let name = $derived(room?.name);
-
-  async function deleteObject() {}
 </script>
 
 {#if !room}
@@ -89,7 +87,18 @@
           </p>
         </div>
         <div class="flex justify-start">
-          <Button onclick={deleteObject} class="justify-start" variant="red">
+          <Button
+            onclick={async () => {
+              if (!current.joinedSpace || !current.roomId)
+                throw new Error("Could not find current room ID");
+              await deleteRoom({
+                spaceId: current.joinedSpace.id,
+                roomId: current.roomId,
+              });
+            }}
+            class="justify-start"
+            variant="red"
+          >
             <IconLucideTrash class="size-4" />
             Delete object
           </Button>
