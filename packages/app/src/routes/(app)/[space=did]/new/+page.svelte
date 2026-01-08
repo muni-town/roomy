@@ -1,13 +1,12 @@
 <script lang="ts">
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
-  import { LiveQuery } from "$lib/utils/liveQuery.svelte";
-  import { current } from "$lib/queries";
+  import { categoriesQuery, current } from "$lib/queries";
   import { navigate } from "$lib/utils.svelte";
-  import { sql } from "$lib/utils/sqlTemplate";
   import { backend } from "$lib/workers";
   import { Button, Input, ScrollArea, Select } from "@fuxui/base";
   import { Ulid, ulidFactory } from "$lib/schema";
+  import { deepClone } from "@ark/util";
 
   const types = ["Channel", "Category"] as const;
   let type = $state("Channel") as (typeof types)[number];
@@ -15,38 +14,58 @@
 
   const spaceId = current.joinedSpace?.id;
 
-  let selectedCategory = $state("") as Ulid;
-
-  let categoriesQuery = new LiveQuery<{ name: string; id: string }>(
-    () => sql`
-      select i.name, e.id as id
-      from entities e
-        inner join comp_room r on e.id = r.entity
-        inner join comp_info i on e.id = i.entity
-      where
-        e.stream_id = ${spaceId}
-          and
-        r.label = 'space.roomy.category' 
-    `,
+  let categories = $derived(
+    categoriesQuery.result?.map((x) => ({
+      name: x.name,
+      children: x.children.map((x) => Ulid.assert(x.id)),
+    })),
   );
-  const categories = $derived(categoriesQuery.result || []);
+
+  let selectedCategory = $state("");
+  $effect(() => {
+    selectedCategory = categories?.[0]?.name || "";
+  });
 
   async function createRoom() {
-    if (!spaceId) return;
+    if (!spaceId || !categories) return;
 
     const newUlid = ulidFactory();
 
+    const newCategories = deepClone(categories);
+
     // Create a new room
-    const roomId = newUlid();
-    await backend.sendEvent(spaceId, {
-      id: roomId,
-      $type: "space.roomy.room.createRoom.v0",
-      kind: type == "Category" ? "space.roomy.category" : "space.roomy.channel",
-      name,
-    });
+    const id = newUlid();
+    if (type == "Category") {
+      newCategories.push({ name, children: [] });
+
+      await backend.sendEvent(spaceId, {
+        id,
+        $type: "space.roomy.space.updateSidebar.v0",
+        categories: newCategories,
+      });
+    } else {
+      const selected = newCategories.find((x) => x.name == selectedCategory);
+      if (!selected) throw new Error("Must select category");
+
+      selected.children.push(id);
+
+      await backend.sendEventBatch(spaceId, [
+        {
+          id,
+          $type: "space.roomy.room.createRoom.v0",
+          kind: "space.roomy.channel",
+          name,
+        },
+        {
+          id: newUlid(),
+          $type: "space.roomy.space.updateSidebar.v0",
+          categories: newCategories,
+        },
+      ]);
+    }
 
     if (type == "Channel") {
-      navigate({ space: spaceId, object: roomId });
+      navigate({ space: spaceId, object: id });
     } else if (type == "Category") {
       navigate({ space: spaceId });
     }
@@ -110,7 +129,7 @@
         </div>
       </fieldset>
 
-      {#if type != "Category"}
+      {#if type != "Category" && !!categories}
         <div>
           <label
             for="parent"
@@ -121,10 +140,7 @@
             <Select
               bind:value={selectedCategory}
               type="single"
-              items={[
-                { value: "", label: "General" },
-                ...categories.map((x) => ({ value: x.id, label: x.name })),
-              ]}
+              items={categories.map((x) => ({ value: x.name, label: x.name }))}
             />
           </div>
         </div>

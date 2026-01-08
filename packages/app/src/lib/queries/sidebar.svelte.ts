@@ -3,7 +3,7 @@ import { current } from "./current.svelte";
 import { sql } from "$lib/utils/sqlTemplate";
 import type { SidebarItem } from "./types";
 
-let categoriesQuery: LiveQuery<{
+export let categoriesQuery: LiveQuery<{
   name: string;
   children: { id: string; name: string }[];
 }>;
@@ -22,18 +22,21 @@ $effect.root(() => {
       return sql`
         select json_object(
           'name', categories.value -> 'name',
-          'children', json_group_array(
-            json_object(
-              'name', child_info.name,
-              'id', child_info.entity
+          'children', case when count(children.value) > 0 
+            then json_group_array(
+              json_object(
+                'name', child_info.name,
+                'id', child_info.entity
+              )
             )
-          )
+            else json('[]')
+            end
         ) as json
         from
           comp_space space,
-          json_each(space.sidebar_config -> 'categories') as categories,
-          json_each(categories.value -> 'children') as children
-        join
+          json_each(space.sidebar_config -> 'categories') as categories
+        left join json_each(categories.value -> 'children') as children
+        left join
           comp_info child_info on child_info.entity = children.value
         where space.entity = ${spaceId}
         group by categories.value -> 'name'
@@ -44,6 +47,7 @@ $effect.root(() => {
 
   // Convert categories query to expected sidebar items structure
   $effect(() => {
+    console.log(categoriesQuery.result);
     if (categoriesQuery.result) {
       sidebar.result = categoriesQuery.result.map((x) => ({
         type: "space.roomy.category",
