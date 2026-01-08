@@ -119,14 +119,16 @@
 
     toggleMessageSelection(message: Message) {
       if (this.state.kind !== "threading") return;
-      const messageIdx = this.state.selectedMessages.findIndex(
-        (x) => x.id == message.id,
+      const messages = new Map(
+        this.state.selectedMessages.map((m) => [m.id, m]),
       );
-      if (messageIdx != -1) {
-        this.state.selectedMessages.splice(messageIdx, 1);
+
+      if (messages.has(message.id)) {
+        messages.delete(message.id);
       } else {
-        this.state.selectedMessages.push(message);
+        messages.set(message.id, message);
       }
+      this.state.selectedMessages = Array.from(messages.values());
     }
   }
 
@@ -139,9 +141,9 @@
   import { setInputFocus } from "./ChatInput.svelte";
   import type { Ulid } from "$lib/schema";
 
-  $effect(() => {
-    console.log("messaging state", messagingState.current);
-  });
+  // $effect(() => {
+  //   console.debug("messaging state", $state.snapshot(messagingState.current));
+  // });
 
   function startThreading(message?: Message) {
     const currentState = messagingState.current;
@@ -151,9 +153,6 @@
       name: message ? message.content : "Thread",
       selectedMessages: message ? [message] : [],
     });
-    if (message && messagingState.current.kind === "threading") {
-      messagingState.current.selectedMessages.push(message);
-    }
     setInputFocus();
   }
 
