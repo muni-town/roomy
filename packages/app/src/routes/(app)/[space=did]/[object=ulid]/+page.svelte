@@ -185,7 +185,6 @@
 
   $effect(() => {
     if (!current.joinedSpace?.id || !current.roomId) return;
-    console.log("call lazy load", current.joinedSpace.id, current.roomId);
     backend.lazyLoadRoom(current.joinedSpace.id, current.roomId);
   });
 </script>

@@ -47,7 +47,9 @@ $effect.root(() => {
 
   // Convert categories query to expected sidebar items structure
   $effect(() => {
-    console.log(categoriesQuery.result);
+    if (!current.joinedSpace || categoriesQuery.current.status === "loading")
+      return;
+    console.debug("categories", $state.snapshot(categoriesQuery.result));
     if (categoriesQuery.result) {
       sidebar.result = categoriesQuery.result.map((x) => ({
         type: "space.roomy.category",

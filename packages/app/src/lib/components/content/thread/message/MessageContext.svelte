@@ -46,7 +46,7 @@
 
   if (!context) throw new Error("No relevant context");
 
-  console.log("context", context);
+  console.log("message context", $state.snapshot(context));
 
   const scrollToMessage = getContext("scrollToMessage") as (id: string) => void;
 </script>
