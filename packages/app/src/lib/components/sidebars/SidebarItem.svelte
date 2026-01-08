@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { navigateSync } from "$lib/utils.svelte";
-  import { Badge, Button, Heading, Input, Modal, Label } from "@fuxui/base";
+  import { Badge, Button } from "@fuxui/base";
   // import { atprotoFeedService } from "$lib/services/atprotoFeedService";
   import SidebarItemList from "./SidebarItemList.svelte";
   import type { SidebarItem } from "$lib/queries";

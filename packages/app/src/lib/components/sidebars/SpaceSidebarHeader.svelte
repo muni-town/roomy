@@ -10,7 +10,7 @@
   import IconLucideChevronDown from "~icons/lucide/chevron-down";
   import IconLucideShare from "~icons/lucide/share";
   import IconLucidePlus from "~icons/lucide/plus";
-  import IconLucidePencil from "~icons/lucide/pencil";
+  // import IconLucidePencil from "~icons/lucide/pencil";
   import IconLucideSettings from "~icons/lucide/settings";
   import IconLucideLogOut from "~icons/lucide/log-out";
 
@@ -100,7 +100,7 @@
         >
           <IconLucidePlus class="size-4" /> New
         </Button>
-        <Button
+        <!-- <Button
           class="w-full"
           onclick={() => {
             isEditing = !isEditing;
@@ -110,7 +110,7 @@
         >
           <IconLucidePencil class="size-4" />
           {isEditing ? "Finish editing" : "Edit Sidebar"}
-        </Button>
+        </Button> -->
 
         <Button
           class="w-full"

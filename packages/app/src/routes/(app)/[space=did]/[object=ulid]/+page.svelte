@@ -21,7 +21,6 @@
     convertToPage,
     convertToThread,
     createPage,
-    addRoomToSidebar,
     setPageReadMarker,
   } from "$lib/mutations/room";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
@@ -44,10 +43,12 @@
   import IconHeroiconsDocument from "~icons/heroicons/document";
   import IconHeroiconsChatBubbleLeftRight from "~icons/heroicons/chat-bubble-left-right";
   import IconTablerClick from "~icons/tabler/click";
+  import IconTablerSettings from "~icons/tabler/settings";
 
   import Error from "$lib/components/modals/Error.svelte";
   import { Ulid } from "$lib/schema";
   import { flags } from "$lib/flags";
+  import EditRoomModal from "$lib/components/modals/EditRoomModal.svelte";
 
   let createPageDialogOpen = $state(false);
   let createPageName = $state("");
@@ -62,6 +63,8 @@
   let shouldShowPageTitle = $state(false);
   let promoteChannelDialogOpen = $state(false);
   let sentLastReadMarker = $state(false); // flag to ensure lastRead event is only sent once per page load
+
+  let editRoomModalOpen = $state(false);
 
   const roomQuery = new LiveQuery<{
     name: string;
@@ -337,6 +340,16 @@
           </div>
         </Popover>
 
+        {#if current.isSpaceAdmin}
+          <Button
+            variant="secondary"
+            size="icon"
+            onclick={() => (editRoomModalOpen = true)}
+          >
+            <IconTablerSettings class="shrink-0" /></Button
+          >
+        {/if}
+
         <Modal bind:open={createPageDialogOpen} title="Create Page">
           <form
             class="flex flex-col items-stretch gap-4"
@@ -430,3 +443,5 @@
     {/if}
   </MainLayout>
 {/if}
+
+<EditRoomModal bind:open={editRoomModalOpen} />
