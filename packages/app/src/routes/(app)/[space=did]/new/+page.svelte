@@ -26,6 +26,15 @@
     selectedCategory = categories?.[0]?.name || "";
   });
 
+  // redirect to space home if not joined
+  $effect(() => {
+    if (current.space.status === "invited") {
+      navigate({
+        space: current.space.spaceId,
+      });
+    }
+  });
+
   async function createRoom() {
     if (!spaceId || !categories) return;
 
