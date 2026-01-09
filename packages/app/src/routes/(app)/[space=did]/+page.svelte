@@ -18,11 +18,17 @@
   import Error from "$lib/components/modals/Error.svelte";
   import { flags } from "$lib/flags";
   import { navigate } from "$lib/utils.svelte";
+  import { page } from "$app/state";
 
   const spaceId = $derived(current.joinedSpace?.id);
 
   $effect(() => {
-    if (flags.threadsList || !current.joinedSpace) return;
+    if (
+      flags.threadsList ||
+      !current.joinedSpace ||
+      current.joinedSpace.id !== page.params.space
+    )
+      return;
     const firstCategory = sidebarQuery.result?.[0];
     if (firstCategory?.type === "space.roomy.category") {
       const firstChild = firstCategory.children?.[0]?.id;
