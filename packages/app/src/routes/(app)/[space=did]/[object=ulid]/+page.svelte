@@ -18,8 +18,8 @@
   import { backend, backendStatus } from "$lib/workers";
 
   import {
-    convertToPage,
-    convertToThread,
+    // convertToPage,
+    // convertToThread,
     createPage,
     setPageReadMarker,
   } from "$lib/mutations/room";
@@ -38,7 +38,6 @@
   import PageHistory from "$lib/components/content/page/PageHistory.svelte";
   import JoinSpaceModal from "$lib/components/modals/JoinSpaceModal.svelte";
 
-  import IconHeroiconsChevronRight from "~icons/heroicons/chevron-right";
   import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
   import IconHeroiconsDocument from "~icons/heroicons/document";
   import IconHeroiconsChatBubbleLeftRight from "~icons/heroicons/chat-bubble-left-right";
@@ -69,32 +68,21 @@
   const roomQuery = new LiveQuery<{
     name: string;
     kind: string;
-    parent?: { id: string; name: string; kind: string; parent: string | null };
+    spaceId: string;
     lastRead: number;
   }>(
     () => sql`
     select json_object(
       'name', name,
-      'parent', (
-        select json_object(
-          'id', pe.id,
-          'name', pi.name,
-          'kind', pr.label,
-          'parent', pe.room
-        )
-        from comp_info pi
-          join entities pe on pe.id = pi.entity
-          join comp_room pr on pe.id = pr.entity
-          where pe.id = e.room
-      ),
       'kind', r.label,
+      'spaceId', e.stream_id,
       'lastRead', coalesce(l.timestamp, 1)
     ) as json
     from entities e
       join comp_info i on i.entity = e.id
       join comp_room r on r.entity = e.id
       left join comp_last_read l on l.entity = e.id
-    where e.id = ${page.params.object}
+    where e.id = ${current.roomId}
   `,
     (row) => JSON.parse(row.json),
   );
@@ -157,7 +145,13 @@
   });
 
   $effect(() => {
-    room;
+    if (!room || !page.params.space) return;
+    // If the room's spaceId doesn't match the URL, navigate to space root
+    if (room.spaceId !== page.params.space) {
+      navigate({
+        space: page.params.space,
+      });
+    }
   });
 
   $effect(() => {
@@ -217,16 +211,6 @@
               class="w-5 h-5 ml-2 shrink-0 text-base-700 dark:text-base-300 mr-1"
             />
           </div>
-        {/if}
-
-        {#if room?.parent && room.parent.kind == "space.roomy.channel" && (room?.kind !== "space.roomy.page" || shouldShowPageTitle)}
-          <a
-            href={`/${page.params.space}/${room.parent.id}${room.kind == "space.roomy.page" ? "#pages" : room.kind == "space.roomy.thread" ? "#threads" : ""}`}
-            class="hover:underline underline-offset-4"
-          >
-            {room?.parent?.name}
-          </a>
-          <IconHeroiconsChevronRight class="w-4 h-4 shrink-0" />
         {/if}
 
         {#if room?.kind !== "space.roomy.page"}
