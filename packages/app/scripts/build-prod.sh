@@ -12,7 +12,7 @@ echo "Target URL: $target_url"
 if [[ "$OAUTH_HOST" == "https://next.roomy.space" ]]; then
   repo_scopes="repo:space.roomy.upload.v0 repo:space.roomy.space.personal.next repo:space.roomy.space.handle.next"
 else
-  repo_scopes="repo:space.roomy.upload.v0 repo:space.roomy.stream repo:space.roomy.space.handle"
+  repo_scopes="repo:space.roomy.upload.v0 repo:space.roomy.space.personal repo:space.roomy.space.handle"
 fi
 
 # Add oauth-client configuration
