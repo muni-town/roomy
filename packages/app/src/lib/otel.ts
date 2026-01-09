@@ -1,13 +1,20 @@
 import {
   BaseInstrumentation,
+  BaseTransport,
   getWebInstrumentations,
   initializeFaro as init,
   LogLevel,
+  TransportItemType,
+  type TransportItem,
 } from "@grafana/faro-web-sdk";
 import { TracingInstrumentation } from "@grafana/faro-web-tracing";
 import { ZoneContextManager } from "@opentelemetry/context-zone";
 import { context, SpanStatusCode, trace } from "@opentelemetry/api";
 import { CONFIG } from "./config";
+
+let telemetryDisabled = false;
+let failureCount = 0;
+const MAX_FAILURES = 3;
 
 type WorkerInfo =
   | {
@@ -105,56 +112,113 @@ class CustomConsoleInstrumentation extends BaseInstrumentation {
 }
 
 export function initializeFaro(opts: WorkerInfo) {
-  CONFIG.faroEndpoint
-    ? init({
-        app: { name: "roomy", version: __APP_VERSION__ },
-        apiKey: "bad_api_key",
-        url: CONFIG.faroEndpoint,
-        dedupe: false,
-        globalObjectKey: "faro",
-        beforeSend(event) {
-          if ("context" in event.payload) {
-            event.payload.context = {
-              ...(event.payload.context || {}),
-              worker: opts.worker,
-            };
-          } else if ("resourceSpans" in event.payload) {
-            event.payload.resourceSpans?.forEach((span) => {
-              span.resource?.attributes.push({
-                key: "app.worker",
-                value: { stringValue: opts.worker },
-              });
-              if (event.meta.session?.id) {
-                span.resource?.attributes.push({
-                  key: "session.id",
-                  value: { stringValue: event.meta.session?.id },
-                });
-              }
+  if (CONFIG.faroEndpoint) {
+    init({
+      app: { name: "roomy", version: __APP_VERSION__ },
+      dedupe: false,
+      globalObjectKey: "faro",
+      transports: [new ResilientFetchTransport()],
+      beforeSend(event) {
+        // If telemetry has been disabled due to blocked requests, drop all events
+        if (telemetryDisabled) {
+          return null;
+        }
+
+        if ("context" in event.payload) {
+          event.payload.context = {
+            ...(event.payload.context || {}),
+            worker: opts.worker,
+          };
+        } else if ("resourceSpans" in event.payload) {
+          event.payload.resourceSpans?.forEach((span) => {
+            span.resource?.attributes.push({
+              key: "app.worker",
+              value: { stringValue: opts.worker },
             });
-          }
-          return event;
-        },
-        instrumentations: [
-          ...(opts.worker == "main"
-            ? [
-                ...getWebInstrumentations({
-                  captureConsole: false,
-                }),
-              ]
-            : []),
-          new CustomConsoleInstrumentation(),
-          new TracingInstrumentation({
-            contextManager: new ZoneContextManager(),
-          }),
-        ],
-      })
-    : undefined;
+            if (event.meta.session?.id) {
+              span.resource?.attributes.push({
+                key: "session.id",
+                value: { stringValue: event.meta.session?.id },
+              });
+            }
+          });
+        }
+        return event;
+      },
+      instrumentations: [
+        ...(opts.worker == "main"
+          ? [
+              ...getWebInstrumentations({
+                captureConsole: false,
+              }),
+            ]
+          : []),
+        new CustomConsoleInstrumentation(),
+        new TracingInstrumentation({
+          contextManager: new ZoneContextManager(),
+        }),
+      ],
+    });
+  }
 
   faro?.api.setSession({ attributes: { isSampled: "true" } });
 
   (globalThis as any).tracer = faro?.api
     .getOTEL()
     ?.trace.getTracer("roomy", __APP_VERSION__);
+}
+
+class ResilientFetchTransport extends BaseTransport {
+  readonly name = "resilient-fetch";
+  readonly version = "0.1";
+
+  override send(items: TransportItem | TransportItem[]): void {
+    const payload = this.makePayload(Array.isArray(items) ? items : [items]);
+    if (!payload) return;
+
+    fetch(CONFIG.faroEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": "bad_api_key",
+      },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => {
+      failureCount++;
+      if (failureCount >= MAX_FAILURES && faro) {
+        faro.pause();
+        console.debug("Telemetry paused due to blocked requests");
+      }
+    });
+  }
+
+  private makePayload(items: TransportItem[]) {
+    if (items.length === 0) return null;
+
+    const body: Record<string, unknown> = { meta: items[0]!.meta };
+
+    for (const item of items) {
+      const key = this.getPayloadKey(item.type);
+      if (key) {
+        (body[key] ??= [] as unknown[]) as unknown[];
+        (body[key] as unknown[]).push(item.payload);
+      }
+    }
+    return body;
+  }
+
+  private getPayloadKey(type: TransportItemType): string | null {
+    return type;
+  }
+
+  override getIgnoreUrls() {
+    return [CONFIG.faroEndpoint];
+  }
+
+  override isBatched() {
+    return false;
+  }
 }
 
 export async function trackUncaughtExceptions<T>(
@@ -164,7 +228,7 @@ export async function trackUncaughtExceptions<T>(
   try {
     return await f();
   } catch (e) {
-    console.error(e);
+    console.error("Otel Uncaught:", e);
     context.with(ctx, () => {
       const span = trace.getActiveSpan();
       if (span) {
