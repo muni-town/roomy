@@ -67,13 +67,14 @@ export const backend = messagePortInterface<ConsoleInterface, BackendInterface>(
       const prefixedArgs = ["[BW]", ...args]; // Backend Worker
       console[level](...prefixedArgs);
     },
+    async setSessionId(id) {
+      faro.api.setSession({
+        id,
+        attributes: { isSampled: "true" },
+      });
+    },
   },
 );
-
-faro.api.setSession({
-  id: await backend.getSessionId(),
-  attributes: { isSampled: "true" },
-});
 
 (globalThis as any).backend = backend;
 (globalThis as any).CONFIG = CONFIG;

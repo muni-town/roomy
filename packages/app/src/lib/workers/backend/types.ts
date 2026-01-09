@@ -94,6 +94,7 @@ export const consoleLogLevels = [
 ] as const;
 export type ConsoleLogLevel = (typeof consoleLogLevels)[number];
 export type ConsoleInterface = {
+  setSessionId(id: string): Promise<void>;
   log(level: ConsoleLogLevel, ...args: any[]): Promise<void>;
 };
 

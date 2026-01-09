@@ -314,6 +314,8 @@ class WorkerSupervisor {
       ConsoleInterface
     >(port, this.getBackendInterface());
 
+    consoleInterface.setSessionId(sessionId);
+
     // Set up console forwarding to main thread for debugging
     // This intercepts console.log/warn/error/info/debug calls in the SharedWorker
     // and forwards them to the main thread with a [SharedWorker] prefix.

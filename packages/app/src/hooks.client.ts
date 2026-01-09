@@ -3,6 +3,8 @@ import { initializeFaro } from "$lib/otel";
 import type { HandleClientError } from "@sveltejs/kit";
 import posthog from "posthog-js";
 
+initializeFaro({ worker: "main" });
+
 if (dev && window.location.hostname == "localhost")
   window.location.hostname = "127.0.0.1";
 
@@ -16,8 +18,6 @@ window.navigator.serviceWorker.getRegistrations().then((registrations) => {
   // Reload the page just to make sure things are totally reset.
   if (hadRegistration) window.location.reload();
 });
-
-initializeFaro({ worker: "main" });
 
 export const handleError: HandleClientError = async ({
   error,
