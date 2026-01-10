@@ -8,11 +8,12 @@ const config = {
     serviceWorker: {
       register: process.env.MODE !== "tauri",
     },
+    output: {
+      bundleStrategy: "single",
+    },
     adapter:
       process.env.NETLIFY == "true"
-        ? adapterNetlify({
-          fallback: "index.html",
-        })
+        ? adapterNetlify()
         : adapterStatic({
           fallback: "index.html",
         }),
