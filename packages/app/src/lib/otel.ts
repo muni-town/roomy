@@ -112,58 +112,56 @@ class CustomConsoleInstrumentation extends BaseInstrumentation {
 }
 
 export function initializeFaro(opts: WorkerInfo) {
-  if (CONFIG.faroEndpoint) {
-    init({
-      app: { name: "roomy", version: __APP_VERSION__ },
-      dedupe: false,
-      globalObjectKey: "faro",
-      transports: [new ResilientFetchTransport()],
-      beforeSend(event) {
-        // If telemetry has been disabled due to blocked requests, drop all events
-        if (telemetryDisabled) {
-          return null;
-        }
+  const faro = init({
+    app: { name: "roomy", version: __APP_VERSION__ },
+    dedupe: false,
+    globalObjectKey: "faro",
+    transports: [new ResilientFetchTransport()],
+    beforeSend(event) {
+      // If telemetry has been disabled due to blocked requests, drop all events
+      if (telemetryDisabled) {
+        return null;
+      }
 
-        if ("context" in event.payload) {
-          event.payload.context = {
-            ...(event.payload.context || {}),
-            worker: opts.worker,
-          };
-        } else if ("resourceSpans" in event.payload) {
-          event.payload.resourceSpans?.forEach((span) => {
-            span.resource?.attributes.push({
-              key: "app.worker",
-              value: { stringValue: opts.worker },
-            });
-            if (event.meta.session?.id) {
-              span.resource?.attributes.push({
-                key: "session.id",
-                value: { stringValue: event.meta.session?.id },
-              });
-            }
+      if ("context" in event.payload) {
+        event.payload.context = {
+          ...(event.payload.context || {}),
+          worker: opts.worker,
+        };
+      } else if ("resourceSpans" in event.payload) {
+        event.payload.resourceSpans?.forEach((span) => {
+          span.resource?.attributes.push({
+            key: "app.worker",
+            value: { stringValue: opts.worker },
           });
-        }
-        return event;
-      },
-      instrumentations: [
-        ...(opts.worker == "main"
-          ? [
-              ...getWebInstrumentations({
-                captureConsole: false,
-              }),
-            ]
-          : []),
-        new CustomConsoleInstrumentation(),
-        new TracingInstrumentation({
-          contextManager: new ZoneContextManager(),
-        }),
-      ],
-    });
-  }
+          if (event.meta.session?.id) {
+            span.resource?.attributes.push({
+              key: "session.id",
+              value: { stringValue: event.meta.session?.id },
+            });
+          }
+        });
+      }
+      return event;
+    },
+    instrumentations: [
+      ...(opts.worker == "main"
+        ? [
+            ...getWebInstrumentations({
+              captureConsole: false,
+            }),
+          ]
+        : []),
+      new CustomConsoleInstrumentation(),
+      new TracingInstrumentation({
+        contextManager: new ZoneContextManager(),
+      }),
+    ],
+  });
 
-  faro?.api.setSession({ attributes: { isSampled: "true" } });
+  faro.api.setSession({ attributes: { isSampled: "true" } });
 
-  (globalThis as any).tracer = faro?.api
+  (globalThis as any).tracer = faro.api
     .getOTEL()
     ?.trace.getTracer("roomy", __APP_VERSION__);
 }
@@ -173,6 +171,8 @@ class ResilientFetchTransport extends BaseTransport {
   readonly version = "0.1";
 
   override send(items: TransportItem | TransportItem[]): void {
+    if (!CONFIG.faroEndpoint) return;
+
     const payload = this.makePayload(Array.isArray(items) ? items : [items]);
     if (!payload) return;
 
