@@ -488,7 +488,7 @@ const materializers: {
           sql`
           update comp_content
           set 
-            data = cast(apply_dmp_patch(cast(event as text), ${new TextDecoder().decode(fromBytes(event.body.data))}) as blob),
+            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(fromBytes(event.body.data))}) as blob),
             last_edit = ${event.id}
           where
             entity = ${event.messageId}
