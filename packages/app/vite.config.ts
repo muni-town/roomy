@@ -7,6 +7,8 @@ import Icons from "unplugin-icons/vite";
 import { FileSystemIconLoader } from "unplugin-icons/loaders";
 import packageJson from "./package.json";
 
+// import { visualizer } from "rollup-plugin-visualizer";
+
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
@@ -36,11 +38,16 @@ export default defineConfig({
         custom: FileSystemIconLoader("./static/icons"),
       },
     }),
+
+    // This visualizer can be useful for debugging bundles during dev.
+
+    // visualizer({
+    //   emitFile: true,
+    //   filename: "stats.html",
+    // }),
   ] as PluginOption[],
   build: {
-    target: "es2022",
-    chunkSizeWarningLimit: 2048,
-    sourcemap: true,
+    target: "es2024",
   },
   server: {
     host: "127.0.0.1",

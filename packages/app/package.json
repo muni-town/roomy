@@ -123,6 +123,7 @@
     "posthog-js": "^1.266.0",
     "prettier": "3.5.3",
     "prettier-plugin-svelte": "3.3.3",
+    "rollup-plugin-visualizer": "^6.0.5",
     "svelte": "^5.38.10",
     "svelte-boring-avatars": "^1.2.6",
     "svelte-check": "^4.3.1",
