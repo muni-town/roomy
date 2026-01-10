@@ -21,7 +21,20 @@ export const Bytes = type.or(
   type.instanceOf(BytesWrapper),
   type({ $bytes: "string.base64" }),
 );
-export { fromBytes } from "@atcute/cbor";
+import { fromBytes as fromCborBytes } from "@atcute/cbor";
+
+// Not sure why the out-of-the-box bytes isn't detecting the `instanceof BytesWrapper` properly, but
+// this is an easy fix.
+//
+// It is most-likely caused by sending the bytes wrapper a message port or something that makes the
+// object lose it's prototype.
+export function fromBytes(bytes: Bytes): Uint8Array {
+  if ("buf" in bytes && bytes.buf instanceof Uint8Array) {
+    return bytes.buf;
+  } else {
+    return fromCborBytes(bytes);
+  }
+}
 
 // Re-export the type helper for use in other modules
 export { type };
