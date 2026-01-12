@@ -57,7 +57,7 @@ Test Tags           space    creation
 
     # Navigate to the space so window.sidebar is populated
     # (sidebar.svelte.ts uses current.joinedSpace?.id to filter)
-    Go To    http://127.0.0.1:5173/${space_id}
+    Go To    ${BASE_URL}/${space_id}
     Sleep    1s    # Give UI time to set current.joinedSpace
 
     # Query sidebar using the helper keyword (reads from window.sidebar.result)
@@ -78,7 +78,7 @@ Test Tags           space    creation
     ...        }
     ...        return countRooms(window.sidebar?.result || []);
     ...    }
-    Log    Total rooms in tree (flattened): ${total_rooms} (should be 3: category + channel + thread)
+    Log    Total rooms in tree (flattened): ${total_rooms} (should be 2: category + channel - threads not in sidebar)
 
 Create First Space - Basic Flow
     [Documentation]    Test creating a user's first space with minimal configuration
@@ -136,31 +136,31 @@ Verify Default Room Structure
     ${channel_id}=    Set Variable    ${None}
     ${thread_id}=    Set Variable    ${None}
 
+    # Note: Room types are now fully-qualified NSIDs like 'space.roomy.category'
     FOR    ${room}    IN    @{rooms}
-        IF    '${room['type']}' == 'category'
+        IF    '${room['type']}' == 'space.roomy.category'
             ${category_id}=    Set Variable    ${room['id']}
             Should Be Equal    ${room['name']}    Uncategorized    msg=Category should be named 'Uncategorized'
             Should Be Equal    ${room['parent']}    ${None}    msg=Category should have no parent
             Should Be Equal As Numbers    ${room['deleted']}    0    msg=Category should not be deleted
-        ELSE IF    '${room['type']}' == 'channel'
+        ELSE IF    '${room['type']}' == 'space.roomy.channel'
             ${channel_id}=    Set Variable    ${room['id']}
             Should Be Equal    ${room['name']}    general    msg=Channel should be named 'general'
-            Should Not Be Equal    ${room['parent']}    ${None}    msg=Channel should have a parent
             Should Be Equal As Numbers    ${room['deleted']}    0    msg=Channel should not be deleted
-        ELSE IF    '${room['type']}' == 'thread'
+        ELSE IF    '${room['type']}' == 'space.roomy.thread'
             ${thread_id}=    Set Variable    ${room['id']}
             Should Contain    ${room['name']}    Welcome to    msg=Thread name should contain 'Welcome to'
-            Should Not Be Equal    ${room['parent']}    ${None}    msg=Thread should have a parent
             Should Be Equal As Numbers    ${room['deleted']}    0    msg=Thread should not be deleted
         END
     END
 
-    # Verify hierarchy: channel parent is category, thread parent is channel
+    # Note: Hierarchy is now managed by sidebar config, not parent relationships in entities table
+    # Channels and threads no longer have direct entity parent references
     FOR    ${room}    IN    @{rooms}
-        IF    '${room['type']}' == 'channel'
-            Should Be Equal    ${room['parent']}    ${category_id}    msg=Channel parent should be category
-        ELSE IF    '${room['type']}' == 'thread'
-            Should Be Equal    ${room['parent']}    ${channel_id}    msg=Thread parent should be channel
+        IF    '${room['type']}' == 'space.roomy.channel'
+            Log    Channel ${room['id']} parent (room column): ${room['parent']}
+        ELSE IF    '${room['type']}' == 'space.roomy.thread'
+            Log    Thread ${room['id']} parent (room column): ${room['parent']}
         END
     END
 
@@ -262,6 +262,7 @@ Verify Sidebar Structure
     [Documentation]    Verify sidebar query (what UI sidebar uses) returns correct structure
     ...                This validates what the user actually sees in the UI sidebar
     ...                Tests window.sidebar.result exposed in workers/index.ts
+    ...                Note: Sidebar now only shows categories and channels, not threads
     [Tags]    structure    critical    ui
 
     # Create space
@@ -272,7 +273,7 @@ Verify Sidebar Structure
     Should Be True    ${reached_idle}    msg=Space did not reach 'idle' status
 
     # Navigate to the space so window.sidebar is populated for this space
-    Go To    http://127.0.0.1:5173/${space_id}
+    Go To    ${BASE_URL}/${space_id}
     Sleep    1s    # Give UI time to set current.joinedSpace and update sidebar
 
     # Query window.sidebar.result (what the UI actually uses) - expect 1 top-level category
@@ -280,9 +281,9 @@ Verify Sidebar Structure
     ${tree_count}=    Get Length    ${space_tree}
     Should Be Equal As Numbers    ${tree_count}    1    msg=sidebar should have 1 top-level room (category)
 
-    # Get the category (first item)
+    # Get the category (first item) - type is now full NSID
     ${category}=    Set Variable    ${space_tree[0]}
-    Should Be Equal    ${category['type']}    category    msg=Top-level room should be category
+    Should Be Equal    ${category['type']}    space.roomy.category    msg=Top-level room should be category
     Should Be Equal    ${category['name']}    Uncategorized
 
     # Verify category has children (channel)
@@ -290,22 +291,14 @@ Verify Sidebar Structure
     ${has_channel}=    Evaluate    len(${category_children}) > 0
     Should Be True    ${has_channel}    msg=Category should have children
 
-    # Get the channel (first child of category)
+    # Get the channel (first child of category) - type is now full NSID
     ${channel}=    Set Variable    ${category_children[0]}
-    Should Be Equal    ${channel['type']}    channel    msg=First child should be channel
+    Should Be Equal    ${channel['type']}    space.roomy.channel    msg=First child should be channel
     Should Be Equal    ${channel['name']}    general
 
-    # Verify channel has children (thread)
-    ${channel_children}=    Set Variable    ${channel['children']}
-    ${has_thread}=    Evaluate    len(${channel_children}) > 0
-    Should Be True    ${has_thread}    msg=Channel should have children (thread)
-
-    # Get the thread (first child of channel)
-    ${thread}=    Set Variable    ${channel_children[0]}
-    Should Be Equal    ${thread['type']}    thread    msg=First child of channel should be thread
-    Should Contain    ${thread['name']}    Welcome to    msg=Thread name should contain 'Welcome to'
-
-    Log    window.sidebar structure validated: Category → Channel → Thread
+    # Note: Threads are no longer in the sidebar tree structure
+    # They are displayed within channel content, not as sidebar children
+    Log    window.sidebar structure validated: Category → Channel (threads not in sidebar)
 
 Verify Welcome Message Creation
     [Documentation]    Verify the welcome message is created in the welcome thread
@@ -387,7 +380,7 @@ Setup Test Environment For Spaces
     # Setup browser
     New Browser    chromium    headless=True
     New Context    viewport={'width': 1280, 'height': 720}
-    New Page    http://127.0.0.1:5173
+    New Page    ${BASE_URL}
 
     # Wait for app to load
     ${backend_initialized}=    Wait For Backend To Initialize

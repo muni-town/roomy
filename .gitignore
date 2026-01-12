@@ -12,6 +12,7 @@ node_modules
 **/dist
 **/.llm.**
 **/.claude/*
+.chainlink
 
 # Testing
 test-results
