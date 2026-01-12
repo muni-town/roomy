@@ -30,6 +30,8 @@
     ),
   );
 
+  const parentContext = $derived(page.url.searchParams.get("parent"));
+
   let openEditRoomModal = $state(false);
 </script>
 
@@ -53,7 +55,7 @@
   {/if}
 
   <div class="w-full pt-2 px-2">
-    {#if page.params.object && !roomsInSidebar.has(page.params.object)}
+    {#if page.params.object && !roomsInSidebar.has(page.params.object) && !parentContext}
       <Button
         variant="ghost"
         class="w-full justify-start min-w-0 mb-2 border-dashed border-accent-200 dark:border-base-800 dark:hover:border-accent-900 border-2"

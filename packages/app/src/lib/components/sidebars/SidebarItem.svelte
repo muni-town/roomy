@@ -31,7 +31,10 @@
   let isSubthread = $state(false);
   // let notificationCount = 0;
 
-  let current = $derived(page.params.object === item.id);
+  const itemActive = $derived(
+    page.params.object === item.id ||
+      page.url.searchParams.get("parent") === item.id,
+  );
 </script>
 
 {#snippet editButton()}
@@ -44,11 +47,11 @@
     >
       <IconLucidePencil class="size-4" />
     </Button>
-  {:else if item.type === "space.roomy.category"}{:else if !current && item.unreadCount > 0}
+  {:else if item.type === "space.roomy.category"}{:else if !itemActive && item.unreadCount > 0}
     <Badge>
       {item.unreadCount}
     </Badge>
-  {:else if !current && item.lastRead === 1 && item.unreadCount > 0}
+  {:else if !itemActive && item.lastRead === 1 && item.unreadCount > 0}
     <Badge>🌟</Badge>
   {/if}
 {/snippet}
@@ -84,7 +87,7 @@
     </div>
 
     <!-- Group children (pages, channels) -->
-    {#if item.id === page.params.object && !isEditing}
+    {#if itemActive && !isEditing}
       <div class={"w-full max-w-full shrink min-w-0"}>
         <LinkedRoomsList bind:roomId={item.id as Ulid} />
       </div>

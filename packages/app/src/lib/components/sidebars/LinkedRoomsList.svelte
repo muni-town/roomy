@@ -38,6 +38,11 @@
   let linkedRooms = $derived.by(() => {
     if (!query.result) return null;
     return query.result;
+    // idea to reorder to have the active room first
+    // const activeRoom = query.result.find((r) => r.id === page.params.object);
+    // const rooms = query.result.filter((r) => r.id !== page.params.object);
+    // if (activeRoom) rooms.unshift(activeRoom);
+    // return rooms;
   });
 </script>
 
@@ -58,7 +63,7 @@
             object: room.id,
           }) +
             "?parent=" +
-            page.params.object}
+            (page.url.searchParams.get("parent") || page.params.object)}
           variant="ghost"
           class="w-full justify-start min-w-0 px-1 rounded-sm py-1 text-base-600"
           data-current={room.id === page.params.object}
