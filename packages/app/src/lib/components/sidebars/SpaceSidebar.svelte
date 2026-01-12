@@ -2,13 +2,17 @@
   import { page } from "$app/state";
   import { flags } from "$lib/flags";
   import { current, sidebar } from "$lib/queries";
-  import SidebarItemList from "./SidebarItemList.svelte";
+  // import SidebarItemList from "./SidebarItemList.svelte";
   import SpaceSidebarHeader from "./SpaceSidebarHeader.svelte";
   import EditRoomModal from "../modals/EditRoomModal.svelte";
   import { Button } from "@fuxui/base";
 
   import IconBasilCheckSolid from "~icons/basil/check-solid";
   import IconHeroiconsHome from "~icons/heroicons/home";
+  import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
+  import SidebarCategory from "./SidebarCategory.svelte";
+  import EntityName from "../primitives/EntityName.svelte";
+  import { Ulid } from "$lib/schema";
 
   // at the top level there can be categories, channels or pages
   // under categories there can be channels or pages
@@ -19,6 +23,12 @@
   function editSidebarItem() {
     openEditRoomModal = true;
   }
+
+  const roomsInSidebar = $derived(
+    new Set(
+      sidebar.result?.flatMap((cat) => cat.children.map((child) => child.id)),
+    ),
+  );
 
   let openEditRoomModal = $state(false);
 </script>
@@ -43,6 +53,22 @@
   {/if}
 
   <div class="w-full pt-2 px-2">
+    {#if page.params.object && !roomsInSidebar.has(page.params.object)}
+      <Button
+        variant="ghost"
+        class="w-full justify-start min-w-0 mb-2 border-dashed border-accent-200 border-2"
+      >
+        <IconHeroiconsHashtag class="shrink-0" />
+        <span
+          class={[
+            "truncate whitespace-nowrap overflow-hidden min-w-0 font-semibold",
+          ]}
+        >
+          <EntityName id={Ulid.assert(page.params.object)} /></span
+        >
+      </Button>
+    {/if}
+
     {#if flags.threadsList}
       <Button
         class="w-full justify-start mb-2"
@@ -57,11 +83,13 @@
       <hr class="my-2 border-base-800/10 dark:border-base-100/5" />
     {/if}
 
-    <SidebarItemList
-      bind:isEditing
-      {editSidebarItem}
-      items={sidebar.result || []}
-    />
+    <div class="flex flex-col w-full">
+      {#each sidebar.result as category (category.id)}
+        <div class="flex items-start gap-2 w-full">
+          <SidebarCategory bind:isEditing {editSidebarItem} {category} />
+        </div>
+      {/each}
+    </div>
   </div>
 {/if}
 

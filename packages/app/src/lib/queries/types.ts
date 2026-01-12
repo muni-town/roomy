@@ -12,6 +12,11 @@ export type SpaceMeta = {
   permissions: [string, "read" | "post" | "admin"][];
 };
 
+export type SidebarCategory = Extract<
+  SidebarItem,
+  { type: "space.roomy.category" }
+>;
+
 export type SidebarItem = {
   id: string;
   name: string;

@@ -6,19 +6,19 @@
   //   dragHandle,
   //   type Item,
   // } from "svelte-dnd-action";
-  import { type SidebarItem as SidebarItemData } from "$lib/queries";
-  import SidebarItem from "./SidebarItem.svelte";
+  import { type SidebarCategory as SidebarCategoryData } from "$lib/queries";
+  import SidebarCategory from "./SidebarCategory.svelte";
 
   let {
     isEditing = $bindable(false),
-    items,
-    level = 0,
+    categories,
+    // level = 0,
     editSidebarItem,
   }: {
     isEditing: boolean;
     editSidebarItem: () => void;
-    items: SidebarItemData[];
-    level?: number;
+    categories: SidebarCategoryData[];
+    // level?: number;
   } = $props();
 
   // let {
@@ -156,9 +156,9 @@
   {/if} -->
 
 <div class="flex flex-col w-full">
-  {#each items as item, index (item.id)}
+  {#each categories as category (category.id)}
     <div class="flex items-start gap-2 w-full">
-      <SidebarItem bind:isEditing {level} {editSidebarItem} {index} {item} />
+      <SidebarCategory bind:isEditing {editSidebarItem} {category} />
     </div>
   {/each}
 </div>

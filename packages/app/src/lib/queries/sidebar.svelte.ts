@@ -1,7 +1,7 @@
 import { LiveQuery } from "$lib/utils/liveQuery.svelte";
 import { current } from "./current.svelte";
 import { sql } from "$lib/utils/sqlTemplate";
-import type { SidebarItem } from "./types";
+import type { SidebarCategory } from "./types";
 
 export let categoriesQuery: LiveQuery<{
   name: string;
@@ -9,7 +9,7 @@ export let categoriesQuery: LiveQuery<{
 }>;
 
 /** The sidebar tree for the currently selected space. */
-export const sidebar = $state<{ result?: SidebarItem[] }>({
+export const sidebar = $state<{ result?: SidebarCategory[] }>({
   result: undefined,
 });
 (globalThis as any).sidebar = sidebar;
@@ -71,7 +71,7 @@ $effect.root(() => {
               sortIdx: "",
               unreadCount: 0,
             })),
-          }) satisfies SidebarItem,
+          }) satisfies SidebarCategory,
       );
     } else {
       sidebar.result = undefined;
