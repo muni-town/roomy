@@ -1,7 +1,6 @@
 const CONFIG = {
   leafUrl: import.meta.env.VITE_LEAF_URL || "https://leaf-dev.muni.town",
-  faroEndpoint:
-    import.meta.env.VITE_FARO_ENDPOINT,
+  faroEndpoint: import.meta.env.VITE_FARO_ENDPOINT,
   streamNsid:
     import.meta.env.VITE_STREAM_NSID || "space.roomy.space.personal.dev",
   streamHandleNsid:
@@ -12,6 +11,9 @@ const CONFIG = {
   atprotoOauthScope: "",
   testingAppPassword: import.meta.env.VITE_TESTING_APP_PASSWORD,
   testingHandle: import.meta.env.VITE_TESTING_HANDLE,
+  flags: {
+    threadsList: true, // 'Index' (threads list) page for spaces
+  },
 };
 
 CONFIG.leafServerDid = `did:web:${new URL(CONFIG.leafUrl).hostname}`;
@@ -56,5 +58,25 @@ CONFIG.atprotoOauthScope = [
   // should be able to set the audience to the `leafServerDid`.
   `rpc:town.muni.leaf.authenticate?aud=*`, // Access to authenticate to the leaf server
 ].join(" ");
+
+/** Default feature flags, can be overridden per environment with
+ * VITE_FEATURE_FLAGS env var as JSON string.
+ */
+
+type Flags = typeof CONFIG.flags;
+
+function loadFlags(): Flags {
+  const overrides = import.meta.env.VITE_FEATURE_FLAGS;
+  if (!overrides) return CONFIG.flags;
+
+  try {
+    return { ...CONFIG.flags, ...JSON.parse(overrides) };
+  } catch {
+    console.warn("Invalid VITE_FEATURE_FLAGS JSON");
+    return CONFIG.flags;
+  }
+}
+
+export const flags = loadFlags();
 
 export { CONFIG };
