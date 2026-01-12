@@ -13,14 +13,6 @@
     roomId: Ulid;
   } = $props();
 
-  $effect(() => {
-    console.log("linkedRooms", {
-      roomId,
-      linkedRooms,
-      spaceId: page.params.space,
-    });
-  });
-
   let query = new LiveQuery<{ name: string; id: Ulid }>(
     () => sql`
       select

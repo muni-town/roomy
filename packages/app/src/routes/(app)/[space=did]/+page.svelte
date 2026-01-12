@@ -88,7 +88,7 @@
           where
             e.stream_id = ${spaceId}
               and
-            r.label = 'page'
+            r.label = 'space.roomy.page'
 
             union
 
@@ -124,11 +124,11 @@
           from comp_room r
             join comp_info i on i.entity = r.entity
             join entities e on e.id = r.entity
-            join comp_info ci on ci.entity = e.room
+            left join comp_info ci on ci.entity = e.room
           where
             e.stream_id = ${spaceId}
               and
-            r.label = 'thread'
+            r.label = 'space.roomy.thread'
         )
         order by activity ->> 'latestTimestamp' desc
       `;

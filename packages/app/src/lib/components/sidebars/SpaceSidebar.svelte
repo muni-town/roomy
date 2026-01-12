@@ -55,22 +55,6 @@
   {/if}
 
   <div class="w-full pt-2 px-2">
-    {#if page.params.object && !roomsInSidebar.has(page.params.object) && !parentContext}
-      <Button
-        variant="ghost"
-        class="w-full justify-start min-w-0 mb-2 border-dashed border-accent-200 dark:border-base-800 dark:hover:border-accent-900 border-2"
-      >
-        <IconHeroiconsHashtag class="shrink-0" />
-        <span
-          class={[
-            "truncate whitespace-nowrap overflow-hidden min-w-0 font-semibold",
-          ]}
-        >
-          <EntityName id={Ulid.assert(page.params.object)} /></span
-        >
-      </Button>
-    {/if}
-
     {#if flags.threadsList}
       <Button
         class="w-full justify-start mb-2"
@@ -83,6 +67,23 @@
       </Button>
 
       <hr class="my-2 border-base-800/10 dark:border-base-100/5" />
+    {/if}
+
+    {#if page.params.object && !roomsInSidebar.has(page.params.object) && !parentContext}
+      <Button
+        variant="ghost"
+        class="w-full justify-start min-w-0 my-4"
+        data-current={true}
+      >
+        <IconHeroiconsHashtag class="shrink-0" />
+        <span
+          class={[
+            "truncate whitespace-nowrap overflow-hidden min-w-0 font-semibold",
+          ]}
+        >
+          <EntityName id={Ulid.assert(page.params.object)} /></span
+        >
+      </Button>
     {/if}
 
     <div class="flex flex-col w-full">

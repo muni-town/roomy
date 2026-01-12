@@ -5,6 +5,7 @@
   import { sql } from "$lib/utils/sqlTemplate";
   import BoardView from "./BoardView.svelte";
   import type { ThreadInfo } from "./types";
+  import { Ulid } from "$lib/schema";
 
   let { emptyMessage }: { objectType?: string; emptyMessage?: string } =
     $props();
@@ -51,13 +52,14 @@
           from comp_room r
             join comp_info i on i.entity = r.entity
             join entities e on e.id = r.entity
-            join comp_info ci on ci.entity = e.room
+            join edges pe on pe.tail = r.entity and pe.label = 'link'
+            join comp_info ci on ci.entity = pe.head
           where
             e.stream_id = ${spaceId}
               and
-            e.room = ${page.params.object}
+            pe.head = ${page.params.object}
               and
-            (r.label = 'thread' or r.label = 'page')
+            (r.label = 'space.roomy.thread' or r.label = 'space.roomy.page')
         )
         order by activity ->> 'latestTimestamp' desc
       `,
@@ -66,5 +68,9 @@
 </script>
 
 {#if threadsList.result || threadsList.error}
-  <BoardView threads={threadsList.result || []} {emptyMessage} />
+  <BoardView
+    threads={threadsList.result || []}
+    {emptyMessage}
+    parent={page.params.object as Ulid}
+  />
 {/if}
