@@ -118,6 +118,16 @@
       messagesToMove: $state.snapshot(state.selectedMessages),
     });
 
+    const events: Event[] = [];
+
+    // link thread to current room
+    events.push({
+      id: newUlid(),
+      room: current.roomId,
+      $type: "space.roomy.link.createRoomLink.v0",
+      linkToRoom: threadId,
+    });
+
     // move selected messages into thread
     for (const message of state.selectedMessages) {
       const event = {
@@ -127,9 +137,11 @@
         messageId: message.id,
         toRoomId: threadId,
       } as const;
-      console.log("sending event", { spaceId, event });
-      await backend.sendEvent(spaceId, event);
+      events.push(event);
     }
+
+    console.log("sending events", { spaceId, events });
+    await backend.sendEventBatch(spaceId, events);
 
     messagingState.set({
       kind: "normal",
