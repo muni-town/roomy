@@ -144,7 +144,7 @@ create table if not exists comp_comment (
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
 
-create table if not exists comp_image (
+create table if not exists comp_embed_image (
   entity text primary key references entities(ulid) on delete cascade, -- URI
   mime_type text not null,
   size integer,
@@ -156,7 +156,7 @@ create table if not exists comp_image (
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
 
-create table if not exists comp_video (
+create table if not exists comp_embed_video (
   entity text primary key references entities(ulid) on delete cascade, -- URI
   mime_type text not null,
   size integer,
@@ -169,7 +169,7 @@ create table if not exists comp_video (
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
 
-create table if not exists comp_file (
+create table if not exists comp_embed_file (
   entity text primary key references entities(ulid) on delete cascade, -- URI
   mime_type text not null,
   size integer,
@@ -178,7 +178,7 @@ create table if not exists comp_file (
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
 
-create table if not exists comp_link (
+create table if not exists comp_embed_link (
   entity text primary key references entities(ulid) on delete cascade, -- URI
   show_preview integer check(show_preview in (0, 1)) default 1,
   created_at integer not null default (unixepoch() * 1000),

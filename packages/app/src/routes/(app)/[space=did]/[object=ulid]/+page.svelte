@@ -233,7 +233,7 @@
       {:else if room?.kind == "space.roomy.thread"}
         <span class="grow"></span>
 
-        <Popover>
+        <!-- <Popover>
           {#snippet child({ props })}
             <Button {...props} variant="secondary" size="icon">
               <IconTablerClick class="shrink-0" /></Button
@@ -243,7 +243,7 @@
           <Button onclick={() => (promoteChannelDialogOpen = true)}
             >Promote to Channel</Button
           >
-        </Popover>
+        </Popover> -->
 
         <Modal
           bind:open={promoteChannelDialogOpen}

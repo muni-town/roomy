@@ -6,8 +6,13 @@
   import IconHeroiconsDocument from "~icons/heroicons/document";
   import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
   import AvatarGroup from "$lib/components/user/AvatarGroup.svelte";
+  import type { Ulid } from "$lib/schema";
 
-  let { thread }: { thread: ThreadInfo; activityCountMax?: number } = $props();
+  let {
+    thread,
+    parent,
+  }: { thread: ThreadInfo; activityCountMax?: number; parent?: Ulid } =
+    $props();
 
   let lastMessageTimestamp = $derived(thread.activity.latestTimestamp);
 
@@ -39,7 +44,9 @@
   };
 </script>
 
-<a href={`/${page.params.space}/${thread.id}`}>
+<a
+  href={`/${page.params.space}/${thread.id}${parent ? "?parent=" + parent : ""}`}
+>
   <Box class="flex items-baseline p-3">
     <div
       class="flex items-center relative -bottom-1 justify-between gap-2 mr-2"
@@ -64,7 +71,7 @@
       <!-- <div class="grow"></div> -->
 
       <div class="grow shrink-0 text-end">
-        <span class="text-base-500 text-sm mr-1"
+        <span class="text-base-500 text-sm mr-2"
           >{#if lastMessageTimestamp}
             {#if Date.now() - lastMessageTimestamp < 60 * 1000}
               Just Now

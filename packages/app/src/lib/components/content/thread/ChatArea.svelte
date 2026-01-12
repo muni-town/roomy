@@ -117,9 +117,9 @@
             'name', f.name
           ))
           from entities me
-          left join comp_image i on i.entity = me.id
-          left join comp_video v on v.entity = me.id
-          left join comp_file f on f.entity = me.id
+          left join comp_embed_image i on i.entity = me.id
+          left join comp_embed_video v on v.entity = me.id
+          left join comp_embed_file f on f.entity = me.id
           where me.room = e.id
             and (i.entity is not null or v.entity is not null or f.entity is not null)
         ),
@@ -128,7 +128,7 @@
             'uri', l.entity,
             'showPreview', l.show_preview
           ))
-          from comp_link l
+          from comp_embed_link l
           where l.entity = e.id
         ),
         'comment', (

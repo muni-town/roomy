@@ -5,6 +5,7 @@
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import type { Message } from "../ChatArea.svelte";
+  import { renderMarkdownPlaintext } from "$lib/utils/markdown";
 
   let {
     replyToId,
@@ -27,7 +28,7 @@
       from entities e
         join comp_content c on c.entity = e.id
         join edges author_edge on author_edge.head = e.id and author_edge.label = 'author'
-        join comp_user u on u.did = author_edge.tail
+        left join comp_user u on u.did = author_edge.tail
         join comp_info i on i.entity = author_edge.tail
         left join comp_override_meta o on o.entity = e.id
         left join comp_info oi on oi.entity = o.author
@@ -72,5 +73,5 @@
   {/if}
 </div>
 <div class="line-clamp-1 md:basis-auto overflow-hidden italic">
-  {@html contextMessage?.content ?? ""}
+  {@html renderMarkdownPlaintext(contextMessage?.content ?? "")}
 </div>

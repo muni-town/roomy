@@ -5,3 +5,13 @@ import DOMPurify from "dompurify";
 export function renderMarkdownSanitized(markdown: string) {
   return DOMPurify.sanitize(marked.parse(markdown, { async: false })) as string;
 }
+
+export function renderMarkdownPlaintext(markdown: string): string {
+  const html = DOMPurify.sanitize(
+    marked.parse(markdown, { async: false }),
+  ) as string;
+
+  // Use the browser’s HTML parser rather than regex
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return doc.body.textContent ?? "";
+}

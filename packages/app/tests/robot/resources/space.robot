@@ -24,13 +24,13 @@ Dump Database State For Space
 
     # Dump entities table
     ${entities_sql}=    Catenate    SEPARATOR=${SPACE}
-    ...    SELECT id, stream_id, parent
+    ...    SELECT id, stream_id, room
     ...    FROM entities WHERE stream_id = '${spaceId}'
     ...    ORDER BY id
     ${entities}=    Execute SQL Query    ${entities_sql}
     Log    ENTITIES (${entities['rows'].__len__()} rows):
     FOR    ${row}    IN    @{entities['rows']}
-        Log    - id=${row['id']}, stream_id=${row['stream_id']}, parent=${row['parent']}
+        Log    - id=${row['id']}, stream_id=${row['stream_id']}, room=${row['room']}
     END
 
     # Dump comp_room table
@@ -118,94 +118,97 @@ Create Space With Name
     ...        const spaceName = '${name}';
     ...        const spaceDescription = '${description}';
     ...        try {
-    ...            // Import ulid function
-    ...            const { ulid } = await import('https://cdn.jsdelivr.net/npm/ulidx@2.4.1/+esm');
+    ...            // Import ulid function - use newUlid from window if available, fallback to ulidx
+    ...            const newUlid = window.newUlid || (await import('https://cdn.jsdelivr.net/npm/ulidx@2.4.1/+esm')).ulid;
     ...            // Create space stream
-    ...            const spaceId = await window.backend.createSpaceStream();
-    ...            console.log('Created space stream:', spaceId);
+    ...            const spaceDid = await window.backend.createSpaceStream();
+    ...            console.log('Created space stream:', spaceDid);
     ...            // Get personal stream ID
     ...            const personalStreamId = window.backendStatus?.current?.authState?.personalStream;
     ...            if (!personalStreamId) throw new Error('Personal stream ID not found');
-    ...            // Join the space
+    ...            // Join the space (updated event format)
     ...            await window.backend.sendEvent(personalStreamId, {
-    ...                ulid: newUlid(),
-    ...                parent: undefined,
-    ...                variant: { kind: 'space.roomy.personal.joinSpace.v0', data: { spaceId } }
+    ...                id: newUlid(),
+    ...                $type: 'space.roomy.space.personal.joinSpace.v0',
+    ...                spaceDid: spaceDid
     ...            });
     ...            console.log('Sent join event');
-    ...            // Build event batch for room structure
+    ...            // Build event batch for room structure (new flattened format)
     ...            const batch = [];
     ...            // Space info
     ...            batch.push({
-    ...                ulid: newUlid(), parent: undefined,
-    ...                variant: { kind: 'space.roomy.common.setInfo.v0', data: {
-    ...                    name: spaceName ? { set: spaceName } : { ignore: undefined },
-    ...                    description: spaceDescription ? { set: spaceDescription } : { ignore: undefined },
-    ...                    avatar: { ignore: undefined }
-    ...                }}
+    ...                id: newUlid(),
+    ...                $type: 'space.roomy.space.updateSpaceInfo.v0',
+    ...                name: spaceName || undefined,
+    ...                description: spaceDescription || undefined
     ...            });
     ...            // Make user admin
     ...            const userDid = window.backendStatus?.current?.authState?.did;
     ...            if (userDid) {
-    ...                batch.push({ ulid: newUlid(), parent: undefined,
-    ...                    variant: { kind: 'space.roomy.space.addAdmin.v0', data: { adminId: userDid } }
+    ...                batch.push({
+    ...                    id: newUlid(),
+    ...                    $type: 'space.roomy.space.addAdmin.v0',
+    ...                    userDid: userDid
     ...                });
     ...            }
     ...            // System user
-    ...            batch.push({ ulid: newUlid(), parent: undefined,
-    ...                variant: { kind: 'space.roomy.space.overrideUserMeta.v0', data: { handle: 'system' } }
+    ...            batch.push({
+    ...                id: newUlid(),
+    ...                $type: 'space.roomy.user.overrideHandle.v0',
+    ...                handle: 'system',
+    ...                did: spaceDid
     ...            });
-    ...            // Category
+    ...            // Category (kind is now part of createRoom.v0)
     ...            const categoryId = newUlid();
-    ...            batch.push({ ulid: categoryId, parent: undefined,
-    ...                variant: { kind: 'space.roomy.room.createRoom.v0', data: undefined } });
-    ...            batch.push({ ulid: newUlid(), parent: categoryId,
-    ...                variant: { kind: 'space.roomy.common.setInfo.v0', data: {
-    ...                    name: { set: 'Uncategorized' }, avatar: { ignore: undefined }, description: { ignore: undefined }
-    ...                }}});
-    ...            batch.push({ ulid: newUlid(), parent: categoryId,
-    ...                variant: { kind: 'space.roomy.room.setKind.v0', data: {
-    ...                    kind: 'category', data: undefined
-    ...                }}});
+    ...            batch.push({
+    ...                id: categoryId,
+    ...                $type: 'space.roomy.room.createRoom.v0',
+    ...                kind: 'space.roomy.category',
+    ...                name: 'Uncategorized'
+    ...            });
     ...            // Channel
     ...            const channelId = newUlid();
-    ...            batch.push({ ulid: channelId, parent: categoryId,
-    ...                variant: { kind: 'space.roomy.room.createRoom.v0', data: undefined } });
-    ...            batch.push({ ulid: newUlid(), parent: channelId,
-    ...                variant: { kind: 'space.roomy.common.setInfo.v0', data: {
-    ...                    name: { set: 'general' }, avatar: { ignore: undefined }, description: { ignore: undefined }
-    ...                }}});
-    ...            batch.push({ ulid: newUlid(), parent: channelId,
-    ...                variant: { kind: 'space.roomy.room.setKind.v0', data: {
-    ...                    kind: 'channel', data: undefined
-    ...                }}});
+    ...            batch.push({
+    ...                id: channelId,
+    ...                $type: 'space.roomy.room.createRoom.v0',
+    ...                kind: 'space.roomy.channel',
+    ...                name: 'general'
+    ...            });
     ...            // Thread
     ...            const threadId = newUlid();
-    ...            batch.push({ ulid: threadId, parent: channelId,
-    ...                variant: { kind: 'space.roomy.room.createRoom.v0', data: undefined } });
-    ...            batch.push({ ulid: newUlid(), parent: threadId,
-    ...                variant: { kind: 'space.roomy.common.setInfo.v0', data: {
-    ...                    name: { set: `Welcome to \${spaceName}!` }, avatar: { ignore: undefined }, description: { ignore: undefined }
-    ...                }}});
-    ...            batch.push({ ulid: newUlid(), parent: threadId,
-    ...                variant: { kind: 'space.roomy.room.setKind.v0', data: {
-    ...                    kind: 'thread', data: undefined
-    ...                }}});
-    ...            // Welcome message
+    ...            batch.push({
+    ...                id: threadId,
+    ...                $type: 'space.roomy.room.createRoom.v0',
+    ...                kind: 'space.roomy.thread',
+    ...                name: `Welcome to \${spaceName}!`
+    ...            });
+    ...            // Welcome message (updated to message.createMessage.v0)
     ...            const messageId = newUlid();
-    ...            batch.push({ ulid: messageId, parent: threadId,
-    ...                variant: { kind: 'space.roomy.room.sendMessage.v0', data: {
-    ...                    replyTo: undefined,
-    ...                    content: { mimeType: 'text/markdown', content: new TextEncoder().encode('Welcome to your new Roomy space!') }
-    ...                }}});
-    ...            batch.push({ ulid: newUlid(), parent: messageId,
-    ...                variant: { kind: 'space.roomy.room.overrideMessageMeta.v0', data: {
-    ...                    author: spaceId, timestamp: BigInt(Date.now())
-    ...                }}});
+    ...            batch.push({
+    ...                id: messageId,
+    ...                room: threadId,
+    ...                $type: 'space.roomy.message.createMessage.v0',
+    ...                body: {
+    ...                    mimeType: 'text/markdown',
+    ...                    data: { buf: new TextEncoder().encode('Welcome to your new Roomy space!') }
+    ...                },
+    ...                extensions: {
+    ...                    'space.roomy.extension.authorOverride.v0': { did: spaceDid },
+    ...                    'space.roomy.extension.timestampOverride.v0': { timestamp: BigInt(Date.now()) }
+    ...                }
+    ...            });
+    ...            // Sidebar config (new event type)
+    ...            batch.push({
+    ...                id: newUlid(),
+    ...                $type: 'space.roomy.space.updateSidebar.v0',
+    ...                categories: [
+    ...                    { name: 'Uncategorized', children: [channelId] }
+    ...                ]
+    ...            });
     ...            // Send batch
-    ...            await window.backend.sendEventBatch(spaceId, batch);
+    ...            await window.backend.sendEventBatch(spaceDid, batch);
     ...            console.log('Sent event batch with', batch.length, 'events');
-    ...            return spaceId;
+    ...            return spaceDid;
     ...        } catch (error) {
     ...            console.error('Failed to create space:', error);
     ...            throw error;
@@ -292,7 +295,7 @@ Get Space Status
     RETURN    ${status}
 
 Send Space Join Event
-    [Documentation]    Send space.roomy.personal.joinSpace.0 event to personal stream
+    [Documentation]    Send space.roomy.space.personal.joinSpace.v0 event to personal stream
     ...                Makes the authenticated user join the specified space
     ...
     ...                Example:
@@ -308,24 +311,19 @@ Send Space Join Event
 
     Evaluate JavaScript    ${None}
     ...    async () => {
-    ...        const spaceId = '${spaceId}';
+    ...        const spaceDid = '${spaceId}';
     ...        const personalStreamId = window.backendStatus?.current?.authState?.personalStream;
     ...        if (!personalStreamId) {
     ...            throw new Error('Personal stream ID not found');
     ...        }
     ...        // Generate a simple ULID-like ID for testing (not cryptographically secure)
-    ...        const ulid = Date.now().toString(36) + Math.random().toString(36).substring(2);
+    ...        const id = Date.now().toString(36) + Math.random().toString(36).substring(2);
     ...        await window.backend.sendEvent(personalStreamId, {
-    ...            ulid: ulid,
-    ...            parent: undefined,
-    ...            variant: {
-    ...                kind: 'space.roomy.personal.joinSpace.v0',
-    ...                data: {
-    ...                    spaceId: spaceId
-    ...                }
-    ...            }
+    ...            id: id,
+    ...            $type: 'space.roomy.space.personal.joinSpace.v0',
+    ...            spaceDid: spaceDid
     ...        });
-    ...        console.log('Sent space.join event for space:', spaceId);
+    ...        console.log('Sent space.join event for space:', spaceDid);
     ...    }
 
     Log    Sent join event for space: ${spaceId}
@@ -387,7 +385,7 @@ Query Space Rooms
     ...    e.id as id,
     ...    r.label as type,
     ...    i.name,
-    ...    e.parent as parent,
+    ...    e.room as parent,
     ...    r.deleted
     ...    FROM entities e
     ...    JOIN comp_room r ON r.entity = e.id
@@ -447,15 +445,16 @@ Count Rooms By Type
     ${results}=    Set Variable    ${result['rows']}
 
     # Convert results to dictionary with default values
+    # Note: Room kinds are now fully-qualified NSIDs like 'space.roomy.channel'
     ${counts}=    Create Dictionary    categories=0    channels=0    threads=0    pages=0
     FOR    ${row}    IN    @{results}
-        IF    '${row['label']}' == 'category'
+        IF    '${row['label']}' == 'space.roomy.category'
             Set To Dictionary    ${counts}    categories=${row['count']}
-        ELSE IF    '${row['label']}' == 'channel'
+        ELSE IF    '${row['label']}' == 'space.roomy.channel'
             Set To Dictionary    ${counts}    channels=${row['count']}
-        ELSE IF    '${row['label']}' == 'thread'
+        ELSE IF    '${row['label']}' == 'space.roomy.thread'
             Set To Dictionary    ${counts}    threads=${row['count']}
-        ELSE IF    '${row['label']}' == 'page'
+        ELSE IF    '${row['label']}' == 'space.roomy.page'
             Set To Dictionary    ${counts}    pages=${row['count']}
         END
     END
@@ -540,7 +539,7 @@ Verify Welcome Message Exists
     ...    FROM entities e
     ...    JOIN comp_content c ON c.entity = e.id
     ...    LEFT JOIN comp_override_meta om ON om.entity = e.id
-    ...    WHERE e.parent = '${thread_id}'
+    ...    WHERE e.room = '${thread_id}'
     ...    ORDER BY e.id
     ...    LIMIT 1
 

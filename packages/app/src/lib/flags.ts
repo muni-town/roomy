@@ -2,7 +2,7 @@
  * VITE_FEATURE_FLAGS env var as JSON string.
  */
 const baseFlags = {
-  threadsList: false, // 'Index' (threads list) page for spaces
+  threadsList: true, // 'Index' (threads list) page for spaces
 };
 
 type Flags = typeof baseFlags;
