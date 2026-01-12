@@ -12,7 +12,7 @@
   import { backend } from "$lib/workers";
   import { current } from "$lib/queries";
   import { page } from "$app/state";
-  import { navigate } from "$lib/utils.svelte";
+  import { navigate, navigateSync } from "$lib/utils.svelte";
   import {
     messagingState,
     type Commenting,
@@ -24,6 +24,7 @@
   import type { Attachment } from "$lib/schema/extensions/message";
   import ChatInput, { setInputFocus } from "./ChatInput.svelte";
   import { createThread } from "$lib/mutations/room";
+  import { goto } from "$app/navigation";
 
   let spaceId = $derived(current.joinedSpace?.id);
   let isSendingMessage = $state(false);
@@ -147,7 +148,14 @@
       files: [],
     });
 
-    navigate({ space: page.params.space, object: threadId });
+    const threadUrl =
+      navigateSync({ space: page.params.space, object: threadId }) +
+      "?parent=" +
+      current.roomId;
+
+    console.log("threadUrl", threadUrl); // not working
+
+    goto(threadUrl);
   }
 
   async function sendMessage() {

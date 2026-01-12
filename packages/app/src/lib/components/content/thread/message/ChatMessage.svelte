@@ -7,7 +7,6 @@
   import MessageContext from "./MessageContext.svelte";
   import MessageReactions from "./MessageReactions.svelte";
   import ChatInput from "../ChatInput.svelte";
-  import IconTablerCheck from "~icons/tabler/check";
   import { goto } from "$app/navigation";
   import { renderMarkdownSanitized } from "$lib/utils/markdown";
   import type { Message } from "../ChatArea.svelte";
@@ -150,39 +149,7 @@
   // });
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div
-  id={message.id}
-  class={`flex flex-col w-full relative max-w-screen isolate px-4 ${threading ? "select-none" : ""}`}
-  onmouseenter={() => (hovered = true)}
-  onmouseleave={() => (hovered = false)}
->
-  {#if threading}
-    <Checkbox.Root
-      aria-label="Select message"
-      onclick={(e) => e.stopPropagation()}
-      bind:checked={
-        () => isSelected,
-        (value) => {
-          if (value && !messageByMe && !current.isSpaceAdmin) {
-            toast.error("You cannot move someone else's message");
-            return;
-          }
-          toggleSelect(message);
-        }
-      }
-      class="absolute right-8 inset-y-0 top-1 z-10"
-    >
-      <div
-        class="border border-primary bg-base-50 text-primary-content size-4 rounded items-center cursor-pointer"
-      >
-        {#if isSelected}
-          <IconTablerCheck class="bg-primary size-3.5 dark:text-black" />
-        {/if}
-      </div>
-    </Checkbox.Root>
-  {/if}
-
+{#snippet messageBox()}
   <div
     class={[
       `relative group w-full flex flex-col px-2 rounded ${isSelected ? "bg-accent-100/50 dark:bg-accent-900/50 hover:bg-accent-100/75 dark:hover:bg-accent-900/75" : " hover:bg-base-100/50  dark:hover:bg-base-400/5"}`,
@@ -263,7 +230,7 @@
 
         <!-- Message text -->
         <div
-          class="prose prose-a:text-accent-600 dark:prose-a:text-accent-400 dark:prose-invert prose-a:no-underline max-w-full"
+          class="prose text-left prose-a:text-accent-600 dark:prose-a:text-accent-400 dark:prose-invert prose-a:no-underline max-w-full"
         >
           {#if editingMessage.id === message.id}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -340,7 +307,44 @@
 
     <MessageReactions {message} />
   </div>
-</div>
+{/snippet}
+
+{#if threading}
+  <Checkbox.Root
+    aria-label="Select message"
+    onclick={(e) => e.stopPropagation()}
+    bind:checked={
+      () => isSelected,
+      (value) => {
+        if (value && !messageByMe && !current.isSpaceAdmin) {
+          toast.error("You cannot move someone else's message");
+          return;
+        }
+        toggleSelect(message);
+      }
+    }
+    class="flex flex-col w-full relative max-w-screen isolate px-4"
+  >
+    {@render messageBox()}
+    <!-- <div
+      class="border border-primary bg-base-50 text-primary-content size-4 rounded items-center cursor-pointer"
+    >
+      {#if isSelected}
+        <IconTablerCheck class="bg-primary size-3.5 dark:text-black" />
+      {/if}
+    </div> -->
+  </Checkbox.Root>
+{:else}
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div
+    id={message.id}
+    class={`flex flex-col w-full relative max-w-screen isolate px-4 ${threading ? "select-none" : ""}`}
+    onmouseenter={() => (hovered = true)}
+    onmouseleave={() => (hovered = false)}
+  >
+    {@render messageBox()}
+  </div>
+{/if}
 
 {#snippet timestamp(date: Date)}
   {@const formattedDate = isToday(date) ? "Today" : format(date, "P")}
