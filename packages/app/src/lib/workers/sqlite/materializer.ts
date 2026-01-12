@@ -50,7 +50,7 @@ const materializers: {
         })}
       )
     `,
-    // Create a virtual message announcing the member joining
+    // Create a system message announcing the member joining
     sql`
       insert into entities (id, stream_id, room)
       values (
@@ -65,7 +65,7 @@ const materializers: {
         )
       ) on conflict do nothing
     `,
-    // Set author on the virtual message to be the stream itself
+    // Set author on the system message to be the stream itself
     sql`
         insert or replace into edges (head, tail, label)
         select 
@@ -218,20 +218,43 @@ const materializers: {
   },
 
   // TODO: fix
-  "space.roomy.link.createRoomLink.v0": async ({ event }) => {
+  "space.roomy.link.createRoomLink.v0": async ({ streamId, event, user }) => {
     // Update the parent room
     return [
-      event.room !== undefined
-        ? sql`
-          insert into edges (head, tail, label)
+      sql`
+          insert or replace into edges (head, tail, label)
           values (
             ${event.room},
             ${event.linkToRoom},
             'link'
           )
-        `
-        : undefined,
-    ].filter((x) => !!x);
+        `,
+      // create system message announcing the link
+      sql`
+        insert into entities (id, stream_id, room)
+        values (
+          ${event.id},
+          ${streamId},
+          ${event.room}
+        ) on conflict do nothing
+      `,
+      sql`
+          insert or replace into edges (head, tail, label)
+          select 
+            ${event.id},
+            ${streamId},
+            'author'
+        `,
+      // 'linked to' is probably not what we want, but this is not a user facing affordance for now
+      sql`
+        insert or replace into comp_content (entity, mime_type, data, last_edit)
+        values (
+          ${event.id},
+          'text/markdown',
+          cast(('[@' || (select handle from comp_user where did = ${user}) || '](/user/' || ${user} || ') ' || ${event.isCreationLink ? "created [" : "linked to ]"} || (select name from comp_info where entity = ${event.linkToRoom}) || '](' || ${event.linkToRoom} || ').') as blob),
+          ${event.id}
+      )`,
+    ];
   },
 
   // TODO: fix
@@ -465,14 +488,15 @@ const materializers: {
     return statements;
   },
 
-  "space.roomy.message.moveMessage.v0": async ({ event }) => {
-    // Update the parent room
-    return [
-      sql`
-          update entities set room = ${event.toRoomId || null}
-          where id = ${event.messageId}
+  "space.roomy.message.moveMessages.v0": async ({ event }) => {
+    // Update the room for each message
+    return event.messageId.map(
+      (msgId) =>
+        sql`
+          update entities set room = ${event.toRoomId}
+          where id = ${msgId}
         `,
-    ].filter((x) => !!x);
+    );
   },
 
   // TODO: Note that this is interactive with the db and handled in the worker.

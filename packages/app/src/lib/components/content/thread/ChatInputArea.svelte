@@ -126,21 +126,19 @@
       room: current.roomId,
       $type: "space.roomy.link.createRoomLink.v0",
       linkToRoom: threadId,
+      isCreationLink: true,
     });
 
     // move selected messages into thread
-    for (const message of state.selectedMessages) {
-      const event = {
-        id: newUlid(),
-        room: current.roomId,
-        $type: "space.roomy.message.moveMessage.v0",
-        messageId: message.id,
-        toRoomId: threadId,
-      } as const;
-      events.push(event);
-    }
+    events.push({
+      id: newUlid(),
+      room: current.roomId,
+      $type: "space.roomy.message.moveMessages.v0",
+      messageId: state.selectedMessages.map((m) => m.id),
+      toRoomId: threadId,
+    });
 
-    console.log("sending events", { spaceId, events });
+    console.log("sending thread creation events", { spaceId, events });
     await backend.sendEventBatch(spaceId, events);
 
     messagingState.set({

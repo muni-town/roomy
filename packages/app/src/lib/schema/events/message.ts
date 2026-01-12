@@ -42,13 +42,15 @@ setDependsOn("space.roomy.message.deleteMessage.v0", {
   events: (x) => [x.messageId],
 });
 
-export const MoveMessage = type({
-  $type: "'space.roomy.message.moveMessage.v0'",
-  messageId: Ulid.describe("The ID of the message being moved."),
-  toRoomId: Ulid.describe("The room to which the message should be moved"),
-}).describe("Move a message to a different room");
+export const MoveMessages = type({
+  $type: "'space.roomy.message.moveMessages.v0'",
+  messageId: Ulid.describe("The ID of each message being moved.")
+    .array()
+    .moreThanLength(0),
+  toRoomId: Ulid.describe("The room to which the messages should be moved"),
+}).describe("Move one or more messages to a different room");
 
-setDependsOn("space.roomy.message.moveMessage.v0", {
+setDependsOn("space.roomy.message.moveMessages.v0", {
   events: (x) => [x.messageId],
 });
 
@@ -69,6 +71,6 @@ export const MessageEventVariant = type.or(
   CreateMessage,
   EditMessage,
   DeleteMessage,
-  MoveMessage,
+  MoveMessages,
   ReorderMessage,
 );
