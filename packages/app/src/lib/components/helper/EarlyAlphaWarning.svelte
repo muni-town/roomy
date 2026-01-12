@@ -16,7 +16,8 @@
           Roomy is in an unstable, early "Alpha" state. This means that it is a
           work-in-progress and is under heavy development. Many things may not
           work as expected and, though we do have backups as a precaution, <strong
-            class="text-white">data might not be preserved</strong
+            class="font-medium dark:text-white"
+            >data might not be preserved</strong
           >.
         </p>
         <p>
