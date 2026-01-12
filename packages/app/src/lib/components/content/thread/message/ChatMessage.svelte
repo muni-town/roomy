@@ -345,6 +345,6 @@
 {#snippet timestamp(date: Date)}
   {@const formattedDate = isToday(date) ? "Today" : format(date, "P")}
   <time class="text-xs text-base-700 dark:text-base-400">
-    {formattedDate}, {format(date, "pp")}
+    {formattedDate}, {format(date, "p")}
   </time>
 {/snippet}
