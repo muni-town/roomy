@@ -171,7 +171,7 @@
           toggleSelect(message);
         }
       }
-      class="absolute right-8 inset-y-0 z-10"
+      class="absolute right-8 inset-y-0 top-1 z-10"
     >
       <div
         class="border border-primary bg-base-50 text-primary-content size-4 rounded items-center cursor-pointer"
@@ -185,8 +185,8 @@
 
   <div
     class={[
-      `relative group w-full h-fit flex flex-col gap-2 px-2 pt-2 pb-1 ${isSelected ? "bg-accent-100/50 dark:bg-accent-900/50 hover:bg-accent-100/75 dark:hover:bg-accent-900/75" : " hover:bg-base-100/50  dark:hover:bg-base-400/5"}`,
-      message.mergeWithPrevious ? "" : "pt-3",
+      `relative group w-full flex flex-col px-2 rounded ${isSelected ? "bg-accent-100/50 dark:bg-accent-900/50 hover:bg-accent-100/75 dark:hover:bg-accent-900/75" : " hover:bg-base-100/50  dark:hover:bg-base-400/5"}`,
+      message.mergeWithPrevious ? "mt-1" : "mt-5 pt-1",
     ]}
   >
     <div class={message.mergeWithPrevious ? "pl-12" : ""}>
