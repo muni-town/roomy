@@ -56,7 +56,7 @@
     {#if page.params.object && !roomsInSidebar.has(page.params.object)}
       <Button
         variant="ghost"
-        class="w-full justify-start min-w-0 mb-2 border-dashed border-accent-200 border-2"
+        class="w-full justify-start min-w-0 mb-2 border-dashed border-accent-200 dark:border-base-800 dark:hover:border-accent-900 border-2"
       >
         <IconHeroiconsHashtag class="shrink-0" />
         <span

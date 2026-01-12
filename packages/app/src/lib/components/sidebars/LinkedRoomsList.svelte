@@ -56,7 +56,9 @@
           href={navigateSync({
             space: page.params.space!,
             object: room.id,
-          })}
+          }) +
+            "?parent=" +
+            page.params.object}
           variant="ghost"
           class="w-full justify-start min-w-0 px-1 rounded-sm py-1 text-base-600"
           data-current={room.id === page.params.object}
