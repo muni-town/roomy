@@ -218,16 +218,20 @@ const materializers: {
   },
 
   // TODO: fix
-  "space.roomy.link.createRoomLink.v0": async ({}) => {
+  "space.roomy.link.createRoomLink.v0": async ({ event }) => {
     // Update the parent room
-    return []; // [
-    //   event.room !== undefined
-    //     ? sql`
-    //       update entities set room = ${event.toParent || null}
-    //       where id = ${event.room}
-    //     `
-    //     : undefined,
-    // ].filter((x) => !!x);
+    return [
+      event.room !== undefined
+        ? sql`
+          insert into edges (head, tail, label)
+          values (
+            ${event.room},
+            ${event.linkToRoom},
+            'link'
+          )
+        `
+        : undefined,
+    ].filter((x) => !!x);
   },
 
   // TODO: fix
@@ -381,7 +385,7 @@ const materializers: {
         statements.push(
           ensureEntity(streamId, uriWithUlidQuery, event.id),
           sql`
-            insert or replace into comp_image (entity, mime_type, alt, width, height, blurhash, size)
+            insert or replace into comp_embed_image (entity, mime_type, alt, width, height, blurhash, size)
             values (
               ${uriWithUlidQuery},
               ${att.mimeType},
@@ -399,7 +403,7 @@ const materializers: {
         statements.push(
           ensureEntity(streamId, uriWithUlidQuery, event.id),
           sql`
-            insert or replace into comp_video (entity, mime_type, alt, width, height, length, blurhash, size)
+            insert or replace into comp_embed_video (entity, mime_type, alt, width, height, length, blurhash, size)
             values (
               ${uriWithUlidQuery},
               ${att.mimeType},
@@ -417,7 +421,7 @@ const materializers: {
         statements.push(
           ensureEntity(streamId, uriWithUlidQuery, event.id),
           sql`
-            insert or replace into comp_file (entity, mime_type, name, size)
+            insert or replace into comp_embed_file (entity, mime_type, name, size)
             values (
               ${uriWithUlidQuery},
               ${att.mimeType},
@@ -431,7 +435,7 @@ const materializers: {
         statements.push(
           ensureEntity(streamId, uriWithUlidQuery, event.id),
           sql`
-          insert into comp_link (entity, show_preview)
+          insert into comp_embed_link (entity, show_preview)
           values (
             ${uriWithUlidQuery},
             ${att.showPreview ? 1 : 0}
@@ -765,20 +769,19 @@ function edgePayload<EdgeLabel extends keyof EdgesWithPayload>(
 }
 
 export type EdgeLabel =
-  | "child"
-  | "parent"
-  | "subscribe"
-  | "member"
-  | "ban"
-  | "hide"
-  | "pin"
-  | "embed"
-  | "reply"
-  | "link"
-  | "author"
-  | "reorder"
-  | "source"
-  | "avatar";
+  // | "child"
+  // | "parent"
+  // | "subscribe"
+  "member" | "ban";
+// | "hide"
+// | "pin"
+// | "embed"
+// | "reply"
+// | "link"
+// | "author"
+// | "reorder"
+// | "source"
+// | "avatar";
 
 type EntityId = string;
 
