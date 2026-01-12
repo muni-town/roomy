@@ -25,6 +25,7 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
     "test:robot": "uv run robot --outputdir tests/robot/results tests/robot",
+    "test:robot:path": "uv run robot --outputdir tests/robot/results",
     "test:robot:setup": "uv sync && uv run rfbrowser init",
     "test:robot:headed": "uv run robot --outputdir tests/robot/results --variable HEADLESS:False tests/robot",
     "test:robot:tag": "uv run robot --outputdir tests/robot/results --include",
