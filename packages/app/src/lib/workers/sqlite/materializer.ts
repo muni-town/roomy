@@ -490,7 +490,7 @@ const materializers: {
 
   "space.roomy.message.moveMessages.v0": async ({ event }) => {
     // Update the room for each message
-    return event.messageId.map(
+    return event.messageIds.map(
       (msgId) =>
         sql`
           update entities set room = ${event.toRoomId}
