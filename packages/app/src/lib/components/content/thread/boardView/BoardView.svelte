@@ -2,7 +2,7 @@
   import BoardViewItem from "./BoardViewItem.svelte";
   import { ScrollArea } from "@fuxui/base";
   import type { ThreadInfo } from "./types";
-  import type { Ulid } from "$lib/schema";
+  import type { Ulid } from "@roomy/sdk";
 
   const {
     threads,

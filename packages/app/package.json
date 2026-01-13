@@ -79,6 +79,7 @@
     "@opentelemetry/sdk-trace-web": "^2.2.0",
     "@playwright/test": "^1.40.0",
     "@repo/tsconfig": "workspace:*",
+    "@roomy/sdk": "workspace:*",
     "@scure/base": "^2.0.0",
     "@sqlite.org/sqlite-wasm": "3.50.4-build1",
     "@sveltejs/adapter-netlify": "^5.2.3",

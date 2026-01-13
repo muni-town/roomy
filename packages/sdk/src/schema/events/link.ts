@@ -1,6 +1,6 @@
 import { type, Ulid } from "../primitives";
 
-export const CreateRoomLink = type({
+const CreateRoomLink = type({
   $type: "'space.roomy.link.createRoomLink.v0'",
   linkToRoom: Ulid.describe("The room to link."),
   "isCreationLink?": "boolean", // Whether this link is being created as part of the creation of the linked room

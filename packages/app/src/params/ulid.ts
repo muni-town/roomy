@@ -1,4 +1,4 @@
-import { type, Ulid } from "$lib/schema";
+import { type, Ulid } from "@roomy/sdk";
 import type { ParamMatcher } from "@sveltejs/kit";
 
 export const match = ((param: string) => {

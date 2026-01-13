@@ -21,6 +21,7 @@ export const RoomEventVariantUnion = type.or(
   PageEventVariant,
   LinkEventVariant,
 );
+export type RoomEventVariantUnion = typeof RoomEventVariantUnion.infer;
 
 /** Any event variant that is sent in the top level of a space */
 export const SpaceEventVariantUnion = type.or(
@@ -40,7 +41,9 @@ export const SpaceEvent = SpaceEventVariantUnion;
 /** Any event variant */
 export const Event = type.or(RoomEvent, SpaceEvent).and(
   type({
-    id: Ulid.describe("Unique event ULID. A ULID is both globally unique and also contains timestamp information"),
+    id: Ulid.describe(
+      "Unique event ULID. A ULID is both globally unique and also contains timestamp information",
+    ),
   }),
 );
 

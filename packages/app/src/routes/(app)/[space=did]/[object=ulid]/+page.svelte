@@ -45,8 +45,9 @@
   import IconTablerSettings from "~icons/tabler/settings";
 
   import Error from "$lib/components/modals/Error.svelte";
-  import { Ulid } from "$lib/schema";
+
   import { flags } from "$lib/config";
+  import { Ulid } from "@roomy/sdk";
   import EditRoomModal from "$lib/components/modals/EditRoomModal.svelte";
 
   let createPageDialogOpen = $state(false);

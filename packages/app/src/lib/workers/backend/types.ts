@@ -8,7 +8,7 @@ import type { BlobRef } from "@atproto/lexicon";
 import type { Deferred } from "$lib/utils/deferred";
 import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
 import type { ConnectedStream } from "./stream";
-import type { StreamDid, UserDid, Event, Handle, Ulid } from "$lib/schema";
+import type { StreamDid, UserDid, Event, Handle, Ulid } from "@roomy/sdk";
 
 export interface BackendStatus {
   authState: ReactiveAuthState;

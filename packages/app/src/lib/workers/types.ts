@@ -6,7 +6,7 @@ import type {
   Handle,
   Event,
   UserDid,
-} from "$lib/schema";
+} from "@roomy/sdk";
 import type { QueryResult } from "./sqlite/setup";
 import type { SqlStatement } from "./sqlite/types";
 

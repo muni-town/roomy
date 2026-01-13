@@ -1,4 +1,4 @@
-import { UserDid } from "$lib/schema";
+import { UserDid } from "@roomy/sdk";
 import { LiveQuery } from "$lib/utils/liveQuery.svelte";
 import { sql } from "$lib/utils/sqlTemplate";
 import { backend, backendStatus, getPersonalStreamId } from "$lib/workers";

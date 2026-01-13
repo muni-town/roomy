@@ -10,7 +10,7 @@
   import { RichTextEditor } from "$lib/components/richtext";
   import { patchMake, patchToText } from "diff-match-patch-es";
   import Turndown from "turndown";
-  import { newUlid, toBytes, Ulid } from "$lib/schema";
+  import { newUlid, toBytes, Ulid } from "@roomy/sdk";
   import { scrollContainerRef } from "$lib/utils.svelte";
 
   import IconTablerCheck from "~icons/tabler/check";

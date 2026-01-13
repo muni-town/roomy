@@ -4,7 +4,7 @@ import { joinedSpaces } from "./spaces.svelte";
 import type { AuthStates } from "$lib/workers/backend/types";
 import type { SpaceIdOrHandle } from "$lib/workers/types";
 import type { SpaceMeta } from "./types";
-import { type StreamDid, Ulid, type UserDid } from "$lib/schema";
+import { type StreamDid, Ulid, type UserDid } from "@roomy/sdk";
 
 type SpaceStatus =
   | { status: "no-current-space" }
