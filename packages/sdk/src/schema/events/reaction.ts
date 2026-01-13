@@ -3,9 +3,9 @@
  */
 
 import { UserDid, type, Ulid } from "../primitives";
-import { setDependsOn } from "./dependencies";
+import { defineEvent, sql } from "./index";
 
-export const AddReaction = type({
+const AddReactionSchema = type({
   $type: "'space.roomy.reaction.addReaction.v0'",
   reactionTo: Ulid.describe("The ID of the event being reacted to."),
   reaction: type.string.describe(
@@ -13,20 +13,48 @@ export const AddReaction = type({
   ),
 }).describe("Add a reaction.");
 
-setDependsOn("space.roomy.reaction.addReaction.v0", {
-  events: (x) => [x.reactionTo],
-});
+export const AddReaction = defineEvent(
+  AddReactionSchema,
+  ({ event, user }) => {
+    return [
+      sql`
+        insert or replace into comp_reaction (entity, user, reaction, reaction_id)
+        values (
+          ${event.reactionTo},
+          ${user},
+          ${event.reaction},
+          ${event.id}
+        )
+      `,
+    ];
+  },
+  (x) => [x.reactionTo],
+);
 
-export const RemoveReaction = type({
+const RemoveReactionSchema = type({
   $type: "'space.roomy.reaction.removeReaction.v0'",
   reactionId: Ulid.describe("The ID of the addReaction event to undo."),
 }).describe("Remove a reaction.");
 
-setDependsOn("space.roomy.reaction.removeReaction.v0", {
-  events: (x) => [x.reactionId],
-});
+export const RemoveReaction = defineEvent(
+  RemoveReactionSchema,
+  ({ event }) => {
+    if (!event.room) {
+      console.warn("Delete reaction missing room");
+      return [];
+    }
+    return [
+      sql`
+      delete from comp_reaction
+      where
+        reaction_id = ${event.reactionId}
+    `,
+    ];
+  },
+  (x) => [x.reactionId],
+);
 
-export const AddBrigedReaction = type({
+const AddBridgedReactionSchema = type({
   $type: "'space.roomy.reaction.addBridgedReaction.v0'",
   reactionTo: Ulid.describe("The ID of the event being reacted to."),
   reaction: type.string.describe(
@@ -38,11 +66,25 @@ export const AddBrigedReaction = type({
 This is used for bridging reactions from other platforms.",
 );
 
-setDependsOn("space.roomy.reaction.addBridgedReaction.v0", {
-  events: (x) => [x.reactionTo],
-});
+export const AddBridgedReaction = defineEvent(
+  AddBridgedReactionSchema,
+  ({ event, user }) => {
+    return [
+      sql`
+        insert or replace into comp_reaction (entity, user, reaction, reaction_id)
+        values (
+          ${event.reactionTo},
+          ${user},
+          ${event.reaction},
+          ${event.id}
+        )
+      `,
+    ];
+  },
+  (x) => [x.reactionTo],
+);
 
-export const RemoveBrigedReaction = type({
+const RemoveBridgedReactionSchema = type({
   $type: "'space.roomy.reaction.removeBridgedReaction.v0'",
   reactionId: Ulid.describe("The ID of the addBridgedReaction event to undo."),
   reactingUser: UserDid.describe("The external user ID doing the reacting"),
@@ -51,14 +93,28 @@ export const RemoveBrigedReaction = type({
 This is used for bridging reactions from other platforms.",
 );
 
-setDependsOn("space.roomy.reaction.removeBridgedReaction.v0", {
-  events: (x) => [x.reactionId],
-});
+export const RemoveBridgedReaction = defineEvent(
+  RemoveBridgedReactionSchema,
+  ({ event }) => {
+    if (!event.room) {
+      console.warn("Delete reaction missing room");
+      return [];
+    }
+    return [
+      sql`
+      delete from comp_reaction
+      where
+        reaction_id = ${event.reactionId}
+    `,
+    ];
+  },
+  (x) => [x.reactionId],
+);
 
 // All reaction events
 export const ReactionEventVariant = type.or(
-  AddReaction,
-  RemoveReaction,
-  AddBrigedReaction,
-  RemoveBrigedReaction,
+  AddReactionSchema,
+  RemoveReactionSchema,
+  AddBridgedReactionSchema,
+  RemoveBridgedReactionSchema,
 );

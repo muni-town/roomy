@@ -39,7 +39,22 @@ export {
   type EventType,
 } from "./envelope";
 
-export * from "./events/dependencies";
+// Event definitions and utilities
+export {
+  defineEvent,
+  sql,
+  ensureEntity,
+  edgePayload,
+  decodeTime,
+  fromBytes,
+  getDependsOn,
+  getMaterializer,
+  type MaterializeContext,
+  type MaterializeFn,
+  type DependsOnFn,
+  type DefinedEvent,
+  type SqlStatement,
+} from "./events";
 
 export * from "./extensions/message";
 

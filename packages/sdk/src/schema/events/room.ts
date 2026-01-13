@@ -3,6 +3,7 @@
  */
 
 import { UserDid, type, Ulid, BasicInfo, BasicInfoUpdate } from "../primitives";
+import { defineEvent, sql, ensureEntity } from "./index";
 
 export const RoomKind = type(
   "'space.roomy.channel' | 'space.roomy.category' | 'space.roomy.thread' | 'space.roomy.page'",
@@ -35,7 +36,7 @@ export const GroupMember = type
   )
   .describe("The group member identifier");
 
-export const CreateRoom = type({
+const CreateRoomSchema = type({
   $type: "'space.roomy.room.createRoom.v0'",
   kind: RoomKind,
 })
@@ -44,7 +45,23 @@ export const CreateRoom = type({
     "Create a room. The ulid of this event becomes the id of the room.",
   );
 
-export const UpdateRoom = type({
+export const CreateRoom = defineEvent(
+  CreateRoomSchema,
+  ({ streamId, event }) => [
+    ensureEntity(streamId, event.id),
+    sql`
+      insert into comp_info ( entity, name, avatar, description)
+      values ( ${event.id}, ${event.name || null}, ${event.avatar || null}, ${event.description || null})
+      on conflict do nothing
+    `,
+    sql`
+      insert into comp_room ( entity, label )
+      values ( ${event.id}, ${event.kind} ) on conflict do nothing
+    `,
+  ],
+);
+
+const UpdateRoomSchema = type({
   $type: "'space.roomy.room.updateRoom.v0'",
   roomId: Ulid.describe("The room to update"),
   "kind?": RoomKind.or(type.null),
@@ -54,47 +71,58 @@ export const UpdateRoom = type({
     "Allows you to set the room kind, basic information, or to change it's parent",
   );
 
-export const DeleteRoom = type({
+export const UpdateRoom = defineEvent(UpdateRoomSchema, ({ event }) => {
+  const updates = [
+    { key: "name", value: event.name },
+    { key: "avatar", value: event.avatar },
+    { key: "description", value: event.description },
+  ];
+  const setUpdates = updates.filter((x) => x.value !== undefined);
+
+  return [
+    // Update the room kind
+    event.kind !== undefined
+      ? sql`
+          update comp_room set label = ${event.kind} where entity = ${event.roomId}
+          `
+      : undefined,
+
+    // Update the room info
+    setUpdates.length > 0
+      ? {
+          sql: `insert into comp_info (entity, ${setUpdates.map((x) => `${x.key}`).join(", ")})
+            VALUES (:entity, ${setUpdates.map((x) => `:${x.key}`)})
+            on conflict do update set ${[...setUpdates].map((x) => `${x.key} = :${x.key}`)}`,
+          params: Object.fromEntries([
+            [":entity", event.roomId],
+            ...setUpdates.map((x) => [
+              ":" + x.key,
+              "value" in x ? x.value : undefined,
+            ]),
+          ]),
+        }
+      : undefined,
+  ].filter((x) => !!x);
+});
+
+const DeleteRoomSchema = type({
   $type: "'space.roomy.room.deleteRoom.v0'",
   roomId: Ulid.describe("The room to delete"),
 }).describe("Delete a room. Sent at top level or in the parent room.");
 
-// export const JoinRoom = type({
-//   $type: "'space.roomy.room.joinRoom.v0'",
-// }).describe("Join the room specified in envelope.");
-
-// export const LeaveRoom = type({
-//   $type: "'space.roomy.room.leaveRoom.v0'",
-// }).describe("Leave a room");
-
-// export const AddMember = type({
-//   $type: "'space.roomy.room.addMember.v0'",
-//   member: GroupMember,
-//   access: AccessLevel,
-// }).describe("Add a member to the room's access list");
-
-// export const UpdateMember = type({
-//   $type: "'space.roomy.room.updateMember.v0'",
-//   member: GroupMember,
-//   access: AccessLevel,
-//   "reason?": "string",
-// }).describe("Change a room member's access permissions");
-
-// export const RemoveMember = type({
-//   $type: "'space.roomy.room.removeMember.v0'",
-//   member: GroupMember,
-//   access: AccessLevel,
-//   "reason?": "string",
-// }).describe("Remove a member from the room's access list");
+export const DeleteRoom = defineEvent(DeleteRoomSchema, ({ event }) => {
+  return [
+    sql`
+        update comp_room
+        set deleted = 1
+        where entity = ${event.roomId}
+      `,
+  ];
+});
 
 // All room events
 export const RoomEventVariant = type.or(
-  CreateRoom,
-  DeleteRoom,
-  // JoinRoom,
-  // LeaveRoom,
-  UpdateRoom,
-  // AddMember,
-  // UpdateMember,
-  // RemoveMember,
+  CreateRoomSchema,
+  DeleteRoomSchema,
+  UpdateRoomSchema,
 );
