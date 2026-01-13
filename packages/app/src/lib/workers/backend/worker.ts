@@ -29,7 +29,7 @@ import type {
   SqliteWorkerInterface,
   SqlStatement,
 } from "../sqlite/types";
-import { ensureEntity } from "../sqlite/materializer";
+import { ensureEntity } from "@roomy/sdk";
 import {
   UserDid,
   parseEvent,
