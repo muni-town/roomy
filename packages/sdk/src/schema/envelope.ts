@@ -6,13 +6,15 @@
  */
 
 import { type, Ulid } from "./primitives";
-import { MessageEventVariant } from "./events/message";
-import { RoomEventVariant } from "./events/room";
-import { ReactionEventVariant } from "./events/reaction";
-import { SpaceEventVariant } from "./events/space";
-import { PageEventVariant } from "./events/page";
-import { UserEventVariant } from "./events/user";
-import { LinkEventVariant } from "./events/link";
+import {
+  MessageEventVariant,
+  ReactionEventVariant,
+  PageEventVariant,
+  LinkEventVariant,
+  SpaceEventVariant,
+  RoomEventVariant,
+  UserEventVariant,
+} from "./events";
 
 /** Any event variant that is sent in a room */
 export const RoomEventVariantUnion = type.or(

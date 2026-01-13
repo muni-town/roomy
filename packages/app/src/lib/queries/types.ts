@@ -1,4 +1,4 @@
-import type { Handle, StreamDid, UserDid } from "$lib/schema";
+import type { Handle, StreamDid, UserDid } from "@roomy/sdk";
 
 export type SpaceMeta = {
   id: StreamDid;
