@@ -29,7 +29,6 @@ import {
   Ulid,
   UserDid,
   newUlid,
-  parseEvent,
   type Event,
   type EventType,
 } from "@roomy/sdk";
@@ -45,7 +44,6 @@ import type { BackendInterface } from "../backend/types";
 import { Deferred } from "$lib/utils/deferred";
 import { CONFIG } from "$lib/config";
 import { initializeFaro, trackUncaughtExceptions } from "$lib/otel";
-import { decode } from "@atcute/cbor";
 import { decodeTime, ulid } from "ulidx";
 import { context } from "@opentelemetry/api";
 
