@@ -15,7 +15,7 @@ import {
   type Event,
   Ulid,
   parseEvent,
-} from "$lib/schema";
+} from "@roomy/sdk";
 import { decode, encode } from "@atcute/cbor";
 import { Deferred } from "$lib/utils/deferred";
 import type { ModuleWithCid } from "./modules";

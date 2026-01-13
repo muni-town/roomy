@@ -1,7 +1,7 @@
-import { newUlid, toBytes, Ulid } from "$lib/schema";
+import { newUlid, toBytes, Ulid } from "@roomy/sdk";
 import { backend } from "$lib/workers";
-import type { Event, StreamDid } from "$lib/schema";
-import { RoomKind } from "$lib/schema/events/room";
+import type { Event, StreamDid } from "@roomy/sdk";
+import { RoomKind } from "@roomy/sdk";
 
 interface CreateRoomOpts {
   spaceId: StreamDid;
@@ -194,7 +194,6 @@ export async function setPageReadMarker(opts: {
 }) {
   // TODO: temporarily remove for now since unreads aren't calculated yet, and we don't want to
   // flood the personal space with these when we will be using ephemeral events.
-
   // await backend.sendEvent(opts.personalStreamId, {
   //   id: newUlid(),
   //   $type: "space.roomy.space.personal.setLastRead.v0",

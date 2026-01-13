@@ -18,7 +18,7 @@
   import { decodeTime } from "ulidx";
   import { onNavigate } from "$app/navigation";
   import type { MessagingState } from "./TimelineView.svelte";
-  import type { Ulid, UserDid } from "$lib/schema";
+  import type { Ulid, UserDid } from "@roomy/sdk";
 
   export type Message = {
     id: Ulid;

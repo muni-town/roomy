@@ -9,8 +9,8 @@ import {
   type Ulid,
   UserDid,
   StreamDid,
-} from "$lib/schema";
-import { getDependsOn } from "$lib/schema/events/dependencies";
+} from "@roomy/sdk";
+import { getDependsOn } from "@roomy/sdk";
 
 /** SQL mapping for each event variant */
 const materializers: {

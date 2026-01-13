@@ -6,7 +6,7 @@
   import IconHeroiconsDocument from "~icons/heroicons/document";
   import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
   import AvatarGroup from "$lib/components/user/AvatarGroup.svelte";
-  import type { Ulid } from "$lib/schema";
+  import type { Ulid } from "@roomy/sdk";
 
   let {
     thread,

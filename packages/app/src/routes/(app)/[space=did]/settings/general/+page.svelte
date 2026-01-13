@@ -5,7 +5,7 @@
   import { current } from "$lib/queries";
   import { backend, backendStatus } from "$lib/workers";
   import { Button, Input, Textarea, toast } from "@fuxui/base";
-  import { newUlid } from "$lib/schema";
+  import { newUlid } from "@roomy/sdk";
 
   let currentSpace = $derived(current.joinedSpace);
   let spaceId = $derived(currentSpace?.id);

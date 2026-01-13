@@ -4,7 +4,7 @@
   import type { AsyncStateWithIdle } from "$lib/types/asyncState";
   import { navigate } from "$lib/utils.svelte";
   import { backendStatus } from "$lib/workers";
-  import type { StreamDid } from "$lib/schema";
+  import type { StreamDid } from "@roomy/sdk";
   import IconHeroiconsXMark from "~icons/heroicons/x-mark";
   import {
     Alert,

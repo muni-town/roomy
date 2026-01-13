@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import type { Ulid } from "$lib/schema";
+  import type { Ulid } from "@roomy/sdk";
   import { navigateSync } from "$lib/utils.svelte";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";

@@ -1,5 +1,5 @@
 {
-  "name": "@roomy-chat/sdk",
+  "name": "@roomy/sdk",
   "version": "0.3.0",
   "license": "MPL-2.0",
   "type": "module",
@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "dev": "tsc --watch",
-    "build": "tsc && cp src/utils/spow/spow-wasm_bg.wasm dist/utils/spow/",
+    "build": "tsc",
     "format": "prettier . --write",
     "build-lib": "pnpm build"
   },
@@ -27,11 +27,18 @@
     }
   },
   "devDependencies": {
+    "@repo/tsconfig": "workspace:*",
     "beachball": "^2.54.0",
     "pkgroll": "^2.12.2",
+    "prettier": "3.5.3",
     "turbo": "^2.5.2",
-    "typescript": "^5.8.3",
-    "@repo/tsconfig": "workspace:*",
-    "prettier": "3.5.3"
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@atcute/cbor": "^2.2.8",
+    "@atproto/lexicon": "^0.4.14",
+    "@atproto/oauth-client": "^0.5.6",
+    "arktype": "^2.1.29",
+    "@ark/util": "^0.56.0"
   }
 }

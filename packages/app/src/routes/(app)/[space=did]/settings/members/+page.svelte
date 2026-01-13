@@ -6,7 +6,7 @@
   import { Button } from "@fuxui/base";
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import { newUlid, UserDid } from "$lib/schema";
+  import { newUlid, UserDid } from "@roomy/sdk";
 
   const spaceId = $derived(current.joinedSpace?.id);
 

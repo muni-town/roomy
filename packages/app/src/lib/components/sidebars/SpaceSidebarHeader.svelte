@@ -5,7 +5,7 @@
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { current } from "$lib/queries";
   import { backend, backendStatus } from "$lib/workers";
-  import { newUlid } from "$lib/schema";
+  import { newUlid } from "@roomy/sdk";
 
   import IconLucideChevronDown from "~icons/lucide/chevron-down";
   import IconLucideShare from "~icons/lucide/share";
@@ -83,7 +83,7 @@
       <Button
         onclick={() => {
           const url = new URL(page.url.href);
-          url.pathname = `/${page.params.space}`
+          url.pathname = `/${page.params.space}`;
           navigator.clipboard.writeText(url.href);
           toast.success("Invite link copied to clipboard");
         }}

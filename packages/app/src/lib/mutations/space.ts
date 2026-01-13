@@ -1,7 +1,7 @@
 import { backend, backendStatus } from "$lib/workers";
-import type { Event, StreamDid, Did } from "$lib/schema";
+import type { Event, StreamDid, Did } from "@roomy/sdk";
 import { toast } from "@fuxui/base";
-import { newUlid, ulidFactory } from "$lib/schema";
+import { newUlid, ulidFactory } from "@roomy/sdk";
 
 /**
  * Join a space.

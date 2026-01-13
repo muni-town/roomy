@@ -32,7 +32,7 @@ import {
   parseEvent,
   type Event,
   type EventType,
-} from "$lib/schema";
+} from "@roomy/sdk";
 import { materialize } from "./materializer";
 import { AsyncChannel } from "../asyncChannel";
 import type {

@@ -51,7 +51,7 @@ export const MoveMessages = type({
 }).describe("Move one or more messages to a different room");
 
 setDependsOn("space.roomy.message.moveMessages.v0", {
-  events: (x) => [x.messageId],
+  events: (x) => [...x.messageIds],
 });
 
 export const ReorderMessage = type({

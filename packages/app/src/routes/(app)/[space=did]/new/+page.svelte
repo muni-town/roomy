@@ -5,7 +5,7 @@
   import { navigate } from "$lib/utils.svelte";
   import { backend } from "$lib/workers";
   import { Button, Input, ScrollArea, Select } from "@fuxui/base";
-  import { Ulid, ulidFactory } from "$lib/schema";
+  import { Ulid, ulidFactory } from "@roomy/sdk";
   import { deepClone } from "@ark/util";
 
   const types = ["Channel", "Category"] as const;
