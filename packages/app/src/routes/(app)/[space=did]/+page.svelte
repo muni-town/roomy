@@ -16,7 +16,7 @@
 
   import type { ThreadInfo } from "$lib/components/content/thread/boardView/types";
   import Error from "$lib/components/modals/Error.svelte";
-  import { flags } from "$lib/flags";
+  import { flags } from "$lib/config";
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
 

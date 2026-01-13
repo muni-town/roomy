@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { flags } from "$lib/flags";
+  import { flags } from "$lib/config";
   import { current, sidebar } from "$lib/queries";
   // import SidebarItemList from "./SidebarItemList.svelte";
   import SpaceSidebarHeader from "./SpaceSidebarHeader.svelte";

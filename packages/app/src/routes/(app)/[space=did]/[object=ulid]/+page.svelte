@@ -46,7 +46,7 @@
 
   import Error from "$lib/components/modals/Error.svelte";
   import { Ulid } from "$lib/schema";
-  import { flags } from "$lib/flags";
+  import { flags } from "$lib/config";
   import EditRoomModal from "$lib/components/modals/EditRoomModal.svelte";
 
   let createPageDialogOpen = $state(false);
