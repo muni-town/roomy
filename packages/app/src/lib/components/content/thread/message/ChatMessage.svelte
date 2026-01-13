@@ -16,7 +16,7 @@
   import { toast } from "@fuxui/base";
   import type { MessagingState } from "../TimelineView.svelte";
   import MediaEmbed from "./embeds/MediaEmbed.svelte";
-  import { newUlid, toBytes, Ulid } from "$lib/schema";
+  import { newUlid, toBytes, Ulid } from "@roomy/sdk";
   import { page } from "$app/state";
   import { cdnImageUrl } from "$lib/utils.svelte";
 

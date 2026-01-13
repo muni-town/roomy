@@ -36,7 +36,7 @@
 
   import IconHeroiconsChatBubbleBottomCenterText from "~icons/heroicons/chat-bubble-bottom-center-text";
   import MessageContextReply from "./MessageContextReply.svelte";
-  import type { Ulid } from "$lib/schema";
+  import type { Ulid } from "@roomy/sdk";
 
   let {
     context = $bindable(undefined),

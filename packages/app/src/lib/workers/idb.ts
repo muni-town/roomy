@@ -1,6 +1,6 @@
 import { CONFIG } from "$lib/config";
 import Dexie, { type EntityTable } from "dexie";
-import type { StreamDid } from "$lib/schema";
+import type { StreamDid } from "@roomy/sdk";
 
 interface KeyValue {
   key: string;

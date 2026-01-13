@@ -23,7 +23,7 @@ import {
   StreamDid,
   type,
   Ulid,
-} from "$lib/schema";
+} from "@roomy/sdk";
 import { encode } from "@atcute/cbor";
 import { modules } from "./modules";
 

@@ -139,7 +139,7 @@
   import ChatArea, { type Message } from "./ChatArea.svelte";
   import ChatInputArea from "./ChatInputArea.svelte";
   import { setInputFocus } from "./ChatInput.svelte";
-  import type { Ulid } from "$lib/schema";
+  import type { Ulid } from "@roomy/sdk";
 
   // $effect(() => {
   //   console.debug("messaging state", $state.snapshot(messagingState.current));

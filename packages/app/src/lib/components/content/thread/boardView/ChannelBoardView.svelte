@@ -5,7 +5,7 @@
   import { sql } from "$lib/utils/sqlTemplate";
   import BoardView from "./BoardView.svelte";
   import type { ThreadInfo } from "./types";
-  import { Ulid } from "$lib/schema";
+  import { Ulid } from "@roomy/sdk";
 
   let { emptyMessage }: { objectType?: string; emptyMessage?: string } =
     $props();

@@ -5,7 +5,7 @@
   import { joinSpace } from "$lib/mutations/space";
   import { type SpaceIdOrHandle } from "$lib/workers/types";
   import { backend } from "$lib/workers";
-  import { StreamDid } from "$lib/schema";
+  import { StreamDid } from "@roomy/sdk";
 
   let spaceName = $state() as string | undefined;
   let spaceAvatar = $state() as string | undefined;

@@ -1,4 +1,4 @@
-import { newUlid, type StreamDid, type Ulid } from "$lib/schema";
+import { newUlid, type StreamDid, type Ulid } from "@roomy/sdk";
 import { backend } from "$lib/workers";
 
 export async function addReaction(

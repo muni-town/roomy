@@ -37,7 +37,7 @@ import {
   type Event,
   newUlid,
   Ulid,
-} from "$lib/schema";
+} from "@roomy/sdk";
 import { decode, encode } from "@atcute/cbor";
 import { initializeFaro } from "$lib/otel";
 

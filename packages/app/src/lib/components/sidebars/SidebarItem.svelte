@@ -10,7 +10,7 @@
   import IconTablerCornerDownRight from "~icons/tabler/corner-down-right";
   import IconHeroiconsDocument from "~icons/heroicons/document";
   import LinkedRoomsList from "./LinkedRoomsList.svelte";
-  import { Ulid } from "$lib/schema";
+  import { Ulid } from "@roomy/sdk";
   // import IconCustomThread from "~icons/custom/thread";
 
   let {

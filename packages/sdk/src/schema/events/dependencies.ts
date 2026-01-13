@@ -1,14 +1,14 @@
 import { Ulid } from "../primitives";
 import type { EventType, Event } from "../envelope";
 
-const dependencies: Map<EventType, { events?: (x: EventVariant) => Ulid[] }> =
+const dependencies: Map<EventType, { events?: (x: Event) => Ulid[] }> =
   new Map();
 
 /** Register an event as requiring a certain field */
 export function setDependsOn<T extends EventType>(
   t: T,
   deps: {
-    events?: (x: EventVariant<T>) => Ulid[];
+    events?: (x: Event<T>) => Ulid[];
   },
 ) {
   dependencies.set(
@@ -17,7 +17,7 @@ export function setDependsOn<T extends EventType>(
   );
 }
 
-export function getDependsOn(ev: EventVariant): Ulid[] {
+export function getDependsOn(ev: Event): Ulid[] {
   const config = dependencies.get(ev.$type);
   if (!config) return [];
   return config.events?.(ev) || [];

@@ -38,3 +38,9 @@ export {
   type SpaceEventType,
   type EventType,
 } from "./envelope";
+
+export * from "./events/dependencies";
+
+export * from "./extensions/message";
+
+export * from "./events/room";

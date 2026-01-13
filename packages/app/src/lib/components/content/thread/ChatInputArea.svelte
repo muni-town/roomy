@@ -20,8 +20,8 @@
   } from "./TimelineView.svelte";
   import { markCommentForRemoval } from "$lib/components/richtext/RichTextEditor.svelte";
   import { getImagePreloadData } from "$lib/utils/media";
-  import { newUlid, toBytes, Ulid, type Event } from "$lib/schema";
-  import type { Attachment } from "$lib/schema/extensions/message";
+  import { newUlid, toBytes, Ulid, type Event } from "@roomy/sdk";
+  import type { Attachment } from "@roomy/sdk";
   import ChatInput, { setInputFocus } from "./ChatInput.svelte";
   import { createThread } from "$lib/mutations/room";
   import { goto } from "$app/navigation";

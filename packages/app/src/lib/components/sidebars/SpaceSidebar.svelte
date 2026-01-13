@@ -12,7 +12,7 @@
   import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
   import SidebarCategory from "./SidebarCategory.svelte";
   import EntityName from "../primitives/EntityName.svelte";
-  import { Ulid } from "$lib/schema";
+  import { Ulid } from "@roomy/sdk";
 
   // at the top level there can be categories, channels or pages
   // under categories there can be channels or pages
