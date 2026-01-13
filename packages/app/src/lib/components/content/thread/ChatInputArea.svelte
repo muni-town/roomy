@@ -135,7 +135,7 @@
       id: newUlid(),
       room: current.roomId,
       $type: "space.roomy.message.moveMessages.v0",
-      messageId: state.selectedMessages.map((m) => m.id),
+      messageIds: state.selectedMessages.map((m) => m.id),
       toRoomId: threadId,
     });
 
