@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { page } from "$app/state";
   import type { Ulid } from "@roomy/sdk";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
@@ -9,14 +8,6 @@
   }: {
     id: Ulid;
   } = $props();
-
-  $effect(() => {
-    console.log("Name", {
-      id,
-      name,
-      spaceId: page.params.space,
-    });
-  });
 
   let query = new LiveQuery<{ name: string }>(
     () => sql`

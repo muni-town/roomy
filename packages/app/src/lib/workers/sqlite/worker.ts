@@ -513,8 +513,6 @@ class SqliteWorkerSupervisor {
       if (allDependencies.size > 0) {
         const depsArray = [...allDependencies].flat();
 
-        console.debug("depsArray", depsArray);
-
         const result = await executeQuery({
           sql: `SELECT entity_ulid FROM events 
                 WHERE entity_ulid IN (${depsArray.map(() => "?").join(",")}) 
