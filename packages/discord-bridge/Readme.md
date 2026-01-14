@@ -16,11 +16,6 @@ Create `.env` file in the discord-bridge package:
 ```bash
 # Discord Bridge Service
 PORT=3301
-
-# Jazz Integration (for syncing with Roomy spaces)
-JAZZ_WORKER_ACCOUNT=your_worker_account_id
-JAZZ_WORKER_SECRET=your_worker_secret
-JAZZ_API_KEY=your_jazz_api_key
 ```
 
 ### 2. Running the Service

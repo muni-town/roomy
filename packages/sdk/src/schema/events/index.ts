@@ -41,6 +41,10 @@ export type DefinedEvent<
   dependsOn: HasDependsOn extends true
     ? DependsOnFn<TSchema["infer"]>
     : undefined;
+  create: (
+    id: Ulid,
+    data: TSchema["infer"] & { room?: Ulid },
+  ) => Event<TSchema["infer"]["$type"]>;
 };
 
 /**
