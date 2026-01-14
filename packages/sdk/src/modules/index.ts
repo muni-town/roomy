@@ -1,4 +1,4 @@
-import { sql } from "$lib/utils/sqlTemplate";
+import { sql } from "../utils/sqlTemplate";
 import { LeafClient, type BasicModule } from "@muni-town/leaf-client";
 
 export type ModuleWithCid = {
@@ -14,7 +14,7 @@ const personalModuleDef: BasicModule = {
       type text not null default 'space.roomy.space.personal',
       schema_version text not null default '2'
     );
-    
+
     insert into stream_info (admin) select null where not exists (select 1 from stream_info);
   `.sql,
   authorizer: sql`
@@ -26,7 +26,7 @@ const personalModuleDef: BasicModule = {
     select unauthorized('stream not initialized - only admin.add allowed')
     where (select admin from stream_info) is null
       and (select event_type from event_info) is not 'space.roomy.space.addAdmin.v0';
-  
+
     with event_info as (
       select drisl_extract(payload, '.$type') as event_type from event
     )
@@ -34,7 +34,7 @@ const personalModuleDef: BasicModule = {
     select unauthorized('admin already set')
     where (select admin from stream_info) is not null
       and (select event_type from event_info) = 'space.roomy.space.addAdmin.v0';
-  
+
     with event_info as (
       select drisl_extract(payload, '.$type') as event_type from event
     )
@@ -75,7 +75,6 @@ const personal: ModuleWithCid = {
   def: personalModuleDef,
   cid: personalModuleCid,
 };
-personal.cid.then((cid) => console.debug(`Personal module cid: ${cid}`));
 
 const spaceModuleDef: BasicModule = {
   $type: "muni.town.leaf.module.basic.v0" as const,
@@ -85,8 +84,8 @@ const spaceModuleDef: BasicModule = {
       type text not null default 'space.roomy.space.space',
       schema_version text not null default '2'
     ) strict;
-    
-    insert into stream_info (type) select 'space.roomy.space.space' 
+
+    insert into stream_info (type) select 'space.roomy.space.space'
       where not exists (select 1 from stream_info);
 
     create table if not exists space_info (
@@ -95,15 +94,15 @@ const spaceModuleDef: BasicModule = {
     ) strict;
     delete from space_info;
     insert into space_info (name, avatar) values (null, null);
-      
+
     create table if not exists admins (
       user_id text primary key -- did
     ) strict;
-    
+
     create table if not exists metadata_events (
       idx integer primary key
     ) strict;
-    
+
     create table if not exists room_events (
       idx integer primary key,
       room text not null
@@ -154,7 +153,7 @@ const spaceModuleDef: BasicModule = {
       avatar = case (select drisl_exists(payload, '.avatar') from event)
         when 1 then (select drisl_extract(payload, '.avatar') from event) else avatar end
     where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.updateSpaceInfo.v0';
-    
+
     -- Mark metadata events
     insert into metadata_events (idx)
     select idx from event
@@ -174,7 +173,7 @@ const spaceModuleDef: BasicModule = {
       'space.roomy.room.removeMember.v0',
       'space.roomy.user.updateUserProfile.v0'
     );
-    
+
     -- Track room membership for events
     insert or ignore into room_events (idx, room)
     select idx, drisl_extract(payload, '.room') from event
@@ -208,10 +207,10 @@ const spaceModuleDef: BasicModule = {
     {
       name: "metadata",
       sql: `
-        select e.idx, e.user, e.payload 
+        select e.idx, e.user, e.payload
         from events.events e
         inner join metadata_events m on e.idx = m.idx
-        where e.idx >= $start 
+        where e.idx >= $start
         limit $limit;
       `,
       params: [],
@@ -239,7 +238,6 @@ const space: ModuleWithCid = {
   def: spaceModuleDef,
   cid: spaceModuleCid,
 };
-space.cid.then((cid) => console.debug(`Space module cid: ${cid}`));
 
 export const modules = {
   personal,

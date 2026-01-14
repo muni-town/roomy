@@ -23,9 +23,9 @@ import {
   StreamDid,
   type,
   Ulid,
+  modules,
 } from "@roomy/sdk";
 import { encode } from "@atcute/cbor";
-import { modules } from "./modules";
 
 /** Handles interaction with ATProto and Leaf, manages state for connection to both,
  * including connecting to and backfilling streams */

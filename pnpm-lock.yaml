@@ -454,6 +454,9 @@ importers:
       '@atproto/oauth-client':
         specifier: ^0.5.6
         version: 0.5.6
+      '@muni-town/leaf-client':
+        specifier: 0.1.0-alpha.15
+        version: 0.1.0-alpha.15
       arktype:
         specifier: ^2.1.29
         version: 2.1.29
