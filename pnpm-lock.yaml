@@ -463,6 +463,9 @@ importers:
       arktype:
         specifier: ^2.1.29
         version: 2.1.29
+      ulidx:
+        specifier: ^2.4.1
+        version: 2.4.1
     devDependencies:
       '@repo/tsconfig':
         specifier: workspace:*

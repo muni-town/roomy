@@ -1,6 +1,6 @@
 {
   "name": "@roomy/sdk",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "license": "MPL-2.0",
   "type": "module",
   "packageManager": "pnpm@10.10.0",
@@ -35,10 +35,11 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@ark/util": "^0.56.0",
     "@atcute/cbor": "^2.2.8",
     "@atproto/lexicon": "^0.4.14",
     "@atproto/oauth-client": "^0.5.6",
     "arktype": "^2.1.29",
-    "@ark/util": "^0.56.0"
+    "ulidx": "^2.4.1"
   }
 }
