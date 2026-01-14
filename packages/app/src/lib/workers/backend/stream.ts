@@ -161,7 +161,7 @@ export class ConnectedStream {
       },
       async (result) => {
         if ("Ok" in result) {
-          const events = decodeEvents(parseEvents(result.Ok.rows));
+          const events = this.decodeAndParseEvents(parseEvents(result.Ok.rows));
           const batchId = newUlid();
 
           if (events.length !== 0) {
@@ -217,7 +217,7 @@ export class ConnectedStream {
       },
       async (result) => {
         if ("Ok" in result) {
-          const events = decodeEvents(parseEvents(result.Ok.rows));
+          const events = this.decodeAndParseEvents(parseEvents(result.Ok.rows));
           if (events.length !== 0) {
             this.eventChannel.push({
               status: "events",
@@ -279,7 +279,7 @@ export class ConnectedStream {
       params,
       limit,
     });
-    const events = decodeEvents(parseEvents(resp));
+    const events = this.decodeAndParseEvents(parseEvents(resp));
     events.reverse();
     return events;
   }
@@ -343,8 +343,52 @@ export class ConnectedStream {
       limit,
       start,
     });
-    const events = decodeEvents(parseEvents(resp));
+    const events = this.decodeAndParseEvents(parseEvents(resp));
     return events;
+  }
+
+  decodeAndParseEvents(events: EncodedStreamEvent[]): DecodedStreamEvent[] {
+    return (
+      events
+        // decode event payload
+        .map((e) => {
+          try {
+            // Convert ArrayBuffer to Uint8Array for decoding
+            const payloadBytes = new Uint8Array(e.payload);
+            return { ...e, event: decode(payloadBytes) };
+          } catch (error) {
+            const payloadBytes = new Uint8Array(e.payload);
+            console.warn(
+              `Skipping malformed event (idx ${e.idx}): Failed to decode ${payloadBytes.length} bytes.`,
+              { event: e, error, streamId: this.id },
+            );
+            // Return null to filter out this event
+            return null;
+          }
+        })
+        .filter((e): e is Exclude<typeof e, null> => e !== null)
+        // parse event after decoding
+        .map((e) => {
+          try {
+            const result = parseEvent(e?.event);
+            if (result.success) {
+              return {
+                idx: e?.idx,
+                event: result.data,
+                user: e?.user,
+              } as const;
+            } else throw result.error;
+          } catch (error) {
+            console.warn(
+              `Skipping malformed event (idx ${e?.idx}): Failed to parse event.`,
+              { event: e, error, streamId: this.id },
+            );
+            // Return null to filter out this event
+            return null;
+          }
+        })
+        .filter((e): e is Exclude<typeof e, null> => e !== null)
+    );
   }
 }
 
@@ -372,31 +416,4 @@ export function parseEvents(rows: SqlRows): EncodedStreamEvent[] {
       payload: result.payload?.value,
     };
   });
-}
-
-export function decodeEvents(
-  events: EncodedStreamEvent[],
-): DecodedStreamEvent[] {
-  return events
-    .map((e) => {
-      try {
-        // Convert ArrayBuffer to Uint8Array for decoding
-        const payloadBytes = new Uint8Array(e.payload);
-        const decoded = decode(payloadBytes);
-        const result = parseEvent(decoded);
-        if (result.success) {
-          return { idx: e.idx, event: result.data, user: e.user } as const;
-        } else throw result.error;
-      } catch (error) {
-        const payloadBytes = new Uint8Array(e.payload);
-        console.warn(
-          `Skipping malformed event (idx ${e.idx}): Failed to decode ${payloadBytes.length} bytes.`,
-          `Error:`,
-          error instanceof Error ? error.message : error,
-        );
-        // Return null to filter out this event
-        return null;
-      }
-    })
-    .filter((e): e is Exclude<typeof e, null> => e !== null);
 }

@@ -12,7 +12,7 @@
   import { backend } from "$lib/workers";
   import { current } from "$lib/queries";
   import { page } from "$app/state";
-  import { navigate, navigateSync } from "$lib/utils.svelte";
+  import { navigateSync } from "$lib/utils.svelte";
   import {
     messagingState,
     type Commenting,
