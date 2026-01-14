@@ -11,8 +11,6 @@ import { ZoneContextManager } from "@opentelemetry/context-zone";
 import { context, SpanStatusCode, trace } from "@opentelemetry/api";
 import { CONFIG } from "./config";
 
-let telemetryDisabled = false;
-let failureCount = 0;
 const MAX_FAILURES = 3;
 
 type WorkerInfo =
@@ -115,13 +113,8 @@ export function initializeFaro(opts: WorkerInfo) {
     app: { name: "roomy", version: __APP_VERSION__ },
     dedupe: false,
     globalObjectKey: "faro",
-    transports: [new CustomFetchTransport()],
+    transports: [new CustomFetchTransport(`${opts.worker} worker`)],
     beforeSend(event) {
-      // If telemetry has been disabled due to blocked requests, drop all events
-      if (telemetryDisabled) {
-        return null;
-      }
-
       if ("context" in event.payload) {
         event.payload.context = {
           ...(event.payload.context || {}),
@@ -167,28 +160,31 @@ export function initializeFaro(opts: WorkerInfo) {
 
 class CustomFetchTransport extends FetchTransport {
   failureCount: number = 0;
+  debugName: string;
 
-  constructor() {
+  constructor(debugName: string) {
     super({
       url: CONFIG.faroEndpoint || "http://localhost:12345/collect",
       apiKey: "bad_api_key",
     });
+    this.debugName = debugName;
   }
 
-  send(items: TransportItem[]): Promise<void> {
-    if (!CONFIG.faroEndpoint || failureCount > MAX_FAILURES) {
+  async send(items: TransportItem[]): Promise<void> {
+    if (!CONFIG.faroEndpoint || this.failureCount >= MAX_FAILURES) {
       return Promise.resolve();
     }
-    return super.send(items).catch((e) => {
-      failureCount += 1;
-      console.warn(`Error sending telemetry data.`, e);
+    return super.send(items);
+  }
 
-      if (failureCount > MAX_FAILURES) {
-        console.debug(
-          "Remotely sending telemetry is paused due to blocked requests",
-        );
-      }
-    });
+  logError(...args: unknown[]): void {
+    console.warn(`Error sending '${this.debugName}' telemetry data.`, ...args);
+    this.failureCount += 1;
+    if (this.failureCount >= MAX_FAILURES) {
+      console.warn(
+        "Remotely sending telemetry is paused due to blocked requests",
+      );
+    }
   }
 }
 
