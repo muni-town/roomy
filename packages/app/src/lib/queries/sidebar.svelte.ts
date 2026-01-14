@@ -50,7 +50,7 @@ $effect.root(() => {
   $effect(() => {
     if (!current.joinedSpace || categoriesQuery.current.status === "loading")
       return;
-    console.debug("categories", $state.snapshot(categoriesQuery.result));
+    // console.debug("categories", $state.snapshot(categoriesQuery.result));
     if (categoriesQuery.result) {
       sidebar.result = categoriesQuery.result.map(
         (x) =>
