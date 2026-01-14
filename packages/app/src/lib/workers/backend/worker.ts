@@ -330,6 +330,11 @@ class WorkerSupervisor {
         }
       };
     }
+
+    this.#authenticated.promise.then(() => {
+      // Tell the main thread that initialization is finished.
+      consoleInterface.initFinished();
+    });
   }
 
   private async refreshSession() {
@@ -341,11 +346,12 @@ class WorkerSupervisor {
           return;
         }
         console.debug("Session restored successfully");
-        this.setAuthenticated(client);
         faro.api.setSession({
           id: faro.api.getSession()?.id,
           attributes: { isSampled: "true", did: client.agent.assertDid },
         });
+
+        this.setAuthenticated(client);
         console.info("ATProto Authenticated", { did: client.agent.assertDid });
 
         client.getProfile().then((profile) => {
@@ -360,7 +366,9 @@ class WorkerSupervisor {
 
   private async authenticateCallback(params: URLSearchParams) {
     this.setAuthState({ state: "loading" });
-    await Client.oauthCallback(params);
+    const client = await Client.oauthCallback(params);
+    this.setAuthenticated(client);
+    return client;
   }
 
   private get consoleForwarding() {
@@ -400,7 +408,9 @@ class WorkerSupervisor {
       login: async (handle) => Client.login(handle),
       oauthCallback: async (paramsStr) => {
         const params = new URLSearchParams(paramsStr);
-        await this.authenticateCallback(params);
+        return {
+          did: (await this.authenticateCallback(params)).agent.assertDid,
+        };
       },
       logout: async () => this.logout(),
       getProfile: async (did) => this.client.getProfile(did),
