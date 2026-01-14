@@ -140,6 +140,7 @@
   import ChatInputArea from "./ChatInputArea.svelte";
   import { setInputFocus } from "./ChatInput.svelte";
   import type { Ulid } from "@roomy/sdk";
+  import { renderMarkdownPlaintext } from "$lib/utils/markdown";
 
   // $effect(() => {
   //   console.debug("messaging state", $state.snapshot(messagingState.current));
@@ -147,10 +148,11 @@
 
   function startThreading(message?: Message) {
     const currentState = messagingState.current;
+    const name = message ? renderMarkdownPlaintext(message.content) : "Thread";
     messagingState.set({
       ...currentState,
       kind: "threading",
-      name: message ? message.content : "Thread",
+      name,
       selectedMessages: message ? [message] : [],
     });
     setInputFocus();
