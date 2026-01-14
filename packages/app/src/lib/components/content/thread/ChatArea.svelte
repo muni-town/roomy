@@ -151,6 +151,8 @@
         left join comp_comment cc on cc.entity = e.id
       where
         e.room = ${page.params.object}
+          and
+        c.data is not null
       order by e.sort_idx desc, e.id desc
       limit ${showLastN}
     `,
