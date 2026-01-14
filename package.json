@@ -27,7 +27,6 @@
   },
   "dependencies": {
     "@muni-town/leaf-client": "link:../leaf/clients/typescript",
-    "date-fns": "^4.1.0",
-    "jazz-run": "^0.15.10"
+    "date-fns": "^4.1.0"
   }
 }
