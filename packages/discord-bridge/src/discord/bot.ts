@@ -17,6 +17,7 @@ import {
   handleSlashCommandInteraction,
   slashCommands,
 } from "./slashCommands.js";
+import { desiredProperties, DiscordBot, DiscordChannel } from "./types.js";
 
 import {
   discordLatestMessageInChannelForBridge,
@@ -27,80 +28,17 @@ import {
   syncedIdsForBridge,
 } from "../db.js";
 import { GuildContext } from "../types.js";
-// import { backfill, doneBackfillingFromDiscord } from "../roomy/to.js";
-// import { getRoomyThreadForChannel } from "../roomy/from.js";
-
-// import {
-//   co,
-//   createMessage,
-//   RoomyEntity,
-//   createThread,
-//   getComponent,
-//   ThreadComponent,
-//   addToFolder,
-//   AuthorComponent,
-//   getSpaceGroups,
-//   LoadedSpaceGroups,
-//   AllThreadsComponent,
-//   SubThreadsComponent,
-//   addComponent,
-//   Timeline,
-// } from "@roomy-chat/sdk";
+import {
+  ensureRoomyChannelForDiscordChannel,
+  ensureRoomySidebarForCategoriesAndChannels,
+  ensureRoomyThreadForDiscordThread,
+} from "../roomy/to.js";
 
 const tracer = trace.getTracer("discordBot");
 
 export const botState = {
   appId: undefined as undefined | string,
 };
-
-export const desiredProperties = {
-  message: {
-    id: true,
-    guildId: true,
-    content: true,
-    channelId: true,
-    author: true,
-    webhookId: true,
-  },
-  guild: {
-    id: true,
-    channels: true,
-  },
-  channel: {
-    id: true,
-    lastMessageId: true,
-    name: true,
-    type: true,
-    guildId: true,
-    parentId: true,
-  },
-  user: {
-    username: true,
-    avatar: true,
-    id: true,
-    discriminator: true,
-  },
-  webhook: {
-    id: true,
-    token: true,
-  },
-  interaction: {
-    id: true,
-    type: true,
-    data: true,
-    token: true,
-    guildId: true,
-    authorizingIntegrationOwners: true,
-  },
-} satisfies RecursivePartial<TransformersDesiredProperties>;
-
-export type DiscordBot = Bot<
-  CompleteDesiredProperties<typeof desiredProperties>
->;
-export type DiscordChannel = SetupDesiredProps<
-  Channel,
-  CompleteDesiredProperties<typeof desiredProperties>
->;
 
 export async function hasBridge(guildId: bigint): Promise<boolean> {
   return (await registeredBridges.get_spaceId(guildId.toString())) != undefined;
@@ -268,9 +206,19 @@ export async function backfill(bot: DiscordBot, guildIds: bigint[]) {
         async (span) => {
           console.log("backfilling Discord guild", guildId);
           const channels = await bot.helpers.getChannels(guildId);
+
+          // Get all categories
+          const categories = channels.filter(
+            (x) => x.type == ChannelTypes.GuildCategory,
+          );
+
+          // Get all text channels
           const textChannels = channels.filter(
             (x) => x.type == ChannelTypes.GuildText,
           );
+
+          // TODO: support announcement channels
+
           const activeThreads = (await bot.helpers.getActiveThreads(guildId))
             .threads;
           const archivedThreads = (
@@ -314,6 +262,20 @@ export async function backfill(bot: DiscordBot, guildIds: bigint[]) {
             ...archivedThreads,
           ];
 
+          for (const channel of textChannels) {
+            await ensureRoomyChannelForDiscordChannel(ctx, channel);
+          }
+
+          for (const thread of [...activeThreads, ...archivedThreads]) {
+            await ensureRoomyThreadForDiscordThread(ctx, thread);
+          }
+
+          await ensureRoomySidebarForCategoriesAndChannels(
+            ctx,
+            categories,
+            textChannels,
+          );
+
           for (const channel of allChannelsAndThreads) {
             await tracer.startActiveSpan(
               "backfillChannel",
@@ -326,52 +288,52 @@ export async function backfill(bot: DiscordBot, guildIds: bigint[]) {
                   ? BigInt(cachedLatestForChannel)
                   : "0";
 
-                while (true) {
-                  try {
-                    // Get the next set of messages
-                    const messages = await bot.helpers.getMessages(channel.id, {
-                      after,
-                      limit: 100,
-                    });
-                    if (messages.length > 0)
-                      span.addEvent("Fetched new messages", {
-                        count: messages.length,
-                      });
+                // while (true) {
+                //   try {
+                //     // Get the next set of messages
+                //     const messages = await bot.helpers.getMessages(channel.id, {
+                //       after,
+                //       limit: 100,
+                //     });
+                //     if (messages.length > 0)
+                //       span.addEvent("Fetched new messages", {
+                //         count: messages.length,
+                //       });
 
-                    console.log(
-                      `    Found ${messages.length} messages since last message.`,
-                    );
+                //     console.log(
+                //       `    Found ${messages.length} messages since last message.`,
+                //     );
 
-                    if (messages.length == 0) break;
+                //     if (messages.length == 0) break;
 
-                    // const { thread } = await getRoomyThreadForChannel(
-                    //   ctx,
-                    //   channel,
-                    // );
+                //     // const { thread } = await getRoomyThreadForChannel(
+                //     //   ctx,
+                //     //   channel,
+                //     // );
 
-                    // Backfill each one that we haven't indexed yet
-                    for (const message of messages.reverse()) {
-                      console.log("message", message.content);
-                      // after = message.id;
-                      // await syncDiscordMessageToRoomy(ctx, {
-                      //   discordChannelId: message.channelId,
-                      //   message,
-                      //   thread,
-                      // });
-                    }
+                //     // Backfill each one that we haven't indexed yet
+                //     for (const message of messages.reverse()) {
+                //       console.log("message", message.content);
+                //       // after = message.id;
+                //       // await syncDiscordMessageToRoomy(ctx, {
+                //       //   discordChannelId: message.channelId,
+                //       //   message,
+                //       //   thread,
+                //       // });
+                //     }
 
-                    after &&
-                      (await ctx.latestMessagesInChannel.put(
-                        channel.id.toString(),
-                        after.toString(),
-                      ));
-                  } catch (e) {
-                    console.warn(
-                      `Error syncing message to roomy ( this might be normal if the bot does not have access to the channel ): ${e}`,
-                    );
-                    break;
-                  }
-                }
+                //     after &&
+                //       (await ctx.latestMessagesInChannel.put(
+                //         channel.id.toString(),
+                //         after.toString(),
+                //       ));
+                //   } catch (e) {
+                //     console.warn(
+                //       `Error syncing message to roomy ( this might be normal if the bot does not have access to the channel ): ${e}`,
+                //     );
+                //     break;
+                //   }
+                // }
 
                 span.end();
               },

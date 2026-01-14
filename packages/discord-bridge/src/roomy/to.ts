@@ -12,11 +12,42 @@
 //   Message,
 //   SetupDesiredProps,
 // } from "@discordeno/bot";
-// import { GuildContext } from "../types";
 // import { discordWebhookTokensForBridge } from "../db";
 // import { getRoomyThreadForChannel } from "./from";
 
+import { ChannelProperties } from "../discord/types";
+import { GuildContext } from "../types";
+
 // const tracer = trace.getTracer("discordBot");
+
+export async function ensureRoomyChannelForDiscordChannel(
+  ctx: GuildContext,
+  channel: ChannelProperties,
+) {
+  console.log("TODO: Ensure Roomy Channel for", channel.name);
+
+  // first check what channels exist in Roomy
+}
+
+export async function ensureRoomySidebarForCategoriesAndChannels(
+  ctx: GuildContext,
+  categories: ChannelProperties[],
+  textChannels: ChannelProperties[],
+) {
+  console.log(
+    "TODO: Ensure Roomy Sidebar for categories and channels",
+    categories.map((c) => c.name),
+  );
+
+  // note: do not create empty categories
+}
+
+export async function ensureRoomyThreadForDiscordThread(
+  ctx: GuildContext,
+  thread: ChannelProperties,
+) {
+  console.log("TODO: Ensure Roomy Thread for", thread.name);
+}
 
 // export async function syncDiscordMessageToRoomy(
 //   ctx: GuildContext,
