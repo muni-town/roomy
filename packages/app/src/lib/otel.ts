@@ -11,7 +11,7 @@ import { ZoneContextManager } from "@opentelemetry/context-zone";
 import { context, SpanStatusCode, trace } from "@opentelemetry/api";
 import { CONFIG } from "./config";
 
-const MAX_FAILURES = 3;
+const MAX_FAILURES = 1;
 
 type WorkerInfo =
   | {
@@ -44,7 +44,36 @@ class CustomConsoleInstrumentation extends BaseInstrumentation {
       /* eslint-disable-next-line no-console */
       console[level] = (...args) => {
         if (telemetryLevels.includes(level)) {
-          if (
+          if (args.length == 1 && args[0] instanceof Error) {
+            const err = args[0];
+            this.api.pushLog(
+              [err.name, err.message].filter((x) => !!x),
+              {
+                level,
+                context: {
+                  ...(err.stack ? { stack: err.stack } : {}),
+                  ...(err.originalStack ? { stack: err.originalStack } : {}),
+                },
+              },
+            );
+
+            const span = trace.getActiveSpan();
+            if (span) {
+              if (level == "error") {
+                span.setStatus({
+                  code: SpanStatusCode.ERROR,
+                  message: err.message,
+                });
+              }
+              span.addEvent(err.name, {
+                level,
+                stack: err.stack,
+                message: err.message,
+                cause: err.cause?.toString(),
+                originalStack: err.originalStack,
+              });
+            }
+          } else if (
             args.length == 2 &&
             typeof args[0] == "string" &&
             typeof args[1] == "object"
