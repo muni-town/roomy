@@ -146,10 +146,6 @@
     current.space.status === "loading" ||
       threadsQuery.current.status === "loading",
   );
-
-  onNavigate(() => {
-    threads.list = [];
-  });
 </script>
 
 {#snippet sidebar()}
