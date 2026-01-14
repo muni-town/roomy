@@ -15,6 +15,8 @@ const CONFIG = {
   testingHandle: import.meta.env.VITE_TESTING_HANDLE,
   flags: {
     threadsList: true, // 'Index' (threads list) page for spaces
+    discordImport: false,
+    discordBridge: false,
   },
 };
 

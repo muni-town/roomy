@@ -4,14 +4,13 @@
   import { Badge, Button, toast } from "@fuxui/base";
   import { onMount } from "svelte";
 
-  let space = $derived(new CoState(RoomyEntity, page.params.space));
+  let space = $derived(page.params.space);
   let bridgeStatus:
     | { type: "checking" }
     | {
         type: "loaded";
         guildId: undefined | string;
         appId: string;
-        bridgeJazzAccount: Account;
         hasFullWritePermissions: boolean;
       }
     | { type: "error_checking" } = $state({
@@ -19,7 +18,7 @@
   });
 
   async function updateBridgeStatus() {
-    if (!space.current) return;
+    if (!space) return;
     try {
       const aResp = await fetch(`${env.PUBLIC_DISCORD_BRIDGE}/info`);
       const info:
@@ -34,22 +33,22 @@
         `${env.PUBLIC_DISCORD_BRIDGE}/get-guild-id?spaceId=${page.params.space}`,
       );
       const { guildId }: { guildId?: string } = await gResp.json();
-      const jazzAccount = await Account.load(info.jazzAccountId);
-      if (!jazzAccount) {
-        console.error("Could not load jazz account for discord bridge.");
-        bridgeStatus = {
-          type: "error_checking",
-        };
-        return;
-      }
-      const hasWrite = await isSpaceAdmin(jazzAccount, space.current);
-      bridgeStatus = {
-        type: "loaded",
-        appId: info.discordAppId,
-        bridgeJazzAccount: jazzAccount,
-        guildId,
-        hasFullWritePermissions: hasWrite,
-      };
+      // const jazzAccount = await Account.load(info.jazzAccountId);
+      // if (!jazzAccount) {
+      //   console.error("Could not load jazz account for discord bridge.");
+      //   bridgeStatus = {
+      //     type: "error_checking",
+      //   };
+      //   return;
+      // }
+      // const hasWrite = await isSpaceAdmin(jazzAccount, space.current);
+      // bridgeStatus = {
+      //   type: "loaded",
+      //   appId: info.discordAppId,
+      //   bridgeJazzAccount: jazzAccount,
+      //   guildId,
+      //   hasFullWritePermissions: hasWrite,
+      // };
     } catch (e) {
       bridgeStatus = {
         type: "error_checking",
@@ -58,14 +57,14 @@
   }
 
   async function grantBotPermissions() {
-    if (bridgeStatus.type != "loaded" || !space.current) return;
-    await makeSpaceAdmin(bridgeStatus.bridgeJazzAccount, space.current);
+    // if (bridgeStatus.type != "loaded" || !space.current) return;
+    // await makeSpaceAdmin(bridgeStatus.bridgeJazzAccount, space.current);
     updateBridgeStatus();
     toast.success("Successfully granted bot permissions.");
   }
   async function revokeBotPermissions() {
-    if (bridgeStatus.type != "loaded" || !space.current) return;
-    await revokeSpaceAdmin(bridgeStatus.bridgeJazzAccount, space.current);
+    // if (bridgeStatus.type != "loaded" || !space.current) return;
+    // await revokeSpaceAdmin(bridgeStatus.bridgeJazzAccount, space.current);
     updateBridgeStatus();
     toast.success("Revoked granted bot permissions.");
   }
@@ -233,14 +232,15 @@
             3. Connect your Roomy space to your Discord server</label
           >
           <p class="mt-1 text-sm/6 text-base-600 dark:text-base-400">
-            Finish by running the <code class="bg-base-800 p-1 rounded"
+            Finish by running the <code
+              class="bg-base-200 dark:bg-base-800 p-1 rounded"
               >/connect-roomy-space</code
             > slash command in your Discord server to connect the space. It will
             require you to specify your space ID.
           </p>
           <div class="flex gap-2 items-center mt-4 ml-4">
             <strong>space-id:</strong>
-            <code class="m-3 p-2 bg-base-800 text-sm rounded"
+            <code class="m-3 p-2 bg-base-200 dark:bg-base-800 text-sm rounded"
               >{page.params.space}</code
             >
           </div>
