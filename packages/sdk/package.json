@@ -39,6 +39,7 @@
     "@atcute/cbor": "^2.2.8",
     "@atproto/lexicon": "^0.4.14",
     "@atproto/oauth-client": "^0.5.6",
+    "@muni-town/leaf-client": "0.1.0-alpha.15",
     "arktype": "^2.1.29",
     "ulidx": "^2.4.1"
   }
