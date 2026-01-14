@@ -381,7 +381,7 @@ export class ConnectedStream {
           } catch (error) {
             console.warn(
               `Skipping malformed event (idx ${e?.idx}): Failed to parse event.`,
-              { event: e, error, streamId: this.id },
+              { event: e?.event, error, streamId: this.id },
             );
             // Return null to filter out this event
             return null;
