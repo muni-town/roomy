@@ -1,10 +1,9 @@
 <script lang="ts">
   import "../../app.css";
-  import { browser, dev } from "$app/environment";
-  import posthog from "posthog-js";
+  import { dev } from "$app/environment";
   import { backendStatus } from "$lib/workers";
   import { onMount } from "svelte";
-  import { Alert, Toaster as FxUIToaster } from "@fuxui/base";
+  import { Toaster as FxUIToaster } from "@fuxui/base";
 
   import { fade } from "svelte/transition";
   import LoginForm from "$lib/components/user/LoginForm.svelte";
@@ -12,16 +11,6 @@
 
   import IconMdiLoading from "~icons/mdi/loading";
   import Error from "$lib/components/modals/Error.svelte";
-
-  onMount(async () => {
-    // Initialize PostHog for analytics
-    if (!dev && browser && globalThis.location.hostname == "roomy.space") {
-      posthog.init("phc_j80ksIuoxjfjRI7rPBmTLWx79rntg4Njz6Dixc3I3ik", {
-        api_host: "https://hog.roomy.space/",
-        person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well
-      });
-    }
-  });
 
   // Cache the current profile for use in the LoginForm to preview the last login.
   $effect(() => {
