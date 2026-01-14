@@ -131,13 +131,15 @@
     });
 
     // move selected messages into thread
-    events.push({
-      id: newUlid(),
-      room: current.roomId,
-      $type: "space.roomy.message.moveMessages.v0",
-      messageIds: state.selectedMessages.map((m) => m.id),
-      toRoomId: threadId,
-    });
+    for (const msg of state.selectedMessages) {
+      events.push({
+        id: newUlid(),
+        room: current.roomId,
+        $type: "space.roomy.message.moveMessages.v0",
+        messageIds: [msg.id], // We must only have one message in array until we have TVFs on backend
+        toRoomId: threadId,
+      });
+    }
 
     console.log("sending thread creation events", { spaceId, events });
     await backend.sendEventBatch(spaceId, events);

@@ -226,9 +226,10 @@ export const DeleteMessage = defineEvent(
 
 const MoveMessagesSchema = type({
   $type: "'space.roomy.message.moveMessages.v0'",
-  messageIds: Ulid.describe("The ID of each message being moved.")
-    .array()
-    .moreThanLength(0),
+  messageIds: Ulid.array()
+    .moreThanLength(0)
+    .atMostLength(1) // Must be exactly one until we have TVFs in LibSQL
+    .describe("The IDs of the messages being moved."),
   toRoomId: Ulid.describe("The room to which the messages should be moved"),
 }).describe("Move one or more messages to a different room");
 
