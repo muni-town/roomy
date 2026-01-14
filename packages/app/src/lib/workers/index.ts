@@ -82,7 +82,8 @@ export const backend = messagePortInterface<ConsoleInterface, BackendInterface>(
         attributes: { isSampled: "true" },
       });
     },
-    async initFinished() {
+    async initFinished({ userDid }) {
+      globalInitSpan.setAttribute("userDid", userDid);
       globalInitSpan.end();
     },
   },
