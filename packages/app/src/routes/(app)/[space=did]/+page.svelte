@@ -3,7 +3,6 @@
 
   import { current, sidebar as sidebarQuery } from "$lib/queries";
   import { backendStatus } from "$lib/workers";
-  import { onNavigate } from "$app/navigation";
 
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
