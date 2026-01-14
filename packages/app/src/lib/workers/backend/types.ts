@@ -7,8 +7,7 @@ import type { Client } from "./client";
 import type { BlobRef } from "@atproto/lexicon";
 import type { Deferred } from "$lib/utils/deferred";
 import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
-import type { ConnectedStream } from "./stream";
-import type { StreamDid, UserDid, Event, Handle, Ulid } from "@roomy/sdk";
+import type { StreamDid, UserDid, Event, Handle, Ulid, ConnectedSpace } from "@roomy/sdk";
 
 export interface BackendStatus {
   authState: ReactiveAuthState;
@@ -176,9 +175,9 @@ export namespace ConnectionStates {
 
   export interface ConnectedStreams {
     status: "connected";
-    personalStream: ConnectedStream;
+    personalStream: ConnectedSpace;
     eventChannel: AsyncChannel<Batch.Events>;
-    streams: Map<StreamDid, ConnectedStream>;
+    streams: Map<StreamDid, ConnectedSpace>;
   }
 }
 

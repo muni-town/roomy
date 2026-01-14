@@ -37,6 +37,7 @@
   "dependencies": {
     "@ark/util": "^0.56.0",
     "@atcute/cbor": "^2.2.8",
+    "@atproto/api": "^0.14.22",
     "@atproto/lexicon": "^0.4.14",
     "@atproto/oauth-client": "^0.5.6",
     "@muni-town/leaf-client": "0.1.0-alpha.15",

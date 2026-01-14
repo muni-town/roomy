@@ -135,13 +135,13 @@ class WorkerSupervisor {
 
     // Ensure personal stream space entity exists
     await this.sqlite.runQuery(
-      ensureEntity(personalStream.id, personalStream.id),
+      ensureEntity(personalStream.streamDid, personalStream.streamDid),
     );
 
     // Mark personal stream space as hidden
     await this.sqlite.runQuery(sql`
       insert into comp_space (entity, hidden)
-      values (${personalStream.id}, 1) 
+      values (${personalStream.streamDid}, 1) 
       on conflict (entity) do nothing
     `);
 
@@ -153,7 +153,7 @@ class WorkerSupervisor {
     this.#status.authState = {
       state: "authenticated",
       did: UserDid.assert(userDid),
-      personalStream: personalStream.id,
+      personalStream: personalStream.streamDid,
       clientStatus: client.status,
     };
 
@@ -168,7 +168,7 @@ class WorkerSupervisor {
 
     this.#status.spaces = {
       ...this.#status.spaces,
-      [personalStream.id]: "idle",
+      [personalStream.streamDid]: "idle",
     };
 
     if (this.#status.authState?.state !== "authenticated")
@@ -198,6 +198,7 @@ class WorkerSupervisor {
     // pass the spaces to the client to connect
     const { streams, failed } = await this.client.connect(
       personalStream,
+      eventChannel,
       new Map(streamIdsAndCursors),
     );
 
@@ -219,7 +220,7 @@ class WorkerSupervisor {
         await stream.doneBackfilling;
         this.#status.spaces = {
           ...this.#status.spaces,
-          [stream.id]: "idle",
+          [stream.streamDid]: "idle",
         };
       })();
     }

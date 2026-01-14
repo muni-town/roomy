@@ -30,7 +30,7 @@ interface ConnectedStreamOpts {
   priority?: TaskPriority;
 }
 
-export class ConnectedStream {
+class ConnectedStream {
   user: UserDid;
   leaf: LeafClient;
   id: StreamDid;

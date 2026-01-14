@@ -14,7 +14,7 @@ import { type Profile } from "$lib/types/profile";
 import { Deferred } from "$lib/utils/deferred";
 import { AsyncChannel } from "../asyncChannel";
 import type { StreamConnectionStatus, ConnectionStates } from "./types";
-import { ConnectedStream, parseEvents } from "./stream";
+import { parseEvents } from "./stream";
 import {
   Did,
   UserDid,
@@ -24,6 +24,10 @@ import {
   type,
   Ulid,
   modules,
+  ConnectedSpace,
+  newUlid,
+  type EventCallback,
+  type DecodedStreamEvent,
 } from "@roomy/sdk";
 import { encode } from "@atcute/cbor";
 
@@ -160,25 +164,32 @@ export class Client {
 
   /** Connect to the list of spaces. */
   async connect(
-    personalStream: ConnectedStream,
+    personalStream: ConnectedSpace,
+    eventChannel: AsyncChannel<Batch.Events>,
     streamList: Map<StreamDid, StreamIndex>,
   ) {
     console.debug("Client connecting", streamList);
 
-    const streams = new Map<StreamDid, ConnectedStream>();
+    const streams = new Map<StreamDid, ConnectedSpace>();
     const failed: StreamDid[] = [];
 
-    for await (const [streamId, upToEventId] of streamList.entries()) {
+    for await (const [streamId, _upToEventId] of streamList.entries()) {
       try {
-        const stream = await ConnectedStream.connect({
-          user: UserDid.assert(this.agent.assertDid),
+        const space = await ConnectedSpace.connect({
+          agent: this.agent,
           leaf: this.leaf,
-          id: streamId,
-          idx: upToEventId,
-          eventChannel: personalStream.eventChannel,
+          streamDid: streamId,
           module: modules.space,
         });
-        streams.set(streamId, stream);
+
+        // Subscribe with callback that pushes to eventChannel
+        const callback = this.#createEventCallback(eventChannel, streamId);
+        // First get metadata to find latest index, then subscribe from there
+        const latest = await space.subscribeMetadata(callback, 0);
+        await space.unsubscribe();
+        space.subscribe(callback, latest);
+
+        streams.set(streamId, space);
       } catch (e) {
         console.error("Stream may not exist:", streamId, e);
         failed.push(streamId);
@@ -188,7 +199,7 @@ export class Client {
     this.#streamConnection = {
       status: "connected",
       personalStream: personalStream,
-      eventChannel: personalStream.eventChannel,
+      eventChannel: eventChannel,
       streams,
     };
     this.#connected.resolve(this.#streamConnection);
@@ -196,6 +207,23 @@ export class Client {
     console.debug("(init.3) Client connected");
 
     return { streams, failed };
+  }
+
+  /** Create an event callback that pushes to the eventChannel */
+  #createEventCallback(
+    eventChannel: AsyncChannel<Batch.Events>,
+    streamId: StreamDid,
+  ): EventCallback {
+    return (events: DecodedStreamEvent[], { isBackfill }) => {
+      if (events.length === 0) return;
+      eventChannel.push({
+        status: "events",
+        batchId: newUlid(),
+        streamId,
+        events,
+        priority: isBackfill ? "background" : "priority",
+      });
+    };
   }
 
   private get eventChannel() {
@@ -237,7 +265,7 @@ export class Client {
       : undefined;
   }
 
-  async connectSpaceStream(streamId: StreamDid, idx: StreamIndex) {
+  async connectSpaceStream(streamId: StreamDid, _idx: StreamIndex) {
     if (this.#streamConnection.status !== "connected")
       throw new Error("Client must be connected to add new space stream");
     await this.#leafAuthenticated.promise;
@@ -245,19 +273,21 @@ export class Client {
     const alreadyConnected = this.#streamConnection.streams.get(streamId);
     if (alreadyConnected) return;
 
-    const stream = await ConnectedStream.connect({
-      user: UserDid.assert(this.agent.assertDid),
+    const space = await ConnectedSpace.connect({
+      agent: this.agent,
       leaf: this.leaf,
-      id: streamId,
-      idx,
-      eventChannel: this.eventChannel,
+      streamDid: streamId,
       module: modules.space,
     });
 
-    const latest = await stream.backfillMetadata();
-    stream.subscribeEvents(latest);
+    // Subscribe with callback that pushes to eventChannel
+    const callback = this.#createEventCallback(this.eventChannel, streamId);
+    // First get metadata to find latest index, then subscribe from there
+    const latest = await space.subscribeMetadata(callback, 0);
+    await space.unsubscribe();
+    await space.subscribe(callback, latest);
 
-    this.#streamConnection.streams.set(streamId, stream);
+    this.#streamConnection.streams.set(streamId, space);
 
     return;
   }
@@ -267,21 +297,28 @@ export class Client {
       throw new Error("Client must be connected to add new space stream");
     await this.#leafAuthenticated.promise;
 
-    const newStream = await ConnectedStream.create({
-      user: UserDid.assert(this.agent.assertDid),
-      leaf: this.leaf,
-      eventChannel: this.eventChannel,
-      module: modules.space,
-    });
+    const newSpace = await ConnectedSpace.create(
+      {
+        agent: this.agent,
+        leaf: this.leaf,
+        module: modules.space,
+      },
+      UserDid.assert(this.agent.assertDid),
+    );
 
-    await newStream.backfillAndSubscribeAllEvents();
+    // Subscribe with callback that pushes to eventChannel
+    const callback = this.#createEventCallback(
+      this.eventChannel,
+      newSpace.streamDid,
+    );
+    await newSpace.subscribe(callback);
 
-    console.debug("Successfully created space stream:", newStream.id);
+    console.debug("Successfully created space stream:", newSpace.streamDid);
 
     // add to stream connection map
-    this.#streamConnection.streams.set(newStream.id, newStream);
+    this.#streamConnection.streams.set(newSpace.streamDid, newSpace);
 
-    return newStream.id as StreamDid;
+    return newSpace.streamDid;
   }
 
   get personalStream() {
@@ -292,26 +329,34 @@ export class Client {
 
   get personalStreamId() {
     if (this.#streamConnection.status === "connected")
-      return this.#streamConnection.personalStream.id;
+      return this.#streamConnection.personalStream.streamDid;
     else return undefined;
   }
 
   async createPersonalStream(
     eventChannel: AsyncChannel<Batch.Events>,
-  ): Promise<ConnectedStream> {
+  ): Promise<ConnectedSpace> {
     await this.#leafAuthenticated.promise;
 
-    return await ConnectedStream.create({
-      user: UserDid.assert(this.agent.assertDid),
-      leaf: this.leaf,
-      eventChannel,
-      module: modules.personal,
-    });
+    const space = await ConnectedSpace.create(
+      {
+        agent: this.agent,
+        leaf: this.leaf,
+        module: modules.personal,
+      },
+      UserDid.assert(this.agent.assertDid),
+    );
+
+    // Subscribe with callback that pushes to eventChannel
+    const callback = this.#createEventCallback(eventChannel, space.streamDid);
+    await space.subscribe(callback);
+
+    return space;
   }
 
   async ensurePersonalStream(
     eventChannel: AsyncChannel<Batch.Events>,
-  ): Promise<ConnectedStream> {
+  ): Promise<ConnectedSpace> {
     if (this.personalStream) return this.personalStream;
     await this.#leafAuthenticated.promise;
 
@@ -319,18 +364,13 @@ export class Client {
       rkey: CONFIG.streamSchemaVersion,
     });
 
-    // TODO: Caching the personal stream ID causes problems when it gets cached and the PDS record
-    // has changed because the app will just get stuck loading forever trying to get the stream that
-    // doesn't exist. For now we just disable loading the stream ID from cache. I don't think it's
-    // unreasonable to just fetch this on startup for now.
-
-    // let id = await personalStream.getIdCache(this.agent.assertDid);
-
     let attempts = 0;
     let errors: any[] = [];
-    let stream: ConnectedStream | null = null;
-    while (!stream) {
+    let space: ConnectedSpace | null = null;
+    let needsSubscription = false;
+    while (!space) {
       if (attempts > 2) throw errors;
+      attempts++;
       try {
         const getResponse = await this.agent.com.atproto.repo.getRecord({
           collection: CONFIG.streamNsid,
@@ -342,29 +382,32 @@ export class Client {
           this.agent.assertDid,
           existingRecord.id,
         );
-        stream = await ConnectedStream.connect({
-          user: UserDid.assert(this.agent.assertDid),
+        console.debug("Got streamId, connecting...", {
+          streamId: existingRecord.id,
+        });
+        space = await ConnectedSpace.connect({
+          agent: this.agent,
           leaf: this.leaf,
-          id: existingRecord.id as StreamDid,
-          idx: 0 as StreamIndex,
-          eventChannel,
+          streamDid: existingRecord.id as StreamDid,
           module: modules.personal,
         });
+        console.debug("Connected to personal stream");
+        needsSubscription = true;
       } catch (e) {
         if ((e as any).error === "RecordNotFound") {
           console.info(
             "Could not find existing stream ID on PDS. Creating new stream!",
           );
 
-          // create a new stream on leaf server
-          stream = await this.createPersonalStream(eventChannel);
+          // create a new stream on leaf server (this also subscribes)
+          space = await this.createPersonalStream(eventChannel);
 
           console.debug("Putting record to PDS");
 
           // put the stream ID in a record
           const putResponse = await this.agent.com.atproto.repo.putRecord({
             collection: CONFIG.streamNsid,
-            record: { id: stream.id },
+            record: { id: space.streamDid },
             repo: this.agent.assertDid,
             rkey: CONFIG.streamSchemaVersion,
           });
@@ -376,7 +419,10 @@ export class Client {
             );
           }
 
-          await personalStream.setIdCache(this.agent.assertDid, stream.id);
+          await personalStream.setIdCache(
+            this.agent.assertDid,
+            space.streamDid,
+          );
         } else if ((e as Error).message.includes("Stream does not exist")) {
           console.warn("Stream does not exist");
           if (import.meta.env.DEV) {
@@ -407,12 +453,13 @@ export class Client {
       }
     }
 
-    stream.backfillAndSubscribeAllEvents();
+    // Subscribe if we connected to existing stream (create already subscribes)
+    if (needsSubscription) {
+      const callback = this.#createEventCallback(eventChannel, space.streamDid);
+      await space.subscribe(callback);
+    }
 
-    // Get the module id for this stream to check whether or not we need to update the module.
-    const streamInfo = await this.leaf.streamInfo(stream.id);
-
-    return stream;
+    return space;
   }
 
   async sendEvent(streamId: string, event: Event) {
@@ -462,10 +509,21 @@ export class Client {
     if (this.#streamConnection.status !== "connected")
       throw new Error("Stream not connected");
 
-    const stream = this.#streamConnection.streams.get(streamId);
-    if (!stream) throw new Error("Could not find stream in connected streams");
+    const space = this.#streamConnection.streams.get(streamId);
+    if (!space) throw new Error("Could not find stream in connected streams");
     const ROOM_FETCH_BATCH_SIZE = 100;
-    await stream.lazyLoadRoom(roomId, ROOM_FETCH_BATCH_SIZE, end);
+    const events = await space.lazyLoadRoom(roomId, ROOM_FETCH_BATCH_SIZE, end);
+
+    // Push fetched events to eventChannel for materialization
+    if (events.length > 0) {
+      this.eventChannel.push({
+        status: "events",
+        batchId: newUlid(),
+        streamId,
+        events,
+        priority: "priority",
+      });
+    }
   }
 
   async uploadToPDS(
