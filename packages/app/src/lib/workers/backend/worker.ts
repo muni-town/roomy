@@ -333,7 +333,7 @@ class WorkerSupervisor {
 
     this.#authenticated.promise.then(() => {
       // Tell the main thread that initialization is finished.
-      consoleInterface.initFinished();
+      consoleInterface.initFinished({ userDid: this.client.agent.assertDid });
     });
   }
 
