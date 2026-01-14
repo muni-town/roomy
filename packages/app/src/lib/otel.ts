@@ -1,10 +1,9 @@
 import {
   BaseInstrumentation,
-  BaseTransport,
+  FetchTransport,
   getWebInstrumentations,
   initializeFaro as init,
   LogLevel,
-  TransportItemType,
   type TransportItem,
 } from "@grafana/faro-web-sdk";
 import { TracingInstrumentation } from "@grafana/faro-web-tracing";
@@ -116,7 +115,7 @@ export function initializeFaro(opts: WorkerInfo) {
     app: { name: "roomy", version: __APP_VERSION__ },
     dedupe: false,
     globalObjectKey: "faro",
-    transports: [new ResilientFetchTransport()],
+    transports: [new CustomFetchTransport()],
     beforeSend(event) {
       // If telemetry has been disabled due to blocked requests, drop all events
       if (telemetryDisabled) {
@@ -166,58 +165,30 @@ export function initializeFaro(opts: WorkerInfo) {
     ?.trace.getTracer("roomy", __APP_VERSION__);
 }
 
-class ResilientFetchTransport extends BaseTransport {
-  readonly name = "resilient-fetch";
-  readonly version = "0.1";
+class CustomFetchTransport extends FetchTransport {
+  failureCount: number = 0;
 
-  override send(items: TransportItem | TransportItem[]): void {
-    if (!CONFIG.faroEndpoint) return;
-
-    const payload = this.makePayload(Array.isArray(items) ? items : [items]);
-    if (!payload) return;
-
-    fetch(CONFIG.faroEndpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": "bad_api_key",
-      },
-      body: JSON.stringify(payload),
-      keepalive: true,
-    }).catch(() => {
-      failureCount++;
-      if (failureCount >= MAX_FAILURES && faro) {
-        faro.pause();
-        console.debug("Telemetry paused due to blocked requests");
-      }
+  constructor() {
+    super({
+      url: CONFIG.faroEndpoint || "http://localhost:12345/collect",
+      apiKey: "bad_api_key",
     });
   }
 
-  private makePayload(items: TransportItem[]) {
-    if (items.length === 0) return null;
-
-    const body: Record<string, unknown> = { meta: items[0]!.meta };
-
-    for (const item of items) {
-      const key = this.getPayloadKey(item.type);
-      if (key) {
-        (body[key] ??= [] as unknown[]) as unknown[];
-        (body[key] as unknown[]).push(item.payload);
-      }
+  send(items: TransportItem[]): Promise<void> {
+    if (!CONFIG.faroEndpoint || failureCount > MAX_FAILURES) {
+      return Promise.resolve();
     }
-    return body;
-  }
+    return super.send(items).catch((e) => {
+      failureCount += 1;
+      console.warn(`Error sending telemetry data.`, e);
 
-  private getPayloadKey(type: TransportItemType): string | null {
-    return type;
-  }
-
-  override getIgnoreUrls() {
-    return [CONFIG.faroEndpoint];
-  }
-
-  override isBatched() {
-    return false;
+      if (failureCount > MAX_FAILURES) {
+        console.debug(
+          "Remotely sending telemetry is paused due to blocked requests",
+        );
+      }
+    });
   }
 }
 

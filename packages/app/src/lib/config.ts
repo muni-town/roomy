@@ -1,6 +1,8 @@
 const CONFIG = {
   leafUrl: import.meta.env.VITE_LEAF_URL || "https://leaf-dev.muni.town",
-  faroEndpoint: import.meta.env.VITE_FARO_ENDPOINT,
+  faroEndpoint: (import.meta.env.VITE_FARO_ENDPOINT || undefined) as
+    | string
+    | undefined,
   streamNsid:
     import.meta.env.VITE_STREAM_NSID || "space.roomy.space.personal.dev",
   streamHandleNsid:

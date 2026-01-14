@@ -5,6 +5,8 @@ services:
   leaf-server:
     image: ghcr.io/muni-town/leaf:sha-6b74aff
     platform: linux/amd64 # no arm64 build available
+    # Uncomment if you are also dev-ing the leaf server
+    # scale: 0
     volumes:
       - leaf-data:/data
     ports:
@@ -84,7 +86,7 @@ services:
         target: /etc/alloy/config.alloy
 
   grafana:
-    image: grafana/grafana:12.0.0
+    image: grafana/grafana:12.3.0
     configs:
       - source: grafana-datasources
         target: /etc/grafana/provisioning/datasources/datasources.yaml
