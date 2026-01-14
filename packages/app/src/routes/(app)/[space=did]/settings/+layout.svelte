@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { dev } from "$app/environment";
   import { page } from "$app/state";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import MainSidebarSpace from "$lib/components/sidebars/SpaceSidebarHeader.svelte";
+  import { flags } from "$lib/config";
   import { Button, ScrollArea } from "@fuxui/base";
 
   import IconLucideArrowLeft from "~icons/lucide/arrow-left";
@@ -17,10 +17,16 @@
       slug: "members",
     },
   ];
-  if (dev) {
+  if (flags.discordImport) {
     sidebarLinks.push({
       label: "Discord Import",
       slug: "discord-import",
+    });
+  }
+  if (flags.discordBridge) {
+    sidebarLinks.push({
+      label: "Discord Bridge",
+      slug: "discord-bridge",
     });
   }
 
