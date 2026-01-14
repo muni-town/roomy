@@ -37,6 +37,7 @@
   import IconHeroiconsChatBubbleBottomCenterText from "~icons/heroicons/chat-bubble-bottom-center-text";
   import MessageContextReply from "./MessageContextReply.svelte";
   import type { Ulid } from "@roomy/sdk";
+  import { renderMarkdownPlaintext } from "$lib/utils/markdown";
 
   let {
     context = $bindable(undefined),
@@ -88,7 +89,7 @@
         </span>
       </div>
       <div class="line-clamp-1 md:basis-auto overflow-hidden italic">
-        {context.selectedMessages[0]?.content}
+        {renderMarkdownPlaintext(context.selectedMessages[0]?.content || "")}
       </div>
     {/if}
   </Button.Root>
