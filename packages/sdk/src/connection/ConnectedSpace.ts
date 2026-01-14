@@ -196,6 +196,7 @@ export class ConnectedSpace {
             const meta: EventCallbackMeta = {
               isBackfill: this.#backfillStatus.status !== "finished",
               streamDid: this.streamDid,
+              batchId,
             };
             this.#callback(events, meta);
           }
@@ -242,6 +243,7 @@ export class ConnectedSpace {
             const meta: EventCallbackMeta = {
               isBackfill: true,
               streamDid: this.streamDid,
+              batchId: newUlid(),
             };
             callback(events, meta);
 
