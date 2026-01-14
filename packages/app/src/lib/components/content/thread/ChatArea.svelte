@@ -207,7 +207,7 @@
   let slicedTimeline = $derived(timeline.slice(-showLastN));
   let messagesLoaded = $derived(timeline && timeline.length >= 0);
 
-  let isShowingFirstMessage = $derived(showLastN >= timeline.length);
+  let isShowingFirstMessage = $derived(!timeline.length);
   let viewport: HTMLDivElement = $state(null!);
 
   // Track initial load for auto-scroll
@@ -311,7 +311,8 @@
               Hello world!
             </p>
             <p class="text-sm text-base-600 dark:text-base-400">
-              This is the beginning of something beautiful.
+              No messages here yet. This is the beginning of something
+              beautiful.
             </p>
           </div>
         {/if}
