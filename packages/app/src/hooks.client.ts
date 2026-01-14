@@ -2,10 +2,14 @@ import { dev } from "$app/environment";
 import { initializeFaro } from "$lib/otel";
 import type { HandleClientError } from "@sveltejs/kit";
 
-initializeFaro({ worker: "main" });
-
 if (dev && window.location.hostname == "localhost")
   window.location.hostname = "127.0.0.1";
+
+initializeFaro({ worker: "main" });
+
+tracer.startActiveSpan("Roomy Init", (span) => {
+  (globalThis as any).globalInitSpan = span;
+});
 
 // For now, unregister the service worker, in case it might be causing problems.
 window.navigator.serviceWorker.getRegistrations().then((registrations) => {

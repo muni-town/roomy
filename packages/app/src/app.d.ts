@@ -1,5 +1,5 @@
 import type { Faro } from "@grafana/faro-web-sdk";
-import type { Tracer } from "@opentelemetry/api";
+import type { Span, Tracer } from "@opentelemetry/api";
 import "unplugin-icons/types/svelte";
 
 // See https://svelte.dev/docs/kit/types#app.d.ts
@@ -15,6 +15,7 @@ declare global {
 
   declare const faro: Faro;
   declare const tracer: Tracer;
+  declare let globalInitSpan: Span;
 
   namespace App {
     // interface Error {}

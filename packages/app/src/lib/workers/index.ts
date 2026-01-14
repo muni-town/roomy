@@ -7,6 +7,7 @@ import type {
 } from "./backend/types";
 import type { SqliteStatus } from "./sqlite/types";
 import { CONFIG } from "../config";
+import { context, trace } from "@opentelemetry/api";
 
 // Force page reload when hot reloading this file to avoid confusion if the workers get mixed up.
 if (import.meta.hot && !(window as any).__playwright) {
@@ -54,6 +55,14 @@ const SharedWorkerConstructor = hasSharedWorker
     : undefined;
 if (!SharedWorkerConstructor)
   throw new Error("No SharedWorker or Worker constructor defined");
+
+const createWorkersSpan = tracer.startActiveSpan(
+  "Create Workers",
+  {},
+  trace.setSpan(context.active(), globalInitSpan),
+  (span) => span,
+);
+
 const backendWorker = new SharedWorkerConstructor(backendWorkerUrl, {
   name: "roomy-backend",
   type: "module",
@@ -72,6 +81,9 @@ export const backend = messagePortInterface<ConsoleInterface, BackendInterface>(
         id,
         attributes: { isSampled: "true" },
       });
+    },
+    async initFinished() {
+      globalInitSpan.end();
     },
   },
 );
@@ -103,6 +115,8 @@ sqliteWorker.postMessage(
   },
   [sqliteWorkerChannel.port2, workerStatusChannel.port2],
 );
+
+createWorkersSpan.end();
 
 export function getPersonalStreamId() {
   return backendStatus.authState?.state === "authenticated"

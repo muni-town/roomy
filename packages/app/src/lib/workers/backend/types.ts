@@ -23,7 +23,7 @@ export type BackendInterface = {
   getSpaceInfo(
     streamDid: StreamDid,
   ): Promise<{ name?: string; avatar?: string } | undefined>;
-  oauthCallback(searchParams: string): Promise<void>;
+  oauthCallback(searchParams: string): Promise<{ did: string }>;
   runQuery<T>(statement: SqlStatement): Promise<QueryResult<T>>;
   getProfile(did: UserDid): Promise<Profile | undefined>;
   dangerousCompletelyDestroyDatabase(opts: {
@@ -95,6 +95,7 @@ export const consoleLogLevels = [
 export type ConsoleLogLevel = (typeof consoleLogLevels)[number];
 export type ConsoleInterface = {
   setSessionId(id: string): Promise<void>;
+  initFinished(): Promise<void>;
   log(level: ConsoleLogLevel, ...args: any[]): Promise<void>;
 };
 
