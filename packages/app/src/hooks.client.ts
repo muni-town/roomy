@@ -1,7 +1,6 @@
 import { dev } from "$app/environment";
 import { initializeFaro } from "$lib/otel";
 import type { HandleClientError } from "@sveltejs/kit";
-import posthog from "posthog-js";
 
 initializeFaro({ worker: "main" });
 
@@ -34,6 +33,5 @@ export const handleError: HandleClientError = async ({
 
   if (status !== 404) {
     console.error(error, status, event, message);
-    posthog.captureException(error, { status, event, message });
   }
 };
