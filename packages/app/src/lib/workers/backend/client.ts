@@ -214,11 +214,11 @@ export class Client {
     eventChannel: AsyncChannel<Batch.Events>,
     streamId: StreamDid,
   ): EventCallback {
-    return (events: DecodedStreamEvent[], { isBackfill }) => {
+    return (events: DecodedStreamEvent[], { isBackfill, batchId }) => {
       if (events.length === 0) return;
       eventChannel.push({
         status: "events",
-        batchId: newUlid(),
+        batchId,
         streamId,
         events,
         priority: isBackfill ? "background" : "priority",
@@ -393,6 +393,7 @@ export class Client {
         });
         console.debug("Connected to personal stream");
         needsSubscription = true;
+        150;
       } catch (e) {
         if ((e as any).error === "RecordNotFound") {
           console.info(

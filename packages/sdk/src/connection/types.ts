@@ -3,7 +3,7 @@
  */
 
 import type { Agent } from "@atproto/api";
-import type { StreamDid, StreamIndex, UserDid, Event } from "../schema";
+import type { StreamDid, StreamIndex, UserDid, Event, Ulid } from "../schema";
 import type { ModuleWithCid } from "../modules";
 import { LeafClient } from "@muni-town/leaf-client";
 
@@ -41,6 +41,8 @@ export interface EventCallbackMeta {
   isBackfill: boolean;
   /** The stream these events came from */
   streamDid: StreamDid;
+  /** ID assigned to the batch of events */
+  batchId: Ulid;
 }
 
 /**
