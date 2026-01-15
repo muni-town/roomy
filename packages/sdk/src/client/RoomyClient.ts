@@ -14,14 +14,8 @@
 
 import type { Agent } from "@atproto/api";
 import type { LeafClient } from "@muni-town/leaf-client";
-import {
-  Did,
-  Handle,
-  UserDid,
-  StreamDid,
-  type,
-} from "../schema";
-import { Deferred } from "../connection/Deferred";
+import { Did, Handle, UserDid, StreamDid, type } from "../schema";
+import { Deferred } from "../utils/Deferred";
 import { createLeafClient, type LeafConfig } from "../leaf";
 import {
   getProfile,
@@ -80,7 +74,7 @@ export class RoomyClient {
    */
   static async create(
     config: RoomyClientConfig,
-    events?: RoomyClientEvents
+    events?: RoomyClientEvents,
   ): Promise<RoomyClient> {
     const leaf = createLeafClient(config.agent, {
       leafUrl: config.leafUrl,
@@ -169,7 +163,7 @@ export class RoomyClient {
           headers: {
             "atproto-proxy": `${did}#atproto_pds`,
           },
-        }
+        },
       );
 
       const streamId = resp.data.value?.id
@@ -181,7 +175,7 @@ export class RoomyClient {
         const exists = await this.checkStreamExists(streamId);
         if (!exists) {
           console.warn(
-            "Stream handle record points to non-existing stream, returning undefined"
+            "Stream handle record points to non-existing stream, returning undefined",
           );
           this.#streamHandleCache.set(did, undefined);
           return undefined;
@@ -193,7 +187,7 @@ export class RoomyClient {
     } catch (e) {
       console.warn(
         "Could not get stream handle record, most likely does not exist",
-        e
+        e,
       );
       this.#streamHandleCache.set(did, undefined);
       return undefined;
@@ -252,12 +246,14 @@ export class RoomyClient {
    */
   async resolveHandleForSpace(
     spaceId: StreamDid,
-    handleAccountDid: UserDid
+    handleAccountDid: UserDid,
   ): Promise<Handle | undefined> {
     try {
       const profile = await this.getProfileCached(handleAccountDid);
       const handle = profile.data.handle as Handle;
-      const resolved = await this.resolveSpaceId(handleAccountDid as unknown as Handle);
+      const resolved = await this.resolveSpaceId(
+        handleAccountDid as unknown as Handle,
+      );
       if (resolved.spaceId === spaceId) {
         return handle;
       }
@@ -271,7 +267,7 @@ export class RoomyClient {
    * Get space info from the Leaf server.
    */
   async getSpaceInfo(
-    streamDid: StreamDid
+    streamDid: StreamDid,
   ): Promise<{ name?: string; avatar?: string } | undefined> {
     try {
       const resp = await this.leaf.query(streamDid, {
@@ -302,7 +298,7 @@ export class RoomyClient {
    */
   async uploadBlob(
     bytes: ArrayBuffer,
-    opts?: { alt?: string; mimetype?: string }
+    opts?: { alt?: string; mimetype?: string },
   ) {
     return uploadBlob(this.agent, bytes, opts);
   }

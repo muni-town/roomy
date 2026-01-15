@@ -24,7 +24,7 @@ import {
   type,
 } from "../schema";
 
-import { Deferred } from "./Deferred";
+import { Deferred } from "../utils/Deferred";
 import type {
   ConnectedSpaceConfig,
   DecodedStreamEvent,

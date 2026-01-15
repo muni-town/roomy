@@ -1,5 +1,3 @@
-import type { TaskPriority } from "./types";
-
 /***
  * AsyncChannel is a producer-consumer queue that bridges synchronous push operations with
  * asynchronous iteration. Producers call `push(item)` to add data to a queue, which can
@@ -87,5 +85,7 @@ export class AsyncChannel<T> {
     }
   }
 }
+
+export type TaskPriority = "priority" | "background";
 
 const END = Symbol();

@@ -6,7 +6,6 @@ import { lexicons } from "$lib/lexicons";
 import { CONFIG } from "$lib/config";
 import { type Batch, type EncodedStreamEvent } from "../types";
 import { Deferred } from "$lib/utils/deferred";
-import { AsyncChannel } from "../asyncChannel";
 import type { StreamConnectionStatus, ConnectionStates } from "./types";
 import {
   UserDid,
@@ -19,6 +18,7 @@ import {
   newUlid,
   type EventCallback,
   type DecodedStreamEvent,
+  AsyncChannel,
   // SDK client
   RoomyClient,
   getPersonalStreamId,

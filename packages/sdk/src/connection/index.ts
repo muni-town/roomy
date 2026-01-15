@@ -22,7 +22,6 @@
  */
 
 export { ConnectedSpace } from "./ConnectedSpace";
-export { Deferred } from "./Deferred";
 export type {
   ConnectedSpaceConfig,
   DecodedStreamEvent,
