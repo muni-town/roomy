@@ -14,7 +14,7 @@
 
 import type { Agent } from "@atproto/api";
 import type { LeafClient } from "@muni-town/leaf-client";
-import { Did, Handle, UserDid, StreamDid, type } from "../schema";
+import { Did, Handle, UserDid, StreamDid, type, newUlid } from "../schema";
 import { Deferred } from "../utils/Deferred";
 import { createLeafClient, type LeafConfig } from "../leaf";
 import {
@@ -24,6 +24,8 @@ import {
   createStreamHandleRecord,
   removeStreamHandleRecord,
 } from "../atproto";
+import { ConnectedSpace } from "../connection/ConnectedSpace";
+import type { ModuleWithCid } from "../modules";
 
 export interface RoomyClientConfig extends LeafConfig {
   agent: Agent;
@@ -58,6 +60,16 @@ export class RoomyClient {
   // Caches
   readonly #profileCache = new Map<string, ProfileResponse>();
   readonly #streamHandleCache = new Map<string, StreamDid | undefined>();
+
+  // Personal stream
+  readonly #personalStream: ConnectedSpace | null = null;
+
+  /**
+   * Get the connected personal stream, if any.
+   */
+  get personalStream(): ConnectedSpace | null {
+    return this.#personalStream;
+  }
 
   private constructor(config: RoomyClientConfig, leaf: LeafClient) {
     this.agent = config.agent;
@@ -301,6 +313,95 @@ export class RoomyClient {
     opts?: { alt?: string; mimetype?: string },
   ) {
     return uploadBlob(this.agent, bytes, opts);
+  }
+
+  /**
+   * Connect to or create the user's personal stream.
+   * Returns existing stream if already connected.
+   *
+   * @param module - Module definition for personal streams
+   */
+  async connectPersonalStream(module: ModuleWithCid): Promise<ConnectedSpace> {
+    // Return existing if already connected
+    if (this.#personalStream) {
+      return this.#personalStream;
+    }
+
+    const userDid = this.agent.assertDid as UserDid;
+
+    // Check for existing personal stream
+    const existingStreamId = await this.getStreamHandleRecord(userDid);
+
+    let space: ConnectedSpace;
+
+    if (existingStreamId) {
+      // Connect to existing personal stream
+      space = await ConnectedSpace.connect({
+        client: this,
+        streamDid: existingStreamId,
+        module,
+      });
+    } else {
+      // Create new personal stream
+      space = await ConnectedSpace.create(
+        {
+          client: this,
+          module,
+        },
+        userDid,
+      );
+
+      // Save the stream ID to PDS
+      await this.createStreamHandleRecord(space.streamDid);
+    }
+
+    // Update the private field using type assertion (since it's readonly)
+    (
+      this as unknown as { "#personalStream": ConnectedSpace | null }
+    )["#personalStream"] = space;
+
+    return space;
+  }
+
+  /**
+   * Join a space by sending events to both personal stream and the target space.
+   *
+   * @param spaceId - The stream DID of the space to join
+   * @param spaceModule - Module definition for the space
+   * @returns The connected space
+   * @throws If personal stream is not connected
+   */
+  async joinSpace(
+    spaceId: StreamDid,
+    spaceModule: ModuleWithCid,
+  ): Promise<ConnectedSpace> {
+    if (!this.#personalStream) {
+      throw new Error(
+        "Personal stream not connected. Call connectPersonalStream() first.",
+      );
+    }
+
+    // Send PersonalJoinSpace event to personal stream
+    await this.#personalStream.sendEvent({
+      id: newUlid(),
+      $type: "space.roomy.space.personal.joinSpace.v0",
+      spaceDid: spaceId,
+    });
+
+    // Connect to the target space
+    const space = await ConnectedSpace.connect({
+      client: this,
+      streamDid: spaceId,
+      module: spaceModule,
+    });
+
+    // Send JoinSpace event to the target space
+    await space.sendEvent({
+      id: newUlid(),
+      $type: "space.roomy.space.joinSpace.v0",
+    });
+
+    return space;
   }
 
   /**
