@@ -40,6 +40,7 @@ import {
 } from "@roomy/sdk";
 import { decode, encode } from "@atcute/cbor";
 import { initializeFaro } from "$lib/otel";
+import { context, type Context } from "@opentelemetry/api";
 
 const sessionId = newUlid();
 
@@ -69,12 +70,12 @@ const isSharedWorker = "SharedWorkerGlobalScope" in globalThis;
  * Singleton for supervising authentication, subscriptions and materialisation
  * */
 class WorkerSupervisor {
-  #config: WorkerConfig;
-  #sqlite: SqliteSupervisor;
+  #config: WorkerConfig = { consoleForwarding: false };
+  #sqlite: SqliteSupervisor = new SqliteSupervisor();
 
-  #status: Partial<BackendStatus>;
-  #auth: AuthState;
-  #connection: ConnectionState; // tabs connected to shared worker
+  #auth: AuthState = { state: "loading" };
+  #status: Partial<BackendStatus> = { authState: { state: "loading" } };
+  #connection: ConnectionState = { count: 0, ports: new WeakMap() }; // tabs connected to shared worker
   #authenticated = new Deferred<void>();
 
   /* To get the result of a materialised batch, create and await a Promise
@@ -85,146 +86,194 @@ class WorkerSupervisor {
   > = new Map();
 
   constructor() {
-    this.#config = {
-      consoleForwarding: import.meta.env.SHARED_WORKER_LOG_FORWARDING || true,
-    };
-    this.loadStoredConfig();
+    tracer.startActiveSpan("Init Backend", async (span) => {
+      this.#config = {
+        consoleForwarding: import.meta.env.SHARED_WORKER_LOG_FORWARDING || true,
+      };
+      this.loadStoredConfig();
 
-    console.info("Starting Roomy WorkerSupervisor", this.#config);
+      console.info("Starting Roomy Backend WorkerSupervisor", {}, this.#config);
 
-    this.#sqlite = new SqliteSupervisor();
-    this.#status = reactiveWorkerState<BackendStatus>(
-      new BroadcastChannel("backend-status"),
-      true,
-    );
+      this.#status = reactiveWorkerState<BackendStatus>(
+        new BroadcastChannel("backend-status"),
+        true,
+      );
 
-    this.#auth = { state: "loading" };
-    this.#status.authState = this.#auth; // in general prefer setAuthState
+      this.connectRPC();
 
-    this.#connection = { ports: new WeakMap(), count: 0 };
-    this.connectRPC();
+      const ctx = context.active();
 
-    this.refreshSession();
+      await tracer.startActiveSpan(
+        "Restore Client Session",
+        {},
+        ctx,
+        async (span) => {
+          await this.refreshSession(context.active());
+          span.end();
+        },
+      );
+
+      await tracer.startActiveSpan(
+        "Wait Until authenticated",
+        {},
+        ctx,
+        async (span) => {
+          await this.#authenticated.promise;
+          span.end();
+        },
+      );
+
+      span.end();
+    });
   }
 
   /** Where most of the initialisation happens. Backfill the personal
    * stream from the stored cursor, then set up the other streams.
    */
-  async setAuthenticated(client: Client) {
-    const userDid = client.agent.did;
-    if (!userDid || !UserDid.allows(userDid))
-      throw new Error("DID not defined on client");
+  async initBackendWithClient(ctx: Context, client: Client) {
+    await tracer.startActiveSpan(
+      "Init Backend With Client",
+      {},
+      ctx,
+      async (span) => {
+        const userDid = client.agent.did;
+        if (!userDid || !UserDid.allows(userDid))
+          throw new Error("DID not defined on client");
 
-    await this.sqlite
-      .authenticate(UserDid.assert(userDid))
-      .catch((e) => console.error("Failed to authenticate sqlite worker", e));
+        // Intentionally don't await on this
+        tracer.startActiveSpan(
+          "Send Auth to SQLite Worker",
+          {},
+          context.active(),
+          async (span) => {
+            await this.sqlite
+              .authenticate(UserDid.assert(userDid))
+              .catch((e) =>
+                console.error("Failed to authenticate sqlite worker", e),
+              );
+            span.end();
+          },
+        );
 
-    // try to fetch or create the personal stream
-    this.setAuthState({ state: "loading" });
+        // try to fetch or create the personal stream
+        this.setAuthState({ state: "loading" });
 
-    const eventChannel = new AsyncChannel<Batch.Events>();
+        const eventChannel = new AsyncChannel<Batch.Events>();
 
-    const personalStream = await client
-      .ensurePersonalStream(eventChannel)
-      .catch((e) => {
-        const error = { state: "error", error: e } as const;
-        this.#auth = error;
-        this.#status.authState = error;
-        throw error;
-      });
+        const personalStream = await tracer.startActiveSpan(
+          "Ensure Personal Stream",
+          {},
+          context.active(),
+          async (span) => {
+            const stream = await client
+              .ensurePersonalStream(eventChannel)
+              .catch((e) => {
+                const error = { state: "error", error: e } as const;
+                this.#auth = error;
+                this.#status.authState = error;
+                throw error;
+              });
+            span.end();
+            return stream;
+          },
+        );
 
-    // Ensure personal stream space entity exists
-    await this.sqlite.runQuery(
-      ensureEntity(personalStream.id, personalStream.id),
-    );
+        // Ensure personal stream space entity exists
+        await this.sqlite.runQuery(
+          ensureEntity(personalStream.id, personalStream.id),
+        );
 
-    // Mark personal stream space as hidden
-    await this.sqlite.runQuery(sql`
-      insert into comp_space (entity, hidden)
-      values (${personalStream.id}, 1) 
-      on conflict (entity) do nothing
-    `);
+        // Mark personal stream space as hidden
+        await this.sqlite.runQuery(sql`
+            insert into comp_space (entity, hidden)
+            values (${personalStream.id}, 1) 
+            on conflict (entity) do nothing
+          `);
 
-    this.#auth = {
-      state: "authenticated",
-      client,
-      eventChannel,
-    };
-    this.#status.authState = {
-      state: "authenticated",
-      did: UserDid.assert(userDid),
-      personalStream: personalStream.id,
-      clientStatus: client.status,
-    };
+        this.#auth = {
+          state: "authenticated",
+          client,
+          eventChannel,
+        };
+        this.#status.authState = {
+          state: "authenticated",
+          did: UserDid.assert(userDid),
+          personalStream: personalStream.id,
+          clientStatus: client.status,
+        };
 
-    this.startMaterializer();
+        this.startMaterializer();
 
-    const lastBatchId = await personalStream.doneBackfilling;
+        const lastBatchId = await personalStream.doneBackfilling;
 
-    // ensure the backfilled stream is fully materialised
-    const personalStreamMaterialised = new Promise((resolve) => {
-      this.#batchResolvers.set(lastBatchId, resolve);
-    });
+        // ensure the backfilled stream is fully materialised
+        const personalStreamMaterialised = new Promise((resolve) => {
+          this.#batchResolvers.set(lastBatchId, resolve);
+        });
 
-    this.#status.spaces = {
-      ...this.#status.spaces,
-      [personalStream.id]: "idle",
-    };
-
-    if (this.#status.authState?.state !== "authenticated")
-      throw new Error("Not authenticated");
-
-    // get streams from SQLite
-    const streamsResult = await this.sqlite.runQuery<{
-      id: StreamDid;
-      backfilled_to: StreamIndex;
-    }>(sql`-- backend space list
-      select e.id as id, cs.backfilled_to from entities e join comp_space cs on e.id = cs.entity
-      where hidden = 0
-    `);
-
-    // pass them to the client
-    const streamIdsAndCursors = (streamsResult.rows || []).map((row) => {
-      return [row.id, row.backfilled_to] as const;
-    });
-
-    // set all spaces to 'loading' in reactive status
-    this.#status.spaces = {
-      ...Object.fromEntries(
-        streamIdsAndCursors.map(([spaceId]) => [spaceId, "loading"]),
-      ),
-    };
-
-    // pass the spaces to the client to connect
-    const { streams, failed } = await this.client.connect(
-      personalStream,
-      new Map(streamIdsAndCursors),
-    );
-
-    if (failed.length) console.warn("Some streams didn't connect", failed);
-    // TODO: clean up nonexistent streams from db
-
-    await personalStreamMaterialised;
-
-    // need to reassign the whole object to trigger reactive update
-    this.#status.authState = {
-      clientStatus: "connected",
-      did: this.#status.authState.did,
-      personalStream: this.#status.authState.personalStream,
-      state: "authenticated",
-    };
-
-    for (const stream of streams.values()) {
-      (async () => {
-        await stream.doneBackfilling;
         this.#status.spaces = {
           ...this.#status.spaces,
-          [stream.id]: "idle",
+          [personalStream.id]: "idle",
         };
-      })();
-    }
 
-    this.#authenticated.resolve();
+        if (this.#status.authState?.state !== "authenticated")
+          throw new Error("Not authenticated");
+
+        // get streams from SQLite
+        const streamsResult = await this.sqlite.runQuery<{
+          id: StreamDid;
+          backfilled_to: StreamIndex;
+        }>(sql`-- backend space list
+            select e.id as id, cs.backfilled_to from entities e join comp_space cs on e.id = cs.entity
+            where hidden = 0
+          `);
+
+        // pass them to the client
+        const streamIdsAndCursors = (streamsResult.rows || []).map((row) => {
+          return [row.id, row.backfilled_to] as const;
+        });
+
+        // set all spaces to 'loading' in reactive status
+        this.#status.spaces = {
+          ...Object.fromEntries(
+            streamIdsAndCursors.map(([spaceId]) => [spaceId, "loading"]),
+          ),
+        };
+
+        // pass the spaces to the client to connect
+        const { streams, failed } = await this.client.connect(
+          personalStream,
+          new Map(streamIdsAndCursors),
+        );
+
+        if (failed.length) console.warn("Some streams didn't connect", failed);
+        // TODO: clean up nonexistent streams from db
+
+        await personalStreamMaterialised;
+
+        // need to reassign the whole object to trigger reactive update
+        this.#status.authState = {
+          clientStatus: "connected",
+          did: this.#status.authState.did,
+          personalStream: this.#status.authState.personalStream,
+          state: "authenticated",
+        };
+
+        for (const stream of streams.values()) {
+          (async () => {
+            await stream.doneBackfilling;
+            this.#status.spaces = {
+              ...this.#status.spaces,
+              [stream.id]: "idle",
+            };
+          })();
+        }
+
+        this.#authenticated.resolve();
+
+        span.end();
+      },
+    );
   }
 
   private async startMaterializer() {
@@ -265,7 +314,7 @@ class WorkerSupervisor {
       this.#status.authState = state;
       return;
     } else {
-      this.setAuthenticated(state.client);
+      this.initBackendWithClient(context.active(), state.client);
     }
   }
 
@@ -337,25 +386,32 @@ class WorkerSupervisor {
     });
   }
 
-  private async refreshSession() {
-    Client.new()
+  private async refreshSession(ctx: Context) {
+    return await Client.restoreSession(ctx)
       .then((client) => {
         if (!client) {
           console.debug("No previous session found.");
           this.setAuthState({ state: "unauthenticated" });
           return;
         }
+
         console.debug("Session restored successfully");
         faro.api.setSession({
           id: faro.api.getSession()?.id,
           attributes: { isSampled: "true", did: client.agent.assertDid },
         });
 
-        this.setAuthenticated(client);
-        console.info("ATProto Authenticated", { did: client.agent.assertDid });
+        this.initBackendWithClient(ctx, client);
 
-        client.getProfile().then((profile) => {
-          this.#status.profile = profile;
+        console.info("ATProto Authenticated", {
+          did: client.agent.assertDid,
+        });
+
+        tracer.startActiveSpan("Get Profile", {}, ctx, (span) => {
+          client.getProfile().then((profile) => {
+            span.end();
+            this.#status.profile = profile;
+          });
         });
       })
       .catch((error) => {
@@ -364,10 +420,12 @@ class WorkerSupervisor {
       });
   }
 
-  private async authenticateCallback(params: URLSearchParams) {
+  private async authenticateCallback(ctx: Context, params: URLSearchParams) {
     this.setAuthState({ state: "loading" });
-    const client = await Client.oauthCallback(params);
-    this.setAuthenticated(client);
+    const client = await Client.oauthCallback(ctx, params);
+
+    this.initBackendWithClient(ctx, client);
+
     return client;
   }
 
@@ -408,8 +466,21 @@ class WorkerSupervisor {
       login: async (handle) => Client.login(handle),
       oauthCallback: async (paramsStr) => {
         const params = new URLSearchParams(paramsStr);
+
+        const client = await tracer.startActiveSpan(
+          "Oauth Callback",
+          async (span) => {
+            const client = await this.authenticateCallback(
+              context.active(),
+              params,
+            );
+            span.end();
+            return client;
+          },
+        );
+
         return {
-          did: (await this.authenticateCallback(params)).agent.assertDid,
+          did: client.agent.assertDid,
         };
       },
       logout: async () => this.logout(),

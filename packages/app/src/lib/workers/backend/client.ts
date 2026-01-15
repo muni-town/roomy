@@ -26,6 +26,10 @@ import {
 } from "@roomy/sdk";
 import { encode } from "@atcute/cbor";
 import { modules } from "./modules";
+import {
+  context,
+  type Context,
+} from "@opentelemetry/api";
 
 /** Handles interaction with ATProto and Leaf, manages state for connection to both,
  * including connecting to and backfilling streams */
@@ -57,7 +61,11 @@ export class Client {
   }
 
   // authenticate using app password (testing only)
-  static async loginWithAppPassword(handle: string, appPassword: string) {
+  static async loginWithAppPassword(
+    ctx: Context,
+    handle: string,
+    appPassword: string,
+  ) {
     const atpAgent = new AtpAgent({ service: "https://bsky.social" });
 
     try {
@@ -77,14 +85,15 @@ export class Client {
     // Store DID for consistency with OAuth flow
     await db.kv.put({ key: "did", value: atpAgent.did });
 
-    return Client.fromAgent(atpAgent);
+    return Client.fromAgent(ctx, atpAgent);
   }
 
   // restore previous session or return `undefined` if there was none
-  static async new(): Promise<Client | undefined> {
+  static async restoreSession(ctx: Context): Promise<Client | undefined> {
     if (CONFIG.testingAppPassword && CONFIG.testingHandle) {
       console.debug("Using app password authentication for testing");
       return Client.loginWithAppPassword(
+        ctx,
         CONFIG.testingHandle,
         CONFIG.testingAppPassword,
       );
@@ -97,27 +106,59 @@ export class Client {
     const didEntry = await db.kv.get("did");
     if (!didEntry) return;
 
-    const restoredSession = await oauthClient.restore(didEntry.value);
-    return Client.fromSession(restoredSession);
+    const restoredSession = await tracer.startActiveSpan(
+      "Restore Oauth Session",
+      {},
+      ctx,
+      async (span) => {
+        const session = await oauthClient.restore(didEntry.value);
+        span.end();
+        return session;
+      },
+    );
+
+    const client = await tracer.startActiveSpan(
+      "Connect Leaf Client",
+      {},
+      ctx,
+      async (span) => {
+        const client = await Client.fromSession(
+          context.active(),
+          restoredSession,
+        );
+        span.end();
+        return client;
+      },
+    );
+
+    return client;
   }
 
   // create new session from query params
-  static async oauthCallback(params: URLSearchParams) {
+  static async oauthCallback(ctx: Context, params: URLSearchParams) {
     const oauth = await createOauthClient();
     const response = await oauth.callback(params);
-    return Client.fromSession(response.session);
+    return Client.fromSession(ctx, response.session);
   }
 
-  private static async fromAgent(agent: Agent) {
+  private static async fromAgent(ctx: Context, agent: Agent) {
     try {
       lexicons.forEach((l) => agent.lex.add(l as any));
 
       const leaf = new LeafClient(CONFIG.leafUrl, async () => {
-        const resp = await agent?.com.atproto.server.getServiceAuth({
-          aud: CONFIG.leafServerDid,
-          lxm: "town.muni.leaf.authenticate",
-        });
-        if (!resp) throw "Error authenticating for leaf server";
+        const resp = await tracer.startActiveSpan(
+          "Leaf Authenticate",
+          {},
+          ctx,
+          async (span) => {
+            const resp = await agent?.com.atproto.server.getServiceAuth({
+              aud: CONFIG.leafServerDid,
+              lxm: "town.muni.leaf.authenticate",
+            });
+            span.end();
+            return resp;
+          },
+        );
         return resp.data.token;
       });
 
@@ -128,11 +169,11 @@ export class Client {
     }
   }
 
-  static async fromSession(session: OAuthSession) {
+  static async fromSession(ctx: Context, session: OAuthSession) {
     try {
       await db.kv.put({ key: "did", value: session.did });
       const agent = new Agent(session);
-      return Client.fromAgent(agent);
+      return Client.fromAgent(ctx, agent);
     } catch (e) {
       console.error(e);
       // db.kv.delete("did");

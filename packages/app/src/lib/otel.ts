@@ -175,6 +175,7 @@ export function initializeFaro(opts: WorkerInfo) {
         : []),
       new CustomConsoleInstrumentation(),
       new TracingInstrumentation({
+        // This didn't seem to be helping for sure and it's a semi-heavy lib so try disabling it for now.
         contextManager: new ZoneContextManager(),
       }),
     ],
