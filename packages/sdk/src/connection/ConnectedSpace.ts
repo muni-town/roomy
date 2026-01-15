@@ -73,8 +73,8 @@ export class ConnectedSpace {
   private constructor(config: ConnectedSpaceConfig) {
     this.streamDid = config.streamDid;
     this.#config = config;
-    this.#agent = config.agent;
-    this.#leaf = config.leaf;
+    this.#agent = config.client.agent;
+    this.#leaf = config.client.leaf;
   }
 
   /**
@@ -85,7 +85,9 @@ export class ConnectedSpace {
     console.debug("Connecting", config);
 
     try {
-      const { moduleCid } = await config.leaf.streamInfo(config.streamDid);
+      const { moduleCid } = await config.client.leaf.streamInfo(
+        config.streamDid,
+      );
       const expectedCid = await config.module.cid;
 
       console.debug("Got stream info", { moduleCid });
@@ -95,16 +97,16 @@ export class ConnectedSpace {
           `Module for stream ${config.streamDid} (${moduleCid}) differs from expected (${expectedCid}), updating...`,
         );
 
-        if (!(await config.leaf.hasModule(expectedCid))) {
+        if (!(await config.client.leaf.hasModule(expectedCid))) {
           console.log(
             "Leaf server doesn't have module, uploading:",
             expectedCid,
           );
-          await config.leaf.uploadModule(config.module.def);
+          await config.client.leaf.uploadModule(config.module.def);
         }
 
         try {
-          await config.leaf.updateModule(config.streamDid, expectedCid);
+          await config.client.leaf.updateModule(config.streamDid, expectedCid);
         } catch (e) {
           // May fail if user is not admin, which is fine
           console.warn(
@@ -134,17 +136,17 @@ export class ConnectedSpace {
       console.log("Creating stream");
       const cid = await config.module.cid;
 
-      if (!(await config.leaf.hasModule(cid))) {
+      if (!(await config.client.leaf.hasModule(cid))) {
         console.info("Leaf server does not have module yet. Uploading:", cid);
-        await config.leaf.uploadModule(config.module.def);
+        await config.client.leaf.uploadModule(config.module.def);
       }
 
       console.debug("Module ready to create stream");
-      const { streamDid } = await config.leaf.createStream(cid);
+      const { streamDid } = await config.client.leaf.createStream(cid);
       console.log("Created stream:", streamDid);
 
       // Send addAdmin event for the creator
-      await config.leaf.sendEvent(
+      await config.client.leaf.sendEvent(
         streamDid,
         encode({
           id: newUlid(),

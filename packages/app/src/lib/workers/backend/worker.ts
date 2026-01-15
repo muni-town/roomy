@@ -355,7 +355,7 @@ class WorkerSupervisor {
         this.setAuthenticated(client);
         console.info("ATProto Authenticated", { did: client.agent.assertDid });
 
-        client.getProfile().then((profile) => {
+        client.roomy.getProfile().then((profile) => {
           this.#status.profile = profile;
         });
       })
@@ -404,7 +404,7 @@ class WorkerSupervisor {
         return sessionId;
       },
       getSpaceInfo: (streamDid) => {
-        return this.client.getSpaceInfo(streamDid);
+        return this.client.roomy.getSpaceInfo(streamDid);
       },
       login: async (handle) => Client.login(handle),
       oauthCallback: async (paramsStr) => {
@@ -414,7 +414,7 @@ class WorkerSupervisor {
         };
       },
       logout: async () => this.logout(),
-      getProfile: async (did) => this.client.getProfile(did),
+      getProfile: async (did) => this.client.roomy.getProfile(did),
       runQuery: async (statement) => {
         return this.sqlite.runQuery(statement);
       },
@@ -467,7 +467,7 @@ class WorkerSupervisor {
         return streamId;
       },
       sendEvent: async (streamId: string, event: Event) => {
-        await this.client.sendEvent(streamId, event);
+        await this.client.roomy.leaf.sendEvent(streamId, encode(event));
       },
       sendEventBatch: async (streamId, payloads) => {
         encode(payloads);
@@ -480,7 +480,7 @@ class WorkerSupervisor {
         return await this.client.lazyLoadRoom(streamId, roomId, end);
       },
       uploadToPds: async (bytes, opts) => {
-        return this.client.uploadToPDS(bytes, opts);
+        return this.client.roomy.uploadBlob(bytes, opts);
       },
       addClient: async (port) => this.connectMessagePort(port),
       pauseSubscription: async (_streamId) => {
@@ -490,18 +490,18 @@ class WorkerSupervisor {
         // await this.openSpacesMaterializer?.unpauseSubscription(streamId);
       },
       resolveHandleForSpace: async (spaceId, handleAccountDid) =>
-        this.client.resolveHandleForSpace(spaceId, handleAccountDid),
+        this.client.roomy.resolveHandleForSpace(spaceId, handleAccountDid),
       resolveSpaceId: async (handleOrDid) => {
         await this.#authenticated.promise;
-        return await this.client.resolveSpaceId(handleOrDid);
+        return await this.client.roomy.resolveSpaceId(handleOrDid);
       },
       checkSpaceExists: async (spaceId) =>
-        this.client.checkStreamExists(spaceId),
+        this.client.roomy.checkStreamExists(spaceId),
       createStreamHandleRecord: async (spaceId) => {
-        await this.client.createStreamHandleRecord(spaceId);
+        await this.client.roomy.createStreamHandleRecord(spaceId);
       },
       removeStreamHandleRecord: async () => {
-        await this.client.removeStreamHandleRecord();
+        await this.client.roomy.removeStreamHandleRecord();
       },
       getStreamRecord: async () => this.getStreamRecord(),
       deleteStreamRecord: async () => this.deleteStreamRecord(),

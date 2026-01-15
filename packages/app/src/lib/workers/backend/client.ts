@@ -5,18 +5,14 @@ import { Agent, AtpAgent } from "@atproto/api";
 import { lexicons } from "$lib/lexicons";
 import { CONFIG } from "$lib/config";
 import { type Batch, type EncodedStreamEvent } from "../types";
-import { type Profile } from "$lib/types/profile";
 import { Deferred } from "$lib/utils/deferred";
 import { AsyncChannel } from "../asyncChannel";
 import type { StreamConnectionStatus, ConnectionStates } from "./types";
 import {
-  Did,
   UserDid,
-  Handle,
   type Event,
   StreamDid,
   StreamIndex,
-  type,
   Ulid,
   modules,
   ConnectedSpace,
@@ -27,25 +23,23 @@ import {
   RoomyClient,
   getPersonalStreamId,
   savePersonalStreamId,
+  parseEvents,
 } from "@roomy/sdk";
 import { encode } from "@atcute/cbor";
-import type { SqlRows } from "@muni-town/leaf-client";
 
 /** Handles interaction with ATProto and Leaf, manages state for connection to both,
  * including connecting to and backfilling streams */
 export class Client {
   /** SDK client for ATProto/Leaf operations with caching */
-  roomy: RoomyClient;
+  readonly roomy: RoomyClient;
   #streamConnection: StreamConnectionStatus;
-  #leafAuthenticated = new Deferred();
   #connected = new Deferred<ConnectionStates.ConnectedStreams>();
 
-  constructor(roomy: RoomyClient) {
+  private constructor(roomy: RoomyClient) {
     this.roomy = roomy;
     this.#streamConnection = {
       status: "initialising",
     };
-    this.setLeafHandlers();
   }
 
   /** Convenience accessor for the ATProto agent */
@@ -57,6 +51,11 @@ export class Client {
   get leaf() {
     return this.roomy.leaf;
   }
+
+  /** Handle Leaf disconnect by updating stream connection status */
+  #handleDisconnect = () => {
+    this.#streamConnection = { status: "offline" };
+  };
 
   // get a URL for redirecting to the ATProto PDS for login
   static async login(handle: string) {
@@ -119,34 +118,35 @@ export class Client {
     return Client.fromSession(response.session);
   }
 
-  private static async fromAgent(agent: Agent) {
-    try {
-      lexicons.forEach((l) => agent.lex.add(l as any));
+  private static async fromAgent(agent: Agent): Promise<Client> {
+    lexicons.forEach((l) => agent.lex.add(l as any));
 
-      const roomy = new RoomyClient({
+    // We need to create the client first so we can pass its disconnect handler
+    // Use a two-phase initialization
+    let disconnectHandler: (() => void) | undefined;
+
+    const roomy = await RoomyClient.create(
+      {
         agent,
         leafUrl: CONFIG.leafUrl,
         leafDid: CONFIG.leafServerDid,
         streamHandleNsid: CONFIG.streamHandleNsid,
-      });
+      },
+      {
+        onDisconnect: () => disconnectHandler?.(),
+      },
+    );
 
-      return new Client(roomy);
-    } catch (e) {
-      console.error(e);
-      throw new Error("Failed to create client");
-    }
+    const client = new Client(roomy);
+    disconnectHandler = client.#handleDisconnect;
+
+    return client;
   }
 
   static async fromSession(session: OAuthSession) {
-    try {
-      await db.kv.put({ key: "did", value: session.did });
-      const agent = new Agent(session);
-      return Client.fromAgent(agent);
-    } catch (e) {
-      console.error(e);
-      // db.kv.delete("did");
-      throw new Error("Failed to create client from session");
-    }
+    await db.kv.put({ key: "did", value: session.did });
+    const agent = new Agent(session);
+    return Client.fromAgent(agent);
   }
 
   get status() {
@@ -155,10 +155,6 @@ export class Client {
 
   get connected() {
     return this.#connected.promise;
-  }
-
-  async checkStreamExists(streamId: StreamDid) {
-    return this.roomy.checkStreamExists(streamId);
   }
 
   /** Connect to the list of spaces. */
@@ -175,8 +171,7 @@ export class Client {
     for await (const [streamId, _upToEventId] of streamList.entries()) {
       try {
         const space = await ConnectedSpace.connect({
-          agent: this.agent,
-          leaf: this.leaf,
+          client: this.roomy,
           streamDid: streamId,
           module: modules.space,
         });
@@ -234,35 +229,15 @@ export class Client {
     return this.#streamConnection.eventChannel;
   }
 
-  setLeafHandlers() {
-    this.leaf.on("connect", async () => {
-      console.info("Leaf: connected");
-    });
-    this.leaf.on("disconnect", () => {
-      console.info("Leaf: disconnected");
-      this.#streamConnection = { status: "offline" };
-    });
-    this.leaf.on("authenticated", async (did) => {
-      console.info("Leaf: authenticated as", { did });
-      this.#leafAuthenticated.resolve();
-    });
-  }
-
-  async getProfile(did?: Did): Promise<Profile | undefined> {
-    return this.roomy.getProfile(did);
-  }
-
   async connectSpaceStream(streamId: StreamDid, _idx: StreamIndex) {
     if (this.#streamConnection.status !== "connected")
       throw new Error("Client must be connected to add new space stream");
-    await this.#leafAuthenticated.promise;
 
     const alreadyConnected = this.#streamConnection.streams.get(streamId);
     if (alreadyConnected) return;
 
     const space = await ConnectedSpace.connect({
-      agent: this.agent,
-      leaf: this.leaf,
+      client: this.roomy,
       streamDid: streamId,
       module: modules.space,
     });
@@ -282,12 +257,10 @@ export class Client {
   async createSpaceStream() {
     if (this.#streamConnection.status !== "connected")
       throw new Error("Client must be connected to add new space stream");
-    await this.#leafAuthenticated.promise;
 
     const newSpace = await ConnectedSpace.create(
       {
-        agent: this.agent,
-        leaf: this.leaf,
+        client: this.roomy,
         module: modules.space,
       },
       UserDid.assert(this.agent.assertDid),
@@ -323,12 +296,9 @@ export class Client {
   async createPersonalStream(
     eventChannel: AsyncChannel<Batch.Events>,
   ): Promise<ConnectedSpace> {
-    await this.#leafAuthenticated.promise;
-
     const space = await ConnectedSpace.create(
       {
-        agent: this.agent,
-        leaf: this.leaf,
+        client: this.roomy,
         module: modules.personal,
       },
       UserDid.assert(this.agent.assertDid),
@@ -345,7 +315,6 @@ export class Client {
     eventChannel: AsyncChannel<Batch.Events>,
   ): Promise<ConnectedSpace> {
     if (this.personalStream) return this.personalStream;
-    await this.#leafAuthenticated.promise;
 
     const recordConfig = {
       collection: CONFIG.streamNsid,
@@ -371,13 +340,11 @@ export class Client {
         if (!existingStreamDid) {
           throw { error: "RecordNotFound" };
         }
-        await personalStream.setIdCache(this.agent.assertDid, existingStreamDid);
         console.debug("Got streamId, connecting...", {
           streamId: existingStreamDid,
         });
         space = await ConnectedSpace.connect({
-          agent: this.agent,
-          leaf: this.leaf,
+          client: this.roomy,
           streamDid: existingStreamDid,
           module: modules.personal,
         });
@@ -452,13 +419,7 @@ export class Client {
     return space;
   }
 
-  async sendEvent(streamId: string, event: Event) {
-    await this.#leafAuthenticated.promise;
-    await this.leaf.sendEvent(streamId, encode(event));
-  }
-
   async sendEventBatch(streamId: string, payloads: Event[]) {
-    await this.#leafAuthenticated.promise;
     const encodedPayloads = payloads.map((x) => {
       try {
         return encode(x);
@@ -482,7 +443,6 @@ export class Client {
     start: number,
     limit: number,
   ): Promise<EncodedStreamEvent[]> {
-    await this.#leafAuthenticated.promise;
     const resp = await this.leaf?.query(streamId, {
       name: "events",
       params: {},
@@ -494,7 +454,6 @@ export class Client {
   }
 
   async lazyLoadRoom(streamId: StreamDid, roomId: Ulid, end?: StreamIndex) {
-    await this.#leafAuthenticated.promise;
     await this.#connected.promise;
     if (this.#streamConnection.status !== "connected")
       throw new Error("Stream not connected");
@@ -516,69 +475,7 @@ export class Client {
     }
   }
 
-  async uploadToPDS(
-    bytes: ArrayBuffer,
-    opts?: { alt?: string; mimetype?: string },
-  ) {
-    return this.roomy.uploadBlob(bytes, opts);
-  }
-
-  async removeStreamHandleRecord() {
-    return this.roomy.removeStreamHandleRecord();
-  }
-
-  async resolveHandleForSpace(
-    spaceId: StreamDid,
-    handleAccountDid: UserDid,
-  ): Promise<Handle | undefined> {
-    return this.roomy.resolveHandleForSpace(spaceId, handleAccountDid);
-  }
-
-  async getSpaceInfo(
-    streamDid: StreamDid,
-  ): Promise<{ name?: string; avatar?: string } | undefined> {
-    return this.roomy.getSpaceInfo(streamDid);
-  }
-
-  async resolveSpaceId(spaceIdOrHandle: StreamDid | Handle): Promise<{
-    spaceId: StreamDid;
-    handle?: Handle;
-    did?: UserDid;
-  }> {
-    return this.roomy.resolveSpaceId(spaceIdOrHandle);
-  }
-
-  async createStreamHandleRecord(spaceId: string) {
-    return this.roomy.createStreamHandleRecord(StreamDid.assert(spaceId));
-  }
-
   logout() {
     db.kv.delete("did");
   }
-}
-
-const encodedStreamEvent = type({
-  idx: { $type: "'muni.town.sqliteValue.integer'", value: StreamIndex },
-  user: { $type: "'muni.town.sqliteValue.text'", value: "string" },
-  payload: {
-    $type: "'muni.town.sqliteValue.blob'",
-    value: type.instanceOf(Uint8Array),
-  },
-});
-
-export function parseEvents(rows: SqlRows): EncodedStreamEvent[] {
-  return rows.map((row) => {
-    const result = encodedStreamEvent(row);
-
-    if (result instanceof type.errors) {
-      console.error("Could not parse event", result);
-      throw new Error("Invalid column names for events response");
-    }
-
-    return {
-      idx: Number(result.idx.value) as StreamIndex,
-      user: UserDid.assert(result.user!.value),
-      payload: result.payload?.value,
-    };
-  });
 }
