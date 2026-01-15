@@ -6,15 +6,14 @@ import type { Agent } from "@atproto/api";
 import type { StreamDid, StreamIndex, UserDid, Event, Ulid } from "../schema";
 import type { ModuleWithCid } from "../modules";
 import { LeafClient } from "@muni-town/leaf-client";
+import { RoomyClient } from "../client";
 
 /**
  * Configuration for connecting to a Roomy space.
  */
 export interface ConnectedSpaceConfig {
-  /** ATProto agent for authentication */
-  agent: Agent;
-  /** Client for the Leaf server */
-  leaf: LeafClient;
+  /** Client for Roomy containing both ATProto and Leaf clients */
+  client: RoomyClient;
   /** DID of the stream (space) to connect to */
   streamDid: StreamDid;
   /** Module definition for the space */

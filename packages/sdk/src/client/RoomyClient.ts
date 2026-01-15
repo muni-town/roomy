@@ -7,6 +7,9 @@
  * - Cached stream handle record lookups
  * - Space resolution from handles or DIDs
  * - PDS operations (blob uploads, records)
+ *
+ * Use the static `create()` method to instantiate - it waits for Leaf
+ * authentication before returning, so all methods are ready to use.
  */
 
 import type { Agent } from "@atproto/api";
@@ -18,6 +21,7 @@ import {
   StreamDid,
   type,
 } from "../schema";
+import { Deferred } from "../connection/Deferred";
 import { createLeafClient, type LeafConfig } from "../leaf";
 import {
   getProfile,
@@ -31,6 +35,13 @@ export interface RoomyClientConfig extends LeafConfig {
   agent: Agent;
   /** Collection for stream handle records, e.g., "space.roomy.space.handle.dev" */
   streamHandleNsid: string;
+}
+
+export interface RoomyClientEvents {
+  /** Called when Leaf connection is established */
+  onConnect?: () => void;
+  /** Called when Leaf connection is lost */
+  onDisconnect?: () => void;
 }
 
 interface ProfileResponse {
@@ -54,13 +65,49 @@ export class RoomyClient {
   readonly #profileCache = new Map<string, ProfileResponse>();
   readonly #streamHandleCache = new Map<string, StreamDid | undefined>();
 
-  constructor(config: RoomyClientConfig) {
+  private constructor(config: RoomyClientConfig, leaf: LeafClient) {
     this.agent = config.agent;
     this.#config = config;
-    this.leaf = createLeafClient(config.agent, {
+    this.leaf = leaf;
+  }
+
+  /**
+   * Create a RoomyClient and wait for Leaf authentication.
+   * Returns only when the client is fully ready to use.
+   *
+   * @param config - Client configuration
+   * @param events - Optional event handlers for connection status
+   */
+  static async create(
+    config: RoomyClientConfig,
+    events?: RoomyClientEvents
+  ): Promise<RoomyClient> {
+    const leaf = createLeafClient(config.agent, {
       leafUrl: config.leafUrl,
       leafDid: config.leafDid,
     });
+
+    const authenticated = new Deferred<void>();
+
+    leaf.on("connect", () => {
+      console.info("Leaf: connected");
+      events?.onConnect?.();
+    });
+
+    leaf.on("disconnect", () => {
+      console.info("Leaf: disconnected");
+      events?.onDisconnect?.();
+    });
+
+    leaf.on("authenticated", (did) => {
+      console.info("Leaf: authenticated as", { did });
+      authenticated.resolve();
+    });
+
+    // Wait for authentication before returning
+    await authenticated.promise;
+
+    return new RoomyClient(config, leaf);
   }
 
   /**
