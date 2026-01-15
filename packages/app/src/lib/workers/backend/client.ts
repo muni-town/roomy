@@ -1,6 +1,6 @@
 import type { OAuthSession } from "@atproto/oauth-client";
 import { createOauthClient } from "./oauth";
-import { db, personalStream } from "../idb";
+import { db } from "../idb";
 import { Agent, AtpAgent } from "@atproto/api";
 import { lexicons } from "$lib/lexicons";
 import { CONFIG } from "$lib/config";
@@ -24,6 +24,7 @@ import {
   parseEvents,
 } from "@roomy/sdk";
 import { encode } from "@atcute/cbor";
+import { context } from "@opentelemetry/api";
 
 /** Handles interaction with ATProto and Leaf, manages state for connection to both,
  * including connecting to and backfilling streams */
@@ -89,7 +90,12 @@ export class Client {
   }
 
   // restore previous session or return `undefined` if there was none
-  static async new(): Promise<Client | undefined> {
+  static async restoreSession(): Promise<Client | undefined> {
+    const [span, ctx] = tracer.startActiveSpan(
+      "Restore Client Session",
+      (span) => [span, context.active()] as const,
+    );
+
     if (CONFIG.testingAppPassword && CONFIG.testingHandle) {
       console.debug("Using app password authentication for testing");
       return Client.loginWithAppPassword(
@@ -105,8 +111,17 @@ export class Client {
     const didEntry = await db.kv.get("did");
     if (!didEntry) return;
 
-    const restoredSession = await oauthClient.restore(didEntry.value);
-    return Client.fromSession(restoredSession);
+    const restoredSession = await tracer.startActiveSpan(
+      "Restore Oauth Session",
+      {},
+      ctx,
+      (span) => oauthClient.restore(didEntry.value).finally(() => span.end()),
+    );
+
+    const client = await context.bind(ctx, Client.fromSession)(restoredSession);
+
+    span.end();
+    return client;
   }
 
   // create new session from query params
@@ -117,13 +132,14 @@ export class Client {
   }
 
   private static async fromAgent(agent: Agent): Promise<Client> {
+    const ctx = context.active();
     lexicons.forEach((l) => agent.lex.add(l as any));
 
     // We need to create the client first so we can pass its disconnect handler
     // Use a two-phase initialization
     let disconnectHandler: (() => void) | undefined;
 
-    const roomy = await RoomyClient.create(
+    const roomy = await context.bind(ctx, RoomyClient.create)(
       {
         agent,
         leafUrl: CONFIG.leafUrl,
@@ -143,9 +159,10 @@ export class Client {
   }
 
   static async fromSession(session: OAuthSession) {
+    const ctx = context.active();
     await db.kv.put({ key: "did", value: session.did });
     const agent = new Agent(session);
-    return Client.fromAgent(agent);
+    return context.bind(ctx, Client.fromAgent)(agent);
   }
 
   get status() {

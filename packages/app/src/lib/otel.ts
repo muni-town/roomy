@@ -175,6 +175,10 @@ export function initializeFaro(opts: WorkerInfo) {
         : []),
       new CustomConsoleInstrumentation(),
       new TracingInstrumentation({
+        // This helps the otel context to automatically propagate in more scenarios. It isn't
+        // perfect and manual propagation is often necessary but this helps when manual propagation
+        // isn't an option, such as when triggering socket.io fetches. Unfortunately it can't seem
+        // to propagate to the ATProto client fetches.
         contextManager: new ZoneContextManager(),
       }),
     ],

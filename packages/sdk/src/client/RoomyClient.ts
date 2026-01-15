@@ -28,7 +28,6 @@ import {
 } from "../atproto";
 import { ConnectedSpace } from "../connection/ConnectedSpace";
 import { modules, type ModuleWithCid } from "../modules";
-import { EventCallback } from "../connection";
 
 export interface RoomyClientConfig extends LeafConfig {
   agent: Agent;

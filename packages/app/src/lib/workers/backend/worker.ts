@@ -40,6 +40,7 @@ import {
 } from "@roomy/sdk";
 import { decode, encode } from "@atcute/cbor";
 import { initializeFaro } from "$lib/otel";
+import { context } from "@opentelemetry/api";
 
 const sessionId = newUlid();
 
@@ -85,6 +86,15 @@ class WorkerSupervisor {
   > = new Map();
 
   constructor() {
+    let [initSpan, ctx] = tracer.startActiveSpan(
+      "Init Backend",
+      (span) => [span, context.active()] as const,
+    );
+
+    // This span gives us a starting placeholder for the Init Backend span in case something gets
+    // stuck and we need to look for an incomplete backend initialization trace.
+    tracer.startActiveSpan("Start Init Backend", {}, ctx, (span) => span.end());
+
     this.#config = {
       consoleForwarding: import.meta.env.SHARED_WORKER_LOG_FORWARDING || true,
     };
@@ -102,36 +112,67 @@ class WorkerSupervisor {
     this.#status.authState = this.#auth; // in general prefer setAuthState
 
     this.#connection = { ports: new WeakMap(), count: 0 };
+
     this.connectRPC();
 
-    this.refreshSession();
+    context.with(ctx, async () => {
+      await this.refreshSession();
+
+      tracer.startActiveSpan(
+        "Wait Until Authenticated",
+        {},
+        ctx,
+        (waitSpan) => {
+          this.#authenticated.promise.then(() => {
+            waitSpan.end(), initSpan.end();
+          });
+        },
+      );
+    });
   }
 
   /** Where most of the initialisation happens. Backfill the personal
    * stream from the stored cursor, then set up the other streams.
    */
-  async setAuthenticated(client: Client) {
+  async initBackendWithClient(client: Client) {
+    const [span, ctx] = tracer.startActiveSpan(
+      "Init Backend With Client",
+      (span) => [span, context.active()] as const,
+    );
+
     const userDid = client.agent.did;
     if (!userDid || !UserDid.allows(userDid))
       throw new Error("DID not defined on client");
 
-    await this.sqlite
-      .authenticate(UserDid.assert(userDid))
-      .catch((e) => console.error("Failed to authenticate sqlite worker", e));
+    tracer.startActiveSpan("Authenticate SQLite", {}, ctx, (span) => {
+      this.sqlite
+        .authenticate(UserDid.assert(userDid))
+        .catch((e) => console.error("Failed to authenticate sqlite worker", e))
+        .finally(() => span.end());
+    });
 
     // try to fetch or create the personal stream
     this.setAuthState({ state: "loading" });
 
     const eventChannel = new AsyncChannel<Batch.Events>();
 
-    const personalStream = await client
-      .ensurePersonalSpace(eventChannel)
-      .catch((e) => {
-        const error = { state: "error", error: e } as const;
-        this.#auth = error;
-        this.#status.authState = error;
-        throw error;
-      });
+    const personalStream = await tracer.startActiveSpan(
+      "Ensure Personal Space",
+      {},
+      ctx,
+      async (span) => {
+        const stream = await client
+          .ensurePersonalSpace(eventChannel)
+          .catch((e) => {
+            const error = { state: "error", error: e } as const;
+            this.#auth = error;
+            this.#status.authState = error;
+            throw error;
+          });
+        span.end();
+        return stream;
+      },
+    );
 
     // Ensure personal stream space entity exists
     await this.sqlite.runQuery(
@@ -159,7 +200,16 @@ class WorkerSupervisor {
 
     this.startMaterializer();
 
-    const lastBatchId = await personalStream.doneBackfilling;
+    const lastBatchId = await tracer.startActiveSpan(
+      "Wait For Personal Stream Backfill",
+      {},
+      ctx,
+      async (span) => {
+        const batch = await personalStream.doneBackfilling;
+        span.end();
+        return batch;
+      },
+    );
 
     // ensure the backfilled stream is fully materialised
     const personalStreamMaterialised = new Promise((resolve) => {
@@ -205,7 +255,15 @@ class WorkerSupervisor {
     if (failed.length) console.warn("Some streams didn't connect", failed);
     // TODO: clean up nonexistent streams from db
 
-    await personalStreamMaterialised;
+    await tracer.startActiveSpan(
+      "Wait for Personal Stream Materialized",
+      {},
+      ctx,
+      async (span) => {
+        await personalStreamMaterialised;
+        span.end();
+      },
+    );
 
     // need to reassign the whole object to trigger reactive update
     this.#status.authState = {
@@ -215,17 +273,26 @@ class WorkerSupervisor {
       state: "authenticated",
     };
 
-    for (const stream of streams.values()) {
-      (async () => {
-        await stream.doneBackfilling;
-        this.#status.spaces = {
-          ...this.#status.spaces,
-          [stream.streamDid]: "idle",
-        };
-      })();
-    }
+    await tracer.startActiveSpan(
+      "Wait for Joined Streams Backfilled",
+      {},
+      ctx,
+      async (span) => {
+        for (const stream of streams.values()) {
+          (async () => {
+            await stream.doneBackfilling;
+            this.#status.spaces = {
+              ...this.#status.spaces,
+              [stream.streamDid]: "idle",
+            };
+          })();
+        }
+        span.end();
+      },
+    );
 
     this.#authenticated.resolve();
+    span.end();
   }
 
   private async startMaterializer() {
@@ -266,7 +333,7 @@ class WorkerSupervisor {
       this.#status.authState = state;
       return;
     } else {
-      this.setAuthenticated(state.client);
+      this.initBackendWithClient(state.client);
     }
   }
 
@@ -339,7 +406,14 @@ class WorkerSupervisor {
   }
 
   private async refreshSession() {
-    Client.new()
+    const [span, ctx] = tracer.startActiveSpan(
+      "Refresh Session",
+      {},
+      (span) => [span, context.active()] as const,
+    );
+
+    await context
+      .with(ctx, () => Client.restoreSession())
       .then((client) => {
         if (!client) {
           console.debug("No previous session found.");
@@ -352,23 +426,32 @@ class WorkerSupervisor {
           attributes: { isSampled: "true", did: client.agent.assertDid },
         });
 
-        this.setAuthenticated(client);
+        context.with(ctx, () => this.initBackendWithClient(client));
+
         console.info("ATProto Authenticated", { did: client.agent.assertDid });
 
-        client.roomy.getProfile().then((profile) => {
-          this.#status.profile = profile;
+        tracer.startActiveSpan("Fetch Profile", {}, ctx, (span) => {
+          client.roomy
+            .getProfile()
+            .then((profile) => {
+              this.#status.profile = profile;
+            })
+            .finally(() => span.end());
         });
+
+        span.end();
       })
       .catch((error) => {
         console.error("Could not restore session", { error });
         this.setAuthState({ state: "unauthenticated" });
+        span.end();
       });
   }
 
   private async authenticateCallback(params: URLSearchParams) {
     this.setAuthState({ state: "loading" });
     const client = await Client.oauthCallback(params);
-    this.setAuthenticated(client);
+    this.initBackendWithClient(client);
     return client;
   }
 
