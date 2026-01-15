@@ -6,14 +6,26 @@
  */
 
 import { AtpAgent } from "@atproto/api";
-import { RoomyClient } from "@roomy/sdk";
+import {
+  RoomyClient,
+  ConnectedSpace,
+  modules,
+  type StreamDid,
+  type StreamIndex,
+} from "@roomy/sdk";
 import {
   ATPROTO_BRIDGE_DID,
   ATPROTO_BRIDGE_APP_PASSWORD,
   LEAF_URL,
   LEAF_SERVER_DID,
   STREAM_HANDLE_NSID,
+  STREAM_NSID,
 } from "../env.js";
+import { registeredBridges } from "../db.js";
+import {
+  createSpaceSubscriptionHandler,
+  getLastProcessedIdx,
+} from "./subscription.js";
 
 let roomyClient: RoomyClient | undefined;
 
@@ -46,13 +58,19 @@ export async function initRoomyClient(): Promise<RoomyClient> {
       agent: atpAgent,
       leafUrl: LEAF_URL,
       leafDid: LEAF_SERVER_DID,
-      streamHandleNsid: STREAM_HANDLE_NSID,
+      spaceHandleNsid: STREAM_HANDLE_NSID,
+      spaceNsid: STREAM_NSID,
     },
     {
       onConnect: () => console.log("Leaf: connected"),
       onDisconnect: () => console.log("Leaf: disconnected"),
     },
   );
+
+  // Connect to the bridge's personal stream
+  console.log("Connecting to personal stream...");
+  await roomyClient.connectPersonalSpace("4");
+  console.log("Personal stream connected");
 
   console.log("Roomy client initialized successfully");
   return roomyClient;
@@ -64,7 +82,84 @@ export async function initRoomyClient(): Promise<RoomyClient> {
  */
 export function getRoomyClient(): RoomyClient {
   if (!roomyClient) {
-    throw new Error("Roomy client not initialized - call initRoomyClient first");
+    throw new Error(
+      "Roomy client not initialized - call initRoomyClient first",
+    );
   }
   return roomyClient;
+}
+
+/**
+ * Get the bridge's DID.
+ */
+export function getBridgeDid(): string {
+  return getRoomyClient().agent.assertDid;
+}
+
+/** Map of connected spaces by spaceId */
+const connectedSpaces = new Map<string, ConnectedSpace>();
+
+/**
+ * Subscribe to all registered spaces, resuming from stored cursors.
+ * This should be called once at startup after initRoomyClient().
+ */
+export async function subscribeToConnectedSpaces(): Promise<void> {
+  const client = getRoomyClient();
+  const bridges = await registeredBridges.list();
+
+  console.log(`Subscribing to ${bridges.length} connected spaces...`);
+
+  for (const { spaceId } of bridges) {
+    try {
+      await subscribeToSpace(client, spaceId as StreamDid);
+    } catch (e) {
+      console.error(`Failed to subscribe to space ${spaceId}:`, e);
+    }
+  }
+
+  console.log("All space subscriptions started");
+}
+
+/**
+ * Subscribe to a single space, resuming from stored cursor.
+ */
+export async function subscribeToSpace(
+  client: RoomyClient,
+  spaceId: StreamDid,
+): Promise<ConnectedSpace> {
+  // Check if already connected
+  const existing = connectedSpaces.get(spaceId);
+  if (existing) {
+    console.log(`Already subscribed to space ${spaceId}`);
+    return existing;
+  }
+
+  console.log(`Connecting to space ${spaceId}...`);
+
+  // Connect to the space
+  const space = await ConnectedSpace.connect({
+    client,
+    streamDid: spaceId,
+    module: modules.space,
+  });
+
+  // Get the cursor to resume from
+  const cursor = await getLastProcessedIdx(spaceId);
+  console.log(`Resuming space ${spaceId} from idx ${cursor}`);
+
+  // Subscribe with the handler
+  const handler = createSpaceSubscriptionHandler(spaceId);
+  await space.subscribe(handler, cursor as StreamIndex);
+
+  connectedSpaces.set(spaceId, space);
+  console.log(`Subscribed to space ${spaceId}`);
+
+  return space;
+}
+
+/**
+ * Get a connected space by ID, if subscribed.
+ */
+export function getConnectedSpace(spaceId: string): ConnectedSpace | undefined {
+  return connectedSpaces.get(spaceId);
 }

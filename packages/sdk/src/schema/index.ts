@@ -57,5 +57,6 @@ export {
 } from "./events";
 
 export * from "./extensions/message";
+export * from "./extensions/room";
 
 export * from "./events/room";
