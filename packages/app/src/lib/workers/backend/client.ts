@@ -1,26 +1,21 @@
 import type { OAuthSession } from "@atproto/oauth-client";
 import { createOauthClient } from "./oauth";
 import { db, personalStream } from "../idb";
-import { Agent, AtpAgent, BlobRef } from "@atproto/api";
+import { Agent, AtpAgent } from "@atproto/api";
 import { lexicons } from "$lib/lexicons";
-import { LeafClient } from "@muni-town/leaf-client";
 import { CONFIG } from "$lib/config";
-import {
-  type StreamIndex,
-  type Batch,
-  type EncodedStreamEvent,
-} from "../types";
+import { type Batch, type EncodedStreamEvent } from "../types";
 import { type Profile } from "$lib/types/profile";
 import { Deferred } from "$lib/utils/deferred";
 import { AsyncChannel } from "../asyncChannel";
 import type { StreamConnectionStatus, ConnectionStates } from "./types";
-import { parseEvents } from "./stream";
 import {
   Did,
   UserDid,
   Handle,
   type Event,
   StreamDid,
+  StreamIndex,
   type,
   Ulid,
   modules,
@@ -28,27 +23,39 @@ import {
   newUlid,
   type EventCallback,
   type DecodedStreamEvent,
+  // SDK client
+  RoomyClient,
+  getPersonalStreamId,
+  savePersonalStreamId,
 } from "@roomy/sdk";
 import { encode } from "@atcute/cbor";
+import type { SqlRows } from "@muni-town/leaf-client";
 
 /** Handles interaction with ATProto and Leaf, manages state for connection to both,
  * including connecting to and backfilling streams */
 export class Client {
-  agent: Agent;
-  leaf: LeafClient;
+  /** SDK client for ATProto/Leaf operations with caching */
+  roomy: RoomyClient;
   #streamConnection: StreamConnectionStatus;
   #leafAuthenticated = new Deferred();
   #connected = new Deferred<ConnectionStates.ConnectedStreams>();
-  #agentStreamHandleCache = new Map<Did, { result: any }>();
-  #agentProfileCache = new Map<string, { result: any }>();
 
-  constructor(agent: Agent, leaf: LeafClient) {
-    this.agent = agent;
-    this.leaf = leaf;
+  constructor(roomy: RoomyClient) {
+    this.roomy = roomy;
     this.#streamConnection = {
       status: "initialising",
     };
     this.setLeafHandlers();
+  }
+
+  /** Convenience accessor for the ATProto agent */
+  get agent() {
+    return this.roomy.agent;
+  }
+
+  /** Convenience accessor for the Leaf client */
+  get leaf() {
+    return this.roomy.leaf;
   }
 
   // get a URL for redirecting to the ATProto PDS for login
@@ -116,16 +123,14 @@ export class Client {
     try {
       lexicons.forEach((l) => agent.lex.add(l as any));
 
-      const leaf = new LeafClient(CONFIG.leafUrl, async () => {
-        const resp = await agent?.com.atproto.server.getServiceAuth({
-          aud: CONFIG.leafServerDid,
-          lxm: "town.muni.leaf.authenticate",
-        });
-        if (!resp) throw "Error authenticating for leaf server";
-        return resp.data.token;
+      const roomy = new RoomyClient({
+        agent,
+        leafUrl: CONFIG.leafUrl,
+        leafDid: CONFIG.leafServerDid,
+        streamHandleNsid: CONFIG.streamHandleNsid,
       });
 
-      return new Client(agent, leaf);
+      return new Client(roomy);
     } catch (e) {
       console.error(e);
       throw new Error("Failed to create client");
@@ -153,13 +158,7 @@ export class Client {
   }
 
   async checkStreamExists(streamId: StreamDid) {
-    try {
-      const streamInfo = await this.leaf.streamInfo(streamId);
-      if (!streamInfo) return false;
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return this.roomy.checkStreamExists(streamId);
   }
 
   /** Connect to the list of spaces. */
@@ -250,19 +249,7 @@ export class Client {
   }
 
   async getProfile(did?: Did): Promise<Profile | undefined> {
-    const targetDid = did || this.agent.did;
-    if (!targetDid) throw new Error("ATProto client doesn't have a DID");
-    const resp = await this.agent.getProfile({ actor: targetDid });
-    return resp.success
-      ? {
-          id: resp.data.did,
-          avatar: resp.data.avatar,
-          banner: resp.data.banner,
-          description: resp.data.description,
-          displayName: resp.data.displayName,
-          handle: resp.data.handle,
-        }
-      : undefined;
+    return this.roomy.getProfile(did);
   }
 
   async connectSpaceStream(streamId: StreamDid, _idx: StreamIndex) {
@@ -360,6 +347,11 @@ export class Client {
     if (this.personalStream) return this.personalStream;
     await this.#leafAuthenticated.promise;
 
+    const recordConfig = {
+      collection: CONFIG.streamNsid,
+      schemaVersion: CONFIG.streamSchemaVersion,
+    };
+
     console.debug("Looking for personal stream id with", {
       rkey: CONFIG.streamSchemaVersion,
     });
@@ -372,28 +364,25 @@ export class Client {
       if (attempts > 2) throw errors;
       attempts++;
       try {
-        const getResponse = await this.agent.com.atproto.repo.getRecord({
-          collection: CONFIG.streamNsid,
-          repo: this.agent.assertDid,
-          rkey: CONFIG.streamSchemaVersion,
-        });
-        const existingRecord = getResponse.data.value as { id: StreamDid };
-        await personalStream.setIdCache(
-          this.agent.assertDid,
-          existingRecord.id,
+        const existingStreamDid = await getPersonalStreamId(
+          this.agent,
+          recordConfig,
         );
+        if (!existingStreamDid) {
+          throw { error: "RecordNotFound" };
+        }
+        await personalStream.setIdCache(this.agent.assertDid, existingStreamDid);
         console.debug("Got streamId, connecting...", {
-          streamId: existingRecord.id,
+          streamId: existingStreamDid,
         });
         space = await ConnectedSpace.connect({
           agent: this.agent,
           leaf: this.leaf,
-          streamDid: existingRecord.id as StreamDid,
+          streamDid: existingStreamDid,
           module: modules.personal,
         });
         console.debug("Connected to personal stream");
         needsSubscription = true;
-        150;
       } catch (e) {
         if ((e as any).error === "RecordNotFound") {
           console.info(
@@ -406,16 +395,16 @@ export class Client {
           console.debug("Putting record to PDS");
 
           // put the stream ID in a record
-          const putResponse = await this.agent.com.atproto.repo.putRecord({
-            collection: CONFIG.streamNsid,
-            record: { id: space.streamDid },
-            repo: this.agent.assertDid,
-            rkey: CONFIG.streamSchemaVersion,
-          });
-          if (!putResponse.success) {
+          try {
+            await savePersonalStreamId(
+              this.agent,
+              space.streamDid,
+              recordConfig,
+            );
+          } catch (saveError) {
             errors.push(
               new Error("Could not create PDS record for personal stream", {
-                cause: JSON.stringify(putResponse.data),
+                cause: saveError,
               }),
             );
           }
@@ -424,7 +413,7 @@ export class Client {
             this.agent.assertDid,
             space.streamDid,
           );
-        } else if ((e as Error).message.includes("Stream does not exist")) {
+        } else if ((e as Error).message?.includes("Stream does not exist")) {
           console.warn("Stream does not exist");
           if (import.meta.env.DEV) {
             console.warn("Deleting stream record off PDS (dev only)");
@@ -530,119 +519,25 @@ export class Client {
   async uploadToPDS(
     bytes: ArrayBuffer,
     opts?: { alt?: string; mimetype?: string },
-  ): Promise<{
-    blob: ReturnType<BlobRef["toJSON"]>;
-    uri: string;
-  }> {
-    const resp = await this.agent.com.atproto.repo.uploadBlob(
-      new Uint8Array(bytes),
-    );
-    const blobRef = resp.data.blob;
-    if (opts?.mimetype) blobRef.mimeType = opts?.mimetype;
-    const blobInfo = {
-      blob: blobRef.toJSON(),
-      uri: `atblob://${this.agent.assertDid}/${blobRef.ref}`,
-    };
-
-    // Create a record that links to the blob
-    const record = {
-      $type: "space.roomy.upload.v0",
-      image: blobRef,
-      alt: opts?.alt,
-    };
-    // Put the record in the repository
-    await this.agent.com.atproto.repo.putRecord({
-      repo: this.agent.assertDid,
-      collection: "space.roomy.upload.v0",
-      rkey: `${Date.now()}`, // Using timestamp as a unique key
-      record: record,
-    });
-    return blobInfo;
+  ) {
+    return this.roomy.uploadBlob(bytes, opts);
   }
 
   async removeStreamHandleRecord() {
-    const resp = await this.agent.com.atproto.repo.deleteRecord({
-      collection: CONFIG.streamHandleNsid,
-      repo: this.agent.assertDid,
-      rkey: "self",
-    });
-    if (!resp.success) throw "Error deleting stream handle record on PDS";
-  }
-
-  private async getProfileCached(actor: string) {
-    const cached = this.#agentProfileCache.get(actor);
-    if (cached) return cached.result;
-
-    const resp = await this.agent.getProfile({
-      actor,
-    });
-    this.#agentProfileCache.set(actor, { result: resp });
-
-    return resp;
+    return this.roomy.removeStreamHandleRecord();
   }
 
   async resolveHandleForSpace(
     spaceId: StreamDid,
     handleAccountDid: UserDid,
   ): Promise<Handle | undefined> {
-    try {
-      const resp = await this.getProfileCached(handleAccountDid);
-      const handle = resp.data.handle as Handle;
-      const did = handleAccountDid;
-      const resolvedSpaceId = (await this.resolveSpaceId(did))?.spaceId;
-      if (resolvedSpaceId == spaceId) {
-        return handle;
-      }
-    } catch (e) {
-      console.warn("error while resolving handle for space", e);
-      return undefined;
-    }
-  }
-
-  private resolveIdType(spaceDidOrHandle: StreamDid | Did | Handle) {
-    const didParsed = Did(spaceDidOrHandle);
-    if (!(didParsed instanceof type.errors)) return "did";
-    const handleParsed = Handle(spaceDidOrHandle);
-    if (!(handleParsed instanceof type.errors)) return "handle";
-    else throw new Error("Invalid ID: " + spaceDidOrHandle);
-  }
-
-  private async resolveDidFromHandle(handle: Handle): Promise<UserDid> {
-    const type = this.resolveIdType(handle);
-    if (type === "handle") {
-      try {
-        const profile = await this.getProfileCached(handle as Handle);
-        return profile.data.did;
-      } catch (e) {
-        console.warn("Error resolving DID from handle", handle, e);
-        throw e;
-      }
-    } else throw new Error("Invalid type for DID resolution");
+    return this.roomy.resolveHandleForSpace(spaceId, handleAccountDid);
   }
 
   async getSpaceInfo(
     streamDid: StreamDid,
   ): Promise<{ name?: string; avatar?: string } | undefined> {
-    try {
-      const resp = await this.leaf.query(streamDid, {
-        name: "space_info",
-        params: {},
-      });
-      let row = resp[0];
-      if (!row) return;
-      let name =
-        row.name?.$type == "muni.town.sqliteValue.text"
-          ? row.name.value
-          : undefined;
-      let avatar =
-        row.avatar?.$type == "muni.town.sqliteValue.text"
-          ? row.avatar.value
-          : undefined;
-      return { name, avatar };
-    } catch (error) {
-      console.error("Failed to load space info", { streamDid, error });
-      return;
-    }
+    return this.roomy.getSpaceInfo(streamDid);
   }
 
   async resolveSpaceId(spaceIdOrHandle: StreamDid | Handle): Promise<{
@@ -650,94 +545,40 @@ export class Client {
     handle?: Handle;
     did?: UserDid;
   }> {
-    const type = this.resolveIdType(spaceIdOrHandle);
-
-    if (type === "handle") {
-      try {
-        const did = await this.resolveDidFromHandle(spaceIdOrHandle);
-        const spaceIdFromHandle = await this.getStreamHandleRecordCached(did);
-        if (!spaceIdFromHandle) throw "Could not resolve space ID from handle";
-        return {
-          spaceId: spaceIdFromHandle!,
-          handle: type === "handle" ? (spaceIdOrHandle as Handle) : undefined,
-          did,
-        };
-      } catch (e) {
-        console.warn(
-          "Error resolving space from identifier",
-          spaceIdOrHandle,
-          e,
-        );
-        throw e;
-      }
-    } else {
-      return { spaceId: spaceIdOrHandle as StreamDid };
-    }
-  }
-
-  /** Some streams have a handle configured as an alias via a PDS record that verifies the mapping.
-   * This method fetches that record, with caching, and returns the associated stream ID and DID.
-   */
-  private async getStreamHandleRecordCached(
-    did: Did,
-  ): Promise<StreamDid | undefined> {
-    const cached = this.#agentStreamHandleCache.get(did);
-    if (cached) return cached.result;
-
-    try {
-      const resp = await this.agent.com.atproto.repo.getRecord(
-        {
-          collection: CONFIG.streamHandleNsid,
-          repo: did,
-          rkey: "self",
-        },
-        {
-          headers: {
-            "atproto-proxy": `${did}#atproto_pds`,
-          },
-        },
-      );
-
-      const verifiedSpaceId = resp.data.value?.id
-        ? (resp.data.value.id as StreamDid)
-        : undefined;
-
-      if (verifiedSpaceId) {
-        const exists = await this.checkStreamExists(verifiedSpaceId);
-        if (!exists) {
-          console.warn(
-            "Stream handle record points to non-existing stream, returning undefined",
-          );
-          this.#agentStreamHandleCache.set(did, { result: undefined });
-          return undefined;
-        }
-      }
-
-      this.#agentStreamHandleCache.set(did, { result: verifiedSpaceId });
-      return verifiedSpaceId;
-    } catch (e) {
-      console.warn(
-        "Could not get stream handle record, most likely does not exist",
-        e,
-      );
-      this.#agentStreamHandleCache.set(did, { result: undefined });
-      return undefined;
-    }
+    return this.roomy.resolveSpaceId(spaceIdOrHandle);
   }
 
   async createStreamHandleRecord(spaceId: string) {
-    const resp = await this.agent.com.atproto.repo.putRecord({
-      collection: CONFIG.streamHandleNsid,
-      repo: this.agent.assertDid,
-      rkey: "self",
-      record: {
-        id: spaceId,
-      },
-    });
-    if (!resp.success) throw "Error creating stream handle record on PDS";
+    return this.roomy.createStreamHandleRecord(StreamDid.assert(spaceId));
   }
 
   logout() {
     db.kv.delete("did");
   }
+}
+
+const encodedStreamEvent = type({
+  idx: { $type: "'muni.town.sqliteValue.integer'", value: StreamIndex },
+  user: { $type: "'muni.town.sqliteValue.text'", value: "string" },
+  payload: {
+    $type: "'muni.town.sqliteValue.blob'",
+    value: type.instanceOf(Uint8Array),
+  },
+});
+
+export function parseEvents(rows: SqlRows): EncodedStreamEvent[] {
+  return rows.map((row) => {
+    const result = encodedStreamEvent(row);
+
+    if (result instanceof type.errors) {
+      console.error("Could not parse event", result);
+      throw new Error("Invalid column names for events response");
+    }
+
+    return {
+      idx: Number(result.idx.value) as StreamIndex,
+      user: UserDid.assert(result.user!.value),
+      payload: result.payload?.value,
+    };
+  });
 }
