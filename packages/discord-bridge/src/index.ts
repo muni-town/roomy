@@ -4,7 +4,10 @@ import "dotenv/config";
 import { startBot } from "./discord/bot.js";
 // import { startRoomyWatcher } from "./roomy/from.js";
 import { startApi } from "./api.js";
-import { initRoomyClient } from "./roomy/client.js";
+import {
+  initRoomyClient,
+  subscribeToConnectedSpaces,
+} from "./roomy/client.js";
 import { trace } from "@opentelemetry/api";
 
 const tracer = trace.getTracer("index");
@@ -25,8 +28,10 @@ startApi();
 console.log("Connecting to Roomy...");
 const roomyClient = await initRoomyClient();
 
+console.log("Subscribing to connected spaces...");
+await subscribeToConnectedSpaces();
+
 console.log("Connecting to Discord...");
 const discordBot = await startBot();
 
-console.log("Starting Roomy Syncer");
-// startRoomyWatcher(discordBot);
+console.log("Discord bridge ready");

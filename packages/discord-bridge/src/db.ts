@@ -204,3 +204,14 @@ export const syncedIdsForBridge = ({
     "roomyId",
   );
 };
+
+/**
+ * Per-space cursor tracking for Leaf event subscriptions.
+ * Stores the last processed event index (idx) for each connected space.
+ * Used to resume subscriptions from the correct position after restart.
+ */
+export const leafCursors = db.sublevel<string, number>("leafCursors", {
+  valueEncoding: "json",
+});
+
+export type LeafCursors = typeof leafCursors;

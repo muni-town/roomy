@@ -8,13 +8,14 @@ import {
   MessageFlags,
 } from "@discordeno/bot";
 
-// import { co, isSpaceAdmin, RoomyEntity } from "@roomy-chat/sdk";
 import {
   discordLatestMessageInChannelForBridge,
   discordWebhookTokensForBridge,
   registeredBridges,
   syncedIdsForBridge,
 } from "../db.js";
+import { getRoomyClient } from "../roomy/client.js";
+import { StreamDid } from "@roomy/sdk";
 
 export const slashCommands = [
   {
@@ -76,46 +77,42 @@ export async function handleSlashCommandInteraction(interaction: any) {
         (x: { name: string; value: unknown }) => x.name == "space-id",
       )?.value as string;
 
-      // let space: co.loaded<typeof RoomyEntity> | null = null;
-      // space = await RoomyEntity.load(spaceId, {
-      //   resolve: {
-      //     components: {
-      //       $each: true,
-      //     },
-      //   },
-      // });
+      // Validate the space ID format
+      let streamDid: StreamDid;
+      try {
+        streamDid = StreamDid.assert(spaceId);
+      } catch {
+        interaction.respond({
+          flags: MessageFlags.Ephemeral,
+          content: "🛑 Invalid space ID. Please provide a valid stream DID.",
+        });
+        return;
+      }
 
-      // if (!space) {
-      //   interaction.respond({
-      //     flags: MessageFlags.Ephemeral,
-      //     content: "🛑 Could not find a space with that ID. 😕",
-      //   });
-      //   return;
-      // }
+      // Check if the bridge can access this space
+      const client = getRoomyClient();
+      const spaceExists = await client.checkStreamExists(streamDid);
 
-      // const hasPermissions = await isSpaceAdmin(jazz, space);
-      // if (!hasPermissions) {
-      //   interaction.respond({
-      //     flags: MessageFlags.Ephemeral,
-      //     content:
-      //       "🛑 The Discord bot is missing permissions to your Roomy space. " +
-      //       "Don't worry that's easy to fix!\n\nClick \"Grant Access\" in the Discord bridge " +
-      //       "settings page for your space in Roomy, then come back and try to connect again.",
-      //   });
-      //   return;
-      // }
+      if (!spaceExists) {
+        interaction.respond({
+          flags: MessageFlags.Ephemeral,
+          content:
+            "🛑 Could not find a space with that ID, or the bridge doesn't have access. " +
+            'Make sure you\'ve clicked "Grant Access" in the Discord bridge settings page first.',
+        });
+        return;
+      }
 
       const existingRegistration = await registeredBridges.get_spaceId(
         guildId.toString(),
       );
       if (existingRegistration) {
-        console.log("Existing registration", existingRegistration);
-        // interaction.respond({
-        //   flags: MessageFlags.Ephemeral,
-        //   content:
-        //     `🛑 This Discord server is already bridge to another Roomy [space](https://roomy.space/${existingRegistration}).` +
-        //     " If you want to connect to a new space, first disconnect it using the `/disconnect-roomy-space` command.",
-        // });
+        interaction.respond({
+          flags: MessageFlags.Ephemeral,
+          content:
+            `🛑 This Discord server is already bridged to another Roomy [space](https://roomy.space/${existingRegistration}). ` +
+            "If you want to connect to a new space, first disconnect it using the `/disconnect-roomy-space` command.",
+        });
         return;
       }
 

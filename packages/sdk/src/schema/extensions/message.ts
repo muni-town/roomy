@@ -1,5 +1,6 @@
 import { type } from "arktype";
 import { Timestamp, Ulid, unionToMap, UserDid } from "../primitives";
+import { DiscordSnowflake } from "./room";
 
 export const AuthorOverride = type({
   $type: "'space.roomy.extension.authorOverride.v0'",
@@ -72,6 +73,16 @@ export const LinkAttachment = type({
   showPreview: "boolean",
 }).describe("Link with optional preview");
 
+export const DiscordMessageOrigin = type({
+  $type: "'space.roomy.extension.discordMessageOrigin.v0'",
+  snowflake: DiscordSnowflake.describe("The Discord message snowflake ID."),
+  channelId: DiscordSnowflake.describe("The Discord channel snowflake ID."),
+  guildId: DiscordSnowflake.describe("The Discord guild (server) snowflake ID."),
+}).describe(
+  "Origin metadata for messages bridged from Discord. \
+Used for idempotency checks and linking back to Discord.",
+);
+
 export const Attachment = type.or(
   Reply,
   Comment,
@@ -92,6 +103,7 @@ export const messageExtension = type.or(
   AuthorOverride,
   TimestampOverride,
   Attachments,
+  DiscordMessageOrigin,
 );
 
 export type MessageExtension = typeof messageExtension.infer;

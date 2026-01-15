@@ -3,6 +3,7 @@
  */
 
 import { UserDid, type, Ulid, BasicInfo, BasicInfoUpdate } from "../primitives";
+import { RoomExtensionMap } from "../extensions/room";
 import { defineEvent, sql, ensureEntity } from "./index";
 
 export const RoomKind = type(
@@ -39,6 +40,7 @@ export const GroupMember = type
 const CreateRoomSchema = type({
   $type: "'space.roomy.room.createRoom.v0'",
   kind: RoomKind,
+  "extensions?": RoomExtensionMap,
 })
   .and(BasicInfo)
   .describe(
