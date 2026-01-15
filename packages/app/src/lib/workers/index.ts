@@ -56,68 +56,69 @@ const SharedWorkerConstructor = hasSharedWorker
 if (!SharedWorkerConstructor)
   throw new Error("No SharedWorker or Worker constructor defined");
 
-const createWorkersSpan = tracer.startActiveSpan(
+export const backend = tracer.startActiveSpan(
   "Create Workers",
   {},
   trace.setSpan(context.active(), globalInitSpan),
-  (span) => span,
-);
+  (span) => {
+    const backendWorker = new SharedWorkerConstructor(backendWorkerUrl, {
+      name: "roomy-backend",
+      type: "module",
+    });
 
-const backendWorker = new SharedWorkerConstructor(backendWorkerUrl, {
-  name: "roomy-backend",
-  type: "module",
-});
+    const backend = messagePortInterface<ConsoleInterface, BackendInterface>(
+      "port" in backendWorker ? backendWorker.port : backendWorker,
+      {
+        async log(level, args) {
+          const prefixedArgs = ["[BW]", ...args]; // Backend Worker
+          console[level](...prefixedArgs);
+        },
+        async setSessionId(id) {
+          faro.api.setSession({
+            id,
+            attributes: { isSampled: "true" },
+          });
+        },
+        async initFinished({ userDid }) {
+          globalInitSpan.setAttribute("userDid", userDid);
+          globalInitSpan.end();
+        },
+      },
+    );
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export const backend = messagePortInterface<ConsoleInterface, BackendInterface>(
-  "port" in backendWorker ? backendWorker.port : backendWorker,
-  {
-    async log(level, args) {
-      const prefixedArgs = ["[BW]", ...args]; // Backend Worker
-      console[level](...prefixedArgs);
-    },
-    async setSessionId(id) {
-      faro.api.setSession({
-        id,
-        attributes: { isSampled: "true" },
-      });
-    },
-    async initFinished({ userDid }) {
-      globalInitSpan.setAttribute("userDid", userDid);
-      globalInitSpan.end();
-    },
+    (globalThis as any).backend = backend;
+    (globalThis as any).CONFIG = CONFIG;
+
+    console.debug("(init.1) Backend worker loaded");
+
+    // Start a sqlite worker for this tab.
+    const sqliteWorkerChannel = new MessageChannel();
+    backend.addClient(sqliteWorkerChannel.port1);
+    const sqliteWorker = new Worker(
+      new URL("./sqlite/worker.ts", import.meta.url),
+      {
+        name: "roomy-sqlite-worker",
+        type: "module",
+      },
+    );
+
+    console.debug("(init.2) Sqlite worker loaded");
+
+    sqliteWorker.postMessage(
+      {
+        backendPort: sqliteWorkerChannel.port2,
+        statusPort: workerStatusChannel.port2,
+        dbName: "temp",
+        sessionId: faro.api.getSession()!.id,
+      },
+      [sqliteWorkerChannel.port2, workerStatusChannel.port2],
+    );
+
+    span.end();
+
+    return backend;
   },
 );
-
-(globalThis as any).backend = backend;
-(globalThis as any).CONFIG = CONFIG;
-
-console.debug("(init.1) Backend worker loaded");
-
-// Start a sqlite worker for this tab.
-const sqliteWorkerChannel = new MessageChannel();
-backend.addClient(sqliteWorkerChannel.port1);
-const sqliteWorker = new Worker(
-  new URL("./sqlite/worker.ts", import.meta.url),
-  {
-    name: "roomy-sqlite-worker",
-    type: "module",
-  },
-);
-
-console.debug("(init.2) Sqlite worker loaded");
-
-sqliteWorker.postMessage(
-  {
-    backendPort: sqliteWorkerChannel.port2,
-    statusPort: workerStatusChannel.port2,
-    dbName: "temp",
-    sessionId: faro.api.getSession()!.id,
-  },
-  [sqliteWorkerChannel.port2, workerStatusChannel.port2],
-);
-
-createWorkersSpan.end();
 
 export function getPersonalStreamId() {
   return backendStatus.authState?.state === "authenticated"

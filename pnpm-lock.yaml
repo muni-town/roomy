@@ -463,6 +463,9 @@ importers:
       '@muni-town/leaf-client':
         specifier: 0.1.0-alpha.15
         version: 0.1.0-alpha.15
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.0
       arktype:
         specifier: ^2.1.29
         version: 2.1.29
