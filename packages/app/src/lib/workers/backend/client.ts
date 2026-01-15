@@ -6,7 +6,7 @@ import { lexicons } from "$lib/lexicons";
 import { CONFIG } from "$lib/config";
 import { type Batch, type EncodedStreamEvent } from "../types";
 import { Deferred } from "$lib/utils/deferred";
-import type { StreamConnectionStatus, ConnectionStates } from "./types";
+import type { SpaceConnectionStatus, ConnectionStates } from "./types";
 import {
   UserDid,
   type Event,
@@ -21,8 +21,6 @@ import {
   AsyncChannel,
   // SDK client
   RoomyClient,
-  getPersonalStreamId,
-  savePersonalStreamId,
   parseEvents,
 } from "@roomy/sdk";
 import { encode } from "@atcute/cbor";
@@ -32,12 +30,12 @@ import { encode } from "@atcute/cbor";
 export class Client {
   /** SDK client for ATProto/Leaf operations with caching */
   readonly roomy: RoomyClient;
-  #streamConnection: StreamConnectionStatus;
+  #spaceConnection: SpaceConnectionStatus;
   #connected = new Deferred<ConnectionStates.ConnectedStreams>();
 
   private constructor(roomy: RoomyClient) {
     this.roomy = roomy;
-    this.#streamConnection = {
+    this.#spaceConnection = {
       status: "initialising",
     };
   }
@@ -54,7 +52,7 @@ export class Client {
 
   /** Handle Leaf disconnect by updating stream connection status */
   #handleDisconnect = () => {
-    this.#streamConnection = { status: "offline" };
+    this.#spaceConnection = { status: "offline" };
   };
 
   // get a URL for redirecting to the ATProto PDS for login
@@ -130,7 +128,8 @@ export class Client {
         agent,
         leafUrl: CONFIG.leafUrl,
         leafDid: CONFIG.leafServerDid,
-        streamHandleNsid: CONFIG.streamHandleNsid,
+        spaceHandleNsid: CONFIG.streamHandleNsid,
+        spaceNsid: CONFIG.streamNsid,
       },
       {
         onDisconnect: () => disconnectHandler?.(),
@@ -150,7 +149,7 @@ export class Client {
   }
 
   get status() {
-    return this.#streamConnection.status;
+    return this.#spaceConnection.status;
   }
 
   get connected() {
@@ -159,7 +158,7 @@ export class Client {
 
   /** Connect to the list of spaces. */
   async connect(
-    personalStream: ConnectedSpace,
+    personalSpace: ConnectedSpace,
     eventChannel: AsyncChannel<Batch.Events>,
     streamList: Map<StreamDid, StreamIndex>,
   ) {
@@ -190,13 +189,13 @@ export class Client {
       }
     }
 
-    this.#streamConnection = {
+    this.#spaceConnection = {
       status: "connected",
-      personalStream: personalStream,
+      personalSpace: personalSpace,
       eventChannel: eventChannel,
       streams,
     };
-    this.#connected.resolve(this.#streamConnection);
+    this.#connected.resolve(this.#spaceConnection);
 
     console.debug("(init.3) Client connected");
 
@@ -221,19 +220,19 @@ export class Client {
   }
 
   private get eventChannel() {
-    if (this.#streamConnection.status !== "connected")
+    if (this.#spaceConnection.status !== "connected")
       throw new Error(
         "No event channel: Client is not connected. Status: " +
-          this.#streamConnection.status,
+          this.#spaceConnection.status,
       );
-    return this.#streamConnection.eventChannel;
+    return this.#spaceConnection.eventChannel;
   }
 
   async connectSpaceStream(streamId: StreamDid, _idx: StreamIndex) {
-    if (this.#streamConnection.status !== "connected")
+    if (this.#spaceConnection.status !== "connected")
       throw new Error("Client must be connected to add new space stream");
 
-    const alreadyConnected = this.#streamConnection.streams.get(streamId);
+    const alreadyConnected = this.#spaceConnection.streams.get(streamId);
     if (alreadyConnected) return;
 
     const space = await ConnectedSpace.connect({
@@ -249,13 +248,13 @@ export class Client {
     await space.unsubscribe();
     await space.subscribe(callback, latest);
 
-    this.#streamConnection.streams.set(streamId, space);
+    this.#spaceConnection.streams.set(streamId, space);
 
     return;
   }
 
   async createSpaceStream() {
-    if (this.#streamConnection.status !== "connected")
+    if (this.#spaceConnection.status !== "connected")
       throw new Error("Client must be connected to add new space stream");
 
     const newSpace = await ConnectedSpace.create(
@@ -276,24 +275,24 @@ export class Client {
     console.debug("Successfully created space stream:", newSpace.streamDid);
 
     // add to stream connection map
-    this.#streamConnection.streams.set(newSpace.streamDid, newSpace);
+    this.#spaceConnection.streams.set(newSpace.streamDid, newSpace);
 
     return newSpace.streamDid;
   }
 
-  get personalStream() {
-    if (this.#streamConnection.status === "connected")
-      return this.#streamConnection.personalStream;
+  get personalSpace() {
+    if (this.#spaceConnection.status === "connected")
+      return this.#spaceConnection.personalSpace;
     else return undefined;
   }
 
-  get personalStreamId() {
-    if (this.#streamConnection.status === "connected")
-      return this.#streamConnection.personalStream.streamDid;
+  get personalSpaceId() {
+    if (this.#spaceConnection.status === "connected")
+      return this.#spaceConnection.personalSpace.streamDid;
     else return undefined;
   }
 
-  async createPersonalStream(
+  async createPersonalSpace(
     eventChannel: AsyncChannel<Batch.Events>,
   ): Promise<ConnectedSpace> {
     const space = await ConnectedSpace.create(
@@ -311,115 +310,26 @@ export class Client {
     return space;
   }
 
-  async ensurePersonalStream(
+  async ensurePersonalSpace(
     eventChannel: AsyncChannel<Batch.Events>,
   ): Promise<ConnectedSpace> {
-    if (this.personalStream) return this.personalStream;
-
-    const recordConfig = {
-      collection: CONFIG.streamNsid,
-      schemaVersion: CONFIG.streamSchemaVersion,
-    };
+    if (this.personalSpace) return this.personalSpace;
 
     console.debug("Looking for personal stream id with", {
       rkey: CONFIG.streamSchemaVersion,
     });
 
-    let attempts = 0;
-    let errors: any[] = [];
-    let space: ConnectedSpace | null = null;
-    let needsSubscription = false;
-    while (!space) {
-      if (attempts > 2) throw errors;
-      attempts++;
-      try {
-        const existingStreamDid = await getPersonalStreamId(
-          this.agent,
-          recordConfig,
-        );
-        if (!existingStreamDid) {
-          throw { error: "RecordNotFound" };
-        }
-        console.debug("Got streamId, connecting...", {
-          streamId: existingStreamDid,
-        });
-        space = await ConnectedSpace.connect({
-          client: this.roomy,
-          streamDid: existingStreamDid,
-          module: modules.personal,
-        });
-        console.debug("Connected to personal stream");
-        needsSubscription = true;
-      } catch (e) {
-        if ((e as any).error === "RecordNotFound") {
-          console.info(
-            "Could not find existing stream ID on PDS. Creating new stream!",
-          );
+    const space = await this.roomy.connectPersonalSpace(
+      CONFIG.streamSchemaVersion,
+    );
 
-          // create a new stream on leaf server (this also subscribes)
-          space = await this.createPersonalStream(eventChannel);
-
-          console.debug("Putting record to PDS");
-
-          // put the stream ID in a record
-          try {
-            await savePersonalStreamId(
-              this.agent,
-              space.streamDid,
-              recordConfig,
-            );
-          } catch (saveError) {
-            errors.push(
-              new Error("Could not create PDS record for personal stream", {
-                cause: saveError,
-              }),
-            );
-          }
-
-          await personalStream.setIdCache(
-            this.agent.assertDid,
-            space.streamDid,
-          );
-        } else if ((e as Error).message?.includes("Stream does not exist")) {
-          console.warn("Stream does not exist");
-          if (import.meta.env.DEV) {
-            console.warn("Deleting stream record off PDS (dev only)");
-            // delete record on PDS
-            const deleteResponse =
-              await this.agent.com.atproto.repo.deleteRecord({
-                collection: CONFIG.streamNsid,
-                repo: this.agent.assertDid,
-                rkey: CONFIG.streamSchemaVersion,
-              });
-            if (!deleteResponse.success) {
-              errors.push(
-                new Error("Could not delete PDS record for personal stream", {
-                  cause: JSON.stringify(deleteResponse.data),
-                }),
-              );
-            }
-          }
-          errors.push(e);
-
-          // should create stream on retry
-        } else {
-          if (e instanceof Error) console.error(e);
-          console.error("Error while fetching personal stream record:", e);
-          errors.push(e);
-        }
-      }
-    }
-
-    // Subscribe if we connected to existing stream (create already subscribes)
-    if (needsSubscription) {
-      const callback = this.#createEventCallback(eventChannel, space.streamDid);
-      await space.subscribe(callback);
-    }
+    const callback = this.#createEventCallback(eventChannel, space.streamDid);
+    await space.subscribe(callback);
 
     return space;
   }
 
-  async sendEventBatch(streamId: string, payloads: Event[]) {
+  async sendEventBatch(spaceId: string, payloads: Event[]) {
     const encodedPayloads = payloads.map((x) => {
       try {
         return encode(x);
@@ -431,19 +341,19 @@ export class Client {
       }
     });
     console.debug("sending event batch", {
-      streamId,
+      spaceId,
       payloads,
       encodedPayloads,
     });
-    await this.leaf.sendEvents(streamId, encodedPayloads);
+    await this.leaf.sendEvents(spaceId, encodedPayloads);
   }
 
   async fetchEvents(
-    streamId: string,
+    spaceId: string,
     start: number,
     limit: number,
   ): Promise<EncodedStreamEvent[]> {
-    const resp = await this.leaf?.query(streamId, {
+    const resp = await this.leaf?.query(spaceId, {
       name: "events",
       params: {},
       limit,
@@ -453,13 +363,13 @@ export class Client {
     return events;
   }
 
-  async lazyLoadRoom(streamId: StreamDid, roomId: Ulid, end?: StreamIndex) {
+  async lazyLoadRoom(spaceId: StreamDid, roomId: Ulid, end?: StreamIndex) {
     await this.#connected.promise;
-    if (this.#streamConnection.status !== "connected")
+    if (this.#spaceConnection.status !== "connected")
       throw new Error("Stream not connected");
 
-    const space = this.#streamConnection.streams.get(streamId);
-    if (!space) throw new Error("Could not find stream in connected streams");
+    const space = this.#spaceConnection.streams.get(spaceId);
+    if (!space) throw new Error("Could not find space in connected streams");
     const ROOM_FETCH_BATCH_SIZE = 100;
     const events = await space.lazyLoadRoom(roomId, ROOM_FETCH_BATCH_SIZE, end);
 
@@ -468,7 +378,7 @@ export class Client {
       this.eventChannel.push({
         status: "events",
         batchId: newUlid(),
-        streamId,
+        streamId: spaceId,
         events,
         priority: "priority",
       });

@@ -23,14 +23,19 @@ import {
   uploadBlob,
   createStreamHandleRecord,
   removeStreamHandleRecord,
+  getPersonalStreamId,
+  savePersonalStreamId,
 } from "../atproto";
 import { ConnectedSpace } from "../connection/ConnectedSpace";
-import type { ModuleWithCid } from "../modules";
+import { modules, type ModuleWithCid } from "../modules";
+import { EventCallback } from "../connection";
 
 export interface RoomyClientConfig extends LeafConfig {
   agent: Agent;
-  /** Collection for stream handle records, e.g., "space.roomy.space.handle.dev" */
-  streamHandleNsid: string;
+  /** Collection for personal space record, e.g., "space.roomy.space.personal.dev" */
+  spaceNsid: string;
+  /** Collection for space handle records, e.g., "space.roomy.space.handle.dev" */
+  spaceHandleNsid: string;
 }
 
 export interface RoomyClientEvents {
@@ -62,7 +67,7 @@ export class RoomyClient {
   readonly #streamHandleCache = new Map<string, StreamDid | undefined>();
 
   // Personal stream
-  readonly #personalStream: ConnectedSpace | null = null;
+  #personalStream: ConnectedSpace | null = null;
 
   /**
    * Get the connected personal stream, if any.
@@ -167,7 +172,7 @@ export class RoomyClient {
     try {
       const resp = await this.agent.com.atproto.repo.getRecord(
         {
-          collection: this.#config.streamHandleNsid,
+          collection: this.#config.spaceHandleNsid,
           repo: did,
           rkey: "self",
         },
@@ -211,7 +216,7 @@ export class RoomyClient {
    */
   async createStreamHandleRecord(spaceId: StreamDid): Promise<void> {
     await createStreamHandleRecord(this.agent, spaceId, {
-      collection: this.#config.streamHandleNsid,
+      collection: this.#config.spaceHandleNsid,
     });
     // Invalidate cache for current user
     this.#streamHandleCache.delete(this.agent.assertDid);
@@ -222,7 +227,7 @@ export class RoomyClient {
    */
   async removeStreamHandleRecord(): Promise<void> {
     await removeStreamHandleRecord(this.agent, {
-      collection: this.#config.streamHandleNsid,
+      collection: this.#config.spaceHandleNsid,
     });
     // Invalidate cache for current user
     this.#streamHandleCache.delete(this.agent.assertDid);
@@ -321,44 +326,86 @@ export class RoomyClient {
    *
    * @param module - Module definition for personal streams
    */
-  async connectPersonalStream(module: ModuleWithCid): Promise<ConnectedSpace> {
+  async connectPersonalSpace(schemaVersion: string): Promise<ConnectedSpace> {
     // Return existing if already connected
     if (this.#personalStream) {
       return this.#personalStream;
     }
 
+    const recordConfig = {
+      collection: this.#config.spaceNsid,
+      schemaVersion,
+    };
+
     const userDid = this.agent.assertDid as UserDid;
 
-    // Check for existing personal stream
-    const existingStreamId = await this.getStreamHandleRecord(userDid);
+    let attempts = 0;
+    let errors: any[] = [];
+    let space: ConnectedSpace | null = null;
 
-    let space: ConnectedSpace;
-
-    if (existingStreamId) {
-      // Connect to existing personal stream
-      space = await ConnectedSpace.connect({
-        client: this,
-        streamDid: existingStreamId,
-        module,
-      });
-    } else {
-      // Create new personal stream
-      space = await ConnectedSpace.create(
-        {
+    while (!space) {
+      if (attempts > 2) throw errors;
+      attempts++;
+      try {
+        const existingStreamDid = await getPersonalStreamId(
+          this.agent,
+          recordConfig,
+        );
+        if (!existingStreamDid) {
+          throw { error: "RecordNotFound" };
+        }
+        console.debug("Got streamId, connecting...", {
+          streamId: existingStreamDid,
+        });
+        space = await ConnectedSpace.connect({
           client: this,
-          module,
-        },
-        userDid,
-      );
+          streamDid: existingStreamDid,
+          module: modules.personal,
+        });
+        console.debug("Connected to personal stream");
+      } catch (e) {
+        if ((e as any).error === "RecordNotFound") {
+          console.info(
+            "Could not find existing stream ID on PDS. Creating new stream!",
+          );
 
-      // Save the stream ID to PDS
-      await this.createStreamHandleRecord(space.streamDid);
+          // create a new stream on leaf server (this also subscribes)
+          space = await ConnectedSpace.create(
+            {
+              client: this,
+              module: modules.personal,
+            },
+            UserDid.assert(this.agent.assertDid),
+          );
+
+          console.debug("Putting record to PDS");
+
+          // put the stream ID in a record
+          try {
+            await savePersonalStreamId(
+              this.agent,
+              space.streamDid,
+              recordConfig,
+            );
+          } catch (saveError) {
+            errors.push(
+              new Error("Could not create PDS record for personal stream", {
+                cause: saveError,
+              }),
+            );
+          }
+        } else if ((e as Error).message?.includes("Stream does not exist")) {
+          console.warn("Stream does not exist");
+          errors.push(e);
+        } else {
+          if (e instanceof Error) console.error(e);
+          console.error("Error while fetching personal stream record:", e);
+          errors.push(e);
+        }
+      }
     }
 
-    // Update the private field using type assertion (since it's readonly)
-    (
-      this as unknown as { "#personalStream": ConnectedSpace | null }
-    )["#personalStream"] = space;
+    this.#personalStream = space;
 
     return space;
   }

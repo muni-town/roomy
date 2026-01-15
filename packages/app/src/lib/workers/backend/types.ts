@@ -133,7 +133,7 @@ export namespace AuthStates {
     state: "authenticated";
     did: UserDid;
     personalStream: StreamDid;
-    clientStatus: StreamConnectionStatus["status"];
+    clientStatus: SpaceConnectionStatus["status"];
   }
 }
 
@@ -159,7 +159,7 @@ export interface WorkerConfig {
   consoleForwarding: boolean;
 }
 
-export type StreamConnectionStatus =
+export type SpaceConnectionStatus =
   | ConnectionStates.Error
   | ConnectionStates.Offline
   | ConnectionStates.InitialisingStreams
@@ -182,7 +182,7 @@ export namespace ConnectionStates {
 
   export interface ConnectedStreams {
     status: "connected";
-    personalStream: ConnectedSpace;
+    personalSpace: ConnectedSpace;
     eventChannel: AsyncChannel<Batch.Events>;
     streams: Map<StreamDid, ConnectedSpace>;
   }
