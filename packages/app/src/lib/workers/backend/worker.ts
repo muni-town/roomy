@@ -9,7 +9,6 @@ import {
 } from "../workerMessaging";
 import { sql } from "$lib/utils/sqlTemplate";
 import { CONFIG } from "$lib/config";
-import { AsyncChannel } from "../asyncChannel";
 import { db, personalStream, prevStream } from "../idb";
 import { Client } from "./client";
 import { Deferred } from "$lib/utils/deferred";
@@ -31,6 +30,7 @@ import type {
 } from "../sqlite/types";
 import { ensureEntity } from "@roomy/sdk";
 import {
+  AsyncChannel,
   UserDid,
   parseEvent,
   type StreamDid,

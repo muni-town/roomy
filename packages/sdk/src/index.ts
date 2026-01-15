@@ -4,3 +4,4 @@ export * from "./connection";
 export * from "./atproto";
 export * from "./leaf";
 export * from "./client";
+export * from "./utils";

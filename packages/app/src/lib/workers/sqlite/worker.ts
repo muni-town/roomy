@@ -25,6 +25,7 @@ import { db } from "../idb";
 import schemaSql from "./schema.sql?raw";
 import { sql } from "$lib/utils/sqlTemplate";
 import {
+  AsyncChannel,
   StreamDid,
   Ulid,
   UserDid,
@@ -33,7 +34,6 @@ import {
   type EventType,
 } from "@roomy/sdk";
 import { materialize } from "./materializer";
-import { AsyncChannel } from "../asyncChannel";
 import type {
   Savepoint,
   SqliteStatus,

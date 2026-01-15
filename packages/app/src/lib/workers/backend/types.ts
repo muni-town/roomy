@@ -1,4 +1,3 @@
-import type { AsyncChannel } from "../asyncChannel";
 import type { QueryResult } from "../sqlite/setup";
 import type { Batch, EncodedStreamEvent, StreamIndex } from "../types";
 import type { Profile } from "../../types/profile";
@@ -7,7 +6,15 @@ import type { Client } from "./client";
 import type { BlobRef } from "@atproto/lexicon";
 import type { Deferred } from "$lib/utils/deferred";
 import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
-import type { StreamDid, UserDid, Event, Handle, Ulid, ConnectedSpace } from "@roomy/sdk";
+import { AsyncChannel } from "@roomy/sdk";
+import type {
+  StreamDid,
+  UserDid,
+  Event,
+  Handle,
+  Ulid,
+  ConnectedSpace,
+} from "@roomy/sdk";
 
 export interface BackendStatus {
   authState: ReactiveAuthState;
