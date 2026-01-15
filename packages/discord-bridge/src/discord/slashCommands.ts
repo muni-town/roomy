@@ -1,13 +1,11 @@
 import {
   ApplicationCommandOptionTypes,
-  CompleteDesiredProperties,
   CreateApplicationCommand,
   DiscordApplicationIntegrationType,
   DiscordInteractionContextType,
   Interaction,
   InteractionTypes,
   MessageFlags,
-  SetupDesiredProps,
 } from "@discordeno/bot";
 
 // import { co, isSpaceAdmin, RoomyEntity } from "@roomy-chat/sdk";
@@ -17,8 +15,6 @@ import {
   registeredBridges,
   syncedIdsForBridge,
 } from "../db.js";
-// import { jazz } from "../jazz.js";
-import { desiredProperties } from "../discord/bot.js";
 
 export const slashCommands = [
   {
@@ -53,12 +49,9 @@ export const slashCommands = [
   },
 ] satisfies CreateApplicationCommand[];
 
-export async function handleSlashCommandInteraction(
-  interaction: SetupDesiredProps<
-    Interaction,
-    CompleteDesiredProperties<NoInfer<typeof desiredProperties>>
-  >,
-) {
+/** Handle Discord slash command interactions */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function handleSlashCommandInteraction(interaction: any) {
   const guildId = interaction.guildId;
   if (!guildId) {
     console.error("Guild ID missing from interaction:", interaction);
@@ -80,7 +73,7 @@ export async function handleSlashCommandInteraction(
       });
     } else if (interaction.data?.name == "connect-roomy-space") {
       const spaceId = interaction.data.options?.find(
-        (x) => x.name == "space-id",
+        (x: { name: string; value: unknown }) => x.name == "space-id",
       )?.value as string;
 
       // let space: co.loaded<typeof RoomyEntity> | null = null;

@@ -369,6 +369,9 @@ importers:
 
   packages/discord-bridge:
     dependencies:
+      '@atproto/api':
+        specifier: ^0.14.22
+        version: 0.14.22
       '@discordeno/bot':
         specifier: ^21.0.0
         version: 21.0.0
