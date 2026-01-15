@@ -125,7 +125,7 @@ class WorkerSupervisor {
     const eventChannel = new AsyncChannel<Batch.Events>();
 
     const personalStream = await client
-      .ensurePersonalStream(eventChannel)
+      .ensurePersonalSpace(eventChannel)
       .catch((e) => {
         const error = { state: "error", error: e } as const;
         this.#auth = error;
@@ -239,7 +239,7 @@ class WorkerSupervisor {
 
     for await (const batch of eventChannel) {
       // personal stream backfill is always high priority, other streams can be in background
-      if (batch.streamId === this.client.personalStreamId) {
+      if (batch.streamId === this.client.personalSpaceId) {
         const result = await this.sqlite.materializeBatch(batch, "priority");
 
         // If there is a resolver waiting on this batch, resolve it with the result
@@ -575,7 +575,7 @@ class WorkerSupervisor {
     if (this.#auth.state !== "authenticated") {
       throw new Error("Cannot ensure personal stream: not authenticated");
     }
-    await this.client.ensurePersonalStream(this.#auth.eventChannel);
+    await this.client.ensurePersonalSpace(this.#auth.eventChannel);
   }
 }
 
