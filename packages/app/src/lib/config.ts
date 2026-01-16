@@ -1,23 +1,35 @@
 const CONFIG = {
+  // service endpoints
   leafUrl: import.meta.env.VITE_LEAF_URL || "https://leaf-dev.muni.town",
   faroEndpoint: (import.meta.env.VITE_FARO_ENDPOINT || undefined) as
     | string
     | undefined,
+
+  // min log level for telemetry
+  logLevel: import.meta.env.VITE_LOG_LEVEL || "info",
+
+  // atproto collections and schema versions
   streamNsid:
     import.meta.env.VITE_STREAM_NSID || "space.roomy.space.personal.dev",
   streamHandleNsid:
     import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.space.handle.dev",
   streamSchemaVersion: "4" as const,
   databaseSchemaVersion: "3" as const,
-  leafServerDid: "",
-  atprotoOauthScope: "",
-  testingAppPassword: import.meta.env.VITE_TESTING_APP_PASSWORD,
+
+  // testing credentials for auto-authentication in e2e tests
   testingHandle: import.meta.env.VITE_TESTING_HANDLE,
+  testingAppPassword: import.meta.env.VITE_TESTING_APP_PASSWORD,
+
+  // feature flags
   flags: {
     threadsList: true, // 'Index' (threads list) page for spaces
     discordImport: false,
     discordBridge: false,
   },
+
+  // placeholders overridden below
+  leafServerDid: "",
+  atprotoOauthScope: "",
 };
 
 CONFIG.leafServerDid = `did:web:${new URL(CONFIG.leafUrl).hostname}`;
