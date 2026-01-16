@@ -1,1 +1,5 @@
-export { RoomyClient, type RoomyClientConfig } from "./RoomyClient";
+export {
+  RoomyClient,
+  type RoomyClientConfig,
+  type RoomyClientEvents,
+} from "./RoomyClient";
