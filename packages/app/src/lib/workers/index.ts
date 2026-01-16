@@ -59,7 +59,7 @@ if (!BackendWorkerConstructor)
   throw new Error("No SharedWorker or Worker constructor defined");
 
 export const backend = tracer.startActiveSpan(
-  "Create Workers",
+  "Wait for Backend Init",
   {},
   trace.setSpan(context.active(), globalInitSpan),
   (span) => {
