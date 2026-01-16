@@ -1,8 +1,10 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { backend } from "$lib/workers";
+  import { Alert, Button } from "@fuxui/base";
   import { trace, context, SpanStatusCode } from "@opentelemetry/api";
   import { onMount } from "svelte";
+  import IconMdiLoading from "~icons/mdi/loading";
 
   let error = $state("");
 
@@ -37,11 +39,17 @@
   });
 </script>
 
-{#if error}
-  <p class="text-base-900 dark:text-base-100">
-    Error logging in: {error}.
-  </p>
-  <p class="text-base-900 dark:text-base-100">
-    <a href="/">Go Home</a>
-  </p>
-{/if}
+<div
+  class="flex h-screen w-screen justify-center items-center fixed top-0 left-0 bg-base-50 dark:bg-base-950 z-50"
+>
+  {#if error}
+    <Alert class="text-lg w-auto flex flex-col items-center gap-2">
+      <p class="text-base-900 dark:text-base-100">
+        Error logging in: {error}.
+      </p>
+      <Button href="/">Go Home</Button>
+    </Alert>
+  {:else}
+    <IconMdiLoading font-size="8em" class="animate-spin text-primary" />
+  {/if}
+</div>
