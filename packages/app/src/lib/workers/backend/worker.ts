@@ -394,7 +394,14 @@ class WorkerSupervisor {
       globalThis.console[level] = (...args) => {
         normalLog(...args);
         if (worker.consoleForwarding) {
-          consoleInterface.log(level, args);
+          try {
+            consoleInterface.log(level, args);
+          } catch (e) {
+            consoleInterface.log(
+              level,
+              "Failed to forward log, probably due to trying to log uncloneable object",
+            );
+          }
         }
       };
     }
