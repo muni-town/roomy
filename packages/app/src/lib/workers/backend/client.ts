@@ -6,7 +6,7 @@ import { lexicons } from "$lib/lexicons";
 import { CONFIG } from "$lib/config";
 import { type Batch, type EncodedStreamEvent } from "../types";
 import { Deferred } from "$lib/utils/deferred";
-import type { SpaceConnectionStatus, ConnectionStates } from "./types";
+import type { ClientStatus, ConnectionStates } from "./types";
 import {
   UserDid,
   type Event,
@@ -31,12 +31,12 @@ import { context } from "@opentelemetry/api";
 export class Client {
   /** SDK client for ATProto/Leaf operations with caching */
   readonly roomy: RoomyClient;
-  #spaceConnection: SpaceConnectionStatus;
+  #state: ClientStatus;
   #connected = new Deferred<ConnectionStates.ConnectedStreams>();
 
   private constructor(roomy: RoomyClient) {
     this.roomy = roomy;
-    this.#spaceConnection = {
+    this.#state = {
       status: "initialising",
     };
   }
@@ -53,7 +53,7 @@ export class Client {
 
   /** Handle Leaf disconnect by updating stream connection status */
   #handleDisconnect = () => {
-    this.#spaceConnection = { status: "offline" };
+    this.#state = { status: "offline" };
   };
 
   // get a URL for redirecting to the ATProto PDS for login
@@ -166,7 +166,7 @@ export class Client {
   }
 
   get status() {
-    return this.#spaceConnection.status;
+    return this.#state.status;
   }
 
   get connected() {
@@ -206,13 +206,13 @@ export class Client {
       }
     }
 
-    this.#spaceConnection = {
+    this.#state = {
       status: "connected",
       personalSpace: personalSpace,
       eventChannel: eventChannel,
       streams,
     };
-    this.#connected.resolve(this.#spaceConnection);
+    this.#connected.resolve(this.#state);
 
     console.debug("(init.3) Client connected");
 
@@ -237,19 +237,19 @@ export class Client {
   }
 
   private get eventChannel() {
-    if (this.#spaceConnection.status !== "connected")
+    if (this.#state.status !== "connected")
       throw new Error(
         "No event channel: Client is not connected. Status: " +
-          this.#spaceConnection.status,
+          this.#state.status,
       );
-    return this.#spaceConnection.eventChannel;
+    return this.#state.eventChannel;
   }
 
   async connectSpaceStream(streamId: StreamDid, _idx: StreamIndex) {
-    if (this.#spaceConnection.status !== "connected")
+    if (this.#state.status !== "connected")
       throw new Error("Client must be connected to add new space stream");
 
-    const alreadyConnected = this.#spaceConnection.streams.get(streamId);
+    const alreadyConnected = this.#state.streams.get(streamId);
     if (alreadyConnected) return;
 
     const space = await ConnectedSpace.connect({
@@ -265,13 +265,13 @@ export class Client {
     await space.unsubscribe();
     await space.subscribe(callback, latest);
 
-    this.#spaceConnection.streams.set(streamId, space);
+    this.#state.streams.set(streamId, space);
 
     return;
   }
 
   async createSpaceStream() {
-    if (this.#spaceConnection.status !== "connected")
+    if (this.#state.status !== "connected")
       throw new Error("Client must be connected to add new space stream");
 
     const newSpace = await ConnectedSpace.create(
@@ -292,20 +292,19 @@ export class Client {
     console.debug("Successfully created space stream:", newSpace.streamDid);
 
     // add to stream connection map
-    this.#spaceConnection.streams.set(newSpace.streamDid, newSpace);
+    this.#state.streams.set(newSpace.streamDid, newSpace);
 
     return newSpace.streamDid;
   }
 
   get personalSpace() {
-    if (this.#spaceConnection.status === "connected")
-      return this.#spaceConnection.personalSpace;
+    if (this.#state.status === "connected") return this.#state.personalSpace;
     else return undefined;
   }
 
   get personalSpaceId() {
-    if (this.#spaceConnection.status === "connected")
-      return this.#spaceConnection.personalSpace.streamDid;
+    if (this.#state.status === "connected")
+      return this.#state.personalSpace.streamDid;
     else return undefined;
   }
 
@@ -382,10 +381,10 @@ export class Client {
 
   async lazyLoadRoom(spaceId: StreamDid, roomId: Ulid, end?: StreamIndex) {
     await this.#connected.promise;
-    if (this.#spaceConnection.status !== "connected")
-      throw new Error("Stream not connected");
+    if (this.#state.status !== "connected")
+      throw new Error("Client not connected");
 
-    const space = this.#spaceConnection.streams.get(spaceId);
+    const space = this.#state.streams.get(spaceId);
     if (!space) throw new Error("Could not find space in connected streams");
     const ROOM_FETCH_BATCH_SIZE = 100;
     const events = await space.lazyLoadRoom(roomId, ROOM_FETCH_BATCH_SIZE, end);

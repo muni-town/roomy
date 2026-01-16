@@ -133,7 +133,7 @@ export namespace AuthStates {
     state: "authenticated";
     did: UserDid;
     personalStream: StreamDid;
-    clientStatus: SpaceConnectionStatus["status"];
+    clientStatus: ClientStatus["status"];
   }
 }
 
@@ -159,7 +159,7 @@ export interface WorkerConfig {
   consoleForwarding: boolean;
 }
 
-export type SpaceConnectionStatus =
+export type ClientStatus =
   | ConnectionStates.Error
   | ConnectionStates.Offline
   | ConnectionStates.InitialisingStreams
