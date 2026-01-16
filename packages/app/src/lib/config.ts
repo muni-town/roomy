@@ -25,6 +25,7 @@ const CONFIG = {
     threadsList: true, // 'Index' (threads list) page for spaces
     discordImport: false,
     discordBridge: false,
+    sharedWorker: true,
   },
 
   // placeholders overridden below

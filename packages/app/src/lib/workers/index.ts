@@ -6,7 +6,7 @@ import type {
   ConsoleInterface,
 } from "./backend/types";
 import type { SqliteStatus } from "./sqlite/types";
-import { CONFIG } from "../config";
+import { CONFIG, flags } from "../config";
 import { context, trace } from "@opentelemetry/api";
 
 // Force page reload when hot reloading this file to avoid confusion if the workers get mixed up.
@@ -48,12 +48,14 @@ export const sqliteStatus = reactiveWorkerState<SqliteStatus>(
 // Initialize shared worker
 export const hasSharedWorker = "SharedWorker" in globalThis;
 const hasWorker = "Worker" in globalThis;
-const SharedWorkerConstructor = hasSharedWorker
-  ? SharedWorker
-  : hasWorker
-    ? Worker
-    : undefined;
-if (!SharedWorkerConstructor)
+
+const BackendWorkerConstructor =
+  hasSharedWorker && flags.sharedWorker
+    ? SharedWorker
+    : hasWorker
+      ? Worker
+      : undefined;
+if (!BackendWorkerConstructor)
   throw new Error("No SharedWorker or Worker constructor defined");
 
 export const backend = tracer.startActiveSpan(
@@ -61,7 +63,7 @@ export const backend = tracer.startActiveSpan(
   {},
   trace.setSpan(context.active(), globalInitSpan),
   (span) => {
-    const backendWorker = new SharedWorkerConstructor(backendWorkerUrl, {
+    const backendWorker = new BackendWorkerConstructor(backendWorkerUrl, {
       name: "roomy-backend",
       type: "module",
     });
