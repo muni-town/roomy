@@ -37,7 +37,9 @@ class CustomConsoleInstrumentation extends BaseInstrumentation {
       "warn",
       "error",
     ] as LogLevel[];
-    const telemetryLevels = ["info", "warn", "error"];
+    const minLogLevel = CONFIG.logLevel || "info";
+    const minLogLevelIndex = levels.indexOf(minLogLevel);
+    const telemetryLevels = levels.slice(minLogLevelIndex);
     const origConsoleFns: { [key: string]: (...args: any[]) => void } = {};
     levels.forEach((level) => {
       origConsoleFns[level] = console[level];
