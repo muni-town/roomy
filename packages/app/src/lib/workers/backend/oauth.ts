@@ -15,24 +15,20 @@ import { JoseKey } from "@atproto/jwk-jose";
 import { CONFIG } from "$lib/config";
 
 // TODO: implement cleanup of old db state and session values?
-const db = new Dexie("atproto-oauth") as Dexie & {
+export const oauthDb = new Dexie("atproto-oauth") as Dexie & {
   state: EntityTable<{ key: string; data: string }, "key">;
   session: EntityTable<{ key: string; data: Session }, "key">;
   dpopNonce: EntityTable<{ key: string; data: string }, "key">;
 };
-db.version(1).stores({
+oauthDb.version(1).stores({
   state: `key`,
   session: `key`,
   dpopNonce: `key`,
 });
 
-const requestLock: undefined | RuntimeLock = navigator.locks?.request
+const requestLock: RuntimeLock | undefined = navigator.locks?.request
   ? <T>(name: string, fn: () => T | PromiseLike<T>): Promise<T> =>
-      navigator.locks.request(
-        name,
-        { mode: "exclusive" },
-        async () => await fn(),
-      )
+      navigator.locks.request(name, { mode: "exclusive" }, fn) as Promise<T>
   : undefined;
 
 function encodeKey(key: Key): unknown {
@@ -71,13 +67,21 @@ export const workerOauthClient = (clientMetadata: OAuthClientMetadataInput) =>
         algorithm: { name: string },
       ): Promise<Uint8Array> {
         // sha256 is required. Unsupported algorithms should throw an error.
-        if (algorithm.name.startsWith("sha")) {
-          const subtleAlgo = `SHA-${algorithm.name.slice(3)}`;
-          const buffer = await crypto.subtle.digest(subtleAlgo, bytes);
-          return new Uint8Array(buffer);
+        const algoMap: Record<string, string> = {
+          sha256: "SHA-256",
+          sha384: "SHA-384",
+          sha512: "SHA-512",
+        };
+
+        const subtleAlgo = algoMap[algorithm.name];
+        if (!subtleAlgo) {
+          throw new TypeError(`Unsupported algorithm: ${algorithm.name}`);
         }
 
-        throw new TypeError(`Unsupported algorithm: ${algorithm.name}`);
+        // Ensure we have a plain ArrayBuffer-backed Uint8Array
+        const buffer = new Uint8Array(bytes).buffer;
+        const hash = await crypto.subtle.digest(subtleAlgo, buffer);
+        return new Uint8Array(hash);
       },
 
       requestLock,
@@ -89,13 +93,13 @@ export const workerOauthClient = (clientMetadata: OAuthClientMetadataInput) =>
           ...internalState,
           dpopKey: encodeKey(internalState.dpopKey) as any,
         };
-        await db.state.put({
+        await oauthDb.state.put({
           key,
           data: JSON.stringify(data),
         });
       },
       async get(key: string): Promise<InternalStateData | undefined> {
-        const entry = await db.state.get(key);
+        const entry = await oauthDb.state.get(key);
         if (!entry)
           throw new Error("Could not find key in ATProto OAuth iDB: " + key);
         const data = JSON.parse(entry.data || "undefined");
@@ -105,42 +109,42 @@ export const workerOauthClient = (clientMetadata: OAuthClientMetadataInput) =>
         return data;
       },
       async del(key: string): Promise<void> {
-        await db.state.delete(key);
+        await oauthDb.state.delete(key);
       },
     },
 
     // TODO: Figure out if we need to clear this with some kind of a TTL
     dpopNonceCache: {
       async set(key: string, data): Promise<void> {
-        await db.dpopNonce.put({
+        await oauthDb.dpopNonce.put({
           key,
           data,
         });
       },
       async get(key: string): Promise<string | undefined> {
-        return (await db.dpopNonce.get(key))?.data;
+        return (await oauthDb.dpopNonce.get(key))?.data;
       },
       async del(key: string): Promise<void> {
-        await db.dpopNonce.delete(key);
+        await oauthDb.dpopNonce.delete(key);
       },
     },
 
     sessionStore: {
       async set(sub: string, session: Session): Promise<void> {
-        await db.session.put({
+        await oauthDb.session.put({
           key: sub,
           data: { ...session, dpopKey: encodeKey(session.dpopKey) as any },
         });
       },
       async get(sub: string): Promise<Session | undefined> {
-        const data = (await db.session.get(sub))?.data;
+        const data = (await oauthDb.session.get(sub))?.data;
         if (data) {
           data.dpopKey = await decodeKey(data.dpopKey as any);
         }
         return data;
       },
       async del(sub: string): Promise<void> {
-        await db.session.delete(sub);
+        await oauthDb.session.delete(sub);
       },
     },
 

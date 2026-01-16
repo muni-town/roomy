@@ -1,5 +1,5 @@
 import type { OAuthSession } from "@atproto/oauth-client";
-import { createOauthClient } from "./oauth";
+import { createOauthClient, oauthDb } from "./oauth";
 import { db } from "../idb";
 import { Agent, AtpAgent } from "@atproto/api";
 import { lexicons } from "$lib/lexicons";
@@ -402,7 +402,9 @@ export class Client {
     }
   }
 
-  logout() {
-    db.kv.delete("did");
+  async logout() {
+    await db.kv.delete("did");
+    await oauthDb.session.clear();
+    await oauthDb.state.clear();
   }
 }
