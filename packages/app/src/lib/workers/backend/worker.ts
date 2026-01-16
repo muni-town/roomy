@@ -420,7 +420,12 @@ class WorkerSupervisor {
     );
 
     await context
-      .with(ctx, () => Client.restoreSession())
+      .with(ctx, () =>
+        Client.restoreSession({
+          onConnect: () => console.debug("BW (restored): connected"),
+          onDisconnect: () => console.debug("BW (restored): disconnected"),
+        }),
+      )
       .then((client) => {
         if (!client) {
           console.debug("No previous session found.");
@@ -457,7 +462,10 @@ class WorkerSupervisor {
 
   private async authenticateCallback(params: URLSearchParams) {
     this.setAuthState({ state: "loading" });
-    const client = await Client.oauthCallback(params);
+    const client = await Client.oauthCallback(params, {
+      onConnect: () => console.debug("BW (callback): connected"),
+      onDisconnect: () => console.log("BW (callback): disconnected"),
+    });
     this.initBackendWithClient(client);
     return client;
   }
