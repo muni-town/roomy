@@ -503,7 +503,7 @@ class WorkerSupervisor {
           did: (await this.authenticateCallback(params)).agent.assertDid,
         };
       },
-      logout: async () => this.logout(),
+      logout: async () => await this.logout(),
       getProfile: async (did) => this.client.roomy.getProfile(did),
       runQuery: async (statement) => {
         return this.sqlite.runQuery(statement);
@@ -599,9 +599,9 @@ class WorkerSupervisor {
     };
   }
 
-  private logout() {
+  private async logout() {
     if (this.#auth.state === "authenticated") {
-      this.#auth.client.logout();
+      await this.#auth.client.logout();
       this.#auth = { state: "unauthenticated" };
     } else {
       console.warn("Already logged out");

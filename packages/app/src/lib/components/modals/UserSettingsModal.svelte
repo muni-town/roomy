@@ -33,8 +33,10 @@
     class="w-full justify-start"
     size="lg"
     onclick={() => {
-      backend.logout().then(() => window.location.reload());
-      open = false;
+      backend.logout().then(() => {
+        open = false;
+        window.location.reload();
+      });
     }}
   >
     Log Out
