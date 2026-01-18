@@ -476,8 +476,10 @@ class WorkerSupervisor {
       onConnect: () => console.debug("BW (callback): connected"),
       onDisconnect: () => console.log("BW (callback): disconnected"),
     });
-    this.initBackendWithClient(client);
-    return client;
+    if (client) {
+      this.initBackendWithClient(client);
+      return client;
+    }
   }
 
   private get consoleForwarding() {
@@ -517,8 +519,9 @@ class WorkerSupervisor {
       login: async (handle) => Client.login(handle),
       oauthCallback: async (paramsStr) => {
         const params = new URLSearchParams(paramsStr);
+        const client = await this.authenticateCallback(params);
         return {
-          did: (await this.authenticateCallback(params)).agent.assertDid,
+          did: client?.agent.assertDid,
         };
       },
       logout: async () => await this.logout(),
