@@ -33,6 +33,7 @@ export type MessagePortInterfaceConfig<Local extends HalfInterface> = {
     ms: number;
     onTimeout: (method: string, requestId: string) => void;
   };
+  onError?: (error: unknown, method: string, args: unknown[]) => void;
 };
 
 /**
@@ -49,7 +50,18 @@ export function messagePortInterface<
   Local extends HalfInterface,
   Remote extends HalfInterface,
 >(config: MessagePortInterfaceConfig<Local>): Remote {
-  const { messagePort, handlers, timeout } = config;
+  const {
+    messagePort,
+    handlers,
+    timeout,
+    onError = (error, method, args) => {
+      console.error(
+        `RPC error in "${method}":`,
+        error,
+        ...(args.length ? ["Args:", args] : []),
+      );
+    },
+  } = config;
 
   const pendingResponseResolvers: {
     [key: string]: {
@@ -72,7 +84,7 @@ export function messagePortInterface<
             const resp = await handler(...parameters);
             messagePort.postMessage(["response", requestId, "resolve", resp]);
           } catch (e) {
-            console.error(e);
+            onError?.(e, String(name), parameters);
             messagePort.postMessage(["response", requestId, "reject", e]);
           }
         }
@@ -83,6 +95,9 @@ export function messagePortInterface<
       if (pending) {
         if (pending.timerId !== undefined) {
           clearTimeout(pending.timerId);
+        }
+        if (action === "reject") {
+          onError?.(data, pending.method, []);
         }
         pending[action](data);
         delete pendingResponseResolvers[requestId];
