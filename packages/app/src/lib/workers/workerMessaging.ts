@@ -26,6 +26,15 @@ type IncomingMessage<In extends HalfInterface, Out extends HalfInterface> =
       ];
     }[keyof Out];
 
+export type MessagePortInterfaceConfig<Local extends HalfInterface> = {
+  messagePort: MessagePortApi;
+  handlers: Local;
+  timeout?: {
+    ms: number;
+    onTimeout: (method: string, requestId: string) => void;
+  };
+};
+
 /**
  * Establish a a typed bidirectional RPC (remote procedure call) layer on a message port.
  * The `Local` type parameter defines the functions that can be called by the remote side,
@@ -39,11 +48,15 @@ type IncomingMessage<In extends HalfInterface, Out extends HalfInterface> =
 export function messagePortInterface<
   Local extends HalfInterface,
   Remote extends HalfInterface,
->(messagePort: MessagePortApi, handlers: Local): Remote {
+>(config: MessagePortInterfaceConfig<Local>): Remote {
+  const { messagePort, handlers, timeout } = config;
+
   const pendingResponseResolvers: {
     [key: string]: {
       resolve: (resp: ReturnType<Remote[keyof Remote]>) => void;
       reject: (error: any) => void;
+      timerId?: ReturnType<typeof setTimeout>;
+      method: string;
     };
   } = {};
 
@@ -51,7 +64,6 @@ export function messagePortInterface<
     ev: MessageEvent<IncomingMessage<Local, Remote>>,
   ) => {
     const type = ev.data[0];
-
     if (type == "call") {
       const [, name, requestId, ...parameters] = ev.data;
       for (const [event, handler] of Object.entries(handlers)) {
@@ -67,15 +79,19 @@ export function messagePortInterface<
       }
     } else if (type == "response") {
       const [, requestId, action, data] = ev.data;
-      pendingResponseResolvers[requestId]?.[action](data);
-      delete pendingResponseResolvers[requestId];
+      const pending = pendingResponseResolvers[requestId];
+      if (pending) {
+        if (pending.timerId !== undefined) {
+          clearTimeout(pending.timerId);
+        }
+        pending[action](data);
+        delete pendingResponseResolvers[requestId];
+      }
     }
   };
 
   return new Proxy(
-    {
-      messagePort,
-    },
+    { messagePort },
     {
       get({ messagePort }, name) {
         const n = name as keyof Remote;
@@ -83,10 +99,27 @@ export function messagePortInterface<
           ...args: Parameters<Remote[typeof n]>
         ): ReturnType<Remote[typeof n]> => {
           const reqId = crypto.randomUUID();
-          const respPromise = new Promise(
-            (resolve, reject) =>
-              (pendingResponseResolvers[reqId] = { resolve, reject }),
-          );
+          const method = String(n);
+
+          const respPromise = new Promise((resolve, reject) => {
+            const pending: (typeof pendingResponseResolvers)[string] = {
+              resolve,
+              reject,
+              method,
+            };
+
+            if (timeout) {
+              pending.timerId = setTimeout(() => {
+                if (pendingResponseResolvers[reqId]) {
+                  timeout.onTimeout(method, reqId);
+                  delete pendingResponseResolvers[reqId];
+                }
+              }, timeout.ms);
+            }
+
+            pendingResponseResolvers[reqId] = pending;
+          });
+
           const transferList = [];
           for (const arg of args) {
             if (arg instanceof MessagePort) {

@@ -68,9 +68,9 @@ export const backend = tracer.startActiveSpan(
       type: "module",
     });
 
-    const backend = messagePortInterface<ConsoleInterface, BackendInterface>(
-      "port" in backendWorker ? backendWorker.port : backendWorker,
-      {
+    const backend = messagePortInterface<ConsoleInterface, BackendInterface>({
+      messagePort: "port" in backendWorker ? backendWorker.port : backendWorker,
+      handlers: {
         async log(level, args) {
           const prefixedArgs = ["[BW]", ...args]; // Backend Worker
           console[level](...prefixedArgs);
@@ -86,7 +86,7 @@ export const backend = tracer.startActiveSpan(
           globalInitSpan.end();
         },
       },
-    );
+    });
 
     (globalThis as any).backend = backend;
     (globalThis as any).CONFIG = CONFIG;

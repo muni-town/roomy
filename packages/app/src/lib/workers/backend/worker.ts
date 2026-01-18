@@ -380,7 +380,17 @@ class WorkerSupervisor {
     const consoleInterface = messagePortInterface<
       BackendInterface,
       ConsoleInterface
-    >(port, this.getBackendInterface());
+    >({
+      messagePort: port,
+      handlers: this.getBackendInterface(),
+      timeout: {
+        ms: 5000,
+        onTimeout: (method, reqId) => {
+          if (method !== "log")
+            console.warn("Backend RPC Timeout", { method, reqId });
+        },
+      },
+    });
 
     consoleInterface.setSessionId(sessionId);
 
@@ -534,7 +544,10 @@ class WorkerSupervisor {
       setActiveSqliteWorker: async (messagePort) => {
         // eslint-disable-next-line @typescript-eslint/no-empty-object-type
         await this.sqlite.setReady(
-          messagePortInterface<{}, SqliteWorkerInterface>(messagePort, {}),
+          messagePortInterface<{}, SqliteWorkerInterface>({
+            messagePort,
+            handlers: {},
+          }),
         );
       },
       async ping() {
