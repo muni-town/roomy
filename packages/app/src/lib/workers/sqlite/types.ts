@@ -17,6 +17,9 @@ export type SqliteWorkerInterface = {
     priority: TaskPriority,
   ): Promise<Batch.Statement | Batch.ApplyResult>;
   runQuery<Row>(statement: SqlStatement): Promise<QueryResult<Row>>;
+  resetLocalDatabase(): Promise<
+    { done: true } | { done: false; error: string }
+  >;
   createLiveQuery(
     id: string,
     port: MessagePort,
