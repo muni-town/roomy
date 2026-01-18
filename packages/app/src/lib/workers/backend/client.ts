@@ -140,8 +140,13 @@ export class Client {
     eventHandlers?: RoomyClientEvents,
   ) {
     const oauth = await createOauthClient();
-    const response = await oauth.callback(params);
-    return Client.fromSession(response.session, eventHandlers);
+    try {
+      const response = await oauth.callback(params);
+      return Client.fromSession(response.session, eventHandlers);
+    } catch (e) {
+      console.warn("OAuth callback failed", e);
+      return undefined;
+    }
   }
 
   private static async fromAgent(

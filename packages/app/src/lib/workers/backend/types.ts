@@ -29,7 +29,7 @@ export type BackendInterface = {
   getSpaceInfo(
     streamDid: StreamDid,
   ): Promise<{ name?: string; avatar?: string } | undefined>;
-  oauthCallback(searchParams: string): Promise<{ did: string }>;
+  oauthCallback(searchParams: string): Promise<{ did?: string }>;
   runQuery<T>(statement: SqlStatement): Promise<QueryResult<T>>;
   getProfile(did: UserDid): Promise<Profile | undefined>;
   dangerousCompletelyDestroyDatabase(opts: {
