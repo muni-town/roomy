@@ -104,10 +104,10 @@ class SqliteWorkerSupervisor {
 
     this.#status = reactiveWorkerState<SqliteStatus>(params.statusPort, true);
 
-    this.#backend = messagePortInterface<{}, BackendInterface>(
-      params.backendPort,
-      {},
-    );
+    this.#backend = messagePortInterface<{}, BackendInterface>({
+      messagePort: params.backendPort,
+      handlers: {},
+    });
 
     this.#status.workerId = this.#workerId;
     this.#status.isActiveWorker = false; // Initialize to false for reactive state tracking
@@ -121,10 +121,10 @@ class SqliteWorkerSupervisor {
     await this.loadDb(params.dbName, false);
     try {
       const sqliteChannel = new MessageChannel();
-      messagePortInterface<SqliteWorkerInterface, {}>(
-        sqliteChannel.port1,
-        this.getSqliteInterface(),
-      );
+      messagePortInterface<SqliteWorkerInterface, {}>({
+        messagePort: sqliteChannel.port1,
+        handlers: this.getSqliteInterface(),
+      });
       this.#backend?.setActiveSqliteWorker(sqliteChannel.port2);
       this.listenEvents();
       this.listenStatements();
