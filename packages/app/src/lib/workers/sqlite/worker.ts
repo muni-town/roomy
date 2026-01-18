@@ -350,6 +350,35 @@ class SqliteWorkerSupervisor {
       );
   }
 
+  async resetLocalDatabase() {
+    console.warn("Resetting local database");
+    // await this.untilReady?.catch((error) => {
+    //   console.error("Database did not initialise", error);
+    // });
+    // if (this.#state.state !== "ready")
+    //   throw new Error("Sqlite worker not initialized when resetting database.");
+    try {
+      await this.runQuery(sql`pragma writable_schema = 1`);
+      await this.runQuery(sql`delete from sqlite_master`);
+      await this.runQuery(sql`vacuum`);
+      await this.runQuery(sql`pragma integrity_check`);
+      // await personalStream.clearIdCache();
+      return { done: true } as const;
+    } catch (error) {
+      console.error("Database reset failed", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Unknown error";
+      return {
+        done: false,
+        error: message,
+      } as const;
+    }
+  }
+
   private startHeartbeat() {
     if (this.#heartbeatInterval) clearInterval(this.#heartbeatInterval);
 
@@ -421,6 +450,18 @@ class SqliteWorkerSupervisor {
     }
   }
 
+  async runQuery<Row>(statement: SqlStatement) {
+    // This lock makes sure that the JS tasks don't interleave some other query executions in while we
+    // are trying to compose a bulk transaction.
+    return navigator.locks.request(QUERY_LOCK, async () => {
+      try {
+        return (await executeQuery(statement)) as QueryResult<Row>;
+      } catch (e) {
+        throw new Error(`Error running SQL query \`${statement.sql}\`: ${e}`);
+      }
+    });
+  }
+
   private getSqliteInterface(): SqliteWorkerInterface {
     return {
       authenticate: async (did) => {
@@ -435,19 +476,8 @@ class SqliteWorkerSupervisor {
       materializeBatch: async (eventsBatch, priority) => {
         return this.materializeBatch(eventsBatch, priority);
       },
-      runQuery: async <Row>(statement: SqlStatement) => {
-        // This lock makes sure that the JS tasks don't interleave some other query executions in while we
-        // are trying to compose a bulk transaction.
-        return navigator.locks.request(QUERY_LOCK, async () => {
-          try {
-            return (await executeQuery(statement)) as QueryResult<Row>;
-          } catch (e) {
-            throw new Error(
-              `Error running SQL query \`${statement.sql}\`: ${e}`,
-            );
-          }
-        });
-      },
+      runQuery: this.runQuery,
+      resetLocalDatabase: this.resetLocalDatabase,
       createLiveQuery: async (id, port, statement) => {
         await this.#authenticated.promise;
         if (!this.#status.authenticated) throw new Error("Not authenticated");

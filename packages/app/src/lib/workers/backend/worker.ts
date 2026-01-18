@@ -539,7 +539,7 @@ class WorkerSupervisor {
       },
       dangerousCompletelyDestroyDatabase: async ({ yesIAmSure }) => {
         if (!yesIAmSure) throw "You need to be sure";
-        return await this.sqlite.resetLocalDatabase();
+        return await this.sqlite.sqliteWorker.resetLocalDatabase();
       },
       setActiveSqliteWorker: async (messagePort) => {
         // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -734,7 +734,7 @@ class SqliteSupervisor {
       ) {
         // Reset the local database cache when the stream schema version changes.
         // Asynchronous, but has to wait until readyPromise is resolved, so we can't await it here.
-        this.resetLocalDatabase().catch(console.error);
+        this.sqliteWorker.resetLocalDatabase().catch(console.error);
       }
 
       await prevStream.setSchemaVersion(CONFIG.streamSchemaVersion);
@@ -745,7 +745,7 @@ class SqliteSupervisor {
           sql`select version from roomy_schema_version`,
         );
         if (result.rows?.[0]?.version !== CONFIG.databaseSchemaVersion) {
-          await this.resetLocalDatabase();
+          await this.sqliteWorker.resetLocalDatabase();
         }
       })();
 
@@ -814,53 +814,6 @@ class SqliteSupervisor {
       throw new Error("Sqlite worker not initialized.");
     this.liveQueries.delete(id);
     await this.#state.sqliteWorker.deleteLiveQuery(id);
-  }
-
-  async resetLocalDatabase() {
-    console.warn("Resetting local database");
-    await this.untilReady?.catch((error) => {
-      console.error("Database did not initialise", error);
-    });
-    if (this.#state.state !== "ready")
-      throw new Error("Sqlite worker not initialized when resetting database.");
-    try {
-      await this.#state.sqliteWorker.runQuery(sql`pragma writable_schema = 1`);
-      await this.#state.sqliteWorker.runQuery(sql`delete from sqlite_master`);
-      await this.#state.sqliteWorker.runQuery(sql`vacuum`);
-      await this.#state.sqliteWorker.runQuery(sql`pragma integrity_check`);
-      await personalStream.clearIdCache();
-      return { done: true } as const;
-    } catch (error) {
-      console.error("Database reset failed", error);
-      const message =
-        error instanceof Error
-          ? error.message
-          : typeof error === "string"
-            ? error
-            : "Unknown error";
-      return {
-        done: false,
-        error: message,
-      } as const;
-    }
-  }
-
-  async getStreamCursor(streamId: StreamDid) {
-    const upToEventIdQuery = await this.runQuery<{
-      backfilled_to: StreamIndex;
-    }>(
-      sql`select backfilled_to from comp_space where entity = ${streamId}`,
-    ).catch((e) => console.warn("Error getting backfilled_to", e));
-
-    const upToEventId =
-      upToEventIdQuery &&
-      upToEventIdQuery.rows?.length &&
-      upToEventIdQuery.rows[0]!.backfilled_to;
-
-    if (typeof upToEventId !== "number")
-      throw new Error("Could not get backfilled_to for stream: " + streamId);
-
-    return upToEventId as StreamIndex;
   }
 }
 
