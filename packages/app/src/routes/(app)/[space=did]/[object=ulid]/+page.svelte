@@ -424,7 +424,10 @@
         <PageHistory />
       {/if}
     {:else}
-      <div class="p-4">Unknown Object type</div>
+      <Error
+        message="Oh no! We had an issue getting the data for this room 😬"
+        goHome
+      />
     {/if}
   </MainLayout>
 {/if}
