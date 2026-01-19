@@ -147,6 +147,7 @@
   // });
 
   function startThreading(message?: Message) {
+    console.debug("Start threading", message);
     const currentState = messagingState.current;
     const name = message ? renderMarkdownPlaintext(message.content) : "Thread";
     messagingState.set({

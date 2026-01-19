@@ -1,6 +1,5 @@
 <script lang="ts">
   import { Toolbar, Tooltip as BitsTooltip } from "bits-ui";
-  import Drawer from "$lib/components/helper/Drawer.svelte";
   import Tooltip from "$lib/components/helper/Tooltip.svelte";
   import { Button, buttonVariants } from "@fuxui/base";
   import { PopoverEmojiPicker } from "@fuxui/social";
@@ -19,24 +18,21 @@
 
   let {
     editMessage,
-    isDrawerOpen = $bindable(false),
     message,
     startThreading,
     keepToolbarOpen = $bindable(false),
   }: {
     canEdit?: boolean;
     editMessage: () => void;
-    isDrawerOpen?: boolean;
     message: Message;
     startThreading: () => void;
     keepToolbarOpen: boolean;
   } = $props();
 
-  let isEmojiDrawerPickerOpen = $state(false);
   let isEmojiToolbarPickerOpen = $state(false);
 
   $effect(() => {
-    keepToolbarOpen = isEmojiDrawerPickerOpen || isEmojiToolbarPickerOpen;
+    keepToolbarOpen = isEmojiToolbarPickerOpen;
   });
 
   let canEditAndDelete = $derived(
@@ -55,7 +51,6 @@
 
   function onEmojiPick(emoji: string) {
     const spaceId = current.joinedSpace?.id;
-    console.log("emoji pick", emoji, spaceId, current.roomId);
     if (!spaceId || !current.roomId) return;
 
     const reaction = message.reactions.find(
@@ -70,102 +65,8 @@
       removeReaction(spaceId, current.roomId, reaction.reactionId);
     }
     isEmojiToolbarPickerOpen = false;
-    isEmojiDrawerPickerOpen = false;
-    isDrawerOpen = false;
   }
 </script>
-
-<Drawer
-  bind:open={
-    () => isDrawerOpen,
-    (open) => {
-      if (open) {
-        isDrawerOpen = open;
-        return;
-      }
-
-      if (!isEmojiDrawerPickerOpen) isDrawerOpen = open;
-    }
-  }
->
-  <div class="flex gap-4 justify-center mb-4">
-    <Button
-      variant="ghost"
-      size="icon"
-      onclick={() => {
-        onEmojiPick("👍");
-        isDrawerOpen = false;
-      }}
-      class="dz-btn dz-btn-circle"
-    >
-      👍
-    </Button>
-    <Button
-      variant="ghost"
-      size="icon"
-      onclick={() => {
-        onEmojiPick("😂");
-        isDrawerOpen = false;
-      }}
-    >
-      😂
-    </Button>
-
-    <PopoverEmojiPicker
-      bind:open={isEmojiDrawerPickerOpen}
-      onpicked={(emoji) => onEmojiPick(emoji.unicode)}
-    >
-      {#snippet child({ props })}
-        <Button size="icon" variant="ghost" {...props}>
-          <IconLucideSmilePlus class="text-primary" />
-        </Button>
-      {/snippet}
-    </PopoverEmojiPicker>
-  </div>
-
-  <div class="flex flex-col gap-4 w-full">
-    <Button
-      onclick={() => {
-        messagingState.setReplyTo(message);
-        isDrawerOpen = false;
-      }}
-      class="dz-join-item dz-btn w-full"
-    >
-      <IconMdiReply />
-      Reply
-    </Button>
-    <Button
-      onclick={() => {
-        startThreading();
-        isDrawerOpen = false;
-      }}
-      class="dz-join-item dz-btn w-full"
-    >
-      <IconTablerNeedleThread />Create Thread
-    </Button>
-    {#if canEditAndDelete}
-      <Button
-        onclick={() => {
-          editMessage();
-          isDrawerOpen = false;
-        }}
-        class="dz-join-item dz-btn w-full"
-      >
-        <IconTablerEdit />
-        Edit
-      </Button>
-    {/if}
-    {#if canEditAndDelete}
-      <Button
-        onclick={() => deleteCurrentMessage()}
-        class="dz-join-item dz-btn dz-btn-error w-full"
-      >
-        <IconTablerTrash />
-        Delete
-      </Button>
-    {/if}
-  </div>
-</Drawer>
 
 <BitsTooltip.Provider>
   <Toolbar.Root

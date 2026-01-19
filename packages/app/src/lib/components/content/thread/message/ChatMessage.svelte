@@ -25,18 +25,20 @@
     messagingState,
     startThreading,
     toggleSelect,
+    onOpenMobileMenu,
+    editingMessageId,
+    onStartEdit,
+    onCancelEdit,
   }: {
     message: Message;
     messagingState?: MessagingState;
     startThreading: (message?: Message) => void;
     toggleSelect: (message: Message) => void;
+    onOpenMobileMenu: (message: Message) => void;
+    editingMessageId: string;
+    onStartEdit: (id: string) => void;
+    onCancelEdit: () => void;
   } = $props();
-
-  let editingMessage = $state({ id: "" });
-
-  // log messages sent in last 2.7hours
-  // if (decodeTime(message.id) > Date.now() - 10000000)
-  // console.log("message", message.content, message);
 
   const threading = $derived.by(() => {
     if (!messagingState) return null;
@@ -91,24 +93,23 @@
       message.authorDid == backendStatus.authState.did,
   );
 
-  let isDrawerOpen = $state(false);
-
   let isSelected = $derived(
     threading?.selectedMessages.find((x) => x.id == message.id) ? true : false,
   );
 
+  let isEditing = $derived(editingMessageId === message.id);
+
   function editMessage() {
-    editingMessage.id = message.id;
+    onStartEdit(message.id);
   }
 
   async function saveEditedMessage(newContent: string) {
-    editingMessage.id = "";
+    onCancelEdit();
     const spaceId = current.joinedSpace?.id;
     if (!spaceId) return;
 
     // If the content is the same, don't save
     if (message.content == newContent) {
-      editingMessage.id = "";
       return;
     }
 
@@ -125,28 +126,11 @@
       },
       previous: message.lastEdit,
     });
-
-    editingMessage.id = "";
   }
 
   function cancelEditing() {
-    editingMessage.id = "";
+    onCancelEdit();
   }
-
-  // let isMessageEdited = $derived.by(() => {
-  // if (!message.current) return false;
-  // if (
-  //   !userAccessTimes.current?.createdAt ||
-  //   !userAccessTimes.current?.updatedAt
-  // )
-  //   return false;
-  // // if time between createdAt and updatedAt is less than 1 minute, we dont consider it edited
-  // return (
-  //   userAccessTimes.current?.updatedAt.getTime() -
-  //     userAccessTimes.current?.createdAt.getTime() >
-  //   1000 * 60
-  // );
-  // });
 </script>
 
 {#snippet messageBox()}
@@ -232,7 +216,7 @@
         <div
           class="prose text-left prose-a:text-accent-600 dark:prose-a:text-accent-400 dark:prose-invert prose-a:no-underline max-w-full"
         >
-          {#if editingMessage.id === message.id}
+          {#if isEditing}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
               onkeydown={(e) => {
@@ -279,9 +263,8 @@
       </div>
     </div>
 
-    {#if (editingMessage.id !== message.id && hovered && !threading) || keepToolbarOpen}
+    {#if (!isEditing && hovered && !threading) || keepToolbarOpen}
       <MessageToolbar
-        bind:isDrawerOpen
         canEdit={messageByMe}
         bind:keepToolbarOpen
         {editMessage}
@@ -291,7 +274,7 @@
     {/if}
 
     <button
-      onclick={() => (isDrawerOpen = true)}
+      onclick={() => onOpenMobileMenu(message)}
       class="block pointer-fine:hidden absolute inset-0 w-full h-full"
     >
       <span class="sr-only">Open toolbar</span>
@@ -326,13 +309,6 @@
     class="flex flex-col w-full relative max-w-screen isolate px-4"
   >
     {@render messageBox()}
-    <!-- <div
-      class="border border-primary bg-base-50 text-primary-content size-4 rounded items-center cursor-pointer"
-    >
-      {#if isSelected}
-        <IconTablerCheck class="bg-primary size-3.5 dark:text-black" />
-      {/if}
-    </div> -->
   </Checkbox.Root>
 {:else}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
