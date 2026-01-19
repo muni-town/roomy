@@ -219,7 +219,7 @@ export const DeleteMessage = defineEvent(
       console.warn("Missing target for message meta override.");
       return [];
     }
-    return [sql`delete from entities where id = ${event.room}`];
+    return [sql`delete from entities where id = ${event.messageId}`];
   },
   (x) => [x.messageId],
 );
