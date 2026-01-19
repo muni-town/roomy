@@ -325,16 +325,6 @@
           </div>
         </Popover> -->
 
-        {#if current.isSpaceAdmin}
-          <Button
-            variant="secondary"
-            size="icon"
-            onclick={() => (editRoomModalOpen = true)}
-          >
-            <IconTablerSettings class="shrink-0" /></Button
-          >
-        {/if}
-
         <Modal bind:open={createPageDialogOpen} title="Create Page">
           <form
             class="flex flex-col items-stretch gap-4"

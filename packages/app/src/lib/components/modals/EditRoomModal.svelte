@@ -4,14 +4,17 @@
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { Modal, Input, Button } from "@fuxui/base";
+  import type { Ulid } from "@roomy/sdk";
   // import FeedConfiguration from "../content/bluesky-feed/FeedConfiguration.svelte";
   import IconLucideSave from "~icons/lucide/save";
   import IconLucideTrash from "~icons/lucide/trash";
 
   let {
     open = $bindable(false),
+    roomId,
   }: {
     open: boolean;
+    roomId: Ulid | null;
   } = $props();
 
   async function save() {
@@ -29,21 +32,37 @@
 
   const roomQuery = new LiveQuery<{
     name: string;
+    kind:
+      | "space.roomy.channel"
+      | "space.roomy.category"
+      | "space.roomy.thread"
+      | "space.roomy.page";
   }>(
     () => sql`
     select json_object(
-      'name', name
+      'name', name,
+      'kind', label
     ) as json
-    from comp_info
-    where entity = ${current.roomId}
+    from comp_info ci
+    left join comp_room cr on ci.entity = cr.entity
+    where ci.entity = ${roomId}
   `,
     (row) => JSON.parse(row.json),
   );
   const room = $derived(roomQuery.result?.[0]);
   let name = $derived(room?.name);
+  let kind = $derived.by(() => {
+    if (!room) return "";
+    switch (room.kind) {
+      case "space.roomy.channel":
+        return "Channel";
+      default:
+        return "";
+    }
+  });
 </script>
 
-{#if room}
+{#if roomId && room}
   <Modal bind:open>
     <div class="max-h-[80vh] overflow-y-auto">
       <form id="createSpace" class="flex flex-col gap-4" onsubmit={save}>
@@ -51,11 +70,11 @@
           id="dialog-title"
           class="text-base font-semibold text-base-900 dark:text-base-100"
         >
-          Edit room
+          Edit {kind}
         </h3>
         <div class="mt-2">
           <p class="text-sm text-base-500 dark:text-base-400">
-            Change the name of the room
+            Change the name of the {kind.toLowerCase()}
           </p>
         </div>
         <Input bind:value={name} placeholder="Name" type="text" required />
@@ -80,7 +99,8 @@
         </h3>
         <div class="mt-1">
           <p class="text-sm text-base-500 dark:text-base-400">
-            This will also delete all children of this room and cannot be undone
+            This will also delete all children of this {kind.toLowerCase()} and cannot
+            be undone
           </p>
         </div>
         <div class="flex justify-start">

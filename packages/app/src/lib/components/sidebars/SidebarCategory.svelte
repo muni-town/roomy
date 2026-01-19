@@ -2,11 +2,12 @@
   import { Button } from "@fuxui/base";
   import type { SidebarCategory } from "$lib/queries";
 
-  import IconLucidePencil from "~icons/lucide/pencil";
+  // import IconLucidePencil from "~icons/lucide/pencil";
   import IconHeroiconsChevronDown from "~icons/heroicons/chevron-down";
   import IconHeroiconsChevronUp from "~icons/heroicons/chevron-up";
   import { page } from "$app/state";
   import SidebarItem from "./SidebarItem.svelte";
+  import type { Ulid } from "@roomy/sdk";
 
   let {
     category,
@@ -15,24 +16,25 @@
   }: {
     category: SidebarCategory;
     isEditing: boolean;
-    editSidebarItem: () => void;
+    editSidebarItem: (roomId: Ulid) => void;
   } = $props();
 
   let showGroupChildren = $state(true);
 </script>
 
-{#snippet editButton()}
+<!-- temporarily don't show edit button for categories -->
+<!-- {#snippet editButton()}
   {#if isEditing}
     <Button
       variant="ghost"
       size="icon"
-      onclick={editSidebarItem}
+      onclick={() => editSidebarItem()}
       class="group-hover:opacity-100 opacity-0"
     >
       <IconLucidePencil class="size-4" />
     </Button>
   {/if}
-{/snippet}
+{/snippet} -->
 
 <div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink pb-4">
   <div
@@ -56,7 +58,7 @@
         <IconHeroiconsChevronUp class="shrink-0 !size-2" />
       {/if}
     </Button>
-    {@render editButton?.()}
+    <!-- {@render editButton?.()} -->
   </div>
 
   <!-- Group children (pages, channels) -->
