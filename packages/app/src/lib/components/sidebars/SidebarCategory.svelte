@@ -2,7 +2,7 @@
   import { Button } from "@fuxui/base";
   import type { SidebarCategory } from "$lib/queries";
   import { dragHandleZone, dragHandle } from "svelte-dnd-action";
-  // import IconLucidePencil from "~icons/lucide/pencil";
+  import IconLucidePencil from "~icons/lucide/pencil";
   import IconHeroiconsChevronDown from "~icons/heroicons/chevron-down";
   import IconHeroiconsChevronUp from "~icons/heroicons/chevron-up";
   import IconLucideGripVertical from "~icons/lucide/grip-vertical";
@@ -18,7 +18,7 @@
   }: {
     category: SidebarCategory;
     isEditing: boolean;
-    editSidebarItem: (roomId: Ulid) => void;
+    editSidebarItem: (id: { room: Ulid } | { category: string }) => void;
     onRoomMove?: (newChildren: SidebarCategory["children"]) => void;
   } = $props();
 
@@ -29,19 +29,18 @@
   let showGroupChildren = $state(true);
 </script>
 
-<!-- temporarily don't show edit button for categories -->
-<!-- {#snippet editButton()}
+{#snippet editButton()}
   {#if isEditing}
     <Button
       variant="ghost"
       size="icon"
-      onclick={() => editSidebarItem()}
-      class="group-hover:opacity-100 opacity-0"
+      onclick={() => editSidebarItem({ category: category.id })}
+      class="group-hover:opacity-100 opacity-20"
     >
       <IconLucidePencil class="size-4" />
     </Button>
   {/if}
-{/snippet} -->
+{/snippet}
 
 <div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink pb-4">
   <div
@@ -67,7 +66,7 @@
         {/if}
       {/if}
     </Button>
-    <!-- {@render editButton?.()} -->
+    {@render editButton?.()}
   </div>
 
   <!-- Group children (pages, channels) -->

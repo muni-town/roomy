@@ -21,7 +21,7 @@
     item: SidebarItem;
     isEditing: boolean;
     index?: number;
-    editSidebarItem: (roomId: Ulid) => void;
+    editSidebarItem: (id: { room: Ulid } | { category: string }) => void;
   } = $props();
 
   // let showEditModal = $state(false);
@@ -42,7 +42,7 @@
     <Button
       variant="ghost"
       size="icon"
-      onclick={() => editSidebarItem(item.id as Ulid)}
+      onclick={() => editSidebarItem({ room: item.id as Ulid })}
       class="group-hover:opacity-100 opacity-20"
     >
       <IconLucidePencil class="size-4" />

@@ -27,11 +27,12 @@
   // under channels there can be threads or pages
 
   let isEditing = $state(false);
-  let editingRoomId = $state<Ulid | null>(null);
+  let editingId = $state<{ room: Ulid } | { category: string } | null>(null);
 
-  function editSidebarItem(roomId: Ulid) {
+  function editSidebarItem(id: { room: Ulid } | { category: string }) {
+    console.debug("Edit sidebar item");
     openEditRoomModal = true;
-    editingRoomId = roomId;
+    editingId = id;
   }
 
   const roomsInSidebar = $derived(
@@ -43,6 +44,21 @@
   const parentContext = $derived(page.url.searchParams.get("parent"));
 
   let openEditRoomModal = $state(false);
+
+  function renameCategory(id: string, newName: string) {
+    // keep the 'id' (old name) the same in the categoryMap
+    // but change the name in state
+    console.debug("Rename category", { id, newName });
+    const category = categoryMap.get(id);
+    const renamed = {
+      ...category,
+      name: newName,
+    } as SidebarCategoryType;
+    categoryMap.set(id, renamed);
+    categoryMap = new Map(categoryMap);
+    // draftOrder = draftOrder;
+    console.debug("new categoryMap", $state.snapshot(categoryMap));
+  }
 
   async function saveChanges() {
     if (draftOrder && current.joinedSpace) {
@@ -77,7 +93,7 @@
   let draftOrder = $state<DraftOrder | null>(null);
 
   // Build lookup maps from the latest sidebar data
-  const categoryMap = $derived(
+  let categoryMap = $derived(
     new Map(sidebar.result?.map((c) => [c.id, c]) ?? []),
   );
   const roomMap = $derived(
@@ -90,6 +106,7 @@
   const displayCategories: (SidebarCategoryType & {
     [SHADOW_ITEM_MARKER_PROPERTY_NAME]?: boolean;
   })[] = $derived.by(() => {
+    console.debug("evaluating displayCategories");
     if (!draftOrder) return categories;
 
     return draftOrder
@@ -245,4 +262,4 @@
   </div>
 {/if}
 
-<EditRoomModal bind:open={openEditRoomModal} roomId={editingRoomId} />
+<EditRoomModal bind:open={openEditRoomModal} id={editingId} {renameCategory} />
