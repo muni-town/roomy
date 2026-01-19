@@ -2,7 +2,6 @@
   import { page } from "$app/state";
   import { flags } from "$lib/config";
   import { current, sidebar } from "$lib/queries";
-  // import SidebarItemList from "./SidebarItemList.svelte";
   import SpaceSidebarHeader from "./SpaceSidebarHeader.svelte";
   import EditRoomModal from "../modals/EditRoomModal.svelte";
   import { Button } from "@fuxui/base";
@@ -19,9 +18,11 @@
   // under channels there can be threads or pages
 
   let isEditing = $state(false);
+  let editingRoomId = $state<Ulid | null>(null);
 
-  function editSidebarItem() {
+  function editSidebarItem(roomId: Ulid) {
     openEditRoomModal = true;
+    editingRoomId = roomId;
   }
 
   const roomsInSidebar = $derived(
@@ -96,4 +97,4 @@
   </div>
 {/if}
 
-<EditRoomModal bind:open={openEditRoomModal} />
+<EditRoomModal bind:open={openEditRoomModal} roomId={editingRoomId} />
