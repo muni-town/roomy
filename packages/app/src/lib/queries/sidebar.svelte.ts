@@ -28,6 +28,7 @@ $effect.root(() => {
                 'name', child_info.name,
                 'id', child_info.entity
               )
+              ORDER BY children.key  -- preserve child order
             )
             else json('[]')
             end
@@ -40,7 +41,8 @@ $effect.root(() => {
         left join comp_room child_room on child_room.entity = children.value
         where space.entity = ${spaceId}
           and (child_room.entity is null or child_room.deleted != 1)
-        group by categories.value -> 'name'
+        group by categories.key, categories.value -> 'name'  -- include key in group
+        order by categories.key  -- preserve category order
       `;
     },
     (row) => JSON.parse(row.json),

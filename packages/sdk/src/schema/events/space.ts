@@ -191,10 +191,11 @@ export const UpdateSidebar = defineEvent(
   UpdateSidebarSchema,
   ({ streamId, event }) => {
     const configJson = { categories: event.categories };
+    const config = JSON.stringify(configJson);
     return [
       sql`
       update comp_space
-      set sidebar_config = ${JSON.stringify(configJson)}
+      set sidebar_config = ${config}
       where entity = ${streamId}
     `,
     ];

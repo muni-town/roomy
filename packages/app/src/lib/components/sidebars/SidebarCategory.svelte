@@ -1,10 +1,11 @@
 <script lang="ts">
   import { Button } from "@fuxui/base";
   import type { SidebarCategory } from "$lib/queries";
-
+  import { dragHandleZone, dragHandle } from "svelte-dnd-action";
   // import IconLucidePencil from "~icons/lucide/pencil";
   import IconHeroiconsChevronDown from "~icons/heroicons/chevron-down";
   import IconHeroiconsChevronUp from "~icons/heroicons/chevron-up";
+  import IconLucideGripVertical from "~icons/lucide/grip-vertical";
   import { page } from "$app/state";
   import SidebarItem from "./SidebarItem.svelte";
   import type { Ulid } from "@roomy/sdk";
@@ -13,11 +14,17 @@
     category,
     isEditing = $bindable(false),
     editSidebarItem,
+    onRoomMove,
   }: {
     category: SidebarCategory;
     isEditing: boolean;
     editSidebarItem: (roomId: Ulid) => void;
+    onRoomMove?: (newChildren: SidebarCategory["children"]) => void;
   } = $props();
+
+  // Local state just for visual feedback during drag
+  let draggingChildren = $state<typeof category.children | null>(null);
+  const displayChildren = $derived(draggingChildren ?? category.children ?? []);
 
   let showGroupChildren = $state(true);
 </script>
@@ -52,21 +59,54 @@
         class="truncate font-regular text-base-600 dark:text-base-400 text-xs tracking-wide whitespace-nowrap overflow-hidden min-w-0"
         >{category.name}</span
       >
-      {#if showGroupChildren}
-        <IconHeroiconsChevronDown class="shrink-0 !size-2" />
-      {:else}
-        <IconHeroiconsChevronUp class="shrink-0 !size-2" />
+      {#if !isEditing}
+        {#if showGroupChildren}
+          <IconHeroiconsChevronDown class="shrink-0 !size-2" />
+        {:else}
+          <IconHeroiconsChevronUp class="shrink-0 !size-2" />
+        {/if}
       {/if}
     </Button>
     <!-- {@render editButton?.()} -->
   </div>
 
   <!-- Group children (pages, channels) -->
-  {#if showGroupChildren}
-    <div class={"w-full max-w-full shrink min-w-0"}>
-      {#each category.children as child, index (child.id)}
-        <div class="flex items-start gap-2 w-full">
-          <SidebarItem bind:isEditing {editSidebarItem} {index} item={child} />
+  {#if isEditing}
+    <div
+      class="w-full max-w-full shrink min-w-0 min-h-4 p-1"
+      use:dragHandleZone={{
+        items: displayChildren,
+        type: "room",
+        flipDurationMs: 150,
+        dropTargetClasses: ["min-h-10", "bg-accent-500/10", "rounded"],
+        dropTargetStyle: {
+          outline: "2px solid var(--color-accent-500/30)",
+        },
+      }}
+      onconsider={(e) => (draggingChildren = e.detail.items)}
+      onfinalize={(e) => {
+        draggingChildren = null;
+        onRoomMove?.(e.detail.items);
+      }}
+    >
+      {#each displayChildren as room, index (room.id)}
+        <div id={room.id} class="flex items-start w-full relative">
+          <div
+            class="mt-[10px]"
+            use:dragHandle
+            aria-label="drag handle for {room.name}"
+          >
+            <IconLucideGripVertical class="size-3" />
+          </div>
+          <SidebarItem bind:isEditing {editSidebarItem} {index} item={room} />
+        </div>
+      {/each}
+    </div>
+  {:else if showGroupChildren}
+    <div class="w-full max-w-full shrink min-w-0 min-h-4 p-1">
+      {#each category.children as room, index (room.id)}
+        <div id={room.id} class="flex items-start w-full relative">
+          <SidebarItem bind:isEditing {editSidebarItem} {index} item={room} />
         </div>
       {/each}
     </div>
