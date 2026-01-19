@@ -11,32 +11,36 @@
 
   let {
     open = $bindable(false),
-    roomId,
+    id,
+    renameCategory,
   }: {
     open: boolean;
-    roomId: Ulid | null;
+    id: { room: Ulid } | { category: string } | null;
+    renameCategory: (id: string, newName: string) => void;
   } = $props();
 
   async function save() {
-    if (!current.joinedSpace || !roomId)
+    if (!current.joinedSpace || !id)
       throw new Error("Could not find current room ID");
     if (!name) return;
-    console.log("Saving", name);
-    await renameRoom({
-      spaceId: current.joinedSpace.id,
-      roomId,
-      newName: name,
-    });
+
+    if ("room" in id) {
+      console.log("Saving Room", name);
+      await renameRoom({
+        spaceId: current.joinedSpace.id,
+        roomId: id.room,
+        newName: name,
+      });
+    } else if ("category" in id) {
+      console.log("Todo: save category name");
+      renameCategory(id.category, name);
+    }
     open = false;
   }
 
   const roomQuery = new LiveQuery<{
     name: string;
-    kind:
-      | "space.roomy.channel"
-      | "space.roomy.category"
-      | "space.roomy.thread"
-      | "space.roomy.page";
+    kind: "space.roomy.channel" | "space.roomy.thread" | "space.roomy.page";
   }>(
     () => sql`
     select json_object(
@@ -45,24 +49,28 @@
     ) as json
     from comp_info ci
     left join comp_room cr on ci.entity = cr.entity
-    where ci.entity = ${roomId}
+    where ci.entity = ${(id && "room" in id && id.room) ?? ""}
   `,
     (row) => JSON.parse(row.json),
   );
   const room = $derived(roomQuery.result?.[0]);
-  let name = $derived(room?.name);
+  let name = $derived(
+    room?.name ?? (id && "category" in id && id.category) ?? "",
+  );
   let kind = $derived.by(() => {
-    if (!room) return "";
+    if (!room) return "Category";
+    // TODO: replace the whole rename functionality with in-place input
+    // For now just support Channel and Category which will not be a room
     switch (room.kind) {
       case "space.roomy.channel":
         return "Channel";
       default:
-        return "";
+        throw new Error("Room had no kind");
     }
   });
 </script>
 
-{#if roomId && room}
+{#if id && (("room" in id && room) || "category" in id)}
   <Modal bind:open>
     <div class="max-h-[80vh] overflow-y-auto">
       <form id="createSpace" class="flex flex-col gap-4" onsubmit={save}>
