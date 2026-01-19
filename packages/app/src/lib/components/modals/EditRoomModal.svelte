@@ -18,13 +18,13 @@
   } = $props();
 
   async function save() {
-    if (!current.joinedSpace || !current.roomId)
+    if (!current.joinedSpace || !roomId)
       throw new Error("Could not find current room ID");
     if (!name) return;
     console.log("Saving", name);
     await renameRoom({
       spaceId: current.joinedSpace.id,
-      roomId: current.roomId,
+      roomId,
       newName: name,
     });
     open = false;

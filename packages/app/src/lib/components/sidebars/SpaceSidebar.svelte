@@ -9,9 +9,18 @@
   import IconBasilCheckSolid from "~icons/basil/check-solid";
   import IconHeroiconsHome from "~icons/heroicons/home";
   import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
+  import IconLucideGripVertical from "~icons/lucide/grip-vertical";
   import SidebarCategory from "./SidebarCategory.svelte";
+  import { type SidebarCategory as SidebarCategoryType } from "$lib/queries";
   import EntityName from "../primitives/EntityName.svelte";
-  import { Ulid } from "@roomy/sdk";
+  import { newUlid, Ulid } from "@roomy/sdk";
+
+  import {
+    dragHandleZone,
+    dragHandle,
+    SHADOW_ITEM_MARKER_PROPERTY_NAME,
+  } from "svelte-dnd-action";
+  import { backend } from "$lib/workers";
 
   // at the top level there can be categories, channels or pages
   // under categories there can be channels or pages
@@ -34,6 +43,106 @@
   const parentContext = $derived(page.url.searchParams.get("parent"));
 
   let openEditRoomModal = $state(false);
+
+  async function saveChanges() {
+    if (draftOrder && current.joinedSpace) {
+      // TODO: persist draftCategories to backend
+      const newSidebar = draftOrder.map((c) => ({
+        name: categoryMap.get(c.id)?.name ?? "",
+        children: c.childIds as Ulid[],
+      }));
+      console.log("newSidebar", $state.snapshot(newSidebar));
+      await backend.sendEvent(current.joinedSpace.id, {
+        id: newUlid(),
+        $type: "space.roomy.space.updateSidebar.v0",
+        categories: $state.snapshot(newSidebar),
+      });
+    }
+    draftOrder = null;
+    isEditing = false;
+  }
+
+  let categories = $derived(sidebar.result ?? []);
+
+  $effect(() => {
+    console.log("sidebar should be??", $state.snapshot(categories));
+  });
+
+  type DraftOrder = {
+    id: string;
+    childIds: string[];
+    [SHADOW_ITEM_MARKER_PROPERTY_NAME]?: boolean;
+  }[];
+
+  let draftOrder = $state<DraftOrder | null>(null);
+
+  // Build lookup maps from the latest sidebar data
+  const categoryMap = $derived(
+    new Map(sidebar.result?.map((c) => [c.id, c]) ?? []),
+  );
+  const roomMap = $derived(
+    new Map(
+      sidebar.result?.flatMap((c) => c.children.map((r) => [r.id, r])) ?? [],
+    ),
+  );
+
+  // Derive display by merging draft order with latest names
+  const displayCategories: (SidebarCategoryType & {
+    [SHADOW_ITEM_MARKER_PROPERTY_NAME]?: boolean;
+  })[] = $derived.by(() => {
+    if (!draftOrder) return categories;
+
+    return draftOrder
+      .map((draft) => {
+        const latestCat = categoryMap.get(draft.id);
+        if (!latestCat) return null;
+
+        return {
+          ...latestCat,
+          ...(draft[SHADOW_ITEM_MARKER_PROPERTY_NAME] && {
+            [SHADOW_ITEM_MARKER_PROPERTY_NAME]: true,
+          }),
+          children: draft.childIds
+            .map((childId) => roomMap.get(childId))
+            .filter((r): r is NonNullable<typeof r> => r != null),
+        };
+      })
+      .filter((c): c is NonNullable<typeof c> => c != null);
+  });
+
+  // Update the effect that initializes draft state
+  $effect(() => {
+    if (isEditing && !draftOrder) {
+      draftOrder = categories.map((c) => ({
+        id: c.id,
+        childIds: c.children.map((ch) => ch.id),
+      }));
+    }
+    if (!isEditing && draftOrder) {
+      draftOrder = null;
+    }
+  });
+
+  // Update handlers to work with the new structure
+  function handleCategoryReorder(newCategories: SidebarCategoryType[]) {
+    draftOrder = newCategories.map((c) => ({
+      id: c.id,
+      childIds: c.children.map((ch) => ch.id),
+    }));
+  }
+
+  function handleRoomMove(
+    categoryId: string,
+    newChildren: SidebarCategoryType["children"],
+  ) {
+    if (!draftOrder) return;
+
+    draftOrder = draftOrder.map((cat) =>
+      cat.id === categoryId
+        ? { ...cat, childIds: newChildren.map((ch) => ch.id) }
+        : cat,
+    );
+  }
 </script>
 
 <!-- Header -->
@@ -46,10 +155,7 @@
   </div>
 {:else}
   {#if isEditing}
-    <Button
-      class="justify-start mb-4 mx-2 self-stretch"
-      onclick={() => (isEditing = false)}
-    >
+    <Button class="justify-start mb-4 mx-2 self-stretch" onclick={saveChanges}>
       <IconBasilCheckSolid class="size-4" />
       Finish editing</Button
     >
@@ -87,13 +193,55 @@
       </Button>
     {/if}
 
-    <div class="flex flex-col w-full">
-      {#each sidebar.result as category (category.id)}
-        <div class="flex items-start gap-2 w-full">
-          <SidebarCategory bind:isEditing {editSidebarItem} {category} />
-        </div>
-      {/each}
-    </div>
+    {#if isEditing}
+      <div
+        class="flex flex-col w-full min-h-4"
+        use:dragHandleZone={{
+          items: displayCategories,
+          type: "category",
+          dropTargetClasses: ["min-h-10", "bg-accent-500/10", "rounded"],
+          dropTargetStyle: {
+            outline: "2px solid var(--color-accent-500/30)",
+          },
+        }}
+        onconsider={(e) => {
+          draftOrder = e.detail.items.map((c) => ({
+            id: c.id,
+            childIds: c.children.map((ch) => ch.id),
+            [SHADOW_ITEM_MARKER_PROPERTY_NAME]:
+              c[SHADOW_ITEM_MARKER_PROPERTY_NAME],
+          }));
+        }}
+        onfinalize={(e) => handleCategoryReorder(e.detail.items)}
+      >
+        {#each displayCategories as category ((category as any)[SHADOW_ITEM_MARKER_PROPERTY_NAME] ? `shadow-${category.id}` : category.id)}
+          <div class="flex items-start w-full" id={category.id}>
+            <div
+              use:dragHandle
+              aria-label="drag-handle for {category?.name}"
+              class="ml-2 mt-2.5 z-10"
+            >
+              <IconLucideGripVertical class="size-3" />
+            </div>
+            <SidebarCategory
+              bind:isEditing
+              {editSidebarItem}
+              {category}
+              onRoomMove={(newChildren) =>
+                handleRoomMove(category.id, newChildren)}
+            />
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <div class="flex flex-col w-full min-h-4">
+        {#each sidebar.result as category (category.id)}
+          <div class="flex items-start w-full" id={category.id}>
+            <SidebarCategory bind:isEditing {editSidebarItem} {category} />
+          </div>
+        {/each}
+      </div>
+    {/if}
   </div>
 {/if}
 
