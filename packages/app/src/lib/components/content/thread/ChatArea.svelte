@@ -7,6 +7,7 @@
 <script lang="ts">
   import { ScrollArea } from "bits-ui";
   import ChatMessage from "./message/ChatMessage.svelte";
+  import MobileMessageDrawer from "./message/MobileMessageDrawer.svelte";
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { setContext } from "svelte";
   import { page } from "$app/state";
@@ -170,7 +171,6 @@
 
   let timeline = $derived.by(() => {
     if (!query.result) return [];
-    // return query.result;
 
     const mapped = query.result.reverse().map((message, index) => {
       // Get the previous message (if it exists)
@@ -215,6 +215,32 @@
   // Track initial load for auto-scroll
   let hasInitiallyScrolled = $state(false);
   let lastTimelineLength = $state(0);
+
+  // Lifted state for editing messages
+  let editingMessageId = $state("");
+
+  // Mobile drawer state - lifted out of virtualized items
+  let mobileMenuMessage = $state<Message | null>(null);
+  let isMobileDrawerOpen = $state(false);
+
+  function openMobileMenu(message: Message) {
+    mobileMenuMessage = message;
+    isMobileDrawerOpen = true;
+  }
+
+  function handleMobileStartThreading() {
+    if (mobileMenuMessage) {
+      startThreading(mobileMenuMessage);
+    }
+    isMobileDrawerOpen = false;
+  }
+
+  function handleMobileEditMessage() {
+    if (mobileMenuMessage) {
+      editingMessageId = mobileMenuMessage.id;
+    }
+    isMobileDrawerOpen = false;
+  }
 
   function scrollToBottom() {
     if (!virtualizer) return;
@@ -360,6 +386,10 @@
                       {messagingState}
                       {startThreading}
                       {toggleSelect}
+                      onOpenMobileMenu={openMobileMenu}
+                      {editingMessageId}
+                      onStartEdit={(id) => (editingMessageId = id)}
+                      onCancelEdit={() => (editingMessageId = "")}
                     />
                   {/if}
                 {/snippet}
@@ -379,4 +409,12 @@
     </ScrollArea.Scrollbar>
     <ScrollArea.Corner />
   </ScrollArea.Root>
+
+  <!-- Mobile drawer - outside virtualizer so it doesn't get recycled -->
+  <MobileMessageDrawer
+    message={mobileMenuMessage}
+    bind:open={isMobileDrawerOpen}
+    onStartThreading={handleMobileStartThreading}
+    onEditMessage={handleMobileEditMessage}
+  />
 </div>

@@ -8,6 +8,7 @@
     open?: boolean;
     drawerTrigger?: Snippet;
     children: Snippet;
+    onOpenChange?: (open: boolean) => void;
   };
 
   let {
@@ -16,10 +17,11 @@
     open = $bindable<boolean>(false),
     drawerTrigger,
     children,
+    onOpenChange,
   }: Props = $props();
 </script>
 
-<Drawer.Root bind:open>
+<Drawer.Root bind:open {onOpenChange}>
   {#if drawerTrigger}
     <Drawer.Trigger>
       {@render drawerTrigger?.()}
