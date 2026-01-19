@@ -3,7 +3,7 @@
   import { page } from "$app/state";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { current } from "$lib/queries";
-  import { backend, backendStatus } from "$lib/workers";
+  import { backend, backendStatus } from "$lib/workers/index.svelte";
   import { Button, Input, Textarea, toast } from "@fuxui/base";
   import { newUlid } from "@roomy/sdk";
 
@@ -65,8 +65,8 @@
 
   let updateSpaceHandle = $state(1);
   let spaceForCurrentAccountHandleResp = $derived(
-    updateSpaceHandle && backendStatus.authState?.state === "authenticated"
-      ? backend.resolveSpaceId(backendStatus.authState.did)
+    updateSpaceHandle && backendStatus.auth?.state === "authenticated"
+      ? backend.resolveSpaceId(backendStatus.auth.did)
       : undefined,
   );
   let handleForCurrentSpace = $derived(
@@ -87,12 +87,12 @@
   }
 
   async function useHandleForSpace() {
-    if (!spaceId || backendStatus.authState?.state !== "authenticated") return;
+    if (!spaceId || backendStatus.auth?.state !== "authenticated") return;
     try {
       await backend.sendEvent(spaceId, {
         id: newUlid(),
         $type: "space.roomy.space.setHandleAccount.v0",
-        did: backendStatus.authState.did,
+        did: backendStatus.auth.did,
       });
       await backend.createStreamHandleRecord(spaceId);
       updateSpaceHandle += 1;

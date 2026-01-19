@@ -1,5 +1,5 @@
 import type { AsyncState } from "$lib/types/asyncState";
-import { backend } from "$lib/workers";
+import { backend } from "$lib/workers/index.svelte";
 import type { LiveQueryMessage } from "$lib/workers/sqlite/setup";
 import type { SqlStatement } from "$lib/workers/sqlite/types";
 

@@ -43,11 +43,11 @@ import type {
 import type { BackendInterface } from "../backend/types";
 import { Deferred } from "$lib/utils/deferred";
 import { CONFIG } from "$lib/config";
-import { initializeFaro, trackUncaughtExceptions } from "$lib/otel";
+// import { initializeFaro, trackUncaughtExceptions } from "$lib/otel";
 import { decodeTime, ulid } from "ulidx";
 import { context } from "@opentelemetry/api";
 
-initializeFaro({ worker: "sqlite" });
+// initializeFaro({ worker: "sqlite" });
 
 const initSql = schemaSql
   .split("\n")
@@ -66,7 +66,7 @@ const newUserSignals: EventType[] = [
   "space.roomy.message.createMessage.v0",
 ];
 
-class SqliteWorkerSupervisor {
+export class SqliteWorkerSupervisor {
   // Private state
   #workerId: string;
   #isConnectionHealthy: boolean = true;
@@ -172,7 +172,7 @@ class SqliteWorkerSupervisor {
           console.timeEnd("initSql");
 
           // Set current schema version
-          await executeQuery(sql`
+          executeQuery(sql`
           insert or replace into roomy_schema_version
           (id, version) values (1, ${CONFIG.databaseSchemaVersion})
           `);
@@ -214,9 +214,10 @@ class SqliteWorkerSupervisor {
   /** Map a batch of incoming events to SQL that applies the event to the entities,
    * components and edges, then forward them to the statements channel for application
    */
-  listenEvents() {
+  private listenEvents() {
     (async () => {
       for await (const batch of this.#eventChannel) {
+        console.warn("bot batch", batch);
         const bundles: Bundle.Statement[] = [];
 
         // console.time("convert-events-to-sql");
@@ -289,7 +290,7 @@ class SqliteWorkerSupervisor {
   }
 
   /** As batches of materialised events are produced, apply statements to SQLite DB  */
-  listenStatements() {
+  private listenStatements() {
     (async () => {
       for await (const batch of this.#statementChannel) {
         // apply statements
@@ -474,6 +475,7 @@ class SqliteWorkerSupervisor {
         );
       },
       materializeBatch: async (eventsBatch, priority) => {
+        console.warn(eventsBatch);
         return this.materializeBatch(eventsBatch, priority);
       },
       runQuery: this.runQuery,
@@ -524,7 +526,7 @@ class SqliteWorkerSupervisor {
 
   private async runStatementBatch(batch: Batch.Statement) {
     const exec = async () => {
-      await executeQuery({ sql: `savepoint batch${batch.batchId}` });
+      executeQuery({ sql: `savepoint batch${batch.batchId}` });
 
       const results: Batch.ApplyResult["results"] = [];
       const appliedInBatch = new Set<Ulid>();
@@ -543,7 +545,7 @@ class SqliteWorkerSupervisor {
       if (allDependencies.size > 0) {
         const depsArray = [...allDependencies].flat();
 
-        const result = await executeQuery({
+        const result = executeQuery({
           sql: `SELECT entity_ulid FROM events 
                 WHERE entity_ulid IN (${depsArray.map(() => "?").join(",")}) 
                 AND applied = 1`,
@@ -569,13 +571,13 @@ class SqliteWorkerSupervisor {
         }
       }
 
-      await executeQuery(
+      executeQuery(
         sql`update comp_space set backfilled_to = ${batch.latestEvent} where entity = ${batch.streamId}`,
       );
 
       console.debug("Updated backfilled_to to", batch.latestEvent);
 
-      await executeQuery({ sql: `release batch${batch.batchId}` });
+      executeQuery({ sql: `release batch${batch.batchId}` });
       return {
         batchId: batch.batchId,
         priority: batch.priority,
@@ -620,7 +622,7 @@ class SqliteWorkerSupervisor {
     user: UserDid,
     priority: TaskPriority,
   ) {
-    const stashed = await executeQuery(sql`
+    const stashed = executeQuery(sql`
       SELECT idx, entity_ulid, payload
       FROM events
       WHERE depends_on = ${appliedEventId} AND applied = 0
@@ -661,7 +663,7 @@ class SqliteWorkerSupervisor {
 
     if (bundle.dependsOn && !isSatisfied) {
       // STASH: Insert event with applied=0
-      await executeQuery(sql`
+      executeQuery(sql`
             INSERT INTO events (idx, stream_id, user, entity_ulid,  payload, applied, depends_on)
             VALUES (${bundle.eventIdx}, ${streamId}, ${bundle.user}, ${bundle.event.id},
                     ${JSON.stringify(bundle.event)}, 0, ${JSON.stringify(bundle.dependsOn)})
@@ -712,12 +714,12 @@ class SqliteWorkerSupervisor {
       user: UserDid;
     },
   ) {
-    await executeQuery({ sql: `savepoint bundle${bundleId}` });
+    executeQuery({ sql: `savepoint bundle${bundleId}` });
     const queryResults: (QueryResult | ApplyResultError)[] = [];
     let hadError = false;
     for (const statement of statements) {
       try {
-        queryResults.push(await executeQuery(statement));
+        queryResults.push(executeQuery(statement));
       } catch (e) {
         hadError = true;
         console.warn(
@@ -744,13 +746,17 @@ class SqliteWorkerSupervisor {
         ON CONFLICT DO NOTHING
         `;
       queryResults.push(
-        await executeQuery(insertEvent).catch((e) => {
-          return {
-            type: "error",
-            statement: insertEvent,
-            message: e instanceof Error ? e.message : (e as string),
-          };
-        }),
+        (() => {
+          try {
+            return executeQuery(insertEvent);
+          } catch (e) {
+            return {
+              type: "error",
+              statement: insertEvent,
+              message: e instanceof Error ? e.message : (e as string),
+            };
+          }
+        })(),
       );
 
       // If this event is a reorder event that modifies the `after` position for another event.
@@ -773,7 +779,7 @@ class SqliteWorkerSupervisor {
       }
     }
 
-    await executeQuery({ sql: `release bundle${bundleId}` });
+    executeQuery({ sql: `release bundle${bundleId}` });
     return queryResults;
   }
 
@@ -795,11 +801,9 @@ class SqliteWorkerSupervisor {
     update?: boolean;
   }): Promise<void> {
     // Check this entity's sort index
-    const existingEntity = (
-      await executeQuery<{
-        sort_idx: string | null;
-      }>(sql`select sort_idx from entities where id = ${ulid}`)
-    ).rows?.[0];
+    const existingEntity = executeQuery<{
+      sort_idx: string | null;
+    }>(sql`select sort_idx from entities where id = ${ulid}`).rows?.[0];
 
     // Skip completely if the materialization didn't create an entity for this event
     if (!existingEntity) return;
@@ -811,16 +815,14 @@ class SqliteWorkerSupervisor {
 
     // First we need to get the closest entity that comes before this one.
     // Try to get the event this one is after if it exists
-    const eventBeforeThisOne = (
-      await executeQuery<{
-        sort_idx?: string;
-      }>(sql`
+    const eventBeforeThisOne = executeQuery<{
+      sort_idx?: string;
+    }>(sql`
           select coalesce(sort_idx, id) as sort_idx -- fall back to ULID
           from entities
           where stream_id = ${streamId} and id = ${after}
           limit 1
-        `)
-    ).rows?.[0];
+        `).rows?.[0];
 
     if (!eventBeforeThisOne)
       throw new Error("Entity given by 'after' does not exist");
@@ -828,8 +830,7 @@ class SqliteWorkerSupervisor {
     // Now we need to get the closest entity that comes after this one
     // We want to sort it _immediately_ after, so we need to find the entity that _currently_
     // sorts immediately after it and stick it in between.
-    const eventAfterThisOne = (
-      await executeQuery<{ sort_idx: string }>(sql`
+    const eventAfterThisOne = executeQuery<{ sort_idx: string }>(sql`
           select sort_idx
           from entities
           where
@@ -840,8 +841,7 @@ class SqliteWorkerSupervisor {
             id != ${ulid}
           order by sort_idx
           limit 1
-        `)
-    ).rows?.[0];
+        `).rows?.[0];
 
     // Finally we can compute the sort index for this entity
     try {
@@ -851,7 +851,7 @@ class SqliteWorkerSupervisor {
       );
 
       // Now we can update the sort index for this entity
-      await executeQuery(
+      executeQuery(
         sql`update entities set sort_idx = ${sortIdx} where id = ${ulid}`,
       );
     } catch (e) {
@@ -865,13 +865,13 @@ class SqliteWorkerSupervisor {
 
   private async runSavepoint(savepoint: Savepoint, depth = 0) {
     const exec: () => Promise<QueryResult[]> = async () => {
-      await executeQuery({ sql: `savepoint ${savepoint.name}` });
+      executeQuery({ sql: `savepoint ${savepoint.name}` });
       let hadError = false;
       const queryResults: QueryResult[] = [];
       for (const savepointOrStatement of savepoint.items) {
         try {
           if ("sql" in savepointOrStatement) {
-            queryResults.push(await executeQuery(savepointOrStatement));
+            queryResults.push(executeQuery(savepointOrStatement));
           } else {
             queryResults.concat(
               await this.runSavepoint(savepointOrStatement, depth + 1),
@@ -897,7 +897,7 @@ class SqliteWorkerSupervisor {
         );
       }
 
-      await executeQuery({ sql: `release ${savepoint.name}` });
+      executeQuery({ sql: `release ${savepoint.name}` });
       return queryResults;
     };
 
@@ -908,7 +908,7 @@ class SqliteWorkerSupervisor {
       // are trying to compose a bulk transaction.
       const result = await navigator.locks.request(QUERY_LOCK, exec);
 
-      await enableLiveQueries();
+      enableLiveQueries();
       return result;
     } else {
       return exec();
@@ -918,7 +918,7 @@ class SqliteWorkerSupervisor {
   async connectSpaceStream(spaceId: StreamDid) {
     const knownStream = this.#knownStreams.has(spaceId);
     if (!knownStream) {
-      const maybeSpace = await executeQuery(sql`
+      const maybeSpace = executeQuery(sql`
         select backfilled_to, hidden from comp_space 
         where entity = ${spaceId}`);
 
@@ -956,7 +956,7 @@ class SqliteWorkerSupervisor {
           statements: [],
         };
 
-      const missingProfilesResp = (await executeQuery({
+      const missingProfilesResp = executeQuery({
         sql: `with existing(did) as (
           values ${dids.map((_) => `(?)`).join(",")}
         )
@@ -966,7 +966,7 @@ class SqliteWorkerSupervisor {
         where ent.id is null
         `,
         params: dids,
-      })) as QueryResult<{ did: string }>; // i think
+      }) as QueryResult<{ did: string }>; // i think
       const missingDids =
         missingProfilesResp.rows?.map((x: any) => x.did) || [];
       if (missingDids.length == 0)
@@ -1044,28 +1044,28 @@ class SqliteWorkerSupervisor {
   }
 }
 
-const worker = new SqliteWorkerSupervisor();
+// const worker = new SqliteWorkerSupervisor();
 
-// Debugging hooks
-(globalThis as any).worker = worker;
-(globalThis as any).debugSqlite = {
-  disableLiveQueries,
-  enableLiveQueries,
-  executeQuery,
-};
+// // Debugging hooks
+// (globalThis as any).worker = worker;
+// (globalThis as any).debugSqlite = {
+//   disableLiveQueries,
+//   enableLiveQueries,
+//   executeQuery,
+// };
 
-globalThis.onmessage = (ev) => {
-  faro.api.setSession({
-    id: ev.data?.sessionId,
-    attributes: { isSampled: "true" },
-  });
-  tracer.startActiveSpan("Init SQLite Worker", async (span) => {
-    await trackUncaughtExceptions(async () => {
-      await worker.initialize(ev.data);
-    });
-    span.end();
-  });
-};
+// globalThis.onmessage = (ev) => {
+//   faro.api.setSession({
+//     id: ev.data?.sessionId,
+//     attributes: { isSampled: "true" },
+//   });
+//   tracer.startActiveSpan("Init SQLite Worker", async (span) => {
+//     await trackUncaughtExceptions(async () => {
+//       await worker.initialize(ev.data);
+//     });
+//     span.end();
+//   });
+// };
 
 function midpointUlid(earlier: Ulid, later?: Ulid) {
   const earlierTime = decodeTime(earlier);

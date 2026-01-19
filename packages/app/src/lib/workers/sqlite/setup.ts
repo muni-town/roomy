@@ -149,16 +149,16 @@ export type QueryResult<Row = { [key: string]: unknown }> = {
   actions: Action[];
 };
 
-export async function executeQuery<Row = { [key: string]: unknown }>(
+export function executeQuery<Row = { [key: string]: unknown }>(
   statement: SqlStatement,
-): Promise<QueryResult<Row>> {
+): QueryResult<Row> {
   if (!db || !sqlite3) throw new Error("database_not_initialized");
 
   try {
-    const { prepared, actions } = await prepareSql(statement);
+    const { prepared, actions } = prepareSql(statement);
     const result = runPreparedStatement<Row>(prepared);
 
-    await updateLiveQueries(actions);
+    updateLiveQueries(actions);
 
     return { ...result, actions };
   } catch (e) {
@@ -171,9 +171,10 @@ export async function executeQuery<Row = { [key: string]: unknown }>(
 }
 
 const preparedSqlCache: Map<string, PreparedStatement> = new Map();
-async function prepareSql(
-  statement: SqlStatement,
-): Promise<{ prepared: PreparedStatement; actions: Action[] }> {
+function prepareSql(statement: SqlStatement): {
+  prepared: PreparedStatement;
+  actions: Action[];
+} {
   if (!db || !sqlite3) throw new Error("database_not_initialized");
 
   authorizerQueue = [];
@@ -266,7 +267,7 @@ function tablesFromActions(actions: Action[]): string[] {
   return tables;
 }
 
-async function updateLiveQuery(id: string) {
+function updateLiveQuery(id: string) {
   const query = liveQueries.get(id);
   if (!query) throw `No Live query with ID: ${id}`;
   const { port, status } = query;
@@ -274,9 +275,7 @@ async function updateLiveQuery(id: string) {
 
   if (status.kind == "unprepared") {
     try {
-      const { prepared: prepared, actions } = await prepareSql(
-        status.statement,
-      );
+      const { prepared: prepared, actions } = prepareSql(status.statement);
       liveQueries.set(id, {
         port,
         status: {
@@ -304,7 +303,7 @@ async function updateLiveQuery(id: string) {
   }
 }
 
-async function updateLiveQueries(actions: Action[]) {
+function updateLiveQueries(actions: Action[]) {
   if (!liveQueriesEnabled) return;
 
   for (const [id, { status }] of liveQueries.entries()) {
@@ -313,7 +312,7 @@ async function updateLiveQueries(actions: Action[]) {
     // that is made on the database, hoping a schema change will fix it.
     if (status.kind == "unprepared") {
       console.log("update unprepared");
-      await updateLiveQuery(id);
+      updateLiveQuery(id);
 
       // For prepared statements we are able to check which tables they are involved in.
     } else if (status.kind == "prepared") {
@@ -338,7 +337,7 @@ async function updateLiveQueries(actions: Action[]) {
         }
       }
       if (!foundMatchingUpdate) continue;
-      await updateLiveQuery(id);
+      updateLiveQuery(id);
     }
   }
 }

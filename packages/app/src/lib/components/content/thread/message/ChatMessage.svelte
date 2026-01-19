@@ -10,7 +10,7 @@
   import { goto } from "$app/navigation";
   import { renderMarkdownSanitized } from "$lib/utils/markdown";
   import type { Message } from "../ChatArea.svelte";
-  import { backend, backendStatus } from "$lib/workers";
+  import { backend, backendStatus } from "$lib/workers/index.svelte";
   import { decodeTime } from "ulidx";
   import { current } from "$lib/queries";
   import { toast } from "@fuxui/base";
@@ -88,9 +88,9 @@
   });
 
   let messageByMe = $derived(
-    backendStatus.authState &&
-      "did" in backendStatus.authState &&
-      message.authorDid == backendStatus.authState.did,
+    backendStatus.auth &&
+      "did" in backendStatus.auth &&
+      message.authorDid == backendStatus.auth.did,
   );
 
   let isSelected = $derived(

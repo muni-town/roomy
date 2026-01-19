@@ -5,6 +5,7 @@ import {
   type InternalStateData,
   type OAuthClientMetadataInput,
   type RuntimeLock,
+  type OAuthClientMetadata,
 } from "@atproto/oauth-client";
 import {
   atprotoLoopbackClientMetadata,
@@ -152,7 +153,7 @@ export const workerOauthClient = (clientMetadata: OAuthClientMetadataInput) =>
     allowHttp: true,
   });
 
-export async function createOauthClient(): Promise<OAuthClient> {
+export async function createOauthClientMetadata(): Promise<OAuthClientMetadataInput> {
   // Build the client metadata
   let clientMetadata: OAuthClientMetadataInput;
   if (import.meta.env.DEV) {
@@ -183,5 +184,9 @@ export async function createOauthClient(): Promise<OAuthClient> {
     clientMetadata = await resp.json();
   }
 
-  return workerOauthClient(clientMetadata);
+  return clientMetadata;
+}
+
+export async function createWorkerOauthClient(): Promise<OAuthClient> {
+  return workerOauthClient(await createOauthClientMetadata());
 }

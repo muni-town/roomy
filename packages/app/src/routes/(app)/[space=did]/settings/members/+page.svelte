@@ -2,7 +2,7 @@
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { current } from "$lib/queries";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { backend, backendStatus } from "$lib/workers";
+  import { backend, backendStatus } from "$lib/workers/index.svelte";
   import { Button } from "@fuxui/base";
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
@@ -76,7 +76,7 @@
           >
           {#if current.joinedSpace?.permissions.find(([user, perm]) => user == member.id && perm != "admin")}
             <Button onclick={() => addAdmin(member.id)}>Make Admin</Button>
-          {:else if backendStatus.authState?.state === "authenticated" && member.id != backendStatus.authState.did}
+          {:else if backendStatus.auth?.state === "authenticated" && member.id != backendStatus.auth.did}
             <Button onclick={() => removeAdmin(member.id)}>Demote Admin</Button>
           {/if}
         </li>

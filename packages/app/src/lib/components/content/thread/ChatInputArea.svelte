@@ -9,7 +9,7 @@
   import IconTablerNeedleThread from "~icons/tabler/needle-thread";
   import IconTablerX from "~icons/tabler/x";
   import UploadFileButton from "$lib/components/helper/UploadFileButton.svelte";
-  import { backend } from "$lib/workers";
+  import { backend } from "$lib/workers/index.svelte";
   import { current } from "$lib/queries";
   import { page } from "$app/state";
   import { navigateSync } from "$lib/utils.svelte";

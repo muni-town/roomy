@@ -1,7 +1,11 @@
 import { UserDid } from "@roomy/sdk";
 import { LiveQuery } from "$lib/utils/liveQuery.svelte";
 import { sql } from "$lib/utils/sqlTemplate";
-import { backend, backendStatus, getPersonalStreamId } from "$lib/workers";
+import {
+  backend,
+  backendStatus,
+  getPersonalSpaceId,
+} from "$lib/workers/index.svelte";
 import type { SpaceMeta } from "./types";
 
 /** The space list. */
@@ -35,7 +39,7 @@ $effect.root(() => {
       from comp_space cs
       join entities e on e.id = cs.entity
       left join comp_info ci on cs.entity = ci.entity
-      where e.stream_id = ${getPersonalStreamId()} 
+      where e.stream_id = ${getPersonalSpaceId()} 
         and hidden = 0
     `,
     (row) => JSON.parse(row.json),
@@ -47,8 +51,8 @@ $effect.root(() => {
     joinedSpaces.error = "";
     joinedSpaces.list = [];
     if (
-      backendStatus.authState?.state !== "authenticated" ||
-      backendStatus.authState.clientStatus !== "connected"
+      backendStatus.auth?.state !== "authenticated" ||
+      backendStatus.auth.clientStatus !== "connected"
     )
       return;
     Promise.all(

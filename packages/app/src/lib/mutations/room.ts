@@ -1,5 +1,5 @@
 import { newUlid, toBytes, Ulid } from "@roomy/sdk";
-import { backend } from "$lib/workers";
+import { backend } from "$lib/workers/index.svelte";
 import type { Event, StreamDid } from "@roomy/sdk";
 import { RoomKind } from "@roomy/sdk";
 

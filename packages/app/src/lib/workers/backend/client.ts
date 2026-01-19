@@ -1,5 +1,5 @@
 import type { OAuthSession } from "@atproto/oauth-client";
-import { createOauthClient, oauthDb } from "./oauth";
+import { createWorkerOauthClient, oauthDb } from "./oauth";
 import { db } from "../idb";
 import { Agent, AtpAgent } from "@atproto/api";
 import { lexicons } from "$lib/lexicons";
@@ -52,14 +52,9 @@ export class Client {
     return this.roomy.leaf;
   }
 
-  /** Handle Leaf disconnect by updating stream connection status */
-  #handleDisconnect = () => {
-    this.#state = { status: "offline" };
-  };
-
   // get a URL for redirecting to the ATProto PDS for login
   static async login(handle: string) {
-    const oauth = await createOauthClient();
+    const oauth = await createWorkerOauthClient();
     const url = await oauth.authorize(handle, {
       scope: CONFIG.atprotoOauthScope,
     });
@@ -112,7 +107,7 @@ export class Client {
     }
 
     // Standard OAuth flow
-    const oauthClient = await createOauthClient();
+    const oauthClient = await createWorkerOauthClient();
 
     // if there's a stored DID and no session yet, try to restore the session
     const didEntry = await db.kv.get("did");
@@ -139,7 +134,7 @@ export class Client {
     params: URLSearchParams,
     eventHandlers?: RoomyClientEvents,
   ) {
-    const oauth = await createOauthClient();
+    const oauth = await createWorkerOauthClient();
     try {
       const response = await oauth.callback(params);
       return Client.fromSession(response.session, eventHandlers);

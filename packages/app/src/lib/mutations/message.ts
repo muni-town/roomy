@@ -1,5 +1,5 @@
 import { newUlid, type StreamDid, type Ulid } from "@roomy/sdk";
-import { backend } from "$lib/workers";
+import { backend } from "$lib/workers/index.svelte";
 
 export async function deleteMessage(
   spaceId: StreamDid,

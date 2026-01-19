@@ -2,7 +2,7 @@
   import { fade } from "svelte/transition";
 
   import { current, sidebar as sidebarQuery } from "$lib/queries";
-  import { backendStatus } from "$lib/workers";
+  import { backendStatus } from "$lib/workers/index.svelte";
 
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
@@ -163,7 +163,7 @@
           {#if spaceActive}Index{/if}
         </div>
 
-        {#if current.joinedSpace?.id && backendStatus.authState?.state === "loading"}
+        {#if current.joinedSpace?.id && backendStatus.auth?.state === "loading"}
           <div class="dark:!text-base-400 !text-base-600">
             Downloading Entire Space...
           </div>
@@ -171,7 +171,7 @@
       </h2>
     </div>
 
-    {#if current.joinedSpace?.id && backendStatus.authState?.state === "loading"}
+    {#if current.joinedSpace?.id && backendStatus.auth?.state === "loading"}
       <LoadingLine />
     {/if}
   </div>

@@ -11,7 +11,7 @@
   import IconTablerNeedleThread from "~icons/tabler/needle-thread";
   import IconTablerEdit from "~icons/tabler/edit";
   import IconTablerTrash from "~icons/tabler/trash";
-  import { backendStatus } from "$lib/workers";
+  import { backendStatus } from "$lib/workers/index.svelte";
   import { current } from "$lib/queries";
   import { addReaction, removeReaction } from "$lib/mutations/reaction";
   import { deleteMessage } from "$lib/mutations/message";
@@ -36,10 +36,9 @@
   });
 
   let canEditAndDelete = $derived(
-    backendStatus.authState &&
-      backendStatus.authState.state === "authenticated" &&
-      (current.isSpaceAdmin ||
-        message.authorDid == backendStatus.authState.did),
+    backendStatus.auth &&
+      backendStatus.auth.state === "authenticated" &&
+      (current.isSpaceAdmin || message.authorDid == backendStatus.auth.did),
   );
 
   async function deleteCurrentMessage() {

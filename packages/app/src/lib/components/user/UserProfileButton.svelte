@@ -1,13 +1,11 @@
 <script lang="ts">
   import { Avatar, Tooltip } from "@fuxui/base";
   import UserSettingsModal from "../modals/UserSettingsModal.svelte";
-  import { backendStatus } from "$lib/workers";
+  import { backendStatus } from "$lib/workers/index.svelte";
 
   let userSettingsModalOpen = $state(false);
 
-  const connected = $derived(
-    backendStatus.authState?.state === "authenticated",
-  );
+  const connected = $derived(backendStatus.auth?.state === "authenticated");
 </script>
 
 <Tooltip

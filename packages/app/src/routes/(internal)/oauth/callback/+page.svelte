@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { backend } from "$lib/workers";
+  import { backend } from "$lib/workers/index.svelte";
   import { Alert, Button } from "@fuxui/base";
   import { trace, context, SpanStatusCode } from "@opentelemetry/api";
   import { onMount } from "svelte";
@@ -47,7 +47,12 @@
       <p class="text-base-900 dark:text-base-100">
         Error logging in: {error}.
       </p>
-      <Button href="/">Go Home</Button>
+      <Button
+        onclick={() => {
+          // Intentionally reload the page just to reset any left-over state.
+          window.location.href = "/";
+        }}>Go Home</Button
+      >
     </Alert>
   {:else}
     <IconMdiLoading font-size="8em" class="animate-spin text-primary" />

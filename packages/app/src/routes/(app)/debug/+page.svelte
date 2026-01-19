@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { backend, sqliteStatus, backendStatus } from "$lib/workers";
+  import { backend, sqliteStatus, backendStatus } from "$lib/workers/index.svelte";
   import { onMount } from "svelte";
 
   let diagnostics = $state({

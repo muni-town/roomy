@@ -3,7 +3,7 @@
   import UserProfile from "$lib/components/user/UserProfile.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import type { Profile } from "$lib/workers/Profile";
-  import { backend } from "$lib/workers";
+  import { backend } from "$lib/workers/index.svelte";
 
   let profile = $state(undefined) as Profile | undefined;
   $effect(() => {

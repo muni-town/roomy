@@ -3,7 +3,7 @@
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
   import { categoriesQuery, current } from "$lib/queries";
   import { navigate } from "$lib/utils.svelte";
-  import { backend } from "$lib/workers";
+  import { backend } from "$lib/workers/index.svelte";
   import { Button, Input, ScrollArea, Select } from "@fuxui/base";
   import { Ulid, ulidFactory } from "@roomy/sdk";
   import { deepClone } from "@ark/util";

@@ -14,7 +14,15 @@
 
 import type { Agent } from "@atproto/api";
 import type { LeafClient } from "@muni-town/leaf-client";
-import { Did, Handle, UserDid, StreamDid, type, newUlid } from "../schema";
+import {
+  Did,
+  Handle,
+  UserDid,
+  StreamDid,
+  type,
+  newUlid,
+  Event,
+} from "../schema";
 import { Deferred } from "../utils/Deferred";
 import { createLeafClient, type LeafConfig } from "../leaf";
 import {
@@ -28,6 +36,7 @@ import {
 } from "../atproto";
 import { ConnectedSpace } from "../connection/ConnectedSpace";
 import { modules, type ModuleWithCid } from "../modules";
+import { encode } from "@atcute/cbor";
 
 export interface RoomyClientConfig extends LeafConfig {
   agent: Agent;
@@ -448,6 +457,14 @@ export class RoomyClient {
     });
 
     return space;
+  }
+
+  async sendEvent(streamDid: StreamDid, event: Event) {
+    this.leaf.sendEvent(streamDid, encode(event));
+  }
+
+  async sendEvents(streamDid: StreamDid, events: Event[]) {
+    this.leaf.sendEvents(streamDid, events.map(encode));
   }
 
   /**

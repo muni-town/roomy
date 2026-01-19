@@ -123,8 +123,8 @@ export const backend = tracer.startActiveSpan(
 );
 
 export function getPersonalStreamId() {
-  return backendStatus.authState?.state === "authenticated"
-    ? backendStatus.authState.personalStream
+  return backendStatus.auth?.state === "authenticated"
+    ? backendStatus.auth.personalStream
     : undefined;
 }
 

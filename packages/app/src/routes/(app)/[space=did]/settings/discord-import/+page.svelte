@@ -6,7 +6,7 @@
   import * as types from "./types";
 
   import * as zip from "@zip-js/zip-js";
-  import { backend } from "$lib/workers";
+  import { backend } from "$lib/workers/index.svelte";
   import { current } from "$lib/queries";
   import { sql } from "$lib/utils/sqlTemplate";
   import { formatDate } from "date-fns";

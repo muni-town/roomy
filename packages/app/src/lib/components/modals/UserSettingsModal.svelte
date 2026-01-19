@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { backend } from "$lib/workers";
+  import { backend } from "$lib/workers/index.svelte";
   import { Modal, Button, Heading } from "@fuxui/base";
 
   let {

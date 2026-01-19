@@ -3,7 +3,7 @@
   import { createSpace } from "$lib/mutations/space";
   import type { AsyncStateWithIdle } from "$lib/types/asyncState";
   import { navigate } from "$lib/utils.svelte";
-  import { backendStatus } from "$lib/workers";
+  import { backendStatus } from "$lib/workers/index.svelte";
   import type { StreamDid } from "@roomy/sdk";
   import IconHeroiconsXMark from "~icons/heroicons/x-mark";
   import {
@@ -55,7 +55,7 @@
 
   async function createSpaceSubmit(evt: Event) {
     evt.preventDefault();
-    if (backendStatus.authState?.state != "authenticated") return;
+    if (backendStatus.auth?.state != "authenticated") return;
 
     try {
       spaceCreationState = { status: "loading" };
@@ -65,8 +65,8 @@
         spaceDescription: form.spaceDescription || undefined,
         avatarFile: form.avatarFile || undefined,
         creator: {
-          did: backendStatus.authState.did,
-          personalStreamId: backendStatus.authState.personalStream,
+          did: backendStatus.auth.did,
+          personalStreamId: backendStatus.auth.personalStream,
         },
       });
 

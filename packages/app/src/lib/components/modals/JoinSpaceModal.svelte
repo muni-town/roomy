@@ -4,7 +4,7 @@
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { joinSpace } from "$lib/mutations/space";
   import { type SpaceIdOrHandle } from "$lib/workers/types";
-  import { backend } from "$lib/workers";
+  import { backend } from "$lib/workers/index.svelte";
   import { StreamDid } from "@roomy/sdk";
 
   let spaceName = $state() as string | undefined;

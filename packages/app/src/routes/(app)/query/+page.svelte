@@ -1,6 +1,6 @@
 <script lang="ts">
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
-  import { backend } from "$lib/workers";
+  import { backend } from "$lib/workers/index.svelte";
   import { Textarea, Button, ScrollArea } from "@fuxui/base";
 
   let query = $state(

@@ -4,7 +4,7 @@
   import { renderMarkdownSanitized } from "$lib/utils/markdown";
   import { current } from "$lib/queries";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { backend } from "$lib/workers";
+  import { backend } from "$lib/workers/index.svelte";
   import { Button, Prose } from "@fuxui/base";
   import ScrollArea from "$lib/components/layout/ScrollArea.svelte";
   import { RichTextEditor } from "$lib/components/richtext";

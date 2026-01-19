@@ -4,7 +4,7 @@
   import { page } from "$app/state";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { current } from "$lib/queries";
-  import { backend, backendStatus } from "$lib/workers";
+  import { backend, backendStatus } from "$lib/workers/index.svelte";
   import { newUlid } from "@roomy/sdk";
 
   import IconLucideChevronDown from "~icons/lucide/chevron-down";
@@ -22,8 +22,8 @@
 
   async function leaveSpace() {
     const spaceDid = current.joinedSpace?.id;
-    if (backendStatus.authState?.state !== "authenticated") return;
-    if (!spaceDid || !backendStatus.authState.personalStream) return;
+    if (backendStatus.roomy?.state !== "connected") return;
+    if (!spaceDid || !backendStatus.roomy.personalSpace.streamDid) return;
 
     // Tell the space that we are leaving the member list
     await backend.sendEvent(spaceDid, {
@@ -32,7 +32,7 @@
     });
 
     // Remove the space from our personal space list
-    await backend.sendEvent(backendStatus.authState.personalStream, {
+    await backend.sendEvent(backendStatus.roomy.personalSpace.streamDid, {
       id: newUlid(),
       $type: "space.roomy.space.personal.leaveSpace.v0",
       spaceDid: spaceDid,

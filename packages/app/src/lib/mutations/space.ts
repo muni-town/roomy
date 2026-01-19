@@ -1,4 +1,4 @@
-import { backend, backendStatus } from "$lib/workers";
+import { backend, backendStatus } from "$lib/workers/index.svelte";
 import type { Event, StreamDid, Did } from "@roomy/sdk";
 import { toast } from "@fuxui/base";
 import { newUlid, ulidFactory } from "@roomy/sdk";
@@ -8,13 +8,13 @@ import { newUlid, ulidFactory } from "@roomy/sdk";
  */
 export async function joinSpace(spaceId: StreamDid) {
   try {
-    if (backendStatus.authState?.state !== "authenticated") {
+    if (backendStatus.roomy?.state !== "connected") {
       toast.error("Could not join space. It's possible it does not exist.");
       return;
     }
 
     // Add the space to the personal list of joined spaces
-    await backend.sendEvent(backendStatus.authState.personalStream, {
+    await backend.sendEvent(backendStatus.roomy.personalSpace.streamDid, {
       id: newUlid(),
       $type: "space.roomy.space.personal.joinSpace.v0",
       spaceDid: spaceId,

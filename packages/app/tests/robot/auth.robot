@@ -232,7 +232,7 @@ Get Env Value
     RETURN    ${EMPTY}
 
 Wait For Client To Be Created
-    [Documentation]    Wait for authentication to complete (backendStatus.authState === 'authenticated')
+    [Documentation]    Wait for authentication to complete (backendStatus.auth === 'authenticated')
     [Arguments]    ${timeout}=30s
 
     ${client_exists}=    Evaluate JavaScript    ${None}

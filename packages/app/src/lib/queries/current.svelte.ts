@@ -1,5 +1,5 @@
 import { page } from "$app/state";
-import { backend, backendStatus } from "$lib/workers";
+import { backend, backendStatus } from "$lib/workers/index.svelte";
 import { joinedSpaces } from "./spaces.svelte";
 import type { AuthStates } from "$lib/workers/backend/types";
 import type { SpaceIdOrHandle } from "$lib/workers/types";
@@ -72,7 +72,7 @@ async function getCurrentSpace(spaceId: SpaceIdOrHandle) {
     matchingSpace.permissions?.some(
       (permission) =>
         permission[0] ===
-          (backendStatus.authState as AuthStates.ReactiveAuthenticated).did &&
+          (backendStatus.auth as AuthStates.ReactiveAuthenticated).did &&
         permission[1] === "admin",
     ) || false;
   return { matchingSpace, spaceId: resp.spaceId, isSpaceAdmin };
@@ -95,8 +95,8 @@ $effect.root(() => {
 
     if (joinedSpaces.loading || !page.params.space) return; // wait until spaces are loaded
     if (
-      backendStatus.authState?.state !== "authenticated" ||
-      backendStatus.authState.clientStatus !== "connected"
+      backendStatus.auth?.state !== "authenticated" ||
+      backendStatus.auth.clientStatus !== "connected"
     )
       return;
 
@@ -140,8 +140,8 @@ $effect.root(() => {
 
   $effect(() => {
     current.did =
-      backendStatus.authState?.state === "authenticated"
-        ? backendStatus.authState.did
+      backendStatus.auth?.state === "authenticated"
+        ? backendStatus.auth.did
         : undefined;
   });
 });

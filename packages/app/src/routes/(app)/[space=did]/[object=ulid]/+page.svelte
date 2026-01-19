@@ -15,7 +15,7 @@
 
   import { page } from "$app/state";
   import { current } from "$lib/queries";
-  import { backend, backendStatus } from "$lib/workers";
+  import { backend, backendStatus } from "$lib/workers/index.svelte";
 
   import {
     // convertToPage,
@@ -93,8 +93,8 @@
 
   const setPageRead = () => {
     if (
-      !backendStatus.authState ||
-      backendStatus.authState.state !== "authenticated" ||
+      !backendStatus.auth ||
+      backendStatus.auth.state !== "authenticated" ||
       !spaceId ||
       !page.params.object ||
       sentLastReadMarker === true
@@ -102,7 +102,7 @@
       return;
     sentLastReadMarker = true;
     setPageReadMarker({
-      personalStreamId: backendStatus.authState.personalStream,
+      personalStreamId: backendStatus.auth.personalStream,
       streamId: spaceId,
       roomId: Ulid.assert(page.params.object),
     });
@@ -167,8 +167,8 @@
 
   $effect(() => {
     if (
-      !backendStatus.authState ||
-      backendStatus.authState.state !== "authenticated" ||
+      !backendStatus.auth ||
+      backendStatus.auth.state !== "authenticated" ||
       !page.params.space ||
       !page.params.object ||
       !room?.lastRead
@@ -227,7 +227,7 @@
         {/if}
       </h2>
 
-      {#if spaceId && backendStatus.authState?.state === "loading"}
+      {#if spaceId && backendStatus.auth?.state === "loading"}
         <div class="dark:!text-base-400 !text-base-600 mx-3">
           Downloading Entire Space...
         </div>
@@ -379,7 +379,7 @@
     </div>
   </div>
 
-  {#if spaceId && backendStatus.authState?.state === "loading"}
+  {#if spaceId && backendStatus.auth?.state === "loading"}
     <LoadingLine />
   {/if}
 {/snippet}

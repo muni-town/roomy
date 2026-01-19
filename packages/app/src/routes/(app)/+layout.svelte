@@ -1,7 +1,7 @@
 <script lang="ts">
   import "../../app.css";
   import { dev } from "$app/environment";
-  import { backendStatus } from "$lib/workers";
+  import { backendStatus } from "$lib/workers/index.svelte";
   import { onMount } from "svelte";
   import { Toaster as FxUIToaster } from "@fuxui/base";
 
@@ -15,7 +15,7 @@
   // Cache the current profile for use in the LoginForm to preview the last login.
   $effect(() => {
     if (
-      backendStatus.authState?.state === "authenticated" &&
+      backendStatus.auth?.state === "authenticated" &&
       backendStatus.profile &&
       localStorage.getItem("just-logged-in") != undefined
     ) {
@@ -23,7 +23,7 @@
         `last-login`,
         JSON.stringify({
           handle: backendStatus.profile.handle,
-          did: backendStatus.authState.did,
+          did: backendStatus.auth.did,
           avatar: backendStatus.profile.avatar,
         }),
       );
@@ -57,7 +57,7 @@
   <!-- <RenderScan /> -->
 {/if}
 
-{#if backendStatus.authState?.state === "unauthenticated"}
+{#if backendStatus.auth?.state === "unauthenticated"}
   <!-- Login Form -->
   <div
     class="flex h-screen w-full items-center justify-center bg-base-950/75 bg fixed left-0 top-0 z-10"
@@ -67,7 +67,7 @@
 {/if}
 
 <!-- Loading overlay -->
-{#if backendStatus.authState?.state === "loading"}
+{#if backendStatus.auth?.state === "connecting"}
   <div
     class="flex h-screen w-screen justify-center items-center fixed top-0 left-0 bg-base-50 dark:bg-base-950 z-50"
     transition:fade
@@ -80,15 +80,15 @@
   </div>
 {/if}
 
-{#if backendStatus.authState?.state === "authenticated"}
+{#if backendStatus.auth?.state === "authenticated"}
   <!-- Page Content -->
   <TooltipProvider>
     {@render children?.()}
   </TooltipProvider>
 {/if}
 
-{#if backendStatus.authState?.state === "error"}
-  <Error message={backendStatus.authState.error} />
+{#if backendStatus.auth?.state === "error"}
+  <Error message={backendStatus.auth.error} />
 {/if}
 
 <FxUIToaster />

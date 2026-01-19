@@ -1,7 +1,7 @@
 <!-- Clone of fox UI login form without being a modal: https://github.com/flo-bit/ui-kit/tree/main/packages/social/src/lib/components/bluesky-login -->
 <script lang="ts">
   import { env } from "$env/dynamic/public";
-  import { backend } from "$lib/workers";
+  import { backend } from "$lib/workers/index.svelte";
 
   import {
     Button,
