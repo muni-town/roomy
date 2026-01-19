@@ -145,6 +145,8 @@
     current.space.status === "loading" ||
       threadsQuery.current.status === "loading",
   );
+
+  const spaceActive = $derived(current.space.status === "joined");
 </script>
 
 {#snippet sidebar()}
@@ -157,7 +159,9 @@
       <h2
         class="w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
       >
-        <div class="ml-2 font-bold grow text-center text-lg">Index</div>
+        <div class="ml-2 font-bold grow text-center text-lg">
+          {#if spaceActive}Index{/if}
+        </div>
 
         {#if current.joinedSpace?.id && backendStatus.authState?.state === "loading"}
           <div class="dark:!text-base-400 !text-base-600">
@@ -174,11 +178,11 @@
 {/snippet}
 
 {#if current.space.status === "error"}
-  <MainLayout>
+  <MainLayout {navbar}>
     <Error message={current.space.message} />
   </MainLayout>
 {:else if current.space.status === "invited"}
-  <MainLayout>
+  <MainLayout {navbar}>
     <JoinSpaceModal />
   </MainLayout>
 {:else}

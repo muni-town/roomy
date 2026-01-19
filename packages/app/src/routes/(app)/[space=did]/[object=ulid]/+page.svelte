@@ -396,7 +396,7 @@
 
 {#if current.space.status === "error"}
   <MainLayout>
-    <Error message={current.space.message} />
+    <Error message={current.space.message} goHome />
   </MainLayout>
 {:else if current.space.status === "invited"}
   <MainLayout>
