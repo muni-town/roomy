@@ -194,6 +194,8 @@ class WorkerSupervisor {
         // eslint-disable-next-line @typescript-eslint/no-empty-object-type
         await this.sqlite.setReady(
           messagePortInterface<{}, SqliteWorkerInterface>({
+            localName: "backend",
+            remoteName: "sqlite",
             messagePort,
             handlers: {},
           }),
@@ -310,6 +312,8 @@ class WorkerSupervisor {
       BackendInterface,
       ConsoleInterface
     >({
+      localName: "backend",
+      remoteName: "main",
       messagePort: port,
       handlers: this.getBackendInterface(),
     });
@@ -600,13 +604,6 @@ class WorkerSupervisor {
         [...spacesToConnect.entries()].map(([spaceId]) => [spaceId, "loading"]),
       ),
     };
-
-    // pass the spaces to the client to connect
-    // const { streams, failed } = await this.client.connect(
-    //   personalStream,
-    //   eventChannel,
-    //   new Map(streamIdsAndCursors),
-    // );
 
     console.debug("Connecting to spaces", spacesToConnect);
 

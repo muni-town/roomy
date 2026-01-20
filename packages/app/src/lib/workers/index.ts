@@ -56,6 +56,8 @@ export const backend = tracer.startActiveSpan(
     });
 
     const backend = messagePortInterface<ConsoleInterface, BackendInterface>({
+      localName: "main",
+      remoteName: "backend",
       messagePort: "port" in backendWorker ? backendWorker.port : backendWorker,
       handlers: {
         async log(level, args) {
