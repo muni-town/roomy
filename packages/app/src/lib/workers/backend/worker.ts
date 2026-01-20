@@ -9,8 +9,7 @@ import {
 } from "../workerMessaging";
 import { sql } from "$lib/utils/sqlTemplate";
 import { CONFIG } from "$lib/config";
-import { db, personalStream, prevStream } from "../idb";
-import { Client } from "./client";
+import { db, prevStream } from "../idb";
 import { Deferred } from "$lib/utils/deferred";
 import type { QueryResult } from "../sqlite/setup";
 import {
@@ -22,13 +21,23 @@ import {
   type ConsoleInterface,
   consoleLogLevels,
   type SqliteState,
+  type RoomyState,
 } from "./types";
 import type {
   Savepoint,
   SqliteWorkerInterface,
   SqlStatement,
 } from "../sqlite/types";
-import { ensureEntity } from "@roomy/sdk";
+import {
+  ConnectedSpace,
+  ensureEntity,
+  modules,
+  parseEvents,
+  RoomyClient,
+  type DecodedStreamEvent,
+  type EncodedStreamEvent,
+  type EventCallback,
+} from "@roomy/sdk";
 import {
   AsyncChannel,
   UserDid,
@@ -41,6 +50,10 @@ import {
 import { decode, encode } from "@atcute/cbor";
 import { initializeFaro } from "$lib/otel";
 import { context } from "@opentelemetry/api";
+import { createOauthClient, oauthDb } from "./oauth";
+import { Agent, CredentialSession } from "@atproto/api";
+import { lexicons } from "$lib/lexicons";
+import type { SessionManager } from "@atproto/api/dist/session-manager";
 
 const sessionId = newUlid();
 
@@ -73,10 +86,18 @@ class WorkerSupervisor {
   #config: WorkerConfig;
   #sqlite: SqliteSupervisor;
 
-  #status: Partial<BackendStatus>;
   #auth: AuthState;
+  #roomy: RoomyState;
+
+  //fixmeee
+  #status: Partial<BackendStatus>;
+
   #connection: ConnectionState; // tabs connected to shared worker
   #authenticated = new Deferred<void>();
+  #connectedPersonalSpace = new Deferred<
+    Extract<RoomyState, { state: "materializingPersonalSpace" }>
+  >();
+  #connected = new Deferred<Extract<RoomyState, { state: "connected" }>>();
 
   /* To get the result of a materialised batch, create and await a Promise
   setting the resolver against the Batch ID in this Map */
@@ -87,7 +108,7 @@ class WorkerSupervisor {
 
   constructor() {
     let [initSpan, ctx] = tracer.startActiveSpan(
-      "Init Backend",
+      "Construct Backend",
       (span) => [span, context.active()] as const,
     );
 
@@ -109,271 +130,14 @@ class WorkerSupervisor {
     );
 
     this.#auth = { state: "loading" };
+    this.#roomy = { state: "disconnected" };
     this.#status.authState = this.#auth; // in general prefer setAuthState
 
     this.#connection = { ports: new WeakMap(), count: 0 };
 
     this.connectRPC();
 
-    context.with(ctx, async () => {
-      await this.refreshSession();
-
-      tracer.startActiveSpan(
-        "Wait Until Authenticated",
-        {},
-        ctx,
-        (waitSpan) => {
-          this.#authenticated.promise.then(() => {
-            waitSpan.end(), initSpan.end();
-          });
-        },
-      );
-    });
-  }
-
-  /** Where most of the initialisation happens. Backfill the personal
-   * stream from the stored cursor, then set up the other streams.
-   */
-  async initBackendWithClient(client: Client) {
-    const [span, ctx] = tracer.startActiveSpan(
-      "Init Backend With Client",
-      (span) => [span, context.active()] as const,
-    );
-
-    const userDid = client.agent.did;
-    if (!userDid || !UserDid.allows(userDid))
-      throw new Error("DID not defined on client");
-
-    tracer.startActiveSpan("Authenticate SQLite", {}, ctx, (span) => {
-      this.sqlite
-        .authenticate(UserDid.assert(userDid))
-        .catch((e) => console.error("Failed to authenticate sqlite worker", e))
-        .finally(() => span.end());
-    });
-
-    // try to fetch or create the personal stream
-    this.setAuthState({ state: "loading" });
-
-    const eventChannel = new AsyncChannel<Batch.Events>();
-
-    const personalStream = await tracer.startActiveSpan(
-      "Ensure Personal Space",
-      {},
-      ctx,
-      async (span) => {
-        const stream = await client
-          .ensurePersonalSpace(eventChannel)
-          .catch((e) => {
-            const error = { state: "error", error: e } as const;
-            this.#auth = error;
-            this.#status.authState = error;
-            throw error;
-          });
-        span.end();
-        return stream;
-      },
-    );
-
-    // Ensure personal stream space entity exists
-    await this.sqlite.runQuery(
-      ensureEntity(personalStream.streamDid, personalStream.streamDid),
-    );
-
-    // Mark personal stream space as hidden
-    await this.sqlite.runQuery(sql`
-      insert into comp_space (entity, hidden)
-      values (${personalStream.streamDid}, 1) 
-      on conflict (entity) do nothing
-    `);
-
-    this.#auth = {
-      state: "authenticated",
-      client,
-      eventChannel,
-    };
-    this.#status.authState = {
-      state: "authenticated",
-      did: UserDid.assert(userDid),
-      personalStream: personalStream.streamDid,
-      clientStatus: client.status,
-    };
-
-    this.startMaterializer();
-
-    const lastBatchId = await tracer.startActiveSpan(
-      "Wait For Personal Stream Backfill",
-      {},
-      ctx,
-      async (span) => {
-        const batch = await personalStream.doneBackfilling;
-        span.end();
-        return batch;
-      },
-    );
-
-    // ensure the backfilled stream is fully materialised
-    const personalStreamMaterialised = new Promise((resolve) => {
-      this.#batchResolvers.set(lastBatchId, resolve);
-    });
-
-    this.#status.spaces = {
-      ...this.#status.spaces,
-      [personalStream.streamDid]: "idle",
-    };
-
-    if (this.#status.authState?.state !== "authenticated")
-      throw new Error("Not authenticated");
-
-    // get streams from SQLite
-    const streamsResult = await this.sqlite.runQuery<{
-      id: StreamDid;
-      backfilled_to: StreamIndex;
-    }>(sql`-- backend space list
-      select e.id as id, cs.backfilled_to from entities e join comp_space cs on e.id = cs.entity
-      where hidden = 0
-    `);
-
-    // pass them to the client
-    const streamIdsAndCursors = (streamsResult.rows || []).map((row) => {
-      return [row.id, row.backfilled_to] as const;
-    });
-
-    // set all spaces to 'loading' in reactive status
-    this.#status.spaces = {
-      ...Object.fromEntries(
-        streamIdsAndCursors.map(([spaceId]) => [spaceId, "loading"]),
-      ),
-    };
-
-    // pass the spaces to the client to connect
-    const { streams, failed } = await this.client.connect(
-      personalStream,
-      eventChannel,
-      new Map(streamIdsAndCursors),
-    );
-
-    if (failed.length) console.warn("Some streams didn't connect", failed);
-    // TODO: clean up nonexistent streams from db
-
-    await tracer.startActiveSpan(
-      "Wait for Personal Stream Materialized",
-      {},
-      ctx,
-      async (span) => {
-        await personalStreamMaterialised;
-        span.end();
-      },
-    );
-
-    // Connect to spaces the user has joined (but not left) after full personal stream backfill
-    await tracer.startActiveSpan(
-      "Connect Pending Spaces",
-      {},
-      ctx,
-      async (span) => {
-        await this.sqlite.sqliteWorker.connectPendingSpaces();
-        span.end();
-      },
-    );
-
-    // need to reassign the whole object to trigger reactive update
-    this.#status.authState = {
-      clientStatus: "connected",
-      did: this.#status.authState.did,
-      personalStream: this.#status.authState.personalStream,
-      state: "authenticated",
-    };
-
-    await tracer.startActiveSpan(
-      "Wait for Joined Streams Backfilled",
-      {},
-      ctx,
-      async (span) => {
-        for (const stream of streams.values()) {
-          (async () => {
-            await stream.doneBackfilling;
-            this.#status.spaces = {
-              ...this.#status.spaces,
-              [stream.streamDid]: "idle",
-            };
-          })();
-        }
-        span.end();
-      },
-    );
-
-    this.#authenticated.resolve();
-    span.end();
-  }
-
-  private async startMaterializer() {
-    if (this.#auth.state !== "authenticated") {
-      throw new Error("Tried to handle events while unauthenticated");
-    }
-    await this.client.connected;
-    const eventChannel = this.#auth.eventChannel;
-
-    console.debug("listening on eventChannel...");
-
-    for await (const batch of eventChannel) {
-      // personal stream backfill is always high priority, other streams can be in background
-      if (batch.streamId === this.client.personalSpaceId) {
-        const result = await this.sqlite.materializeBatch(batch, "priority");
-
-        // If there is a resolver waiting on this batch, resolve it with the result
-        const resolver = this.#batchResolvers.get(batch.batchId);
-        if (resolver) {
-          resolver(result);
-          this.#batchResolvers.delete(batch.batchId);
-        }
-
-        // Check for event ID resolvers (for sendEvent waiting on materialization)
-        this.resolveEventPromises(result);
-
-        console.debug("materialised (personal):", { batch, result });
-      } else {
-        const result = await this.sqlite.materializeBatch(
-          batch,
-          batch.priority,
-        );
-
-        // Check for event ID resolvers (for sendEvent waiting on materialization)
-        this.resolveEventPromises(result);
-
-        console.debug("materialised (space):", { batch, result });
-      }
-    }
-  }
-
-  /** Resolve any pending event promises based on materialized results */
-  private resolveEventPromises(result: Batch.Statement | Batch.ApplyResult) {
-    if (result.status !== "applied") return;
-
-    for (const bundleResult of result.results) {
-      if ("eventId" in bundleResult && bundleResult.eventId) {
-        const resolver = this.#batchResolvers.get(bundleResult.eventId);
-        if (resolver) {
-          resolver(result);
-          this.#batchResolvers.delete(bundleResult.eventId);
-        }
-      }
-    }
-  }
-
-  private setAuthState(state: AuthState) {
-    if (state.state !== "authenticated") {
-      this.#auth = state;
-      this.#status.authState = state;
-      return;
-    } else {
-      this.initBackendWithClient(state.client);
-    }
-  }
-
-  private loadStoredConfig() {
-    db.kv
-      .get("consoleForwarding")
-      .then((pref) => (this.#config.consoleForwarding = !!pref?.value));
+    initSpan.end();
   }
 
   private connectRPC() {
@@ -388,6 +152,138 @@ class WorkerSupervisor {
     } else {
       this.connectMessagePort(globalThis);
     }
+  }
+
+  private getBackendInterface(): BackendInterface {
+    return {
+      getSessionId: async () => {
+        return sessionId;
+      },
+      getSpaceInfo: (streamDid) => {
+        if (this.#roomy.state !== "connected") throw new Error("Not connected");
+        return this.#roomy.client.getSpaceInfo(streamDid);
+      },
+      login: async (handle) => this.login(handle),
+      initialize: async (paramsStr) => {
+        return await this.initialize(paramsStr);
+      },
+      logout: async () => await this.logout(),
+      getProfile: async (did) => {
+        await this.#connected.promise;
+        return this.client.getProfile(did);
+      },
+      runQuery: async (statement) => {
+        return this.sqlite.runQuery(statement);
+      },
+      createLiveQuery: async (id, port, statement) => {
+        await this.sqlite.untilReady;
+
+        const channel = this.sqlite.createLiveQueryChannel(port);
+        navigator.locks.request(id, async () => {
+          // When we obtain a lock to the query ID, that means that the query is no longer in
+          // use and we can delete it.
+          await this.sqlite.deleteLiveQuery(id);
+        });
+        return this.sqlite.createLiveQuery(id, channel.port2, statement);
+      },
+      dangerousCompletelyDestroyDatabase: async ({ yesIAmSure }) => {
+        if (!yesIAmSure) throw "You need to be sure";
+        return await this.sqlite.sqliteWorker.resetLocalDatabase();
+      },
+      setActiveSqliteWorker: async (messagePort) => {
+        // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+        await this.sqlite.setReady(
+          messagePortInterface<{}, SqliteWorkerInterface>({
+            messagePort,
+            handlers: {},
+          }),
+        );
+      },
+      async ping() {
+        console.info("Backend: Ping received");
+        return {
+          timestamp: Date.now(),
+        };
+      },
+      clientConnected: async () => {
+        await this.#authenticated.promise;
+        await this.#connected.promise;
+      },
+      enableLogForwarding: () => this.enableLogForwarding(),
+      disableLogForwarding: () => this.disableLogForwarding(),
+      connectSpaceStream: async (streamId, idx) => {
+        await this.connectSpaceStream(streamId, idx);
+        this.#status.spaces = {
+          ...this.#status.spaces,
+          [streamId]: "idle",
+        };
+      },
+      createSpaceStream: async () => {
+        const streamId = await this.createSpaceStream();
+        this.#status.spaces = {
+          ...this.#status.spaces,
+          [streamId]: "idle",
+        };
+        return streamId;
+      },
+      sendEvent: async (streamId: string, event: Event) => {
+        // Create a promise that resolves when the event is materialized
+        const materialized = new Promise<void>((resolve) => {
+          this.#batchResolvers.set(event.id, () => resolve());
+        });
+
+        await this.client.leaf.sendEvent(streamId, encode(event));
+        await materialized;
+      },
+      sendEventBatch: async (streamId, payloads) => {
+        // Create promises for each event that resolve when materialized
+        const materializedPromises = payloads.map(
+          (event) =>
+            new Promise<void>((resolve) => {
+              this.#batchResolvers.set(event.id, () => resolve());
+            }),
+        );
+
+        await this.sendEventBatch(streamId, payloads);
+        await Promise.all(materializedPromises);
+      },
+      fetchEvents: async (streamId, offset, limit) =>
+        this.fetchEvents(streamId, offset, limit),
+      lazyLoadRoom: async (streamId, roomId, end) => {
+        await this.sqlite.untilReady;
+        return await this.lazyLoadRoom(streamId, roomId, end);
+      },
+      uploadToPds: async (bytes, opts) => {
+        return this.client.uploadBlob(bytes, opts);
+      },
+      addClient: async (port) => this.connectMessagePort(port),
+      pauseSubscription: async (_streamId) => {
+        // await this.openSpacesMaterializer?.pauseSubscription(streamId);
+      },
+      unpauseSubscription: async (_streamId) => {
+        // await this.openSpacesMaterializer?.unpauseSubscription(streamId);
+      },
+      resolveHandleForSpace: async (spaceId, handleAccountDid) =>
+        this.client.resolveHandleForSpace(spaceId, handleAccountDid),
+      resolveSpaceId: async (handleOrDid) => {
+        await this.#authenticated.promise;
+        return await this.client.resolveSpaceId(handleOrDid);
+      },
+      checkSpaceExists: async (spaceId) =>
+        this.client.checkStreamExists(spaceId),
+      createStreamHandleRecord: async (spaceId) => {
+        await this.client.createStreamHandleRecord(spaceId);
+      },
+      removeStreamHandleRecord: async () => {
+        await this.client.removeStreamHandleRecord();
+      },
+      getStreamRecord: async () => this.getStreamRecord(),
+      deleteStreamRecord: async () => this.deleteStreamRecord(),
+      ensurePersonalStream: async () => this.ensurePersonalStream(),
+      connectPendingSpaces: async () => {
+        await this.sqlite.sqliteWorker.connectPendingSpaces();
+      },
+    };
   }
 
   private connectMessagePort(port: MessagePortApi) {
@@ -442,86 +338,594 @@ class WorkerSupervisor {
       };
     }
 
-    this.#authenticated.promise.then(() => {
+    this.#connected.promise.then((roomyState) => {
       // Tell the main thread that initialization is finished.
-      consoleInterface.initFinished({ userDid: this.client.agent.assertDid });
+      consoleInterface.initFinished({
+        userDid: roomyState.client.agent.assertDid,
+      });
     });
   }
 
-  private async refreshSession() {
+  private async initialize(paramsStr?: string): Promise<{ did?: string }> {
+    let [initSpan, ctx] = tracer.startActiveSpan(
+      "Init Backend",
+      (span) => [span, context.active()] as const,
+    );
+    console.debug("Initialising Backend Worker", { paramsStr });
+    return context.with(ctx, async () => {
+      // attempt to authenticate
+      const params = paramsStr ? new URLSearchParams(paramsStr) : undefined;
+      const session = await this.authenticate(params);
+
+      tracer.startActiveSpan(
+        "Wait Until Authenticated",
+        {},
+        ctx,
+        (waitSpan) => {
+          this.#authenticated.promise.then(() => {
+            waitSpan.end(), initSpan.end();
+          });
+        },
+      );
+
+      if (!session) {
+        console.info("Not authenticated");
+        this.#auth = { state: "unauthenticated" };
+        this.#status.authState = this.#auth;
+        return {};
+      }
+
+      if (!session.did) throw new Error("No DID on session"); // not sure why this would happen
+
+      // user is authenticated
+      await db.kv.put({ key: "did", value: session.did });
+      this.#auth = { state: "authenticated", session };
+      this.#status.authState = {
+        state: "authenticated",
+        did: session.did as UserDid,
+      };
+      faro.api.setSession({
+        id: faro.api.getSession()?.id,
+        attributes: { isSampled: "true", did: session.did },
+      });
+
+      console.debug("Session restored successfully");
+
+      // init with session
+      context.with(ctx, () => this.initBackendWithSession(session));
+
+      return { did: session.did };
+    });
+  }
+
+  private async authenticate(
+    params?: URLSearchParams,
+  ): Promise<SessionManager | null> {
+    const oauth = await createOauthClient();
+
+    if (params) {
+      // oauth callback
+      const [span, ctx] = tracer.startActiveSpan(
+        "Create Session at OAuth Callback",
+        {},
+        (span) => [span, context.active()] as const,
+      );
+
+      try {
+        const response = await oauth.callback(params);
+        span.end();
+        return response.session;
+      } catch (e) {
+        console.warn("OAuth callback failed", e);
+        span.end();
+        return null;
+      }
+    } else {
+      // refresh session
+      const [span, ctx] = tracer.startActiveSpan(
+        "Refresh Session",
+        {},
+        (span) => [span, context.active()] as const,
+      );
+      if (CONFIG.testingAppPassword && CONFIG.testingHandle) {
+        // authenticate using app password (testing only)
+        console.debug("Using app password authentication for testing");
+        const session = new CredentialSession(new URL("https://bsky.social"));
+        try {
+          await session.login({
+            identifier: CONFIG.testingHandle,
+            password: CONFIG.testingAppPassword,
+          });
+          span.end();
+          return session;
+        } catch (error) {
+          console.error("loginWithAppPassword: Login failed", error);
+          span.end();
+          throw error;
+        }
+      } else {
+        // if there's a stored DID and no session yet, try to restore the session
+        const didEntry = await db.kv.get("did");
+        if (!didEntry?.value) return null;
+
+        return await tracer.startActiveSpan(
+          "Restore Oauth Session",
+          {},
+          ctx,
+          (span) => oauth.restore(didEntry.value).finally(() => span.end()),
+        );
+      }
+    }
+  }
+
+  /** Where most of the initialisation happens. Backfill the personal
+   * stream from the stored cursor, then set up the other streams.
+   */
+  async initBackendWithSession(session: SessionManager) {
     const [span, ctx] = tracer.startActiveSpan(
-      "Refresh Session",
-      {},
+      "Init Backend With Client",
       (span) => [span, context.active()] as const,
     );
 
-    await context
-      .with(ctx, () =>
-        Client.restoreSession({
-          onConnect: () => console.debug("BW (restored): connected"),
-          onDisconnect: () => console.debug("BW (restored): disconnected"),
-        }),
-      )
-      .then((client) => {
-        if (!client) {
-          console.debug("No previous session found.");
-          this.setAuthState({ state: "unauthenticated" });
-          return;
+    // create the Roomy client
+    const eventHandlers = {
+      onConnect: () => console.debug("BW (restored): connected"),
+      onDisconnect: () => console.debug("BW (restored): disconnected"),
+    };
+
+    const agent = new Agent(session);
+    lexicons.forEach((l) => agent.lex.add(l as any));
+
+    this.#roomy = { state: "connectingToServer" };
+    this.#status.roomyState = this.#roomy;
+
+    const roomy = await context.bind(ctx, RoomyClient.create)(
+      {
+        agent,
+        leafUrl: CONFIG.leafUrl,
+        leafDid: CONFIG.leafServerDid,
+        spaceHandleNsid: CONFIG.streamHandleNsid,
+        spaceNsid: CONFIG.streamNsid,
+      },
+      eventHandlers,
+    );
+
+    // fetch profile in advance (don't await)
+    tracer.startActiveSpan("Fetch Profile", {}, ctx, (span) => {
+      roomy
+        .getProfile()
+        .then((profile) => {
+          this.#status.profile = profile;
+        })
+        .finally(() => span.end());
+    });
+
+    console.debug("Looking for personal stream id with", {
+      rkey: CONFIG.streamSchemaVersion,
+    });
+
+    // Open connection to personal space
+    const personalSpace = await roomy.connectPersonalSpace(
+      CONFIG.streamSchemaVersion,
+    );
+
+    const eventChannel = new AsyncChannel<Batch.Events>();
+
+    const callback = this.#createEventCallback(
+      eventChannel,
+      personalSpace.streamDid,
+    );
+
+    // backfill entire personal space
+    await personalSpace.subscribe(callback);
+
+    // Ensure personal stream space entity exists
+    await this.sqlite.runQuery(
+      ensureEntity(personalSpace.streamDid, personalSpace.streamDid),
+    );
+
+    // Mark personal stream space as hidden
+    await this.sqlite.runQuery(sql`
+      insert into comp_space (entity, hidden)
+      values (${personalSpace.streamDid}, 1) 
+      on conflict (entity) do nothing
+    `);
+
+    this.#roomy = {
+      state: "materializingPersonalSpace",
+      client: roomy,
+      personalSpace,
+      eventChannel,
+      spaces: new Map(),
+    };
+    this.#status.roomyState = {
+      state: "materializingPersonalSpace",
+      personalSpace: personalSpace.streamDid,
+    };
+    this.#connectedPersonalSpace.resolve(this.#roomy);
+
+    // authenticate sqlite
+    tracer.startActiveSpan("Authenticate SQLite", {}, ctx, (span) => {
+      this.sqlite
+        .authenticate(UserDid.assert(roomy.agent.did))
+        .catch((e) => console.error("Failed to authenticate sqlite worker", e))
+        .finally(() => span.end());
+    });
+
+    this.startMaterializer();
+
+    const lastBatchId = await tracer.startActiveSpan(
+      "Wait For Personal Stream Backfill",
+      {},
+      ctx,
+      async (span) => {
+        const batch = await personalSpace.doneBackfilling;
+        span.end();
+        return batch;
+      },
+    );
+
+    // ensure the backfilled stream is fully materialised
+    const personalSpaceMaterialised = new Promise((resolve) => {
+      this.#batchResolvers.set(lastBatchId, resolve);
+    });
+
+    this.#status.spaces = {
+      ...this.#status.spaces,
+      [personalSpace.streamDid]: "idle",
+    };
+
+    if (this.#status.authState?.state !== "authenticated")
+      throw new Error("Not authenticated");
+
+    // get streams from SQLite
+    const streamsResult = await this.sqlite.runQuery<{
+      id: StreamDid;
+      backfilled_to: StreamIndex;
+    }>(sql`-- backend space list
+      select e.id as id, cs.backfilled_to from entities e join comp_space cs on e.id = cs.entity
+      where hidden = 0
+    `);
+
+    // pass them to the client
+    const spacesToConnect = new Map(
+      (streamsResult.rows || []).map((row) => {
+        return [row.id, row.backfilled_to] as const;
+      }),
+    );
+
+    // set all spaces to 'loading' in reactive status
+    this.#status.spaces = {
+      ...Object.fromEntries(
+        [...spacesToConnect.entries()].map(([spaceId]) => [spaceId, "loading"]),
+      ),
+    };
+
+    // pass the spaces to the client to connect
+    // const { streams, failed } = await this.client.connect(
+    //   personalStream,
+    //   eventChannel,
+    //   new Map(streamIdsAndCursors),
+    // );
+
+    console.debug("Connecting to spaces", spacesToConnect);
+
+    const connectedSpaces = new Map<StreamDid, ConnectedSpace>();
+    const failed: StreamDid[] = [];
+
+    for await (const [streamId, _upToEventId] of spacesToConnect.entries()) {
+      try {
+        const space = await ConnectedSpace.connect({
+          client: this.#roomy.client,
+          streamDid: streamId,
+          module: modules.space,
+        });
+
+        // Subscribe with callback that pushes to eventChannel
+        const callback = this.#createEventCallback(eventChannel, streamId);
+        // First get metadata to find latest index, then subscribe from there
+        const latest = await space.subscribeMetadata(callback, 0);
+        await space.unsubscribe();
+        space.subscribe(callback, latest);
+
+        connectedSpaces.set(streamId, space);
+      } catch (e) {
+        console.error("Stream may not exist:", streamId, e);
+        failed.push(streamId);
+      }
+    }
+
+    if (failed.length) console.warn("Some streams didn't connect", failed);
+    // TODO: clean up nonexistent streams from db
+
+    console.debug("Spaces connected");
+
+    await tracer.startActiveSpan(
+      "Wait for Personal Stream Materialized",
+      {},
+      ctx,
+      async (span) => {
+        await personalSpaceMaterialised;
+        span.end();
+      },
+    );
+
+    // Connect to spaces the user has joined (but not left) after full personal stream backfill
+    await tracer.startActiveSpan(
+      "Connect Pending Spaces",
+      {},
+      ctx,
+      async (span) => {
+        await this.sqlite.sqliteWorker.connectPendingSpaces();
+        span.end();
+      },
+    );
+
+    this.#roomy = {
+      ...this.#roomy,
+      state: "connected",
+      eventChannel,
+      spaces: new Map([
+        ...this.#roomy.spaces.entries(),
+        ...connectedSpaces.entries(),
+      ]),
+    };
+    this.#status.roomyState = {
+      personalSpace: personalSpace.streamDid,
+      state: "connected",
+    };
+    this.#connected.resolve(this.#roomy);
+
+    await tracer.startActiveSpan(
+      "Wait for Joined Streams Backfilled",
+      {},
+      ctx,
+      async (span) => {
+        for (const stream of connectedSpaces.values()) {
+          (async () => {
+            await stream.doneBackfilling;
+            this.#status.spaces = {
+              ...this.#status.spaces,
+              [stream.streamDid]: "idle",
+            };
+          })();
         }
-        console.debug("Session restored successfully");
-        faro.api.setSession({
-          id: faro.api.getSession()?.id,
-          attributes: { isSampled: "true", did: client.agent.assertDid },
-        });
-
-        context.with(ctx, () => this.initBackendWithClient(client));
-
-        console.info("ATProto Authenticated", { did: client.agent.assertDid });
-
-        tracer.startActiveSpan("Fetch Profile", {}, ctx, (span) => {
-          client.roomy
-            .getProfile()
-            .then((profile) => {
-              this.#status.profile = profile;
-            })
-            .finally(() => span.end());
-        });
-
         span.end();
-      })
-      .catch((error) => {
-        console.error("Could not restore session", { error });
-        this.setAuthState({ state: "unauthenticated" });
-        span.end();
-      });
+      },
+    );
+
+    this.#authenticated.resolve();
+    span.end();
   }
 
-  private async authenticateCallback(params: URLSearchParams) {
-    this.setAuthState({ state: "loading" });
-    const client = await Client.oauthCallback(params, {
-      onConnect: () => console.debug("BW (callback): connected"),
-      onDisconnect: () => console.log("BW (callback): disconnected"),
+  // get a URL for redirecting to the ATProto PDS for login
+  async login(handle: string) {
+    const oauth = await createOauthClient();
+    const url = await oauth.authorize(handle, {
+      scope: CONFIG.atprotoOauthScope,
     });
-    if (client) {
-      this.initBackendWithClient(client);
-      return client;
+    return url.href;
+  }
+
+  async logout() {
+    await db.kv.delete("did");
+    await oauthDb.session.clear();
+    await oauthDb.state.clear();
+  }
+
+  private async startMaterializer() {
+    console.debug("Starting materialiser");
+    const { eventChannel } = await this.#connectedPersonalSpace.promise; // TODO await roomy connected
+    if (
+      this.#roomy.state !== "connected" &&
+      this.#roomy.state !== "materializingPersonalSpace" // should be this one
+    ) {
+      throw new Error("Tried to handle events while unauthenticated");
+    }
+
+    console.debug("listening on eventChannel...");
+
+    for await (const batch of eventChannel) {
+      // personal stream backfill is always high priority, other streams can be in background
+      if (batch.streamId === this.#roomy.personalSpace.streamDid) {
+        const result = await this.sqlite.materializeBatch(batch, "priority");
+
+        // If there is a resolver waiting on this batch, resolve it with the result
+        const resolver = this.#batchResolvers.get(batch.batchId);
+        if (resolver) {
+          resolver(result);
+          this.#batchResolvers.delete(batch.batchId);
+        }
+
+        // Check for event ID resolvers (for sendEvent waiting on materialization)
+        this.resolveEventPromises(result);
+
+        console.debug("materialised (personal):", { batch, result });
+      } else {
+        const result = await this.sqlite.materializeBatch(
+          batch,
+          batch.priority,
+        );
+
+        // Check for event ID resolvers (for sendEvent waiting on materialization)
+        this.resolveEventPromises(result);
+
+        console.debug("materialised (space):", { batch, result });
+      }
     }
   }
+
+  /** Resolve any pending event promises based on materialized results */
+  private resolveEventPromises(result: Batch.Statement | Batch.ApplyResult) {
+    if (result.status !== "applied") return;
+
+    for (const bundleResult of result.results) {
+      if ("eventId" in bundleResult && bundleResult.eventId) {
+        const resolver = this.#batchResolvers.get(bundleResult.eventId);
+        if (resolver) {
+          resolver(result);
+          this.#batchResolvers.delete(bundleResult.eventId);
+        }
+      }
+    }
+  }
+
+  async connectSpaceStream(streamId: StreamDid, _idx: StreamIndex) {
+    await this.#connectedPersonalSpace.promise;
+    if (
+      this.#roomy.state !== "connected" &&
+      this.#roomy.state !== "materializingPersonalSpace"
+    )
+      throw new Error("Roomy must be connected to add new space stream");
+
+    const alreadyConnected = this.#roomy.spaces.get(streamId);
+    if (alreadyConnected) return;
+
+    const space = await ConnectedSpace.connect({
+      client: this.client,
+      streamDid: streamId,
+      module: modules.space,
+    });
+
+    // Subscribe with callback that pushes to eventChannel
+    const callback = this.#createEventCallback(
+      this.#roomy.eventChannel,
+      streamId,
+    );
+    // First get metadata to find latest index, then subscribe from there
+    const latest = await space.subscribeMetadata(callback, 0);
+    await space.unsubscribe();
+    await space.subscribe(callback, latest);
+
+    this.#roomy.spaces.set(streamId, space);
+
+    return;
+  }
+
+  async createSpaceStream() {
+    if (this.#roomy.state !== "connected")
+      throw new Error("Client must be connected to add new space stream");
+
+    const newSpace = await ConnectedSpace.create(
+      {
+        client: this.client,
+        module: modules.space,
+      },
+      UserDid.assert(this.client.agent.assertDid),
+    );
+
+    // Subscribe with callback that pushes to eventChannel
+    const callback = this.#createEventCallback(
+      this.#roomy.eventChannel,
+      newSpace.streamDid,
+    );
+    await newSpace.subscribe(callback);
+
+    console.debug("Successfully created space stream:", newSpace.streamDid);
+
+    // add to stream connection map
+    this.#roomy.spaces.set(newSpace.streamDid, newSpace);
+
+    return newSpace.streamDid;
+  }
+
+  async sendEventBatch(spaceId: string, payloads: Event[]) {
+    const encodedPayloads = payloads.map((x) => {
+      try {
+        return encode(x);
+      } catch (e) {
+        throw new Error(
+          `Could not encode event: ${JSON.stringify(x, null, "  ")}`,
+          { cause: e },
+        );
+      }
+    });
+    console.debug("sending event batch", {
+      spaceId,
+      payloads,
+      encodedPayloads,
+    });
+    await this.client.leaf.sendEvents(spaceId, encodedPayloads);
+  }
+
+  async fetchEvents(
+    spaceId: string,
+    start: number,
+    limit: number,
+  ): Promise<EncodedStreamEvent[]> {
+    const resp = await this.client.leaf?.query(spaceId, {
+      name: "events",
+      params: {},
+      limit,
+      start,
+    });
+    const events = parseEvents(resp);
+    return events;
+  }
+
+  async lazyLoadRoom(spaceId: StreamDid, roomId: Ulid, end?: StreamIndex) {
+    await this.#connected.promise;
+    if (this.#roomy.state !== "connected")
+      throw new Error("Client not connected");
+
+    const space = this.#roomy.spaces.get(spaceId);
+    if (!space) throw new Error("Could not find space in connected streams");
+    const ROOM_FETCH_BATCH_SIZE = 100;
+    const events = await space.lazyLoadRoom(roomId, ROOM_FETCH_BATCH_SIZE, end);
+
+    // Push fetched events to eventChannel for materialization
+    if (events.length > 0) {
+      this.#roomy.eventChannel.push({
+        status: "events",
+        batchId: newUlid(),
+        streamId: spaceId,
+        events,
+        priority: "priority",
+      });
+    }
+  }
+
+  /** Create an event callback that pushes to the eventChannel */
+  #createEventCallback(
+    eventChannel: AsyncChannel<Batch.Events>,
+    streamId: StreamDid,
+  ): EventCallback {
+    return (events: DecodedStreamEvent[], { isBackfill, batchId }) => {
+      if (events.length === 0) return;
+      eventChannel.push({
+        status: "events",
+        batchId,
+        streamId,
+        events,
+        priority: isBackfill ? "background" : "priority",
+      });
+    };
+  }
+
+  /**
+   *
+   * CONVENIENCES
+   *
+   */
 
   private get consoleForwarding() {
     return this.#config.consoleForwarding;
   }
 
   private get client() {
-    if (this.#auth.state === "authenticated") {
-      return this.#auth.client;
-    } else {
-      throw new Error("Not authenticated");
-    }
+    if (this.#roomy.state !== "connected")
+      throw new Error("Not connected to RoomyClient");
+    return this.#roomy.client;
   }
 
   private get sqlite() {
     return this.#sqlite;
+  }
+
+  private loadStoredConfig() {
+    db.kv
+      .get("consoleForwarding")
+      .then((pref) => (this.#config.consoleForwarding = !!pref?.value));
   }
 
   private async enableLogForwarding() {
@@ -534,159 +938,24 @@ class WorkerSupervisor {
     this.#config.consoleForwarding = false;
   }
 
-  private getBackendInterface(): BackendInterface {
-    return {
-      getSessionId: async () => {
-        return sessionId;
-      },
-      getSpaceInfo: (streamDid) => {
-        return this.client.roomy.getSpaceInfo(streamDid);
-      },
-      login: async (handle) => Client.login(handle),
-      oauthCallback: async (paramsStr) => {
-        const params = new URLSearchParams(paramsStr);
-        const client = await this.authenticateCallback(params);
-        return {
-          did: client?.agent.assertDid,
-        };
-      },
-      logout: async () => await this.logout(),
-      getProfile: async (did) => this.client.roomy.getProfile(did),
-      runQuery: async (statement) => {
-        return this.sqlite.runQuery(statement);
-      },
-      createLiveQuery: async (id, port, statement) => {
-        await this.sqlite.untilReady;
-
-        const channel = this.sqlite.createLiveQueryChannel(port);
-        navigator.locks.request(id, async () => {
-          // When we obtain a lock to the query ID, that means that the query is no longer in
-          // use and we can delete it.
-          await this.sqlite.deleteLiveQuery(id);
-        });
-        return this.sqlite.createLiveQuery(id, channel.port2, statement);
-      },
-      dangerousCompletelyDestroyDatabase: async ({ yesIAmSure }) => {
-        if (!yesIAmSure) throw "You need to be sure";
-        return await this.sqlite.sqliteWorker.resetLocalDatabase();
-      },
-      setActiveSqliteWorker: async (messagePort) => {
-        // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-        await this.sqlite.setReady(
-          messagePortInterface<{}, SqliteWorkerInterface>({
-            messagePort,
-            handlers: {},
-          }),
-        );
-      },
-      async ping() {
-        console.info("Backend: Ping received");
-        return {
-          timestamp: Date.now(),
-        };
-      },
-      clientConnected: async () => {
-        await this.#authenticated.promise;
-        await this.client.connected;
-      },
-      enableLogForwarding: () => this.enableLogForwarding(),
-      disableLogForwarding: () => this.disableLogForwarding(),
-      connectSpaceStream: async (streamId, idx) => {
-        await this.client.connectSpaceStream(streamId, idx);
-        this.#status.spaces = {
-          ...this.#status.spaces,
-          [streamId]: "idle",
-        };
-      },
-      createSpaceStream: async () => {
-        const streamId = await this.client.createSpaceStream();
-        this.#status.spaces = {
-          ...this.#status.spaces,
-          [streamId]: "idle",
-        };
-        return streamId;
-      },
-      sendEvent: async (streamId: string, event: Event) => {
-        // Create a promise that resolves when the event is materialized
-        const materialized = new Promise<void>((resolve) => {
-          this.#batchResolvers.set(event.id, () => resolve());
-        });
-
-        await this.client.roomy.leaf.sendEvent(streamId, encode(event));
-        await materialized;
-      },
-      sendEventBatch: async (streamId, payloads) => {
-        // Create promises for each event that resolve when materialized
-        const materializedPromises = payloads.map(
-          (event) =>
-            new Promise<void>((resolve) => {
-              this.#batchResolvers.set(event.id, () => resolve());
-            }),
-        );
-
-        await this.client.sendEventBatch(streamId, payloads);
-        await Promise.all(materializedPromises);
-      },
-      fetchEvents: async (streamId, offset, limit) =>
-        this.client.fetchEvents(streamId, offset, limit),
-      lazyLoadRoom: async (streamId, roomId, end) => {
-        await this.sqlite.untilReady;
-        return await this.client.lazyLoadRoom(streamId, roomId, end);
-      },
-      uploadToPds: async (bytes, opts) => {
-        return this.client.roomy.uploadBlob(bytes, opts);
-      },
-      addClient: async (port) => this.connectMessagePort(port),
-      pauseSubscription: async (_streamId) => {
-        // await this.openSpacesMaterializer?.pauseSubscription(streamId);
-      },
-      unpauseSubscription: async (_streamId) => {
-        // await this.openSpacesMaterializer?.unpauseSubscription(streamId);
-      },
-      resolveHandleForSpace: async (spaceId, handleAccountDid) =>
-        this.client.roomy.resolveHandleForSpace(spaceId, handleAccountDid),
-      resolveSpaceId: async (handleOrDid) => {
-        await this.#authenticated.promise;
-        return await this.client.roomy.resolveSpaceId(handleOrDid);
-      },
-      checkSpaceExists: async (spaceId) =>
-        this.client.roomy.checkStreamExists(spaceId),
-      createStreamHandleRecord: async (spaceId) => {
-        await this.client.roomy.createStreamHandleRecord(spaceId);
-      },
-      removeStreamHandleRecord: async () => {
-        await this.client.roomy.removeStreamHandleRecord();
-      },
-      getStreamRecord: async () => this.getStreamRecord(),
-      deleteStreamRecord: async () => this.deleteStreamRecord(),
-      ensurePersonalStream: async () => this.ensurePersonalStream(),
-      connectPendingSpaces: async () => {
-        await this.sqlite.sqliteWorker.connectPendingSpaces();
-      },
-    };
-  }
-
-  private async logout() {
-    if (this.#auth.state === "authenticated") {
-      await this.#auth.client.logout();
-      this.#auth = { state: "unauthenticated" };
-    } else {
-      console.warn("Already logged out");
-    }
-  }
+  /**
+   *
+   * DIAGNOSTICS
+   *
+   */
 
   async debugFetchPersonalStream(): Promise<Event[]> {
-    if (this.#status.authState?.state != "authenticated") {
+    if (this.#status.roomyState?.state != "connected") {
       throw "Not authenticated";
     }
-    return this.debugFetchStream(this.#status.authState.personalStream);
+    return this.debugFetchStream(this.#status.roomyState.personalSpace);
   }
 
   async debugFetchStream(streamId: string): Promise<Event[]> {
-    if (this.#status.authState?.state != "authenticated") {
+    if (this.#status.roomyState?.state != "connected") {
       throw "Not authenticated";
     }
-    const resp = await this.client.fetchEvents(streamId, 0, 1e10);
+    const resp = await this.fetchEvents(streamId, 0, 1e10);
 
     return resp
       .map((e) => parseEvent(decode(new Uint8Array(e.payload))))
@@ -727,12 +996,12 @@ class WorkerSupervisor {
     }
   }
 
-  /** Testing: Trigger personal stream creation */
+  // /** Testing: Trigger personal stream creation */
   async ensurePersonalStream(): Promise<void> {
     if (this.#auth.state !== "authenticated") {
       throw new Error("Cannot ensure personal stream: not authenticated");
     }
-    await this.client.ensurePersonalSpace(this.#auth.eventChannel);
+    // await this.client.connectPersonalSpace(this.#auth.eventChannel);
   }
 }
 

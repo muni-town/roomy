@@ -17,9 +17,9 @@
         const searchParams = new URL(globalThis.location.href).searchParams;
 
         backend
-          .oauthCallback(searchParams.toString())
+          .initialize(searchParams.toString())
           .then(({ did }) => {
-            span.setAttribute("userDid", did);
+            span.setAttribute("userDid", did || "");
             span.setStatus({ code: SpanStatusCode.OK });
             span.end();
 
