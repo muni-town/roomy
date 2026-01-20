@@ -169,7 +169,7 @@ class WorkerSupervisor {
       },
       logout: async () => await this.logout(),
       getProfile: async (did) => {
-        await this.#connected.promise;
+        await this.#connectedPersonalSpace.promise;
         return this.client.getProfile(did);
       },
       runQuery: async (statement) => {
@@ -910,7 +910,10 @@ class WorkerSupervisor {
   }
 
   private get client() {
-    if (this.#roomy.state !== "connected")
+    if (
+      this.#roomy.state !== "connected" &&
+      this.#roomy.state !== "materializingPersonalSpace"
+    )
       throw new Error("Not connected to RoomyClient");
     return this.#roomy.client;
   }
