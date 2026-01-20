@@ -80,10 +80,6 @@
 
   let categories = $derived(sidebar.result ?? []);
 
-  $effect(() => {
-    console.log("sidebar should be??", $state.snapshot(categories));
-  });
-
   type DraftOrder = {
     id: string;
     childIds: string[];
