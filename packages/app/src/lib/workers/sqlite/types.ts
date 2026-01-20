@@ -28,6 +28,10 @@ export type SqliteWorkerInterface = {
   deleteLiveQuery(id: string): Promise<void>;
   ping(): Promise<{ timestamp: number; workerId: string; isActive: boolean }>;
   runSavepoint(savepoint: Savepoint): Promise<QueryResult[]>;
+  /** Connect to all spaces accumulated during personal stream backfill.
+   * This should be called after the personal stream is fully materialized
+   * to ensure we don't connect to spaces the user has left. */
+  connectPendingSpaces(): Promise<void>;
 };
 
 export interface SqlStatement {
