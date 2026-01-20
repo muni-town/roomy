@@ -27,6 +27,8 @@ type IncomingMessage<In extends HalfInterface, Out extends HalfInterface> =
     }[keyof Out];
 
 export type MessagePortInterfaceConfig<Local extends HalfInterface> = {
+  localName?: string;
+  remoteName?: string;
   messagePort: MessagePortApi;
   handlers: Local;
   timeout?: {
@@ -51,18 +53,26 @@ export function messagePortInterface<
   Remote extends HalfInterface,
 >(config: MessagePortInterfaceConfig<Local>): Remote {
   const {
+    localName,
+    remoteName,
     messagePort,
     handlers,
     timeout = {
       ms: 5000,
       onTimeout: (method, reqId) => {
         if (method !== "log")
-          console.warn("Backend RPC Timeout", { method, reqId });
+          console.warn(
+            `RPC Timeout [${remoteName}${localName ? " <- " + localName : ""}]`,
+            {
+              method,
+              reqId,
+            },
+          );
       },
     },
     onError = (error, method, args) => {
       console.error(
-        `RPC error in "${method}":`,
+        `RPC error in "${method} [${remoteName}${localName ? " from " + localName : ""}]":`,
         error,
         ...(args.length ? ["Args:", args] : []),
       );

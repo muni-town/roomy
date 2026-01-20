@@ -109,6 +109,8 @@ class SqliteWorkerSupervisor {
     this.#status = reactiveWorkerState<SqliteStatus>(params.statusPort, true);
 
     this.#backend = messagePortInterface<{}, BackendInterface>({
+      localName: "sqlite",
+      remoteName: "backend",
       messagePort: params.backendPort,
       handlers: {},
     });
@@ -126,6 +128,8 @@ class SqliteWorkerSupervisor {
     try {
       const sqliteChannel = new MessageChannel();
       messagePortInterface<SqliteWorkerInterface, {}>({
+        localName: "sqlite",
+        remoteName: "backend",
         messagePort: sqliteChannel.port1,
         handlers: this.getSqliteInterface(),
       });
