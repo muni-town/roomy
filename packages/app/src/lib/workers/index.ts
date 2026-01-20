@@ -72,7 +72,13 @@ export const backend = tracer.startActiveSpan(
       messagePort: "port" in backendWorker ? backendWorker.port : backendWorker,
       handlers: {
         async log(level, args) {
-          const prefixedArgs = ["[BW]", ...args]; // Backend Worker
+          const text = Array.isArray(args) ? args[0] : args;
+          // log args should all be in format [string, object]
+          const object = Array.isArray(args) && args.length > 1 ? args[1] : {};
+          // in case we forget
+          const remainder =
+            Array.isArray(args) && args.length > 2 ? args.slice(2) : [];
+          const prefixedArgs = ["[BW] " + text, { ...object }, ...remainder]; // Backend Worker
           console[level](...prefixedArgs);
         },
         async setSessionId(id) {
