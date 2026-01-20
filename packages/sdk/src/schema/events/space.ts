@@ -24,7 +24,7 @@ export const JoinSpace = defineEvent(
   JoinSpaceSchema,
   ({ streamId, user, event }) => [
     sql`
-      insert or replace into edges (head, tail, label, payload)
+      insert or ignore into edges (head, tail, label, payload)
       values (
         ${streamId},
         ${user},
