@@ -521,7 +521,7 @@ class SqliteWorkerSupervisor {
         this.#pendingSpacesToConnect.clear();
 
         console.debug(
-          `Connecting ${spacesToConnect.length} pending space(s) after personal stream backfill:`,
+          `Connecting ${spacesToConnect.length} pending space(s):`,
           spacesToConnect,
         );
 

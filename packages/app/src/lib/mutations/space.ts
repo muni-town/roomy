@@ -19,13 +19,16 @@ export async function joinSpace(spaceId: StreamDid) {
       $type: "space.roomy.space.personal.joinSpace.v0",
       spaceDid: spaceId,
     });
+
+    await backend.connectPendingSpaces();
+
     // Tell the space that we joined.
     await backend.sendEvent(spaceId, {
       id: newUlid(),
       $type: "space.roomy.space.joinSpace.v0",
     });
 
-    await backend.connectPendingSpaces();
+
   } catch (e) {
     console.error(e);
     toast.error("Could not join space. It's possible it does not exist.");
