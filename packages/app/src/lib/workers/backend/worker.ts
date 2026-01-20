@@ -416,13 +416,6 @@ class WorkerSupervisor {
     >({
       messagePort: port,
       handlers: this.getBackendInterface(),
-      timeout: {
-        ms: 5000,
-        onTimeout: (method, reqId) => {
-          if (method !== "log")
-            console.warn("Backend RPC Timeout", { method, reqId });
-        },
-      },
     });
 
     consoleInterface.setSessionId(sessionId);

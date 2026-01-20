@@ -53,7 +53,13 @@ export function messagePortInterface<
   const {
     messagePort,
     handlers,
-    timeout,
+    timeout = {
+      ms: 5000,
+      onTimeout: (method, reqId) => {
+        if (method !== "log")
+          console.warn("Backend RPC Timeout", { method, reqId });
+      },
+    },
     onError = (error, method, args) => {
       console.error(
         `RPC error in "${method}":`,
