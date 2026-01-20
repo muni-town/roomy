@@ -8,6 +8,7 @@ import type {
 import type { SqliteStatus } from "./sqlite/types";
 import { CONFIG, flags } from "../config";
 import { context, trace } from "@opentelemetry/api";
+import { page } from "$app/state";
 
 // Force page reload when hot reloading this file to avoid confusion if the workers get mixed up.
 if (import.meta.hot && !(window as any).__playwright) {
@@ -30,20 +31,6 @@ export const sqliteStatus = reactiveWorkerState<SqliteStatus>(
 );
 
 (globalThis as any).sqliteStatus = sqliteStatus;
-
-// console.log(
-//   "Main thread: sqliteStatus created, workerId:",
-//   sqliteStatus.workerId,
-// );
-
-// // Add a manual check
-// setInterval(() => {
-//   console.log("Main thread: Current sqliteStatus =", {
-//     workerId: sqliteStatus.workerId,
-//     isActive: sqliteStatus.isActiveWorker,
-//     vfsType: sqliteStatus.vfsType,
-//   });
-// }, 10000);
 
 // Initialize shared worker
 export const hasSharedWorker = "SharedWorker" in globalThis;
@@ -122,6 +109,10 @@ export const backend = tracer.startActiveSpan(
       [sqliteWorkerChannel.port2, workerStatusChannel.port2],
     );
 
+    if (page.route.id !== "/(internal)/oauth/callback") {
+      backend.initialize();
+    }
+
     span.end();
 
     return backend;
@@ -129,8 +120,8 @@ export const backend = tracer.startActiveSpan(
 );
 
 export function getPersonalStreamId() {
-  return backendStatus.authState?.state === "authenticated"
-    ? backendStatus.authState.personalStream
+  return backendStatus.roomyState?.state === "connected"
+    ? backendStatus.roomyState.personalSpace
     : undefined;
 }
 

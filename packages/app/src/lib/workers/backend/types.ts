@@ -2,7 +2,6 @@ import type { QueryResult } from "../sqlite/setup";
 import type { Batch, EncodedStreamEvent, StreamIndex } from "../types";
 import type { Profile } from "../../types/profile";
 import type { MessagePortApi } from "../workerMessaging";
-import type { Client } from "./client";
 import type { BlobRef } from "@atproto/lexicon";
 import type { Deferred } from "$lib/utils/deferred";
 import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
@@ -14,10 +13,13 @@ import type {
   Handle,
   Ulid,
   ConnectedSpace,
+  RoomyClient,
 } from "@roomy/sdk";
+import type { SessionManager } from "@atproto/api/dist/session-manager";
 
 export interface BackendStatus {
   authState: ReactiveAuthState;
+  roomyState: ReactiveRoomyState;
   profile: Profile;
   spaces: Record<StreamDid, "loading" | "idle" | "error">;
 }
@@ -29,7 +31,7 @@ export type BackendInterface = {
   getSpaceInfo(
     streamDid: StreamDid,
   ): Promise<{ name?: string; avatar?: string } | undefined>;
-  oauthCallback(searchParams: string): Promise<{ did?: string }>;
+  initialize(searchParams?: string): Promise<{ did?: string }>;
   runQuery<T>(statement: SqlStatement): Promise<QueryResult<T>>;
   getProfile(did: UserDid): Promise<Profile | undefined>;
   dangerousCompletelyDestroyDatabase(opts: {
@@ -108,51 +110,81 @@ export type ConsoleInterface = {
   log(level: ConsoleLogLevel, ...args: any[]): Promise<void>;
 };
 
-export namespace AuthStates {
-  export interface Unauthenticated {
-    state: "unauthenticated";
-  } // implies workerRunning, authLoaded
-
-  export interface AuthLoading {
-    state: "loading";
-  }
-
-  export interface OAuthRedirecting {
-    state: "redirecting";
-  }
-
-  export interface Authenticated {
-    state: "authenticated";
-    client: Client;
-    eventChannel: AsyncChannel<Batch.Events>;
-  } // implies leafConnected, has personalStreamId
-
-  export interface AuthError {
-    state: "error";
-    error: string;
-  }
-
-  export interface ReactiveAuthenticated {
-    state: "authenticated";
-    did: UserDid;
-    personalStream: StreamDid;
-    clientStatus: ClientStatus["status"];
-  }
-}
-
 export type AuthState =
-  | AuthStates.Unauthenticated
-  | AuthStates.AuthLoading
-  | AuthStates.OAuthRedirecting
-  | AuthStates.Authenticated
-  | AuthStates.AuthError;
+  | {
+      state: "loading";
+    }
+  | {
+      state: "unauthenticated";
+    } // implies workerRunning, authLoaded
+  | {
+      state: "authenticated";
+      session: SessionManager;
+    } // implies leafConnected, has personalStreamId
+  | {
+      state: "error";
+      error: string;
+    };
 
 export type ReactiveAuthState =
-  | AuthStates.Unauthenticated
-  | AuthStates.AuthLoading
-  | AuthStates.OAuthRedirecting
-  | AuthStates.ReactiveAuthenticated
-  | AuthStates.AuthError;
+  | {
+      state: "loading";
+    }
+  | {
+      state: "unauthenticated";
+    }
+  | {
+      state: "authenticated";
+      did: UserDid;
+    }
+  | {
+      state: "error";
+      error: string;
+    };
+
+export type RoomyState =
+  | {
+      state: "disconnected";
+    }
+  | {
+      state: "connectingToServer";
+    }
+  | {
+      state: "materializingPersonalSpace";
+      client: RoomyClient;
+      personalSpace: ConnectedSpace;
+      eventChannel: AsyncChannel<Batch.Events>;
+      spaces: Map<StreamDid, ConnectedSpace>;
+    }
+  | {
+      state: "connected";
+      client: RoomyClient;
+      personalSpace: ConnectedSpace;
+      eventChannel: AsyncChannel<Batch.Events>;
+      spaces: Map<StreamDid, ConnectedSpace>;
+    }
+  | {
+      state: "error";
+    };
+
+export type ReactiveRoomyState =
+  | {
+      state: "disconnected";
+    }
+  | {
+      state: "connectingToServer";
+    }
+  | {
+      state: "materializingPersonalSpace";
+      personalSpace: StreamDid;
+    }
+  | {
+      state: "connected";
+      personalSpace: StreamDid;
+    }
+  | {
+      state: "error";
+    };
 
 export interface ConnectionState {
   ports: WeakMap<MessagePortApi, string>;
