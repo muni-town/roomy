@@ -103,7 +103,6 @@ export namespace Batch {
     bundles: Bundle.Statement[];
     latestEvent: StreamIndex;
     priority: TaskPriority;
-    spacesToConnect: StreamDid[];
   }
 
   export interface ApplyResult {

@@ -80,6 +80,10 @@ class SqliteWorkerSupervisor {
   #statementChannel = new AsyncChannel<Batch.Statement>();
   #pendingBatches = new Map<string, (result: Batch.ApplyResult) => void>();
   #authenticated = new Deferred();
+  /** Spaces to connect after personal stream backfill completes.
+   * We accumulate joinSpace events and remove leaveSpace events to ensure
+   * we only connect to spaces the user is currently a member of. */
+  #pendingSpacesToConnect = new Set<StreamDid>();
 
   constructor() {
     this.#workerId = crypto.randomUUID();
@@ -244,7 +248,6 @@ class SqliteWorkerSupervisor {
           );
 
         let latestEvent = 0;
-        const spacesToConnect: StreamDid[] = [];
         for (const [incoming, event] of decodedEvents) {
           latestEvent = Math.max(latestEvent, incoming.idx);
           try {
@@ -261,9 +264,15 @@ class SqliteWorkerSupervisor {
             bundles.push(bundle);
 
             if (bundle.status === "success") {
-              // Collect space IDs to connect AFTER batch is applied
+              // Track space membership changes in personal stream
+              // We accumulate these and only connect after full backfill
+              // to avoid connecting to spaces the user has since left
               if (event.$type === "space.roomy.space.personal.joinSpace.v0") {
-                spacesToConnect.push(event.spaceDid);
+                this.#pendingSpacesToConnect.add(event.spaceDid);
+              } else if (
+                event.$type === "space.roomy.space.personal.leaveSpace.v0"
+              ) {
+                this.#pendingSpacesToConnect.delete(event.spaceDid);
               }
             }
           } catch (e) {
@@ -279,7 +288,6 @@ class SqliteWorkerSupervisor {
             bundles: bundles,
             latestEvent: latestEvent as StreamIndex,
             priority: batch.priority,
-            spacesToConnect,
           },
           batch.priority,
         );
@@ -296,7 +304,7 @@ class SqliteWorkerSupervisor {
         try {
           const result = await this.runStatementBatch(batch);
 
-          // resolve promises
+          // resolve promise
           try {
             const resolver = this.#pendingBatches.get(batch.batchId);
             if (resolver) {
@@ -307,17 +315,6 @@ class SqliteWorkerSupervisor {
             }
           } catch (error) {
             console.error("Error running statement batch", batch, error);
-          }
-
-          // Connect spaces AFTER batch is applied and committed
-          if (batch.spacesToConnect && batch.spacesToConnect.length > 0) {
-            console.debug(
-              `Connecting ${batch.spacesToConnect.length} space(s) after batch commit:`,
-              batch.spacesToConnect,
-            );
-            for (const spaceId of batch.spacesToConnect) {
-              this.connectSpaceStream(spaceId);
-            }
           }
         } catch (error) {
           console.error("Error running statement batch", batch, error);
@@ -518,6 +515,19 @@ class SqliteWorkerSupervisor {
       runSavepoint: async (savepoint) => {
         if (!this.#status.authenticated) throw new Error("Not authenticated");
         return this.runSavepoint(savepoint);
+      },
+      connectPendingSpaces: async () => {
+        const spacesToConnect = [...this.#pendingSpacesToConnect];
+        this.#pendingSpacesToConnect.clear();
+
+        console.debug(
+          `Connecting ${spacesToConnect.length} pending space(s) after personal stream backfill:`,
+          spacesToConnect,
+        );
+
+        for (const spaceId of spacesToConnect) {
+          await this.connectSpaceStream(spaceId);
+        }
       },
     };
   }

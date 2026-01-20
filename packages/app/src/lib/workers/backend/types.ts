@@ -88,6 +88,9 @@ export type BackendInterface = {
   }>;
   /** Adds a new message port connection to the backend that can call the backend interface. */
   addClient(port: MessagePort): Promise<void>;
+  /** Connect to all spaces accumulated during personal stream materialization.
+   * Call this after sending a joinSpace event to connect to the newly joined space. */
+  connectPendingSpaces(): Promise<void>;
 };
 
 export const consoleLogLevels = [

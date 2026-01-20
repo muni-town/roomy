@@ -265,6 +265,17 @@ class WorkerSupervisor {
       },
     );
 
+    // Connect to spaces the user has joined (but not left) after full personal stream backfill
+    await tracer.startActiveSpan(
+      "Connect Pending Spaces",
+      {},
+      ctx,
+      async (span) => {
+        await this.sqlite.sqliteWorker.connectPendingSpaces();
+        span.end();
+      },
+    );
+
     // need to reassign the whole object to trigger reactive update
     this.#status.authState = {
       clientStatus: "connected",
@@ -316,13 +327,35 @@ class WorkerSupervisor {
           this.#batchResolvers.delete(batch.batchId);
         }
 
+        // Check for event ID resolvers (for sendEvent waiting on materialization)
+        this.resolveEventPromises(result);
+
         console.debug("materialised (personal):", { batch, result });
       } else {
         const result = await this.sqlite.materializeBatch(
           batch,
           batch.priority,
         );
+
+        // Check for event ID resolvers (for sendEvent waiting on materialization)
+        this.resolveEventPromises(result);
+
         console.debug("materialised (space):", { batch, result });
+      }
+    }
+  }
+
+  /** Resolve any pending event promises based on materialized results */
+  private resolveEventPromises(result: Batch.Statement | Batch.ApplyResult) {
+    if (result.status !== "applied") return;
+
+    for (const bundleResult of result.results) {
+      if ("eventId" in bundleResult && bundleResult.eventId) {
+        const resolver = this.#batchResolvers.get(bundleResult.eventId);
+        if (resolver) {
+          resolver(result);
+          this.#batchResolvers.delete(bundleResult.eventId);
+        }
       }
     }
   }
@@ -581,11 +614,25 @@ class WorkerSupervisor {
         return streamId;
       },
       sendEvent: async (streamId: string, event: Event) => {
+        // Create a promise that resolves when the event is materialized
+        const materialized = new Promise<void>((resolve) => {
+          this.#batchResolvers.set(event.id, () => resolve());
+        });
+
         await this.client.roomy.leaf.sendEvent(streamId, encode(event));
+        await materialized;
       },
       sendEventBatch: async (streamId, payloads) => {
-        encode(payloads);
+        // Create promises for each event that resolve when materialized
+        const materializedPromises = payloads.map(
+          (event) =>
+            new Promise<void>((resolve) => {
+              this.#batchResolvers.set(event.id, () => resolve());
+            }),
+        );
+
         await this.client.sendEventBatch(streamId, payloads);
+        await Promise.all(materializedPromises);
       },
       fetchEvents: async (streamId, offset, limit) =>
         this.client.fetchEvents(streamId, offset, limit),
@@ -620,6 +667,9 @@ class WorkerSupervisor {
       getStreamRecord: async () => this.getStreamRecord(),
       deleteStreamRecord: async () => this.deleteStreamRecord(),
       ensurePersonalStream: async () => this.ensurePersonalStream(),
+      connectPendingSpaces: async () => {
+        await this.sqlite.sqliteWorker.connectPendingSpaces();
+      },
     };
   }
 

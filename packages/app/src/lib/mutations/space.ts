@@ -24,6 +24,8 @@ export async function joinSpace(spaceId: StreamDid) {
       id: newUlid(),
       $type: "space.roomy.space.joinSpace.v0",
     });
+
+    await backend.connectPendingSpaces();
   } catch (e) {
     console.error(e);
     toast.error("Could not join space. It's possible it does not exist.");
