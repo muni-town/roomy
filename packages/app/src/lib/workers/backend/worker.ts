@@ -582,6 +582,16 @@ class WorkerSupervisor {
     if (this.#status.authState?.state !== "authenticated")
       throw new Error("Not authenticated");
 
+    await tracer.startActiveSpan(
+      "Wait for Personal Stream Materialized",
+      {},
+      ctx,
+      async (span) => {
+        await personalSpaceMaterialised;
+        span.end();
+      },
+    );
+
     // get streams from SQLite
     const streamsResult = await this.sqlite.runQuery<{
       id: StreamDid;
@@ -636,16 +646,6 @@ class WorkerSupervisor {
     // TODO: clean up nonexistent streams from db
 
     console.debug("Spaces connected");
-
-    await tracer.startActiveSpan(
-      "Wait for Personal Stream Materialized",
-      {},
-      ctx,
-      async (span) => {
-        await personalSpaceMaterialised;
-        span.end();
-      },
-    );
 
     // Connect to spaces the user has joined (but not left) after full personal stream backfill
     await tracer.startActiveSpan(
