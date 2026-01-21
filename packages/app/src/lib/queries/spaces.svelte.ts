@@ -1,11 +1,13 @@
-import { UserDid } from "@roomy/sdk";
+import { Handle, StreamDid, UserDid } from "@roomy/sdk";
 import { LiveQuery } from "$lib/utils/liveQuery.svelte";
 import { sql } from "$lib/utils/sqlTemplate";
 import { backend, backendStatus, getPersonalSpaceId } from "$lib/workers";
 import type { SpaceMeta } from "./types";
+import { SvelteMap } from "svelte/reactivity";
 
 /** The space list. */
 let spacesQuery: LiveQuery<SpaceMeta>;
+let handlesForSpace = new SvelteMap<StreamDid, Handle | undefined>();
 
 // For Svelte reactivity we need to export a const object:
 // mutate properties, never reassign the object itself
@@ -41,6 +43,26 @@ $effect.root(() => {
     (row) => JSON.parse(row.json),
   );
 
+  /** Asynchronously resolve handle for each space and store in reactive map */
+  $effect(() => {
+    if (
+      backendStatus.authState?.state !== "authenticated" ||
+      backendStatus.roomyState?.state !== "connected" ||
+      !spacesQuery.result
+    )
+      return;
+
+    for (const space of spacesQuery.result) {
+      if (space.handle_account && !handlesForSpace.has(space.id)) {
+        backend
+          .resolveHandleForSpace(space.id, UserDid.assert(space.handle_account))
+          .then((maybeHandle) => {
+            handlesForSpace.set(space.id, maybeHandle);
+          });
+      }
+    }
+  });
+
   // Update spaces list, loading the space handle if it has one.
   $effect(() => {
     joinedSpaces.loading = true;
@@ -48,28 +70,21 @@ $effect.root(() => {
     joinedSpaces.list = [];
     if (
       backendStatus.authState?.state !== "authenticated" ||
-      backendStatus.roomyState?.state !== "connected"
+      backendStatus.roomyState?.state !== "connected" ||
+      !spacesQuery.result
     )
       return;
-    Promise.all(
-      spacesQuery.result?.map(async (spaceRow) => ({
-        ...spaceRow,
-        handle: spaceRow.handle_account
-          ? await backend.resolveHandleForSpace(
-              spaceRow.id,
-              UserDid.assert(spaceRow.handle_account),
-            )
-          : undefined,
-        backfill_status: backendStatus.spaces?.[spaceRow.id] || "error",
-      })) || [],
-    )
-      .then((s) => {
-        joinedSpaces.list = s;
-        joinedSpaces.loading = false;
-      })
-      .catch((e) => {
-        joinedSpaces.loading = false;
-        joinedSpaces.error = `Failed to load spaces: ${e}`;
-      });
+    const spacesWithMeta = spacesQuery.result.map((spaceRow) => ({
+      ...spaceRow,
+      handle: handlesForSpace.get(spaceRow.id),
+      backfill_status: backendStatus.spaces?.[spaceRow.id] || "error",
+    }));
+
+    joinedSpaces.list = spacesWithMeta;
+    joinedSpaces.loading = false;
+
+    console.info("Joined Spaces", {
+      joinedSpaces: $state.snapshot(joinedSpaces),
+    });
   });
 });
