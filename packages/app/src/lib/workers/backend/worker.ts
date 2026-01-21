@@ -52,6 +52,7 @@ import { initializeFaro } from "$lib/otel";
 import { context } from "@opentelemetry/api";
 import { createOauthClient, oauthDb } from "./oauth";
 import { Agent, CredentialSession } from "@atproto/api";
+import { requestLock, locksEnabled } from "$lib/workers/locks";
 import { lexicons } from "$lib/lexicons";
 import type { SessionManager } from "@atproto/api/dist/session-manager";
 
@@ -178,12 +179,20 @@ class WorkerSupervisor {
         await this.sqlite.untilReady;
 
         const channel = this.sqlite.createLiveQueryChannel(port);
-        navigator.locks.request(id, async () => {
-          // When we obtain a lock to the query ID, that means that the query is no longer in
-          // use and we can delete it.
-          await this.sqlite.deleteLiveQuery(id);
-        });
+        // When SharedWorker is enabled, use lock acquisition as a signal that the query
+        // is no longer in use. When disabled, cleanup is handled by explicit deleteLiveQuery calls.
+        if (locksEnabled()) {
+          requestLock(id, async () => {
+            // When we obtain a lock to the query ID, that means that the query is no longer in
+            // use and we can delete it.
+            await this.sqlite.deleteLiveQuery(id);
+          });
+        }
         return this.sqlite.createLiveQuery(id, channel.port2, statement);
+      },
+      deleteLiveQuery: async (id) => {
+        await this.sqlite.untilReady;
+        await this.sqlite.deleteLiveQuery(id);
       },
       dangerousCompletelyDestroyDatabase: async ({ yesIAmSure }) => {
         if (!yesIAmSure) throw "You need to be sure";

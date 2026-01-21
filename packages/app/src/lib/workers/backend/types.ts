@@ -46,6 +46,7 @@ export type BackendInterface = {
     port: MessagePort,
     statement: SqlStatement,
   ): Promise<void>;
+  deleteLiveQuery(id: string): Promise<void>;
   sendEvent(streamId: StreamDid, event: Event): Promise<void>;
   sendEventBatch(streamId: StreamDid, events: Event[]): Promise<void>;
   fetchEvents(
