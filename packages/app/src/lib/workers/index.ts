@@ -121,7 +121,7 @@ export const backend = tracer.startActiveSpan(
   },
 );
 
-export function getPersonalStreamId() {
+export function getPersonalSpaceId() {
   return backendStatus.roomyState?.state === "connected"
     ? backendStatus.roomyState.personalSpace
     : undefined;

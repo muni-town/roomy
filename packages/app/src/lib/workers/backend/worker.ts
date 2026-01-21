@@ -215,10 +215,6 @@ class WorkerSupervisor {
       disableLogForwarding: () => this.disableLogForwarding(),
       connectSpaceStream: async (streamId, idx) => {
         await this.connectSpaceStream(streamId, idx);
-        this.#status.spaces = {
-          ...this.#status.spaces,
-          [streamId]: "idle",
-        };
       },
       createSpaceStream: async () => {
         const streamId = await this.createSpaceStream();
@@ -441,6 +437,7 @@ class WorkerSupervisor {
             password: CONFIG.testingAppPassword,
           });
           span.end();
+          this.#authenticated.resolve();
           return session;
         } catch (error) {
           console.error("loginWithAppPassword: Login failed", error);
@@ -452,12 +449,20 @@ class WorkerSupervisor {
         const didEntry = await db.kv.get("did");
         if (!didEntry?.value) return null;
 
-        return await tracer.startActiveSpan(
+        const session = await tracer.startActiveSpan(
           "Restore Oauth Session",
           {},
           ctx,
-          (span) => oauth.restore(didEntry.value).finally(() => span.end()),
+          (span) =>
+            oauth.restore(didEntry.value).catch((e) => {
+              console.warn("Restore session failed", e);
+              span.end();
+              return null;
+            }),
         );
+        this.#authenticated.resolve();
+        span.end();
+        return session;
       }
     }
   }
@@ -615,38 +620,6 @@ class WorkerSupervisor {
       ),
     };
 
-    console.debug("Connecting to spaces", spacesToConnect);
-
-    const connectedSpaces = new Map<StreamDid, ConnectedSpace>();
-    const failed: StreamDid[] = [];
-
-    for await (const [streamId, _upToEventId] of spacesToConnect.entries()) {
-      try {
-        const space = await ConnectedSpace.connect({
-          client: this.#roomy.client,
-          streamDid: streamId,
-          module: modules.space,
-        });
-
-        // Subscribe with callback that pushes to eventChannel
-        const callback = this.#createEventCallback(eventChannel, streamId);
-        // First get metadata to find latest index, then subscribe from there
-        const latest = await space.subscribeMetadata(callback, 0);
-        await space.unsubscribe();
-        space.subscribe(callback, latest);
-
-        connectedSpaces.set(streamId, space);
-      } catch (e) {
-        console.error("Stream may not exist:", streamId, e);
-        failed.push(streamId);
-      }
-    }
-
-    if (failed.length) console.warn("Some streams didn't connect", failed);
-    // TODO: clean up nonexistent streams from db
-
-    console.debug("Spaces connected");
-
     // Connect to spaces the user has joined (but not left) after full personal stream backfill
     await tracer.startActiveSpan(
       "Connect Pending Spaces",
@@ -664,7 +637,7 @@ class WorkerSupervisor {
       eventChannel,
       spaces: new Map([
         ...this.#roomy.spaces.entries(),
-        ...connectedSpaces.entries(),
+        // ...connectedSpaces.entries(),
       ]),
     };
     this.#status.roomyState = {
@@ -678,12 +651,12 @@ class WorkerSupervisor {
       {},
       ctx,
       async (span) => {
-        for (const stream of connectedSpaces.values()) {
+        for (const space of this.spaces.values()) {
           (async () => {
-            await stream.doneBackfilling;
+            await space.doneBackfilling;
             this.#status.spaces = {
               ...this.#status.spaces,
-              [stream.streamDid]: "idle",
+              [space.streamDid]: "idle",
             };
           })();
         }
@@ -691,7 +664,8 @@ class WorkerSupervisor {
       },
     );
 
-    this.#authenticated.resolve();
+    console.info("Backend initialised!");
+
     span.end();
   }
 
@@ -795,6 +769,10 @@ class WorkerSupervisor {
     await space.subscribe(callback, latest);
 
     this.#roomy.spaces.set(streamId, space);
+    this.#status.spaces = {
+      ...this.#status.spaces,
+      [streamId]: "idle",
+    };
 
     return;
   }
@@ -920,6 +898,15 @@ class WorkerSupervisor {
 
   private get sqlite() {
     return this.#sqlite;
+  }
+
+  private get spaces() {
+    if (
+      this.#roomy.state !== "connected" &&
+      this.#roomy.state !== "materializingPersonalSpace"
+    )
+      throw new Error("Not connected to RoomyClient");
+    return this.#roomy.spaces;
   }
 
   private loadStoredConfig() {
