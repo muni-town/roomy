@@ -88,8 +88,6 @@ class WorkerSupervisor {
 
   #auth: AuthState;
   #roomy: RoomyState;
-
-  //fixmeee
   #status: Partial<BackendStatus>;
 
   #connection: ConnectionState; // tabs connected to shared worker
@@ -130,8 +128,9 @@ class WorkerSupervisor {
     );
 
     this.#auth = { state: "loading" };
+    this.#status.authState = this.#auth;
     this.#roomy = { state: "disconnected" };
-    this.#status.authState = this.#auth; // in general prefer setAuthState
+    this.#status.roomyState = this.#roomy;
 
     this.#connection = { ports: new WeakMap(), count: 0 };
 
