@@ -1,7 +1,7 @@
 import { page } from "$app/state";
 import { backend, backendStatus } from "$lib/workers";
 import { joinedSpaces } from "./spaces.svelte";
-import type { AuthStates } from "$lib/workers/backend/types";
+import type { AuthState, ReactiveAuthState } from "$lib/workers/backend/types";
 import type { SpaceIdOrHandle } from "$lib/workers/types";
 import type { SpaceMeta } from "./types";
 import { type StreamDid, Ulid, type UserDid } from "@roomy/sdk";
@@ -72,8 +72,12 @@ async function getCurrentSpace(spaceId: SpaceIdOrHandle) {
     matchingSpace.permissions?.some(
       (permission) =>
         permission[0] ===
-          (backendStatus.authState as AuthStates.ReactiveAuthenticated).did &&
-        permission[1] === "admin",
+          (
+            backendStatus.authState as Extract<
+              ReactiveAuthState,
+              { state: "authenticated" }
+            >
+          ).did && permission[1] === "admin",
     ) || false;
   return { matchingSpace, spaceId: resp.spaceId, isSpaceAdmin };
 }
@@ -96,7 +100,7 @@ $effect.root(() => {
     if (joinedSpaces.loading || !page.params.space) return; // wait until spaces are loaded
     if (
       backendStatus.authState?.state !== "authenticated" ||
-      backendStatus.authState.clientStatus !== "connected"
+      backendStatus.roomyState?.state !== "connected"
     )
       return;
 

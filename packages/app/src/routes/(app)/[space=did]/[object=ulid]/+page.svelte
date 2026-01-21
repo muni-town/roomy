@@ -27,7 +27,7 @@
   import { sql } from "$lib/utils/sqlTemplate";
   import { navigate, scrollContainerRef } from "$lib/utils.svelte";
 
-  import { Input, Modal, Popover, Button, toast } from "@fuxui/base";
+  import { Input, Modal, Button, toast } from "@fuxui/base";
   import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
@@ -41,14 +41,14 @@
   import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
   import IconHeroiconsDocument from "~icons/heroicons/document";
   import IconHeroiconsChatBubbleLeftRight from "~icons/heroicons/chat-bubble-left-right";
-  import IconTablerClick from "~icons/tabler/click";
-  import IconTablerSettings from "~icons/tabler/settings";
+  // import IconTablerClick from "~icons/tabler/click";
+  // import IconTablerSettings from "~icons/tabler/settings";
 
   import Error from "$lib/components/modals/Error.svelte";
 
   import { flags } from "$lib/config";
   import { Ulid } from "@roomy/sdk";
-  import EditRoomModal from "$lib/components/modals/EditRoomModal.svelte";
+  // import EditRoomModal from "$lib/components/modals/EditRoomModal.svelte";
 
   let createPageDialogOpen = $state(false);
   let createPageName = $state("");
@@ -64,7 +64,7 @@
   let promoteChannelDialogOpen = $state(false);
   let sentLastReadMarker = $state(false); // flag to ensure lastRead event is only sent once per page load
 
-  let editRoomModalOpen = $state(false);
+  // let editRoomModalOpen = $state(false);
 
   const roomQuery = new LiveQuery<{
     name: string;
@@ -93,8 +93,7 @@
 
   const setPageRead = () => {
     if (
-      !backendStatus.authState ||
-      backendStatus.authState.state !== "authenticated" ||
+      backendStatus.roomyState?.state !== "connected" ||
       !spaceId ||
       !page.params.object ||
       sentLastReadMarker === true
@@ -102,7 +101,7 @@
       return;
     sentLastReadMarker = true;
     setPageReadMarker({
-      personalStreamId: backendStatus.authState.personalStream,
+      personalStreamId: backendStatus.roomyState?.personalSpace,
       streamId: spaceId,
       roomId: Ulid.assert(page.params.object),
     });
@@ -422,4 +421,4 @@
   </MainLayout>
 {/if}
 
-<EditRoomModal bind:open={editRoomModalOpen} />
+<!-- <EditRoomModal bind:open={editRoomModalOpen} /> -->
