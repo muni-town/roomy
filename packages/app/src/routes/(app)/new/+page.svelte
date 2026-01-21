@@ -55,7 +55,11 @@
 
   async function createSpaceSubmit(evt: Event) {
     evt.preventDefault();
-    if (backendStatus.authState?.state != "authenticated") return;
+    if (
+      backendStatus.authState?.state != "authenticated" ||
+      backendStatus.roomyState?.state !== "connected"
+    )
+      return;
 
     try {
       spaceCreationState = { status: "loading" };
@@ -66,7 +70,7 @@
         avatarFile: form.avatarFile || undefined,
         creator: {
           did: backendStatus.authState.did,
-          personalStreamId: backendStatus.authState.personalStream,
+          personalStreamId: backendStatus.roomyState.personalSpace,
         },
       });
 
