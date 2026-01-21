@@ -122,7 +122,8 @@ export const backend = tracer.startActiveSpan(
 );
 
 export function getPersonalSpaceId() {
-  return backendStatus.roomyState?.state === "connected"
+  return backendStatus.roomyState?.state === "connected" ||
+    backendStatus.roomyState?.state === "materializingPersonalSpace"
     ? backendStatus.roomyState.personalSpace
     : undefined;
 }

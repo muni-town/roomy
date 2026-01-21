@@ -22,8 +22,8 @@
 
   async function leaveSpace() {
     const spaceDid = current.joinedSpace?.id;
-    if (backendStatus.authState?.state !== "authenticated") return;
-    if (!spaceDid || !backendStatus.authState.personalStream) return;
+    if (backendStatus.roomyState?.state !== "connected") return;
+    if (!spaceDid || !backendStatus.roomyState.personalSpace) return;
 
     // Tell the space that we are leaving the member list
     await backend.sendEvent(spaceDid, {
@@ -32,7 +32,7 @@
     });
 
     // Remove the space from our personal space list
-    await backend.sendEvent(backendStatus.authState.personalStream, {
+    await backend.sendEvent(backendStatus.roomyState.personalSpace, {
       id: newUlid(),
       $type: "space.roomy.space.personal.leaveSpace.v0",
       spaceDid: spaceDid,

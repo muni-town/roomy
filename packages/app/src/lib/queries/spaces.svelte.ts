@@ -48,7 +48,7 @@ $effect.root(() => {
     if (
       backendStatus.authState?.state !== "authenticated" ||
       backendStatus.roomyState?.state !== "connected" ||
-      !spacesQuery.result
+      !spacesQuery.result?.length
     )
       return;
 
@@ -78,9 +78,10 @@ $effect.root(() => {
     if (
       backendStatus.authState?.state !== "authenticated" ||
       backendStatus.roomyState?.state !== "connected" ||
-      !spacesQuery.result
+      !spacesQuery.result?.length
     )
       return;
+
     const spacesWithMeta = spacesQuery.result.map((spaceRow) => ({
       ...spaceRow,
       handle: handlesForSpace.get(spaceRow.id),
@@ -90,8 +91,9 @@ $effect.root(() => {
     joinedSpaces.list = spacesWithMeta;
     joinedSpaces.loading = false;
 
-    console.info("Joined Spaces", {
-      joinedSpaces: $state.snapshot(joinedSpaces),
-    });
+    // console.info("Joined Spaces", {
+    //   joinedSpaces: $state.snapshot(joinedSpaces),
+    //   spacesQuery: $state.snapshot(spacesQuery.result),
+    // });
   });
 });
