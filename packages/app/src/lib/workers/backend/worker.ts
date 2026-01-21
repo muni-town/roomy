@@ -264,7 +264,7 @@ class WorkerSupervisor {
       resolveHandleForSpace: async (spaceId, handleAccountDid) =>
         this.client.resolveHandleForSpace(spaceId, handleAccountDid),
       resolveSpaceId: async (handleOrDid) => {
-        await this.#authenticated.promise;
+        await this.#connected.promise;
         return await this.client.resolveSpaceId(handleOrDid);
       },
       checkSpaceExists: async (spaceId) =>
