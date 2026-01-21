@@ -52,22 +52,29 @@ $effect.root(() => {
     )
       return;
 
-    for (const space of spacesQuery.result) {
-      if (space.handle_account && !handlesForSpace.has(space.id)) {
-        backend
-          .resolveHandleForSpace(space.id, UserDid.assert(space.handle_account))
-          .then((maybeHandle) => {
-            handlesForSpace.set(space.id, maybeHandle);
-          });
-      }
-    }
+    Promise.all(
+      spacesQuery.result
+        .filter(
+          (space) => space.handle_account && !handlesForSpace.has(space.id),
+        )
+        .map(async (space) => {
+          return {
+            id: space.id,
+            handle: await backend.resolveHandleForSpace(
+              space.id,
+              UserDid.assert(space.handle_account),
+            ),
+          };
+        }),
+    ).then((spaces) => {
+      spaces
+        .filter((s) => !!s.handle)
+        .forEach((space) => handlesForSpace.set(space.id, space.handle));
+    });
   });
 
   // Update spaces list, loading the space handle if it has one.
   $effect(() => {
-    joinedSpaces.loading = true;
-    joinedSpaces.error = "";
-    joinedSpaces.list = [];
     if (
       backendStatus.authState?.state !== "authenticated" ||
       backendStatus.roomyState?.state !== "connected" ||
