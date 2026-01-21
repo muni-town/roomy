@@ -1,10 +1,11 @@
 import { page } from "$app/state";
 import { backend, backendStatus } from "$lib/workers";
 import { joinedSpaces } from "./spaces.svelte";
-import type { AuthState, ReactiveAuthState } from "$lib/workers/backend/types";
+import type { ReactiveAuthState } from "$lib/workers/backend/types";
 import type { SpaceIdOrHandle } from "$lib/workers/types";
 import type { SpaceMeta } from "./types";
-import { type StreamDid, Ulid, type UserDid } from "@roomy/sdk";
+import { Handle, type StreamDid, Ulid, type UserDid } from "@roomy/sdk";
+import { SvelteMap } from "svelte/reactivity";
 
 type SpaceStatus =
   | { status: "no-current-space" }
@@ -35,6 +36,18 @@ export const current = $state<{
 });
 (globalThis as any).current = current;
 
+let resolvedSpaceIds = new SvelteMap<
+  string,
+  | {
+      spaceId: StreamDid;
+      handle?: Handle;
+      did?: UserDid;
+    }
+  | { error: string }
+>();
+
+let resolvedSpaceExists = new SvelteMap<StreamDid, boolean>();
+
 function error(message: string) {
   console.error(message);
   current.space = { status: "error", message };
@@ -42,11 +55,26 @@ function error(message: string) {
   current.isSpaceAdmin = false;
 }
 
-async function getCurrentSpace(spaceId: SpaceIdOrHandle) {
+const currentSpace = $derived.by(() => {
   // Resolve the space handle to a space ID
-  const resp = await backend.resolveSpaceId(spaceId as SpaceIdOrHandle);
+  const spaceUrlSegment = page.params.space;
+  if (!spaceUrlSegment) return undefined;
+  if (!resolvedSpaceIds.has(spaceUrlSegment)) {
+    backend.resolveSpaceId(spaceUrlSegment as SpaceIdOrHandle).then((resp) => {
+      resolvedSpaceIds.set(spaceUrlSegment, resp);
+    });
+    return undefined;
+  }
+  const resp = resolvedSpaceIds.get(spaceUrlSegment);
 
-  const exists = await backend.checkSpaceExists(resp.spaceId);
+  if (!resp || !("spaceId" in resp)) return undefined;
+  if (!resolvedSpaceExists.has(resp.spaceId)) {
+    backend.checkSpaceExists(resp.spaceId).then((exists) => {
+      resolvedSpaceExists.set(resp.spaceId, exists);
+    });
+    return undefined;
+  }
+  const exists = resolvedSpaceExists.get(resp.spaceId);
   if (!exists) {
     throw "This space doesn't exist or has been deleted.";
   }
@@ -80,15 +108,11 @@ async function getCurrentSpace(spaceId: SpaceIdOrHandle) {
           ).did && permission[1] === "admin",
     ) || false;
   return { matchingSpace, spaceId: resp.spaceId, isSpaceAdmin };
-}
+});
 
 $effect.root(() => {
   // Update current.space whenever page.params.space or joinedSpaces change
   $effect(() => {
-    page.params.space; // depend on page.params.space
-
-    // console.log("current space", page.params.space);
-
     // TODO: when we checked if the space was loading right here it would cause a problem when
     // we start lazy loading a room, because we go from a loaded space to a loading space, and
     // once the space was loaded it would change the space and trigger another lazy load in an
@@ -100,26 +124,23 @@ $effect.root(() => {
     if (joinedSpaces.loading || !page.params.space) return; // wait until spaces are loaded
     if (
       backendStatus.authState?.state !== "authenticated" ||
-      backendStatus.roomyState?.state !== "connected"
+      backendStatus.roomyState?.state !== "connected" ||
+      !currentSpace
     )
       return;
 
-    getCurrentSpace(page.params.space as SpaceIdOrHandle)
-      .then(({ matchingSpace, isSpaceAdmin, spaceId }) => {
-        current.space = matchingSpace
-          ? {
-              status: "joined",
-              space: matchingSpace,
-              isSpaceAdmin,
-            }
-          : {
-              status: "invited",
-              spaceId: spaceId,
-            };
-        current.joinedSpace = matchingSpace;
-        current.isSpaceAdmin = isSpaceAdmin;
-      })
-      .catch(error);
+    current.space = currentSpace.matchingSpace
+      ? {
+          status: "joined",
+          space: currentSpace.matchingSpace,
+          isSpaceAdmin: currentSpace?.isSpaceAdmin,
+        }
+      : {
+          status: "invited",
+          spaceId: currentSpace.spaceId,
+        };
+    current.joinedSpace = currentSpace.matchingSpace;
+    current.isSpaceAdmin = currentSpace.isSpaceAdmin;
 
     // reset when space changes
     return () => {
