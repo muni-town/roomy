@@ -43,6 +43,7 @@ import type {
 import type { BackendInterface } from "../backend/types";
 import { Deferred } from "$lib/utils/deferred";
 import { CONFIG } from "$lib/config";
+import { requestLock, queryLocks, locksEnabled } from "$lib/workers/locks";
 import { initializeFaro, trackUncaughtExceptions } from "$lib/otel";
 import { decodeTime, ulid } from "ulidx";
 import { context } from "@opentelemetry/api";
@@ -157,7 +158,9 @@ class SqliteWorkerSupervisor {
           activeWorkerId: this.#workerId,
         });
         this.#status.isActiveWorker = true;
-        this.startHeartbeat();
+        if (locksEnabled()) {
+          this.startHeartbeat();
+        }
 
         globalThis.addEventListener("error", this.cleanup);
         globalThis.addEventListener("unhandledrejection", this.cleanup);
@@ -196,8 +199,14 @@ class SqliteWorkerSupervisor {
     };
 
     const attemptLock = async (): Promise<void> => {
+      // If SharedWorker is disabled, skip locking entirely - each tab has its own worker
+      if (!locksEnabled()) {
+        await callback();
+        return;
+      }
+
       try {
-        await navigator.locks.request(
+        await requestLock(
           "sqlite-worker-lock",
           { mode: "exclusive", signal: AbortSignal.timeout(LOCK_TIMEOUT_MS) },
           callback,
@@ -407,6 +416,11 @@ class SqliteWorkerSupervisor {
   }
 
   private async attemptLockSteal(callback: () => Promise<void>) {
+    // Lock stealing is only relevant when SharedWorker is enabled
+    if (!locksEnabled()) {
+      return;
+    }
+
     try {
       // Check if there's a recent heartbeat from another worker
       const heartbeatData = await db.kv.get(HEARTBEAT_KEY);
@@ -429,7 +443,7 @@ class SqliteWorkerSupervisor {
       );
 
       // Try to acquire lock with ifAvailable first
-      const lockAcquired = await navigator.locks.request(
+      const lockAcquired = await requestLock(
         "sqlite-worker-lock-backup",
         { mode: "exclusive", ifAvailable: true },
         async (lock) => {
@@ -453,8 +467,8 @@ class SqliteWorkerSupervisor {
 
   async runQuery<Row>(statement: SqlStatement) {
     // This lock makes sure that the JS tasks don't interleave some other query executions in while we
-    // are trying to compose a bulk transaction.
-    return navigator.locks.request(QUERY_LOCK, async () => {
+    // are trying to compose a bulk transaction. Only needed with SharedWorker.
+    return requestLock(QUERY_LOCK, async () => {
       try {
         return (await executeQuery(statement)) as QueryResult<Row>;
       } catch (e) {
@@ -492,8 +506,8 @@ class SqliteWorkerSupervisor {
       ping: async () => {
         console.debug("SQLite worker: Ping received");
 
-        // Check lock status
-        const lockInfo = await navigator.locks.query();
+        // Check lock status (only meaningful when SharedWorker is enabled)
+        const lockInfo = await queryLocks();
         const sqliteLocks = lockInfo?.held?.filter(
           (lock) =>
             lock.name === "sqlite-worker-lock" || lock.name === QUERY_LOCK,
@@ -601,11 +615,8 @@ class SqliteWorkerSupervisor {
     disableLiveQueries();
 
     // This lock makes sure that the JS tasks don't interleave some other query executions in while we
-    // are trying to compose a bulk transaction.
-    const result: Batch.ApplyResult = await navigator.locks.request(
-      QUERY_LOCK,
-      exec,
-    );
+    // are trying to compose a bulk transaction. Only needed with SharedWorker.
+    const result: Batch.ApplyResult = await requestLock(QUERY_LOCK, exec);
 
     await enableLiveQueries();
 
@@ -919,8 +930,8 @@ class SqliteWorkerSupervisor {
       disableLiveQueries();
 
       // This lock makes sure that the JS tasks don't interleave some other query executions in while we
-      // are trying to compose a bulk transaction.
-      const result = await navigator.locks.request(QUERY_LOCK, exec);
+      // are trying to compose a bulk transaction. Only needed with SharedWorker.
+      const result = await requestLock(QUERY_LOCK, exec);
 
       await enableLiveQueries();
       return result;

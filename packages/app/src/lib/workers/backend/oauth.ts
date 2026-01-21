@@ -12,7 +12,7 @@ import {
 } from "@atproto/oauth-client-browser";
 import { Dexie, type EntityTable } from "dexie";
 import { JoseKey } from "@atproto/jwk-jose";
-import { CONFIG } from "$lib/config";
+import { CONFIG, flags } from "$lib/config";
 
 // TODO: implement cleanup of old db state and session values?
 export const oauthDb = new Dexie("atproto-oauth") as Dexie & {
@@ -26,10 +26,12 @@ oauthDb.version(1).stores({
   dpopNonce: `key`,
 });
 
-const requestLock: RuntimeLock | undefined = navigator.locks?.request
-  ? <T>(name: string, fn: () => T | PromiseLike<T>): Promise<T> =>
-      navigator.locks.request(name, { mode: "exclusive" }, fn) as Promise<T>
-  : undefined;
+// Only use locks when SharedWorker is enabled - otherwise each tab has isolated state
+const requestLock: RuntimeLock | undefined =
+  flags.sharedWorker && navigator.locks?.request
+    ? <T>(name: string, fn: () => T | PromiseLike<T>): Promise<T> =>
+        navigator.locks.request(name, { mode: "exclusive" }, fn) as Promise<T>
+    : undefined;
 
 function encodeKey(key: Key): unknown {
   return (key as any).jwk;

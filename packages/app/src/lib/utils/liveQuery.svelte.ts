@@ -2,6 +2,7 @@ import type { AsyncState } from "$lib/types/asyncState";
 import { backend } from "$lib/workers";
 import type { LiveQueryMessage } from "$lib/workers/sqlite/setup";
 import type { SqlStatement } from "$lib/workers/sqlite/types";
+import { locksEnabled, requestLock } from "$lib/workers/locks";
 
 export class LiveQuery<Row extends { [key: string]: unknown }> {
   current: AsyncState<Row[]> = $state.raw({ status: "loading" });
@@ -17,7 +18,7 @@ export class LiveQuery<Row extends { [key: string]: unknown }> {
 
       this.#statement = statement();
 
-      navigator.locks.request(instanceId, async () => {
+      const setupQuery = async () => {
         const channel = new MessageChannel();
         channel.port1.onmessage = (ev) => {
           const data: LiveQueryMessage = ev.data;
@@ -34,14 +35,32 @@ export class LiveQuery<Row extends { [key: string]: unknown }> {
           }
         };
 
-        navigator.locks.request(id, async (_lock) => {
+        if (locksEnabled()) {
+          // With SharedWorker: use locks to signal when query is no longer in use
+          requestLock(id, async () => {
+            backend.createLiveQuery(id, channel.port2, this.#statement);
+            await lockPromise;
+          });
+        } else {
+          // Without SharedWorker: create query directly, cleanup via effect return
           backend.createLiveQuery(id, channel.port2, this.#statement);
-          await lockPromise;
-        });
-      });
+        }
+      };
+
+      if (locksEnabled()) {
+        requestLock(instanceId, setupQuery);
+      } else {
+        setupQuery();
+      }
 
       return () => {
         dropLock();
+        // When locks are disabled, explicitly delete the live query on cleanup
+        if (!locksEnabled()) {
+          backend.deleteLiveQuery(id).catch(() => {
+            // Ignore errors during cleanup - worker may already be gone
+          });
+        }
       };
     });
   }
