@@ -84,45 +84,55 @@ export class ConnectedSpace {
   static async connect(config: ConnectedSpaceConfig): Promise<ConnectedSpace> {
     console.debug("Connecting", config);
 
+    let previousModuleCid: undefined | string;
     try {
-      const { moduleCid } = await config.client.leaf.streamInfo(
+      const { moduleCid: cid } = await config.client.leaf.streamInfo(
         config.streamDid,
       );
-      const expectedCid = await config.module.cid;
+      previousModuleCid = cid;
+      console.debug("Got stream info", { moduleCid: previousModuleCid });
+    } catch (e) {
+      console.warn(
+        "Stream info error ( will try to reset module if possible ):",
+        e,
+      );
+    }
+    const expectedCid = await config.module.cid;
 
-      console.debug("Got stream info", { moduleCid });
+    if (previousModuleCid !== expectedCid) {
+      console.info(
+        `Module for stream ${config.streamDid} (${previousModuleCid}) differs from expected (${expectedCid}), trying to update...`,
+      );
 
-      if (moduleCid !== expectedCid) {
-        console.info(
-          `Module for stream ${config.streamDid} (${moduleCid}) differs from expected (${expectedCid}), updating...`,
+      if (!(await config.client.leaf.hasModule(expectedCid))) {
+        console.log("Leaf server doesn't have module, uploading:", expectedCid);
+        await config.client.leaf.uploadModule(config.module.def);
+      }
+
+      try {
+        await config.client.leaf.updateModule(config.streamDid, expectedCid);
+        console.log(
+          `Updated stream ( ${config.streamDid} ) module to ${expectedCid}`,
         );
-
-        if (!(await config.client.leaf.hasModule(expectedCid))) {
-          console.log(
-            "Leaf server doesn't have module, uploading:",
-            expectedCid,
-          );
-          await config.client.leaf.uploadModule(config.module.def);
-        }
-
-        try {
-          await config.client.leaf.updateModule(config.streamDid, expectedCid);
-        } catch (e) {
+      } catch (e) {
+        if (previousModuleCid) {
           // May fail if user is not admin, which is fine
           console.warn(
             "Could not update space module (user may not be admin):",
             e,
           );
+        } else {
+          // If we couldn't get a previous module, and we couldn't update it, then something is
+          // wrong with the stream, or it doesn't exist.
+          throw new Error(
+            `Stream does not exist on this Leaf server. Stream ID: ${config.streamDid}\n \
+            Tried to update module bug got error: ${e}`,
+          );
         }
       }
-
-      return new ConnectedSpace(config);
-    } catch (e) {
-      console.error("Stream info error:", e);
-      throw new Error(
-        `Stream does not exist on this Leaf server. Stream ID: ${config.streamDid}`,
-      );
     }
+
+    return new ConnectedSpace(config);
   }
 
   /**
