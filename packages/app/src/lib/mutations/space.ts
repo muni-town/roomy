@@ -8,13 +8,13 @@ import { newUlid, ulidFactory } from "@roomy/sdk";
  */
 export async function joinSpace(spaceId: StreamDid) {
   try {
-    if (backendStatus.authState?.state !== "authenticated") {
+    if (backendStatus.roomyState?.state !== "connected") {
       toast.error("Could not join space. It's possible it does not exist.");
       return;
     }
 
     // Add the space to the personal list of joined spaces
-    await backend.sendEvent(backendStatus.authState.personalStream, {
+    await backend.sendEvent(backendStatus.roomyState.personalSpace, {
       id: newUlid(),
       $type: "space.roomy.space.personal.joinSpace.v0",
       spaceDid: spaceId,
@@ -27,8 +27,6 @@ export async function joinSpace(spaceId: StreamDid) {
       id: newUlid(),
       $type: "space.roomy.space.joinSpace.v0",
     });
-
-
   } catch (e) {
     console.error(e);
     toast.error("Could not join space. It's possible it does not exist.");
