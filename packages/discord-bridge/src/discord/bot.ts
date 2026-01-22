@@ -32,6 +32,7 @@ import {
   ensureRoomyChannelForDiscordChannel,
   ensureRoomySidebarForCategoriesAndChannels,
   ensureRoomyThreadForDiscordThread,
+  ensureRoomyMessageForDiscordMessage,
 } from "../roomy/to.js";
 import { getConnectedSpace } from "../roomy/client.js";
 
@@ -138,10 +139,8 @@ export async function startBot() {
 
       // Handle new messages
       async messageCreate(message) {
-        // We don't handle realtime messages while we are in the middle of backfilling, otherwise we
-        // might be indexing at the same time and incorrectly update the latest message seen in the
-        // channel.
-        // if (!doneBackfillingFromDiscord) return;
+        // Skip during backfill to avoid race conditions with cursor tracking
+        if (!doneBackfillingFromDiscord) return;
         if (!(await hasBridge(message.guildId!))) return;
 
         const guildId = message.guildId;
@@ -154,41 +153,17 @@ export async function startBot() {
           console.error("Channel ID not present on Discord message event");
           return;
         }
+
         const ctx = await getGuildContext(guildId);
+        const roomyRoomId = await ctx.syncedIds.get_roomyId(channelId.toString());
 
-        const roomyThreadId = await ctx.syncedIds.get_roomyId(
-          message.channelId.toString(),
-        );
-
-        console.log("Message", message, "threadId", roomyThreadId);
-
-        if (!roomyThreadId) {
-          throw new Error(
-            "Discord channel for message doesn't have a roomy thread yet.",
-          );
+        if (!roomyRoomId) {
+          console.warn(`Discord channel ${channelId} not synced to Roomy, skipping message`);
+          return;
         }
 
-        // const threadEnt = await RoomyEntity.load(roomyThreadId, {
-        //   resolve: { components: { [ThreadComponent.id]: true } },
-        // });
-        // const thread =
-        //   threadEnt &&
-        //   (await ThreadComponent.load(
-        //     threadEnt.components[ThreadComponent.id]!,
-        //     { resolve: { timeline: true } },
-        //   ));
-        // if (!thread) throw new Error("Could't load Roomy thread.");
-
-        // await syncDiscordMessageToRoomy(ctx, {
-        //   discordChannelId: channelId,
-        //   thread,
-        //   message,
-        // });
-
-        ctx.latestMessagesInChannel.put(
-          message.channelId.toString(),
-          message.id.toString(),
-        );
+        await ensureRoomyMessageForDiscordMessage(ctx, roomyRoomId, message);
+        await ctx.latestMessagesInChannel.put(channelId.toString(), message.id.toString());
       },
     },
   });
@@ -198,6 +173,49 @@ export async function startBot() {
 
 // should this be a global? or per guild?
 export let doneBackfillingFromDiscord = false;
+
+async function backfillMessagesForChannel(
+  bot: DiscordBot,
+  ctx: GuildContext,
+  channel: DiscordChannel,
+): Promise<void> {
+  const roomyRoomId = await ctx.syncedIds.get_roomyId(channel.id.toString());
+  if (!roomyRoomId) {
+    console.warn(`Channel ${channel.id} not synced, skipping message backfill`);
+    return;
+  }
+
+  let after: bigint | string = "0";
+  const cachedLatest = await ctx.latestMessagesInChannel.get(channel.id.toString());
+  if (cachedLatest) {
+    after = BigInt(cachedLatest);
+  }
+
+  while (true) {
+    try {
+      const messages = await bot.helpers.getMessages(channel.id, {
+        after,
+        limit: 100,
+      });
+
+      if (messages.length === 0) break;
+
+      console.log(`Backfilling ${messages.length} messages in channel ${channel.name || channel.id}`);
+
+      // Process oldest first (messages come newest-first from API)
+      const sortedMessages = [...messages].reverse();
+      for (const message of sortedMessages) {
+        await ensureRoomyMessageForDiscordMessage(ctx, roomyRoomId, message);
+        after = message.id;
+      }
+
+      await ctx.latestMessagesInChannel.put(channel.id.toString(), after.toString());
+    } catch (e) {
+      console.warn(`Error backfilling messages for channel ${channel.id}: ${e}`);
+      break;
+    }
+  }
+}
 
 /** Bridge all past messages in a Discord guild to Roomy */
 export async function backfill(bot: DiscordBot, guildIds: bigint[]) {
@@ -282,67 +300,25 @@ export async function backfill(bot: DiscordBot, guildIds: bigint[]) {
             textChannels,
           );
 
-          for (const channel of allChannelsAndThreads) {
-            await tracer.startActiveSpan(
-              "backfillChannel",
-              { attributes: { channelId: channel.id.toString() } },
-              async (span) => {
-                const cachedLatestForChannel =
-                  await ctx.latestMessagesInChannel.get(channel.id.toString());
+          // Backfill messages for all channels in parallel (with concurrency limit)
+          const CONCURRENCY_LIMIT = 5;
+          const channelChunks: DiscordChannel[][] = [];
+          for (let i = 0; i < allChannelsAndThreads.length; i += CONCURRENCY_LIMIT) {
+            channelChunks.push(allChannelsAndThreads.slice(i, i + CONCURRENCY_LIMIT));
+          }
 
-                let after = cachedLatestForChannel
-                  ? BigInt(cachedLatestForChannel)
-                  : "0";
-
-                // while (true) {
-                //   try {
-                //     // Get the next set of messages
-                //     const messages = await bot.helpers.getMessages(channel.id, {
-                //       after,
-                //       limit: 100,
-                //     });
-                //     if (messages.length > 0)
-                //       span.addEvent("Fetched new messages", {
-                //         count: messages.length,
-                //       });
-
-                //     console.log(
-                //       `    Found ${messages.length} messages since last message.`,
-                //     );
-
-                //     if (messages.length == 0) break;
-
-                //     // const { thread } = await getRoomyThreadForChannel(
-                //     //   ctx,
-                //     //   channel,
-                //     // );
-
-                //     // Backfill each one that we haven't indexed yet
-                //     for (const message of messages.reverse()) {
-                //       console.log("message", message.content);
-                //       // after = message.id;
-                //       // await syncDiscordMessageToRoomy(ctx, {
-                //       //   discordChannelId: message.channelId,
-                //       //   message,
-                //       //   thread,
-                //       // });
-                //     }
-
-                //     after &&
-                //       (await ctx.latestMessagesInChannel.put(
-                //         channel.id.toString(),
-                //         after.toString(),
-                //       ));
-                //   } catch (e) {
-                //     console.warn(
-                //       `Error syncing message to roomy ( this might be normal if the bot does not have access to the channel ): ${e}`,
-                //     );
-                //     break;
-                //   }
-                // }
-
-                span.end();
-              },
+          for (const chunk of channelChunks) {
+            await Promise.all(
+              chunk.map((channel) =>
+                tracer.startActiveSpan(
+                  "backfillChannelMessages",
+                  { attributes: { channelId: channel.id.toString() } },
+                  async (span) => {
+                    await backfillMessagesForChannel(bot, ctx, channel);
+                    span.end();
+                  },
+                ),
+              ),
             );
           }
 
