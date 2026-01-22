@@ -15,9 +15,10 @@
 // import { discordWebhookTokensForBridge } from "../db";
 // import { getRoomyThreadForChannel } from "./from";
 
-import { ChannelProperties } from "../discord/types";
+import { ChannelProperties, MessageProperties } from "../discord/types";
 import { GuildContext } from "../types";
-import { newUlid, type Event, type Ulid } from "@roomy/sdk";
+import { newUlid, toBytes, type Attachment, type Event, type Ulid } from "@roomy/sdk";
+import { discordWebhookTokensForBridge } from "../db.js";
 
 // const tracer = trace.getTracer("discordBot");
 
@@ -275,3 +276,121 @@ export async function ensureRoomyThreadForDiscordThread(
 //     span.end();
 //   });
 // }
+
+export async function ensureRoomyMessageForDiscordMessage(
+  ctx: GuildContext,
+  roomyRoomId: string,
+  message: MessageProperties,
+): Promise<string | null> {
+  // 1. Idempotency check
+  const existingId = await ctx.syncedIds.get_roomyId(message.id.toString());
+  if (existingId) {
+    return existingId;
+  }
+
+  // 2. Skip bot's own webhook messages (avoid echo)
+  const webhookTokens = discordWebhookTokensForBridge({
+    discordGuildId: ctx.guildId,
+    roomySpaceId: ctx.spaceId,
+  });
+  const channelWebhookToken = await webhookTokens.get(message.channelId.toString());
+  const channelWebhookId = channelWebhookToken?.split(":")[0];
+  if (channelWebhookId && message.webhookId?.toString() === channelWebhookId) {
+    return null;
+  }
+
+  // 3. Build attachments array
+  const attachments: Attachment[] = [];
+
+  // 3a. Reply attachment (if message_reference exists and target is synced)
+  if (message.messageReference?.messageId) {
+    const replyTargetId = await ctx.syncedIds.get_roomyId(
+      message.messageReference.messageId.toString(),
+    );
+    if (replyTargetId) {
+      attachments.push({
+        $type: "space.roomy.attachment.reply.v0",
+        target: replyTargetId as Ulid,
+      });
+    }
+  }
+
+  // 3b. Media attachments (images, videos, files)
+  for (const att of message.attachments || []) {
+    if (att.contentType?.startsWith("image/")) {
+      attachments.push({
+        $type: "space.roomy.attachment.image.v0",
+        uri: att.url,
+        mimeType: att.contentType,
+        width: att.width,
+        height: att.height,
+        size: att.size,
+      });
+    } else if (att.contentType?.startsWith("video/")) {
+      attachments.push({
+        $type: "space.roomy.attachment.video.v0",
+        uri: att.url,
+        mimeType: att.contentType,
+        width: att.width,
+        height: att.height,
+        size: att.size,
+      });
+    } else {
+      attachments.push({
+        $type: "space.roomy.attachment.file.v0",
+        uri: att.url,
+        mimeType: att.contentType || "application/octet-stream",
+        name: att.filename,
+        size: att.size,
+      });
+    }
+  }
+
+  // 4. Build CreateMessage event
+  const messageId = newUlid();
+  const extensions: Record<string, unknown> = {
+    "space.roomy.extension.discordMessageOrigin.v0": {
+      $type: "space.roomy.extension.discordMessageOrigin.v0",
+      snowflake: message.id.toString(),
+      channelId: message.channelId.toString(),
+      guildId: ctx.guildId.toString(),
+    },
+    "space.roomy.extension.authorOverride.v0": {
+      $type: "space.roomy.extension.authorOverride.v0",
+      did: `did:discord:${message.author.id}`,
+    },
+    "space.roomy.extension.timestampOverride.v0": {
+      $type: "space.roomy.extension.timestampOverride.v0",
+      timestamp: new Date(message.timestamp).getTime(),
+    },
+  };
+
+  if (attachments.length > 0) {
+    extensions["space.roomy.extension.attachments.v0"] = {
+      $type: "space.roomy.extension.attachments.v0",
+      attachments,
+    };
+  }
+
+  const event: Event = {
+    id: messageId,
+    room: roomyRoomId as Ulid,
+    $type: "space.roomy.message.createMessage.v0",
+    body: {
+      mimeType: "text/markdown",
+      data: toBytes(new TextEncoder().encode(message.content)),
+    },
+    extensions,
+  };
+
+  await ctx.connectedSpace.sendEvent(event);
+  console.log(`Created Roomy message ${messageId} for Discord message ${message.id}`);
+
+  // 5. Register mapping immediately
+  await ctx.syncedIds.register({
+    discordId: message.id.toString(),
+    roomyId: messageId,
+  });
+
+  return messageId;
+}

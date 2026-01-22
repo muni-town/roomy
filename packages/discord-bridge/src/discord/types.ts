@@ -15,6 +15,9 @@ const messageProperties = {
   channelId: true,
   author: true,
   webhookId: true,
+  timestamp: true,
+  attachments: true,
+  messageReference: true,
 } as const;
 export type MessageProperties = SetupDesiredProps<
   Message,
@@ -58,6 +61,16 @@ export const desiredProperties = {
     token: true,
     guildId: true,
     authorizingIntegrationOwners: true,
+  },
+  attachment: {
+    id: true,
+    filename: true,
+    contentType: true,
+    size: true,
+    url: true,
+    proxyUrl: true,
+    width: true,
+    height: true,
   },
 } satisfies RecursivePartial<TransformersDesiredProperties>;
 
