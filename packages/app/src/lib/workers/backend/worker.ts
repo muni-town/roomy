@@ -531,6 +531,8 @@ class WorkerSupervisor {
     const callback = this.#createEventCallback(
       eventChannel,
       personalSpace.streamDid,
+      // After each personal stream batch is materialized, connect to any new spaces
+      async () => this.sqlite.sqliteWorker.connectPendingSpaces(),
     );
 
     // backfill entire personal space
@@ -868,13 +870,19 @@ class WorkerSupervisor {
     }
   }
 
-  /** Create an event callback that pushes to the eventChannel */
+  /** Create an event callback that pushes to the eventChannel.
+   * Optionally registers a post-materialization callback that runs after the batch is processed. */
   #createEventCallback(
     eventChannel: AsyncChannel<Batch.Events>,
     streamId: StreamDid,
+    onBatch?: (result: Batch.Statement | Batch.ApplyResult) => void,
   ): EventCallback {
     return (events: DecodedStreamEvent[], { isBackfill, batchId }) => {
       if (events.length === 0) return;
+      if (onBatch) {
+        // Register the post-materialization callback for this batch
+        this.#batchResolvers.set(batchId, onBatch);
+      }
       eventChannel.push({
         status: "events",
         batchId,
