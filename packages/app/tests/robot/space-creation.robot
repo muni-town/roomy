@@ -377,14 +377,20 @@ Setup Test Environment For Spaces
     ...                - User authenticated with app password
     ...                - Personal stream exists
 
-    # Setup browser
+    # Setup browser - disable service workers to prevent hooks.client.ts from
+    # triggering a reload due to service worker cleanup
     New Browser    chromium    headless=True
-    New Context    viewport={'width': 1280, 'height': 720}
-    New Page    ${BASE_URL}
+    New Context    viewport={'width': 1280, 'height': 720}    serviceWorkers=block
+    # Navigate directly to /home to avoid redirect from root route
+    # (root route redirects to /home on mount, which can destroy JS context)
+    New Page    ${BASE_URL}/home
 
     # Wait for app to load
     ${backend_initialized}=    Wait For Backend To Initialize
     Should Be True    ${backend_initialized}
+
+    # Set __playwright flag to disable HMR page reloads (see workers/index.ts)
+    Evaluate JavaScript    ${None}    () => { window.__playwright = true; }
 
     # Wait for authentication (happens automatically with app password)
     ${authenticated}=    Wait For Authentication    timeout=30s
