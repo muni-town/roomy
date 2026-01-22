@@ -109,7 +109,10 @@ export function unionToMap<T extends { $type: string }>(
   opts?: { makeAllNullable: boolean },
 ): Type<TypeMap<T>> {
   const map = {} as any;
-  for (const variant of t.json as (
+  // Normalize to array: type.or() with a single variant returns the type directly (not an array)
+  const json = t.json;
+  const variants = Array.isArray(json) ? json : [json];
+  for (const variant of variants as (
     | {
         domain: string | { domain: string; meta?: string };
         required: { key: string; value: { unit: string } | {} }[];
