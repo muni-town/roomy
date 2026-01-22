@@ -48,7 +48,7 @@ $effect.root(() => {
     if (
       backendStatus.authState?.state !== "authenticated" ||
       backendStatus.roomyState?.state !== "connected" ||
-      !spacesQuery.result?.length
+      spacesQuery.result === undefined
     )
       return;
 
@@ -78,7 +78,7 @@ $effect.root(() => {
     if (
       backendStatus.authState?.state !== "authenticated" ||
       backendStatus.roomyState?.state !== "connected" ||
-      !spacesQuery.result?.length
+      spacesQuery.result === undefined
     )
       return;
 
