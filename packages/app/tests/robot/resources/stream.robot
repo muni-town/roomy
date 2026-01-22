@@ -16,8 +16,8 @@ Library             Collections
 
 *** Keywords ***
 Wait For Authentication
-    [Documentation]    Wait for authentication to complete and client to be connected
-    ...                Polls window.backendStatus until both authenticated and connected
+    [Documentation]    Wait for authentication to complete and Roomy to be connected
+    ...                Polls window.backendStatus until both authenticated and roomyState connected
     ...
     ...                Example:
     ...                | ${authenticated}= | Wait For Authentication |
@@ -39,12 +39,13 @@ Wait For Authentication
     ...        const start = Date.now();
     ...        const check = () => {
     ...            const authState = window.backendStatus?.current?.authState;
-    ...            if (authState?.state === 'authenticated' && authState?.clientStatus === 'connected') {
+    ...            const roomyState = window.backendStatus?.current?.roomyState;
+    ...            if (authState?.state === 'authenticated' && roomyState?.state === 'connected') {
     ...                resolve(true);
     ...            } else if (Date.now() - start < timeoutMs) {
     ...                setTimeout(check, 200);
     ...            } else {
-    ...                console.log('Timeout waiting for authentication. Auth state:', authState?.state, 'Client status:', authState?.clientStatus);
+    ...                console.log('Timeout waiting for authentication. Auth state:', authState?.state, 'Roomy state:', roomyState?.state);
     ...                resolve(false);
     ...            }
     ...        };
@@ -124,9 +125,9 @@ Verify Stream Connected
 
     ${backend_status}=    Evaluate JavaScript    ${None}    () => window.backendStatus.current
     Should Be Equal    ${backend_status['authState']['state']}    authenticated
-    Should Be Equal    ${backend_status['authState']['clientStatus']}    connected
-    Should Not Be Empty    ${backend_status['authState']['personalStream']}
-    Log    Personal stream connected: ${backend_status['authState']['personalStream']}
+    Should Be Equal    ${backend_status['roomyState']['state']}    connected
+    Should Not Be Empty    ${backend_status['roomyState']['personalSpace']}
+    Log    Personal space connected: ${backend_status['roomyState']['personalSpace']}
 
 Trigger Personal Stream Creation
     [Documentation]    Explicitly triggers personal stream creation via backend worker
@@ -173,7 +174,7 @@ Verify PDS Record Structure
     Log    Stream record validated: ${record}
 
 Wait For Personal Stream ID
-    [Documentation]    Waits for personal stream ID to appear in backend status
+    [Documentation]    Waits for personal space ID to appear in backend status (roomyState)
     ...                Useful after triggering stream creation
     ...
     ...                Example:
@@ -195,39 +196,40 @@ Wait For Personal Stream ID
     ...        const timeoutMs = ${timeout_ms};
     ...        const start = Date.now();
     ...        const check = () => {
-    ...            const streamId = window.backendStatus?.current?.authState?.personalStream;
+    ...            const streamId = window.backendStatus?.current?.roomyState?.personalSpace;
     ...            if (streamId) {
     ...                resolve(streamId);
     ...            } else if (Date.now() - start < timeoutMs) {
     ...                setTimeout(check, 200);
     ...            } else {
-    ...                console.log('Timeout waiting for personal stream ID');
+    ...                console.log('Timeout waiting for personal space ID');
     ...                resolve(null);
     ...            }
     ...        };
     ...        check();
     ...    })
 
-    Should Not Be Empty    ${stream_id}    msg=Personal stream ID did not appear in backend status within ${timeout}
-    Log    Personal stream ID: ${stream_id}
+    Should Not Be Empty    ${stream_id}    msg=Personal space ID did not appear in backend status within ${timeout}
+    Log    Personal space ID: ${stream_id}
     RETURN    ${stream_id}
 
 Get Client Status
-    [Documentation]    Returns current client connection status from backend worker
+    [Documentation]    Returns current Roomy connection status from backend worker
     ...
     ...                Example:
     ...                | ${status}= | Get Client Status |
     ...                | Should Be Equal | ${status} | connected |
     ...
     ...                Possible values:
-    ...                - 'error': Connection error
-    ...                - 'offline': Not connected
-    ...                - 'initialising': Streams initializing
+    ...                - 'disconnected': Not connected
+    ...                - 'connectingToServer': Connecting to Leaf server
+    ...                - 'materializingPersonalSpace': Materializing personal space
     ...                - 'connected': Fully connected
+    ...                - 'error': Connection error
 
     ${backend_status}=    Evaluate JavaScript    ${None}    () => window.backendStatus.current
-    ${client_status}=    Set Variable    ${backend_status['authState']['clientStatus']}
-    Log    Client status: ${client_status}
+    ${client_status}=    Set Variable    ${backend_status['roomyState']['state']}
+    Log    Roomy state: ${client_status}
     RETURN    ${client_status}
 
 Clear IndexedDB Stream Cache

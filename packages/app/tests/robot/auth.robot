@@ -82,15 +82,16 @@ App Password Authentication Should Work When Environment Variables Are Set
     ${auth_debug}=    Evaluate JavaScript    ${None}
     ...    () => {
     ...        const authState = window.backendStatus?.current?.authState;
+    ...        const roomyState = window.backendStatus?.current?.roomyState;
     ...        if (!authState) return { error: 'no authState' };
     ...        if (authState.state !== 'authenticated') return { error: 'not authenticated', state: authState.state };
     ...        return {
     ...            state: authState.state,
     ...            hasDid: !!authState.did,
     ...            did: authState.did || 'none',
-    ...            hasPersonalStream: !!authState.personalStream,
-    ...            personalStream: authState.personalStream || 'none',
-    ...            clientStatus: authState.clientStatus
+    ...            hasPersonalSpace: !!roomyState?.personalSpace,
+    ...            personalSpace: roomyState?.personalSpace || 'none',
+    ...            roomyState: roomyState?.state
     ...        };
     ...    }
     Log    Auth debug: ${auth_debug}
@@ -107,20 +108,23 @@ Backend Should Have Valid Agent After App Password Auth
     ...                after app password authentication
     [Tags]    auth    app-password    backend
 
-    # Load the app
-    New Page    ${BASE_URL}
+    # Load the app - go directly to /home to avoid redirect from root
+    New Page    ${BASE_URL}/home
     Wait For Load State    domcontentloaded    timeout=${TIMEOUT}
 
-    # Wait for backend and authentication
+    # Wait for backend and full authentication (including roomyState.connected)
     ${backend_initialized}=    Wait For Backend To Initialize
     Should Be True    ${backend_initialized}
-    ${client_created}=    Wait For Client To Be Created
-    Should Be True    ${client_created}
+
+    # Wait for full authentication including personal space (roomyState.connected)
+    ${authenticated}=    Wait For Leaf Authentication
+    Should Be True    ${authenticated}    msg=Full authentication did not complete
 
     # Check that authentication is complete
     ${auth_status}=    Evaluate JavaScript    ${None}
     ...    () => {
     ...        const authState = window.backendStatus?.current?.authState;
+    ...        const roomyState = window.backendStatus?.current?.roomyState;
     ...        if (!authState || authState.state !== 'authenticated') {
     ...            return { exists: false, state: authState?.state || 'unknown' };
     ...        }
@@ -129,13 +133,13 @@ Backend Should Have Valid Agent After App Password Auth
     ...            state: authState.state,
     ...            hasDid: !!authState.did,
     ...            did: authState.did,
-    ...            hasPersonalStream: !!authState.personalStream,
+    ...            hasPersonalSpace: !!roomyState?.personalSpace,
     ...        };
     ...    }
 
     Should Be True    ${auth_status}[exists]    msg=Auth state does not exist or not authenticated. State: ${auth_status}[state]
     Should Be True    ${auth_status}[hasDid]    msg=Auth state missing DID
-    Should Be True    ${auth_status}[hasPersonalStream]    msg=Auth state missing personal stream
+    Should Be True    ${auth_status}[hasPersonalSpace]    msg=Roomy state missing personal space
 
     Log    Agent DID: ${auth_status}[did]
 
@@ -254,7 +258,7 @@ Wait For Client To Be Created
     RETURN    ${client_exists}
 
 Wait For Leaf Authentication
-    [Documentation]    Wait for client to be in 'connected' state (indicates Leaf authenticated)
+    [Documentation]    Wait for roomyState to be 'connected' (indicates Leaf authenticated)
     [Arguments]    ${timeout}=30s
 
     ${leaf_authenticated}=    Evaluate JavaScript    ${None}
@@ -262,6 +266,7 @@ Wait For Leaf Authentication
     ...        const start = Date.now();
     ...        const check = () => {
     ...            const authState = window.backendStatus?.current?.authState;
+    ...            const roomyState = window.backendStatus?.current?.roomyState;
     ...            if (!authState || authState.state !== 'authenticated') {
     ...                if (Date.now() - start < 30000) {
     ...                    setTimeout(check, 200);
@@ -271,13 +276,13 @@ Wait For Leaf Authentication
     ...                }
     ...                return;
     ...            }
-    ...            // Check if client status is 'connected' (indicates Leaf is ready)
-    ...            if (authState.clientStatus === 'connected') {
+    ...            // Check if roomyState is 'connected' (indicates Leaf is ready)
+    ...            if (roomyState?.state === 'connected') {
     ...                resolve(true);
     ...            } else if (Date.now() - start < 30000) {
     ...                setTimeout(check, 200);
     ...            } else {
-    ...                console.log('Timeout: clientStatus:', authState.clientStatus);
+    ...                console.log('Timeout: roomyState:', roomyState?.state);
     ...                resolve(false);
     ...            }
     ...        };
@@ -292,11 +297,12 @@ Get Client Connection Status
     ${status}=    Evaluate JavaScript    ${None}
     ...    () => {
     ...        const authState = window.backendStatus?.current?.authState;
+    ...        const roomyState = window.backendStatus?.current?.roomyState;
     ...        if (!authState || authState.state !== 'authenticated') return null;
     ...        return {
-    ...            clientStatus: authState.clientStatus,
+    ...            roomyState: roomyState?.state,
     ...            hasDid: !!authState.did,
-    ...            hasPersonalStream: !!authState.personalStream,
+    ...            hasPersonalSpace: !!roomyState?.personalSpace,
     ...        };
     ...    }
 
