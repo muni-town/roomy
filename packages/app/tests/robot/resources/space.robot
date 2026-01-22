@@ -96,8 +96,8 @@ Execute SQL Query
     RETURN    ${result}
 
 Create Space With Name
-    [Documentation]    Create a new space with specified name and optional description
-    ...                Creates space stream and sends initial event batch to set up rooms
+    [Documentation]    Create a new space using the UI form
+    ...                This navigates to /new and fills out the create space form
     ...
     ...                Example:
     ...                | ${space_id}= | Create Space With Name | My Test Space |
@@ -113,109 +113,59 @@ Create Space With Name
 
     Should Not Be Empty    ${name}    msg=Space name is required
 
-    ${space_id}=    Evaluate JavaScript    ${None}
-    ...    async () => {
-    ...        const spaceName = '${name}';
-    ...        const spaceDescription = '${description}';
-    ...        try {
-    ...            // Import ulid function - use newUlid from window if available, fallback to ulidx
-    ...            const newUlid = window.newUlid || (await import('https://cdn.jsdelivr.net/npm/ulidx@2.4.1/+esm')).ulid;
-    ...            // Create space stream
-    ...            const spaceDid = await window.backend.createSpaceStream();
-    ...            console.log('Created space stream:', spaceDid);
-    ...            // Get personal stream ID
-    ...            const personalStreamId = window.backendStatus?.current?.authState?.personalStream;
-    ...            if (!personalStreamId) throw new Error('Personal stream ID not found');
-    ...            // Join the space (updated event format)
-    ...            await window.backend.sendEvent(personalStreamId, {
-    ...                id: newUlid(),
-    ...                $type: 'space.roomy.space.personal.joinSpace.v0',
-    ...                spaceDid: spaceDid
-    ...            });
-    ...            console.log('Sent join event');
-    ...            // Build event batch for room structure (new flattened format)
-    ...            const batch = [];
-    ...            // Space info
-    ...            batch.push({
-    ...                id: newUlid(),
-    ...                $type: 'space.roomy.space.updateSpaceInfo.v0',
-    ...                name: spaceName || undefined,
-    ...                description: spaceDescription || undefined
-    ...            });
-    ...            // Make user admin
-    ...            const userDid = window.backendStatus?.current?.authState?.did;
-    ...            if (userDid) {
-    ...                batch.push({
-    ...                    id: newUlid(),
-    ...                    $type: 'space.roomy.space.addAdmin.v0',
-    ...                    userDid: userDid
-    ...                });
-    ...            }
-    ...            // System user
-    ...            batch.push({
-    ...                id: newUlid(),
-    ...                $type: 'space.roomy.user.overrideHandle.v0',
-    ...                handle: 'system',
-    ...                did: spaceDid
-    ...            });
-    ...            // Category (kind is now part of createRoom.v0)
-    ...            const categoryId = newUlid();
-    ...            batch.push({
-    ...                id: categoryId,
-    ...                $type: 'space.roomy.room.createRoom.v0',
-    ...                kind: 'space.roomy.category',
-    ...                name: 'Uncategorized'
-    ...            });
-    ...            // Channel
-    ...            const channelId = newUlid();
-    ...            batch.push({
-    ...                id: channelId,
-    ...                $type: 'space.roomy.room.createRoom.v0',
-    ...                kind: 'space.roomy.channel',
-    ...                name: 'general'
-    ...            });
-    ...            // Thread
-    ...            const threadId = newUlid();
-    ...            batch.push({
-    ...                id: threadId,
-    ...                $type: 'space.roomy.room.createRoom.v0',
-    ...                kind: 'space.roomy.thread',
-    ...                name: `Welcome to \${spaceName}!`
-    ...            });
-    ...            // Welcome message (updated to message.createMessage.v0)
-    ...            const messageId = newUlid();
-    ...            batch.push({
-    ...                id: messageId,
-    ...                room: threadId,
-    ...                $type: 'space.roomy.message.createMessage.v0',
-    ...                body: {
-    ...                    mimeType: 'text/markdown',
-    ...                    data: { buf: new TextEncoder().encode('Welcome to your new Roomy space!') }
-    ...                },
-    ...                extensions: {
-    ...                    'space.roomy.extension.authorOverride.v0': { did: spaceDid },
-    ...                    'space.roomy.extension.timestampOverride.v0': { timestamp: BigInt(Date.now()) }
-    ...                }
-    ...            });
-    ...            // Sidebar config (new event type)
-    ...            batch.push({
-    ...                id: newUlid(),
-    ...                $type: 'space.roomy.space.updateSidebar.v0',
-    ...                categories: [
-    ...                    { name: 'Uncategorized', children: [channelId] }
-    ...                ]
-    ...            });
-    ...            // Send batch
-    ...            await window.backend.sendEventBatch(spaceDid, batch);
-    ...            console.log('Sent event batch with', batch.length, 'events');
-    ...            return spaceDid;
-    ...        } catch (error) {
-    ...            console.error('Failed to create space:', error);
-    ...            throw error;
-    ...        }
-    ...    }
+    # First, verify the backend is in the right state
+    ${pre_check}=    Evaluate JavaScript    ${None}
+    ...    () => ({
+    ...        hasBackend: !!window.backend,
+    ...        roomyState: window.backendStatus?.current?.roomyState?.state,
+    ...        hasPersonalSpace: !!window.backendStatus?.current?.roomyState?.personalSpace,
+    ...        personalSpace: window.backendStatus?.current?.roomyState?.personalSpace
+    ...    })
+    Log    Pre-check state: ${pre_check}
+    Should Be Equal    ${pre_check}[roomyState]    connected    msg=Backend must be connected before creating space
 
-    Should Not Be Empty    ${space_id}    msg=Space ID should not be empty
+    # Navigate to the create space page
+    Go To    ${BASE_URL}/new
+    Wait For Load State    networkidle    timeout=10s
+
+    # Fill in the space name
+    Fill Text    id=name    ${name}
+
+    # Fill in description if provided
+    IF    '${description}' != '${EMPTY}'
+        Fill Text    textarea    ${description}
+    END
+
+    # Get the current URL to compare after form submission
+    ${before_url}=    Get Url
+
+    # Submit the form
+    Click    button[type="submit"]
+
+    # Wait for URL to change from /new to something else (the new space)
+    Wait For Load State    networkidle    timeout=30s
+
+    # Wait until URL changes from /new
+    ${new_url}=    Evaluate JavaScript    ${None}
+    ...    () => new Promise((resolve) => {
+    ...        const check = () => {
+    ...            if (!window.location.pathname.endsWith('/new')) {
+    ...                resolve(window.location.href);
+    ...            } else {
+    ...                setTimeout(check, 100);
+    ...            }
+    ...        };
+    ...        check();
+    ...        // Timeout after 25s
+    ...        setTimeout(() => resolve(window.location.href), 25000);
+    ...    })
+    Log    Navigated to: ${new_url}
+
+    # Parse the space ID from the URL (format: http://127.0.0.1:5173/did:plc:xxxx)
+    ${space_id}=    Evaluate JavaScript    ${None}
+    ...    () => window.location.pathname.split('/')[1] || null
+
+    Should Not Be Empty    ${space_id}    msg=Space ID should not be empty (URL: ${new_url})
     Log    Created space: ${space_id}
     RETURN    ${space_id}
 
@@ -312,9 +262,9 @@ Send Space Join Event
     Evaluate JavaScript    ${None}
     ...    async () => {
     ...        const spaceDid = '${spaceId}';
-    ...        const personalStreamId = window.backendStatus?.current?.authState?.personalStream;
+    ...        const personalStreamId = window.backendStatus?.current?.roomyState?.personalSpace;
     ...        if (!personalStreamId) {
-    ...            throw new Error('Personal stream ID not found');
+    ...            throw new Error('Personal space ID not found');
     ...        }
     ...        // Generate a simple ULID-like ID for testing (not cryptographically secure)
     ...        const id = Date.now().toString(36) + Math.random().toString(36).substring(2);
@@ -560,23 +510,23 @@ Verify Welcome Message Exists
     RETURN    ${None}
 
 Get Personal Stream ID
-    [Documentation]    Get the authenticated user's personal stream ID
-    ...                Reads from window.backendStatus.current.authState.personalStream
+    [Documentation]    Get the authenticated user's personal space ID
+    ...                Reads from window.backendStatus.current.roomyState.personalSpace
     ...
     ...                Example:
     ...                | ${personal_stream}= | Get Personal Stream ID |
     ...                | Should Not Be Empty | ${personal_stream} |
     ...
-    ...                Returns: Personal stream ID (DidStream)
+    ...                Returns: Personal space ID (DidStream)
 
     ${personal_stream}=    Evaluate JavaScript    ${None}
     ...    () => {
-    ...        const streamId = window.backendStatus?.current?.authState?.personalStream;
+    ...        const streamId = window.backendStatus?.current?.roomyState?.personalSpace;
     ...        return streamId || null;
     ...    }
 
-    Should Not Be Empty    ${personal_stream}    msg=Personal stream ID not found in backend status
-    Log    Personal stream ID: ${personal_stream}
+    Should Not Be Empty    ${personal_stream}    msg=Personal space ID not found in backend status
+    Log    Personal space ID: ${personal_stream}
     RETURN    ${personal_stream}
 
 Verify Space In Backend Status
