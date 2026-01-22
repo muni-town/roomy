@@ -314,6 +314,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div
     id={message.id}
+    data-message-id={message.id}
     class={`flex flex-col w-full relative max-w-screen isolate px-4 ${threading ? "select-none" : ""}`}
     onmouseenter={() => (hovered = true)}
     onmouseleave={() => (hovered = false)}
