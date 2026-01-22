@@ -92,6 +92,41 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
           }
         }
       }
+
+      // Check for delete events and unregister mappings
+      if (event.$type === "space.roomy.room.deleteRoom.v0") {
+        try {
+          const discordId = await syncedIds.get_discordId(event.roomId);
+          if (discordId) {
+            await syncedIds.unregister({
+              discordId,
+              roomyId: event.roomId,
+            });
+          }
+          // TODO: consider Roomy→Discord sync for deletions
+        } catch (e) {
+          if (!(e instanceof Error && e.message.includes("isn't registered"))) {
+            console.error("Error unregistering room:", e);
+          }
+        }
+      }
+
+      if (event.$type === "space.roomy.message.deleteMessage.v0") {
+        try {
+          const discordId = await syncedIds.get_discordId(event.messageId);
+          if (discordId) {
+            await syncedIds.unregister({
+              discordId,
+              roomyId: event.messageId,
+            });
+          }
+          // TODO: consider Roomy→Discord sync for deletions
+        } catch (e) {
+          if (!(e instanceof Error && e.message.includes("isn't registered"))) {
+            console.error("Error unregistering message:", e);
+          }
+        }
+      }
     }
 
     // Update cursor to highest idx in batch

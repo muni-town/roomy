@@ -17,36 +17,164 @@
 
 import { ChannelProperties } from "../discord/types";
 import { GuildContext } from "../types";
+import { newUlid, type Event, type Ulid } from "@roomy/sdk";
 
 // const tracer = trace.getTracer("discordBot");
 
 export async function ensureRoomyChannelForDiscordChannel(
   ctx: GuildContext,
   channel: ChannelProperties,
-) {
-  console.log("TODO: Ensure Roomy Channel for", channel.name);
+): Promise<string> {
+  // Check if already synced
+  const existingRoomyId = await ctx.syncedIds.get_roomyId(channel.id.toString());
+  if (existingRoomyId) {
+    console.log(`Channel ${channel.name} already synced as ${existingRoomyId}`);
+    return existingRoomyId;
+  }
 
-  // first check what channels exist in Roomy
+  // Create new room
+  const roomId = newUlid();
+  const event: Event = {
+    id: roomId,
+    $type: "space.roomy.room.createRoom.v0",
+    kind: "space.roomy.channel",
+    name: channel.name || "Untitled",
+    extensions: {
+      "space.roomy.extension.discordOrigin.v0": {
+        snowflake: channel.id.toString(),
+        guildId: ctx.guildId.toString(),
+      },
+    },
+  };
+
+  await ctx.connectedSpace.sendEvent(event);
+  console.log(`Created Roomy channel ${roomId} for Discord channel ${channel.name}`);
+
+  // Register the mapping immediately (subscription handler will also do this, but we need it now)
+  await ctx.syncedIds.register({
+    discordId: channel.id.toString(),
+    roomyId: roomId,
+  });
+
+  return roomId;
 }
 
 export async function ensureRoomySidebarForCategoriesAndChannels(
   ctx: GuildContext,
   categories: ChannelProperties[],
   textChannels: ChannelProperties[],
-) {
-  console.log(
-    "TODO: Ensure Roomy Sidebar for categories and channels",
-    categories.map((c) => c.name),
-  );
+): Promise<void> {
+  // Build category map: categoryId -> roomyIds of child channels
+  const categoryChildren = new Map<string, Ulid[]>();
+  const uncategorizedChannels: Ulid[] = [];
 
-  // note: do not create empty categories
+  for (const channel of textChannels) {
+    const roomyId = await ctx.syncedIds.get_roomyId(channel.id.toString());
+    if (!roomyId) {
+      console.warn(`Channel ${channel.name} not synced yet, skipping in sidebar`);
+      continue;
+    }
+
+    if (channel.parentId) {
+      const parentIdStr = channel.parentId.toString();
+      if (!categoryChildren.has(parentIdStr)) {
+        categoryChildren.set(parentIdStr, []);
+      }
+      categoryChildren.get(parentIdStr)!.push(roomyId as Ulid);
+    } else {
+      uncategorizedChannels.push(roomyId as Ulid);
+    }
+  }
+
+  // Build categories array for UpdateSidebar event
+  const sidebarCategories: { name: string; children: Ulid[] }[] = [];
+
+  // Add uncategorized channels to "general" category
+  if (uncategorizedChannels.length > 0) {
+    sidebarCategories.push({
+      name: "general",
+      children: uncategorizedChannels,
+    });
+  }
+
+  // Add each Discord category (skip empty ones)
+  for (const category of categories) {
+    const children = categoryChildren.get(category.id.toString()) || [];
+    if (children.length > 0) {
+      sidebarCategories.push({
+        name: category.name || "Unnamed Category",
+        children,
+      });
+    }
+  }
+
+  // Send UpdateSidebar event
+  const event: Event = {
+    id: newUlid(),
+    $type: "space.roomy.space.updateSidebar.v0",
+    categories: sidebarCategories,
+  };
+
+  await ctx.connectedSpace.sendEvent(event);
+  console.log(`Updated sidebar with ${sidebarCategories.length} categories`);
 }
 
 export async function ensureRoomyThreadForDiscordThread(
   ctx: GuildContext,
   thread: ChannelProperties,
-) {
-  console.log("TODO: Ensure Roomy Thread for", thread.name);
+): Promise<string> {
+  // Check if already synced
+  const existingRoomyId = await ctx.syncedIds.get_roomyId(thread.id.toString());
+  if (existingRoomyId) {
+    console.log(`Thread ${thread.name} already synced as ${existingRoomyId}`);
+    return existingRoomyId;
+  }
+
+  // Get parent channel's Roomy ID
+  if (!thread.parentId) {
+    throw new Error(`Thread ${thread.name} has no parent channel`);
+  }
+  const parentRoomyId = await ctx.syncedIds.get_roomyId(thread.parentId.toString());
+  if (!parentRoomyId) {
+    throw new Error(`Parent channel ${thread.parentId} not synced yet for thread ${thread.name}`);
+  }
+
+  // Create new room for thread
+  const roomId = newUlid();
+  const createRoomEvent: Event = {
+    id: roomId,
+    $type: "space.roomy.room.createRoom.v0",
+    kind: "space.roomy.thread",
+    name: thread.name || "Untitled Thread",
+    extensions: {
+      "space.roomy.extension.discordOrigin.v0": {
+        snowflake: thread.id.toString(),
+        guildId: ctx.guildId.toString(),
+      },
+    },
+  };
+
+  await ctx.connectedSpace.sendEvent(createRoomEvent);
+
+  // Link thread to parent channel
+  const linkEvent: Event = {
+    id: newUlid(),
+    room: parentRoomyId as Ulid,
+    $type: "space.roomy.link.createRoomLink.v0",
+    linkToRoom: roomId,
+    isCreationLink: true,
+  };
+
+  await ctx.connectedSpace.sendEvent(linkEvent);
+  console.log(`Created Roomy thread ${roomId} for Discord thread ${thread.name}, linked to ${parentRoomyId}`);
+
+  // Register the mapping immediately
+  await ctx.syncedIds.register({
+    discordId: thread.id.toString(),
+    roomyId: roomId,
+  });
+
+  return roomId;
 }
 
 // export async function syncDiscordMessageToRoomy(

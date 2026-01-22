@@ -1,8 +1,10 @@
 import { LatestMessages, SyncedIds } from "./db";
+import type { ConnectedSpace } from "@roomy/sdk";
 
 export type GuildContext = {
   guildId: bigint;
+  spaceId: string;
   syncedIds: SyncedIds;
-  spaceId?: string; // DID
   latestMessagesInChannel: LatestMessages;
+  connectedSpace: ConnectedSpace;
 };
