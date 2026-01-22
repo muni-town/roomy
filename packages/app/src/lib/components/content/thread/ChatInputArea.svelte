@@ -8,6 +8,7 @@
   import IconMdiCloseCircle from "~icons/mdi/close-circle";
   import IconTablerNeedleThread from "~icons/tabler/needle-thread";
   import IconTablerX from "~icons/tabler/x";
+  import IconTablerSend from "~icons/tabler/send";
   import UploadFileButton from "$lib/components/helper/UploadFileButton.svelte";
   import { backend } from "$lib/workers";
   import { current } from "$lib/queries";
@@ -425,6 +426,18 @@
               onEnter={sendMessage}
               {processImageFile}
             />
+            <!-- Send button - visible on mobile, useful for testing -->
+            {#if !isSendingMessage && (state.input || state.files.length > 0)}
+              <Button
+                data-testid="send-message-button"
+                onclick={sendMessage}
+                variant="primary"
+                size="icon"
+                class="shrink-0 rounded-full"
+              >
+                <IconTablerSend />
+              </Button>
+            {/if}
             <!-- {/key} -->
           {/if}
         </div>
