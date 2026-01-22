@@ -41,3 +41,6 @@ vite.config.ts.timestamp-*
 src-tauri/icons
 
 mise.toml
+
+# Worktrees
+.worktrees/
