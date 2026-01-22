@@ -29,6 +29,7 @@
     "test:robot:setup": "uv sync && uv run rfbrowser init",
     "test:robot:headed": "uv run robot --outputdir tests/robot/results --variable HEADLESS:False tests/robot",
     "test:robot:tag": "uv run robot --outputdir tests/robot/results --include",
+    "test:robot:cleanup": "uv run robot --outputdir tests/robot/results tests/robot/cleanup.robot",
     "preview": "vite preview",
     "format": "prettier . --write",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
