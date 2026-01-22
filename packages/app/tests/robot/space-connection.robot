@@ -200,6 +200,68 @@ Backend Status Consistency Across Tabs
 
     Log    Status consistent across tabs: ${status_a}
 
+[DIAGNOSTIC] Monitor Space Status Transitions
+    [Documentation]    Monitor space status transitions over time
+    ...                Creates a space and tracks status changes every 500ms
+    ...                Checks for console errors during connection
+    [Tags]    diagnostic    monitoring
+
+    # Clear console logs before starting
+    ${cleared}=    Evaluate JavaScript    ${None}
+    ...    () => {
+    ...        // Store initial console state to compare later
+    ...        window._initialConsoleEntries = console.log.length || 0;
+    ...        return true;
+    ...    }
+
+    # Create space in Tab B
+    Switch To Creator Tab
+    ${space_id}=    Create Space With Name    Monitoring Test Space
+    Log    Created space: ${space_id}
+
+    # Wait for idle in creator tab
+    Wait For Space Status    ${space_id}    expectedStatus=idle    timeout=30s
+
+    # Switch to observer tab and start monitoring BEFORE space appears
+    Switch To Observer Tab
+
+    # Monitor status over 10 seconds
+    ${status_history}=    Monitor Space Status Over Time    ${space_id}    duration=10s
+
+    # Analyze status transitions
+    ${statuses_seen}=    Evaluate JavaScript    ${None}
+    ...    () => {
+    ...        const history = ${status_history};
+    ...        const unique = [...new Set(history.map(s => s.status))];
+    ...        return unique.filter(s => s !== null);
+    ...    }
+    Log    Statuses observed during monitoring: ${statuses_seen}
+
+    # Check if we ever reached 'idle'
+    ${reached_idle}=    Evaluate JavaScript    ${None}
+    ...    () => ${status_history}.some(s => s.status === 'idle')
+    Log    Reached 'idle' during monitoring: ${reached_idle}
+
+    # Get any console errors
+    ${console_errors}=    Get Error Console Logs
+    ${error_count}=    Get Length    ${console_errors}
+    Log    Console errors/warnings during test: ${error_count}
+
+    # Final status check
+    ${final_status}=    Get Space Status    ${space_id}
+    Log    Final status after monitoring: ${final_status}
+
+    # Log should be helpful either way
+    IF    not ${reached_idle}
+        Log    WARNING: Space never reached 'idle' during 10s monitoring period
+        Log    Status history: ${status_history}
+    ELSE
+        Log    Space successfully reached 'idle' during monitoring
+    END
+
+    # Assert that we eventually reached idle
+    Should Be True    ${reached_idle}    msg=Space did not reach idle during monitoring period
+
 
 *** Keywords ***
 Setup Multi-Tab Test Environment
@@ -283,3 +345,52 @@ Check Space Materialized In Database
 
     Log    Space ${spaceId} materialization check: count=${count}, materialized=${is_materialized}
     RETURN    ${is_materialized}
+
+Monitor Space Status Over Time
+    [Documentation]    Monitor a space's status in backendStatus over time
+    ...                Returns a list of status values observed at 500ms intervals
+    ...                Useful for detecting status transitions or stuck states
+    [Arguments]    ${spaceId}    ${duration}=10s
+
+    ${duration_ms}=    Convert Time    ${duration}    result_format=number
+    ${duration_ms}=    Evaluate    int(${duration_ms} * 1000)
+    ${interval}=    Set Variable    500
+    ${iterations}=    Evaluate    int(${duration_ms} / ${interval})
+
+    ${statuses}=    Evaluate JavaScript    ${None}
+    ...    async () => {
+    ...        const spaceId = '${spaceId}';
+    ...        const iterations = ${iterations};
+    ...        const interval = ${interval};
+    ...        const statuses = [];
+    ...        for (let i = 0; i < iterations; i++) {
+    ...            const status = window.backendStatus?.current?.spaces?.[spaceId];
+    ...            statuses.push({ iteration: i, status: status || null, timestamp: Date.now() });
+    ...            await new Promise(resolve => setTimeout(resolve, interval));
+    ...        }
+    ...        return statuses;
+    ...    }
+
+    Log    Space ${spaceId} status over ${duration}: ${statuses}
+    RETURN    ${statuses}
+
+Get Error Console Logs
+    [Documentation]    Get error and warning logs from console
+    ...                Returns list of error/warning messages since page load
+
+    ${logs}=    Get Console Log    full=True
+    ${errors}=    Create List
+
+    FOR    ${log}    IN    @{logs}
+        ${log_type}=    Get From Dictionary    ${log}    type    default=${EMPTY}
+        IF    '${log_type}' == 'error' or '${log_type}' == 'warning'
+            Append To List    ${errors}    ${log}
+        END
+    END
+
+    Log    Found ${errors.__len__()} error/warning console logs
+    FOR    ${error}    IN    @{errors}
+        Log    Console ${error['type']}: ${error['text']}
+    END
+
+    RETURN    ${errors}
