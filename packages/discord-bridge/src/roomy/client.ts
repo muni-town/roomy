@@ -149,7 +149,12 @@ export async function subscribeToSpace(
 
   // Subscribe with the handler
   const handler = createSpaceSubscriptionHandler(spaceId);
-  await space.subscribe(handler, cursor as StreamIndex);
+  space.subscribe(handler, cursor as StreamIndex);
+
+  // Wait for backfill to complete before returning
+  console.log(`Waiting for backfill of space ${spaceId}...`);
+  await space.doneBackfilling;
+  console.log(`Backfill complete for space ${spaceId}`);
 
   connectedSpaces.set(spaceId, space);
   console.log(`Subscribed to space ${spaceId}`);

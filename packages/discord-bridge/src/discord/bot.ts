@@ -33,6 +33,7 @@ import {
   ensureRoomySidebarForCategoriesAndChannels,
   ensureRoomyThreadForDiscordThread,
 } from "../roomy/to.js";
+import { getConnectedSpace } from "../roomy/client.js";
 
 const tracer = trace.getTracer("discordBot");
 
@@ -63,18 +64,23 @@ export async function getGuildContext(guildId: bigint): Promise<GuildContext> {
     throw new Error(
       "Discord guild doesn't have Roomy space bridged: " + guildId.toString(),
     );
+
+  const connectedSpace = getConnectedSpace(spaceId);
+  if (!connectedSpace) {
+    throw new Error(
+      "Space not connected: " + spaceId,
+    );
+  }
+
   const syncedIds = syncedIdsForBridge({
     discordGuildId: guildId,
     roomySpaceId: spaceId,
   });
-  // const space = await RoomyEntity.load(spaceId);
-  // if (!space) throw new Error("Could not load space ID");
-  // const groups = await getSpaceGroups(space);
   const latestMessagesInChannel = discordLatestMessageInChannelForBridge({
     roomySpaceId: spaceId,
     discordGuildId: guildId,
   });
-  return { guildId, syncedIds, latestMessagesInChannel };
+  return { guildId, spaceId, syncedIds, latestMessagesInChannel, connectedSpace };
 }
 
 /**
