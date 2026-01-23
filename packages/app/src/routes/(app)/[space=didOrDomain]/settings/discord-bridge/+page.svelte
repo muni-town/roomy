@@ -3,6 +3,12 @@
   import { env } from "$env/dynamic/public";
   import { Badge, Button, toast } from "@fuxui/base";
   import { onMount } from "svelte";
+<<<<<<< HEAD:packages/app/src/routes/(app)/[space=didOrDomain]/settings/discord-bridge/+page.svelte
+=======
+  import { backend } from "$lib/workers";
+  import { newUlid, UserDid, StreamDid } from "@roomy/sdk";
+  import InlineMono from "$lib/components/primitives/InlineMono.svelte";
+>>>>>>> b4d05595 (refactor: create InlineMono component):packages/app/src/routes/(app)/[space=did]/settings/discord-bridge/+page.svelte
 
   let space = $derived(page.params.space);
   let bridgeStatus:
@@ -132,7 +138,7 @@
           target="_blank">Discord server</a
         >. You can disconnect it by going to Discord and running the slash
         command:
-        <code class="bg-base-800 p-1 rounded">/disconnect-roomy-space</code>.
+        <InlineMono>/disconnect-roomy-space</InlineMono>.
       </p>
     </div>
   </form>
@@ -232,16 +238,13 @@
             3. Connect your Roomy space to your Discord server</label
           >
           <p class="mt-1 text-sm/6 text-base-600 dark:text-base-400">
-            Finish by running the <code
-              class="bg-base-200 dark:bg-base-800 p-1 rounded"
-              >/connect-roomy-space</code
-            > slash command in your Discord server to connect the space. It will
-            require you to specify your space ID.
+            Finish by running the <InlineMono>/connect-roomy-space</InlineMono> slash
+            command in your Discord server to connect the space. It will require
+            you to specify your space ID.
           </p>
           <div class="flex gap-2 items-center mt-4 ml-4">
             <strong>space-id:</strong>
-            <code class="m-3 p-2 bg-base-200 dark:bg-base-800 text-sm rounded"
-              >{page.params.space}</code
+            <InlineMono>{page.params.space}</InlineMono>
             >
           </div>
         </div>
