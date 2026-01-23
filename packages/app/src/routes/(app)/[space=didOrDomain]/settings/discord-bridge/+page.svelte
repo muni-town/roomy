@@ -3,12 +3,9 @@
   import { env } from "$env/dynamic/public";
   import { Badge, Button, toast } from "@fuxui/base";
   import { onMount } from "svelte";
-<<<<<<< HEAD:packages/app/src/routes/(app)/[space=didOrDomain]/settings/discord-bridge/+page.svelte
-=======
   import { backend } from "$lib/workers";
   import { newUlid, UserDid, StreamDid } from "@roomy/sdk";
   import InlineMono from "$lib/components/primitives/InlineMono.svelte";
->>>>>>> b4d05595 (refactor: create InlineMono component):packages/app/src/routes/(app)/[space=did]/settings/discord-bridge/+page.svelte
 
   let space = $derived(page.params.space);
   let bridgeStatus:
