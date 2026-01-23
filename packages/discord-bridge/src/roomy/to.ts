@@ -15,6 +15,7 @@
 // import { discordWebhookTokensForBridge } from "../db";
 // import { getRoomyThreadForChannel } from "./from";
 
+import { avatarUrl } from "@discordeno/bot";
 import { ChannelProperties, MessageProperties } from "../discord/types";
 import { GuildContext } from "../types";
 import { newUlid, toBytes, type Attachment, type Did, type Event, type Ulid } from "@roomy/sdk";
@@ -45,6 +46,7 @@ export async function ensureRoomyProfileForDiscordUser(
   user: {
     id: bigint;
     username: string;
+    discriminator: string;
     globalName?: string | null;
     avatar?: string | null;
   },
@@ -71,10 +73,12 @@ export async function ensureRoomyProfileForDiscordUser(
     // Key not found - first sync for this user
   }
 
-  // Build avatar URL
-  const avatarUrl = user.avatar
-    ? `https://cdn.discordapp.com/avatars/${userIdStr}/${user.avatar}.png`
-    : null;
+  // Build avatar URL using discordeno helper (handles format and size correctly)
+  const userAvatarUrl = avatarUrl(user.id, user.discriminator, {
+    avatar: user.avatar ?? undefined,
+    size: 256,
+    format: "webp",
+  });
 
   // Send profile update event
   const event: Event = {
@@ -82,7 +86,7 @@ export async function ensureRoomyProfileForDiscordUser(
     $type: "space.roomy.user.updateProfile.v0",
     did: `did:discord:${userIdStr}` as Did,
     name: user.globalName ?? user.username,
-    avatar: avatarUrl,
+    avatar: userAvatarUrl,
     extensions: {
       "space.roomy.extension.discordUserOrigin.v0": {
         $type: "space.roomy.extension.discordUserOrigin.v0",
@@ -395,6 +399,7 @@ export async function ensureRoomyMessageForDiscordMessage(
   await ensureRoomyProfileForDiscordUser(ctx, {
     id: message.author.id,
     username: message.author.username,
+    discriminator: message.author.discriminator,
     globalName: (message.author as any).globalName ?? null,
     avatar: (message.author.avatar as unknown as string | null) ?? null,
   });
