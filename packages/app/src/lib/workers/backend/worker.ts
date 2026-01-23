@@ -159,6 +159,10 @@ class WorkerSupervisor {
       getSessionId: async () => {
         return sessionId;
       },
+      setSpaceHandle: (spaceDid, handle) => {
+        if (this.#roomy.state !== "connected") throw new Error("Not connected");
+        return this.#roomy.client.setHandle(spaceDid, handle);
+      },
       getSpaceInfo: (streamDid) => {
         if (this.#roomy.state !== "connected") throw new Error("Not connected");
         return this.#roomy.client.getSpaceInfo(streamDid);
