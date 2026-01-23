@@ -17,10 +17,89 @@
 
 import { ChannelProperties, MessageProperties } from "../discord/types";
 import { GuildContext } from "../types";
-import { newUlid, toBytes, type Attachment, type Event, type Ulid } from "@roomy/sdk";
-import { discordWebhookTokensForBridge } from "../db.js";
+import { newUlid, toBytes, type Attachment, type Did, type Event, type Ulid } from "@roomy/sdk";
+import { discordWebhookTokensForBridge, syncedProfilesForBridge } from "../db.js";
 
 // const tracer = trace.getTracer("discordBot");
+
+/**
+ * Compute a simple hash from Discord user profile data.
+ * Used for change detection to avoid redundant profile updates.
+ */
+function computeProfileHash(
+  username: string,
+  globalName: string | null,
+  avatar: string | null,
+): string {
+  const data = `${username}|${globalName ?? ""}|${avatar ?? ""}`;
+  // Simple hash: base64 encode and take first 16 chars
+  return Buffer.from(data).toString("base64").slice(0, 16);
+}
+
+/**
+ * Ensure a Discord user's profile is synced to Roomy.
+ * Uses hash-based change detection to avoid redundant updates.
+ */
+export async function ensureRoomyProfileForDiscordUser(
+  ctx: GuildContext,
+  user: {
+    id: bigint;
+    username: string;
+    globalName?: string | null;
+    avatar?: string | null;
+  },
+): Promise<void> {
+  const syncedProfiles = syncedProfilesForBridge({
+    discordGuildId: ctx.guildId,
+    roomySpaceId: ctx.spaceId,
+  });
+
+  const userIdStr = user.id.toString();
+  const hash = computeProfileHash(
+    user.username,
+    user.globalName ?? null,
+    user.avatar ?? null,
+  );
+
+  // Check if profile already synced with same hash
+  try {
+    const existingHash = await syncedProfiles.get(userIdStr);
+    if (existingHash === hash) {
+      return; // No change
+    }
+  } catch {
+    // Key not found - first sync for this user
+  }
+
+  // Build avatar URL
+  const avatarUrl = user.avatar
+    ? `https://cdn.discordapp.com/avatars/${userIdStr}/${user.avatar}.png`
+    : null;
+
+  // Send profile update event
+  const event: Event = {
+    id: newUlid(),
+    $type: "space.roomy.user.updateProfile.v0",
+    did: `did:discord:${userIdStr}` as Did,
+    name: user.globalName ?? user.username,
+    avatar: avatarUrl,
+    extensions: {
+      "space.roomy.extension.discordUserOrigin.v0": {
+        $type: "space.roomy.extension.discordUserOrigin.v0",
+        snowflake: userIdStr,
+        guildId: ctx.guildId.toString(),
+        profileHash: hash,
+        handle: user.username,
+      },
+    },
+  };
+
+  await ctx.connectedSpace.sendEvent(event);
+  console.log(`Synced profile for Discord user ${user.username} (${userIdStr})`);
+
+  // Update local cache
+  await syncedProfiles.put(userIdStr, hash);
+}
 
 export async function ensureRoomyChannelForDiscordChannel(
   ctx: GuildContext,
@@ -311,6 +390,14 @@ export async function ensureRoomyMessageForDiscordMessage(
   if (existingId) {
     return existingId;
   }
+
+  // 1b. Ensure user profile is synced
+  await ensureRoomyProfileForDiscordUser(ctx, {
+    id: message.author.id,
+    username: message.author.username,
+    globalName: (message.author as any).globalName ?? null,
+    avatar: (message.author.avatar as unknown as string | null) ?? null,
+  });
 
   // 2. Skip bot's own webhook messages (avoid echo)
   const webhookTokens = discordWebhookTokensForBridge({

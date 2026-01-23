@@ -224,18 +224,25 @@
           const avatarHash = avatarPathSegments[avatarPathSegments.length - 1];
 
           if (!existingDiscordUsers.has(author)) {
+            // Compute a simple hash from the profile data
+            const profileData = `${message.author.name}|${message.author.nickname}|${avatarHash}`;
+            const profileHash = btoa(profileData).slice(0, 16);
+
             batch.push({
               id: makeUlid(),
               $type: "space.roomy.user.updateProfile.v0",
               did: author,
               name: message.author.nickname,
               avatar: `https://cdn.discordapp.com/avatars/${message.author.id}/${avatarHash}?size=64`,
-            });
-            batch.push({
-              id: makeUlid(),
-              $type: "space.roomy.user.overrideHandle.v0",
-              did: author,
-              handle: message.author.name,
+              extensions: {
+                "space.roomy.extension.discordUserOrigin.v0": {
+                  $type: "space.roomy.extension.discordUserOrigin.v0",
+                  snowflake: message.author.id,
+                  guildId: "0", // Not available in import
+                  profileHash,
+                  handle: message.author.name,
+                },
+              },
             });
             existingDiscordUsers.add(author);
           }

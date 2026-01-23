@@ -215,3 +215,25 @@ export const leafCursors = db.sublevel<string, number>("leafCursors", {
 });
 
 export type LeafCursors = typeof leafCursors;
+
+/**
+ * Per-space profile hash tracking for Discord users.
+ * Key: Discord user snowflake
+ * Value: profile hash (for change detection)
+ */
+export const syncedProfilesForBridge = ({
+  discordGuildId,
+  roomySpaceId,
+}: {
+  discordGuildId: bigint;
+  roomySpaceId: string;
+}) =>
+  db.sublevel<string, string>(
+    `syncedProfiles:${discordGuildId.toString()}:${roomySpaceId}`,
+    {
+      keyEncoding: "utf8",
+      valueEncoding: "utf8",
+    },
+  );
+
+export type SyncedProfiles = ReturnType<typeof syncedProfilesForBridge>;

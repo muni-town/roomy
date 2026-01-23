@@ -83,9 +83,9 @@ export async function createSpace(opts: {
   // Create the "system" user as the space itself
   batch.push({
     id: newUlid(),
-    $type: "space.roomy.user.overrideHandle.v0",
-    handle: "system",
+    $type: "space.roomy.user.updateProfile.v0",
     did: spaceDid,
+    name: "system",
   });
 
   const generalChannelId = newUlid();
