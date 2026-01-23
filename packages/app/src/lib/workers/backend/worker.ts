@@ -507,6 +507,7 @@ class WorkerSupervisor {
         leafDid: CONFIG.leafServerDid,
         spaceHandleNsid: CONFIG.streamHandleNsid,
         spaceNsid: CONFIG.streamNsid,
+        plcDirectory: CONFIG.plcDirectory,
       },
       eventHandlers,
     );

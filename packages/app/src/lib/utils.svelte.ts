@@ -50,13 +50,16 @@ export function navigateSync(target: NavigationTarget) {
   }
 }
 
+const PLC_DIRECTORY =
+  import.meta.env.PUBLIC_PLC_DIRECTORY || "https://plc.directory";
+
 const handleCache: { [did: string]: DidDocument } = {};
 export async function resolveDid(
   did: string,
 ): Promise<DidDocument | undefined> {
   if (handleCache[did]) return handleCache[did];
   try {
-    const resp = await fetch(`https://plc.directory/${did}`);
+    const resp = await fetch(`${PLC_DIRECTORY}/${did}`);
     const json = await resp.json();
     return json;
   } catch (_e) {
