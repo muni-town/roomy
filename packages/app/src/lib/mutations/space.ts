@@ -80,13 +80,9 @@ export async function createSpace(opts: {
     description: currentSpaceDescription,
   });
 
-  // Create the "system" user as the space itself
-  batch.push({
-    id: newUlid(),
-    $type: "space.roomy.user.updateProfile.v0",
-    did: spaceDid,
-    name: "system",
-  });
+  // Note: We no longer create a separate "system" user profile.
+  // System messages (like "user joined") use the space DID as author,
+  // and the space's own comp_info entry provides the display name.
 
   const generalChannelId = newUlid();
   batch.push({
