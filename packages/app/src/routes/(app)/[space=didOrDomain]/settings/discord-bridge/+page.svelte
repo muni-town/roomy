@@ -3,8 +3,6 @@
   import { env } from "$env/dynamic/public";
   import { Badge, Button, toast } from "@fuxui/base";
   import { onMount } from "svelte";
-  import { backend } from "$lib/workers";
-  import { newUlid, UserDid, StreamDid } from "@roomy/sdk";
   import InlineMono from "$lib/components/primitives/InlineMono.svelte";
 
   let space = $derived(page.params.space);
@@ -25,7 +23,7 @@
     try {
       const aResp = await fetch(`${env.PUBLIC_DISCORD_BRIDGE}/info`);
       const info:
-        | { discordAppId: string; jazzAccountId: string }
+        | { discordAppId: string; bridgeDid: string }
         | { error: string; status: number } = await aResp.json();
       if ("error" in info) {
         console.error("Couldn't fetch Discord app ID from bridge.");
@@ -35,23 +33,19 @@
       const gResp = await fetch(
         `${env.PUBLIC_DISCORD_BRIDGE}/get-guild-id?spaceId=${page.params.space}`,
       );
-      const { guildId }: { guildId?: string } = await gResp.json();
-      // const jazzAccount = await Account.load(info.jazzAccountId);
-      // if (!jazzAccount) {
-      //   console.error("Could not load jazz account for discord bridge.");
-      //   bridgeStatus = {
-      //     type: "error_checking",
-      //   };
-      //   return;
-      // }
-      // const hasWrite = await isSpaceAdmin(jazzAccount, space.current);
-      // bridgeStatus = {
-      //   type: "loaded",
-      //   appId: info.discordAppId,
-      //   bridgeJazzAccount: jazzAccount,
-      //   guildId,
-      //   hasFullWritePermissions: hasWrite,
-      // };
+      // 404 means no guild is connected yet - that's expected for unconnected spaces
+      let guildId: string | undefined;
+      if (gResp.ok) {
+        const data: { guildId?: string } = await gResp.json();
+        guildId = data.guildId;
+      }
+      // TODO: Check if bridge has write permissions to the space
+      bridgeStatus = {
+        type: "loaded",
+        appId: info.discordAppId,
+        guildId,
+        hasFullWritePermissions: false,
+      };
     } catch (e) {
       bridgeStatus = {
         type: "error_checking",
