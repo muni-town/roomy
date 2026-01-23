@@ -52,10 +52,22 @@ export async function ensureRoomyChannelForDiscordChannel(
   console.log(`Created Roomy channel ${roomId} for Discord channel ${channel.name}`);
 
   // Register the mapping immediately (subscription handler will also do this, but we need it now)
-  await ctx.syncedIds.register({
-    discordId: channel.id.toString(),
-    roomyId: roomId,
-  });
+  try {
+    await ctx.syncedIds.register({
+      discordId: channel.id.toString(),
+      roomyId: roomId,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("already registered")) {
+      // Another process (subscription handler) registered this mapping - use the existing one
+      const existingRoomyId = await ctx.syncedIds.get_roomyId(channel.id.toString());
+      if (existingRoomyId) {
+        console.log(`Channel ${channel.name} was registered by another process as ${existingRoomyId}`);
+        return existingRoomyId;
+      }
+    }
+    throw e;
+  }
 
   return roomId;
 }
@@ -170,10 +182,22 @@ export async function ensureRoomyThreadForDiscordThread(
   console.log(`Created Roomy thread ${roomId} for Discord thread ${thread.name}, linked to ${parentRoomyId}`);
 
   // Register the mapping immediately
-  await ctx.syncedIds.register({
-    discordId: thread.id.toString(),
-    roomyId: roomId,
-  });
+  try {
+    await ctx.syncedIds.register({
+      discordId: thread.id.toString(),
+      roomyId: roomId,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("already registered")) {
+      // Another process (subscription handler) registered this mapping - use the existing one
+      const existingRoomyId = await ctx.syncedIds.get_roomyId(thread.id.toString());
+      if (existingRoomyId) {
+        console.log(`Thread ${thread.name} was registered by another process as ${existingRoomyId}`);
+        return existingRoomyId;
+      }
+    }
+    throw e;
+  }
 
   return roomId;
 }
@@ -387,10 +411,22 @@ export async function ensureRoomyMessageForDiscordMessage(
   console.log(`Created Roomy message ${messageId} for Discord message ${message.id}`);
 
   // 5. Register mapping immediately
-  await ctx.syncedIds.register({
-    discordId: message.id.toString(),
-    roomyId: messageId,
-  });
+  try {
+    await ctx.syncedIds.register({
+      discordId: message.id.toString(),
+      roomyId: messageId,
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("already registered")) {
+      // Another process (subscription handler) registered this mapping - use the existing one
+      const existingRoomyId = await ctx.syncedIds.get_roomyId(message.id.toString());
+      if (existingRoomyId) {
+        console.log(`Message ${message.id} was registered by another process as ${existingRoomyId}`);
+        return existingRoomyId;
+      }
+    }
+    throw e;
+  }
 
   return messageId;
 }

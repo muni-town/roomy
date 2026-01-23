@@ -40,6 +40,7 @@ const tracer = trace.getTracer("discordBot");
 
 export const botState = {
   appId: undefined as undefined | string,
+  bot: undefined as DiscordBot | undefined,
 };
 
 export async function hasBridge(guildId: bigint): Promise<boolean> {
@@ -105,6 +106,7 @@ export async function startBot() {
 
           // Set Discord app ID used in `/info` API endpoint.
           botState.appId = ready.applicationId.toString();
+          botState.bot = bot;
 
           // Update discord slash commands.
           bot.helpers.upsertGlobalApplicationCommands(slashCommands);
@@ -217,114 +219,119 @@ async function backfillMessagesForChannel(
   }
 }
 
-/** Bridge all past messages in a Discord guild to Roomy */
+/** Bridge all past messages in a single Discord guild to Roomy */
+export async function backfillGuild(bot: DiscordBot, guildId: bigint) {
+  const ctx = await getGuildContext(guildId);
+
+  await tracer.startActiveSpan(
+    "backfillGuild",
+    { attributes: { guildId: guildId.toString() } },
+    async (span) => {
+      console.log("backfilling Discord guild", guildId);
+      const channels = await bot.helpers.getChannels(guildId);
+
+      // Get all categories
+      const categories = channels.filter(
+        (x) => x.type == ChannelTypes.GuildCategory,
+      );
+
+      // Get all text channels
+      const textChannels = channels.filter(
+        (x) => x.type == ChannelTypes.GuildText,
+      );
+
+      // TODO: support announcement channels
+
+      const activeThreads = (await bot.helpers.getActiveThreads(guildId))
+        .threads;
+      const archivedThreads = (
+        await Promise.all(
+          textChannels.map(async (x) => {
+            let before;
+            let threads: DiscordChannel[] = [];
+            while (true) {
+              try {
+                const resp = await bot.helpers.getPublicArchivedThreads(
+                  x.id,
+                  {
+                    before,
+                  },
+                );
+                threads = [...threads, ...(resp.threads as any)];
+
+                if (resp.hasMore) {
+                  before = parseInt(
+                    resp.threads[resp.threads.length - 1]?.threadMetadata
+                      ?.archiveTimestamp || "0",
+                  );
+                } else {
+                  break;
+                }
+              } catch (e) {
+                console.warn(
+                  `Error fetching threads for channel ( this might be normal if the bot does not have access to the channel ): ${e}`,
+                );
+                break;
+              }
+            }
+
+            return threads;
+          }),
+        )
+      ).flat();
+      const allChannelsAndThreads = [
+        ...textChannels,
+        ...activeThreads,
+        ...archivedThreads,
+      ];
+
+      for (const channel of textChannels) {
+        await ensureRoomyChannelForDiscordChannel(ctx, channel);
+      }
+
+      for (const thread of [...activeThreads, ...archivedThreads]) {
+        await ensureRoomyThreadForDiscordThread(ctx, thread);
+      }
+
+      await ensureRoomySidebarForCategoriesAndChannels(
+        ctx,
+        categories,
+        textChannels,
+      );
+
+      // Backfill messages for all channels in parallel (with concurrency limit)
+      const CONCURRENCY_LIMIT = 5;
+      const channelChunks: DiscordChannel[][] = [];
+      for (let i = 0; i < allChannelsAndThreads.length; i += CONCURRENCY_LIMIT) {
+        channelChunks.push(allChannelsAndThreads.slice(i, i + CONCURRENCY_LIMIT));
+      }
+
+      for (const chunk of channelChunks) {
+        await Promise.all(
+          chunk.map((channel) =>
+            tracer.startActiveSpan(
+              "backfillChannelMessages",
+              { attributes: { channelId: channel.id.toString() } },
+              async (span) => {
+                await backfillMessagesForChannel(bot, ctx, channel);
+                span.end();
+              },
+            ),
+          ),
+        );
+      }
+
+      span.end();
+    },
+  );
+}
+
+/** Bridge all past messages in multiple Discord guilds to Roomy */
 export async function backfill(bot: DiscordBot, guildIds: bigint[]) {
   await tracer.startActiveSpan("backfill", async (span) => {
     for (const guildId of guildIds) {
       if (!(await hasBridge(guildId))) continue;
-      const ctx = await getGuildContext(guildId);
-
-      await tracer.startActiveSpan(
-        "backfillGuild",
-        { attributes: { guildId: guildId.toString() } },
-        async (span) => {
-          console.log("backfilling Discord guild", guildId);
-          const channels = await bot.helpers.getChannels(guildId);
-
-          // Get all categories
-          const categories = channels.filter(
-            (x) => x.type == ChannelTypes.GuildCategory,
-          );
-
-          // Get all text channels
-          const textChannels = channels.filter(
-            (x) => x.type == ChannelTypes.GuildText,
-          );
-
-          // TODO: support announcement channels
-
-          const activeThreads = (await bot.helpers.getActiveThreads(guildId))
-            .threads;
-          const archivedThreads = (
-            await Promise.all(
-              textChannels.map(async (x) => {
-                let before;
-                let threads: DiscordChannel[] = [];
-                while (true) {
-                  try {
-                    const resp = await bot.helpers.getPublicArchivedThreads(
-                      x.id,
-                      {
-                        before,
-                      },
-                    );
-                    threads = [...threads, ...(resp.threads as any)];
-
-                    if (resp.hasMore) {
-                      before = parseInt(
-                        resp.threads[resp.threads.length - 1]?.threadMetadata
-                          ?.archiveTimestamp || "0",
-                      );
-                    } else {
-                      break;
-                    }
-                  } catch (e) {
-                    console.warn(
-                      `Error fetching threads for channel ( this might be normal if the bot does not have access to the channel ): ${e}`,
-                    );
-                    break;
-                  }
-                }
-
-                return threads;
-              }),
-            )
-          ).flat();
-          const allChannelsAndThreads = [
-            ...textChannels,
-            ...activeThreads,
-            ...archivedThreads,
-          ];
-
-          for (const channel of textChannels) {
-            await ensureRoomyChannelForDiscordChannel(ctx, channel);
-          }
-
-          for (const thread of [...activeThreads, ...archivedThreads]) {
-            await ensureRoomyThreadForDiscordThread(ctx, thread);
-          }
-
-          await ensureRoomySidebarForCategoriesAndChannels(
-            ctx,
-            categories,
-            textChannels,
-          );
-
-          // Backfill messages for all channels in parallel (with concurrency limit)
-          const CONCURRENCY_LIMIT = 5;
-          const channelChunks: DiscordChannel[][] = [];
-          for (let i = 0; i < allChannelsAndThreads.length; i += CONCURRENCY_LIMIT) {
-            channelChunks.push(allChannelsAndThreads.slice(i, i + CONCURRENCY_LIMIT));
-          }
-
-          for (const chunk of channelChunks) {
-            await Promise.all(
-              chunk.map((channel) =>
-                tracer.startActiveSpan(
-                  "backfillChannelMessages",
-                  { attributes: { channelId: channel.id.toString() } },
-                  async (span) => {
-                    await backfillMessagesForChannel(bot, ctx, channel);
-                    span.end();
-                  },
-                ),
-              ),
-            );
-          }
-
-          span.end();
-        },
-      );
+      await backfillGuild(bot, guildId);
     }
 
     span.end();
