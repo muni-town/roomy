@@ -62,14 +62,10 @@ export type BackendInterface = {
   setActiveSqliteWorker(port: MessagePort): Promise<void>;
   pauseSubscription(streamId: StreamDid): Promise<void>;
   unpauseSubscription(streamId: StreamDid): Promise<void>;
-  resolveHandleForSpace(
-    spaceId: StreamDid,
-    handleAccountDid: UserDid,
-  ): Promise<Handle | undefined>;
+  resolveHandleForSpace(spaceId: StreamDid): Promise<Handle | undefined>;
   resolveSpaceId(spaceIdOrHandle: StreamDid | Handle): Promise<{
     spaceId: StreamDid;
     handle?: Handle;
-    did?: UserDid;
   }>;
   checkSpaceExists(spaceId: StreamDid): Promise<boolean>;
   createStreamHandleRecord(spaceId: StreamDid): Promise<void>;

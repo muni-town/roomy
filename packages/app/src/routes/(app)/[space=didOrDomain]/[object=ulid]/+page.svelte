@@ -145,9 +145,12 @@
   });
 
   $effect(() => {
-    if (!room || !page.params.space) return;
+    if (!room) return;
     // If the room's spaceId doesn't match the URL, navigate to space root
-    if (room.spaceId !== page.params.space) {
+    if (
+      current.space.status == "joined" &&
+      current.space.space.id !== room.spaceId
+    ) {
       navigate({
         space: page.params.space,
       });

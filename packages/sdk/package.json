@@ -41,7 +41,7 @@
     "@atproto/api": "^0.14.22",
     "@atproto/lexicon": "^0.4.14",
     "@atproto/oauth-client": "^0.5.6",
-    "@muni-town/leaf-client": "0.1.0-alpha.15",
+    "@muni-town/leaf-client": "0.1.0-alpha.16",
     "arktype": "^2.1.29",
     "ulidx": "^2.4.1"
   }

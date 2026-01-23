@@ -3,8 +3,6 @@
   import { env } from "$env/dynamic/public";
   import { Badge, Button, toast } from "@fuxui/base";
   import { onMount } from "svelte";
-  import { backend } from "$lib/workers";
-  import { newUlid, UserDid, StreamDid } from "@roomy/sdk";
 
   let space = $derived(page.params.space);
   let bridgeStatus:
@@ -13,11 +11,9 @@
         type: "loaded";
         guildId: undefined | string;
         appId: string;
-        bridgeDid: string;
-        isBridgeAdmin: boolean;
+        hasFullWritePermissions: boolean;
       }
-    | { type: "error_checking" }
-    | { type: "granting" } = $state({
+    | { type: "error_checking" } = $state({
     type: "checking",
   });
 
@@ -26,7 +22,7 @@
     try {
       const aResp = await fetch(`${env.PUBLIC_DISCORD_BRIDGE}/info`);
       const info:
-        | { discordAppId: string; bridgeDid: string }
+        | { discordAppId: string; jazzAccountId: string }
         | { error: string; status: number } = await aResp.json();
       if ("error" in info) {
         console.error("Couldn't fetch Discord app ID from bridge.");
@@ -37,17 +33,22 @@
         `${env.PUBLIC_DISCORD_BRIDGE}/get-guild-id?spaceId=${page.params.space}`,
       );
       const { guildId }: { guildId?: string } = await gResp.json();
-
-      // TODO: Query admin status from SQLite once we have the query
-      const isBridgeAdmin = false;
-
-      bridgeStatus = {
-        type: "loaded",
-        appId: info.discordAppId,
-        bridgeDid: info.bridgeDid,
-        guildId,
-        isBridgeAdmin,
-      };
+      // const jazzAccount = await Account.load(info.jazzAccountId);
+      // if (!jazzAccount) {
+      //   console.error("Could not load jazz account for discord bridge.");
+      //   bridgeStatus = {
+      //     type: "error_checking",
+      //   };
+      //   return;
+      // }
+      // const hasWrite = await isSpaceAdmin(jazzAccount, space.current);
+      // bridgeStatus = {
+      //   type: "loaded",
+      //   appId: info.discordAppId,
+      //   bridgeJazzAccount: jazzAccount,
+      //   guildId,
+      //   hasFullWritePermissions: hasWrite,
+      // };
     } catch (e) {
       bridgeStatus = {
         type: "error_checking",
@@ -56,64 +57,16 @@
   }
 
   async function grantBotPermissions() {
-    if (bridgeStatus.type !== "loaded" || !space) return;
-
-    const previousStatus = bridgeStatus;
-    bridgeStatus = { type: "granting" };
-
-    try {
-      // Step 1: Tell the bridge to join the space
-      const joinResp = await fetch(`${env.PUBLIC_DISCORD_BRIDGE}/join-space`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ spaceId: space }),
-      });
-
-      if (!joinResp.ok) {
-        const err = await joinResp.json();
-        throw new Error(err.error || "Failed to join space");
-      }
-
-      const { bridgeDid } = await joinResp.json();
-
-      // Step 2: Add the bridge as an admin
-      const spaceId = StreamDid.assert(space);
-      await backend.sendEvent(spaceId, {
-        id: newUlid(),
-        $type: "space.roomy.space.addAdmin.v0",
-        userDid: UserDid.assert(bridgeDid),
-      });
-
-      toast.success("Successfully granted bot permissions.");
-      await updateBridgeStatus();
-    } catch (e) {
-      console.error("Error granting bot permissions:", e);
-      toast.error(
-        `Failed to grant permissions: ${e instanceof Error ? e.message : "Unknown error"}`,
-      );
-      bridgeStatus = previousStatus;
-    }
+    // if (bridgeStatus.type != "loaded" || !space.current) return;
+    // await makeSpaceAdmin(bridgeStatus.bridgeJazzAccount, space.current);
+    updateBridgeStatus();
+    toast.success("Successfully granted bot permissions.");
   }
-
   async function revokeBotPermissions() {
-    if (bridgeStatus.type !== "loaded" || !space) return;
-
-    try {
-      const spaceId = StreamDid.assert(space);
-      await backend.sendEvent(spaceId, {
-        id: newUlid(),
-        $type: "space.roomy.space.removeAdmin.v0",
-        userDid: UserDid.assert(bridgeStatus.bridgeDid),
-      });
-
-      toast.success("Revoked bot permissions.");
-      await updateBridgeStatus();
-    } catch (e) {
-      console.error("Error revoking bot permissions:", e);
-      toast.error(
-        `Failed to revoke permissions: ${e instanceof Error ? e.message : "Unknown error"}`,
-      );
-    }
+    // if (bridgeStatus.type != "loaded" || !space.current) return;
+    // await revokeSpaceAdmin(bridgeStatus.bridgeJazzAccount, space.current);
+    updateBridgeStatus();
+    toast.success("Revoked granted bot permissions.");
   }
 
   // Reload app when this module changes to prevent stacking the setIntervals
@@ -151,8 +104,6 @@
 {#snippet bridgeStatusBadge()}
   {#if bridgeStatus.type == "checking"}
     <Badge variant="yellow">checking</Badge>
-  {:else if bridgeStatus.type == "granting"}
-    <Badge variant="yellow">granting access...</Badge>
   {:else if bridgeStatus.type == "loaded"}
     {#if bridgeStatus.guildId}
       <Badge variant="green">bridged</Badge>
@@ -203,7 +154,7 @@
           >
             <span class="pr-1">
               {bridgeStatus.type == "loaded"
-                ? bridgeStatus.isBridgeAdmin
+                ? bridgeStatus.hasFullWritePermissions
                   ? "✅"
                   : ""
                 : ""}
@@ -216,20 +167,18 @@
           </p>
 
           <div class="mt-4">
-            {#if bridgeStatus.type === "granting"}
-              <Button disabled={true}>Granting Access...</Button>
-            {:else}
-              <Button
-                disabled={bridgeStatus.type !== "loaded" ||
-                  bridgeStatus.isBridgeAdmin}
-                onclick={grantBotPermissions}>Grant Access</Button
-              >
-              <Button
-                disabled={bridgeStatus.type !== "loaded" ||
-                  !bridgeStatus.isBridgeAdmin}
-                onclick={revokeBotPermissions}>Revoke Access</Button
-              >
-            {/if}
+            <Button
+              disabled={bridgeStatus.type == "loaded"
+                ? bridgeStatus.hasFullWritePermissions
+                : true}
+              onclick={grantBotPermissions}>Grant Access</Button
+            >
+            <Button
+              disabled={bridgeStatus.type == "loaded"
+                ? !bridgeStatus.hasFullWritePermissions
+                : true}
+              onclick={revokeBotPermissions}>Revoke Access</Button
+            >
           </div>
         </div>
 

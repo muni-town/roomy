@@ -19,7 +19,7 @@
     messagingState,
     type Comment,
   } from "../thread/TimelineView.svelte";
-  import { ensureShowPageChat } from "../../../../routes/(app)/[space=did]/[object=ulid]/+page.svelte";
+  import { ensureShowPageChat } from "../../../../routes/(app)/[space=didOrDomain]/[object=ulid]/+page.svelte";
 
   let isEditing = $state(false);
   const spaceId = $derived(current.joinedSpace?.id);

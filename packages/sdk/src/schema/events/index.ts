@@ -147,7 +147,7 @@ export {
   UpdateSidebar,
   AddAdmin,
   RemoveAdmin,
-  SetHandleAccount,
+  SetHandle,
 } from "./space";
 export { EditPage } from "./page";
 export { SetUserProfile, OverrideUserHandle, SetLastRead } from "./user";
@@ -177,7 +177,7 @@ import {
   UpdateSidebar,
   AddAdmin,
   RemoveAdmin,
-  SetHandleAccount,
+  SetHandle,
 } from "./space";
 import { EditPage } from "./page";
 import { SetUserProfile, OverrideUserHandle, SetLastRead } from "./user";
@@ -206,7 +206,7 @@ const eventRegistry = {
   "space.roomy.space.updateSidebar.v0": UpdateSidebar,
   "space.roomy.space.addAdmin.v0": AddAdmin,
   "space.roomy.space.removeAdmin.v0": RemoveAdmin,
-  "space.roomy.space.setHandleAccount.v0": SetHandleAccount,
+  "space.roomy.space.setHandle.v0": SetHandle,
   "space.roomy.page.editPage.v0": EditPage,
   "space.roomy.user.updateProfile.v0": SetUserProfile,
   "space.roomy.user.overrideHandle.v0": OverrideUserHandle,

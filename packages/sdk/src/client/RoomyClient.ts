@@ -29,6 +29,14 @@ import {
 import { ConnectedSpace } from "../connection/ConnectedSpace";
 import { modules, type ModuleWithCid } from "../modules";
 
+/**
+ * Global roomy client config. It is possible to modify this variable to change the configuration
+ * used by all roomy clients.
+ * */
+export const CONFIG = {
+  plcDirectory: "https://plc.directory",
+} as const;
+
 export interface RoomyClientConfig extends LeafConfig {
   agent: Agent;
   /** Collection for personal space record, e.g., "space.roomy.space.personal.dev" */
@@ -143,9 +151,9 @@ export class RoomyClient {
   /**
    * Resolve a handle to a DID using the cached profile lookup.
    */
-  async resolveDidFromHandle(handle: Handle): Promise<UserDid> {
+  async resolveDidFromHandle(handle: Handle): Promise<StreamDid> {
     const profile = await this.getProfileCached(handle);
-    return profile.data.did as UserDid;
+    return profile.data.did as StreamDid;
   }
 
   /**
@@ -237,40 +245,54 @@ export class RoomyClient {
    * If given a handle, resolves via profile and stream handle record.
    */
   async resolveSpaceId(spaceIdOrHandle: StreamDid | Handle): Promise<{
-    spaceId: StreamDid;
+    spaceDid: StreamDid;
     handle?: Handle;
-    did?: UserDid;
   }> {
     const idType = this.#parseIdType(spaceIdOrHandle);
 
     if (idType === "handle") {
-      const did = await this.resolveDidFromHandle(spaceIdOrHandle as Handle);
-      const spaceId = await this.getStreamHandleRecord(did);
-      if (!spaceId) throw new Error("Could not resolve space ID from handle");
+      const spaceDid = await resolveLeafDid(spaceIdOrHandle);
+      if (!spaceDid) throw new Error("Could not resolve space ID from handle");
       return {
-        spaceId,
+        spaceDid,
         handle: spaceIdOrHandle as Handle,
-        did,
       };
     }
 
-    return { spaceId: spaceIdOrHandle as StreamDid };
+    return { spaceDid: spaceIdOrHandle as StreamDid };
   }
 
   /**
    * Resolve a handle for a space, verifying the handle points to this space.
+   *
+   * @param verify If this is set to false it will just do the handle lookup without checking that
+   * the handle also resolves to the space's DID.
    */
   async resolveHandleForSpace(
-    spaceId: StreamDid,
-    handleAccountDid: UserDid,
+    spaceDid: StreamDid,
+    verify = true,
   ): Promise<Handle | undefined> {
     try {
-      const profile = await this.getProfileCached(handleAccountDid);
-      const handle = profile.data.handle as Handle;
-      const resolved = await this.resolveSpaceId(
-        handleAccountDid as unknown as Handle,
-      );
-      if (resolved.spaceId === spaceId) {
+      const resp: { alsoKnownAs: string[] } = await (
+        await fetch(`${CONFIG.plcDirectory}/${spaceDid}`)
+      ).json();
+
+      const handle = resp.alsoKnownAs
+        .filter((x) => x.startsWith("leaf://"))[0]
+        ?.split("leaf://")[1] as Handle | undefined;
+
+      if (verify && handle) {
+        const did = await resolveLeafDid(handle);
+        if (did == spaceDid) {
+          return handle;
+        } else {
+          console.warn(
+            `Space with DID ${spaceDid} resolved to handle\
+            ${handle}, but handle resolved to different DID: ${did}`,
+          );
+          return undefined;
+        }
+      } else {
         return handle;
       }
     } catch (e) {
@@ -451,6 +473,14 @@ export class RoomyClient {
   }
 
   /**
+   * Set the leaf handle for a stream. This updates the DID document with a `leaf://example.handle`
+   * alias, or removes an existing alias if the handle is `null`.
+   */
+  setHandle(streamDid: StreamDid, handle: string | null): Promise<void> {
+    return this.leaf.setHandle(streamDid, handle);
+  }
+
+  /**
    * Parse whether an identifier is a DID or handle.
    */
   #parseIdType(value: string): "did" | "handle" {
@@ -460,4 +490,23 @@ export class RoomyClient {
     if (!(handleParsed instanceof type.errors)) return "handle";
     throw new Error(`Invalid identifier: ${value}`);
   }
+}
+
+export async function resolveLeafDid(
+  handle: string,
+): Promise<StreamDid | undefined> {
+  const resp = await fetch(
+    `https://resolver.roomy.chat/xrpc/town.muni.leaf.resolveHandle?handle=${encodeURIComponent(handle)}`,
+    {
+      headers: [["accept", "application/json"]],
+    },
+  );
+  if (!resp.ok) {
+    throw new Error(
+      `Error resolving leaf handle to DID (${resp.status}: ${resp.statusText}): ${await resp.text()}`,
+    );
+  }
+  const json = await resp.json();
+  const did = json.did;
+  return StreamDid.assert(did);
 }

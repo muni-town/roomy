@@ -11,6 +11,7 @@ const personalModuleDef: BasicModule = {
   initSql: sql`
     create table if not exists stream_info (
       admin text,
+      handle text,
       type text not null default 'space.roomy.space.personal',
       schema_version text not null default '2'
     );
@@ -82,6 +83,7 @@ const spaceModuleDef: BasicModule = {
   initSql: sql`
     create table if not exists stream_info (
       type text not null default 'space.roomy.space.space',
+      handle text,
       schema_version text not null default '2'
     ) strict;
 
@@ -162,7 +164,7 @@ const spaceModuleDef: BasicModule = {
       'space.roomy.space.personal.leaveSpace.v0',
       'space.roomy.space.addAdmin.v0',
       'space.roomy.space.removeAdmin.v0',
-      'space.roomy.user.setHandleAccount.v0',
+      'space.roomy.user.setHandle.v0',
       'space.roomy.space.updateSpaceInfo.v0',
       'space.roomy.space.updateSidebar.v0',
       'space.roomy.room.createRoom.v0',

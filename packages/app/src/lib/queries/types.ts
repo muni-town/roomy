@@ -1,4 +1,4 @@
-import type { Handle, StreamDid, UserDid } from "@roomy/sdk";
+import type { Handle, StreamDid } from "@roomy/sdk";
 
 export type SpaceMeta = {
   id: StreamDid;
@@ -6,7 +6,6 @@ export type SpaceMeta = {
   joined?: boolean;
   name?: string;
   avatar?: string;
-  handle_account?: UserDid;
   handle?: Handle;
   description?: string;
   permissions: [string, "read" | "post" | "admin"][];
