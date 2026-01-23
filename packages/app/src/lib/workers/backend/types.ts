@@ -90,6 +90,7 @@ export type BackendInterface = {
   /** Connect to all spaces accumulated during personal stream materialization.
    * Call this after sending a joinSpace event to connect to the newly joined space. */
   connectPendingSpaces(): Promise<void>;
+  setSpaceHandle(spaceDid: StreamDid, handle: string | null): Promise<void>;
 };
 
 export const consoleLogLevels = [

@@ -1,4 +1,4 @@
-import { Handle, StreamDid, UserDid } from "@roomy/sdk";
+import { Handle, StreamDid } from "@roomy/sdk";
 import { LiveQuery } from "$lib/utils/liveQuery.svelte";
 import { sql } from "$lib/utils/sqlTemplate";
 import { backend, backendStatus, getPersonalSpaceId } from "$lib/workers";
@@ -56,7 +56,6 @@ $effect.root(() => {
         .filter((space) => !handlesForSpace.has(space.id))
         .map(async (space) => {
           const handle = await backend.resolveHandleForSpace(space.id);
-          console.warn("space", space.id, handle);
           return {
             id: space.id,
             handle,
