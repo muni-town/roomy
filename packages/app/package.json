@@ -1,6 +1,6 @@
 {
   "name": "roomy.chat",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "description": "A shared web space for digital gardening.",
