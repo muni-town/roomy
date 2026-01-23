@@ -3,11 +3,12 @@
  */
 
 import { BasicInfoUpdate, Did, StreamDid, type, Ulid } from "../primitives";
-import { defineEvent, sql, ensureEntity, decodeTime } from "./index";
+import { defineEvent, sql, ensureEntity, decodeTime, type SqlStatement } from "./index";
 
 const SetUserProfileSchema = type({
   $type: "'space.roomy.user.updateProfile.v0'",
   did: Did.describe("The DID of the user to set the profile for."),
+  "extensions?": type.Record(type.string, type.unknown),
 })
   .and(BasicInfoUpdate)
   .describe(
@@ -26,7 +27,7 @@ export const SetUserProfile = defineEvent(
     ];
     const setUpdates = updates.filter((x) => x.value !== undefined);
 
-    return [
+    const statements: (SqlStatement | undefined)[] = [
       ensureEntity(streamId, event.id),
       setUpdates.length > 0
         ? {
@@ -42,32 +43,23 @@ export const SetUserProfile = defineEvent(
             ]),
           }
         : undefined,
-    ].filter((x) => !!x);
-  },
-);
-
-const OverrideUserHandleSchema = type({
-  $type: "'space.roomy.user.overrideHandle.v0'",
-  did: Did.describe("The DID of the user to override the info for"),
-  handle: type.string.describe("The original handle from the bridged platform"),
-}).describe(
-  "Override user metadata in this space. \
-Primarily used for bridged accounts (e.g. Discord) where we can't retrieve the handle from the ID.",
-);
-
-export const OverrideUserHandle = defineEvent(
-  OverrideUserHandleSchema,
-  ({ event }) => {
-    return [
-      sql`
-        insert into comp_user (did, handle)
-        values (
-          ${event.did},
-          ${event.handle}
-        )
-        on conflict(did) do update set handle = ${event.handle}
-      `,
     ];
+
+    // Extract handle from Discord extension if present
+    const discordOrigin = event.extensions?.[
+      "space.roomy.extension.discordUserOrigin.v0"
+    ] as { handle?: string } | undefined;
+    if (discordOrigin?.handle) {
+      statements.push(
+        sql`
+          INSERT INTO comp_user (did, handle)
+          VALUES (${event.did}, ${discordOrigin.handle})
+          ON CONFLICT(did) DO UPDATE SET handle = ${discordOrigin.handle}
+        `,
+      );
+    }
+
+    return statements.filter((x) => !!x);
   },
 );
 
@@ -104,6 +96,5 @@ export const SetLastRead = defineEvent(SetLastReadSchema, ({ event }) => {
 // All user events
 export const UserEventVariant = type.or(
   SetUserProfileSchema,
-  OverrideUserHandleSchema,
   SetLastReadSchema,
 );

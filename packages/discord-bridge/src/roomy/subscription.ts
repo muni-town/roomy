@@ -7,7 +7,12 @@
  */
 
 import type { DecodedStreamEvent, EventCallbackMeta } from "@roomy/sdk";
-import { leafCursors, syncedIdsForBridge, registeredBridges } from "../db.js";
+import {
+  leafCursors,
+  syncedIdsForBridge,
+  syncedProfilesForBridge,
+  registeredBridges,
+} from "../db.js";
 
 /**
  * Extension type key for Discord message origin metadata.
@@ -20,6 +25,12 @@ const DISCORD_MESSAGE_ORIGIN_KEY =
  */
 const DISCORD_ORIGIN_KEY = "space.roomy.extension.discordOrigin.v0" as const;
 
+/**
+ * Extension type key for Discord user origin metadata.
+ */
+const DISCORD_USER_ORIGIN_KEY =
+  "space.roomy.extension.discordUserOrigin.v0" as const;
+
 interface DiscordMessageOrigin {
   snowflake: string;
   channelId: string;
@@ -29,6 +40,13 @@ interface DiscordMessageOrigin {
 interface DiscordOrigin {
   snowflake: string;
   guildId: string;
+}
+
+interface DiscordUserOrigin {
+  snowflake: string;
+  guildId: string;
+  profileHash: string;
+  handle: string;
 }
 
 /**
@@ -90,6 +108,20 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
           if (!(e instanceof Error && e.message.includes("already registered"))) {
             console.error("Error registering synced ID:", e);
           }
+        }
+      }
+
+      // Check for Discord user origin extension (profile sync)
+      const userOrigin = extractDiscordUserOrigin(event);
+      if (userOrigin && userOrigin.guildId === guildIdStr) {
+        const syncedProfiles = syncedProfilesForBridge({
+          discordGuildId: guildId,
+          roomySpaceId: spaceId,
+        });
+        try {
+          await syncedProfiles.put(userOrigin.snowflake, userOrigin.profileHash);
+        } catch (e) {
+          console.error("Error caching profile hash:", e);
         }
       }
 
@@ -165,6 +197,24 @@ function extractDiscordOrigin(
   if (!extensions) return undefined;
 
   const origin = extensions[DISCORD_ORIGIN_KEY] as DiscordOrigin | undefined;
+  return origin;
+}
+
+/**
+ * Extract Discord user origin extension from an event if present.
+ */
+function extractDiscordUserOrigin(
+  event: DecodedStreamEvent["event"],
+): DiscordUserOrigin | undefined {
+  if (event.$type !== "space.roomy.user.updateProfile.v0") return undefined;
+
+  const extensions = (event as { extensions?: Record<string, unknown> })
+    .extensions;
+  if (!extensions) return undefined;
+
+  const origin = extensions[DISCORD_USER_ORIGIN_KEY] as
+    | DiscordUserOrigin
+    | undefined;
   return origin;
 }
 

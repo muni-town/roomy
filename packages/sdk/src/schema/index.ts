@@ -58,5 +58,6 @@ export {
 
 export * from "./extensions/message";
 export * from "./extensions/room";
+export * from "./extensions/user";
 
 export * from "./events/room";

@@ -150,7 +150,7 @@ export {
   SetHandle,
 } from "./space";
 export { EditPage } from "./page";
-export { SetUserProfile, OverrideUserHandle, SetLastRead } from "./user";
+export { SetUserProfile, SetLastRead } from "./user";
 export { CreateRoomLink, RemoveRoomLink } from "./link";
 
 // Import defined events for the registry
@@ -180,7 +180,7 @@ import {
   SetHandle,
 } from "./space";
 import { EditPage } from "./page";
-import { SetUserProfile, OverrideUserHandle, SetLastRead } from "./user";
+import { SetUserProfile, SetLastRead } from "./user";
 import { CreateRoomLink, RemoveRoomLink } from "./link";
 import { Event, EventType } from "../envelope";
 
@@ -209,7 +209,6 @@ const eventRegistry = {
   "space.roomy.space.setHandle.v0": SetHandle,
   "space.roomy.page.editPage.v0": EditPage,
   "space.roomy.user.updateProfile.v0": SetUserProfile,
-  "space.roomy.user.overrideHandle.v0": OverrideUserHandle,
   "space.roomy.space.personal.setLastRead.v0": SetLastRead,
   "space.roomy.link.createRoomLink.v0": CreateRoomLink,
   "space.roomy.link.removeRoomLink.v0": RemoveRoomLink,
