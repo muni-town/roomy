@@ -9,7 +9,7 @@
 
   let currentSpace = $derived(current.joinedSpace);
   let spaceId = $derived(currentSpace?.id);
-  let handleAccount = $derived(currentSpace?.handle_account);
+  let handleAccount = $derived(currentSpace?.handle);
   let spaceName = $derived(currentSpace?.name ?? "");
   let avatarUrl = $derived(currentSpace?.avatar ?? "");
   let spaceDescription = $derived(currentSpace?.description ?? "");

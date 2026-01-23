@@ -269,11 +269,15 @@ class WorkerSupervisor {
       unpauseSubscription: async (_streamId) => {
         // await this.openSpacesMaterializer?.unpauseSubscription(streamId);
       },
-      resolveHandleForSpace: async (spaceId, handleAccountDid) =>
-        this.client.resolveHandleForSpace(spaceId, handleAccountDid),
+      resolveHandleForSpace: async (spaceId) =>
+        this.client.resolveHandleForSpace(spaceId),
       resolveSpaceId: async (handleOrDid) => {
         await this.#connected.promise;
-        return await this.client.resolveSpaceId(handleOrDid);
+        const resp = await this.client.resolveSpaceId(handleOrDid);
+        return {
+          spaceId: resp.spaceDid,
+          handle: resp.handle,
+        };
       },
       checkSpaceExists: async (spaceId) =>
         this.client.checkStreamExists(spaceId),

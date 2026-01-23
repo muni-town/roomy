@@ -41,7 +41,6 @@ let resolvedSpaceIds = new SvelteMap<
   | {
       spaceId: StreamDid;
       handle?: Handle;
-      did?: UserDid;
     }
   | { error: string }
 >();
@@ -85,15 +84,6 @@ const currentSpace = $derived.by(() => {
     : undefined;
   if (!matchingSpace) {
     return { matchingSpace, spaceId: resp.spaceId, isSpaceAdmin: false };
-  }
-
-  // Make sure that the space actually has a handle
-  const handleAccount = matchingSpace?.handle_account;
-  if (handleAccount) {
-    // Validate that the DID of the handle matches our handle account
-    if (handleAccount != resp.did) {
-      throw "This space's handle is registered to a different account.";
-    }
   }
 
   const isSpaceAdmin =

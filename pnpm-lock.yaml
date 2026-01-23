@@ -461,8 +461,8 @@ importers:
         specifier: ^0.5.6
         version: 0.5.6
       '@muni-town/leaf-client':
-        specifier: 0.1.0-alpha.15
-        version: 0.1.0-alpha.15
+        specifier: 0.1.0-alpha.16
+        version: 0.1.0-alpha.16
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -1179,6 +1179,10 @@ packages:
 
   '@muni-town/leaf-client@0.1.0-alpha.15':
     resolution: {integrity: sha512-FgTj0R4LcSTbCLanmvAP3E7oJFfSeUfzmZvoYmsMG0Qh6AL9W/0nxX4fktnW17dGSABto4JW53fEDKKLMTYwiA==}
+    hasBin: true
+
+  '@muni-town/leaf-client@0.1.0-alpha.16':
+    resolution: {integrity: sha512-tFYs/Jn+8NG+GBduIboq1gGQZiho9bFTHVEOt2j3GiYSmRbAt1oI4aBi/eklh2SnpdaCxCIgKXAyKkv5lMYKWg==}
     hasBin: true
 
   '@noble/ciphers@1.3.0':
@@ -5443,6 +5447,17 @@ snapshots:
   '@mixmark-io/domino@2.2.0': {}
 
   '@muni-town/leaf-client@0.1.0-alpha.15':
+    dependencies:
+      '@atcute/cbor': 2.2.8
+      '@atcute/cid': 2.2.6
+      socket.io-client: 4.8.1
+      socket.io-msgpack-parser: 3.0.2
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+
+  '@muni-town/leaf-client@0.1.0-alpha.16':
     dependencies:
       '@atcute/cbor': 2.2.8
       '@atcute/cid': 2.2.6

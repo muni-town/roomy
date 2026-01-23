@@ -26,7 +26,6 @@ $effect.root(() => {
           'name', ci.name,
           'avatar', ci.avatar,
           'description', ci.description,
-          'handle_account', cs.handle_account,
           'permissions', (
             select json_group_array(
               json_array(cu.did, json_extract(e.payload, '$.can')))
@@ -54,16 +53,13 @@ $effect.root(() => {
 
     Promise.all(
       spacesQuery.result
-        .filter(
-          (space) => space.handle_account && !handlesForSpace.has(space.id),
-        )
+        .filter((space) => !handlesForSpace.has(space.id))
         .map(async (space) => {
+          const handle = await backend.resolveHandleForSpace(space.id);
+          console.warn("space", space.id, handle);
           return {
             id: space.id,
-            handle: await backend.resolveHandleForSpace(
-              space.id,
-              UserDid.assert(space.handle_account),
-            ),
+            handle,
           };
         }),
     ).then((spaces) => {
