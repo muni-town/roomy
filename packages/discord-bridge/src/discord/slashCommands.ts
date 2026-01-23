@@ -14,8 +14,9 @@ import {
   registeredBridges,
   syncedIdsForBridge,
 } from "../db.js";
-import { getRoomyClient } from "../roomy/client.js";
+import { getRoomyClient, subscribeToSpace } from "../roomy/client.js";
 import { StreamDid } from "@roomy/sdk";
+import { backfillGuild, botState } from "./bot.js";
 
 export const slashCommands = [
   {
@@ -121,10 +122,29 @@ export async function handleSlashCommandInteraction(interaction: any) {
         spaceId,
       });
 
+      // Respond immediately, then start backfill in background
       interaction.respond({
         flags: MessageFlags.Ephemeral,
-        content: "Roomy space has been connected! 🥳",
+        content: "Roomy space has been connected! Starting sync... 🥳",
       });
+
+      // Subscribe to the Roomy space (backfills existing Roomy events)
+      try {
+        console.log(`Subscribing to newly connected space ${spaceId}...`);
+        await subscribeToSpace(client, streamDid);
+        console.log(`Subscribed to space ${spaceId}`);
+
+        // Trigger Discord backfill for this guild
+        if (botState.bot) {
+          console.log(`Starting Discord backfill for guild ${guildId}...`);
+          await backfillGuild(botState.bot, guildId);
+          console.log(`Discord backfill complete for guild ${guildId}`);
+        } else {
+          console.warn("Bot not ready yet, Discord backfill will happen on next restart");
+        }
+      } catch (e) {
+        console.error(`Error during initial sync for space ${spaceId}:`, e);
+      }
     } else if (interaction.data?.name == "disconnect-roomy-space") {
       const roomySpace = await registeredBridges.get_spaceId(
         guildId.toString(),
