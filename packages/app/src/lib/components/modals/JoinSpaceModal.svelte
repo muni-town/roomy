@@ -5,17 +5,21 @@
   import { joinSpace } from "$lib/mutations/space";
   import { type SpaceIdOrHandle } from "$lib/workers/types";
   import { backend } from "$lib/workers";
-  import { StreamDid } from "@roomy/sdk";
+  import { Handle, StreamDid } from "@roomy/sdk";
 
   let spaceName = $state() as string | undefined;
   let spaceAvatar = $state() as string | undefined;
 
   $effect(() => {
     if (!page.params.space) return;
-    backend.getSpaceInfo(StreamDid.assert(page.params.space)).then((info) => {
-      spaceName = info?.name;
-      spaceAvatar = info?.avatar;
-    });
+    backend
+      .resolveSpaceId(page.params.space as StreamDid | Handle)
+      .then((did) =>
+        backend.getSpaceInfo(StreamDid.assert(did.spaceId)).then((info) => {
+          spaceName = info?.name;
+          spaceAvatar = info?.avatar;
+        }),
+      );
   });
 
   type JoinStatus =
