@@ -43,6 +43,8 @@ export interface RoomyClientConfig extends LeafConfig {
   spaceNsid: string;
   /** Collection for space handle records, e.g., "space.roomy.space.handle.dev" */
   spaceHandleNsid: string;
+  /** PLC directory URL for resolving DIDs. Defaults to https://plc.directory */
+  plcDirectory?: string;
 }
 
 export interface RoomyClientEvents {
@@ -68,6 +70,7 @@ export class RoomyClient {
   readonly agent: Agent;
   readonly leaf: LeafClient;
   readonly #config: RoomyClientConfig;
+  readonly plcDirectory: string;
 
   // Caches
   readonly #profileCache = new Map<string, ProfileResponse>();
@@ -87,6 +90,7 @@ export class RoomyClient {
     this.agent = config.agent;
     this.#config = config;
     this.leaf = leaf;
+    this.plcDirectory = config.plcDirectory ?? CONFIG.plcDirectory;
   }
 
   /**
@@ -274,7 +278,7 @@ export class RoomyClient {
   ): Promise<Handle | undefined> {
     try {
       const resp: { alsoKnownAs: string[] } = await (
-        await fetch(`${CONFIG.plcDirectory}/${spaceDid}`)
+        await fetch(`${this.plcDirectory}/${spaceDid}`)
       ).json();
 
       const handle = resp.alsoKnownAs

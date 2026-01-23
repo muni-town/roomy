@@ -1,6 +1,10 @@
 const CONFIG = {
   // service endpoints
   leafUrl: import.meta.env.VITE_LEAF_URL || "https://leaf-dev.muni.town",
+  plcDirectory:
+    (import.meta.env.VITE_PLC_DIRECTORY ||
+      import.meta.env.PUBLIC_PLC_DIRECTORY ||
+      "https://plc.directory") as string,
   faroEndpoint: (import.meta.env.VITE_FARO_ENDPOINT || undefined) as
     | string
     | undefined,
