@@ -237,3 +237,25 @@ export const syncedProfilesForBridge = ({
   );
 
 export type SyncedProfiles = ReturnType<typeof syncedProfilesForBridge>;
+
+/**
+ * Per-space reaction tracking for Discord reactions.
+ * Key: `${discordMessageId}:${discordUserId}:${emojiKey}` where emojiKey is emoji name or id
+ * Value: Roomy reaction event ID (used for removal)
+ */
+export const syncedReactionsForBridge = ({
+  discordGuildId,
+  roomySpaceId,
+}: {
+  discordGuildId: bigint;
+  roomySpaceId: string;
+}) =>
+  db.sublevel<string, string>(
+    `syncedReactions:${discordGuildId.toString()}:${roomySpaceId}`,
+    {
+      keyEncoding: "utf8",
+      valueEncoding: "utf8",
+    },
+  );
+
+export type SyncedReactions = ReturnType<typeof syncedReactionsForBridge>;

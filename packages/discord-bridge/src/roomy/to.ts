@@ -15,11 +15,22 @@
 // import { discordWebhookTokensForBridge } from "../db";
 // import { getRoomyThreadForChannel } from "./from";
 
-import { avatarUrl } from "@discordeno/bot";
+import { avatarUrl, type Emoji } from "@discordeno/bot";
 import { ChannelProperties, MessageProperties } from "../discord/types";
 import { GuildContext } from "../types";
-import { newUlid, toBytes, type Attachment, type Did, type Event, type Ulid } from "@roomy/sdk";
-import { discordWebhookTokensForBridge, syncedProfilesForBridge } from "../db.js";
+import {
+  newUlid,
+  toBytes,
+  UserDid,
+  type Attachment,
+  type Did,
+  type Event,
+  type Ulid,
+} from "@roomy/sdk";
+import {
+  discordWebhookTokensForBridge,
+  syncedProfilesForBridge,
+} from "../db.js";
 
 // const tracer = trace.getTracer("discordBot");
 
@@ -99,7 +110,9 @@ export async function ensureRoomyProfileForDiscordUser(
   };
 
   await ctx.connectedSpace.sendEvent(event);
-  console.log(`Synced profile for Discord user ${user.username} (${userIdStr})`);
+  console.log(
+    `Synced profile for Discord user ${user.username} (${userIdStr})`,
+  );
 
   // Update local cache
   await syncedProfiles.put(userIdStr, hash);
@@ -110,7 +123,9 @@ export async function ensureRoomyChannelForDiscordChannel(
   channel: ChannelProperties,
 ): Promise<string> {
   // Check if already synced
-  const existingRoomyId = await ctx.syncedIds.get_roomyId(channel.id.toString());
+  const existingRoomyId = await ctx.syncedIds.get_roomyId(
+    channel.id.toString(),
+  );
   if (existingRoomyId) {
     console.log(`Channel ${channel.name} already synced as ${existingRoomyId}`);
     return existingRoomyId;
@@ -132,7 +147,9 @@ export async function ensureRoomyChannelForDiscordChannel(
   };
 
   await ctx.connectedSpace.sendEvent(event);
-  console.log(`Created Roomy channel ${roomId} for Discord channel ${channel.name}`);
+  console.log(
+    `Created Roomy channel ${roomId} for Discord channel ${channel.name}`,
+  );
 
   // Register the mapping immediately (subscription handler will also do this, but we need it now)
   try {
@@ -143,9 +160,13 @@ export async function ensureRoomyChannelForDiscordChannel(
   } catch (e) {
     if (e instanceof Error && e.message.includes("already registered")) {
       // Another process (subscription handler) registered this mapping - use the existing one
-      const existingRoomyId = await ctx.syncedIds.get_roomyId(channel.id.toString());
+      const existingRoomyId = await ctx.syncedIds.get_roomyId(
+        channel.id.toString(),
+      );
       if (existingRoomyId) {
-        console.log(`Channel ${channel.name} was registered by another process as ${existingRoomyId}`);
+        console.log(
+          `Channel ${channel.name} was registered by another process as ${existingRoomyId}`,
+        );
         return existingRoomyId;
       }
     }
@@ -167,7 +188,9 @@ export async function ensureRoomySidebarForCategoriesAndChannels(
   for (const channel of textChannels) {
     const roomyId = await ctx.syncedIds.get_roomyId(channel.id.toString());
     if (!roomyId) {
-      console.warn(`Channel ${channel.name} not synced yet, skipping in sidebar`);
+      console.warn(
+        `Channel ${channel.name} not synced yet, skipping in sidebar`,
+      );
       continue;
     }
 
@@ -230,9 +253,13 @@ export async function ensureRoomyThreadForDiscordThread(
   if (!thread.parentId) {
     throw new Error(`Thread ${thread.name} has no parent channel`);
   }
-  const parentRoomyId = await ctx.syncedIds.get_roomyId(thread.parentId.toString());
+  const parentRoomyId = await ctx.syncedIds.get_roomyId(
+    thread.parentId.toString(),
+  );
   if (!parentRoomyId) {
-    throw new Error(`Parent channel ${thread.parentId} not synced yet for thread ${thread.name}`);
+    throw new Error(
+      `Parent channel ${thread.parentId} not synced yet for thread ${thread.name}`,
+    );
   }
 
   // Create new room for thread
@@ -262,7 +289,9 @@ export async function ensureRoomyThreadForDiscordThread(
   };
 
   await ctx.connectedSpace.sendEvent(linkEvent);
-  console.log(`Created Roomy thread ${roomId} for Discord thread ${thread.name}, linked to ${parentRoomyId}`);
+  console.log(
+    `Created Roomy thread ${roomId} for Discord thread ${thread.name}, linked to ${parentRoomyId}`,
+  );
 
   // Register the mapping immediately
   try {
@@ -273,9 +302,13 @@ export async function ensureRoomyThreadForDiscordThread(
   } catch (e) {
     if (e instanceof Error && e.message.includes("already registered")) {
       // Another process (subscription handler) registered this mapping - use the existing one
-      const existingRoomyId = await ctx.syncedIds.get_roomyId(thread.id.toString());
+      const existingRoomyId = await ctx.syncedIds.get_roomyId(
+        thread.id.toString(),
+      );
       if (existingRoomyId) {
-        console.log(`Thread ${thread.name} was registered by another process as ${existingRoomyId}`);
+        console.log(
+          `Thread ${thread.name} was registered by another process as ${existingRoomyId}`,
+        );
         return existingRoomyId;
       }
     }
@@ -409,7 +442,9 @@ export async function ensureRoomyMessageForDiscordMessage(
     discordGuildId: ctx.guildId,
     roomySpaceId: ctx.spaceId,
   });
-  const channelWebhookToken = await webhookTokens.get(message.channelId.toString());
+  const channelWebhookToken = await webhookTokens.get(
+    message.channelId.toString(),
+  );
   const channelWebhookId = channelWebhookToken?.split(":")[0];
   if (channelWebhookId && message.webhookId?.toString() === channelWebhookId) {
     return null;
@@ -420,14 +455,20 @@ export async function ensureRoomyMessageForDiscordMessage(
 
   // 3a. Reply attachment (if message_reference exists and target is synced)
   if (message.messageReference?.messageId) {
-    const replyTargetId = await ctx.syncedIds.get_roomyId(
-      message.messageReference.messageId.toString(),
-    );
+    const targetIdStr = message.messageReference.messageId.toString();
+    const replyTargetId = await ctx.syncedIds.get_roomyId(targetIdStr);
     if (replyTargetId) {
       attachments.push({
         $type: "space.roomy.attachment.reply.v0",
         target: replyTargetId as Ulid,
       });
+    } else {
+      // Target message not synced yet - this can happen for cross-channel replies
+      // or if messages arrive out of order
+      console.warn(
+        `Reply target ${message.messageReference.messageId} not found for message ${message.id}. ` +
+          `The reply attachment will be missing.`,
+      );
     }
   }
 
@@ -500,7 +541,9 @@ export async function ensureRoomyMessageForDiscordMessage(
   };
 
   await ctx.connectedSpace.sendEvent(event);
-  console.log(`Created Roomy message ${messageId} for Discord message ${message.id}`);
+  console.log(
+    `Created Roomy message ${messageId} for Discord message ${message.id}`,
+  );
 
   // 5. Register mapping immediately
   try {
@@ -511,9 +554,13 @@ export async function ensureRoomyMessageForDiscordMessage(
   } catch (e) {
     if (e instanceof Error && e.message.includes("already registered")) {
       // Another process (subscription handler) registered this mapping - use the existing one
-      const existingRoomyId = await ctx.syncedIds.get_roomyId(message.id.toString());
+      const existingRoomyId = await ctx.syncedIds.get_roomyId(
+        message.id.toString(),
+      );
       if (existingRoomyId) {
-        console.log(`Message ${message.id} was registered by another process as ${existingRoomyId}`);
+        console.log(
+          `Message ${message.id} was registered by another process as ${existingRoomyId}`,
+        );
         return existingRoomyId;
       }
     }
@@ -521,4 +568,158 @@ export async function ensureRoomyMessageForDiscordMessage(
   }
 
   return messageId;
+}
+
+/**
+ * Convert Discord emoji to a string representation for Roomy.
+ * Custom emojis use their ID, unicode emojis use their name.
+ */
+function emojiToString(emoji: Partial<Emoji>): string {
+  // Custom emoji - use the format <:name:id> or <a:name:id> for animated
+  if (emoji.id) {
+    const animated = emoji.animated ? "a" : "";
+    return `<${animated}:${emoji.name || "_"}:${emoji.id}>`;
+  }
+  // Unicode emoji - just use the name (which is the emoji character)
+  return emoji.name || "❓";
+}
+
+/**
+ * Generate a unique key for a reaction (for idempotency tracking).
+ */
+function reactionKey(
+  messageId: bigint,
+  userId: bigint,
+  emoji: Partial<Emoji>,
+): string {
+  const emojiKey = emoji.id ? emoji.id.toString() : emoji.name || "unknown";
+  return `${messageId}:${userId}:${emojiKey}`;
+}
+
+/**
+ * Sync a Discord reaction to Roomy as a bridged reaction.
+ */
+export async function syncDiscordReactionToRoomy(
+  ctx: GuildContext,
+  opts: {
+    messageId: bigint;
+    channelId: bigint;
+    userId: bigint;
+    emoji: Partial<Emoji>;
+  },
+): Promise<string | null> {
+  const key = reactionKey(opts.messageId, opts.userId, opts.emoji);
+
+  // 1. Idempotency check - skip if already synced
+  try {
+    const existingReactionId = await ctx.syncedReactions.get(key);
+    if (existingReactionId) {
+      return existingReactionId;
+    }
+  } catch {
+    // Key not found - proceed with sync
+  }
+
+  // 2. Get the Roomy message ID for this Discord message
+  const roomyMessageId = await ctx.syncedIds.get_roomyId(
+    opts.messageId.toString(),
+  );
+  if (!roomyMessageId) {
+    console.warn(
+      `Discord message ${opts.messageId} not synced to Roomy, skipping reaction`,
+    );
+    return null;
+  }
+
+  // 3. Get the Roomy room ID for this channel
+  const roomyRoomId = await ctx.syncedIds.get_roomyId(
+    opts.channelId.toString(),
+  );
+  if (!roomyRoomId) {
+    console.warn(
+      `Discord channel ${opts.channelId} not synced to Roomy, skipping reaction`,
+    );
+    return null;
+  }
+
+  // 4. Build and send the AddBridgedReaction event
+  const reactionId = newUlid();
+  const reactionString = emojiToString(opts.emoji);
+
+  const event: Event = {
+    id: reactionId,
+    room: roomyRoomId as Ulid,
+    $type: "space.roomy.reaction.addBridgedReaction.v0",
+    reactionTo: roomyMessageId as Ulid,
+    reaction: reactionString,
+    reactingUser: UserDid.assert(`did:discord:${opts.userId}`),
+  };
+
+  await ctx.connectedSpace.sendEvent(event);
+  console.log(
+    `Synced reaction ${reactionString} from Discord user ${opts.userId} to message ${roomyMessageId}`,
+  );
+
+  // 5. Track the synced reaction
+  await ctx.syncedReactions.put(key, reactionId);
+
+  return reactionId;
+}
+
+/**
+ * Remove a Discord reaction from Roomy.
+ */
+export async function removeDiscordReactionFromRoomy(
+  ctx: GuildContext,
+  opts: {
+    messageId: bigint;
+    channelId: bigint;
+    userId: bigint;
+    emoji: Partial<Emoji>;
+  },
+): Promise<void> {
+  const key = reactionKey(opts.messageId, opts.userId, opts.emoji);
+
+  // 1. Get the Roomy reaction event ID
+  let reactionEventId: string | undefined;
+  try {
+    reactionEventId = await ctx.syncedReactions.get(key);
+  } catch {
+    // Key not found - reaction wasn't synced
+    console.warn(`Reaction not found for removal: ${key}`);
+    return;
+  }
+
+  if (!reactionEventId) {
+    console.warn(`Reaction not found for removal: ${key}`);
+    return;
+  }
+
+  // 2. Get the Roomy room ID for this channel
+  const roomyRoomId = await ctx.syncedIds.get_roomyId(
+    opts.channelId.toString(),
+  );
+  if (!roomyRoomId) {
+    console.warn(
+      `Discord channel ${opts.channelId} not synced to Roomy, skipping reaction removal`,
+    );
+    return;
+  }
+
+  // 3. Send the RemoveBridgedReaction event
+  const event: Event = {
+    id: newUlid(),
+    room: roomyRoomId as Ulid,
+    $type: "space.roomy.reaction.removeBridgedReaction.v0",
+    reactionId: reactionEventId as Ulid,
+    reactingUser: UserDid.assert(`did:discord:${opts.userId}`),
+  };
+
+  await ctx.connectedSpace.sendEvent(event);
+  console.log(
+    `Removed reaction ${reactionEventId} from Discord user ${opts.userId}`,
+  );
+
+  // 4. Remove from tracking
+  await ctx.syncedReactions.del(key);
 }

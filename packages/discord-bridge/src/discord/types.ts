@@ -72,6 +72,15 @@ export const desiredProperties = {
     width: true,
     height: true,
   },
+  emoji: {
+    id: true,
+    name: true,
+  },
+  messageReference: {
+    messageId: true,
+    channelId: true,
+    guildId: true,
+  },
 } satisfies RecursivePartial<TransformersDesiredProperties>;
 
 export type DiscordBot = Bot<
