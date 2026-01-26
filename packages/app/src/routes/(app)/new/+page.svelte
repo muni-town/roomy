@@ -59,7 +59,7 @@
       backendStatus.authState?.state != "authenticated" ||
       backendStatus.roomyState?.state !== "connected"
     )
-      return;
+      throw new Error("Not connected");
 
     try {
       spaceCreationState = { status: "loading" };
