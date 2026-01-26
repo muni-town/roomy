@@ -4,6 +4,8 @@
   import SpaceButton from "$lib/components/spaces/SpaceButton.svelte";
   import EarlyAlphaWarning from "$lib/components/helper/EarlyAlphaWarning.svelte";
   import { joinedSpaces } from "$lib/queries";
+
+  import IconTablerPlus from "~icons/tabler/plus";
 </script>
 
 <MainLayout>
@@ -41,6 +43,11 @@
           {/each}
         </section>
       {/if} -->
+
+      <Button href="/new" class="gap-2">
+        <IconTablerPlus />
+        Create Space
+      </Button>
 
       {#if joinedSpaces.list.length || 0 > 0}
         <h2 class="text-3xl font-bold text-base-900 dark:text-base-100">

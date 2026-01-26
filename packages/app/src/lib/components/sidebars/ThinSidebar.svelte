@@ -8,23 +8,22 @@
   import { current, joinedSpaces } from "$lib/queries";
   import { dev } from "$app/environment";
 
-  import IconTablerPlus from "~icons/tabler/plus";
-  import IconTablerHome from "~icons/tabler/home";
+  import IconHeroiconsSquaresPlus from "~icons/heroicons/squares-plus";
   import IconMdiSqlQuery from "~icons/mdi/sql-query";
 
   let openSpace = $derived(current.joinedSpace?.id);
   let isOpenSpaceJoined = $derived(true);
 </script>
 
-<div class="flex flex-col gap-1 items-center justify-center pt-2">
+<div class="flex flex-col gap-1 items-center justify-center pt-4">
   <Button
     variant="link"
     type="button"
     onclick={() => navigate("home")}
-    class="px-0 aspect-square [&_svg]:size-8"
+    class="px-0 aspect-square [&_svg]:size-8  hover:bg-accent-500/20"
     data-current={page.url.pathname.startsWith("/home")}
   >
-    <IconTablerHome font-size="1.75em" />
+    <IconHeroiconsSquaresPlus font-size="1.75em" />
   </Button>
 
   {#if current.did}
@@ -38,16 +37,6 @@
       >
         <Icon icon="tabler:mail" font-size="1.75em" />
       </Button> -->
-
-    <Button
-      variant="link"
-      title="Create Space"
-      class="aspect-square [&_svg]:size-8"
-      href="/new"
-      data-current={page.url.pathname.startsWith("/new")}
-    >
-      <IconTablerPlus font-size="2em" />
-    </Button>
   {/if}
 
   <div class="divider my-0"></div>
