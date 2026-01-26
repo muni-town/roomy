@@ -386,6 +386,33 @@ export class ConnectedSpace {
   }
 
   /**
+   * Fetch link events (createRoomLink, removeRoomLink).
+   *
+   * @param start - Starting event index
+   * @param limit - Maximum number of events to return
+   * @param room - Optional room ID to filter by (returns links posted in this room)
+   * @returns Decoded link events
+   */
+  async fetchLinks(
+    start: StreamIndex,
+    limit: number,
+    room?: Ulid,
+  ): Promise<DecodedStreamEvent[]> {
+    const params: LeafQuery["params"] = {};
+    if (room !== undefined) {
+      params["room"] = { $type: "muni.town.sqliteValue.text", value: room };
+    }
+
+    const resp = await this.#leaf.query(this.streamDid, {
+      name: "links",
+      params,
+      limit,
+      start,
+    });
+    return this.#decodeAndParseEvents(parseRows(resp));
+  }
+
+  /**
    * Send an event to this space.
    */
   async sendEvent(event: Event): Promise<void> {

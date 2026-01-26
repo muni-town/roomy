@@ -6,6 +6,7 @@ import type {
   Handle,
   Event,
   UserDid,
+  DecodedStreamEvent,
 } from "@roomy/sdk";
 import type { QueryResult } from "./sqlite/setup";
 import type { SqlStatement } from "./sqlite/types";
@@ -63,18 +64,6 @@ export type EdgesRecord<TRequired extends readonly EdgeLabel[]> = {
 export type SpaceIdOrHandle = StreamDid | Handle;
 
 export type TaskPriority = "priority" | "background";
-
-export interface EncodedStreamEvent {
-  idx: StreamIndex;
-  user: UserDid;
-  payload: Uint8Array;
-}
-
-export interface DecodedStreamEvent {
-  idx: StreamIndex;
-  event: Event;
-  user: UserDid;
-}
 
 /** SqliteWorker handles a pipeline of batched computations, transforming
  * batches from Events to SQL Statements to Results
