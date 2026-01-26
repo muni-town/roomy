@@ -18,6 +18,7 @@ import {
   slashCommands,
 } from "./slashCommands.js";
 import { desiredProperties, DiscordBot, DiscordChannel } from "./types.js";
+import type { Emoji } from "@discordeno/bot";
 
 import {
   discordLatestMessageInChannelForBridge,
@@ -26,6 +27,7 @@ import {
   registeredBridges,
   SyncedIds,
   syncedIdsForBridge,
+  syncedReactionsForBridge,
 } from "../db.js";
 import { GuildContext } from "../types.js";
 import {
@@ -33,6 +35,8 @@ import {
   ensureRoomySidebarForCategoriesAndChannels,
   ensureRoomyThreadForDiscordThread,
   ensureRoomyMessageForDiscordMessage,
+  syncDiscordReactionToRoomy,
+  removeDiscordReactionFromRoomy,
 } from "../roomy/to.js";
 import { getConnectedSpace } from "../roomy/client.js";
 
@@ -82,7 +86,11 @@ export async function getGuildContext(guildId: bigint): Promise<GuildContext> {
     roomySpaceId: spaceId,
     discordGuildId: guildId,
   });
-  return { guildId, spaceId, syncedIds, latestMessagesInChannel, connectedSpace };
+  const syncedReactions = syncedReactionsForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  return { guildId, spaceId, syncedIds, latestMessagesInChannel, syncedReactions, connectedSpace };
 }
 
 /**
@@ -92,7 +100,7 @@ export async function getGuildContext(guildId: bigint): Promise<GuildContext> {
 export async function startBot() {
   const bot = createBot({
     token: DISCORD_TOKEN,
-    intents: Intents.MessageContent | Intents.Guilds | Intents.GuildMessages,
+    intents: Intents.MessageContent | Intents.Guilds | Intents.GuildMessages | Intents.GuildMessageReactions,
     desiredProperties,
     events: {
       ready(ready) {
@@ -166,6 +174,36 @@ export async function startBot() {
 
         await ensureRoomyMessageForDiscordMessage(ctx, roomyRoomId, message);
         await ctx.latestMessagesInChannel.put(channelId.toString(), message.id.toString());
+      },
+
+      // Handle reaction add
+      async reactionAdd(payload) {
+        if (!doneBackfillingFromDiscord) return;
+        if (!payload.guildId) return;
+        if (!(await hasBridge(payload.guildId))) return;
+
+        const ctx = await getGuildContext(payload.guildId);
+        await syncDiscordReactionToRoomy(ctx, {
+          messageId: payload.messageId,
+          channelId: payload.channelId,
+          userId: payload.userId,
+          emoji: payload.emoji,
+        });
+      },
+
+      // Handle reaction remove
+      async reactionRemove(payload) {
+        if (!doneBackfillingFromDiscord) return;
+        if (!payload.guildId) return;
+        if (!(await hasBridge(payload.guildId))) return;
+
+        const ctx = await getGuildContext(payload.guildId);
+        await removeDiscordReactionFromRoomy(ctx, {
+          messageId: payload.messageId,
+          channelId: payload.channelId,
+          userId: payload.userId,
+          emoji: payload.emoji,
+        });
       },
     },
   });
