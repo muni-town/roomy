@@ -656,10 +656,7 @@ class WorkerSupervisor {
       ...this.#roomy,
       state: "connected",
       eventChannel,
-      spaces: new Map([
-        ...this.#roomy.spaces.entries(),
-        // ...connectedSpaces.entries(),
-      ]),
+      spaces: new Map([...this.#roomy.spaces.entries()]),
     };
     this.#status.roomyState = {
       personalSpace: personalSpace.streamDid,
@@ -772,30 +769,37 @@ class WorkerSupervisor {
 
     const alreadyConnected = this.#roomy.spaces.get(streamId);
     if (alreadyConnected) return;
+    try {
+      const space = await ConnectedSpace.connect({
+        client: this.client,
+        streamDid: streamId,
+        module: modules.space,
+      });
+      // Subscribe with callback that pushes to eventChannel
+      const callback = this.#createEventCallback(
+        this.#roomy.eventChannel,
+        streamId,
+      );
+      // First get metadata to find latest index, then subscribe from there
+      const latest = await space.subscribeMetadata(callback, 0);
+      await space.unsubscribe();
+      await space.subscribe(callback, latest);
 
-    const space = await ConnectedSpace.connect({
-      client: this.client,
-      streamDid: streamId,
-      module: modules.space,
-    });
+      this.#roomy.spaces.set(streamId, space);
+      this.#status.spaces = {
+        ...this.#status.spaces,
+        [streamId]: "idle",
+      };
 
-    // Subscribe with callback that pushes to eventChannel
-    const callback = this.#createEventCallback(
-      this.#roomy.eventChannel,
-      streamId,
-    );
-    // First get metadata to find latest index, then subscribe from there
-    const latest = await space.subscribeMetadata(callback, 0);
-    await space.unsubscribe();
-    await space.subscribe(callback, latest);
-
-    this.#roomy.spaces.set(streamId, space);
-    this.#status.spaces = {
-      ...this.#status.spaces,
-      [streamId]: "idle",
-    };
-
-    return;
+      return;
+    } catch (e) {
+      // space failed to connect
+      console.error("Failed to connect to space", { streamId, error: e });
+      this.#status.spaces = {
+        ...this.#status.spaces,
+        [streamId]: "error",
+      };
+    }
   }
 
   async createSpaceStream() {
