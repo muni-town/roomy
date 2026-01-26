@@ -26,6 +26,7 @@ import {
   createSpaceSubscriptionHandler,
   getLastProcessedIdx,
 } from "./subscription.js";
+import { tracer, setRoomyAttrs, recordError } from "../tracing.js";
 
 let roomyClient: RoomyClient | undefined;
 
@@ -127,39 +128,80 @@ export async function subscribeToSpace(
   client: RoomyClient,
   spaceId: StreamDid,
 ): Promise<ConnectedSpace> {
-  // Check if already connected
-  const existing = connectedSpaces.get(spaceId);
-  if (existing) {
-    console.log(`Already subscribed to space ${spaceId}`);
-    return existing;
-  }
+  return tracer.startActiveSpan(
+    "leaf.stream.subscribe",
+    { attributes: { "roomy.space.id": spaceId } },
+    async (span) => {
+      try {
+        // Check if already connected
+        const existing = connectedSpaces.get(spaceId);
+        if (existing) {
+          console.log(`Already subscribed to space ${spaceId}`);
+          span.setAttribute("subscription.status", "already_connected");
+          return existing;
+        }
 
-  console.log(`Connecting to space ${spaceId}...`);
+        console.log(`Connecting to space ${spaceId}...`);
 
-  // Connect to the space
-  const space = await ConnectedSpace.connect({
-    client,
-    streamDid: spaceId,
-    module: modules.space,
-  });
+        // Connect to the space
+        const space = await tracer.startActiveSpan(
+          "leaf.stream.connect",
+          async (connectSpan) => {
+            try {
+              const s = await ConnectedSpace.connect({
+                client,
+                streamDid: spaceId,
+                module: modules.space,
+              });
+              connectSpan.setAttribute("connection.status", "success");
+              return s;
+            } catch (e) {
+              recordError(connectSpan, e);
+              throw e;
+            } finally {
+              connectSpan.end();
+            }
+          },
+        );
 
-  // Get the cursor to resume from
-  const cursor = await getLastProcessedIdx(spaceId);
-  console.log(`Resuming space ${spaceId} from idx ${cursor}`);
+        // Get the cursor to resume from
+        const cursor = await getLastProcessedIdx(spaceId);
+        console.log(`Resuming space ${spaceId} from idx ${cursor}`);
+        span.setAttribute("subscription.resume_cursor", cursor ?? "none");
 
-  // Subscribe with the handler
-  const handler = createSpaceSubscriptionHandler(spaceId);
-  space.subscribe(handler, cursor as StreamIndex);
+        // Subscribe with the handler
+        const handler = createSpaceSubscriptionHandler(spaceId);
+        space.subscribe(handler, cursor as StreamIndex);
 
-  // Wait for backfill to complete before returning
-  console.log(`Waiting for backfill of space ${spaceId}...`);
-  await space.doneBackfilling;
-  console.log(`Backfill complete for space ${spaceId}`);
+        // Wait for backfill to complete before returning
+        console.log(`Waiting for backfill of space ${spaceId}...`);
+        await tracer.startActiveSpan("leaf.stream.backfill", async (backfillSpan) => {
+          try {
+            setRoomyAttrs(backfillSpan, { spaceId });
+            await space.doneBackfilling;
+            backfillSpan.setAttribute("backfill.status", "complete");
+          } catch (e) {
+            recordError(backfillSpan, e);
+            throw e;
+          } finally {
+            backfillSpan.end();
+          }
+        });
+        console.log(`Backfill complete for space ${spaceId}`);
 
-  connectedSpaces.set(spaceId, space);
-  console.log(`Subscribed to space ${spaceId}`);
+        connectedSpaces.set(spaceId, space);
+        console.log(`Subscribed to space ${spaceId}`);
+        span.setAttribute("subscription.status", "connected");
 
-  return space;
+        return space;
+      } catch (e) {
+        recordError(span, e);
+        throw e;
+      } finally {
+        span.end();
+      }
+    },
+  );
 }
 
 /**
