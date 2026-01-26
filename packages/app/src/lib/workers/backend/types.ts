@@ -1,5 +1,5 @@
 import type { QueryResult } from "../sqlite/setup";
-import type { Batch, EncodedStreamEvent, StreamIndex } from "../types";
+import type { Batch, StreamIndex } from "../types";
 import type { Profile } from "../../types/profile";
 import type { MessagePortApi } from "../workerMessaging";
 import type { BlobRef } from "@atproto/lexicon";
@@ -14,6 +14,8 @@ import type {
   Ulid,
   ConnectedSpace,
   RoomyClient,
+  DecodedStreamEvent,
+  EncodedStreamEvent,
 } from "@roomy/sdk";
 import type { SessionManager } from "@atproto/api/dist/session-manager";
 
@@ -59,6 +61,12 @@ export type BackendInterface = {
     roomId: Ulid,
     end?: StreamIndex,
   ): Promise<void>;
+  fetchLinks(
+    streamId: StreamDid,
+    start: StreamIndex,
+    limit: number,
+    room?: Ulid,
+  ): Promise<DecodedStreamEvent[]>;
   setActiveSqliteWorker(port: MessagePort): Promise<void>;
   pauseSubscription(streamId: StreamDid): Promise<void>;
   unpauseSubscription(streamId: StreamDid): Promise<void>;

@@ -2,7 +2,7 @@
   import { fade } from "svelte/transition";
 
   import { current, sidebar as sidebarQuery } from "$lib/queries";
-  import { backendStatus } from "$lib/workers";
+  import { backend, backendStatus } from "$lib/workers";
 
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
@@ -147,6 +147,12 @@
   );
 
   const spaceActive = $derived(current.space.status === "joined");
+
+  $effect(() => {
+    if (!spaceId || current.space.status !== "joined") return;
+    // Fetch all link events in the space
+    backend.fetchLinks(spaceId, 0, 1000);
+  });
 </script>
 
 {#snippet sidebar()}

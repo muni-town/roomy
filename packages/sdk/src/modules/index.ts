@@ -13,7 +13,7 @@ const personalModuleDef: BasicModule = {
       admin text,
       handle text,
       type text not null default 'space.roomy.space.personal',
-      schema_version text not null default '2'
+      schema_version text not null default '3'
     );
 
     insert into stream_info (admin) select null where not exists (select 1 from stream_info);
@@ -84,7 +84,7 @@ const spaceModuleDef: BasicModule = {
     create table if not exists stream_info (
       type text not null default 'space.roomy.space.space',
       handle text,
-      schema_version text not null default '2'
+      schema_version text not null default '3'
     ) strict;
 
     insert into stream_info (type) select 'space.roomy.space.space'
@@ -110,6 +110,20 @@ const spaceModuleDef: BasicModule = {
       room text not null
     ) strict;
     create index if not exists room_events_room_idx on room_events(room);
+
+    create table if not exists link_events (
+      idx integer primary key
+    ) strict;
+
+    create table if not exists room_links (
+      parent_room text not null,
+      child_room text not null,
+      is_canonical integer not null default 0,
+      created_at integer not null,
+      primary key (parent_room, child_room)
+    ) strict;
+    create index if not exists room_links_parent_idx on room_links(parent_room);
+    create index if not exists room_links_child_idx on room_links(child_room, is_canonical desc);
   `.sql,
 
   authorizer: sql`
@@ -180,6 +194,14 @@ const spaceModuleDef: BasicModule = {
     insert or ignore into room_events (idx, room)
     select idx, drisl_extract(payload, '.room') from event
     where drisl_extract(payload, '.room') is not null;
+
+    -- Mark link events
+    insert into link_events (idx)
+    select idx from event
+    where drisl_extract(payload, '.$type') in (
+      'space.roomy.link.createRoomLink.v0',
+      'space.roomy.link.removeRoomLink.v0'
+    );
   `.sql,
 
   queries: [
@@ -231,6 +253,20 @@ const spaceModuleDef: BasicModule = {
         { kind: "text", name: "room", optional: false },
         { kind: "integer", name: "end", optional: true },
       ],
+    },
+    {
+      name: "links",
+      sql: `
+        select e.idx, e.user, e.payload
+        from events.events e
+        inner join link_events l on e.idx = l.idx
+        where e.idx >= $start
+          and ($room is null or e.idx in (
+            select r.idx from room_events r where r.room = $room
+          ))
+        limit $limit;
+      `,
+      params: [{ kind: "text", name: "room", optional: true }],
     },
   ],
 };

@@ -2,10 +2,11 @@
   import { page } from "$app/state";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { current } from "$lib/queries";
+  import { backend } from "$lib/workers";
   import { sql } from "$lib/utils/sqlTemplate";
   import BoardView from "./BoardView.svelte";
   import type { ThreadInfo } from "./types";
-  import { Ulid } from "@roomy/sdk";
+  import { StreamIndex, Ulid } from "@roomy/sdk";
 
   let { emptyMessage }: { objectType?: string; emptyMessage?: string } =
     $props();
@@ -65,6 +66,17 @@
       `,
     (row) => JSON.parse(row.json),
   );
+
+  $effect(() => {
+    if (!spaceId || !page.params.object) return;
+    // Fetch link events posted in this channel
+    backend.fetchLinks(
+      spaceId,
+      0 as StreamIndex,
+      1000,
+      page.params.object as Ulid,
+    );
+  });
 </script>
 
 {#if threadsList.result || threadsList.error}

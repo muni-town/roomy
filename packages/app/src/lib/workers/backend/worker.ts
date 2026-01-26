@@ -263,6 +263,8 @@ class WorkerSupervisor {
         await this.sqlite.untilReady;
         return await this.lazyLoadRoom(streamId, roomId, end);
       },
+      fetchLinks: async (streamId, start, limit, room) =>
+        this.fetchLinks(streamId, start, limit, room),
       uploadToPds: async (bytes, opts) => {
         return this.client.uploadBlob(bytes, opts);
       },
@@ -877,6 +879,22 @@ class WorkerSupervisor {
         priority: "priority",
       });
     }
+  }
+
+  async fetchLinks(
+    spaceId: StreamDid,
+    start: StreamIndex,
+    limit: number,
+    room?: Ulid,
+  ): Promise<DecodedStreamEvent[]> {
+    await this.#connected.promise;
+    if (this.#roomy.state !== "connected")
+      throw new Error("Client not connected");
+
+    const space = this.#roomy.spaces.get(spaceId);
+    if (!space) throw new Error("Could not find space in connected streams");
+
+    return await space.fetchLinks(start, limit, room);
   }
 
   /** Create an event callback that pushes to the eventChannel.
