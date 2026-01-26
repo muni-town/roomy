@@ -31,6 +31,12 @@ import {
   discordWebhookTokensForBridge,
   syncedProfilesForBridge,
 } from "../db.js";
+import {
+  tracer,
+  setDiscordAttrs,
+  setRoomyAttrs,
+  recordError,
+} from "../tracing.js";
 
 // const tracer = trace.getTracer("discordBot");
 
@@ -62,60 +68,91 @@ export async function ensureRoomyProfileForDiscordUser(
     avatar?: string | null;
   },
 ): Promise<void> {
-  const syncedProfiles = syncedProfilesForBridge({
-    discordGuildId: ctx.guildId,
-    roomySpaceId: ctx.spaceId,
-  });
+  return tracer.startActiveSpan(
+    "sync.profile.discord_to_roomy",
+    async (span) => {
+      try {
+        // Set Discord attributes
+        setDiscordAttrs(span, {
+          guildId: ctx.guildId,
+          userId: user.id,
+        });
+        span.setAttribute("discord.user.name", user.username);
 
-  const userIdStr = user.id.toString();
-  const hash = computeProfileHash(
-    user.username,
-    user.globalName ?? null,
-    user.avatar ?? null,
-  );
+        // Set Roomy attributes
+        setRoomyAttrs(span, {
+          spaceId: ctx.spaceId,
+        });
 
-  // Check if profile already synced with same hash
-  try {
-    const existingHash = await syncedProfiles.get(userIdStr);
-    if (existingHash === hash) {
-      return; // No change
-    }
-  } catch {
-    // Key not found - first sync for this user
-  }
+        const syncedProfiles = syncedProfilesForBridge({
+          discordGuildId: ctx.guildId,
+          roomySpaceId: ctx.spaceId,
+        });
 
-  // Build avatar URL using discordeno helper (handles format and size correctly)
-  const userAvatarUrl = avatarUrl(user.id, user.discriminator, {
-    avatar: user.avatar ?? undefined,
-    size: 256,
-    format: "webp",
-  });
+        const userIdStr = user.id.toString();
+        const hash = computeProfileHash(
+          user.username,
+          user.globalName ?? null,
+          user.avatar ?? null,
+        );
 
-  // Send profile update event
-  const event: Event = {
-    id: newUlid(),
-    $type: "space.roomy.user.updateProfile.v0",
-    did: `did:discord:${userIdStr}` as Did,
-    name: user.globalName ?? user.username,
-    avatar: userAvatarUrl,
-    extensions: {
-      "space.roomy.extension.discordUserOrigin.v0": {
-        $type: "space.roomy.extension.discordUserOrigin.v0",
-        snowflake: userIdStr,
-        guildId: ctx.guildId.toString(),
-        profileHash: hash,
-        handle: user.username,
-      },
+        // Check if profile already synced with same hash
+        try {
+          const existingHash = await syncedProfiles.get(userIdStr);
+          if (existingHash === hash) {
+            span.setAttribute("sync.reason", "no_change");
+            span.setAttribute("sync.result", "skipped_no_change");
+            return; // No change
+          }
+          span.setAttribute("sync.reason", "profile_changed");
+        } catch {
+          // Key not found - first sync for this user
+          span.setAttribute("sync.reason", "new_user");
+        }
+
+        // Build avatar URL using discordeno helper (handles format and size correctly)
+        const userAvatarUrl = avatarUrl(user.id, user.discriminator, {
+          avatar: user.avatar ?? undefined,
+          size: 256,
+          format: "webp",
+        });
+
+        // Send profile update event
+        const event: Event = {
+          id: newUlid(),
+          $type: "space.roomy.user.updateProfile.v0",
+          did: `did:discord:${userIdStr}` as Did,
+          name: user.globalName ?? user.username,
+          avatar: userAvatarUrl,
+          extensions: {
+            "space.roomy.extension.discordUserOrigin.v0": {
+              $type: "space.roomy.extension.discordUserOrigin.v0",
+              snowflake: userIdStr,
+              guildId: ctx.guildId.toString(),
+              profileHash: hash,
+              handle: user.username,
+            },
+          },
+        };
+
+        await ctx.connectedSpace.sendEvent(event);
+        console.log(
+          `Synced profile for Discord user ${user.username} (${userIdStr})`,
+        );
+
+        // Update local cache
+        await syncedProfiles.put(userIdStr, hash);
+
+        span.setAttribute("sync.result", "success");
+      } catch (error) {
+        span.setAttribute("sync.result", "error");
+        recordError(span, error);
+        throw error;
+      } finally {
+        span.end();
+      }
     },
-  };
-
-  await ctx.connectedSpace.sendEvent(event);
-  console.log(
-    `Synced profile for Discord user ${user.username} (${userIdStr})`,
   );
-
-  // Update local cache
-  await syncedProfiles.put(userIdStr, hash);
 }
 
 export async function ensureRoomyChannelForDiscordChannel(
@@ -422,152 +459,228 @@ export async function ensureRoomyMessageForDiscordMessage(
   roomyRoomId: string,
   message: MessageProperties,
 ): Promise<string | null> {
-  // 1. Idempotency check
-  const existingId = await ctx.syncedIds.get_roomyId(message.id.toString());
-  if (existingId) {
-    return existingId;
-  }
+  return tracer.startActiveSpan(
+    "sync.message.discord_to_roomy",
+    async (span) => {
+      try {
+        // Set Discord attributes
+        setDiscordAttrs(span, {
+          guildId: ctx.guildId,
+          channelId: message.channelId,
+          messageId: message.id,
+          userId: message.author.id,
+        });
 
-  // 1b. Ensure user profile is synced
-  await ensureRoomyProfileForDiscordUser(ctx, {
-    id: message.author.id,
-    username: message.author.username,
-    discriminator: message.author.discriminator,
-    globalName: (message.author as any).globalName ?? null,
-    avatar: (message.author.avatar as unknown as string | null) ?? null,
-  });
+        // Set Roomy attributes
+        setRoomyAttrs(span, {
+          spaceId: ctx.spaceId,
+          roomId: roomyRoomId,
+        });
 
-  // 2. Skip bot's own webhook messages (avoid echo)
-  const webhookTokens = discordWebhookTokensForBridge({
-    discordGuildId: ctx.guildId,
-    roomySpaceId: ctx.spaceId,
-  });
-  const channelWebhookToken = await webhookTokens.get(
-    message.channelId.toString(),
-  );
-  const channelWebhookId = channelWebhookToken?.split(":")[0];
-  if (channelWebhookId && message.webhookId?.toString() === channelWebhookId) {
-    return null;
-  }
-
-  // 3. Build attachments array
-  const attachments: Attachment[] = [];
-
-  // 3a. Reply attachment (if message_reference exists and target is synced)
-  if (message.messageReference?.messageId) {
-    const targetIdStr = message.messageReference.messageId.toString();
-    const replyTargetId = await ctx.syncedIds.get_roomyId(targetIdStr);
-    if (replyTargetId) {
-      attachments.push({
-        $type: "space.roomy.attachment.reply.v0",
-        target: replyTargetId as Ulid,
-      });
-    } else {
-      // Target message not synced yet - this can happen for cross-channel replies
-      // or if messages arrive out of order
-      console.warn(
-        `Reply target ${message.messageReference.messageId} not found for message ${message.id}. ` +
-          `The reply attachment will be missing.`,
-      );
-    }
-  }
-
-  // 3b. Media attachments (images, videos, files)
-  for (const att of message.attachments || []) {
-    if (att.contentType?.startsWith("image/")) {
-      attachments.push({
-        $type: "space.roomy.attachment.image.v0",
-        uri: att.url,
-        mimeType: att.contentType,
-        width: att.width,
-        height: att.height,
-        size: att.size,
-      });
-    } else if (att.contentType?.startsWith("video/")) {
-      attachments.push({
-        $type: "space.roomy.attachment.video.v0",
-        uri: att.url,
-        mimeType: att.contentType,
-        width: att.width,
-        height: att.height,
-        size: att.size,
-      });
-    } else {
-      attachments.push({
-        $type: "space.roomy.attachment.file.v0",
-        uri: att.url,
-        mimeType: att.contentType || "application/octet-stream",
-        name: att.filename,
-        size: att.size,
-      });
-    }
-  }
-
-  // 4. Build CreateMessage event
-  const messageId = newUlid();
-  const extensions: Record<string, unknown> = {
-    "space.roomy.extension.discordMessageOrigin.v0": {
-      $type: "space.roomy.extension.discordMessageOrigin.v0",
-      snowflake: message.id.toString(),
-      channelId: message.channelId.toString(),
-      guildId: ctx.guildId.toString(),
-    },
-    "space.roomy.extension.authorOverride.v0": {
-      $type: "space.roomy.extension.authorOverride.v0",
-      did: `did:discord:${message.author.id}`,
-    },
-    "space.roomy.extension.timestampOverride.v0": {
-      $type: "space.roomy.extension.timestampOverride.v0",
-      timestamp: new Date(message.timestamp).getTime(),
-    },
-  };
-
-  if (attachments.length > 0) {
-    extensions["space.roomy.extension.attachments.v0"] = {
-      $type: "space.roomy.extension.attachments.v0",
-      attachments,
-    };
-  }
-
-  const event: Event = {
-    id: messageId,
-    room: roomyRoomId as Ulid,
-    $type: "space.roomy.message.createMessage.v0",
-    body: {
-      mimeType: "text/markdown",
-      data: toBytes(new TextEncoder().encode(message.content)),
-    },
-    extensions,
-  };
-
-  await ctx.connectedSpace.sendEvent(event);
-  console.log(
-    `Created Roomy message ${messageId} for Discord message ${message.id}`,
-  );
-
-  // 5. Register mapping immediately
-  try {
-    await ctx.syncedIds.register({
-      discordId: message.id.toString(),
-      roomyId: messageId,
-    });
-  } catch (e) {
-    if (e instanceof Error && e.message.includes("already registered")) {
-      // Another process (subscription handler) registered this mapping - use the existing one
-      const existingRoomyId = await ctx.syncedIds.get_roomyId(
-        message.id.toString(),
-      );
-      if (existingRoomyId) {
-        console.log(
-          `Message ${message.id} was registered by another process as ${existingRoomyId}`,
+        // 1. Idempotency check
+        const existingId = await ctx.syncedIds.get_roomyId(
+          message.id.toString(),
         );
-        return existingRoomyId;
-      }
-    }
-    throw e;
-  }
+        if (existingId) {
+          span.setAttribute("sync.result", "skipped_already_synced");
+          return existingId;
+        }
 
-  return messageId;
+        // 1b. Ensure user profile is synced
+        await tracer.startActiveSpan("sync.user.ensure", async (userSpan) => {
+          try {
+            setDiscordAttrs(userSpan, { userId: message.author.id });
+            await ensureRoomyProfileForDiscordUser(ctx, {
+              id: message.author.id,
+              username: message.author.username,
+              discriminator: message.author.discriminator,
+              globalName: (message.author as any).globalName ?? null,
+              avatar:
+                (message.author.avatar as unknown as string | null) ?? null,
+            });
+          } catch (error) {
+            recordError(userSpan, error);
+            throw error;
+          } finally {
+            userSpan.end();
+          }
+        });
+
+        // 2. Skip bot's own webhook messages (avoid echo)
+        const webhookTokens = discordWebhookTokensForBridge({
+          discordGuildId: ctx.guildId,
+          roomySpaceId: ctx.spaceId,
+        });
+        const channelWebhookToken = await webhookTokens.get(
+          message.channelId.toString(),
+        );
+        const channelWebhookId = channelWebhookToken?.split(":")[0];
+        if (
+          channelWebhookId &&
+          message.webhookId?.toString() === channelWebhookId
+        ) {
+          span.setAttribute("sync.result", "skipped_own_webhook");
+          return null;
+        }
+
+        // 3. Build attachments array
+        const attachments: Attachment[] = [];
+
+        // 3a. Reply attachment (if message_reference exists and target is synced)
+        if (message.messageReference?.messageId) {
+          const targetIdStr = message.messageReference.messageId.toString();
+          const replyTargetId = await ctx.syncedIds.get_roomyId(targetIdStr);
+          if (replyTargetId) {
+            attachments.push({
+              $type: "space.roomy.attachment.reply.v0",
+              target: replyTargetId as Ulid,
+            });
+          } else {
+            // Target message not synced yet - this can happen for cross-channel replies
+            // or if messages arrive out of order
+            console.warn(
+              `Reply target ${message.messageReference.messageId} not found for message ${message.id}. ` +
+                `The reply attachment will be missing.`,
+            );
+          }
+        }
+
+        // 3b. Media attachments (images, videos, files)
+        for (const att of message.attachments || []) {
+          if (att.contentType?.startsWith("image/")) {
+            attachments.push({
+              $type: "space.roomy.attachment.image.v0",
+              uri: att.url,
+              mimeType: att.contentType,
+              width: att.width,
+              height: att.height,
+              size: att.size,
+            });
+          } else if (att.contentType?.startsWith("video/")) {
+            attachments.push({
+              $type: "space.roomy.attachment.video.v0",
+              uri: att.url,
+              mimeType: att.contentType,
+              width: att.width,
+              height: att.height,
+              size: att.size,
+            });
+          } else {
+            attachments.push({
+              $type: "space.roomy.attachment.file.v0",
+              uri: att.url,
+              mimeType: att.contentType || "application/octet-stream",
+              name: att.filename,
+              size: att.size,
+            });
+          }
+        }
+
+        // 4. Build CreateMessage event
+        const messageId = newUlid();
+        const extensions: Record<string, unknown> = {
+          "space.roomy.extension.discordMessageOrigin.v0": {
+            $type: "space.roomy.extension.discordMessageOrigin.v0",
+            snowflake: message.id.toString(),
+            channelId: message.channelId.toString(),
+            guildId: ctx.guildId.toString(),
+          },
+          "space.roomy.extension.authorOverride.v0": {
+            $type: "space.roomy.extension.authorOverride.v0",
+            did: `did:discord:${message.author.id}`,
+          },
+          "space.roomy.extension.timestampOverride.v0": {
+            $type: "space.roomy.extension.timestampOverride.v0",
+            timestamp: new Date(message.timestamp).getTime(),
+          },
+        };
+
+        if (attachments.length > 0) {
+          extensions["space.roomy.extension.attachments.v0"] = {
+            $type: "space.roomy.extension.attachments.v0",
+            attachments,
+          };
+        }
+
+        const event: Event = {
+          id: messageId,
+          room: roomyRoomId as Ulid,
+          $type: "space.roomy.message.createMessage.v0",
+          body: {
+            mimeType: "text/markdown",
+            data: toBytes(new TextEncoder().encode(message.content)),
+          },
+          extensions,
+        };
+
+        // Send message event with tracing
+        await tracer.startActiveSpan("sync.message.send", async (sendSpan) => {
+          try {
+            setRoomyAttrs(sendSpan, { eventId: messageId });
+            await ctx.connectedSpace.sendEvent(event);
+            console.log(
+              `Created Roomy message ${messageId} for Discord message ${message.id}`,
+            );
+          } catch (error) {
+            recordError(sendSpan, error);
+            throw error;
+          } finally {
+            sendSpan.end();
+          }
+        });
+
+        // 5. Register mapping immediately with tracing
+        await tracer.startActiveSpan(
+          "sync.mapping.store",
+          async (mappingSpan) => {
+            try {
+              mappingSpan.setAttribute(
+                "sync.mapping.discord_id",
+                message.id.toString(),
+              );
+              mappingSpan.setAttribute("sync.mapping.roomy_id", messageId);
+              await ctx.syncedIds.register({
+                discordId: message.id.toString(),
+                roomyId: messageId,
+              });
+            } catch (e) {
+              if (
+                e instanceof Error &&
+                e.message.includes("already registered")
+              ) {
+                // Another process (subscription handler) registered this mapping - use the existing one
+                mappingSpan.setAttribute("sync.mapping.conflict", true);
+                const existingRoomyId = await ctx.syncedIds.get_roomyId(
+                  message.id.toString(),
+                );
+                if (existingRoomyId) {
+                  console.log(
+                    `Message ${message.id} was registered by another process as ${existingRoomyId}`,
+                  );
+                  mappingSpan.end();
+                  span.setAttribute("sync.result", "success");
+                  return existingRoomyId;
+                }
+              }
+              recordError(mappingSpan, e);
+              throw e;
+            } finally {
+              mappingSpan.end();
+            }
+          },
+        );
+
+        span.setAttribute("sync.result", "success");
+        return messageId;
+      } catch (error) {
+        span.setAttribute("sync.result", "error");
+        recordError(span, error);
+        throw error;
+      } finally {
+        span.end();
+      }
+    },
+  );
 }
 
 /**
@@ -608,62 +721,127 @@ export async function syncDiscordReactionToRoomy(
     emoji: Partial<Emoji>;
   },
 ): Promise<string | null> {
-  const key = reactionKey(opts.messageId, opts.userId, opts.emoji);
+  return tracer.startActiveSpan(
+    "sync.reaction.discord_to_roomy",
+    async (span) => {
+      try {
+        // Set Discord attributes
+        setDiscordAttrs(span, {
+          guildId: ctx.guildId,
+          channelId: opts.channelId,
+          messageId: opts.messageId,
+          userId: opts.userId,
+        });
 
-  // 1. Idempotency check - skip if already synced
-  try {
-    const existingReactionId = await ctx.syncedReactions.get(key);
-    if (existingReactionId) {
-      return existingReactionId;
-    }
-  } catch {
-    // Key not found - proceed with sync
-  }
+        // Set action and emoji attributes
+        span.setAttribute("sync.action", "add");
+        const reactionString = emojiToString(opts.emoji);
+        span.setAttribute("discord.emoji", reactionString);
 
-  // 2. Get the Roomy message ID for this Discord message
-  const roomyMessageId = await ctx.syncedIds.get_roomyId(
-    opts.messageId.toString(),
+        const key = reactionKey(opts.messageId, opts.userId, opts.emoji);
+
+        // 1. Idempotency check - skip if already synced
+        try {
+          const existingReactionId = await ctx.syncedReactions.get(key);
+          if (existingReactionId) {
+            span.setAttribute("sync.result", "skipped_already_synced");
+            return existingReactionId;
+          }
+        } catch {
+          // Key not found - proceed with sync
+        }
+
+        // 2. Get the Roomy message ID for this Discord message
+        const roomyMessageId = await tracer.startActiveSpan(
+          "sync.mapping.lookup",
+          async (lookupSpan) => {
+            try {
+              lookupSpan.setAttribute("sync.mapping.type", "message");
+              lookupSpan.setAttribute(
+                "sync.mapping.discord_id",
+                opts.messageId.toString(),
+              );
+              const id = await ctx.syncedIds.get_roomyId(
+                opts.messageId.toString(),
+              );
+              if (id) {
+                lookupSpan.setAttribute("sync.mapping.roomy_id", id);
+              }
+              return id;
+            } finally {
+              lookupSpan.end();
+            }
+          },
+        );
+
+        if (!roomyMessageId) {
+          span.setAttribute("sync.result", "skipped_message_not_synced");
+          console.warn(
+            `Discord message ${opts.messageId} not synced to Roomy, skipping reaction`,
+          );
+          return null;
+        }
+
+        // Set Roomy attributes now that we have the message ID
+        setRoomyAttrs(span, {
+          spaceId: ctx.spaceId,
+        });
+
+        // 3. Get the Roomy room ID for this channel
+        const roomyRoomId = await ctx.syncedIds.get_roomyId(
+          opts.channelId.toString(),
+        );
+        if (!roomyRoomId) {
+          span.setAttribute("sync.result", "skipped_channel_not_synced");
+          console.warn(
+            `Discord channel ${opts.channelId} not synced to Roomy, skipping reaction`,
+          );
+          return null;
+        }
+
+        setRoomyAttrs(span, { roomId: roomyRoomId });
+
+        // 4. Build and send the AddBridgedReaction event
+        const reactionId = newUlid();
+
+        const event: Event = {
+          id: reactionId,
+          room: roomyRoomId as Ulid,
+          $type: "space.roomy.reaction.addBridgedReaction.v0",
+          reactionTo: roomyMessageId as Ulid,
+          reaction: reactionString,
+          reactingUser: UserDid.assert(`did:discord:${opts.userId}`),
+        };
+
+        await tracer.startActiveSpan("sync.reaction.send", async (sendSpan) => {
+          try {
+            setRoomyAttrs(sendSpan, { eventId: reactionId });
+            await ctx.connectedSpace.sendEvent(event);
+            console.log(
+              `Synced reaction ${reactionString} from Discord user ${opts.userId} to message ${roomyMessageId}`,
+            );
+          } catch (error) {
+            recordError(sendSpan, error);
+            throw error;
+          } finally {
+            sendSpan.end();
+          }
+        });
+
+        // 5. Track the synced reaction
+        await ctx.syncedReactions.put(key, reactionId);
+
+        span.setAttribute("sync.result", "success");
+        return reactionId;
+      } catch (error) {
+        span.setAttribute("sync.result", "error");
+        recordError(span, error);
+        throw error;
+      } finally {
+        span.end();
+      }
+    },
   );
-  if (!roomyMessageId) {
-    console.warn(
-      `Discord message ${opts.messageId} not synced to Roomy, skipping reaction`,
-    );
-    return null;
-  }
-
-  // 3. Get the Roomy room ID for this channel
-  const roomyRoomId = await ctx.syncedIds.get_roomyId(
-    opts.channelId.toString(),
-  );
-  if (!roomyRoomId) {
-    console.warn(
-      `Discord channel ${opts.channelId} not synced to Roomy, skipping reaction`,
-    );
-    return null;
-  }
-
-  // 4. Build and send the AddBridgedReaction event
-  const reactionId = newUlid();
-  const reactionString = emojiToString(opts.emoji);
-
-  const event: Event = {
-    id: reactionId,
-    room: roomyRoomId as Ulid,
-    $type: "space.roomy.reaction.addBridgedReaction.v0",
-    reactionTo: roomyMessageId as Ulid,
-    reaction: reactionString,
-    reactingUser: UserDid.assert(`did:discord:${opts.userId}`),
-  };
-
-  await ctx.connectedSpace.sendEvent(event);
-  console.log(
-    `Synced reaction ${reactionString} from Discord user ${opts.userId} to message ${roomyMessageId}`,
-  );
-
-  // 5. Track the synced reaction
-  await ctx.syncedReactions.put(key, reactionId);
-
-  return reactionId;
 }
 
 /**
@@ -678,48 +856,96 @@ export async function removeDiscordReactionFromRoomy(
     emoji: Partial<Emoji>;
   },
 ): Promise<void> {
-  const key = reactionKey(opts.messageId, opts.userId, opts.emoji);
+  return tracer.startActiveSpan(
+    "sync.reaction.discord_to_roomy",
+    async (span) => {
+      try {
+        // Set Discord attributes
+        setDiscordAttrs(span, {
+          guildId: ctx.guildId,
+          channelId: opts.channelId,
+          messageId: opts.messageId,
+          userId: opts.userId,
+        });
 
-  // 1. Get the Roomy reaction event ID
-  let reactionEventId: string | undefined;
-  try {
-    reactionEventId = await ctx.syncedReactions.get(key);
-  } catch {
-    // Key not found - reaction wasn't synced
-    console.warn(`Reaction not found for removal: ${key}`);
-    return;
-  }
+        // Set action and emoji attributes
+        span.setAttribute("sync.action", "remove");
+        const emojiStr = emojiToString(opts.emoji);
+        span.setAttribute("discord.emoji", emojiStr);
 
-  if (!reactionEventId) {
-    console.warn(`Reaction not found for removal: ${key}`);
-    return;
-  }
+        const key = reactionKey(opts.messageId, opts.userId, opts.emoji);
 
-  // 2. Get the Roomy room ID for this channel
-  const roomyRoomId = await ctx.syncedIds.get_roomyId(
-    opts.channelId.toString(),
+        // 1. Get the Roomy reaction event ID
+        let reactionEventId: string | undefined;
+        try {
+          reactionEventId = await ctx.syncedReactions.get(key);
+        } catch {
+          // Key not found - reaction wasn't synced
+          span.setAttribute("sync.result", "skipped_not_found");
+          console.warn(`Reaction not found for removal: ${key}`);
+          return;
+        }
+
+        if (!reactionEventId) {
+          span.setAttribute("sync.result", "skipped_not_found");
+          console.warn(`Reaction not found for removal: ${key}`);
+          return;
+        }
+
+        // 2. Get the Roomy room ID for this channel
+        const roomyRoomId = await ctx.syncedIds.get_roomyId(
+          opts.channelId.toString(),
+        );
+        if (!roomyRoomId) {
+          span.setAttribute("sync.result", "skipped_channel_not_synced");
+          console.warn(
+            `Discord channel ${opts.channelId} not synced to Roomy, skipping reaction removal`,
+          );
+          return;
+        }
+
+        // Set Roomy attributes
+        setRoomyAttrs(span, {
+          spaceId: ctx.spaceId,
+          roomId: roomyRoomId,
+        });
+
+        // 3. Send the RemoveBridgedReaction event
+        const eventId = newUlid();
+        const event: Event = {
+          id: eventId,
+          room: roomyRoomId as Ulid,
+          $type: "space.roomy.reaction.removeBridgedReaction.v0",
+          reactionId: reactionEventId as Ulid,
+          reactingUser: UserDid.assert(`did:discord:${opts.userId}`),
+        };
+
+        await tracer.startActiveSpan("sync.reaction.send", async (sendSpan) => {
+          try {
+            setRoomyAttrs(sendSpan, { eventId });
+            await ctx.connectedSpace.sendEvent(event);
+            console.log(
+              `Removed reaction ${reactionEventId} from Discord user ${opts.userId}`,
+            );
+          } catch (error) {
+            recordError(sendSpan, error);
+            throw error;
+          } finally {
+            sendSpan.end();
+          }
+        });
+
+        // 4. Remove from tracking
+        await ctx.syncedReactions.del(key);
+
+        span.setAttribute("sync.result", "success");
+      } catch (error) {
+        span.setAttribute("sync.result", "error");
+        recordError(span, error);
+        throw error;
+      } finally {
+        span.end();
+      }
+    },
   );
-  if (!roomyRoomId) {
-    console.warn(
-      `Discord channel ${opts.channelId} not synced to Roomy, skipping reaction removal`,
-    );
-    return;
-  }
-
-  // 3. Send the RemoveBridgedReaction event
-  const event: Event = {
-    id: newUlid(),
-    room: roomyRoomId as Ulid,
-    $type: "space.roomy.reaction.removeBridgedReaction.v0",
-    reactionId: reactionEventId as Ulid,
-    reactingUser: UserDid.assert(`did:discord:${opts.userId}`),
-  };
-
-  await ctx.connectedSpace.sendEvent(event);
-  console.log(
-    `Removed reaction ${reactionEventId} from Discord user ${opts.userId}`,
-  );
-
-  // 4. Remove from tracking
-  await ctx.syncedReactions.del(key);
 }
