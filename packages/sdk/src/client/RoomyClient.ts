@@ -28,6 +28,7 @@ import {
 } from "../atproto";
 import { ConnectedSpace } from "../connection/ConnectedSpace";
 import { modules, type ModuleWithCid } from "../modules";
+import { withTimeoutWarning } from "../utils/timeout";
 
 /**
  * Global roomy client config. It is possible to modify this variable to change the configuration
@@ -127,7 +128,10 @@ export class RoomyClient {
     });
 
     // Wait for authentication before returning
-    await authenticated.promise;
+    await withTimeoutWarning(
+      authenticated.promise,
+      "RoomyClient.create: waiting for Leaf authentication",
+    );
 
     return new RoomyClient(config, leaf);
   }
