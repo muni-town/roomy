@@ -13,8 +13,8 @@
     "./README.md"
   ],
   "scripts": {
-    "dev": "tsc --watch",
-    "build": "tsc",
+    "dev": "pkgroll --watch",
+    "build": "pkgroll",
     "format": "prettier . --write",
     "build-lib": "pnpm build"
   },
