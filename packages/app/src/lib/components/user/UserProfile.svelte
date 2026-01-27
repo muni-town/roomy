@@ -71,7 +71,7 @@
         </h1>
         {#if profile?.handle}
           <a
-            href="https://bsky.app/profile/{profile.handle}"
+            href="https://aturi.to/{profile.did}"
             target="_blank"
             rel="noopener noreferrer"
             class="text-sm text-accent-600 dark:text-accent-400 transition-colors font-medium"
