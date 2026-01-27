@@ -203,8 +203,8 @@
             <span class="font-bold text-accent-700 dark:text-accent-400"
               >{metadata.name}</span
             >
-            {#if metadata.handle}<span class="opacity-70"
-                >@{metadata.handle}</span
+            {#if metadata.handle && !message.masqueradeAuthor}<span
+                class="opacity-70">@{metadata.handle}</span
               >{/if}
             {#if isFromDiscord}
               <Badge
