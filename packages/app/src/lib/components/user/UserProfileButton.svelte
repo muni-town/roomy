@@ -47,8 +47,7 @@
           class="group-hover:scale-110 transition-transform duration-200"
         ></Avatar><a
           class="mr-auto font-medium"
-          target="_blank"
-          href={"https://aturi.to/" + backendStatus.profile?.id}
+          href={"/user/" + backendStatus.profile?.id}
           >@{backendStatus.profile?.handle}</a
         >
         <Button variant="ghost" class="" onclick={handleLogout}>Log Out</Button>
