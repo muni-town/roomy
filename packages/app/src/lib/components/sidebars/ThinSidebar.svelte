@@ -2,8 +2,7 @@
   import { navigate } from "$lib/utils.svelte";
   import SidebarSpace from "./ThinSidebarSpace.svelte";
   import { page } from "$app/state";
-  import { Button, ThemeToggle, ScrollArea } from "@fuxui/base";
-  import { SelectThemePopover } from "@fuxui/colors";
+  import { Button, ScrollArea } from "@fuxui/base";
   import UserProfileButton from "../user/UserProfileButton.svelte";
   import { current, joinedSpaces } from "$lib/queries";
   import { dev } from "$app/environment";
@@ -69,7 +68,5 @@
       <IconMdiSqlQuery font-size="2em" />
     </a>
   {/if}
-  <SelectThemePopover />
-  <ThemeToggle class="backdrop-blur-none" />
   <UserProfileButton />
 </section>

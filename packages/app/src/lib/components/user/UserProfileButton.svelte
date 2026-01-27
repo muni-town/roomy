@@ -1,50 +1,60 @@
 <script lang="ts">
-  import { Avatar, Tooltip } from "@fuxui/base";
-  import UserSettingsModal from "../modals/UserSettingsModal.svelte";
-  import { backendStatus } from "$lib/workers";
+  import { Avatar, Popover, Button } from "@fuxui/base";
+  import ThemeSettings from "./ThemeSettings.svelte";
+  import { backend, backendStatus } from "$lib/workers";
 
-  let userSettingsModalOpen = $state(false);
+  let popoverOpen = $state(false);
 
   const connected = $derived(
     backendStatus.authState?.state === "authenticated",
   );
+
+  function handleLogout() {
+    backend.logout().then(() => {
+      popoverOpen = false;
+      window.location.reload();
+    });
+  }
 </script>
 
-<Tooltip
-  text={connected ? "Connected" : "Disconnected"}
-  contentProps={{ side: "right" }}
->
+<Popover bind:open={popoverOpen} side="right" sideOffset={12} class="my-4">
   {#snippet child({ props })}
-    <div
+    <button
       {...props}
-      class="border-2 border-solid rounded-full flex"
+      class="cursor-pointer opacity-90 hover:opacity-100 transition-opacity duration-200 group overflow-hidden rounded-full size-10 border-2 border-solid"
       class:border-green-500={connected}
       class:border-red-500={!connected}
     >
-      <button
-        onclick={() => {
-          if (connected) {
-            userSettingsModalOpen = true;
-          }
-          //  else {
-          //   blueskyLoginModalState.open = true;
-          // }
-        }}
-        class="cursor-pointer opacity-90 hover:opacity-100 transition-opacity duration-200 group overflow-hidden rounded-full size-10"
-      >
+      <Avatar
+        src={backendStatus.profile?.avatar}
+        fallback={backendStatus.profile?.displayName}
+        class="group-hover:scale-110 transition-transform duration-200"
+      ></Avatar>
+      {#if backendStatus.profile}
+        <span class="sr-only">{backendStatus.profile.handle}</span>
+      {:else}
+        <span class="sr-only">Log in</span>
+      {/if}
+    </button>
+  {/snippet}
+
+  <div class="flex flex-col">
+    {#if connected}
+      <div class="border-b border-base-300 pb-4 mb-2 flex items-center gap-2">
         <Avatar
           src={backendStatus.profile?.avatar}
           fallback={backendStatus.profile?.displayName}
           class="group-hover:scale-110 transition-transform duration-200"
-        ></Avatar>
-        {#if backendStatus.profile}
-          <span class="sr-only">{backendStatus.profile.handle}</span>
-        {:else}
-          <span class="sr-only">Log in</span>
-        {/if}
-      </button>
-    </div>
-  {/snippet}
-</Tooltip>
+        ></Avatar><a
+          class="mr-auto font-medium"
+          target="_blank"
+          href={"https://aturi.to/" + backendStatus.profile?.id}
+          >@{backendStatus.profile?.handle}</a
+        >
+        <Button variant="ghost" class="" onclick={handleLogout}>Log Out</Button>
+      </div>
+    {/if}
 
-<UserSettingsModal bind:open={userSettingsModalOpen} />
+    <ThemeSettings />
+  </div>
+</Popover>
