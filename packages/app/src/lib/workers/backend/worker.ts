@@ -50,6 +50,7 @@ import {
 import { decode, encode } from "@atcute/cbor";
 import { initializeFaro } from "$lib/otel";
 import { context } from "@opentelemetry/api";
+import { logMaterializationResult } from "../materializationLogging";
 import { createOauthClient, oauthDb } from "./oauth";
 import { Agent, CredentialSession } from "@atproto/api";
 import { requestLock, locksEnabled } from "$lib/workers/locks";
@@ -729,7 +730,7 @@ class WorkerSupervisor {
         // Check for event ID resolvers (for sendEvent waiting on materialization)
         this.resolveEventPromises(result);
 
-        console.debug("materialised (personal):", { batch, result });
+        logMaterializationResult(batch.streamId, result, "personal");
       } else {
         const result = await this.sqlite.materializeBatch(
           batch,
@@ -739,7 +740,7 @@ class WorkerSupervisor {
         // Check for event ID resolvers (for sendEvent waiting on materialization)
         this.resolveEventPromises(result);
 
-        console.debug("materialised (space):", { batch, result });
+        logMaterializationResult(batch.streamId, result, "space");
       }
     }
   }

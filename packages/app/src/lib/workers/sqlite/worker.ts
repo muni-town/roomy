@@ -1,8 +1,11 @@
 /* eslint-disable @typescript-eslint/no-empty-object-type */
 import {
   type ApplyResultError,
+  type ApplyResultSuccess,
   type Batch,
   type Bundle,
+  type MaterializationSummary,
+  type MaterializationWarnings,
   type StreamIndex,
   type TaskPriority,
 } from "../types";
@@ -47,6 +50,10 @@ import { requestLock, queryLocks, locksEnabled } from "$lib/workers/locks";
 import { initializeFaro, trackUncaughtExceptions } from "$lib/otel";
 import { decodeTime, ulid } from "ulidx";
 import { context } from "@opentelemetry/api";
+import {
+  computeMaterializationSummary,
+  computeMaterializationWarnings,
+} from "../materializationLogging";
 
 initializeFaro({ worker: "sqlite" });
 
@@ -551,6 +558,7 @@ class SqliteWorkerSupervisor {
   }
 
   private async runStatementBatch(batch: Batch.Statement) {
+    const batchStartTime = performance.now();
     const exec = async () => {
       await executeQuery({ sql: `savepoint batch${batch.batchId}` });
 
@@ -572,8 +580,8 @@ class SqliteWorkerSupervisor {
         const depsArray = [...allDependencies].flat();
 
         const result = await executeQuery({
-          sql: `SELECT entity_ulid FROM events 
-                WHERE entity_ulid IN (${depsArray.map(() => "?").join(",")}) 
+          sql: `SELECT entity_ulid FROM events
+                WHERE entity_ulid IN (${depsArray.map(() => "?").join(",")})
                 AND applied = 1`,
           params: depsArray,
         });
@@ -604,11 +612,28 @@ class SqliteWorkerSupervisor {
       console.debug("Updated backfilled_to to", batch.latestEvent);
 
       await executeQuery({ sql: `release batch${batch.batchId}` });
+
+      // Compute summary and warnings from results
+      const summary = computeMaterializationSummary(results, batchStartTime);
+      const warnings = computeMaterializationWarnings(results);
+
+      // Log if there are issues
+      if (warnings.stashedEvents?.length || warnings.failedEvents?.length || warnings.failedStatements?.length) {
+        console.warn("[SqW] Materialization issues detected:", {
+          batchId: batch.batchId,
+          streamId: batch.streamId,
+          summary,
+          warnings,
+        });
+      }
+
       return {
         batchId: batch.batchId,
         priority: batch.priority,
         status: "applied",
         results,
+        summary,
+        warnings,
       } as const;
     };
 
@@ -738,11 +763,20 @@ class SqliteWorkerSupervisor {
     },
   ) {
     await executeQuery({ sql: `savepoint bundle${bundleId}` });
-    const queryResults: (QueryResult | ApplyResultError)[] = [];
+    const queryResults: (ApplyResultSuccess | ApplyResultError)[] = [];
     let hadError = false;
     for (const statement of statements) {
+      const startTime = performance.now();
       try {
-        queryResults.push(await executeQuery(statement));
+        const result = await executeQuery(statement);
+        const durationMs = performance.now() - startTime;
+        queryResults.push({
+          type: "success",
+          sql: statement.sql,
+          params: statement.params,
+          rows: result.rows?.length ?? (result.ok ? 0 : undefined),
+          durationMs,
+        });
       } catch (e) {
         hadError = true;
         console.warn(
@@ -768,14 +802,23 @@ class SqliteWorkerSupervisor {
         VALUES (${eventMeta.idx}, ${eventMeta.streamId}, ${eventMeta.user}, ${eventMeta.event.id}, ${JSON.stringify(eventMeta.event)}, ${hadError ? 0 : 1})
         ON CONFLICT DO NOTHING
         `;
+      const startTime = performance.now();
       queryResults.push(
-        await executeQuery(insertEvent).catch((e) => {
-          return {
-            type: "error",
-            statement: insertEvent,
-            message: e instanceof Error ? e.message : (e as string),
-          };
-        }),
+        await executeQuery(insertEvent)
+          .then((result) => ({
+            type: "success" as const,
+            sql: insertEvent.sql,
+            params: insertEvent.params,
+            rows: result.rows?.length ?? 1,
+            durationMs: performance.now() - startTime,
+          }))
+          .catch((e) => {
+            return {
+              type: "error" as const,
+              statement: insertEvent,
+              message: e instanceof Error ? e.message : (e as string),
+            };
+          }),
       );
 
       // If this event is a reorder event that modifies the `after` position for another event.

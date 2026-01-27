@@ -10,6 +10,7 @@ import type {
 } from "@roomy/sdk";
 import type { QueryResult } from "./sqlite/setup";
 import type { SqlStatement } from "./sqlite/types";
+import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
 
 export type EdgeLabel =
   | "child"
@@ -104,6 +105,8 @@ export namespace Batch {
       | Bundle.ApplyStashed
     )[];
     priority: TaskPriority;
+    summary: MaterializationSummary;
+    warnings: MaterializationWarnings;
   }
 }
 
@@ -111,6 +114,35 @@ export interface ApplyResultError {
   type: "error";
   statement: SqlStatement;
   message: string;
+}
+
+/** A successfully executed statement with full details */
+export interface ApplyResultSuccess {
+  type: "success";
+  sql: string;
+  params?: BindingSpec;
+  rows?: number; // Number of rows affected or returned
+  durationMs?: number; // Time taken to execute
+}
+
+export interface MaterializationWarnings {
+  /** Events that were stashed due to unmet dependencies */
+  stashedEvents?: Array<{ eventId: Ulid; dependsOn: Ulid[] }>;
+  /** Events that had errors during materialization or execution */
+  failedEvents?: Array<{ eventId: Ulid; error: string }>;
+  /** Statements that failed within otherwise successful bundles */
+  failedStatements?: Array<{ eventId: Ulid; statement: string; error: string }>;
+}
+
+export interface MaterializationSummary {
+  totalEvents: number;
+  appliedEvents: number;
+  stashedEvents: number;
+  errorEvents: number;
+  totalStatements: number;
+  successfulStatements: number;
+  failedStatements: number;
+  durationMs: number;
 }
 
 interface ApplyErrorMissingDependency {
@@ -161,13 +193,13 @@ export namespace Bundle {
   export interface ProfileApplyResult {
     result: "appliedProfiles";
     firstDid?: Did;
-    output: (QueryResult | ApplyResultError)[];
+    output: (ApplyResultSuccess | ApplyResultError)[];
   }
 
   export interface ApplyResult {
     result: "applied";
     eventId: Ulid;
-    output: (QueryResult | ApplyResultError)[];
+    output: (ApplyResultSuccess | ApplyResultError)[];
   }
 
   export interface ApplyStashed {
