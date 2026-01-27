@@ -188,7 +188,7 @@ export class ConnectedSpace {
    */
   async subscribe(
     callback: EventCallback,
-    start: StreamIndex = 0 as StreamIndex,
+    start: StreamIndex = 1 as StreamIndex,
   ): Promise<Ulid> {
     this.#callback = callback;
 
