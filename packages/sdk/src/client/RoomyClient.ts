@@ -424,14 +424,31 @@ export class RoomyClient {
             );
           }
         } else if ((e as Error).message?.includes("Stream does not exist")) {
-          console.warn("Stream does not exist");
+          // Stream record exists on PDS but stream doesn't exist on Leaf server.
+          // This can happen if the stream was deleted or the Leaf server was reset.
+          // Don't auto-recreate to avoid data loss. User should manually verify and delete the record if needed.
+          console.error(
+            "Stream record exists on PDS but stream doesn't exist on Leaf server. " +
+              "This may indicate data inconsistency. Manual recovery may be needed. " +
+              "To fix, you may need to delete the stale PDS record and let it recreate.",
+            { error: (e as Error).message },
+          );
           errors.push(e);
+          // Don't retry - this won't fix itself
+          break;
         } else {
           if (e instanceof Error) console.error(e);
           console.error("Error while fetching personal stream record:", e);
           errors.push(e);
         }
       }
+    }
+
+    if (!space) {
+      throw new Error(
+        `Failed to connect to personal stream after ${attempts} attempts`,
+        { cause: errors },
+      );
     }
 
     this.#personalStream = space;
