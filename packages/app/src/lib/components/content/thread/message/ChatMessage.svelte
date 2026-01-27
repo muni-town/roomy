@@ -13,7 +13,7 @@
   import { backend, backendStatus } from "$lib/workers";
   import { decodeTime } from "ulidx";
   import { current } from "$lib/queries";
-  import { toast } from "@fuxui/base";
+  import { Badge, toast } from "@fuxui/base";
   import type { MessagingState } from "../TimelineView.svelte";
   import MediaEmbed from "./embeds/MediaEmbed.svelte";
   import { newUlid, toBytes, Ulid } from "@roomy/sdk";
@@ -98,6 +98,10 @@
   );
 
   let isEditing = $derived(editingMessageId === message.id);
+
+  let isFromDiscord = $derived(
+    message.masqueradeAuthor?.startsWith("did:discord:") ?? false,
+  );
 
   function editMessage() {
     onStartEdit(message.id);
@@ -192,24 +196,27 @@
         <div class="w-8 shrink-0 sm:w-10"></div>
       {/if}
 
-      <div class="flex flex-col gap-1">
+      <div class="flex flex-col gap-1 w-full">
         <!-- Username, timestamp -->
         {#if !message.mergeWithPrevious}
-          <span class="flex items-center gap-2 text-sm">
+          <div class="flex items-center gap-2 text-sm w-full">
             <span class="font-bold text-accent-700 dark:text-accent-400"
               >{metadata.name}</span
             >
-            <!-- {#if customAuthor.current && customAuthor.current.authorId?.startsWith("discord:")}
+            {#if metadata.handle}<span class="opacity-70"
+                >@{metadata.handle}</span
+              >{/if}
+            {#if isFromDiscord}
               <Badge
                 variant="secondary"
-                title="This message is being bridged into this space via a Discord.com instance."
-                >Discord</Badge
+                title="This message was bridged from Discord"
+                class="text-xs">Discord</Badge
               >
-            {:else if customAuthor.current}
-              <Badge variant="secondary">App</Badge>
-            {/if} -->
-            {@render timestamp(metadata.timestamp)}
-          </span>
+            {/if}
+            <span class="ml-auto opacity-70"
+              >{@render timestamp(metadata.timestamp)}</span
+            >
+          </div>
         {/if}
 
         <!-- Message text -->
@@ -324,8 +331,8 @@
 {/if}
 
 {#snippet timestamp(date: Date)}
-  {@const formattedDate = isToday(date) ? "Today" : format(date, "P")}
+  {@const formattedDate = isToday(date) ? "" : format(date, "P") + ", "}
   <time class="text-xs text-base-700 dark:text-base-400">
-    {formattedDate}, {format(date, "p")}
+    {formattedDate}{format(date, "p")}
   </time>
 {/snippet}

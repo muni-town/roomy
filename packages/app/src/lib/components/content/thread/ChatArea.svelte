@@ -85,6 +85,7 @@
         'authorDid', u.did,
         'authorName', i.name,
         'authorAvatar', i.avatar,
+        'authorHandle', u.handle,
         'masqueradeAuthor', o.author,
         'masqueradeTimestamp', o.timestamp,
         'replyTo', coalesce((
@@ -141,15 +142,15 @@
           )
         )
       ) as json, author_edge.*
-      from entities e
-        join comp_content c on c.entity = e.id
-        join edges author_edge on author_edge.head = e.id and author_edge.label = 'author'
-        left join comp_user u on u.did = author_edge.tail
-        left join comp_info i on i.entity = author_edge.tail
-        left join comp_override_meta o on o.entity = e.id
-        left join comp_info oai on oai.entity = o.author
-        left join comp_user oau on oau.did = o.author
-        left join comp_comment cc on cc.entity = e.id
+      from entities e -- message
+        join comp_content c on c.entity = e.id -- message content
+        join edges author_edge on author_edge.head = e.id and author_edge.label = 'author' -- message author relation
+        left join comp_user u on u.did = author_edge.tail -- author user
+        left join comp_info i on i.entity = author_edge.tail -- author info
+        left join comp_override_meta o on o.entity = e.id -- overridden author/timestamp
+        left join comp_info oai on oai.entity = o.author -- overridden author info
+        left join comp_user oau on oau.did = o.author -- overridden author user
+        left join comp_comment cc on cc.entity = e.id -- comment
       where
         e.room = ${page.params.object}
           and
