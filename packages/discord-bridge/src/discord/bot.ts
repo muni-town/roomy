@@ -60,21 +60,22 @@ export async function hasBridge(guildId: bigint): Promise<boolean> {
  * space and their roles, and a handle to the persisted store of latest messages
  * for each channel.
  *
+ * Returns undefined if the guild is not bridged or the space is not connected.
+ *
  * we may want to implement some caching since Jazz was handling that
  *
  */
-export async function getGuildContext(guildId: bigint): Promise<GuildContext> {
+export async function getGuildContext(guildId: bigint): Promise<GuildContext | undefined> {
   const spaceId = await registeredBridges.get_spaceId(guildId.toString());
-  if (!spaceId)
-    throw new Error(
-      "Discord guild doesn't have Roomy space bridged: " + guildId.toString(),
-    );
+  if (!spaceId) {
+    console.warn(`Discord guild ${guildId} doesn't have Roomy space bridged`);
+    return undefined;
+  }
 
   const connectedSpace = getConnectedSpace(spaceId);
   if (!connectedSpace) {
-    throw new Error(
-      "Space not connected: " + spaceId,
-    );
+    console.warn(`Space ${spaceId} for guild ${guildId} is not connected`);
+    return undefined;
   }
 
   const syncedIds = syncedIdsForBridge({
@@ -134,6 +135,7 @@ export async function startBot() {
           throw new Error("Discord guild ID missing from channel create event");
         if (!(await hasBridge(channel.guildId!))) return;
         const ctx = await getGuildContext(channel.guildId);
+        if (!ctx) return;
         console.log("Channel create event", channel, ctx);
         // await getRoomyThreadForChannel(ctx, channel);
       },
@@ -142,6 +144,7 @@ export async function startBot() {
           throw new Error("Discord guild ID missing from thread create event");
         if (!(await hasBridge(channel.guildId!))) return;
         const ctx = await getGuildContext(channel.guildId);
+        if (!ctx) return;
         console.log("Thread create event", channel, ctx);
         // await getRoomyThreadForChannel(ctx, channel);
       },
@@ -164,6 +167,7 @@ export async function startBot() {
         }
 
         const ctx = await getGuildContext(guildId);
+        if (!ctx) return;
         const roomyRoomId = await ctx.syncedIds.get_roomyId(channelId.toString());
 
         if (!roomyRoomId) {
@@ -182,6 +186,7 @@ export async function startBot() {
         if (!(await hasBridge(payload.guildId))) return;
 
         const ctx = await getGuildContext(payload.guildId);
+        if (!ctx) return;
         await syncDiscordReactionToRoomy(ctx, {
           messageId: payload.messageId,
           channelId: payload.channelId,
@@ -197,6 +202,7 @@ export async function startBot() {
         if (!(await hasBridge(payload.guildId))) return;
 
         const ctx = await getGuildContext(payload.guildId);
+        if (!ctx) return;
         await removeDiscordReactionFromRoomy(ctx, {
           messageId: payload.messageId,
           channelId: payload.channelId,
@@ -259,6 +265,10 @@ async function backfillMessagesForChannel(
 /** Bridge all past messages in a single Discord guild to Roomy */
 export async function backfillGuild(bot: DiscordBot, guildId: bigint) {
   const ctx = await getGuildContext(guildId);
+  if (!ctx) {
+    console.warn(`Skipping backfill for guild ${guildId}: space not connected`);
+    return;
+  }
 
   await tracer.startActiveSpan(
     "bridge.guild.backfill",
