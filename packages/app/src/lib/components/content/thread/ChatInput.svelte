@@ -4,6 +4,10 @@
     if (!editor) return;
     editor.commands.focus();
   }
+  export function clearInput() {
+    if (!editor) return;
+    editor.commands.clearContent();
+  }
 </script>
 
 <script lang="ts">

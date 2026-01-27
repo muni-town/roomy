@@ -23,7 +23,7 @@
   import { getImagePreloadData } from "$lib/utils/media";
   import { newUlid, toBytes, Ulid, type Event } from "@roomy/sdk";
   import type { Attachment } from "@roomy/sdk";
-  import ChatInput, { setInputFocus } from "./ChatInput.svelte";
+  import ChatInput, { clearInput, setInputFocus } from "./ChatInput.svelte";
   import { createThread } from "$lib/mutations/room";
   import { goto } from "$app/navigation";
 
@@ -257,6 +257,7 @@
       toast.error("Failed to send message.", { position: "bottom-right" });
     } finally {
       messagingState.set({ kind: "normal", input: "", files: [] });
+      clearInput();
       isSendingMessage = false;
       previewImages = [];
       setInputFocus();
