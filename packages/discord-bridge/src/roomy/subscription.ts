@@ -219,13 +219,14 @@ function extractDiscordUserOrigin(
 }
 
 /**
- * Get the last processed index for a space, or 0 if not found.
+ * Get the last processed index for a space, or 1 if not found.
+ * Leaf stream indices are 1-based, so new subscriptions should start at 1.
  */
 export async function getLastProcessedIdx(spaceId: string): Promise<number> {
   try {
     const idx = await leafCursors.get(spaceId);
-    return idx ?? 0;
+    return idx ?? 1;
   } catch {
-    return 0;
+    return 1;
   }
 }
