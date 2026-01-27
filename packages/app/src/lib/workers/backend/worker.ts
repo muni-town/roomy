@@ -788,9 +788,12 @@ class WorkerSupervisor {
             connectionPromise,
             () => {
               timedOut = true;
-              console.error(`Space connection timed out after ${WorkerSupervisor.SPACE_CONNECTION_TIMEOUT_MS}ms`, {
-                streamId,
-              });
+              console.error(
+                `Space connection timed out after ${WorkerSupervisor.SPACE_CONNECTION_TIMEOUT_MS}ms`,
+                {
+                  streamId,
+                },
+              );
               span.setStatus({
                 code: SpanStatusCode.ERROR,
                 message: "Connection timed out",
@@ -826,6 +829,12 @@ class WorkerSupervisor {
   }
 
   async #connectSpaceStreamInner(streamId: StreamDid) {
+    if (
+      this.#roomy.state !== "connected" &&
+      this.#roomy.state !== "materializingPersonalSpace"
+    )
+      throw new Error("No event channel yet");
+
     const space = await ConnectedSpace.connect({
       client: this.client,
       streamDid: streamId,
