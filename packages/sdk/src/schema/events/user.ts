@@ -3,11 +3,19 @@
  */
 
 import { BasicInfoUpdate, Did, StreamDid, type, Ulid } from "../primitives";
-import { defineEvent, sql, ensureEntity, decodeTime, type SqlStatement } from "./index";
+import {
+  defineEvent,
+  sql,
+  ensureEntity,
+  decodeTime,
+  type SqlStatement,
+} from "./index";
 
 const SetUserProfileSchema = type({
   $type: "'space.roomy.user.updateProfile.v0'",
   did: Did.describe("The DID of the user to set the profile for."),
+  // isn't specifying the did a bit of an edge case, only really for bridging or weird admin actions?
+  // in which case it seems better to be an extension...
   "extensions?": type.Record(type.string, type.unknown),
 })
   .and(BasicInfoUpdate)
@@ -28,7 +36,7 @@ export const SetUserProfile = defineEvent(
     const setUpdates = updates.filter((x) => x.value !== undefined);
 
     const statements: (SqlStatement | undefined)[] = [
-      ensureEntity(streamId, event.id),
+      ensureEntity(streamId, event.did),
       setUpdates.length > 0
         ? {
             sql: `insert into comp_info (entity, ${setUpdates.map((x) => `${x.key}`).join(", ")})

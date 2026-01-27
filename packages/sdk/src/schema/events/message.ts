@@ -24,13 +24,6 @@ export const CreateMessage = defineEvent(
     const statements = [
       ensureEntity(streamId, event.id, event.room),
       sql`
-        insert or replace into edges (head, tail, label)
-        select
-          ${event.id},
-          ${user},
-          'author'
-      `,
-      sql`
         insert or replace into comp_content (entity, mime_type, data, last_edit)
         values (
           ${event.id},
@@ -50,6 +43,44 @@ export const CreateMessage = defineEvent(
             updated_at = (unixepoch() * 1000)
       `,
     ];
+
+    // Handle overrideAuthorDid, overrideTimestamp extensions
+    const overrideAuthorExt =
+      event.extensions["space.roomy.extension.authorOverride.v0"]?.did;
+    const overrideTimestampExt =
+      event.extensions["space.roomy.extension.timestampOverride.v0"]?.timestamp;
+
+    if (!overrideAuthorExt) {
+      // normal messages - create 'author' edge
+      statements.push(sql`
+        insert or replace into edges (head, tail, label)
+        select
+          ${event.id},
+          ${user},
+          'author'
+      `);
+    } else {
+      // for bridged messages, use the overridden author, not the actual one
+      statements.push(ensureEntity(streamId, overrideAuthorExt));
+      statements.push(sql`
+        insert or replace into edges (head, tail, label)
+        select
+          ${event.id},
+          ${overrideAuthorExt},
+          'author'
+      `);
+    }
+    
+    if (overrideAuthorExt || overrideTimestampExt) {
+      statements.push(sql`
+        insert or replace into comp_override_meta (entity, author, timestamp)
+        values (
+          ${event.id},
+          ${overrideAuthorExt ? overrideAuthorExt : null},
+          ${overrideTimestampExt ? Number(overrideTimestampExt) : null}
+        )
+      `);
+    }
 
     for (const att of event.extensions["space.roomy.extension.attachments.v0"]
       ?.attachments || []) {
@@ -137,23 +168,6 @@ export const CreateMessage = defineEvent(
         `,
         );
       }
-    }
-
-    // Handle overrideAuthorDid, overrideTimestamp extensions
-    const overrideAuthorExt =
-      event.extensions["space.roomy.extension.authorOverride.v0"]?.did;
-    const overrideTimestampExt =
-      event.extensions["space.roomy.extension.timestampOverride.v0"]?.timestamp;
-
-    if (overrideAuthorExt || overrideTimestampExt) {
-      statements.push(sql`
-        insert or replace into comp_override_meta (entity, author, timestamp)
-        values (
-          ${event.id},
-          ${overrideAuthorExt ? overrideAuthorExt : null},
-          ${overrideTimestampExt ? Number(overrideTimestampExt) : null}
-        )
-      `);
     }
 
     return statements;
