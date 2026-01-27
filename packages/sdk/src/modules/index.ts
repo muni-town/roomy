@@ -11,7 +11,6 @@ const personalModuleDef: BasicModule = {
   initSql: sql`
     create table if not exists stream_info (
       admin text,
-      handle text,
       type text not null default 'space.roomy.space.personal',
       schema_version text not null default '3'
     );
@@ -83,7 +82,6 @@ const spaceModuleDef: BasicModule = {
   initSql: sql`
     create table if not exists stream_info (
       type text not null default 'space.roomy.space.space',
-      handle text,
       schema_version text not null default '3'
     ) strict;
 
@@ -92,10 +90,11 @@ const spaceModuleDef: BasicModule = {
 
     create table if not exists space_info (
       name text,
-      avatar text
+      avatar text,
+      handle_provider text
     ) strict;
     delete from space_info;
-    insert into space_info (name, avatar) values (null, null);
+    insert into space_info (name, avatar, handle_provider) values (null, null, null);
 
     create table if not exists admins (
       user_id text primary key -- did
@@ -170,6 +169,11 @@ const spaceModuleDef: BasicModule = {
         when 1 then (select drisl_extract(payload, '.avatar') from event) else avatar end
     where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.updateSpaceInfo.v0';
 
+    -- Set handle provider
+    update space_info
+    set handle_provider = (select drisl_extract(payload, '.did') from event)
+    where (select drisl_extract(payload,  '.$type') from event) = 'space.roomy.space.setHandleProvider.v0';
+      
     -- Mark metadata events
     insert into metadata_events (idx)
     select idx from event
@@ -178,7 +182,7 @@ const spaceModuleDef: BasicModule = {
       'space.roomy.space.personal.leaveSpace.v0',
       'space.roomy.space.addAdmin.v0',
       'space.roomy.space.removeAdmin.v0',
-      'space.roomy.user.setHandle.v0',
+      'space.roomy.user.setHandleProvider.v0',
       'space.roomy.space.updateSpaceInfo.v0',
       'space.roomy.space.updateSidebar.v0',
       'space.roomy.room.createRoom.v0',
@@ -212,7 +216,7 @@ const spaceModuleDef: BasicModule = {
     },
     {
       name: "space_info",
-      sql: `select name, avatar from space_info;`,
+      sql: `select name, avatar, handle_provider from space_info;`,
       params: [],
     },
     {

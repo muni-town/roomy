@@ -11,10 +11,10 @@ export interface PersonalStreamRecordConfig {
 }
 
 /** Create a stream handle record linking a user's DID to a space. */
-export async function createStreamHandleRecord(
+export async function createProfileSpaceRecord(
   agent: Agent,
   spaceId: StreamDid,
-  config: StreamHandleConfig
+  config: StreamHandleConfig,
 ): Promise<void> {
   const resp = await agent.com.atproto.repo.putRecord({
     collection: config.collection,
@@ -26,9 +26,9 @@ export async function createStreamHandleRecord(
 }
 
 /** Remove a stream handle record. */
-export async function removeStreamHandleRecord(
+export async function removeProfileSpaceRecord(
   agent: Agent,
-  config: StreamHandleConfig
+  config: StreamHandleConfig,
 ): Promise<void> {
   const resp = await agent.com.atproto.repo.deleteRecord({
     collection: config.collection,
@@ -42,7 +42,7 @@ export async function removeStreamHandleRecord(
 export async function uploadBlob(
   agent: Agent,
   bytes: ArrayBuffer,
-  opts?: { alt?: string; mimetype?: string }
+  opts?: { alt?: string; mimetype?: string },
 ): Promise<{ blob: ReturnType<BlobRef["toJSON"]>; uri: string }> {
   const resp = await agent.com.atproto.repo.uploadBlob(new Uint8Array(bytes));
   const blobRef = resp.data.blob;
@@ -69,7 +69,7 @@ export async function uploadBlob(
 /** Get personal stream ID from PDS record. */
 export async function getPersonalStreamId(
   agent: Agent,
-  config: PersonalStreamRecordConfig
+  config: PersonalStreamRecordConfig,
 ): Promise<StreamDid | undefined> {
   try {
     const resp = await agent.com.atproto.repo.getRecord({
@@ -91,7 +91,7 @@ export async function getPersonalStreamId(
 export async function savePersonalStreamId(
   agent: Agent,
   streamDid: StreamDid,
-  config: PersonalStreamRecordConfig
+  config: PersonalStreamRecordConfig,
 ): Promise<void> {
   const resp = await agent.com.atproto.repo.putRecord({
     collection: config.collection,

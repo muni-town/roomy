@@ -76,8 +76,8 @@ export type BackendInterface = {
     handle?: Handle;
   }>;
   checkSpaceExists(spaceId: StreamDid): Promise<boolean>;
-  createStreamHandleRecord(spaceId: StreamDid): Promise<void>;
-  removeStreamHandleRecord(): Promise<void>;
+  setProfileSpace(spaceId: StreamDid | null): Promise<void>;
+  getProfileSpace(): Promise<StreamDid | undefined>;
   connectSpaceStream(spaceId: StreamDid, idx: StreamIndex): Promise<void>;
   createSpaceStream(): Promise<StreamDid>;
   /** Testing: Get personal stream record from PDS */

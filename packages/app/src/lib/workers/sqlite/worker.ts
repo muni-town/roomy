@@ -565,7 +565,9 @@ class SqliteWorkerSupervisor {
           }
         });
 
-        const succeeded = results.filter((r) => r.status === "fulfilled").length;
+        const succeeded = results.filter(
+          (r) => r.status === "fulfilled",
+        ).length;
         const failed = results.filter((r) => r.status === "rejected").length;
         if (failed > 0) {
           console.warn(
@@ -637,7 +639,11 @@ class SqliteWorkerSupervisor {
       const warnings = computeMaterializationWarnings(results);
 
       // Log if there are issues
-      if (warnings.stashedEvents?.length || warnings.failedEvents?.length || warnings.failedStatements?.length) {
+      if (
+        warnings.stashedEvents?.length ||
+        warnings.failedEvents?.length ||
+        warnings.failedStatements?.length
+      ) {
         console.warn("[SqW] Materialization issues detected:", {
           batchId: batch.batchId,
           streamId: batch.streamId,

@@ -243,20 +243,22 @@ export const RemoveAdmin = defineEvent(
   ],
 );
 
-const SetHandleSchema = type({
-  $type: "'space.roomy.space.setHandle.v0'",
-  did: Did.or(type.null).describe("The domain to use as a handle, or null to unset."),
+const SetHandleProviderSchema = type({
+  $type: "'space.roomy.space.setHandleProvider.v0'",
+  did: Did.or(type.null).describe(
+    "Sets the ATProto DID with the handle that we want to use for this space.",
+  ),
 }).describe(
-  "Set the space's handle. \
-For verification, the domain must have a _leaf sub-domain with TXT record pointing back to this stream's DID. \
-The value for the TXT record should be `did=did:plc:streamDID`.",
+  "Set the space's handle provider. \
+This must be an ATProto DID that also has a space.roomy.profileSpace/self record with an `id` \
+field set to the DID of this space.",
 );
 
-export const SetHandle = defineEvent(
-  SetHandleSchema,
+export const SetHandleProvider = defineEvent(
+  SetHandleProviderSchema,
   ({ streamId, event }) => [
     sql`
-      update comp_space set handle = ${event.did || null}
+      update comp_space set handle_provider = ${event.did || null}
       where entity = ${streamId}
     `,
   ],
@@ -270,7 +272,7 @@ export const SpaceEventVariant = type.or(
   PersonalLeaveSpaceSchema,
   AddAdminSchema,
   RemoveAdminSchema,
-  SetHandleSchema,
+  SetHandleProviderSchema,
   UpdateSpaceInfoSchema,
   UpdateSidebarSchema,
 );

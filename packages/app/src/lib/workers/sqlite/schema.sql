@@ -61,6 +61,7 @@ create table if not exists comp_space (
   entity text primary key references entities(id) on delete cascade,
   hidden integer not null default 0 check(hidden in (0, 1)),
   handle text, -- domain
+  handle_provider text,
   backfilled_to integer references events(idx) default 0,
   sidebar_config text not null default '{ categories: [] }', -- JSON sidebar config
   created_at integer not null default (unixepoch() * 1000),
