@@ -37,7 +37,7 @@ export const lexicons: LexiconDoc[] = [
   },
   {
     lexicon: 1,
-    id: "space.roomy.space.handle",
+    id: "space.roomy.profileSpace",
     defs: {
       main: {
         type: "record",

@@ -1,8 +1,4 @@
-export {
-  getProfile,
-  createProfileResolver,
-  type Profile,
-} from "./profiles";
+export { getProfile, createProfileResolver, type Profile } from "./profiles";
 
 export {
   resolveDidFromHandle,
@@ -11,8 +7,8 @@ export {
 } from "./handles";
 
 export {
-  createStreamHandleRecord,
-  removeStreamHandleRecord,
+  createProfileSpaceRecord,
+  removeProfileSpaceRecord,
   uploadBlob,
   getPersonalStreamId,
   savePersonalStreamId,

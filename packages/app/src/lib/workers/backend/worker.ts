@@ -278,22 +278,29 @@ class WorkerSupervisor {
         // await this.openSpacesMaterializer?.unpauseSubscription(streamId);
       },
       resolveHandleForSpace: async (spaceId) =>
-        this.client.resolveHandleForSpace(spaceId),
+        this.client.resolveHandleFromSpaceId(spaceId),
       resolveSpaceId: async (handleOrDid) => {
         await this.#connected.promise;
-        const resp = await this.client.resolveSpaceId(handleOrDid);
+        const resp =
+          await this.client.resolveSpaceIdFromDidOrHandle(handleOrDid);
         return {
           spaceId: resp.spaceDid,
           handle: resp.handle,
         };
       },
       checkSpaceExists: async (spaceId) =>
-        this.client.checkStreamExists(spaceId),
-      createStreamHandleRecord: async (spaceId) => {
-        await this.client.createStreamHandleRecord(spaceId);
+        // TODO: this isn't the best way to check whether a space exists, but right now we actually
+        // don't have a way check for stream existence in the API so it's a close enough
+        // approximation.
+        !!(await this.client.getSpaceInfo(spaceId))?.name,
+      setProfileSpace: async (spaceId) => {
+        await this.client.setProfileSpace(spaceId);
       },
-      removeStreamHandleRecord: async () => {
-        await this.client.removeStreamHandleRecord();
+      getProfileSpace: async () => {
+        await this.#connected.promise;
+        return this.client.resolveProfileSpaceFromUserDid(
+          this.client.agent.assertDid as UserDid,
+        );
       },
       getStreamRecord: async () => this.getStreamRecord(),
       deleteStreamRecord: async () => this.deleteStreamRecord(),
@@ -425,7 +432,7 @@ class WorkerSupervisor {
 
     if (params) {
       // oauth callback
-      const [span, ctx] = tracer.startActiveSpan(
+      const [span, _ctx] = tracer.startActiveSpan(
         "Create Session at OAuth Callback",
         {},
         (span) => [span, context.active()] as const,
@@ -513,7 +520,7 @@ class WorkerSupervisor {
         agent,
         leafUrl: CONFIG.leafUrl,
         leafDid: CONFIG.leafServerDid,
-        spaceHandleNsid: CONFIG.streamHandleNsid,
+        profileSpaceNsid: CONFIG.profileSpaceNsid,
         spaceNsid: CONFIG.streamNsid,
         plcDirectory: CONFIG.plcDirectory,
       },

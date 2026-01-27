@@ -1,10 +1,9 @@
 const CONFIG = {
   // service endpoints
   leafUrl: import.meta.env.VITE_LEAF_URL || "https://leaf-dev.muni.town",
-  plcDirectory:
-    (import.meta.env.VITE_PLC_DIRECTORY ||
-      import.meta.env.PUBLIC_PLC_DIRECTORY ||
-      "https://plc.directory") as string,
+  plcDirectory: (import.meta.env.VITE_PLC_DIRECTORY ||
+    import.meta.env.PUBLIC_PLC_DIRECTORY ||
+    "https://plc.directory") as string,
   faroEndpoint: (import.meta.env.VITE_FARO_ENDPOINT || undefined) as
     | string
     | undefined,
@@ -15,8 +14,8 @@ const CONFIG = {
   // atproto collections and schema versions
   streamNsid:
     import.meta.env.VITE_STREAM_NSID || "space.roomy.space.personal.dev",
-  streamHandleNsid:
-    import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.space.handle.dev",
+  profileSpaceNsid:
+    import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.profileSpace.dev",
   streamSchemaVersion: "4" as const,
   databaseSchemaVersion: "3" as const,
 
@@ -73,7 +72,7 @@ CONFIG.atprotoOauthScope = [
   "repo:space.roomy.upload.v0", // And creating roomy upload records
 
   `repo:${CONFIG.streamNsid}`, // Access to the stream collection
-  `repo:${CONFIG.streamHandleNsid}`, // Access to the stream handle collection
+  `repo:${CONFIG.profileSpaceNsid}`, // Access to the stream handle collection
 
   // TODO: For some reason I can't get this to work with a non-wildcard audience. In the future we
   // should be able to set the audience to the `leafServerDid`.
