@@ -3,7 +3,7 @@
   "version": "0.2.0-alpha.1",
   "license": "PolyForm-Noncommercial-1.0.0",
   "description": "Bridge between Discord and Roomy - Node.js Server",
-  "main": "dist/server.js",
+  "main": "dist/index.js",
   "type": "module",
   "scripts": {
     "build": "turbo build-discord-bridge",

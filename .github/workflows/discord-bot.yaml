@@ -13,18 +13,16 @@ env:
 
 jobs:
   build-and-publish:
-    # This isn't working anymore so disable the build, but keep the file for reference.
-    if: 'false'
     name: Build and Publish Docker Image
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v5
         with:
           # list of Docker images to use as base name for tags
           images: |
@@ -51,21 +49,22 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: cache
         with:
           path: |
             target
             registry
             git
-          key: cache-${{ hashFiles('Dockerfile') }}
+          key: cache-${{ hashFiles('packages/discord-bridge/Dockerfile') }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          file: discord-bridge.Dockerfile
+          context: .
+          file: packages/discord-bridge/Dockerfile
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -12,10 +12,11 @@ RUN cd packages/discord-bridge && pnpm build
 WORKDIR /project/packages/discord-bridge
 
 ENV PORT=3301
-ENV JAZZ_WORKER_ACCOUNT=""
-ENV JAZZ_WORKER_SECRET=""
-ENV JAZZ_EMAIL=""
 ENV DISCORD_TOKEN=""
-ENV DATA_DIR="/data"
+ENV ATPROTO_BRIDGE_DID=""
+ENV ATPROTO_BRIDGE_APP_PASSWORD=""
+ENV LEAF_URL="https://leaf.muni.town"
+ENV STREAM_NSID="space.roomy.space.personal"
+ENV STREAM_HANDLE_NSID="space.roomy.space.handle"
 
 ENTRYPOINT ["node", "dist/index.js"]
