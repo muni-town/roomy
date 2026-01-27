@@ -1,12 +1,12 @@
 import type { QueryResult } from "../sqlite/setup";
 import type { Batch, StreamIndex } from "../types";
-import type { Profile } from "../../types/profile";
 import type { MessagePortApi } from "../workerMessaging";
 import type { BlobRef } from "@atproto/lexicon";
 import type { Deferred } from "$lib/utils/deferred";
 import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
 import { AsyncChannel } from "@roomy/sdk";
 import type {
+  Profile,
   StreamDid,
   UserDid,
   Event,

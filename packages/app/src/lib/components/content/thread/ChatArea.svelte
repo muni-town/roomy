@@ -1,7 +1,12 @@
 <script lang="ts" module>
+  import type { Message as MessageType } from "./types";
+
   export const chatArea = $state({
     scrollToMessage: null as ((id: string) => void) | null,
   });
+
+  // Re-export Message type for backwards compatibility
+  export type { MessageType as Message };
 </script>
 
 <script lang="ts">
@@ -19,61 +24,15 @@
   import { decodeTime } from "ulidx";
   import { onNavigate } from "$app/navigation";
   import type { MessagingState } from "./TimelineView.svelte";
-  import type { Ulid, UserDid } from "@roomy/sdk";
-
-  export type Message = {
-    id: Ulid;
-    content: string;
-    lastEdit: Ulid;
-    authorDid: UserDid | null;
-    authorName: string | null;
-    authorHandle: string | null;
-    authorAvatar: string | null;
-    masqueradeAuthor: string | null;
-    masqueradeAuthorHandle: string | null;
-    masqueradeTimestamp: string | null;
-    masqueradeAuthorName: string | null;
-    masqueradeAuthorAvatar: string | null;
-    mergeWithPrevious: boolean | null;
-    replyTo: Ulid[];
-    reactions: {
-      reaction: string;
-      userId: UserDid;
-      userName: string;
-      reactionId: Ulid;
-    }[];
-    media: {
-      uri: string;
-      mimeType: string;
-      width?: number;
-      height?: number;
-      blurhash?: string;
-      length?: number;
-      size?: number;
-      name?: string;
-    }[];
-    links: {
-      uri: string;
-      showPreview: boolean;
-    }[];
-    comment: {
-      snippet?: string;
-      version: Ulid;
-      from: number;
-      to: number;
-    };
-  };
+  import { messagingState } from "./TimelineView.svelte";
+  import type { Message } from "./types";
 
   let {
-    messagingState,
-    startThreading,
+    messagingState: messagingStateProp,
     virtualizer = $bindable(),
-    toggleSelect,
   }: {
     messagingState?: MessagingState;
-    startThreading: (message?: Message) => void;
     virtualizer?: VirtualizerHandle;
-    toggleSelect: (message: Message) => void;
   } = $props();
 
   let query = new LiveQuery<Message>(
@@ -231,7 +190,7 @@
 
   function handleMobileStartThreading() {
     if (mobileMenuMessage) {
-      startThreading(mobileMenuMessage);
+      messagingState.startThreading(mobileMenuMessage);
     }
     isMobileDrawerOpen = false;
   }
@@ -384,9 +343,7 @@
                   {#if message}
                     <ChatMessage
                       {message}
-                      {messagingState}
-                      {startThreading}
-                      {toggleSelect}
+                      messagingState={messagingStateProp}
                       onOpenMobileMenu={openMobileMenu}
                       {editingMessageId}
                       onStartEdit={(id) => (editingMessageId = id)}

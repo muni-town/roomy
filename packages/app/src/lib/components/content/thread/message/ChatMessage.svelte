@@ -15,6 +15,7 @@
   import { current } from "$lib/queries";
   import { Badge, toast } from "@fuxui/base";
   import type { MessagingState } from "../TimelineView.svelte";
+  import { messagingState as importedMessagingState } from "../TimelineView.svelte";
   import MediaEmbed from "./embeds/MediaEmbed.svelte";
   import { newUlid, toBytes, Ulid } from "@roomy/sdk";
   import { page } from "$app/state";
@@ -23,8 +24,6 @@
   let {
     message,
     messagingState,
-    startThreading,
-    toggleSelect,
     onOpenMobileMenu,
     editingMessageId,
     onStartEdit,
@@ -32,8 +31,6 @@
   }: {
     message: Message;
     messagingState?: MessagingState;
-    startThreading: (message?: Message) => void;
-    toggleSelect: (message: Message) => void;
     onOpenMobileMenu: (message: Message) => void;
     editingMessageId: string;
     onStartEdit: (id: string) => void;
@@ -275,7 +272,7 @@
         canEdit={messageByMe}
         bind:keepToolbarOpen
         {editMessage}
-        startThreading={() => startThreading(message)}
+        startThreading={() => importedMessagingState.startThreading(message)}
         {message}
       />
     {/if}
@@ -310,7 +307,7 @@
           toast.error("You cannot move someone else's message");
           return;
         }
-        toggleSelect(message);
+        importedMessagingState.toggleMessageSelection(message);
       }
     }
     class="flex flex-col w-full relative max-w-screen isolate px-4"

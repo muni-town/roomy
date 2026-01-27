@@ -1,4 +1,8 @@
 <script lang="ts" module>
+  import { setInputFocus } from "./ChatInput.svelte";
+  import { renderMarkdownPlaintext } from "$lib/utils/markdown";
+  import type { Message } from "./types";
+
   export type Normal = {
     kind: "normal";
     input: string;
@@ -130,46 +134,44 @@
       }
       this.state.selectedMessages = Array.from(messages.values());
     }
+
+    startThreading(message?: Message) {
+      console.debug("Start threading", message);
+      const currentState = this.state;
+      const name = message ? renderMarkdownPlaintext(message.content) : "Thread";
+      this.state = {
+        ...currentState,
+        kind: "threading",
+        name,
+        selectedMessages: message ? [message] : [],
+      };
+      setInputFocus();
+    }
+
+    setThreadingFromMessages(messages: Message[], name?: string) {
+      console.debug("Start threading from messages", messages);
+      const currentState = this.state;
+      this.state = {
+        ...currentState,
+        kind: "threading",
+        name: name ?? "Thread",
+        selectedMessages: messages,
+      };
+      setInputFocus();
+    }
   }
 
   export const messagingState = new MessagingStateManager();
 </script>
 
 <script lang="ts">
-  import ChatArea, { type Message } from "./ChatArea.svelte";
+  import ChatArea from "./ChatArea.svelte";
   import ChatInputArea from "./ChatInputArea.svelte";
-  import { setInputFocus } from "./ChatInput.svelte";
   import type { Ulid } from "@roomy/sdk";
-  import { renderMarkdownPlaintext } from "$lib/utils/markdown";
-
-  // $effect(() => {
-  //   console.debug("messaging state", $state.snapshot(messagingState.current));
-  // });
-
-  function startThreading(message?: Message) {
-    console.debug("Start threading", message);
-    const currentState = messagingState.current;
-    const name = message ? renderMarkdownPlaintext(message.content) : "Thread";
-    messagingState.set({
-      ...currentState,
-      kind: "threading",
-      name,
-      selectedMessages: message ? [message] : [],
-    });
-    setInputFocus();
-  }
-
-  function toggleSelect(message: Message) {
-    messagingState.toggleMessageSelection(message);
-  }
 </script>
 
 <div class="flex flex-col flex-1 h-full min-h-0 justify-stretch">
-  <ChatArea
-    messagingState={messagingState.current}
-    {startThreading}
-    {toggleSelect}
-  />
+  <ChatArea messagingState={messagingState.current} />
 
   <div class="shrink-0 mt-auto">
     <ChatInputArea />
