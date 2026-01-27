@@ -33,6 +33,7 @@ import type {
   EventCallbackMeta,
   BackfillStatus,
 } from "./types";
+import { withTimeoutWarning } from "../utils/timeout";
 
 /**
  * Manages a connection to a Roomy space stream.
@@ -225,7 +226,10 @@ export class ConnectedSpace {
     );
 
     this.#backfillStatus = { status: "started" };
-    return this.#doneBackfilling.promise;
+    return withTimeoutWarning(
+      this.#doneBackfilling.promise,
+      "Still waiting for events to backfill...",
+    );
   }
 
   /**
@@ -281,7 +285,10 @@ export class ConnectedSpace {
       },
     );
 
-    return doneBackfilling.promise;
+    return withTimeoutWarning(
+      doneBackfilling.promise,
+      "Still waiting for metadata backfill...",
+    );
   }
 
   /**
