@@ -34,6 +34,7 @@ import {
   modules,
   parseEvents,
   RoomyClient,
+  withTimeoutCallback,
   type DecodedStreamEvent,
   type EncodedStreamEvent,
   type EventCallback,
@@ -49,7 +50,7 @@ import {
 } from "@roomy/sdk";
 import { decode, encode } from "@atcute/cbor";
 import { initializeFaro } from "$lib/otel";
-import { context } from "@opentelemetry/api";
+import { context, SpanStatusCode } from "@opentelemetry/api";
 import { logMaterializationResult } from "../materializationLogging";
 import { createOauthClient, oauthDb } from "./oauth";
 import { Agent, CredentialSession } from "@atproto/api";
@@ -760,6 +761,9 @@ class WorkerSupervisor {
     }
   }
 
+  /** Timeout for connecting to a single space (30 seconds) */
+  static SPACE_CONNECTION_TIMEOUT_MS = 30_000;
+
   async connectSpaceStream(streamId: StreamDid, _idx: StreamIndex) {
     await this.#connectedPersonalSpace.promise;
     if (
@@ -770,37 +774,88 @@ class WorkerSupervisor {
 
     const alreadyConnected = this.#roomy.spaces.get(streamId);
     if (alreadyConnected) return;
-    try {
-      const space = await ConnectedSpace.connect({
-        client: this.client,
-        streamDid: streamId,
-        module: modules.space,
-      });
-      // Subscribe with callback that pushes to eventChannel
-      const callback = this.#createEventCallback(
-        this.#roomy.eventChannel,
-        streamId,
-      );
-      // First get metadata to find latest index, then subscribe from there
-      const latest = await space.subscribeMetadata(callback, 0);
-      await space.unsubscribe();
-      await space.subscribe(callback, latest);
 
-      this.#roomy.spaces.set(streamId, space);
-      this.#status.spaces = {
-        ...this.#status.spaces,
-        [streamId]: "idle",
-      };
+    await tracer.startActiveSpan(
+      `Connect Space`,
+      { attributes: { "stream.id": streamId } },
+      async (span) => {
+        try {
+          const connectionPromise = this.#connectSpaceStreamInner(streamId);
 
-      return;
-    } catch (e) {
-      // space failed to connect
-      console.error("Failed to connect to space", { streamId, error: e });
-      this.#status.spaces = {
-        ...this.#status.spaces,
-        [streamId]: "error",
-      };
-    }
+          // Hard timeout that rejects - prevents one slow space from blocking everything
+          let timedOut = false;
+          const result = await withTimeoutCallback(
+            connectionPromise,
+            () => {
+              timedOut = true;
+              console.error(`Space connection timed out after ${WorkerSupervisor.SPACE_CONNECTION_TIMEOUT_MS}ms`, {
+                streamId,
+              });
+              span.setStatus({
+                code: SpanStatusCode.ERROR,
+                message: "Connection timed out",
+              });
+            },
+            WorkerSupervisor.SPACE_CONNECTION_TIMEOUT_MS,
+          );
+
+          if (timedOut) {
+            // Mark as error since it timed out (even if it eventually completes)
+            this.#status.spaces = {
+              ...this.#status.spaces,
+              [streamId]: "error",
+            };
+          }
+
+          span.end();
+          return result;
+        } catch (e) {
+          console.error("Failed to connect to space", { streamId, error: e });
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            message: e instanceof Error ? e.message : String(e),
+          });
+          span.end();
+          this.#status.spaces = {
+            ...this.#status.spaces,
+            [streamId]: "error",
+          };
+        }
+      },
+    );
+  }
+
+  async #connectSpaceStreamInner(streamId: StreamDid) {
+    const space = await ConnectedSpace.connect({
+      client: this.client,
+      streamDid: streamId,
+      module: modules.space,
+    });
+
+    const callback = this.#createEventCallback(
+      this.#roomy.eventChannel,
+      streamId,
+    );
+
+    // First get metadata to find latest index, then subscribe from there
+    const latest = await withTimeoutCallback(
+      space.subscribeMetadata(callback, 0),
+      () => console.warn(`Waiting for space metadata backfill`, { streamId }),
+      5000,
+    );
+    await space.unsubscribe();
+
+    await withTimeoutCallback(
+      space.subscribe(callback, latest),
+      () => console.warn(`Waiting for space events backfill`, { streamId }),
+      5000,
+    );
+
+    this.#roomy.spaces.set(streamId, space);
+    this.#status.spaces = {
+      ...this.#status.spaces,
+      [streamId]: "idle",
+    };
   }
 
   async createSpaceStream() {

@@ -550,8 +550,27 @@ class SqliteWorkerSupervisor {
           spacesToConnect,
         );
 
-        for (const spaceId of spacesToConnect) {
-          await this.connectSpaceStream(spaceId);
+        // Connect spaces in parallel - one failing/slow space shouldn't block others
+        const results = await Promise.allSettled(
+          spacesToConnect.map((spaceId) => this.connectSpaceStream(spaceId)),
+        );
+
+        // Log any failures for observability
+        results.forEach((result, idx) => {
+          if (result.status === "rejected") {
+            console.error(`Failed to connect space`, {
+              streamId: spacesToConnect[idx],
+              error: result.reason,
+            });
+          }
+        });
+
+        const succeeded = results.filter((r) => r.status === "fulfilled").length;
+        const failed = results.filter((r) => r.status === "rejected").length;
+        if (failed > 0) {
+          console.warn(
+            `Space connection summary: ${succeeded} succeeded, ${failed} failed`,
+          );
         }
       },
     };
