@@ -430,6 +430,18 @@ export class ConnectedSpace {
   }
 
   /**
+   * Send multiple events to this space in a single batch.
+   * More efficient than calling sendEvent multiple times.
+   */
+  async sendEvents(events: Event[]): Promise<void> {
+    if (events.length === 0) return;
+    await this.#leaf.sendEvents(
+      this.streamDid,
+      events.map((event) => encode(event)),
+    );
+  }
+
+  /**
    * Current backfill status.
    */
   get backfillStatus(): BackfillStatus {
