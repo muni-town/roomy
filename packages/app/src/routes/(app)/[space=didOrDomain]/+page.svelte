@@ -18,6 +18,7 @@
   import { flags } from "$lib/config";
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
+  import type { StreamIndex } from "@roomy/sdk";
 
   const spaceId = $derived(current.joinedSpace?.id);
 
@@ -40,12 +41,13 @@
   });
 
   let threadsQuery = new LiveQuery<ThreadInfo>(
-    () => {
-      return sql`
+    () => sql`
         select json_object(
-          'id', id, 
+          'id', id,
           'name', name,
           'channel', channel,
+          'channelName', channelName,
+          'canonicalParent', canonicalParent,
           'activity', json(activity),
           'kind', label
         ) as json
@@ -54,7 +56,9 @@
             r.entity as id,
             i.name as name,
             null as channel,
+            null as channelName,
             r.label as label,
+            null as canonicalParent,
             (
               select json_object(
                 'members', json_group_array(json_object(
@@ -95,7 +99,9 @@
             r.entity as id,
             i.name as name,
             ci.name as channel,
+            ci.name as channelName,
             r.label as label,
+            pe.head as canonicalParent,
             (
               select json_object(
                 'members', json_group_array(json_object(
@@ -107,7 +113,11 @@
                 select
                   case when override.entity is not null then null else coalesce(author_override_info.avatar, author_info.avatar) end as avatar,
                   coalesce(author_override_info.name, author_info.name) as author,
-                  coalesce(override.timestamp, ulid_timestamp(me.id)) as timestamp
+                  coalesce(override.timestamp, ulid_timestamp(me.id)) as timestamp,
+                  row_number() over (
+                    partition by author
+                    order by me.id desc
+                  ) as row_num
                 from comp_content mc
                   join entities me on me.id = mc.entity
                   join edges author_edge on author_edge.head = me.id and author_edge.label = 'author'
@@ -115,23 +125,20 @@
                   left join comp_override_meta override on override.entity = me.id
                   left join comp_info author_override_info on author_override_info.entity = override.author
                 where me.room = e.id
-                group by author
-                order by me.id desc
-                limit 3
-              )
+              ) where row_num = 1 limit 3
             ) as activity
           from comp_room r
             join comp_info i on i.entity = r.entity
             join entities e on e.id = r.entity
-            left join comp_info ci on ci.entity = e.room
+            left join edges pe on pe.tail = r.entity and pe.label = 'link'
+          left join comp_info ci on ci.entity = pe.head
           where
             e.stream_id = ${spaceId}
               and
             r.label = 'space.roomy.thread'
         )
         order by activity ->> 'latestTimestamp' desc
-      `;
-    },
+      `,
     (row) => JSON.parse(row.json),
   );
 
@@ -150,8 +157,8 @@
 
   $effect(() => {
     if (!spaceId || current.space.status !== "joined") return;
-    // Fetch all link events in the space
-    backend.fetchLinks(spaceId, 0, 1000);
+    // Fetch all link events in space
+    backend.fetchLinks(spaceId, 1 as StreamIndex, 1000);
   });
 </script>
 

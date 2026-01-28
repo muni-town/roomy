@@ -8,7 +8,11 @@
     threads,
     emptyMessage = "No items",
     parent,
-  }: { threads: ThreadInfo[]; emptyMessage?: string; parent?: Ulid } = $props();
+  }: {
+    threads: ThreadInfo[];
+    emptyMessage?: string;
+    parent?: Ulid;
+  } = $props();
 </script>
 
 {#if threads.length}

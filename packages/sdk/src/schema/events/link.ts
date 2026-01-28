@@ -16,11 +16,18 @@ export const CreateRoomLink = defineEvent(
   ({ streamId, event, user }) => {
     return [
       sql`
-          insert or replace into edges (head, tail, label)
+          insert or replace into edges (head, tail, label, payload)
           values (
             ${event.room},
             ${event.linkToRoom},
-            'link'
+            'link',
+            json_object('canonical_parent', (
+              SELECT COUNT(*) = 0
+              FROM edges
+              WHERE head = ${event.room}
+                AND tail = ${event.linkToRoom}
+                AND label = 'link'
+            ))
           )
         `,
       // create system message announcing the link
@@ -45,9 +52,10 @@ export const CreateRoomLink = defineEvent(
         values (
           ${event.id},
           'text/markdown',
-          cast(('[@' || (select handle from comp_user where did = ${user}) || '](/user/' || ${user} || ') ' || ${event.isCreationLink ? "created [" : "linked to ]"} || (select name from comp_info where entity = ${event.linkToRoom}) || '](' || ${event.linkToRoom} || ').') as blob),
+          cast(('[@' || (select handle from comp_user where did = ${user}) || '](/user/' || ${user} || ') ' || ${event.isCreationLink ? "created [" : "linked to "} || (select name from comp_info where entity = ${event.linkToRoom}) || '](' || ${event.linkToRoom} || ').') as blob),
           ${event.id}
-      )`,
+      )
+      `,
     ];
   },
 );

@@ -14,6 +14,13 @@
   }: { thread: ThreadInfo; activityCountMax?: number; parent?: Ulid } =
     $props();
 
+  $effect(() => {
+    console.log("boardviewitem", {
+      parent,
+      thread: $state.snapshot(thread),
+    });
+  });
+
   let lastMessageTimestamp = $derived(thread.activity.latestTimestamp);
 
   const formatDistanceLocale: Pick<Locale, "formatDistance"> = {
@@ -45,7 +52,7 @@
 </script>
 
 <a
-  href={`/${page.params.space}/${thread.id}${parent ? "?parent=" + parent : ""}`}
+  href={`/${page.params.space}/${thread.id}${parent ? "?parent=" + parent : thread.canonicalParent ? "?parent=" + thread.canonicalParent : ""}`}
 >
   <Box class="flex items-baseline p-3">
     <div

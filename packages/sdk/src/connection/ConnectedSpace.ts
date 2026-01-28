@@ -101,25 +101,28 @@ export class ConnectedSpace {
     const expectedCid = await config.module.cid;
 
     if (previousModuleCid !== expectedCid) {
-      console.info(
+      console.debug(
         `Module for stream ${config.streamDid} (${previousModuleCid}) differs from expected (${expectedCid}), trying to update...`,
       );
 
       if (!(await config.client.leaf.hasModule(expectedCid))) {
-        console.log("Leaf server doesn't have module, uploading:", expectedCid);
+        console.log("Leaf server doesn't have module, uploading:", {
+          streamDid: config.streamDid,
+          expectedCid,
+        });
         await config.client.leaf.uploadModule(config.module.def);
       }
 
       try {
         await config.client.leaf.updateModule(config.streamDid, expectedCid);
-        console.log(
+        console.info(
           `Updated stream ( ${config.streamDid} ) module to ${expectedCid}`,
         );
       } catch (e) {
         if (previousModuleCid) {
           // May fail if user is not admin, which is fine
           console.warn(
-            "Could not update space module (user may not be admin):",
+            `Could not update space module ${config.streamDid} (user may not be admin):`,
             e,
           );
         } else {
