@@ -39,6 +39,7 @@ import {
   removeDiscordReactionFromRoomy,
 } from "../roomy/to.js";
 import { getConnectedSpace } from "../roomy/client.js";
+import { EventBatcher } from "../roomy/batcher.js";
 
 
 export const botState = {
@@ -236,6 +237,9 @@ async function backfillMessagesForChannel(
     after = BigInt(cachedLatest);
   }
 
+  // Use event batcher to send events in batches of 100
+  const batcher = new EventBatcher(ctx.connectedSpace);
+
   while (true) {
     try {
       const messages = await bot.helpers.getMessages(channel.id, {
@@ -250,16 +254,24 @@ async function backfillMessagesForChannel(
       // Process oldest first (messages come newest-first from API)
       const sortedMessages = [...messages].reverse();
       for (const message of sortedMessages) {
-        await ensureRoomyMessageForDiscordMessage(ctx, roomyRoomId, message);
+        await ensureRoomyMessageForDiscordMessage(ctx, roomyRoomId, message, batcher);
         after = message.id;
       }
+
+      // Flush after each Discord API batch
+      await batcher.flush();
 
       await ctx.latestMessagesInChannel.put(channel.id.toString(), after.toString());
     } catch (e) {
       console.warn(`Error backfilling messages for channel ${channel.id}: ${e}`);
+      // Flush any remaining events before exiting
+      await batcher.flush();
       break;
     }
   }
+
+  // Final flush to ensure all events are sent
+  await batcher.flush();
 }
 
 /** Bridge all past messages in a single Discord guild to Roomy */

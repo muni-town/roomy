@@ -37,6 +37,7 @@ import {
   setRoomyAttrs,
   recordError,
 } from "../tracing.js";
+import { EventBatcher } from "./batcher.js";
 
 // const tracer = trace.getTracer("discordBot");
 
@@ -57,6 +58,7 @@ function computeProfileHash(
 /**
  * Ensure a Discord user's profile is synced to Roomy.
  * Uses hash-based change detection to avoid redundant updates.
+ * @param batcher - Optional event batcher for bulk operations
  */
 export async function ensureRoomyProfileForDiscordUser(
   ctx: GuildContext,
@@ -67,6 +69,7 @@ export async function ensureRoomyProfileForDiscordUser(
     globalName?: string | null;
     avatar?: string | null;
   },
+  batcher?: EventBatcher,
 ): Promise<void> {
   return tracer.startActiveSpan(
     "sync.profile.discord_to_roomy",
@@ -135,7 +138,11 @@ export async function ensureRoomyProfileForDiscordUser(
           },
         };
 
-        await ctx.connectedSpace.sendEvent(event);
+        if (batcher) {
+          await batcher.add(event);
+        } else {
+          await ctx.connectedSpace.sendEvent(event);
+        }
         console.log(
           `Synced profile for Discord user ${user.username} (${userIdStr})`,
         );
@@ -458,6 +465,7 @@ export async function ensureRoomyMessageForDiscordMessage(
   ctx: GuildContext,
   roomyRoomId: string,
   message: MessageProperties,
+  batcher?: EventBatcher,
 ): Promise<string | null> {
   return tracer.startActiveSpan(
     "sync.message.discord_to_roomy",
@@ -490,14 +498,18 @@ export async function ensureRoomyMessageForDiscordMessage(
         await tracer.startActiveSpan("sync.user.ensure", async (userSpan) => {
           try {
             setDiscordAttrs(userSpan, { userId: message.author.id });
-            await ensureRoomyProfileForDiscordUser(ctx, {
-              id: message.author.id,
-              username: message.author.username,
-              discriminator: message.author.discriminator,
-              globalName: (message.author as any).globalName ?? null,
-              avatar:
-                (message.author.avatar as unknown as string | null) ?? null,
-            });
+            await ensureRoomyProfileForDiscordUser(
+              ctx,
+              {
+                id: message.author.id,
+                username: message.author.username,
+                discriminator: message.author.discriminator,
+                globalName: (message.author as any).globalName ?? null,
+                avatar:
+                  (message.author.avatar as unknown as string | null) ?? null,
+              },
+              batcher,
+            );
           } catch (error) {
             recordError(userSpan, error);
             throw error;
@@ -617,7 +629,11 @@ export async function ensureRoomyMessageForDiscordMessage(
         await tracer.startActiveSpan("sync.message.send", async (sendSpan) => {
           try {
             setRoomyAttrs(sendSpan, { eventId: messageId });
-            await ctx.connectedSpace.sendEvent(event);
+            if (batcher) {
+              await batcher.add(event);
+            } else {
+              await ctx.connectedSpace.sendEvent(event);
+            }
             console.log(
               `Created Roomy message ${messageId} for Discord message ${message.id}`,
             );
