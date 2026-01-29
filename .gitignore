@@ -13,6 +13,7 @@ node_modules
 **/.llm.**
 **/.claude/*
 .chainlink
+**/.letta/*
 
 # Testing
 test-results
