@@ -8,7 +8,6 @@
   }: {
     profile: {
       id?: string;
-      did?: string;
       handle?: string;
       displayName?: string;
       avatar?: string;
@@ -51,7 +50,7 @@
     <Avatar.Root class="size-24 sm:size-32">
       <Avatar.Image src={profile?.avatar} class="rounded-full" />
       <Avatar.Fallback>
-        <AvatarBeam name={profile?.did || profile?.handle || "unknown"} />
+        <AvatarBeam name={profile?.id || profile?.handle || "unknown"} />
       </Avatar.Fallback>
     </Avatar.Root>
 
@@ -71,7 +70,7 @@
         </h1>
         {#if profile?.handle}
           <a
-            href="https://aturi.to/{profile.did}"
+            href="https://aturi.to/{profile.id}"
             target="_blank"
             rel="noopener noreferrer"
             class="text-sm text-accent-600 dark:text-accent-400 transition-colors font-medium"
