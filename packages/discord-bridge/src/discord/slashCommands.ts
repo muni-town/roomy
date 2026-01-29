@@ -199,7 +199,7 @@ export async function handleSlashCommandInteraction(interaction: any) {
 
         // Check if the bridge can access this space
         const client = getRoomyClient();
-        const spaceExists = await client.checkStreamExists(streamDid);
+        const spaceExists = !!(await client.getSpaceInfo(streamDid))?.name;
 
         if (!spaceExists) {
           await interaction.edit({

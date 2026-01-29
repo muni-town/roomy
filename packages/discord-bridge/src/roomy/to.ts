@@ -15,6 +15,7 @@
 // import { discordWebhookTokensForBridge } from "../db";
 // import { getRoomyThreadForChannel } from "./from";
 
+import { createHash } from "node:crypto";
 import { avatarUrl, type Emoji } from "@discordeno/bot";
 import { ChannelProperties, MessageProperties } from "../discord/types";
 import { GuildContext } from "../types";
@@ -43,7 +44,15 @@ import { EventBatcher } from "./batcher.js";
 // const tracer = trace.getTracer("discordBot");
 
 /**
- * Compute a simple hash from Discord user profile data.
+ * Compute a collision-resistant fingerprint from arbitrary string data.
+ * Uses SHA-256 and returns a 32-character hex string (128 bits).
+ */
+function fingerprint(data: string): string {
+  return createHash("sha256").update(data).digest("hex").slice(0, 32);
+}
+
+/**
+ * Compute a fingerprint from Discord user profile data.
  * Used for change detection to avoid redundant profile updates.
  */
 function computeProfileHash(
@@ -52,13 +61,11 @@ function computeProfileHash(
   avatar: string | null,
 ): string {
   const data = `${username}|${globalName ?? ""}|${avatar ?? ""}`;
-  // Simple hash: base64 encode and take first 16 chars
-  return Buffer.from(data).toString("base64").slice(0, 16);
+  return fingerprint(data);
 }
 
 /**
- * Compute a hash from sidebar structure for change detection.
- * Uses JSON serialization to capture the full structure.
+ * Compute a fingerprint from sidebar structure for change detection.
  */
 function computeSidebarHash(
   categories: { name: string; children: Ulid[] }[],
@@ -70,8 +77,7 @@ function computeSidebarHash(
       children: [...c.children].sort(),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
-  const data = JSON.stringify(normalized);
-  return Buffer.from(data).toString("base64").slice(0, 32);
+  return fingerprint(JSON.stringify(normalized));
 }
 
 /**

@@ -60,7 +60,7 @@ export async function initRoomyClient(): Promise<RoomyClient> {
       agent: atpAgent,
       leafUrl: LEAF_URL,
       leafDid: LEAF_SERVER_DID,
-      spaceHandleNsid: STREAM_HANDLE_NSID,
+      profileSpaceNsid: STREAM_HANDLE_NSID,
       spaceNsid: STREAM_NSID,
     },
     {
