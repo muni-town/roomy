@@ -70,15 +70,12 @@
       {/if}
       {thread.name}
     </div>
-    {#if thread.channel}
-      <Badge class="mx-2" size="sm">{thread.channel}</Badge>
-    {/if}
 
     <div class="ml-auto flex items-center shrink-0">
       <!-- <div class="grow"></div> -->
 
       <div class="grow shrink-0 text-end">
-        <span class="text-base-500 text-sm mr-2"
+        <span class="text-base-500 text-sm"
           >{#if lastMessageTimestamp}
             {#if Date.now() - lastMessageTimestamp < 60 * 1000}
               Just Now
@@ -90,6 +87,9 @@
           {/if}</span
         >
       </div>
+      {#if thread.channel}
+        <Badge class="mx-2" size="sm">{thread.channel}</Badge>
+      {/if}
       <AvatarGroup
         avatarClass="size-8"
         users={thread.activity.members
