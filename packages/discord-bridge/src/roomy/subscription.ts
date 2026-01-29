@@ -17,33 +17,16 @@ import {
 } from "../db.js";
 
 /**
- * Extension type key for Discord message origin metadata.
+ * Extension type key constants.
+ * Exported for use in to.ts to avoid duplication and typos.
  */
-const DISCORD_MESSAGE_ORIGIN_KEY =
-  "space.roomy.extension.discordMessageOrigin.v0" as const;
-
-/**
- * Extension type key for Discord room origin metadata.
- */
-const DISCORD_ORIGIN_KEY = "space.roomy.extension.discordOrigin.v0" as const;
-
-/**
- * Extension type key for Discord user origin metadata.
- */
-const DISCORD_USER_ORIGIN_KEY =
-  "space.roomy.extension.discordUserOrigin.v0" as const;
-
-/**
- * Extension type key for Discord sidebar origin metadata.
- */
-const DISCORD_SIDEBAR_ORIGIN_KEY =
-  "space.roomy.extension.discordSidebarOrigin.v0" as const;
-
-/**
- * Extension type key for Discord room link origin metadata.
- */
-const DISCORD_ROOM_LINK_ORIGIN_KEY =
-  "space.roomy.extension.discordRoomLinkOrigin.v0" as const;
+export const DISCORD_EXTENSION_KEYS = {
+  MESSAGE_ORIGIN: "space.roomy.extension.discordMessageOrigin.v0" as const,
+  ROOM_ORIGIN: "space.roomy.extension.discordOrigin.v0" as const,
+  USER_ORIGIN: "space.roomy.extension.discordUserOrigin.v0" as const,
+  SIDEBAR_ORIGIN: "space.roomy.extension.discordSidebarOrigin.v0" as const,
+  ROOM_LINK_ORIGIN: "space.roomy.extension.discordRoomLinkOrigin.v0" as const,
+} as const;
 
 interface DiscordMessageOrigin {
   snowflake: string;
@@ -227,20 +210,36 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
 }
 
 /**
+ * Generic helper to extract an extension from an event.
+ * @param event - The event to extract from
+ * @param extensionKey - The extension key to look for
+ * @param eventType - Optional event type to filter by
+ * @returns The extension value or undefined
+ */
+function extractExtension<T>(
+  event: DecodedStreamEvent["event"],
+  extensionKey: string,
+  eventType?: string,
+): T | undefined {
+  if (eventType && event.$type !== eventType) return undefined;
+
+  const extensions = (event as { extensions?: Record<string, unknown> })
+    .extensions;
+  if (!extensions) return undefined;
+
+  return extensions[extensionKey] as T | undefined;
+}
+
+/**
  * Extract Discord message origin extension from an event if present.
  */
 function extractDiscordMessageOrigin(
   event: DecodedStreamEvent["event"],
 ): DiscordMessageOrigin | undefined {
-  // Message events have extensions at the top level
-  const extensions = (event as { extensions?: Record<string, unknown> })
-    .extensions;
-  if (!extensions) return undefined;
-
-  const origin = extensions[DISCORD_MESSAGE_ORIGIN_KEY] as
-    | DiscordMessageOrigin
-    | undefined;
-  return origin;
+  return extractExtension<DiscordMessageOrigin>(
+    event,
+    DISCORD_EXTENSION_KEYS.MESSAGE_ORIGIN,
+  );
 }
 
 /**
@@ -249,13 +248,10 @@ function extractDiscordMessageOrigin(
 function extractDiscordOrigin(
   event: DecodedStreamEvent["event"],
 ): DiscordOrigin | undefined {
-  // Room events have extensions at the top level
-  const extensions = (event as { extensions?: Record<string, unknown> })
-    .extensions;
-  if (!extensions) return undefined;
-
-  const origin = extensions[DISCORD_ORIGIN_KEY] as DiscordOrigin | undefined;
-  return origin;
+  return extractExtension<DiscordOrigin>(
+    event,
+    DISCORD_EXTENSION_KEYS.ROOM_ORIGIN,
+  );
 }
 
 /**
@@ -264,16 +260,11 @@ function extractDiscordOrigin(
 function extractDiscordUserOrigin(
   event: DecodedStreamEvent["event"],
 ): DiscordUserOrigin | undefined {
-  if (event.$type !== "space.roomy.user.updateProfile.v0") return undefined;
-
-  const extensions = (event as { extensions?: Record<string, unknown> })
-    .extensions;
-  if (!extensions) return undefined;
-
-  const origin = extensions[DISCORD_USER_ORIGIN_KEY] as
-    | DiscordUserOrigin
-    | undefined;
-  return origin;
+  return extractExtension<DiscordUserOrigin>(
+    event,
+    DISCORD_EXTENSION_KEYS.USER_ORIGIN,
+    "space.roomy.user.updateProfile.v0",
+  );
 }
 
 /**
@@ -282,16 +273,11 @@ function extractDiscordUserOrigin(
 function extractDiscordSidebarOrigin(
   event: DecodedStreamEvent["event"],
 ): DiscordSidebarOrigin | undefined {
-  if (event.$type !== "space.roomy.space.updateSidebar.v0") return undefined;
-
-  const extensions = (event as { extensions?: Record<string, unknown> })
-    .extensions;
-  if (!extensions) return undefined;
-
-  const origin = extensions[DISCORD_SIDEBAR_ORIGIN_KEY] as
-    | DiscordSidebarOrigin
-    | undefined;
-  return origin;
+  return extractExtension<DiscordSidebarOrigin>(
+    event,
+    DISCORD_EXTENSION_KEYS.SIDEBAR_ORIGIN,
+    "space.roomy.space.updateSidebar.v0",
+  );
 }
 
 /**
@@ -302,13 +288,10 @@ function extractDiscordRoomLinkOrigin(
 ): { origin: DiscordRoomLinkOrigin; linkToRoom: string } | undefined {
   if (event.$type !== "space.roomy.link.createRoomLink.v0") return undefined;
 
-  const extensions = (event as { extensions?: Record<string, unknown> })
-    .extensions;
-  if (!extensions) return undefined;
-
-  const origin = extensions[DISCORD_ROOM_LINK_ORIGIN_KEY] as
-    | DiscordRoomLinkOrigin
-    | undefined;
+  const origin = extractExtension<DiscordRoomLinkOrigin>(
+    event,
+    DISCORD_EXTENSION_KEYS.ROOM_LINK_ORIGIN,
+  );
   if (!origin) return undefined;
 
   const linkToRoom = (event as { linkToRoom?: string }).linkToRoom;

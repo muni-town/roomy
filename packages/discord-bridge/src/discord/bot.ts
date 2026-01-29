@@ -27,8 +27,10 @@ import {
   registeredBridges,
   SyncedIds,
   syncedIdsForBridge,
+  syncedProfilesForBridge,
   syncedReactionsForBridge,
   syncedRoomLinksForBridge,
+  syncedSidebarHashForBridge,
 } from "../db.js";
 import { GuildContext } from "../types.js";
 import {
@@ -96,7 +98,15 @@ export async function getGuildContext(guildId: bigint): Promise<GuildContext | u
     discordGuildId: guildId,
     roomySpaceId: spaceId,
   });
-  return { guildId, spaceId, syncedIds, latestMessagesInChannel, syncedReactions, syncedRoomLinks, connectedSpace };
+  const syncedProfiles = syncedProfilesForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  const syncedSidebarHash = syncedSidebarHashForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  return { guildId, spaceId, syncedIds, latestMessagesInChannel, syncedReactions, syncedRoomLinks, syncedProfiles, syncedSidebarHash, connectedSpace };
 }
 
 /**

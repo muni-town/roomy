@@ -40,6 +40,7 @@ import {
   recordError,
 } from "../tracing.js";
 import { EventBatcher } from "./batcher.js";
+import { DISCORD_EXTENSION_KEYS } from "./subscription.js";
 
 // const tracer = trace.getTracer("discordBot");
 
@@ -153,8 +154,8 @@ export async function ensureRoomyProfileForDiscordUser(
           name: user.globalName ?? user.username,
           avatar: userAvatarUrl,
           extensions: {
-            "space.roomy.extension.discordUserOrigin.v0": {
-              $type: "space.roomy.extension.discordUserOrigin.v0",
+            [DISCORD_EXTENSION_KEYS.USER_ORIGIN]: {
+              $type: DISCORD_EXTENSION_KEYS.USER_ORIGIN,
               snowflake: userIdStr,
               guildId: ctx.guildId.toString(),
               profileHash: hash,
@@ -208,11 +209,11 @@ export async function ensureRoomyChannelForDiscordChannel(
     kind: "space.roomy.channel",
     name: channel.name || "Untitled",
     extensions: {
-      "space.roomy.extension.discordOrigin.v0": {
+      [DISCORD_EXTENSION_KEYS.ROOM_ORIGIN]: {
         snowflake: channel.id.toString(),
         guildId: ctx.guildId.toString(),
       },
-    },
+    } as Record<string, unknown>,
   };
 
   await ctx.connectedSpace.sendEvent(event);
@@ -322,8 +323,8 @@ export async function ensureRoomySidebarForCategoriesAndChannels(
     $type: "space.roomy.space.updateSidebar.v0",
     categories: sidebarCategories,
     extensions: {
-      "space.roomy.extension.discordSidebarOrigin.v0": {
-        $type: "space.roomy.extension.discordSidebarOrigin.v0",
+      [DISCORD_EXTENSION_KEYS.SIDEBAR_ORIGIN]: {
+        $type: DISCORD_EXTENSION_KEYS.SIDEBAR_ORIGIN,
         guildId: ctx.guildId.toString(),
         sidebarHash: hash,
       },
@@ -369,11 +370,11 @@ export async function ensureRoomyThreadForDiscordThread(
     kind: "space.roomy.thread",
     name: thread.name || "Untitled Thread",
     extensions: {
-      "space.roomy.extension.discordOrigin.v0": {
+      [DISCORD_EXTENSION_KEYS.ROOM_ORIGIN]: {
         snowflake: thread.id.toString(),
         guildId: ctx.guildId.toString(),
       },
-    },
+    } as Record<string, unknown>,
   };
 
   await ctx.connectedSpace.sendEvent(createRoomEvent);
@@ -403,8 +404,8 @@ export async function ensureRoomyThreadForDiscordThread(
       linkToRoom: roomId,
       isCreationLink: true,
       extensions: {
-        "space.roomy.extension.discordRoomLinkOrigin.v0": {
-          $type: "space.roomy.extension.discordRoomLinkOrigin.v0",
+        [DISCORD_EXTENSION_KEYS.ROOM_LINK_ORIGIN]: {
+          $type: DISCORD_EXTENSION_KEYS.ROOM_LINK_ORIGIN,
           parentSnowflake: thread.parentId.toString(),
           childSnowflake: thread.id.toString(),
           guildId: ctx.guildId.toString(),
@@ -679,8 +680,8 @@ export async function ensureRoomyMessageForDiscordMessage(
         // 4. Build CreateMessage event
         const messageId = newUlid();
         const extensions: Record<string, unknown> = {
-          "space.roomy.extension.discordMessageOrigin.v0": {
-            $type: "space.roomy.extension.discordMessageOrigin.v0",
+          [DISCORD_EXTENSION_KEYS.MESSAGE_ORIGIN]: {
+            $type: DISCORD_EXTENSION_KEYS.MESSAGE_ORIGIN,
             snowflake: message.id.toString(),
             channelId: message.channelId.toString(),
             guildId: ctx.guildId.toString(),

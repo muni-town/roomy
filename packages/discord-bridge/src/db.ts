@@ -217,24 +217,39 @@ export const leafCursors = db.sublevel<string, number>("leafCursors", {
 export type LeafCursors = typeof leafCursors;
 
 /**
+ * Generic factory for creating per-bridge KV stores.
+ * Reduces duplication in store creation by providing a single function
+ * that handles the common pattern of creating scoped sublevels.
+ *
+ * @param storeName - Base name for the store (e.g., "syncedProfiles")
+ * @returns Factory function that creates a store for a specific guild-space pair
+ */
+function createBridgeStoreFactory<TValue = string>(
+  storeName: string,
+  valueEncoding: "utf8" | "json" = "utf8",
+) {
+  return ({
+    discordGuildId,
+    roomySpaceId,
+  }: {
+    discordGuildId: bigint;
+    roomySpaceId: string;
+  }) =>
+    db.sublevel<string, TValue>(
+      `${storeName}:${discordGuildId.toString()}:${roomySpaceId}`,
+      {
+        keyEncoding: "utf8",
+        valueEncoding,
+      },
+    );
+}
+
+/**
  * Per-space profile hash tracking for Discord users.
  * Key: Discord user snowflake
  * Value: profile hash (for change detection)
  */
-export const syncedProfilesForBridge = ({
-  discordGuildId,
-  roomySpaceId,
-}: {
-  discordGuildId: bigint;
-  roomySpaceId: string;
-}) =>
-  db.sublevel<string, string>(
-    `syncedProfiles:${discordGuildId.toString()}:${roomySpaceId}`,
-    {
-      keyEncoding: "utf8",
-      valueEncoding: "utf8",
-    },
-  );
+export const syncedProfilesForBridge = createBridgeStoreFactory("syncedProfiles");
 
 export type SyncedProfiles = ReturnType<typeof syncedProfilesForBridge>;
 
@@ -243,20 +258,7 @@ export type SyncedProfiles = ReturnType<typeof syncedProfilesForBridge>;
  * Key: `${discordMessageId}:${discordUserId}:${emojiKey}` where emojiKey is emoji name or id
  * Value: Roomy reaction event ID (used for removal)
  */
-export const syncedReactionsForBridge = ({
-  discordGuildId,
-  roomySpaceId,
-}: {
-  discordGuildId: bigint;
-  roomySpaceId: string;
-}) =>
-  db.sublevel<string, string>(
-    `syncedReactions:${discordGuildId.toString()}:${roomySpaceId}`,
-    {
-      keyEncoding: "utf8",
-      valueEncoding: "utf8",
-    },
-  );
+export const syncedReactionsForBridge = createBridgeStoreFactory("syncedReactions");
 
 export type SyncedReactions = ReturnType<typeof syncedReactionsForBridge>;
 
@@ -265,20 +267,8 @@ export type SyncedReactions = ReturnType<typeof syncedReactionsForBridge>;
  * Key: "sidebar" (single key per space)
  * Value: hash of serialized sidebar structure (for change detection)
  */
-export const syncedSidebarHashForBridge = ({
-  discordGuildId,
-  roomySpaceId,
-}: {
-  discordGuildId: bigint;
-  roomySpaceId: string;
-}) =>
-  db.sublevel<string, string>(
-    `syncedSidebarHash:${discordGuildId.toString()}:${roomySpaceId}`,
-    {
-      keyEncoding: "utf8",
-      valueEncoding: "utf8",
-    },
-  );
+export const syncedSidebarHashForBridge =
+  createBridgeStoreFactory("syncedSidebarHash");
 
 export type SyncedSidebarHash = ReturnType<typeof syncedSidebarHashForBridge>;
 
@@ -287,19 +277,6 @@ export type SyncedSidebarHash = ReturnType<typeof syncedSidebarHashForBridge>;
  * Key: `${parentRoomyId}:${childRoomyId}` (parent→child link)
  * Value: Roomy link event ID
  */
-export const syncedRoomLinksForBridge = ({
-  discordGuildId,
-  roomySpaceId,
-}: {
-  discordGuildId: bigint;
-  roomySpaceId: string;
-}) =>
-  db.sublevel<string, string>(
-    `syncedRoomLinks:${discordGuildId.toString()}:${roomySpaceId}`,
-    {
-      keyEncoding: "utf8",
-      valueEncoding: "utf8",
-    },
-  );
+export const syncedRoomLinksForBridge = createBridgeStoreFactory("syncedRoomLinks");
 
 export type SyncedRoomLinks = ReturnType<typeof syncedRoomLinksForBridge>;
