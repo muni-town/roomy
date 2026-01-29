@@ -30,6 +30,11 @@ export type BackendInterface = {
   getSessionId(): Promise<Ulid>;
   login(username: Handle): Promise<string>;
   logout(): Promise<void>;
+  getMembers(
+    spaceDid: StreamDid,
+  ): Promise<
+    { did: string; handle?: string; name?: string; avatar?: string }[]
+  >;
   getSpaceInfo(
     streamDid: StreamDid,
   ): Promise<{ name?: string; avatar?: string } | undefined>;

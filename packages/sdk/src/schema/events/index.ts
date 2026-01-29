@@ -1,4 +1,4 @@
-import { type, Type } from "arktype";
+import { Type } from "arktype";
 import { decodeTime } from "ulidx";
 import { Ulid, StreamDid, UserDid, fromBytes } from "../primitives";
 import type { EdgesMap, EdgesWithPayload, SqlStatement } from "../../types";

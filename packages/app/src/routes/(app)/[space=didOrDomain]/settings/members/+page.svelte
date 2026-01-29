@@ -1,38 +1,19 @@
 <script lang="ts">
-  import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { current } from "$lib/queries";
-  import { sql } from "$lib/utils/sqlTemplate";
   import { backend, backendStatus } from "$lib/workers";
   import { Button } from "@fuxui/base";
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { newUlid, UserDid } from "@roomy/sdk";
 
+  import IconMdiLoading from "~icons/mdi/loading";
+
   const spaceId = $derived(current.joinedSpace?.id);
 
-  const users = new LiveQuery<{
-    id: string;
-    name: string | null;
-    avatar: string | null;
-    info: { can: "admin" | "post" };
-  }>(
-    () => sql`
-    select
-      tail as id,
-      payload as info,
-      i.name as name,
-      i.avatar as avatar
-    from edges
-      left join comp_info i on i.entity = tail
-    where
-      label = 'member'
-        and
-      head = ${spaceId}
-  `,
-    (row) => ({
-      ...row,
-      info: JSON.parse(row.info),
-    }),
+  const members = $derived(
+    current.space.status == "joined"
+      ? backend.getMembers(current.space.space.id)
+      : undefined,
   );
 
   async function addAdmin(userId: string) {
@@ -62,25 +43,32 @@
       Members
     </h2>
 
-    <ul class="flex flex-col gap-2">
-      {#each users.result || [] as member}
-        <li class="flex items-center gap-4">
-          <a class="flex row gap-3 items-center" href={`/user/${member.id}`}>
-            <Avatar.Root class="size-8 sm:size-10">
-              <Avatar.Image src={member.avatar} class="rounded-full" />
-              <Avatar.Fallback>
-                <AvatarBeam name={member.id} />
-              </Avatar.Fallback>
-            </Avatar.Root>
-            {member.name}</a
-          >
-          {#if current.joinedSpace?.permissions.find(([user, perm]) => user == member.id && perm != "admin")}
-            <Button onclick={() => addAdmin(member.id)}>Make Admin</Button>
-          {:else if backendStatus.authState?.state === "authenticated" && member.id != backendStatus.authState.did}
-            <Button onclick={() => removeAdmin(member.id)}>Demote Admin</Button>
-          {/if}
-        </li>
-      {/each}
-    </ul>
+    {#await members}
+      <IconMdiLoading class="animate-spin" font-size={40} />
+    {:then members}
+      <ul class="flex flex-col gap-2">
+        {#each members || [] as member}
+          <li class="flex items-center gap-4">
+            <a class="flex row gap-3 items-center" href={`/user/${member.did}`}>
+              <Avatar.Root class="size-8 sm:size-10">
+                <Avatar.Image src={member.avatar} class="rounded-full" />
+                <Avatar.Fallback>
+                  <AvatarBeam name={member.did} />
+                </Avatar.Fallback>
+              </Avatar.Root>
+              {member.name}
+              {member.handle ? "@" + member.handle : ""}</a
+            >
+            {#if current.space.status == "joined" && !current.space.space.permissions.find(([user, perm]) => user == member.did && perm == "admin")}
+              <Button onclick={() => addAdmin(member.did)}>Make Admin</Button>
+            {:else if backendStatus.authState?.state === "authenticated" && member.did != backendStatus.authState.did}
+              <Button onclick={() => removeAdmin(member.did)}
+                >Demote Admin</Button
+              >
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    {/await}
   </div>
 </div>

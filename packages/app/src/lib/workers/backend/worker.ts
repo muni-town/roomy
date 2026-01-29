@@ -30,6 +30,7 @@ import type {
 } from "../sqlite/types";
 import {
   ConnectedSpace,
+  Did,
   ensureEntity,
   modules,
   parseEvents,
@@ -307,6 +308,33 @@ class WorkerSupervisor {
       ensurePersonalStream: async () => this.ensurePersonalStream(),
       connectPendingSpaces: async () => {
         await this.sqlite.sqliteWorker.connectPendingSpaces();
+      },
+      getMembers: async (spaceDid) => {
+        await this.#connected.promise;
+        // TODO: we should move this logic to the SDK
+        const resp = await this.client.leaf.query(spaceDid, {
+          name: "members",
+          params: {},
+        });
+
+        return Promise.all(
+          resp
+            .flatMap((x) => {
+              if (x.user_id?.$type == "muni.town.sqliteValue.text") {
+                return [Did.assert(x.user_id.value)];
+              }
+              return [];
+            })
+            .map(async (did) => {
+              const profile = await this.client.getProfile(did);
+              return {
+                did,
+                avatar: profile?.avatar,
+                name: profile?.displayName,
+                handle: profile?.handle,
+              };
+            }),
+        );
       },
     };
   }

@@ -100,6 +100,10 @@ const spaceModuleDef: BasicModule = {
       user_id text primary key -- did
     ) strict;
 
+    create table if not exists members (
+      user_id text primary key
+    ) strict;
+
     create table if not exists metadata_events (
       idx integer primary key
     ) strict;
@@ -160,6 +164,17 @@ const spaceModuleDef: BasicModule = {
     where user_id = (select drisl_extract(payload, '.userDid') from event)
       and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.removeAdmin.v0';
 
+    -- Add member
+    insert or ignore into members (user_id)
+    select user
+    from event
+    where drisl_extract(payload, '.$type') = 'space.roomy.space.joinSpace.v0';
+
+    -- Remove member
+    delete from members
+    where user_id = (select user from event)
+      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.leaveSpace.v0';
+
     -- Update space info
     update space_info
     set
@@ -212,6 +227,11 @@ const spaceModuleDef: BasicModule = {
     {
       name: "stream_info",
       sql: `select * from stream_info;`,
+      params: [],
+    },
+    {
+      name: "members",
+      sql: `select user_id from members`,
       params: [],
     },
     {
