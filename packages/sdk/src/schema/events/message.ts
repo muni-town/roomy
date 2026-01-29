@@ -193,7 +193,7 @@ export const EditMessage = defineEvent(
       return [];
     }
 
-    return [
+    const statements = [
       ensureEntity(streamId, event.id, event.room),
       event.body.mimeType == "text/x-dmp-patch"
         ? sql`
@@ -216,6 +216,118 @@ export const EditMessage = defineEvent(
             entity = ${event.messageId}
         `,
     ];
+
+    // Handle attachments extension updates
+    // null = remove all attachments, value = replace attachments
+    if (event.extensions && "space.roomy.extension.attachments.v0" in event.extensions) {
+      const attachmentsExt = event.extensions["space.roomy.extension.attachments.v0"];
+
+      // Delete existing attachment data for this message
+      // Pattern: entity ends with ?message=<messageId>
+      const messageIdSuffix = `%?message=${event.messageId}`;
+      statements.push(
+        sql`delete from comp_embed_image where entity like ${messageIdSuffix}`,
+        sql`delete from comp_embed_video where entity like ${messageIdSuffix}`,
+        sql`delete from comp_embed_file where entity like ${messageIdSuffix}`,
+        sql`delete from comp_embed_link where entity like ${messageIdSuffix}`,
+        sql`delete from comp_comment where entity = ${event.messageId}`,
+        sql`delete from edges where head = ${event.messageId} and label = 'reply'`,
+        // Clean up orphaned entities
+        sql`delete from entities where parent = ${event.messageId} and id != ${event.messageId}`,
+      );
+
+      // If new attachments provided (not null/undefined), insert them
+      if (attachmentsExt != null) {
+        for (const att of attachmentsExt.attachments || []) {
+          if (att.$type == "space.roomy.attachment.reply.v0") {
+            statements.push(sql`
+              insert or ignore into edges (head, tail, label)
+              values (
+                ${event.messageId},
+                ${att.target},
+                'reply'
+              )
+            `);
+          } else if (att.$type == "space.roomy.attachment.comment.v0") {
+            statements.push(
+              sql`
+              insert into comp_comment (entity, version, snippet, idx_from, idx_to, updated_at)
+              values (
+                ${event.messageId},
+                ${att.version},
+                ${att.snippet || ""},
+                ${att.from},
+                ${att.to},
+                (unixepoch() * 1000)
+              )`,
+            );
+          } else if (att.$type == "space.roomy.attachment.image.v0") {
+            const uriWithUlidQuery = att.uri + "?message=" + event.messageId;
+            statements.push(
+              ensureEntity(streamId, uriWithUlidQuery, event.messageId),
+              sql`
+                insert or replace into comp_embed_image (entity, mime_type, alt, width, height, blurhash, size)
+                values (
+                  ${uriWithUlidQuery},
+                  ${att.mimeType},
+                  ${att.alt},
+                  ${att.width ? Number(att.width) : null},
+                  ${att.height ? Number(att.height) : null},
+                  ${att.blurhash || null},
+                  ${att.size ? Number(att.size) : null}
+                )
+            `,
+            );
+          } else if (att.$type == "space.roomy.attachment.video.v0") {
+            const uriWithUlidQuery = att.uri + "?message=" + event.messageId;
+            statements.push(
+              ensureEntity(streamId, uriWithUlidQuery, event.messageId),
+              sql`
+                insert or replace into comp_embed_video (entity, mime_type, alt, width, height, length, blurhash, size)
+                values (
+                  ${uriWithUlidQuery},
+                  ${att.mimeType},
+                  ${att.alt},
+                  ${att.width ? Number(att.width) : null},
+                  ${att.height ? Number(att.height) : null},
+                  ${att.length ? Number(att.length) : null},
+                  ${att.blurhash || null},
+                  ${att.size ? Number(att.size) : null}
+                )
+            `,
+            );
+          } else if (att.$type == "space.roomy.attachment.file.v0") {
+            const uriWithUlidQuery = att.uri + "?message=" + event.messageId;
+            statements.push(
+              ensureEntity(streamId, uriWithUlidQuery, event.messageId),
+              sql`
+                insert or replace into comp_embed_file (entity, mime_type, name, size)
+                values (
+                  ${uriWithUlidQuery},
+                  ${att.mimeType},
+                  ${att.name || null},
+                  ${att.size ? Number(att.size) : null}
+                )
+            `,
+            );
+          } else if (att.$type == "space.roomy.attachment.link.v0") {
+            const uriWithUlidQuery = att.uri + "?message=" + event.messageId;
+            statements.push(
+              ensureEntity(streamId, uriWithUlidQuery, event.messageId),
+              sql`
+              insert into comp_embed_link (entity, show_preview)
+              values (
+                ${uriWithUlidQuery},
+                ${att.showPreview ? 1 : 0}
+              )
+            `,
+            );
+          }
+        }
+      }
+    }
+
+    return statements;
   },
   (x) => (x.previous ? [x.previous, x.messageId] : [x.messageId]),
 );
