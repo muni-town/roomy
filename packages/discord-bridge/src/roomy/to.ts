@@ -30,6 +30,7 @@ import {
 import {
   discordWebhookTokensForBridge,
   syncedProfilesForBridge,
+  syncedSidebarHashForBridge,
 } from "../db.js";
 import {
   tracer,
@@ -53,6 +54,24 @@ function computeProfileHash(
   const data = `${username}|${globalName ?? ""}|${avatar ?? ""}`;
   // Simple hash: base64 encode and take first 16 chars
   return Buffer.from(data).toString("base64").slice(0, 16);
+}
+
+/**
+ * Compute a hash from sidebar structure for change detection.
+ * Uses JSON serialization to capture the full structure.
+ */
+function computeSidebarHash(
+  categories: { name: string; children: Ulid[] }[],
+): string {
+  // Sort categories by name and children by value for consistent hashing
+  const normalized = categories
+    .map((c) => ({
+      name: c.name,
+      children: [...c.children].sort(),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const data = JSON.stringify(normalized);
+  return Buffer.from(data).toString("base64").slice(0, 32);
 }
 
 /**
@@ -271,15 +290,45 @@ export async function ensureRoomySidebarForCategoriesAndChannels(
     }
   }
 
-  // Send UpdateSidebar event
-  const event: Event = {
+  // Compute hash for idempotence check
+  const hash = computeSidebarHash(sidebarCategories);
+
+  // Check if sidebar already synced with same hash
+  const sidebarHashStore = syncedSidebarHashForBridge({
+    discordGuildId: ctx.guildId,
+    roomySpaceId: ctx.spaceId,
+  });
+
+  try {
+    const existingHash = await sidebarHashStore.get("sidebar");
+    if (existingHash === hash) {
+      console.log(`Sidebar unchanged (hash: ${hash}), skipping update`);
+      return;
+    }
+  } catch {
+    // Key not found - first sync for this sidebar
+  }
+
+  // Send UpdateSidebar event with extension for tracking
+  // Note: extensions are passed through even though not in the base schema type
+  const event = {
     id: newUlid(),
     $type: "space.roomy.space.updateSidebar.v0",
     categories: sidebarCategories,
-  };
+    extensions: {
+      "space.roomy.extension.discordSidebarOrigin.v0": {
+        $type: "space.roomy.extension.discordSidebarOrigin.v0",
+        guildId: ctx.guildId.toString(),
+        sidebarHash: hash,
+      },
+    },
+  } as Event;
 
   await ctx.connectedSpace.sendEvent(event);
-  console.log(`Updated sidebar with ${sidebarCategories.length} categories`);
+  console.log(`Updated sidebar with ${sidebarCategories.length} categories (hash: ${hash})`);
+
+  // Update local cache
+  await sidebarHashStore.put("sidebar", hash);
 }
 
 export async function ensureRoomyThreadForDiscordThread(
@@ -323,19 +372,52 @@ export async function ensureRoomyThreadForDiscordThread(
 
   await ctx.connectedSpace.sendEvent(createRoomEvent);
 
-  // Link thread to parent channel
-  const linkEvent: Event = {
-    id: newUlid(),
-    room: parentRoomyId as Ulid,
-    $type: "space.roomy.link.createRoomLink.v0",
-    linkToRoom: roomId,
-    isCreationLink: true,
-  };
+  // Check if link already exists (for idempotence on restart after partial sync)
+  const linkKey = `${parentRoomyId}:${roomId}`;
+  let linkExists = false;
+  try {
+    const existingLinkId = await ctx.syncedRoomLinks.get(linkKey);
+    if (existingLinkId) {
+      linkExists = true;
+      console.log(
+        `Room link ${parentRoomyId} -> ${roomId} already exists as ${existingLinkId}`,
+      );
+    }
+  } catch {
+    // Key not found - proceed with creating link
+  }
 
-  await ctx.connectedSpace.sendEvent(linkEvent);
-  console.log(
-    `Created Roomy thread ${roomId} for Discord thread ${thread.name}, linked to ${parentRoomyId}`,
-  );
+  if (!linkExists) {
+    // Link thread to parent channel
+    const linkId = newUlid();
+    const linkEvent = {
+      id: linkId,
+      room: parentRoomyId as Ulid,
+      $type: "space.roomy.link.createRoomLink.v0",
+      linkToRoom: roomId,
+      isCreationLink: true,
+      extensions: {
+        "space.roomy.extension.discordRoomLinkOrigin.v0": {
+          $type: "space.roomy.extension.discordRoomLinkOrigin.v0",
+          parentSnowflake: thread.parentId.toString(),
+          childSnowflake: thread.id.toString(),
+          guildId: ctx.guildId.toString(),
+        },
+      },
+    } as Event;
+
+    await ctx.connectedSpace.sendEvent(linkEvent);
+    console.log(
+      `Created Roomy thread ${roomId} for Discord thread ${thread.name}, linked to ${parentRoomyId}`,
+    );
+
+    // Track the link
+    await ctx.syncedRoomLinks.put(linkKey, linkId);
+  } else {
+    console.log(
+      `Created Roomy thread ${roomId} for Discord thread ${thread.name} (link already exists)`,
+    );
+  }
 
   // Register the mapping immediately
   try {

@@ -1,4 +1,4 @@
-import { LatestMessages, SyncedIds, SyncedReactions } from "./db";
+import { LatestMessages, SyncedIds, SyncedReactions, SyncedRoomLinks } from "./db";
 import type { ConnectedSpace } from "@roomy/sdk";
 
 export type GuildContext = {
@@ -7,5 +7,6 @@ export type GuildContext = {
   syncedIds: SyncedIds;
   latestMessagesInChannel: LatestMessages;
   syncedReactions: SyncedReactions;
+  syncedRoomLinks: SyncedRoomLinks;
   connectedSpace: ConnectedSpace;
 };

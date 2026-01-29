@@ -259,3 +259,47 @@ export const syncedReactionsForBridge = ({
   );
 
 export type SyncedReactions = ReturnType<typeof syncedReactionsForBridge>;
+
+/**
+ * Per-space sidebar hash tracking.
+ * Key: "sidebar" (single key per space)
+ * Value: hash of serialized sidebar structure (for change detection)
+ */
+export const syncedSidebarHashForBridge = ({
+  discordGuildId,
+  roomySpaceId,
+}: {
+  discordGuildId: bigint;
+  roomySpaceId: string;
+}) =>
+  db.sublevel<string, string>(
+    `syncedSidebarHash:${discordGuildId.toString()}:${roomySpaceId}`,
+    {
+      keyEncoding: "utf8",
+      valueEncoding: "utf8",
+    },
+  );
+
+export type SyncedSidebarHash = ReturnType<typeof syncedSidebarHashForBridge>;
+
+/**
+ * Per-space room link tracking.
+ * Key: `${parentRoomyId}:${childRoomyId}` (parent→child link)
+ * Value: Roomy link event ID
+ */
+export const syncedRoomLinksForBridge = ({
+  discordGuildId,
+  roomySpaceId,
+}: {
+  discordGuildId: bigint;
+  roomySpaceId: string;
+}) =>
+  db.sublevel<string, string>(
+    `syncedRoomLinks:${discordGuildId.toString()}:${roomySpaceId}`,
+    {
+      keyEncoding: "utf8",
+      valueEncoding: "utf8",
+    },
+  );
+
+export type SyncedRoomLinks = ReturnType<typeof syncedRoomLinksForBridge>;

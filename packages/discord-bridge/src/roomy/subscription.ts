@@ -11,6 +11,8 @@ import {
   leafCursors,
   syncedIdsForBridge,
   syncedProfilesForBridge,
+  syncedSidebarHashForBridge,
+  syncedRoomLinksForBridge,
   registeredBridges,
 } from "../db.js";
 
@@ -31,6 +33,18 @@ const DISCORD_ORIGIN_KEY = "space.roomy.extension.discordOrigin.v0" as const;
 const DISCORD_USER_ORIGIN_KEY =
   "space.roomy.extension.discordUserOrigin.v0" as const;
 
+/**
+ * Extension type key for Discord sidebar origin metadata.
+ */
+const DISCORD_SIDEBAR_ORIGIN_KEY =
+  "space.roomy.extension.discordSidebarOrigin.v0" as const;
+
+/**
+ * Extension type key for Discord room link origin metadata.
+ */
+const DISCORD_ROOM_LINK_ORIGIN_KEY =
+  "space.roomy.extension.discordRoomLinkOrigin.v0" as const;
+
 interface DiscordMessageOrigin {
   snowflake: string;
   channelId: string;
@@ -47,6 +61,17 @@ interface DiscordUserOrigin {
   guildId: string;
   profileHash: string;
   handle: string;
+}
+
+interface DiscordSidebarOrigin {
+  guildId: string;
+  sidebarHash: string;
+}
+
+interface DiscordRoomLinkOrigin {
+  parentSnowflake: string;
+  childSnowflake: string;
+  guildId: string;
 }
 
 /**
@@ -122,6 +147,39 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
           await syncedProfiles.put(userOrigin.snowflake, userOrigin.profileHash);
         } catch (e) {
           console.error("Error caching profile hash:", e);
+        }
+      }
+
+      // Check for Discord sidebar origin extension
+      const sidebarOrigin = extractDiscordSidebarOrigin(event);
+      if (sidebarOrigin && sidebarOrigin.guildId === guildIdStr) {
+        const sidebarHashStore = syncedSidebarHashForBridge({
+          discordGuildId: guildId,
+          roomySpaceId: spaceId,
+        });
+        try {
+          await sidebarHashStore.put("sidebar", sidebarOrigin.sidebarHash);
+        } catch (e) {
+          console.error("Error caching sidebar hash:", e);
+        }
+      }
+
+      // Check for Discord room link origin extension
+      const roomLinkData = extractDiscordRoomLinkOrigin(event);
+      if (roomLinkData && roomLinkData.origin.guildId === guildIdStr) {
+        const syncedRoomLinks = syncedRoomLinksForBridge({
+          discordGuildId: guildId,
+          roomySpaceId: spaceId,
+        });
+        // Get the parent Roomy ID from the room field
+        const parentRoomyId = (event as { room?: string }).room;
+        if (parentRoomyId) {
+          const linkKey = `${parentRoomyId}:${roomLinkData.linkToRoom}`;
+          try {
+            await syncedRoomLinks.put(linkKey, event.id);
+          } catch (e) {
+            console.error("Error caching room link:", e);
+          }
         }
       }
 
@@ -216,6 +274,48 @@ function extractDiscordUserOrigin(
     | DiscordUserOrigin
     | undefined;
   return origin;
+}
+
+/**
+ * Extract Discord sidebar origin extension from an event if present.
+ */
+function extractDiscordSidebarOrigin(
+  event: DecodedStreamEvent["event"],
+): DiscordSidebarOrigin | undefined {
+  if (event.$type !== "space.roomy.space.updateSidebar.v0") return undefined;
+
+  const extensions = (event as { extensions?: Record<string, unknown> })
+    .extensions;
+  if (!extensions) return undefined;
+
+  const origin = extensions[DISCORD_SIDEBAR_ORIGIN_KEY] as
+    | DiscordSidebarOrigin
+    | undefined;
+  return origin;
+}
+
+/**
+ * Extract Discord room link origin extension from an event if present.
+ */
+function extractDiscordRoomLinkOrigin(
+  event: DecodedStreamEvent["event"],
+): { origin: DiscordRoomLinkOrigin; linkToRoom: string } | undefined {
+  if (event.$type !== "space.roomy.link.createRoomLink.v0") return undefined;
+
+  const extensions = (event as { extensions?: Record<string, unknown> })
+    .extensions;
+  if (!extensions) return undefined;
+
+  const origin = extensions[DISCORD_ROOM_LINK_ORIGIN_KEY] as
+    | DiscordRoomLinkOrigin
+    | undefined;
+  if (!origin) return undefined;
+
+  const linkToRoom = (event as { linkToRoom?: string }).linkToRoom;
+  const room = (event as { room?: string }).room;
+  if (!linkToRoom || !room) return undefined;
+
+  return { origin, linkToRoom };
 }
 
 /**
