@@ -13,6 +13,7 @@ import {
   syncedProfilesForBridge,
   syncedSidebarHashForBridge,
   syncedRoomLinksForBridge,
+  syncedEditsForBridge,
   registeredBridges,
 } from "../db.js";
 
@@ -32,6 +33,8 @@ interface DiscordMessageOrigin {
   snowflake: string;
   channelId: string;
   guildId: string;
+  editedTimestamp?: number;
+  contentHash?: string;
 }
 
 interface DiscordOrigin {
@@ -162,6 +165,25 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
             await syncedRoomLinks.put(linkKey, event.id);
           } catch (e) {
             console.error("Error caching room link:", e);
+          }
+        }
+      }
+
+      // Check for Discord message edit with origin extension
+      if (event.$type === "space.roomy.message.editMessage.v0") {
+        const origin = extractDiscordMessageOrigin(event);
+        if (origin?.editedTimestamp && origin?.contentHash) {
+          const syncedEdits = syncedEditsForBridge({
+            discordGuildId: guildId,
+            roomySpaceId: spaceId,
+          });
+          try {
+            await syncedEdits.put(origin.snowflake, {
+              editedTimestamp: origin.editedTimestamp,
+              contentHash: origin.contentHash,
+            });
+          } catch (e) {
+            console.error("Error caching edit state:", e);
           }
         }
       }

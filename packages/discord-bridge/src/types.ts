@@ -1,5 +1,6 @@
 import {
   LatestMessages,
+  SyncedEdits,
   SyncedIds,
   SyncedProfiles,
   SyncedReactions,
@@ -17,5 +18,6 @@ export type GuildContext = {
   syncedReactions: SyncedReactions;
   syncedSidebarHash: SyncedSidebarHash;
   syncedRoomLinks: SyncedRoomLinks;
+  syncedEdits: SyncedEdits;
   connectedSpace: ConnectedSpace;
 };

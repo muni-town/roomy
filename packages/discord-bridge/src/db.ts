@@ -280,3 +280,15 @@ export type SyncedSidebarHash = ReturnType<typeof syncedSidebarHashForBridge>;
 export const syncedRoomLinksForBridge = createBridgeStoreFactory("syncedRoomLinks");
 
 export type SyncedRoomLinks = ReturnType<typeof syncedRoomLinksForBridge>;
+
+export type SyncedEdit = {
+  editedTimestamp: number;
+  contentHash: string;
+};
+
+export const syncedEditsForBridge = createBridgeStoreFactory<SyncedEdit>(
+  "syncedEdits",
+  "json"
+);
+
+export type SyncedEdits = ReturnType<typeof syncedEditsForBridge>;

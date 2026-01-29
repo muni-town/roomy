@@ -31,6 +31,7 @@ import {
   syncedReactionsForBridge,
   syncedRoomLinksForBridge,
   syncedSidebarHashForBridge,
+  syncedEditsForBridge,
 } from "../db.js";
 import { GuildContext } from "../types.js";
 import {
@@ -40,6 +41,7 @@ import {
   ensureRoomyMessageForDiscordMessage,
   syncDiscordReactionToRoomy,
   removeDiscordReactionFromRoomy,
+  syncMessageEditToRoomy,
 } from "../roomy/to.js";
 import { getConnectedSpace } from "../roomy/client.js";
 import { EventBatcher } from "../roomy/batcher.js";
@@ -106,7 +108,11 @@ export async function getGuildContext(guildId: bigint): Promise<GuildContext | u
     discordGuildId: guildId,
     roomySpaceId: spaceId,
   });
-  return { guildId, spaceId, syncedIds, latestMessagesInChannel, syncedReactions, syncedRoomLinks, syncedProfiles, syncedSidebarHash, connectedSpace };
+  const syncedEdits = syncedEditsForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  return { guildId, spaceId, syncedIds, latestMessagesInChannel, syncedReactions, syncedRoomLinks, syncedProfiles, syncedSidebarHash, syncedEdits, connectedSpace };
 }
 
 /**
@@ -225,6 +231,24 @@ export async function startBot() {
           userId: payload.userId,
           emoji: payload.emoji,
         });
+      },
+
+      // Handle message edits
+      async messageUpdate(message) {
+        // Skip during backfill
+        if (!doneBackfillingFromDiscord) return;
+
+        // Skip if not a user edit (embed resolution, pin change, etc.)
+        if (!message.editedTimestamp) return;
+
+        if (!message.guildId) return;
+        if (!(await hasBridge(message.guildId))) return;
+
+        const ctx = await getGuildContext(message.guildId);
+        if (!ctx) return;
+
+        // syncMessageEditToRoomy will skip messages not in syncedIds (including bot messages)
+        await syncMessageEditToRoomy(ctx, message);
       },
     },
   });

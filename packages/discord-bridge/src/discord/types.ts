@@ -16,6 +16,7 @@ const messageProperties = {
   author: true,
   webhookId: true,
   timestamp: true,
+  editedTimestamp: true,
   attachments: true,
   messageReference: true,
 } as const;

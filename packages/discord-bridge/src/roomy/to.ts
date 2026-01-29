@@ -32,6 +32,7 @@ import {
   discordWebhookTokensForBridge,
   syncedProfilesForBridge,
   syncedSidebarHashForBridge,
+  syncedEditsForBridge,
 } from "../db.js";
 import {
   tracer,
@@ -79,6 +80,20 @@ function computeSidebarHash(
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
   return fingerprint(JSON.stringify(normalized));
+}
+
+/**
+ * Compute a fingerprint from message content and attachments for edit change detection.
+ */
+function computeEditHash(
+  content: string,
+  attachments: { url: string }[],
+): string {
+  const data = JSON.stringify({
+    content,
+    attachments: attachments.map((a) => a.url).sort(),
+  });
+  return fingerprint(data);
 }
 
 /**
@@ -777,6 +792,169 @@ export async function ensureRoomyMessageForDiscordMessage(
 
         span.setAttribute("sync.result", "success");
         return messageId;
+      } catch (error) {
+        span.setAttribute("sync.result", "error");
+        recordError(span, error);
+        throw error;
+      } finally {
+        span.end();
+      }
+    },
+  );
+}
+
+/**
+ * Sync a Discord message edit to Roomy.
+ * Uses timestamp-first with hash fallback for idempotence.
+ */
+export async function syncMessageEditToRoomy(
+  ctx: GuildContext,
+  message: MessageProperties,
+): Promise<void> {
+  return tracer.startActiveSpan(
+    "sync.message_edit.discord_to_roomy",
+    async (span) => {
+      try {
+        const snowflake = message.id.toString();
+
+        // Set Discord attributes
+        setDiscordAttrs(span, {
+          guildId: ctx.guildId,
+          channelId: message.channelId,
+          messageId: message.id,
+        });
+
+        // Set Roomy attributes
+        setRoomyAttrs(span, {
+          spaceId: ctx.spaceId,
+        });
+
+        // Get the Roomy message ID from our mapping
+        const roomyMessageId = await ctx.syncedIds.get_roomyId(snowflake);
+        if (!roomyMessageId) {
+          span.setAttribute("sync.result", "skipped_not_synced");
+          return; // Message wasn't synced originally
+        }
+
+        // Get the Roomy room ID from the Discord channel ID
+        const roomyRoomId = await ctx.syncedIds.get_roomyId(
+          message.channelId.toString(),
+        );
+        if (!roomyRoomId) {
+          span.setAttribute("sync.result", "skipped_room_not_synced");
+          return; // Channel/room wasn't synced
+        }
+
+        // editedTimestamp should be set (caller should have checked this)
+        const editedTimestamp = message.editedTimestamp
+          ? new Date(message.editedTimestamp).getTime()
+          : Date.now();
+        const contentHash = computeEditHash(
+          message.content,
+          message.attachments || [],
+        );
+
+        // Get edit tracking store
+        const syncedEdits = syncedEditsForBridge({
+          discordGuildId: ctx.guildId,
+          roomySpaceId: ctx.spaceId,
+        });
+
+        // Idempotence check
+        try {
+          const synced = await syncedEdits.get(snowflake);
+          if (synced) {
+            if (editedTimestamp < synced.editedTimestamp) {
+              span.setAttribute("sync.result", "skipped_stale");
+              return; // Stale edit
+            }
+            if (
+              editedTimestamp === synced.editedTimestamp &&
+              contentHash === synced.contentHash
+            ) {
+              span.setAttribute("sync.result", "skipped_duplicate");
+              return; // Duplicate
+            }
+          }
+        } catch {
+          // Key not found - first edit for this message
+        }
+
+        // Build extensions
+        const extensions: Record<string, unknown> = {
+          [DISCORD_EXTENSION_KEYS.MESSAGE_ORIGIN]: {
+            $type: DISCORD_EXTENSION_KEYS.MESSAGE_ORIGIN,
+            snowflake,
+            channelId: message.channelId.toString(),
+            guildId: ctx.guildId.toString(),
+            editedTimestamp,
+            contentHash,
+          },
+        };
+
+        // Include attachments if present, or explicitly remove if none
+        if (message.attachments && message.attachments.length > 0) {
+          const attachments: unknown[] = [];
+          for (const att of message.attachments) {
+            if (att.contentType?.startsWith("image/")) {
+              attachments.push({
+                $type: "space.roomy.attachment.image.v0",
+                uri: att.url,
+                mimeType: att.contentType,
+                width: att.width,
+                height: att.height,
+                size: att.size,
+              });
+            } else if (att.contentType?.startsWith("video/")) {
+              attachments.push({
+                $type: "space.roomy.attachment.video.v0",
+                uri: att.url,
+                mimeType: att.contentType,
+                width: att.width,
+                height: att.height,
+                size: att.size,
+              });
+            } else {
+              attachments.push({
+                $type: "space.roomy.attachment.file.v0",
+                uri: att.url,
+                mimeType: att.contentType || "application/octet-stream",
+                name: att.filename,
+                size: att.size,
+              });
+            }
+          }
+          extensions["space.roomy.extension.attachments.v0"] = {
+            $type: "space.roomy.extension.attachments.v0",
+            attachments,
+          };
+        } else {
+          // Explicitly remove attachments extension (null = remove, undefined = no change)
+          extensions["space.roomy.extension.attachments.v0"] = null;
+        }
+
+        // Send edit event
+        const event = {
+          id: newUlid(),
+          room: roomyRoomId as Ulid,
+          $type: "space.roomy.message.editMessage.v0",
+          messageId: roomyMessageId as Ulid,
+          body: {
+            mimeType: "text/markdown",
+            data: toBytes(new TextEncoder().encode(message.content)),
+          },
+          extensions,
+        } as Event;
+
+        await ctx.connectedSpace.sendEvent(event);
+        console.log(
+          `Synced edit for Discord message ${message.id} -> Roomy ${roomyMessageId}`,
+        );
+
+        // Update cache
+        await syncedEdits.put(snowflake, { editedTimestamp, contentHash });
+
+        span.setAttribute("sync.result", "success");
       } catch (error) {
         span.setAttribute("sync.result", "error");
         recordError(span, error);
