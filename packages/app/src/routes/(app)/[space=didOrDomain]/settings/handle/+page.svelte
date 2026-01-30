@@ -147,11 +147,7 @@
       const url = !spaceHandle || !handleResolvesToSpace
         ? `/${current.space.space.id}/settings/handle`
         : `/${spaceHandle}/settings/handle`;
-
-      await goto(url, {
-        state: { showToast: "Updated space handle" },
-        replaceState: true
-      })
+      await goto(url)
 
       toast.success("Updated space handle");
       
