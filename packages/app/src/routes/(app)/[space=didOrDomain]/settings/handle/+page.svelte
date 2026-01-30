@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import InlineMono from "$lib/components/primitives/InlineMono.svelte";
   import { current } from "$lib/queries";
@@ -25,10 +26,10 @@
   let exampleSpaceHandle = $derived(
     spaceHandle || backendStatus.profile?.handle || "example.com",
   );
-  let currentSpaceHandle = $derived(
-    current.space.status == "joined" && current.space.space.handle,
+  let currentSpaceHandle = $state(
+    current.space.status == "joined" ? current.space.space.handle : "",
   );
-  let currentProfileSpace = $derived(backend.getProfileSpace());
+  let profileSpace = $state<string | null>(null);
 
   let handleResolvesToSpace = $state(new Promise<boolean>(() => {}));
   $effect(() => {
@@ -50,6 +51,12 @@
   const handleTabs = ["Use My Handle", "Use DNS"] as const;
   let activeHandleTab: (typeof handleTabs)[number] = $state("Use My Handle");
 
+  $effect(() => {
+    (async () => {
+      profileSpace = await backend.getProfileSpace() ?? null;
+    })();
+  });
+
   async function setSpaceHandleUsingProfile() {
     if (
       current.space.status != "joined" ||
@@ -68,20 +75,27 @@
         did: backendStatus.authState.did,
       });
 
-      // And reload the page
-      window.location.reload();
+      // Update reactive state
+      currentSpaceHandle = backendStatus.profile?.handle ?? "";
+      profileSpace = current.space.space.id;
+
+      // Navigate to this page using the new space handle to reflect changes
+      await goto(`/${backendStatus.profile?.handle}/settings/handle`)
+
+      toast.success("Updated space handle");
+
     } catch (e) {
       console.error(e);
-      toast.error("Error unsetting handle for space.");
+      toast.error("Error setting handle for space.");
     }
   }
 
   async function removeProfileSpaceRecord() {
-    const currentProfileSpaceId = await currentProfileSpace;
     if (
-      !currentProfileSpaceId ||
+      !profileSpace ||
       current.space.status != "joined" ||
-      current.space.space.id != currentProfileSpaceId ||
+      current.space.space.id != profileSpace ||
+      currentSpaceHandle != backendStatus.profile?.handle ||
       backendStatus.authState?.state != "authenticated" ||
       !backendStatus.profile
     ) {
@@ -89,42 +103,62 @@
     }
 
     try {
-      // If the current space handle matches our user's handle, then we need to clear the handle
-      // provider for the space.
-      if (currentSpaceHandle == backendStatus.profile.handle) {
-        await backend.sendEvent(current.space.space.id, {
-          $type: "space.roomy.space.setHandleProvider.v0",
-          id: newUlid(),
-          did: null,
-        });
-      }
-
-      // Then we need remove the profile space record from the user's PDS.
+      // Unset the user's profile space
       await backend.setProfileSpace(null);
-      // And reload the page
-      window.location.reload();
+
+      // Unset the current handle provider for the space
+      await backend.sendEvent(current.space.space.id, {
+        $type: "space.roomy.space.setHandleProvider.v0",
+        id: newUlid(),
+        did: null,
+      });
+
+      // Update reactive state
+      currentSpaceHandle = ""
+      profileSpace = null
+
+      // Navigate to this page using the space ID to reflect changes
+      await goto(`/${current.space.space.id}/settings/handle`)
+
+      toast.success("Updated space handle");
+
     } catch (e) {
       console.error(e);
       toast.error("Error unsetting handle for space.");
     }
   }
 
-  function setHandleUsingDns() {
-    if (current.space.status != "joined") return;
-    const spaceId = current.space.space.id;
-    backend
-      .setSpaceHandle(spaceId, spaceHandle || null)
-      .then(async () => {
-        toast.success("Updated space handle");
-        if (!spaceHandle || !(await handleResolvesToSpace)) {
-          window.location.href = `/${spaceId}/settings/general`;
-        } else {
-          window.location.href = `/${spaceHandle}/settings/general`;
-        }
+  async function setHandleUsingDns() {
+    if (
+      current.space.status != "joined" ||
+      backendStatus.authState?.state != "authenticated"
+    ) 
+      return;
+    
+    try {
+      // Set the space handle to the new value
+      await backend.setSpaceHandle(current.space.space.id, spaceHandle || null)
+
+      // Update reactive state
+      currentSpaceHandle = spaceHandle;
+      profileSpace = current.space.space.id;
+
+      // Navigate to this page using the new space handle to reflect changes
+      const url = !spaceHandle || !handleResolvesToSpace
+        ? `/${current.space.space.id}/settings/handle`
+        : `/${spaceHandle}/settings/handle`;
+
+      await goto(url, {
+        state: { showToast: "Updated space handle" },
+        replaceState: true
       })
-      .catch((e) => {
-        toast.error(`Could not update space handle: ${e}`);
-      });
+
+      toast.success("Updated space handle");
+      
+    } catch (e) {
+      console.error(e)
+      toast.error(`Error setting handle for space: ${e}`);
+    }
   }
 </script>
 
@@ -162,7 +196,7 @@
   </div>
 
   {#if activeHandleTab == "Use My Handle"}
-    {#await currentProfileSpace}
+    {#await profileSpace}
       <div class="flex justify-center">
         <IconMdiLoading class="animate-spin" font-size={40} />
       </div>
