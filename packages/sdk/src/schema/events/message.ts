@@ -388,6 +388,44 @@ export const ReorderMessage = defineEvent(
   (x) => [x.messageId],
 );
 
+const ForwardMessagesSchema = type({
+  $type: "'space.roomy.message.forwardMessages.v0'",
+  messageIds: Ulid.array()
+    .moreThanLength(0)
+    .atMostLength(1) // Must be exactly one until we have TVFs in LibSQL
+    .describe("The IDs of the messages being forwarded."),
+  fromRoomId: Ulid.describe("The room from which the messages are being forwarded"),
+}).describe(
+  "Forward one or more messages to a different room. Unlike move, the original messages remain in place.",
+);
+
+export const ForwardMessages = defineEvent(
+  ForwardMessagesSchema,
+  ({ streamId, event }) => {
+    if (!event.room) {
+      console.warn("Forward event missing room");
+      return [];
+    }
+    // For each forwarded message, create a "forward" edge in the destination room
+    // The forwarded message appears in event.room with a reference back to the original
+    // event.fromRoomId indicates where the message originated
+    return event.messageIds.flatMap((msgId) => [
+      // Ensure the forwarded reference entity exists in the target (destination) room
+      ensureEntity(streamId, `${msgId}:forward:${event.room}`, event.room),
+      // Create forward edge: head = forward reference, tail = original message
+      sql`
+        insert or ignore into edges (head, tail, label)
+        values (
+          ${`${msgId}:forward:${event.room}`},
+          ${msgId},
+          'forward'
+        )
+      `,
+    ]);
+  },
+  (x) => [...x.messageIds],
+);
+
 // All message events
 export const MessageEventVariant = type.or(
   CreateMessageSchema,
@@ -395,4 +433,5 @@ export const MessageEventVariant = type.or(
   DeleteMessageSchema,
   MoveMessagesSchema,
   ReorderMessageSchema,
+  ForwardMessagesSchema,
 );

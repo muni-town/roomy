@@ -130,6 +130,7 @@ export {
   DeleteMessage,
   MoveMessages,
   ReorderMessage,
+  ForwardMessages,
 } from "./message";
 export { CreateRoom, UpdateRoom, DeleteRoom } from "./room";
 export {
@@ -160,6 +161,7 @@ import {
   DeleteMessage,
   MoveMessages,
   ReorderMessage,
+  ForwardMessages,
 } from "./message";
 import { CreateRoom, UpdateRoom, DeleteRoom } from "./room";
 import {
@@ -191,6 +193,7 @@ const eventRegistry = {
   "space.roomy.message.deleteMessage.v0": DeleteMessage,
   "space.roomy.message.moveMessages.v0": MoveMessages,
   "space.roomy.message.reorderMessage.v0": ReorderMessage,
+  "space.roomy.message.forwardMessages.v0": ForwardMessages,
   "space.roomy.room.createRoom.v0": CreateRoom,
   "space.roomy.room.updateRoom.v0": UpdateRoom,
   "space.roomy.room.deleteRoom.v0": DeleteRoom,
