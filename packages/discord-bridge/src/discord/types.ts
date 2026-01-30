@@ -19,6 +19,7 @@ const messageProperties = {
   editedTimestamp: true,
   attachments: true,
   messageReference: true,
+  type: true,
 } as const;
 export type MessageProperties = SetupDesiredProps<
   Message,

@@ -42,6 +42,7 @@ import {
   syncDiscordReactionToRoomy,
   removeDiscordReactionFromRoomy,
   syncMessageEditToRoomy,
+  getRoomKey,
 } from "../roomy/to.js";
 import { getConnectedSpace } from "../roomy/client.js";
 import { EventBatcher } from "../roomy/batcher.js";
@@ -190,14 +191,14 @@ export async function startBot() {
 
         const ctx = await getGuildContext(guildId);
         if (!ctx) return;
-        const roomyRoomId = await ctx.syncedIds.get_roomyId(channelId.toString());
+        const roomyRoomId = await ctx.syncedIds.get_roomyId(getRoomKey(channelId));
 
         if (!roomyRoomId) {
           console.warn(`Discord channel ${channelId} not synced to Roomy, skipping message`);
           return;
         }
 
-        await ensureRoomyMessageForDiscordMessage(ctx, roomyRoomId, message);
+        await ensureRoomyMessageForDiscordMessage(ctx, roomyRoomId, message, bot);
         await ctx.latestMessagesInChannel.put(channelId.toString(), message.id.toString());
       },
 
@@ -264,7 +265,7 @@ async function backfillMessagesForChannel(
   ctx: GuildContext,
   channel: DiscordChannel,
 ): Promise<void> {
-  const roomyRoomId = await ctx.syncedIds.get_roomyId(channel.id.toString());
+  const roomyRoomId = await ctx.syncedIds.get_roomyId(getRoomKey(channel.id));
   if (!roomyRoomId) {
     console.warn(`Channel ${channel.id} not synced, skipping message backfill`);
     return;

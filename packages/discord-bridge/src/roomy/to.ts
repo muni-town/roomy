@@ -18,6 +18,7 @@
 import { createHash } from "node:crypto";
 import { avatarUrl, type Emoji } from "@discordeno/bot";
 import { ChannelProperties, MessageProperties } from "../discord/types";
+import type { DiscordBot } from "../discord/types";
 import { GuildContext } from "../types";
 import {
   newUlid,
@@ -44,6 +45,18 @@ import { EventBatcher } from "./batcher.js";
 import { DISCORD_EXTENSION_KEYS } from "./subscription.js";
 
 // const tracer = trace.getTracer("discordBot");
+
+/**
+ * Discord message types that should not be synced as regular messages.
+ * @see https://discord.com/developers/docs/resources/channel#message-object-message-types
+ */
+const DISCORD_MESSAGE_TYPES = {
+  DEFAULT: 0,
+  CHANNEL_NAME_CHANGE: 4, // Channel/thread rename system message
+  THREAD_CREATED: 18, // System message announcing thread creation
+  REPLY: 19, // A reply to another message
+  THREAD_STARTER_MESSAGE: 21, // First message in a thread created from existing message
+} as const;
 
 /**
  * Compute a collision-resistant fingerprint from arbitrary string data.
@@ -203,14 +216,17 @@ export async function ensureRoomyProfileForDiscordUser(
   );
 }
 
+// Key prefix for room/channel/thread mappings to distinguish from message mappings
+// This is necessary because Discord reuses message IDs as thread IDs when creating threads from messages
+const ROOM_KEY_PREFIX = "room:";
+
 export async function ensureRoomyChannelForDiscordChannel(
   ctx: GuildContext,
   channel: ChannelProperties,
 ): Promise<string> {
-  // Check if already synced
-  const existingRoomyId = await ctx.syncedIds.get_roomyId(
-    channel.id.toString(),
-  );
+  // Check if already synced (use room: prefix to distinguish from messages)
+  const roomKey = ROOM_KEY_PREFIX + channel.id.toString();
+  const existingRoomyId = await ctx.syncedIds.get_roomyId(roomKey);
   if (existingRoomyId) {
     console.log(`Channel ${channel.name} already synced as ${existingRoomyId}`);
     return existingRoomyId;
@@ -239,15 +255,13 @@ export async function ensureRoomyChannelForDiscordChannel(
   // Register the mapping immediately (subscription handler will also do this, but we need it now)
   try {
     await ctx.syncedIds.register({
-      discordId: channel.id.toString(),
+      discordId: roomKey,
       roomyId: roomId,
     });
   } catch (e) {
     if (e instanceof Error && e.message.includes("already registered")) {
       // Another process (subscription handler) registered this mapping - use the existing one
-      const existingRoomyId = await ctx.syncedIds.get_roomyId(
-        channel.id.toString(),
-      );
+      const existingRoomyId = await ctx.syncedIds.get_roomyId(roomKey);
       if (existingRoomyId) {
         console.log(
           `Channel ${channel.name} was registered by another process as ${existingRoomyId}`,
@@ -261,6 +275,11 @@ export async function ensureRoomyChannelForDiscordChannel(
   return roomId;
 }
 
+/** Get the Roomy room ID for a Discord channel/thread ID */
+export function getRoomKey(discordChannelId: string | bigint): string {
+  return ROOM_KEY_PREFIX + discordChannelId.toString();
+}
+
 export async function ensureRoomySidebarForCategoriesAndChannels(
   ctx: GuildContext,
   categories: ChannelProperties[],
@@ -271,7 +290,7 @@ export async function ensureRoomySidebarForCategoriesAndChannels(
   const uncategorizedChannels: Ulid[] = [];
 
   for (const channel of textChannels) {
-    const roomyId = await ctx.syncedIds.get_roomyId(channel.id.toString());
+    const roomyId = await ctx.syncedIds.get_roomyId(getRoomKey(channel.id));
     if (!roomyId) {
       console.warn(
         `Channel ${channel.name} not synced yet, skipping in sidebar`,
@@ -357,8 +376,9 @@ export async function ensureRoomyThreadForDiscordThread(
   ctx: GuildContext,
   thread: ChannelProperties,
 ): Promise<string> {
-  // Check if already synced
-  const existingRoomyId = await ctx.syncedIds.get_roomyId(thread.id.toString());
+  // Check if already synced (use room: prefix to distinguish from messages)
+  const threadKey = getRoomKey(thread.id);
+  const existingRoomyId = await ctx.syncedIds.get_roomyId(threadKey);
   if (existingRoomyId) {
     console.log(`Thread ${thread.name} already synced as ${existingRoomyId}`);
     return existingRoomyId;
@@ -369,7 +389,7 @@ export async function ensureRoomyThreadForDiscordThread(
     throw new Error(`Thread ${thread.name} has no parent channel`);
   }
   const parentRoomyId = await ctx.syncedIds.get_roomyId(
-    thread.parentId.toString(),
+    getRoomKey(thread.parentId),
   );
   if (!parentRoomyId) {
     throw new Error(
@@ -441,18 +461,16 @@ export async function ensureRoomyThreadForDiscordThread(
     );
   }
 
-  // Register the mapping immediately
+  // Register the mapping immediately (use room: prefix)
   try {
     await ctx.syncedIds.register({
-      discordId: thread.id.toString(),
+      discordId: threadKey,
       roomyId: roomId,
     });
   } catch (e) {
     if (e instanceof Error && e.message.includes("already registered")) {
       // Another process (subscription handler) registered this mapping - use the existing one
-      const existingRoomyId = await ctx.syncedIds.get_roomyId(
-        thread.id.toString(),
-      );
+      const existingRoomyId = await ctx.syncedIds.get_roomyId(threadKey);
       if (existingRoomyId) {
         console.log(
           `Thread ${thread.name} was registered by another process as ${existingRoomyId}`,
@@ -838,7 +856,7 @@ export async function syncMessageEditToRoomy(
 
         // Get the Roomy room ID from the Discord channel ID
         const roomyRoomId = await ctx.syncedIds.get_roomyId(
-          message.channelId.toString(),
+          getRoomKey(message.channelId),
         );
         if (!roomyRoomId) {
           span.setAttribute("sync.result", "skipped_room_not_synced");
@@ -1072,7 +1090,7 @@ export async function syncDiscordReactionToRoomy(
 
         // 3. Get the Roomy room ID for this channel
         const roomyRoomId = await ctx.syncedIds.get_roomyId(
-          opts.channelId.toString(),
+          getRoomKey(opts.channelId),
         );
         if (!roomyRoomId) {
           span.setAttribute("sync.result", "skipped_channel_not_synced");
@@ -1177,7 +1195,7 @@ export async function removeDiscordReactionFromRoomy(
 
         // 2. Get the Roomy room ID for this channel
         const roomyRoomId = await ctx.syncedIds.get_roomyId(
-          opts.channelId.toString(),
+          getRoomKey(opts.channelId),
         );
         if (!roomyRoomId) {
           span.setAttribute("sync.result", "skipped_channel_not_synced");

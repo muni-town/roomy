@@ -111,7 +111,7 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
       if (roomOrigin) {
         try {
           await syncedIds.register({
-            discordId: roomOrigin.snowflake,
+            discordId: `room:${roomOrigin.snowflake}`,
             roomyId: event.id,
           });
         } catch (e) {
