@@ -1,8 +1,8 @@
-import type { AsyncState } from "$lib/types/asyncState";
 import { backend } from "$lib/workers";
 import type { LiveQueryMessage } from "$lib/workers/sqlite/setup";
 import type { SqlStatement } from "$lib/workers/sqlite/types";
 import { locksEnabled, requestLock } from "$lib/workers/locks";
+import type { AsyncState } from "@roomy/sdk";
 
 export class LiveQuery<Row extends { [key: string]: unknown }> {
   current: AsyncState<Row[]> = $state.raw({ status: "loading" });

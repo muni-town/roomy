@@ -1,10 +1,9 @@
 <script lang="ts">
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { createSpace } from "$lib/mutations/space";
-  import type { AsyncStateWithIdle } from "$lib/types/asyncState";
   import { navigate } from "$lib/utils.svelte";
   import { backendStatus } from "$lib/workers";
-  import type { StreamDid } from "@roomy/sdk";
+  import type { AsyncStateWithIdle, StreamDid } from "@roomy/sdk";
   import IconHeroiconsXMark from "~icons/heroicons/x-mark";
   import {
     Alert,

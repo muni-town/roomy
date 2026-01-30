@@ -19,6 +19,7 @@
   import { Button, toast } from "@fuxui/base";
 
   import IconTablerArrowDown from "~icons/tabler/arrow-down";
+  import IconMdiLoading from "~icons/mdi/loading";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { decodeTime } from "ulidx";
@@ -26,7 +27,8 @@
   import type { MessagingState } from "./TimelineView.svelte";
   import { messagingState } from "./TimelineView.svelte";
   import type { Message } from "./types";
-  import QueryBoundary from "$lib/components/primitives/QueryBoundary.svelte";
+  import { mapAsyncState, type AsyncState } from "@roomy/sdk";
+  import StateSuspense from "$lib/components/primitives/StateSuspense.svelte";
 
   let {
     messagingState: messagingStateProp,
@@ -215,54 +217,69 @@
   let isAtBottom = $state(true);
   let showJumpToPresent = $derived(!isAtBottom);
 
-  // Expose the raw query state for boundary to use
-  let queryState = $derived(query.current);
+  let timeline = $derived(
+    mapAsyncState(query.current, (results) => {
+      if (!results) return [];
 
-  let timeline = $derived.by(() => {
-    const results = query.result;
-    if (!results) return [];
+      const mapped = results.reverse().map((message, index) => {
+        // Get the previous message (if it exists)
+        const prevMessage = index > 0 ? query.result![index - 1] : null;
 
-    const mapped = results.reverse().map((message, index) => {
-      // Get the previous message (if it exists)
-      const prevMessage = index > 0 ? query.result![index - 1] : null;
+        // Normalize messages for calculating whether or not to merge them
+        const prevMessageNorm = prevMessage
+          ? {
+              author: prevMessage.masqueradeAuthor || prevMessage.authorDid,
+              timestamp:
+                parseInt(prevMessage.masqueradeTimestamp || "0") ||
+                decodeTime(prevMessage.id),
+            }
+          : undefined;
+        const messageNorm = {
+          author: message.masqueradeAuthor || message.authorDid,
+          timestamp:
+            parseInt(message.masqueradeTimestamp || "0") ||
+            decodeTime(message.id),
+        };
 
-      // Normalize messages for calculating whether or not to merge them
-      const prevMessageNorm = prevMessage
-        ? {
-            author: prevMessage.masqueradeAuthor || prevMessage.authorDid,
-            timestamp:
-              parseInt(prevMessage.masqueradeTimestamp || "0") ||
-              decodeTime(prevMessage.id),
-          }
-        : undefined;
-      const messageNorm = {
-        author: message.masqueradeAuthor || message.authorDid,
-        timestamp:
-          parseInt(message.masqueradeTimestamp || "0") ||
-          decodeTime(message.id),
-      };
+        // Calculate mergeWithPrevious
+        let mergeWithPrevious =
+          prevMessageNorm?.author == messageNorm.author &&
+          messageNorm.timestamp - (prevMessageNorm?.timestamp || 0) <
+            1000 * 60 * 5;
 
-      // Calculate mergeWithPrevious
-      let mergeWithPrevious =
-        prevMessageNorm?.author == messageNorm.author &&
-        messageNorm.timestamp - (prevMessageNorm?.timestamp || 0) <
-          1000 * 60 * 5;
+        return {
+          ...message,
+          mergeWithPrevious,
+        };
+      });
 
-      return {
-        ...message,
-        mergeWithPrevious,
-      };
-    });
-
-    return mapped;
-  });
-  let slicedTimeline = $derived(timeline.slice(-showLastN));
-  let isShowingFirstMessage = $derived(!timeline.length);
+      return mapped;
+    }),
+  );
+  let slicedTimeline = $derived(
+    mapAsyncState(timeline, (t) => t.slice(-showLastN)),
+  );
+  // let isShowingFirstMessage = $derived(
+  //   mapAsyncState(timeline, (t) => !t.length),
+  // );
   let viewport: HTMLDivElement = $state(null!);
 
   // Track initial load for auto-scroll
   let hasInitiallyScrolled = $state(false);
-  let lastTimelineLength = $state(0);
+  // // Handle new messages - only auto-scroll if user is at bottom
+  let lastTimelineLength: AsyncState<number> = $derived.by(() => {
+    return mapAsyncState(timeline, (t) => {
+      if (
+        isAtBottom &&
+        virtualizer &&
+        lastTimelineLength.status === "success" &&
+        lastTimelineLength.data > 0
+      ) {
+        setTimeout(() => scrollToBottom(), 50);
+      }
+      return t.length;
+    });
+  });
 
   // Lifted state for editing messages
   let editingMessageId = $state("");
@@ -291,8 +308,8 @@
   }
 
   function scrollToBottom() {
-    if (!virtualizer) return;
-    virtualizer.scrollToIndex(timeline.length - 1, { align: "start" });
+    if (!virtualizer || timeline.status !== "success") return;
+    virtualizer.scrollToIndex(timeline.data.length - 1, { align: "start" });
     isAtBottom = true;
   }
 
@@ -304,12 +321,13 @@
   }
 
   function scrollToMessage(id: string) {
-    const message = slicedTimeline.find((msg) => id === msg.id);
+    if (slicedTimeline.status !== "success") return;
+    const message = slicedTimeline.data.find((msg) => id === msg.id);
     if (!message) {
       toast.error("Message not found");
       return;
     }
-    const idx = slicedTimeline.indexOf(message);
+    const idx = slicedTimeline.data.indexOf(message);
     if (idx >= 0) virtualizer?.scrollToIndex(idx);
     else {
       toast.error("Message not found");
@@ -326,7 +344,12 @@
 
   // // Simple initial scroll to bottom when timeline first loads
   $effect(() => {
-    if (!hasInitiallyScrolled && timeline.length > 0 && virtualizer) {
+    if (
+      !hasInitiallyScrolled &&
+      timeline.status === "success" &&
+      timeline.data.length > 0 &&
+      virtualizer
+    ) {
       setTimeout(() => {
         scrollToBottom();
         hasInitiallyScrolled = true;
@@ -335,15 +358,6 @@
     chatArea.scrollToMessage = scrollToMessage;
   });
 
-  // // Handle new messages - only auto-scroll if user is at bottom
-  $effect(() => {
-    if (timeline.length > lastTimelineLength && lastTimelineLength > 0) {
-      if (isAtBottom && virtualizer) {
-        setTimeout(() => scrollToBottom(), 50);
-      }
-    }
-    lastTimelineLength = timeline.length;
-  });
   let isShifting = $state(false);
   let lastShowLastN = $state(0);
   $effect(() => {
@@ -372,46 +386,57 @@
       onscroll={handleScroll}
     >
       <div class="flex flex-col w-full h-full pb-16 pt-2">
-        <QueryBoundary
-          query={queryState}
-          emptyMessage="No messages here yet. This is the beginning of something beautiful."
-          showEmptyState={isShowingFirstMessage}
-        >
-          {#snippet children()}
+        <StateSuspense state={timeline}>
+          {#snippet children(timeline)}
             <ol class="flex flex-col gap-2 max-w-full">
-              {#key viewport}
-                {#if timeline.length > 0}
-                  <Virtualizer
-                    bind:this={virtualizer}
-                    data={timeline}
-                    scrollRef={viewport}
-                    overscan={5}
-                    shift={isShifting}
-                    getKey={(x) => {
-                      return x?.id;
-                    }}
-                    onscroll={(o) => {
-                      if (o < 100) showLastN += 50;
-                    }}
-                  >
-                    {#snippet children(message?: Message)}
-                      {#if message}
-                        <ChatMessage
-                          {message}
-                          messagingState={messagingStateProp}
-                          onOpenMobileMenu={openMobileMenu}
-                          {editingMessageId}
-                          onStartEdit={(id) => (editingMessageId = id)}
-                          onCancelEdit={() => (editingMessageId = "")}
-                        />
-                      {/if}
-                    {/snippet}
-                  </Virtualizer>
-                {/if}
-              {/key}
+              {#if timeline.length === 0}
+                "No messages here yet. This is the beginning of something
+                beautiful."
+              {:else}
+                {#key viewport}
+                  {#if timeline.length > 0}
+                    <Virtualizer
+                      bind:this={virtualizer}
+                      data={timeline}
+                      scrollRef={viewport}
+                      overscan={5}
+                      shift={isShifting}
+                      getKey={(x) => {
+                        return x?.id;
+                      }}
+                      onscroll={(o) => {
+                        if (o < 100) showLastN += 50;
+                      }}
+                    >
+                      {#snippet children(message?: Message)}
+                        {#if message}
+                          <ChatMessage
+                            {message}
+                            messagingState={messagingStateProp}
+                            onOpenMobileMenu={openMobileMenu}
+                            {editingMessageId}
+                            onStartEdit={(id) => (editingMessageId = id)}
+                            onCancelEdit={() => (editingMessageId = "")}
+                          />
+                        {/if}
+                      {/snippet}
+                    </Virtualizer>
+                  {/if}
+                {/key}
+              {/if}
             </ol>
           {/snippet}
-        </QueryBoundary>
+          {#snippet pending()}
+            <div
+              class="grid items-center justify-center h-full w-full min-h-32 bg-transparent"
+            >
+              <IconMdiLoading
+                font-size="2em"
+                class="animate-spin text-base-600 dark:text-base-400"
+              />
+            </div>
+          {/snippet}
+        </StateSuspense>
       </div>
     </ScrollArea.Viewport>
     <ScrollArea.Scrollbar
