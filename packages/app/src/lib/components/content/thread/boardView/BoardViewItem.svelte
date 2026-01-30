@@ -60,9 +60,7 @@
     >
       {#if thread.kind == "space.roomy.page"}
         <IconHeroiconsDocument class="shrink-0" />
-      {:else if thread.kind == "space.roomy.thread"}
-        <IconHeroiconsHashtag class="shrink-0" />
-      {/if}
+      {:else if thread.kind == "space.roomy.thread"}{/if}
     </div>
     <div class="text-ellipsis min-w-0 shrink w-full max-w-full">
       {#if thread.kind == "space.roomy.channel"}
@@ -88,7 +86,11 @@
         >
       </div>
       {#if thread.channel}
-        <Badge class="mx-2" size="sm">{thread.channel}</Badge>
+        <Badge class="mx-2" size="sm"
+          ><IconHeroiconsHashtag
+            class="shrink-0 size-3 -mr-1"
+          />{thread.channel}</Badge
+        >
       {/if}
       <AvatarGroup
         avatarClass="size-8"
