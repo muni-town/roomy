@@ -183,11 +183,6 @@
     if (elapsed < 1000 * 60 * 5) return;
     setTimeout(setPageRead, 1000);
   });
-
-  $effect(() => {
-    if (!current.joinedSpace?.id || !current.roomId) return;
-    backend.lazyLoadRoom(current.joinedSpace.id, current.roomId);
-  });
 </script>
 
 {#snippet sidebar()}

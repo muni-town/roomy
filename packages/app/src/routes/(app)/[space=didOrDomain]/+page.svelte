@@ -12,9 +12,11 @@
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import JoinSpaceModal from "$lib/components/modals/JoinSpaceModal.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
+  import StateSuspense from "$lib/components/primitives/StateSuspense.svelte";
 
   import type { ThreadInfo } from "$lib/components/content/thread/boardView/types";
   import Error from "$lib/components/modals/Error.svelte";
+  import IconMdiLoading from "~icons/mdi/loading";
   import { flags } from "$lib/config";
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
@@ -142,18 +144,8 @@
     (row) => JSON.parse(row.json),
   );
 
-  const threads = $state<{ list: ThreadInfo[] }>({ list: [] });
-
-  $effect(() => {
-    threads.list = threadsQuery.result || [];
-  });
-
-  const roomLoading = $derived(
-    current.space.status === "loading" ||
-      threadsQuery.current.status === "loading",
-  );
-
   const spaceActive = $derived(current.space.status === "joined");
+  const spaceLoading = $derived(current.space.status === "loading");
 
   $effect(() => {
     if (!spaceId || current.space.status !== "joined") return;
@@ -200,20 +192,39 @@
   </MainLayout>
 {:else}
   <MainLayout {sidebar} {navbar}>
-    {#if roomLoading}
-      <!-- TODO loading spinner -->
-      <div class="h-full w-full flex">
-        <div class="m-auto">Loading...</div>
-      </div>
-    {:else if threads}
+    {#if spaceLoading}
       <div
-        transition:fade={{ duration: 200 }}
-        class="flex flex-col justify-center h-full w-full"
+        class="grid items-center justify-center h-full w-full min-h-32 bg-transparent"
       >
-        <BoardView threads={threads.list} emptyMessage="No threads found." />
+        <IconMdiLoading
+          font-size="2em"
+          class="animate-spin text-base-600 dark:text-base-400"
+        />
       </div>
-    {:else if threadsQuery.error}
-      <Error message={threadsQuery.error} />
+    {:else}
+      <StateSuspense state={threadsQuery.current} loadingDelay={200}>
+        {#snippet pending()}
+          <div
+            class="grid items-center justify-center h-full w-full min-h-32 bg-transparent"
+          >
+            <IconMdiLoading
+              font-size="2em"
+              class="animate-spin text-base-600 dark:text-base-400"
+            />
+          </div>
+        {/snippet}
+        {#snippet error(info)}
+          <Error message={info.message} />
+        {/snippet}
+        {#snippet children(threads)}
+          <div
+            transition:fade={{ duration: 200 }}
+            class="flex flex-col justify-center h-full w-full"
+          >
+            <BoardView {threads} emptyMessage="No threads found." />
+          </div>
+        {/snippet}
+      </StateSuspense>
     {/if}
   </MainLayout>
 {/if}

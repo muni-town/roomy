@@ -27,8 +27,34 @@
   import type { MessagingState } from "./TimelineView.svelte";
   import { messagingState } from "./TimelineView.svelte";
   import type { Message } from "./types";
-  import { mapAsyncState, type AsyncState } from "@roomy/sdk";
+  import { mapAsyncState, type AsyncState, type AsyncStateWithIdle } from "@roomy/sdk";
   import StateSuspense from "$lib/components/primitives/StateSuspense.svelte";
+  import { backend } from "$lib/workers";
+  import { current } from "$lib/queries";
+
+  // Lazy loading state (AsyncStateWithIdle pattern)
+  let lazyLoadState = $state<AsyncStateWithIdle<{ hasMore: boolean }>>({ status: "idle" });
+  const isLazyLoading = $derived(lazyLoadState.status === "loading");
+  const hasMoreHistory = $derived(
+    lazyLoadState.status !== "success" || lazyLoadState.data.hasMore
+  );
+
+  async function loadMoreMessages() {
+    if (lazyLoadState.status === "loading") return;
+    if (lazyLoadState.status === "success" && !lazyLoadState.data.hasMore) return;
+    if (!current.joinedSpace?.id || !current.roomId) return;
+
+    lazyLoadState = { status: "loading" };
+    try {
+      const result = await backend.lazyLoadRoom(current.joinedSpace.id, current.roomId);
+      lazyLoadState = { status: "success", data: result };
+    } catch (e) {
+      lazyLoadState = {
+        status: "error",
+        message: e instanceof Error ? e.message : "Failed to load messages"
+      };
+    }
+  }
 
   let {
     messagingState: messagingStateProp,
@@ -367,6 +393,25 @@
       setTimeout(() => (isShifting = false), 1000);
     }
   });
+
+  // Track which room we've loaded for to prevent re-triggering
+  let lastLoadedRoomId: string | undefined;
+
+  // Initial lazy load on room change
+  $effect(() => {
+    const spaceId = current.joinedSpace?.id;
+    const roomId = current.roomId;
+
+    if (!spaceId || !roomId) return;
+
+    // Only trigger load if room actually changed
+    if (roomId === lastLoadedRoomId) return;
+    lastLoadedRoomId = roomId;
+
+    // Reset state for new room
+    lazyLoadState = { status: "idle" };
+    loadMoreMessages();
+  });
 </script>
 
 <div class="grow min-h-0 relative">
@@ -386,6 +431,19 @@
       onscroll={handleScroll}
     >
       <div class="flex flex-col w-full h-full pb-16 pt-2">
+        <StateSuspense state={lazyLoadState}>
+          {#snippet pending()}
+            <div class="flex justify-center py-2">
+              <IconMdiLoading class="animate-spin text-base-500" />
+            </div>
+          {/snippet}
+          {#snippet error({ message })}
+            <div class="flex justify-center items-center gap-2 py-2 text-sm text-red-500">
+              <span>Failed to load older messages: {message}</span>
+              <Button size="sm" variant="secondary" onclick={loadMoreMessages}>Retry</Button>
+            </div>
+          {/snippet}
+        </StateSuspense>
         <StateSuspense state={timeline}>
           {#snippet children(timeline)}
             <ol class="flex flex-col gap-2 max-w-full">
@@ -405,6 +463,9 @@
                         return x?.id;
                       }}
                       onscroll={(o) => {
+                        if (o < 100 && !isLazyLoading && hasMoreHistory) {
+                          loadMoreMessages();
+                        }
                         if (o < 100) showLastN += 50;
                       }}
                     >

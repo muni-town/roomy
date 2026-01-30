@@ -65,7 +65,7 @@ export type BackendInterface = {
     streamId: StreamDid,
     roomId: Ulid,
     end?: StreamIndex,
-  ): Promise<void>;
+  ): Promise<{ hasMore: boolean }>;
   fetchLinks(
     streamId: StreamDid,
     start: StreamIndex,

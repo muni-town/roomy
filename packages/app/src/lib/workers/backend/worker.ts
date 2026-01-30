@@ -773,6 +773,13 @@ class WorkerSupervisor {
           batch.priority,
         );
 
+        // If there is a resolver waiting on this batch, resolve it with the result
+        const resolver = this.#batchResolvers.get(batch.batchId);
+        if (resolver) {
+          resolver(result);
+          this.#batchResolvers.delete(batch.batchId);
+        }
+
         // Check for event ID resolvers (for sendEvent waiting on materialization)
         this.resolveEventPromises(result);
 
@@ -963,26 +970,35 @@ class WorkerSupervisor {
     return events;
   }
 
-  async lazyLoadRoom(spaceId: StreamDid, roomId: Ulid, end?: StreamIndex) {
+  async lazyLoadRoom(spaceId: StreamDid, roomId: Ulid, end?: StreamIndex): Promise<{ hasMore: boolean }> {
     await this.#connected.promise;
     if (this.#roomy.state !== "connected")
       throw new Error("Client not connected");
 
     const space = this.#roomy.spaces.get(spaceId);
     if (!space) throw new Error("Could not find space in connected streams");
+
     const ROOM_FETCH_BATCH_SIZE = 100;
     const events = await space.lazyLoadRoom(roomId, ROOM_FETCH_BATCH_SIZE, end);
 
-    // Push fetched events to eventChannel for materialization
     if (events.length > 0) {
+      const batchId = newUlid();
+      const materialized = new Promise<void>((resolve) => {
+        this.#batchResolvers.set(batchId, () => resolve());
+      });
+
       this.#roomy.eventChannel.push({
         status: "events",
-        batchId: newUlid(),
+        batchId,
         streamId: spaceId,
         events,
         priority: "priority",
       });
+
+      await materialized;
     }
+
+    return { hasMore: events.length >= ROOM_FETCH_BATCH_SIZE };
   }
 
   async fetchLinks(
