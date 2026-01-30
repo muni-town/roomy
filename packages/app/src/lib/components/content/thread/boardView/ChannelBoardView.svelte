@@ -47,7 +47,7 @@
                   coalesce(author_override_info.name, author_info.name) as author,
                   coalesce(override.timestamp, ulid_timestamp(me.id)) as timestamp,
                   row_number() over (
-                    partition by author
+                    partition by author_edge.tail
                     order by me.id desc
                   ) as row_num
                 from comp_content mc

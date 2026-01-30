@@ -54,7 +54,7 @@
 <a
   href={`/${page.params.space}/${thread.id}${parent ? "?parent=" + parent : thread.canonicalParent ? "?parent=" + thread.canonicalParent : ""}`}
 >
-  <Box class="flex items-baseline p-3">
+  <Box class="flex items-center p-3">
     <div
       class="flex items-center relative -bottom-1 justify-between gap-2 mr-2"
     >
@@ -72,7 +72,24 @@
     <div class="ml-auto flex items-center shrink-0">
       <!-- <div class="grow"></div> -->
 
-      <div class="grow shrink-0 text-end">
+      <AvatarGroup
+        avatarClass="size-8"
+        users={thread.activity.members
+          .filter((x) => !!x.avatar)
+          .map((m) => ({
+            src: m.avatar!,
+            id: m.id,
+            alt: "User Avatar for " + (m.name || "Unknown User"),
+          }))}
+      />
+      <div class="grow shrink-0 flex justify-between text-end w-40">
+        {#if thread.channel}
+          <Badge class="mx-2" size="sm" variant="secondary"
+            ><IconHeroiconsHashtag
+              class="shrink-0 size-3 -mr-1"
+            />{thread.channel}</Badge
+          >
+        {/if}
         <span class="text-base-500 text-sm"
           >{#if lastMessageTimestamp}
             {#if Date.now() - lastMessageTimestamp < 60 * 1000}
@@ -85,23 +102,6 @@
           {/if}</span
         >
       </div>
-      {#if thread.channel}
-        <Badge class="mx-2" size="sm"
-          ><IconHeroiconsHashtag
-            class="shrink-0 size-3 -mr-1"
-          />{thread.channel}</Badge
-        >
-      {/if}
-      <AvatarGroup
-        avatarClass="size-8"
-        users={thread.activity.members
-          .filter((x) => !!x.avatar)
-          .map((m) => ({
-            src: m.avatar!,
-            id: m.id,
-            alt: "User Avatar for " + (m.name || "Unknown User"),
-          }))}
-      />
     </div>
   </Box>
 </a>
