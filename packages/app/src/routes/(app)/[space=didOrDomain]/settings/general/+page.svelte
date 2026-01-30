@@ -1,9 +1,18 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import InlineMono from "$lib/components/primitives/InlineMono.svelte";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { current } from "$lib/queries";
   import { backend, backendStatus } from "$lib/workers";
-  import { Badge, Button, Input, Tabs, Textarea, toast } from "@fuxui/base";
+  import {
+    Alert,
+    Badge,
+    Button,
+    Input,
+    Tabs,
+    Textarea,
+    toast,
+  } from "@fuxui/base";
   import { Handle, newUlid } from "@roomy/sdk";
 
   import IconMdiLoading from "~icons/mdi/loading";
@@ -271,22 +280,21 @@
     Space Handle <Badge>{currentSpaceHandle || "Not Set"}</Badge>
   </h2>
 
-  <p class="mb-3 text-base-700 dark:text-base-300 text-center">
-    Setting a space handle allows your space to be accessed with a nicer URL such as:
+  <p class="mb-3 text-base-700 dark:text-base-300">
+    Setting a space handle allows your space to be accessed with a nicer URL
+    such as:
   </p>
 
-  <div
-    class="font-bold text-center m-3 font-mono text-base-900 dark:text-base-100"
-  >
+  <div class="font-bold m-3 font-mono text-base-900 dark:text-base-100">
     {page.url.host}/{exampleSpaceHandle}
   </div>
 
-  <p class="mb-3 text-base-700 dark:text-base-300 text-center">
+  <p class="mb-3 text-base-700 dark:text-base-300">
     A space admin can use their handle for the space, or you can configure a
     handle using DNS.
   </p>
 
-  <div class="flex justify-center">
+  <div class="flex">
     <Tabs
       items={handleTabs.map((name) => ({
         name,
@@ -303,28 +311,37 @@
         <IconMdiLoading class="animate-spin" font-size={40} />
       </div>
     {:then profileSpace}
-      <form class="text-center">
+      <form class="items-start">
         {#if current.space.status == "joined" && current.space.space.id == profileSpace}
           <strong
             >Your ATProto handle <code>{backendStatus.profile?.handle}</code> is
             being used for this space.
           </strong>
         {:else if profileSpace}
-          <strong
-            >Your ATProto handle <code>{backendStatus.profile?.handle}</code> is
-            being used for a
-            <a href={`/${profileSpace}`} class="text-accent-500"
-              >different space</a
-            >.</strong
-          > Using your handle for this space will disconnect it from the other one.
+          <Alert type="warning"
+            ><div>
+              <strong
+                >Your ATProto handle <InlineMono
+                  >{backendStatus.profile?.handle}</InlineMono
+                > is being used for a
+                <a href={`/${profileSpace}`} class="text-accent-500"
+                  >different space</a
+                >.</strong
+              > Using your handle for this space will disconnect it from the other
+              one.
+            </div></Alert
+          >
         {:else}
-          <strong
-            >Your ATProto handle <code>{backendStatus.profile?.handle}</code> is
-            not being used for any space.</strong
+          <Alert type="info"
+            ><span
+              >Your ATProto handle <InlineMono
+                >@{backendStatus.profile?.handle}</InlineMono
+              > is not being used for any space.</span
+            ></Alert
           >
         {/if}
 
-        <div class="gap-2 flex flex-col my-3 p-3">
+        <div class="gap-2 flex flex-col items-start my-3 p-3">
           <!-- If the space is not currently using the user's handle. -->
           {#if backendStatus.profile && currentSpaceHandle != backendStatus.profile?.handle}
             <Button onclick={setSpaceHandleUsingProfile}
@@ -360,13 +377,13 @@
     {/await}
   {:else if activeHandleTab == "Use DNS"}
     <form>
-      <p class="mb-3 text-base-700 dark:text-base-300 text-center">
+      <p class="mb-3 text-base-700 dark:text-base-300">
         In order to set a space handle you must create a DNS TXT record for your
         domain:
       </p>
 
       <pre
-        class="font-bold text-center m-4 font-mono text-base-900 dark:text-base-100">TXT    _leaf{exampleSpaceHandle.split(
+        class="font-bold m-4 font-mono text-base-900 dark:text-base-100">TXT    _leaf{exampleSpaceHandle.split(
           ".",
         ).length >= 3
           ? "."
