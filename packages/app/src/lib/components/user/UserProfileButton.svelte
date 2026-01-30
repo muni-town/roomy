@@ -17,11 +17,16 @@
   }
 </script>
 
-<Popover bind:open={popoverOpen} side="right" sideOffset={12} class="my-4">
+<Popover
+  bind:open={popoverOpen}
+  side="right"
+  sideOffset={12}
+  class="my-4 max-w-80"
+>
   {#snippet child({ props })}
     <button
       {...props}
-      class="cursor-pointer opacity-90 hover:opacity-100 transition-opacity duration-200 group overflow-hidden rounded-full size-10 border-2 border-solid"
+      class="cursor-pointer opacity-90 hover:opacity-100 transition-opacity duration-200 group overflow-hidden rounded-full border-2 border-solid"
       class:border-green-500={connected}
       class:border-red-500={!connected}
     >
@@ -46,7 +51,8 @@
           fallback={backendStatus.profile?.displayName}
           class="group-hover:scale-110 transition-transform duration-200"
         ></Avatar><a
-          class="mr-auto font-medium"
+          class="mr-auto font-medium truncate"
+          title={`@${backendStatus.profile?.handle}`}
           href={"/user/" + backendStatus.profile?.id}
           >@{backendStatus.profile?.handle}</a
         >
