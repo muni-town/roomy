@@ -4,7 +4,8 @@
 
 import { UserDid, type, Ulid, BasicInfo, BasicInfoUpdate } from "../primitives";
 import { RoomExtensionMap } from "../extensions/room";
-import { defineEvent, sql, ensureEntity } from "./index";
+import { defineEvent, ensureEntity } from "./utils";
+import { sql } from "../../utils";
 
 export const RoomKind = type(
   "'space.roomy.channel' | 'space.roomy.category' | 'space.roomy.thread' | 'space.roomy.page'",

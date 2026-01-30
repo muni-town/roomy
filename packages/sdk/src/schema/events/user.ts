@@ -2,14 +2,11 @@
  * User events: metadata overrides (for bridged accounts) and read tracking
  */
 
+import { decodeTime } from "ulidx";
+import { SqlStatement } from "../../types";
+import { sql } from "../../utils";
 import { BasicInfoUpdate, Did, StreamDid, type, Ulid } from "../primitives";
-import {
-  defineEvent,
-  sql,
-  ensureEntity,
-  decodeTime,
-  type SqlStatement,
-} from "./index";
+import { defineEvent, ensureEntity } from "./utils";
 
 const SetUserProfileSchema = type({
   $type: "'space.roomy.user.updateProfile.v0'",

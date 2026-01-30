@@ -2,8 +2,10 @@
  * Page events: editing collaborative documents
  */
 
+import { fromBytes } from "@atcute/cbor";
+import { sql } from "../../utils";
 import { type, Content, Ulid } from "../primitives";
-import { defineEvent, sql, ensureEntity, fromBytes } from "./index";
+import { defineEvent, ensureEntity } from "./utils";
 
 const EditPageSchema = type({
   $type: "'space.roomy.page.editPage.v0'",

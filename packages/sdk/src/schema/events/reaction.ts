@@ -2,8 +2,9 @@
  * Reaction events: add, remove (including bridged variants)
  */
 
+import { sql } from "../../utils";
 import { UserDid, type, Ulid } from "../primitives";
-import { defineEvent, sql } from "./index";
+import { defineEvent } from "./utils";
 
 const AddReactionSchema = type({
   $type: "'space.roomy.reaction.addReaction.v0'",

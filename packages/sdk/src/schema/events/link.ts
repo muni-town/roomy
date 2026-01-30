@@ -2,8 +2,9 @@
  * Link events: create and remove room links
  */
 
+import { sql } from "../../utils/sqlTemplate";
 import { type, Ulid } from "../primitives";
-import { defineEvent, sql } from "./index";
+import { defineEvent } from "./utils";
 
 const CreateRoomLinkSchema = type({
   $type: "'space.roomy.link.createRoomLink.v0'",

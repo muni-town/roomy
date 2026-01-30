@@ -2,6 +2,7 @@
  * Space-level events: join, leave, admin management, handle linking
  */
 
+import { sql } from "../../utils";
 import {
   BasicInfoUpdate,
   Did,
@@ -10,7 +11,7 @@ import {
   UserDid,
   type,
 } from "../primitives";
-import { defineEvent, sql, ensureEntity, edgePayload } from "./index";
+import { defineEvent, edgePayload, ensureEntity } from "./utils";
 
 const JoinSpaceSchema = type({
   $type: "'space.roomy.space.joinSpace.v0'",

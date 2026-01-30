@@ -7,7 +7,10 @@ import {
   MessageExtensionMap,
   MessageExtensionUpdateMap,
 } from "../extensions/message";
-import { defineEvent, sql, ensureEntity, decodeTime, fromBytes } from "./index";
+import { defineEvent, ensureEntity } from "./utils";
+import { sql } from "../../utils";
+import { decodeTime } from "ulidx";
+import { fromBytes } from "@atcute/cbor";
 
 const CreateMessageSchema = type({
   $type: "'space.roomy.message.createMessage.v0'",
@@ -70,7 +73,7 @@ export const CreateMessage = defineEvent(
           'author'
       `);
     }
-    
+
     if (overrideAuthorExt || overrideTimestampExt) {
       statements.push(sql`
         insert or replace into comp_override_meta (entity, author, timestamp)
@@ -219,8 +222,12 @@ export const EditMessage = defineEvent(
 
     // Handle attachments extension updates
     // null = remove all attachments, value = replace attachments
-    if (event.extensions && "space.roomy.extension.attachments.v0" in event.extensions) {
-      const attachmentsExt = event.extensions["space.roomy.extension.attachments.v0"];
+    if (
+      event.extensions &&
+      "space.roomy.extension.attachments.v0" in event.extensions
+    ) {
+      const attachmentsExt =
+        event.extensions["space.roomy.extension.attachments.v0"];
 
       // Delete existing attachment data for this message
       // Pattern: entity ends with ?message=<messageId>
@@ -394,7 +401,9 @@ const ForwardMessagesSchema = type({
     .moreThanLength(0)
     .atMostLength(1) // Must be exactly one until we have TVFs in LibSQL
     .describe("The IDs of the messages being forwarded."),
-  fromRoomId: Ulid.describe("The room from which the messages are being forwarded"),
+  fromRoomId: Ulid.describe(
+    "The room from which the messages are being forwarded",
+  ),
 }).describe(
   "Forward one or more messages to a different room. Unlike move, the original messages remain in place.",
 );
