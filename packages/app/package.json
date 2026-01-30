@@ -128,7 +128,7 @@
     "rollup-plugin-visualizer": "^6.0.5",
     "svelte": "^5.38.10",
     "svelte-boring-avatars": "^1.2.6",
-    "svelte-check": "^4.3.1",
+    "svelte-check": "^4.3.5",
     "svelte-dnd-action": "^0.9.65",
     "svelte-render-scan": "^1.1.0",
     "svelte-tiptap": "^2.2.0",

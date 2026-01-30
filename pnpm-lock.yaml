@@ -319,8 +319,8 @@ importers:
         specifier: ^1.2.6
         version: 1.2.6
       svelte-check:
-        specifier: ^4.3.1
-        version: 4.3.1(picomatch@4.0.3)(svelte@5.38.10)(typescript@5.9.2)
+        specifier: ^4.3.5
+        version: 4.3.5(picomatch@4.0.3)(svelte@5.38.10)(typescript@5.9.2)
       svelte-dnd-action:
         specifier: ^0.9.65
         version: 0.9.65(svelte@5.38.10)
@@ -4158,8 +4158,8 @@ packages:
   svelte-boring-avatars@1.2.6:
     resolution: {integrity: sha512-8+Z1DhsMUVI/V/5ik00Arw0PgbJcMdhTXq3YGqccBc5bYFeceCtMEMB0aWGhi8xFV+0aqZbWvS89Hcj16LlfHA==}
 
-  svelte-check@4.3.1:
-    resolution: {integrity: sha512-lkh8gff5gpHLjxIV+IaApMxQhTGnir2pNUAqcNgeKkvK5bT/30Ey/nzBxNLDlkztCH4dP7PixkMt9SWEKFPBWg==}
+  svelte-check@4.3.5:
+    resolution: {integrity: sha512-e4VWZETyXaKGhpkxOXP+B/d0Fp/zKViZoJmneZWe/05Y2aqSKj3YN2nLfYPJBQ87WEiY4BQCQ9hWGu9mPT1a1Q==}
     engines: {node: '>= 18.0.0'}
     hasBin: true
     peerDependencies:
@@ -8478,7 +8478,7 @@ snapshots:
 
   svelte-boring-avatars@1.2.6: {}
 
-  svelte-check@4.3.1(picomatch@4.0.3)(svelte@5.38.10)(typescript@5.9.2):
+  svelte-check@4.3.5(picomatch@4.0.3)(svelte@5.38.10)(typescript@5.9.2):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       chokidar: 4.0.3
