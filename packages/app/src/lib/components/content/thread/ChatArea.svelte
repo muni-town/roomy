@@ -26,6 +26,7 @@
   import type { MessagingState } from "./TimelineView.svelte";
   import { messagingState } from "./TimelineView.svelte";
   import type { Message } from "./types";
+  import QueryBoundary from "$lib/components/primitives/QueryBoundary.svelte";
 
   let {
     messagingState: messagingStateProp,
@@ -214,10 +215,14 @@
   let isAtBottom = $state(true);
   let showJumpToPresent = $derived(!isAtBottom);
 
-  let timeline = $derived.by(() => {
-    if (!query.result) return [];
+  // Expose the raw query state for boundary to use
+  let queryState = $derived(query.current);
 
-    const mapped = query.result.reverse().map((message, index) => {
+  let timeline = $derived.by(() => {
+    const results = query.result;
+    if (!results) return [];
+
+    const mapped = results.reverse().map((message, index) => {
       // Get the previous message (if it exists)
       const prevMessage = index > 0 ? query.result![index - 1] : null;
 
@@ -252,8 +257,6 @@
     return mapped;
   });
   let slicedTimeline = $derived(timeline.slice(-showLastN));
-  let messagesLoaded = $derived(timeline && timeline.length >= 0);
-
   let isShowingFirstMessage = $derived(!timeline.length);
   let viewport: HTMLDivElement = $state(null!);
 
@@ -363,83 +366,52 @@
   </div>
 
   <ScrollArea.Root type="auto" class="h-full overflow-hidden">
-    <!-- Important: This area takes the place of the chat which pushes chat offscreen
-        which allows it to load then pop into place once the spinner is gone. -->
-    {#if !messagesLoaded}
-      <div
-        class="grid items-center justify-center h-full w-full bg-transparent"
-      >
-        <span class="dz-loading dz-loading-spinner"></span>
-      </div>
-    {/if}
     <ScrollArea.Viewport
       bind:ref={viewport}
       class="relative max-w-full w-full h-full"
       onscroll={handleScroll}
     >
       <div class="flex flex-col w-full h-full pb-16 pt-2">
-        {#if isShowingFirstMessage}
-          <div class="flex flex-col gap-2 max-w-full px-6 mb-4 mt-4">
-            <p class="text-base font-semibold text-base-900 dark:text-base-100">
-              Hello world!
-            </p>
-            <p class="text-sm text-base-600 dark:text-base-400">
-              No messages here yet. This is the beginning of something
-              beautiful.
-            </p>
-          </div>
-        {/if}
-        <ol class="flex flex-col gap-2 max-w-full">
-          <!--
-            This use of `key` needs explaining. `key` causes the components below
-            it to be deleted and re-created when the expression passed to it is changed.
-            This means that every time the `viewport` binding si updated, the virtualizer
-            will be re-created. This is important because the virtualizer only actually sets
-            up the scrollRef when is mounted. And `viewport` is technically only assigned after
-            _this_ parent component is mounted. Leading to a chicken-egg problem.
-
-            Once the `viewport` is assigned, the virtualizer has already been mounted with scrollRef
-            set to `undefined`, and it won't be re-calculated.
-
-            By using `key` we make sure that the virtualizer is re-mounted after the `viewport` is
-            assigned, so that it's scroll integration works properly.
-          -->
-          {#key viewport}
-            {#if timeline.length > 0}
-              <Virtualizer
-                bind:this={virtualizer}
-                data={timeline}
-                scrollRef={viewport}
-                overscan={5}
-                shift={isShifting}
-                getKey={(x) => {
-                  // Note: for some reason, sometimes `x` and `message` below are
-                  // undefined, so we have to use the conditionals to make sure we
-                  // don't try access properties of `undefined`.
-                  //
-                  // It might be good to figure out the root cause and fix that sometime.
-                  return x?.id;
-                }}
-                onscroll={(o) => {
-                  if (o < 100) showLastN += 50;
-                }}
-              >
-                {#snippet children(message?: Message)}
-                  {#if message}
-                    <ChatMessage
-                      {message}
-                      messagingState={messagingStateProp}
-                      onOpenMobileMenu={openMobileMenu}
-                      {editingMessageId}
-                      onStartEdit={(id) => (editingMessageId = id)}
-                      onCancelEdit={() => (editingMessageId = "")}
-                    />
-                  {/if}
-                {/snippet}
-              </Virtualizer>
-            {/if}
-          {/key}
-        </ol>
+        <QueryBoundary
+          query={queryState}
+          emptyMessage="No messages here yet. This is the beginning of something beautiful."
+          showEmptyState={isShowingFirstMessage}
+        >
+          {#snippet children()}
+            <ol class="flex flex-col gap-2 max-w-full">
+              {#key viewport}
+                {#if timeline.length > 0}
+                  <Virtualizer
+                    bind:this={virtualizer}
+                    data={timeline}
+                    scrollRef={viewport}
+                    overscan={5}
+                    shift={isShifting}
+                    getKey={(x) => {
+                      return x?.id;
+                    }}
+                    onscroll={(o) => {
+                      if (o < 100) showLastN += 50;
+                    }}
+                  >
+                    {#snippet children(message?: Message)}
+                      {#if message}
+                        <ChatMessage
+                          {message}
+                          messagingState={messagingStateProp}
+                          onOpenMobileMenu={openMobileMenu}
+                          {editingMessageId}
+                          onStartEdit={(id) => (editingMessageId = id)}
+                          onCancelEdit={() => (editingMessageId = "")}
+                        />
+                      {/if}
+                    {/snippet}
+                  </Virtualizer>
+                {/if}
+              {/key}
+            </ol>
+          {/snippet}
+        </QueryBoundary>
       </div>
     </ScrollArea.Viewport>
     <ScrollArea.Scrollbar
