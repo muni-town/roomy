@@ -409,21 +409,22 @@ export const ForwardMessages = defineEvent(
     // For each forwarded message, create a "forward" edge in the destination room
     // The forwarded message appears in event.room with a reference back to the original
     // event.fromRoomId indicates where the message originated
+    // event.id serves as the forward reference entity ULID
     return event.messageIds.flatMap((msgId) => [
       // Ensure the forwarded reference entity exists in the target (destination) room
-      ensureEntity(streamId, `${msgId}:forward:${event.room}`, event.room),
-      // Create forward edge: head = forward reference, tail = original message
+      ensureEntity(streamId, event.id, event.room),
+      // Create forward edge: head = forward reference (event.id), tail = original message
       sql`
         insert or ignore into edges (head, tail, label)
         values (
-          ${`${msgId}:forward:${event.room}`},
+          ${event.id},
           ${msgId},
           'forward'
         )
       `,
     ]);
   },
-  (x) => [...x.messageIds],
+  (x) => [x.id, ...x.messageIds],
 );
 
 // All message events
