@@ -52,7 +52,7 @@ export const CreateRoomLink = defineEvent(
         values (
           ${event.id},
           'text/markdown',
-          cast(('[@' || (select handle from comp_user where did = ${user}) || '](/user/' || ${user} || ') ' || ${event.isCreationLink ? "created [" : "linked to "} || (select name from comp_info where entity = ${event.linkToRoom}) || '](' || ${event.linkToRoom} || ').') as blob),
+          cast(('[@' || (select handle from comp_user where did = ${user}) || '](/user/' || ${user} || ') ' || ${event.isCreationLink ? "created [" : "linked to "} || (select name from comp_info where entity = ${event.linkToRoom}) || '](' || ${event.linkToRoom} || '?parent=' || ${event.room} || ').') as blob),
           ${event.id}
       )
       `,
