@@ -232,8 +232,8 @@ export const EditMessage = defineEvent(
         sql`delete from comp_embed_link where entity like ${messageIdSuffix}`,
         sql`delete from comp_comment where entity = ${event.messageId}`,
         sql`delete from edges where head = ${event.messageId} and label = 'reply'`,
-        // Clean up orphaned entities
-        sql`delete from entities where parent = ${event.messageId} and id != ${event.messageId}`,
+        // Clean up orphaned entities (media entities have room = messageId)
+        sql`delete from entities where room = ${event.messageId} and id != ${event.messageId}`,
       );
 
       // If new attachments provided (not null/undefined), insert them
