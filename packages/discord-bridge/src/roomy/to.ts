@@ -587,8 +587,23 @@ export async function ensureRoomyMessageForDiscordMessage(
   ctx: GuildContext,
   roomyRoomId: string,
   message: MessageProperties,
-  batcher?: EventBatcher,
+  botOrBatcher?: DiscordBot | EventBatcher,
+  maybeBatcher?: EventBatcher,
 ): Promise<string | null> {
+  // Unpack parameters: botOrBatcher can be either the bot (for fetching original messages) or a batcher
+  let bot: DiscordBot | undefined;
+  let batcher: EventBatcher | undefined;
+  if (botOrBatcher) {
+    if ('helpers' in botOrBatcher) {
+      bot = botOrBatcher as DiscordBot;
+    } else {
+      batcher = botOrBatcher as EventBatcher;
+    }
+  }
+  if (maybeBatcher) {
+    batcher = maybeBatcher;
+  }
+
   return tracer.startActiveSpan(
     "sync.message.discord_to_roomy",
     async (span) => {
@@ -655,6 +670,131 @@ export async function ensureRoomyMessageForDiscordMessage(
         ) {
           span.setAttribute("sync.result", "skipped_own_webhook");
           return null;
+        }
+
+        // 2b. Skip system messages that shouldn't be synced as regular content
+        const msgType = message.type;
+        if (
+          msgType === DISCORD_MESSAGE_TYPES.THREAD_CREATED ||
+          msgType === DISCORD_MESSAGE_TYPES.CHANNEL_NAME_CHANGE
+        ) {
+          span.setAttribute("sync.result", "skipped_system_message");
+          span.setAttribute("discord.message_type", msgType);
+          console.log(
+            `Skipping system message ${message.id} (type=${msgType})`,
+          );
+          return null;
+        }
+
+        // 2c. Handle thread starter messages - forward original message to thread
+        if (msgType === DISCORD_MESSAGE_TYPES.THREAD_STARTER_MESSAGE) {
+          span.setAttribute("sync.result", "thread_starter_forward");
+          span.setAttribute("discord.message_type", msgType);
+
+          // ThreadStarterMessage has a messageReference pointing to the original message
+          if (!message.messageReference?.messageId) {
+            console.warn(
+              `ThreadStarterMessage ${message.id} has no messageReference - skipping`,
+            );
+            return null;
+          }
+
+          const originalMsgIdStr =
+            message.messageReference.messageId.toString();
+          let originalRoomyId =
+            await ctx.syncedIds.get_roomyId(originalMsgIdStr);
+
+          // If original message not synced, fetch it from Discord
+          if (!originalRoomyId) {
+            if (!bot) {
+              console.warn(
+                `Original message ${originalMsgIdStr} for thread starter not yet synced and no bot available - skipping forward`,
+              );
+              return null;
+            }
+            console.log(
+              `Original message ${originalMsgIdStr} not synced, fetching from Discord...`,
+            );
+            try {
+              const originalMsg = await bot.helpers.getMessage(
+                message.messageReference.channelId!,
+                message.messageReference.messageId,
+              );
+              // Get the parent channel's Roomy ID
+              const parentChannelKey = getRoomKey(message.messageReference.channelId!);
+              const parentRoomyId = await ctx.syncedIds.get_roomyId(parentChannelKey);
+              if (!parentRoomyId) {
+                console.warn(
+                  `Parent channel ${message.messageReference.channelId} not synced - cannot sync original message`,
+                );
+                return null;
+              }
+              // Sync the original message
+              const syncedId = await ensureRoomyMessageForDiscordMessage(
+                ctx,
+                parentRoomyId,
+                originalMsg,
+                batcher,
+              );
+              if (!syncedId) {
+                console.warn(
+                  `Failed to sync original message ${originalMsgIdStr} - skipping forward`,
+                );
+                return null;
+              }
+              originalRoomyId = syncedId;
+            } catch (e) {
+              console.error(
+                `Failed to fetch original message ${originalMsgIdStr} from Discord:`,
+                e,
+              );
+              return null;
+            }
+          }
+
+          // Get the parent channel's Roomy ID (where the original message lives)
+          if (!message.messageReference.channelId) {
+            console.warn(
+              `ThreadStarterMessage ${message.id} has no channelReference - skipping`,
+            );
+            return null;
+          }
+          const parentChannelKey = getRoomKey(message.messageReference.channelId);
+          const fromRoomyId = await ctx.syncedIds.get_roomyId(parentChannelKey);
+
+          if (!fromRoomyId) {
+            console.warn(
+              `Parent channel ${message.messageReference.channelId} not yet synced - skipping forward`,
+            );
+            return null;
+          }
+
+          // Forward the original message to this thread room
+          const forwardEvent: Event = {
+            id: newUlid(),
+            room: roomyRoomId as Ulid,
+            $type: "space.roomy.message.forwardMessages.v0",
+            messageIds: [originalRoomyId as Ulid],
+            fromRoomId: fromRoomyId as Ulid,
+          };
+
+          if (batcher) {
+            await batcher.add(forwardEvent);
+          } else {
+            await ctx.connectedSpace.sendEvent(forwardEvent);
+          }
+
+          console.log(
+            `Forwarded message ${originalRoomyId} from ${fromRoomyId} to thread ${roomyRoomId} (Discord thread starter ${message.id})`,
+          );
+
+          // Register the thread starter message ID as synced (mapped to the forward event)
+          await ctx.syncedIds.register({
+            discordId: message.id.toString(),
+            roomyId: forwardEvent.id,
+          });
+
+          return forwardEvent.id;
         }
 
         // 3. Build attachments array

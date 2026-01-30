@@ -163,13 +163,29 @@ export async function startBot() {
         // await getRoomyThreadForChannel(ctx, channel);
       },
       async threadCreate(channel) {
+        // Skip during backfill to avoid race conditions
+        if (!doneBackfillingFromDiscord) {
+          console.log(`Skipping threadCreate for ${channel.name} - backfill not complete`);
+          return;
+        }
         if (!channel.guildId)
           throw new Error("Discord guild ID missing from thread create event");
-        if (!(await hasBridge(channel.guildId!))) return;
+        if (!(await hasBridge(channel.guildId!))) {
+          console.log(`Skipping threadCreate for ${channel.name} - no bridge for guild`);
+          return;
+        }
         const ctx = await getGuildContext(channel.guildId);
-        if (!ctx) return;
-        console.log("Thread create event", channel, ctx);
-        // await getRoomyThreadForChannel(ctx, channel);
+        if (!ctx) {
+          console.log(`Skipping threadCreate for ${channel.name} - no guild context`);
+          return;
+        }
+        console.log(`Thread create event: ${channel.name} (id=${channel.id}, parentId=${channel.parentId})`);
+        try {
+          await ensureRoomyThreadForDiscordThread(ctx, channel);
+          console.log(`Successfully created Roomy thread for Discord thread ${channel.name}`);
+        } catch (error) {
+          console.error(`Failed to create Roomy thread for Discord thread ${channel.name}:`, error);
+        }
       },
 
       // Handle new messages

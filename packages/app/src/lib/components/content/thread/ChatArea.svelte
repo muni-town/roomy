@@ -64,7 +64,7 @@
           ))
           from comp_reaction rc
           join comp_info i on i.entity = rc.user
-          where rc.entity = e.id 
+          where rc.entity = e.id
         ),
         'media', (
           select json_group_array(json_object(
@@ -99,8 +99,9 @@
             'from', cc.idx_from,
             'to', cc.idx_to
           )
-        )
-      ) as json, author_edge.*
+        ),
+        'forwardedFrom', null
+      ) as json, e.sort_idx as sort_idx, e.id as msg_id, author_edge.*
       from entities e -- message
         join comp_content c on c.entity = e.id -- message content
         join edges author_edge on author_edge.head = e.id and author_edge.label = 'author' -- message author relation
@@ -114,7 +115,91 @@
         e.room = ${page.params.object}
           and
         c.data is not null
-      order by e.sort_idx desc, e.id desc
+
+        union all
+  
+        -- Forwarded messages: follow forward edge to get original message content
+        select json_object(
+          'id', fwd.id,
+          'content', cast(c.data as text),
+          'lastEdit', c.last_edit,
+          'authorDid', u.did,
+          'authorName', i.name,
+          'authorAvatar', i.avatar,
+          'authorHandle', u.handle,
+          'masqueradeAuthor', o.author,
+          'masqueradeTimestamp', o.timestamp,
+          'replyTo', coalesce((
+            select json_group_array(ed.tail)
+            from edges ed
+            where ed.head = orig.id and ed.label = 'reply'
+          ), json_array()),
+          'masqueradeAuthorName', oai.name,
+          'masqueradeAuthorAvatar', oai.avatar,
+          'masqueradeAuthorHandle', oau.handle,
+          'reactions', (
+            select json_group_array(json_object(
+              'reaction', rc.reaction,
+              'userId', rc.user,
+              'userName', i.name,
+              'reactionId', rc.reaction_id
+            ))
+            from comp_reaction rc
+            join comp_info i on i.entity = rc.user
+            where rc.entity = orig.id
+          ),
+          'media', (
+            select json_group_array(json_object(
+              'mimeType', coalesce(i.mime_type, v.mime_type, f.mime_type),
+              'uri', coalesce(i.entity, v.entity, f.entity),
+              'width', coalesce(i.width, v.width),
+              'height', coalesce(i.height, v.height),
+              'blurhash', coalesce(i.blurhash, v.blurhash),
+              'length', v.length,
+              'size', coalesce(i.size, v.size, f.size),
+              'name', f.name
+            ))
+            from entities me
+            left join comp_embed_image i on i.entity = me.id
+            left join comp_embed_video v on v.entity = me.id
+            left join comp_embed_file f on f.entity = me.id
+            where me.room = orig.id
+              and (i.entity is not null or v.entity is not null or f.entity is not null)
+          ),
+          'links', (
+            select json_group_array(json_object(
+              'uri', l.entity,
+              'showPreview', l.show_preview
+            ))
+            from comp_embed_link l
+            where l.entity = orig.id
+          ),
+          'comment', (
+            select json_object(
+              'snippet', cc.snippet,
+              'version', cc.version,
+              'from', cc.idx_from,
+              'to', cc.idx_to
+            )
+            from comp_comment cc
+            where cc.entity = orig.id
+          ),
+          'forwardedFrom', orig.id
+        ) as json, fwd.sort_idx as sort_idx, fwd.id as msg_id, author_edge.*
+        from entities fwd -- forward reference entity
+          join edges fwd_edge on fwd_edge.head = fwd.id and fwd_edge.label = 'forward' -- forward edge
+          join entities orig on orig.id = fwd_edge.tail -- original message
+          join comp_content c on c.entity = orig.id -- original message content
+          join edges author_edge on author_edge.head = orig.id and author_edge.label = 'author' -- original author
+          left join comp_user u on u.did = author_edge.tail
+          left join comp_info i on i.entity = author_edge.tail
+          left join comp_override_meta o on o.entity = orig.id
+          left join comp_info oai on oai.entity = o.author
+          left join comp_user oau on oau.did = o.author
+        where
+          fwd.room = ${page.params.object}
+
+      order by sort_idx desc, msg_id desc
       limit ${showLastN}
     `,
     (row) => {

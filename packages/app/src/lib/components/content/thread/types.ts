@@ -15,6 +15,7 @@ export type Message = {
   masqueradeAuthorAvatar: string | null;
   mergeWithPrevious: boolean | null;
   replyTo: Ulid[];
+  forwardedFrom: Ulid | null;
   reactions: {
     reaction: string;
     userId: UserDid;
@@ -37,8 +38,8 @@ export type Message = {
   }[];
   comment: {
     snippet?: string;
-    version: Ulid;
-    from: number;
-    to: number;
-  };
+    version: Ulid | null;
+    from: number | null;
+    to: number | null;
+  } | null;
 };
