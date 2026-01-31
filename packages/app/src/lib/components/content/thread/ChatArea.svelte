@@ -27,31 +27,41 @@
   import type { MessagingState } from "./TimelineView.svelte";
   import { messagingState } from "./TimelineView.svelte";
   import type { Message } from "./types";
-  import { mapAsyncState, type AsyncState, type AsyncStateWithIdle } from "@roomy/sdk";
+  import {
+    mapAsyncState,
+    type AsyncState,
+    type AsyncStateWithIdle,
+  } from "@roomy/sdk";
   import StateSuspense from "$lib/components/primitives/StateSuspense.svelte";
   import { backend } from "$lib/workers";
   import { current } from "$lib/queries";
 
   // Lazy loading state (AsyncStateWithIdle pattern)
-  let lazyLoadState = $state<AsyncStateWithIdle<{ hasMore: boolean }>>({ status: "idle" });
+  let lazyLoadState = $state<AsyncStateWithIdle<{ hasMore: boolean }>>({
+    status: "idle",
+  });
   const isLazyLoading = $derived(lazyLoadState.status === "loading");
   const hasMoreHistory = $derived(
-    lazyLoadState.status !== "success" || lazyLoadState.data.hasMore
+    lazyLoadState.status !== "success" || lazyLoadState.data.hasMore,
   );
 
   async function loadMoreMessages() {
     if (lazyLoadState.status === "loading") return;
-    if (lazyLoadState.status === "success" && !lazyLoadState.data.hasMore) return;
+    if (lazyLoadState.status === "success" && !lazyLoadState.data.hasMore)
+      return;
     if (!current.joinedSpace?.id || !current.roomId) return;
 
     lazyLoadState = { status: "loading" };
     try {
-      const result = await backend.lazyLoadRoom(current.joinedSpace.id, current.roomId);
+      const result = await backend.lazyLoadRoom(
+        current.joinedSpace.id,
+        current.roomId,
+      );
       lazyLoadState = { status: "success", data: result };
     } catch (e) {
       lazyLoadState = {
         status: "error",
-        message: e instanceof Error ? e.message : "Failed to load messages"
+        message: e instanceof Error ? e.message : "Failed to load messages",
       };
     }
   }
@@ -409,7 +419,9 @@
 
   // Enable shift mode when lazy loading OR when showLastN increases
   // This preserves scroll position when messages are prepended at the top
-  const isShifting = $derived(isShiftingFromLazyLoad || isShiftingFromShowLastN);
+  const isShifting = $derived(
+    isShiftingFromLazyLoad || isShiftingFromShowLastN,
+  );
 
   // Track which room we've loaded for to prevent re-triggering
   let lastLoadedRoomId: string | undefined;
@@ -448,26 +460,37 @@
       onscroll={handleScroll}
     >
       <div class="flex flex-col w-full h-full pb-16 pt-2">
-        <StateSuspense state={lazyLoadState}>
-          {#snippet pending()}
-            <div class="flex justify-center py-2">
-              <IconMdiLoading class="animate-spin text-base-500" />
-            </div>
-          {/snippet}
-          {#snippet error({ message })}
-            <div class="flex justify-center items-center gap-2 py-2 text-sm text-red-500">
-              <span>Failed to load older messages: {message}</span>
-              <Button size="sm" variant="secondary" onclick={loadMoreMessages}>Retry</Button>
-            </div>
-          {/snippet}
-        </StateSuspense>
         <StateSuspense state={timeline}>
           {#snippet children(timeline)}
             <ol class="flex flex-col gap-2 max-w-full">
-              {#if timeline.length === 0}
-                "No messages here yet. This is the beginning of something
-                beautiful."
-              {:else}
+              <StateSuspense state={lazyLoadState}>
+                {#snippet children()}
+                  {#if timeline.length === 0}
+                    <p class="opacity-80 p-4 text-center text-sm">
+                      No messages here yet. This is the beginning of something
+                      beautiful.
+                    </p>
+                  {/if}
+                {/snippet}
+                {#snippet pending()}
+                  <div class="flex justify-center py-2">
+                    <IconMdiLoading class="animate-spin text-base-500" />
+                  </div>
+                {/snippet}
+                {#snippet error({ message })}
+                  <div
+                    class="flex justify-center items-center gap-2 py-2 text-sm text-red-500"
+                  >
+                    <span>Failed to load older messages: {message}</span>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onclick={loadMoreMessages}>Retry</Button
+                    >
+                  </div>
+                {/snippet}
+              </StateSuspense>
+              {#if timeline.length > 0}
                 {#key viewport}
                   {#if timeline.length > 0}
                     <Virtualizer
