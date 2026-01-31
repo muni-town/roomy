@@ -384,15 +384,32 @@
     chatArea.scrollToMessage = scrollToMessage;
   });
 
-  let isShifting = $state(false);
+  let isShiftingFromShowLastN = $state(false);
+  let isShiftingFromLazyLoad = $state(false);
   let lastShowLastN = $state(0);
+
   $effect(() => {
     if (showLastN > lastShowLastN) {
       lastShowLastN = showLastN;
-      isShifting = true;
-      setTimeout(() => (isShifting = false), 1000);
+      isShiftingFromShowLastN = true;
+      setTimeout(() => (isShiftingFromShowLastN = false), 1000);
     }
   });
+
+  // Keep shift mode enabled during lazy load AND briefly after it completes
+  // (new messages need time to render before we can disable shift)
+  $effect(() => {
+    if (isLazyLoading) {
+      isShiftingFromLazyLoad = true;
+    } else if (isShiftingFromLazyLoad) {
+      // Delay disabling shift to allow messages to render
+      setTimeout(() => (isShiftingFromLazyLoad = false), 500);
+    }
+  });
+
+  // Enable shift mode when lazy loading OR when showLastN increases
+  // This preserves scroll position when messages are prepended at the top
+  const isShifting = $derived(isShiftingFromLazyLoad || isShiftingFromShowLastN);
 
   // Track which room we've loaded for to prevent re-triggering
   let lastLoadedRoomId: string | undefined;
