@@ -6,6 +6,7 @@ import {
   messagePortInterface,
   reactiveWorkerState,
   type MessagePortApi,
+  type ReactiveWorkerState,
 } from "../workerMessaging";
 import { sql } from "$lib/utils/sqlTemplate";
 import { CONFIG } from "$lib/config";
@@ -55,7 +56,6 @@ import { context, SpanStatusCode } from "@opentelemetry/api";
 import { logMaterializationResult } from "../materializationLogging";
 import { createOauthClient, oauthDb } from "./oauth";
 import { Agent, CredentialSession } from "@atproto/api";
-import { requestLock, locksEnabled } from "$lib/workers/locks";
 import { lexicons } from "$lib/lexicons";
 import type { SessionManager } from "@atproto/api/dist/session-manager";
 
@@ -92,7 +92,7 @@ class WorkerSupervisor {
 
   #auth: AuthState;
   #roomy: RoomyState;
-  #status: Partial<BackendStatus>;
+  #status: ReactiveWorkerState<BackendStatus>;
 
   #connection: ConnectionState; // tabs connected to shared worker
   #authenticated = new Deferred<void>();

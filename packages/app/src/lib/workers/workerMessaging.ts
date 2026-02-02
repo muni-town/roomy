@@ -15,16 +15,16 @@ type HalfInterface = {
 };
 type IncomingMessage<In extends HalfInterface, Out extends HalfInterface> =
   | {
-      [K in keyof In]: ["call", K, string, ...Parameters<In[K]>];
-    }[keyof In]
+    [K in keyof In]: ["call", K, string, ...Parameters<In[K]>];
+  }[keyof In]
   | {
-      [K in keyof Out]: [
-        "response",
-        string,
-        "resolve" | "reject",
-        ReturnType<Out[K]>,
-      ];
-    }[keyof Out];
+    [K in keyof Out]: [
+      "response",
+      string,
+      "resolve" | "reject",
+      ReturnType<Out[K]>,
+    ];
+  }[keyof Out];
 
 export type MessagePortInterfaceConfig<Local extends HalfInterface> = {
   localName?: string;
@@ -167,8 +167,8 @@ export function messagePortInterface<
 
 type ReactiveWorkerStateMessage = ["need", string] | ["update", string, any];
 
-export type ReactiveWorkerState<T> = Partial<T> & {
-  current: { [key: string]: any | undefined };
+export type ReactiveWorkerState<T> = { [K in keyof T]?: Readonly<T[K]> } & {
+  current: { [key: string]: Readonly<any> | undefined };
 };
 
 /**
