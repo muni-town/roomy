@@ -17,6 +17,8 @@ services:
       DID: did:web:localhost
       PLC_DIRECTORY: http://plc-directory:3000
       ENDPOINT: http://locahost:5530
+    networks:
+      - roomy-dev
 
   plc-directory:
     image: ghcr.io/zicklag/did-plc-server:plc-053ddecb6a12ce0e996d300f9395899adf02dd05
@@ -33,6 +35,8 @@ services:
       LOG_ENABLED: "true"
       LOG_LEVEL: debug
       LOG_DESTINATION: 1
+    networks:
+      - roomy-dev
 
   plc-db:
     image: postgres
@@ -41,6 +45,27 @@ services:
       POSTGRES_PASSWORD: password
     volumes:
       - plc-db-data:/var/lib/postgresql
+
+  pds:
+    image: node:20-alpine
+    working_dir: /pds
+    command: sh -c "npm install && npm start"
+    volumes:
+      - ./pds:/pds
+      - pds-data:/data
+    ports:
+      - "2583:2583"
+    environment:
+      NODE_ENV: development
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:2583/xrpc/_health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - roomy-dev
 
   pyroscope:
     image: grafana/pyroscope:latest
@@ -112,6 +137,12 @@ services:
 volumes:
   leaf-data:
   plc-db-data:
+  pds-data:
+
+networks:
+  roomy-dev:
+    name: roomy-dev
+    external: true
 
 configs:
   loki-config:

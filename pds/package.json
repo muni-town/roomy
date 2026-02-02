@@ -1,0 +1,13 @@
+{
+  "name": "roomy-local-pds",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Lightweight local PDS for development and testing",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "@atproto/pds": "^0.5.2",
+    "dotenv": "^16.4.5"
+  }
+}
