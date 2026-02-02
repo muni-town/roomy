@@ -182,20 +182,19 @@ class WorkerSupervisor {
       runQuery: async (statement) => {
         return this.sqlite.runQuery(statement);
       },
-      createLiveQuery: async (id, port, statement) => {
+      createLiveQuery: async (lockId, port, statement) => {
         await this.sqlite.untilReady;
 
         const channel = this.sqlite.createLiveQueryChannel(port);
-        // When SharedWorker is enabled, use lock acquisition as a signal that the query
-        // is no longer in use. When disabled, cleanup is handled by explicit deleteLiveQuery calls.
-        if (locksEnabled()) {
-          requestLock(id, async () => {
-            // When we obtain a lock to the query ID, that means that the query is no longer in
-            // use and we can delete it.
-            await this.sqlite.deleteLiveQuery(id);
-          });
-        }
-        return this.sqlite.createLiveQuery(id, channel.port2, statement);
+
+        // Try to obtain a lock on the query. This will stall until the frontend is done with the
+        // query.
+        navigator.locks.request(lockId, async () => {
+          // Once we have a lock on the query, we know the frontend has stopped using it, so we can
+          // delete it.
+          await this.sqlite.deleteLiveQuery(lockId);
+        });
+        return this.sqlite.createLiveQuery(lockId, channel.port2, statement);
       },
       deleteLiveQuery: async (id) => {
         await this.sqlite.untilReady;

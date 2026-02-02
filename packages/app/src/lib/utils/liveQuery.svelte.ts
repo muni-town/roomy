@@ -1,7 +1,6 @@
 import { backend } from "$lib/workers";
 import type { LiveQueryMessage } from "$lib/workers/sqlite/setup";
 import type { SqlStatement } from "$lib/workers/sqlite/types";
-import { locksEnabled, requestLock } from "$lib/workers/locks";
 import type { AsyncState } from "@roomy/sdk";
 
 export class LiveQuery<Row extends { [key: string]: unknown }> {
@@ -9,17 +8,28 @@ export class LiveQuery<Row extends { [key: string]: unknown }> {
   #statement: SqlStatement = { sql: "" };
 
   constructor(statement: () => SqlStatement, mapper?: (row: any) => Row) {
-    const instanceId = "live-query-instance-" + crypto.randomUUID();
-
     $effect(() => {
-      const id = `live-query-${crypto.randomUUID()}`;
-      let dropLock: () => void = () => {};
-      const lockPromise = new Promise((r) => (dropLock = r as any));
-
+      // Compute the statement. Since we are in an effect this will be re-computed if any
+      // dependencies of `statement()` change.
       this.#statement = statement();
 
-      const setupQuery = async () => {
+      // Create a unique lock ID to use for this query
+      const lockId = `live-query-${crypto.randomUUID()}`;
+
+      // Create callback to drop the query when we are finished with it. ( Initialized in the next line. )
+      let dropQuery: () => void = () => { };
+
+      // Create a promise that will resolve once the query has been dropped.
+      const queryDropped = new Promise((r) => (dropQuery = r as any));
+
+      // Obtain a web-lock for this query that will be held for as long as we are interested in the
+      // results of the live query. 
+      navigator.locks.request(lockId, async () => {
+        // Create a new message channel to receive live query results
         const channel = new MessageChannel();
+
+        // When new results come over the channel, we need to parse the message and update the
+        // current state.
         channel.port1.onmessage = (ev) => {
           const data: LiveQueryMessage = ev.data;
           if ("error" in data) {
@@ -35,32 +45,21 @@ export class LiveQuery<Row extends { [key: string]: unknown }> {
           }
         };
 
-        if (locksEnabled()) {
-          // With SharedWorker: use locks to signal when query is no longer in use
-          requestLock(id, async () => {
-            backend.createLiveQuery(id, channel.port2, this.#statement);
-            await lockPromise;
-          });
-        } else {
-          // Without SharedWorker: create query directly, cleanup via effect return
-          backend.createLiveQuery(id, channel.port2, this.#statement);
-        }
-      };
+        // Register the live query with the backend so that we will get notified when results come
+        // in.
+        backend.createLiveQuery(lockId, channel.port2, this.#statement);
 
-      if (locksEnabled()) {
-        requestLock(instanceId, setupQuery);
-      } else {
-        setupQuery();
-      }
+        // Wait here to hold the web lock until the query is dropped. The backend will try to obtain
+        // the query lock that we currently hold, so as soon as we exit this closure, the backend
+        // will drop our the query for us.
+        await queryDropped;
+      });
 
+      // This callback will be called by Svelte before the effect is re-run because of changes, or
+      // when the component is unmounted.
       return () => {
-        dropLock();
-        // When locks are disabled, explicitly delete the live query on cleanup
-        if (!locksEnabled()) {
-          backend.deleteLiveQuery(id).catch(() => {
-            // Ignore errors during cleanup - worker may already be gone
-          });
-        }
+        // Drop the query lock, which will alert the backend that it may delete the query.
+        dropQuery();
       };
     });
   }
