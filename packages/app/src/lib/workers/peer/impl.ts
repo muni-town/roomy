@@ -2,25 +2,22 @@
 import { type Batch, type StreamIndex, type TaskPriority } from "../types";
 import {
     messagePortInterface,
-    reactiveWorkerState,
+    reactiveChannelState,
     type MessagePortApi,
-    type ReactiveWorkerState,
-} from "../workerMessaging";
+    type ReactiveChannelState,
+} from "../internalMessaging";
 import { sql } from "$lib/utils/sqlTemplate";
 import { CONFIG } from "$lib/config";
 import { db, prevStream } from "../idb";
 import { Deferred } from "$lib/utils/deferred";
 import type { QueryResult } from "../sqlite/setup";
 import {
-    type WorkerConfig,
     type AuthState,
-    type ConnectionState,
     type PeerStatus,
     type PeerInterface,
-    type ConsoleInterface,
-    consoleLogLevels,
     type SqliteState,
     type RoomyState,
+    type PeerClientInterface,
 } from "./types";
 import type {
     Savepoint,
@@ -56,6 +53,9 @@ import { Agent, CredentialSession } from "@atproto/api";
 import { lexicons } from "$lib/lexicons";
 import type { SessionManager } from "@atproto/api/dist/session-manager";
 
+export const peerStatusChannel = (sessionId: string) =>
+    new BroadcastChannel(`peer-status-${sessionId}`);
+
 /**
  * The peer implementation, wrapping up authentication and materialization of the roomy state.
  * */
@@ -69,11 +69,10 @@ export class Peer {
     #roomy: RoomyState;
 
     /** The reactive peer status which is propagated automatically over the worker reactive state channel. */
-    #status: ReactiveWorkerState<PeerStatus>;
+    #status: ReactiveChannelState<PeerStatus>;
 
     #sqlite: SqliteSupervisor;
 
-    #connection: ConnectionState; // tabs connected to shared worker
     #authenticated = new Deferred<void>();
     #connectedPersonalSpace = new Deferred<
         Extract<RoomyState, { state: "materializingPersonalSpace" }>
@@ -88,34 +87,23 @@ export class Peer {
         (value: Batch.Statement | Batch.ApplyResult) => void
     > = new Map();
 
+    
     constructor(opts: { sessionId: Ulid }) {
-        let [initSpan, ctx] = tracer.startActiveSpan(
-            "Construct Peer",
-            (span) => [span, context.active()] as const,
-        );
+    this.#sessionId = opts.sessionId;
 
-        // This span gives us a starting placeholder for the Init Peer span in case something gets
-        // stuck and we need to look for an incomplete peer initialization trace.
-        tracer.startActiveSpan("Start Init Peer", {}, ctx, (span) => span.end());
+    this.#sqlite = new SqliteSupervisor();
 
-        this.#sessionId = opts.sessionId;
+    this.#status = reactiveChannelState<PeerStatus>(
+      peerStatusChannel(this.#sessionId),
+      true,
+    );
 
-        this.#sqlite = new SqliteSupervisor();
-        this.#status = reactiveWorkerState<PeerStatus>(
-            new BroadcastChannel("peer-status"),
-            true,
-        );
+    this.#auth = { state: "loading" };
+    this.#status.authState = this.#auth;
 
-        this.#auth = { state: "loading" };
-        this.#status.authState = this.#auth;
-
-        this.#roomy = { state: "disconnected" };
-        this.#status.roomyState = this.#roomy;
-
-        this.#connection = { ports: new WeakMap(), count: 0 };
-
-        initSpan.end();
-    }
+    this.#roomy = { state: "disconnected" };
+    this.#status.roomyState = this.#roomy;
+  }
 
     getPeerInterface(this: Peer): PeerInterface {
         return {
@@ -228,7 +216,7 @@ export class Peer {
             uploadToPds: async (bytes, opts) => {
                 return this.client.uploadBlob(bytes, opts);
             },
-            addClient: async (port) => this.connectRpcMessagePort(port),
+            connectRpcClient: async (port) => this.connectRpcClient(port),
             pauseSubscription: async (_streamId) => {
                 // await this.openSpacesMaterializer?.pauseSubscription(streamId);
             },
@@ -295,47 +283,36 @@ export class Peer {
             },
         };
     }
+  /**
+   * Connect an RPC client to the peer over the provided message port.
+   *
+   * The client will be able to call the {@link PeerInterface} on the port using the
+   * {@link messagePortInterface} and the {@link Peer} will be able to call the the
+   * {@link PeerClientInterface} on the client.
+   */
+  connectRpcClient(messagePort: MessagePortApi) {
+    // Create the client interface wrapper around the message port
+    const peerClientInterface = messagePortInterface<
+      PeerInterface,
+      PeerClientInterface
+    >({
+      localName: "peer",
+      remoteName: "main",
+      messagePort,
+      handlers: this.getPeerInterface(),
+    });
 
-    connectRpcMessagePort(port: MessagePortApi) {
-        // Prevent duplicate connections - only connect once per port
-        if (this.#connection.ports.has(port)) {
-            const existingId = this.#connection.ports.get(port);
-            console.debug(
-                `SharedWorker: Port already connected (ID: ${existingId}), skipping duplicate connection`,
-            );
-            return;
-        }
+    // Let the client know the peer's session ID right away
+    peerClientInterface.setSessionId(this.#sessionId);
 
-        const connectionId = `conn-${++this.#connection.count}`;
-        this.#connection.ports.set(port, connectionId);
+    // Let the client know as soon as we get connected to the roomy server
+    this.#connected.promise.then((roomyState) => {
+      peerClientInterface.initFinished({
+        userDid: roomyState.client.agent.assertDid,
+      });
+    });
+  }
 
-        // Log connection BEFORE setting up console forwarding to avoid broadcast duplication
-        console.debug("(init.1) SharedWorker peer connected", {
-            id: connectionId,
-            total: this.#connection.count,
-        });
-
-        // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-        const consoleInterface = messagePortInterface<
-            PeerInterface,
-            ConsoleInterface
-        >({
-            localName: "peer",
-            remoteName: "main",
-            messagePort: port,
-            handlers: this.getPeerInterface(),
-        });
-
-        consoleInterface.setSessionId(this.#sessionId);
-
-
-        this.#connected.promise.then((roomyState) => {
-            // Tell the main thread that initialization is finished.
-            consoleInterface.initFinished({
-                userDid: roomyState.client.agent.assertDid,
-            });
-        });
-    }
 
     private async initialize(paramsStr?: string): Promise<{ did?: string }> {
         let [initSpan, ctx] = tracer.startActiveSpan(

@@ -21,9 +21,9 @@ import {
 } from "./setup";
 import {
   messagePortInterface,
-  reactiveWorkerState,
-  type ReactiveWorkerState,
-} from "../workerMessaging";
+  reactiveChannelState,
+  type ReactiveChannelState,
+} from "../internalMessaging";
 import { db } from "../idb";
 import schemaSql from "./schema.sql?raw";
 import { sql } from "$lib/utils/sqlTemplate";
@@ -80,7 +80,7 @@ class SqliteWorkerSupervisor {
   #isConnectionHealthy: boolean = true;
   // Heartbeat mechanism to prove this worker is alive
   #heartbeatInterval: NodeJS.Timeout | null = null;
-  #status: ReactiveWorkerState<SqliteStatus> = { current: {} };
+  #status: ReactiveChannelState<SqliteStatus> = { current: {} };
   #peer: PeerInterface | null = null;
   #ensuredProfiles = new Set<string>();
   #knownStreams = new Set<StreamDid>();
@@ -114,7 +114,7 @@ class SqliteWorkerSupervisor {
       this.#isConnectionHealthy = false;
     };
 
-    this.#status = reactiveWorkerState<SqliteStatus>(params.statusPort, true);
+    this.#status = reactiveChannelState<SqliteStatus>(params.statusPort, true);
 
     this.#peer = messagePortInterface<{}, PeerInterface>({
       localName: "sqlite",

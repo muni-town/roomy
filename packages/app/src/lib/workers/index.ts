@@ -1,9 +1,9 @@
-import { messagePortInterface, reactiveWorkerState } from "./workerMessaging";
+import { messagePortInterface, reactiveChannelState } from "./internalMessaging";
 import peerWorkerUrl from "./peer/worker.ts?worker&url";
 import type {
   PeerInterface,
   PeerStatus,
-  ConsoleInterface,
+  PeerClientInterface,
 } from "./peer/types";
 import type { SqliteStatus } from "./sqlite/types";
 import { CONFIG, flags } from "../config";
@@ -16,7 +16,7 @@ if (import.meta.hot && !(window as any).__playwright) {
 }
 
 /** Reactive status of the shared worker "peer". */
-export const peerStatus = reactiveWorkerState<PeerStatus>(
+export const peerStatus = reactiveChannelState<PeerStatus>(
   new BroadcastChannel("peer-status"),
   false,
 );
@@ -25,7 +25,7 @@ export const peerStatus = reactiveWorkerState<PeerStatus>(
 const workerStatusChannel = new MessageChannel();
 
 /** Reactive status of the sqlite worker for this tab. */
-export const sqliteStatus = reactiveWorkerState<SqliteStatus>(
+export const sqliteStatus = reactiveChannelState<SqliteStatus>(
   workerStatusChannel.port1,
   false,
 );
@@ -55,7 +55,7 @@ export const peer = tracer.startActiveSpan(
       type: "module",
     });
 
-    const peer = messagePortInterface<ConsoleInterface, PeerInterface>({
+    const peer = messagePortInterface<PeerClientInterface, PeerInterface>({
       localName: "main",
       remoteName: "peer",
       messagePort: "port" in peerWorker ? peerWorker.port : peerWorker,
@@ -90,7 +90,7 @@ export const peer = tracer.startActiveSpan(
 
     // Start a sqlite worker for this tab.
     const sqliteWorkerChannel = new MessageChannel();
-    peer.addClient(sqliteWorkerChannel.port1);
+    peer.connectRpcClient(sqliteWorkerChannel.port1);
     const sqliteWorker = new Worker(
       new URL("./sqlite/worker.ts", import.meta.url),
       {
@@ -130,14 +130,6 @@ export function getPersonalSpaceId() {
 
 // for running in console REPL
 (window as any).debugWorkers = {
-  async enableLogForwarding() {
-    await peer.enableLogForwarding();
-  },
-
-  async disableLogForwarding() {
-    await peer.disableLogForwarding();
-  },
-
   async pingPeer() {
     try {
       const result = await peer.ping();

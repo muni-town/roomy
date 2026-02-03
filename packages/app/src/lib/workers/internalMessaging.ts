@@ -165,20 +165,42 @@ export function messagePortInterface<
   ) as unknown as Remote;
 }
 
-type ReactiveWorkerStateMessage = ["need", string] | ["update", string, any];
+type ReactiveChannelStateMessage = ["need", string] | ["update", string, any];
 
-export type ReactiveWorkerState<T> = { [K in keyof T]?: Readonly<T[K]> } & {
+/** The wrapper for the reactive state object returned by `reactiveChannelState()`. */
+export type ReactiveChannelState<T> = { [K in keyof T]?: Readonly<T[K]> } & {
   current: { [key: string]: Readonly<any> | undefined };
 };
 
 /**
- * Create an object with reactive properties ( shallow reactivity, not deep ), that will reactively
- * update svelte even when updated from a worker.
+ * Create an object with svelte reactive properties ( shallow reactivity, not deep ), that will
+ * reactively update by sending messages over a message port.
+ * 
+ * When using a broadcast channel for the message port, you can sync reactive state from a worker to
+ * several other observers.
+ * 
+ * When a new reactive state is created, if it is not a `provider` it will send a `need` message
+ * over the message port to notify the `provider` that it wants to access a certain value. The
+ * provider, if it has data for that key, will then send an `update` message to provide the value to
+ * the observer.
+ * 
+ * Note that there is generally only one provider, and the rest are observers.
+ * 
+ * The messages are sent transparently and, for the most part, the data is automatically reactive.
+ * 
+ * Also note that values only have shallow reactivity, so if you have an object as a key, you need
+ * to re-assign the entire object when making changes for the observers to see the change.
+ * 
+ * @param channel can be anything that implements the `MessagePortApi` and is often a
+ * `BroadcastChannel` which can be used to sync a reactive state even across different workers.
+ * @param provider sets whether or not this is instance will be the provider.
  * */
-export function reactiveWorkerState<T extends { [key: string]: any }>(
+export function reactiveChannelState<T extends { [key: string]: any }>(
   channel: MessagePortApi,
   provider: boolean,
-): ReactiveWorkerState<T> {
+): ReactiveChannelState<T> {
+
+  /** Internal state for reactive syncing. */
   const state = {
     channel,
     props: {} as {
@@ -193,7 +215,7 @@ export function reactiveWorkerState<T extends { [key: string]: any }>(
   };
 
   state.channel.onmessage = (ev) => {
-    const data: ReactiveWorkerStateMessage = ev.data;
+    const data: ReactiveChannelStateMessage = ev.data;
     if (data[0] == "update") {
       const [, prop, value] = data;
       state.props[prop] = value;
@@ -221,7 +243,7 @@ export function reactiveWorkerState<T extends { [key: string]: any }>(
         state.channel.postMessage([
           "need",
           prop,
-        ] satisfies ReactiveWorkerStateMessage);
+        ] satisfies ReactiveChannelStateMessage);
       }
       subscribe();
       return state.props[prop];
@@ -242,9 +264,9 @@ export function reactiveWorkerState<T extends { [key: string]: any }>(
         "update",
         prop,
         value,
-      ] satisfies ReactiveWorkerStateMessage);
+      ] satisfies ReactiveChannelStateMessage);
 
       return true;
     },
-  }) as unknown as ReactiveWorkerState<T>;
+  }) as unknown as ReactiveChannelState<T>;
 }

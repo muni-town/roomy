@@ -62,13 +62,13 @@ if (isSharedWorker) {
   }: {
     ports: [MessagePort];
   }) => {
-    peer.connectRpcMessagePort(port);
+    peer.connectRpcClient(port);
   };
 
 } else {
   // If we are running as a dedicated worker, then we will only have one message port for the
   // current tab, and that is located on `globalThis`.
-  peer.connectRpcMessagePort(globalThis);
+  peer.connectRpcClient(globalThis);
 }
 
 (globalThis as any).peer = peer; // For debugging only !!
