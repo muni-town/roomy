@@ -62,8 +62,6 @@ import type { SessionManager } from "@atproto/api/dist/session-manager";
 export class Peer {
     /** The current user session ID, used primarily for telemetry */
     #sessionId: Ulid;
-    /** Miscellaneous peer configuration options. Currently just for console forwarding setting. */
-    #config: WorkerConfig;
 
     /** The current authentication state of the peer. */
     #auth: AuthState;
@@ -101,12 +99,6 @@ export class Peer {
         tracer.startActiveSpan("Start Init Peer", {}, ctx, (span) => span.end());
 
         this.#sessionId = opts.sessionId;
-        this.#config = {
-            consoleForwarding: import.meta.env.SHARED_WORKER_LOG_FORWARDING || true,
-        };
-        this.loadStoredConfig();
-
-        console.info("Starting Roomy WorkerSupervisor", this.#config);
 
         this.#sqlite = new SqliteSupervisor();
         this.#status = reactiveWorkerState<PeerStatus>(
@@ -193,8 +185,6 @@ export class Peer {
                 await this.#authenticated.promise;
                 await this.#connected.promise;
             },
-            enableLogForwarding: () => this.enableLogForwarding(),
-            disableLogForwarding: () => this.disableLogForwarding(),
             connectSpaceStream: async (streamId, idx) => {
                 await this.connectSpaceStream(streamId, idx);
             },
@@ -338,27 +328,6 @@ export class Peer {
 
         consoleInterface.setSessionId(this.#sessionId);
 
-        // Set up console forwarding to main thread for debugging
-        // This intercepts console.log/warn/error/info/debug calls in the SharedWorker
-        // and forwards them to the main thread with a [SharedWorker] prefix.
-        // This is essential for debugging on Safari where SharedWorker console
-        // output is not directly visible in developer tools.
-        for (const level of consoleLogLevels) {
-            const normalLog = globalThis.console[level];
-            globalThis.console[level] = (...args) => {
-                normalLog(...args);
-                if (this.consoleForwarding) {
-                    try {
-                        consoleInterface.log(level, args);
-                    } catch (e) {
-                        consoleInterface.log(
-                            level,
-                            "Failed to forward log, probably due to trying to log uncloneable object",
-                        );
-                    }
-                }
-            };
-        }
 
         this.#connected.promise.then((roomyState) => {
             // Tell the main thread that initialization is finished.
@@ -1013,10 +982,6 @@ export class Peer {
      *
      */
 
-    private get consoleForwarding() {
-        return this.#config.consoleForwarding;
-    }
-
     private get client() {
         if (
             this.#roomy.state !== "connected" &&
@@ -1037,22 +1002,6 @@ export class Peer {
         )
             throw new Error("Not connected to RoomyClient");
         return this.#roomy.spaces;
-    }
-
-    private loadStoredConfig() {
-        db.kv
-            .get("consoleForwarding")
-            .then((pref) => (this.#config.consoleForwarding = !!pref?.value));
-    }
-
-    private async enableLogForwarding() {
-        await db.kv.put({ key: "consoleForwarding", value: "true" });
-        this.#config.consoleForwarding = true;
-    }
-
-    private async disableLogForwarding() {
-        await db.kv.put({ key: "consoleForwarding", value: "" });
-        this.#config.consoleForwarding = false;
     }
 
     /**

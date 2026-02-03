@@ -46,8 +46,6 @@ export type PeerInterface = {
   }): Promise<{ done: true } | { done: false; error: string }>;
   ping(): Promise<{ timestamp: number }>;
   clientConnected(): Promise<void>;
-  enableLogForwarding(): Promise<void>;
-  disableLogForwarding(): Promise<void>;
   createLiveQuery(
     id: string,
     port: MessagePort,
