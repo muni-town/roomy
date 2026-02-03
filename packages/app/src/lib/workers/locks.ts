@@ -38,7 +38,9 @@ export async function requestLock<T>(
   maybeCallback?: (lock: Lock | null) => T | Promise<T>,
 ): Promise<T> {
   const callback =
-    typeof optionsOrCallback === "function" ? optionsOrCallback : maybeCallback!;
+    typeof optionsOrCallback === "function"
+      ? optionsOrCallback
+      : maybeCallback!;
   const options =
     typeof optionsOrCallback === "function" ? undefined : optionsOrCallback;
 

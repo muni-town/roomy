@@ -13,9 +13,9 @@ type SpaceStatus =
   | { status: "invited"; spaceId: StreamDid }
   | { status: "joined"; space: SpaceMeta; isSpaceAdmin: boolean }
   | {
-    status: "error";
-    message: string;
-  };
+      status: "error";
+      message: string;
+    };
 
 // For Svelte reactivity we need to export a const object:
 // mutate properties, never reassign the object itself
@@ -39,9 +39,9 @@ export const current = $state<{
 let resolvedSpaceIds = new SvelteMap<
   string,
   | {
-    spaceId: StreamDid;
-    handle?: Handle;
-  }
+      spaceId: StreamDid;
+      handle?: Handle;
+    }
   | { error: string }
 >();
 
@@ -90,12 +90,12 @@ const currentSpace = $derived.by(() => {
     matchingSpace.permissions?.some(
       (permission) =>
         permission[0] ===
-        (
-          peerStatus.authState as Extract<
-            ReactiveAuthState,
-            { state: "authenticated" }
-          >
-        ).did && permission[1] === "admin",
+          (
+            peerStatus.authState as Extract<
+              ReactiveAuthState,
+              { state: "authenticated" }
+            >
+          ).did && permission[1] === "admin",
     ) || false;
   return { matchingSpace, spaceId: resp.spaceId, isSpaceAdmin };
 });
@@ -121,14 +121,14 @@ $effect.root(() => {
 
     current.space = currentSpace.matchingSpace
       ? {
-        status: "joined",
-        space: currentSpace.matchingSpace,
-        isSpaceAdmin: currentSpace?.isSpaceAdmin,
-      }
+          status: "joined",
+          space: currentSpace.matchingSpace,
+          isSpaceAdmin: currentSpace?.isSpaceAdmin,
+        }
       : {
-        status: "invited",
-        spaceId: currentSpace.spaceId,
-      };
+          status: "invited",
+          spaceId: currentSpace.spaceId,
+        };
     current.joinedSpace = currentSpace.matchingSpace;
     current.isSpaceAdmin = currentSpace.isSpaceAdmin;
 

@@ -17,13 +17,13 @@ export class LiveQuery<Row extends { [key: string]: unknown }> {
       const lockId = `live-query-${crypto.randomUUID()}`;
 
       // Create callback to drop the query when we are finished with it. ( Initialized in the next line. )
-      let dropQuery: () => void = () => { };
+      let dropQuery: () => void = () => {};
 
       // Create a promise that will resolve once the query has been dropped.
       const queryDropped = new Promise((r) => (dropQuery = r as any));
 
       // Obtain a web-lock for this query that will be held for as long as we are interested in the
-      // results of the live query. 
+      // results of the live query.
       navigator.locks.request(lockId, async () => {
         // Create a new message channel to receive live query results
         const channel = new MessageChannel();

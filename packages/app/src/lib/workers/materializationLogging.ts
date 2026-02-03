@@ -24,8 +24,12 @@ export function computeMaterializationSummary(
     if (result.result === "applied") {
       appliedEvents++;
       totalStatements += result.output.length;
-      successfulStatements += result.output.filter((r) => r.type === "success").length;
-      failedStatements += result.output.filter((r) => r.type === "error").length;
+      successfulStatements += result.output.filter(
+        (r) => r.type === "success",
+      ).length;
+      failedStatements += result.output.filter(
+        (r) => r.type === "error",
+      ).length;
     } else if (result.result === "stashed") {
       stashedEvents++;
     } else if (result.result === "error") {
@@ -33,8 +37,12 @@ export function computeMaterializationSummary(
     } else if (result.result === "appliedProfiles") {
       // Profile bundles are not events, so we count statements but not events
       totalStatements += result.output.length;
-      successfulStatements += result.output.filter((r) => r.type === "success").length;
-      failedStatements += result.output.filter((r) => r.type === "error").length;
+      successfulStatements += result.output.filter(
+        (r) => r.type === "success",
+      ).length;
+      failedStatements += result.output.filter(
+        (r) => r.type === "error",
+      ).length;
     }
   }
 
@@ -61,16 +69,29 @@ export function computeMaterializationWarnings(
   results: Batch.ApplyResult["results"],
 ): MaterializationWarnings {
   const stashedEvents: Array<{ eventId: Ulid; dependsOn: Ulid[] }> = [];
-  const failedStatements: Array<{ eventId: Ulid; statement: string; error: string }> = [];
+  const failedStatements: Array<{
+    eventId: Ulid;
+    statement: string;
+    error: string;
+  }> = [];
 
   for (const result of results) {
     if (result.result === "stashed") {
-      stashedEvents.push({ eventId: result.eventId, dependsOn: result.dependsOn });
-    } else if (result.result === "applied" || result.result === "appliedProfiles") {
+      stashedEvents.push({
+        eventId: result.eventId,
+        dependsOn: result.dependsOn,
+      });
+    } else if (
+      result.result === "applied" ||
+      result.result === "appliedProfiles"
+    ) {
       for (const output of result.output) {
         if (output.type === "error") {
           failedStatements.push({
-            eventId: result.result === "applied" ? result.eventId : ("profile" as Ulid),
+            eventId:
+              result.result === "applied"
+                ? result.eventId
+                : ("profile" as Ulid),
             statement: output.statement.sql,
             error: output.message,
           });

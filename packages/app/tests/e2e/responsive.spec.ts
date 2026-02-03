@@ -386,7 +386,7 @@ test.describe("Responsive Design - Cross-Browser Compatibility", () => {
           hasProperContrast:
             window.getComputedStyle(document.body).color !== "rgb(0, 0, 0)" ||
             window.getComputedStyle(document.body).backgroundColor !==
-            "rgb(255, 255, 255)",
+              "rgb(255, 255, 255)",
         };
       });
 

@@ -1,4 +1,7 @@
-import { messagePortInterface, reactiveChannelState } from "./internalMessaging";
+import {
+  messagePortInterface,
+  reactiveChannelState,
+} from "./internalMessaging";
 import peerWorkerUrl from "./peer/worker.ts?worker&url";
 import type {
   PeerInterface,

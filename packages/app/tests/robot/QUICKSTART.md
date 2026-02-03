@@ -8,6 +8,7 @@ pnpm test:robot:setup
 ```
 
 This will:
+
 - Install Robot Framework and Browser library via `uv`
 - Download Chromium, Firefox, and WebKit browsers (~160MB)
 - Set up everything needed to run tests
@@ -52,10 +53,10 @@ Workers Should Initialize
     [Tags]    smoke    workers
     New Page    ${BASE_URL}
     Wait For Load State    domcontentloaded
-    
+
     ${has_backend}=    Evaluate JavaScript    ${None}
     ...    () => window.backend && window.backendStatus
-    
+
     Should Be True    ${has_backend}
 ```
 

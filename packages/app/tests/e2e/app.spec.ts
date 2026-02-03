@@ -147,7 +147,7 @@ test.describe("Roomy App - Core Functionality", () => {
     // The app should set these headers for SQLite WASM to work properly
     expect(
       headers["cross-origin-embedder-policy"] === "credentialless" ||
-      headers["cross-origin-embedder-policy"] === "require-corp",
+        headers["cross-origin-embedder-policy"] === "require-corp",
     ).toBeTruthy();
 
     expect(headers["cross-origin-opener-policy"]).toBe("same-origin");

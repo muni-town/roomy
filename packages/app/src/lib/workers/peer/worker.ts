@@ -1,9 +1,9 @@
 /**
  * The peer worker.
- * 
+ *
  * On some platforms or in some situations this is a shared worker while on others it is a dedicated
  * worker.
- * 
+ *
  * NOTE: SharedWorker logs are not accessible in all browsers.
  *
  * For Chrome, go to chrome://inspect/#workers and click 'inspect' under roomy-peer For browsers
@@ -14,9 +14,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /// <reference lib="webworker" />
 
-import {
-  newUlid,
-} from "@roomy/sdk";
+import { newUlid } from "@roomy/sdk";
 import { Peer } from "./impl";
 import { initializeFaro } from "$lib/otel";
 
@@ -48,7 +46,7 @@ const isSharedWorker = "SharedWorkerGlobalScope" in globalThis;
 
 /**
  * Create the peer worker.
- * 
+ *
  * This class wraps up all the peer logic.
  * */
 const peer = new Peer({ sessionId });
@@ -64,7 +62,6 @@ if (isSharedWorker) {
   }) => {
     peer.connectRpcClient(port);
   };
-
 } else {
   // If we are running as a dedicated worker, then we will only have one message port for the
   // current tab, and that is located on `globalThis`.

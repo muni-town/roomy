@@ -15,8 +15,8 @@ const config = {
       process.env.NETLIFY == "true"
         ? adapterNetlify()
         : adapterStatic({
-          fallback: "index.html",
-        }),
+            fallback: "index.html",
+          }),
   },
 };
 

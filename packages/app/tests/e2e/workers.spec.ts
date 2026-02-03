@@ -288,7 +288,7 @@ test.describe("Worker System - Cross-Browser Compatibility", () => {
   }, testInfo) => {
     test.skip(
       testInfo.project.name === "Desktop Safari" ||
-      testInfo.project.name === "Mobile Safari",
+        testInfo.project.name === "Mobile Safari",
       "Known issue: Playwright WebKit doesn't fully support OPFS, falls back to memory VFS which has message passing issues",
     );
 
@@ -508,7 +508,7 @@ test.describe("Worker System - Cross-Browser Compatibility", () => {
   }, testInfo) => {
     test.skip(
       testInfo.project.name === "Desktop Safari" ||
-      testInfo.project.name === "Mobile Safari",
+        testInfo.project.name === "Mobile Safari",
       "Known issue: Playwright WebKit doesn't fully support OPFS, falls back to memory VFS which has message passing issues",
     );
 

@@ -138,7 +138,9 @@
     startThreading(message?: Message) {
       console.debug("Start threading", message);
       const currentState = this.state;
-      const name = message ? renderMarkdownPlaintext(message.content) : "Thread";
+      const name = message
+        ? renderMarkdownPlaintext(message.content)
+        : "Thread";
       this.state = {
         ...currentState,
         kind: "threading",

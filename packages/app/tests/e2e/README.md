@@ -41,7 +41,7 @@ The app requires specific browser APIs to function:
 
 ```bash
 cd packages/app
-pnpm install 
+pnpm install
 pnpm exec playwright install
 ```
 

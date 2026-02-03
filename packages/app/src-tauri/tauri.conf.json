@@ -40,28 +40,19 @@
     "deep-link": {
       "mobile": [
         {
-          "scheme": [
-            "space.roomy"
-          ],
+          "scheme": ["space.roomy"],
           "host": "space.roomy",
           "appLink": false
         },
         {
-          "scheme": [
-            "https"
-          ],
-          "pathPrefix": [
-            "/oauth/callback"
-          ],
+          "scheme": ["https"],
+          "pathPrefix": ["/oauth/callback"],
           "host": "space.roomy",
           "appLink": true
         }
       ],
       "desktop": {
-        "schemes": [
-          "space.roomy",
-          "roomy"
-        ]
+        "schemes": ["space.roomy", "roomy"]
       }
     }
   }
