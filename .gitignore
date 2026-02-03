@@ -1,6 +1,7 @@
 # Generated
 build
 node_modules
+.pnpm-store
 .svelte-kit/
 .turbo/
 .output
