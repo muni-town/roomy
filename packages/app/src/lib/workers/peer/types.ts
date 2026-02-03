@@ -4,24 +4,24 @@ import type { BlobRef } from "@atproto/lexicon";
 import type { Deferred } from "$lib/utils/deferred";
 import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
 import { AsyncChannel } from "@roomy/sdk";
-import type {
-  Profile,
-  StreamDid,
+import {
+  type Profile,
+  type StreamDid,
   UserDid,
-  Event,
-  Handle,
-  Ulid,
-  ConnectedSpace,
-  RoomyClient,
-  DecodedStreamEvent,
-  EncodedStreamEvent,
+  type Event,
+  type Handle,
+  type Ulid,
+  type ConnectedSpace,
+  type RoomyClient,
+  type DecodedStreamEvent,
+  type EncodedStreamEvent,
 } from "@roomy/sdk";
 import type { SessionManager } from "@atproto/api/dist/session-manager";
 import type { messagePortInterface } from "../internalMessaging";
 
 export interface PeerStatus {
-  authState: ReactiveAuthState;
-  roomyState: ReactiveRoomyState;
+  authState: AuthStatus;
+  roomyState: RoomyStatus;
   profile: Profile;
   spaces: Record<StreamDid, "loading" | "idle" | "error">;
 }
@@ -143,6 +143,60 @@ export type PeerClientInterface = {
   log(level: ConsoleLogLevel, ...args: any[]): Promise<void>;
 };
 
+export type TrackableState<State, Status> = {
+  init: State;
+  mapper: (state: State) => Status;
+};
+const trackableState = <State, Status>(
+  init: State,
+  mapper: (state: State) => Status,
+): TrackableState<State, Status> => ({
+  init,
+  mapper,
+});
+
+export type TrackedState<State, Status> = {
+  get current(): Readonly<State>;
+  set current(state: State);
+  get status(): Status;
+  subscribeStatus: (handler: (status: Status) => void) => void;
+};
+
+/** Helper class that will track changes to the state and update a reactive status, mapping the
+ * state to the status value. */
+export function trackedState<State, Status>(
+  trackable: TrackableState<State, Status>,
+): TrackedState<State, Status> {
+  let state = trackable.init;
+  let mapper = trackable.mapper;
+
+  let statusSubscribers: ((status: Status) => void)[] = [];
+
+  return {
+    get current() {
+      return state;
+    },
+    set current(value) {
+      // Update the internal state
+      state = value;
+
+      // Notify status subscribers
+      const status = mapper(state);
+      for (const handler of statusSubscribers) {
+        handler(status);
+      }
+    },
+
+    get status() {
+      return mapper(state);
+    },
+
+    subscribeStatus(handler: (status: Status) => void) {
+      statusSubscribers.push(handler);
+    },
+  };
+}
+
 export type AuthState =
   | {
       state: "loading";
@@ -159,7 +213,7 @@ export type AuthState =
       error: string;
     };
 
-export type ReactiveAuthState =
+export type AuthStatus =
   | {
       state: "loading";
     }
@@ -174,6 +228,25 @@ export type ReactiveAuthState =
       state: "error";
       error: string;
     };
+export const authStateTrackable = trackableState<AuthState, AuthStatus>(
+  { state: "loading" },
+  (value) => {
+    if (
+      value.state == "loading" ||
+      value.state == "error" ||
+      value.state == "unauthenticated"
+    ) {
+      return value;
+    } else if (value.state == "authenticated") {
+      return {
+        state: "authenticated",
+        did: UserDid.assert(value.session.did),
+      };
+    } else {
+      throw "Unexpected state";
+    }
+  },
+);
 
 export type RoomyState =
   | {
@@ -200,7 +273,7 @@ export type RoomyState =
       state: "error";
     };
 
-export type ReactiveRoomyState =
+export type RoomyStatus =
   | {
       state: "disconnected";
     }
@@ -218,6 +291,31 @@ export type ReactiveRoomyState =
   | {
       state: "error";
     };
+
+export const roomyStateTrackable = trackableState<RoomyState, RoomyStatus>(
+  { state: "disconnected" },
+  (value) => {
+    if (
+      value.state == "disconnected" ||
+      value.state == "error" ||
+      value.state == "connectingToServer"
+    ) {
+      return value;
+    } else if (value.state == "materializingPersonalSpace") {
+      return {
+        state: "materializingPersonalSpace",
+        personalSpace: value.personalSpace.streamDid,
+      };
+    } else if (value.state == "connected") {
+      return {
+        state: "connected",
+        personalSpace: value.personalSpace.streamDid,
+      };
+    } else {
+      throw "Unexpected state";
+    }
+  },
+);
 
 export interface WorkerConfig {
   consoleForwarding: boolean;

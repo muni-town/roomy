@@ -1,7 +1,7 @@
 import { page } from "$app/state";
 import { peer, peerStatus } from "$lib/workers";
 import { joinedSpaces } from "./spaces.svelte";
-import type { ReactiveAuthState } from "$lib/workers/peer/types";
+import type { AuthStatus } from "$lib/workers/peer/types";
 import type { SpaceIdOrHandle } from "$lib/workers/types";
 import type { SpaceMeta } from "./types";
 import { Handle, type StreamDid, Ulid, type UserDid } from "@roomy/sdk";
@@ -92,7 +92,7 @@ const currentSpace = $derived.by(() => {
         permission[0] ===
           (
             peerStatus.authState as Extract<
-              ReactiveAuthState,
+              AuthStatus,
               { state: "authenticated" }
             >
           ).did && permission[1] === "admin",

@@ -3,7 +3,6 @@ import {
   messagePortInterface,
   reactiveChannelState,
   type MessagePortApi,
-  type ReactiveChannelState,
 } from "../internalMessaging";
 import { sql } from "$lib/utils/sqlTemplate";
 import { CONFIG } from "$lib/config";
@@ -17,6 +16,12 @@ import {
   type SqliteState,
   type RoomyState,
   type PeerClientInterface,
+  type AuthStatus,
+  type RoomyStatus,
+  trackedState,
+  roomyStateTrackable as roomyStateTrackable,
+  authStateTrackable,
+  type TrackedState,
 } from "./types";
 import type {
   Savepoint,
@@ -34,6 +39,7 @@ import {
   type DecodedStreamEvent,
   type EncodedStreamEvent,
   type EventCallback,
+  type Profile,
 } from "@roomy/sdk";
 import {
   AsyncChannel,
@@ -63,12 +69,17 @@ export class Peer {
   #sessionId: Ulid;
 
   /** The current authentication state of the peer. */
-  #auth: AuthState;
+  #auth: TrackedState<AuthState, AuthStatus>;
   /** The current state of the roomy client. */
-  #roomy: RoomyState;
+  #roomy: TrackedState<RoomyState, RoomyStatus>;
 
-  /** The reactive peer status which is propagated automatically over the worker reactive state channel. */
-  #status: ReactiveChannelState<PeerStatus>;
+  /** Helper to set the profile in the reactive {@link PeerStatus} for this peer. */
+  #updateReactiveProfile: (profile: Profile | undefined) => void;
+
+  #spaceStatuses: {
+    set(id: StreamDid, status: "loading" | "idle" | "error"): void;
+    setBatch(ids: [StreamDid, "loading" | "idle" | "error"][]): void;
+  };
 
   #sqlite: SqliteSupervisor;
 
@@ -90,16 +101,43 @@ export class Peer {
 
     this.#sqlite = new SqliteSupervisor();
 
-    this.#status = reactiveChannelState<PeerStatus>(
-      peerStatusChannel(this.#sessionId),
-      true,
+    // Create a reactive peer status that the UI can subscribe to.
+    const reactiveStatus = reactiveChannelState<PeerStatus>(
+      peerStatusChannel(this.#sessionId), // Use the session-specific broadcast channel
+      true, // We are the provider of these values
     );
 
-    this.#auth = { state: "loading" };
-    this.#status.authState = this.#auth;
+    this.#spaceStatuses = {
+      set(id, status) {
+        reactiveStatus.spaces = { ...reactiveStatus.spaces, [id]: status };
+      },
+      setBatch(ids) {
+        reactiveStatus.spaces = {
+          ...Object.fromEntries(ids.map(([spaceId]) => [spaceId, "loading"])),
+        };
+      },
+    };
 
-    this.#roomy = { state: "disconnected" };
-    this.#status.roomyState = this.#roomy;
+    // Initialize auth state
+    this.#auth = trackedState<AuthState, AuthStatus>(authStateTrackable);
+
+    // Update the reactive status when the auth state changes
+    this.#auth.subscribeStatus((status) => {
+      reactiveStatus.authState = status;
+    });
+
+    // Initialize the roomy client state
+    this.#roomy = trackedState<RoomyState, RoomyStatus>(roomyStateTrackable);
+
+    // Update the reactive status when the roomy client state changes
+    this.#roomy.subscribeStatus((status) => {
+      reactiveStatus.roomyState = status;
+    });
+
+    // Register a heler for updating the reactive profile in the PeerStatus
+    this.#updateReactiveProfile = (profile) => {
+      reactiveStatus.profile = profile;
+    };
   }
 
   getPeerInterface(this: Peer): PeerInterface {
@@ -108,12 +146,14 @@ export class Peer {
         return this.#sessionId;
       },
       setSpaceHandle: (spaceDid, handle) => {
-        if (this.#roomy.state !== "connected") throw new Error("Not connected");
-        return this.#roomy.client.setHandle(spaceDid, handle);
+        if (this.#roomy.current.state !== "connected")
+          throw new Error("Not connected");
+        return this.#roomy.current.client.setHandle(spaceDid, handle);
       },
       getSpaceInfo: (streamDid) => {
-        if (this.#roomy.state !== "connected") throw new Error("Not connected");
-        return this.#roomy.client.getSpaceInfo(streamDid);
+        if (this.#roomy.current.state !== "connected")
+          throw new Error("Not connected");
+        return this.#roomy.current.client.getSpaceInfo(streamDid);
       },
       login: async (handle) => this.login(handle),
       initialize: async (paramsStr) => {
@@ -175,10 +215,7 @@ export class Peer {
       },
       createSpaceStream: async () => {
         const streamId = await this.createSpaceStream();
-        this.#status.spaces = {
-          ...this.#status.spaces,
-          [streamId]: "idle",
-        };
+        this.#spaceStatuses.set(streamId, "idle");
         return streamId;
       },
       sendEvent: async (streamId: string, event: Event) => {
@@ -334,8 +371,7 @@ export class Peer {
 
       if (!session) {
         console.info("Not authenticated");
-        this.#auth = { state: "unauthenticated" };
-        this.#status.authState = this.#auth;
+        this.#auth.current = { state: "unauthenticated" };
         return {};
       }
 
@@ -343,11 +379,7 @@ export class Peer {
 
       // user is authenticated
       await db.kv.put({ key: "did", value: session.did });
-      this.#auth = { state: "authenticated", session };
-      this.#status.authState = {
-        state: "authenticated",
-        did: session.did as UserDid,
-      };
+      this.#auth.current = { state: "authenticated", session };
       faro.api.setSession({
         id: faro.api.getSession()?.id,
         attributes: { isSampled: "true", did: session.did },
@@ -449,8 +481,7 @@ export class Peer {
     const agent = new Agent(session);
     lexicons.forEach((l) => agent.lex.add(l as any));
 
-    this.#roomy = { state: "connectingToServer" };
-    this.#status.roomyState = this.#roomy;
+    this.#roomy.current = { state: "connectingToServer" };
 
     const roomy = await context.bind(ctx, RoomyClient.create)(
       {
@@ -469,7 +500,7 @@ export class Peer {
       roomy
         .getProfile()
         .then((profile) => {
-          this.#status.profile = profile;
+          this.#updateReactiveProfile(profile);
         })
         .finally(() => span.end());
     });
@@ -507,18 +538,14 @@ export class Peer {
       on conflict (entity) do nothing
     `);
 
-    this.#roomy = {
+    this.#roomy.current = {
       state: "materializingPersonalSpace",
       client: roomy,
       personalSpace,
       eventChannel,
       spaces: new Map(),
     };
-    this.#status.roomyState = {
-      state: "materializingPersonalSpace",
-      personalSpace: personalSpace.streamDid,
-    };
-    this.#connectedPersonalSpace.resolve(this.#roomy);
+    this.#connectedPersonalSpace.resolve(this.#roomy.current);
 
     // authenticate sqlite
     tracer.startActiveSpan("Authenticate SQLite", {}, ctx, (span) => {
@@ -546,12 +573,9 @@ export class Peer {
       this.#batchResolvers.set(lastBatchId, resolve);
     });
 
-    this.#status.spaces = {
-      ...this.#status.spaces,
-      [personalSpace.streamDid]: "idle",
-    };
+    this.#spaceStatuses.set(personalSpace.streamDid, "idle");
 
-    if (this.#status.authState?.state !== "authenticated")
+    if (this.#auth.current.state !== "authenticated")
       throw new Error("Not authenticated");
 
     await tracer.startActiveSpan(
@@ -581,11 +605,9 @@ export class Peer {
     );
 
     // set all spaces to 'loading' in reactive status
-    this.#status.spaces = {
-      ...Object.fromEntries(
-        [...spacesToConnect.entries()].map(([spaceId]) => [spaceId, "loading"]),
-      ),
-    };
+    this.#spaceStatuses.setBatch(
+      [...spacesToConnect.keys()].map((id) => [id, "loading"]),
+    );
 
     // Connect to spaces the user has joined (but not left) after full personal stream backfill
     await tracer.startActiveSpan(
@@ -598,17 +620,14 @@ export class Peer {
       },
     );
 
-    this.#roomy = {
-      ...this.#roomy,
+    this.#roomy.current = {
       state: "connected",
       eventChannel,
-      spaces: new Map([...this.#roomy.spaces.entries()]),
+      spaces: new Map([...this.#roomy.current.spaces.entries()]),
+      client: this.#roomy.current.client,
+      personalSpace: this.#roomy.current.personalSpace,
     };
-    this.#status.roomyState = {
-      personalSpace: personalSpace.streamDid,
-      state: "connected",
-    };
-    this.#connected.resolve(this.#roomy);
+    this.#connected.resolve(this.#roomy.current);
 
     await tracer.startActiveSpan(
       "Wait for Joined Streams Backfilled",
@@ -618,10 +637,7 @@ export class Peer {
         for (const space of this.spaces.values()) {
           (async () => {
             await space.doneBackfilling;
-            this.#status.spaces = {
-              ...this.#status.spaces,
-              [space.streamDid]: "idle",
-            };
+            this.#spaceStatuses.set(space.streamDid, "idle");
           })();
         }
         span.end();
@@ -652,8 +668,8 @@ export class Peer {
     console.debug("Starting materialiser");
     const { eventChannel } = await this.#connectedPersonalSpace.promise; // TODO await roomy connected
     if (
-      this.#roomy.state !== "connected" &&
-      this.#roomy.state !== "materializingPersonalSpace" // should be this one
+      this.#roomy.current.state !== "connected" &&
+      this.#roomy.current.state !== "materializingPersonalSpace" // should be this one
     ) {
       throw new Error("Tried to handle events while unauthenticated");
     }
@@ -662,7 +678,7 @@ export class Peer {
 
     for await (const batch of eventChannel) {
       // personal stream backfill is always high priority, other streams can be in background
-      if (batch.streamId === this.#roomy.personalSpace.streamDid) {
+      if (batch.streamId === this.#roomy.current.personalSpace.streamDid) {
         const result = await this.sqlite.materializeBatch(batch, "priority");
 
         // If there is a resolver waiting on this batch, resolve it with the result
@@ -718,12 +734,12 @@ export class Peer {
   async connectSpaceStream(streamId: StreamDid, _idx: StreamIndex) {
     await this.#connectedPersonalSpace.promise;
     if (
-      this.#roomy.state !== "connected" &&
-      this.#roomy.state !== "materializingPersonalSpace"
+      this.#roomy.current.state !== "connected" &&
+      this.#roomy.current.state !== "materializingPersonalSpace"
     )
       throw new Error("Roomy must be connected to add new space stream");
 
-    const alreadyConnected = this.#roomy.spaces.get(streamId);
+    const alreadyConnected = this.#roomy.current.spaces.get(streamId);
     if (alreadyConnected) return;
 
     await tracer.startActiveSpan(
@@ -755,10 +771,7 @@ export class Peer {
 
           if (timedOut) {
             // Mark as error since it timed out (even if it eventually completes)
-            this.#status.spaces = {
-              ...this.#status.spaces,
-              [streamId]: "error",
-            };
+            this.#spaceStatuses.set(streamId, "error");
           }
 
           span.end();
@@ -770,10 +783,7 @@ export class Peer {
             message: e instanceof Error ? e.message : String(e),
           });
           span.end();
-          this.#status.spaces = {
-            ...this.#status.spaces,
-            [streamId]: "error",
-          };
+          this.#spaceStatuses.set(streamId, "error");
         }
       },
     );
@@ -781,8 +791,8 @@ export class Peer {
 
   async #connectSpaceStreamInner(streamId: StreamDid) {
     if (
-      this.#roomy.state !== "connected" &&
-      this.#roomy.state !== "materializingPersonalSpace"
+      this.#roomy.current.state !== "connected" &&
+      this.#roomy.current.state !== "materializingPersonalSpace"
     )
       throw new Error("No event channel yet");
 
@@ -793,7 +803,7 @@ export class Peer {
     });
 
     const callback = this.#createEventCallback(
-      this.#roomy.eventChannel,
+      this.#roomy.current.eventChannel,
       streamId,
     );
 
@@ -811,15 +821,12 @@ export class Peer {
       5000,
     );
 
-    this.#roomy.spaces.set(streamId, space);
-    this.#status.spaces = {
-      ...this.#status.spaces,
-      [streamId]: "idle",
-    };
+    this.#roomy.current.spaces.set(streamId, space);
+    this.#spaceStatuses.set(streamId, "idle");
   }
 
   async createSpaceStream() {
-    if (this.#roomy.state !== "connected")
+    if (this.#roomy.current.state !== "connected")
       throw new Error("Client must be connected to add new space stream");
 
     const newSpace = await ConnectedSpace.create(
@@ -832,7 +839,7 @@ export class Peer {
 
     // Subscribe with callback that pushes to eventChannel
     const callback = this.#createEventCallback(
-      this.#roomy.eventChannel,
+      this.#roomy.current.eventChannel,
       newSpace.streamDid,
     );
     await newSpace.subscribe(callback);
@@ -840,7 +847,7 @@ export class Peer {
     console.debug("Successfully created space stream:", newSpace.streamDid);
 
     // add to stream connection map
-    this.#roomy.spaces.set(newSpace.streamDid, newSpace);
+    this.#roomy.current.spaces.set(newSpace.streamDid, newSpace);
 
     return newSpace.streamDid;
   }
@@ -885,10 +892,10 @@ export class Peer {
     end?: StreamIndex,
   ): Promise<{ hasMore: boolean }> {
     await this.#connected.promise;
-    if (this.#roomy.state !== "connected")
+    if (this.#roomy.current.state !== "connected")
       throw new Error("Client not connected");
 
-    const space = this.#roomy.spaces.get(spaceId);
+    const space = this.#roomy.current.spaces.get(spaceId);
     if (!space) throw new Error("Could not find space in connected streams");
 
     const ROOM_FETCH_BATCH_SIZE = 100;
@@ -900,7 +907,7 @@ export class Peer {
         this.#batchResolvers.set(batchId, () => resolve());
       });
 
-      this.#roomy.eventChannel.push({
+      this.#roomy.current.eventChannel.push({
         status: "events",
         batchId,
         streamId: spaceId,
@@ -921,10 +928,10 @@ export class Peer {
     room?: Ulid,
   ): Promise<DecodedStreamEvent[]> {
     await this.#connected.promise;
-    if (this.#roomy.state !== "connected")
+    if (this.#roomy.current.state !== "connected")
       throw new Error("Client not connected");
 
-    const space = this.#roomy.spaces.get(spaceId);
+    const space = this.#roomy.current.spaces.get(spaceId);
     if (!space) throw new Error("Could not find space in connected streams");
 
     return await space.fetchLinks(start, limit, room);
@@ -961,11 +968,11 @@ export class Peer {
 
   private get client() {
     if (
-      this.#roomy.state !== "connected" &&
-      this.#roomy.state !== "materializingPersonalSpace"
+      this.#roomy.current.state !== "connected" &&
+      this.#roomy.current.state !== "materializingPersonalSpace"
     )
       throw new Error("Not connected to RoomyClient");
-    return this.#roomy.client;
+    return this.#roomy.current.client;
   }
 
   private get sqlite() {
@@ -974,11 +981,11 @@ export class Peer {
 
   private get spaces() {
     if (
-      this.#roomy.state !== "connected" &&
-      this.#roomy.state !== "materializingPersonalSpace"
+      this.#roomy.current.state !== "connected" &&
+      this.#roomy.current.state !== "materializingPersonalSpace"
     )
       throw new Error("Not connected to RoomyClient");
-    return this.#roomy.spaces;
+    return this.#roomy.current.spaces;
   }
 
   /**
@@ -988,14 +995,14 @@ export class Peer {
    */
 
   async debugFetchPersonalStream(): Promise<Event[]> {
-    if (this.#status.roomyState?.state != "connected") {
+    if (this.#roomy.current.state != "connected") {
       throw "Not authenticated";
     }
-    return this.debugFetchStream(this.#status.roomyState.personalSpace);
+    return this.debugFetchStream(this.#roomy.current.personalSpace.streamDid);
   }
 
   async debugFetchStream(streamId: string): Promise<Event[]> {
-    if (this.#status.roomyState?.state != "connected") {
+    if (this.#roomy.current.state != "connected") {
       throw "Not authenticated";
     }
     const resp = await this.fetchEvents(streamId, 0, 1e10);
@@ -1041,7 +1048,7 @@ export class Peer {
 
   // /** Testing: Trigger personal stream creation */
   async ensurePersonalStream(): Promise<void> {
-    if (this.#auth.state !== "authenticated") {
+    if (this.#auth.current.state !== "authenticated") {
       throw new Error("Cannot ensure personal stream: not authenticated");
     }
     // await this.client.connectPersonalSpace(this.#auth.eventChannel);
