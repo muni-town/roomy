@@ -198,7 +198,7 @@ test.describe("OPFS Diagnostics", () => {
     console.log("\n=== SQLite WASM VFS Availability ===");
     await page.waitForFunction(
       () => {
-        return (window as any).backend;
+        return (window as any).peer;
       },
       { timeout: 15000 },
     );
@@ -325,7 +325,7 @@ test.describe("OPFS Diagnostics", () => {
     if (!diagnostics.opfs.getDirectory) {
       issues.push("❌ OPFS API NOT available");
       recommendations.push(
-        "This browser/environment does not support OPFS - consider using a different storage backend",
+        "This browser/environment does not support OPFS - consider using a different storage peer",
       );
     } else if (diagnostics.opfs.accessSuccessful === false) {
       issues.push("❌ OPFS API exists but access FAILED");

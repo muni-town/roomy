@@ -1,7 +1,7 @@
 import { page } from "$app/state";
-import { backend, backendStatus } from "$lib/workers";
+import { peer, peerStatus } from "$lib/workers";
 import { joinedSpaces } from "./spaces.svelte";
-import type { ReactiveAuthState } from "$lib/workers/backend/types";
+import type { ReactiveAuthState } from "$lib/workers/peer/types";
 import type { SpaceIdOrHandle } from "$lib/workers/types";
 import type { SpaceMeta } from "./types";
 import { Handle, type StreamDid, Ulid, type UserDid } from "@roomy/sdk";
@@ -13,9 +13,9 @@ type SpaceStatus =
   | { status: "invited"; spaceId: StreamDid }
   | { status: "joined"; space: SpaceMeta; isSpaceAdmin: boolean }
   | {
-      status: "error";
-      message: string;
-    };
+    status: "error";
+    message: string;
+  };
 
 // For Svelte reactivity we need to export a const object:
 // mutate properties, never reassign the object itself
@@ -39,9 +39,9 @@ export const current = $state<{
 let resolvedSpaceIds = new SvelteMap<
   string,
   | {
-      spaceId: StreamDid;
-      handle?: Handle;
-    }
+    spaceId: StreamDid;
+    handle?: Handle;
+  }
   | { error: string }
 >();
 
@@ -59,7 +59,7 @@ const currentSpace = $derived.by(() => {
   const spaceUrlSegment = page.params.space;
   if (!spaceUrlSegment) return undefined;
   if (!resolvedSpaceIds.has(spaceUrlSegment)) {
-    backend.resolveSpaceId(spaceUrlSegment as SpaceIdOrHandle).then((resp) => {
+    peer.resolveSpaceId(spaceUrlSegment as SpaceIdOrHandle).then((resp) => {
       resolvedSpaceIds.set(spaceUrlSegment, resp);
     });
     return undefined;
@@ -68,7 +68,7 @@ const currentSpace = $derived.by(() => {
 
   if (!resp || !("spaceId" in resp)) return undefined;
   if (!resolvedSpaceExists.has(resp.spaceId)) {
-    backend.checkSpaceExists(resp.spaceId).then((exists) => {
+    peer.checkSpaceExists(resp.spaceId).then((exists) => {
       resolvedSpaceExists.set(resp.spaceId, exists);
     });
     return undefined;
@@ -90,12 +90,12 @@ const currentSpace = $derived.by(() => {
     matchingSpace.permissions?.some(
       (permission) =>
         permission[0] ===
-          (
-            backendStatus.authState as Extract<
-              ReactiveAuthState,
-              { state: "authenticated" }
-            >
-          ).did && permission[1] === "admin",
+        (
+          peerStatus.authState as Extract<
+            ReactiveAuthState,
+            { state: "authenticated" }
+          >
+        ).did && permission[1] === "admin",
     ) || false;
   return { matchingSpace, spaceId: resp.spaceId, isSpaceAdmin };
 });
@@ -113,22 +113,22 @@ $effect.root(() => {
 
     if (joinedSpaces.loading || !page.params.space) return; // wait until spaces are loaded
     if (
-      backendStatus.authState?.state !== "authenticated" ||
-      backendStatus.roomyState?.state !== "connected" ||
+      peerStatus.authState?.state !== "authenticated" ||
+      peerStatus.roomyState?.state !== "connected" ||
       !currentSpace
     )
       return;
 
     current.space = currentSpace.matchingSpace
       ? {
-          status: "joined",
-          space: currentSpace.matchingSpace,
-          isSpaceAdmin: currentSpace?.isSpaceAdmin,
-        }
+        status: "joined",
+        space: currentSpace.matchingSpace,
+        isSpaceAdmin: currentSpace?.isSpaceAdmin,
+      }
       : {
-          status: "invited",
-          spaceId: currentSpace.spaceId,
-        };
+        status: "invited",
+        spaceId: currentSpace.spaceId,
+      };
     current.joinedSpace = currentSpace.matchingSpace;
     current.isSpaceAdmin = currentSpace.isSpaceAdmin;
 
@@ -155,8 +155,8 @@ $effect.root(() => {
 
   $effect(() => {
     current.did =
-      backendStatus.authState?.state === "authenticated"
-        ? backendStatus.authState.did
+      peerStatus.authState?.state === "authenticated"
+        ? peerStatus.authState.did
         : undefined;
   });
 });

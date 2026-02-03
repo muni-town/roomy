@@ -22,8 +22,8 @@ Cleanup Test Spaces
     New Page    http://127.0.0.1:5173
 
     # Wait for backend initialization
-    ${backend_initialized}=    Wait For Backend To Initialize
-    Should Be True    ${backend_initialized}    msg=Backend initialization failed
+    ${backend_initialized}=    Wait For Peer To Initialize
+    Should Be True    ${backend_initialized}    msg=Peer initialization failed
 
     # Wait for authentication (happens automatically with app password)
     ${authenticated}=    Wait For Authentication

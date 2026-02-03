@@ -1,12 +1,12 @@
 import { newUlid, type StreamDid, type Ulid } from "@roomy/sdk";
-import { backend } from "$lib/workers";
+import { peer } from "$lib/workers";
 
 export async function deleteMessage(
   spaceId: StreamDid,
   roomId: Ulid,
   messageId: Ulid,
 ) {
-  await backend.sendEvent(spaceId, {
+  await peer.sendEvent(spaceId, {
     $type: "space.roomy.message.deleteMessage.v0",
     id: newUlid(),
     room: roomId,
@@ -20,7 +20,7 @@ export async function reorderMessage(
   messageId: Ulid,
   moveAfter: Ulid,
 ) {
-  await backend.sendEvent(streamId, {
+  await peer.sendEvent(streamId, {
     $type: "space.roomy.message.reorderMessage.v0",
     id: newUlid(),
     room: roomId,

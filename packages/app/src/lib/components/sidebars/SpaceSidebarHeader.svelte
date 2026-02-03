@@ -4,7 +4,7 @@
   import { page } from "$app/state";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { current } from "$lib/queries";
-  import { backend, backendStatus } from "$lib/workers";
+  import { peer, peerStatus } from "$lib/workers";
   import { newUlid } from "@roomy/sdk";
 
   import IconLucideChevronDown from "~icons/lucide/chevron-down";
@@ -22,17 +22,17 @@
 
   async function leaveSpace() {
     const spaceDid = current.joinedSpace?.id;
-    if (backendStatus.roomyState?.state !== "connected") return;
-    if (!spaceDid || !backendStatus.roomyState.personalSpace) return;
+    if (peerStatus.roomyState?.state !== "connected") return;
+    if (!spaceDid || !peerStatus.roomyState.personalSpace) return;
 
     // Tell the space that we are leaving the member list
-    await backend.sendEvent(spaceDid, {
+    await peer.sendEvent(spaceDid, {
       id: newUlid(),
       $type: "space.roomy.space.leaveSpace.v0",
     });
 
     // Remove the space from our personal space list
-    await backend.sendEvent(backendStatus.roomyState.personalSpace, {
+    await peer.sendEvent(peerStatus.roomyState.personalSpace, {
       id: newUlid(),
       $type: "space.roomy.space.personal.leaveSpace.v0",
       spaceDid: spaceDid,

@@ -2,15 +2,13 @@
   import { page } from "$app/state";
   import UserProfile from "$lib/components/user/UserProfile.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
-  import { backend } from "$lib/workers";
+  import { peer } from "$lib/workers";
   import type { Profile, UserDid } from "@roomy/sdk";
 
   let profile = $state(undefined) as Profile | undefined;
   $effect(() => {
     if (page.params.user) {
-      backend
-        .getProfile(page.params.user as UserDid)
-        .then((p) => (profile = p));
+      peer.getProfile(page.params.user as UserDid).then((p) => (profile = p));
     }
   });
 </script>

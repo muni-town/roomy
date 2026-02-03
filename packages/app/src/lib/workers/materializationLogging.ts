@@ -87,7 +87,7 @@ export function computeMaterializationWarnings(
 
 /**
  * Log materialization result with summary and warnings.
- * Used by the backend worker to provide visibility into event processing.
+ * Used by the peer worker to provide visibility into event processing.
  */
 export function logMaterializationResult(
   streamId: StreamDid,

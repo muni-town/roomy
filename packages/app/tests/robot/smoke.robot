@@ -22,10 +22,10 @@ Workers Should Initialize
     New Page    ${BASE_URL}
     Wait For Load State    domcontentloaded    timeout=${TIMEOUT}
 
-    ${has_backend}=    Wait For Backend To Initialize    timeout=${TIMEOUT}
+    ${has_backend}=    Wait For Peer To Initialize    timeout=${TIMEOUT}
     Should Be Equal    ${has_backend}    ${True}    msg=Workers did not initialize within timeout
 
-Backend Worker Should Respond To Ping
+Peer Worker Should Respond To Ping
     [Documentation]    Test backend worker ping functionality
     [Tags]    smoke    workers    backend
     New Page    ${BASE_URL}
@@ -38,14 +38,14 @@ Backend Worker Should Respond To Ping
     ${ping_result}=    Evaluate JavaScript    ${None}
     ...    async () => {
     ...        try {
-    ...            const result = await window.debugWorkers.pingBackend();
+    ...            const result = await window.debugWorkers.pingPeer();
     ...            return { success: true, result };
     ...        } catch (error) {
     ...            return { success: false, error: error.message };
     ...        }
     ...    }
     
-    Should Be Equal    ${ping_result}[success]    ${True}    msg=Backend ping failed
+    Should Be Equal    ${ping_result}[success]    ${True}    msg=Peer ping failed
 
 SQLite Worker Should Connect
     [Documentation]    Verify SQLite worker connection

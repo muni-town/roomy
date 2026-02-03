@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { backend, sqliteStatus, backendStatus } from "$lib/workers";
+  import { peer, sqliteStatus, peerStatus } from "$lib/workers";
   import { onMount } from "svelte";
 
   let diagnostics = $state({
@@ -42,7 +42,7 @@
     diagnostics.testResult = null;
 
     try {
-      const result = await backend.runQuery({ sql: "SELECT 1 as test" });
+      const result = await peer.runQuery({ sql: "SELECT 1 as test" });
       diagnostics.testResult = result;
     } catch (error) {
       diagnostics.testError =
@@ -52,13 +52,13 @@
     }
   }
 
-  async function pingBackend() {
+  async function pingPeer() {
     isLoading = true;
     diagnostics.testError = null;
     diagnostics.testResult = null;
 
     try {
-      const result = await backend.ping();
+      const result = await peer.ping();
       diagnostics.testResult = result;
     } catch (error) {
       diagnostics.testError =
@@ -190,35 +190,33 @@
       </div>
     </section>
 
-    <!-- Backend Status -->
+    <!-- Peer Status -->
     <section class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <h2 class="text-xl font-semibold mb-4">Backend Worker Status</h2>
+      <h2 class="text-xl font-semibold mb-4">Peer Worker Status</h2>
       <div class="space-y-2">
         <div class="flex items-center gap-2">
           <span class="text-2xl"
-            >{getStatusIcon(!!backendStatus.workerRunning)}</span
+            >{getStatusIcon(!!peerStatus.workerRunning)}</span
           >
           <span class="font-medium">Worker Running:</span>
           <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded"
-            >{backendStatus.workerRunning ?? "unknown"}</code
+            >{peerStatus.workerRunning ?? "unknown"}</code
           >
         </div>
         <div class="flex items-center gap-2">
-          <span class="text-2xl"
-            >{getStatusIcon(!!backendStatus.authLoaded)}</span
-          >
+          <span class="text-2xl">{getStatusIcon(!!peerStatus.authLoaded)}</span>
           <span class="font-medium">Auth Loaded:</span>
           <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded"
-            >{backendStatus.authLoaded ?? "unknown"}</code
+            >{peerStatus.authLoaded ?? "unknown"}</code
           >
         </div>
         <div class="flex items-center gap-2">
           <span class="text-2xl"
-            >{getStatusIcon(!!backendStatus.leafConnected)}</span
+            >{getStatusIcon(!!peerStatus.leafConnected)}</span
           >
           <span class="font-medium">Leaf Connected:</span>
           <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded"
-            >{backendStatus.leafConnected ?? "unknown"}</code
+            >{peerStatus.leafConnected ?? "unknown"}</code
           >
         </div>
       </div>
@@ -238,11 +236,11 @@
         </button>
 
         <button
-          onclick={pingBackend}
+          onclick={pingPeer}
           disabled={isLoading}
           class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
-          {isLoading ? "Running..." : "Ping Backend"}
+          {isLoading ? "Running..." : "Ping Peer"}
         </button>
       </div>
 

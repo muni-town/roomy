@@ -1,6 +1,6 @@
 <script lang="ts">
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
-  import { backend } from "$lib/workers";
+  import { peer } from "$lib/workers";
   import { Textarea, Button, ScrollArea } from "@fuxui/base";
 
   let query = $state(
@@ -13,7 +13,7 @@
 
   async function runQuery() {
     try {
-      queryResult = await backend.runQuery({ sql: query });
+      queryResult = await peer.runQuery({ sql: query });
     } catch (e: any) {
       queryResult = e.toString();
     }

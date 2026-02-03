@@ -1,4 +1,4 @@
-import { backend, backendStatus } from "$lib/workers";
+import { peer, peerStatus } from "$lib/workers";
 import type { Event, StreamDid, Did } from "@roomy/sdk";
 import { toast } from "@fuxui/base";
 import { newUlid, ulidFactory } from "@roomy/sdk";
@@ -8,22 +8,22 @@ import { newUlid, ulidFactory } from "@roomy/sdk";
  */
 export async function joinSpace(spaceId: StreamDid) {
   try {
-    if (backendStatus.roomyState?.state !== "connected") {
+    if (peerStatus.roomyState?.state !== "connected") {
       toast.error("Could not join space. It's possible it does not exist.");
       return;
     }
 
     // Add the space to the personal list of joined spaces
-    await backend.sendEvent(backendStatus.roomyState.personalSpace, {
+    await peer.sendEvent(peerStatus.roomyState.personalSpace, {
       id: newUlid(),
       $type: "space.roomy.space.personal.joinSpace.v0",
       spaceDid: spaceId,
     });
 
-    await backend.connectPendingSpaces();
+    await peer.connectPendingSpaces();
 
     // Tell the space that we joined.
-    await backend.sendEvent(spaceId, {
+    await peer.sendEvent(spaceId, {
       id: newUlid(),
       $type: "space.roomy.space.joinSpace.v0",
     });
@@ -52,12 +52,12 @@ export async function createSpace(opts: {
   }
 
   // Create a new stream for the space
-  const spaceDid = await backend.createSpaceStream();
+  const spaceDid = await peer.createSpaceStream();
 
   console.log("created space", spaceDid);
 
   // Join the space
-  await backend.sendEvent(opts.creator.personalStreamId, {
+  await peer.sendEvent(opts.creator.personalStreamId, {
     id: newUlid(),
     $type: "space.roomy.space.personal.joinSpace.v0",
     spaceDid: spaceDid,
@@ -67,7 +67,7 @@ export async function createSpace(opts: {
 
   const avatarUpload =
     opts.avatarFile &&
-    (await backend.uploadToPds(await opts.avatarFile.arrayBuffer()));
+    (await peer.uploadToPds(await opts.avatarFile.arrayBuffer()));
 
   const batch: Event[] = [];
 
@@ -103,7 +103,7 @@ export async function createSpace(opts: {
     ],
   });
 
-  await backend.sendEventBatch(spaceDid, batch);
+  await peer.sendEventBatch(spaceDid, batch);
 
   console.log("sent events batch", batch);
 

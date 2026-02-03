@@ -19,14 +19,14 @@ import type {
 } from "@roomy/sdk";
 import type { SessionManager } from "@atproto/api/dist/session-manager";
 
-export interface BackendStatus {
+export interface PeerStatus {
   authState: ReactiveAuthState;
   roomyState: ReactiveRoomyState;
   profile: Profile;
   spaces: Record<StreamDid, "loading" | "idle" | "error">;
 }
 
-export type BackendInterface = {
+export type PeerInterface = {
   getSessionId(): Promise<Ulid>;
   login(username: Handle): Promise<string>;
   logout(): Promise<void>;
@@ -98,7 +98,7 @@ export type BackendInterface = {
     blob: ReturnType<BlobRef["toJSON"]>;
     uri: string;
   }>;
-  /** Adds a new message port connection to the backend that can call the backend interface. */
+  /** Adds a new message port connection to the peer that can call the peer interface. */
   addClient(port: MessagePort): Promise<void>;
   /** Connect to all spaces accumulated during personal stream materialization.
    * Call this after sending a joinSpace event to connect to the newly joined space. */
@@ -123,79 +123,79 @@ export type ConsoleInterface = {
 
 export type AuthState =
   | {
-      state: "loading";
-    }
+    state: "loading";
+  }
   | {
-      state: "unauthenticated";
-    } // implies workerRunning, authLoaded
+    state: "unauthenticated";
+  } // implies workerRunning, authLoaded
   | {
-      state: "authenticated";
-      session: SessionManager;
-    } // implies leafConnected, has personalStreamId
+    state: "authenticated";
+    session: SessionManager;
+  } // implies leafConnected, has personalStreamId
   | {
-      state: "error";
-      error: string;
-    };
+    state: "error";
+    error: string;
+  };
 
 export type ReactiveAuthState =
   | {
-      state: "loading";
-    }
+    state: "loading";
+  }
   | {
-      state: "unauthenticated";
-    }
+    state: "unauthenticated";
+  }
   | {
-      state: "authenticated";
-      did: UserDid;
-    }
+    state: "authenticated";
+    did: UserDid;
+  }
   | {
-      state: "error";
-      error: string;
-    };
+    state: "error";
+    error: string;
+  };
 
 export type RoomyState =
   | {
-      state: "disconnected";
-    }
+    state: "disconnected";
+  }
   | {
-      state: "connectingToServer";
-    }
+    state: "connectingToServer";
+  }
   | {
-      state: "materializingPersonalSpace";
-      client: RoomyClient;
-      personalSpace: ConnectedSpace;
-      eventChannel: AsyncChannel<Batch.Events>;
-      spaces: Map<StreamDid, ConnectedSpace>;
-    }
+    state: "materializingPersonalSpace";
+    client: RoomyClient;
+    personalSpace: ConnectedSpace;
+    eventChannel: AsyncChannel<Batch.Events>;
+    spaces: Map<StreamDid, ConnectedSpace>;
+  }
   | {
-      state: "connected";
-      client: RoomyClient;
-      personalSpace: ConnectedSpace;
-      eventChannel: AsyncChannel<Batch.Events>;
-      spaces: Map<StreamDid, ConnectedSpace>;
-    }
+    state: "connected";
+    client: RoomyClient;
+    personalSpace: ConnectedSpace;
+    eventChannel: AsyncChannel<Batch.Events>;
+    spaces: Map<StreamDid, ConnectedSpace>;
+  }
   | {
-      state: "error";
-    };
+    state: "error";
+  };
 
 export type ReactiveRoomyState =
   | {
-      state: "disconnected";
-    }
+    state: "disconnected";
+  }
   | {
-      state: "connectingToServer";
-    }
+    state: "connectingToServer";
+  }
   | {
-      state: "materializingPersonalSpace";
-      personalSpace: StreamDid;
-    }
+    state: "materializingPersonalSpace";
+    personalSpace: StreamDid;
+  }
   | {
-      state: "connected";
-      personalSpace: StreamDid;
-    }
+    state: "connected";
+    personalSpace: StreamDid;
+  }
   | {
-      state: "error";
-    };
+    state: "error";
+  };
 
 export interface ConnectionState {
   ports: WeakMap<MessagePortApi, string>;

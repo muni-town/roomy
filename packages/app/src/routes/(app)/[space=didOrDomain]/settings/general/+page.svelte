@@ -3,7 +3,7 @@
   import InlineMono from "$lib/components/primitives/InlineMono.svelte";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { current } from "$lib/queries";
-  import { backend, backendStatus } from "$lib/workers";
+  import { peer, peerStatus } from "$lib/workers";
   import {
     Alert,
     Badge,
@@ -47,11 +47,10 @@
       isSaving = true;
 
       const avatarUpload =
-        avatarFile &&
-        (await backend.uploadToPds(await avatarFile.arrayBuffer()));
+        avatarFile && (await peer.uploadToPds(await avatarFile.arrayBuffer()));
 
       // Update space info
-      await backend.sendEvent(spaceId, {
+      await peer.sendEvent(spaceId, {
         id: newUlid(),
         $type: "space.roomy.space.updateSpaceInfo.v0",
         avatar: avatarChanged ? avatarUpload?.uri : undefined,
@@ -80,12 +79,12 @@
       spaceHandle = current.space.space.handle;
   });
   let exampleSpaceHandle = $derived(
-    spaceHandle || backendStatus.profile?.handle || "example.com",
+    spaceHandle || peerStatus.profile?.handle || "example.com",
   );
   let currentSpaceHandle = $derived(
     current.space.status == "joined" && current.space.space.handle,
   );
-  let currentProfileSpace = $derived(backend.getProfileSpace());
+  let currentProfileSpace = $derived(peer.getProfileSpace());
 
   let handleResolvesToSpace = $state(new Promise<boolean>(() => {}));
   $effect(() => {
@@ -94,7 +93,7 @@
       handleResolvesToSpace = new Promise(() => {});
       return;
     }
-    handleResolvesToSpace = backend
+    handleResolvesToSpace = peer
       .resolveSpaceId(Handle.assert(handle))
       .then(({ spaceId }) => {
         return (
@@ -123,19 +122,19 @@
   async function setSpaceHandleUsingProfile() {
     if (
       current.space.status != "joined" ||
-      backendStatus.authState?.state != "authenticated"
+      peerStatus.authState?.state != "authenticated"
     )
       return;
 
     try {
       // Set this space as the user's profile space
-      await backend.setProfileSpace(current.space.space.id);
+      await peer.setProfileSpace(current.space.space.id);
 
       // Set the current user as the handle provider for the space
-      await backend.sendEvent(current.space.space.id, {
+      await peer.sendEvent(current.space.space.id, {
         $type: "space.roomy.space.setHandleProvider.v0",
         id: newUlid(),
-        did: backendStatus.authState.did,
+        did: peerStatus.authState.did,
       });
 
       // And reload the page
@@ -152,8 +151,8 @@
       !currentProfileSpaceId ||
       current.space.status != "joined" ||
       current.space.space.id != currentProfileSpaceId ||
-      backendStatus.authState?.state != "authenticated" ||
-      !backendStatus.profile
+      peerStatus.authState?.state != "authenticated" ||
+      !peerStatus.profile
     ) {
       return;
     }
@@ -161,8 +160,8 @@
     try {
       // If the current space handle matches our user's handle, then we need to clear the handle
       // provider for the space.
-      if (currentSpaceHandle == backendStatus.profile.handle) {
-        await backend.sendEvent(current.space.space.id, {
+      if (currentSpaceHandle == peerStatus.profile.handle) {
+        await peer.sendEvent(current.space.space.id, {
           $type: "space.roomy.space.setHandleProvider.v0",
           id: newUlid(),
           did: null,
@@ -170,7 +169,7 @@
       }
 
       // Then we need remove the profile space record from the user's PDS.
-      await backend.setProfileSpace(null);
+      await peer.setProfileSpace(null);
       // And reload the page
       window.location.reload();
     } catch (e) {
@@ -182,7 +181,7 @@
   function setHandleUsingDns() {
     if (current.space.status != "joined") return;
     const spaceId = current.space.space.id;
-    backend
+    peer
       .setSpaceHandle(spaceId, spaceHandle || null)
       .then(async () => {
         toast.success("Updated space handle");
@@ -314,15 +313,15 @@
       <form class="items-start">
         {#if current.space.status == "joined" && current.space.space.id == profileSpace}
           <strong
-            >Your ATProto handle <code>{backendStatus.profile?.handle}</code> is
-            being used for this space.
+            >Your ATProto handle <code>{peerStatus.profile?.handle}</code> is being
+            used for this space.
           </strong>
         {:else if profileSpace}
           <Alert type="warning"
             ><div>
               <strong
                 >Your ATProto handle <InlineMono
-                  >{backendStatus.profile?.handle}</InlineMono
+                  >{peerStatus.profile?.handle}</InlineMono
                 > is being used for a
                 <a href={`/${profileSpace}`} class="text-accent-500"
                   >different space</a
@@ -335,7 +334,7 @@
           <Alert type="info"
             ><span
               >Your ATProto handle <InlineMono
-                >@{backendStatus.profile?.handle}</InlineMono
+                >@{peerStatus.profile?.handle}</InlineMono
               > is not being used for any space.</span
             ></Alert
           >
@@ -343,7 +342,7 @@
 
         <div class="gap-2 flex flex-col items-start my-3 p-3">
           <!-- If the space is not currently using the user's handle. -->
-          {#if backendStatus.profile && currentSpaceHandle != backendStatus.profile?.handle}
+          {#if peerStatus.profile && currentSpaceHandle != peerStatus.profile?.handle}
             <Button onclick={setSpaceHandleUsingProfile}
               >Use My Handle For This Space</Button
             >

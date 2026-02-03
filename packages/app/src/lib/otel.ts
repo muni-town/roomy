@@ -15,14 +15,14 @@ const MAX_FAILURES = 1;
 
 type WorkerInfo =
   | {
-      worker: "main";
-    }
+    worker: "main";
+  }
   | {
-      worker: "sqlite";
-    }
+    worker: "sqlite";
+  }
   | {
-      worker: "backend";
-    };
+    worker: "peer";
+  };
 
 class CustomConsoleInstrumentation extends BaseInstrumentation {
   readonly name = "@muni-town/roomy:instrumentation-console";
@@ -170,10 +170,10 @@ export function initializeFaro(opts: WorkerInfo) {
     instrumentations: [
       ...(opts.worker == "main"
         ? [
-            ...getWebInstrumentations({
-              captureConsole: false,
-            }),
-          ]
+          ...getWebInstrumentations({
+            captureConsole: false,
+          }),
+        ]
         : []),
       new CustomConsoleInstrumentation(),
       new TracingInstrumentation({

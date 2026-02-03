@@ -43,7 +43,7 @@ import type {
   SqliteWorkerInterface,
   SqlStatement,
 } from "./types";
-import type { BackendInterface } from "../backend/types";
+import type { PeerInterface } from "../peer/types";
 import { Deferred } from "$lib/utils/deferred";
 import { CONFIG } from "$lib/config";
 import { requestLock, queryLocks, locksEnabled } from "$lib/workers/locks";
@@ -81,7 +81,7 @@ class SqliteWorkerSupervisor {
   // Heartbeat mechanism to prove this worker is alive
   #heartbeatInterval: NodeJS.Timeout | null = null;
   #status: ReactiveWorkerState<SqliteStatus> = { current: {} };
-  #backend: BackendInterface | null = null;
+  #peer: PeerInterface | null = null;
   #ensuredProfiles = new Set<string>();
   #knownStreams = new Set<StreamDid>();
   #eventChannel: AsyncChannel<Batch.Events | Batch.Unstash>;
@@ -99,13 +99,13 @@ class SqliteWorkerSupervisor {
   }
 
   async initialize(params: {
-    backendPort: MessagePort;
+    peerPort: MessagePort;
     statusPort: MessagePort;
     dbName: string;
   }) {
     // Monitor port health
-    params.backendPort.onmessageerror = (error) => {
-      console.error("SQLite worker: Backend port message error", error);
+    params.peerPort.onmessageerror = (error) => {
+      console.error("SQLite worker: Peer port message error", error);
       this.#isConnectionHealthy = false;
     };
 
@@ -116,10 +116,10 @@ class SqliteWorkerSupervisor {
 
     this.#status = reactiveWorkerState<SqliteStatus>(params.statusPort, true);
 
-    this.#backend = messagePortInterface<{}, BackendInterface>({
+    this.#peer = messagePortInterface<{}, PeerInterface>({
       localName: "sqlite",
-      remoteName: "backend",
-      messagePort: params.backendPort,
+      remoteName: "peer",
+      messagePort: params.peerPort,
       handlers: {},
     });
 
@@ -137,11 +137,11 @@ class SqliteWorkerSupervisor {
       const sqliteChannel = new MessageChannel();
       messagePortInterface<SqliteWorkerInterface, {}>({
         localName: "sqlite",
-        remoteName: "backend",
+        remoteName: "peer",
         messagePort: sqliteChannel.port1,
         handlers: this.getSqliteInterface(),
       });
-      this.#backend?.setActiveSqliteWorker(sqliteChannel.port2);
+      this.#peer?.setActiveSqliteWorker(sqliteChannel.port2);
       this.listenEvents();
       this.listenStatements();
       console.debug(
@@ -1020,7 +1020,7 @@ class SqliteWorkerSupervisor {
       ) as StreamIndex;
 
       this.#knownStreams.add(spaceId);
-      await this.#backend?.connectSpaceStream(spaceId, backfilledToIdx);
+      await this.#peer?.connectSpaceStream(spaceId, backfilledToIdx);
     }
   }
 
@@ -1074,7 +1074,7 @@ class SqliteWorkerSupervisor {
       for (const did of missingDids) {
         this.#ensuredProfiles.add(did);
 
-        const profile = await this.#backend?.getProfile(did);
+        const profile = await this.#peer?.getProfile(did);
         if (!profile) continue;
 
         statements.push(

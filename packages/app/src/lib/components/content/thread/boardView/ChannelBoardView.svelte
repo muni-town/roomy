@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { current } from "$lib/queries";
-  import { backend } from "$lib/workers";
+  import { peer } from "$lib/workers";
   import { sql } from "$lib/utils/sqlTemplate";
 
   import BoardView from "./BoardView.svelte";
@@ -79,7 +79,7 @@
   $effect(() => {
     if (!spaceId || !page.params.object) return;
     // Fetch link events posted in this channel
-    backend.fetchLinks(
+    peer.fetchLinks(
       spaceId,
       0 as StreamIndex,
       1000,

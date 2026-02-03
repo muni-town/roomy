@@ -1,7 +1,7 @@
 <!-- Clone of fox UI login form without being a modal: https://github.com/flo-bit/ui-kit/tree/main/packages/social/src/lib/components/bluesky-login -->
 <script lang="ts">
   import { env } from "$env/dynamic/public";
-  import { backend } from "$lib/workers";
+  import { peer } from "$lib/workers";
 
   import {
     Button,
@@ -35,7 +35,7 @@
     error = null;
 
     try {
-      const redirect = await backend.login(handle);
+      const redirect = await peer.login(handle);
 
       console.log("redirect", redirect);
 

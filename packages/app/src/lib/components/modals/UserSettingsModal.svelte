@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { backend } from "$lib/workers";
+  import { peer } from "$lib/workers";
   import { Modal, Button, Heading } from "@fuxui/base";
 
   let {
@@ -19,7 +19,7 @@
   </p>
   <Button
     onclick={() => {
-      backend
+      peer
         .dangerousCompletelyDestroyDatabase({ yesIAmSure: true })
         .then((result) =>
           result.done
@@ -33,7 +33,7 @@
     class="w-full justify-start"
     size="lg"
     onclick={() => {
-      backend.logout().then(() => {
+      peer.logout().then(() => {
         open = false;
         window.location.reload();
       });

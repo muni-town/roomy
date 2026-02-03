@@ -4,7 +4,7 @@
   import { renderMarkdownSanitized } from "$lib/utils/markdown";
   import { current } from "$lib/queries";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { backend } from "$lib/workers";
+  import { peer } from "$lib/workers";
   import { Button, Prose } from "@fuxui/base";
   import ScrollArea from "$lib/components/layout/ScrollArea.svelte";
   import { RichTextEditor } from "$lib/components/richtext";
@@ -55,7 +55,7 @@
     if (pageMarkdown == newMarkdown) return;
     const patch = patchToText(patchMake(pageMarkdown || "", newMarkdown));
     const editEventId = newUlid();
-    await backend.sendEvent(spaceId, {
+    await peer.sendEvent(spaceId, {
       id: editEventId,
       room: Ulid.assert(page.params.object),
       $type: "space.roomy.page.editPage.v0",

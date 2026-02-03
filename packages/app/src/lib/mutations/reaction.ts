@@ -1,5 +1,5 @@
 import { newUlid, type StreamDid, type Ulid } from "@roomy/sdk";
-import { backend } from "$lib/workers";
+import { peer } from "$lib/workers";
 
 export async function addReaction(
   spaceId: StreamDid,
@@ -7,7 +7,7 @@ export async function addReaction(
   messageId: Ulid,
   reaction: string,
 ) {
-  await backend.sendEvent(spaceId, {
+  await peer.sendEvent(spaceId, {
     id: newUlid(),
     room: roomId,
     $type: "space.roomy.reaction.addReaction.v0",
@@ -21,7 +21,7 @@ export async function removeReaction(
   roomId: Ulid,
   reactionId: Ulid,
 ) {
-  await backend.sendEvent(spaceId, {
+  await peer.sendEvent(spaceId, {
     id: newUlid(),
     room: roomId,
     $type: "space.roomy.reaction.removeReaction.v0",

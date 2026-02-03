@@ -3,7 +3,7 @@
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
   import { categoriesQuery, current } from "$lib/queries";
   import { navigate } from "$lib/utils.svelte";
-  import { backend } from "$lib/workers";
+  import { peer } from "$lib/workers";
   import { Button, Input, ScrollArea, Select } from "@fuxui/base";
   import { Ulid, ulidFactory } from "@roomy/sdk";
   import { deepClone } from "@ark/util";
@@ -47,7 +47,7 @@
     if (type == "Category") {
       newCategories.push({ name, children: [] });
 
-      await backend.sendEvent(spaceId, {
+      await peer.sendEvent(spaceId, {
         id,
         $type: "space.roomy.space.updateSidebar.v0",
         categories: newCategories,
@@ -58,7 +58,7 @@
 
       selected.children.push(id);
 
-      await backend.sendEventBatch(spaceId, [
+      await peer.sendEventBatch(spaceId, [
         {
           id,
           $type: "space.roomy.room.createRoom.v0",

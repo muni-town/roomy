@@ -1,7 +1,7 @@
 <script lang="ts">
   import "../../app.css";
   import { dev } from "$app/environment";
-  import { backendStatus } from "$lib/workers";
+  import { peerStatus } from "$lib/workers";
   import { onMount } from "svelte";
   import { Toaster as FxUIToaster } from "@fuxui/base";
 
@@ -15,16 +15,16 @@
   // Cache the current profile for use in the LoginForm to preview the last login.
   $effect(() => {
     if (
-      backendStatus.authState?.state === "authenticated" &&
-      backendStatus.profile &&
+      peerStatus.authState?.state === "authenticated" &&
+      peerStatus.profile &&
       localStorage.getItem("just-logged-in") != undefined
     ) {
       localStorage.setItem(
         `last-login`,
         JSON.stringify({
-          handle: backendStatus.profile.handle,
-          did: backendStatus.authState.did,
-          avatar: backendStatus.profile.avatar,
+          handle: peerStatus.profile.handle,
+          did: peerStatus.authState.did,
+          avatar: peerStatus.profile.avatar,
         }),
       );
       localStorage.removeItem("just-logged-in");
@@ -57,7 +57,7 @@
   <!-- <RenderScan /> -->
 {/if}
 
-{#if backendStatus.authState?.state === "unauthenticated"}
+{#if peerStatus.authState?.state === "unauthenticated"}
   <!-- Login Form -->
   <div
     class="flex h-screen w-full items-center justify-center bg-base-950/75 bg fixed left-0 top-0 z-10"
@@ -67,7 +67,7 @@
 {/if}
 
 <!-- Loading overlay -->
-{#if backendStatus.authState?.state === "loading"}
+{#if peerStatus.authState?.state === "loading"}
   <div
     class="flex h-screen w-screen justify-center items-center fixed top-0 left-0 bg-base-50 dark:bg-base-950 z-50"
     transition:fade
@@ -80,15 +80,15 @@
   </div>
 {/if}
 
-{#if backendStatus.authState?.state === "authenticated"}
+{#if peerStatus.authState?.state === "authenticated"}
   <!-- Page Content -->
   <TooltipProvider>
     {@render children?.()}
   </TooltipProvider>
 {/if}
 
-{#if backendStatus.authState?.state === "error"}
-  <Error message={backendStatus.authState.error} />
+{#if peerStatus.authState?.state === "error"}
+  <Error message={peerStatus.authState.error} />
 {/if}
 
 <FxUIToaster />

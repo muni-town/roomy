@@ -21,7 +21,7 @@ test.describe("Worker System - Cross-Browser Compatibility", () => {
       // Wait for workers to initialize
       await new Promise((resolve) => {
         const checkWorkers = () => {
-          if ((window as any).backend) resolve(true);
+          if ((window as any).peer) resolve(true);
           else setTimeout(checkWorkers, 100);
         };
         checkWorkers();
@@ -30,14 +30,14 @@ test.describe("Worker System - Cross-Browser Compatibility", () => {
       return {
         hasSharedWorker: "SharedWorker" in globalThis,
         hasWorker: "Worker" in globalThis,
-        backendExists: typeof (window as any).backend === "object",
-        backendStatusExists: typeof (window as any).backendStatus === "object",
+        peerExists: typeof (window as any).peer === "object",
+        peerStatusExists: typeof (window as any).peerStatus === "object",
         hasSharedWorkerSupport: (window as any).hasSharedWorker,
       };
     });
 
-    expect(workerInfo.backendExists).toBeTruthy();
-    expect(workerInfo.backendStatusExists).toBeTruthy();
+    expect(workerInfo.peerExists).toBeTruthy();
+    expect(workerInfo.peerStatusExists).toBeTruthy();
 
     // Log which worker type is being used
     console.log("Worker initialization info:", workerInfo);
@@ -246,7 +246,7 @@ test.describe("Worker System - Cross-Browser Compatibility", () => {
       for (let i = 0; i < 3; i++) {
         try {
           const debugWorkers = (window as any).debugWorkers;
-          const pingResult = await debugWorkers.pingBackend();
+          const pingResult = await debugWorkers.pingPeer();
           results.push({
             success: true,
             timestamp: pingResult.timestamp || Date.now(),
@@ -288,16 +288,16 @@ test.describe("Worker System - Cross-Browser Compatibility", () => {
   }, testInfo) => {
     test.skip(
       testInfo.project.name === "Desktop Safari" ||
-        testInfo.project.name === "Mobile Safari",
+      testInfo.project.name === "Mobile Safari",
       "Known issue: Playwright WebKit doesn't fully support OPFS, falls back to memory VFS which has message passing issues",
     );
 
     await page.waitForLoadState("domcontentloaded");
 
-    // Wait for backend and debug helpers to be ready
+    // Wait for peer and debug helpers to be ready
     await page.waitForFunction(
       () => {
-        return (window as any).backend && (window as any).debugWorkers;
+        return (window as any).peer && (window as any).debugWorkers;
       },
       { timeout: 15000 },
     );
@@ -372,10 +372,10 @@ test.describe("Worker System - Cross-Browser Compatibility", () => {
   test("should handle worker errors gracefully", async ({ page }) => {
     await page.waitForLoadState("domcontentloaded");
 
-    // Wait for backend and debug helpers to be ready
+    // Wait for peer and debug helpers to be ready
     await page.waitForFunction(
       () => {
-        return (window as any).backend && (window as any).debugWorkers;
+        return (window as any).peer && (window as any).debugWorkers;
       },
       { timeout: 15000 },
     );
@@ -508,7 +508,7 @@ test.describe("Worker System - Cross-Browser Compatibility", () => {
   }, testInfo) => {
     test.skip(
       testInfo.project.name === "Desktop Safari" ||
-        testInfo.project.name === "Mobile Safari",
+      testInfo.project.name === "Mobile Safari",
       "Known issue: Playwright WebKit doesn't fully support OPFS, falls back to memory VFS which has message passing issues",
     );
 
@@ -517,11 +517,11 @@ test.describe("Worker System - Cross-Browser Compatibility", () => {
     // Wait for workers and debug helpers to fully initialize
     await page.waitForFunction(
       () => {
-        const backend = (window as any).backend;
+        const peer = (window as any).peer;
         const sqliteStatus = (window as any).sqliteStatus;
         const debugWorkers = (window as any).debugWorkers;
         return (
-          backend && sqliteStatus && sqliteStatus.isActiveWorker && debugWorkers
+          peer && sqliteStatus && sqliteStatus.isActiveWorker && debugWorkers
         );
       },
       { timeout: 25000 },
@@ -542,7 +542,7 @@ test.describe("Worker System - Cross-Browser Compatibility", () => {
         });
 
         // Test ping functionality
-        const pingResult = await debugWorkers.pingBackend();
+        const pingResult = await debugWorkers.pingPeer();
         operations.push({
           operation: "BACKEND PING",
           success: true,
@@ -602,7 +602,7 @@ test.describe("Worker System - Cross-Browser Compatibility", () => {
             args.some(
               (arg) =>
                 typeof arg === "string" &&
-                arg.includes("SharedWorker backend connected"),
+                arg.includes("SharedWorker peer connected"),
             )
           ) {
             connectCount++;
@@ -736,7 +736,7 @@ test.describe("Worker System - Cross-Browser Compatibility", () => {
         timeline.push({
           stage: "initial",
           sqliteStatusExists: !!(window as any).sqliteStatus,
-          backendExists: !!(window as any).backend,
+          peerExists: !!(window as any).peer,
         });
 
         // Wait for worker to initialize

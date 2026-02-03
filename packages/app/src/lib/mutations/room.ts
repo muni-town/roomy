@@ -1,5 +1,5 @@
 import { newUlid, toBytes, Ulid } from "@roomy/sdk";
-import { backend } from "$lib/workers";
+import { peer } from "$lib/workers";
 import type { Event, StreamDid } from "@roomy/sdk";
 import { RoomKind } from "@roomy/sdk";
 
@@ -30,7 +30,7 @@ function createRoomEvents(opts: CreateRoomOpts) {
 
 export async function createRoom(opts: CreateRoomOpts) {
   const { roomId, events } = createRoomEvents(opts);
-  await backend.sendEventBatch(opts.spaceId, events);
+  await peer.sendEventBatch(opts.spaceId, events);
   return roomId;
 }
 
@@ -48,7 +48,7 @@ export async function createThread(opts: {
     },
   });
 
-  await backend.sendEventBatch(opts.spaceId, events);
+  await peer.sendEventBatch(opts.spaceId, events);
   return threadId;
 }
 
@@ -76,7 +76,7 @@ export async function createPage(opts: {
     },
   });
 
-  await backend.sendEventBatch(opts.spaceId, events);
+  await peer.sendEventBatch(opts.spaceId, events);
   return pageId;
 }
 
@@ -85,7 +85,7 @@ export async function renameRoom(opts: {
   roomId: Ulid;
   newName: string;
 }) {
-  await backend.sendEvent(opts.spaceId, {
+  await peer.sendEvent(opts.spaceId, {
     id: newUlid(),
     $type: "space.roomy.room.updateRoom.v0",
     roomId: opts.roomId,
@@ -94,7 +94,7 @@ export async function renameRoom(opts: {
 }
 
 export async function deleteRoom(opts: { spaceId: StreamDid; roomId: Ulid }) {
-  await backend.sendEvent(opts.spaceId, {
+  await peer.sendEvent(opts.spaceId, {
     id: newUlid(),
     $type: "space.roomy.room.deleteRoom.v0",
     roomId: opts.roomId,
@@ -144,14 +144,14 @@ export async function addRoomToSidebar(opts: {
   //   },
   // });
 
-  await backend.sendEventBatch(opts.spaceId, events);
+  await peer.sendEventBatch(opts.spaceId, events);
 }
 
 export async function convertToThread(opts: {
   spaceId: StreamDid;
   roomId: Ulid;
 }) {
-  await backend.sendEvent(opts.spaceId, {
+  await peer.sendEvent(opts.spaceId, {
     id: newUlid(),
     $type: "space.roomy.room.updateRoom.v0",
     roomId: opts.roomId,
@@ -184,7 +184,7 @@ export async function convertToPage(opts: {
       },
     },
   ];
-  await backend.sendEventBatch(opts.spaceId, events);
+  await peer.sendEventBatch(opts.spaceId, events);
 }
 
 export async function setPageReadMarker(opts: {
@@ -194,7 +194,7 @@ export async function setPageReadMarker(opts: {
 }) {
   // TODO: temporarily remove for now since unreads aren't calculated yet, and we don't want to
   // flood the personal space with these when we will be using ephemeral events.
-  // await backend.sendEvent(opts.personalStreamId, {
+  // await peer.sendEvent(opts.personalStreamId, {
   //   id: newUlid(),
   //   $type: "space.roomy.space.personal.setLastRead.v0",
   //   streamDid: opts.streamId,

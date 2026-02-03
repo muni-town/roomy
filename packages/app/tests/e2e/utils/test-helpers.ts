@@ -15,8 +15,8 @@ export async function waitForWorkersReady(page: Page, timeout = 20000) {
   await page.waitForFunction(
     () => {
       return (
-        (window as any).backend &&
-        (window as any).backendStatus &&
+        (window as any).peer &&
+        (window as any).peerStatus &&
         (window as any).sqliteStatus
       );
     },
@@ -38,13 +38,13 @@ export async function waitForWorkersReady(page: Page, timeout = 20000) {
  */
 export async function getWorkerStatus(page: Page) {
   return await page.evaluate(() => {
-    const backend = (window as any).backend;
-    const backendStatus = (window as any).backendStatus;
+    const peer = (window as any).peer;
+    const peerStatus = (window as any).peerStatus;
     const sqliteStatus = (window as any).sqliteStatus;
 
     return {
-      hasBackend: !!backend,
-      hasBackendStatus: !!backendStatus,
+      hasPeer: !!peer,
+      hasPeerStatus: !!peerStatus,
       hasSqliteStatus: !!sqliteStatus,
       sqliteIsActive: sqliteStatus?.isActiveWorker || false,
       sqliteWorkerId: sqliteStatus?.workerId,
@@ -69,7 +69,7 @@ export async function testWorkerPing(page: Page, maxRetries = 3) {
     const result = await page.evaluate(async () => {
       try {
         const debugWorkers = (window as any).debugWorkers;
-        const pingResult = await debugWorkers.pingBackend();
+        const pingResult = await debugWorkers.pingPeer();
         return {
           success: true,
           result: pingResult,
@@ -146,7 +146,7 @@ export function setupWorkerErrorMonitoring(page: Page) {
       msg.type() === "error" &&
       (text.includes("worker") ||
         text.includes("sqlite") ||
-        text.includes("backend") ||
+        text.includes("peer") ||
         text.includes("lock"))
     ) {
       errors.push({
@@ -162,7 +162,7 @@ export function setupWorkerErrorMonitoring(page: Page) {
     if (
       message.includes("worker") ||
       message.includes("sqlite") ||
-      message.includes("backend")
+      message.includes("peer")
     ) {
       errors.push({
         type: "pageerror",
@@ -395,7 +395,7 @@ export async function assertWorkersHealthy(page: Page) {
   const status = await getWorkerStatus(page);
 
   // Essential checks
-  expect(status.hasBackend, "Backend worker should be available").toBeTruthy();
+  expect(status.hasPeer, "Peer worker should be available").toBeTruthy();
   expect(
     status.hasSqliteStatus,
     "SQLite status should be available",

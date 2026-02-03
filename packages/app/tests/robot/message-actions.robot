@@ -311,8 +311,8 @@ Message Persists After Page Reload
     Wait For Load State    networkidle    timeout=10s
 
     # Wait for backend to reinitialize
-    ${backend_ready}=    Wait For Backend To Initialize    timeout=${TIMEOUT}
-    Should Be True    ${backend_ready}    msg=Backend did not initialize after reload
+    ${backend_ready}=    Wait For Peer To Initialize    timeout=${TIMEOUT}
+    Should Be True    ${backend_ready}    msg=Peer did not initialize after reload
 
     # Wait for space to reach idle status
     Wait For Space Status    ${space_id}    expectedStatus=idle    timeout=30s
@@ -407,7 +407,7 @@ Setup Test Environment
     [Documentation]    Initialize browser and authenticate for message tests
     ...                Extended setup for message action tests:
     ...                - Browser with proper viewport
-    ...                - Backend worker initialized
+    ...                - Peer worker initialized
     ...                - User authenticated with app password
     ...                - Personal stream exists
 
@@ -420,8 +420,8 @@ Setup Test Environment
     New Page    ${BASE_URL}/home
 
     # Wait for app to load
-    ${backend_initialized}=    Wait For Backend To Initialize    timeout=${TIMEOUT}
-    Should Be True    ${backend_initialized}    msg=Backend did not initialize
+    ${backend_initialized}=    Wait For Peer To Initialize    timeout=${TIMEOUT}
+    Should Be True    ${backend_initialized}    msg=Peer did not initialize
 
     # Set __playwright flag to disable HMR page reloads
     Evaluate JavaScript    ${None}    () => { window.__playwright = true; }

@@ -14,8 +14,8 @@ test.describe("Roomy App - Smoke Tests", () => {
     await page.waitForFunction(
       () => {
         return (
-          (window as any).backend &&
-          (window as any).backendStatus &&
+          (window as any).peer &&
+          (window as any).peerStatus &&
           (window as any).debugWorkers
         );
       },
@@ -25,14 +25,14 @@ test.describe("Roomy App - Smoke Tests", () => {
     // Verify worker objects exist
     const workerStatus = await page.evaluate(() => {
       return {
-        hasBackend: typeof (window as any).backend === "object",
-        hasBackendStatus: typeof (window as any).backendStatus === "object",
+        hasPeer: typeof (window as any).peer === "object",
+        hasPeerStatus: typeof (window as any).peerStatus === "object",
         hasDebugWorkers: typeof (window as any).debugWorkers === "object",
       };
     });
 
-    expect(workerStatus.hasBackend).toBeTruthy();
-    expect(workerStatus.hasBackendStatus).toBeTruthy();
+    expect(workerStatus.hasPeer).toBeTruthy();
+    expect(workerStatus.hasPeerStatus).toBeTruthy();
     expect(workerStatus.hasDebugWorkers).toBeTruthy();
   });
 
@@ -60,7 +60,7 @@ test.describe("Roomy App - Smoke Tests", () => {
     console.log("Browser API support:", apiSupport);
   });
 
-  test("should ping backend worker successfully", async ({ page }) => {
+  test("should ping peer worker successfully", async ({ page }) => {
     // Wait for debug workers to be available
     await page.waitForFunction(
       () => {
@@ -69,10 +69,10 @@ test.describe("Roomy App - Smoke Tests", () => {
       { timeout: 20000 },
     );
 
-    // Test backend ping
+    // Test peer ping
     const pingResult = await page.evaluate(async () => {
       try {
-        const result = await (window as any).debugWorkers.pingBackend();
+        const result = await (window as any).debugWorkers.pingPeer();
         return { success: true, result };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -80,7 +80,7 @@ test.describe("Roomy App - Smoke Tests", () => {
     });
 
     expect(pingResult.success).toBeTruthy();
-    console.log("Backend ping result:", pingResult.result);
+    console.log("Peer ping result:", pingResult.result);
   });
 
   test("should connect to SQLite database", async ({ page }) => {
@@ -126,7 +126,7 @@ test.describe("Roomy App - Smoke Tests", () => {
 
     // Test that workers still work after viewport change
     const workersStillWork = await page.evaluate(() => {
-      return (window as any).backend && (window as any).debugWorkers;
+      return (window as any).peer && (window as any).debugWorkers;
     });
 
     expect(workersStillWork).toBeTruthy();

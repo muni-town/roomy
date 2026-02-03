@@ -1,6 +1,6 @@
 <script lang="ts">
   import { current } from "$lib/queries";
-  import { backend, backendStatus } from "$lib/workers";
+  import { peer, peerStatus } from "$lib/workers";
   import { Button } from "@fuxui/base";
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
@@ -12,14 +12,14 @@
 
   const members = $derived(
     current.space.status == "joined"
-      ? backend.getMembers(current.space.space.id)
+      ? peer.getMembers(current.space.space.id)
       : undefined,
   );
 
   async function addAdmin(userId: string) {
     if (!spaceId) return;
 
-    await backend.sendEvent(spaceId, {
+    await peer.sendEvent(spaceId, {
       id: newUlid(),
       $type: "space.roomy.space.addAdmin.v0",
       userDid: UserDid.assert(userId),
@@ -29,7 +29,7 @@
   async function removeAdmin(userId: string) {
     if (!spaceId) return;
 
-    await backend.sendEvent(spaceId, {
+    await peer.sendEvent(spaceId, {
       id: newUlid(),
       $type: "space.roomy.space.removeAdmin.v0",
       userDid: UserDid.assert(userId),
@@ -61,7 +61,7 @@
             >
             {#if current.space.status == "joined" && !current.space.space.permissions.find(([user, perm]) => user == member.did && perm == "admin")}
               <Button onclick={() => addAdmin(member.did)}>Make Admin</Button>
-            {:else if backendStatus.authState?.state === "authenticated" && member.did != backendStatus.authState.did}
+            {:else if peerStatus.authState?.state === "authenticated" && member.did != peerStatus.authState.did}
               <Button onclick={() => removeAdmin(member.did)}
                 >Demote Admin</Button
               >

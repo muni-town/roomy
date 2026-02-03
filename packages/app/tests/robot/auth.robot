@@ -68,8 +68,8 @@ App Password Authentication Should Work When Environment Variables Are Set
     Wait For Load State    domcontentloaded    timeout=${TIMEOUT}
 
     # Wait for backend to initialize
-    ${backend_initialized}=    Wait For Backend To Initialize
-    Should Be True    ${backend_initialized}    msg=Backend worker did not initialize
+    ${backend_initialized}=    Wait For Peer To Initialize
+    Should Be True    ${backend_initialized}    msg=Peer worker did not initialize
     
     # Wait longer for client to be created (app password auth may take time)
     ${client_created}=    Wait For Client To Be Created    timeout=60s
@@ -103,7 +103,7 @@ App Password Authentication Should Work When Environment Variables Are Set
 
     Log    Successfully authenticated with DID: ${auth_debug}[did]
 
-Backend Should Have Valid Agent After App Password Auth
+Peer Should Have Valid Agent After App Password Auth
     [Documentation]    Verify that authentication is complete with valid DID
     ...                after app password authentication
     [Tags]    auth    app-password    backend
@@ -113,7 +113,7 @@ Backend Should Have Valid Agent After App Password Auth
     Wait For Load State    domcontentloaded    timeout=${TIMEOUT}
 
     # Wait for backend and full authentication (including roomyState.connected)
-    ${backend_initialized}=    Wait For Backend To Initialize
+    ${backend_initialized}=    Wait For Peer To Initialize
     Should Be True    ${backend_initialized}
 
     # Wait for full authentication including personal space (roomyState.connected)
@@ -153,7 +153,7 @@ Client Should Connect To Leaf Server After Authentication
     Wait For Load State    domcontentloaded    timeout=${TIMEOUT}
     
     # Wait for backend and client
-    ${backend_initialized}=    Wait For Backend To Initialize
+    ${backend_initialized}=    Wait For Peer To Initialize
     Should Be True    ${backend_initialized}
     ${client_created}=    Wait For Client To Be Created
     Should Be True    ${client_created}

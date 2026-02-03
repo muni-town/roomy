@@ -37,7 +37,7 @@ Setup Test Environment For Backfill
     Setup Browser
     New Context    viewport={'width': 1280, 'height': 720}
     New Page    ${BASE_URL}
-    Wait For Backend To Initialize
+    Wait For Peer To Initialize
     ${authenticated}=    Wait For Authentication    timeout=30s
     Should Be True    ${authenticated}    msg=Authentication failed
     Log    Backfill test environment ready
@@ -94,7 +94,7 @@ Reload And Wait For Backfill
     Reload
 
     # Wait for backend to reinitialize
-    Wait For Backend To Initialize
+    Wait For Peer To Initialize
 
     # Wait for authentication
     ${authenticated}=    Wait For Authentication    timeout=30s

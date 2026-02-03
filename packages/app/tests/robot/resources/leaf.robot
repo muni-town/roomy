@@ -188,12 +188,12 @@ Verify Event Count In Leaf Stream
 
     Log    Verified ${expected_count} events in Leaf stream ${stream_id}
 
-Get User DID From Backend
+Get User DID From Peer
     [Documentation]    Get the authenticated user's DID from backend status
     ...                Useful for generating events as the test user
     ...
     ...                Example:
-    ...                | ${user_did}= | Get User DID From Backend |
+    ...                | ${user_did}= | Get User DID From Peer |
     ...
     ...                Returns: User DID (e.g., did:plc:abc123)
 

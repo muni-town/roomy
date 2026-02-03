@@ -10,7 +10,7 @@ Documentation       Test suite for personal stream creation and management
 ...                 - PDS record storage (AT Protocol)
 ...                 - Leaf server stream hosting
 ...                 - IndexedDB caching
-...                 - Backend worker stream management
+...                 - Peer worker stream management
 
 Library             Browser
 Resource            resources/common.robot
@@ -28,7 +28,7 @@ Create Personal Stream - First Time User
     ...                Verifies:
     ...                - Stream is created on Leaf server
     ...                - PDS record is created with stream ID
-    ...                - Backend worker connects to stream
+    ...                - Peer worker connects to stream
     ...                - Stream ID is cached in IndexedDB
     [Tags]    first-time    critical
 
@@ -40,7 +40,7 @@ Create Personal Stream - First Time User
     Reload
 
     # Wait for backend to initialize
-    ${backend_initialized}=    Wait For Backend To Initialize
+    ${backend_initialized}=    Wait For Peer To Initialize
     Should Be True    ${backend_initialized}
 
     # Wait for authentication (triggers stream creation)
@@ -89,7 +89,7 @@ Retrieve Existing Personal Stream
     Reload
 
     # Wait for backend to initialize
-    ${backend_initialized}=    Wait For Backend To Initialize
+    ${backend_initialized}=    Wait For Peer To Initialize
     Should Be True    ${backend_initialized}
 
     # Wait for authentication
@@ -134,7 +134,7 @@ Handle Stale PDS Record
     Reload
 
     # Wait for backend to initialize
-    ${backend_initialized}=    Wait For Backend To Initialize
+    ${backend_initialized}=    Wait For Peer To Initialize
     Should Be True    ${backend_initialized}
 
     # Wait for authentication (should recreate stream when PDS record not found)
@@ -176,7 +176,7 @@ Stream Persistence After Page Reload
     Reload
 
     # Wait for backend to initialize
-    ${backend_initialized}=    Wait For Backend To Initialize
+    ${backend_initialized}=    Wait For Peer To Initialize
     Should Be True    ${backend_initialized}
 
     # Wait for authentication
@@ -206,7 +206,7 @@ Stream Connection Status Transitions
     Reload
 
     # Wait for backend to initialize
-    ${backend_initialized}=    Wait For Backend To Initialize
+    ${backend_initialized}=    Wait For Peer To Initialize
     Should Be True    ${backend_initialized}
 
     # Wait for authentication
@@ -229,7 +229,7 @@ Setup Test Environment
     [Documentation]    Initialize browser and authenticate
     ...                Sets up clean test environment with:
     ...                - Browser with proper viewport
-    ...                - Backend worker initialized
+    ...                - Peer worker initialized
     ...                - User authenticated with app password
 
     # Setup browser
@@ -238,7 +238,7 @@ Setup Test Environment
     New Page    http://127.0.0.1:5173
 
     # Wait for app to load
-    ${backend_initialized}=    Wait For Backend To Initialize
+    ${backend_initialized}=    Wait For Peer To Initialize
     Should Be True    ${backend_initialized}
 
     # Wait for authentication (happens automatically with app password)

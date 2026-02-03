@@ -12,11 +12,11 @@ import { db, prevStream } from "../idb";
 import { Deferred } from "$lib/utils/deferred";
 import type { QueryResult } from "../sqlite/setup";
 import {
-    type WorkerConfig as BackendConfig,
+    type WorkerConfig,
     type AuthState,
     type ConnectionState,
-    type BackendStatus,
-    type BackendInterface,
+    type PeerStatus,
+    type PeerInterface,
     type ConsoleInterface,
     consoleLogLevels,
     type SqliteState,
@@ -57,21 +57,21 @@ import { lexicons } from "$lib/lexicons";
 import type { SessionManager } from "@atproto/api/dist/session-manager";
 
 /**
- * The backend implementation, wrapping up authentication and materialization of the roomy state.
+ * The peer implementation, wrapping up authentication and materialization of the roomy state.
  * */
-export class WorkerSupervisor {
+export class Peer {
     /** The current user session ID, used primarily for telemetry */
     #sessionId: Ulid;
-    /** Miscellaneous backend configuration options. Currently just for console forwarding setting. */
-    #config: BackendConfig;
+    /** Miscellaneous peer configuration options. Currently just for console forwarding setting. */
+    #config: WorkerConfig;
 
-    /** The current authentication state of the backend. */
+    /** The current authentication state of the peer. */
     #auth: AuthState;
     /** The current state of the roomy client. */
     #roomy: RoomyState;
 
-    /** The reactive backend status which is propagated automatically over the worker reactive state channel. */
-    #status: ReactiveWorkerState<BackendStatus>;
+    /** The reactive peer status which is propagated automatically over the worker reactive state channel. */
+    #status: ReactiveWorkerState<PeerStatus>;
 
     #sqlite: SqliteSupervisor;
 
@@ -92,13 +92,13 @@ export class WorkerSupervisor {
 
     constructor(opts: { sessionId: Ulid }) {
         let [initSpan, ctx] = tracer.startActiveSpan(
-            "Construct Backend",
+            "Construct Peer",
             (span) => [span, context.active()] as const,
         );
 
-        // This span gives us a starting placeholder for the Init Backend span in case something gets
-        // stuck and we need to look for an incomplete backend initialization trace.
-        tracer.startActiveSpan("Start Init Backend", {}, ctx, (span) => span.end());
+        // This span gives us a starting placeholder for the Init Peer span in case something gets
+        // stuck and we need to look for an incomplete peer initialization trace.
+        tracer.startActiveSpan("Start Init Peer", {}, ctx, (span) => span.end());
 
         this.#sessionId = opts.sessionId;
         this.#config = {
@@ -109,8 +109,8 @@ export class WorkerSupervisor {
         console.info("Starting Roomy WorkerSupervisor", this.#config);
 
         this.#sqlite = new SqliteSupervisor();
-        this.#status = reactiveWorkerState<BackendStatus>(
-            new BroadcastChannel("backend-status"),
+        this.#status = reactiveWorkerState<PeerStatus>(
+            new BroadcastChannel("peer-status"),
             true,
         );
 
@@ -125,7 +125,7 @@ export class WorkerSupervisor {
         initSpan.end();
     }
 
-    getBackendInterface(this: WorkerSupervisor): BackendInterface {
+    getPeerInterface(this: Peer): PeerInterface {
         return {
             getSessionId: async () => {
                 return this.#sessionId;
@@ -176,7 +176,7 @@ export class WorkerSupervisor {
                 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
                 await this.sqlite.setReady(
                     messagePortInterface<{}, SqliteWorkerInterface>({
-                        localName: "backend",
+                        localName: "peer",
                         remoteName: "sqlite",
                         messagePort,
                         handlers: {},
@@ -184,7 +184,7 @@ export class WorkerSupervisor {
                 );
             },
             async ping() {
-                console.info("Backend: Ping received");
+                console.info("Peer: Ping received");
                 return {
                     timestamp: Date.now(),
                 };
@@ -320,20 +320,20 @@ export class WorkerSupervisor {
         this.#connection.ports.set(port, connectionId);
 
         // Log connection BEFORE setting up console forwarding to avoid broadcast duplication
-        console.debug("(init.1) SharedWorker backend connected", {
+        console.debug("(init.1) SharedWorker peer connected", {
             id: connectionId,
             total: this.#connection.count,
         });
 
         // eslint-disable-next-line @typescript-eslint/no-empty-object-type
         const consoleInterface = messagePortInterface<
-            BackendInterface,
+            PeerInterface,
             ConsoleInterface
         >({
-            localName: "backend",
+            localName: "peer",
             remoteName: "main",
             messagePort: port,
-            handlers: this.getBackendInterface(),
+            handlers: this.getPeerInterface(),
         });
 
         consoleInterface.setSessionId(this.#sessionId);
@@ -370,10 +370,10 @@ export class WorkerSupervisor {
 
     private async initialize(paramsStr?: string): Promise<{ did?: string }> {
         let [initSpan, ctx] = tracer.startActiveSpan(
-            "Init Backend",
+            "Init Peer",
             (span) => [span, context.active()] as const,
         );
-        console.debug("Initialising Backend Worker", { paramsStr });
+        console.debug("Initialising Peer Worker", { paramsStr });
         return context.with(ctx, async () => {
             // attempt to authenticate
             const params = paramsStr ? new URLSearchParams(paramsStr) : undefined;
@@ -414,7 +414,7 @@ export class WorkerSupervisor {
             console.debug("Session restored successfully");
 
             // init with session
-            context.with(ctx, () => this.initBackendWithSession(session));
+            context.with(ctx, () => this.initPeerWithSession(session));
 
             return { did: session.did };
         });
@@ -492,9 +492,9 @@ export class WorkerSupervisor {
     /** Where most of the initialisation happens. Backfill the personal
      * stream from the stored cursor, then set up the other streams.
      */
-    async initBackendWithSession(session: SessionManager) {
+    async initPeerWithSession(session: SessionManager) {
         const [span, ctx] = tracer.startActiveSpan(
-            "Init Backend With Client",
+            "Init Peer With Client",
             (span) => [span, context.active()] as const,
         );
 
@@ -626,7 +626,7 @@ export class WorkerSupervisor {
         const streamsResult = await this.sqlite.runQuery<{
             id: StreamDid;
             backfilled_to: StreamIndex;
-        }>(sql`-- backend space list
+        }>(sql`-- peer space list
       select e.id as id, cs.backfilled_to from entities e join comp_space cs on e.id = cs.entity
       where hidden = 0
     `);
@@ -686,7 +686,7 @@ export class WorkerSupervisor {
             },
         );
 
-        console.info("Backend initialised!");
+        console.info("Peer initialised!");
 
         span.end();
     }
@@ -798,7 +798,7 @@ export class WorkerSupervisor {
                         () => {
                             timedOut = true;
                             console.error(
-                                `Space connection timed out after ${WorkerSupervisor.SPACE_CONNECTION_TIMEOUT_MS}ms`,
+                                `Space connection timed out after ${Peer.SPACE_CONNECTION_TIMEOUT_MS}ms`,
                                 {
                                     streamId,
                                 },
@@ -808,7 +808,7 @@ export class WorkerSupervisor {
                                 message: "Connection timed out",
                             });
                         },
-                        WorkerSupervisor.SPACE_CONNECTION_TIMEOUT_MS,
+                        Peer.SPACE_CONNECTION_TIMEOUT_MS,
                     );
 
                     if (timedOut) {

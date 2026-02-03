@@ -37,19 +37,19 @@ test.describe("Roomy App - Core Functionality", () => {
     // Wait for workers to be available on the global object
     await page.waitForFunction(
       () => {
-        return (window as any).backend && (window as any).backendStatus;
+        return (window as any).peer && (window as any).peerStatus;
       },
       { timeout: 15000 },
     );
 
     // Verify worker objects exist
-    const hasBackend = await page.evaluate(() => {
+    const hasPeer = await page.evaluate(() => {
       return (
-        typeof (window as any).backend === "object" &&
-        typeof (window as any).backendStatus === "object"
+        typeof (window as any).peer === "object" &&
+        typeof (window as any).peerStatus === "object"
       );
     });
-    expect(hasBackend).toBeTruthy();
+    expect(hasPeer).toBeTruthy();
   });
 
   test("should support SharedWorker or fallback to Worker", async ({
@@ -77,24 +77,24 @@ test.describe("Roomy App - Core Functionality", () => {
     console.log("Worker support:", workerSupport);
   });
 
-  test("should initialize backend worker and respond to ping", async ({
+  test("should initialize peer worker and respond to ping", async ({
     page,
   }) => {
     await page.waitForLoadState("domcontentloaded");
 
-    // Wait for backend to be ready and debug helpers to be available
+    // Wait for peer to be ready and debug helpers to be available
     await page.waitForFunction(
       () => {
-        return (window as any).backend && (window as any).debugWorkers;
+        return (window as any).peer && (window as any).debugWorkers;
       },
       { timeout: 15000 },
     );
 
-    // Test backend ping functionality using debug helper
+    // Test peer ping functionality using debug helper
     const pingResult = await page.evaluate(async () => {
       try {
         const debugWorkers = (window as any).debugWorkers;
-        const result = await debugWorkers.pingBackend();
+        const result = await debugWorkers.pingPeer();
         return { success: true, result };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -102,7 +102,7 @@ test.describe("Roomy App - Core Functionality", () => {
     });
 
     expect(pingResult.success).toBeTruthy();
-    console.log("Backend ping result:", pingResult);
+    console.log("Peer ping result:", pingResult);
   });
 
   test("should initialize SQLite worker and handle basic queries", async ({
@@ -110,10 +110,10 @@ test.describe("Roomy App - Core Functionality", () => {
   }) => {
     await page.waitForLoadState("domcontentloaded");
 
-    // Wait for backend and debug helpers to be ready
+    // Wait for peer and debug helpers to be ready
     await page.waitForFunction(
       () => {
-        return (window as any).backend && (window as any).debugWorkers;
+        return (window as any).peer && (window as any).debugWorkers;
       },
       { timeout: 15000 },
     );
@@ -147,7 +147,7 @@ test.describe("Roomy App - Core Functionality", () => {
     // The app should set these headers for SQLite WASM to work properly
     expect(
       headers["cross-origin-embedder-policy"] === "credentialless" ||
-        headers["cross-origin-embedder-policy"] === "require-corp",
+      headers["cross-origin-embedder-policy"] === "require-corp",
     ).toBeTruthy();
 
     expect(headers["cross-origin-opener-policy"]).toBe("same-origin");
@@ -167,13 +167,13 @@ test.describe("Roomy App - Core Functionality", () => {
     const debugHelpers = await page.evaluate(() => {
       const helpers = (window as any).debugWorkers;
       return {
-        hasPingBackend: typeof helpers?.pingBackend === "function",
+        hasPingPeer: typeof helpers?.pingPeer === "function",
         hasTestSqliteConnection:
           typeof helpers?.testSqliteConnection === "function",
       };
     });
 
-    expect(debugHelpers.hasPingBackend).toBeTruthy();
+    expect(debugHelpers.hasPingPeer).toBeTruthy();
     expect(debugHelpers.hasTestSqliteConnection).toBeTruthy();
   });
 
@@ -183,23 +183,23 @@ test.describe("Roomy App - Core Functionality", () => {
     // Wait for status objects to be available
     await page.waitForFunction(
       () => {
-        return (window as any).backendStatus;
+        return (window as any).peerStatus;
       },
       { timeout: 15000 },
     );
 
     // Check that status is reactive and has expected properties
     const statusCheck = await page.evaluate(() => {
-      const backendStatus = (window as any).backendStatus;
+      const peerStatus = (window as any).peerStatus;
       return {
-        hasBackendStatus: !!backendStatus,
+        hasPeerStatus: !!peerStatus,
         isReactive:
-          typeof backendStatus?.subscribe === "function" ||
-          typeof backendStatus?.value !== "undefined",
+          typeof peerStatus?.subscribe === "function" ||
+          typeof peerStatus?.value !== "undefined",
       };
     });
 
-    expect(statusCheck.hasBackendStatus).toBeTruthy();
+    expect(statusCheck.hasPeerStatus).toBeTruthy();
   });
 
   test("should handle navigation and basic UI", async ({ page }) => {
@@ -230,7 +230,7 @@ test.describe("Roomy App - Core Functionality", () => {
     // Wait for workers and debug helpers to initialize
     await page.waitForFunction(
       () => {
-        return (window as any).backend && (window as any).debugWorkers;
+        return (window as any).peer && (window as any).debugWorkers;
       },
       { timeout: 15000 },
     );

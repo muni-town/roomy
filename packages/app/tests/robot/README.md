@@ -84,7 +84,7 @@ tests/robot/
 Core smoke tests covering:
 - App loading
 - Worker initialization
-- Backend worker ping
+- Peer worker ping
 - SQLite connection
 - Browser API compatibility
 

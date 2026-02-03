@@ -10,7 +10,7 @@
   import { goto } from "$app/navigation";
   import { renderMarkdownSanitized } from "$lib/utils/markdown";
   import type { Message } from "../ChatArea.svelte";
-  import { backend, backendStatus } from "$lib/workers";
+  import { peer, peerStatus } from "$lib/workers";
   import { decodeTime } from "ulidx";
   import { current } from "$lib/queries";
   import { Badge, toast } from "@fuxui/base";
@@ -85,9 +85,9 @@
   });
 
   let messageByMe = $derived(
-    backendStatus.authState &&
-      "did" in backendStatus.authState &&
-      message.authorDid == backendStatus.authState.did,
+    peerStatus.authState &&
+      "did" in peerStatus.authState &&
+      message.authorDid == peerStatus.authState.did,
   );
 
   let isSelected = $derived(
@@ -116,7 +116,7 @@
 
     let contentPatch = patchToText(patchMake(message.content, newContent));
 
-    await backend.sendEvent(spaceId, {
+    await peer.sendEvent(spaceId, {
       id: newUlid(),
       room: Ulid.assert(page.params.object),
       $type: "space.roomy.message.editMessage.v0",

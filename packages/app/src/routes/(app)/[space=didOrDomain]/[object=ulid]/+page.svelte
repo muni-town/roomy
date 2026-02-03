@@ -15,7 +15,7 @@
 
   import { page } from "$app/state";
   import { current } from "$lib/queries";
-  import { backend, backendStatus } from "$lib/workers";
+  import { peer, peerStatus } from "$lib/workers";
 
   import {
     // convertToPage,
@@ -93,7 +93,7 @@
 
   const setPageRead = () => {
     if (
-      backendStatus.roomyState?.state !== "connected" ||
+      peerStatus.roomyState?.state !== "connected" ||
       !spaceId ||
       !page.params.object ||
       sentLastReadMarker === true
@@ -101,7 +101,7 @@
       return;
     sentLastReadMarker = true;
     setPageReadMarker({
-      personalStreamId: backendStatus.roomyState?.personalSpace,
+      personalStreamId: peerStatus.roomyState?.personalSpace,
       streamId: spaceId,
       roomId: Ulid.assert(page.params.object),
     });
@@ -169,14 +169,14 @@
 
   $effect(() => {
     if (
-      !backendStatus.authState ||
-      backendStatus.authState.state !== "authenticated" ||
+      !peerStatus.authState ||
+      peerStatus.authState.state !== "authenticated" ||
       !page.params.space ||
       !page.params.object ||
       !room?.lastRead
     )
       return;
-    backend.runQuery(
+    peer.runQuery(
       sql`update comp_last_read set unread_count = 0 where entity = ${page.params.object}`,
     );
     const elapsed = Date.now() - room.lastRead;
@@ -224,7 +224,7 @@
         {/if}
       </h2>
 
-      {#if spaceId && backendStatus.authState?.state === "loading"}
+      {#if spaceId && peerStatus.authState?.state === "loading"}
         <div class="dark:!text-base-400 !text-base-600 mx-3">
           Downloading Entire Space...
         </div>
@@ -376,7 +376,7 @@
     </div>
   </div>
 
-  {#if spaceId && backendStatus.authState?.state === "loading"}
+  {#if spaceId && peerStatus.authState?.state === "loading"}
     <LoadingLine />
   {/if}
 {/snippet}

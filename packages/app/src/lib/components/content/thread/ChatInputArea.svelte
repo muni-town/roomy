@@ -11,7 +11,7 @@
   import IconTablerSend from "~icons/tabler/send";
   import IconLucideImage from "~icons/lucide/image";
   import IconHeroIconsPlus from "~icons/heroicons/plus";
-  import { backend } from "$lib/workers";
+  import { peer } from "$lib/workers";
   import { current } from "$lib/queries";
   import { page } from "$app/state";
   import { navigateSync } from "$lib/utils.svelte";
@@ -160,13 +160,13 @@
         id: newUlid(),
         room: current.roomId,
         $type: "space.roomy.message.moveMessages.v0",
-        messageIds: [msg.id], // We must only have one message in array until we have TVFs on backend
+        messageIds: [msg.id], // We must only have one message in array until we have TVFs on peer
         toRoomId: threadId,
       });
     }
 
     console.log("sending thread creation events", { spaceId, events });
-    await backend.sendEventBatch(spaceId, events);
+    await peer.sendEventBatch(spaceId, events);
 
     messagingState.set({
       kind: "normal",
@@ -210,12 +210,9 @@
       const { cleanedFile, ...dimensions } = await getImagePreloadData(media);
       if (!cleanedFile)
         throw new Error("Could not strip EXIF metadata for " + media.name);
-      const { uri } = await backend.uploadToPds(
-        await cleanedFile.arrayBuffer(),
-        {
-          mimetype: media.type,
-        },
-      );
+      const { uri } = await peer.uploadToPds(await cleanedFile.arrayBuffer(), {
+        mimetype: media.type,
+      });
 
       uploadedFiles.push({
         uri,
@@ -274,7 +271,7 @@
 
       console.debug("sending message", messageEvent);
 
-      await backend.sendEvent(spaceId, messageEvent);
+      await peer.sendEvent(spaceId, messageEvent);
     } catch (e: any) {
       console.error(e);
       toast.error("Failed to send message.", { position: "bottom-right" });

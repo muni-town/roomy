@@ -192,7 +192,7 @@ test.describe("Responsive Design - Cross-Browser Compatibility", () => {
       // The app should still work regardless of pixel density
       await waitForWorkersReady(page);
       const status = await getWorkerStatus(page);
-      expect(status.hasBackend).toBeTruthy();
+      expect(status.hasPeer).toBeTruthy();
     }
   });
 
@@ -209,7 +209,7 @@ test.describe("Responsive Design - Cross-Browser Compatibility", () => {
     try {
       await waitForWorkersReady(page, 30000); // Longer timeout for small screens
       const status = await getWorkerStatus(page);
-      expect(status.hasBackend).toBeTruthy();
+      expect(status.hasPeer).toBeTruthy();
     } catch (error) {
       console.log(
         "Workers may have issues on very small screens:",
@@ -386,7 +386,7 @@ test.describe("Responsive Design - Cross-Browser Compatibility", () => {
           hasProperContrast:
             window.getComputedStyle(document.body).color !== "rgb(0, 0, 0)" ||
             window.getComputedStyle(document.body).backgroundColor !==
-              "rgb(255, 255, 255)",
+            "rgb(255, 255, 255)",
         };
       });
 

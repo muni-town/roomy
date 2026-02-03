@@ -58,7 +58,7 @@ The main SvelteKit application. Uses a three-tier worker architecture:
 ```
 UI Thread (Svelte Components)
     ↓
-Shared Worker (Backend Worker)
+Shared Worker (Peer Worker)
     - Authentication & OAuth
     - Stream subscriptions
     - Multi-tab coordination
@@ -94,7 +94,7 @@ Check storage type via `getVfsType()` → `"opfs-sahpool"` | `"memory"` | `null`
 
 ### Data Flow
 
-1. User authenticates → `Client` created in Backend Worker
+1. User authenticates → `Client` created in Peer Worker
 2. `Client` connects to AT Protocol PDS and Leaf server
 3. Events stream through `ConnectedStream` instances
 4. SQLite worker materializes events into relational tables
@@ -113,7 +113,7 @@ Configured in `src/lib/config.ts`:
 Available in browser console:
 ```javascript
 window.debugWorkers.enableLogForwarding()
-window.debugWorkers.pingBackend()
+window.debugWorkers.pingPeer()
 window.debugWorkers.testSqliteConnection()
 window.debugWorkers.logWorkerStatus()
 window.debugWorkers.diagnoseRoom(roomId)

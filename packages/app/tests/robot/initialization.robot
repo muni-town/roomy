@@ -24,8 +24,8 @@ SharedWorker Should Initialize With Proper Fallback
     
     ${worker_info}=    Wait For Workers To Initialize
     
-    Should Be True    ${worker_info}[backendExists]    msg=Backend worker not initialized
-    Should Be True    ${worker_info}[backendStatusExists]    msg=Backend status not available
+    Should Be True    ${worker_info}[backendExists]    msg=Peer worker not initialized
+    Should Be True    ${worker_info}[backendStatusExists]    msg=Peer status not available
     
     Log    Worker Type: SharedWorker=${worker_info}[hasSharedWorker], Worker=${worker_info}[hasWorker]
 
@@ -347,7 +347,7 @@ Database Should Initialize And Handle Basic Operations
     ...            const selectResult = await debugWorkers.testSqliteConnection();
     ...            operations.push({ operation: 'SELECT', success: true, result: selectResult });
     ...            
-    ...            const pingResult = await debugWorkers.pingBackend();
+    ...            const pingResult = await debugWorkers.pingPeer();
     ...            operations.push({ operation: 'BACKEND PING', success: true, result: pingResult });
     ...            
     ...            return { success: true, operations };
@@ -634,7 +634,7 @@ Test Worker Ping
     ...        for (let i = 0; i < attempts; i++) {
     ...            try {
     ...                const debugWorkers = window.debugWorkers;
-    ...                const pingResult = await debugWorkers.pingBackend();
+    ...                const pingResult = await debugWorkers.pingPeer();
     ...                results.push({
     ...                    success: true,
     ...                    timestamp: pingResult.timestamp || Date.now(),

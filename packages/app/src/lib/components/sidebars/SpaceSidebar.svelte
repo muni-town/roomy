@@ -20,7 +20,7 @@
     dragHandle,
     SHADOW_ITEM_MARKER_PROPERTY_NAME,
   } from "svelte-dnd-action";
-  import { backend } from "$lib/workers";
+  import { peer } from "$lib/workers";
 
   // at the top level there can be categories, channels or pages
   // under categories there can be channels or pages
@@ -62,13 +62,13 @@
 
   async function saveChanges() {
     if (draftOrder && current.joinedSpace) {
-      // TODO: persist draftCategories to backend
+      // TODO: persist draftCategories to peer
       const newSidebar = draftOrder.map((c) => ({
         name: categoryMap.get(c.id)?.name ?? "",
         children: c.childIds as Ulid[],
       }));
       console.log("newSidebar", $state.snapshot(newSidebar));
-      await backend.sendEvent(current.joinedSpace.id, {
+      await peer.sendEvent(current.joinedSpace.id, {
         id: newUlid(),
         $type: "space.roomy.space.updateSidebar.v0",
         categories: $state.snapshot(newSidebar),

@@ -1,7 +1,7 @@
 import { Handle, StreamDid } from "@roomy/sdk";
 import { LiveQuery } from "$lib/utils/liveQuery.svelte";
 import { sql } from "$lib/utils/sqlTemplate";
-import { backend, backendStatus, getPersonalSpaceId } from "$lib/workers";
+import { peer, peerStatus, getPersonalSpaceId } from "$lib/workers";
 import type { SpaceMeta } from "./types";
 import { SvelteMap } from "svelte/reactivity";
 
@@ -45,8 +45,8 @@ $effect.root(() => {
   /** Asynchronously resolve handle for each space and store in reactive map */
   $effect(() => {
     if (
-      backendStatus.authState?.state !== "authenticated" ||
-      backendStatus.roomyState?.state !== "connected" ||
+      peerStatus.authState?.state !== "authenticated" ||
+      peerStatus.roomyState?.state !== "connected" ||
       spacesQuery.result === undefined
     )
       return;
@@ -55,7 +55,7 @@ $effect.root(() => {
       spacesQuery.result
         .filter((space) => !handlesForSpace.has(space.id))
         .map(async (space) => {
-          const handle = await backend.resolveHandleForSpace(space.id);
+          const handle = await peer.resolveHandleForSpace(space.id);
           return {
             id: space.id,
             handle,
@@ -71,8 +71,8 @@ $effect.root(() => {
   // Update spaces list, loading the space handle if it has one.
   $effect(() => {
     if (
-      backendStatus.authState?.state !== "authenticated" ||
-      backendStatus.roomyState?.state !== "connected" ||
+      peerStatus.authState?.state !== "authenticated" ||
+      peerStatus.roomyState?.state !== "connected" ||
       spacesQuery.result === undefined
     )
       return;
@@ -80,7 +80,7 @@ $effect.root(() => {
     const spacesWithMeta = spacesQuery.result.map((spaceRow) => ({
       ...spaceRow,
       handle: handlesForSpace.get(spaceRow.id),
-      backfill_status: backendStatus.spaces?.[spaceRow.id] || "error",
+      backfill_status: peerStatus.spaces?.[spaceRow.id] || "error",
     }));
 
     joinedSpaces.list = spacesWithMeta;

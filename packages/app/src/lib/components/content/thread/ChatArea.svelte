@@ -33,7 +33,7 @@
     type AsyncStateWithIdle,
   } from "@roomy/sdk";
   import StateSuspense from "$lib/components/primitives/StateSuspense.svelte";
-  import { backend } from "$lib/workers";
+  import { peer } from "$lib/workers";
   import { current } from "$lib/queries";
 
   // Lazy loading state (AsyncStateWithIdle pattern)
@@ -53,7 +53,7 @@
 
     lazyLoadState = { status: "loading" };
     try {
-      const result = await backend.lazyLoadRoom(
+      const result = await peer.lazyLoadRoom(
         current.joinedSpace.id,
         current.roomId,
       );

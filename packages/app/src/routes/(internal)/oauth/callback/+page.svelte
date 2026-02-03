@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { backend } from "$lib/workers";
+  import { peer } from "$lib/workers";
   import { Alert, Button } from "@fuxui/base";
   import { trace, context, SpanStatusCode } from "@opentelemetry/api";
   import { onMount } from "svelte";
@@ -16,7 +16,7 @@
       (span) => {
         const searchParams = new URL(globalThis.location.href).searchParams;
 
-        backend
+        peer
           .initialize(searchParams.toString())
           .then(({ did }) => {
             span.setAttribute("userDid", did || "");

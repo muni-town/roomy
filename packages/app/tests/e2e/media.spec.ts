@@ -15,8 +15,8 @@ test.describe("Media Processing", () => {
     await page.waitForFunction(
       () => {
         return (
-          (window as any).backend &&
-          (window as any).backendStatus &&
+          (window as any).peer &&
+          (window as any).peerStatus &&
           (window as any).debugWorkers
         );
       },

@@ -6,7 +6,7 @@
   import * as types from "./types";
 
   import * as zip from "@zip-js/zip-js";
-  import { backend } from "$lib/workers";
+  import { peer } from "$lib/workers";
   import { current } from "$lib/queries";
   import { sql } from "$lib/utils/sqlTemplate";
   import { formatDate } from "date-fns";
@@ -75,11 +75,11 @@
     let batch: Event[] = [];
     let batchMessageCount = 0;
 
-    await backend.pauseSubscription(spaceId);
+    await peer.pauseSubscription(spaceId);
 
     const existingDiscordUsers = new Set();
 
-    const existingInDb = await backend.runQuery<{ did: string }>(
+    const existingInDb = await peer.runQuery<{ did: string }>(
       sql`select did as did from comp_user where did like 'did:discord:%';`,
     );
     for (const row of existingInDb.rows || []) {
@@ -251,7 +251,7 @@
 
           if (batch.length >= batchSize) {
             try {
-              await backend.sendEventBatch(spaceId, batch);
+              await peer.sendEventBatch(spaceId, batch);
             } catch (e) {
               console.error(e);
               throw new Error("Error sending batch");
@@ -266,13 +266,13 @@
         finishedMessages.value = 0;
       }
 
-      await backend.sendEventBatch(spaceId, batch);
+      await peer.sendEventBatch(spaceId, batch);
 
       launchConfetti();
       importFinished = true;
       stopwatch.stop();
 
-      await backend.unpauseSubscription(spaceId);
+      await peer.unpauseSubscription(spaceId);
     } catch (e) {
       console.error(e);
       toast.error(`Error while importing Discord archive: ${e}`, {

@@ -1,10 +1,10 @@
 import { messagePortInterface, reactiveWorkerState } from "./workerMessaging";
-import backendWorkerUrl from "./backend/worker.ts?worker&url";
+import peerWorkerUrl from "./peer/worker.ts?worker&url";
 import type {
-  BackendInterface,
-  BackendStatus,
+  PeerInterface,
+  PeerStatus,
   ConsoleInterface,
-} from "./backend/types";
+} from "./peer/types";
 import type { SqliteStatus } from "./sqlite/types";
 import { CONFIG, flags } from "../config";
 import { context, trace } from "@opentelemetry/api";
@@ -15,12 +15,12 @@ if (import.meta.hot && !(window as any).__playwright) {
   import.meta.hot.accept(() => window.location.reload());
 }
 
-/** Reactive status of the shared worker "backend". */
-export const backendStatus = reactiveWorkerState<BackendStatus>(
-  new BroadcastChannel("backend-status"),
+/** Reactive status of the shared worker "peer". */
+export const peerStatus = reactiveWorkerState<PeerStatus>(
+  new BroadcastChannel("peer-status"),
   false,
 );
-(globalThis as any).backendStatus = backendStatus;
+(globalThis as any).peerStatus = peerStatus;
 
 const workerStatusChannel = new MessageChannel();
 
@@ -36,29 +36,29 @@ export const sqliteStatus = reactiveWorkerState<SqliteStatus>(
 export const hasSharedWorker = "SharedWorker" in globalThis;
 const hasWorker = "Worker" in globalThis;
 
-const BackendWorkerConstructor =
+const PeerWorkerConstructor =
   hasSharedWorker && flags.sharedWorker
     ? SharedWorker
     : hasWorker
       ? Worker
       : undefined;
-if (!BackendWorkerConstructor)
+if (!PeerWorkerConstructor)
   throw new Error("No SharedWorker or Worker constructor defined");
 
-export const backend = tracer.startActiveSpan(
-  "Wait for Backend Init",
+export const peer = tracer.startActiveSpan(
+  "Wait for Peer Init",
   {},
   trace.setSpan(context.active(), globalInitSpan),
   (span) => {
-    const backendWorker = new BackendWorkerConstructor(backendWorkerUrl, {
-      name: "roomy-backend",
+    const peerWorker = new PeerWorkerConstructor(peerWorkerUrl, {
+      name: "roomy-peer",
       type: "module",
     });
 
-    const backend = messagePortInterface<ConsoleInterface, BackendInterface>({
+    const peer = messagePortInterface<ConsoleInterface, PeerInterface>({
       localName: "main",
-      remoteName: "backend",
-      messagePort: "port" in backendWorker ? backendWorker.port : backendWorker,
+      remoteName: "peer",
+      messagePort: "port" in peerWorker ? peerWorker.port : peerWorker,
       handlers: {
         async log(level, args) {
           const text = Array.isArray(args) ? args[0] : args;
@@ -67,7 +67,7 @@ export const backend = tracer.startActiveSpan(
           // in case we forget
           const remainder =
             Array.isArray(args) && args.length > 2 ? args.slice(2) : [];
-          const prefixedArgs = ["[BW] " + text, { ...object }, ...remainder]; // Backend Worker
+          const prefixedArgs = ["[BW] " + text, { ...object }, ...remainder]; // Peer Worker
           console[level](...prefixedArgs);
         },
         async setSessionId(id) {
@@ -83,14 +83,14 @@ export const backend = tracer.startActiveSpan(
       },
     });
 
-    (globalThis as any).backend = backend;
+    (globalThis as any).peer = peer;
     (globalThis as any).CONFIG = CONFIG;
 
-    console.debug("(init.1) Backend worker loaded");
+    console.debug("(init.1) Peer worker loaded");
 
     // Start a sqlite worker for this tab.
     const sqliteWorkerChannel = new MessageChannel();
-    backend.addClient(sqliteWorkerChannel.port1);
+    peer.addClient(sqliteWorkerChannel.port1);
     const sqliteWorker = new Worker(
       new URL("./sqlite/worker.ts", import.meta.url),
       {
@@ -103,7 +103,7 @@ export const backend = tracer.startActiveSpan(
 
     sqliteWorker.postMessage(
       {
-        backendPort: sqliteWorkerChannel.port2,
+        peerPort: sqliteWorkerChannel.port2,
         statusPort: workerStatusChannel.port2,
         dbName: "temp",
         sessionId: faro.api.getSession()!.id,
@@ -112,46 +112,46 @@ export const backend = tracer.startActiveSpan(
     );
 
     if (page.route.id !== "/(internal)/oauth/callback") {
-      backend.initialize();
+      peer.initialize();
     }
 
     span.end();
 
-    return backend;
+    return peer;
   },
 );
 
 export function getPersonalSpaceId() {
-  return backendStatus.roomyState?.state === "connected" ||
-    backendStatus.roomyState?.state === "materializingPersonalSpace"
-    ? backendStatus.roomyState.personalSpace
+  return peerStatus.roomyState?.state === "connected" ||
+    peerStatus.roomyState?.state === "materializingPersonalSpace"
+    ? peerStatus.roomyState.personalSpace
     : undefined;
 }
 
 // for running in console REPL
 (window as any).debugWorkers = {
   async enableLogForwarding() {
-    await backend.enableLogForwarding();
+    await peer.enableLogForwarding();
   },
 
   async disableLogForwarding() {
-    await backend.disableLogForwarding();
+    await peer.disableLogForwarding();
   },
 
-  async pingBackend() {
+  async pingPeer() {
     try {
-      const result = await backend.ping();
-      console.log("Main thread: Backend ping result", result);
+      const result = await peer.ping();
+      console.log("Main thread: Peer ping result", result);
       return result;
     } catch (error) {
-      console.error("Main thread: Backend ping failed", error);
+      console.error("Main thread: Peer ping failed", error);
       throw error;
     }
   },
 
   async testSqliteConnection() {
     try {
-      const result = await backend.runQuery({ sql: "SELECT 1 as test" });
+      const result = await peer.runQuery({ sql: "SELECT 1 as test" });
       console.log("Main thread: SQLite test query result", result);
       return result;
     } catch (error) {
@@ -161,7 +161,7 @@ export function getPersonalSpaceId() {
   },
 
   logWorkerStatus() {
-    console.log("📊 [backendStatus] Current state:", backendStatus.current);
+    console.log("📊 [peerStatus] Current state:", peerStatus.current);
     console.log("🗃️ [sqliteStatus] Current state:", sqliteStatus.current);
   },
 
@@ -206,7 +206,7 @@ export function getPersonalSpaceId() {
         left join comp_info parent_i on parent_i.entity = e.parent
       `;
 
-      const result = await backend.runQuery(diagnosticQuery);
+      const result = await peer.runQuery(diagnosticQuery);
       const diagnostic = result.rows?.[0]
         ? JSON.parse((result.rows[0] as any).diagnostic as string)
         : null;
@@ -254,7 +254,7 @@ export function getPersonalSpaceId() {
         ) as diagnostic
       `;
 
-      const result = await backend.runQuery(diagnosticQuery);
+      const result = await peer.runQuery(diagnosticQuery);
       const diagnostic = result.rows?.[0]
         ? JSON.parse((result.rows[0] as any).diagnostic as string)
         : null;

@@ -28,7 +28,7 @@ Close Current Page If Open
         Log    Could not close page - browser may have crashed
     END
 
-Wait For Backend To Initialize
+Wait For Peer To Initialize
     [Documentation]    Wait for window.backend and window.backendStatus to be initialized
     [Arguments]    ${timeout}=${DEFAULT_TIMEOUT}
     ${backend_exists}=    Evaluate JavaScript    ${None}
@@ -40,7 +40,7 @@ Wait For Backend To Initialize
     ...            } else if (Date.now() - start < 20000) {
     ...                setTimeout(check, 200);
     ...            } else {
-    ...                console.error('Backend initialization timeout. window.backend:', !!window.backend, 'window.backendStatus:', !!window.backendStatus);
+    ...                console.error('Peer initialization timeout. window.backend:', !!window.backend, 'window.backendStatus:', !!window.backendStatus);
     ...                console.error('Available window properties:', Object.keys(window).filter(k => k.includes('backend') || k.includes('CONFIG')));
     ...                resolve(false);
     ...            }

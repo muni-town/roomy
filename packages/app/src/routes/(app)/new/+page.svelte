@@ -2,7 +2,7 @@
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { createSpace } from "$lib/mutations/space";
   import { navigate } from "$lib/utils.svelte";
-  import { backendStatus } from "$lib/workers";
+  import { peerStatus } from "$lib/workers";
   import type { AsyncStateWithIdle, StreamDid } from "@roomy/sdk";
   import IconHeroiconsXMark from "~icons/heroicons/x-mark";
   import {
@@ -55,8 +55,8 @@
   async function createSpaceSubmit(evt: Event) {
     evt.preventDefault();
     if (
-      backendStatus.authState?.state != "authenticated" ||
-      backendStatus.roomyState?.state !== "connected"
+      peerStatus.authState?.state != "authenticated" ||
+      peerStatus.roomyState?.state !== "connected"
     )
       throw new Error("Not connected");
 
@@ -68,8 +68,8 @@
         spaceDescription: form.spaceDescription || undefined,
         avatarFile: form.avatarFile || undefined,
         creator: {
-          did: backendStatus.authState.did,
-          personalStreamId: backendStatus.roomyState.personalSpace,
+          did: peerStatus.authState.did,
+          personalStreamId: peerStatus.roomyState.personalSpace,
         },
       });
 

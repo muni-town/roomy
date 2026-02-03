@@ -8,7 +8,7 @@ Documentation       Test suite for space connection status synchronization
 ...                 These tests verify the integration between:
 ...                 - Personal stream event subscription
 ...                 - Space materialization from joinSpace events
-...                 - Backend status updates (spaces[idle])
+...                 - Peer status updates (spaces[idle])
 ...                 - Multi-tab state synchronization
 
 Library             Browser
@@ -59,7 +59,7 @@ Test Tags           space    connection    multi-tab
 
     # Wait for space to appear in Tab A's backendStatus
     # This tests if the personal stream subscription delivers joinSpace event
-    ${space_appeared}=    Verify Space In Backend Status    ${space_id}    timeout=30s
+    ${space_appeared}=    Verify Space In Peer Status    ${space_id}    timeout=30s
     Log    Tab A - Space appeared in backendStatus: ${space_appeared}
 
     # Check the status immediately after appearing
@@ -90,7 +90,7 @@ Test Tags           space    connection    multi-tab
         ...            spacesCount: Object.keys(status?.spaces || {}).length
         ...        };
         ...    }
-        Log    Tab A - Backend status summary: ${backend_status}
+        Log    Tab A - Peer status summary: ${backend_status}
 
         # Check if space is materialized in database
         ${materialized}=    Check Space Materialized In Database    ${space_id}
@@ -153,7 +153,7 @@ Space Connection After Tab A Reload
 
     # Switch to Tab A and verify it appears
     Switch To Observer Tab
-    ${appeared}=    Verify Space In Backend Status    ${space_id}    timeout=30s
+    ${appeared}=    Verify Space In Peer Status    ${space_id}    timeout=30s
     Log    Tab A - Space appeared: ${appeared}
 
     # Reload Tab A
@@ -161,7 +161,7 @@ Space Connection After Tab A Reload
     Wait For Load State    networkidle    timeout=10s
 
     # Wait for backend to reinitialize
-    ${backend_ready}=    Wait For Backend To Initialize
+    ${backend_ready}=    Wait For Peer To Initialize
     Should Be True    ${backend_ready}
 
     # Re-authenticate
@@ -177,7 +177,7 @@ Space Connection After Tab A Reload
 
     Log    Space reached idle after reload in Tab A
 
-Backend Status Consistency Across Tabs
+Peer Status Consistency Across Tabs
     [Documentation]    Verify that backend status is consistent between tabs
     ...                Checks that spaces show same status in both tabs
     [Tags]    consistency
@@ -276,7 +276,7 @@ Setup Multi-Tab Test Environment
 
     # Create Tab 0 (observer) - navigate to /home
     New Page    ${BASE_URL}/home
-    ${backend_init_0}=    Wait For Backend To Initialize
+    ${backend_init_0}=    Wait For Peer To Initialize
     Should Be True    ${backend_init_0}    msg=Tab 0 backend initialization failed
 
     # Set __playwright flag in Tab 0
@@ -297,7 +297,7 @@ Setup Multi-Tab Test Environment
 
     # Create Tab 1 (creator) - new page in same context (shared authentication)
     New Page    ${BASE_URL}/home
-    ${backend_init_1}=    Wait For Backend To Initialize
+    ${backend_init_1}=    Wait For Peer To Initialize
     Should Be True    ${backend_init_1}    msg=Tab 1 backend initialization failed
 
     # Set __playwright flag in Tab 1

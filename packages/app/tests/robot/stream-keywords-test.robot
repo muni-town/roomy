@@ -70,7 +70,7 @@ Test Delete And Recreate Stream Record
     Reload
 
     # Wait for backend to initialize
-    ${backend_initialized}=    Wait For Backend To Initialize
+    ${backend_initialized}=    Wait For Peer To Initialize
     Should Be True    ${backend_initialized}
 
     # Wait for authentication (should recreate stream when PDS record not found)
@@ -93,7 +93,7 @@ Test Delete And Recreate Stream Record
 
 Test Delete Stream Record Idempotence
     [Documentation]    Verify deleting non-existent record doesn't fail
-    ...                Backend silently ignores RecordNotFound errors
+    ...                Peer silently ignores RecordNotFound errors
     [Tags]    cleanup
 
     # Delete record multiple times - should not fail
@@ -115,7 +115,7 @@ Setup Test Environment
     New Page    http://127.0.0.1:5173
 
     # Wait for app to load
-    ${backend_initialized}=    Wait For Backend To Initialize
+    ${backend_initialized}=    Wait For Peer To Initialize
     Should Be True    ${backend_initialized}
 
     # Wait for authentication (happens automatically with app password)

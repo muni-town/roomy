@@ -12,7 +12,7 @@ Documentation       Test suite for space creation and initialization
 ...                 - Leaf server stream creation
 ...                 - Event batch submission
 ...                 - SQLite database materialization
-...                 - Backend worker space management
+...                 - Peer worker space management
 
 Library             Browser
 Resource            resources/common.robot
@@ -162,7 +162,7 @@ Verify Space Metadata Persistence
     Reload
 
     # Wait for backend to initialize
-    ${backend_initialized}=    Wait For Backend To Initialize
+    ${backend_initialized}=    Wait For Peer To Initialize
     Should Be True    ${backend_initialized}
 
     # Wait for authentication
@@ -318,7 +318,7 @@ Space Reconnection After Reload
     Reload
 
     # Wait for backend to initialize
-    ${backend_initialized}=    Wait For Backend To Initialize
+    ${backend_initialized}=    Wait For Peer To Initialize
     Should Be True    ${backend_initialized}
 
     # Wait for authentication
@@ -347,7 +347,7 @@ Setup Test Environment For Spaces
     [Documentation]    Initialize browser and authenticate
     ...                Extended setup for space creation tests:
     ...                - Browser with proper viewport
-    ...                - Backend worker initialized
+    ...                - Peer worker initialized
     ...                - User authenticated with app password
     ...                - Personal stream exists
 
@@ -360,7 +360,7 @@ Setup Test Environment For Spaces
     New Page    ${BASE_URL}/home
 
     # Wait for app to load
-    ${backend_initialized}=    Wait For Backend To Initialize
+    ${backend_initialized}=    Wait For Peer To Initialize
     Should Be True    ${backend_initialized}
 
     # Set __playwright flag to disable HMR page reloads (see workers/index.ts)

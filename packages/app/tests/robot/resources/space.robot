@@ -116,13 +116,13 @@ Create Space With Name
     # First, verify the backend is in the right state
     ${pre_check}=    Evaluate JavaScript    ${None}
     ...    () => ({
-    ...        hasBackend: !!window.backend,
+    ...        hasPeer: !!window.backend,
     ...        roomyState: window.backendStatus?.current?.roomyState?.state,
     ...        hasPersonalSpace: !!window.backendStatus?.current?.roomyState?.personalSpace,
     ...        personalSpace: window.backendStatus?.current?.roomyState?.personalSpace
     ...    })
     Log    Pre-check state: ${pre_check}
-    Should Be Equal    ${pre_check}[roomyState]    connected    msg=Backend must be connected before creating space
+    Should Be Equal    ${pre_check}[roomyState]    connected    msg=Peer must be connected before creating space
 
     # Navigate to the create space page
     Go To    ${BASE_URL}/new
@@ -529,13 +529,13 @@ Get Personal Stream ID
     Log    Personal space ID: ${personal_stream}
     RETURN    ${personal_stream}
 
-Verify Space In Backend Status
+Verify Space In Peer Status
     [Documentation]    Verify that a space appears in backend status
     ...                Polls until space appears in window.backendStatus.spaces
     ...
     ...                Example:
-    ...                | Verify Space In Backend Status | ${space_id} |
-    ...                | Verify Space In Backend Status | ${space_id} | timeout=10s |
+    ...                | Verify Space In Peer Status | ${space_id} |
+    ...                | Verify Space In Peer Status | ${space_id} | timeout=10s |
     ...
     ...                Arguments:
     ...                - spaceId: Space ID to verify

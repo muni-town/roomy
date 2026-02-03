@@ -1,4 +1,4 @@
-import { backend } from "$lib/workers";
+import { peer } from "$lib/workers";
 import type { LiveQueryMessage } from "$lib/workers/sqlite/setup";
 import type { SqlStatement } from "$lib/workers/sqlite/types";
 import type { AsyncState } from "@roomy/sdk";
@@ -45,12 +45,12 @@ export class LiveQuery<Row extends { [key: string]: unknown }> {
           }
         };
 
-        // Register the live query with the backend so that we will get notified when results come
+        // Register the live query with the peer so that we will get notified when results come
         // in.
-        backend.createLiveQuery(lockId, channel.port2, this.#statement);
+        peer.createLiveQuery(lockId, channel.port2, this.#statement);
 
-        // Wait here to hold the web lock until the query is dropped. The backend will try to obtain
-        // the query lock that we currently hold, so as soon as we exit this closure, the backend
+        // Wait here to hold the web lock until the query is dropped. The peer will try to obtain
+        // the query lock that we currently hold, so as soon as we exit this closure, the peer
         // will drop our the query for us.
         await queryDropped;
       });
@@ -58,7 +58,7 @@ export class LiveQuery<Row extends { [key: string]: unknown }> {
       // This callback will be called by Svelte before the effect is re-run because of changes, or
       // when the component is unmounted.
       return () => {
-        // Drop the query lock, which will alert the backend that it may delete the query.
+        // Drop the query lock, which will alert the peer that it may delete the query.
         dropQuery();
       };
     });

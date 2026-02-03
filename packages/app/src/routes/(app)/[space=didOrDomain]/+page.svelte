@@ -2,7 +2,7 @@
   import { fade } from "svelte/transition";
 
   import { current, sidebar as sidebarQuery } from "$lib/queries";
-  import { backend, backendStatus } from "$lib/workers";
+  import { peer, peerStatus } from "$lib/workers";
 
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
@@ -150,7 +150,7 @@
   $effect(() => {
     if (!spaceId || current.space.status !== "joined") return;
     // Fetch all link events in space
-    backend.fetchLinks(spaceId, 1 as StreamIndex, 1000);
+    peer.fetchLinks(spaceId, 1 as StreamIndex, 1000);
   });
 </script>
 
@@ -168,7 +168,7 @@
           {#if spaceActive}Index{/if}
         </div>
 
-        {#if current.joinedSpace?.id && backendStatus.authState?.state === "loading"}
+        {#if current.joinedSpace?.id && peerStatus.authState?.state === "loading"}
           <div class="dark:!text-base-400 !text-base-600">
             Downloading Entire Space...
           </div>
@@ -176,7 +176,7 @@
       </h2>
     </div>
 
-    {#if current.joinedSpace?.id && backendStatus.authState?.state === "loading"}
+    {#if current.joinedSpace?.id && peerStatus.authState?.state === "loading"}
       <LoadingLine />
     {/if}
   </div>

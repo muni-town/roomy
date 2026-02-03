@@ -1,16 +1,14 @@
 <script lang="ts">
   import { Avatar, Popover, Button } from "@fuxui/base";
   import ThemeSettings from "./ThemeSettings.svelte";
-  import { backend, backendStatus } from "$lib/workers";
+  import { peer, peerStatus } from "$lib/workers";
 
   let popoverOpen = $state(false);
 
-  const connected = $derived(
-    backendStatus.authState?.state === "authenticated",
-  );
+  const connected = $derived(peerStatus.authState?.state === "authenticated");
 
   function handleLogout() {
-    backend.logout().then(() => {
+    peer.logout().then(() => {
       popoverOpen = false;
       window.location.reload();
     });
@@ -31,12 +29,12 @@
       class:border-red-500={!connected}
     >
       <Avatar
-        src={backendStatus.profile?.avatar}
-        fallback={backendStatus.profile?.displayName}
+        src={peerStatus.profile?.avatar}
+        fallback={peerStatus.profile?.displayName}
         class="group-hover:scale-110 transition-transform duration-200"
       ></Avatar>
-      {#if backendStatus.profile}
-        <span class="sr-only">{backendStatus.profile.handle}</span>
+      {#if peerStatus.profile}
+        <span class="sr-only">{peerStatus.profile.handle}</span>
       {:else}
         <span class="sr-only">Log in</span>
       {/if}
@@ -47,14 +45,14 @@
     {#if connected}
       <div class="border-b border-base-300 pb-4 mb-2 flex items-center gap-2">
         <Avatar
-          src={backendStatus.profile?.avatar}
-          fallback={backendStatus.profile?.displayName}
+          src={peerStatus.profile?.avatar}
+          fallback={peerStatus.profile?.displayName}
           class="group-hover:scale-110 transition-transform duration-200"
         ></Avatar><a
           class="mr-auto font-medium truncate"
-          title={`@${backendStatus.profile?.handle}`}
-          href={"/user/" + backendStatus.profile?.id}
-          >@{backendStatus.profile?.handle}</a
+          title={`@${peerStatus.profile?.handle}`}
+          href={"/user/" + peerStatus.profile?.id}
+          >@{peerStatus.profile?.handle}</a
         >
         <Button variant="ghost" class="" onclick={handleLogout}>Log Out</Button>
       </div>
