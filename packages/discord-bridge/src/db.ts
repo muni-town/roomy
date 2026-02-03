@@ -292,3 +292,15 @@ export const syncedEditsForBridge = createBridgeStoreFactory<SyncedEdit>(
 );
 
 export type SyncedEdits = ReturnType<typeof syncedEditsForBridge>;
+
+/**
+ * Per-space Discord message hash tracking for Roomy → Discord sync.
+ * Key format: `${truncatedNonce}:${hash}` for webhook messages or `:${hash}` for human messages
+ * Value: Discord message ID (snowflake as string)
+ * Used for duplicate detection during Roomy → Discord sync (hash-based idempotency)
+ */
+export const discordMessageHashesForBridge = createBridgeStoreFactory<
+  Record<string, string>
+>("discordMessageHashes", "json");
+
+export type DiscordMessageHashes = ReturnType<typeof discordMessageHashesForBridge>;

@@ -1,4 +1,5 @@
 import {
+  DiscordMessageHashes,
   LatestMessages,
   SyncedEdits,
   SyncedIds,
@@ -19,5 +20,6 @@ export type GuildContext = {
   syncedSidebarHash: SyncedSidebarHash;
   syncedRoomLinks: SyncedRoomLinks;
   syncedEdits: SyncedEdits;
+  discordMessageHashes: DiscordMessageHashes;
   connectedSpace: ConnectedSpace;
 };

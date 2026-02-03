@@ -32,6 +32,7 @@ import {
   syncedRoomLinksForBridge,
   syncedSidebarHashForBridge,
   syncedEditsForBridge,
+  discordMessageHashesForBridge,
 } from "../db.js";
 import { GuildContext } from "../types.js";
 import {
@@ -46,6 +47,7 @@ import {
 } from "../roomy/to.js";
 import { getConnectedSpace } from "../roomy/client.js";
 import { EventBatcher } from "../roomy/batcher.js";
+import { backfillRoomyToDiscord } from "../roomy/backfill.js";
 
 
 export const botState = {
@@ -113,7 +115,11 @@ export async function getGuildContext(guildId: bigint): Promise<GuildContext | u
     discordGuildId: guildId,
     roomySpaceId: spaceId,
   });
-  return { guildId, spaceId, syncedIds, latestMessagesInChannel, syncedReactions, syncedRoomLinks, syncedProfiles, syncedSidebarHash, syncedEdits, connectedSpace };
+  const discordMessageHashes = discordMessageHashesForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  return { guildId, spaceId, syncedIds, latestMessagesInChannel, syncedReactions, syncedRoomLinks, syncedProfiles, syncedSidebarHash, syncedEdits, discordMessageHashes, connectedSpace };
 }
 
 /**
@@ -464,6 +470,10 @@ export async function backfill(bot: DiscordBot, guildIds: bigint[]) {
       if (!(await hasBridge(guildId))) continue;
       await backfillGuild(bot, guildId);
     }
+
+    // NEW: Start Roomy → Discord backfill after Discord → Roomy completes
+    console.log("Discord → Roomy backfill complete, starting Roomy → Discord backfill...");
+    await backfillRoomyToDiscord(bot);
 
     span.end();
     doneBackfillingFromDiscord = true;

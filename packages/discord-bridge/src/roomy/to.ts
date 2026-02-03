@@ -61,8 +61,9 @@ const DISCORD_MESSAGE_TYPES = {
 /**
  * Compute a collision-resistant fingerprint from arbitrary string data.
  * Uses SHA-256 and returns a 32-character hex string (128 bits).
+ * Exported for reuse in discord/backfill.ts
  */
-function fingerprint(data: string): string {
+export function fingerprint(data: string): string {
   return createHash("sha256").update(data).digest("hex").slice(0, 32);
 }
 

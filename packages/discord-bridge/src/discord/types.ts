@@ -92,3 +92,13 @@ export type DiscordChannel = SetupDesiredProps<
   Channel,
   CompleteDesiredProperties<typeof desiredProperties>
 >;
+
+/**
+ * Message options for executing webhooks.
+ * Based on @discordeno/bot's ExecuteWebhook options.
+ */
+export interface DiscordMessageOptions {
+  content?: string;
+  username?: string;
+  avatarUrl?: string;
+}

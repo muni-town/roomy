@@ -18,12 +18,15 @@ import { computeDiscordMessageHash } from "../discord/backfill.js";
 
 // Helper to decode message body data
 function decodeMessageBody(event: Event): string {
-  const createMessageEvent = event as { body?: { data: { $bytes?: string } | Uint8Array } };
+  const createMessageEvent = event as { body?: { data: { $bytes?: string } | Uint8Array } } };
   const data = createMessageEvent.body?.data;
-  if (!data) return "";
-  if (data instanceof Uint8Array) return new TextDecoder().decode(data);
-  const bytesData = data as { $bytes?: string };
-  if (bytesData.$bytes) return atob(bytesData.$bytes);
+  if (data) {
+    if (typeof data === 'object' && '$bytes' in data) {
+      return atob(data.$bytes!);
+    } else if (data instanceof Uint8Array) {
+      return new TextDecoder().decode(data);
+    }
+  }
   return "";
 }
 
@@ -224,7 +227,7 @@ export async function syncEditMessageToDiscord(
       setDiscordAttrs(span, { channelId });
 
       // Decode content
-      const content = editEvent.body ? decodeMessageBody(editEvent as Event) : "";
+      const content = editEvent.body?.data?.$bytes ? atob(editEvent.body.data.$bytes) : "";
 
       // Edit the message
       await bot.helpers.editMessage(channelId, discordMessageId, { content });
