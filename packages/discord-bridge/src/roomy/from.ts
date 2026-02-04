@@ -96,33 +96,40 @@ export async function syncCreateMessageToDiscord(
       });
 
       // Extract author info for puppeting
+      // For bridged messages, use authorOverride.did; for pure Roomy messages, use decodedEvent.user
       const authorOverride = extensions["space.roomy.extension.authorOverride.v0"] as { did?: string } | undefined;
-      const authorDid = authorOverride?.did;
+      const authorDid = authorOverride?.did || decodedEvent.user;
+
+      console.log(`[Profile Puppeting] Event ${event.id}: authorOverride.did = ${authorOverride?.did || "NOT FOUND"}, using DID: ${authorDid}`);
 
       // Get username/avatar from DID
       let username = "Roomy User";
       let avatarUrl: string | undefined;
-      if (authorDid) {
-        // Check if it's a Discord user
-        const discordMatch = authorDid.match(/did:discord:(\d+)/);
-        if (discordMatch) {
-          username = `Roomy User ${discordMatch[1]}`;
-          // Could fetch user info from Discord API here for avatar
-        } else {
-          // It's a Roomy user - try to get their profile from cache
-          const roomyProfiles = roomyUserProfilesForBridge({
-            discordGuildId: ctx.guildId,
-            roomySpaceId: ctx.spaceId,
-          });
-          try {
-            const profile = await roomyProfiles.get(authorDid);
-            if (profile) {
-              username = profile.name;
-              avatarUrl = profile.avatar ?? undefined;
-            }
-          } catch {
-            // Profile not found - use defaults
+
+      // Check if it's a Discord user
+      const discordMatch = authorDid.match(/did:discord:(\d+)/);
+      if (discordMatch) {
+        username = `Roomy User ${discordMatch[1]}`;
+        console.log(`[Profile Puppeting] Event ${event.id}: Discord user detected, using username: ${username}`);
+        // Could fetch user info from Discord API here for avatar
+      } else {
+        // It's a Roomy user - try to get their profile from cache
+        console.log(`[Profile Puppeting] Event ${event.id}: Roomy user detected (${authorDid}), looking up profile...`);
+        const roomyProfiles = roomyUserProfilesForBridge({
+          discordGuildId: ctx.guildId,
+          roomySpaceId: ctx.spaceId,
+        });
+        try {
+          const profile = await roomyProfiles.get(authorDid);
+          if (profile) {
+            username = profile.name;
+            avatarUrl = profile.avatar ?? undefined;
+            console.log(`[Profile Puppeting] Event ${event.id}: Found profile - name: ${username}, avatar: ${avatarUrl || "none"}`);
+          } else {
+            console.warn(`[Profile Puppeting] Event ${event.id}: Profile not found in cache for DID ${authorDid}`);
           }
+        } catch (e) {
+          console.error(`[Profile Puppeting] Event ${event.id}: Error looking up profile for DID ${authorDid}:`, e);
         }
       }
 
@@ -346,9 +353,11 @@ export async function syncAddReactionToDiscord(
       };
 
       // Get the Discord message ID from the Roomy message ID
-      const discordId = await ctx.syncedIds.get_discordId(reactionEvent.reactionTo);
+      // Use get_roomyId() to get the Discord snowflake from the Roomy ULID
+      const discordId = await ctx.syncedIds.get_roomyId(reactionEvent.reactionTo);
       if (!discordId) {
         span.setAttribute("sync.result", "skipped_not_synced");
+        console.warn(`Roomy message ${reactionEvent.reactionTo} not synced to Discord, skipping reaction`);
         return;
       }
 

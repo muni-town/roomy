@@ -139,7 +139,7 @@ export async function syncRoomyToDiscord(
       let duplicateCount = 0;
       let errorCount = 0;
 
-      for (const { event } of roomyEvents) {
+      for (const { event, user } of roomyEvents) {
         // Only process createMessage events initially
         if (event.$type !== "space.roomy.message.createMessage.v0") {
           skippedCount++;
@@ -240,33 +240,33 @@ export async function syncRoomyToDiscord(
                 );
 
                 // Extract author info for puppeting
+                // For bridged messages, use authorOverride.did; for pure Roomy messages, use event.user
                 const authorOverride = extensions["space.roomy.extension.authorOverride.v0"] as { did?: string } | undefined;
-                const authorDid = authorOverride?.did;
+                const authorDid = authorOverride?.did || user;
 
                 // Get username/avatar from DID
                 let username = "Roomy User";
                 let avatarUrl: string | undefined;
-                if (authorDid) {
-                  // Check if it's a Discord user
-                  const discordMatch = authorDid.match(/did:discord:(\d+)/);
-                  if (discordMatch) {
-                    username = `Roomy User ${discordMatch[1]}`;
-                    // Could fetch user info from Discord API here for avatar
-                  } else {
-                    // It's a Roomy user - try to get their profile from cache
-                    const roomyProfiles = roomyUserProfilesForBridge({
-                      discordGuildId: ctx.guildId,
-                      roomySpaceId: ctx.spaceId,
-                    });
-                    try {
-                      const profile = await roomyProfiles.get(authorDid);
-                      if (profile) {
-                        username = profile.name;
-                        avatarUrl = profile.avatar ?? undefined;
-                      }
-                    } catch {
-                      // Profile not found - use defaults
+
+                // Check if it's a Discord user
+                const discordMatch = authorDid.match(/did:discord:(\d+)/);
+                if (discordMatch) {
+                  username = `Roomy User ${discordMatch[1]}`;
+                  // Could fetch user info from Discord API here for avatar
+                } else {
+                  // It's a Roomy user - try to get their profile from cache
+                  const roomyProfiles = roomyUserProfilesForBridge({
+                    discordGuildId: ctx.guildId,
+                    roomySpaceId: ctx.spaceId,
+                  });
+                  try {
+                    const profile = await roomyProfiles.get(authorDid);
+                    if (profile) {
+                      username = profile.name;
+                      avatarUrl = profile.avatar ?? undefined;
                     }
+                  } catch {
+                    // Profile not found - use defaults
                   }
                 }
 
