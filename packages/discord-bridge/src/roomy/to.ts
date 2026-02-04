@@ -524,17 +524,25 @@ export async function ensureRoomyMessageForDiscordMessage(
   }
 
   // Use the DiscordMessageService with BridgeRepository for better testability
-  const { DiscordMessageService } = await import("../services/DiscordMessageService.js");
-  const { createBridgeRepository } = await import("../repositories/index.js");
-  const repo = createBridgeRepository(ctx);
-  const service = new DiscordMessageService(
-    repo,
-    ctx.connectedSpace,
-    ctx.guildId,
-    ctx.spaceId,
-    bot,
-  );
-  return service.syncMessage(roomyRoomId, message, batcher);
+  console.log(`[ensureRoomyMessage] Starting sync for Discord message ${message.id} to Roomy room ${roomyRoomId}`);
+  try {
+    const { DiscordMessageService } = await import("../services/DiscordMessageService.js");
+    const { createBridgeRepository } = await import("../repositories/index.js");
+    const repo = createBridgeRepository(ctx);
+    const service = new DiscordMessageService(
+      repo,
+      ctx.connectedSpace,
+      ctx.guildId,
+      ctx.spaceId,
+      bot,
+    );
+    const result = await service.syncMessage(roomyRoomId, message, batcher);
+    console.log(`[ensureRoomyMessage] Completed sync for Discord message ${message.id} -> Roomy ${result}`);
+    return result;
+  } catch (error) {
+    console.error(`[ensureRoomyMessage] Error syncing Discord message ${message.id}:`, error);
+    throw error;
+  }
 }
 
 /**
