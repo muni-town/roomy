@@ -14,6 +14,7 @@ import {
   clearWebhookCache,
 } from "../discord/webhooks.js";
 import { computeDiscordMessageHash } from "../discord/backfill.js";
+import { roomyUserProfilesForBridge } from "../db.js";
 
 // Helper to decode message body data
 function decodeMessageBody(event: Event): string {
@@ -102,11 +103,26 @@ export async function syncCreateMessageToDiscord(
       let username = "Roomy User";
       let avatarUrl: string | undefined;
       if (authorDid) {
-        // Parse did:discord:12345 format
-        const match = authorDid.match(/did:discord:(\d+)/);
-        if (match) {
-          username = `Roomy User ${match[1]}`;
+        // Check if it's a Discord user
+        const discordMatch = authorDid.match(/did:discord:(\d+)/);
+        if (discordMatch) {
+          username = `Roomy User ${discordMatch[1]}`;
           // Could fetch user info from Discord API here for avatar
+        } else {
+          // It's a Roomy user - try to get their profile from cache
+          const roomyProfiles = roomyUserProfilesForBridge({
+            discordGuildId: ctx.guildId,
+            roomySpaceId: ctx.spaceId,
+          });
+          try {
+            const profile = await roomyProfiles.get(authorDid);
+            if (profile) {
+              username = profile.name;
+              avatarUrl = profile.avatar ?? undefined;
+            }
+          } catch {
+            // Profile not found - use defaults
+          }
         }
       }
 
@@ -147,15 +163,16 @@ export async function syncCreateMessageToDiscord(
       });
 
       if (result) {
-        // Register the truncated ULID mapping
+        // Register bidirectional mapping between Discord snowflake and Roomy ULID
         await ctx.syncedIds.register({
-          discordId: nonce,
-          roomyId: result.id.toString(),
+          discordId: result.id.toString(),  // Discord snowflake
+          roomyId: event.id,                 // Roomy ULID
         });
 
-        // Also register the full ULID mapping for reverse lookup
+        // Also register the truncated nonce mapping (for idempotency check)
+        // Maps nonce → Discord snowflake so we can check if already synced
         await ctx.syncedIds.register({
-          discordId: event.id,
+          discordId: nonce,
           roomyId: result.id.toString(),
         });
 

@@ -254,6 +254,28 @@ export const syncedProfilesForBridge = createBridgeStoreFactory("syncedProfiles"
 export type SyncedProfiles = ReturnType<typeof syncedProfilesForBridge>;
 
 /**
+ * Roomy user profile data.
+ * Stored when we see an updateProfile event from Roomy users.
+ */
+export interface RoomyUserProfile {
+  name: string;
+  avatar: string | null;
+  handle?: string;
+}
+
+/**
+ * Per-space Roomy user profile cache.
+ * Key: Roomy user DID
+ * Value: User profile data (name, avatar, handle)
+ */
+export const roomyUserProfilesForBridge = createBridgeStoreFactory<RoomyUserProfile>(
+  "roomyUserProfiles",
+  "json"
+);
+
+export type RoomyUserProfiles = ReturnType<typeof roomyUserProfilesForBridge>;
+
+/**
  * Per-space reaction tracking for Discord reactions.
  * Key: `${discordMessageId}:${discordUserId}:${emojiKey}` where emojiKey is emoji name or id
  * Value: Roomy reaction event ID (used for removal)

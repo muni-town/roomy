@@ -15,6 +15,7 @@ import {
   syncedRoomLinksForBridge,
   syncedEditsForBridge,
   registeredBridges,
+  roomyUserProfilesForBridge,
 } from "../db.js";
 import { botState } from "../discord/bot.js";
 import {
@@ -156,6 +157,29 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
         }
       }
 
+      // Capture Roomy user profiles from updateProfile events (non-Discord users)
+      if (event.$type === "space.roomy.user.updateProfile.v0" && !userOrigin) {
+        const profileEvent = event as {
+          did: string;
+          name?: string;
+          avatar?: string | null;
+        };
+        if (profileEvent.did) {
+          const roomyProfiles = roomyUserProfilesForBridge({
+            discordGuildId: guildId,
+            roomySpaceId: spaceId,
+          });
+          try {
+            await roomyProfiles.put(profileEvent.did, {
+              name: profileEvent.name || "Unknown",
+              avatar: profileEvent.avatar ?? null,
+            });
+          } catch (e) {
+            console.error("Error caching Roomy user profile:", e);
+          }
+        }
+      }
+
       // Check for Discord sidebar origin extension
       const sidebarOrigin = extractDiscordSidebarOrigin(event);
       if (sidebarOrigin && sidebarOrigin.guildId === guildIdStr) {
@@ -251,8 +275,13 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
         const userOrigin = extractDiscordUserOrigin(event);
         const reactionOrigin = extractDiscordReactionOrigin(event);
 
-        // Only sync events that don't have Discord-origin extensions
-        if (!messageOrigin && !roomOrigin && !userOrigin && !reactionOrigin) {
+        // Reactions should sync bidirectionally, so skip message/room/user origin check for them
+        const isReactionEvent =
+          event.$type === "space.roomy.reaction.addBridgedReaction.v0" ||
+          event.$type === "space.roomy.reaction.removeBridgedReaction.v0";
+
+        // Only sync events that don't have Discord-origin extensions (except reactions)
+        if ((!messageOrigin && !roomOrigin && !userOrigin && !reactionOrigin) || isReactionEvent) {
           // Get bot and guild context
           const bot = botState.bot;
           if (bot) {
