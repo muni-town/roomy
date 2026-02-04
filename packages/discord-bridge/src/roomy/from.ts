@@ -17,17 +17,7 @@ import {
 import { computeDiscordMessageHash } from "../discord/backfill.js";
 import { roomyUserProfilesForBridge } from "../db.js";
 import { getRoomyClient } from "./client.js";
-
-// Helper to decode message body data
-function decodeMessageBody(event: Event): string {
-  const createMessageEvent = event as { body?: { data: { $bytes?: string } | Uint8Array } };
-  const data = createMessageEvent.body?.data;
-  if (!data) return "";
-  if (data instanceof Uint8Array) return new TextDecoder().decode(data);
-  const bytesData = data as { $bytes?: string };
-  if (bytesData.$bytes) return atob(bytesData.$bytes);
-  return "";
-}
+import { decodeMessageBody } from "../utils/message.js";
 
 /**
  * Sync a Roomy createMessage event to Discord.

@@ -1,21 +1,3 @@
-// import { trace } from "@opentelemetry/api";
-// import {
-//   desiredProperties,
-//   DiscordBot,
-//   DiscordChannel,
-//   getGuildContext,
-//   hasBridge,
-// } from "../discord/bot";
-// import {
-//   ChannelTypes,
-//   CompleteDesiredProperties,
-//   Message,
-//   SetupDesiredProps,
-// } from "@discordeno/bot";
-// import { discordWebhookTokensForBridge } from "../db";
-// import { getRoomyThreadForChannel } from "./from";
-
-import { createHash } from "node:crypto";
 import { avatarUrl, type Emoji } from "@discordeno/bot";
 import { ChannelProperties, MessageProperties } from "../discord/types";
 import type { DiscordBot } from "../discord/types";
@@ -44,71 +26,16 @@ import {
 import { EventBatcher } from "./batcher.js";
 import { DISCORD_EXTENSION_KEYS } from "./subscription.js";
 
-// const tracer = trace.getTracer("discordBot");
-
-/**
- * Discord message types that should not be synced as regular messages.
- * @see https://discord.com/developers/docs/resources/channel#message-object-message-types
- */
-const DISCORD_MESSAGE_TYPES = {
-  DEFAULT: 0,
-  CHANNEL_NAME_CHANGE: 4, // Channel/thread rename system message
-  THREAD_CREATED: 18, // System message announcing thread creation
-  REPLY: 19, // A reply to another message
-  THREAD_STARTER_MESSAGE: 21, // First message in a thread created from existing message
-} as const;
-
-/**
- * Compute a collision-resistant fingerprint from arbitrary string data.
- * Uses SHA-256 and returns a 32-character hex string (128 bits).
- * Exported for reuse in discord/backfill.ts
- */
-export function fingerprint(data: string): string {
-  return createHash("sha256").update(data).digest("hex").slice(0, 32);
-}
-
-/**
- * Compute a fingerprint from Discord user profile data.
- * Used for change detection to avoid redundant profile updates.
- */
-function computeProfileHash(
-  username: string,
-  globalName: string | null,
-  avatar: string | null,
-): string {
-  const data = `${username}|${globalName ?? ""}|${avatar ?? ""}`;
-  return fingerprint(data);
-}
-
-/**
- * Compute a fingerprint from sidebar structure for change detection.
- */
-function computeSidebarHash(
-  categories: { name: string; children: Ulid[] }[],
-): string {
-  // Sort categories by name and children by value for consistent hashing
-  const normalized = categories
-    .map((c) => ({
-      name: c.name,
-      children: [...c.children].sort(),
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  return fingerprint(JSON.stringify(normalized));
-}
-
-/**
- * Compute a fingerprint from message content and attachments for edit change detection.
- */
-function computeEditHash(
-  content: string,
-  attachments: { url: string }[],
-): string {
-  const data = JSON.stringify({
-    content,
-    attachments: attachments.map((a) => a.url).sort(),
-  });
-  return fingerprint(data);
-}
+// Import pure utility functions
+import {
+  fingerprint,
+  computeProfileHash,
+  computeSidebarHash,
+  computeEditHash,
+} from "../utils/hash.js";
+import { emojiToString, reactionKey } from "../utils/emoji.js";
+import { getRoomKey } from "../utils/room.js";
+import { DISCORD_MESSAGE_TYPES } from "../constants.js";
 
 /**
  * Ensure a Discord user's profile is synced to Roomy.
@@ -217,16 +144,12 @@ export async function ensureRoomyProfileForDiscordUser(
   );
 }
 
-// Key prefix for room/channel/thread mappings to distinguish from message mappings
-// This is necessary because Discord reuses message IDs as thread IDs when creating threads from messages
-const ROOM_KEY_PREFIX = "room:";
-
 export async function ensureRoomyChannelForDiscordChannel(
   ctx: GuildContext,
   channel: ChannelProperties,
 ): Promise<string> {
   // Check if already synced (use room: prefix to distinguish from messages)
-  const roomKey = ROOM_KEY_PREFIX + channel.id.toString();
+  const roomKey = getRoomKey(channel.id);
   const existingRoomyId = await ctx.syncedIds.get_roomyId(roomKey);
   if (existingRoomyId) {
     console.log(`Channel ${channel.name} already synced as ${existingRoomyId}`);
@@ -274,11 +197,6 @@ export async function ensureRoomyChannelForDiscordChannel(
   }
 
   return roomId;
-}
-
-/** Get the Roomy room ID for a Discord channel/thread ID */
-export function getRoomKey(discordChannelId: string | bigint): string {
-  return ROOM_KEY_PREFIX + discordChannelId.toString();
 }
 
 export async function ensureRoomySidebarForCategoriesAndChannels(
@@ -1123,32 +1041,6 @@ export async function syncMessageEditToRoomy(
       }
     },
   );
-}
-
-/**
- * Convert Discord emoji to a string representation for Roomy.
- * Custom emojis use their ID, unicode emojis use their name.
- */
-function emojiToString(emoji: Partial<Emoji>): string {
-  // Custom emoji - use the format <:name:id> or <a:name:id> for animated
-  if (emoji.id) {
-    const animated = emoji.animated ? "a" : "";
-    return `<${animated}:${emoji.name || "_"}:${emoji.id}>`;
-  }
-  // Unicode emoji - just use the name (which is the emoji character)
-  return emoji.name || "❓";
-}
-
-/**
- * Generate a unique key for a reaction (for idempotency tracking).
- */
-function reactionKey(
-  messageId: bigint,
-  userId: bigint,
-  emoji: Partial<Emoji>,
-): string {
-  const emojiKey = emoji.id ? emoji.id.toString() : emoji.name || "unknown";
-  return `${messageId}:${userId}:${emojiKey}`;
 }
 
 /**
