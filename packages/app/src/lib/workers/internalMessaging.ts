@@ -170,6 +170,7 @@ type ReactiveChannelStateMessage = ["need", string] | ["update", string, any];
 /** The wrapper for the reactive state object returned by `reactiveChannelState()`. */
 export type ReactiveChannelState<T> = { [K in keyof T]?: Readonly<T[K]> } & {
   current: { [key: string]: Readonly<any> | undefined };
+  updateChannel: (channel: MessagePortApi) => void;
 };
 
 /**
@@ -213,17 +214,23 @@ export function reactiveChannelState<T extends { [key: string]: any }>(
     },
   };
 
-  state.channel.onmessage = (ev) => {
-    const data: ReactiveChannelStateMessage = ev.data;
-    if (data[0] == "update") {
-      const [, prop, value] = data;
-      state.props[prop] = value;
-      state.propUpdateSubscribers[prop]?.();
-    } else if (data[0] == "need" && provider == true) {
-      const [, prop] = ev.data;
-      state.channel.postMessage(["update", prop, state.props[prop]]);
-    }
+  /** Helper to setup the message handler for the channel. */
+  const setupChannel = () => {
+    state.channel.onmessage = (ev) => {
+      const data: ReactiveChannelStateMessage = ev.data;
+      if (data[0] == "update") {
+        const [, prop, value] = data;
+        state.props[prop] = value;
+        state.propUpdateSubscribers[prop]?.();
+      } else if (data[0] == "need" && provider == true) {
+        const [, prop] = ev.data;
+        state.channel.postMessage(["update", prop, state.props[prop]]);
+      }
+    };
   };
+
+  // Call it immediately to setup the channel
+  setupChannel();
 
   return new Proxy(state, {
     get(state, prop) {
@@ -231,6 +238,13 @@ export function reactiveChannelState<T extends { [key: string]: any }>(
 
       if (prop === "current") {
         return { ...state.props };
+      } else if (prop === "updateChannel") {
+        return (channel: MessagePortApi) => {
+          // Update the channel
+          state.channel = channel;
+          // And make sure it gets setup
+          setupChannel();
+        };
       }
 
       let subscribe = state.propSubscribe[prop];

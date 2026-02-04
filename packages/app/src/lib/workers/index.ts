@@ -12,6 +12,7 @@ import type { SqliteStatus } from "./sqlite/types";
 import { CONFIG, flags } from "../config";
 import { context, trace } from "@opentelemetry/api";
 import { page } from "$app/state";
+import { peerStatusChannel } from "./peer/impl";
 
 // Force page reload when hot reloading this file to avoid confusion if the workers get mixed up.
 if (import.meta.hot && !(window as any).__playwright) {
@@ -20,7 +21,12 @@ if (import.meta.hot && !(window as any).__playwright) {
 
 /** Reactive status of the shared worker "peer". */
 export const peerStatus = reactiveChannelState<PeerStatus>(
-  new BroadcastChannel("peer-status"),
+  // This is temporary. We will update the channel with a real one once we connect to the peer
+  // instance.
+  {
+    onmessage() {},
+    postMessage() {},
+  },
   false,
 );
 (globalThis as any).peerStatus = peerStatus;
@@ -78,6 +84,7 @@ export const peer = tracer.startActiveSpan(
             id,
             attributes: { isSampled: "true" },
           });
+          peerStatus.updateChannel(peerStatusChannel(id));
         },
         async initFinished({ userDid }) {
           globalInitSpan.setAttribute("userDid", userDid);
