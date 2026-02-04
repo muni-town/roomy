@@ -131,7 +131,7 @@ export class DiscordMessageService {
         // For now, we need to pass a GuildContext-like object. We'll need to get the stores
         // from the repository or pass them separately.
         // This is a temporary workaround - the profile service will handle this properly.
-        const { discordWebhookTokensForBridge, syncedProfilesForBridge } = await import("../db.js");
+        const { discordWebhookTokensForBridge, syncedProfilesForBridge, syncedIdsForBridge } = await import("../db.js");
 
         // Create the stores needed for profile sync
         const webhookTokens = discordWebhookTokensForBridge({
@@ -142,22 +142,25 @@ export class DiscordMessageService {
           discordGuildId: this.guildId,
           roomySpaceId: this.spaceId,
         });
+        const syncedIds = syncedIdsForBridge({
+          discordGuildId: this.guildId,
+          roomySpaceId: this.spaceId,
+        });
 
         // Build a minimal GuildContext for the profile sync function
-        // The service will eventually replace this pattern entirely
         const ctx = {
           guildId: this.guildId,
           spaceId: this.spaceId,
-          syncedIds: this as any, // Temporary - the repo implements the same interface
+          syncedIds,
           syncedProfiles,
           connectedSpace: this.connectedSpace,
-          // Add other required properties
-          latestMessagesInChannel: this as any,
-          syncedReactions: this as any,
-          syncedSidebarHash: this as any,
-          syncedRoomLinks: this as any,
-          syncedEdits: this as any,
-          discordMessageHashes: this as any,
+          // Add other required properties - use empty objects for now as they're not needed for profile sync
+          latestMessagesInChannel: {} as any,
+          syncedReactions: {} as any,
+          syncedSidebarHash: {} as any,
+          syncedRoomLinks: {} as any,
+          syncedEdits: {} as any,
+          discordMessageHashes: {} as any,
         } as GuildContext;
 
         await ensureRoomyProfileForDiscordUser(
