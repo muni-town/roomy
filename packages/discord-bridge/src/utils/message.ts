@@ -33,6 +33,14 @@ export function decodeMessageBody(event: Event): string {
   if (!data) return "";
   if (data instanceof Uint8Array) return new TextDecoder().decode(data);
   const bytesData = data as { $bytes?: string };
-  if (bytesData.$bytes) return atob(bytesData.$bytes);
+  if (bytesData.$bytes) {
+    // Decode base64 to binary string, then convert to Uint8Array for proper UTF-8 decoding
+    const binaryString = atob(bytesData.$bytes);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return new TextDecoder().decode(bytes);
+  }
   return "";
 }
