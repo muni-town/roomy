@@ -1246,14 +1246,25 @@ export async function syncDiscordReactionToRoomy(
         // 4. Build and send the AddBridgedReaction event
         const reactionId = newUlid();
 
-        const event: Event = {
+        const event = {
           id: reactionId,
           room: roomyRoomId as Ulid,
           $type: "space.roomy.reaction.addBridgedReaction.v0",
           reactionTo: roomyMessageId as Ulid,
           reaction: reactionString,
           reactingUser: UserDid.assert(`did:discord:${opts.userId}`),
-        };
+          extensions: {
+            [DISCORD_EXTENSION_KEYS.REACTION_ORIGIN]: {
+              $type: DISCORD_EXTENSION_KEYS.REACTION_ORIGIN,
+              snowflake: reactionId, // Use the reaction event ID as snowflake
+              messageId: opts.messageId.toString(),
+              channelId: opts.channelId.toString(),
+              userId: opts.userId.toString(),
+              emoji: reactionString,
+              guildId: ctx.guildId.toString(),
+            },
+          },
+        } as Event;
 
         await tracer.startActiveSpan("sync.reaction.send", async (sendSpan) => {
           try {
@@ -1354,13 +1365,24 @@ export async function removeDiscordReactionFromRoomy(
 
         // 3. Send the RemoveBridgedReaction event
         const eventId = newUlid();
-        const event: Event = {
+        const event = {
           id: eventId,
           room: roomyRoomId as Ulid,
           $type: "space.roomy.reaction.removeBridgedReaction.v0",
           reactionId: reactionEventId as Ulid,
           reactingUser: UserDid.assert(`did:discord:${opts.userId}`),
-        };
+          extensions: {
+            [DISCORD_EXTENSION_KEYS.REACTION_ORIGIN]: {
+              $type: DISCORD_EXTENSION_KEYS.REACTION_ORIGIN,
+              snowflake: eventId, // Use the reaction event ID as snowflake
+              messageId: opts.messageId.toString(),
+              channelId: opts.channelId.toString(),
+              userId: opts.userId.toString(),
+              emoji: emojiStr,
+              guildId: ctx.guildId.toString(),
+            },
+          },
+        } as Event;
 
         await tracer.startActiveSpan("sync.reaction.send", async (sendSpan) => {
           try {

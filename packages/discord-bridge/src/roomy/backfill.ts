@@ -84,6 +84,11 @@ export async function fetchRoomyOriginEvents(
             return false;
           }
 
+          // Check for Discord reaction origin extension
+          if (extensions?.[DISCORD_EXTENSION_KEYS.REACTION_ORIGIN]) {
+            return false;
+          }
+
           return true;
         });
 
