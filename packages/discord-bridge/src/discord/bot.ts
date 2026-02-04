@@ -17,6 +17,7 @@ import {
   handleSlashCommandInteraction,
   slashCommands,
 } from "./slashCommands.js";
+import { backfillDiscordReactions } from "./backfill.js";
 import { desiredProperties, DiscordBot, DiscordChannel } from "./types.js";
 import type { Emoji } from "@discordeno/bot";
 
@@ -515,6 +516,17 @@ export async function backfillGuild(bot: DiscordBot, guildId: bigint) {
             ),
           ),
         );
+      }
+
+      // Backfill reactions for all channels
+      console.log(`Backfilling reactions for ${allChannelsAndThreads.length} channels/threads...`);
+      for (const channel of allChannelsAndThreads) {
+        try {
+          await backfillDiscordReactions(bot, ctx, channel.id);
+        } catch (e) {
+          console.error(`Failed to backfill reactions for channel ${channel.id}:`, e);
+          // Don't fail the entire backfill for reaction errors
+        }
       }
     } catch (e) {
       recordError(span, e);

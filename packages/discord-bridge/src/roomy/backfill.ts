@@ -3,8 +3,8 @@
  * Implements Phase 1 (Roomy timeline backfill) and Phase 3 (Roomy → Discord sync).
  */
 
-import type { DecodedStreamEvent, Event } from "@roomy/sdk";
-import { StreamIndex } from "@roomy/sdk";
+import type { DecodedStreamEvent, Event, Did } from "@roomy/sdk";
+import { StreamIndex, getProfile } from "@roomy/sdk";
 import type { DiscordBot } from "../discord/types.js";
 import { registeredBridges, roomyUserProfilesForBridge } from "../db.js";
 import { GuildContext } from "../types.js";
@@ -20,6 +20,7 @@ import {
   executeWebhookWithRetry,
   clearWebhookCache,
 } from "../discord/webhooks.js";
+import { getRoomyClient } from "./client.js";
 
 // Helper to decode message body data
 function decodeMessageBody(event: Event): string {
@@ -254,13 +255,33 @@ export async function syncRoomyToDiscord(
                   username = `Roomy User ${discordMatch[1]}`;
                   // Could fetch user info from Discord API here for avatar
                 } else {
-                  // It's a Roomy user - try to get their profile from cache
+                  // It's a Roomy user - try to get their profile from cache first
                   const roomyProfiles = roomyUserProfilesForBridge({
                     discordGuildId: ctx.guildId,
                     roomySpaceId: ctx.spaceId,
                   });
                   try {
-                    const profile = await roomyProfiles.get(authorDid);
+                    let profile = await roomyProfiles.get(authorDid);
+                    if (!profile) {
+                      // Profile not in cache - fetch from ATProto
+                      try {
+                        const roomyClient = getRoomyClient();
+                        // Cast authorDid to Did type (branded string)
+                        const atpProfile = await getProfile(roomyClient.agent, authorDid as Did);
+                        if (atpProfile) {
+                          profile = {
+                            name: atpProfile.displayName || atpProfile.handle,
+                            avatar: atpProfile.avatar ?? null,
+                            handle: atpProfile.handle,
+                          };
+                          // Cache the profile
+                          await roomyProfiles.put(authorDid, profile);
+                        }
+                      } catch {
+                        // Profile not found - use defaults
+                      }
+                    }
+
                     if (profile) {
                       username = profile.name;
                       avatarUrl = profile.avatar ?? undefined;
@@ -328,9 +349,13 @@ export async function syncRoomyToDiscord(
                     roomyId: result.id.toString(),
                   });
 
+                  console.log(`[Backfill Webhook] Synced Roomy message ${event.id} to Discord ${result.id}`);
+                  console.log(`[Backfill Webhook Registration] Registered mapping: discordId=${result.id} → roomyId=${event.id}`);
                   syncedCount++;
                   eventSpan.setAttribute("sync.result", "success");
                   eventSpan.setAttribute("discord.message.id", result.id.toString());
+                } else {
+                  console.error(`[Backfill Webhook] No result from webhook execution for event ${event.id}`);
                 }
               } catch (error) {
                 recordError(eventSpan, error);

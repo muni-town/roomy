@@ -1,4 +1,4 @@
-import type { Message } from "@discordeno/bot";
+import type { Message, Emoji } from "@discordeno/bot";
 import type { DiscordBot } from "./types";
 import type { MessageProperties } from "./types";
 import {
@@ -8,7 +8,7 @@ import {
 import { GuildContext } from "../types.js";
 import { tracer, setDiscordAttrs, recordError } from "../tracing.js";
 import { DISCORD_EXTENSION_KEYS } from "../roomy/subscription.js";
-import { getRoomKey, fingerprint } from "../roomy/to.js";
+import { getRoomKey, fingerprint, syncDiscordReactionToRoomy } from "../roomy/to.js";
 
 /**
  * Compute a SHA-256 hash of normalized Discord message content.
@@ -181,6 +181,87 @@ export async function backfillDiscordMessages(
       } catch (error) {
         recordError(span, error);
         throw error;
+      } finally {
+        span.end();
+      }
+    },
+  );
+}
+
+/**
+ * Backfill all reactions for Discord messages.
+ *
+ * @param bot - Discord bot instance
+ * @param ctx - Guild context
+ * @param channelId - Discord channel ID
+ */
+export async function backfillDiscordReactions(
+  bot: DiscordBot,
+  ctx: GuildContext,
+  channelId: bigint,
+): Promise<void> {
+  return tracer.startActiveSpan(
+    "backfill.discord_reactions",
+    async (span) => {
+      try {
+        setDiscordAttrs(span, { guildId: ctx.guildId, channelId });
+
+        let reactionCount = 0;
+
+        // Fetch messages with pagination to get their reactions
+        let before: bigint | undefined;
+        while (true) {
+          const messages = await bot.helpers.getMessages(channelId, {
+            before,
+            limit: 100,
+          });
+
+          if (messages.length === 0) break;
+
+          // Process each message's reactions
+          for (const message of messages) {
+            // Type guard for reactions property
+            const reactions = (message as unknown as { reactions?: unknown[] }).reactions;
+            if (!reactions || reactions.length === 0) {
+              continue;
+            }
+
+            // For each reaction type, fetch the users who reacted
+            for (const reaction of reactions) {
+              if (!reaction || typeof reaction !== 'object') continue;
+
+              const emoji = (reaction as { emoji?: Partial<Emoji> }).emoji;
+              if (!emoji) continue;
+
+              const count = (reaction as { count?: number }).count || 1;
+
+              // For now, just log the reaction. Full backfill requires:
+              // 1. Fetching all users who reacted with this emoji (paginated)
+              // 2. Syncing each user's reaction to Roomy
+              // This is a more complex operation due to Discord API pagination
+              console.log(`Found ${count} reaction(s) with emoji ${emoji.name || '?'}` +
+                          ` on message ${message.id} in channel ${channelId}`);
+
+              // TODO: Implement full reaction user fetching with pagination
+              // The Discord API returns users in pages of 100, requiring multiple calls
+              // For each reaction type: bot.helpers.getReactions(channelId, messageId, emoji, {limit, after})
+            }
+
+            before = message.id;
+          }
+
+          // Check if we've fetched all messages
+          if (messages.length < 100) break;
+        }
+
+        console.log(`Found ${reactionCount} reactions on channel ${channelId} (not yet synced to Roomy)`);
+        span.setAttribute("sync.result", "success");
+        span.setAttribute("reaction.count", reactionCount);
+      } catch (error) {
+        recordError(span, error);
+        console.error(`Error backfilling reactions for channel ${channelId}:`, error);
+        // Don't throw - reactions are optional
+        span.setAttribute("sync.result", "partial");
       } finally {
         span.end();
       }

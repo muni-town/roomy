@@ -277,7 +277,10 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
         const reactionOrigin = extractDiscordReactionOrigin(event);
 
         // Check if this is a reaction event (for bidirectional sync)
+        // Includes both pure Roomy reactions (addReaction/removeReaction) and bridged reactions
         const isReactionEvent =
+          event.$type === "space.roomy.reaction.addReaction.v0" ||
+          event.$type === "space.roomy.reaction.removeReaction.v0" ||
           event.$type === "space.roomy.reaction.addBridgedReaction.v0" ||
           event.$type === "space.roomy.reaction.removeBridgedReaction.v0";
 
@@ -314,14 +317,28 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
             // Reactions sync bidirectionally (even on Discord-origin messages)
             // BUT block reactions that themselves have Discord origin (sync loop prevention)
             if (isReactionEvent && !reactionOrigin) {
-              // Handle addBridgedReaction events
+              // Handle pure Roomy addReaction events
+              if (event.$type === "space.roomy.reaction.addReaction.v0") {
+                await syncAddReactionToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                  console.error(`Failed to sync Roomy reaction ${event.id} to Discord:`, error);
+                });
+              }
+
+              // Handle bridged addBridgedReaction events
               if (event.$type === "space.roomy.reaction.addBridgedReaction.v0") {
                 await syncAddReactionToDiscord(ctx, bot, decodedEvent).catch((error) => {
                   console.error(`Failed to sync Roomy reaction ${event.id} to Discord:`, error);
                 });
               }
 
-              // Handle removeBridgedReaction events
+              // Handle pure Roomy removeReaction events
+              if (event.$type === "space.roomy.reaction.removeReaction.v0") {
+                await syncRemoveReactionToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                  console.error(`Failed to sync Roomy reaction removal ${event.id} to Discord:`, error);
+                });
+              }
+
+              // Handle bridged removeBridgedReaction events
               if (event.$type === "space.roomy.reaction.removeBridgedReaction.v0") {
                 await syncRemoveReactionToDiscord(ctx, bot, decodedEvent).catch((error) => {
                   console.error(`Failed to sync Roomy reaction removal ${event.id} to Discord:`, error);
