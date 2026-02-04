@@ -36,6 +36,7 @@ export const DISCORD_EXTENSION_KEYS = {
   USER_ORIGIN: "space.roomy.extension.discordUserOrigin.v0" as const,
   SIDEBAR_ORIGIN: "space.roomy.extension.discordSidebarOrigin.v0" as const,
   ROOM_LINK_ORIGIN: "space.roomy.extension.discordRoomLinkOrigin.v0" as const,
+  REACTION_ORIGIN: "space.roomy.extension.discordReactionOrigin.v0" as const,
 } as const;
 
 interface DiscordMessageOrigin {
@@ -66,6 +67,15 @@ interface DiscordSidebarOrigin {
 interface DiscordRoomLinkOrigin {
   parentSnowflake: string;
   childSnowflake: string;
+  guildId: string;
+}
+
+interface DiscordReactionOrigin {
+  snowflake: string;
+  messageId: string;
+  channelId: string;
+  userId: string;
+  emoji: string;
   guildId: string;
 }
 
@@ -239,9 +249,10 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
         const messageOrigin = extractDiscordMessageOrigin(event);
         const roomOrigin = extractDiscordOrigin(event);
         const userOrigin = extractDiscordUserOrigin(event);
+        const reactionOrigin = extractDiscordReactionOrigin(event);
 
         // Only sync events that don't have Discord-origin extensions
-        if (!messageOrigin && !roomOrigin && !userOrigin) {
+        if (!messageOrigin && !roomOrigin && !userOrigin && !reactionOrigin) {
           // Get bot and guild context
           const bot = botState.bot;
           if (bot) {
@@ -385,6 +396,32 @@ function extractDiscordRoomLinkOrigin(
   if (!linkToRoom || !room) return undefined;
 
   return { origin, linkToRoom };
+}
+
+/**
+ * Extract Discord reaction origin extension from an event if present.
+ * Supports both addBridgedReaction and removeBridgedReaction events.
+ */
+function extractDiscordReactionOrigin(
+  event: DecodedStreamEvent["event"],
+): DiscordReactionOrigin | undefined {
+  // Check for addBridgedReaction event type
+  if (event.$type === "space.roomy.reaction.addBridgedReaction.v0") {
+    return extractExtension<DiscordReactionOrigin>(
+      event,
+      DISCORD_EXTENSION_KEYS.REACTION_ORIGIN,
+      "space.roomy.reaction.addBridgedReaction.v0",
+    );
+  }
+  // Check for removeBridgedReaction event type
+  if (event.$type === "space.roomy.reaction.removeBridgedReaction.v0") {
+    return extractExtension<DiscordReactionOrigin>(
+      event,
+      DISCORD_EXTENSION_KEYS.REACTION_ORIGIN,
+      "space.roomy.reaction.removeBridgedReaction.v0",
+    );
+  }
+  return undefined;
 }
 
 /**
