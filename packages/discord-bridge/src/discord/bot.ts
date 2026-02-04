@@ -44,9 +44,9 @@ import {
   syncDiscordReactionToRoomy,
   removeDiscordReactionFromRoomy,
   syncMessageEditToRoomy,
-  getRoomKey,
 } from "../roomy/to.js";
 import { getConnectedSpace } from "../roomy/client.js";
+import { getRoomKey } from "../utils/room.js";
 import { EventBatcher } from "../roomy/batcher.js";
 import { backfillRoomyToDiscord } from "../roomy/backfill.js";
 
