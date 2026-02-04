@@ -49,7 +49,6 @@ import { getConnectedSpace } from "../roomy/client.js";
 import { EventBatcher } from "../roomy/batcher.js";
 import { backfillRoomyToDiscord } from "../roomy/backfill.js";
 
-
 export const botState = {
   appId: undefined as undefined | string,
   bot: undefined as DiscordBot | undefined,
@@ -74,7 +73,9 @@ export async function hasBridge(guildId: bigint): Promise<boolean> {
  * we may want to implement some caching since Jazz was handling that
  *
  */
-export async function getGuildContext(guildId: bigint): Promise<GuildContext | undefined> {
+export async function getGuildContext(
+  guildId: bigint,
+): Promise<GuildContext | undefined> {
   const spaceId = await registeredBridges.get_spaceId(guildId.toString());
   if (!spaceId) {
     console.warn(`Discord guild ${guildId} doesn't have Roomy space bridged`);
@@ -119,7 +120,19 @@ export async function getGuildContext(guildId: bigint): Promise<GuildContext | u
     discordGuildId: guildId,
     roomySpaceId: spaceId,
   });
-  return { guildId, spaceId, syncedIds, latestMessagesInChannel, syncedReactions, syncedRoomLinks, syncedProfiles, syncedSidebarHash, syncedEdits, discordMessageHashes, connectedSpace };
+  return {
+    guildId,
+    spaceId,
+    syncedIds,
+    latestMessagesInChannel,
+    syncedReactions,
+    syncedRoomLinks,
+    syncedProfiles,
+    syncedSidebarHash,
+    syncedEdits,
+    discordMessageHashes,
+    connectedSpace,
+  };
 }
 
 /**
@@ -129,13 +142,20 @@ export async function getGuildContext(guildId: bigint): Promise<GuildContext | u
 export async function startBot() {
   const bot = createBot({
     token: DISCORD_TOKEN,
-    intents: Intents.MessageContent | Intents.Guilds | Intents.GuildMessages | Intents.GuildMessageReactions,
+    intents:
+      Intents.MessageContent |
+      Intents.Guilds |
+      Intents.GuildMessages |
+      Intents.GuildMessageReactions,
     desiredProperties,
     events: {
       ready(ready) {
         console.log("Discord bot connected", ready);
         tracer.startActiveSpan("discord.bot.ready", (span) => {
-          span.setAttribute("discord.application.id", ready.applicationId.toString());
+          span.setAttribute(
+            "discord.application.id",
+            ready.applicationId.toString(),
+          );
           span.setAttribute("discord.shard.id", ready.shardId);
           span.setAttribute("discord.guilds.count", ready.guilds.length);
 
@@ -171,26 +191,39 @@ export async function startBot() {
       async threadCreate(channel) {
         // Skip during backfill to avoid race conditions
         if (!doneBackfillingFromDiscord) {
-          console.log(`Skipping threadCreate for ${channel.name} - backfill not complete`);
+          console.log(
+            `Skipping threadCreate for ${channel.name} - backfill not complete`,
+          );
           return;
         }
         if (!channel.guildId)
           throw new Error("Discord guild ID missing from thread create event");
         if (!(await hasBridge(channel.guildId!))) {
-          console.log(`Skipping threadCreate for ${channel.name} - no bridge for guild`);
+          console.log(
+            `Skipping threadCreate for ${channel.name} - no bridge for guild`,
+          );
           return;
         }
         const ctx = await getGuildContext(channel.guildId);
         if (!ctx) {
-          console.log(`Skipping threadCreate for ${channel.name} - no guild context`);
+          console.log(
+            `Skipping threadCreate for ${channel.name} - no guild context`,
+          );
           return;
         }
-        console.log(`Thread create event: ${channel.name} (id=${channel.id}, parentId=${channel.parentId})`);
+        console.log(
+          `Thread create event: ${channel.name} (id=${channel.id}, parentId=${channel.parentId})`,
+        );
         try {
           await ensureRoomyThreadForDiscordThread(ctx, channel);
-          console.log(`Successfully created Roomy thread for Discord thread ${channel.name}`);
+          console.log(
+            `Successfully created Roomy thread for Discord thread ${channel.name}`,
+          );
         } catch (error) {
-          console.error(`Failed to create Roomy thread for Discord thread ${channel.name}:`, error);
+          console.error(
+            `Failed to create Roomy thread for Discord thread ${channel.name}:`,
+            error,
+          );
         }
       },
 
@@ -213,15 +246,27 @@ export async function startBot() {
 
         const ctx = await getGuildContext(guildId);
         if (!ctx) return;
-        const roomyRoomId = await ctx.syncedIds.get_roomyId(getRoomKey(channelId));
+        const roomyRoomId = await ctx.syncedIds.get_roomyId(
+          getRoomKey(channelId),
+        );
 
         if (!roomyRoomId) {
-          console.warn(`Discord channel ${channelId} not synced to Roomy, skipping message`);
+          console.warn(
+            `Discord channel ${channelId} not synced to Roomy, skipping message`,
+          );
           return;
         }
 
-        await ensureRoomyMessageForDiscordMessage(ctx, roomyRoomId, message, bot);
-        await ctx.latestMessagesInChannel.put(channelId.toString(), message.id.toString());
+        await ensureRoomyMessageForDiscordMessage(
+          ctx,
+          roomyRoomId,
+          message,
+          bot,
+        );
+        await ctx.latestMessagesInChannel.put(
+          channelId.toString(),
+          message.id.toString(),
+        );
       },
 
       // Handle reaction add
@@ -294,7 +339,9 @@ async function backfillMessagesForChannel(
   }
 
   let after: bigint | string = "0";
-  const cachedLatest = await ctx.latestMessagesInChannel.get(channel.id.toString());
+  const cachedLatest = await ctx.latestMessagesInChannel.get(
+    channel.id.toString(),
+  );
   if (cachedLatest) {
     after = BigInt(cachedLatest);
   }
@@ -311,21 +358,33 @@ async function backfillMessagesForChannel(
 
       if (messages.length === 0) break;
 
-      console.log(`Backfilling ${messages.length} messages in channel ${channel.name || channel.id}`);
+      console.log(
+        `Backfilling ${messages.length} messages in channel ${channel.name || channel.id}`,
+      );
 
       // Process oldest first (messages come newest-first from API)
       const sortedMessages = [...messages].reverse();
       for (const message of sortedMessages) {
-        await ensureRoomyMessageForDiscordMessage(ctx, roomyRoomId, message, batcher);
+        await ensureRoomyMessageForDiscordMessage(
+          ctx,
+          roomyRoomId,
+          message,
+          batcher,
+        );
         after = message.id;
       }
 
       // Flush after each Discord API batch
       await batcher.flush();
 
-      await ctx.latestMessagesInChannel.put(channel.id.toString(), after.toString());
+      await ctx.latestMessagesInChannel.put(
+        channel.id.toString(),
+        after.toString(),
+      );
     } catch (e) {
-      console.warn(`Error backfilling messages for channel ${channel.id}: ${e}`);
+      console.warn(
+        `Error backfilling messages for channel ${channel.id}: ${e}`,
+      );
       // Flush any remaining events before exiting
       await batcher.flush();
       break;
@@ -344,123 +403,126 @@ export async function backfillGuild(bot: DiscordBot, guildId: bigint) {
     return;
   }
 
-  await tracer.startActiveSpan(
-    "bridge.guild.backfill",
-    async (span) => {
-      setDiscordAttrs(span, { guildId });
-      span.setAttribute("roomy.space.id", ctx.spaceId);
+  await tracer.startActiveSpan("bridge.guild.backfill", async (span) => {
+    setDiscordAttrs(span, { guildId });
+    span.setAttribute("roomy.space.id", ctx.spaceId);
 
-      try {
-        console.log("backfilling Discord guild", guildId);
-        const channels = await bot.helpers.getChannels(guildId);
+    try {
+      console.log("backfilling Discord guild", guildId);
+      const channels = await bot.helpers.getChannels(guildId);
 
-        // Get all categories
-        const categories = channels.filter(
-          (x) => x.type == ChannelTypes.GuildCategory,
-        );
+      // Get all categories
+      const categories = channels.filter(
+        (x) => x.type == ChannelTypes.GuildCategory,
+      );
 
-        // Get all text channels
-        const textChannels = channels.filter(
-          (x) => x.type == ChannelTypes.GuildText,
-        );
+      // Get all text channels
+      const textChannels = channels.filter(
+        (x) => x.type == ChannelTypes.GuildText,
+      );
 
-        // Note: announcement channels are not yet supported
+      // Note: announcement channels are not yet supported
 
-        const activeThreads = (await bot.helpers.getActiveThreads(guildId))
-          .threads;
-        const archivedThreads = (
-          await Promise.all(
-            textChannels.map(async (x) => {
-              let before;
-              let threads: DiscordChannel[] = [];
-              while (true) {
-                try {
-                  const resp = await bot.helpers.getPublicArchivedThreads(
-                    x.id,
-                    {
-                      before,
-                    },
+      const activeThreads = (await bot.helpers.getActiveThreads(guildId))
+        .threads;
+      const archivedThreads = (
+        await Promise.all(
+          textChannels.map(async (x) => {
+            let before;
+            let threads: DiscordChannel[] = [];
+            while (true) {
+              try {
+                const resp = await bot.helpers.getPublicArchivedThreads(x.id, {
+                  before,
+                });
+                threads = [...threads, ...(resp.threads as any)];
+
+                if (resp.hasMore) {
+                  before = parseInt(
+                    resp.threads[resp.threads.length - 1]?.threadMetadata
+                      ?.archiveTimestamp || "0",
                   );
-                  threads = [...threads, ...(resp.threads as any)];
-
-                  if (resp.hasMore) {
-                    before = parseInt(
-                      resp.threads[resp.threads.length - 1]?.threadMetadata
-                        ?.archiveTimestamp || "0",
-                    );
-                  } else {
-                    break;
-                  }
-                } catch (e) {
-                  console.warn(
-                    `Error fetching threads for channel ( this might be normal if the bot does not have access to the channel ): ${e}`,
-                  );
+                } else {
                   break;
                 }
+              } catch (e) {
+                console.warn(
+                  `Error fetching threads for channel ( this might be normal if the bot does not have access to the channel ): ${e}`,
+                );
+                break;
               }
+            }
 
-              return threads;
-            }),
-          )
-        ).flat();
-        const allChannelsAndThreads = [
-          ...textChannels,
-          ...activeThreads,
-          ...archivedThreads,
-        ];
+            return threads;
+          }),
+        )
+      ).flat();
+      const allChannelsAndThreads = [
+        ...textChannels,
+        ...activeThreads,
+        ...archivedThreads,
+      ];
 
-        span.setAttribute("discord.channels.count", textChannels.length);
-        span.setAttribute("discord.threads.count", activeThreads.length + archivedThreads.length);
+      span.setAttribute("discord.channels.count", textChannels.length);
+      span.setAttribute(
+        "discord.threads.count",
+        activeThreads.length + archivedThreads.length,
+      );
 
-        for (const channel of textChannels) {
-          await ensureRoomyChannelForDiscordChannel(ctx, channel);
-        }
-
-        for (const thread of [...activeThreads, ...archivedThreads]) {
-          await ensureRoomyThreadForDiscordThread(ctx, thread);
-        }
-
-        await ensureRoomySidebarForCategoriesAndChannels(
-          ctx,
-          categories,
-          textChannels,
-        );
-
-        // Backfill messages for all channels in parallel (with concurrency limit)
-        const CONCURRENCY_LIMIT = 5;
-        const channelChunks: DiscordChannel[][] = [];
-        for (let i = 0; i < allChannelsAndThreads.length; i += CONCURRENCY_LIMIT) {
-          channelChunks.push(allChannelsAndThreads.slice(i, i + CONCURRENCY_LIMIT));
-        }
-
-        for (const chunk of channelChunks) {
-          await Promise.all(
-            chunk.map((channel) =>
-              tracer.startActiveSpan(
-                "bridge.channel.backfill",
-                async (channelSpan) => {
-                  setDiscordAttrs(channelSpan, { channelId: channel.id });
-                  try {
-                    await backfillMessagesForChannel(bot, ctx, channel);
-                  } catch (e) {
-                    recordError(channelSpan, e);
-                    throw e;
-                  } finally {
-                    channelSpan.end();
-                  }
-                },
-              ),
-            ),
-          );
-        }
-      } catch (e) {
-        recordError(span, e);
-        throw e;
-      } finally {
-        span.end();
+      for (const channel of textChannels) {
+        await ensureRoomyChannelForDiscordChannel(ctx, channel);
       }
-    },
-  );
+
+      for (const thread of [...activeThreads, ...archivedThreads]) {
+        await ensureRoomyThreadForDiscordThread(ctx, thread);
+      }
+
+      await ensureRoomySidebarForCategoriesAndChannels(
+        ctx,
+        categories,
+        textChannels,
+      );
+
+      // Backfill messages for all channels in parallel (with concurrency limit)
+      const CONCURRENCY_LIMIT = 5;
+      const channelChunks: DiscordChannel[][] = [];
+      for (
+        let i = 0;
+        i < allChannelsAndThreads.length;
+        i += CONCURRENCY_LIMIT
+      ) {
+        channelChunks.push(
+          allChannelsAndThreads.slice(i, i + CONCURRENCY_LIMIT),
+        );
+      }
+
+      for (const chunk of channelChunks) {
+        await Promise.all(
+          chunk.map((channel) =>
+            tracer.startActiveSpan(
+              "bridge.channel.backfill",
+              async (channelSpan) => {
+                setDiscordAttrs(channelSpan, { channelId: channel.id });
+                try {
+                  await backfillMessagesForChannel(bot, ctx, channel);
+                } catch (e) {
+                  recordError(channelSpan, e);
+                  throw e;
+                } finally {
+                  channelSpan.end();
+                }
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      recordError(span, e);
+      throw e;
+    } finally {
+      span.end();
+    }
+  });
 }
 
 /** Bridge all past messages in multiple Discord guilds to Roomy */
@@ -472,8 +534,12 @@ export async function backfill(bot: DiscordBot, guildIds: bigint[]) {
     }
 
     // NEW: Start Roomy → Discord backfill after Discord → Roomy completes
-    console.log("Discord → Roomy backfill complete, starting Roomy → Discord backfill...");
+    console.log(
+      "Discord → Roomy backfill complete, starting Roomy → Discord backfill...",
+    );
     await backfillRoomyToDiscord(bot);
+
+    console.log("Roomy → Discord backfill complete.");
 
     span.end();
     doneBackfillingFromDiscord = true;
