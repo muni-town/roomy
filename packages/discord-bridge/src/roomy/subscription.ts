@@ -174,6 +174,7 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
               name: profileEvent.name || "Unknown",
               avatar: profileEvent.avatar ?? null,
             });
+            console.log(`[Profile Capture] Cached Roomy user profile: did=${profileEvent.did}, name=${profileEvent.name || "Unknown"}`);
           } catch (e) {
             console.error("Error caching Roomy user profile:", e);
           }
@@ -275,19 +276,19 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
         const userOrigin = extractDiscordUserOrigin(event);
         const reactionOrigin = extractDiscordReactionOrigin(event);
 
-        // Reactions should sync bidirectionally, so skip message/room/user origin check for them
+        // Check if this is a reaction event (for bidirectional sync)
         const isReactionEvent =
           event.$type === "space.roomy.reaction.addBridgedReaction.v0" ||
           event.$type === "space.roomy.reaction.removeBridgedReaction.v0";
 
-        // Only sync events that don't have Discord-origin extensions (except reactions)
-        if ((!messageOrigin && !roomOrigin && !userOrigin && !reactionOrigin) || isReactionEvent) {
-          // Get bot and guild context
-          const bot = botState.bot;
-          if (bot) {
-            const ctx = await getGuildContext(guildId);
+        // Get bot and guild context
+        const bot = botState.bot;
+        if (bot) {
+          const ctx = await getGuildContext(guildId);
 
-            if (ctx) {
+          if (ctx) {
+            // Sync non-Discord-origin events (messages, edits, deletes)
+            if (!messageOrigin && !roomOrigin && !userOrigin && !reactionOrigin) {
               // Handle createMessage events
               if (event.$type === "space.roomy.message.createMessage.v0") {
                 await syncCreateMessageToDiscord(ctx, bot, decodedEvent).catch((error) => {
@@ -295,8 +296,8 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
                 });
               }
 
-              // Handle editMessage events (only if not from Discord)
-              if (event.$type === "space.roomy.message.editMessage.v0" && !messageOrigin) {
+              // Handle editMessage events
+              if (event.$type === "space.roomy.message.editMessage.v0") {
                 await syncEditMessageToDiscord(ctx, bot, decodedEvent).catch((error) => {
                   console.error(`Failed to sync Roomy edit ${event.id} to Discord:`, error);
                 });
@@ -308,7 +309,11 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
                   console.error(`Failed to sync Roomy delete ${event.id} to Discord:`, error);
                 });
               }
+            }
 
+            // Reactions sync bidirectionally (even on Discord-origin messages)
+            // BUT block reactions that themselves have Discord origin (sync loop prevention)
+            if (isReactionEvent && !reactionOrigin) {
               // Handle addBridgedReaction events
               if (event.$type === "space.roomy.reaction.addBridgedReaction.v0") {
                 await syncAddReactionToDiscord(ctx, bot, decodedEvent).catch((error) => {
