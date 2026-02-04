@@ -3,7 +3,8 @@
  * Processes Roomy-origin events and sends them to Discord.
  */
 
-import type { DecodedStreamEvent, Event } from "@roomy/sdk";
+import type { DecodedStreamEvent, Event, Did } from "@roomy/sdk";
+import { getProfile } from "@roomy/sdk";
 import type { DiscordBot } from "../discord/types.js";
 import { GuildContext } from "../types.js";
 import { tracer, setDiscordAttrs, setRoomyAttrs, recordError } from "../tracing.js";
@@ -15,6 +16,7 @@ import {
 } from "../discord/webhooks.js";
 import { computeDiscordMessageHash } from "../discord/backfill.js";
 import { roomyUserProfilesForBridge } from "../db.js";
+import { getRoomyClient } from "./client.js";
 
 // Helper to decode message body data
 function decodeMessageBody(event: Event): string {
@@ -113,23 +115,45 @@ export async function syncCreateMessageToDiscord(
         console.log(`[Profile Puppeting] Event ${event.id}: Discord user detected, using username: ${username}`);
         // Could fetch user info from Discord API here for avatar
       } else {
-        // It's a Roomy user - try to get their profile from cache
+        // It's a Roomy user - try to get their profile from cache first
         console.log(`[Profile Puppeting] Event ${event.id}: Roomy user detected (${authorDid}), looking up profile...`);
         const roomyProfiles = roomyUserProfilesForBridge({
           discordGuildId: ctx.guildId,
           roomySpaceId: ctx.spaceId,
         });
         try {
-          const profile = await roomyProfiles.get(authorDid);
+          let profile = await roomyProfiles.get(authorDid);
+          if (!profile) {
+            // Profile not in cache - fetch from ATProto
+            console.log(`[Profile Puppeting] Event ${event.id}: Profile not cached, fetching from ATProto for ${authorDid}...`);
+            try {
+              const roomyClient = getRoomyClient();
+              // Cast authorDid to Did type (branded string)
+              const atpProfile = await getProfile(roomyClient.agent, authorDid as Did);
+              if (atpProfile) {
+                profile = {
+                  name: atpProfile.displayName || atpProfile.handle,
+                  avatar: atpProfile.avatar ?? null,
+                  handle: atpProfile.handle,
+                };
+                // Cache the profile
+                await roomyProfiles.put(authorDid, profile);
+                console.log(`[Profile Puppeting] Event ${event.id}: Fetched and cached profile - name: ${profile.name}, avatar: ${profile.avatar || "none"}`);
+              }
+            } catch (e) {
+              console.error(`[Profile Puppeting] Event ${event.id}: Failed to fetch profile from ATProto:`, e);
+            }
+          }
+
           if (profile) {
             username = profile.name;
             avatarUrl = profile.avatar ?? undefined;
-            console.log(`[Profile Puppeting] Event ${event.id}: Found profile - name: ${username}, avatar: ${avatarUrl || "none"}`);
+            console.log(`[Profile Puppeting] Event ${event.id}: Using profile - name: ${username}, avatar: ${avatarUrl || "none"}`);
           } else {
-            console.warn(`[Profile Puppeting] Event ${event.id}: Profile not found in cache for DID ${authorDid}`);
+            console.warn(`[Profile Puppeting] Event ${event.id}: No profile available for ${authorDid}, using default username`);
           }
         } catch (e) {
-          console.error(`[Profile Puppeting] Event ${event.id}: Error looking up profile for DID ${authorDid}:`, e);
+          console.error(`[Profile Puppeting] Event ${event.id}: Error getting profile for DID ${authorDid}:`, e);
         }
       }
 
@@ -184,8 +208,11 @@ export async function syncCreateMessageToDiscord(
         });
 
         console.log(`Synced Roomy message ${event.id} to Discord ${result.id}`);
+        console.log(`[Webhook Registration] Registered mapping: discordId=${result.id} → roomyId=${event.id}`);
         span.setAttribute("sync.result", "success");
         span.setAttribute("discord.message.id", result.id.toString());
+      } else {
+        console.error(`[Webhook Registration] No result from webhook execution for event ${event.id}`);
       }
     } catch (error) {
       recordError(span, error);
@@ -327,8 +354,12 @@ export async function syncDeleteMessageToDiscord(
 }
 
 /**
- * Sync a Roomy addBridgedReaction event to Discord.
+ * Sync a Roomy addBridgedReaction or addReaction event to Discord.
  * Adds a reaction to the Discord message.
+ *
+ * Handles both:
+ * - space.roomy.reaction.addBridgedReaction.v0 (with reactingUser field)
+ * - space.roomy.reaction.addReaction.v0 (user from DecodedStreamEvent)
  *
  * @param ctx - Guild context
  * @param bot - Discord bot instance
@@ -339,18 +370,23 @@ export async function syncAddReactionToDiscord(
   bot: DiscordBot,
   decodedEvent: DecodedStreamEvent,
 ): Promise<void> {
-  const { event } = decodedEvent;
+  const { event, user } = decodedEvent;
 
   return tracer.startActiveSpan("sync.addReaction.roomy_to_discord", async (span) => {
     try {
       setRoomyAttrs(span, { eventId: event.id });
       setDiscordAttrs(span, { guildId: ctx.guildId });
 
+      // Handle both addBridgedReaction (with reactingUser) and addReaction (user from event)
+      const isBridgedReaction = event.$type === "space.roomy.reaction.addBridgedReaction.v0";
       const reactionEvent = event as {
         reactionTo: string;
         reaction: string;
-        reactingUser: string;
+        reactingUser?: string; // Only present for bridged reactions
       };
+
+      // For pure Roomy reactions, use the event user; for bridged, use reactingUser
+      const reactingUser = reactionEvent.reactingUser ?? user;
 
       // Get the Discord message ID from the Roomy message ID
       // Use get_roomyId() to get the Discord snowflake from the Roomy ULID

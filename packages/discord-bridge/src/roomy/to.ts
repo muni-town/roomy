@@ -1219,7 +1219,8 @@ export async function syncDiscordReactionToRoomy(
         if (!roomyMessageId) {
           span.setAttribute("sync.result", "skipped_message_not_synced");
           console.warn(
-            `Discord message ${opts.messageId} not synced to Roomy, skipping reaction`,
+            `Discord message ${opts.messageId} not synced to Roomy, skipping reaction. ` +
+            `This may be a webhook message that wasn't registered correctly.`,
           );
           return null;
         }
