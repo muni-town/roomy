@@ -45,6 +45,8 @@ services:
       POSTGRES_PASSWORD: password
     volumes:
       - plc-db-data:/var/lib/postgresql
+    networks:
+      - roomy-dev
 
   pds:
     image: node:20-alpine
