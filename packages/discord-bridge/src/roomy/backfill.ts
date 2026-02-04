@@ -10,7 +10,8 @@ import { registeredBridges, roomyUserProfilesForBridge } from "../db.js";
 import { GuildContext } from "../types.js";
 import { tracer, setDiscordAttrs, setRoomyAttrs, recordError } from "../tracing.js";
 import { DISCORD_EXTENSION_KEYS } from "./subscription.js";
-import { getRoomKey } from "./to.js";
+import { getRoomKey } from "../utils/room.js";
+import { decodeMessageBody } from "../utils/message.js";
 import {
   backfillDiscordMessages,
   computeDiscordMessageHash,
@@ -22,16 +23,6 @@ import {
 } from "../discord/webhooks.js";
 import { getRoomyClient } from "./client.js";
 
-// Helper to decode message body data
-function decodeMessageBody(event: Event): string {
-  const createMessageEvent = event as { body?: { data: { $bytes?: string } | Uint8Array } };
-  const data = createMessageEvent.body?.data;
-  if (!data) return "";
-  if (data instanceof Uint8Array) return new TextDecoder().decode(data);
-  const bytesData = data as { $bytes?: string };
-  if (bytesData.$bytes) return atob(bytesData.$bytes);
-  return "";
-}
 /**
  * Fetch Roomy-origin events (skip Discord-origin events).
  * Uses ConnectedSpace to fetch all events and filters for those without Discord origin extensions.
