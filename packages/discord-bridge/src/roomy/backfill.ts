@@ -6,7 +6,7 @@
 import type { DecodedStreamEvent, Event } from "@roomy/sdk";
 import { StreamIndex } from "@roomy/sdk";
 import type { DiscordBot } from "../discord/types.js";
-import { registeredBridges } from "../db.js";
+import { registeredBridges, roomyUserProfilesForBridge } from "../db.js";
 import { GuildContext } from "../types.js";
 import { tracer, setDiscordAttrs, setRoomyAttrs, recordError } from "../tracing.js";
 import { DISCORD_EXTENSION_KEYS } from "./subscription.js";
@@ -247,13 +247,26 @@ export async function syncRoomyToDiscord(
                 let username = "Roomy User";
                 let avatarUrl: string | undefined;
                 if (authorDid) {
-                  // Parse did:discord:12345 format
-                  const match = authorDid.match(/did:discord:(\d+)/);
-                  if (match && match[1]) {
-                    const discordUserId = BigInt(match[1]);
-                    // Could fetch user info from Discord API here
-                    // For now, use a generic username
-                    username = `Roomy User ${match[1]}`;
+                  // Check if it's a Discord user
+                  const discordMatch = authorDid.match(/did:discord:(\d+)/);
+                  if (discordMatch) {
+                    username = `Roomy User ${discordMatch[1]}`;
+                    // Could fetch user info from Discord API here for avatar
+                  } else {
+                    // It's a Roomy user - try to get their profile from cache
+                    const roomyProfiles = roomyUserProfilesForBridge({
+                      discordGuildId: ctx.guildId,
+                      roomySpaceId: ctx.spaceId,
+                    });
+                    try {
+                      const profile = await roomyProfiles.get(authorDid);
+                      if (profile) {
+                        username = profile.name;
+                        avatarUrl = profile.avatar ?? undefined;
+                      }
+                    } catch {
+                      // Profile not found - use defaults
+                    }
                   }
                 }
 
@@ -303,15 +316,15 @@ export async function syncRoomyToDiscord(
                 );
 
                 if (result) {
-                  // Register the mapping
+                  // Register the Discord snowflake → Roomy ULID mapping (for reaction sync)
                   await ctx.syncedIds.register({
-                    discordId: nonce,
-                    roomyId: result.id.toString(),
+                    discordId: result.id.toString(),
+                    roomyId: event.id,
                   });
 
-                  // Also register the full ULID mapping for reverse lookup
+                  // Also register the truncated nonce mapping (for idempotency check)
                   await ctx.syncedIds.register({
-                    discordId: event.id,
+                    discordId: nonce,
                     roomyId: result.id.toString(),
                   });
 
