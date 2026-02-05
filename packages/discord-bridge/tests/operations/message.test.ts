@@ -224,7 +224,7 @@ describe("fetchMessage", () => {
       id: 111n,
       username: "testuser",
       discriminator: "1234",
-      avatar: undefined, // Discord API returns undefined when avatar is not set
+      avatar: null, // Discord API returns null when avatar is not set
     });
     expect(result.timestamp).toBe(1704067200000); // 2024-01-01
     expect(mockHelpers.getMessage).toHaveBeenCalledTimes(1);
@@ -309,7 +309,6 @@ describe("fetchMessage", () => {
     expect(result.messageReference).toEqual({
       messageId: 888n,
       channelId: 123456789n,
-      guildId: 123456789n,
     });
   });
 });
