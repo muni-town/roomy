@@ -99,14 +99,6 @@ export class Peer {
 
   #sqlite: SqliteSupervisor;
 
-  /** May be awaited on to wait for the peer to finish connecting to the leaf server. */
-  #connected = new Deferred<Extract<RoomyState, { state: "connected" }>>();
-
-  /** May be awaited on to wait for the peer to finish connecting to the personal space */
-  #connectedPersonalSpace = new Deferred<
-    Extract<RoomyState, { state: "materializingPersonalSpace" }>
-  >();
-
   /* To get the result of a materialised batch, create and await a Promise setting the resolver
     against the Batch ID in this Map */
   #batchResolvers: Map<
@@ -170,9 +162,8 @@ export class Peer {
     return {
       initializePeer: (oauthCallbackSearchParams) =>
         this.initializePeer(oauthCallbackSearchParams),
-      getSessionId: async () => {
-        return this.#sessionId;
-      },
+      login: async (handle) => this.login(handle),
+      logout: async () => await this.logout(),
       setSpaceHandle: (spaceDid, handle) => {
         if (this.#roomy.current.state !== "connected")
           throw new Error("Not connected");
@@ -183,10 +174,7 @@ export class Peer {
           throw new Error("Not connected");
         return this.#roomy.current.client.getSpaceInfo(streamDid);
       },
-      login: async (handle) => this.login(handle),
-      logout: async () => await this.logout(),
       getProfile: async (did) => {
-        await this.#connectedPersonalSpace.promise;
         return this.client.getProfile(did);
       },
       runQuery: async (statement) => {
@@ -281,7 +269,7 @@ export class Peer {
       resolveHandleForSpace: async (spaceId) =>
         this.client.resolveHandleFromSpaceId(spaceId),
       resolveSpaceId: async (handleOrDid) => {
-        await this.#connected.promise;
+        await this.#roomy.transitionTo("connected");
         const resp =
           await this.client.resolveSpaceIdFromDidOrHandle(handleOrDid);
         return {
@@ -298,7 +286,7 @@ export class Peer {
         await this.client.setProfileSpace(spaceId);
       },
       getProfileSpace: async () => {
-        await this.#connected.promise;
+        await this.#roomy.transitionTo("connected");
         return this.client.resolveProfileSpaceFromUserDid(
           this.client.agent.assertDid as UserDid,
         );
@@ -310,7 +298,7 @@ export class Peer {
         await this.sqlite.sqliteWorker.connectPendingSpaces();
       },
       getMembers: async (spaceDid) => {
-        await this.#connected.promise;
+        await this.#roomy.transitionTo("connected");
         // TODO: we should move this logic to the SDK
         const resp = await this.client.leaf.query(spaceDid, {
           name: "members",
@@ -362,7 +350,7 @@ export class Peer {
     peerClientInterface.setSessionId(this.#sessionId);
 
     // Let the client know as soon as we get connected to the roomy server
-    this.#connected.promise.then((roomyState) => {
+    this.#roomy.transitionTo("connected").then((roomyState) => {
       peerClientInterface.initFinished({
         userDid: roomyState.client.agent.assertDid,
       });
@@ -504,20 +492,17 @@ export class Peer {
     return session;
   }
 
-  /** Where most of the initialisation happens. Backfill the personal
-   * stream from the stored cursor, then set up the other streams.
+  /**
+   * This is where most of the peer initialization happens, right after authentication.
+   *
+   * Here we backfill the personal stream then set up the other streams for spaces the user has
+   * joined.
    */
   async initPeerWithSession(session: SessionManager) {
     const [span, ctx] = tracer.startActiveSpan(
       "Init Peer With Client",
       (span) => [span, context.active()] as const,
     );
-
-    // create the Roomy client
-    const eventHandlers = {
-      onConnect: () => console.debug("BW (restored): connected"),
-      onDisconnect: () => console.debug("BW (restored): disconnected"),
-    };
 
     const agent = new Agent(session);
     lexicons.forEach((l) => agent.lex.add(l as any));
@@ -533,7 +518,10 @@ export class Peer {
         spaceNsid: CONFIG.streamNsid,
         plcDirectory: CONFIG.plcDirectory,
       },
-      eventHandlers,
+      {
+        onConnect: () => console.debug("Peer: connected"),
+        onDisconnect: () => console.debug("Peer: disconnected"),
+      },
     );
 
     // fetch profile in advance (don't await)
@@ -586,7 +574,6 @@ export class Peer {
       eventChannel,
       spaces: new Map(),
     };
-    this.#connectedPersonalSpace.resolve(this.#roomy.current);
 
     // authenticate sqlite
     tracer.startActiveSpan("Authenticate SQLite", {}, ctx, (span) => {
@@ -668,7 +655,6 @@ export class Peer {
       client: this.#roomy.current.client,
       personalSpace: this.#roomy.current.personalSpace,
     };
-    this.#connected.resolve(this.#roomy.current);
 
     await tracer.startActiveSpan(
       "Wait for Joined Streams Backfilled",
@@ -707,7 +693,11 @@ export class Peer {
 
   private async startMaterializer() {
     console.debug("Starting materialiser");
-    const { eventChannel } = await this.#connectedPersonalSpace.promise; // TODO await roomy connected
+    const { eventChannel } = await Promise.race([
+      this.#roomy.transitionTo("materializingPersonalSpace"),
+      this.#roomy.transitionTo("connected"),
+    ]);
+
     if (
       this.#roomy.current.state !== "connected" &&
       this.#roomy.current.state !== "materializingPersonalSpace" // should be this one
@@ -720,7 +710,9 @@ export class Peer {
     for await (const batch of eventChannel) {
       // personal stream backfill is always high priority, other streams can be in background
       if (batch.streamId === this.#roomy.current.personalSpace.streamDid) {
+        console.log("materialize batch...");
         const result = await this.sqlite.materializeBatch(batch, "priority");
+        console.log("materialize batch...done");
 
         // If there is a resolver waiting on this batch, resolve it with the result
         const resolver = this.#batchResolvers.get(batch.batchId);
@@ -773,7 +765,10 @@ export class Peer {
   static SPACE_CONNECTION_TIMEOUT_MS = 30_000;
 
   async connectSpaceStream(streamId: StreamDid, _idx: StreamIndex) {
-    await this.#connectedPersonalSpace.promise;
+    await Promise.race([
+      this.#roomy.transitionTo("materializingPersonalSpace"),
+      this.#roomy.transitionTo("connected"),
+    ]);
     if (
       this.#roomy.current.state !== "connected" &&
       this.#roomy.current.state !== "materializingPersonalSpace"
@@ -932,7 +927,7 @@ export class Peer {
     roomId: Ulid,
     end?: StreamIndex,
   ): Promise<{ hasMore: boolean }> {
-    await this.#connected.promise;
+    await this.#roomy.transitionTo("connected");
     if (this.#roomy.current.state !== "connected")
       throw new Error("Client not connected");
 
@@ -968,7 +963,7 @@ export class Peer {
     limit: number,
     room?: Ulid,
   ): Promise<DecodedStreamEvent[]> {
-    await this.#connected.promise;
+    await this.#roomy.transitionTo("connected");
     if (this.#roomy.current.state !== "connected")
       throw new Error("Client not connected");
 
