@@ -5,7 +5,7 @@
   import { flags } from "$lib/config";
   import { Button, ScrollArea } from "@fuxui/base";
 
-  import IconLucideArrowLeft from "~icons/lucide/arrow-left";
+  import { IconArrowLeft } from "@roomy/design/icons";
 
   let sidebarLinks = [
     {
@@ -39,7 +39,7 @@
 
     <div class="px-2 flex flex-col gap-2">
       <Button href={`/${page.params.space}`} class="w-full justify-start mb-4">
-        <IconLucideArrowLeft class="size-4" />
+        <IconArrowLeft class="size-4" />
         Back to space
       </Button>
 

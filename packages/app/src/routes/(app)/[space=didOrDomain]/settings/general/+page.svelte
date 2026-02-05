@@ -15,7 +15,7 @@
   } from "@fuxui/base";
   import { Handle, newUlid } from "@roomy/sdk";
 
-  import IconMdiLoading from "~icons/mdi/loading";
+  import { IconLoading } from "@roomy/design/icons";
 
   let currentSpace = $derived(current.joinedSpace);
   let spaceId = $derived(currentSpace?.id);
@@ -307,7 +307,7 @@
   {#if activeHandleTab == "Use My Handle"}
     {#await currentProfileSpace}
       <div class="flex justify-center">
-        <IconMdiLoading class="animate-spin" font-size={40} />
+        <IconLoading class="animate-spin" font-size={40} />
       </div>
     {:then profileSpace}
       <form class="items-start">
@@ -399,7 +399,7 @@
         {#if spaceHandle}
           {#await handleResolvesToSpace}
             <span class="flex gap-2 items-center">
-              Verifying <IconMdiLoading class="animate-spin" />
+              Verifying <IconLoading class="animate-spin" />
             </span>
           {:then resolves}
             {#if resolves}

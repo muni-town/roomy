@@ -1,7 +1,7 @@
 <script lang="ts">
   import { decode } from "blurhash";
   import { cdnImageUrl } from "$lib/utils.svelte";
-  import IconLucideImageOff from "~icons/lucide/image-off";
+  import { IconImageOff } from "@roomy/design/icons";
   import FullscreenImageOverlay from "./FullscreenImageOverlay.svelte";
 
   let {
@@ -63,7 +63,7 @@
     aria-label={"Image failed to load: " +
       (image.alt || "No alt text available")}
   >
-    <IconLucideImageOff class="shrink-0" />
+    <IconImageOff class="shrink-0" />
   </div>
 {:else}
   <a
@@ -97,7 +97,7 @@
           aria-hidden="true"
         />
         <div class="absolute inset-0 flex items-center justify-center">
-          <IconLucideImageOff class="shrink-0 relative z-10" />
+          <IconImageOff class="shrink-0 relative z-10" />
         </div>
       </div>
     {:else}

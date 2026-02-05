@@ -9,7 +9,7 @@
   import LoginForm from "$lib/components/user/LoginForm.svelte";
   import { TooltipProvider } from "@fuxui/base";
 
-  import IconMdiLoading from "~icons/mdi/loading";
+  import { IconLoading } from "@roomy/design/icons";
   import Error from "$lib/components/modals/Error.svelte";
 
   // Cache the current profile for use in the LoginForm to preview the last login.
@@ -74,7 +74,7 @@
   >
     {#if showLoadingIcon}
       <div transition:fade={{ duration: 500 }}>
-        <IconMdiLoading font-size="8em" class="animate-spin text-primary" />
+        <IconLoading font-size="8em" class="animate-spin text-primary" />
       </div>
     {/if}
   </div>

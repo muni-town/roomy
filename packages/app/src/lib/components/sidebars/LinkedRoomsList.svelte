@@ -5,7 +5,7 @@
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { Button } from "@fuxui/base";
-  import IconCustomThread from "~icons/custom/thread";
+  import { IconThread } from "@roomy/design/icons";
 
   let {
     roomId = $bindable(),
@@ -45,7 +45,7 @@
     {#each linkedRooms as room}
       <div class="inline-flex w-full items-start justify-between min-w-0">
         <div class="max-h-4 overflow-visible">
-          <IconCustomThread
+          <IconThread
             class="shrink-0 stroke-[0.6] stroke-base-500 h-[1.85rem] -mt-2 ml-[2px] -mr-[2px]"
           />
         </div>

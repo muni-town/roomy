@@ -7,12 +7,7 @@
   import { peer, peerStatus } from "$lib/workers";
   import { newUlid } from "@roomy/sdk";
 
-  import IconLucideChevronDown from "~icons/lucide/chevron-down";
-  import IconLucideShare from "~icons/lucide/share";
-  import IconLucidePlus from "~icons/lucide/plus";
-  import IconLucidePencil from "~icons/lucide/pencil";
-  import IconLucideSettings from "~icons/lucide/settings";
-  import IconLucideLogOut from "~icons/lucide/log-out";
+  import { IconChevronDown, IconShare, IconPlus, IconPencil, IconSettings, IconLogOut } from "@roomy/design/icons";
 
   let {
     isEditing = $bindable(false),
@@ -71,7 +66,7 @@
             {current.joinedSpace?.name ?? ""}
           </h1>
         </div>
-        <IconLucideChevronDown
+        <IconChevronDown
           class={cn(
             "size-4 text-base-700 dark:text-base-300 transition-transform duration-200",
             popoverOpen && "rotate-180",
@@ -89,7 +84,7 @@
         }}
         class="w-full"
       >
-        <IconLucideShare class="size-4" /> Invite
+        <IconShare class="size-4" /> Invite
       </Button>
 
       {#if current.isSpaceAdmin}
@@ -98,7 +93,7 @@
           href={`/${current.joinedSpace?.id}/new`}
           variant="secondary"
         >
-          <IconLucidePlus class="size-4" /> New
+          <IconPlus class="size-4" /> New
         </Button>
         <Button
           class="w-full"
@@ -108,7 +103,7 @@
           }}
           variant="secondary"
         >
-          <IconLucidePencil class="size-4" />
+          <IconPencil class="size-4" />
           {isEditing ? "Finish editing" : "Edit Sidebar"}
         </Button>
 
@@ -117,12 +112,12 @@
           href={`/${page.params.space}/settings`}
           variant="secondary"
         >
-          <IconLucideSettings class="size-4" /> Space settings
+          <IconSettings class="size-4" /> Space settings
         </Button>
       {/if}
 
       <Button variant="red" class="w-full" onclick={leaveSpace}>
-        <IconLucideLogOut class="size-4" /> Leave Space
+        <IconLogOut class="size-4" /> Leave Space
       </Button>
     </div>
   </Popover>

@@ -5,11 +5,7 @@
   import { messagingState } from "../TimelineView.svelte";
   import type { Message } from "../ChatArea.svelte";
 
-  import IconLucideSmilePlus from "~icons/lucide/smile-plus";
-  import IconMdiReply from "~icons/mdi/reply";
-  import IconTablerNeedleThread from "~icons/tabler/needle-thread";
-  import IconTablerEdit from "~icons/tabler/edit";
-  import IconTablerTrash from "~icons/tabler/trash";
+  import { IconSmilePlus, IconReply, IconNeedleThread, IconEdit, IconTrash } from "@roomy/design/icons";
   import { peerStatus } from "$lib/workers";
   import { current } from "$lib/queries";
   import { addReaction, removeReaction } from "$lib/mutations/reaction";
@@ -92,7 +88,7 @@
       >
         {#snippet child({ props })}
           <Button size="icon" variant="ghost" {...props}>
-            <IconLucideSmilePlus class="text-primary" />
+            <IconSmilePlus class="text-primary" />
           </Button>
         {/snippet}
       </PopoverEmojiPicker>
@@ -106,7 +102,7 @@
         }}
         class="dz-join-item dz-btn w-full"
       >
-        <IconMdiReply />
+        <IconReply />
         Reply
       </Button>
       <Button
@@ -116,7 +112,7 @@
         }}
         class="dz-join-item dz-btn w-full"
       >
-        <IconTablerNeedleThread />Create Thread
+        <IconNeedleThread />Create Thread
       </Button>
       {#if canEditAndDelete}
         <Button
@@ -126,7 +122,7 @@
           }}
           class="dz-join-item dz-btn w-full"
         >
-          <IconTablerEdit />
+          <IconEdit />
           Edit
         </Button>
       {/if}
@@ -135,7 +131,7 @@
           onclick={deleteCurrentMessage}
           class="dz-join-item dz-btn dz-btn-error w-full"
         >
-          <IconTablerTrash />
+          <IconTrash />
           Delete
         </Button>
       {/if}

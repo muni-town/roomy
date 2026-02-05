@@ -7,8 +7,7 @@
   import { current, joinedSpaces } from "$lib/queries";
   import { dev } from "$app/environment";
 
-  import IconHeroiconsSquaresPlus from "~icons/heroicons/squares-plus";
-  import IconMdiSqlQuery from "~icons/mdi/sql-query";
+  import { IconSquaresPlus, IconSqlQuery } from "@roomy/design/icons";
 
   let openSpace = $derived(current.joinedSpace?.id);
   let isOpenSpaceJoined = $derived(true);
@@ -22,7 +21,7 @@
     class="px-0 aspect-square [&_svg]:size-8  hover:bg-accent-500/20"
     data-current={page.url.pathname.startsWith("/home")}
   >
-    <IconHeroiconsSquaresPlus font-size="1.75em" />
+    <IconSquaresPlus font-size="1.75em" />
   </Button>
 
   {#if current.did}
@@ -65,7 +64,7 @@
 <section class="flex flex-col items-center gap-2 p-0 pb-2">
   {#if dev}
     <a href="/query">
-      <IconMdiSqlQuery font-size="2em" />
+      <IconSqlQuery font-size="2em" />
     </a>
   {/if}
   <UserProfileButton />

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { PopoverEmojiPicker } from "@fuxui/social";
   import { Button, Toggle, Tooltip } from "@fuxui/base";
-  import IconLucideSmilePlus from "~icons/lucide/smile-plus";
+  import { IconSmilePlus } from "@roomy/design/icons";
   import { current } from "$lib/queries";
   import type { Message } from "../ChatArea.svelte";
   import { addReaction, removeReaction } from "$lib/mutations/reaction";
@@ -93,7 +93,7 @@
     >
       {#snippet child({ props })}
         <Button size="icon" variant="ghost" {...props}>
-          <IconLucideSmilePlus class="text-primary" />
+          <IconSmilePlus class="text-primary" />
         </Button>
       {/snippet}
     </PopoverEmojiPicker>

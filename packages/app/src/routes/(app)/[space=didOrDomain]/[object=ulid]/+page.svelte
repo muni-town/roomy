@@ -38,11 +38,7 @@
   import PageHistory from "$lib/components/content/page/PageHistory.svelte";
   import JoinSpaceModal from "$lib/components/modals/JoinSpaceModal.svelte";
 
-  import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
-  import IconHeroiconsDocument from "~icons/heroicons/document";
-  import IconHeroiconsChatBubbleLeftRight from "~icons/heroicons/chat-bubble-left-right";
-  // import IconTablerClick from "~icons/tabler/click";
-  // import IconTablerSettings from "~icons/tabler/settings";
+  import { IconHashtag, IconDocument, IconChatBubble } from "@roomy/design/icons";
 
   import Error from "$lib/components/modals/Error.svelte";
 
@@ -197,7 +193,7 @@
       >
         {#if room?.kind === "space.roomy.channel" || room?.kind === "space.roomy.thread"}
           <div>
-            <IconHeroiconsHashtag
+            <IconHashtag
               class="w-5 h-5 ml-2 shrink-0 text-base-700 dark:text-base-300"
             />
           </div>
@@ -205,7 +201,7 @@
 
         {#if room?.kind === "space.roomy.page" && shouldShowPageTitle}
           <div in:fade={{ duration: 300 }} out:fade={{ duration: 100 }}>
-            <IconHeroiconsDocument
+            <IconDocument
               class="w-5 h-5 ml-2 shrink-0 text-base-700 dark:text-base-300 mr-1"
             />
           </div>
@@ -369,7 +365,7 @@
             data-active={showPageChat}
             variant={showPageChat ? "primary" : "secondary"}
             onclick={() => toggleShowPageChat()}
-            ><IconHeroiconsChatBubbleLeftRight class="shrink-0" />Chat</Button
+            ><IconChatBubble class="shrink-0" />Chat</Button
           >
         {/if}
       {/if}

@@ -8,7 +8,7 @@
   import type { Editor } from "@tiptap/core";
   import Select from "./Select.svelte";
   import type { RichTextTypes } from ".";
-  import IconHeroiconsChatBubbleBottomCenterText from "~icons/heroicons/chat-bubble-bottom-center-text";
+  import { IconChatBubbleText } from "@roomy/design/icons";
 
   let {
     editor,
@@ -202,7 +202,7 @@
     }}
     bind:pressed={() => isComment, (_comment) => {}}
   >
-    <IconHeroiconsChatBubbleBottomCenterText class="size-6" />
+    <IconChatBubbleText class="size-6" />
     <span class="sr-only">Comment</span>
   </Toggle>
 

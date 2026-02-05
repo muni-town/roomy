@@ -1,0 +1,9 @@
+{
+  "name": "@roomy/design",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./icons": "./src/icons/index.ts"
+  }
+}

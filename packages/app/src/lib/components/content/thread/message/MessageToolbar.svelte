@@ -6,11 +6,7 @@
   import { messagingState } from "../TimelineView.svelte";
   import type { Message } from "../ChatArea.svelte";
 
-  import IconLucideSmilePlus from "~icons/lucide/smile-plus";
-  import IconMdiReply from "~icons/mdi/reply";
-  import IconTablerNeedleThread from "~icons/tabler/needle-thread";
-  import IconTablerEdit from "~icons/tabler/edit";
-  import IconTablerTrash from "~icons/tabler/trash";
+  import { IconSmilePlus, IconReply, IconNeedleThread, IconEdit, IconTrash } from "@roomy/design/icons";
   import { peerStatus } from "$lib/workers";
   import { current } from "$lib/queries";
   import { addReaction, removeReaction } from "$lib/mutations/reaction";
@@ -104,7 +100,7 @@
             class="backdrop-blur-none"
             aria-label="Pick an emoji"
           >
-            <IconLucideSmilePlus class="text-primary" />
+            <IconSmilePlus class="text-primary" />
           </Button>
         {/snippet}
       </PopoverEmojiPicker>
@@ -120,7 +116,7 @@
           ]}
           aria-label="Edit Message"
         >
-          <IconTablerEdit />
+          <IconEdit />
         </Toolbar.Button>
       </Tooltip>
     {/if}
@@ -135,7 +131,7 @@
           ]}
           aria-label="Delete Message"
         >
-          <IconTablerTrash class="text-warning" />
+          <IconTrash class="text-warning" />
         </Toolbar.Button>
       </Tooltip>
     {/if}
@@ -149,7 +145,7 @@
         ]}
         aria-label="Create Thread"
       >
-        <IconTablerNeedleThread class="text-primary" />
+        <IconNeedleThread class="text-primary" />
       </Toolbar.Button>
     </Tooltip>
 
@@ -162,7 +158,7 @@
         ]}
         aria-label="Reply"
       >
-        <IconMdiReply />
+        <IconReply />
       </Toolbar.Button>
     </Tooltip>
   </Toolbar.Root>

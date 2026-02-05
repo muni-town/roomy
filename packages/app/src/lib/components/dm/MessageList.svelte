@@ -8,10 +8,7 @@
   import "bluesky-post-embed/style.css";
   import "bluesky-post-embed/themes/light.css";
 
-  import IconTablerAlertCircle from "~icons/tabler/alert-circle";
-  import IconTablerMessageCirclePlus from "~icons/tabler/message-circle-plus";
-  import IconTablerMessageCircle from "~icons/tabler/message-circle";
-  import IconTablerSend from "~icons/tabler/send";
+  import { IconAlertCircle, IconMessageCirclePlus, IconMessageCircle, IconSend } from "@roomy/design/icons";
 
   const { conversationId }: { conversationId: string } = $props();
 
@@ -275,7 +272,7 @@
     </div>
   {:else if error}
     <div class="alert alert-error m-4 text-base-900 dark:text-base-100">
-      <IconTablerAlertCircle />
+      <IconAlertCircle />
       <div>
         <div class="font-bold">Error</div>
         <div class="text-xs">{error}</div>
@@ -287,7 +284,7 @@
     {#if messages.length === 0 && conversationStatus === "request"}
       <div class="flex-1 flex items-center justify-center p-6">
         <div class="text-center max-w-sm">
-          <IconTablerMessageCirclePlus
+          <IconMessageCirclePlus
             class="h-12 w-12 mx-auto text-base-900 dark:text-base-100 mb-4"
           />
           <h3
@@ -308,7 +305,7 @@
     {:else if messages.length === 0}
       <div class="flex-1 flex items-center justify-center p-6">
         <div class="text-center max-w-sm">
-          <IconTablerMessageCircle
+          <IconMessageCircle
             class="h-12 w-12 mx-auto text-base-content/40 mb-4"
           />
           <h3 class="text-lg font-semibold text-base-content mb-2">
@@ -381,7 +378,7 @@
           variant="ghost"
           disabled={!messageText.trim() || isSending}
         >
-          <IconTablerSend />
+          <IconSend />
         </Button>
       </form>
     </div>

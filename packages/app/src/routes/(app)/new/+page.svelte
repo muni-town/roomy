@@ -4,7 +4,7 @@
   import { navigate } from "$lib/utils.svelte";
   import { peerStatus } from "$lib/workers";
   import type { AsyncStateWithIdle, StreamDid } from "@roomy/sdk";
-  import IconHeroiconsXMark from "~icons/heroicons/x-mark";
+  import { IconXMark } from "@roomy/design/icons";
   import {
     Alert,
     Button,
@@ -124,7 +124,7 @@
             type="button"
             variant="ghost"
             onclick={() => (form.dismissAlert = true)}
-            ><IconHeroiconsXMark /></Button
+            ><IconXMark /></Button
           >
         </div>
       </Alert>

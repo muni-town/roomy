@@ -6,7 +6,7 @@
   import { AvatarBeam } from "svelte-boring-avatars";
   import { newUlid, UserDid } from "@roomy/sdk";
 
-  import IconMdiLoading from "~icons/mdi/loading";
+  import { IconLoading } from "@roomy/design/icons";
 
   const spaceId = $derived(current.joinedSpace?.id);
 
@@ -44,7 +44,7 @@
     </h2>
 
     {#await members}
-      <IconMdiLoading class="animate-spin" font-size={40} />
+      <IconLoading class="animate-spin" font-size={40} />
     {:then members}
       <ul class="flex flex-col gap-2">
         {#each members || [] as member}

@@ -18,8 +18,7 @@
   import { page } from "$app/state";
   import { Button, toast } from "@fuxui/base";
 
-  import IconTablerArrowDown from "~icons/tabler/arrow-down";
-  import IconMdiLoading from "~icons/mdi/loading";
+  import { IconArrowDown, IconLoading } from "@roomy/design/icons";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { decodeTime } from "ulidx";
@@ -447,7 +446,7 @@
   <div class="absolute w-full bottom-4 right-2 z-50 flex justify-center">
     {#if showJumpToPresent}
       <Button onclick={scrollToBottom}>
-        <IconTablerArrowDown class="w-4 h-4" />
+        <IconArrowDown class="w-4 h-4" />
         Jump to present
       </Button>
     {/if}
@@ -474,7 +473,7 @@
                 {/snippet}
                 {#snippet pending()}
                   <div class="flex justify-center py-2">
-                    <IconMdiLoading class="animate-spin text-base-500" />
+                    <IconLoading class="animate-spin text-base-500" />
                   </div>
                 {/snippet}
                 {#snippet error({ message })}
@@ -531,7 +530,7 @@
             <div
               class="grid items-center justify-center h-full w-full min-h-32 bg-transparent"
             >
-              <IconMdiLoading
+              <IconLoading
                 font-size="2em"
                 class="animate-spin text-base-600 dark:text-base-400"
               />

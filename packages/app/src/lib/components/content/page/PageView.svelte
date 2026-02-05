@@ -13,8 +13,7 @@
   import { newUlid, toBytes, Ulid } from "@roomy/sdk";
   import { scrollContainerRef } from "$lib/utils.svelte";
 
-  import IconTablerCheck from "~icons/tabler/check";
-  import IconTablerPencil from "~icons/tabler/pencil";
+  import { IconCheck, IconPencil } from "@roomy/design/icons";
   import TimelineView, {
     messagingState,
     type Comment,
@@ -104,7 +103,7 @@
     <div class="flex z-10 justify-end mb-4 sticky top-0 pr-3">
       {#if isEditing}
         <Button onclick={savePage}>
-          <IconTablerCheck />
+          <IconCheck />
           Save
         </Button>
       {:else}
@@ -115,7 +114,7 @@
             isEditing = true;
           }}
         >
-          <IconTablerPencil />
+          <IconPencil />
           Edit
         </Button>
       {/if}

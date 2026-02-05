@@ -4,7 +4,7 @@
   import { Alert, Button } from "@fuxui/base";
   import { trace, context, SpanStatusCode } from "@opentelemetry/api";
   import { onMount } from "svelte";
-  import IconMdiLoading from "~icons/mdi/loading";
+  import { IconLoading } from "@roomy/design/icons";
 
   let error = $state("");
 
@@ -50,6 +50,6 @@
       <Button href="/">Go Home</Button>
     </Alert>
   {:else}
-    <IconMdiLoading font-size="8em" class="animate-spin text-primary" />
+    <IconLoading font-size="8em" class="animate-spin text-primary" />
   {/if}
 </div>

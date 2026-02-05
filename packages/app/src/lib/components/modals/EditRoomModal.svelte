@@ -6,8 +6,7 @@
   import { Modal, Input, Button } from "@fuxui/base";
   import type { Ulid } from "@roomy/sdk";
   // import FeedConfiguration from "../content/bluesky-feed/FeedConfiguration.svelte";
-  import IconLucideSave from "~icons/lucide/save";
-  import IconLucideTrash from "~icons/lucide/trash";
+  import { IconSave, IconTrash } from "@roomy/design/icons";
 
   let {
     open = $bindable(false),
@@ -88,7 +87,7 @@
         <Input bind:value={name} placeholder="Name" type="text" required />
         <div class="flex justify-start">
           <Button type="submit" disabled={!name} class="justify-start">
-            <IconLucideSave class="size-4" />
+            <IconSave class="size-4" />
             Save
           </Button>
         </div>
@@ -125,7 +124,7 @@
             class="justify-start"
             variant="red"
           >
-            <IconLucideTrash class="size-4" />
+            <IconTrash class="size-4" />
             Delete room
           </Button>
         </div>

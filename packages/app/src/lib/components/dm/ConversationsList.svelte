@@ -8,8 +8,7 @@
   import { Avatar, Badge, cn } from "@fuxui/base";
   import { fade } from "svelte/transition";
 
-  import IconTablerAlertCircle from "~icons/tabler/alert-circle";
-  import IconTablerMessageCircleOff from "~icons/tabler/message-circle-off";
+  import { IconAlertCircle, IconMessageCircleOff } from "@roomy/design/icons";
 
   let {
     selectedConversationId,
@@ -72,7 +71,7 @@
   </div>
 {:else if error}
   <div class="alert alert-error m-4">
-    <IconTablerAlertCircle />
+    <IconAlertCircle />
     <div>
       <div class="font-bold">Error</div>
       <div class="text-xs">{error}</div>
@@ -86,7 +85,7 @@
   </div>
 {:else if conversations.length === 0}
   <div class="text-center py-8">
-    <IconTablerMessageCircleOff
+    <IconMessageCircleOff
       class="h-8 w-8 mx-auto text-base-content/40 mb-2"
     />
     <p class="text-base-content/60">No conversations yet</p>
