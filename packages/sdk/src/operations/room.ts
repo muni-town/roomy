@@ -5,7 +5,7 @@
 
 import { newUlid, toBytes, type Ulid } from "../schema";
 import type { RoomKind } from "../schema/events/room";
-import type { Event, BasicInfoUpdate } from "../schema";
+import type { Event } from "../schema";
 import type { ConnectedSpace } from "../connection";
 
 /**
@@ -119,21 +119,14 @@ export async function updateRoom(
 ): Promise<UpdateRoomResult> {
   const updateId = newUlid();
 
-  const updateBody: BasicInfoUpdate & {
-    roomId: Ulid;
-    kind?: RoomKind | null;
-  } = {
+  const event: Event = {
+    id: updateId,
+    $type: "space.roomy.room.updateRoom.v0",
     roomId: options.roomId,
     ...(options.kind !== undefined && { kind: options.kind }),
     ...(options.name !== undefined && { name: options.name }),
     ...(options.description !== undefined && { description: options.description }),
     ...(options.avatar !== undefined && { avatar: options.avatar }),
-  };
-
-  const event: Event = {
-    id: updateId,
-    $type: "space.roomy.room.updateRoom.v0",
-    ...updateBody,
   };
 
   await space.sendEvent(event);
@@ -422,8 +415,8 @@ export async function createRoomLink(
 export interface RemoveRoomLinkOptions {
   /** The room containing the link */
   roomId: Ulid;
-  /** The link event ID to remove */
-  linkId: Ulid;
+  /** The linked room to unlink */
+  linkToRoom: Ulid;
 }
 
 /**
@@ -445,7 +438,7 @@ export interface RemoveRoomLinkResult {
  * ```ts
  * const result = await removeRoomLink(space, {
  *   roomId: "01H...",
- *   linkId: "01J..."
+ *   linkToRoom: "01J..."
  * });
  * ```
  */
@@ -459,7 +452,7 @@ export async function removeRoomLink(
     id: removeId,
     room: options.roomId,
     $type: "space.roomy.link.removeRoomLink.v0",
-    linkId: options.linkId,
+    linkToRoom: options.linkToRoom,
   };
 
   await space.sendEvent(event);
