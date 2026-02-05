@@ -224,7 +224,9 @@ export class LevelDBBridgeRepository implements BridgeRepository {
       syncedSidebarHash: SyncedSidebarHash;
       syncedRoomLinks: SyncedRoomLinks;
       syncedEdits: SyncedEdits;
-      discordWebhookTokens: ReturnType<typeof import("../db.js").discordWebhookTokensForBridge>;
+      discordWebhookTokens: ReturnType<
+        typeof import("../db.js").discordWebhookTokensForBridge
+      >;
       discordMessageHashes: DiscordMessageHashes;
       discordLatestMessage: LatestMessages;
     },
@@ -233,10 +235,14 @@ export class LevelDBBridgeRepository implements BridgeRepository {
   // === ID Mapping ===
 
   async getRoomyId(discordId: string): Promise<string | undefined> {
+    /** WARNING: this looks wrong but is actually correct.
+     * The naming is short for 'get the value with key prefixed by `discordId`.
+     */
     return this.stores.syncedIds.get_discordId(discordId);
   }
 
   async getDiscordId(roomyId: string): Promise<string | undefined> {
+    /** WARNING: See above. */
     return this.stores.syncedIds.get_roomyId(roomyId);
   }
 
@@ -266,11 +272,16 @@ export class LevelDBBridgeRepository implements BridgeRepository {
     return this.stores.syncedProfiles.put(userId, hash);
   }
 
-  async getRoomyUserProfile(did: string): Promise<RoomyUserProfile | undefined> {
+  async getRoomyUserProfile(
+    did: string,
+  ): Promise<RoomyUserProfile | undefined> {
     return this.stores.roomyUserProfiles.get(did);
   }
 
-  async setRoomyUserProfile(did: string, profile: RoomyUserProfile): Promise<void> {
+  async setRoomyUserProfile(
+    did: string,
+    profile: RoomyUserProfile,
+  ): Promise<void> {
     return this.stores.roomyUserProfiles.put(did, profile);
   }
 
