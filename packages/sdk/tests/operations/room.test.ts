@@ -335,7 +335,7 @@ describe("removeRoomLink", () => {
   it("removes a room link", async () => {
     const result = await removeRoomLink(mockSpace, {
       roomId: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
-      linkId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
+      linkToRoom: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX" as any,
     });
 
     expect(result.id).toMatch(/^[\w-]{26}$/);
@@ -345,7 +345,7 @@ describe("removeRoomLink", () => {
     expect(event).toMatchObject({
       $type: "space.roomy.link.removeRoomLink.v0",
       room: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-      linkId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+      linkToRoom: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     });
   });
 });

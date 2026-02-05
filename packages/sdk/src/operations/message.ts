@@ -64,7 +64,10 @@ export async function createMessage(
 ): Promise<CreateMessageResult> {
   const messageId = newUlid();
 
-  const extensions: Record<string, unknown> = { ...options.extensions };
+  // Start with empty extensions map
+  const extensions: Record<string, unknown> = {
+    ...(options.extensions || {}),
+  };
 
   // Add attachments extension if provided
   if (options.attachments && options.attachments.length > 0) {
@@ -99,6 +102,7 @@ export async function createMessage(
     });
   }
 
+  // Build the event - always include extensions (required by schema)
   const event: Event = {
     id: messageId,
     room: options.roomId,
@@ -108,7 +112,7 @@ export async function createMessage(
       data: toBytes(new TextEncoder().encode(options.body)),
     },
     ...(bodyAttachments.length > 0 ? { attachments: bodyAttachments } : {}),
-    ...(Object.keys(extensions).length > 0 ? { extensions } : {}),
+    extensions,
   };
 
   await space.sendEvent(event);
@@ -175,7 +179,7 @@ export async function editMessage(
     id: editId,
     room: options.roomId,
     $type: "space.roomy.message.editMessage.v0",
-    message: options.messageId,
+    messageId: options.messageId,
     body: {
       mimeType: options.mimeType || "text/markdown",
       data: toBytes(new TextEncoder().encode(options.body)),
