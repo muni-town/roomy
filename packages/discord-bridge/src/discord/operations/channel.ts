@@ -119,6 +119,7 @@ export async function createThread(
       options.messageId,
       {
         name: options.name,
+        autoArchiveDuration: 1440, // 7 days in minutes
       },
     );
     return { id: thread.id };
@@ -128,6 +129,8 @@ export async function createThread(
       options.channelId,
       {
         name: options.name,
+        autoArchiveDuration: 1440, // 7 days in minutes
+        type: 11, // PUBLIC_THREAD
       },
     );
     return { id: thread.id };
@@ -176,10 +179,10 @@ export async function fetchChannel(
 
   return {
     id: channel.id,
-    name: channel.name,
+    name: channel.name || "",
     type: channel.type,
-    guildId: channel.guildId,
-    parentId: channel.parentId,
-    lastMessageId: channel.lastMessageId,
+    guildId: channel.guildId || 0n,
+    parentId: channel.parentId || null,
+    lastMessageId: channel.lastMessageId || null,
   };
 }

@@ -108,7 +108,7 @@ export async function removeReaction(
       options.channelId,
       options.messageId,
       options.emoji,
-      options.userId,
+      options.userId.toString(),
     );
   } else {
     // Remove bot's own reaction
@@ -160,7 +160,7 @@ export async function removeAllReactions(
   bot: DiscordBot,
   options: RemoveAllReactionsOptions,
 ): Promise<RemoveAllReactionsResult> {
-  await bot.helpers.deleteAllReactionsForEmoji(
+  await bot.helpers.deleteReactionsEmoji(
     options.channelId,
     options.messageId,
     options.emoji,
@@ -204,6 +204,6 @@ export async function clearAllReactions(
   bot: DiscordBot,
   options: ClearAllReactionsOptions,
 ): Promise<ClearAllReactionsResult> {
-  await bot.helpers.deleteAllReactions(options.channelId, options.messageId);
+  await bot.helpers.deleteReactionsAll(options.channelId, options.messageId);
   return { success: true };
 }

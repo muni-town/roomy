@@ -273,9 +273,9 @@ export async function fetchMessage(
     content: message.content || "",
     author: {
       id: message.author.id,
-      username: message.username,
-      discriminator: message.discriminator,
-      avatar: message.avatar as unknown as string | null,
+      username: message.author.username,
+      discriminator: message.author.discriminator,
+      avatar: message.author.avatar as unknown as string | null,
     },
     timestamp: Number(message.timestamp),
     editedTimestamp: message.editedTimestamp
@@ -296,7 +296,6 @@ export async function fetchMessage(
       ? {
           messageId: message.messageReference.messageId,
           channelId: message.messageReference.channelId,
-          guildId: message.messageReference.guildId,
         }
       : null,
   };

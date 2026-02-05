@@ -16,8 +16,8 @@ const mockHelpers = {
   addReaction: vi.fn(),
   deleteOwnReaction: vi.fn(),
   deleteUserReaction: vi.fn(),
-  deleteAllReactionsForEmoji: vi.fn(),
-  deleteAllReactions: vi.fn(),
+  deleteReactionsEmoji: vi.fn(),
+  deleteReactionsAll: vi.fn(),
 };
 
 const mockBot = {
@@ -100,14 +100,14 @@ describe("removeReaction", () => {
       123456789n,
       987654321n,
       "👍",
-      111222333n,
+      "111222333",
     );
   });
 });
 
 describe("removeAllReactions", () => {
   it("removes all reactions for an emoji", async () => {
-    mockHelpers.deleteAllReactionsForEmoji.mockResolvedValue(undefined);
+    mockHelpers.deleteReactionsEmoji.mockResolvedValue(undefined);
 
     const result = await removeAllReactions(mockBot, {
       channelId: 123456789n,
@@ -116,8 +116,8 @@ describe("removeAllReactions", () => {
     });
 
     expect(result).toEqual({ success: true });
-    expect(mockHelpers.deleteAllReactionsForEmoji).toHaveBeenCalledTimes(1);
-    expect(mockHelpers.deleteAllReactionsForEmoji).toHaveBeenCalledWith(
+    expect(mockHelpers.deleteReactionsEmoji).toHaveBeenCalledTimes(1);
+    expect(mockHelpers.deleteReactionsEmoji).toHaveBeenCalledWith(
       123456789n,
       987654321n,
       "👍",
@@ -127,7 +127,7 @@ describe("removeAllReactions", () => {
 
 describe("clearAllReactions", () => {
   it("clears all reactions from a message", async () => {
-    mockHelpers.deleteAllReactions.mockResolvedValue(undefined);
+    mockHelpers.deleteReactionsAll.mockResolvedValue(undefined);
 
     const result = await clearAllReactions(mockBot, {
       channelId: 123456789n,
@@ -135,8 +135,8 @@ describe("clearAllReactions", () => {
     });
 
     expect(result).toEqual({ success: true });
-    expect(mockHelpers.deleteAllReactions).toHaveBeenCalledTimes(1);
-    expect(mockHelpers.deleteAllReactions).toHaveBeenCalledWith(
+    expect(mockHelpers.deleteReactionsAll).toHaveBeenCalledTimes(1);
+    expect(mockHelpers.deleteReactionsAll).toHaveBeenCalledWith(
       123456789n,
       987654321n,
     );
