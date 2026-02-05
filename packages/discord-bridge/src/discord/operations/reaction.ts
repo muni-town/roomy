@@ -103,7 +103,8 @@ export async function removeReaction(
   options: RemoveReactionOptions,
 ): Promise<RemoveReactionResult> {
   if (options.userId) {
-    await bot.helpers.removeReactionEmoji(
+    // Remove a specific user's reaction
+    await bot.helpers.deleteUserReaction(
       options.channelId,
       options.messageId,
       options.emoji,
@@ -111,7 +112,7 @@ export async function removeReaction(
     );
   } else {
     // Remove bot's own reaction
-    await bot.helpers.deleteReaction(
+    await bot.helpers.deleteOwnReaction(
       options.channelId,
       options.messageId,
       options.emoji,
@@ -159,7 +160,7 @@ export async function removeAllReactions(
   bot: DiscordBot,
   options: RemoveAllReactionsOptions,
 ): Promise<RemoveAllReactionsResult> {
-  await bot.helpers.removeReactionEmoji(
+  await bot.helpers.deleteAllReactionsForEmoji(
     options.channelId,
     options.messageId,
     options.emoji,
