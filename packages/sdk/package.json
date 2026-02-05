@@ -20,7 +20,9 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run tests/integration",
+    "test:unit": "vitest run tests/operations"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -35,6 +37,7 @@
     "@vitest/coverage-v8": "^2.1.8",
     "@vitest/ui": "^2.1.8",
     "beachball": "^2.54.0",
+    "dotenv": "^17.2.3",
     "pkgroll": "^2.12.2",
     "prettier": "3.5.3",
     "tsconfig-paths": "^4.2.0",
@@ -43,13 +46,13 @@
     "vitest": "^2.1.8"
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.9.0",
     "@ark/util": "^0.56.0",
     "@atcute/cbor": "^2.2.8",
     "@atproto/api": "^0.14.22",
     "@atproto/lexicon": "^0.4.14",
     "@atproto/oauth-client": "^0.5.6",
     "@muni-town/leaf-client": "0.1.0-alpha.16",
+    "@opentelemetry/api": "^1.9.0",
     "arktype": "^2.1.29",
     "ulidx": "^2.4.1"
   }

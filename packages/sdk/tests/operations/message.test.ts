@@ -185,7 +185,7 @@ describe("editMessage", () => {
     expect(event).toMatchObject({
       $type: "space.roomy.message.editMessage.v0",
       room: "01HXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-      message: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+      messageId: "01JXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
       body: {
         mimeType: "text/markdown",
       },
