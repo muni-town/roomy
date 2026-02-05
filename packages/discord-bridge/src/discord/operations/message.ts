@@ -55,12 +55,14 @@ export async function createWebhookMessage(
   bot: DiscordBot,
   options: CreateWebhookMessageOptions,
 ): Promise<CreateMessageResult> {
+  // Pass wait=true in the options to get the message object back from Discord
   const messageOptions: DiscordMessageOptions = {
     content: options.content,
     ...(options.username && { username: options.username }),
     ...(options.avatarUrl && { avatarUrl: options.avatarUrl }),
     ...(options.nonce && { nonce: options.nonce }),
-  };
+    wait: true,
+  } as any;
 
   const result = await bot.helpers.executeWebhook(
     options.webhookId,
@@ -279,7 +281,7 @@ export async function fetchMessage(
     editedTimestamp: message.editedTimestamp
       ? Number(message.editedTimestamp)
       : null,
-    attachments: message.attachments.map((att) => ({
+    attachments: message.attachments?.map((att) => ({
       id: att.id,
       filename: att.filename,
       contentType: att.contentType,
@@ -287,7 +289,7 @@ export async function fetchMessage(
       url: att.url,
       width: att.width,
       height: att.height,
-    })),
+    })) || [],
     webhookId: message.webhookId,
     type: message.type,
     messageReference: message.messageReference

@@ -14,12 +14,14 @@ import {
 // Mock DiscordBot
 const mockHelpers = {
   addReaction: vi.fn(),
-  deleteReaction: vi.fn(),
-  removeReactionEmoji: vi.fn(),
+  deleteOwnReaction: vi.fn(),
+  deleteUserReaction: vi.fn(),
+  deleteAllReactionsForEmoji: vi.fn(),
   deleteAllReactions: vi.fn(),
 };
 
 const mockBot = {
+  id: 123456789n,
   helpers: mockHelpers,
 } as unknown as DiscordBot;
 
@@ -65,7 +67,7 @@ describe("addReaction", () => {
 
 describe("removeReaction", () => {
   it("removes bot's own reaction", async () => {
-    mockHelpers.deleteReaction.mockResolvedValue(undefined);
+    mockHelpers.deleteOwnReaction.mockResolvedValue(undefined);
 
     const result = await removeReaction(mockBot, {
       channelId: 123456789n,
@@ -74,8 +76,8 @@ describe("removeReaction", () => {
     });
 
     expect(result).toEqual({ success: true });
-    expect(mockHelpers.deleteReaction).toHaveBeenCalledTimes(1);
-    expect(mockHelpers.deleteReaction).toHaveBeenCalledWith(
+    expect(mockHelpers.deleteOwnReaction).toHaveBeenCalledTimes(1);
+    expect(mockHelpers.deleteOwnReaction).toHaveBeenCalledWith(
       123456789n,
       987654321n,
       "👍",
@@ -83,7 +85,7 @@ describe("removeReaction", () => {
   });
 
   it("removes a specific user's reaction", async () => {
-    mockHelpers.removeReactionEmoji.mockResolvedValue(undefined);
+    mockHelpers.deleteUserReaction.mockResolvedValue(undefined);
 
     const result = await removeReaction(mockBot, {
       channelId: 123456789n,
@@ -93,8 +95,8 @@ describe("removeReaction", () => {
     });
 
     expect(result).toEqual({ success: true });
-    expect(mockHelpers.removeReactionEmoji).toHaveBeenCalledTimes(1);
-    expect(mockHelpers.removeReactionEmoji).toHaveBeenCalledWith(
+    expect(mockHelpers.deleteUserReaction).toHaveBeenCalledTimes(1);
+    expect(mockHelpers.deleteUserReaction).toHaveBeenCalledWith(
       123456789n,
       987654321n,
       "👍",
@@ -105,7 +107,7 @@ describe("removeReaction", () => {
 
 describe("removeAllReactions", () => {
   it("removes all reactions for an emoji", async () => {
-    mockHelpers.removeReactionEmoji.mockResolvedValue(undefined);
+    mockHelpers.deleteAllReactionsForEmoji.mockResolvedValue(undefined);
 
     const result = await removeAllReactions(mockBot, {
       channelId: 123456789n,
@@ -114,8 +116,8 @@ describe("removeAllReactions", () => {
     });
 
     expect(result).toEqual({ success: true });
-    expect(mockHelpers.removeReactionEmoji).toHaveBeenCalledTimes(1);
-    expect(mockHelpers.removeReactionEmoji).toHaveBeenCalledWith(
+    expect(mockHelpers.deleteAllReactionsForEmoji).toHaveBeenCalledTimes(1);
+    expect(mockHelpers.deleteAllReactionsForEmoji).toHaveBeenCalledWith(
       123456789n,
       987654321n,
       "👍",
