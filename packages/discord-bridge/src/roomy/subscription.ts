@@ -236,7 +236,7 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
       // Check for delete events and unregister mappings
       if (event.$type === "space.roomy.room.deleteRoom.v0") {
         try {
-          const discordId = await syncedIds.get_discordId(event.roomId);
+          const discordId = await syncedIds.get_roomyId(event.roomId);
           if (discordId) {
             await syncedIds.unregister({
               discordId,
@@ -253,7 +253,7 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
 
       if (event.$type === "space.roomy.message.deleteMessage.v0") {
         try {
-          const discordId = await syncedIds.get_discordId(event.messageId);
+          const discordId = await syncedIds.get_roomyId(event.messageId);
           if (discordId) {
             await syncedIds.unregister({
               discordId,
