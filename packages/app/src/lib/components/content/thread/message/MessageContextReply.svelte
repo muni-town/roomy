@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import IconMdiReply from "~icons/mdi/reply";
+  import { IconReply } from "@roomy/design/icons";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import type { Message } from "../ChatArea.svelte";
@@ -45,7 +45,7 @@
 </script>
 
 <div class="flex md:basis-auto gap-2 items-center shrink-0">
-  <IconMdiReply width="12px" height="12px" />
+  <IconReply width="12px" height="12px" />
   {#if contextMessage && (contextMessage.authorAvatar || contextMessage.masqueradeAuthorAvatar || contextMessage.authorDid || contextMessage.masqueradeAuthor)}
     <Avatar.Root class="w-4 h-4">
       <Avatar.Image

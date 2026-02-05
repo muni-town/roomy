@@ -35,7 +35,7 @@ export default defineConfig({
       compiler: "svelte",
       customCollections: {
         // Register your custom collection name ("custom" here)
-        custom: FileSystemIconLoader("./static/icons"),
+        custom: FileSystemIconLoader("../design/static/icons"),
       },
     }),
 

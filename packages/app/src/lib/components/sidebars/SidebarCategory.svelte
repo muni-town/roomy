@@ -2,10 +2,7 @@
   import { Button } from "@fuxui/base";
   import type { SidebarCategory } from "$lib/queries";
   import { dragHandleZone, dragHandle } from "svelte-dnd-action";
-  import IconLucidePencil from "~icons/lucide/pencil";
-  import IconHeroiconsChevronDown from "~icons/heroicons/chevron-down";
-  import IconHeroiconsChevronUp from "~icons/heroicons/chevron-up";
-  import IconLucideGripVertical from "~icons/lucide/grip-vertical";
+  import { IconPencil, IconChevronDown, IconChevronUp, IconGripVertical } from "@roomy/design/icons";
   import { page } from "$app/state";
   import SidebarItem from "./SidebarItem.svelte";
   import type { Ulid } from "@roomy/sdk";
@@ -37,7 +34,7 @@
       onclick={() => editSidebarItem({ category: category.id })}
       class="group-hover:opacity-100 opacity-20"
     >
-      <IconLucidePencil class="size-4" />
+      <IconPencil class="size-4" />
     </Button>
   {/if}
 {/snippet}
@@ -60,9 +57,9 @@
       >
       {#if !isEditing}
         {#if showGroupChildren}
-          <IconHeroiconsChevronDown class="shrink-0 !size-2" />
+          <IconChevronDown class="shrink-0 !size-2" />
         {:else}
-          <IconHeroiconsChevronUp class="shrink-0 !size-2" />
+          <IconChevronUp class="shrink-0 !size-2" />
         {/if}
       {/if}
     </Button>
@@ -95,7 +92,7 @@
             use:dragHandle
             aria-label="drag handle for {room.name}"
           >
-            <IconLucideGripVertical class="size-3" />
+            <IconGripVertical class="size-3" />
           </div>
           <SidebarItem bind:isEditing {editSidebarItem} {index} item={room} />
         </div>

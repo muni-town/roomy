@@ -5,7 +5,7 @@
   import EarlyAlphaWarning from "$lib/components/helper/EarlyAlphaWarning.svelte";
   import { joinedSpaces } from "$lib/queries";
 
-  import IconTablerPlus from "~icons/tabler/plus";
+  import { IconPlus } from "@roomy/design/icons";
 </script>
 
 <MainLayout>
@@ -45,7 +45,7 @@
       {/if} -->
 
       <Button href="/new" class="gap-2">
-        <IconTablerPlus />
+        <IconPlus />
         Create Space
       </Button>
 

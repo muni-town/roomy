@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cdnImageUrl } from "$lib/utils.svelte";
   import { AvatarMarble } from "svelte-boring-avatars";
-  import IconMdiLoading from "~icons/mdi/loading";
+  import { IconLoading } from "@roomy/design/icons";
   import { fade } from "svelte/transition";
 
   let {
@@ -40,7 +40,7 @@
       transition:fade={{ duration: 500 }}
       class="z-10 absolute inset-[-5px] flex items-center justify-center"
     >
-      <IconMdiLoading
+      <IconLoading
         font-size="1.8em"
         class="text-white stroke-0"
         style="animation: spin 1.3s  cubic-bezier(0.5, 0.2, 0.5, 0.8) infinite; stroke-linecap: round;"

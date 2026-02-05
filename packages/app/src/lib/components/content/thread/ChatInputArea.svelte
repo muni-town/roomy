@@ -5,12 +5,7 @@
   } from "./message/MessageContext.svelte";
   import FullscreenImageDropper from "$lib/components/helper/FullscreenImageDropper.svelte";
 
-  import IconMdiCloseCircle from "~icons/mdi/close-circle";
-  import IconTablerNeedleThread from "~icons/tabler/needle-thread";
-  import IconTablerX from "~icons/tabler/x";
-  import IconTablerSend from "~icons/tabler/send";
-  import IconLucideImage from "~icons/lucide/image";
-  import IconHeroIconsPlus from "~icons/heroicons/plus";
+  import { IconCloseCircle, IconNeedleThread, IconX, IconSend, IconImage, IconPlus } from "@roomy/design/icons";
   import { peer } from "$lib/workers";
   import { current } from "$lib/queries";
   import { page } from "$app/state";
@@ -329,7 +324,7 @@
             onclick={() => messagingState.setNormal()}
             class="flex-shrink-0"
           >
-            <IconMdiCloseCircle />
+            <IconCloseCircle />
           </Button>
         {:else if state.kind === "threading"}
           <div
@@ -361,7 +356,7 @@
             onclick={() => messagingState.setNormal()}
             class="flex-shrink-0"
           >
-            <IconMdiCloseCircle />
+            <IconCloseCircle />
           </Button>
         {:else if state.kind === "commenting"}
           <div class="flex items-center gap-1 overflow-hidden text-xs w-full">
@@ -375,7 +370,7 @@
             }}
             class="flex-shrink-0"
           >
-            <IconMdiCloseCircle />
+            <IconCloseCircle />
           </Button>
         {/if}
       </div>
@@ -404,7 +399,7 @@
                   class="absolute p-0.5 top-1 right-1 bg-base-100 hover:bg-base-200 dark:bg-base-900 dark:hover:bg-base-800 rounded-full disabled:hidden"
                   onclick={() => removeImageFile(index)}
                 >
-                  <IconTablerX class="size-4" />
+                  <IconX class="size-4" />
                 </Button>
               </div>
             {/each}
@@ -429,7 +424,7 @@
               />
 
               <Button type="submit"
-                ><IconTablerNeedleThread />Create Thread</Button
+                ><IconNeedleThread />Create Thread</Button
               >
             </form>
           {:else}
@@ -453,7 +448,7 @@
                     size="iconLg"
                     aria-label="Actions"
                   >
-                    <IconHeroIconsPlus class="" />
+                    <IconPlus class="" />
                   </Button>
                 {/snippet}
                 <div class="flex flex-col items-start justify-stretch gap-1">
@@ -462,7 +457,7 @@
                     class="w-full justify-start gap-2"
                     onclick={handleUploadMedia}
                   >
-                    <IconLucideImage class="size-4" />
+                    <IconImage class="size-4" />
                     Upload Media
                   </Button>
                   <Button
@@ -470,7 +465,7 @@
                     class="w-full justify-start gap-2"
                     onclick={handleCreateThreadFromMenu}
                   >
-                    <IconTablerNeedleThread class="size-4" />
+                    <IconNeedleThread class="size-4" />
                     Create Thread
                   </Button>
                 </div>
@@ -503,7 +498,7 @@
                 size="icon"
                 class="shrink-0 rounded-full"
               >
-                <IconTablerSend />
+                <IconSend />
               </Button>
             {/if}
             <!-- {/key} -->

@@ -6,10 +6,7 @@
   import EditRoomModal from "../modals/EditRoomModal.svelte";
   import { Button } from "@fuxui/base";
 
-  import IconBasilCheckSolid from "~icons/basil/check-solid";
-  import IconHeroiconsHome from "~icons/heroicons/home";
-  import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
-  import IconLucideGripVertical from "~icons/lucide/grip-vertical";
+  import { IconCheck, IconHome, IconHashtag, IconGripVertical } from "@roomy/design/icons";
   import SidebarCategory from "./SidebarCategory.svelte";
   import { type SidebarCategory as SidebarCategoryType } from "$lib/queries";
   import EntityName from "../primitives/EntityName.svelte";
@@ -169,7 +166,7 @@
 {:else}
   {#if isEditing}
     <Button class="justify-start mb-4 mx-2 self-stretch" onclick={saveChanges}>
-      <IconBasilCheckSolid class="size-4" />
+      <IconCheck class="size-4" />
       Finish editing</Button
     >
   {/if}
@@ -182,7 +179,7 @@
         href={`/${page.params.space}`}
         data-current={!page.params.object}
       >
-        <IconHeroiconsHome class="shrink-0" />
+        <IconHome class="shrink-0" />
         Index
       </Button>
 
@@ -195,7 +192,7 @@
         class="w-full justify-start min-w-0 my-4"
         data-current={true}
       >
-        <IconHeroiconsHashtag class="shrink-0" />
+        <IconHashtag class="shrink-0" />
         <span
           class={[
             "truncate whitespace-nowrap overflow-hidden min-w-0 font-semibold",
@@ -234,7 +231,7 @@
               aria-label="drag-handle for {category?.name}"
               class="ml-2 mt-2.5 z-10"
             >
-              <IconLucideGripVertical class="size-3" />
+              <IconGripVertical class="size-3" />
             </div>
             <SidebarCategory
               bind:isEditing

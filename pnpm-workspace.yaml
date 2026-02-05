@@ -1,5 +1,6 @@
 packages:
   - packages/app
+  - packages/design
   - packages/sdk
   - packages/discord-bridge
   - packages/tsconfig

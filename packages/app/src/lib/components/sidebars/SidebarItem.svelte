@@ -5,13 +5,9 @@
   // import { atprotoFeedService } from "$lib/services/atprotoFeedService";
   import type { SidebarItem } from "$lib/queries";
 
-  import IconLucidePencil from "~icons/lucide/pencil";
-  import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
-  import IconTablerCornerDownRight from "~icons/tabler/corner-down-right";
-  import IconHeroiconsDocument from "~icons/heroicons/document";
+  import { IconPencil, IconHashtag, IconCornerDownRight, IconDocument } from "@roomy/design/icons";
   import LinkedRoomsList from "./LinkedRoomsList.svelte";
   import { Ulid } from "@roomy/sdk";
-  // import IconCustomThread from "~icons/custom/thread";
 
   let {
     item,
@@ -45,7 +41,7 @@
       onclick={() => editSidebarItem({ room: item.id as Ulid })}
       class="group-hover:opacity-100 opacity-20"
     >
-      <IconLucidePencil class="size-4" />
+      <IconPencil class="size-4" />
     </Button>
   {:else if item.type === "space.roomy.category"}{:else if !itemActive && item.unreadCount > 0}
     <Badge>
@@ -75,8 +71,8 @@
             class="size-1.5 rounded-full bg-accent-500 absolute left-1.5 top-1.5"
           ></div>
         {/if}
-        {#if isSubthread}<IconTablerCornerDownRight />{:else}
-          <IconHeroiconsHashtag class="shrink-0" />{/if}
+        {#if isSubthread}<IconCornerDownRight />{:else}
+          <IconHashtag class="shrink-0" />{/if}
         <span
           class={[
             "truncate whitespace-nowrap overflow-hidden min-w-0 font-semibold",
@@ -117,8 +113,8 @@
             class="size-1.5 rounded-full bg-accent-500 absolute left-1.5 top-1.5"
           ></div>
         {/if}
-        <!-- {#if isSubthread}<IconTablerCornerDownRight />{:else}
-          <IconHeroiconsHashtag class="shrink-0" />{/if} --
+        <!-- {#if isSubthread}<IconCornerDownRight />{:else}
+          <IconHashtag class="shrink-0" />{/if} --
 
         <span
           class="truncate whitespace-nowrap overflow-hidden min-w-0 font-normal"
@@ -130,7 +126,7 @@
           </Badge>
         {/if}
         <!-- {#if item.type === "space.roomy.page"}<div class="ml-auto">
-            <IconHeroiconsDocument class="opacity-60 shrink" />
+            <IconDocument class="opacity-60 shrink" />
           </div>{/if} --
       </Button>
       {@render editButton?.()}
@@ -149,7 +145,7 @@
       class={["w-full justify-start min-w-0 font-semibold"]}
       data-current={item.id === page.params.object && !isEditing}
     >
-      <IconHeroiconsDocument class="shrink-0" />
+      <IconDocument class="shrink-0" />
       <span class="truncate min-w-0 whitespace-nowrap overflow-hidden"
         >{item.name}</span
       >

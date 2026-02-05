@@ -16,7 +16,7 @@
 
   import type { ThreadInfo } from "$lib/components/content/thread/boardView/types";
   import Error from "$lib/components/modals/Error.svelte";
-  import IconMdiLoading from "~icons/mdi/loading";
+  import { IconLoading } from "@roomy/design/icons";
   import { flags } from "$lib/config";
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
@@ -196,7 +196,7 @@
       <div
         class="grid items-center justify-center h-full w-full min-h-32 bg-transparent"
       >
-        <IconMdiLoading
+        <IconLoading
           font-size="2em"
           class="animate-spin text-base-600 dark:text-base-400"
         />
@@ -207,7 +207,7 @@
           <div
             class="grid items-center justify-center h-full w-full min-h-32 bg-transparent"
           >
-            <IconMdiLoading
+            <IconLoading
               font-size="2em"
               class="animate-spin text-base-600 dark:text-base-400"
             />

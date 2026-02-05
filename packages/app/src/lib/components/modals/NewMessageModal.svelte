@@ -3,7 +3,7 @@
   import { dmClient } from "$lib/dm.svelte";
   import { goto } from "$app/navigation";
 
-  import IconBasilPlusOutline from "~icons/basil/plus-outline";
+  import { IconPlus } from "@roomy/design/icons";
 
   let {
     open = $bindable(false),
@@ -37,7 +37,7 @@
       class="w-full justify-center"
       size="lg"
     >
-      <IconBasilPlusOutline font-size="2em" />
+      <IconPlus font-size="2em" />
       Start Conversation
     </Button>
   </form>

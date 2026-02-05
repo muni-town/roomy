@@ -34,7 +34,7 @@
   import { Button } from "bits-ui";
   import { getContext } from "svelte";
 
-  import IconHeroiconsChatBubbleBottomCenterText from "~icons/heroicons/chat-bubble-bottom-center-text";
+  import { IconChatBubbleText } from "@roomy/design/icons";
   import MessageContextReply from "./MessageContextReply.svelte";
   import type { Ulid } from "@roomy/sdk";
   import { renderMarkdownPlaintext } from "$lib/utils/markdown";
@@ -65,7 +65,7 @@
       <MessageContextReply replyToId={context.replyTo.id} />
     {:else if context.kind === "commenting" && context.comment.snippet}
       <div class="flex md:basis-auto gap-2 items-center shrink-0">
-        <IconHeroiconsChatBubbleBottomCenterText width="12px" height="12px" />
+        <IconChatBubbleText width="12px" height="12px" />
         <span
           class="font-medium hidden text-ellipsis text-accent-800 dark:text-accent-300"
           aria-hidden="false"
@@ -79,7 +79,7 @@
       </div>
     {:else if context.kind === "threading"}
       <div class="flex md:basis-auto gap-2 items-center shrink-0">
-        <IconHeroiconsChatBubbleBottomCenterText width="12px" height="12px" />
+        <IconChatBubbleText width="12px" height="12px" />
         <span
           class="font-medium hidden text-ellipsis text-accent-800 dark:text-accent-300"
           aria-hidden="false"

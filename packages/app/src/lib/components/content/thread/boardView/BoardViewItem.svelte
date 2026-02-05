@@ -3,8 +3,7 @@
   import { Badge, Box } from "@fuxui/base";
   import { formatDistanceToNowStrict, type Locale } from "date-fns";
   import type { ThreadInfo } from "./types";
-  import IconHeroiconsDocument from "~icons/heroicons/document";
-  import IconHeroiconsHashtag from "~icons/heroicons/hashtag";
+  import { IconDocument, IconHashtag } from "@roomy/design/icons";
   import AvatarGroup from "$lib/components/user/AvatarGroup.svelte";
   import type { Ulid } from "@roomy/sdk";
 
@@ -59,7 +58,7 @@
       class="flex items-center relative -bottom-1 justify-between gap-2 mr-2"
     >
       {#if thread.kind == "space.roomy.page"}
-        <IconHeroiconsDocument class="shrink-0" />
+        <IconDocument class="shrink-0" />
       {:else if thread.kind == "space.roomy.thread"}{/if}
     </div>
     <div class="text-ellipsis min-w-0 shrink w-full max-w-full">
@@ -85,7 +84,7 @@
       <div class="grow shrink-0 flex justify-between text-end w-40">
         {#if thread.channel}
           <Badge class="mx-2" size="sm" variant="secondary"
-            ><IconHeroiconsHashtag
+            ><IconHashtag
               class="shrink-0 size-3 -mr-1"
             />{thread.channel}</Badge
           >
