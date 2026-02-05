@@ -14,7 +14,9 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run tests/integration",
+    "test:unit": "vitest run tests/operations"
   },
   "dependencies": {
     "@atproto/api": "^0.14.22",

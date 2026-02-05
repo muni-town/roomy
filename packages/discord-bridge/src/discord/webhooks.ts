@@ -41,8 +41,11 @@ export async function getOrCreateWebhook(
     name: "Roomy Bridge",
   });
 
+  // Discord API should return the token when creating via bot
   if (!webhook.token) {
-    throw new Error("Webhook token not returned from Discord API");
+    throw new Error(
+      "Webhook token not returned from Discord API - bot may lack MANAGE_WEBHOOKS permission. Consider setting TEST_WEBHOOK_ID and TEST_WEBHOOK_TOKEN environment variables for integration tests.",
+    );
   }
 
   // Cache webhook token for future use
