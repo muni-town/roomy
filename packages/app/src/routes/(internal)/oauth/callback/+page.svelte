@@ -17,7 +17,7 @@
         const searchParams = new URL(globalThis.location.href).searchParams;
 
         peer
-          .initialize(searchParams.toString())
+          .initializePeer(searchParams.toString())
           .then(({ did }) => {
             span.setAttribute("userDid", did || "");
             span.setStatus({ code: SpanStatusCode.OK });

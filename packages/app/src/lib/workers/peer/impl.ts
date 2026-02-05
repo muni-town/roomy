@@ -58,15 +58,30 @@ import { Agent, CredentialSession } from "@atproto/api";
 import { lexicons } from "$lib/lexicons";
 import type { SessionManager } from "@atproto/api/dist/session-manager";
 
+/** Helper type that is a session manager where the DID is asserted to be defined. */
+type SessionManagerWithDid = Omit<SessionManager, "did"> & { did: string };
+
+/** Helper to get the broadcast channel for the peerStatus for a specific session. */
 export const peerStatusChannel = (sessionId: string) =>
   new BroadcastChannel(`peer-status-${sessionId}`);
+
+/** Helper to cache the session DID to use when restoring sessions */
+const sessionDidCache = {
+  kvKey: "sessionDid",
+  get(): Promise<string | undefined> {
+    return db.kv.get(this.kvKey).then((x) => x?.value);
+  },
+  put(did: string): Promise<void> {
+    return db.kv.put({ key: this.kvKey, value: did }).then(() => {});
+  },
+};
 
 /**
  * The peer implementation, wrapping up authentication and materialization of the roomy state.
  * */
 export class Peer {
   /** The current user session ID, used primarily for telemetry */
-  #sessionId: Ulid;
+  #sessionId: string;
 
   /** The current authentication state of the peer. */
   #auth: TrackedState<AuthState, AuthStatus>;
@@ -76,6 +91,7 @@ export class Peer {
   /** Helper to set the profile in the reactive {@link PeerStatus} for this peer. */
   #updateReactiveProfile: (profile: Profile | undefined) => void;
 
+  /** Helper to update the reactive space statuses for clients. */
   #spaceStatuses: {
     set(id: StreamDid, status: "loading" | "idle" | "error"): void;
     setBatch(ids: [StreamDid, "loading" | "idle" | "error"][]): void;
@@ -83,22 +99,27 @@ export class Peer {
 
   #sqlite: SqliteSupervisor;
 
-  #authenticated = new Deferred<void>();
+  /** May be awaited on to wait for the peer to finish connecting to the leaf server. */
+  #connected = new Deferred<Extract<RoomyState, { state: "connected" }>>();
+
+  /** May be awaited on to wait for the peer to finish connecting to the personal space */
   #connectedPersonalSpace = new Deferred<
     Extract<RoomyState, { state: "materializingPersonalSpace" }>
   >();
-  #connected = new Deferred<Extract<RoomyState, { state: "connected" }>>();
 
-  /* To get the result of a materialised batch, create and await a Promise
-    setting the resolver against the Batch ID in this Map */
+  /* To get the result of a materialised batch, create and await a Promise setting the resolver
+    against the Batch ID in this Map */
   #batchResolvers: Map<
     Ulid,
     (value: Batch.Statement | Batch.ApplyResult) => void
   > = new Map();
 
-  constructor(opts: { sessionId: Ulid }) {
+  /** Construct a new peer with the provided sesion ID. */
+  constructor(opts: { sessionId: string }) {
+    // Store the session
     this.#sessionId = opts.sessionId;
 
+    // Create the sqlite supervisor
     this.#sqlite = new SqliteSupervisor();
 
     // Create a reactive peer status that the UI can subscribe to.
@@ -107,6 +128,7 @@ export class Peer {
       true, // We are the provider of these values
     );
 
+    // Create helpers that the class can use to update the reactive space statuses.
     this.#spaceStatuses = {
       set(id, status) {
         reactiveStatus.spaces = { ...reactiveStatus.spaces, [id]: status };
@@ -118,10 +140,15 @@ export class Peer {
       },
     };
 
-    // Initialize auth state
+    // Create helper for updating the profile in the reactive status
+    this.#updateReactiveProfile = (profile) => {
+      reactiveStatus.profile = profile;
+    };
+
+    // Initialize the auth state
     this.#auth = trackedState<AuthState, AuthStatus>(authStateTrackable);
 
-    // Update the reactive status when the auth state changes
+    // Subscribe to auth state changes and update reactive status
     this.#auth.subscribeStatus((status) => {
       reactiveStatus.authState = status;
     });
@@ -129,19 +156,20 @@ export class Peer {
     // Initialize the roomy client state
     this.#roomy = trackedState<RoomyState, RoomyStatus>(roomyStateTrackable);
 
-    // Update the reactive status when the roomy client state changes
+    // Subscribe to roomy client state changes and update reactive status
     this.#roomy.subscribeStatus((status) => {
       reactiveStatus.roomyState = status;
     });
-
-    // Register a heler for updating the reactive profile in the PeerStatus
-    this.#updateReactiveProfile = (profile) => {
-      reactiveStatus.profile = profile;
-    };
   }
 
+  /**
+   * Create the peer RPC interaface that is the primary way to interact with the peer after
+   * creation.
+   * */
   getPeerInterface(this: Peer): PeerInterface {
     return {
+      initializePeer: (oauthCallbackSearchParams) =>
+        this.initializePeer(oauthCallbackSearchParams),
       getSessionId: async () => {
         return this.#sessionId;
       },
@@ -156,9 +184,6 @@ export class Peer {
         return this.#roomy.current.client.getSpaceInfo(streamDid);
       },
       login: async (handle) => this.login(handle),
-      initialize: async (paramsStr) => {
-        return await this.initialize(paramsStr);
-      },
       logout: async () => await this.logout(),
       getProfile: async (did) => {
         await this.#connectedPersonalSpace.promise;
@@ -205,10 +230,6 @@ export class Peer {
         return {
           timestamp: Date.now(),
         };
-      },
-      clientConnected: async () => {
-        await this.#authenticated.promise;
-        await this.#connected.promise;
       },
       connectSpaceStream: async (streamId, idx) => {
         await this.connectSpaceStream(streamId, idx);
@@ -317,6 +338,7 @@ export class Peer {
       },
     };
   }
+
   /**
    * Connect an RPC client to the peer over the provided message port.
    *
@@ -347,38 +369,38 @@ export class Peer {
     });
   }
 
-  private async initialize(paramsStr?: string): Promise<{ did?: string }> {
+  /**
+   * Initialize the peer.
+   *
+   * If `oauthCallbackSearchParams` is provided, then it will create a new OAuth session using the
+   * callback params.
+   *
+   * If `oauthCallbackSearchParams` is not provided, then it will try to restore the previous
+   * session and initialize as unauthenticated if that is not possible.
+   * */
+  private async initializePeer(
+    oauthCallbackParams?: string,
+  ): Promise<{ did?: string }> {
     let [initSpan, ctx] = tracer.startActiveSpan(
-      "Init Peer",
+      "Initialize Peer",
       (span) => [span, context.active()] as const,
     );
-    console.debug("Initialising Peer Worker", { paramsStr });
+
+    console.debug("Initialising Peer", {
+      oauthCallbackParams,
+    });
+
     return context.with(ctx, async () => {
-      // attempt to authenticate
-      const params = paramsStr ? new URLSearchParams(paramsStr) : undefined;
-      const session = await this.authenticate(params);
+      // attempt to authenticate using a previous session or the oauth callback
+      const session = await this.authenticate(oauthCallbackParams);
 
-      tracer.startActiveSpan(
-        "Wait Until Authenticated",
-        {},
-        ctx,
-        (waitSpan) => {
-          this.#authenticated.promise.then(() => {
-            waitSpan.end(), initSpan.end();
-          });
-        },
-      );
-
+      // If we did not recieve a session, then set our state to unauthenticated
       if (!session) {
         console.info("Not authenticated");
         this.#auth.current = { state: "unauthenticated" };
         return {};
       }
 
-      if (!session.did) throw new Error("No DID on session"); // not sure why this would happen
-
-      // user is authenticated
-      await db.kv.put({ key: "did", value: session.did });
       this.#auth.current = { state: "authenticated", session };
       faro.api.setSession({
         id: faro.api.getSession()?.id,
@@ -386,21 +408,22 @@ export class Peer {
       });
 
       console.debug("Session restored successfully");
+      initSpan.end();
 
-      // init with session
-      context.with(ctx, () => this.initPeerWithSession(session));
+      // Initialize the peer with the new obtained session
+      this.initPeerWithSession(session);
 
       return { did: session.did };
     });
   }
 
   private async authenticate(
-    params?: URLSearchParams,
-  ): Promise<SessionManager | null> {
+    params?: string,
+  ): Promise<SessionManagerWithDid | null> {
     const oauth = await createOauthClient();
 
+    // If we have an oauth callback to respond to
     if (params) {
-      // oauth callback
       const [span, _ctx] = tracer.startActiveSpan(
         "Create Session at OAuth Callback",
         {},
@@ -408,59 +431,77 @@ export class Peer {
       );
 
       try {
-        const response = await oauth.callback(params);
+        // Try to create a new session using the oauth callback params
+        const { session } = await oauth.callback(new URLSearchParams(params));
         span.end();
-        return response.session;
+
+        // If we got a session, this shouldn't happen, but the type marks the did, so handle the
+        // undefined case with an error.
+        if (!session.did) throw new Error("No DID on session");
+
+        // Cache the authenticated user's DID so we can use it to restore the session later.
+        await sessionDidCache.put(session.did);
+
+        // Return the session
+        return session;
       } catch (e) {
         console.warn("OAuth callback failed", e);
         span.end();
         return null;
       }
-    } else {
-      // refresh session
-      const [span, ctx] = tracer.startActiveSpan(
-        "Refresh Session",
-        {},
-        (span) => [span, context.active()] as const,
-      );
-      if (CONFIG.testingAppPassword && CONFIG.testingHandle) {
-        // authenticate using app password (testing only)
-        console.debug("Using app password authentication for testing");
-        const session = new CredentialSession(new URL("https://bsky.social"));
-        try {
-          await session.login({
-            identifier: CONFIG.testingHandle,
-            password: CONFIG.testingAppPassword,
-          });
-          span.end();
-          this.#authenticated.resolve();
-          return session;
-        } catch (error) {
-          console.error("loginWithAppPassword: Login failed", error);
-          span.end();
-          throw error;
-        }
-      } else {
-        // if there's a stored DID and no session yet, try to restore the session
-        const didEntry = await db.kv.get("did");
-        if (!didEntry?.value) return null;
+    }
 
-        const session = await tracer.startActiveSpan(
-          "Restore Oauth Session",
-          {},
-          ctx,
-          (span) =>
-            oauth.restore(didEntry.value).catch((e) => {
-              console.warn("Restore session failed", e);
-              span.end();
-              return null;
-            }),
-        );
-        this.#authenticated.resolve();
+    // If we don't have an oauth callback to respond to, then try to restore the previous session.
+    const [span, ctx] = tracer.startActiveSpan(
+      "Refresh Session",
+      {},
+      (span) => [span, context.active()] as const,
+    );
+
+    // If we are configured for test authentication, use those credentials to login instead
+    if (CONFIG.testingAppPassword && CONFIG.testingHandle) {
+      console.debug("Using app password authentication for testing");
+      const session = new CredentialSession(new URL("https://bsky.social"));
+      try {
+        await session.login({
+          identifier: CONFIG.testingHandle,
+          password: CONFIG.testingAppPassword,
+        });
         span.end();
-        return session;
+
+        if (!session.did) throw new Error("No DID on session");
+
+        // Unfortunately typescript fails to recognize the did check above
+        // so we annotate the type as having a did.
+        const sess = session as CredentialSession & { did: string };
+
+        return sess;
+      } catch (error) {
+        console.error("loginWithAppPassword: Login failed", error);
+        span.end();
+        throw error;
       }
     }
+
+    // Try to get the last session's DID if one existed
+    const did = await sessionDidCache.get();
+    if (!did) return null;
+
+    // If there's a cached DID from a previous session, try to restore it
+    const session = await tracer.startActiveSpan(
+      "Restore Oauth Session",
+      {},
+      ctx,
+      (span) =>
+        oauth.restore(did).catch((e) => {
+          console.warn("Restore session failed", e);
+          span.end();
+          return null;
+        }),
+    );
+
+    span.end();
+    return session;
   }
 
   /** Where most of the initialisation happens. Backfill the personal

@@ -19,15 +19,9 @@ import { Peer } from "./impl";
 import { initializeFaro } from "$lib/otel";
 
 /**
- * The peer worker is where the OAuth session is held and, significantly, where the leaf client
- * and ATProto session are managed, so the peer is responsible for creating the session ID. When
- * using a shared worker this will persist across tabs.
- * */
-
-/**
- * The peer worker is where the OAuth session is held and, significantly, where the leaf client
- * and ATProto session are managed, so the peer is responsible for creating the session ID. When
- * using a shared worker this will persist across tabs.
+ * Because the peer worker is where the OAuth session is held and, significantly, where the leaf
+ * client and ATProto session are managed, the peer worker is also responsible for creating the
+ * session ID. When using a shared worker this will persist across tabs.
  * */
 const sessionId = newUlid();
 

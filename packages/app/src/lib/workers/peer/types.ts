@@ -28,7 +28,18 @@ export interface PeerStatus {
 
 /** RPC interface exposed by the peer to its clients. */
 export type PeerInterface = {
-  getSessionId(): Promise<Ulid>;
+  /**
+   * Initialize the peer.
+   *
+   * If `oauthCallbackSearchParams` is provided, then it will create a new OAuth session using the
+   * callback params.
+   *
+   * If `oauthCallbackSearchParams` is not provided, then it will try to restore the previous
+   * session and initialize as unauthenticated if that is not possible.
+   * */
+  initializePeer(oauthCallbackSearchParams?: string): Promise<{ did?: string }>;
+
+  getSessionId(): Promise<string>;
   login(username: Handle): Promise<string>;
   logout(): Promise<void>;
   getMembers(
@@ -39,14 +50,12 @@ export type PeerInterface = {
   getSpaceInfo(
     streamDid: StreamDid,
   ): Promise<{ name?: string; avatar?: string } | undefined>;
-  initialize(searchParams?: string): Promise<{ did?: string }>;
   runQuery<T>(statement: SqlStatement): Promise<QueryResult<T>>;
   getProfile(did: UserDid): Promise<Profile | undefined>;
   dangerousCompletelyDestroyDatabase(opts: {
     yesIAmSure: true;
   }): Promise<{ done: true } | { done: false; error: string }>;
   ping(): Promise<{ timestamp: number }>;
-  clientConnected(): Promise<void>;
   createLiveQuery(
     id: string,
     port: MessagePort,

@@ -122,7 +122,7 @@ export const peer = tracer.startActiveSpan(
     );
 
     if (page.route.id !== "/(internal)/oauth/callback") {
-      peer.initialize();
+      peer.initializePeer();
     }
 
     span.end();
