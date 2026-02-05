@@ -272,6 +272,7 @@ export async function startBot() {
         const ctx = await getGuildContext(payload.guildId);
         if (!ctx) return;
         const orchestrator = createOrchestratorFromContext(ctx);
+        console.log(`[Discord] Reaction add: msg=${payload.messageId} user=${payload.userId} emoji=${payload.emoji.name}`);
         await orchestrator.handleDiscordReactionAdd(
           payload.messageId,
           payload.channelId,

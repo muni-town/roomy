@@ -59,6 +59,7 @@ export class ReactionSyncService {
     // Get the Roomy message ID for this Discord message
     const roomyMessageId = await this.repo.getRoomyId(messageId.toString());
     if (!roomyMessageId) {
+      console.warn(`[ReactionSync] Message ${messageId} not synced, skipping reaction`);
       return null; // Message not synced
     }
 
@@ -67,6 +68,7 @@ export class ReactionSyncService {
     const roomKey = `room:${channelIdStr}`;
     const roomyRoomId = await this.repo.getRoomyId(roomKey);
     if (!roomyRoomId) {
+      console.warn(`[ReactionSync] Channel ${channelId} not synced, skipping reaction`);
       return null; // Channel not synced
     }
 
