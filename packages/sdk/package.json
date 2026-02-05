@@ -30,6 +30,22 @@
     ".": {
       "development": "./src/index.ts",
       "import": "./dist/index.js"
+    },
+    "./package/operations": {
+      "development": "./src/operations/index.ts",
+      "import": "./dist/operations/index.js"
+    },
+    "./package/operations/room": {
+      "development": "./src/operations/room.ts",
+      "import": "./dist/operations/room.js"
+    },
+    "./package/operations/message": {
+      "development": "./src/operations/message.ts",
+      "import": "./dist/operations/message.js"
+    },
+    "./package/operations/reaction": {
+      "development": "./src/operations/reaction.ts",
+      "import": "./dist/operations/reaction.js"
     }
   },
   "devDependencies": {

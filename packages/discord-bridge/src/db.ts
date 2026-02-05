@@ -43,11 +43,13 @@ function createBidirectionalSublevelMap<A extends string, B extends string>(
      * Sublevel that contains bidirectional mappings from Roomy space to Discord guild ID and
      * vise-versa.
      * */
-    async [`get_${aname}`](b: string): Promise<string | undefined> {
-      return await sublevel.get(bname + "_" + b);
+    // get_aname(value) retrieves 'aname' by looking up the aname-prefixed key
+    async [`get_${aname}`](value: string): Promise<string | undefined> {
+      return await sublevel.get(aname + "_" + value);
     },
-    async [`get_${bname}`](a: string): Promise<string | undefined> {
-      return await sublevel.get(aname + "_" + a);
+    // get_bname(value) retrieves 'bname' by looking up the bname-prefixed key
+    async [`get_${bname}`](value: string): Promise<string | undefined> {
+      return await sublevel.get(bname + "_" + value);
     },
     async unregister(entry: { [K in A | B]: string }) {
       const registeredA: string | undefined = await (
@@ -109,22 +111,31 @@ function createBidirectionalSublevelMap<A extends string, B extends string>(
       }
     },
     async register(entry: { [K in A | B]: string }) {
-      // Make sure we haven't already registered a bridge for this guild or space.
-      if (
-        (await sublevel.has(aname + "_" + entry[aname])) ||
-        (await sublevel.has(bname + "_" + entry[bname]))
-      ) {
-        throw new Error(`${aname} or ${bname} already registered.`);
+      const akey = aname + "_" + entry[aname];
+      const bkey = bname + "_" + entry[bname];
+
+      // Check for existing registrations (for idempotency)
+      const existingA = await sublevel.get(akey);
+      const existingB = await sublevel.get(bkey);
+
+      // If both mappings already exist with the same values, this is idempotent - succeed silently
+      if (existingA === entry[bname] && existingB === entry[aname]) {
+        return; // Already registered with the same values
+      }
+
+      // If there's a partial registration or conflicting values, that's an error
+      if (existingA || existingB) {
+        throw new Error(`${aname} or ${bname} already registered with different values (conflict).`);
       }
 
       await sublevel.batch([
         {
-          key: aname + "_" + entry[aname],
+          key: akey,
           type: "put",
           value: entry[bname],
         },
         {
-          key: bname + "_" + entry[bname],
+          key: bkey,
           type: "put",
           value: entry[aname],
         },

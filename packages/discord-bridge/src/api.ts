@@ -32,7 +32,7 @@ export function startApi() {
       const spaceId = query.spaceId;
       if (typeof spaceId !== "string")
         return error(400, "spaceId query parameter required");
-      const guildId = await registeredBridges.get_guildId(spaceId);
+      const guildId = await registeredBridges.get_spaceId(spaceId);
       if (guildId) return json({ guildId });
       return error(404, "Guild not found for provided space");
     });
@@ -41,7 +41,7 @@ export function startApi() {
       const guildId = query.guildId;
       if (typeof guildId !== "string")
         return error(400, "guildId query parameter required");
-      const spaceId = await registeredBridges.get_spaceId(guildId);
+      const spaceId = await registeredBridges.get_guildId(guildId);
       if (spaceId) return json({ spaceId });
       return error(404, "Space not found for provided guild");
     });
