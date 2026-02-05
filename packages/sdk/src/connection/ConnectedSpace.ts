@@ -83,7 +83,7 @@ export class ConnectedSpace {
    * Validates the stream exists and updates the module if needed.
    */
   static async connect(config: ConnectedSpaceConfig): Promise<ConnectedSpace> {
-    console.debug("Connecting", config);
+    console.debug("Connecting to stream", config.streamDid);
 
     let previousModuleCid: undefined | string;
     try {

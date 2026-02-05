@@ -160,7 +160,7 @@ export async function handleSlashCommandInteraction(interaction: any) {
       // Defer immediately to avoid 3-second timeout
       if (!await safeDefer(interaction, true)) return;
       try {
-        const spaceId = await registeredBridges.get_spaceId(guildId.toString());
+        const spaceId = await registeredBridges.get_guildId(guildId.toString());
         await interaction.edit({
           content: spaceId
             ? `✅ This Discord server is actively bridged to a Roomy [space](https://roomy.space/${spaceId}).`
@@ -210,7 +210,7 @@ export async function handleSlashCommandInteraction(interaction: any) {
           return;
         }
 
-        const existingRegistration = await registeredBridges.get_spaceId(
+        const existingRegistration = await registeredBridges.get_guildId(
           guildId.toString(),
         );
         if (existingRegistration) {
@@ -266,7 +266,7 @@ export async function handleSlashCommandInteraction(interaction: any) {
       // Defer immediately to avoid 3-second timeout
       if (!await safeDefer(interaction, true)) return;
       try {
-        const roomySpace = await registeredBridges.get_spaceId(
+        const roomySpace = await registeredBridges.get_guildId(
           guildId.toString(),
         );
         if (roomySpace) {

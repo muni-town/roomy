@@ -36,19 +36,11 @@ import {
   discordMessageHashesForBridge,
 } from "../db.js";
 import { GuildContext } from "../types.js";
-import {
-  ensureRoomyChannelForDiscordChannel,
-  ensureRoomySidebarForCategoriesAndChannels,
-  ensureRoomyThreadForDiscordThread,
-  ensureRoomyMessageForDiscordMessage,
-  syncDiscordReactionToRoomy,
-  removeDiscordReactionFromRoomy,
-  syncMessageEditToRoomy,
-} from "../roomy/to.js";
 import { getConnectedSpace } from "../roomy/client.js";
 import { getRoomKey } from "../utils/room.js";
 import { EventBatcher } from "../roomy/batcher.js";
 import { backfillRoomyToDiscord } from "../roomy/backfill.js";
+import { createOrchestratorFromContext } from "../repositories/index.js";
 
 export const botState = {
   appId: undefined as undefined | string,
@@ -56,7 +48,7 @@ export const botState = {
 };
 
 export async function hasBridge(guildId: bigint): Promise<boolean> {
-  return (await registeredBridges.get_spaceId(guildId.toString())) != undefined;
+  return (await registeredBridges.get_guildId(guildId.toString())) != undefined;
 }
 
 /**
@@ -77,7 +69,7 @@ export async function hasBridge(guildId: bigint): Promise<boolean> {
 export async function getGuildContext(
   guildId: bigint,
 ): Promise<GuildContext | undefined> {
-  const spaceId = await registeredBridges.get_spaceId(guildId.toString());
+  const spaceId = await registeredBridges.get_guildId(guildId.toString());
   if (!spaceId) {
     console.warn(`Discord guild ${guildId} doesn't have Roomy space bridged`);
     return undefined;
@@ -216,7 +208,12 @@ export async function startBot() {
           `Thread create event: ${channel.name} (id=${channel.id}, parentId=${channel.parentId})`,
         );
         try {
-          await ensureRoomyThreadForDiscordThread(ctx, channel);
+          if (!channel.parentId) {
+            console.error(`Thread ${channel.name} has no parent channel`);
+            return;
+          }
+          const orchestrator = createOrchestratorFromContext(ctx);
+          await orchestrator.handleDiscordThreadCreate(channel, channel.parentId);
           console.log(
             `Successfully created Roomy thread for Discord thread ${channel.name}`,
           );
@@ -258,12 +255,8 @@ export async function startBot() {
           return;
         }
 
-        await ensureRoomyMessageForDiscordMessage(
-          ctx,
-          roomyRoomId,
-          message,
-          bot,
-        );
+        const orchestrator = createOrchestratorFromContext(ctx, bot);
+        await orchestrator.handleDiscordMessageCreate(message, roomyRoomId);
         await ctx.latestMessagesInChannel.put(
           channelId.toString(),
           message.id.toString(),
@@ -278,12 +271,13 @@ export async function startBot() {
 
         const ctx = await getGuildContext(payload.guildId);
         if (!ctx) return;
-        await syncDiscordReactionToRoomy(ctx, {
-          messageId: payload.messageId,
-          channelId: payload.channelId,
-          userId: payload.userId,
-          emoji: payload.emoji,
-        });
+        const orchestrator = createOrchestratorFromContext(ctx);
+        await orchestrator.handleDiscordReactionAdd(
+          payload.messageId,
+          payload.channelId,
+          payload.userId,
+          payload.emoji,
+        );
       },
 
       // Handle reaction remove
@@ -294,12 +288,13 @@ export async function startBot() {
 
         const ctx = await getGuildContext(payload.guildId);
         if (!ctx) return;
-        await removeDiscordReactionFromRoomy(ctx, {
-          messageId: payload.messageId,
-          channelId: payload.channelId,
-          userId: payload.userId,
-          emoji: payload.emoji,
-        });
+        const orchestrator = createOrchestratorFromContext(ctx);
+        await orchestrator.handleDiscordReactionRemove(
+          payload.messageId,
+          payload.channelId,
+          payload.userId,
+          payload.emoji,
+        );
       },
 
       // Handle message edits
@@ -316,8 +311,9 @@ export async function startBot() {
         const ctx = await getGuildContext(message.guildId);
         if (!ctx) return;
 
-        // syncMessageEditToRoomy will skip messages not in syncedIds (including bot messages)
-        await syncMessageEditToRoomy(ctx, message);
+        const orchestrator = createOrchestratorFromContext(ctx);
+        // syncEditToRoomy will skip messages not in syncedIds (including bot messages)
+        await orchestrator.handleDiscordMessageUpdate(message);
       },
     },
   });
@@ -349,6 +345,7 @@ async function backfillMessagesForChannel(
 
   // Use event batcher to send events in batches of 100
   const batcher = new EventBatcher(ctx.connectedSpace);
+  const orchestrator = createOrchestratorFromContext(ctx, bot);
 
   while (true) {
     try {
@@ -366,12 +363,7 @@ async function backfillMessagesForChannel(
       // Process oldest first (messages come newest-first from API)
       const sortedMessages = [...messages].reverse();
       for (const message of sortedMessages) {
-        await ensureRoomyMessageForDiscordMessage(
-          ctx,
-          roomyRoomId,
-          message,
-          batcher,
-        );
+        await orchestrator.handleDiscordMessageCreate(message, roomyRoomId, batcher);
         after = message.id;
       }
 
@@ -470,19 +462,61 @@ export async function backfillGuild(bot: DiscordBot, guildId: bigint) {
         activeThreads.length + archivedThreads.length,
       );
 
+      const orchestrator = createOrchestratorFromContext(ctx);
+
+      // Build a set of channel IDs we're going to sync (GuildText only)
+      const channelIdSet = new Set(textChannels.map((c) => c.id.toString()));
+
       for (const channel of textChannels) {
-        await ensureRoomyChannelForDiscordChannel(ctx, channel);
+        try {
+          await orchestrator.handleDiscordChannelCreate(channel);
+          // Verify the mapping was registered
+          const roomKey = `room:${channel.id.toString()}`;
+          const roomyId = await ctx.syncedIds.get_discordId(roomKey);
+          if (roomyId) {
+            console.log(`Channel ${channel.name || channel.id} synced successfully as ${roomyId}`);
+          } else {
+            console.warn(`Channel ${channel.name || channel.id} created but mapping not found in repo`);
+          }
+        } catch (e) {
+          console.error(`Failed to sync channel ${channel.name || channel.id}:`, e);
+          // Continue with other channels - don't fail entire backfill
+        }
       }
 
       for (const thread of [...activeThreads, ...archivedThreads]) {
-        await ensureRoomyThreadForDiscordThread(ctx, thread);
+        if (!thread.parentId) {
+          console.warn(`Thread ${thread.name || thread.id} has no parent channel, skipping`);
+          continue;
+        }
+        const parentIdStr = thread.parentId.toString();
+
+        // Check if parent channel is in our sync list AND actually synced
+        if (!channelIdSet.has(parentIdStr)) {
+          console.warn(
+            `Thread ${thread.name || thread.id} has parent ${parentIdStr} which is not a GuildText channel (only GuildText is supported), skipping`,
+          );
+          continue;
+        }
+
+        // Verify parent was actually successfully synced in repo
+        const parentRoomyId = await ctx.syncedIds.get_discordId(`room:${parentIdStr}`);
+        if (!parentRoomyId) {
+          console.warn(
+            `Thread ${thread.name || thread.id} has parent ${parentIdStr} which wasn't successfully synced (check earlier errors), skipping`,
+          );
+          continue;
+        }
+
+        try {
+          await orchestrator.handleDiscordThreadCreate(thread, thread.parentId);
+        } catch (e) {
+          console.error(`Failed to sync thread ${thread.name || thread.id}:`, e);
+          // Continue with other threads
+        }
       }
 
-      await ensureRoomySidebarForCategoriesAndChannels(
-        ctx,
-        categories,
-        textChannels,
-      );
+      await orchestrator.handleDiscordSidebarUpdate(textChannels, categories);
 
       // Backfill messages for all channels in parallel (with concurrency limit)
       const CONCURRENCY_LIMIT = 5;

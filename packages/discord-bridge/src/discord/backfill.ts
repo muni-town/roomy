@@ -8,7 +8,6 @@ import {
 import { GuildContext } from "../types.js";
 import { tracer, setDiscordAttrs, recordError } from "../tracing.js";
 import { DISCORD_EXTENSION_KEYS } from "../roomy/subscription.js";
-import { syncDiscordReactionToRoomy } from "../roomy/to.js";
 import { fingerprint } from "../utils/hash.js";
 import { getRoomKey } from "../utils/room.js";
 

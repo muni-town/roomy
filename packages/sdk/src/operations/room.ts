@@ -26,6 +26,8 @@ export interface RoomInfo {
 export interface CreateRoomOptions extends RoomInfo {
   /** The kind of room to create */
   kind: RoomKind;
+  /** Additional extensions to include with the event */
+  extensions?: Record<string, unknown>;
 }
 
 /**
@@ -66,6 +68,7 @@ export async function createRoom(
     ...(options.name && { name: options.name }),
     ...(options.description && { description: options.description }),
     ...(options.avatar && { avatar: options.avatar }),
+    ...(options.extensions && { extensions: options.extensions }),
   };
 
   await space.sendEvent(event);
@@ -187,6 +190,8 @@ export async function deleteRoom(
 export interface CreateThreadOptions extends RoomInfo {
   /** The parent room to link the thread to */
   linkToRoom: Ulid;
+  /** Additional extensions to include with the room event */
+  extensions?: Record<string, unknown>;
 }
 
 /**
@@ -219,7 +224,10 @@ export async function createThread(
   // First create the thread room
   const { id: threadId } = await createRoom(space, {
     kind: "space.roomy.thread",
-    ...options,
+    name: options.name,
+    description: options.description,
+    avatar: options.avatar,
+    extensions: options.extensions,
   });
 
   // Then link it to the parent room

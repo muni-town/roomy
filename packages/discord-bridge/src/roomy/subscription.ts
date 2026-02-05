@@ -93,7 +93,7 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
     meta: EventCallbackMeta,
   ): Promise<void> => {
     // Find the guild ID for this space
-    const guildIdStr = await registeredBridges.get_guildId(spaceId);
+    const guildIdStr = await registeredBridges.get_spaceId(spaceId);
     if (!guildIdStr) {
       console.warn(`No guild registered for space ${spaceId}, skipping events`);
       return;
