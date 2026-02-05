@@ -244,7 +244,7 @@ export async function startBot() {
 
         const ctx = await getGuildContext(guildId);
         if (!ctx) return;
-        const roomyRoomId = await ctx.syncedIds.get_roomyId(
+        const roomyRoomId = await ctx.syncedIds.get_discordId(
           getRoomKey(channelId),
         );
 
@@ -329,7 +329,7 @@ async function backfillMessagesForChannel(
   ctx: GuildContext,
   channel: DiscordChannel,
 ): Promise<void> {
-  const roomyRoomId = await ctx.syncedIds.get_roomyId(getRoomKey(channel.id));
+  const roomyRoomId = await ctx.syncedIds.get_discordId(getRoomKey(channel.id));
   if (!roomyRoomId) {
     console.warn(`Channel ${channel.id} not synced, skipping message backfill`);
     return;

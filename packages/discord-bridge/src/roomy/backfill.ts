@@ -153,9 +153,7 @@ export async function syncRoomyToDiscord(
                   return;
                 }
 
-                const discordId = await ctx.syncedIds.get_discordId(
-                  getRoomKey(roomyRoomId),
-                );
+                const discordId = await ctx.syncedIds.get_roomyId(roomyRoomId);
                 if (!discordId) {
                   eventSpan.setAttribute(
                     "sync.result",
@@ -175,7 +173,7 @@ export async function syncRoomyToDiscord(
                 const nonce = event.id.slice(0, 25);
 
                 // Phase 2: Check if already synced
-                const existingDiscordId = await ctx.syncedIds.get_discordId(
+                const existingDiscordId = await ctx.syncedIds.get_roomyId(
                   nonce,
                 );
                 if (existingDiscordId) {

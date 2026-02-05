@@ -47,7 +47,7 @@ export async function syncCreateMessageToDiscord(
       }
 
       // Look up Discord channel ID from Roomy room ID (result contains "room:" prefix)
-      const discordId = await ctx.syncedIds.get_discordId(roomyRoomId);
+      const discordId = await ctx.syncedIds.get_roomyId(roomyRoomId);
       if (!discordId) {
         span.setAttribute("sync.result", "skipped_channel_not_synced");
         console.warn(`Roomy room ${roomyRoomId} not synced to Discord, skipping message`);
@@ -255,7 +255,7 @@ export async function syncEditMessageToDiscord(
       }
 
       // Get the Discord channel ID
-      const channelIdStr = await ctx.syncedIds.get_discordId(roomyRoomId);
+      const channelIdStr = await ctx.syncedIds.get_roomyId(roomyRoomId);
       if (!channelIdStr) {
         span.setAttribute("sync.result", "skipped_channel_not_synced");
         return;
@@ -320,7 +320,7 @@ export async function syncDeleteMessageToDiscord(
       }
 
       // Get the Discord channel ID
-      const channelIdStr = await ctx.syncedIds.get_discordId(roomyRoomId);
+      const channelIdStr = await ctx.syncedIds.get_roomyId(roomyRoomId);
       if (!channelIdStr) {
         span.setAttribute("sync.result", "skipped_channel_not_synced");
         return;
@@ -397,7 +397,7 @@ export async function syncAddReactionToDiscord(
       }
 
       // Get the Discord channel ID
-      const channelIdStr = await ctx.syncedIds.get_discordId(roomyRoomId);
+      const channelIdStr = await ctx.syncedIds.get_roomyId(roomyRoomId);
       if (!channelIdStr) {
         span.setAttribute("sync.result", "skipped_channel_not_synced");
         return;
@@ -480,7 +480,7 @@ export async function syncRemoveReactionToDiscord(
       }
 
       // Get the Discord channel ID
-      const channelIdStr = await ctx.syncedIds.get_discordId(roomyRoomId);
+      const channelIdStr = await ctx.syncedIds.get_roomyId(roomyRoomId);
       if (!channelIdStr) {
         span.setAttribute("sync.result", "skipped_channel_not_synced");
         return;
