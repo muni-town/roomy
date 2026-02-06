@@ -177,24 +177,46 @@ export class SyncOrchestrator {
 
   /**
    * Handle Roomy create room event.
-   * TODO: Implement Roomy → Discord sync.
+   * Creates a Discord channel if the room doesn't have Discord origin.
    */
   async handleRoomyCreateRoom(
     event: DecodedStreamEvent,
     bot: DiscordBot,
   ): Promise<void> {
-    throw new Error("Not implemented");
+    return await this.structureSync.handleRoomyRoomCreate(event.event as Event);
   }
 
   /**
    * Handle Roomy update sidebar event.
-   * TODO: Implement Roomy → Discord sync.
+   * Syncs Roomy sidebar structure to Discord channels.
    */
   async handleRoomyUpdateSidebar(
     event: DecodedStreamEvent,
     bot: DiscordBot,
   ): Promise<void> {
-    throw new Error("Not implemented");
+    return await this.structureSync.handleRoomySidebarUpdate(event.event as Event);
+  }
+
+  /**
+   * Recover Discord channel mappings from Discord topics.
+   * Called on bridge startup when local data may be lost.
+   */
+  async recoverMappings(): Promise<void> {
+    return await this.structureSync.recoverDiscordMappings();
+  }
+
+  /**
+   * Handle Roomy room rename - update Discord channel name.
+   */
+  async handleRoomyRoomRename(roomyRoomId: string, newName: string): Promise<void> {
+    return await this.structureSync.handleRoomyRoomRename(roomyRoomId as Ulid, newName);
+  }
+
+  /**
+   * Handle Roomy category rename - update Discord category.
+   */
+  async handleRoomyCategoryRename(oldName: string, newName: string): Promise<void> {
+    return await this.structureSync.handleRoomyCategoryRename(oldName, newName);
   }
 }
 
