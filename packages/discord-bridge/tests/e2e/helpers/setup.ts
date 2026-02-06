@@ -5,7 +5,7 @@
 
 import { createBot } from "@discordeno/bot";
 import { createDefaultSpaceEvents, type ConnectedSpace, type StreamDid, modules, ConnectedSpace as SDKConnectedSpace, RoomyClient } from "@roomy/sdk";
-import { desiredProperties } from "../../../src/discord/types.js";
+import { desiredProperties, type ChannelProperties, type DiscordBot } from "../../../src/discord/types.js";
 import { DISCORD_TOKEN, LEAF_URL, LEAF_SERVER_DID, ATPROTO_BRIDGE_DID, ATPROTO_BRIDGE_APP_PASSWORD } from "../../../src/env.js";
 import { registeredBridges } from "../../../src/db.js";
 import { connectedSpaces, initRoomyClient, getRoomyClient as getBridgeRoomyClient } from "../../../src/roomy/client.js";
@@ -19,7 +19,12 @@ import {
   syncedEditsForBridge,
   discordMessageHashesForBridge,
   discordLatestMessageInChannelForBridge,
+  roomyUserProfilesForBridge,
+  discordWebhookTokensForBridge,
 } from "../../../src/db.js";
+import { LevelDBBridgeRepository } from "../../../src/repositories/BridgeRepository.js";
+import { createSyncOrchestrator } from "../../../src/services/SyncOrchestrator.js";
+import type { SyncOrchestrator } from "../../../src/services/SyncOrchestrator.js";
 
 /**
  * Environment variables for E2E tests.
@@ -140,7 +145,8 @@ export async function connectGuildToNewSpace(
   await space.sendEvents(events);
 
   // Wait for events to be materialized in Leaf before continuing
-  await new Promise(resolve => setTimeout(resolve, 100));
+  // Increased delay to handle multiple rapid stream creations in tests
+  await new Promise(resolve => setTimeout(resolve, 300));
 
   // 3. Aggressive cleanup of any existing registrations for this guild
   // This handles cases where previous tests may have left partial state
@@ -298,4 +304,137 @@ export class RoomyQueryHelper {
  */
 export function createQueryHelper(): RoomyQueryHelper {
   return new RoomyQueryHelper(getRoomyClient());
+}
+
+/**
+ * Create a SyncOrchestrator for E2E testing.
+ *
+ * Creates a LevelDBBridgeRepository from the GuildContext stores
+ * and uses it to create a configured SyncOrchestrator.
+ *
+ * @param connectionResult - Result from connectGuildToNewSpace()
+ * @param bot - Optional Discord bot instance for reverse sync operations
+ * @returns Configured SyncOrchestrator ready for sync operations
+ *
+ * @example
+ * ```ts
+ * const result = await connectGuildToNewSpace(roomy, TEST_GUILD_ID, "test");
+ * const bot = await createTestBot();
+ * const orchestrator = await createSyncOrchestratorForTest(result, bot);
+ * await orchestrator.handleDiscordChannelCreate(channel);
+ * ```
+ */
+export function createSyncOrchestratorForTest(
+  connectionResult: GuildConnectionResult,
+  bot?: DiscordBot,
+): SyncOrchestrator {
+  const { guildContext, guildId, spaceId } = connectionResult;
+
+  // Create the additional stores needed by LevelDBBridgeRepository
+  // that aren't included in GuildContext
+  const roomyUserProfiles = roomyUserProfilesForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+
+  const discordWebhookTokens = discordWebhookTokensForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+
+  // Create the repository wrapper
+  const repo = new LevelDBBridgeRepository({
+    syncedIds: guildContext.syncedIds,
+    syncedProfiles: guildContext.syncedProfiles,
+    roomyUserProfiles,
+    syncedReactions: guildContext.syncedReactions,
+    syncedSidebarHash: guildContext.syncedSidebarHash,
+    syncedRoomLinks: guildContext.syncedRoomLinks,
+    syncedEdits: guildContext.syncedEdits,
+    discordWebhookTokens,
+    discordMessageHashes: guildContext.discordMessageHashes,
+    discordLatestMessage: guildContext.latestMessagesInChannel,
+  });
+
+  // Create and return the orchestrator
+  return createSyncOrchestrator({
+    repo,
+    connectedSpace: guildContext.connectedSpace,
+    guildId: guildContext.guildId,
+    spaceId: guildContext.spaceId,
+    bot,
+  });
+}
+
+/**
+ * Discord channel type constants.
+ */
+export const DISCORD_CHANNEL_TYPES = {
+  GUILD_TEXT: 0,      // Text channel
+  GUILD_VOICE: 2,     // Voice channel
+  GUILD_CATEGORY: 4,  // Category
+  GUILD_NEWS: 5,      // News/announcement channel
+  GUILD_NEWS_THREAD: 10, // News thread
+  GUILD_PUBLIC_THREAD: 11,  // Public thread
+  GUILD_PRIVATE_THREAD: 12, // Private thread
+  GUILD_STAGE_VOICE: 13,    // Stage channel
+  GUILD_DIRECTORY: 14,      // Directory
+  GUILD_FORUM: 15,          // Forum channel
+} as const;
+
+/**
+ * Check if a Discord channel is a text channel (should sync to Roomy).
+ * Excludes voice, forum, and category channels.
+ */
+export function isTextChannel(channel: ChannelProperties): boolean {
+  return (
+    channel.type === DISCORD_CHANNEL_TYPES.GUILD_TEXT ||
+    channel.type === DISCORD_CHANNEL_TYPES.GUILD_NEWS
+  );
+}
+
+/**
+ * Fetch all text channels from a Discord guild.
+ *
+ * @param bot - Discord bot instance
+ * @param guildId - Guild ID to fetch channels from
+ * @returns Array of text channels (excludes voice, forum, category)
+ */
+export async function getTextChannels(
+  bot: DiscordBot,
+  guildId: string,
+): Promise<ChannelProperties[]> {
+  const channels = await bot.rest.getChannels(guildId);
+
+  const textChannels: ChannelProperties[] = [];
+  for (const channel of channels.values()) {
+    if (isTextChannel(channel)) {
+      textChannels.push(channel as ChannelProperties);
+    }
+  }
+
+  return textChannels;
+}
+
+/**
+ * Fetch all categories from a Discord guild.
+ *
+ * @param bot - Discord bot instance
+ * @param guildId - Guild ID to fetch channels from
+ * @returns Array of category channels
+ */
+export async function getCategories(
+  bot: DiscordBot,
+  guildId: string,
+): Promise<ChannelProperties[]> {
+  const channels = await bot.rest.getChannels(guildId);
+
+  const categories: ChannelProperties[] = [];
+  for (const channel of channels.values()) {
+    if (channel.type === DISCORD_CHANNEL_TYPES.GUILD_CATEGORY) {
+      categories.push(channel as ChannelProperties);
+    }
+  }
+
+  return categories;
 }

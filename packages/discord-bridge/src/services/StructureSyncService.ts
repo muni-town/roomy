@@ -12,9 +12,11 @@ import { newUlid, type Ulid, type Event } from "@roomy/sdk";
 import type { DiscordBot, ChannelProperties } from "../discord/types.js";
 import { computeSidebarHash } from "../utils/hash.js";
 import { DISCORD_EXTENSION_KEYS } from "../roomy/subscription.js";
+import { addRoomySyncMarker, extractRoomyRoomId } from "../utils/discord-topic.js";
 
 // Import SDK operations from @roomy/sdk/package/operations
 import { createRoom, createThread } from "@roomy/sdk/package/operations";
+import { createChannel as discordCreateChannel, fetchChannel as discordFetchChannel } from "../discord/operations/channel.js";
 
 /**
  * Service for syncing room structure between Discord and Roomy.
@@ -245,8 +247,8 @@ export class StructureSyncService {
   }
 
   /**
-   * Handle Roomy room creation (stub for Roomy → Discord sync).
-   * TODO: Determine if this room should create a Discord channel.
+   * Handle Roomy room creation (Roomy → Discord sync).
+   * Creates a Discord channel if the room doesn't have discordOrigin extension.
    *
    * @param event - Roomy createRoom event
    *
@@ -256,14 +258,96 @@ export class StructureSyncService {
    * ```
    */
   async handleRoomyRoomCreate(event: Event): Promise<void> {
-    // TODO: Determine if this room should create a Discord channel
-    // Call SDK operation: createChannel() from discord/operations/channel.ts
-    throw new Error("Not implemented");
+    if (!this.bot) {
+      console.warn("Bot not available, skipping Roomy → Discord channel sync");
+      return;
+    }
+
+    // Skip if this room was synced from Discord (has discordOrigin extension)
+    if (DISCORD_EXTENSION_KEYS.ROOM_ORIGIN in (event.extensions || {})) {
+      return;
+    }
+
+    const roomyRoomId = event.id;
+    const roomName = event.name || "unnamed-room";
+    const roomKind = event.kind;
+
+    // Only sync channels (not threads, pages, etc.)
+    if (roomKind !== "space.roomy.channel") {
+      return;
+    }
+
+    // Check if we've already synced this room
+    const existingDiscordId = await this.repo.getDiscordId(roomyRoomId);
+    if (existingDiscordId) {
+      // Verify Discord channel still exists
+      try {
+        const channel = await discordFetchChannel(this.bot, { channelId: BigInt(existingDiscordId.replace("room:", "")) });
+        // Channel exists, check if it has our marker
+        if (!extractRoomyRoomId(channel.topic || null)) {
+          // Channel exists but no marker - add it
+          await this.bot.helpers.editChannel(channel.id, {
+            topic: addRoomySyncMarker(channel.topic || null, roomyRoomId),
+          });
+        }
+        return;
+      } catch {
+        // Channel doesn't exist, recreate below
+      }
+    }
+
+    // Create new Discord channel with sync marker
+    await this.createDiscordChannelFromRoomy(roomyRoomId, roomName);
   }
 
   /**
-   * Handle Roomy sidebar update (stub for Roomy → Discord sync).
-   * TODO: Derive Discord structure, compute diff.
+   * Create a Discord channel from a Roomy room.
+   * Adds topic marker for idempotency.
+   *
+   * @param roomyRoomId - Roomy room ULID
+   * @param roomName - Room name
+   * @returns Discord channel ID (snowflake as string)
+   */
+  async createDiscordChannelFromRoomy(
+    roomyRoomId: Ulid,
+    roomName: string,
+  ): Promise<string> {
+    if (!this.bot) {
+      throw new Error("Bot required for Roomy → Discord sync");
+    }
+
+    // Build topic with sync marker
+    const topic = addRoomySyncMarker(null, roomyRoomId);
+
+    console.log(`[StructureSyncService] Creating Discord channel for Roomy room`, {
+      roomyRoomId,
+      roomName,
+      guildId: this.guildId.toString(),
+      topic,
+      botAvailable: !!this.bot,
+    });
+
+    // Create Discord channel
+    const result = await discordCreateChannel(this.bot, {
+      guildId: this.guildId,
+      name: roomName,
+      type: 0, // GUILD_TEXT
+      topic,
+    });
+
+    const discordId = result.id.toString();
+
+    // Register mapping with "room:" prefix
+    await this.repo.registerMapping(`room:${discordId}`, roomyRoomId);
+
+    console.log(`[StructureSyncService] Created Discord channel ${roomName} (${discordId}) for Roomy room ${roomyRoomId}`);
+
+    return discordId;
+  }
+
+  /**
+   * Handle Roomy sidebar update (Roomy → Discord sync).
+   * Creates Discord channels for rooms without discordOrigin extension.
    *
    * @param event - Roomy updateSidebar event
    *
@@ -273,8 +357,166 @@ export class StructureSyncService {
    * ```
    */
   async handleRoomySidebarUpdate(event: Event): Promise<void> {
-    // TODO: Derive Discord structure, compute diff
-    // Call SDK operations: createChannel(), createThread() from discord/operations/
-    throw new Error("Not implemented");
+    if (!this.bot) {
+      console.warn("Bot not available, skipping Roomy → Discord sidebar sync");
+      return;
+    }
+
+    const sidebar = event as {
+      categories: Array<{ name: string; children: Ulid[] }>;
+    };
+
+    for (const category of sidebar.categories) {
+      for (const roomyRoomId of category.children) {
+        // Check if room has discordOrigin extension (skip if synced from Discord)
+        const hasOrigin = await this.hasDiscordOrigin(roomyRoomId);
+        if (hasOrigin) continue;
+
+        // Check if we've already synced this room
+        const existingDiscordId = await this.repo.getDiscordId(roomyRoomId);
+        if (existingDiscordId) {
+          // Verify Discord channel still exists and has our topic marker
+          await this.verifyOrCreateChannel(roomyRoomId);
+        } else {
+          // Get room details from repo or fetch from event stream
+          // For now, create with a default name - the actual name would come from createRoom event
+          await this.createDiscordChannelFromRoomy(roomyRoomId, `roomy-${roomyRoomId.slice(0, 8)}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Check if a Roomy room has Discord origin (was synced from Discord).
+   */
+  private async hasDiscordOrigin(roomyRoomId: Ulid): Promise<boolean> {
+    // Check if the room has a discordOrigin extension
+    // This would require querying the event stream or maintaining a local cache
+    // For now, we check the repo - if it has a room: prefixed mapping, it likely came from Discord
+    const discordId = await this.repo.getDiscordId(roomyRoomId);
+    return discordId?.startsWith("room:") ?? false;
+  }
+
+  /**
+   * Verify a Discord channel exists and has our topic marker, or recreate it.
+   */
+  private async verifyOrCreateChannel(roomyRoomId: Ulid): Promise<void> {
+    if (!this.bot) {
+      throw new Error("Bot required for Roomy → Discord sync");
+    }
+
+    const existingDiscordId = await this.repo.getDiscordId(roomyRoomId);
+    if (!existingDiscordId) {
+      // No mapping exists, create new channel
+      await this.createDiscordChannelFromRoomy(roomyRoomId, `roomy-${roomyRoomId.slice(0, 8)}`);
+      return;
+    }
+
+    const channelId = existingDiscordId.replace("room:", "");
+
+    try {
+      const channel = await discordFetchChannel(this.bot, { channelId: BigInt(channelId) });
+
+      // Check if channel has our topic marker
+      if (!extractRoomyRoomId(channel.topic || null)) {
+        // Channel exists but no marker - add it
+        await this.bot.helpers.editChannel(channel.id, {
+          topic: addRoomySyncMarker(channel.topic || null, roomyRoomId),
+        });
+        console.log(`Added sync marker to existing channel ${channelId}`);
+      }
+    } catch {
+      // Channel doesn't exist, recreate it
+      console.warn(`Discord channel ${channelId} not found, recreating...`);
+      await this.createDiscordChannelFromRoomy(roomyRoomId, `roomy-${roomyRoomId.slice(0, 8)}`);
+    }
+  }
+
+  /**
+   * Recover Discord channel mappings from Discord topics.
+   * Called on bridge startup when local data may be lost.
+   */
+  async recoverDiscordMappings(): Promise<void> {
+    if (!this.bot) {
+      console.warn("Bot not available, skipping Discord mapping recovery");
+      return;
+    }
+
+    try {
+      const channels = await this.bot.rest.getChannels(this.guildId.toString());
+
+      let recoveredCount = 0;
+      for (const [_, channel] of channels) {
+        // Check if channel has our topic marker
+        const roomyRoomId = extractRoomyRoomId(channel.topic);
+        if (roomyRoomId) {
+          // This channel was synced from Roomy
+          const discordId = channel.id.toString();
+
+          // Check if we already have this mapping
+          const existing = await this.repo.getRoomyId(`room:${discordId}`);
+          if (!existing || existing !== roomyRoomId) {
+            // Register or update the mapping
+            await this.repo.registerMapping(`room:${discordId}`, roomyRoomId);
+            console.log(`Recovered mapping: ${roomyRoomId} <-> ${discordId}`);
+            recoveredCount++;
+          }
+        }
+      }
+
+      console.log(`Recovered ${recoveredCount} Discord mappings`);
+    } catch (error) {
+      console.error("Error recovering Discord mappings:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle Roomy room rename - update Discord channel name.
+   */
+  async handleRoomyRoomRename(roomyRoomId: Ulid, newName: string): Promise<void> {
+    if (!this.bot) {
+      console.warn("Bot not available, skipping Roomy → Discord rename sync");
+      return;
+    }
+
+    const discordId = await this.repo.getDiscordId(roomyRoomId);
+    if (!discordId) return; // Not synced to Discord
+
+    const channelId = discordId.replace("room:", "");
+
+    try {
+      const channel = await discordFetchChannel(this.bot, { channelId: BigInt(channelId) });
+
+      if (channel.name !== newName) {
+        await this.bot.helpers.editChannel(channel.id, {
+          name: newName,
+          reason: "Synced from Roomy",
+        });
+        console.log(`Renamed Discord channel ${channelId} to ${newName}`);
+      }
+    } catch (error) {
+      console.error(`Error renaming Discord channel ${channelId}:`, error);
+    }
+  }
+
+  /**
+   * Handle Roomy sidebar category rename - update Discord category.
+   * Note: Discord doesn't support renaming categories directly.
+   * This is a placeholder for future implementation.
+   */
+  async handleRoomyCategoryRename(oldName: string, newName: string): Promise<void> {
+    if (!this.bot) {
+      console.warn("Bot not available, skipping Roomy → Discord category rename sync");
+      return;
+    }
+
+    // Discord doesn't support renaming categories directly
+    // We would need to:
+    // 1. Create new category with new name
+    // 2. Move all channels to new category
+    // 3. Delete old category
+    // For now, this is a no-op placeholder
+    console.log(`Category rename not implemented: ${oldName} -> ${newName}`);
   }
 }
