@@ -99,7 +99,7 @@ export function getBridgeDid(): string {
 }
 
 /** Map of connected spaces by spaceId */
-const connectedSpaces = new Map<string, ConnectedSpace>();
+export const connectedSpaces = new Map<string, ConnectedSpace>();
 
 /**
  * Subscribe to all registered spaces, resuming from stored cursors.

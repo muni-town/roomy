@@ -8,6 +8,15 @@ export default defineConfig({
     envDir: ".",
     include: ["tests/**/*.test.ts"],
     exclude: ["node_modules", "dist"],
+    // Run E2E tests serially to avoid LevelDB state conflicts
+    fileParallelism: false,
+    maxConcurrency: 1,
+    pool: "forks",
+    poolOptions: {
+      forks: {
+        singleFork: true,
+      },
+    },
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
