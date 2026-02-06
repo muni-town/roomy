@@ -11,19 +11,21 @@ import { tracer, recordError } from "../tracing.js";
  * Uses cached webhook tokens if available, otherwise creates a new webhook.
  *
  * @param bot - Discord bot instance
- * @param ctx - Guild context containing space/guild IDs
+ * @param guildId - Discord guild ID
+ * @param spaceId - Roomy space ID
  * @param channelId - Discord channel ID to create webhook in
  * @returns Webhook {id, token} for executing messages
  * @throws Error if bot lacks MANAGE_WEBHOOKS permission or channel not found
  */
 export async function getOrCreateWebhook(
   bot: DiscordBot,
-  ctx: GuildContext,
+  guildId: bigint,
+  spaceId: string,
   channelId: bigint,
 ): Promise<{ id: string; token: string }> {
   const webhookTokens = discordWebhookTokensForBridge({
-    discordGuildId: ctx.guildId,
-    roomySpaceId: ctx.spaceId,
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
   });
   const cached = await webhookTokens.get(channelId.toString());
 
@@ -144,16 +146,18 @@ export async function executeWebhookWithRetry(
  * Clear cached webhook token for a channel.
  * Use when webhooks are deleted externally (404 errors).
  *
- * @param ctx - Guild context
+ * @param guildId - Discord guild ID
+ * @param spaceId - Roomy space ID
  * @param channelId - Channel ID to clear webhook cache for
  */
 export async function clearWebhookCache(
-  ctx: GuildContext,
+  guildId: bigint,
+  spaceId: string,
   channelId: bigint,
 ): Promise<void> {
   const webhookTokens = discordWebhookTokensForBridge({
-    discordGuildId: ctx.guildId,
-    roomySpaceId: ctx.spaceId,
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
   });
   await webhookTokens.del(channelId.toString());
 }

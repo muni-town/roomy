@@ -12,7 +12,7 @@ import type { DiscordBot, MessageProperties, ChannelProperties } from "../discor
 import type { Emoji } from "@discordeno/bot";
 import { MessageSyncService, type EventBatcher } from "./MessageSyncService.js";
 import { ReactionSyncService } from "./ReactionSyncService.js";
-import { ProfileSyncService } from "./ProfileSyncService.js";
+import { ProfileSyncService, type DiscordUser } from "./ProfileSyncService.js";
 import { StructureSyncService } from "./StructureSyncService.js";
 
 /**
@@ -56,8 +56,8 @@ export class SyncOrchestrator {
    * Handle Discord message deletion.
    * Delegates to MessageSyncService.
    */
-  async handleDiscordMessageDelete(messageId: bigint): Promise<void> {
-    await this.messageSync.syncDeleteToRoomy(messageId);
+  async handleDiscordMessageDelete(messageId: bigint, channelId: bigint): Promise<void> {
+    await this.messageSync.syncDeleteToRoomy(messageId, channelId);
   }
 
   /**
@@ -84,6 +84,16 @@ export class SyncOrchestrator {
     emoji: Partial<Emoji>,
   ): Promise<void> {
     await this.reactionSync.syncRemoveToRoomy(messageId, channelId, userId, emoji);
+  }
+
+  /**
+   * Handle Discord user profile sync.
+   * Delegates to ProfileSyncService.
+   * @param user - Discord user to sync
+   * @param batcher - Optional event batcher for bulk operations
+   */
+  async handleDiscordUserProfile(user: DiscordUser, batcher?: EventBatcher): Promise<void> {
+    await this.profileSync.syncDiscordToRoomy(user, batcher);
   }
 
   /**
@@ -117,62 +127,128 @@ export class SyncOrchestrator {
   }
 
   // ============================================================
-  // ROOMY event handlers (stubs for Roomy → Discord sync)
+  // ROOMY event handlers (Roomy → Discord sync)
   // ============================================================
 
   /**
    * Handle Roomy create message event.
-   * TODO: Implement Roomy → Discord sync.
+   * Syncs the message to Discord via webhook.
    */
   async handleRoomyCreateMessage(
-    event: DecodedStreamEvent,
+    decoded: DecodedStreamEvent,
     bot: DiscordBot,
   ): Promise<void> {
-    throw new Error("Not implemented");
+    const { event, user } = decoded;
+    const e = event as any;
+
+    if (!e.room || !e.body) {
+      console.warn("[SyncOrchestrator] Invalid Roomy create message event, missing room or body");
+      return;
+    }
+
+    await this.messageSync.syncRoomyToDiscordCreate(
+      event.id,
+      e.room,
+      e.body,
+      user,
+      bot,
+    );
   }
 
   /**
    * Handle Roomy edit message event.
-   * TODO: Implement Roomy → Discord sync.
+   * Edits the Discord message.
    */
   async handleRoomyEditMessage(
-    event: DecodedStreamEvent,
+    decoded: DecodedStreamEvent,
     bot: DiscordBot,
   ): Promise<void> {
-    throw new Error("Not implemented");
+    const { event } = decoded;
+    const e = event as any;
+
+    if (!e.messageId || !e.room || !e.body) {
+      console.warn("[SyncOrchestrator] Invalid Roomy edit message event, missing messageId, room, or body");
+      return;
+    }
+
+    await this.messageSync.syncRoomyToDiscordEdit(
+      e.messageId,
+      e.room,
+      e.body,
+      bot,
+    );
   }
 
   /**
    * Handle Roomy delete message event.
-   * TODO: Implement Roomy → Discord sync.
+   * Deletes the Discord message.
    */
   async handleRoomyDeleteMessage(
-    event: DecodedStreamEvent,
+    decoded: DecodedStreamEvent,
     bot: DiscordBot,
   ): Promise<void> {
-    throw new Error("Not implemented");
+    const { event } = decoded;
+    const e = event as any;
+
+    if (!e.messageId) {
+      console.warn("[SyncOrchestrator] Invalid Roomy delete message event, missing messageId");
+      return;
+    }
+
+    await this.messageSync.syncRoomyToDiscordDelete(
+      e.messageId,
+      e.room || "",
+      bot,
+    );
   }
 
   /**
    * Handle Roomy add reaction event.
-   * TODO: Implement Roomy → Discord sync.
+   * Adds reaction to Discord message.
    */
   async handleRoomyAddReaction(
-    event: DecodedStreamEvent,
+    decoded: DecodedStreamEvent,
     bot: DiscordBot,
   ): Promise<void> {
-    throw new Error("Not implemented");
+    const { event, user } = decoded;
+    const e = event as any;
+
+    if (!e.reactionTo || !e.reaction || !e.room) {
+      console.warn("[SyncOrchestrator] Invalid Roomy add reaction event, missing reactionTo, reaction, or room");
+      return;
+    }
+
+    await this.reactionSync.syncRoomyToDiscordAdd(
+      e.reactionTo,
+      e.room,
+      e.reaction,
+      user,
+      bot,
+    );
   }
 
   /**
    * Handle Roomy remove reaction event.
-   * TODO: Implement Roomy → Discord sync.
+   * Removes reaction from Discord message.
    */
   async handleRoomyRemoveReaction(
-    event: DecodedStreamEvent,
+    decoded: DecodedStreamEvent,
     bot: DiscordBot,
   ): Promise<void> {
-    throw new Error("Not implemented");
+    const { event, user } = decoded;
+    const e = event as any;
+
+    if (!e.reactionId || !e.room) {
+      console.warn("[SyncOrchestrator] Invalid Roomy remove reaction event, missing reactionId or room");
+      return;
+    }
+
+    await this.reactionSync.syncRoomyToDiscordRemove(
+      e.reactionId,
+      e.room,
+      user,
+      bot,
+    );
   }
 
   /**

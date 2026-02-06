@@ -488,3 +488,372 @@ export async function cleanupRoomySyncedChannels(
 
   return deletedCount;
 }
+
+/**
+ * Cleanup function: Delete all messages from Roomy-synced channels.
+ *
+ * This preserves the channels but removes all test messages.
+ * Useful for cleaning up test messages without deleting test channels.
+ *
+ * @param bot - Discord bot instance
+ * @param guildId - Discord guild ID (usually TEST_GUILD_ID)
+ * @returns Number of messages deleted
+ *
+ * @example
+ * ```ts
+ * const bot = await createTestBot();
+ * const deletedCount = await cleanupTestMessages(bot, TEST_GUILD_ID);
+ * console.log(`Cleaned up ${deletedCount} test messages`);
+ * ```
+ */
+export async function cleanupTestMessages(
+  bot: DiscordBot,
+  guildId: string,
+): Promise<number> {
+  const channels = await bot.rest.getChannels(guildId);
+  let deletedMessages = 0;
+
+  console.log(`\n📋 Found ${channels.length} total channels`);
+
+  for (const channel of channels) {
+    // Only clean Roomy-synced text channels
+    if (!isTextChannel(channel)) {
+      continue;
+    }
+
+    const hasRoomyMarker = isRoomySyncedChannel(channel.topic ?? null);
+    if (!hasRoomyMarker) {
+      continue;
+    }
+
+    console.log(`\n📝 Processing #${channel.name} (${channel.id})`);
+    console.log(`   Topic: "${channel.topic?.slice(0, 50)}..."`);
+
+    try {
+      // Fetch messages (Discord API returns up to 100 at a time)
+      const messages = await bot.rest.getMessages(channel.id, { limit: 100 });
+      console.log(`   Found ${messages.length} messages`);
+
+      // Count webhook vs regular messages
+      const webhookMessageCount = messages.filter(m => m.webhookId).length;
+      const regularMessageCount = messages.length - webhookMessageCount;
+      console.log(`   → ${webhookMessageCount} webhook messages, ${regularMessageCount} regular messages`);
+
+      // Delete all messages - webhook messages need special handling
+      for (const message of messages) {
+        const isWebhook = !!message.webhookId;
+
+        try {
+          if (isWebhook && message.webhookId) {
+            // Webhook messages must be deleted by the webhook
+            // First, get the webhook to retrieve its token
+            const webhooks = await bot.rest.getChannelWebhooks(channel.id);
+            const webhookIdStr = message.webhookId.toString();
+            const webhook = webhooks.find(w => w.id === webhookIdStr);
+
+            if (webhook && webhook.token) {
+              await bot.helpers.deleteWebhookMessage(
+                webhook.id,
+                webhook.token,
+                message.id,
+              );
+              deletedMessages++;
+            } else {
+              console.warn(`  ❌ Webhook ${message.webhookId} not found, skipping message ${message.id}`);
+            }
+          } else {
+            // Regular bot message - can be deleted directly
+            await bot.helpers.deleteMessage(channel.id, message.id);
+            deletedMessages++;
+          }
+        } catch (error: any) {
+          // Log all errors for debugging
+          const errorType = error?.code || error?.metadata?.code || "UNKNOWN";
+          console.warn(`  ❌ Failed to delete ${isWebhook ? "webhook" : "regular"} message ${message.id} (code: ${errorType}):`, error.message);
+        }
+      }
+
+      console.log(`   ✅ Deleted ${deletedMessages} messages`);
+    } catch (error) {
+      console.error(`  ❌ Failed to clean messages from channel ${channel.id}:`, error);
+    }
+  }
+
+  console.log(`\n📊 Total messages deleted: ${deletedMessages}\n`);
+  return deletedMessages;
+}
+
+/**
+ * Cleanup function: Delete all webhook messages from ALL text channels in a guild.
+ *
+ * This is more aggressive than cleanupTestMessages - it targets webhook messages
+ * in all text channels, not just Roomy-synced channels. Useful for cleaning up
+ * webhook messages created during reverse sync tests.
+ *
+ * @param bot - Discord bot instance
+ * @param guildId - Discord guild ID (usually TEST_GUILD_ID)
+ * @returns Number of webhook messages deleted
+ *
+ * @example
+ * ```ts
+ * const bot = await createTestBot();
+ * const deletedCount = await cleanupWebhookMessages(bot, TEST_GUILD_ID);
+ * console.log(`Cleaned up ${deletedCount} webhook messages`);
+ * ```
+ */
+export async function cleanupWebhookMessages(
+  bot: DiscordBot,
+  guildId: string,
+): Promise<number> {
+  const channels = await bot.rest.getChannels(guildId);
+  let deletedMessages = 0;
+  let totalWebhookMessages = 0;
+
+  console.log(`\n📋 Found ${channels.length} total channels`);
+
+  for (const channel of channels) {
+    // Only process text channels (any text channel, not just Roomy-synced)
+    if (!isTextChannel(channel)) {
+      continue;
+    }
+
+    console.log(`\n📝 Processing #${channel.name} (${channel.id})`);
+
+    try {
+      // Fetch messages (Discord API returns up to 100 at a time)
+      const messages = await bot.rest.getMessages(channel.id, { limit: 100 });
+
+      // Filter only webhook messages
+      const webhookMessages = messages.filter(m => m.webhookId);
+      totalWebhookMessages += webhookMessages.length;
+      console.log(`   Found ${messages.length} total messages, ${webhookMessages.length} webhook messages`);
+
+      if (webhookMessages.length === 0) {
+        console.log(`   ℹ️  No webhook messages to delete`);
+        continue;
+      }
+
+      // Delete webhook messages
+      for (const message of webhookMessages) {
+        try {
+          // Try direct deletion first - bot with MANAGE_MESSAGES can delete any message
+          // IDs from Discord API are already Bigints
+          await bot.helpers.deleteMessage(channel.id, message.id);
+          deletedMessages++;
+          // Rate limiting: small delay between deletions
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (error: any) {
+          // If direct deletion fails, try webhook-based deletion
+          const errorDetails = error?.message || String(error);
+          console.warn(`  ⚠️  Direct deletion failed for ${message.id}: ${errorDetails}`);
+
+          try {
+            // Webhook messages must be deleted by the webhook
+            // First, get the webhook to retrieve its token
+            const webhooks = await bot.rest.getChannelWebhooks(channel.id);
+            const webhookIdStr = message.webhookId?.toString();
+            const webhook = webhookIdStr ? webhooks.find(w => w.id === webhookIdStr) : undefined;
+
+            if (webhook && webhook.token && message.webhookId) {
+              await bot.helpers.deleteWebhookMessage(
+                webhook.id,
+                webhook.token,
+                message.id,
+              );
+              deletedMessages++;
+              // Rate limiting: small delay between deletions
+              await new Promise(resolve => setTimeout(resolve, 200));
+            } else {
+              console.warn(`  ❌ Webhook ${message.webhookId} not found, skipping message ${message.id}`);
+            }
+          } catch (webhookError: any) {
+            const webhookErrorDetails = webhookError?.message || String(webhookError);
+            console.warn(`  ❌ Webhook deletion also failed for ${message.id}: ${webhookErrorDetails}`);
+          }
+        }
+      }
+
+      console.log(`   ✅ Deleted ${deletedMessages} webhook messages`);
+    } catch (error) {
+      console.error(`  ❌ Failed to clean webhook messages from channel ${channel.id}:`, error);
+    }
+  }
+
+  console.log(`\n📊 Total webhook messages deleted: ${deletedMessages} of ${totalWebhookMessages}\n`);
+
+  // Fail if we couldn't delete webhook messages
+  if (totalWebhookMessages > 0 && deletedMessages < totalWebhookMessages) {
+    const orphaned = totalWebhookMessages - deletedMessages;
+    throw new Error(
+      `Failed to delete ${orphaned} webhook messages. ` +
+      `The webhooks that created these messages may have been deleted. ` +
+      `To prevent this in the future, use safeDeleteWebhook() to delete ` +
+      `webhook messages before deleting the webhook itself.`
+    );
+  }
+
+  return deletedMessages;
+}
+
+/**
+ * Cleanup function: Delete all bot messages from ALL text channels in a guild.
+ *
+ * This targets regular bot messages (not webhook messages) from all text channels.
+ * Useful for cleaning up test messages created by the bot during testing.
+ *
+ * @param bot - Discord bot instance
+ * @param guildId - Discord guild ID (usually TEST_GUILD_ID)
+ * @returns Number of bot messages deleted
+ *
+ * @example
+ * ```ts
+ * const bot = await createTestBot();
+ * const deletedCount = await cleanupBotMessages(bot, TEST_GUILD_ID);
+ * console.log(`Cleaned up ${deletedCount} bot messages`);
+ * ```
+ */
+export async function cleanupBotMessages(
+  bot: DiscordBot,
+  guildId: string,
+): Promise<number> {
+  const channels = await bot.rest.getChannels(guildId);
+  let deletedMessages = 0;
+  let totalBotMessages = 0;
+
+  console.log(`\n📋 Found ${channels.length} total channels`);
+
+  for (const channel of channels) {
+    // Only process text channels
+    if (!isTextChannel(channel)) {
+      continue;
+    }
+
+    console.log(`\n📝 Processing #${channel.name} (${channel.id})`);
+
+    try {
+      // Fetch messages
+      const messages = await bot.rest.getMessages(channel.id, { limit: 100 });
+
+      // Filter bot messages (not webhook messages, and author.bot is true)
+      const botMessages = messages.filter(m => !m.webhookId && m.author?.bot);
+      totalBotMessages += botMessages.length;
+      console.log(`   Found ${messages.length} total messages, ${botMessages.length} bot messages`);
+
+      if (botMessages.length === 0) {
+        console.log(`   ℹ️  No bot messages to delete`);
+        continue;
+      }
+
+      // Delete bot messages
+      for (const message of botMessages) {
+        try {
+          await bot.helpers.deleteMessage(channel.id, message.id);
+          deletedMessages++;
+          // Rate limiting: small delay between deletions
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (error: any) {
+          const errorDetails = error?.message || String(error);
+          console.warn(`  ❌ Failed to delete bot message ${message.id}: ${errorDetails}`);
+        }
+      }
+
+      console.log(`   ✅ Deleted ${deletedMessages} bot messages`);
+    } catch (error) {
+      console.error(`  ❌ Failed to clean bot messages from channel ${channel.id}:`, error);
+    }
+  }
+
+  console.log(`\n📊 Total bot messages deleted: ${deletedMessages} of ${totalBotMessages}\n`);
+
+  // Fail if we couldn't delete all bot messages
+  if (totalBotMessages > 0 && deletedMessages < totalBotMessages) {
+    const orphaned = totalBotMessages - deletedMessages;
+    throw new Error(
+      `Failed to delete ${orphaned} bot messages. ` +
+      `Check bot permissions and ensure MANAGE_MESSAGES is granted.`
+    );
+  }
+
+  return deletedMessages;
+}
+
+/**
+ * Safely delete a webhook by first deleting all its messages, then the webhook itself.
+ *
+ * This prevents orphaned webhook messages that can't be cleaned up later.
+ * Webhook messages must be deleted using the webhook's token before the webhook is deleted.
+ *
+ * @param bot - Discord bot instance
+ * @param channelId - Channel ID where the webhook is configured
+ * @param webhookId - Webhook ID to delete
+ * @returns Number of messages deleted before webhook deletion
+ *
+ * @example
+ * ```ts
+ * const messagesDeleted = await safeDeleteWebhook(bot, channelId, webhookId);
+ * console.log(`Deleted webhook and ${messagesDeleted} messages`);
+ * ```
+ */
+export async function safeDeleteWebhook(
+  bot: DiscordBot,
+  channelId: bigint,
+  webhookId: bigint,
+): Promise<number> {
+  let messagesDeleted = 0;
+
+  try {
+    // Get the webhook to retrieve its token
+    const webhooks = await bot.rest.getChannelWebhooks(channelId);
+    const webhook = webhooks.find(w => BigInt(w.id) === webhookId);
+
+    if (!webhook) {
+      console.warn(`⚠️  Webhook ${webhookId} not found, may have been deleted already`);
+      return 0;
+    }
+
+    if (!webhook.token) {
+      console.warn(`⚠️  Webhook ${webhookId} does not have a token, cannot delete messages`);
+      return 0;
+    }
+
+    console.log(`🔗 Cleaning up webhook ${webhookId} before deletion...`);
+
+    // Fetch recent messages from the channel
+    const messages = await bot.rest.getMessages(channelId, { limit: 100 });
+
+    // Find and delete messages created by this webhook
+    const webhookMessages = messages.filter(m => BigInt(m.webhookId || 0) === webhookId);
+
+    if (webhookMessages.length > 0) {
+      console.log(`   Found ${webhookMessages.length} messages from this webhook`);
+
+      for (const message of webhookMessages) {
+        try {
+          await bot.helpers.deleteWebhookMessage(
+            webhookId,
+            webhook.token,
+            message.id,
+          );
+          messagesDeleted++;
+          // Small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          console.warn(`   ⚠️  Failed to delete message ${message.id}:`, error);
+        }
+      }
+
+      console.log(`   ✅ Deleted ${messagesDeleted} webhook messages`);
+    } else {
+      console.log(`   ℹ️  No messages to clean up`);
+    }
+
+    // Now delete the webhook itself
+    await bot.helpers.deleteWebhook(webhookId);
+    console.log(`   ✅ Deleted webhook ${webhookId}`);
+
+    return messagesDeleted;
+  } catch (error) {
+    console.error(`❌ Failed to safely delete webhook ${webhookId}:`, error);
+    return messagesDeleted;
+  }
+}
