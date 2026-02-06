@@ -48,7 +48,7 @@ export function extractRoomyRoomId(
 ): string | null {
   if (!topic) return null;
   const match = topic.match(SYNC_MARKER_REGEX);
-  return match ? match[1] : null;
+  return match ? (match[1] ?? null) : null;
 }
 
 /**

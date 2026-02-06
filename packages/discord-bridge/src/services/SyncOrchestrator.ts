@@ -183,7 +183,7 @@ export class SyncOrchestrator {
     event: DecodedStreamEvent,
     bot: DiscordBot,
   ): Promise<void> {
-    return await this.structureSync.handleRoomyRoomCreate(event.event as Event);
+    return await this.structureSync.handleRoomyRoomCreate(event.event as any);
   }
 
   /**
@@ -194,7 +194,7 @@ export class SyncOrchestrator {
     event: DecodedStreamEvent,
     bot: DiscordBot,
   ): Promise<void> {
-    return await this.structureSync.handleRoomySidebarUpdate(event.event as Event);
+    return await this.structureSync.handleRoomySidebarUpdate(event.event as any);
   }
 
   /**

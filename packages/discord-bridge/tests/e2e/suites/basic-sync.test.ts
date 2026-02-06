@@ -8,7 +8,7 @@
  * @vitest-environment node
  */
 
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from "vitest";
 import {
   createTestBot,
   connectGuildToNewSpace,
@@ -16,6 +16,7 @@ import {
   getTextChannels,
   getCategories,
   createSyncOrchestratorForTest,
+  cleanupRoomySyncedChannels,
 } from "../helpers/setup.js";
 import {
   assertChannelSynced,
@@ -35,6 +36,11 @@ describe("E2E: Discord Channel Sync", () => {
     // Initialize Roomy client once
     await initE2ERoomyClient();
     console.log("Roomy client initialized for E2E channel sync tests");
+
+    // Clean up any channels with Roomy sync marker from previous test runs
+    const bot = await createTestBot();
+    const deletedCount = await cleanupRoomySyncedChannels(bot, TEST_GUILD_ID);
+    console.log(`Cleaned up ${deletedCount} Roomy-synced channels from previous test runs`);
   }, 60000);
 
   beforeEach(async () => {
@@ -449,139 +455,180 @@ describe("E2E: Discord Channel Sync", () => {
 
   describe("Roomy → Discord Sync (Reverse)", () => {
     it("should create Discord channel for Roomy room without discordOrigin", async () => {
-      // Setup: Create a Roomy space with a room (no discordOrigin extension)
       const roomy = await initE2ERoomyClient();
       const bot = await createTestBot();
-
+      const testId = Date.now().toString();
       const result = await connectGuildToNewSpace(
         roomy,
         TEST_GUILD_ID,
-        `E2E Reverse Sync Test - ${Date.now()}`,
+        `E2E Reverse Sync Test - ${testId}`,
       );
+      const orchestrator = createSyncOrchestratorForTest(result, bot);
 
-      // Create a room in Roomy (without discordOrigin - simulating a room created in Roomy)
-      // For now, we'll manually create a createRoom event and add it to the sidebar
-      // This is a placeholder for when we have the actual implementation
+      const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
 
-      // TODO: Implementation will:
-      // 1. Create a Roomy room via SDK (createRoom operation)
-      // 2. Update sidebar to include the new room
-      // 3. Trigger handleRoomySidebarUpdate
-      // 4. Verify Discord channel was created via bot.rest.getChannel()
-      // 5. Verify the channel topic contains the Roomy sync marker
+      const uniqueName = `test-roomy-channel-${testId}`;
+      const roomResult = await createRoom(result.connectedSpace, {
+        kind: "space.roomy.channel",
+        name: uniqueName,
+      });
 
-      // Placeholder assertion - will fail until implementation
-      expect(true).toBe(true);
-    });
+      const sidebarEvent = updateSidebarEvents([{ name: "Test", children: [roomResult.id] }]);
+      await result.connectedSpace.sendEvent(sidebarEvent);
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      await orchestrator.handleRoomyUpdateSidebar({ idx: 1, event: sidebarEvent, user: "did:plc:test" as any }, bot);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const channels = await bot.rest.getChannels(TEST_GUILD_ID);
+      const synced = [...channels.values()].find(ch => ch.name === uniqueName);
+      expect(synced).toBeDefined();
+      expect(synced?.topic).toContain(`[Synced from Roomy: ${roomResult.id}]`);
+    }, 30000);
 
     it("should skip sync for Roomy room with discordOrigin extension", async () => {
-      // Setup: Create a Roomy space, sync a Discord channel (adds discordOrigin)
-      // Then trigger reverse sync - should NOT create a duplicate Discord channel
       const roomy = await initE2ERoomyClient();
       const bot = await createTestBot();
-
       const result = await connectGuildToNewSpace(
         roomy,
         TEST_GUILD_ID,
         `E2E Reverse Skip Test - ${Date.now()}`,
       );
-
-      const orchestrator = createSyncOrchestratorForTest(result);
+      const orchestrator = createSyncOrchestratorForTest(result, bot);
 
       // First: sync a Discord channel to Roomy (adds discordOrigin)
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
-      if (channels.length > 0) {
-        await orchestrator.handleDiscordChannelCreate(channels[0]);
-      }
+      expect(channels.length).toBeGreaterThan(0);
+      await orchestrator.handleDiscordChannelCreate(channels[0]);
 
-      // TODO: Trigger reverse sync
-      // Expected: The already-synced channel should be skipped
-      // No new Discord channel should be created
+      // Get channel count before reverse sync
+      const channelsBefore = await bot.rest.getChannels(TEST_GUILD_ID);
+      const countBefore = channelsBefore.size;
 
-      expect(true).toBe(true);
-    });
+      // Create a sidebar update that includes the synced Discord channel
+      const { updateSidebarEvents } = await import("@roomy/sdk");
+      const events = await result.connectedSpace.fetchEvents(1 as any, 100);
+      const createRoomEvents = events.filter((e: any) => e.event.$type === "space.roomy.room.createRoom.v0");
+      expect(createRoomEvents.length).toBeGreaterThan(0);
 
-    it("should create Discord categories matching Roomy sidebar structure", async () => {
-      // Setup: Create a Roomy space with categories in sidebar
-      // Expected: Discord categories are created to match
+      const syncedRoomId = createRoomEvents[0].event.id;
+      const sidebarEvent = updateSidebarEvents([{ name: "Test", children: [syncedRoomId] }]);
+      await result.connectedSpace.sendEvent(sidebarEvent);
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      const roomy = await initE2ERoomyClient();
-      const bot = await createTestBot();
+      await orchestrator.handleRoomyUpdateSidebar({ idx: 1, event: sidebarEvent, user: "did:plc:test" as any }, bot);
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      const result = await connectGuildToNewSpace(
-        roomy,
-        TEST_GUILD_ID,
-        `E2E Reverse Category Test - ${Date.now()}`,
-      );
+      // Channel count should not have changed
+      const channelsAfter = await bot.rest.getChannels(TEST_GUILD_ID);
+      expect(channelsAfter.size).toBe(countBefore);
+    }, 30000);
 
-      // TODO: Implementation will:
-      // 1. Create a Roomy sidebar with a new category (e.g., "Engineering")
-      // 2. Add rooms to that category
-      // 3. Trigger handleRoomySidebarUpdate
-      // 4. Verify Discord category was created via bot.rest.getChannels()
-      // 5. Verify channels are in the correct category
-
+    it.skip("should create Discord categories matching Roomy sidebar structure", async () => {
+      // TODO: Discord category creation is complex (type 4 channels, rename requires delete/recreate/move)
+      // This is out of scope for the current implementation
       expect(true).toBe(true);
     });
 
     it("should handle channel renames (best-effort)", async () => {
-      // Setup: Roomy room is renamed
-      // Expected: Discord channel name is updated
+      const roomy = await initE2ERoomyClient();
+      const bot = await createTestBot();
+      const testId = Date.now().toString();
+      const result = await connectGuildToNewSpace(
+        roomy,
+        TEST_GUILD_ID,
+        `E2E Rename Test - ${testId}`,
+      );
+      const orchestrator = createSyncOrchestratorForTest(result, bot);
 
-      // TODO: Implementation will:
-      // 1. Create a Roomy room, sync to Discord
-      // 2. Rename the Roomy room (updateRoom event or create new version)
-      // 3. Trigger handleRoomySidebarUpdate
-      // 4. Verify Discord channel was renamed
+      const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
 
-      expect(true).toBe(true);
-    });
+      // Create initial room
+      const uniqueName = `original-name-${testId}`;
+      const roomResult = await createRoom(result.connectedSpace, {
+        kind: "space.roomy.channel",
+        name: uniqueName,
+      });
 
-    it("should handle category renames (best-effort)", async () => {
-      // Setup: Roomy sidebar category is renamed
-      // Expected: Discord category is renamed
+      const sidebarEvent = updateSidebarEvents([{ name: "Test", children: [roomResult.id] }]);
+      await result.connectedSpace.sendEvent(sidebarEvent);
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      // TODO: Implementation will:
-      // 1. Create a Roomy sidebar with a category
-      // 2. Rename the category in Roomy
-      // 3. Trigger handleRoomySidebarUpdate
-      // 4. Verify Discord category was renamed
+      await orchestrator.handleRoomyUpdateSidebar({ idx: 1, event: sidebarEvent, user: "did:plc:test" as any }, bot);
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
+      // Find the created channel
+      const channels1 = await bot.rest.getChannels(TEST_GUILD_ID);
+      const synced = [...channels1.values()].find(ch => ch.name === uniqueName);
+      expect(synced).toBeDefined();
+      const channelId = synced!.id;
+
+      // Directly test the rename functionality
+      await orchestrator.handleRoomyRoomRename(roomResult.id, `renamed-channel-${testId}`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Verify the channel was renamed
+      const channels2 = await bot.rest.getChannels(TEST_GUILD_ID);
+      const renamed = [...channels2.values()].find(ch => ch.id === channelId);
+      expect(renamed).toBeDefined();
+      expect(renamed?.name).toBe(`renamed-channel-${testId}`);
+    }, 30000);
+
+    it.skip("should handle category renames (best-effort)", async () => {
+      // TODO: Discord category rename is complex (requires delete/recreate/move)
+      // This is out of scope for the current implementation
       expect(true).toBe(true);
     });
 
     it("should be idempotent - re-sync does not duplicate Discord channels", async () => {
-      // Setup: Run sync twice
-      // Expected: Second sync skips existing channels
-
       const roomy = await initE2ERoomyClient();
       const bot = await createTestBot();
-
       const result = await connectGuildToNewSpace(
         roomy,
         TEST_GUILD_ID,
         `E2E Reverse Idempotency Test - ${Date.now()}`,
       );
+      const orchestrator = createSyncOrchestratorForTest(result, bot);
 
-      // TODO: Implementation will:
-      // 1. Create a Roomy room and sync to Discord
-      // 2. Get Discord channel count
-      // 3. Trigger sync again
-      // 4. Verify Discord channel count unchanged
+      const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
 
-      expect(true).toBe(true);
-    });
+      const roomResult = await createRoom(result.connectedSpace, {
+        kind: "space.roomy.channel",
+        name: "test-idempotent-channel",
+      });
+
+      const sidebarEvent = updateSidebarEvents([{ name: "Test", children: [roomResult.id] }]);
+      await result.connectedSpace.sendEvent(sidebarEvent);
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // First sync
+      await orchestrator.handleRoomyUpdateSidebar({ idx: 1, event: sidebarEvent, user: "did:plc:test" as any }, bot);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Get channel count after first sync
+      const channels1 = await bot.rest.getChannels(TEST_GUILD_ID);
+      const count1 = channels1.size;
+
+      // Second sync with same sidebar
+      await orchestrator.handleRoomyUpdateSidebar({ idx: 2, event: sidebarEvent, user: "did:plc:test" as any }, bot);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Channel count should not have changed
+      const channels2 = await bot.rest.getChannels(TEST_GUILD_ID);
+      expect(channels2.size).toBe(count1);
+    }, 30000);
 
     it("should store Roomy sync marker in Discord channel topic", async () => {
       // Setup: Create a Roomy room and sync to Discord
       // Expected: Discord channel topic contains Roomy ULID marker
       const roomy = await initE2ERoomyClient();
       const bot = await createTestBot();
+      const testId = Date.now().toString();
 
       const result = await connectGuildToNewSpace(
         roomy,
         TEST_GUILD_ID,
-        `E2E Topic Marker Test - ${Date.now()}`,
+        `E2E Topic Marker Test - ${testId}`,
       );
 
       const orchestrator = createSyncOrchestratorForTest(result, bot);
@@ -591,7 +638,7 @@ describe("E2E: Discord Channel Sync", () => {
 
       const roomResult = await createRoom(result.connectedSpace, {
         kind: "space.roomy.channel",
-        name: "test-roomy-channel",
+        name: `test-topic-marker-${testId}`,
         description: "A test channel created in Roomy",
       });
 
@@ -631,7 +678,6 @@ describe("E2E: Discord Channel Sync", () => {
 
       expect(syncedChannel).toBeDefined();
       expect(syncedChannel?.topic).toContain(`[Synced from Roomy: ${roomyRoomId}]`);
-      expect(syncedChannel?.name).toBe("test-roomy-channel");
     }, 30000);
 
     it("should recover mapping from channel topic on restart", async () => {
@@ -639,11 +685,12 @@ describe("E2E: Discord Channel Sync", () => {
       // Expected: Mapping recovered from Discord channel topics
       const roomy = await initE2ERoomyClient();
       const bot = await createTestBot();
+      const testId = Date.now().toString();
 
       const result = await connectGuildToNewSpace(
         roomy,
         TEST_GUILD_ID,
-        `E2E Recovery Test - ${Date.now()}`,
+        `E2E Recovery Test - ${testId}`,
       );
 
       const orchestrator = createSyncOrchestratorForTest(result, bot);
@@ -651,9 +698,10 @@ describe("E2E: Discord Channel Sync", () => {
       // Phase 1: Create a Roomy room and sync to Discord
       const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
 
+      const uniqueName = `test-recovery-channel-${testId}`;
       const roomResult = await createRoom(result.connectedSpace, {
         kind: "space.roomy.channel",
-        name: "test-recovery-channel",
+        name: uniqueName,
         description: "A test channel for recovery testing",
       });
 
@@ -691,6 +739,7 @@ describe("E2E: Discord Channel Sync", () => {
         ch.topic?.includes(roomyRoomId)
       );
       expect(syncedChannel).toBeDefined();
+      expect(syncedChannel?.name).toBe(uniqueName);
       const discordChannelId = syncedChannel!.id.toString();
 
       // Verify the mapping exists before clearing
@@ -720,17 +769,9 @@ describe("E2E: Discord Channel Sync", () => {
       expect(recoveredDiscordId).toBe(roomKey);
     }, 30000);
 
-    it("should sync both space.roomy.channel and space.roomy.thread kinds", async () => {
-      // Setup: Create both a channel and a thread in Roomy
-      // Expected: Both are synced to Discord (as channel and thread)
-
-      // TODO: Implementation will:
-      // 1. Create a Roomy room with kind: space.roomy.channel
-      // 2. Create a Roomy room with kind: space.roomy.thread (linked to the channel)
-      // 3. Add both to sidebar
-      // 4. Trigger sync
-      // 5. Verify Discord channel and thread were created
-
+    it.skip("should sync both space.roomy.channel and space.roomy.thread kinds", async () => {
+      // TODO: Thread sync is future work - Discord thread creation requires different API
+      // and handling of parent channel relationships
       expect(true).toBe(true);
     });
   });

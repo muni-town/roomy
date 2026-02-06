@@ -178,6 +178,7 @@ export interface FetchChannelResult {
   guildId: bigint;
   parentId?: bigint | null;
   lastMessageId?: bigint | null;
+  topic?: string | null;
 }
 
 /**
@@ -207,5 +208,63 @@ export async function fetchChannel(
     guildId: channel.guildId || 0n,
     parentId: channel.parentId || null,
     lastMessageId: channel.lastMessageId || null,
+    topic: channel.topic ?? null,
   };
+}
+
+/**
+ * Options for deleting a channel.
+ */
+export interface DeleteChannelOptions {
+  /** Discord channel ID */
+  channelId: bigint;
+}
+
+/**
+ * Result of deleting a channel.
+ */
+export interface DeleteChannelResult {
+  /** Whether the deletion was successful */
+  success: boolean;
+}
+
+/**
+ * Delete a Discord channel.
+ *
+ * @param bot - Discord bot instance
+ * @param options - Channel deletion options
+ * @returns Success status
+ *
+ * @example
+ * ```ts
+ * const result = await deleteChannel(bot, {
+ *   channelId: 123456789n,
+ * });
+ * ```
+ */
+export async function deleteChannel(
+  bot: DiscordBot,
+  options: DeleteChannelOptions,
+): Promise<DeleteChannelResult> {
+  console.log('[deleteChannel] Deleting Discord channel:', {
+    channelId: options.channelId.toString(),
+  });
+
+  try {
+    await bot.helpers.deleteChannel(options.channelId);
+
+    console.log('[deleteChannel] Successfully deleted Discord channel:', {
+      channelId: options.channelId.toString(),
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('[deleteChannel] Failed to delete Discord channel:', {
+      channelId: options.channelId.toString(),
+      error: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+      fullError: error,
+    });
+    throw error;
+  }
 }
