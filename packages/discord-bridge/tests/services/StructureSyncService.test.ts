@@ -10,6 +10,7 @@ import type { ConnectedSpace } from "@roomy/sdk";
 import { newUlid, type Ulid } from "@roomy/sdk";
 import type { DiscordBot } from "../../src/discord/types.js";
 import type { ChannelProperties, CategoryProperties } from "../../src/discord/types.js";
+import { DISCORD_EXTENSION_KEYS } from "../../src/roomy/subscription.js";
 
 // Mock ConnectedSpace
 const createMockConnectedSpace = () => ({
@@ -293,29 +294,188 @@ describe("StructureSyncService", () => {
     });
   });
 
-  describe("handleRoomyRoomCreate (stub)", () => {
-    it("should throw not implemented error", async () => {
+  describe("handleRoomyRoomCreate", () => {
+    it("should skip rooms with discordOrigin extension", async () => {
+      const bot = createMockBot();
+      const serviceWithBot = new StructureSyncService(
+        repo,
+        mockSpace as unknown as ConnectedSpace,
+        guildId,
+        spaceId,
+        bot,
+      );
+
       const event = {
         id: newUlid(),
         $type: "space.roomy.room.createRoom.v0",
+        kind: "space.roomy.channel",
+        name: "test-channel",
+        extensions: {
+          [DISCORD_EXTENSION_KEYS.ROOM_ORIGIN]: {
+            $type: DISCORD_EXTENSION_KEYS.ROOM_ORIGIN,
+            snowflake: "123456",
+            guildId: guildId.toString(),
+          },
+        },
       } as any;
 
-      await expect(service.handleRoomyRoomCreate(event)).rejects.toThrow(
-        "Not implemented",
+      await serviceWithBot.handleRoomyRoomCreate(event);
+
+      // Should not have created any channel
+      expect(bot.helpers.createChannel).not.toHaveBeenCalled();
+    });
+
+    it("should create Discord channel for Roomy room without discordOrigin", async () => {
+      const bot = createMockBot();
+      const serviceWithBot = new StructureSyncService(
+        repo,
+        mockSpace as unknown as ConnectedSpace,
+        guildId,
+        spaceId,
+        bot,
       );
+
+      // Mock fetchEvents to return our room event
+      (mockSpace as any).fetchEvents = vi.fn(async () => []);
+
+      const event = {
+        id: newUlid(),
+        $type: "space.roomy.room.createRoom.v0",
+        kind: "space.roomy.channel",
+        name: "test-roomy-channel",
+        extensions: {},
+      } as any;
+
+      await serviceWithBot.handleRoomyRoomCreate(event);
+
+      // Should have created Discord channel
+      expect(bot.helpers.createChannel).toHaveBeenCalled();
+    });
+
+    it("should skip non-channel room kinds", async () => {
+      const bot = createMockBot();
+      const serviceWithBot = new StructureSyncService(
+        repo,
+        mockSpace as unknown as ConnectedSpace,
+        guildId,
+        spaceId,
+        bot,
+      );
+
+      const event = {
+        id: newUlid(),
+        $type: "space.roomy.room.createRoom.v0",
+        kind: "space.roomy.page", // Not a channel
+        name: "test-page",
+        extensions: {},
+      } as any;
+
+      await serviceWithBot.handleRoomyRoomCreate(event);
+
+      // Should not have created any channel
+      expect(bot.helpers.createChannel).not.toHaveBeenCalled();
     });
   });
 
-  describe("handleRoomySidebarUpdate (stub)", () => {
-    it("should throw not implemented error", async () => {
-      const event = {
+  describe("handleRoomySidebarUpdate", () => {
+    it("should skip rooms with discordOrigin extension", async () => {
+      const bot = createMockBot();
+      const serviceWithBot = new StructureSyncService(
+        repo,
+        mockSpace as unknown as ConnectedSpace,
+        guildId,
+        spaceId,
+        bot,
+      );
+
+      const roomyRoomId = newUlid();
+
+      // Mock fetchEvents to return room with discordOrigin
+      (mockSpace as any).fetchEvents = vi.fn(async () => [
+        {
+          event: {
+            id: roomyRoomId,
+            $type: "space.roomy.room.createRoom.v0",
+            name: "test-channel",
+            extensions: {
+              [DISCORD_EXTENSION_KEYS.ROOM_ORIGIN]: {
+                $type: DISCORD_EXTENSION_KEYS.ROOM_ORIGIN,
+                snowflake: "123456",
+                guildId: guildId.toString(),
+              },
+            },
+          },
+        },
+      ]);
+
+      const sidebarEvent = {
         id: newUlid(),
         $type: "space.roomy.space.updateSidebar.v0",
+        categories: [{ name: "Test", children: [roomyRoomId] }],
       } as any;
 
-      await expect(service.handleRoomySidebarUpdate(event)).rejects.toThrow(
-        "Not implemented",
+      await serviceWithBot.handleRoomySidebarUpdate(sidebarEvent);
+
+      // Should not have created any channel
+      expect(bot.helpers.createChannel).not.toHaveBeenCalled();
+    });
+
+    it("should create Discord channels for rooms without discordOrigin", async () => {
+      const bot = createMockBot();
+      const serviceWithBot = new StructureSyncService(
+        repo,
+        mockSpace as unknown as ConnectedSpace,
+        guildId,
+        spaceId,
+        bot,
       );
+
+      const roomyRoomId = newUlid();
+
+      // Mock fetchEvents to return room without discordOrigin
+      (mockSpace as any).fetchEvents = vi.fn(async () => [
+        {
+          event: {
+            id: roomyRoomId,
+            $type: "space.roomy.room.createRoom.v0",
+            name: "test-roomy-channel",
+            extensions: {},
+          },
+        },
+      ]);
+
+      const sidebarEvent = {
+        id: newUlid(),
+        $type: "space.roomy.space.updateSidebar.v0",
+        categories: [{ name: "Test", children: [roomyRoomId] }],
+      } as any;
+
+      await serviceWithBot.handleRoomySidebarUpdate(sidebarEvent);
+
+      // Should have created Discord channel
+      expect(bot.helpers.createChannel).toHaveBeenCalled();
+    });
+
+    it("should handle empty sidebar gracefully", async () => {
+      const bot = createMockBot();
+      const serviceWithBot = new StructureSyncService(
+        repo,
+        mockSpace as unknown as ConnectedSpace,
+        guildId,
+        spaceId,
+        bot,
+      );
+
+      const sidebarEvent = {
+        id: newUlid(),
+        $type: "space.roomy.space.updateSidebar.v0",
+        categories: [],
+      } as any;
+
+      await serviceWithBot.handleRoomySidebarUpdate(sidebarEvent);
+
+      // Should not have created any channel
+      expect(bot.helpers.createChannel).not.toHaveBeenCalled();
     });
   });
 });

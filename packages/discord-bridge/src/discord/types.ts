@@ -33,6 +33,7 @@ const channelProperties = {
   type: true,
   guildId: true,
   parentId: true,
+  topic: true,
 } as const;
 export type ChannelProperties = SetupDesiredProps<
   Channel,
