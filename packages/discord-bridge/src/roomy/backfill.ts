@@ -219,7 +219,7 @@ export async function syncRoomyToDiscord(
                   "webhook.get_or_create",
                   async (webhookSpan) => {
                     try {
-                      return await getOrCreateWebhook(bot, ctx, channelId);
+                      return await getOrCreateWebhook(bot, ctx.guildId, ctx.spaceId, channelId);
                     } catch (error) {
                       recordError(webhookSpan, error);
                       throw error;
@@ -305,10 +305,11 @@ export async function syncRoomyToDiscord(
                         error?.code === 404 ||
                         (error as any)?.metadata?.code === 404
                       ) {
-                        await clearWebhookCache(ctx, channelId);
+                        await clearWebhookCache(ctx.guildId, ctx.spaceId, channelId);
                         const newWebhook = await getOrCreateWebhook(
                           bot,
-                          ctx,
+                          ctx.guildId,
+                          ctx.spaceId,
                           channelId,
                         );
                         return await executeWebhookWithRetry(

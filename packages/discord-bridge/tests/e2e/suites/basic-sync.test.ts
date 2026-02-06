@@ -54,25 +54,21 @@ describe("E2E: Discord Channel Sync", () => {
   }, 60000);
 
   beforeEach(async () => {
-    // Clear ALL registrations to ensure clean slate
+    // Aggressive cleanup for each test to ensure clean slate
+    // NOTE: This uses clear() which can affect other test files running in parallel
+    // Tests should be run individually until better database isolation is implemented
     await registeredBridges.clear();
-
+    // Also clear connectedSpaces
     const bridges = await registeredBridges.list();
     for (const bridge of bridges) {
       connectedSpaces.delete(bridge.spaceId);
     }
+    // Delay to ensure LevelDB operations are flushed
+    await new Promise(resolve => setTimeout(resolve, 100));
   });
 
   afterEach(async () => {
-    // Clean up the guild->space mapping after each test
-    const existingSpaceId = await registeredBridges.get_spaceId(TEST_GUILD_ID);
-    if (existingSpaceId) {
-      await registeredBridges.sublevel.batch([
-        { type: "del", key: `guildId_${TEST_GUILD_ID}` },
-        { type: "del", key: `spaceId_${existingSpaceId}` },
-      ]);
-      connectedSpaces.delete(existingSpaceId);
-    }
+    // afterEach cleanup is now handled by beforeEach in the next test
   });
 
   describe("Unit-level: Individual Channel Sync", () => {

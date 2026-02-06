@@ -78,7 +78,7 @@ export async function syncCreateMessageToDiscord(
       // Get webhook
       const webhook = await tracer.startActiveSpan("webhook.get_or_create", async (webhookSpan) => {
         try {
-          return await getOrCreateWebhook(bot, ctx, channelId);
+          return await getOrCreateWebhook(bot, ctx.guildId, ctx.spaceId, channelId);
         } catch (error) {
           recordError(webhookSpan, error);
           throw error;
@@ -168,8 +168,8 @@ export async function syncCreateMessageToDiscord(
           recordError(execSpan, error);
           // If webhook was deleted (404), clear cache and retry
           if (error?.code === 404 || error?.metadata?.code === 404) {
-            await clearWebhookCache(ctx, channelId);
-            const newWebhook = await getOrCreateWebhook(bot, ctx, channelId);
+            await clearWebhookCache(ctx.guildId, ctx.spaceId, channelId);
+            const newWebhook = await getOrCreateWebhook(bot, ctx.guildId, ctx.spaceId, channelId);
             return await executeWebhookWithRetry(
               bot,
               newWebhook.id,

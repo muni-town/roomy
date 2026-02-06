@@ -126,10 +126,11 @@ describe("SyncOrchestrator", () => {
 
     it("should handle Discord message delete", async () => {
       const messageId = 987654321n;
+      const channelId = 111222333n;
       await repo.registerMapping(messageId.toString(), "roomy-msg-456");
-      await repo.registerMapping("roomy-msg-456", "room-room-123");
+      await repo.registerMapping(`room:${channelId.toString()}`, "room-room-123");
 
-      await orchestrator.handleDiscordMessageDelete(messageId);
+      await orchestrator.handleDiscordMessageDelete(messageId, channelId);
 
       // Should have sent a delete event
       expect(mockSpace.sendEvent).toHaveBeenCalled();
