@@ -1,7 +1,7 @@
 import { peer, peerStatus } from "$lib/workers";
-import type { Event, StreamDid, Did } from "@roomy/sdk";
+import type { StreamDid, Did } from "@roomy/sdk";
 import { toast } from "@fuxui/base";
-import { newUlid, ulidFactory } from "@roomy/sdk";
+import { newUlid, createDefaultSpaceEvents } from "@roomy/sdk";
 
 /**
  * Join a space.
@@ -42,12 +42,7 @@ export async function createSpace(opts: {
     personalStreamId: StreamDid;
   };
 }) {
-  let currentSpaceName = opts.spaceName;
-  let currentSpaceDescription = opts.spaceDescription;
-
-  const newUlid = ulidFactory();
-
-  if (!currentSpaceName) {
+  if (!opts.spaceName) {
     throw "Please enter a name for the space";
   }
 
@@ -65,47 +60,22 @@ export async function createSpace(opts: {
 
   console.log("sent join space event to personal stream");
 
+  // Upload avatar if provided
   const avatarUpload =
     opts.avatarFile &&
     (await peer.uploadToPds(await opts.avatarFile.arrayBuffer()));
 
-  const batch: Event[] = [];
-
-  // Update space info
-  batch.push({
-    id: newUlid(),
-    $type: "space.roomy.space.updateSpaceInfo.v0",
+  // Create default space events using SDK helper
+  // This creates: space info, lobby channel, and sidebar with general category
+  const defaultSpaceEvents = createDefaultSpaceEvents({
+    name: opts.spaceName,
+    description: opts.spaceDescription,
     avatar: avatarUpload?.uri,
-    name: currentSpaceName,
-    description: currentSpaceDescription,
   });
 
-  // Note: We no longer create a separate "system" user profile.
-  // System messages (like "user joined") use the space DID as author,
-  // and the space's own comp_info entry provides the display name.
+  await peer.sendEventBatch(spaceDid, defaultSpaceEvents);
 
-  const generalChannelId = newUlid();
-  batch.push({
-    id: generalChannelId,
-    $type: "space.roomy.room.createRoom.v0",
-    kind: "space.roomy.channel",
-    name: "lobby",
-  });
-
-  batch.push({
-    id: newUlid(),
-    $type: "space.roomy.space.updateSidebar.v0",
-    categories: [
-      {
-        name: "general",
-        children: [generalChannelId],
-      },
-    ],
-  });
-
-  await peer.sendEventBatch(spaceDid, batch);
-
-  console.log("sent events batch", batch);
+  console.log("sent default space events", defaultSpaceEvents);
 
   return { spaceDid };
 }
