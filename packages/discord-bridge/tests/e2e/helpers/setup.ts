@@ -6,6 +6,7 @@
 import { createBot } from "@discordeno/bot";
 import { createDefaultSpaceEvents, type ConnectedSpace, type StreamDid, modules, ConnectedSpace as SDKConnectedSpace, RoomyClient } from "@roomy/sdk";
 import { desiredProperties, type ChannelProperties, type DiscordBot } from "../../../src/discord/types.js";
+import { isRoomySyncedChannel } from "../../../src/utils/discord-topic.js";
 import { DISCORD_TOKEN, LEAF_URL, LEAF_SERVER_DID, ATPROTO_BRIDGE_DID, ATPROTO_BRIDGE_APP_PASSWORD } from "../../../src/env.js";
 import { registeredBridges } from "../../../src/db.js";
 import { connectedSpaces, initRoomyClient, getRoomyClient as getBridgeRoomyClient } from "../../../src/roomy/client.js";
@@ -437,4 +438,53 @@ export async function getCategories(
   }
 
   return categories;
+}
+
+/**
+ * Delete all channels in a guild that have the Roomy sync marker.
+ *
+ * This is useful for cleaning up test environments between test runs.
+ * Channels are identified by the [Synced from Roomy: <ULID>] marker in their topic.
+ *
+ * @param bot - Discord bot instance
+ * @param guildId - Guild ID to clean up
+ * @returns Number of channels deleted
+ *
+ * @example
+ * ```ts
+ * const bot = await createTestBot();
+ * const deletedCount = await cleanupRoomySyncedChannels(bot, TEST_GUILD_ID);
+ * console.log(`Cleaned up ${deletedCount} test channels`);
+ * ```
+ */
+export async function cleanupRoomySyncedChannels(
+  bot: DiscordBot,
+  guildId: string,
+): Promise<number> {
+  const channels = await bot.rest.getChannels(guildId);
+  let deletedCount = 0;
+
+  // Collect channels to delete (we can't delete while iterating)
+  const toDelete: bigint[] = [];
+  for (const channel of channels) {
+    // Only delete channels (not categories or voice channels)
+    if (isTextChannel(channel)) {
+      // Check if this channel has the Roomy sync marker
+      if (isRoomySyncedChannel(channel.topic ?? null)) {
+        toDelete.push(BigInt(channel.id));
+      }
+    }
+  }
+
+  // Delete the channels
+  for (const channelId of toDelete) {
+    try {
+      await bot.rest.deleteChannel(channelId);
+      deletedCount++;
+    } catch (error) {
+      console.warn(`Failed to delete channel ${channelId}:`, error);
+    }
+  }
+
+  return deletedCount;
 }

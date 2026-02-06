@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
-import { connectGuildToNewSpace, initE2ERoomyClient, getRoomyClient, createQueryHelper } from "../helpers/setup.js";
+import { connectGuildToNewSpace, initE2ERoomyClient, getRoomyClient, createQueryHelper, createTestBot, cleanupRoomySyncedChannels } from "../helpers/setup.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
 import { registeredBridges } from "../../../src/db.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
@@ -29,6 +29,11 @@ describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
     // Initialize Roomy client once (reuses bridge infrastructure)
     await initE2ERoomyClient();
     console.log("Roomy client initialized for E2E tests");
+
+    // Clean up any channels with Roomy sync marker from previous test runs
+    const bot = await createTestBot();
+    const deletedCount = await cleanupRoomySyncedChannels(bot, TEST_GUILD_ID);
+    console.log(`Cleaned up ${deletedCount} Roomy-synced channels from previous test runs`);
 
     // Clear any stale registrations for the test guild
     const existingSpaceId = await registeredBridges.get_spaceId(TEST_GUILD_ID);

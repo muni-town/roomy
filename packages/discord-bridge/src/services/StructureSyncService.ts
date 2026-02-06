@@ -263,14 +263,17 @@ export class StructureSyncService {
       return;
     }
 
+    // Type assertion to access event properties
+    const e = event as any;
+
     // Skip if this room was synced from Discord (has discordOrigin extension)
-    if (DISCORD_EXTENSION_KEYS.ROOM_ORIGIN in (event.extensions || {})) {
+    if (DISCORD_EXTENSION_KEYS.ROOM_ORIGIN in (e.extensions || {})) {
       return;
     }
 
-    const roomyRoomId = event.id;
-    const roomName = event.name || "unnamed-room";
-    const roomKind = event.kind;
+    const roomyRoomId = e.id;
+    const roomName = e.name || "unnamed-room";
+    const roomKind = e.kind;
 
     // Only sync channels (not threads, pages, etc.)
     if (roomKind !== "space.roomy.channel") {
@@ -284,10 +287,10 @@ export class StructureSyncService {
       try {
         const channel = await discordFetchChannel(this.bot, { channelId: BigInt(existingDiscordId.replace("room:", "")) });
         // Channel exists, check if it has our marker
-        if (!extractRoomyRoomId(channel.topic || null)) {
+        if (!extractRoomyRoomId(channel.topic ?? null)) {
           // Channel exists but no marker - add it
           await this.bot.helpers.editChannel(channel.id, {
-            topic: addRoomySyncMarker(channel.topic || null, roomyRoomId),
+            topic: addRoomySyncMarker(channel.topic ?? null, roomyRoomId),
           });
         }
         return;
@@ -366,49 +369,83 @@ export class StructureSyncService {
       categories: Array<{ name: string; children: Ulid[] }>;
     };
 
+    // Collect all room IDs from sidebar
+    const allRoomIds: Ulid[] = [];
     for (const category of sidebar.categories) {
-      for (const roomyRoomId of category.children) {
-        // Check if room has discordOrigin extension (skip if synced from Discord)
-        const hasOrigin = await this.hasDiscordOrigin(roomyRoomId);
-        if (hasOrigin) continue;
+      allRoomIds.push(...category.children);
+    }
 
-        // Check if we've already synced this room
-        const existingDiscordId = await this.repo.getDiscordId(roomyRoomId);
-        if (existingDiscordId) {
-          // Verify Discord channel still exists and has our topic marker
-          await this.verifyOrCreateChannel(roomyRoomId);
-        } else {
-          // Get room details from repo or fetch from event stream
-          // For now, create with a default name - the actual name would come from createRoom event
-          await this.createDiscordChannelFromRoomy(roomyRoomId, `roomy-${roomyRoomId.slice(0, 8)}`);
-        }
+    if (allRoomIds.length === 0) {
+      console.log("No rooms in sidebar, skipping sync");
+      return;
+    }
+
+    // Fetch room names from event stream
+    const roomNames = await this.fetchRoomNames(allRoomIds);
+
+    // Process each room
+    let createdCount = 0;
+    let skippedCount = 0;
+
+    for (const roomyRoomId of allRoomIds) {
+      // Skip rooms with discordOrigin (synced from Discord)
+      const hasOrigin = await this.hasDiscordOrigin(roomyRoomId);
+      if (hasOrigin) {
+        skippedCount++;
+        continue;
+      }
+
+      const existingDiscordId = await this.repo.getDiscordId(roomyRoomId);
+      const roomName = roomNames.get(roomyRoomId) || `roomy-${roomyRoomId.slice(0, 8)}`;
+
+      if (existingDiscordId) {
+        await this.verifyOrCreateChannelWithName(roomyRoomId, roomName);
+      } else {
+        await this.createDiscordChannelFromRoomy(roomyRoomId, roomName);
+        createdCount++;
       }
     }
+
+    console.log(
+      `[Roomy → Discord Sync] Created ${createdCount} channels, skipped ${skippedCount} (from Discord)`
+    );
   }
 
   /**
    * Check if a Roomy room has Discord origin (was synced from Discord).
+   * Queries the event stream to check for discordOrigin extension.
    */
   private async hasDiscordOrigin(roomyRoomId: Ulid): Promise<boolean> {
-    // Check if the room has a discordOrigin extension
-    // This would require querying the event stream or maintaining a local cache
-    // For now, we check the repo - if it has a room: prefixed mapping, it likely came from Discord
-    const discordId = await this.repo.getDiscordId(roomyRoomId);
-    return discordId?.startsWith("room:") ?? false;
+    const allEvents = await this.connectedSpace.fetchEvents(1 as any, 1000);
+    const roomEvent = allEvents.find(
+      (e) =>
+        (e.event as any).id === roomyRoomId &&
+        (e.event as any).$type === "space.roomy.room.createRoom.v0"
+    );
+
+    if (!roomEvent) {
+      console.warn(`Could not find createRoom event for ${roomyRoomId}`);
+      return false;
+    }
+
+    return DISCORD_EXTENSION_KEYS.ROOM_ORIGIN in ((roomEvent.event as any).extensions || {});
   }
 
   /**
-   * Verify a Discord channel exists and has our topic marker, or recreate it.
+   * Verify a Discord channel exists, has correct name, and has topic marker.
+   * Creates or updates channel as needed.
    */
-  private async verifyOrCreateChannel(roomyRoomId: Ulid): Promise<void> {
+  private async verifyOrCreateChannelWithName(
+    roomyRoomId: Ulid,
+    roomName: string
+  ): Promise<void> {
     if (!this.bot) {
       throw new Error("Bot required for Roomy → Discord sync");
     }
 
     const existingDiscordId = await this.repo.getDiscordId(roomyRoomId);
     if (!existingDiscordId) {
-      // No mapping exists, create new channel
-      await this.createDiscordChannelFromRoomy(roomyRoomId, `roomy-${roomyRoomId.slice(0, 8)}`);
+      await this.createDiscordChannelFromRoomy(roomyRoomId, roomName);
       return;
     }
 
@@ -417,18 +454,22 @@ export class StructureSyncService {
     try {
       const channel = await discordFetchChannel(this.bot, { channelId: BigInt(channelId) });
 
-      // Check if channel has our topic marker
-      if (!extractRoomyRoomId(channel.topic || null)) {
-        // Channel exists but no marker - add it
+      // Check for rename
+      if (channel.name !== roomName) {
+        await this.handleRoomyRoomRename(roomyRoomId, roomName);
+        console.log(`Renamed Discord channel ${channelId} to ${roomName}`);
+      }
+
+      // Verify topic marker
+      if (!extractRoomyRoomId(channel.topic ?? null)) {
         await this.bot.helpers.editChannel(channel.id, {
-          topic: addRoomySyncMarker(channel.topic || null, roomyRoomId),
+          topic: addRoomySyncMarker(channel.topic ?? null, roomyRoomId),
         });
         console.log(`Added sync marker to existing channel ${channelId}`);
       }
     } catch {
-      // Channel doesn't exist, recreate it
       console.warn(`Discord channel ${channelId} not found, recreating...`);
-      await this.createDiscordChannelFromRoomy(roomyRoomId, `roomy-${roomyRoomId.slice(0, 8)}`);
+      await this.createDiscordChannelFromRoomy(roomyRoomId, roomName);
     }
   }
 
@@ -446,7 +487,7 @@ export class StructureSyncService {
       const channels = await this.bot.rest.getChannels(this.guildId.toString());
 
       let recoveredCount = 0;
-      for (const [_, channel] of channels) {
+      for (const channel of Object.values(channels)) {
         // Check if channel has our topic marker
         const roomyRoomId = extractRoomyRoomId(channel.topic);
         if (roomyRoomId) {
@@ -491,8 +532,7 @@ export class StructureSyncService {
       if (channel.name !== newName) {
         await this.bot.helpers.editChannel(channel.id, {
           name: newName,
-          reason: "Synced from Roomy",
-        });
+        } as any);
         console.log(`Renamed Discord channel ${channelId} to ${newName}`);
       }
     } catch (error) {
@@ -518,5 +558,27 @@ export class StructureSyncService {
     // 3. Delete old category
     // For now, this is a no-op placeholder
     console.log(`Category rename not implemented: ${oldName} -> ${newName}`);
+  }
+
+  /**
+   * Fetch room names from event stream for given room IDs.
+   */
+  private async fetchRoomNames(roomIds: Ulid[]): Promise<Map<Ulid, string>> {
+    if (roomIds.length === 0) return new Map();
+
+    const allEvents = await this.connectedSpace.fetchEvents(1 as any, 1000);
+    const createRoomEvents = allEvents.filter(
+      (e) => (e.event as any).$type === "space.roomy.room.createRoom.v0"
+    );
+
+    const nameMap = new Map<Ulid, string>();
+    for (const { event } of createRoomEvents) {
+      const e = event as any;
+      if (roomIds.includes(e.id)) {
+        nameMap.set(e.id, e.name || `roomy-${e.id.slice(0, 8)}`);
+      }
+    }
+
+    return nameMap;
   }
 }
