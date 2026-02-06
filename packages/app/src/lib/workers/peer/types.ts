@@ -176,7 +176,7 @@ export type TrackedState<State extends { state: string }, Status> = {
   get status(): Status;
 
   /** Returns a promise that will resolve when the given state is transitioned to. */
-  transitionTo<S extends State["state"]>(
+  transitionedTo<S extends State["state"]>(
     state: S,
   ): Promise<Extract<Readonly<State>, { state: S }>>;
 
@@ -230,7 +230,7 @@ export function trackedState<State extends { state: string }, Status>(
       return mapper(state);
     },
 
-    transitionTo(desiredState) {
+    transitionedTo(desiredState) {
       type ReturnType = Promise<
         Extract<Readonly<State>, { state: typeof desiredState }>
       >;

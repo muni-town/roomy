@@ -8,7 +8,6 @@ import type {
   UserDid,
   DecodedStreamEvent,
 } from "@roomy/sdk";
-import type { QueryResult } from "./sqlite/setup";
 import type { SqlStatement } from "./sqlite/types";
 import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
 
