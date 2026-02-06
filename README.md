@@ -1,9 +1,6 @@
 # Roomy
 
-Gardenable group chat made with [AT Protocol](https://atproto.com/), [Loro](https://loro.dev) and [Leaf SDK](https://github.com/muni-town/leaf).
-
-Currently working on producing a functional proof-of-concept. See the
-[Roadmap](https://github.com/orgs/muni-town/projects/8/views/4).
+Roomy is a group messaging app that gives online communities tools for autonomous collaboration — designable, gardenable spaces not just for chat, but for cultivating a web of shared understanding together. Roomy is built with [AT Protocol](https://atproto.com/) and our bespoke event-sourcing sync system, [Leaf](https://github.com/muni-town/leaf). See [this blog post](https://blog.muni.town/brief-history-of-roomy-architectures/) to understand a bit about how this project is developed and where we are now.
 
 ## Key Features
 
@@ -11,43 +8,9 @@ Currently working on producing a functional proof-of-concept. See the
 
 **Auto-documenting:** Every page, every thread, every post in Roomy is fundamentally a type of *document*. Any single chat message, or a series of them strung together, can at any point be 'transitioned' into the first draft of a Documentation Page.
 
-**Personally agentic:** Build sovereign communities. You will have a local copy of your community's data at all times, and so will all your community members! [Local-first software.](https://localfirstweb.dev/)
-
-**Peer powered:** Make communities that can, if necessary, endure purely on the shared resources of sufficiently aligned peers in a mutual-sharing network. [Peer-2-Peer software](https://blog.muni.town/roomy-deep-dive/) *(slightly outdated but gist of it remains the same)*
-
-**Public-first; privacy-friendly:** Roomy is designed first and foremost for publicly shared, collaborative content exchange. Private conversations are carefully supported, but private spaces hosted on our network needs to go through screenings. If you don't want your private group subjected to scrutiny, we will soon support self-hosting for full privacy. [Capabilities](https://blog.muni.town/capabilities-and-identity-with-leaf/) *(also pending update)*
-
 **Bring your own ID:** Login with Bluesky (default) (soon also Mastodon, GitHub...).  Extend your existing social profile with Roomy. [Digital Homeownership](https://blog.muni.town/digital-homeownership/)
 
-**Bluesky-connected:** Roomy is optionally connected with the Bluesky network of 30M people. [Make a Roomy-space for any atproto Bluesky account (domain)]()
-
-## Contributions welcome!
-
-Take a look at [our issues](https://github.com/muni-town/roomy/issues) and let us know if there is anything you can take on that isn't already assigned.
-
-## Local Development Requirements
-
-📦 pnpm 10.10.0
-🟢 node 22.15.0
-
-```
-pnpm install
-pnpm run dev
-```
-
-Tools we use:
-
-🔸 svelte 5
-🌬️ tailwind 4
-
-**Docs still pending.** While inaccurate, DeepWiki might provide some basic insights:
-
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/muni-town/roomy)
-
-## Devlog
-
-* [Roomy - Alpha-4]([https://blog.muni.town/roomy-chat-alpha/](https://blog.muni.town/roomy-space-alpha4/))
-* [Roomy Deep Dive: ATProto + Automerge](https://blog.muni.town/roomy-deep-dive/)
+**Bluesky-connected:** Roomy is optionally connected with the Bluesky network of 30M people. Make a Roomy-space for any ATProto (including Bluesky) account.
 
 ## Design
 
