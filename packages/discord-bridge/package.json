@@ -16,7 +16,10 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run tests/integration",
-    "test:unit": "vitest run tests/operations"
+    "test:unit": "vitest run tests/operations",
+    "cleanup": "tsx scripts/run-cleanup.ts all",
+    "cleanup:messages": "tsx scripts/run-cleanup.ts messages",
+    "cleanup:channels": "tsx scripts/run-cleanup.ts channels"
   },
   "dependencies": {
     "@atproto/api": "^0.14.22",
