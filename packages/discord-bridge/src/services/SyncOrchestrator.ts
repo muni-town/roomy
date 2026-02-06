@@ -218,6 +218,14 @@ export class SyncOrchestrator {
   async handleRoomyCategoryRename(oldName: string, newName: string): Promise<void> {
     return await this.structureSync.handleRoomyCategoryRename(oldName, newName);
   }
+
+  /**
+   * Clear internal caches.
+   * Call this between tests to ensure fresh state.
+   */
+  clearCache(): void {
+    this.structureSync.clearCache();
+  }
 }
 
 /**

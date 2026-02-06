@@ -19,9 +19,19 @@ import { createRoom, createThread } from "@roomy/sdk/package/operations";
 import { createChannel as discordCreateChannel, fetchChannel as discordFetchChannel } from "../discord/operations/channel.js";
 
 /**
+ * Cached createRoom event data.
+ */
+interface CreateRoomInfo {
+  name: string;
+  hasDiscordOrigin: boolean;
+}
+
+/**
  * Service for syncing room structure between Discord and Roomy.
  */
 export class StructureSyncService {
+  private createRoomCache: Map<Ulid, CreateRoomInfo> | null = null;
+
   constructor(
     private readonly repo: BridgeRepository,
     private readonly connectedSpace: ConnectedSpace,
@@ -29,6 +39,41 @@ export class StructureSyncService {
     private readonly spaceId: string,
     private readonly bot?: DiscordBot,
   ) {}
+
+  /**
+   * Clear internal caches.
+   * Call this between tests to ensure fresh state.
+   */
+  clearCache(): void {
+    this.createRoomCache = null;
+  }
+
+  /**
+   * Build cache of all createRoom events.
+   * Fetches from event stream once, then caches for reuse.
+   */
+  private async buildCreateRoomCache(): Promise<Map<Ulid, CreateRoomInfo>> {
+    if (this.createRoomCache) {
+      return this.createRoomCache;
+    }
+
+    this.createRoomCache = new Map();
+    // Fetch smaller batch for E2E tests (most test spaces have <50 events)
+    const allEvents = await this.connectedSpace.fetchEvents(1 as any, 1000);
+
+    for (const { event } of allEvents) {
+      if (event.$type === "space.roomy.room.createRoom.v0") {
+        const e = event as any;
+        const hasOrigin = DISCORD_EXTENSION_KEYS.ROOM_ORIGIN in (e.extensions || {});
+        this.createRoomCache.set(e.id, {
+          name: e.name || `roomy-${e.id.slice(0, 8)}`,
+          hasDiscordOrigin: hasOrigin,
+        });
+      }
+    }
+
+    return this.createRoomCache;
+  }
 
   /**
    * Handle Discord channel creation.
@@ -413,22 +458,11 @@ export class StructureSyncService {
 
   /**
    * Check if a Roomy room has Discord origin (was synced from Discord).
-   * Queries the event stream to check for discordOrigin extension.
+   * Uses cached event data for performance.
    */
   private async hasDiscordOrigin(roomyRoomId: Ulid): Promise<boolean> {
-    const allEvents = await this.connectedSpace.fetchEvents(1 as any, 1000);
-    const roomEvent = allEvents.find(
-      (e) =>
-        (e.event as any).id === roomyRoomId &&
-        (e.event as any).$type === "space.roomy.room.createRoom.v0"
-    );
-
-    if (!roomEvent) {
-      console.warn(`Could not find createRoom event for ${roomyRoomId}`);
-      return false;
-    }
-
-    return DISCORD_EXTENSION_KEYS.ROOM_ORIGIN in ((roomEvent.event as any).extensions || {});
+    const cache = await this.buildCreateRoomCache();
+    return cache.get(roomyRoomId)?.hasDiscordOrigin ?? false;
   }
 
   /**
@@ -562,20 +596,18 @@ export class StructureSyncService {
 
   /**
    * Fetch room names from event stream for given room IDs.
+   * Uses cached event data for performance.
    */
   private async fetchRoomNames(roomIds: Ulid[]): Promise<Map<Ulid, string>> {
     if (roomIds.length === 0) return new Map();
 
-    const allEvents = await this.connectedSpace.fetchEvents(1 as any, 1000);
-    const createRoomEvents = allEvents.filter(
-      (e) => (e.event as any).$type === "space.roomy.room.createRoom.v0"
-    );
-
+    const cache = await this.buildCreateRoomCache();
     const nameMap = new Map<Ulid, string>();
-    for (const { event } of createRoomEvents) {
-      const e = event as any;
-      if (roomIds.includes(e.id)) {
-        nameMap.set(e.id, e.name || `roomy-${e.id.slice(0, 8)}`);
+
+    for (const roomId of roomIds) {
+      const info = cache.get(roomId);
+      if (info) {
+        nameMap.set(roomId, info.name);
       }
     }
 
