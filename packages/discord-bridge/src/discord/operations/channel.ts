@@ -61,14 +61,37 @@ export async function createChannel(
   bot: DiscordBot,
   options: CreateChannelOptions,
 ): Promise<CreateChannelResult> {
-  const channel = await bot.helpers.createChannel(options.guildId, {
+  const createChannelPayload = {
     name: options.name,
     type: options.type,
     ...(options.parentId && { parentId: options.parentId.toString() }),
     ...(options.topic && { topic: options.topic }),
+  };
+
+  console.log('[createChannel] Creating Discord channel with options:', {
+    guildId: options.guildId.toString(),
+    payload: createChannelPayload,
   });
 
-  return { id: channel.id };
+  try {
+    const channel = await bot.helpers.createChannel(options.guildId, createChannelPayload);
+
+    console.log('[createChannel] Successfully created Discord channel:', {
+      channelId: channel.id.toString(),
+      channelName: channel.name,
+    });
+
+    return { id: channel.id };
+  } catch (error) {
+    console.error('[createChannel] Failed to create Discord channel:', {
+      guildId: options.guildId.toString(),
+      payload: createChannelPayload,
+      error: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+      fullError: error,
+    });
+    throw error;
+  }
 }
 
 /**
