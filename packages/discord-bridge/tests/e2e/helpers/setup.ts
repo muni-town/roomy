@@ -3,7 +3,7 @@
  * Provides Discord bot and Roomy client creation for tests.
  */
 
-import { createBot } from "@discordeno/bot";
+import { createBot, Intents } from "@discordeno/bot";
 import { createDefaultSpaceEvents, type ConnectedSpace, type StreamDid, modules, ConnectedSpace as SDKConnectedSpace, RoomyClient } from "@roomy/sdk";
 import { desiredProperties, type ChannelProperties, type DiscordBot } from "../../../src/discord/types.js";
 import { isRoomySyncedChannel } from "../../../src/utils/discord-topic.js";
@@ -856,4 +856,464 @@ export async function safeDeleteWebhook(
     console.error(`❌ Failed to safely delete webhook ${webhookId}:`, error);
     return messagesDeleted;
   }
+}
+
+/**
+ * Get reactions for a specific emoji on a Discord message.
+ * Uses Discord REST API to fetch users who reacted with the given emoji.
+ *
+ * @param bot - Discord bot instance
+ * @param channelId - Discord channel ID
+ * @param messageId - Discord message ID
+ * @param emoji - Emoji string (unicode or "name:id" format for custom)
+ * @returns Array of user IDs who reacted with the emoji
+ *
+ * @deprecated Prefer using gateway-based verification (createGatewayTestBot + waitForGatewayReaction)
+ * for reliable e2e testing. This method relies on REST API polling which has timing issues.
+ */
+export async function getDiscordReactions(
+  bot: DiscordBot,
+  channelId: bigint,
+  messageId: bigint,
+  emoji: string,
+): Promise<bigint[]> {
+  if (!emoji) {
+    return [];
+  }
+
+  try {
+    // Discord API: GET /channels/{channel.id}/messages/{message.id}/reactions/{emoji}
+    // For unicode emojis: use the raw unicode (but percent-encoded)
+    // For custom emojis: use name:id format
+    const url = `https://discord.com/api/v10/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}?limit=100`;
+
+    console.log(`getDiscordReactions: ${url}`);
+
+    // Get token from environment
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bot ${DISCORD_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log(`getDiscordReactions response: ${response.status}`);
+
+    if (response.status === 404) {
+      return []; // No reactions found
+    }
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`getDiscordReactions failed: ${response.status} ${response.statusText} - URL: ${url} - Response: ${text}`);
+      return [];
+    }
+
+    const users = await response.json();
+    console.log(`getDiscordReactions users: ${users.length} users found`);
+    return users.map((user: any) => BigInt(user.id));
+  } catch (error: any) {
+    // Log error but don't fail the test
+    console.error(`getDiscordReactions error:`, error);
+    return [];
+  }
+}
+
+// ============================================================================
+// GATEWAY-BASED VERIFICATION HELPERS
+// ============================================================================
+
+/**
+ * A gateway reaction event received from Discord.
+ */
+export interface GatewayReactionEvent {
+  /** The message ID that was reacted to */
+  messageId: bigint;
+  /** The channel ID containing the message */
+  channelId: bigint;
+  /** The guild ID */
+  guildId: bigint;
+  /** The user who reacted */
+  userId: bigint;
+  /** The emoji (with name, and optionally id for custom emojis) */
+  emoji: { name: string | null; id?: bigint | null };
+  /** Whether this is a burst reaction (rare) */
+  burst?: boolean;
+  /** The reaction event type */
+  type: "add" | "remove";
+}
+
+/**
+ * Gateway test bot context that tracks received events.
+ */
+export interface GatewayTestBot {
+  /** The Discord bot instance */
+  bot: DiscordBot;
+  /** Array of reaction events received since creation or last clear */
+  reactionEvents: GatewayReactionEvent[];
+  /** Clear all tracked events */
+  clearEvents(): void;
+  /** Stop the gateway connection */
+  stop(): Promise<void>;
+}
+
+/**
+ * The tracker instance for the currently active gateway test bot.
+ * Used to route gateway events to the test's event array.
+ */
+let gatewayTestBotTracker: {
+  reactionEvents: GatewayReactionEvent[];
+} | null = null;
+
+/**
+ * Create a Discord bot with gateway connection for e2e testing.
+ *
+ * Unlike createTestBot() which creates a REST-only bot, this function connects
+ * to the Discord gateway to receive real-time event notifications. This enables
+ * definitive verification that reactions (and other events) actually occurred on Discord.
+ *
+ * **Why gateway vs REST?**
+ * - REST API returns HTTP 200 OK when request is *accepted*, not when action completes
+ * - REST API has eventual consistency - writes may not be immediately readable
+ * - Gateway sends event when Discord *actually* creates the reaction (source of truth)
+ *
+ * @returns A GatewayTestBot with event tracking and cleanup methods
+ *
+ * @example
+ * ```ts
+ * const gatewayBot = await createGatewayTestBot();
+ *
+ * // Add a reaction via REST
+ * await gatewayBot.bot.helpers.addReaction(channelId, messageId, "👍");
+ *
+ * // Wait for gateway confirmation (definitive proof reaction exists)
+ * const reaction = await waitForGatewayReaction(gatewayBot, {
+ *   messageId,
+ *   channelId,
+ *   emoji: "👍",
+ * });
+ *
+ * expect(reaction).toBeDefined();
+ * expect(reaction.userId).toBe(botId);
+ *
+ * // Cleanup
+ * await gatewayBot.stop();
+ * ```
+ */
+export async function createGatewayTestBot(): Promise<GatewayTestBot> {
+  const env = getTestEnv();
+
+  // Track events for this bot instance
+  const reactionEvents: GatewayReactionEvent[] = [];
+
+  // Set the global tracker (will be used by event handlers)
+  gatewayTestBotTracker = { reactionEvents };
+
+  const bot = await createBot({
+    token: env.discordToken,
+    desiredProperties,
+    // Gateway intents for reaction testing
+    intents: Intents.Guilds | Intents.GuildMessageReactions,
+    events: {
+      ready() {
+        console.log("[GatewayTestBot] Connected to Discord gateway");
+      },
+
+      reactionAdd(payload) {
+        // Only track events with a guildId (skip DMs)
+        if (!payload.guildId) return;
+
+        const event: GatewayReactionEvent = {
+          messageId: payload.messageId,
+          channelId: payload.channelId,
+          guildId: payload.guildId,
+          userId: payload.userId,
+          emoji: payload.emoji,
+          burst: payload.burst,
+          type: "add",
+        };
+
+        console.log(
+          `[GatewayTestBot] Reaction ADD: msg=${payload.messageId} user=${payload.userId} emoji=${payload.emoji.name}`
+        );
+
+        // Add to tracked events
+        reactionEvents.push(event);
+      },
+
+      reactionRemove(payload) {
+        if (!payload.guildId) return;
+
+        const event: GatewayReactionEvent = {
+          messageId: payload.messageId,
+          channelId: payload.channelId,
+          guildId: payload.guildId,
+          userId: payload.userId,
+          emoji: payload.emoji,
+          burst: payload.burst,
+          type: "remove",
+        };
+
+        console.log(
+          `[GatewayTestBot] Reaction REMOVE: msg=${payload.messageId} user=${payload.userId} emoji=${payload.emoji.name}`
+        );
+
+        reactionEvents.push(event);
+      },
+    },
+  });
+
+  // Start the gateway connection
+  bot.start();
+
+  // Wait for the gateway to connect (ready event)
+  // The bot is ready when the `ready` event fires, but we'll use a simple timeout
+  // since we don't have a way to await the ready event synchronously
+  await new Promise<void>(resolve => {
+    const timeout = setTimeout(() => {
+      // Give it extra time - gateway connection can take 1-3 seconds
+      resolve();
+    }, 5000);
+
+    // Try to resolve early if bot becomes ready
+    const checkReady = setInterval(() => {
+      // @ts-ignore - internal gateway property
+      if (bot.gateway?.ready) {
+        clearInterval(checkReady);
+        clearTimeout(timeout);
+        resolve();
+      }
+    }, 100);
+  });
+
+  console.log("[GatewayTestBot] Gateway connection established");
+
+  return {
+    bot,
+    reactionEvents,
+    clearEvents() {
+      reactionEvents.length = 0;
+    },
+    async stop() {
+      console.log("[GatewayTestBot] Stopping gateway connection...");
+      gatewayTestBotTracker = null;
+      // @ts-ignore - bot has a stop method on the gateway
+      bot.gateway?.stop?.();
+    },
+  };
+}
+
+/**
+ * Options for filtering which gateway reaction event to wait for.
+ */
+export interface WaitForReactionOptions {
+  /** The message ID that should be reacted to */
+  messageId: bigint;
+  /** The channel ID containing the message */
+  channelId: bigint;
+  /** Optional: filter by specific emoji (name for unicode or custom emoji) */
+  emoji?: string;
+  /** Optional: filter by specific user ID */
+  userId?: bigint;
+  /** Optional: filter by event type (add or remove) */
+  type?: "add" | "remove";
+  /** Maximum time to wait for the event (default: 5000ms) */
+  timeout?: number;
+}
+
+/**
+ * Wait for a specific reaction event from the Discord gateway.
+ *
+ * This is the definitive way to verify a reaction actually exists on Discord.
+ * Instead of polling the REST API with arbitrary delays, we wait for Discord
+ * to push the gateway event confirming the reaction was created.
+ *
+ * **IMPORTANT LIMITATION:** Discord does NOT send gateway events for a bot's own
+ * reactions. When the bot adds a reaction via REST API, Discord does not echo
+ * a MESSAGE_REACTION_ADD event back to the same bot. This function will timeout
+ * when waiting for the bot's own reactions. For bot reactions, use
+ * `waitForBotReactionViaRest()` instead.
+ *
+ * @param gatewayBot - The gateway test bot instance
+ * @param options - Filter options to match the expected event
+ * @returns The matched gateway reaction event, or null if timeout
+ *
+ * @example
+ * ```ts
+ * // Simulate another user reacting (will trigger gateway event)
+ * const reaction = await waitForGatewayReaction(gatewayBot, {
+ *   messageId,
+ *   channelId,
+ *   emoji: "👍",
+ *   userId: otherUserId, // NOT the bot's user ID
+ * });
+ * ```
+ */
+export async function waitForGatewayReaction(
+  gatewayBot: GatewayTestBot,
+  options: WaitForReactionOptions,
+): Promise<GatewayReactionEvent | null> {
+  const {
+    messageId,
+    channelId,
+    emoji,
+    userId,
+    type,
+    timeout = 5000,
+  } = options;
+
+  const startTime = Date.now();
+
+  return new Promise((resolve) => {
+    // Check existing events first (in case event already arrived)
+    const checkEvents = () => {
+      const match = gatewayBot.reactionEvents.find((event) => {
+        if (event.messageId !== messageId) return false;
+        if (event.channelId !== channelId) return false;
+        if (emoji !== undefined && event.emoji.name !== emoji) return false;
+        if (userId !== undefined && event.userId !== userId) return false;
+        if (type !== undefined && event.type !== type) return false;
+        return true;
+      });
+
+      if (match) {
+        return match;
+      }
+
+      return null;
+    };
+
+    // Immediate check
+    const existingMatch = checkEvents();
+    if (existingMatch) {
+      resolve(existingMatch);
+      return;
+    }
+
+    // Poll for new events
+    const interval = setInterval(() => {
+      const match = checkEvents();
+      if (match) {
+        clearInterval(interval);
+        resolve(match);
+        return;
+      }
+
+      // Check timeout
+      if (Date.now() - startTime > timeout) {
+        clearInterval(interval);
+        console.error(
+          `[waitForGatewayReaction] Timeout after ${timeout}ms waiting for reaction: ` +
+          `messageId=${messageId}, channelId=${channelId}, emoji=${emoji}, userId=${userId}, type=${type}. ` +
+          `Note: Discord does NOT send gateway events for a bot's own reactions.`
+        );
+        resolve(null);
+      }
+    }, 50); // Check every 50ms
+  });
+}
+
+/**
+ * Options for waiting for bot reaction via REST API polling.
+ */
+export interface WaitForBotReactionOptions {
+  /** The bot instance */
+  bot: DiscordBot;
+  /** The message ID that should be reacted to */
+  messageId: bigint;
+  /** The channel ID containing the message */
+  channelId: bigint;
+  /** The emoji to wait for */
+  emoji: string;
+  /** Maximum time to wait for the reaction (default: 10000ms) */
+  timeout?: number;
+  /** Polling interval in ms (default: 200ms) */
+  interval?: number;
+}
+
+/**
+ * Wait for a bot's own reaction to appear via REST API polling.
+ *
+ * Since Discord does NOT send gateway events for a bot's own reactions,
+ * we must poll the REST API to verify the reaction was added. This is more
+ * reliable than arbitrary sleeps because it:
+ * 1. Polls at regular intervals instead of hoping a fixed delay is enough
+ * 2. Has a configurable timeout with clear error messages
+ * 3. Returns as soon as the reaction is detected (no unnecessary waiting)
+ *
+ * **Why is this needed?** Discord's eventual consistency means the REST API
+ * may not immediately return a reaction after adding it. This function polls
+ * until the reaction appears or timeout is reached.
+ *
+ * @param options - Polling options
+ * @returns The array of user IDs who reacted with the emoji, or null if timeout
+ *
+ * @example
+ * ```ts
+ * // Add a reaction via bot
+ * await bot.helpers.addReaction(channelId, messageId, "👍");
+ *
+ * // Wait for reaction to be queryable via REST API
+ * const result = await waitForBotReactionViaRest({
+ *   bot,
+ *   messageId,
+ *   channelId,
+ *   emoji: "👍",
+ * });
+ *
+ * if (!result) {
+ *   throw new Error("Reaction not found in Discord API within timeout");
+ * }
+ *
+ * // Verify bot is in the list of reactors
+ * expect(result).toContain(bot.id);
+ * ```
+ */
+export async function waitForBotReactionViaRest(
+  options: WaitForBotReactionOptions,
+): Promise<bigint[] | null> {
+  const {
+    bot,
+    messageId,
+    channelId,
+    emoji,
+    timeout = 10000,
+    interval = 200,
+  } = options;
+
+  const startTime = Date.now();
+
+  console.log(
+    `[waitForBotReactionViaRest] Polling for reaction: ` +
+    `messageId=${messageId}, channelId=${channelId}, emoji=${emoji}`
+  );
+
+  return new Promise((resolve) => {
+    const poll = async () => {
+      const users = await getDiscordReactions(bot, channelId, messageId, emoji);
+
+      if (users.length > 0) {
+        console.log(
+          `[waitForBotReactionViaRest] Reaction found: ${users.length} users reacted`
+        );
+        resolve(users);
+        return;
+      }
+
+      // Check timeout
+      if (Date.now() - startTime > timeout) {
+        console.error(
+          `[waitForBotReactionViaRest] Timeout after ${timeout}ms waiting for reaction`
+        );
+        resolve(null);
+        return;
+      }
+
+      // Poll again after interval
+      setTimeout(poll, interval);
+    };
+
+    // Start polling
+    poll();
+  });
 }

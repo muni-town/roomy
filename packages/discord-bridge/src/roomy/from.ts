@@ -369,14 +369,22 @@ export async function syncAddReactionToDiscord(
 
       // Handle both addBridgedReaction (with reactingUser) and addReaction (user from event)
       const isBridgedReaction = event.$type === "space.roomy.reaction.addBridgedReaction.v0";
+
+      // Skip bridged reactions - they originated from Discord and syncing them back
+      // would cause an echo loop (Discord → Roomy → Discord → ...)
+      if (isBridgedReaction) {
+        span.setAttribute("sync.result", "skipped_bridged_reaction");
+        return;
+      }
+
       const reactionEvent = event as {
         reactionTo: string;
         reaction: string;
         reactingUser?: string; // Only present for bridged reactions
       };
 
-      // For pure Roomy reactions, use the event user; for bridged, use reactingUser
-      const reactingUser = reactionEvent.reactingUser ?? user;
+      // For pure Roomy reactions, use the event user
+      const reactingUser = user;
 
       // Get the Discord message ID from the Roomy message ID
       // Use get_roomyId() to get the Discord snowflake from the Roomy ULID
