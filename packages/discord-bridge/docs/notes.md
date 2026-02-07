@@ -208,6 +208,58 @@ if (message.webhookId) {
 
 ## E2E Testing (2026-02-07)
 
+### Reaction Verification: REST Polling with `waitForBotReactionViaRest`
+
+**Problem:** E2E tests were taking at face value that `discordeno`'s methods (`bot.helpers.addReaction()`) have successfully sent reactions to Discord, but weren't definitively verifying the reaction exists on Discord.
+
+**Why this matters:**
+- HTTP 200 OK from `addReaction()` only means Discord *accepted* the request, not that the reaction is fully propagated
+- Discord's API has eventual consistency - writes may not be immediately readable
+- Without proper verification, tests could pass even when reactions fail to sync
+
+**Discord API Limitation:**
+> Discord does NOT send gateway events for a bot's own reactions. When a bot adds a reaction via REST API, Discord does not echo a `MESSAGE_REACTION_ADD` event back to the same bot.
+
+This means we cannot use gateway-based verification for the bot's own actions (Roomy → Discord sync).
+
+**Solution:** Implemented `waitForBotReactionViaRest()` in `tests/e2e/helpers/setup.ts`:
+
+```typescript
+// Instead of:
+await new Promise(resolve => setTimeout(resolve, 2000)); // Hope it's ready
+const users = await getDiscordReactions(...);
+expect(users.length).toBeGreaterThan(0);
+
+// Use:
+const users = await waitForBotReactionViaRest({
+  bot,
+  messageId,
+  channelId,
+  emoji: "👍",
+  timeout: 10000,
+});
+expect(users).not.toBeNull();
+```
+
+**Benefits:**
+1. **Deterministic** - polls at regular intervals (default 200ms) instead of hoping a fixed delay is enough
+2. **Fast** - returns as soon as reaction is detected (no unnecessary waiting)
+3. **Clear errors** - timeout with descriptive message if reaction never appears
+4. **Configurable** - adjustable timeout and polling interval
+
+**Updated tests:**
+- `should sync Roomy reaction on Discord message to Discord` (D-msg + R-react)
+- `should sync Roomy reaction on Roomy message to Discord` (R-msg + R-react)
+
+Both tests now verify the reaction actually exists on Discord's REST API before passing.
+
+**Gateway-based verification (for future use):**
+The setup file also includes:
+- `createGatewayTestBot()` - creates a gateway-connected test bot
+- `waitForGatewayReaction()` - waits for gateway events from other users
+
+These are useful for verifying reactions added by OTHER users (Discord → Roomy sync), where Discord DOES send gateway events.
+
 ### Structure Sync: Preserving Roomy-Native Rooms
 
 **Problem:** When syncing Discord channels to Roomy, the sidebar was being completely replaced, losing existing Roomy rooms (like 'lobby') that weren't synced from Discord.
