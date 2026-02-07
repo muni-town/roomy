@@ -863,6 +863,73 @@ describe("E2E: Discord Channel Sync", () => {
       expect(recoveredDiscordId).toBe(roomKey);
     }, 30000);
 
+    it("should sync Roomy-native lobby room to Discord on initial backfill", async () => {
+      // This test verifies that the default 'lobby' room (which has no discordOrigin)
+      // is synced to Discord as a new channel during the initial backfill
+      const roomy = await initE2ERoomyClient();
+      const bot = await createTestBot();
+      const testId = Date.now().toString();
+
+      const result = await connectGuildToNewSpace(
+        roomy,
+        TEST_GUILD_ID,
+        `E2E Lobby Backfill Test - ${testId}`,
+      );
+      const orchestrator = createSyncOrchestratorForTest(result, bot);
+
+      // Wait for the default space structure to be created
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Fetch all createRoom events to find the lobby room (no discordOrigin)
+      const allEvents = await result.connectedSpace.fetchEvents(1 as any, 100);
+      const createRoomEvents = allEvents.filter(
+        (e: any) => e.event.$type === "space.roomy.room.createRoom.v0",
+      );
+
+      // Find a Roomy-native room (like 'lobby') without discordOrigin
+      const lobbyRoomEvent = createRoomEvents.find(
+        (e: any) =>
+          !e.event.extensions?.["space.roomy.extension.discordOrigin.v0"] &&
+          e.event.kind === "space.roomy.channel",
+      );
+
+      expect(lobbyRoomEvent).toBeDefined();
+      const lobbyRoomId = lobbyRoomEvent!.event.id;
+      const lobbyRoomName = lobbyRoomEvent!.event.name;
+
+      console.log(`Found Roomy-native room: ${lobbyRoomName} (${lobbyRoomId})`);
+
+      // Get the current sidebar (it should include the lobby room)
+      const sidebarEvents = allEvents.filter(
+        (e: any) => e.event.$type === "space.roomy.space.updateSidebar.v0",
+      );
+
+      expect(sidebarEvents.length).toBeGreaterThan(0);
+
+      // Trigger Roomy → Discord sync for the sidebar
+      const latestSidebarEvent = sidebarEvents[sidebarEvents.length - 1];
+      await orchestrator.handleRoomyUpdateSidebar(
+        { idx: 1, event: latestSidebarEvent.event, user: "did:plc:test" as any },
+        bot,
+      );
+
+      // Wait for Discord channel creation
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // Verify the lobby room was synced to Discord as a new channel
+      const discordChannels = await bot.rest.getChannels(TEST_GUILD_ID);
+      const syncedChannel = [...discordChannels.values()].find((ch) =>
+        ch.topic?.includes(lobbyRoomId),
+      );
+
+      expect(syncedChannel).toBeDefined();
+      expect(syncedChannel?.topic).toContain(
+        `[Synced from Roomy: ${lobbyRoomId}]`,
+      );
+
+      console.log(`Lobby room "${lobbyRoomName}" synced to Discord as channel "${syncedChannel?.name}"`);
+    }, 45000);
+
     it.skip("should sync both space.roomy.channel and space.roomy.thread kinds", async () => {
       // TODO: Thread sync is future work - Discord thread creation requires different API
       // and handling of parent channel relationships

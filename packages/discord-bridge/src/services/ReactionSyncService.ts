@@ -22,6 +22,7 @@ export class ReactionSyncService {
     private readonly connectedSpace: ConnectedSpace,
     private readonly guildId: bigint,
     private readonly spaceId: string,
+    private readonly botId?: bigint,
   ) {}
 
   /**
@@ -49,6 +50,14 @@ export class ReactionSyncService {
     userId: bigint,
     emoji: Partial<Emoji>,
   ): Promise<string | null> {
+    // Skip bot's own reactions to prevent reaction echo
+    // When we sync a Roomy reaction to Discord via webhook, Discord sends us
+    // a reaction_add event back. We must skip syncing this back to Roomy.
+    if (this.botId && userId === this.botId) {
+      console.log(`[ReactionSync] Skipping bot's own reaction (user ${userId} == bot ${this.botId})`);
+      return null;
+    }
+
     const key = this.getReactionKey(messageId, userId, emoji);
 
     // Idempotency check - skip if already synced
