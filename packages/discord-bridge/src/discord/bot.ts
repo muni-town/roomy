@@ -212,7 +212,7 @@ export async function startBot() {
             console.error(`Thread ${channel.name} has no parent channel`);
             return;
           }
-          const orchestrator = createOrchestratorFromContext(ctx);
+          const orchestrator = createOrchestratorFromContext(ctx, bot);
           await orchestrator.handleDiscordThreadCreate(channel, channel.parentId);
           console.log(
             `Successfully created Roomy thread for Discord thread ${channel.name}`,
@@ -271,7 +271,7 @@ export async function startBot() {
 
         const ctx = await getGuildContext(payload.guildId);
         if (!ctx) return;
-        const orchestrator = createOrchestratorFromContext(ctx);
+        const orchestrator = createOrchestratorFromContext(ctx, bot);
         console.log(`[Discord] Reaction add: msg=${payload.messageId} user=${payload.userId} emoji=${payload.emoji.name}`);
         await orchestrator.handleDiscordReactionAdd(
           payload.messageId,
@@ -289,7 +289,7 @@ export async function startBot() {
 
         const ctx = await getGuildContext(payload.guildId);
         if (!ctx) return;
-        const orchestrator = createOrchestratorFromContext(ctx);
+        const orchestrator = createOrchestratorFromContext(ctx, bot);
         await orchestrator.handleDiscordReactionRemove(
           payload.messageId,
           payload.channelId,
@@ -312,7 +312,7 @@ export async function startBot() {
         const ctx = await getGuildContext(message.guildId);
         if (!ctx) return;
 
-        const orchestrator = createOrchestratorFromContext(ctx);
+        const orchestrator = createOrchestratorFromContext(ctx, bot);
         // syncEditToRoomy will skip messages not in syncedIds (including bot messages)
         await orchestrator.handleDiscordMessageUpdate(message);
       },
@@ -463,7 +463,7 @@ export async function backfillGuild(bot: DiscordBot, guildId: bigint) {
         activeThreads.length + archivedThreads.length,
       );
 
-      const orchestrator = createOrchestratorFromContext(ctx);
+      const orchestrator = createOrchestratorFromContext(ctx, bot);
 
       // Build a set of channel IDs we're going to sync (GuildText only)
       const channelIdSet = new Set(textChannels.map((c) => c.id.toString()));
