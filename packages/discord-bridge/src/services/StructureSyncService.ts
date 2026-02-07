@@ -190,6 +190,7 @@ export class StructureSyncService {
   /**
    * Handle full Discord sidebar sync.
    * Syncs all channels, categories, threads, and their relationships.
+   * Preserves existing Roomy rooms (without discordOrigin) that aren't from Discord.
    *
    * @param channels - All Discord channels
    * @param categories - Discord categories
@@ -203,7 +204,31 @@ export class StructureSyncService {
     channels: ChannelProperties[],
     categories: ChannelProperties[],
   ): Promise<void> {
-    // Build category map: categoryId -> roomyIds of child channels
+    // STEP 1: Collect all Roomy room IDs that don't have discordOrigin (preserve these)
+    // Fetch all createRoom events to find rooms without discordOrigin
+    const allEvents = await this.connectedSpace.fetchEvents(1 as any, 1000);
+    const preservedRoomIds = new Set<Ulid>();
+    const discordSyncedRoomIds = new Set<Ulid>();
+
+    for (const { event } of allEvents) {
+      if (event.$type === "space.roomy.room.createRoom.v0") {
+        const e = event as any;
+        const hasOrigin = DISCORD_EXTENSION_KEYS.ROOM_ORIGIN in (e.extensions || {});
+        const isChannel = e.kind === "space.roomy.channel";
+
+        if (isChannel && !hasOrigin) {
+          // This is a Roomy-native channel (like 'lobby'), preserve it
+          preservedRoomIds.add(e.id);
+        } else if (isChannel && hasOrigin) {
+          // This was synced from Discord, track it
+          discordSyncedRoomIds.add(e.id);
+        }
+      }
+    }
+
+    console.log(`Found ${preservedRoomIds.size} Roomy-native rooms to preserve (e.g., 'lobby'), ${discordSyncedRoomIds.size} Discord-synced rooms`);
+
+    // STEP 2: Build Discord channel map
     const categoryChildren = new Map<string, Ulid[]>();
     const uncategorizedChannels: Ulid[] = [];
 
@@ -239,10 +264,19 @@ export class StructureSyncService {
       }
     }
 
-    // Build categories array for UpdateSidebar event
+    // STEP 3: Build categories array for UpdateSidebar event
     const sidebarCategories: { name: string; children: Ulid[] }[] = [];
 
-    // Add uncategorized channels to "general" category
+    // Add preserved Roomy rooms first (in a "Roomy" category)
+    if (preservedRoomIds.size > 0) {
+      sidebarCategories.push({
+        name: "Roomy",
+        children: Array.from(preservedRoomIds),
+      });
+      console.log(`Added ${preservedRoomIds.size} preserved Roomy rooms to sidebar`);
+    }
+
+    // Add uncategorized Discord channels to "general" category
     if (uncategorizedChannels.length > 0) {
       sidebarCategories.push({
         name: "general",
@@ -269,7 +303,7 @@ export class StructureSyncService {
       return; // No change
     }
 
-    console.log(`Updating sidebar with ${sidebarCategories.length} categories, ${uncategorizedChannels.length} uncategorized channels`);
+    console.log(`Updating sidebar with ${sidebarCategories.length} categories (${preservedRoomIds.size} Roomy, ${uncategorizedChannels.length} uncategorized Discord, ${categoryChildren.size} Discord categories)`);
 
     // Send sidebar update event
     const event = {

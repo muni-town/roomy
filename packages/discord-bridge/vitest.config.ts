@@ -11,10 +11,10 @@ export default defineConfig({
     // Run E2E tests serially to avoid LevelDB state conflicts
     fileParallelism: false,
     maxConcurrency: 1,
-    pool: "forks",
+    pool: "threads",
     poolOptions: {
-      forks: {
-        singleFork: true,
+      threads: {
+        singleThread: true,
       },
     },
     coverage: {
