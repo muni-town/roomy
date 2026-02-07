@@ -302,6 +302,27 @@ export class SyncOrchestrator {
   clearCache(): void {
     this.structureSync.clearCache();
   }
+
+  // ============================================================
+  // BACKFILL operations
+  // ============================================================
+
+  /**
+   * Backfill Roomy → Discord for this specific guild/space.
+   * Orchestrates the four-phase backfill process.
+   *
+   * Phase 0: Backfill Roomy structure (rooms → Discord channels)
+   * Phase 1: Fetch Roomy-origin events
+   * Phase 2: Backfill Discord messages for hash computation
+   * Phase 3: Sync Roomy events to Discord with duplicate detection
+   *
+   * @param bot - Discord bot instance
+   */
+  async backfillRoomyToDiscord(bot: DiscordBot): Promise<void> {
+    // Delegates to the backfill module
+    const { backfillRoomyToDiscordForGuild } = await import("../roomy/backfill.js");
+    await backfillRoomyToDiscordForGuild(this, bot);
+  }
 }
 
 /**

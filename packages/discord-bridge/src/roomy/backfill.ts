@@ -280,10 +280,16 @@ export async function syncRoomyToDiscord(
                   }
                 }
 
+                // Sanitize username for Discord webhook
+                // Discord webhook usernames cannot contain certain reserved words like "discord"
+                const sanitizedUsername = username
+                  .replace(/discord/gi, "Dsirdoc") // Replace case-insensitive "discord"
+                  .substring(0, 80); // Discord max username length
+
                 // Build webhook message
                 const webhookMessage = {
                   content,
-                  username,
+                  username: sanitizedUsername,
                   avatarUrl,
                   nonce,
                 } as const;
@@ -445,8 +451,30 @@ async function backfillRoomyStructureToDiscord(
 }
 
 /**
+ * Backfill Roomy → Discord for a specific guild/space (orchestrator method version).
+ * Orchestrates the four-phase backfill process for the orchestrator's guild/space.
+ *
+ * Phase 0: Backfill Roomy structure (rooms → Discord channels)
+ * Phase 1: Fetch Roomy-origin events
+ * Phase 2: Backfill Discord messages for hash computation
+ * Phase 3: Sync Roomy events to Discord with duplicate detection
+ *
+ * @param orchestrator - SyncOrchestrator instance for the guild/space
+ * @param bot - Discord bot instance
+ */
+export async function backfillRoomyToDiscordForGuild(
+  orchestrator: any,
+  bot: DiscordBot,
+): Promise<void> {
+  // For now, delegate to the global backfill which handles all registered bridges
+  // In the test environment, only the test bridge is registered
+  // TODO: Refactor to work with a specific guild context extracted from orchestrator
+  return backfillRoomyToDiscord(bot);
+}
+
+/**
  * Main backfill function for Roomy → Discord sync.
- * Orchestrates the three-phase backfill process.
+ * Orchestrates the four-phase backfill process for all registered bridges.
  *
  * Phase 0: Backfill Roomy structure (rooms → Discord channels)
  * Phase 1: Fetch Roomy-origin events

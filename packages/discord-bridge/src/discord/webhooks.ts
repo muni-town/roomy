@@ -178,7 +178,7 @@ export async function executeWebhookWithRetry(
         `Webhook rate limited, waiting ${retryAfter}s before retry`,
       );
       await new Promise((resolve) => setTimeout(resolve, delayMs));
-      return executeWebhookWithRetry(bot, webhookId, webhookToken, options, retries);
+      return executeWebhookWithRetry(bot, webhookId, webhookToken, options, retries + 1);
     }
 
     // Webhook deleted (404)
