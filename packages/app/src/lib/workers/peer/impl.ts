@@ -7,7 +7,6 @@ import {
 import { sql } from "$lib/utils/sqlTemplate";
 import { CONFIG } from "$lib/config";
 import { db, prevStream } from "../idb";
-import { Deferred } from "$lib/utils/deferred";
 import type { QueryResult } from "../sqlite/setup";
 import {
   type AuthState,
@@ -18,10 +17,12 @@ import {
   type PeerClientInterface,
   type AuthStatus,
   type RoomyStatus,
-  trackedState,
+  statusMachine,
   roomyStateTrackable as roomyStateTrackable,
   authStateTrackable,
-  type TrackedState,
+  type StatusMachine,
+  stateMachine,
+  type StateMachine,
 } from "./types";
 import type {
   Savepoint,
@@ -30,6 +31,7 @@ import type {
 } from "../sqlite/types";
 import {
   ConnectedSpace,
+  Deferred,
   Did,
   ensureEntity,
   modules,
@@ -74,6 +76,9 @@ const sessionDidCache = {
   put(did: string): Promise<void> {
     return db.kv.put({ key: this.kvKey, value: did }).then(() => {});
   },
+  clear(): Promise<void> {
+    return db.kv.delete(this.kvKey);
+  },
 };
 
 /**
@@ -84,9 +89,9 @@ export class Peer {
   #sessionId: string;
 
   /** The current authentication state of the peer. */
-  #auth: TrackedState<AuthState, AuthStatus>;
+  #auth: StatusMachine<AuthState, AuthStatus>;
   /** The current state of the roomy client. */
-  #roomy: TrackedState<RoomyState, RoomyStatus>;
+  #roomy: StatusMachine<RoomyState, RoomyStatus>;
 
   /** Helper to set the profile in the reactive {@link PeerStatus} for this peer. */
   #updateReactiveProfile: (profile: Profile | undefined) => void;
@@ -138,7 +143,7 @@ export class Peer {
     };
 
     // Initialize the auth state
-    this.#auth = trackedState<AuthState, AuthStatus>(authStateTrackable);
+    this.#auth = statusMachine<AuthState, AuthStatus>(authStateTrackable);
 
     // Subscribe to auth state changes and update reactive status
     this.#auth.subscribeStatus((status) => {
@@ -146,7 +151,7 @@ export class Peer {
     });
 
     // Initialize the roomy client state
-    this.#roomy = trackedState<RoomyState, RoomyStatus>(roomyStateTrackable);
+    this.#roomy = statusMachine<RoomyState, RoomyStatus>(roomyStateTrackable);
 
     // Subscribe to roomy client state changes and update reactive status
     this.#roomy.subscribeStatus((status) => {
@@ -388,6 +393,7 @@ export class Peer {
         return {};
       }
 
+      // If we have a session, update our state to authenticated
       this.#auth.current = { state: "authenticated", session };
       faro.api.setSession({
         id: faro.api.getSession()?.id,
@@ -404,6 +410,13 @@ export class Peer {
     });
   }
 
+  /**
+   * Authenticate the user, either creating a new session using oauth callback parameters, or by
+   * trying to restore a previous session.
+   *
+   * Returns `null` if there was no previous session and we are not creating a new session from
+   * OAuth params.
+   * */
   private async authenticate(
     params?: string,
   ): Promise<SessionManagerWithDid | null> {
@@ -503,11 +516,13 @@ export class Peer {
       (span) => [span, context.active()] as const,
     );
 
+    // Create a new ATProto agent around the authenticated session
     const agent = new Agent(session);
     lexicons.forEach((l) => agent.lex.add(l as any));
 
     this.#roomy.current = { state: "connectingToServer" };
 
+    // Create a Roomy client that will connect to the leaf server.
     const roomy = await context.bind(ctx, RoomyClient.create)(
       {
         agent,
@@ -542,8 +557,12 @@ export class Peer {
       CONFIG.streamSchemaVersion,
     );
 
+    // Create a new event channel that we will use to capture new events coming from the server and
+    // going to the materializer.
     const eventChannel = new AsyncChannel<Batch.Events>();
 
+    // Create a callback that will subscribe to events and send them over the event channel to the
+    // materializer.
     const callback = this.#createEventCallback(
       eventChannel,
       personalSpace.streamDid,
@@ -551,7 +570,7 @@ export class Peer {
       async () => this.sqlite.sqliteWorker.connectPendingSpaces(),
     );
 
-    // backfill entire personal space
+    // backfill entire personal space by subscribing to all of its events.
     await personalSpace.subscribe(callback);
 
     // Ensure personal stream space entity exists
@@ -574,14 +593,7 @@ export class Peer {
       spaces: new Map(),
     };
 
-    // authenticate sqlite
-    tracer.startActiveSpan("Authenticate SQLite", {}, ctx, (span) => {
-      this.sqlite
-        .authenticate(UserDid.assert(roomy.agent.did))
-        .catch((e) => console.error("Failed to authenticate sqlite worker", e))
-        .finally(() => span.end());
-    });
-
+    // Start the SQLite materialization of events we send over the event stream.
     this.startMaterializer();
 
     const lastBatchId = await tracer.startActiveSpan(
@@ -672,7 +684,7 @@ export class Peer {
     span.end();
   }
 
-  // get a URL for redirecting to the ATProto PDS for login
+  /** Get a URL for redirecting to the ATProto PDS for login */
   async login(handle: string) {
     const oauth = await createOauthClient();
     const url = await oauth.authorize(handle, {
@@ -681,12 +693,14 @@ export class Peer {
     return url.href;
   }
 
+  /** Logout of the current session. */
   async logout() {
-    await db.kv.delete("did");
+    await sessionDidCache.clear();
     await oauthDb.session.clear();
     await oauthDb.state.clear();
   }
 
+  /** Start materializng events that come over the event channel. */
   private async startMaterializer() {
     console.debug("Starting materialiser");
     const { eventChannel, personalSpace } = await Promise.race([
@@ -699,9 +713,7 @@ export class Peer {
     for await (const batch of eventChannel) {
       // personal stream backfill is always high priority, other streams can be in background
       if (batch.streamId === personalSpace.streamDid) {
-        console.log("materialize batch...");
         const result = await this.sqlite.materializeBatch(batch, "priority");
-        console.log("materialize batch...done");
 
         // If there is a resolver waiting on this batch, resolve it with the result
         const resolver = this.#batchResolvers.get(batch.batchId);
@@ -1095,12 +1107,6 @@ class SqliteSupervisor {
     if (this.#state.state !== "ready")
       throw new Error("Sqlite worker not initialised");
     return this.#state.sqliteWorker;
-  }
-
-  async authenticate(did: UserDid) {
-    await this.untilReady;
-    await this.sqliteWorker.authenticate(did);
-    console.debug(`SQLite reinitialised with did: ${did}`);
   }
 
   async setReady(workerInterface: SqliteWorkerInterface) {

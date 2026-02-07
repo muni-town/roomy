@@ -4,8 +4,6 @@ import {
   type ApplyResultSuccess,
   type Batch,
   type Bundle,
-  type MaterializationSummary,
-  type MaterializationWarnings,
   type StreamIndex,
   type TaskPriority,
 } from "../types";
@@ -44,7 +42,6 @@ import type {
   SqlStatement,
 } from "./types";
 import type { PeerInterface } from "../peer/types";
-import { Deferred } from "$lib/utils/deferred";
 import { CONFIG } from "$lib/config";
 import { requestLock, queryLocks, locksEnabled } from "$lib/workers/locks";
 import { initializeFaro, trackUncaughtExceptions } from "$lib/otel";
@@ -87,7 +84,6 @@ class SqliteWorkerSupervisor {
   #eventChannel: AsyncChannel<Batch.Events | Batch.Unstash>;
   #statementChannel = new AsyncChannel<Batch.Statement>();
   #pendingBatches = new Map<string, (result: Batch.ApplyResult) => void>();
-  #authenticated = new Deferred();
   /** Spaces to connect after personal stream backfill completes.
    * We accumulate joinSpace events and remove leaveSpace events to ensure
    * we only connect to spaces the user is currently a member of. */
@@ -486,28 +482,15 @@ class SqliteWorkerSupervisor {
 
   private getSqliteInterface(): SqliteWorkerInterface {
     return {
-      authenticate: async (did) => {
-        // await this.loadDb(did, false); // there is no special reason to have DID-keyed db when it's in memory only. keeping for future transition back to persistent
-        this.#status.authenticated = did;
-        this.#authenticated.resolve();
-        console.debug(
-          "[SqW] (init.6) Authenticated. Sqlite worker initialised ✅",
-          { did },
-        );
-      },
       materializeBatch: async (eventsBatch, priority) => {
         return this.materializeBatch(eventsBatch, priority);
       },
       runQuery: this.runQuery,
       resetLocalDatabase: this.resetLocalDatabase,
       createLiveQuery: async (id, port, statement) => {
-        await this.#authenticated.promise;
-        if (!this.#status.authenticated) throw new Error("Not authenticated");
         createLiveQuery(id, port, statement);
       },
       deleteLiveQuery: async (id) => {
-        await this.#authenticated.promise;
-        if (!this.#status.authenticated) throw new Error("Not authenticated");
         deleteLiveQuery(id);
       },
       ping: async () => {
@@ -538,7 +521,6 @@ class SqliteWorkerSupervisor {
         };
       },
       runSavepoint: async (savepoint) => {
-        if (!this.#status.authenticated) throw new Error("Not authenticated");
         return this.runSavepoint(savepoint);
       },
       connectPendingSpaces: async () => {
