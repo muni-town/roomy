@@ -380,9 +380,75 @@ export async function syncRoomyToDiscord(
 }
 
 /**
+ * Backfill Roomy structure to Discord (rooms → Discord channels).
+ * Syncs Roomy rooms without discordOrigin extension to Discord channels.
+ *
+ * @param ctx - Guild context
+ * @param bot - Discord bot instance
+ */
+async function backfillRoomyStructureToDiscord(
+  ctx: GuildContext,
+  bot: DiscordBot,
+): Promise<void> {
+  return tracer.startActiveSpan("backfill.roomy_structure", async (span) => {
+    try {
+      setDiscordAttrs(span, { guildId: ctx.guildId });
+      setRoomyAttrs(span, { spaceId: ctx.spaceId });
+
+      // Get the current sidebar from Roomy
+      const allEvents = await ctx.connectedSpace.fetchEvents(1 as any, 1000);
+      const sidebarEvents = allEvents.filter(
+        ({ event }) => event.$type === "space.roomy.space.updateSidebar.v0"
+      );
+
+      if (sidebarEvents.length === 0) {
+        console.log("No sidebar events found, skipping Roomy structure backfill");
+        span.setAttribute("sync.result", "skipped_no_sidebar");
+        span.end();
+        return;
+      }
+
+      // Get the latest sidebar
+      const latestSidebarEvent = sidebarEvents[sidebarEvents.length - 1];
+      if (!latestSidebarEvent) {
+        console.log("No valid sidebar event found, skipping Roomy structure backfill");
+        span.setAttribute("sync.result", "skipped_no_valid_sidebar");
+        span.end();
+        return;
+      }
+
+      const latestSidebar = latestSidebarEvent.event as {
+        categories: Array<{ name: string; children: string[] }>;
+      };
+
+      console.log(`Found sidebar with ${latestSidebar.categories.length} categories`);
+
+      // Get orchestrator to handle Roomy → Discord structure sync
+      const { createOrchestratorFromContext } = await import("../repositories/index.js");
+      const orchestrator = await createOrchestratorFromContext(ctx, bot);
+
+      // Trigger sidebar sync (creates Discord channels for Roomy rooms)
+      await orchestrator.handleRoomyUpdateSidebar(
+        latestSidebarEvent as any,
+        bot,
+      );
+
+      console.log("Roomy → Discord structure backfill complete");
+      span.setAttribute("sync.result", "success");
+    } catch (error) {
+      recordError(span, error);
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
+}
+
+/**
  * Main backfill function for Roomy → Discord sync.
  * Orchestrates the three-phase backfill process.
  *
+ * Phase 0: Backfill Roomy structure (rooms → Discord channels)
  * Phase 1: Fetch Roomy-origin events
  * Phase 2: Backfill Discord messages for hash computation
  * Phase 3: Sync Roomy events to Discord with duplicate detection
@@ -416,6 +482,10 @@ export async function backfillRoomyToDiscord(bot: DiscordBot): Promise<void> {
                 console.warn(`No context for guild ${guildId}, skipping`);
                 return;
               }
+
+              // Phase 0: Backfill Roomy structure (rooms → Discord channels)
+              bridgeSpan.setAttribute("sync.phase", "0_backfill_structure");
+              await backfillRoomyStructureToDiscord(ctx, bot);
 
               // Get all Discord channels for this guild
               const channels = await bot.helpers.getChannels(guildId);
