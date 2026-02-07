@@ -2,6 +2,40 @@
 
 Notes for future developers working on the Discord bridge.
 
+## Discord API Limits
+
+### Webhook Limits (CRITICAL)
+
+**Per-Channel Limit:** 15 webhooks maximum per channel
+**Per-Guild Limit:** 1,000 webhooks maximum per server
+**Error Code:** 30007 - "Maximum number of webhooks reached (15)"
+
+**Historical Context:**
+- Before August 2022: 10 webhooks per channel
+- After August 2022: Increased to 15 webhooks per channel
+- Source: [GitHub Issue #5286](https://github.com/discord/discord-api-docs/issues/5286)
+
+**Best Practices:**
+1. **Reuse webhooks** - Always check for existing webhooks before creating new ones
+2. **Name your webhooks** - Use consistent names (e.g., "Roomy Bridge") to identify your webhooks
+3. **Cache webhook tokens** - Store `{webhookId}:{token}` in your database to avoid re-fetching
+4. **Clean up corrupted webhooks** - Delete webhooks without tokens that are taking up slots
+5. **Handle the limit gracefully** - If at 15 webhooks, consider deleting the oldest one before creating new
+
+**Implementation:** See `src/discord/webhooks.ts:getOrCreateWebhook()` for robust webhook management that:
+- Checks cache first
+- Reuses existing "Roomy Bridge" webhooks
+- Cleans up corrupted webhooks
+- Falls back to deleting oldest non-Roomy webhook if at limit
+
+### Webhook Rate Limits
+
+Separate from the count limits above:
+- **30 requests per minute** per webhook URL
+- **10 MiB payload limit** (as of January 16, 2025)
+
+---
+
 ## Discord API Gotchas
 
 ### `bot.rest.getChannels()` Returns an Array, Not a Map

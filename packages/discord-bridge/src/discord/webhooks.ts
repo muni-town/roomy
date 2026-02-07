@@ -8,7 +8,11 @@ import { tracer, recordError } from "../tracing.js";
 
 /**
  * Get or create a webhook for a Discord channel.
- * Uses cached webhook tokens if available, otherwise creates a new webhook.
+ * Uses cached webhook tokens if available, otherwise reuses existing webhooks
+ * or creates a new one.
+ *
+ * Discord limits: 15 webhooks per channel, 1000 per guild.
+ * This function reuses existing "Roomy Bridge" webhooks to avoid hitting the limit.
  *
  * @param bot - Discord bot instance
  * @param guildId - Discord guild ID
@@ -27,8 +31,9 @@ export async function getOrCreateWebhook(
     discordGuildId: guildId,
     roomySpaceId: spaceId,
   });
-  const cached = await webhookTokens.get(channelId.toString());
 
+  // Step 1: Check cache first
+  const cached = await webhookTokens.get(channelId.toString());
   if (cached) {
     const parts = cached.split(":");
     const id = parts[0];
@@ -38,7 +43,71 @@ export async function getOrCreateWebhook(
     }
   }
 
-  // Create new webhook
+  // Step 2: Cache miss - fetch existing webhooks from Discord
+  // This handles the case where the cache was cleared but webhooks still exist
+  try {
+    const existingWebhooks = await bot.rest.getChannelWebhooks(channelId);
+
+    // Look for an existing "Roomy Bridge" webhook to reuse
+    const roomyWebhook = existingWebhooks.find(
+      (w) => w.name === "Roomy Bridge" && w.token
+    );
+
+    if (roomyWebhook && roomyWebhook.token) {
+      console.log(
+        `[Webhook] Reusing existing Roomy Bridge webhook ${roomyWebhook.id} in channel ${channelId}`
+      );
+      // Cache the existing webhook for future use
+      await webhookTokens.put(
+        channelId.toString(),
+        `${roomyWebhook.id}:${roomyWebhook.token}`,
+      );
+      return { id: roomyWebhook.id, token: roomyWebhook.token };
+    }
+
+    // Step 3: No suitable webhook found - clean up old Roomy webhooks and create new one
+    // If we have other Roomy Bridge webhooks without tokens (corrupted), delete them
+    const corruptedWebhooks = existingWebhooks.filter(
+      (w) => w.name === "Roomy Bridge" && !w.token
+    );
+    for (const corrupted of corruptedWebhooks) {
+      try {
+        await bot.helpers.deleteWebhook(BigInt(corrupted.id));
+        console.log(
+          `[Webhook] Deleted corrupted Roomy Bridge webhook ${corrupted.id}`
+        );
+      } catch (e) {
+        // Ignore deletion errors
+      }
+    }
+
+    // Check if we're at the 15 webhook limit
+    if (existingWebhooks.length >= 15) {
+      // Try to clean up the oldest non-Roomy webhook
+      const nonRoomyWebhooks = existingWebhooks.filter((w) => w.name !== "Roomy Bridge");
+      if (nonRoomyWebhooks.length > 0) {
+        try {
+          await bot.helpers.deleteWebhook(BigInt(nonRoomyWebhooks[0]!.id));
+          console.log(
+            `[Webhook] Deleted oldest non-Roomy webhook ${nonRoomyWebhooks[0]!.id} to make room`
+          );
+        } catch (e) {
+          console.warn(
+            `[Webhook] Failed to delete webhook to make room:`,
+            e
+          );
+        }
+      }
+    }
+  } catch (error) {
+    // If fetching webhooks fails (e.g., permission error), log and continue to create
+    console.warn(
+      `[Webhook] Failed to fetch existing webhooks for channel ${channelId}:`,
+      error
+    );
+  }
+
+  // Step 4: Create new webhook
   const webhook = await bot.helpers.createWebhook(channelId, {
     name: "Roomy Bridge",
   });
@@ -49,6 +118,10 @@ export async function getOrCreateWebhook(
       "Webhook token not returned from Discord API - bot may lack MANAGE_WEBHOOKS permission. Consider setting TEST_WEBHOOK_ID and TEST_WEBHOOK_TOKEN environment variables for integration tests.",
     );
   }
+
+  console.log(
+    `[Webhook] Created new Roomy Bridge webhook ${webhook.id} in channel ${channelId}`
+  );
 
   // Cache webhook token for future use
   await webhookTokens.put(
