@@ -162,6 +162,15 @@ describe("E2E: Discord Reaction Sync (D→R)", () => {
       const firstChannel = channels[0];
       const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
 
+      // Fetch custom emojis from the guild
+      const emojis = await bot.rest.getEmojis(TEST_GUILD_ID);
+
+      // Skip test if no custom emojis available
+      if (emojis.length === 0) {
+        console.warn("No custom emojis available in test guild, skipping test");
+        return;
+      }
+
       // Create a test message
       const testContent = `Test message for custom emoji at ${Date.now()}`;
       const testMessage = await bot.helpers.sendMessage(firstChannel.id, {
@@ -177,15 +186,6 @@ describe("E2E: Discord Reaction Sync (D→R)", () => {
       expect(roomyMessageId).toBeDefined();
 
       await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Fetch custom emojis from the guild
-      const emojis = await bot.rest.getEmojis(TEST_GUILD_ID);
-
-      // Skip test if no custom emojis available
-      if (emojis.length === 0) {
-        console.warn("No custom emojis available in test guild, skipping test");
-        return;
-      }
 
       // Use the first custom emoji
       const customEmoji = emojis[0];
