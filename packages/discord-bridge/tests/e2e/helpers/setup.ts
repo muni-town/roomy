@@ -1317,3 +1317,182 @@ export async function waitForBotReactionViaRest(
     poll();
   });
 }
+
+// ============================================================================
+// ROOMY EVENT STREAM VALIDATION
+// ============================================================================
+
+/**
+ * A reaction event found in the Roomy event stream.
+ */
+export interface RoomyReactionEvent {
+  /** The event ULID */
+  id: string;
+  /** The event type */
+  $type: string;
+  /** The message being reacted to */
+  reactionTo: string;
+  /** The emoji reaction */
+  reaction: string;
+  /** The user who reacted */
+  reactingUser: string;
+  /** The event index */
+  idx: bigint;
+}
+
+/**
+ * Fetch all reaction events from the Roomy event stream for a specific message.
+ *
+ * @param connectedSpace - The Roomy ConnectedSpace instance
+ * @param messageUlId - The Roomy message ULID to filter by
+ * @returns Array of reaction events for the message
+ */
+export async function getRoomyReactionsForMessage(
+  connectedSpace: ConnectedSpace,
+  messageUlId: string,
+): Promise<RoomyReactionEvent[]> {
+  const events = await connectedSpace.fetchEvents(1, 200);
+
+  const reactionEvents = events
+    .map((e: any) => e.event)
+    .filter((e: any) =>
+      e.$type === "space.roomy.reaction.addBridgedReaction.v0" ||
+      e.$type === "space.roomy.reaction.removeBridgedReaction.v0"
+    )
+    .filter((e: any) => e.reactionTo === messageUlId)
+    .map((e: any) => ({
+      id: e.id,
+      $type: e.$type,
+      reactionTo: e.reactionTo,
+      reaction: e.reaction,
+      reactingUser: e.reactingUser,
+      idx: events.find((ev: any) => ev.event.id === e.id)?.idx || 0n,
+    }));
+
+  return reactionEvents;
+}
+
+/**
+ * Expected reaction in Roomy event stream.
+ */
+export interface ExpectedReaction {
+  /** The Roomy message ULID being reacted to */
+  messageUlId: string;
+  /** The emoji expected */
+  emoji: string;
+  /** The user DID expected (who reacted) */
+  userDid: string;
+  /** Whether this is a bridged (from Discord) or native (from Roomy) reaction */
+  isBridged: boolean;
+}
+
+/**
+ * Validate that the Roomy event stream contains exactly the expected reactions.
+ *
+ * This function ensures that:
+ * 1. All expected reactions exist in the stream
+ * 2. No extra reactions exist (echo prevention working)
+ * 3. Each expected reaction appears exactly once
+ *
+ * @param connectedSpace - The Roomy ConnectedSpace instance
+ * @param expectedReactions - Array of expected reactions
+ * @returns Object with validation result and details
+ *
+ * @example
+ * ```ts
+ * const result = await validateRoomyReactions(connectedSpace, [
+ *   {
+ *     messageUlId: roomyMessageId,
+ *     emoji: "👍",
+ *     userDid: "did:discord:123456789",
+ *     isBridged: true,
+ *   },
+ * ]);
+ *
+ * if (!result.valid) {
+ *   console.error("Validation failed:", result.errors);
+ * }
+ * ```
+ */
+export async function validateRoomyReactions(
+  connectedSpace: ConnectedSpace,
+  expectedReactions: ExpectedReaction[],
+): Promise<{
+  valid: boolean;
+  errors: string[];
+  found: RoomyReactionEvent[];
+  expected: ExpectedReaction[];
+}> {
+  // Fetch all reaction events for each message
+  const allReactions: RoomyReactionEvent[] = [];
+  const messageUlIds = new Set(expectedReactions.map(r => r.messageUlId));
+
+  for (const messageUlId of messageUlIds) {
+    const reactions = await getRoomyReactionsForMessage(connectedSpace, messageUlId);
+    allReactions.push(...reactions);
+  }
+
+  const errors: string[] = [];
+
+  // Check 1: All expected reactions exist
+  for (const expected of expectedReactions) {
+    const matchingReaction = allReactions.find(
+      r =>
+        r.reactionTo === expected.messageUlId &&
+        r.reaction === expected.emoji &&
+        r.reactingUser === expected.userDid &&
+        (expected.isBridged ? r.$type === "space.roomy.reaction.addBridgedReaction.v0" : r.$type === "space.roomy.reaction.addReaction.v0")
+    );
+
+    if (!matchingReaction) {
+      errors.push(
+        `Missing expected reaction: message=${expected.messageUlId}, ` +
+        `emoji=${expected.emoji}, user=${expected.userDid}, ` +
+        `isBridged=${expected.isBridged}`
+      );
+    }
+  }
+
+  // Check 2: No extra reactions (echo prevention)
+  for (const found of allReactions) {
+    const isExpected = expectedReactions.some(
+      expected =>
+        found.reactionTo === expected.messageUlId &&
+        found.reaction === expected.emoji &&
+        found.reactingUser === expected.userDid
+    );
+
+    if (!isExpected) {
+      errors.push(
+        `Unexpected reaction found (possible echo bug): ` +
+        `message=${found.reactionTo}, emoji=${found.reaction}, ` +
+        `user=${found.reactingUser}, type=${found.$type}`
+      );
+    }
+  }
+
+  // Check 3: Each expected reaction appears exactly once
+  for (const expected of expectedReactions) {
+    const matchingReactions = allReactions.filter(
+      r =>
+        r.reactionTo === expected.messageUlId &&
+        r.reaction === expected.emoji &&
+        r.reactingUser === expected.userDid
+    );
+
+    if (matchingReactions.length > 1) {
+      errors.push(
+        `Duplicate reaction found: message=${expected.messageUlId}, ` +
+        `emoji=${expected.emoji}, user=${expected.userDid}, ` +
+        `count=${matchingReactions.length}`
+      );
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    found: allReactions,
+    expected: expectedReactions,
+  };
+}

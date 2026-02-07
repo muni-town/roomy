@@ -208,6 +208,38 @@ if (message.webhookId) {
 
 ## E2E Testing (2026-02-07)
 
+### Reaction Echo Bug: Gateway Handlers Missing Bot Parameter
+
+**Bug:** Gateway event handlers weren't passing the `bot` parameter to `createOrchestratorFromContext()`, causing `ReactionSyncService` to have `botId = undefined` and echo prevention to fail.
+
+**Root Cause:**
+```typescript
+// bot.ts line 274 - BUGGY:
+const orchestrator = createOrchestratorFromContext(ctx);
+// → botId = undefined, echo prevention check fails
+
+// Fixed:
+const orchestrator = createOrchestratorFromContext(ctx, bot);
+// → botId = bot.id, echo prevention works
+```
+
+**Why Bot ID Comparison Works for Reactions:**
+- All Roomy → Discord reaction syncs happen via webhook (bot acts as itself)
+- Gateway events include the user who reacted
+- When bot adds reaction via webhook, Discord echoes back with `userId === bot.id`
+- Simple comparison identifies and skips our own actions
+
+**Unlike Messages:**
+- Messages are created via webhook as the "original user" (harder to distinguish)
+- Nonces help identify messages we've already seen
+
+**Fixed Locations (src/discord/bot.ts):**
+- Line 215: `threadCreate` handler
+- Line 274: `reactionAdd` handler ← Primary cause
+- Line 292: `reactionRemove` handler
+- Line 315: `messageUpdate` handler
+- Line 466: `backfillGuild` function
+
 ### Reaction Verification: REST Polling with `waitForBotReactionViaRest`
 
 **Problem:** E2E tests were taking at face value that `discordeno`'s methods (`bot.helpers.addReaction()`) have successfully sent reactions to Discord, but weren't definitively verifying the reaction exists on Discord.
