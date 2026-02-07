@@ -121,15 +121,20 @@ await bot.helpers.deleteMessage(channelId, messageId);
 # Clean webhook messages from ALL text channels (not just Roomy-synced)
 pnpm tsx scripts/run-cleanup.ts webhooks
 
+# Clean bot messages from ALL text channels (not just Roomy-synced)
+pnpm tsx scripts/run-cleanup.ts bot
+
 # Clean messages from Roomy-synced channels only
 pnpm tsx scripts/run-cleanup.ts messages
 
 # Delete all Roomy-synced channels
 pnpm tsx scripts/run-cleanup.ts channels
 
-# Clean messages, then delete channels (full cleanup)
+# Clean webhook+bot messages from ALL channels, then delete channels (full cleanup)
 pnpm tsx scripts/run-cleanup.ts all
 ```
+
+**Note (2026-02-07):** The default "all" mode was updated to clean webhook and bot messages from ALL text channels (not just Roomy-synced ones). This catches strays in non-synced channels like #general that may accumulate during testing.
 
 ### safeDeleteWebhook() Helper
 

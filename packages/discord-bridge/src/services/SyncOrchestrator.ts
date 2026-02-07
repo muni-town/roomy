@@ -336,7 +336,8 @@ export function createSyncOrchestrator(options: {
 
   // Create services (order matters for dependencies)
   const profileService = new ProfileSyncService(repo, connectedSpace, guildId, spaceId);
-  const reactionService = new ReactionSyncService(repo, connectedSpace, guildId, spaceId);
+  const botId = bot?.id; // Extract bot ID for reaction echo prevention
+  const reactionService = new ReactionSyncService(repo, connectedSpace, guildId, spaceId, botId);
   const structureService = new StructureSyncService(repo, connectedSpace, guildId, spaceId, bot);
   const messageService = new MessageSyncService(repo, connectedSpace, guildId, spaceId, profileService, bot);
 

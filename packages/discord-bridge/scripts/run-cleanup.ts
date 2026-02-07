@@ -4,11 +4,11 @@
  *
  * Usage:
  *   tsx scripts/run-cleanup.ts              # Interactive prompt
- *   tsx scripts/run-cleanup.ts messages     # Clean all messages from test channels
- *   tsx scripts/run-cleanup.ts webhooks     # Clean all webhook messages from ALL text channels
- *   tsx scripts/run-cleanup.ts bot          # Clean all bot messages from ALL text channels
+ *   tsx scripts/run-cleanup.ts messages     # Clean messages from Roomy-synced channels only
+ *   tsx scripts/run-cleanup.ts webhooks     # Clean webhook messages from ALL text channels
+ *   tsx scripts/run-cleanup.ts bot          # Clean bot messages from ALL text channels
  *   tsx scripts/run-cleanup.ts channels     # Delete all test channels
- *   tsx scripts/run-cleanup.ts all         # Clean messages, then delete channels
+ *   tsx scripts/run-cleanup.ts all         # Clean webhook+bot messages from ALL channels, then delete channels
  *
  * Environment variables required:
  *   TEST_GUILD_ID - Discord guild ID to clean
@@ -131,10 +131,24 @@ async function main() {
   let channelsDeleted = 0;
 
   // Clean messages first (if requested)
-  if (mode === "messages" || mode === "all") {
+  if (mode === "messages") {
     console.log("📝 Step 1: Cleaning messages from test channels...");
     messagesDeleted = await cleanupTestMessages(bot as any, testGuildId);
     console.log(`   ✅ Deleted ${messagesDeleted} messages\n`);
+  }
+
+  // For "all" mode, clean webhook and bot messages from ALL channels
+  // (not just Roomy-synced channels, to catch strays in #general, etc.)
+  if (mode === "all") {
+    console.log("📝 Step 1: Cleaning webhook messages from ALL text channels...");
+    const webhookMessagesDeleted = await cleanupWebhookMessages(bot as any, testGuildId);
+    console.log(`   ✅ Deleted ${webhookMessagesDeleted} webhook messages\n`);
+
+    console.log("🤖 Step 2: Cleaning bot messages from ALL text channels...");
+    const botMessagesDeleted = await cleanupBotMessages(bot as any, testGuildId);
+    console.log(`   ✅ Deleted ${botMessagesDeleted} bot messages\n`);
+
+    messagesDeleted = webhookMessagesDeleted + botMessagesDeleted;
   }
 
   // Clean webhook messages (if requested)
@@ -153,7 +167,7 @@ async function main() {
 
   // Delete channels (if requested)
   if (mode === "channels" || mode === "all") {
-    const stepNum = mode === "all" ? "2" : "1";
+    const stepNum = mode === "all" ? "3" : "1";
     console.log(`🗑️  Step ${stepNum}: Deleting test channels...`);
     channelsDeleted = await cleanupRoomySyncedChannels(bot as any, testGuildId);
     console.log(`   ✅ Deleted ${channelsDeleted} channels\n`);
