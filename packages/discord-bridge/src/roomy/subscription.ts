@@ -15,7 +15,17 @@ import {
   syncedRoomLinksForBridge,
   syncedEditsForBridge,
   registeredBridges,
+  roomyUserProfilesForBridge,
 } from "../db.js";
+import { botState } from "../discord/bot.js";
+import {
+  syncCreateMessageToDiscord,
+  syncEditMessageToDiscord,
+  syncDeleteMessageToDiscord,
+  syncAddReactionToDiscord,
+  syncRemoveReactionToDiscord,
+} from "./from.js";
+import { getGuildContext } from "../discord/bot.js";
 
 /**
  * Extension type key constants.
@@ -27,6 +37,7 @@ export const DISCORD_EXTENSION_KEYS = {
   USER_ORIGIN: "space.roomy.extension.discordUserOrigin.v0" as const,
   SIDEBAR_ORIGIN: "space.roomy.extension.discordSidebarOrigin.v0" as const,
   ROOM_LINK_ORIGIN: "space.roomy.extension.discordRoomLinkOrigin.v0" as const,
+  REACTION_ORIGIN: "space.roomy.extension.discordReactionOrigin.v0" as const,
 } as const;
 
 interface DiscordMessageOrigin {
@@ -60,6 +71,15 @@ interface DiscordRoomLinkOrigin {
   guildId: string;
 }
 
+interface DiscordReactionOrigin {
+  snowflake: string;
+  messageId: string;
+  channelId: string;
+  userId: string;
+  emoji: string;
+  guildId: string;
+}
+
 /**
  * Create a subscription handler for a connected space.
  * Updates LevelDB state based on incoming events.
@@ -73,7 +93,7 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
     meta: EventCallbackMeta,
   ): Promise<void> => {
     // Find the guild ID for this space
-    const guildIdStr = await registeredBridges.get_guildId(spaceId);
+    const guildIdStr = await registeredBridges.get_spaceId(spaceId);
     if (!guildIdStr) {
       console.warn(`No guild registered for space ${spaceId}, skipping events`);
       return;
@@ -87,7 +107,8 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
 
     let maxIdx = 0;
 
-    for (const { idx, event } of events) {
+    for (const decodedEvent of events) {
+      const { idx, event, user } = decodedEvent;
       maxIdx = Math.max(maxIdx, idx);
 
       // Check for Discord message origin extension
@@ -133,6 +154,30 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
           await syncedProfiles.put(userOrigin.snowflake, userOrigin.profileHash);
         } catch (e) {
           console.error("Error caching profile hash:", e);
+        }
+      }
+
+      // Capture Roomy user profiles from updateProfile events (non-Discord users)
+      if (event.$type === "space.roomy.user.updateProfile.v0" && !userOrigin) {
+        const profileEvent = event as {
+          did: string;
+          name?: string;
+          avatar?: string | null;
+        };
+        if (profileEvent.did) {
+          const roomyProfiles = roomyUserProfilesForBridge({
+            discordGuildId: guildId,
+            roomySpaceId: spaceId,
+          });
+          try {
+            await roomyProfiles.put(profileEvent.did, {
+              name: profileEvent.name || "Unknown",
+              avatar: profileEvent.avatar ?? null,
+            });
+            console.log(`[Profile Capture] Cached Roomy user profile: did=${profileEvent.did}, name=${profileEvent.name || "Unknown"}`);
+          } catch (e) {
+            console.error("Error caching Roomy user profile:", e);
+          }
         }
       }
 
@@ -191,7 +236,7 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
       // Check for delete events and unregister mappings
       if (event.$type === "space.roomy.room.deleteRoom.v0") {
         try {
-          const discordId = await syncedIds.get_discordId(event.roomId);
+          const discordId = await syncedIds.get_roomyId(event.roomId);
           if (discordId) {
             await syncedIds.unregister({
               discordId,
@@ -208,7 +253,7 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
 
       if (event.$type === "space.roomy.message.deleteMessage.v0") {
         try {
-          const discordId = await syncedIds.get_discordId(event.messageId);
+          const discordId = await syncedIds.get_roomyId(event.messageId);
           if (discordId) {
             await syncedIds.unregister({
               discordId,
@@ -219,6 +264,87 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
         } catch (e) {
           if (!(e instanceof Error && e.message.includes("isn't registered"))) {
             console.error("Error unregistering message:", e);
+          }
+        }
+      }
+
+      // Roomy → Discord real-time sync (only after backfill is complete)
+      // Skip if this is during backfill or if the event has Discord origin
+      if (!meta.isBackfill) {
+        const messageOrigin = extractDiscordMessageOrigin(event);
+        const roomOrigin = extractDiscordOrigin(event);
+        const userOrigin = extractDiscordUserOrigin(event);
+        const reactionOrigin = extractDiscordReactionOrigin(event);
+
+        // Check if this is a reaction event (for bidirectional sync)
+        // Includes both pure Roomy reactions (addReaction/removeReaction) and bridged reactions
+        const isReactionEvent =
+          event.$type === "space.roomy.reaction.addReaction.v0" ||
+          event.$type === "space.roomy.reaction.removeReaction.v0" ||
+          event.$type === "space.roomy.reaction.addBridgedReaction.v0" ||
+          event.$type === "space.roomy.reaction.removeBridgedReaction.v0";
+
+        // Get bot and guild context
+        const bot = botState.bot;
+        if (bot) {
+          const ctx = await getGuildContext(guildId);
+
+          if (ctx) {
+            // Sync non-Discord-origin events (messages, edits, deletes)
+            if (!messageOrigin && !roomOrigin && !userOrigin && !reactionOrigin) {
+              // Handle createMessage events
+              if (event.$type === "space.roomy.message.createMessage.v0") {
+                await syncCreateMessageToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                  console.error(`Failed to sync Roomy message ${event.id} to Discord:`, error);
+                });
+              }
+
+              // Handle editMessage events
+              if (event.$type === "space.roomy.message.editMessage.v0") {
+                await syncEditMessageToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                  console.error(`Failed to sync Roomy edit ${event.id} to Discord:`, error);
+                });
+              }
+
+              // Handle deleteMessage events
+              if (event.$type === "space.roomy.message.deleteMessage.v0") {
+                await syncDeleteMessageToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                  console.error(`Failed to sync Roomy delete ${event.id} to Discord:`, error);
+                });
+              }
+            }
+
+            // Reactions sync bidirectionally (even on Discord-origin messages)
+            // BUT block reactions that themselves have Discord origin (sync loop prevention)
+            if (isReactionEvent && !reactionOrigin) {
+              // Handle pure Roomy addReaction events
+              if (event.$type === "space.roomy.reaction.addReaction.v0") {
+                await syncAddReactionToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                  console.error(`Failed to sync Roomy reaction ${event.id} to Discord:`, error);
+                });
+              }
+
+              // Handle bridged addBridgedReaction events
+              if (event.$type === "space.roomy.reaction.addBridgedReaction.v0") {
+                await syncAddReactionToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                  console.error(`Failed to sync Roomy reaction ${event.id} to Discord:`, error);
+                });
+              }
+
+              // Handle pure Roomy removeReaction events
+              if (event.$type === "space.roomy.reaction.removeReaction.v0") {
+                await syncRemoveReactionToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                  console.error(`Failed to sync Roomy reaction removal ${event.id} to Discord:`, error);
+                });
+              }
+
+              // Handle bridged removeBridgedReaction events
+              if (event.$type === "space.roomy.reaction.removeBridgedReaction.v0") {
+                await syncRemoveReactionToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                  console.error(`Failed to sync Roomy reaction removal ${event.id} to Discord:`, error);
+                });
+              }
+            }
           }
         }
       }
@@ -321,6 +447,32 @@ function extractDiscordRoomLinkOrigin(
   if (!linkToRoom || !room) return undefined;
 
   return { origin, linkToRoom };
+}
+
+/**
+ * Extract Discord reaction origin extension from an event if present.
+ * Supports both addBridgedReaction and removeBridgedReaction events.
+ */
+function extractDiscordReactionOrigin(
+  event: DecodedStreamEvent["event"],
+): DiscordReactionOrigin | undefined {
+  // Check for addBridgedReaction event type
+  if (event.$type === "space.roomy.reaction.addBridgedReaction.v0") {
+    return extractExtension<DiscordReactionOrigin>(
+      event,
+      DISCORD_EXTENSION_KEYS.REACTION_ORIGIN,
+      "space.roomy.reaction.addBridgedReaction.v0",
+    );
+  }
+  // Check for removeBridgedReaction event type
+  if (event.$type === "space.roomy.reaction.removeBridgedReaction.v0") {
+    return extractExtension<DiscordReactionOrigin>(
+      event,
+      DISCORD_EXTENSION_KEYS.REACTION_ORIGIN,
+      "space.roomy.reaction.removeBridgedReaction.v0",
+    );
+  }
+  return undefined;
 }
 
 /**

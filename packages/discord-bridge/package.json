@@ -10,7 +10,16 @@
     "build-discord-bridge": "tsc --project tsconfig.json",
     "start": "tsx -C development src/index.ts",
     "dev": "tsx watch -C development src/index.ts",
-    "generate-account": "tsx generate-env.ts"
+    "generate-account": "tsx generate-env.ts",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run tests/integration",
+    "test:unit": "vitest run tests/operations",
+    "cleanup": "tsx scripts/run-cleanup.ts all",
+    "cleanup:messages": "tsx scripts/run-cleanup.ts messages",
+    "cleanup:channels": "tsx scripts/run-cleanup.ts channels"
   },
   "dependencies": {
     "@atproto/api": "^0.14.22",
@@ -34,10 +43,13 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.17",
+    "@vitest/coverage-v8": "^2.1.8",
+    "@vitest/ui": "^2.1.8",
     "jazz-run": "^0.15.10",
     "prettier": "^3.6.2",
     "tsconfig-paths": "^4.2.0",
     "tsx": "^4.20.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.8"
   }
 }

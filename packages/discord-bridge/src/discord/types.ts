@@ -20,6 +20,7 @@ const messageProperties = {
   attachments: true,
   messageReference: true,
   type: true,
+  reactions: true,
 } as const;
 export type MessageProperties = SetupDesiredProps<
   Message,
@@ -33,6 +34,7 @@ const channelProperties = {
   type: true,
   guildId: true,
   parentId: true,
+  topic: true,
 } as const;
 export type ChannelProperties = SetupDesiredProps<
   Channel,
@@ -92,3 +94,13 @@ export type DiscordChannel = SetupDesiredProps<
   Channel,
   CompleteDesiredProperties<typeof desiredProperties>
 >;
+
+/**
+ * Message options for executing webhooks.
+ * Based on @discordeno/bot's ExecuteWebhook options.
+ */
+export interface DiscordMessageOptions {
+  content?: string;
+  username?: string;
+  avatarUrl?: string;
+}

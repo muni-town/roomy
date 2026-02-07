@@ -1,0 +1,1498 @@
+/**
+ * E2E test setup helpers.
+ * Provides Discord bot and Roomy client creation for tests.
+ */
+
+import { createBot, Intents } from "@discordeno/bot";
+import { createDefaultSpaceEvents, type ConnectedSpace, type StreamDid, modules, ConnectedSpace as SDKConnectedSpace, RoomyClient } from "@roomy/sdk";
+import { desiredProperties, type ChannelProperties, type DiscordBot } from "../../../src/discord/types.js";
+import { isRoomySyncedChannel } from "../../../src/utils/discord-topic.js";
+import { DISCORD_TOKEN, LEAF_URL, LEAF_SERVER_DID, ATPROTO_BRIDGE_DID, ATPROTO_BRIDGE_APP_PASSWORD } from "../../../src/env.js";
+import { registeredBridges } from "../../../src/db.js";
+import { connectedSpaces, initRoomyClient, getRoomyClient as getBridgeRoomyClient } from "../../../src/roomy/client.js";
+import type { GuildContext } from "../../../src/types.js";
+import {
+  syncedIdsForBridge,
+  syncedProfilesForBridge,
+  syncedReactionsForBridge,
+  syncedSidebarHashForBridge,
+  syncedRoomLinksForBridge,
+  syncedEditsForBridge,
+  discordMessageHashesForBridge,
+  discordLatestMessageInChannelForBridge,
+  roomyUserProfilesForBridge,
+  discordWebhookTokensForBridge,
+} from "../../../src/db.js";
+import { LevelDBBridgeRepository } from "../../../src/repositories/BridgeRepository.js";
+import { createSyncOrchestrator } from "../../../src/services/SyncOrchestrator.js";
+import type { SyncOrchestrator } from "../../../src/services/SyncOrchestrator.js";
+
+/**
+ * Environment variables for E2E tests.
+ */
+export interface TestEnv {
+  /** Discord bot token */
+  discordToken: string;
+  /** Test guild ID */
+  testGuildId: string;
+  /** Leaf server URL */
+  leafUrl: string;
+  /** Leaf server DID */
+  leafServerDid: string;
+  /** Bridge DID for Roomy auth */
+  bridgeDid: string;
+  /** Bridge app password for Roomy auth */
+  bridgeAppPassword: string;
+}
+
+/**
+ * Get test environment variables.
+ * Throws if required variables are missing.
+ */
+export function getTestEnv(): TestEnv {
+  const testGuildId = process.env.TEST_GUILD_ID;
+  if (!testGuildId) {
+    throw new Error("TEST_GUILD_ID environment variable not set");
+  }
+
+  return {
+    discordToken: DISCORD_TOKEN,
+    testGuildId,
+    leafUrl: LEAF_URL,
+    leafServerDid: LEAF_SERVER_DID,
+    bridgeDid: ATPROTO_BRIDGE_DID,
+    bridgeAppPassword: ATPROTO_BRIDGE_APP_PASSWORD,
+  };
+}
+
+/**
+ * Create a Discord bot for testing.
+ * Uses REST API only (no gateway connection needed for most operations).
+ */
+export async function createTestBot() {
+  const env = getTestEnv();
+
+  const bot = await createBot({
+    token: env.discordToken,
+    desiredProperties,
+  });
+
+  return bot;
+}
+
+/**
+ * Initialize the Roomy client for E2E tests.
+ * This should be called once in a beforeAll hook.
+ * Reuses the bridge's existing client infrastructure.
+ */
+export async function initE2ERoomyClient(): Promise<RoomyClient> {
+  return initRoomyClient();
+}
+
+/**
+ * Get the initialized Roomy client.
+ */
+export function getRoomyClient(): RoomyClient {
+  return getBridgeRoomyClient();
+}
+
+/**
+ * Result of connecting a guild to a space.
+ */
+export interface GuildConnectionResult {
+  /** The space ID */
+  spaceId: StreamDid;
+  /** The guild ID */
+  guildId: string;
+  /** The connected space instance */
+  connectedSpace: ConnectedSpace;
+  /** The guild context for sync operations */
+  guildContext: GuildContext;
+}
+
+/**
+ * Connect a Discord guild to a new Roomy space (reset any existing connection).
+ *
+ * This function:
+ * 1. Creates a new space with default structure
+ * 2. Unregisters any existing bridge for this guild
+ * 3. Registers the new guild -> space mapping
+ * 4. Tracks the ConnectedSpace for bridge operations
+ * 5. Returns the GuildContext for sync operations
+ *
+ * @param roomy - Roomy client (from getRoomyClient())
+ * @param guildId - Discord guild ID (as string)
+ * @param spaceName - Name for the new space
+ * @returns Connection result with space ID and guild context
+ */
+export async function connectGuildToNewSpace(
+  roomy: RoomyClient,
+  guildId: string,
+  spaceName: string,
+): Promise<GuildConnectionResult> {
+  // 1. Create a new space stream
+  const space = await SDKConnectedSpace.create(
+    {
+      client: roomy,
+      module: modules.space,
+    },
+    ATPROTO_BRIDGE_DID as `did:${string}:${string}`,
+  );
+
+  const spaceId = space.streamDid;
+
+  // 2. Send default space events (lobby channel + sidebar)
+  const events = createDefaultSpaceEvents({ name: spaceName });
+  await space.sendEvents(events);
+
+  // Wait for events to be materialized in Leaf before continuing
+  // Increased delay to handle multiple rapid stream creations in tests
+  await new Promise(resolve => setTimeout(resolve, 300));
+
+  // 3. Aggressive cleanup of any existing registrations for this guild
+  // This handles cases where previous tests may have left partial state
+  try {
+    const existingSpaceForGuild = await registeredBridges.get_spaceId(guildId);
+    if (existingSpaceForGuild) {
+      await registeredBridges.unregister({ guildId, spaceId: existingSpaceForGuild });
+      connectedSpaces.delete(existingSpaceForGuild);
+    }
+  } catch (e) {
+    // If unregister fails (e.g., partial registration), clear both keys aggressively
+    try {
+      const existingSpaceForGuild = await registeredBridges.get_spaceId(guildId);
+      await registeredBridges.sublevel.batch([
+        { type: 'del', key: `guildId_${guildId}` },
+        { type: 'del', key: existingSpaceForGuild ? `spaceId_${existingSpaceForGuild}` : `spaceId_${spaceId}` },
+      ]);
+      if (existingSpaceForGuild) {
+        connectedSpaces.delete(existingSpaceForGuild);
+      }
+    } catch {
+      // Ignore deletion errors
+    }
+  }
+
+  // Also check if our new spaceId happens to be registered to another guild (unlikely)
+  try {
+    const existingGuildForNewSpace = await registeredBridges.get_guildId(spaceId);
+    if (existingGuildForNewSpace) {
+      await registeredBridges.sublevel.del(`spaceId_${spaceId}`);
+    }
+  } catch {
+    // Ignore errors
+  }
+
+  // Delay to ensure LevelDB deletes are flushed before registering
+  await new Promise(resolve => setTimeout(resolve, 50));
+
+  // 4. Register the new guild -> space mapping
+  await registeredBridges.register({ guildId, spaceId });
+
+  // Small delay to ensure LevelDB write is flushed
+  await new Promise(resolve => setTimeout(resolve, 10));
+
+  // 5. Track the ConnectedSpace (needed for getGuildContext to work)
+  connectedSpaces.set(spaceId, space);
+
+  // 6. Create the GuildContext that sync operations need
+  const guildIdBigInt = BigInt(guildId);
+  const guildContext: GuildContext = {
+    guildId: guildIdBigInt,
+    spaceId: spaceId,
+    syncedIds: syncedIdsForBridge({
+      discordGuildId: guildIdBigInt,
+      roomySpaceId: spaceId,
+    }),
+    latestMessagesInChannel: discordLatestMessageInChannelForBridge({
+      discordGuildId: guildIdBigInt,
+      roomySpaceId: spaceId,
+    }),
+    syncedReactions: syncedReactionsForBridge({
+      discordGuildId: guildIdBigInt,
+      roomySpaceId: spaceId,
+    }),
+    syncedRoomLinks: syncedRoomLinksForBridge({
+      discordGuildId: guildIdBigInt,
+      roomySpaceId: spaceId,
+    }),
+    syncedProfiles: syncedProfilesForBridge({
+      discordGuildId: guildIdBigInt,
+      roomySpaceId: spaceId,
+    }),
+    syncedSidebarHash: syncedSidebarHashForBridge({
+      discordGuildId: guildIdBigInt,
+      roomySpaceId: spaceId,
+    }),
+    syncedEdits: syncedEditsForBridge({
+      discordGuildId: guildIdBigInt,
+      roomySpaceId: spaceId,
+    }),
+    discordMessageHashes: discordMessageHashesForBridge({
+      discordGuildId: guildIdBigInt,
+      roomySpaceId: spaceId,
+    }),
+    connectedSpace: space,
+  };
+
+  return {
+    spaceId,
+    guildId,
+    connectedSpace: space,
+    guildContext,
+  };
+}
+
+/**
+ * Query helper for Roomy spaces.
+ */
+export class RoomyQueryHelper {
+  constructor(private client: RoomyClient) {}
+
+  /**
+   * Query the event stream for a space.
+   */
+  async queryEvents(spaceId: StreamDid, params?: { start?: number; limit?: number }) {
+    return this.client.leaf.query(spaceId, {
+      name: "events",
+      params: {
+        start: params?.start ?? 0,
+        limit: params?.limit ?? 100,
+      },
+    });
+  }
+
+  /**
+   * Query space info.
+   */
+  async querySpaceInfo(spaceId: StreamDid) {
+    return this.client.leaf.query(spaceId, {
+      name: "stream_info",
+      params: {},
+    });
+  }
+
+  /**
+   * Query metadata events.
+   */
+  async queryMetadata(spaceId: StreamDid, params?: { start?: number; limit?: number }) {
+    return this.client.leaf.query(spaceId, {
+      name: "metadata",
+      params: {
+        start: params?.start ?? 0,
+        limit: params?.limit ?? 100,
+      },
+    });
+  }
+
+  /**
+   * Query room events.
+   */
+  async queryRoomEvents(spaceId: StreamDid, roomId: string, params?: { end?: number; limit?: number }) {
+    return this.client.leaf.query(spaceId, {
+      name: "room",
+      params: {
+        room: roomId,
+        end: params?.end,
+        limit: params?.limit ?? 100,
+      },
+    });
+  }
+}
+
+/**
+ * Create a query helper for the initialized Roomy client.
+ */
+export function createQueryHelper(): RoomyQueryHelper {
+  return new RoomyQueryHelper(getRoomyClient());
+}
+
+/**
+ * Create a SyncOrchestrator for E2E testing.
+ *
+ * Creates a LevelDBBridgeRepository from the GuildContext stores
+ * and uses it to create a configured SyncOrchestrator.
+ *
+ * @param connectionResult - Result from connectGuildToNewSpace()
+ * @param bot - Optional Discord bot instance for reverse sync operations
+ * @returns Configured SyncOrchestrator ready for sync operations
+ *
+ * @example
+ * ```ts
+ * const result = await connectGuildToNewSpace(roomy, TEST_GUILD_ID, "test");
+ * const bot = await createTestBot();
+ * const orchestrator = await createSyncOrchestratorForTest(result, bot);
+ * await orchestrator.handleDiscordChannelCreate(channel);
+ * ```
+ */
+export function createSyncOrchestratorForTest(
+  connectionResult: GuildConnectionResult,
+  bot?: DiscordBot,
+): SyncOrchestrator {
+  const { guildContext, guildId, spaceId } = connectionResult;
+
+  // Create the additional stores needed by LevelDBBridgeRepository
+  // that aren't included in GuildContext
+  const roomyUserProfiles = roomyUserProfilesForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+
+  const discordWebhookTokens = discordWebhookTokensForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+
+  // Create the repository wrapper
+  const repo = new LevelDBBridgeRepository({
+    syncedIds: guildContext.syncedIds,
+    syncedProfiles: guildContext.syncedProfiles,
+    roomyUserProfiles,
+    syncedReactions: guildContext.syncedReactions,
+    syncedSidebarHash: guildContext.syncedSidebarHash,
+    syncedRoomLinks: guildContext.syncedRoomLinks,
+    syncedEdits: guildContext.syncedEdits,
+    discordWebhookTokens,
+    discordMessageHashes: guildContext.discordMessageHashes,
+    discordLatestMessage: guildContext.latestMessagesInChannel,
+  });
+
+  // Create and return the orchestrator
+  return createSyncOrchestrator({
+    repo,
+    connectedSpace: guildContext.connectedSpace,
+    guildId: guildContext.guildId,
+    spaceId: guildContext.spaceId,
+    bot,
+  });
+}
+
+/**
+ * Discord channel type constants.
+ */
+export const DISCORD_CHANNEL_TYPES = {
+  GUILD_TEXT: 0,      // Text channel
+  GUILD_VOICE: 2,     // Voice channel
+  GUILD_CATEGORY: 4,  // Category
+  GUILD_NEWS: 5,      // News/announcement channel
+  GUILD_NEWS_THREAD: 10, // News thread
+  GUILD_PUBLIC_THREAD: 11,  // Public thread
+  GUILD_PRIVATE_THREAD: 12, // Private thread
+  GUILD_STAGE_VOICE: 13,    // Stage channel
+  GUILD_DIRECTORY: 14,      // Directory
+  GUILD_FORUM: 15,          // Forum channel
+} as const;
+
+/**
+ * Check if a Discord channel is a text channel (should sync to Roomy).
+ * Excludes voice, forum, and category channels.
+ */
+export function isTextChannel(channel: ChannelProperties): boolean {
+  return (
+    channel.type === DISCORD_CHANNEL_TYPES.GUILD_TEXT ||
+    channel.type === DISCORD_CHANNEL_TYPES.GUILD_NEWS
+  );
+}
+
+/**
+ * Fetch all text channels from a Discord guild.
+ *
+ * @param bot - Discord bot instance
+ * @param guildId - Guild ID to fetch channels from
+ * @returns Array of text channels (excludes voice, forum, category)
+ */
+export async function getTextChannels(
+  bot: DiscordBot,
+  guildId: string,
+): Promise<ChannelProperties[]> {
+  const channels = await bot.rest.getChannels(guildId);
+
+  const textChannels: ChannelProperties[] = [];
+  for (const channel of channels.values()) {
+    if (isTextChannel(channel)) {
+      textChannels.push(channel as ChannelProperties);
+    }
+  }
+
+  return textChannels;
+}
+
+/**
+ * Fetch all categories from a Discord guild.
+ *
+ * @param bot - Discord bot instance
+ * @param guildId - Guild ID to fetch channels from
+ * @returns Array of category channels
+ */
+export async function getCategories(
+  bot: DiscordBot,
+  guildId: string,
+): Promise<ChannelProperties[]> {
+  const channels = await bot.rest.getChannels(guildId);
+
+  const categories: ChannelProperties[] = [];
+  for (const channel of channels.values()) {
+    if (channel.type === DISCORD_CHANNEL_TYPES.GUILD_CATEGORY) {
+      categories.push(channel as ChannelProperties);
+    }
+  }
+
+  return categories;
+}
+
+/**
+ * Delete all channels in a guild that have the Roomy sync marker.
+ *
+ * This is useful for cleaning up test environments between test runs.
+ * Channels are identified by the [Synced from Roomy: <ULID>] marker in their topic.
+ *
+ * @param bot - Discord bot instance
+ * @param guildId - Guild ID to clean up
+ * @returns Number of channels deleted
+ *
+ * @example
+ * ```ts
+ * const bot = await createTestBot();
+ * const deletedCount = await cleanupRoomySyncedChannels(bot, TEST_GUILD_ID);
+ * console.log(`Cleaned up ${deletedCount} test channels`);
+ * ```
+ */
+export async function cleanupRoomySyncedChannels(
+  bot: DiscordBot,
+  guildId: string,
+): Promise<number> {
+  const channels = await bot.rest.getChannels(guildId);
+  let deletedCount = 0;
+
+  // Collect channels to delete (we can't delete while iterating)
+  const toDelete: bigint[] = [];
+  for (const channel of channels) {
+    // Only delete channels (not categories or voice channels)
+    if (isTextChannel(channel)) {
+      // Check if this channel has the Roomy sync marker
+      if (isRoomySyncedChannel(channel.topic ?? null)) {
+        toDelete.push(BigInt(channel.id));
+      }
+    }
+  }
+
+  // Delete the channels
+  for (const channelId of toDelete) {
+    try {
+      await bot.rest.deleteChannel(channelId);
+      deletedCount++;
+    } catch (error) {
+      console.warn(`Failed to delete channel ${channelId}:`, error);
+    }
+  }
+
+  return deletedCount;
+}
+
+/**
+ * Cleanup function: Delete all messages from Roomy-synced channels.
+ *
+ * This preserves the channels but removes all test messages.
+ * Useful for cleaning up test messages without deleting test channels.
+ *
+ * @param bot - Discord bot instance
+ * @param guildId - Discord guild ID (usually TEST_GUILD_ID)
+ * @returns Number of messages deleted
+ *
+ * @example
+ * ```ts
+ * const bot = await createTestBot();
+ * const deletedCount = await cleanupTestMessages(bot, TEST_GUILD_ID);
+ * console.log(`Cleaned up ${deletedCount} test messages`);
+ * ```
+ */
+export async function cleanupTestMessages(
+  bot: DiscordBot,
+  guildId: string,
+): Promise<number> {
+  const channels = await bot.rest.getChannels(guildId);
+  let deletedMessages = 0;
+
+  console.log(`\n📋 Found ${channels.length} total channels`);
+
+  for (const channel of channels) {
+    // Only clean Roomy-synced text channels
+    if (!isTextChannel(channel)) {
+      continue;
+    }
+
+    const hasRoomyMarker = isRoomySyncedChannel(channel.topic ?? null);
+    if (!hasRoomyMarker) {
+      continue;
+    }
+
+    console.log(`\n📝 Processing #${channel.name} (${channel.id})`);
+    console.log(`   Topic: "${channel.topic?.slice(0, 50)}..."`);
+
+    try {
+      // Fetch messages (Discord API returns up to 100 at a time)
+      const messages = await bot.rest.getMessages(channel.id, { limit: 100 });
+      console.log(`   Found ${messages.length} messages`);
+
+      // Count webhook vs regular messages
+      const webhookMessageCount = messages.filter(m => m.webhookId).length;
+      const regularMessageCount = messages.length - webhookMessageCount;
+      console.log(`   → ${webhookMessageCount} webhook messages, ${regularMessageCount} regular messages`);
+
+      // Delete all messages - webhook messages need special handling
+      for (const message of messages) {
+        const isWebhook = !!message.webhookId;
+
+        try {
+          if (isWebhook && message.webhookId) {
+            // Webhook messages must be deleted by the webhook
+            // First, get the webhook to retrieve its token
+            const webhooks = await bot.rest.getChannelWebhooks(channel.id);
+            const webhookIdStr = message.webhookId.toString();
+            const webhook = webhooks.find(w => w.id === webhookIdStr);
+
+            if (webhook && webhook.token) {
+              await bot.helpers.deleteWebhookMessage(
+                webhook.id,
+                webhook.token,
+                message.id,
+              );
+              deletedMessages++;
+            } else {
+              console.warn(`  ❌ Webhook ${message.webhookId} not found, skipping message ${message.id}`);
+            }
+          } else {
+            // Regular bot message - can be deleted directly
+            await bot.helpers.deleteMessage(channel.id, message.id);
+            deletedMessages++;
+          }
+        } catch (error: any) {
+          // Log all errors for debugging
+          const errorType = error?.code || error?.metadata?.code || "UNKNOWN";
+          console.warn(`  ❌ Failed to delete ${isWebhook ? "webhook" : "regular"} message ${message.id} (code: ${errorType}):`, error.message);
+        }
+      }
+
+      console.log(`   ✅ Deleted ${deletedMessages} messages`);
+    } catch (error) {
+      console.error(`  ❌ Failed to clean messages from channel ${channel.id}:`, error);
+    }
+  }
+
+  console.log(`\n📊 Total messages deleted: ${deletedMessages}\n`);
+  return deletedMessages;
+}
+
+/**
+ * Cleanup function: Delete all webhook messages from ALL text channels in a guild.
+ *
+ * This is more aggressive than cleanupTestMessages - it targets webhook messages
+ * in all text channels, not just Roomy-synced channels. Useful for cleaning up
+ * webhook messages created during reverse sync tests.
+ *
+ * @param bot - Discord bot instance
+ * @param guildId - Discord guild ID (usually TEST_GUILD_ID)
+ * @returns Number of webhook messages deleted
+ *
+ * @example
+ * ```ts
+ * const bot = await createTestBot();
+ * const deletedCount = await cleanupWebhookMessages(bot, TEST_GUILD_ID);
+ * console.log(`Cleaned up ${deletedCount} webhook messages`);
+ * ```
+ */
+export async function cleanupWebhookMessages(
+  bot: DiscordBot,
+  guildId: string,
+): Promise<number> {
+  const channels = await bot.rest.getChannels(guildId);
+  let deletedMessages = 0;
+  let totalWebhookMessages = 0;
+
+  console.log(`\n📋 Found ${channels.length} total channels`);
+
+  for (const channel of channels) {
+    // Only process text channels (any text channel, not just Roomy-synced)
+    if (!isTextChannel(channel)) {
+      continue;
+    }
+
+    console.log(`\n📝 Processing #${channel.name} (${channel.id})`);
+
+    try {
+      // Fetch messages (Discord API returns up to 100 at a time)
+      const messages = await bot.rest.getMessages(channel.id, { limit: 100 });
+
+      // Filter only webhook messages
+      const webhookMessages = messages.filter(m => m.webhookId);
+      totalWebhookMessages += webhookMessages.length;
+      console.log(`   Found ${messages.length} total messages, ${webhookMessages.length} webhook messages`);
+
+      if (webhookMessages.length === 0) {
+        console.log(`   ℹ️  No webhook messages to delete`);
+        continue;
+      }
+
+      // Delete webhook messages
+      for (const message of webhookMessages) {
+        try {
+          // Try direct deletion first - bot with MANAGE_MESSAGES can delete any message
+          // IDs from Discord API are already Bigints
+          await bot.helpers.deleteMessage(channel.id, message.id);
+          deletedMessages++;
+          // Rate limiting: small delay between deletions
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (error: any) {
+          // If direct deletion fails, try webhook-based deletion
+          const errorDetails = error?.message || String(error);
+          console.warn(`  ⚠️  Direct deletion failed for ${message.id}: ${errorDetails}`);
+
+          try {
+            // Webhook messages must be deleted by the webhook
+            // First, get the webhook to retrieve its token
+            const webhooks = await bot.rest.getChannelWebhooks(channel.id);
+            const webhookIdStr = message.webhookId?.toString();
+            const webhook = webhookIdStr ? webhooks.find(w => w.id === webhookIdStr) : undefined;
+
+            if (webhook && webhook.token && message.webhookId) {
+              await bot.helpers.deleteWebhookMessage(
+                webhook.id,
+                webhook.token,
+                message.id,
+              );
+              deletedMessages++;
+              // Rate limiting: small delay between deletions
+              await new Promise(resolve => setTimeout(resolve, 200));
+            } else {
+              console.warn(`  ❌ Webhook ${message.webhookId} not found, skipping message ${message.id}`);
+            }
+          } catch (webhookError: any) {
+            const webhookErrorDetails = webhookError?.message || String(webhookError);
+            console.warn(`  ❌ Webhook deletion also failed for ${message.id}: ${webhookErrorDetails}`);
+          }
+        }
+      }
+
+      console.log(`   ✅ Deleted ${deletedMessages} webhook messages`);
+    } catch (error) {
+      console.error(`  ❌ Failed to clean webhook messages from channel ${channel.id}:`, error);
+    }
+  }
+
+  console.log(`\n📊 Total webhook messages deleted: ${deletedMessages} of ${totalWebhookMessages}\n`);
+
+  // Fail if we couldn't delete webhook messages
+  if (totalWebhookMessages > 0 && deletedMessages < totalWebhookMessages) {
+    const orphaned = totalWebhookMessages - deletedMessages;
+    throw new Error(
+      `Failed to delete ${orphaned} webhook messages. ` +
+      `The webhooks that created these messages may have been deleted. ` +
+      `To prevent this in the future, use safeDeleteWebhook() to delete ` +
+      `webhook messages before deleting the webhook itself.`
+    );
+  }
+
+  return deletedMessages;
+}
+
+/**
+ * Cleanup function: Delete all bot messages from ALL text channels in a guild.
+ *
+ * This targets regular bot messages (not webhook messages) from all text channels.
+ * Useful for cleaning up test messages created by the bot during testing.
+ *
+ * @param bot - Discord bot instance
+ * @param guildId - Discord guild ID (usually TEST_GUILD_ID)
+ * @returns Number of bot messages deleted
+ *
+ * @example
+ * ```ts
+ * const bot = await createTestBot();
+ * const deletedCount = await cleanupBotMessages(bot, TEST_GUILD_ID);
+ * console.log(`Cleaned up ${deletedCount} bot messages`);
+ * ```
+ */
+export async function cleanupBotMessages(
+  bot: DiscordBot,
+  guildId: string,
+): Promise<number> {
+  const channels = await bot.rest.getChannels(guildId);
+  let deletedMessages = 0;
+  let totalBotMessages = 0;
+
+  console.log(`\n📋 Found ${channels.length} total channels`);
+
+  for (const channel of channels) {
+    // Only process text channels
+    if (!isTextChannel(channel)) {
+      continue;
+    }
+
+    console.log(`\n📝 Processing #${channel.name} (${channel.id})`);
+
+    try {
+      // Fetch messages
+      const messages = await bot.rest.getMessages(channel.id, { limit: 100 });
+
+      // Filter bot messages (not webhook messages, and author.bot is true)
+      const botMessages = messages.filter(m => !m.webhookId && m.author?.bot);
+      totalBotMessages += botMessages.length;
+      console.log(`   Found ${messages.length} total messages, ${botMessages.length} bot messages`);
+
+      if (botMessages.length === 0) {
+        console.log(`   ℹ️  No bot messages to delete`);
+        continue;
+      }
+
+      // Delete bot messages
+      for (const message of botMessages) {
+        try {
+          await bot.helpers.deleteMessage(channel.id, message.id);
+          deletedMessages++;
+          // Rate limiting: small delay between deletions
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (error: any) {
+          const errorDetails = error?.message || String(error);
+          console.warn(`  ❌ Failed to delete bot message ${message.id}: ${errorDetails}`);
+        }
+      }
+
+      console.log(`   ✅ Deleted ${deletedMessages} bot messages`);
+    } catch (error) {
+      console.error(`  ❌ Failed to clean bot messages from channel ${channel.id}:`, error);
+    }
+  }
+
+  console.log(`\n📊 Total bot messages deleted: ${deletedMessages} of ${totalBotMessages}\n`);
+
+  // Fail if we couldn't delete all bot messages
+  if (totalBotMessages > 0 && deletedMessages < totalBotMessages) {
+    const orphaned = totalBotMessages - deletedMessages;
+    throw new Error(
+      `Failed to delete ${orphaned} bot messages. ` +
+      `Check bot permissions and ensure MANAGE_MESSAGES is granted.`
+    );
+  }
+
+  return deletedMessages;
+}
+
+/**
+ * Safely delete a webhook by first deleting all its messages, then the webhook itself.
+ *
+ * This prevents orphaned webhook messages that can't be cleaned up later.
+ * Webhook messages must be deleted using the webhook's token before the webhook is deleted.
+ *
+ * @param bot - Discord bot instance
+ * @param channelId - Channel ID where the webhook is configured
+ * @param webhookId - Webhook ID to delete
+ * @returns Number of messages deleted before webhook deletion
+ *
+ * @example
+ * ```ts
+ * const messagesDeleted = await safeDeleteWebhook(bot, channelId, webhookId);
+ * console.log(`Deleted webhook and ${messagesDeleted} messages`);
+ * ```
+ */
+export async function safeDeleteWebhook(
+  bot: DiscordBot,
+  channelId: bigint,
+  webhookId: bigint,
+): Promise<number> {
+  let messagesDeleted = 0;
+
+  try {
+    // Get the webhook to retrieve its token
+    const webhooks = await bot.rest.getChannelWebhooks(channelId);
+    const webhook = webhooks.find(w => BigInt(w.id) === webhookId);
+
+    if (!webhook) {
+      console.warn(`⚠️  Webhook ${webhookId} not found, may have been deleted already`);
+      return 0;
+    }
+
+    if (!webhook.token) {
+      console.warn(`⚠️  Webhook ${webhookId} does not have a token, cannot delete messages`);
+      return 0;
+    }
+
+    console.log(`🔗 Cleaning up webhook ${webhookId} before deletion...`);
+
+    // Fetch recent messages from the channel
+    const messages = await bot.rest.getMessages(channelId, { limit: 100 });
+
+    // Find and delete messages created by this webhook
+    const webhookMessages = messages.filter(m => BigInt(m.webhookId || 0) === webhookId);
+
+    if (webhookMessages.length > 0) {
+      console.log(`   Found ${webhookMessages.length} messages from this webhook`);
+
+      for (const message of webhookMessages) {
+        try {
+          await bot.helpers.deleteWebhookMessage(
+            webhookId,
+            webhook.token,
+            message.id,
+          );
+          messagesDeleted++;
+          // Small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          console.warn(`   ⚠️  Failed to delete message ${message.id}:`, error);
+        }
+      }
+
+      console.log(`   ✅ Deleted ${messagesDeleted} webhook messages`);
+    } else {
+      console.log(`   ℹ️  No messages to clean up`);
+    }
+
+    // Now delete the webhook itself
+    await bot.helpers.deleteWebhook(webhookId);
+    console.log(`   ✅ Deleted webhook ${webhookId}`);
+
+    return messagesDeleted;
+  } catch (error) {
+    console.error(`❌ Failed to safely delete webhook ${webhookId}:`, error);
+    return messagesDeleted;
+  }
+}
+
+/**
+ * Get reactions for a specific emoji on a Discord message.
+ * Uses Discord REST API to fetch users who reacted with the given emoji.
+ *
+ * @param bot - Discord bot instance
+ * @param channelId - Discord channel ID
+ * @param messageId - Discord message ID
+ * @param emoji - Emoji string (unicode or "name:id" format for custom)
+ * @returns Array of user IDs who reacted with the emoji
+ *
+ * @deprecated Prefer using gateway-based verification (createGatewayTestBot + waitForGatewayReaction)
+ * for reliable e2e testing. This method relies on REST API polling which has timing issues.
+ */
+export async function getDiscordReactions(
+  bot: DiscordBot,
+  channelId: bigint,
+  messageId: bigint,
+  emoji: string,
+): Promise<bigint[]> {
+  if (!emoji) {
+    return [];
+  }
+
+  try {
+    // Discord API: GET /channels/{channel.id}/messages/{message.id}/reactions/{emoji}
+    // For unicode emojis: use the raw unicode (but percent-encoded)
+    // For custom emojis: use name:id format
+    const url = `https://discord.com/api/v10/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}?limit=100`;
+
+    console.log(`getDiscordReactions: ${url}`);
+
+    // Get token from environment
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bot ${DISCORD_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log(`getDiscordReactions response: ${response.status}`);
+
+    if (response.status === 404) {
+      return []; // No reactions found
+    }
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`getDiscordReactions failed: ${response.status} ${response.statusText} - URL: ${url} - Response: ${text}`);
+      return [];
+    }
+
+    const users = await response.json();
+    console.log(`getDiscordReactions users: ${users.length} users found`);
+    return users.map((user: any) => BigInt(user.id));
+  } catch (error: any) {
+    // Log error but don't fail the test
+    console.error(`getDiscordReactions error:`, error);
+    return [];
+  }
+}
+
+// ============================================================================
+// GATEWAY-BASED VERIFICATION HELPERS
+// ============================================================================
+
+/**
+ * A gateway reaction event received from Discord.
+ */
+export interface GatewayReactionEvent {
+  /** The message ID that was reacted to */
+  messageId: bigint;
+  /** The channel ID containing the message */
+  channelId: bigint;
+  /** The guild ID */
+  guildId: bigint;
+  /** The user who reacted */
+  userId: bigint;
+  /** The emoji (with name, and optionally id for custom emojis) */
+  emoji: { name: string | null; id?: bigint | null };
+  /** Whether this is a burst reaction (rare) */
+  burst?: boolean;
+  /** The reaction event type */
+  type: "add" | "remove";
+}
+
+/**
+ * Gateway test bot context that tracks received events.
+ */
+export interface GatewayTestBot {
+  /** The Discord bot instance */
+  bot: DiscordBot;
+  /** Array of reaction events received since creation or last clear */
+  reactionEvents: GatewayReactionEvent[];
+  /** Clear all tracked events */
+  clearEvents(): void;
+  /** Stop the gateway connection */
+  stop(): Promise<void>;
+}
+
+/**
+ * The tracker instance for the currently active gateway test bot.
+ * Used to route gateway events to the test's event array.
+ */
+let gatewayTestBotTracker: {
+  reactionEvents: GatewayReactionEvent[];
+} | null = null;
+
+/**
+ * Create a Discord bot with gateway connection for e2e testing.
+ *
+ * Unlike createTestBot() which creates a REST-only bot, this function connects
+ * to the Discord gateway to receive real-time event notifications. This enables
+ * definitive verification that reactions (and other events) actually occurred on Discord.
+ *
+ * **Why gateway vs REST?**
+ * - REST API returns HTTP 200 OK when request is *accepted*, not when action completes
+ * - REST API has eventual consistency - writes may not be immediately readable
+ * - Gateway sends event when Discord *actually* creates the reaction (source of truth)
+ *
+ * @returns A GatewayTestBot with event tracking and cleanup methods
+ *
+ * @example
+ * ```ts
+ * const gatewayBot = await createGatewayTestBot();
+ *
+ * // Add a reaction via REST
+ * await gatewayBot.bot.helpers.addReaction(channelId, messageId, "👍");
+ *
+ * // Wait for gateway confirmation (definitive proof reaction exists)
+ * const reaction = await waitForGatewayReaction(gatewayBot, {
+ *   messageId,
+ *   channelId,
+ *   emoji: "👍",
+ * });
+ *
+ * expect(reaction).toBeDefined();
+ * expect(reaction.userId).toBe(botId);
+ *
+ * // Cleanup
+ * await gatewayBot.stop();
+ * ```
+ */
+export async function createGatewayTestBot(): Promise<GatewayTestBot> {
+  const env = getTestEnv();
+
+  // Track events for this bot instance
+  const reactionEvents: GatewayReactionEvent[] = [];
+
+  // Set the global tracker (will be used by event handlers)
+  gatewayTestBotTracker = { reactionEvents };
+
+  const bot = await createBot({
+    token: env.discordToken,
+    desiredProperties,
+    // Gateway intents for reaction testing
+    intents: Intents.Guilds | Intents.GuildMessageReactions,
+    events: {
+      ready() {
+        console.log("[GatewayTestBot] Connected to Discord gateway");
+      },
+
+      reactionAdd(payload) {
+        // Only track events with a guildId (skip DMs)
+        if (!payload.guildId) return;
+
+        const event: GatewayReactionEvent = {
+          messageId: payload.messageId,
+          channelId: payload.channelId,
+          guildId: payload.guildId,
+          userId: payload.userId,
+          emoji: payload.emoji,
+          burst: payload.burst,
+          type: "add",
+        };
+
+        console.log(
+          `[GatewayTestBot] Reaction ADD: msg=${payload.messageId} user=${payload.userId} emoji=${payload.emoji.name}`
+        );
+
+        // Add to tracked events
+        reactionEvents.push(event);
+      },
+
+      reactionRemove(payload) {
+        if (!payload.guildId) return;
+
+        const event: GatewayReactionEvent = {
+          messageId: payload.messageId,
+          channelId: payload.channelId,
+          guildId: payload.guildId,
+          userId: payload.userId,
+          emoji: payload.emoji,
+          burst: payload.burst,
+          type: "remove",
+        };
+
+        console.log(
+          `[GatewayTestBot] Reaction REMOVE: msg=${payload.messageId} user=${payload.userId} emoji=${payload.emoji.name}`
+        );
+
+        reactionEvents.push(event);
+      },
+    },
+  });
+
+  // Start the gateway connection
+  bot.start();
+
+  // Wait for the gateway to connect (ready event)
+  // The bot is ready when the `ready` event fires, but we'll use a simple timeout
+  // since we don't have a way to await the ready event synchronously
+  await new Promise<void>(resolve => {
+    const timeout = setTimeout(() => {
+      // Give it extra time - gateway connection can take 1-3 seconds
+      resolve();
+    }, 5000);
+
+    // Try to resolve early if bot becomes ready
+    const checkReady = setInterval(() => {
+      // @ts-ignore - internal gateway property
+      if (bot.gateway?.ready) {
+        clearInterval(checkReady);
+        clearTimeout(timeout);
+        resolve();
+      }
+    }, 100);
+  });
+
+  console.log("[GatewayTestBot] Gateway connection established");
+
+  return {
+    bot,
+    reactionEvents,
+    clearEvents() {
+      reactionEvents.length = 0;
+    },
+    async stop() {
+      console.log("[GatewayTestBot] Stopping gateway connection...");
+      gatewayTestBotTracker = null;
+      // @ts-ignore - bot has a stop method on the gateway
+      bot.gateway?.stop?.();
+    },
+  };
+}
+
+/**
+ * Options for filtering which gateway reaction event to wait for.
+ */
+export interface WaitForReactionOptions {
+  /** The message ID that should be reacted to */
+  messageId: bigint;
+  /** The channel ID containing the message */
+  channelId: bigint;
+  /** Optional: filter by specific emoji (name for unicode or custom emoji) */
+  emoji?: string;
+  /** Optional: filter by specific user ID */
+  userId?: bigint;
+  /** Optional: filter by event type (add or remove) */
+  type?: "add" | "remove";
+  /** Maximum time to wait for the event (default: 5000ms) */
+  timeout?: number;
+}
+
+/**
+ * Wait for a specific reaction event from the Discord gateway.
+ *
+ * This is the definitive way to verify a reaction actually exists on Discord.
+ * Instead of polling the REST API with arbitrary delays, we wait for Discord
+ * to push the gateway event confirming the reaction was created.
+ *
+ * **IMPORTANT LIMITATION:** Discord does NOT send gateway events for a bot's own
+ * reactions. When the bot adds a reaction via REST API, Discord does not echo
+ * a MESSAGE_REACTION_ADD event back to the same bot. This function will timeout
+ * when waiting for the bot's own reactions. For bot reactions, use
+ * `waitForBotReactionViaRest()` instead.
+ *
+ * @param gatewayBot - The gateway test bot instance
+ * @param options - Filter options to match the expected event
+ * @returns The matched gateway reaction event, or null if timeout
+ *
+ * @example
+ * ```ts
+ * // Simulate another user reacting (will trigger gateway event)
+ * const reaction = await waitForGatewayReaction(gatewayBot, {
+ *   messageId,
+ *   channelId,
+ *   emoji: "👍",
+ *   userId: otherUserId, // NOT the bot's user ID
+ * });
+ * ```
+ */
+export async function waitForGatewayReaction(
+  gatewayBot: GatewayTestBot,
+  options: WaitForReactionOptions,
+): Promise<GatewayReactionEvent | null> {
+  const {
+    messageId,
+    channelId,
+    emoji,
+    userId,
+    type,
+    timeout = 5000,
+  } = options;
+
+  const startTime = Date.now();
+
+  return new Promise((resolve) => {
+    // Check existing events first (in case event already arrived)
+    const checkEvents = () => {
+      const match = gatewayBot.reactionEvents.find((event) => {
+        if (event.messageId !== messageId) return false;
+        if (event.channelId !== channelId) return false;
+        if (emoji !== undefined && event.emoji.name !== emoji) return false;
+        if (userId !== undefined && event.userId !== userId) return false;
+        if (type !== undefined && event.type !== type) return false;
+        return true;
+      });
+
+      if (match) {
+        return match;
+      }
+
+      return null;
+    };
+
+    // Immediate check
+    const existingMatch = checkEvents();
+    if (existingMatch) {
+      resolve(existingMatch);
+      return;
+    }
+
+    // Poll for new events
+    const interval = setInterval(() => {
+      const match = checkEvents();
+      if (match) {
+        clearInterval(interval);
+        resolve(match);
+        return;
+      }
+
+      // Check timeout
+      if (Date.now() - startTime > timeout) {
+        clearInterval(interval);
+        console.error(
+          `[waitForGatewayReaction] Timeout after ${timeout}ms waiting for reaction: ` +
+          `messageId=${messageId}, channelId=${channelId}, emoji=${emoji}, userId=${userId}, type=${type}. ` +
+          `Note: Discord does NOT send gateway events for a bot's own reactions.`
+        );
+        resolve(null);
+      }
+    }, 50); // Check every 50ms
+  });
+}
+
+/**
+ * Options for waiting for bot reaction via REST API polling.
+ */
+export interface WaitForBotReactionOptions {
+  /** The bot instance */
+  bot: DiscordBot;
+  /** The message ID that should be reacted to */
+  messageId: bigint;
+  /** The channel ID containing the message */
+  channelId: bigint;
+  /** The emoji to wait for */
+  emoji: string;
+  /** Maximum time to wait for the reaction (default: 10000ms) */
+  timeout?: number;
+  /** Polling interval in ms (default: 200ms) */
+  interval?: number;
+}
+
+/**
+ * Wait for a bot's own reaction to appear via REST API polling.
+ *
+ * Since Discord does NOT send gateway events for a bot's own reactions,
+ * we must poll the REST API to verify the reaction was added. This is more
+ * reliable than arbitrary sleeps because it:
+ * 1. Polls at regular intervals instead of hoping a fixed delay is enough
+ * 2. Has a configurable timeout with clear error messages
+ * 3. Returns as soon as the reaction is detected (no unnecessary waiting)
+ *
+ * **Why is this needed?** Discord's eventual consistency means the REST API
+ * may not immediately return a reaction after adding it. This function polls
+ * until the reaction appears or timeout is reached.
+ *
+ * @param options - Polling options
+ * @returns The array of user IDs who reacted with the emoji, or null if timeout
+ *
+ * @example
+ * ```ts
+ * // Add a reaction via bot
+ * await bot.helpers.addReaction(channelId, messageId, "👍");
+ *
+ * // Wait for reaction to be queryable via REST API
+ * const result = await waitForBotReactionViaRest({
+ *   bot,
+ *   messageId,
+ *   channelId,
+ *   emoji: "👍",
+ * });
+ *
+ * if (!result) {
+ *   throw new Error("Reaction not found in Discord API within timeout");
+ * }
+ *
+ * // Verify bot is in the list of reactors
+ * expect(result).toContain(bot.id);
+ * ```
+ */
+export async function waitForBotReactionViaRest(
+  options: WaitForBotReactionOptions,
+): Promise<bigint[] | null> {
+  const {
+    bot,
+    messageId,
+    channelId,
+    emoji,
+    timeout = 10000,
+    interval = 200,
+  } = options;
+
+  const startTime = Date.now();
+
+  console.log(
+    `[waitForBotReactionViaRest] Polling for reaction: ` +
+    `messageId=${messageId}, channelId=${channelId}, emoji=${emoji}`
+  );
+
+  return new Promise((resolve) => {
+    const poll = async () => {
+      const users = await getDiscordReactions(bot, channelId, messageId, emoji);
+
+      if (users.length > 0) {
+        console.log(
+          `[waitForBotReactionViaRest] Reaction found: ${users.length} users reacted`
+        );
+        resolve(users);
+        return;
+      }
+
+      // Check timeout
+      if (Date.now() - startTime > timeout) {
+        console.error(
+          `[waitForBotReactionViaRest] Timeout after ${timeout}ms waiting for reaction`
+        );
+        resolve(null);
+        return;
+      }
+
+      // Poll again after interval
+      setTimeout(poll, interval);
+    };
+
+    // Start polling
+    poll();
+  });
+}
+
+// ============================================================================
+// ROOMY EVENT STREAM VALIDATION
+// ============================================================================
+
+/**
+ * A reaction event found in the Roomy event stream.
+ */
+export interface RoomyReactionEvent {
+  /** The event ULID */
+  id: string;
+  /** The event type */
+  $type: string;
+  /** The message being reacted to */
+  reactionTo: string;
+  /** The emoji reaction */
+  reaction: string;
+  /** The user who reacted */
+  reactingUser: string;
+  /** The event index */
+  idx: bigint;
+}
+
+/**
+ * Fetch all reaction events from the Roomy event stream for a specific message.
+ *
+ * @param connectedSpace - The Roomy ConnectedSpace instance
+ * @param messageUlId - The Roomy message ULID to filter by
+ * @returns Array of reaction events for the message
+ */
+export async function getRoomyReactionsForMessage(
+  connectedSpace: ConnectedSpace,
+  messageUlId: string,
+): Promise<RoomyReactionEvent[]> {
+  const events = await connectedSpace.fetchEvents(1, 200);
+
+  const reactionEvents = events
+    .map((e: any) => e.event)
+    .filter((e: any) =>
+      e.$type === "space.roomy.reaction.addBridgedReaction.v0" ||
+      e.$type === "space.roomy.reaction.removeBridgedReaction.v0"
+    )
+    .filter((e: any) => e.reactionTo === messageUlId)
+    .map((e: any) => ({
+      id: e.id,
+      $type: e.$type,
+      reactionTo: e.reactionTo,
+      reaction: e.reaction,
+      reactingUser: e.reactingUser,
+      idx: events.find((ev: any) => ev.event.id === e.id)?.idx || 0n,
+    }));
+
+  return reactionEvents;
+}
+
+/**
+ * Expected reaction in Roomy event stream.
+ */
+export interface ExpectedReaction {
+  /** The Roomy message ULID being reacted to */
+  messageUlId: string;
+  /** The emoji expected */
+  emoji: string;
+  /** The user DID expected (who reacted) */
+  userDid: string;
+  /** Whether this is a bridged (from Discord) or native (from Roomy) reaction */
+  isBridged: boolean;
+}
+
+/**
+ * Validate that the Roomy event stream contains exactly the expected reactions.
+ *
+ * This function ensures that:
+ * 1. All expected reactions exist in the stream
+ * 2. No extra reactions exist (echo prevention working)
+ * 3. Each expected reaction appears exactly once
+ *
+ * @param connectedSpace - The Roomy ConnectedSpace instance
+ * @param expectedReactions - Array of expected reactions
+ * @returns Object with validation result and details
+ *
+ * @example
+ * ```ts
+ * const result = await validateRoomyReactions(connectedSpace, [
+ *   {
+ *     messageUlId: roomyMessageId,
+ *     emoji: "👍",
+ *     userDid: "did:discord:123456789",
+ *     isBridged: true,
+ *   },
+ * ]);
+ *
+ * if (!result.valid) {
+ *   console.error("Validation failed:", result.errors);
+ * }
+ * ```
+ */
+export async function validateRoomyReactions(
+  connectedSpace: ConnectedSpace,
+  expectedReactions: ExpectedReaction[],
+): Promise<{
+  valid: boolean;
+  errors: string[];
+  found: RoomyReactionEvent[];
+  expected: ExpectedReaction[];
+}> {
+  // Fetch all reaction events for each message
+  const allReactions: RoomyReactionEvent[] = [];
+  const messageUlIds = new Set(expectedReactions.map(r => r.messageUlId));
+
+  for (const messageUlId of messageUlIds) {
+    const reactions = await getRoomyReactionsForMessage(connectedSpace, messageUlId);
+    allReactions.push(...reactions);
+  }
+
+  const errors: string[] = [];
+
+  // Check 1: All expected reactions exist
+  for (const expected of expectedReactions) {
+    const matchingReaction = allReactions.find(
+      r =>
+        r.reactionTo === expected.messageUlId &&
+        r.reaction === expected.emoji &&
+        r.reactingUser === expected.userDid &&
+        (expected.isBridged ? r.$type === "space.roomy.reaction.addBridgedReaction.v0" : r.$type === "space.roomy.reaction.addReaction.v0")
+    );
+
+    if (!matchingReaction) {
+      errors.push(
+        `Missing expected reaction: message=${expected.messageUlId}, ` +
+        `emoji=${expected.emoji}, user=${expected.userDid}, ` +
+        `isBridged=${expected.isBridged}`
+      );
+    }
+  }
+
+  // Check 2: No extra reactions (echo prevention)
+  for (const found of allReactions) {
+    const isExpected = expectedReactions.some(
+      expected =>
+        found.reactionTo === expected.messageUlId &&
+        found.reaction === expected.emoji &&
+        found.reactingUser === expected.userDid
+    );
+
+    if (!isExpected) {
+      errors.push(
+        `Unexpected reaction found (possible echo bug): ` +
+        `message=${found.reactionTo}, emoji=${found.reaction}, ` +
+        `user=${found.reactingUser}, type=${found.$type}`
+      );
+    }
+  }
+
+  // Check 3: Each expected reaction appears exactly once
+  for (const expected of expectedReactions) {
+    const matchingReactions = allReactions.filter(
+      r =>
+        r.reactionTo === expected.messageUlId &&
+        r.reaction === expected.emoji &&
+        r.reactingUser === expected.userDid
+    );
+
+    if (matchingReactions.length > 1) {
+      errors.push(
+        `Duplicate reaction found: message=${expected.messageUlId}, ` +
+        `emoji=${expected.emoji}, user=${expected.userDid}, ` +
+        `count=${matchingReactions.length}`
+      );
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    found: allReactions,
+    expected: expectedReactions,
+  };
+}
