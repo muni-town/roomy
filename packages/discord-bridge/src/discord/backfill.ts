@@ -264,7 +264,7 @@ export async function backfillDiscordReactions(
 
           // Process each message's reactions
           for (const message of messages) {
-            // Type guard for reactions property
+            // REST API populates the reactions property
             const reactions = (message as unknown as { reactions?: unknown[] }).reactions;
             if (!reactions || reactions.length === 0) {
               continue;

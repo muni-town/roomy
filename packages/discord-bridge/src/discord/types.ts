@@ -20,6 +20,7 @@ const messageProperties = {
   attachments: true,
   messageReference: true,
   type: true,
+  reactions: true,
 } as const;
 export type MessageProperties = SetupDesiredProps<
   Message,
