@@ -1085,32 +1085,30 @@ export class Peer {
 }
 
 class SqliteSupervisor {
-  #state: SqliteState;
+  #state: StateMachine<SqliteState>;
   liveQueries: Map<string, { port: MessagePort; statement: SqlStatement }>;
 
   constructor() {
-    this.#state = { state: "pending", readyPromise: new Deferred() };
+    this.#state = stateMachine({ state: "pending" });
     this.liveQueries = new Map();
   }
 
   get untilReady() {
-    if (this.#state.state === "pending")
-      return this.#state.readyPromise.promise;
-    else return undefined;
+    return this.#state.transitionedTo("ready");
   }
 
   get ready() {
-    return this.#state.state === "ready";
+    return this.#state.current.state === "ready";
   }
 
   get sqliteWorker() {
-    if (this.#state.state !== "ready")
+    if (this.#state.current.state !== "ready")
       throw new Error("Sqlite worker not initialised");
-    return this.#state.sqliteWorker;
+    return this.#state.current.sqliteWorker;
   }
 
   async setReady(workerInterface: SqliteWorkerInterface) {
-    if (this.#state.state === "pending") {
+    if (this.#state.current.state === "pending") {
       const previousSchemaVersion = await prevStream.getSchemaVersion();
       console.debug("(init.2) SQLite Supervisor ready.", {
         previousSchemaVersion,
@@ -1143,37 +1141,27 @@ class SqliteSupervisor {
         const channel = this.createLiveQueryChannel(port);
         this.createLiveQuery(id, channel.port2, statement);
       }
-
-      this.#state.readyPromise.resolve();
     }
-    this.#state = {
+    this.#state.current = {
       state: "ready",
       sqliteWorker: workerInterface,
     };
   }
 
   async materializeBatch(events: Batch.Events, priority: TaskPriority) {
-    await this.untilReady;
-    if (this.#state.state !== "ready")
-      throw new Error("Sqlite worker not initialized.");
-    return this.#state.sqliteWorker.materializeBatch(events, priority);
+    const { sqliteWorker } = await this.#state.transitionedTo("ready");
+    return sqliteWorker.materializeBatch(events, priority);
   }
 
   // Type assertion for convenience. Todo: use Zod/Arktype for sql output validation?
   async runQuery<T = unknown>(statement: SqlStatement) {
-    await this.untilReady;
-    if (this.#state.state !== "ready")
-      throw new Error("Sqlite worker not initialized.");
-    return this.#state.sqliteWorker.runQuery(statement) as Promise<
-      QueryResult<T>
-    >;
+    const { sqliteWorker } = await this.#state.transitionedTo("ready");
+    return sqliteWorker.runQuery(statement) as Promise<QueryResult<T>>;
   }
 
   async runSavepoint(savepoint: Savepoint) {
-    await this.untilReady;
-    if (this.#state.state !== "ready")
-      throw new Error("Sqlite worker not initialized.");
-    return this.#state.sqliteWorker.runSavepoint(savepoint);
+    const { sqliteWorker } = await this.#state.transitionedTo("ready");
+    return sqliteWorker.runSavepoint(savepoint);
   }
 
   createLiveQueryChannel(port: MessagePort) {
@@ -1189,18 +1177,14 @@ class SqliteSupervisor {
     port: MessagePort,
     statement: SqlStatement,
   ) {
-    await this.untilReady;
-    if (this.#state.state !== "ready")
-      throw new Error("Sqlite worker not initialized.");
+    const { sqliteWorker } = await this.#state.transitionedTo("ready");
     this.liveQueries.set(id, { port, statement });
-    await this.#state.sqliteWorker.createLiveQuery(id, port, statement);
+    await sqliteWorker.createLiveQuery(id, port, statement);
   }
 
   async deleteLiveQuery(id: string) {
-    await this.untilReady;
-    if (this.#state.state !== "ready")
-      throw new Error("Sqlite worker not initialized.");
+    const { sqliteWorker } = await this.#state.transitionedTo("ready");
     this.liveQueries.delete(id);
-    await this.#state.sqliteWorker.deleteLiveQuery(id);
+    await sqliteWorker.deleteLiveQuery(id);
   }
 }

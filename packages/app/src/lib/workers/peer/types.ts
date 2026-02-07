@@ -458,23 +458,11 @@ export namespace ConnectionStates {
   }
 }
 
-type SqlitePending = {
-  state: "pending";
-  readyPromise: Deferred<void>;
-};
-
-type SqliteReady = {
-  state: "ready";
-  sqliteWorker: SqliteWorkerInterface;
-};
-
-export type SqliteState = SqlitePending | SqliteReady;
-
-// export type SqliteState =
-//   | {
-//       state: "pending";
-//     }
-//   | {
-//       state: "ready";
-//       sqliteWorker: SqliteWorkerInterface;
-//     };
+export type SqliteState =
+  | {
+      state: "pending";
+    }
+  | {
+      state: "ready";
+      sqliteWorker: SqliteWorkerInterface;
+    };
