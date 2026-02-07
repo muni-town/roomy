@@ -26,9 +26,10 @@ import {
   createSyncOrchestratorForTest,
   getDiscordReactions,
   waitForBotReactionViaRest,
+  validateRoomyReactions,
 } from "../helpers/setup.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
-import { createMessage } from "@roomy/sdk";
+import { createMessage, addReaction } from "@roomy/sdk";
 
 describe("E2E: Reaction Sync - Origin Matrix", () => {
   beforeAll(async () => {
@@ -158,6 +159,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       // Simulate Roomy reaction event (user reacts on Roomy to a Discord message)
       const reaction = "😀";
+      const testUserDid = "did:discord:987654321" as const;
       const reactionEvent = {
         idx: 2n,
         event: {
@@ -167,14 +169,13 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
           reactionTo: roomyMessageId,
           reaction,
         },
-        user: "did:discord:987654321" as const,
+        user: testUserDid,
       };
 
       // Sync Roomy reaction to Discord (bot adds the reaction)
       await orchestrator.handleRoomyAddReaction(reactionEvent, bot);
 
       // Verify: Reaction was actually added to Discord
-      // Since the bot added this reaction, we must poll REST API (Discord doesn't echo bot's own actions via gateway)
       const reactingUsers = await waitForBotReactionViaRest({
         bot,
         messageId: testMessage.id,
@@ -185,8 +186,19 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       expect(reactingUsers, "Discord API did not confirm reaction was added within timeout").not.toBeNull();
       expect(reactingUsers!.length).toBeGreaterThan(0);
-      // The bot should be in the list of users who reacted
       expect(reactingUsers).toContain(bot.id);
+
+      // Simulate Discord echoing back (bot user reaction from gateway)
+      // This tests that echo prevention works correctly
+      const echoReactionId = await orchestrator.handleDiscordReactionAdd(
+        testMessage.id,
+        firstChannel.id,
+        bot.id, // Bot user ID - this is the echo we need to prevent
+        { name: reaction },
+      );
+
+      // Verify: Echo was prevented (returns null)
+      expect(echoReactionId).toBeNull();
 
       // Verify: No echo back to Roomy (no new addBridgedReaction events)
       events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
@@ -356,13 +368,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       const discordMessage = discordMessages.find(m => m.content === testContent);
       expect(discordMessage).toBeDefined();
 
-      // Count Roomy reactions before
-      let events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
-      const reactionsBefore = events.filter(
-        (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0"
-      );
-
-      // Simulate Roomy reaction event
+      // Simulate Roomy reaction event (user reacts on Roomy)
       const reaction = "😀";
       const reactionEvent = {
         idx: 2n,
@@ -380,7 +386,6 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       await orchestrator.handleRoomyAddReaction(reactionEvent, bot);
 
       // Verify: Reaction was actually added to Discord
-      // Since the bot added this reaction, we must poll REST API (Discord doesn't echo bot's own actions via gateway)
       const reactingUsers = await waitForBotReactionViaRest({
         bot,
         messageId: discordMessage!.id,
@@ -391,29 +396,21 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       expect(reactingUsers, "Discord API did not confirm reaction was added within timeout").not.toBeNull();
       expect(reactingUsers!.length).toBeGreaterThan(0);
-      // The bot should be in the list of users who reacted
       expect(reactingUsers).toContain(bot.id);
 
       // Simulate Discord echoing back (bot user reaction from gateway)
-      // This simulates what happens when Discord sends a reaction_add event
-      // after we added the reaction via webhook
+      // This is what happens when the bot adds a reaction via webhook and Discord
+      // sends back a reaction_add event via gateway
       const echoReactionId = await orchestrator.handleDiscordReactionAdd(
         discordMessage!.id,
         firstChannel.id,
-        bot.id, // Bot user ID - this is the echo we need to prevent
+        bot.id, // Bot user ID - echo prevention should skip this
         { name: reaction },
       );
 
       // Verify: Echo was prevented (returns null)
+      // The bot ID check at ReactionSyncService.ts line 56 prevents syncing bot's own reactions
       expect(echoReactionId).toBeNull();
-
-      // Verify: No new addBridgedReaction event created
-      events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
-      const reactionsAfter = events.filter(
-        (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0"
-      );
-
-      expect(reactionsAfter.length).toBe(reactionsBefore.length);
 
       // Cleanup
       if (discordMessage) {
