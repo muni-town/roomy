@@ -4,12 +4,15 @@ import type { MessageProperties } from "./types";
 import {
   discordMessageHashesForBridge,
   discordWebhookTokensForBridge,
+  roomyUserProfilesForBridge,
 } from "../db.js";
 import { GuildContext } from "../types.js";
 import { tracer, setDiscordAttrs, recordError } from "../tracing.js";
 import { DISCORD_EXTENSION_KEYS } from "../roomy/subscription.js";
 import { fingerprint } from "../utils/hash.js";
 import { getRoomKey } from "../utils/room.js";
+import { ReactionSyncService } from "../services/ReactionSyncService.js";
+import { LevelDBBridgeRepository } from "../repositories/BridgeRepository.js";
 
 /**
  * Compute a SHA-256 hash of normalized Discord message content.
@@ -192,6 +195,9 @@ export async function backfillDiscordMessages(
 /**
  * Backfill all reactions for Discord messages.
  *
+ * Fetches all messages in a channel, finds all reactions on each message,
+ * and syncs each user's reaction to Roomy.
+ *
  * @param bot - Discord bot instance
  * @param ctx - Guild context
  * @param channelId - Discord channel ID
@@ -208,6 +214,41 @@ export async function backfillDiscordReactions(
         setDiscordAttrs(span, { guildId: ctx.guildId, channelId });
 
         let reactionCount = 0;
+        let messageCount = 0;
+
+        // Create the additional stores needed by LevelDBBridgeRepository
+        const roomyUserProfiles = roomyUserProfilesForBridge({
+          discordGuildId: ctx.guildId,
+          roomySpaceId: ctx.spaceId,
+        });
+
+        const discordWebhookTokens = discordWebhookTokensForBridge({
+          discordGuildId: ctx.guildId,
+          roomySpaceId: ctx.spaceId,
+        });
+
+        // Create the repository wrapper
+        const repo = new LevelDBBridgeRepository({
+          syncedIds: ctx.syncedIds,
+          syncedProfiles: ctx.syncedProfiles,
+          roomyUserProfiles,
+          syncedReactions: ctx.syncedReactions,
+          syncedSidebarHash: ctx.syncedSidebarHash,
+          syncedRoomLinks: ctx.syncedRoomLinks,
+          syncedEdits: ctx.syncedEdits,
+          discordWebhookTokens,
+          discordMessageHashes: ctx.discordMessageHashes,
+          discordLatestMessage: ctx.latestMessagesInChannel,
+        });
+
+        // Create ReactionSyncService
+        const reactionSync = new ReactionSyncService(
+          repo,
+          ctx.connectedSpace,
+          ctx.guildId,
+          ctx.spaceId,
+          bot.id, // Pass bot ID for echo prevention
+        );
 
         // Fetch messages with pagination to get their reactions
         let before: bigint | undefined;
@@ -218,6 +259,8 @@ export async function backfillDiscordReactions(
           });
 
           if (messages.length === 0) break;
+
+          messageCount += messages.length;
 
           // Process each message's reactions
           for (const message of messages) {
@@ -236,18 +279,57 @@ export async function backfillDiscordReactions(
 
               const count = (reaction as { count?: number }).count || 1;
 
-              // For now, just log the reaction. Full backfill requires:
-              // 1. Fetching all users who reacted with this emoji (paginated)
-              // 2. Syncing each user's reaction to Roomy
-              // This is a more complex operation due to Discord API pagination
-              console.log(`Found ${count} reaction(s) with emoji ${emoji.name || '?'}` +
-                          ` on message ${message.id} in channel ${channelId}`);
+              // Fetch all users who reacted with this emoji (with pagination)
+              let after: string | undefined;
+              let hasMore = true;
 
-              // TODO: Implement full reaction user fetching with pagination
-              // The Discord API returns users in pages of 100, requiring multiple calls
-              // For each reaction type: bot.helpers.getReactions(channelId, messageId, emoji, {limit, after})
+              while (hasMore) {
+                // Build emoji string for API call
+                // Unicode emoji: just use the string
+                // Custom emoji: Discord uses format "name:id"
+                let emojiString = emoji.name || "";
+                if (emoji.id) {
+                  emojiString = `${emoji.name}:${emoji.id}`;
+                }
+
+                // Fetch users who reacted (max 100 per request)
+                const users = await bot.helpers.getReactions(
+                  channelId,
+                  message.id,
+                  emojiString,
+                  { after, limit: 100 },
+                );
+
+                if (users.length === 0) {
+                  hasMore = false;
+                  break;
+                }
+
+                // Sync each user's reaction to Roomy
+                for (const user of users) {
+                  const reactionEventId = await reactionSync.syncAddToRoomy(
+                    message.id,
+                    channelId,
+                    user.id,
+                    emoji,
+                  );
+
+                  if (reactionEventId) {
+                    reactionCount++;
+                  }
+                }
+
+                // Check if there are more users to fetch
+                if (users.length < 100) {
+                  hasMore = false;
+                } else {
+                  // Set cursor to last user's ID for next page
+                  after = users[users.length - 1]?.id.toString();
+                }
+              }
             }
 
+            // Update cursor for message pagination
             before = message.id;
           }
 
@@ -255,9 +337,10 @@ export async function backfillDiscordReactions(
           if (messages.length < 100) break;
         }
 
-        console.log(`Found ${reactionCount} reactions on channel ${channelId} (not yet synced to Roomy)`);
+        console.log(`Backfilled ${reactionCount} reactions from ${messageCount} messages on channel ${channelId}`);
         span.setAttribute("sync.result", "success");
         span.setAttribute("reaction.count", reactionCount);
+        span.setAttribute("message.count", messageCount);
       } catch (error) {
         recordError(span, error);
         console.error(`Error backfilling reactions for channel ${channelId}:`, error);
