@@ -38,6 +38,8 @@ import {
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
 import { registeredBridges } from "../../../src/db.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
+import { createRoom } from "@roomy/sdk/package/operations/room";
+import { createMessage } from "@roomy/sdk/package/operations/message";
 
 describe("E2E: Discord Channel Sync", () => {
   beforeAll(async () => {
@@ -929,6 +931,106 @@ describe("E2E: Discord Channel Sync", () => {
 
       console.log(`Lobby room "${lobbyRoomName}" synced to Discord as channel "${syncedChannel?.name}"`);
     }, 45000);
+
+    it("should backfill Roomy-native rooms with messages to Discord", async () => {
+      // This test validates the full 4-phase backfill process:
+      // Phase 0: Fetch sidebar and trigger room creation
+      // Phase 1: Fetch Roomy-origin events
+      // Phase 2: Backfill Discord messages (empty for Roomy-native rooms)
+      // Phase 3: Sync Roomy events with duplicate detection
+
+      const roomy = await initE2ERoomyClient();
+      const bot = await createTestBot();
+      const testId = Date.now().toString();
+
+      const result = await connectGuildToNewSpace(
+        roomy,
+        TEST_GUILD_ID,
+        `E2E Full Backfill Test - ${testId}`,
+      );
+      const orchestrator = createSyncOrchestratorForTest(result, bot);
+
+      // Wait for default space initialization
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Import updateSidebarEvents
+      const { updateSidebarEvents } = await import("@roomy/sdk");
+
+      // Create a Roomy-native room using the Roomy SDK
+      const testRoomName = `Backfill Test Room ${testId}`;
+      const testRoomId = await createRoom(result.connectedSpace, {
+        kind: "space.roomy.channel",
+        name: testRoomName,
+        description: "Roomy-native room for backfill testing",
+      });
+
+      console.log(`Created Roomy-native room: ${testRoomName} (${testRoomId.id})`);
+
+      // Add the test room to the sidebar so it will be synced to Discord during backfill
+      const sidebarEvent = updateSidebarEvents([
+        { name: "Test", children: [testRoomId.id] },
+      ]);
+      await result.connectedSpace.sendEvent(sidebarEvent);
+
+      console.log(`Added test room to sidebar`);
+
+      // Create some Roomy messages in the room
+      const message1Id = await createMessage(result.connectedSpace, {
+        roomId: testRoomId.id,
+        body: "First message from Roomy",
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const message2Id = await createMessage(result.connectedSpace, {
+        roomId: testRoomId.id,
+        body: "Second message from Roomy",
+      });
+
+      console.log(`Created Roomy messages: ${message1Id.id}, ${message2Id.id}`);
+
+      // Trigger Phase 0: Backfill sidebar to create the Discord channel
+      await orchestrator.backfillRoomyToDiscord(bot);
+
+      // Wait for Phase 0 to complete (channel creation)
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Verify Phase 0: Discord channel was created with Roomy sync marker
+      const discordChannels = await bot.rest.getChannels(TEST_GUILD_ID);
+      const syncedChannel = [...discordChannels.values()].find((ch) =>
+        ch.topic?.includes(testRoomId.id),
+      );
+
+      expect(syncedChannel).toBeDefined();
+      expect(syncedChannel?.name).toBe(testRoomName.toLowerCase().replace(/\s+/g, "-"));
+      expect(syncedChannel?.topic).toContain(`[Synced from Roomy: ${testRoomId.id}]`);
+
+      console.log(`Phase 0 complete: Room synced to Discord as channel "${syncedChannel?.name}"`);
+
+      // Verify Phase 1-3: Messages were backfilled
+      const discordMessages = await bot.rest.getMessages(syncedChannel!.id, {
+        limit: 10,
+      });
+
+      // Should have both Roomy messages in Discord
+      expect(discordMessages.length).toBeGreaterThanOrEqual(2);
+
+      const messageContents = discordMessages.map((m) => m.content);
+
+      expect(messageContents.some((c) => c?.includes("First message from Roomy"))).toBe(true);
+      expect(messageContents.some((c) => c?.includes("Second message from Roomy"))).toBe(true);
+
+      console.log(`Phase 1-3 complete: ${discordMessages.length} messages backfilled to Discord`);
+
+      // Verify the Roomy room ID is properly tracked in synced IDs
+      const syncedDiscordId = await result.guildContext.syncedIds.get_discordId(
+        testRoomId.id,
+      );
+
+      expect(syncedDiscordId).toBe(syncedChannel!.id);
+
+      console.log("Full backfill validation complete!");
+    }, 60000);
 
     it.skip("should sync both space.roomy.channel and space.roomy.thread kinds", async () => {
       // TODO: Thread sync is future work - Discord thread creation requires different API
