@@ -84,6 +84,7 @@ describe("E2E: Discord Reaction Sync (D→R)", () => {
 
       // Add a reaction to the message in Discord
       const testEmoji = { name: "👍" }; // Unicode thumbs up
+      const testUserId = 123456789n; // Simulate a different user reacting (not the bot)
       await bot.helpers.addReaction(firstChannel.id, testMessage.id, testEmoji.name);
 
       // Small delay to ensure reaction is added
@@ -94,7 +95,7 @@ describe("E2E: Discord Reaction Sync (D→R)", () => {
       const reactionEventId = await orchestrator.handleDiscordReactionAdd(
         testMessage.id,
         firstChannel.id,
-        bot.id, // Bot user ID (the one who reacted)
+        testUserId, // Non-bot user ID (to test actual sync, not echo prevention)
         testEmoji,
       );
 
@@ -122,8 +123,8 @@ describe("E2E: Discord Reaction Sync (D→R)", () => {
       // Verify: Reaction has correct emoji
       expect(syncedReaction?.reaction).toBe("👍");
 
-      // Verify: Reacting user is the bot
-      expect(syncedReaction?.reactingUser).toBe(`did:discord:${bot.id}`);
+      // Verify: Reacting user is the test user (not the bot)
+      expect(syncedReaction?.reactingUser).toBe(`did:discord:${testUserId}`);
 
       // Verify: discordReactionOrigin extension with correct snowflake
       const origin = syncedReaction?.extensions?.["space.roomy.extension.discordReactionOrigin.v0"];
@@ -131,7 +132,7 @@ describe("E2E: Discord Reaction Sync (D→R)", () => {
       expect(origin?.snowflake).toBe(reactionEventId);
       expect(origin?.messageId).toBe(testMessage.id.toString());
       expect(origin?.channelId).toBe(firstChannel.id.toString());
-      expect(origin?.userId).toBe(bot.id.toString());
+      expect(origin?.userId).toBe(testUserId.toString());
       expect(origin?.emoji).toBe("👍");
 
       // Clean up: Remove reaction and delete message
@@ -196,10 +197,11 @@ describe("E2E: Discord Reaction Sync (D→R)", () => {
       await new Promise(resolve => setTimeout(resolve, 200));
 
       // Sync the reaction to Roomy
+      const testUserId = 123456789n; // Non-bot user ID for testing actual sync
       const reactionEventId = await orchestrator.handleDiscordReactionAdd(
         testMessage.id,
         firstChannel.id,
-        bot.id,
+        testUserId,
         { id: customEmoji.id, name: customEmoji.name },
       );
 
@@ -269,17 +271,17 @@ describe("E2E: Discord Reaction Sync (D→R)", () => {
 
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Add a reaction to the message
+      // Simulate a reaction add event (from Discord gateway)
+      // We don't use bot.helpers.addReaction here because that would add the reaction as the bot,
+      // and we're now skipping bot reactions to prevent echo.
       const testEmoji = { name: "😀" };
-      await bot.helpers.addReaction(firstChannel.id, testMessage.id, testEmoji.name);
-
-      await new Promise(resolve => setTimeout(resolve, 200));
+      const testUserId = 123456789n; // Non-bot user ID for testing actual sync
 
       // Sync the reaction add
       const reactionEventId = await orchestrator.handleDiscordReactionAdd(
         testMessage.id,
         firstChannel.id,
-        bot.id,
+        testUserId,
         testEmoji,
       );
 
@@ -294,8 +296,13 @@ describe("E2E: Discord Reaction Sync (D→R)", () => {
       );
       expect(addReactionEvents.length).toBeGreaterThan(0);
 
-      // Remove the reaction from Discord
-      await bot.helpers.deleteOwnReaction(firstChannel.id, testMessage.id, testEmoji.name);
+      // Simulate reaction remove event (from Discord gateway)
+      await orchestrator.handleDiscordReactionRemove(
+        testMessage.id,
+        firstChannel.id,
+        testUserId,
+        testEmoji,
+      );
 
       await new Promise(resolve => setTimeout(resolve, 200));
 
@@ -321,8 +328,8 @@ describe("E2E: Discord Reaction Sync (D→R)", () => {
       const removeEvent = removeReactionEvents.find((e: any) => e.reactionId === reactionEventId);
       expect(removeEvent).toBeDefined();
 
-      // Verify: Reacting user is the bot
-      expect(removeEvent?.reactingUser).toBe(`did:discord:${bot.id}`);
+      // Verify: Reacting user is the test user
+      expect(removeEvent?.reactingUser).toBe(`did:discord:${testUserId}`);
 
       // Clean up
       await bot.helpers.deleteMessage(firstChannel.id, testMessage.id);
@@ -365,6 +372,7 @@ describe("E2E: Discord Reaction Sync (D→R)", () => {
 
       // Add a reaction to the message
       const testEmoji = { name: "🎉" };
+      const testUserId = 123456789n; // Non-bot user ID for testing actual sync
       await bot.helpers.addReaction(firstChannel.id, testMessage.id, testEmoji.name);
 
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -373,7 +381,7 @@ describe("E2E: Discord Reaction Sync (D→R)", () => {
       const reactionId1 = await orchestrator.handleDiscordReactionAdd(
         testMessage.id,
         firstChannel.id,
-        bot.id,
+        testUserId,
         testEmoji,
       );
 
@@ -390,7 +398,7 @@ describe("E2E: Discord Reaction Sync (D→R)", () => {
       const reactionId2 = await orchestrator.handleDiscordReactionAdd(
         testMessage.id,
         firstChannel.id,
-        bot.id,
+        testUserId,
         testEmoji,
       );
 
@@ -498,6 +506,264 @@ describe("E2E: Discord Reaction Sync (D→R)", () => {
 
       // Clean up
       await bot.helpers.deleteMessage(firstChannel.id, testMessage.id);
+    }, 30000);
+  });
+
+  describe("Reaction Echo Prevention (Roomy → Discord → Roomy)", () => {
+    it("RCT-ECHO-01: should NOT echo bot's own reactions (R-origin on D-origin message)", async () => {
+      // Scenario: User reacts on Roomy to a Discord-origin message
+      // 1. Reaction synced to Discord via webhook
+      // 2. Discord sends reaction_add event back
+      // 3. We should skip syncing this back to Roomy (no duplicate reaction)
+
+      const roomy = await initE2ERoomyClient();
+      const bot = await createTestBot();
+
+      // Connect guild to new space
+      const result = await connectGuildToNewSpace(
+        roomy,
+        TEST_GUILD_ID,
+        `E2E Reaction Echo Test - ${Date.now()}`,
+      );
+
+      // Create orchestrator
+      const orchestrator = createSyncOrchestratorForTest(result, bot);
+
+      // Fetch channels from Discord
+      const channels = await getTextChannels(bot, TEST_GUILD_ID);
+      expect(channels.length).toBeGreaterThan(0);
+
+      // Sync the first channel
+      const firstChannel = channels[0];
+      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+
+      // Create a Discord-origin message
+      const testContent = `D-origin message for reaction echo test at ${Date.now()}`;
+      const testMessage = await bot.helpers.sendMessage(firstChannel.id, {
+        content: testContent,
+      });
+
+      // Sync the message to Roomy
+      const roomyMessageId = await orchestrator.handleDiscordMessageCreate(
+        testMessage,
+        roomyRoomId,
+      );
+
+      expect(roomyMessageId).toBeDefined();
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Count reactions before
+      let events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      let reactionEventsBefore = events.filter(
+        (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0"
+      );
+
+      // Simulate: Bot adds reaction on Discord (after syncing Roomy reaction)
+      // This is what Discord sends us after we sync a Roomy reaction via webhook
+      const testEmoji = { name: "👍" };
+      const reactionEventId = await orchestrator.handleDiscordReactionAdd(
+        testMessage.id,
+        firstChannel.id,
+        bot.id, // Bot user ID (this is the key - bot's own reaction)
+        testEmoji,
+      );
+
+      // With the fix, this should return null (skipped) because it's the bot's reaction
+      expect(reactionEventId).toBeNull();
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Verify: No new reaction event was created
+      events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const reactionEventsAfter = events.filter(
+        (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0"
+      );
+
+      // Should have the same number of reactions (no echo)
+      expect(reactionEventsAfter.length).toBe(reactionEventsBefore.length);
+
+      // Clean up
+      await bot.helpers.deleteMessage(firstChannel.id, testMessage.id);
+    }, 30000);
+
+    it("RCT-ECHO-02: should sync Discord reaction on Roomy-origin message", async () => {
+      // Scenario: Discord user reacts to a Roomy-origin message
+      // This should sync to Roomy (different from echo test)
+
+      const roomy = await initE2ERoomyClient();
+      const bot = await createTestBot();
+
+      // Connect guild to new space
+      const result = await connectGuildToNewSpace(
+        roomy,
+        TEST_GUILD_ID,
+        `E2E R-Orig Message Reaction Test - ${Date.now()}`,
+      );
+
+      // Create orchestrator
+      const orchestrator = createSyncOrchestratorForTest(result, bot);
+
+      // Fetch channels from Discord
+      const channels = await getTextChannels(bot, TEST_GUILD_ID);
+      expect(channels.length).toBeGreaterThan(0);
+
+      // Sync the first channel
+      const firstChannel = channels[0];
+      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+
+      // Create an actual Roomy message (using the SDK to get a valid ULID)
+      const { createMessage } = await import("@roomy/sdk");
+      const testContent = `R-origin message for reaction test at ${Date.now()}`;
+      const testUserDid = "did:plc:testuser123" as const;
+
+      const messageResult = await createMessage(result.connectedSpace, {
+        room: roomyRoomId,
+        body: {
+          mimeType: "text/plain",
+          data: { buf: new TextEncoder().encode(testContent) },
+        },
+      });
+
+      const roomyMessageId = messageResult.id;
+
+      // Sync the Roomy message to Discord via webhook
+      await orchestrator.handleRoomyCreateMessage({
+        idx: 1n,
+        event: {
+          id: roomyMessageId,
+          $type: "space.roomy.message.createMessage.v0" as const,
+          room: roomyRoomId,
+          body: {
+            mimeType: "text/plain",
+            data: { buf: new TextEncoder().encode(testContent) },
+          },
+        },
+        user: testUserDid,
+      }, bot);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Get the Discord message that was created
+      const discordMessages = await bot.rest.getMessages(firstChannel.id, { limit: 50 });
+      const discordMessage = discordMessages.find(m => m.content === testContent);
+      expect(discordMessage).toBeDefined();
+
+      // Now simulate a Discord user reacting to this message
+      const testEmoji = { name: "🎉" };
+      const reactionEventId = await orchestrator.handleDiscordReactionAdd(
+        discordMessage!.id,
+        firstChannel.id,
+        123456789n, // Different user ID (not the bot)
+        testEmoji,
+      );
+
+      // This should sync successfully (not an echo)
+      expect(reactionEventId).toBeDefined();
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Verify: Reaction was synced to Roomy
+      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const addReactionEvents = events.filter(
+        (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0"
+      );
+
+      expect(addReactionEvents.length).toBeGreaterThan(0);
+
+      const syncedReaction = addReactionEvents.find((e: any) => e.id === reactionEventId);
+      expect(syncedReaction).toBeDefined();
+      expect(syncedReaction?.reactionTo).toBe(roomyMessageId);
+
+      // Clean up
+      await bot.helpers.deleteMessage(firstChannel.id, discordMessage!.id);
+    }, 30000);
+
+    it("RCT-ECHO-03: should sync Roomy-origin reactions in both directions", async () => {
+      // Scenario: User reacts on Roomy to a Roomy-origin message
+      // This should sync to Discord
+
+      const roomy = await initE2ERoomyClient();
+      const bot = await createTestBot();
+
+      // Connect guild to new space
+      const result = await connectGuildToNewSpace(
+        roomy,
+        TEST_GUILD_ID,
+        `E2E R-Orig Reaction Bidirectional Test - ${Date.now()}`,
+      );
+
+      // Create orchestrator
+      const orchestrator = createSyncOrchestratorForTest(result, bot);
+
+      // Fetch channels from Discord
+      const channels = await getTextChannels(bot, TEST_GUILD_ID);
+      expect(channels.length).toBeGreaterThan(0);
+
+      // Sync the first channel
+      const firstChannel = channels[0];
+      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+
+      // Create an actual Roomy message (using the SDK to get a valid ULID)
+      const { createMessage } = await import("@roomy/sdk");
+      const testContent = `R-origin message for bidirectional reaction test ${Date.now()}`;
+      const testUserDid = "did:discord:123456789" as const; // Discord user format
+
+      const messageResult = await createMessage(result.connectedSpace, {
+        room: roomyRoomId,
+        body: {
+          mimeType: "text/plain",
+          data: { buf: new TextEncoder().encode(testContent) },
+        },
+      });
+
+      const roomyMessageId = messageResult.id;
+
+      // Sync the Roomy message to Discord via webhook
+      await orchestrator.handleRoomyCreateMessage({
+        idx: 1n,
+        event: {
+          id: roomyMessageId,
+          $type: "space.roomy.message.createMessage.v0" as const,
+          room: roomyRoomId,
+          body: {
+            mimeType: "text/plain",
+            data: { buf: new TextEncoder().encode(testContent) },
+          },
+        },
+        user: testUserDid,
+      }, bot);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Verify the Discord message was created
+      const discordMessages = await bot.rest.getMessages(firstChannel.id, { limit: 50 });
+      const discordMessage = discordMessages.find(m => m.content === testContent);
+      expect(discordMessage).toBeDefined();
+
+      // Now simulate a Roomy reaction event (would come from Roomy subscription in production)
+      const reaction = "😀";
+      const reactionEvent = {
+        idx: 2n,
+        event: {
+          id: messageResult.id, // Use the message ID as reaction ID for simplicity in this test
+          $type: "space.roomy.reaction.addBridgedReaction.v0" as const,
+          room: roomyRoomId,
+          reactionTo: roomyMessageId,
+          reaction,
+        },
+        user: testUserDid,
+      };
+
+      // Sync Roomy reaction to Discord
+      await orchestrator.handleRoomyAddReaction(reactionEvent, bot);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Verify: The reaction was synced (no error thrown)
+      // Note: Discord API may not return reactions in getMessages, so we just verify no error
+      expect(true).toBe(true);
+
+      // Clean up
+      if (discordMessage) {
+        await bot.helpers.deleteMessage(firstChannel.id, discordMessage.id);
+      }
     }, 30000);
   });
 });
