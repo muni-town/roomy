@@ -512,7 +512,7 @@ export class MessageSyncService {
 
     try {
       // Get or create webhook for this channel
-      const webhook = await getOrCreateWebhook(bot, this.guildId, this.spaceId, channelId);
+      const webhook = await getOrCreateWebhook(bot, this.guildId, this.spaceId, channelId, this.repo);
 
       // Execute webhook to send message
       // wait: true ensures Discord returns the message object
@@ -578,7 +578,7 @@ export class MessageSyncService {
     try {
       // Messages created by webhooks must be edited by webhooks
       // Get the webhook for this channel
-      const webhook = await getOrCreateWebhook(bot, this.guildId, this.spaceId, channelId);
+      const webhook = await getOrCreateWebhook(bot, this.guildId, this.spaceId, channelId, this.repo);
 
       // Use webhook to edit the message
       await bot.helpers.editWebhookMessage(
@@ -629,7 +629,7 @@ export class MessageSyncService {
     try {
       // Messages created by webhooks must be deleted by webhooks
       // Get the webhook for this channel
-      const webhook = await getOrCreateWebhook(bot, this.guildId, this.spaceId, channelId);
+      const webhook = await getOrCreateWebhook(bot, this.guildId, this.spaceId, channelId, this.repo);
 
       // Use webhook to delete the message
       await bot.helpers.deleteWebhookMessage(

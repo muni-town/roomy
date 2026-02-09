@@ -16,15 +16,8 @@ import {
   syncedEditsForBridge,
   registeredBridges,
   roomyUserProfilesForBridge,
-} from "../db.js";
+} from "../repositories/db.js";
 import { botState } from "../discord/bot.js";
-import {
-  syncCreateMessageToDiscord,
-  syncEditMessageToDiscord,
-  syncDeleteMessageToDiscord,
-  syncAddReactionToDiscord,
-  syncRemoveReactionToDiscord,
-} from "./from.js";
 import { getGuildContext } from "../discord/bot.js";
 
 /**
@@ -290,25 +283,27 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
           const ctx = await getGuildContext(guildId);
 
           if (ctx) {
+            const orchestrator = ctx.orchestrator;
+
             // Sync non-Discord-origin events (messages, edits, deletes)
             if (!messageOrigin && !roomOrigin && !userOrigin && !reactionOrigin) {
               // Handle createMessage events
               if (event.$type === "space.roomy.message.createMessage.v0") {
-                await syncCreateMessageToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                await orchestrator.handleRoomyCreateMessage(decodedEvent, bot).catch((error) => {
                   console.error(`Failed to sync Roomy message ${event.id} to Discord:`, error);
                 });
               }
 
               // Handle editMessage events
               if (event.$type === "space.roomy.message.editMessage.v0") {
-                await syncEditMessageToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                await orchestrator.handleRoomyEditMessage(decodedEvent, bot).catch((error) => {
                   console.error(`Failed to sync Roomy edit ${event.id} to Discord:`, error);
                 });
               }
 
               // Handle deleteMessage events
               if (event.$type === "space.roomy.message.deleteMessage.v0") {
-                await syncDeleteMessageToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                await orchestrator.handleRoomyDeleteMessage(decodedEvent, bot).catch((error) => {
                   console.error(`Failed to sync Roomy delete ${event.id} to Discord:`, error);
                 });
               }
@@ -319,28 +314,28 @@ export function createSpaceSubscriptionHandler(spaceId: string) {
             if (isReactionEvent && !reactionOrigin) {
               // Handle pure Roomy addReaction events
               if (event.$type === "space.roomy.reaction.addReaction.v0") {
-                await syncAddReactionToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                await orchestrator.handleRoomyAddReaction(decodedEvent, bot).catch((error) => {
                   console.error(`Failed to sync Roomy reaction ${event.id} to Discord:`, error);
                 });
               }
 
               // Handle bridged addBridgedReaction events
               if (event.$type === "space.roomy.reaction.addBridgedReaction.v0") {
-                await syncAddReactionToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                await orchestrator.handleRoomyAddReaction(decodedEvent, bot).catch((error) => {
                   console.error(`Failed to sync Roomy reaction ${event.id} to Discord:`, error);
                 });
               }
 
               // Handle pure Roomy removeReaction events
               if (event.$type === "space.roomy.reaction.removeReaction.v0") {
-                await syncRemoveReactionToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                await orchestrator.handleRoomyRemoveReaction(decodedEvent, bot).catch((error) => {
                   console.error(`Failed to sync Roomy reaction removal ${event.id} to Discord:`, error);
                 });
               }
 
               // Handle bridged removeBridgedReaction events
               if (event.$type === "space.roomy.reaction.removeBridgedReaction.v0") {
-                await syncRemoveReactionToDiscord(ctx, bot, decodedEvent).catch((error) => {
+                await orchestrator.handleRoomyRemoveReaction(decodedEvent, bot).catch((error) => {
                   console.error(`Failed to sync Roomy reaction removal ${event.id} to Discord:`, error);
                 });
               }

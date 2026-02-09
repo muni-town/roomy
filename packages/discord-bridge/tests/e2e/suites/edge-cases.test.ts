@@ -18,8 +18,9 @@ import {
   createSyncOrchestratorForTest,
 } from "../helpers/setup.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
-import { registeredBridges } from "../../../src/db.js";
+import { registeredBridges } from "../../../src/repositories/db.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
+import { StreamIndex } from "@roomy/sdk";
 
 describe("E2E: Discord Bridge Edge Cases", () => {
   beforeAll(async () => {
@@ -36,7 +37,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
     // for (const bridge of bridges) {
     //   connectedSpaces.delete(bridge.spaceId);
     // }
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
   afterEach(async () => {
@@ -64,7 +65,8 @@ describe("E2E: Discord Bridge Edge Cases", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create a webhook for the channel (simulating Roomy → Discord sync)
       const webhook = await bot.rest.createWebhook(firstChannel.id, {
@@ -78,12 +80,16 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       // and then test that it IS skipped when the token IS stored
 
       // First, test that webhook message IS synced when no token is stored
-      const webhookMessage = await bot.rest.executeWebhook(webhook.id, webhook.token, {
-        content: `Webhook message at ${Date.now()}`,
-        wait: true,
-      });
+      const webhookMessage = await bot.rest.executeWebhook(
+        webhook.id,
+        webhook.token,
+        {
+          content: `Webhook message at ${Date.now()}`,
+          wait: true,
+        },
+      );
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Sync the webhook message (no token stored yet, should sync)
       const roomyMessageId1 = await orchestrator.handleDiscordMessageCreate(
@@ -95,14 +101,17 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       expect(roomyMessageId1).toBeDefined();
 
       // Now store the webhook token
-      const { LevelDBBridgeRepository } = await import("../../../src/repositories/BridgeRepository.js");
+      const { LevelDBBridgeRepository } =
+        await import("../../../src/repositories/BridgeRepository.js");
       // Get the repo from orchestrator - we need to access it differently
       // For now, let's test the behavior by verifying the first sync worked
 
       // Verify: Message was synced
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const createMessageEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.message.createMessage.v0"
+        (e: any) => e.$type === "space.roomy.message.createMessage.v0",
       );
 
       expect(createMessageEvents.length).toBeGreaterThan(0);
@@ -131,7 +140,8 @@ describe("E2E: Discord Bridge Edge Cases", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create a webhook for the channel (simulating Roomy → Discord sync setup)
       const webhook = await bot.rest.createWebhook(firstChannel.id, {
@@ -140,16 +150,22 @@ describe("E2E: Discord Bridge Edge Cases", () => {
 
       // Store webhook token to indicate reverse sync is active
       // We need to access the repo directly - get it from the setup
-      const { createSyncOrchestrator } = await import("../../../src/services/SyncOrchestrator.js");
-      const { LevelDBBridgeRepository } = await import("../../../src/repositories/BridgeRepository.js");
+      const { createSyncOrchestrator } =
+        await import("../../../src/services/SyncOrchestrator.js");
+      const { LevelDBBridgeRepository } =
+        await import("../../../src/repositories/BridgeRepository.js");
 
       // Create a new repo instance with the stores
-      const roomyUserProfiles = (await import("../../../src/db.js")).roomyUserProfilesForBridge({
+      const roomyUserProfiles = (
+        await import("../../../src/repositories/db.js")
+      ).roomyUserProfilesForBridge({
         discordGuildId: result.guildId,
         roomySpaceId: result.spaceId,
       });
 
-      const discordWebhookTokens = (await import("../../../src/db.js")).discordWebhookTokensForBridge({
+      const discordWebhookTokens = (
+        await import("../../../src/repositories/db.js")
+      ).discordWebhookTokensForBridge({
         discordGuildId: result.guildId,
         roomySpaceId: result.spaceId,
       });
@@ -168,7 +184,10 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       });
 
       // Store webhook token
-      await repo.setWebhookToken(firstChannel.id.toString(), `${webhook.id}:${webhook.token}`);
+      await repo.setWebhookToken(
+        firstChannel.id.toString(),
+        `${webhook.id}:${webhook.token}`,
+      );
 
       // Create a new orchestrator with the updated repo
       const newOrchestrator = createSyncOrchestrator({
@@ -195,10 +214,12 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       expect(roomyMessageId).toBeNull();
 
       // Verify: No createMessage event was created for the bot's message
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const createMessageEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.message.createMessage.v0"
+        (e: any) => e.$type === "space.roomy.message.createMessage.v0",
       );
 
       // Should have no messages (bot's own message was skipped)
@@ -229,7 +250,8 @@ describe("E2E: Discord Bridge Edge Cases", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // For this test, we'll create a message via the bot
       // but verify it doesn't get skipped when we DON'T match bot.id
@@ -267,7 +289,8 @@ describe("E2E: Discord Bridge Edge Cases", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create a test message
       const testMessage = await bot.helpers.sendMessage(firstChannel.id, {
@@ -288,10 +311,12 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       // It may return null (skipped) or the message ID (synced before deletion detection)
       expect(roomyMessageId).toBeDefined();
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Verify: No errors thrown, system handled gracefully
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       expect(events).toBeDefined();
       // The exact behavior depends on whether deletion is detected before or after sync
     }, 30000);
@@ -318,7 +343,8 @@ describe("E2E: Discord Bridge Edge Cases", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create a large message (Discord's limit is 2000 chars for user messages)
       // We'll test with 1500 chars to stay safely under the limit
@@ -337,10 +363,12 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       // Verify: Message was synced
       expect(roomyMessageId).toBeDefined();
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Verify: Message content is preserved
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const messageEvent = events.find((e: any) => e.id === roomyMessageId);
 
       expect(messageEvent).toBeDefined();
@@ -380,11 +408,13 @@ describe("E2E: Discord Bridge Edge Cases", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create a message with only an attachment (empty content)
       // Using a simple 1x1 red PNG (base64)
-      const imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+      const imageData =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
       const imageBuffer = Buffer.from(imageData, "base64");
 
       const testMessage = await bot.helpers.sendMessage(firstChannel.id, {
@@ -406,20 +436,23 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       // Verify: Message was synced
       expect(roomyMessageId).toBeDefined();
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Verify: createMessage event exists
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const messageEvent = events.find((e: any) => e.id === roomyMessageId);
 
       expect(messageEvent).toBeDefined();
 
       // Verify: Message has attachment
-      const attachmentsExt = messageEvent?.extensions?.["space.roomy.extension.attachments.v0"];
+      const attachmentsExt =
+        messageEvent?.extensions?.["space.roomy.extension.attachments.v0"];
       expect(attachmentsExt).toBeDefined();
 
       const imageAttachment = attachmentsExt?.attachments?.find(
-        (a: any) => a.$type === "space.roomy.attachment.image.v0"
+        (a: any) => a.$type === "space.roomy.attachment.image.v0",
       );
       expect(imageAttachment).toBeDefined();
 

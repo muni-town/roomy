@@ -36,10 +36,11 @@ import {
   getLatestSidebarEvent,
 } from "../helpers/assertions.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
-import { registeredBridges } from "../../../src/db.js";
+import { registeredBridges } from "../../../src/repositories/db.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
 import { createRoom } from "@roomy/sdk/package/operations/room";
 import { createMessage } from "@roomy/sdk/package/operations/message";
+import { StreamIndex } from "@roomy/sdk";
 
 describe("E2E: Discord Channel Sync", () => {
   beforeAll(async () => {
@@ -66,7 +67,7 @@ describe("E2E: Discord Channel Sync", () => {
       connectedSpaces.delete(bridge.spaceId);
     }
     // Delay to ensure LevelDB operations are flushed
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
   });
 
   afterEach(async () => {
@@ -98,9 +99,9 @@ describe("E2E: Discord Channel Sync", () => {
         await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Verify: A createRoom event was created
-      const events = (await result.connectedSpace.fetchEvents(1, 100)).map(
-        (e: any) => e.event,
-      );
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 100)
+      ).map((e: any) => e.event);
       const createRoomEvents = events.filter(
         (e: any) => e.$type === "space.roomy.room.createRoom.v0",
       );
@@ -151,9 +152,9 @@ describe("E2E: Discord Channel Sync", () => {
       }
 
       // Verify all channels were synced
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map(
-        (e: any) => e.event,
-      );
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const createRoomEvents = events.filter(
         (e: any) =>
           e.$type === "space.roomy.room.createRoom.v0" &&
@@ -206,9 +207,9 @@ describe("E2E: Discord Channel Sync", () => {
         await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Get event count after first sync
-      const events1 = (await result.connectedSpace.fetchEvents(1, 100)).map(
-        (e: any) => e.event,
-      );
+      const events1 = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 100)
+      ).map((e: any) => e.event);
       const channelEvents1 = events1.filter(
         (e: any) =>
           e.$type === "space.roomy.room.createRoom.v0" &&
@@ -220,9 +221,9 @@ describe("E2E: Discord Channel Sync", () => {
         await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Get event count after second sync
-      const events2 = (await result.connectedSpace.fetchEvents(1, 100)).map(
-        (e: any) => e.event,
-      );
+      const events2 = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 100)
+      ).map((e: any) => e.event);
       const channelEvents2 = events2.filter(
         (e: any) =>
           e.$type === "space.roomy.room.createRoom.v0" &&
@@ -265,9 +266,9 @@ describe("E2E: Discord Channel Sync", () => {
       await orchestrator.handleDiscordSidebarUpdate(channels, categories);
 
       // Verify: sidebar update event exists
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map(
-        (e: any) => e.event,
-      );
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const sidebarEvents = events.filter(
         (e: any) => e.$type === "space.roomy.space.updateSidebar.v0",
       );
@@ -313,9 +314,9 @@ describe("E2E: Discord Channel Sync", () => {
       await orchestrator.handleDiscordSidebarUpdate(channels, categories);
 
       // Verify: sidebar was created
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map(
-        (e: any) => e.event,
-      );
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const sidebar = getLatestSidebarEvent(events);
 
       // Should have categories (at least "general" for uncategorized)
@@ -368,9 +369,9 @@ describe("E2E: Discord Channel Sync", () => {
       await orchestrator.handleDiscordSidebarUpdate(channels, categories);
 
       // Verify: each Discord category exists in Roomy sidebar
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map(
-        (e: any) => e.event,
-      );
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const sidebar = getLatestSidebarEvent(events);
 
       // Check each category from Discord
@@ -435,9 +436,9 @@ describe("E2E: Discord Channel Sync", () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // If there are uncategorized channels, they should go into "general" category
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map(
-        (e: any) => e.event,
-      );
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const sidebar = getLatestSidebarEvent(events);
 
       // The "general" category should exist (for uncategorized channels)
@@ -483,9 +484,9 @@ describe("E2E: Discord Channel Sync", () => {
       // Wait for events to be materialized
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const events1 = (await result.connectedSpace.fetchEvents(1, 200)).map(
-        (e: any) => e.event,
-      );
+      const events1 = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const sidebarEvents1 = events1.filter(
         (e: any) => e.$type === "space.roomy.space.updateSidebar.v0",
       );
@@ -493,9 +494,9 @@ describe("E2E: Discord Channel Sync", () => {
       // Second sidebar sync with same data should skip (hash check)
       await orchestrator.handleDiscordSidebarUpdate(channels, categories);
 
-      const events2 = (await result.connectedSpace.fetchEvents(1, 200)).map(
-        (e: any) => e.event,
-      );
+      const events2 = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const sidebarEvents2 = events2.filter(
         (e: any) => e.$type === "space.roomy.space.updateSidebar.v0",
       );
@@ -586,7 +587,11 @@ describe("E2E: Discord Channel Sync", () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       await orchestrator.handleRoomyUpdateSidebar(
-        { idx: 1, event: sidebarEvent, user: "did:plc:test" as any },
+        {
+          idx: 1 as StreamIndex,
+          event: sidebarEvent,
+          user: "did:plc:test" as any,
+        },
         bot,
       );
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -687,7 +692,11 @@ describe("E2E: Discord Channel Sync", () => {
 
       // First sync
       await orchestrator.handleRoomyUpdateSidebar(
-        { idx: 1, event: sidebarEvent, user: "did:plc:test" as any },
+        {
+          idx: 1 as StreamIndex,
+          event: sidebarEvent,
+          user: "did:plc:test" as any,
+        },
         bot,
       );
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -698,7 +707,11 @@ describe("E2E: Discord Channel Sync", () => {
 
       // Second sync with same sidebar
       await orchestrator.handleRoomyUpdateSidebar(
-        { idx: 2, event: sidebarEvent, user: "did:plc:test" as any },
+        {
+          idx: 2 as StreamIndex,
+          event: sidebarEvent,
+          user: "did:plc:test" as any,
+        },
         bot,
       );
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -911,7 +924,11 @@ describe("E2E: Discord Channel Sync", () => {
       // Trigger Roomy → Discord sync for the sidebar
       const latestSidebarEvent = sidebarEvents[sidebarEvents.length - 1];
       await orchestrator.handleRoomyUpdateSidebar(
-        { idx: 1, event: latestSidebarEvent.event, user: "did:plc:test" as any },
+        {
+          idx: 1,
+          event: latestSidebarEvent.event,
+          user: "did:plc:test" as any,
+        },
         bot,
       );
 
@@ -929,7 +946,9 @@ describe("E2E: Discord Channel Sync", () => {
         `[Synced from Roomy: ${lobbyRoomId}]`,
       );
 
-      console.log(`Lobby room "${lobbyRoomName}" synced to Discord as channel "${syncedChannel?.name}"`);
+      console.log(
+        `Lobby room "${lobbyRoomName}" synced to Discord as channel "${syncedChannel?.name}"`,
+      );
     }, 45000);
 
     it("should backfill Roomy-native rooms with messages to Discord", async () => {
@@ -964,7 +983,9 @@ describe("E2E: Discord Channel Sync", () => {
         description: "Roomy-native room for backfill testing",
       });
 
-      console.log(`Created Roomy-native room: ${testRoomName} (${testRoomId.id})`);
+      console.log(
+        `Created Roomy-native room: ${testRoomName} (${testRoomId.id})`,
+      );
 
       // Add the test room to the sidebar so it will be synced to Discord during backfill
       const sidebarEvent = updateSidebarEvents([
@@ -1002,10 +1023,16 @@ describe("E2E: Discord Channel Sync", () => {
       );
 
       expect(syncedChannel).toBeDefined();
-      expect(syncedChannel?.name).toBe(testRoomName.toLowerCase().replace(/\s+/g, "-"));
-      expect(syncedChannel?.topic).toContain(`[Synced from Roomy: ${testRoomId.id}]`);
+      expect(syncedChannel?.name).toBe(
+        testRoomName.toLowerCase().replace(/\s+/g, "-"),
+      );
+      expect(syncedChannel?.topic).toContain(
+        `[Synced from Roomy: ${testRoomId.id}]`,
+      );
 
-      console.log(`Phase 0 complete: Room synced to Discord as channel "${syncedChannel?.name}"`);
+      console.log(
+        `Phase 0 complete: Room synced to Discord as channel "${syncedChannel?.name}"`,
+      );
 
       // Verify Phase 1-3: Messages were backfilled
       const discordMessages = await bot.rest.getMessages(syncedChannel!.id, {
@@ -1017,10 +1044,16 @@ describe("E2E: Discord Channel Sync", () => {
 
       const messageContents = discordMessages.map((m) => m.content);
 
-      expect(messageContents.some((c) => c?.includes("First message from Roomy"))).toBe(true);
-      expect(messageContents.some((c) => c?.includes("Second message from Roomy"))).toBe(true);
+      expect(
+        messageContents.some((c) => c?.includes("First message from Roomy")),
+      ).toBe(true);
+      expect(
+        messageContents.some((c) => c?.includes("Second message from Roomy")),
+      ).toBe(true);
 
-      console.log(`Phase 1-3 complete: ${discordMessages.length} messages backfilled to Discord`);
+      console.log(
+        `Phase 1-3 complete: ${discordMessages.length} messages backfilled to Discord`,
+      );
 
       // Verify the Roomy room ID is properly tracked in synced IDs
       const syncedDiscordId = await result.guildContext.syncedIds.get_discordId(

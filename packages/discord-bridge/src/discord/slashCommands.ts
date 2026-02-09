@@ -13,7 +13,7 @@ import {
   discordWebhookTokensForBridge,
   registeredBridges,
   syncedIdsForBridge,
-} from "../db.js";
+} from "../repositories/db.js";
 import { getRoomyClient, subscribeToSpace } from "../roomy/client.js";
 import { StreamDid } from "@roomy/sdk";
 import { backfillGuild, botState } from "./bot.js";

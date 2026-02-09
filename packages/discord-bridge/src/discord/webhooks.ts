@@ -2,8 +2,7 @@ import {
   DiscordBot,
   DiscordMessageOptions,
 } from "./types.js";
-import { discordWebhookTokensForBridge } from "../db.js";
-import { GuildContext } from "../types.js";
+import type { BridgeRepository } from "../repositories/index.js";
 import { tracer, recordError } from "../tracing.js";
 
 /**
@@ -18,6 +17,7 @@ import { tracer, recordError } from "../tracing.js";
  * @param guildId - Discord guild ID
  * @param spaceId - Roomy space ID
  * @param channelId - Discord channel ID to create webhook in
+ * @param repo - Bridge repository for webhook token caching
  * @returns Webhook {id, token} for executing messages
  * @throws Error if bot lacks MANAGE_WEBHOOKS permission or channel not found
  */
@@ -26,14 +26,10 @@ export async function getOrCreateWebhook(
   guildId: bigint,
   spaceId: string,
   channelId: bigint,
+  repo: BridgeRepository,
 ): Promise<{ id: string; token: string }> {
-  const webhookTokens = discordWebhookTokensForBridge({
-    discordGuildId: guildId,
-    roomySpaceId: spaceId,
-  });
-
   // Step 1: Check cache first
-  const cached = await webhookTokens.get(channelId.toString());
+  const cached = await repo.getWebhookToken(channelId.toString());
   if (cached) {
     const parts = cached.split(":");
     const id = parts[0];
@@ -58,7 +54,7 @@ export async function getOrCreateWebhook(
         `[Webhook] Reusing existing Roomy Bridge webhook ${roomyWebhook.id} in channel ${channelId}`
       );
       // Cache the existing webhook for future use
-      await webhookTokens.put(
+      await repo.setWebhookToken(
         channelId.toString(),
         `${roomyWebhook.id}:${roomyWebhook.token}`,
       );
@@ -124,7 +120,7 @@ export async function getOrCreateWebhook(
   );
 
   // Cache webhook token for future use
-  await webhookTokens.put(
+  await repo.setWebhookToken(
     channelId.toString(),
     `${webhook.id}:${webhook.token}`,
   );
@@ -224,13 +220,8 @@ export async function executeWebhookWithRetry(
  * @param channelId - Channel ID to clear webhook cache for
  */
 export async function clearWebhookCache(
-  guildId: bigint,
-  spaceId: string,
   channelId: bigint,
+  repo: BridgeRepository,
 ): Promise<void> {
-  const webhookTokens = discordWebhookTokensForBridge({
-    discordGuildId: guildId,
-    roomySpaceId: spaceId,
-  });
-  await webhookTokens.del(channelId.toString());
+  await repo.deleteWebhookToken(channelId.toString());
 }

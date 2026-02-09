@@ -1,5 +1,5 @@
 import { AutoRouter, cors, error, json } from "itty-router";
-import { registeredBridges } from "./db.js";
+import { registeredBridges } from "./repositories/db.js";
 import { createServerAdapter } from "@whatwg-node/server";
 import { createServer } from "http";
 import { PORT } from "./env.js";

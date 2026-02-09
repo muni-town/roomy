@@ -4,12 +4,34 @@
  */
 
 import { createBot, Intents } from "@discordeno/bot";
-import { createDefaultSpaceEvents, type ConnectedSpace, type StreamDid, modules, ConnectedSpace as SDKConnectedSpace, RoomyClient } from "@roomy/sdk";
-import { desiredProperties, type ChannelProperties, type DiscordBot } from "../../../src/discord/types.js";
+import {
+  createDefaultSpaceEvents,
+  type ConnectedSpace,
+  type StreamDid,
+  modules,
+  ConnectedSpace as SDKConnectedSpace,
+  RoomyClient,
+  StreamIndex,
+} from "@roomy/sdk";
+import {
+  desiredProperties,
+  type ChannelProperties,
+  type DiscordBot,
+} from "../../../src/discord/types.js";
 import { isRoomySyncedChannel } from "../../../src/utils/discord-topic.js";
-import { DISCORD_TOKEN, LEAF_URL, LEAF_SERVER_DID, ATPROTO_BRIDGE_DID, ATPROTO_BRIDGE_APP_PASSWORD } from "../../../src/env.js";
-import { registeredBridges } from "../../../src/db.js";
-import { connectedSpaces, initRoomyClient, getRoomyClient as getBridgeRoomyClient } from "../../../src/roomy/client.js";
+import {
+  DISCORD_TOKEN,
+  LEAF_URL,
+  LEAF_SERVER_DID,
+  ATPROTO_BRIDGE_DID,
+  ATPROTO_BRIDGE_APP_PASSWORD,
+} from "../../../src/env.js";
+import { registeredBridges } from "../../../src/repositories/db.js";
+import {
+  connectedSpaces,
+  initRoomyClient,
+  getRoomyClient as getBridgeRoomyClient,
+} from "../../../src/roomy/client.js";
 import type { GuildContext } from "../../../src/types.js";
 import {
   syncedIdsForBridge,
@@ -22,7 +44,7 @@ import {
   discordLatestMessageInChannelForBridge,
   roomyUserProfilesForBridge,
   discordWebhookTokensForBridge,
-} from "../../../src/db.js";
+} from "../../../src/repositories/db.js";
 import { LevelDBBridgeRepository } from "../../../src/repositories/BridgeRepository.js";
 import { createSyncOrchestrator } from "../../../src/services/SyncOrchestrator.js";
 import type { SyncOrchestrator } from "../../../src/services/SyncOrchestrator.js";
@@ -147,23 +169,32 @@ export async function connectGuildToNewSpace(
 
   // Wait for events to be materialized in Leaf before continuing
   // Increased delay to handle multiple rapid stream creations in tests
-  await new Promise(resolve => setTimeout(resolve, 300));
+  await new Promise((resolve) => setTimeout(resolve, 300));
 
   // 3. Aggressive cleanup of any existing registrations for this guild
   // This handles cases where previous tests may have left partial state
   try {
     const existingSpaceForGuild = await registeredBridges.get_spaceId(guildId);
     if (existingSpaceForGuild) {
-      await registeredBridges.unregister({ guildId, spaceId: existingSpaceForGuild });
+      await registeredBridges.unregister({
+        guildId,
+        spaceId: existingSpaceForGuild,
+      });
       connectedSpaces.delete(existingSpaceForGuild);
     }
   } catch (e) {
     // If unregister fails (e.g., partial registration), clear both keys aggressively
     try {
-      const existingSpaceForGuild = await registeredBridges.get_spaceId(guildId);
+      const existingSpaceForGuild =
+        await registeredBridges.get_spaceId(guildId);
       await registeredBridges.sublevel.batch([
-        { type: 'del', key: `guildId_${guildId}` },
-        { type: 'del', key: existingSpaceForGuild ? `spaceId_${existingSpaceForGuild}` : `spaceId_${spaceId}` },
+        { type: "del", key: `guildId_${guildId}` },
+        {
+          type: "del",
+          key: existingSpaceForGuild
+            ? `spaceId_${existingSpaceForGuild}`
+            : `spaceId_${spaceId}`,
+        },
       ]);
       if (existingSpaceForGuild) {
         connectedSpaces.delete(existingSpaceForGuild);
@@ -175,7 +206,8 @@ export async function connectGuildToNewSpace(
 
   // Also check if our new spaceId happens to be registered to another guild (unlikely)
   try {
-    const existingGuildForNewSpace = await registeredBridges.get_guildId(spaceId);
+    const existingGuildForNewSpace =
+      await registeredBridges.get_guildId(spaceId);
     if (existingGuildForNewSpace) {
       await registeredBridges.sublevel.del(`spaceId_${spaceId}`);
     }
@@ -184,13 +216,13 @@ export async function connectGuildToNewSpace(
   }
 
   // Delay to ensure LevelDB deletes are flushed before registering
-  await new Promise(resolve => setTimeout(resolve, 50));
+  await new Promise((resolve) => setTimeout(resolve, 50));
 
   // 4. Register the new guild -> space mapping
   await registeredBridges.register({ guildId, spaceId });
 
   // Small delay to ensure LevelDB write is flushed
-  await new Promise(resolve => setTimeout(resolve, 10));
+  await new Promise((resolve) => setTimeout(resolve, 10));
 
   // 5. Track the ConnectedSpace (needed for getGuildContext to work)
   connectedSpaces.set(spaceId, space);
@@ -252,7 +284,10 @@ export class RoomyQueryHelper {
   /**
    * Query the event stream for a space.
    */
-  async queryEvents(spaceId: StreamDid, params?: { start?: number; limit?: number }) {
+  async queryEvents(
+    spaceId: StreamDid,
+    params?: { start?: number; limit?: number },
+  ) {
     return this.client.leaf.query(spaceId, {
       name: "events",
       params: {
@@ -275,7 +310,10 @@ export class RoomyQueryHelper {
   /**
    * Query metadata events.
    */
-  async queryMetadata(spaceId: StreamDid, params?: { start?: number; limit?: number }) {
+  async queryMetadata(
+    spaceId: StreamDid,
+    params?: { start?: number; limit?: number },
+  ) {
     return this.client.leaf.query(spaceId, {
       name: "metadata",
       params: {
@@ -288,7 +326,11 @@ export class RoomyQueryHelper {
   /**
    * Query room events.
    */
-  async queryRoomEvents(spaceId: StreamDid, roomId: string, params?: { end?: number; limit?: number }) {
+  async queryRoomEvents(
+    spaceId: StreamDid,
+    roomId: string,
+    params?: { end?: number; limit?: number },
+  ) {
     return this.client.leaf.query(spaceId, {
       name: "room",
       params: {
@@ -371,16 +413,16 @@ export function createSyncOrchestratorForTest(
  * Discord channel type constants.
  */
 export const DISCORD_CHANNEL_TYPES = {
-  GUILD_TEXT: 0,      // Text channel
-  GUILD_VOICE: 2,     // Voice channel
-  GUILD_CATEGORY: 4,  // Category
-  GUILD_NEWS: 5,      // News/announcement channel
+  GUILD_TEXT: 0, // Text channel
+  GUILD_VOICE: 2, // Voice channel
+  GUILD_CATEGORY: 4, // Category
+  GUILD_NEWS: 5, // News/announcement channel
   GUILD_NEWS_THREAD: 10, // News thread
-  GUILD_PUBLIC_THREAD: 11,  // Public thread
+  GUILD_PUBLIC_THREAD: 11, // Public thread
   GUILD_PRIVATE_THREAD: 12, // Private thread
-  GUILD_STAGE_VOICE: 13,    // Stage channel
-  GUILD_DIRECTORY: 14,      // Directory
-  GUILD_FORUM: 15,          // Forum channel
+  GUILD_STAGE_VOICE: 13, // Stage channel
+  GUILD_DIRECTORY: 14, // Directory
+  GUILD_FORUM: 15, // Forum channel
 } as const;
 
 /**
@@ -535,9 +577,11 @@ export async function cleanupTestMessages(
       console.log(`   Found ${messages.length} messages`);
 
       // Count webhook vs regular messages
-      const webhookMessageCount = messages.filter(m => m.webhookId).length;
+      const webhookMessageCount = messages.filter((m) => m.webhookId).length;
       const regularMessageCount = messages.length - webhookMessageCount;
-      console.log(`   → ${webhookMessageCount} webhook messages, ${regularMessageCount} regular messages`);
+      console.log(
+        `   → ${webhookMessageCount} webhook messages, ${regularMessageCount} regular messages`,
+      );
 
       // Delete all messages - webhook messages need special handling
       for (const message of messages) {
@@ -549,7 +593,7 @@ export async function cleanupTestMessages(
             // First, get the webhook to retrieve its token
             const webhooks = await bot.rest.getChannelWebhooks(channel.id);
             const webhookIdStr = message.webhookId.toString();
-            const webhook = webhooks.find(w => w.id === webhookIdStr);
+            const webhook = webhooks.find((w) => w.id === webhookIdStr);
 
             if (webhook && webhook.token) {
               await bot.helpers.deleteWebhookMessage(
@@ -559,7 +603,9 @@ export async function cleanupTestMessages(
               );
               deletedMessages++;
             } else {
-              console.warn(`  ❌ Webhook ${message.webhookId} not found, skipping message ${message.id}`);
+              console.warn(
+                `  ❌ Webhook ${message.webhookId} not found, skipping message ${message.id}`,
+              );
             }
           } else {
             // Regular bot message - can be deleted directly
@@ -569,13 +615,19 @@ export async function cleanupTestMessages(
         } catch (error: any) {
           // Log all errors for debugging
           const errorType = error?.code || error?.metadata?.code || "UNKNOWN";
-          console.warn(`  ❌ Failed to delete ${isWebhook ? "webhook" : "regular"} message ${message.id} (code: ${errorType}):`, error.message);
+          console.warn(
+            `  ❌ Failed to delete ${isWebhook ? "webhook" : "regular"} message ${message.id} (code: ${errorType}):`,
+            error.message,
+          );
         }
       }
 
       console.log(`   ✅ Deleted ${deletedMessages} messages`);
     } catch (error) {
-      console.error(`  ❌ Failed to clean messages from channel ${channel.id}:`, error);
+      console.error(
+        `  ❌ Failed to clean messages from channel ${channel.id}:`,
+        error,
+      );
     }
   }
 
@@ -624,9 +676,11 @@ export async function cleanupWebhookMessages(
       const messages = await bot.rest.getMessages(channel.id, { limit: 100 });
 
       // Filter only webhook messages
-      const webhookMessages = messages.filter(m => m.webhookId);
+      const webhookMessages = messages.filter((m) => m.webhookId);
       totalWebhookMessages += webhookMessages.length;
-      console.log(`   Found ${messages.length} total messages, ${webhookMessages.length} webhook messages`);
+      console.log(
+        `   Found ${messages.length} total messages, ${webhookMessages.length} webhook messages`,
+      );
 
       if (webhookMessages.length === 0) {
         console.log(`   ℹ️  No webhook messages to delete`);
@@ -641,18 +695,22 @@ export async function cleanupWebhookMessages(
           await bot.helpers.deleteMessage(channel.id, message.id);
           deletedMessages++;
           // Rate limiting: small delay between deletions
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise((resolve) => setTimeout(resolve, 200));
         } catch (error: any) {
           // If direct deletion fails, try webhook-based deletion
           const errorDetails = error?.message || String(error);
-          console.warn(`  ⚠️  Direct deletion failed for ${message.id}: ${errorDetails}`);
+          console.warn(
+            `  ⚠️  Direct deletion failed for ${message.id}: ${errorDetails}`,
+          );
 
           try {
             // Webhook messages must be deleted by the webhook
             // First, get the webhook to retrieve its token
             const webhooks = await bot.rest.getChannelWebhooks(channel.id);
             const webhookIdStr = message.webhookId?.toString();
-            const webhook = webhookIdStr ? webhooks.find(w => w.id === webhookIdStr) : undefined;
+            const webhook = webhookIdStr
+              ? webhooks.find((w) => w.id === webhookIdStr)
+              : undefined;
 
             if (webhook && webhook.token && message.webhookId) {
               await bot.helpers.deleteWebhookMessage(
@@ -662,33 +720,43 @@ export async function cleanupWebhookMessages(
               );
               deletedMessages++;
               // Rate limiting: small delay between deletions
-              await new Promise(resolve => setTimeout(resolve, 200));
+              await new Promise((resolve) => setTimeout(resolve, 200));
             } else {
-              console.warn(`  ❌ Webhook ${message.webhookId} not found, skipping message ${message.id}`);
+              console.warn(
+                `  ❌ Webhook ${message.webhookId} not found, skipping message ${message.id}`,
+              );
             }
           } catch (webhookError: any) {
-            const webhookErrorDetails = webhookError?.message || String(webhookError);
-            console.warn(`  ❌ Webhook deletion also failed for ${message.id}: ${webhookErrorDetails}`);
+            const webhookErrorDetails =
+              webhookError?.message || String(webhookError);
+            console.warn(
+              `  ❌ Webhook deletion also failed for ${message.id}: ${webhookErrorDetails}`,
+            );
           }
         }
       }
 
       console.log(`   ✅ Deleted ${deletedMessages} webhook messages`);
     } catch (error) {
-      console.error(`  ❌ Failed to clean webhook messages from channel ${channel.id}:`, error);
+      console.error(
+        `  ❌ Failed to clean webhook messages from channel ${channel.id}:`,
+        error,
+      );
     }
   }
 
-  console.log(`\n📊 Total webhook messages deleted: ${deletedMessages} of ${totalWebhookMessages}\n`);
+  console.log(
+    `\n📊 Total webhook messages deleted: ${deletedMessages} of ${totalWebhookMessages}\n`,
+  );
 
   // Fail if we couldn't delete webhook messages
   if (totalWebhookMessages > 0 && deletedMessages < totalWebhookMessages) {
     const orphaned = totalWebhookMessages - deletedMessages;
     throw new Error(
       `Failed to delete ${orphaned} webhook messages. ` +
-      `The webhooks that created these messages may have been deleted. ` +
-      `To prevent this in the future, use safeDeleteWebhook() to delete ` +
-      `webhook messages before deleting the webhook itself.`
+        `The webhooks that created these messages may have been deleted. ` +
+        `To prevent this in the future, use safeDeleteWebhook() to delete ` +
+        `webhook messages before deleting the webhook itself.`,
     );
   }
 
@@ -735,9 +803,11 @@ export async function cleanupBotMessages(
       const messages = await bot.rest.getMessages(channel.id, { limit: 100 });
 
       // Filter bot messages (not webhook messages, and author.bot is true)
-      const botMessages = messages.filter(m => !m.webhookId && m.author?.bot);
+      const botMessages = messages.filter((m) => !m.webhookId && m.author?.bot);
       totalBotMessages += botMessages.length;
-      console.log(`   Found ${messages.length} total messages, ${botMessages.length} bot messages`);
+      console.log(
+        `   Found ${messages.length} total messages, ${botMessages.length} bot messages`,
+      );
 
       if (botMessages.length === 0) {
         console.log(`   ℹ️  No bot messages to delete`);
@@ -750,27 +820,34 @@ export async function cleanupBotMessages(
           await bot.helpers.deleteMessage(channel.id, message.id);
           deletedMessages++;
           // Rate limiting: small delay between deletions
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise((resolve) => setTimeout(resolve, 200));
         } catch (error: any) {
           const errorDetails = error?.message || String(error);
-          console.warn(`  ❌ Failed to delete bot message ${message.id}: ${errorDetails}`);
+          console.warn(
+            `  ❌ Failed to delete bot message ${message.id}: ${errorDetails}`,
+          );
         }
       }
 
       console.log(`   ✅ Deleted ${deletedMessages} bot messages`);
     } catch (error) {
-      console.error(`  ❌ Failed to clean bot messages from channel ${channel.id}:`, error);
+      console.error(
+        `  ❌ Failed to clean bot messages from channel ${channel.id}:`,
+        error,
+      );
     }
   }
 
-  console.log(`\n📊 Total bot messages deleted: ${deletedMessages} of ${totalBotMessages}\n`);
+  console.log(
+    `\n📊 Total bot messages deleted: ${deletedMessages} of ${totalBotMessages}\n`,
+  );
 
   // Fail if we couldn't delete all bot messages
   if (totalBotMessages > 0 && deletedMessages < totalBotMessages) {
     const orphaned = totalBotMessages - deletedMessages;
     throw new Error(
       `Failed to delete ${orphaned} bot messages. ` +
-      `Check bot permissions and ensure MANAGE_MESSAGES is granted.`
+        `Check bot permissions and ensure MANAGE_MESSAGES is granted.`,
     );
   }
 
@@ -804,15 +881,19 @@ export async function safeDeleteWebhook(
   try {
     // Get the webhook to retrieve its token
     const webhooks = await bot.rest.getChannelWebhooks(channelId);
-    const webhook = webhooks.find(w => BigInt(w.id) === webhookId);
+    const webhook = webhooks.find((w) => BigInt(w.id) === webhookId);
 
     if (!webhook) {
-      console.warn(`⚠️  Webhook ${webhookId} not found, may have been deleted already`);
+      console.warn(
+        `⚠️  Webhook ${webhookId} not found, may have been deleted already`,
+      );
       return 0;
     }
 
     if (!webhook.token) {
-      console.warn(`⚠️  Webhook ${webhookId} does not have a token, cannot delete messages`);
+      console.warn(
+        `⚠️  Webhook ${webhookId} does not have a token, cannot delete messages`,
+      );
       return 0;
     }
 
@@ -822,10 +903,14 @@ export async function safeDeleteWebhook(
     const messages = await bot.rest.getMessages(channelId, { limit: 100 });
 
     // Find and delete messages created by this webhook
-    const webhookMessages = messages.filter(m => BigInt(m.webhookId || 0) === webhookId);
+    const webhookMessages = messages.filter(
+      (m) => BigInt(m.webhookId || 0) === webhookId,
+    );
 
     if (webhookMessages.length > 0) {
-      console.log(`   Found ${webhookMessages.length} messages from this webhook`);
+      console.log(
+        `   Found ${webhookMessages.length} messages from this webhook`,
+      );
 
       for (const message of webhookMessages) {
         try {
@@ -836,7 +921,7 @@ export async function safeDeleteWebhook(
           );
           messagesDeleted++;
           // Small delay to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         } catch (error) {
           console.warn(`   ⚠️  Failed to delete message ${message.id}:`, error);
         }
@@ -892,8 +977,8 @@ export async function getDiscordReactions(
     // Get token from environment
     const response = await fetch(url, {
       headers: {
-        'Authorization': `Bot ${DISCORD_TOKEN}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bot ${DISCORD_TOKEN}`,
+        "Content-Type": "application/json",
       },
     });
 
@@ -905,7 +990,9 @@ export async function getDiscordReactions(
 
     if (!response.ok) {
       const text = await response.text();
-      console.error(`getDiscordReactions failed: ${response.status} ${response.statusText} - URL: ${url} - Response: ${text}`);
+      console.error(
+        `getDiscordReactions failed: ${response.status} ${response.statusText} - URL: ${url} - Response: ${text}`,
+      );
       return [];
     }
 
@@ -1034,7 +1121,7 @@ export async function createGatewayTestBot(): Promise<GatewayTestBot> {
         };
 
         console.log(
-          `[GatewayTestBot] Reaction ADD: msg=${payload.messageId} user=${payload.userId} emoji=${payload.emoji.name}`
+          `[GatewayTestBot] Reaction ADD: msg=${payload.messageId} user=${payload.userId} emoji=${payload.emoji.name}`,
         );
 
         // Add to tracked events
@@ -1055,7 +1142,7 @@ export async function createGatewayTestBot(): Promise<GatewayTestBot> {
         };
 
         console.log(
-          `[GatewayTestBot] Reaction REMOVE: msg=${payload.messageId} user=${payload.userId} emoji=${payload.emoji.name}`
+          `[GatewayTestBot] Reaction REMOVE: msg=${payload.messageId} user=${payload.userId} emoji=${payload.emoji.name}`,
         );
 
         reactionEvents.push(event);
@@ -1069,7 +1156,7 @@ export async function createGatewayTestBot(): Promise<GatewayTestBot> {
   // Wait for the gateway to connect (ready event)
   // The bot is ready when the `ready` event fires, but we'll use a simple timeout
   // since we don't have a way to await the ready event synchronously
-  await new Promise<void>(resolve => {
+  await new Promise<void>((resolve) => {
     const timeout = setTimeout(() => {
       // Give it extra time - gateway connection can take 1-3 seconds
       resolve();
@@ -1153,14 +1240,7 @@ export async function waitForGatewayReaction(
   gatewayBot: GatewayTestBot,
   options: WaitForReactionOptions,
 ): Promise<GatewayReactionEvent | null> {
-  const {
-    messageId,
-    channelId,
-    emoji,
-    userId,
-    type,
-    timeout = 5000,
-  } = options;
+  const { messageId, channelId, emoji, userId, type, timeout = 5000 } = options;
 
   const startTime = Date.now();
 
@@ -1204,8 +1284,8 @@ export async function waitForGatewayReaction(
         clearInterval(interval);
         console.error(
           `[waitForGatewayReaction] Timeout after ${timeout}ms waiting for reaction: ` +
-          `messageId=${messageId}, channelId=${channelId}, emoji=${emoji}, userId=${userId}, type=${type}. ` +
-          `Note: Discord does NOT send gateway events for a bot's own reactions.`
+            `messageId=${messageId}, channelId=${channelId}, emoji=${emoji}, userId=${userId}, type=${type}. ` +
+            `Note: Discord does NOT send gateway events for a bot's own reactions.`,
         );
         resolve(null);
       }
@@ -1285,7 +1365,7 @@ export async function waitForBotReactionViaRest(
 
   console.log(
     `[waitForBotReactionViaRest] Polling for reaction: ` +
-    `messageId=${messageId}, channelId=${channelId}, emoji=${emoji}`
+      `messageId=${messageId}, channelId=${channelId}, emoji=${emoji}`,
   );
 
   return new Promise((resolve) => {
@@ -1294,7 +1374,7 @@ export async function waitForBotReactionViaRest(
 
       if (users.length > 0) {
         console.log(
-          `[waitForBotReactionViaRest] Reaction found: ${users.length} users reacted`
+          `[waitForBotReactionViaRest] Reaction found: ${users.length} users reacted`,
         );
         resolve(users);
         return;
@@ -1303,7 +1383,7 @@ export async function waitForBotReactionViaRest(
       // Check timeout
       if (Date.now() - startTime > timeout) {
         console.error(
-          `[waitForBotReactionViaRest] Timeout after ${timeout}ms waiting for reaction`
+          `[waitForBotReactionViaRest] Timeout after ${timeout}ms waiting for reaction`,
         );
         resolve(null);
         return;
@@ -1351,13 +1431,14 @@ export async function getRoomyReactionsForMessage(
   connectedSpace: ConnectedSpace,
   messageUlId: string,
 ): Promise<RoomyReactionEvent[]> {
-  const events = await connectedSpace.fetchEvents(1, 200);
+  const events = await connectedSpace.fetchEvents(1 as StreamIndex, 200);
 
   const reactionEvents = events
     .map((e: any) => e.event)
-    .filter((e: any) =>
-      e.$type === "space.roomy.reaction.addBridgedReaction.v0" ||
-      e.$type === "space.roomy.reaction.removeBridgedReaction.v0"
+    .filter(
+      (e: any) =>
+        e.$type === "space.roomy.reaction.addBridgedReaction.v0" ||
+        e.$type === "space.roomy.reaction.removeBridgedReaction.v0",
     )
     .filter((e: any) => e.reactionTo === messageUlId)
     .map((e: any) => ({
@@ -1425,10 +1506,13 @@ export async function validateRoomyReactions(
 }> {
   // Fetch all reaction events for each message
   const allReactions: RoomyReactionEvent[] = [];
-  const messageUlIds = new Set(expectedReactions.map(r => r.messageUlId));
+  const messageUlIds = new Set(expectedReactions.map((r) => r.messageUlId));
 
   for (const messageUlId of messageUlIds) {
-    const reactions = await getRoomyReactionsForMessage(connectedSpace, messageUlId);
+    const reactions = await getRoomyReactionsForMessage(
+      connectedSpace,
+      messageUlId,
+    );
     allReactions.push(...reactions);
   }
 
@@ -1437,18 +1521,20 @@ export async function validateRoomyReactions(
   // Check 1: All expected reactions exist
   for (const expected of expectedReactions) {
     const matchingReaction = allReactions.find(
-      r =>
+      (r) =>
         r.reactionTo === expected.messageUlId &&
         r.reaction === expected.emoji &&
         r.reactingUser === expected.userDid &&
-        (expected.isBridged ? r.$type === "space.roomy.reaction.addBridgedReaction.v0" : r.$type === "space.roomy.reaction.addReaction.v0")
+        (expected.isBridged
+          ? r.$type === "space.roomy.reaction.addBridgedReaction.v0"
+          : r.$type === "space.roomy.reaction.addReaction.v0"),
     );
 
     if (!matchingReaction) {
       errors.push(
         `Missing expected reaction: message=${expected.messageUlId}, ` +
-        `emoji=${expected.emoji}, user=${expected.userDid}, ` +
-        `isBridged=${expected.isBridged}`
+          `emoji=${expected.emoji}, user=${expected.userDid}, ` +
+          `isBridged=${expected.isBridged}`,
       );
     }
   }
@@ -1456,17 +1542,17 @@ export async function validateRoomyReactions(
   // Check 2: No extra reactions (echo prevention)
   for (const found of allReactions) {
     const isExpected = expectedReactions.some(
-      expected =>
+      (expected) =>
         found.reactionTo === expected.messageUlId &&
         found.reaction === expected.emoji &&
-        found.reactingUser === expected.userDid
+        found.reactingUser === expected.userDid,
     );
 
     if (!isExpected) {
       errors.push(
         `Unexpected reaction found (possible echo bug): ` +
-        `message=${found.reactionTo}, emoji=${found.reaction}, ` +
-        `user=${found.reactingUser}, type=${found.$type}`
+          `message=${found.reactionTo}, emoji=${found.reaction}, ` +
+          `user=${found.reactingUser}, type=${found.$type}`,
       );
     }
   }
@@ -1474,17 +1560,17 @@ export async function validateRoomyReactions(
   // Check 3: Each expected reaction appears exactly once
   for (const expected of expectedReactions) {
     const matchingReactions = allReactions.filter(
-      r =>
+      (r) =>
         r.reactionTo === expected.messageUlId &&
         r.reaction === expected.emoji &&
-        r.reactingUser === expected.userDid
+        r.reactingUser === expected.userDid,
     );
 
     if (matchingReactions.length > 1) {
       errors.push(
         `Duplicate reaction found: message=${expected.messageUlId}, ` +
-        `emoji=${expected.emoji}, user=${expected.userDid}, ` +
-        `count=${matchingReactions.length}`
+          `emoji=${expected.emoji}, user=${expected.userDid}, ` +
+          `count=${matchingReactions.length}`,
       );
     }
   }
