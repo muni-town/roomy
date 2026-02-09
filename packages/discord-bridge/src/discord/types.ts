@@ -7,6 +7,11 @@ import {
   SetupDesiredProps,
   TransformersDesiredProperties,
 } from "@discordeno/bot";
+import { SyncOrchestrator } from "../services";
+import { BridgeRepository } from "../repositories";
+import { ConnectedSpace } from "@roomy/sdk";
+import { LatestMessages } from "../repositories/db";
+import { StreamDid } from "@roomy/sdk";
 
 const messageProperties = {
   id: true,
@@ -103,4 +108,13 @@ export interface DiscordMessageOptions {
   content?: string;
   username?: string;
   avatarUrl?: string;
+}
+
+export interface OrchestratorContext {
+  orchestrator: SyncOrchestrator;
+  repo: BridgeRepository;
+  latestMessagesInChannel: LatestMessages;
+  connectedSpace: ConnectedSpace;
+  guildId: bigint;
+  spaceId: StreamDid;
 }

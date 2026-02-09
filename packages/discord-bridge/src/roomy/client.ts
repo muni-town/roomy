@@ -108,10 +108,11 @@ export const connectedSpaces = new Map<string, ConnectedSpace>();
  * If a space connection fails, logs an error to telemetry and continues
  * with other spaces rather than crashing.
  */
-export async function subscribeToConnectedSpaces(): Promise<void> {
+export async function subscribeToConnectedSpaces(
+  client: RoomyClient,
+): Promise<void> {
   return tracer.startActiveSpan("bridge.spaces.subscribe_all", async (span) => {
     try {
-      const client = getRoomyClient();
       const bridges = await registeredBridges.list();
 
       console.log(`Subscribing to ${bridges.length} connected spaces...`);
@@ -203,18 +204,21 @@ export async function subscribeToSpace(
 
         // Wait for backfill to complete before returning
         console.log(`Waiting for backfill of space ${spaceId}...`);
-        await tracer.startActiveSpan("leaf.stream.backfill", async (backfillSpan) => {
-          try {
-            setRoomyAttrs(backfillSpan, { spaceId });
-            await space.doneBackfilling;
-            backfillSpan.setAttribute("backfill.status", "complete");
-          } catch (e) {
-            recordError(backfillSpan, e);
-            throw e;
-          } finally {
-            backfillSpan.end();
-          }
-        });
+        await tracer.startActiveSpan(
+          "leaf.stream.backfill",
+          async (backfillSpan) => {
+            try {
+              setRoomyAttrs(backfillSpan, { spaceId });
+              await space.doneBackfilling;
+              backfillSpan.setAttribute("backfill.status", "complete");
+            } catch (e) {
+              recordError(backfillSpan, e);
+              throw e;
+            } finally {
+              backfillSpan.end();
+            }
+          },
+        );
         console.log(`Backfill complete for space ${spaceId}`);
 
         connectedSpaces.set(spaceId, space);

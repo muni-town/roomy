@@ -20,6 +20,12 @@ export { ReactionSyncService } from "./ReactionSyncService.js";
 export { StructureSyncService } from "./StructureSyncService.js";
 
 export { MessageSyncService } from "./MessageSyncService.js";
-export type { DiscordToRoomyResult, EventBatcher } from "./MessageSyncService.js";
+export type {
+  DiscordToRoomyResult,
+  EventBatcher,
+} from "./MessageSyncService.js";
 
-export { SyncOrchestrator, createSyncOrchestrator } from "./SyncOrchestrator.js";
+export {
+  Bridge as SyncOrchestrator,
+  createSyncOrchestrator,
+} from "./SyncOrchestrator.js";
