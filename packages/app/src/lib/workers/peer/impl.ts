@@ -17,12 +17,8 @@ import {
   type PeerClientInterface,
   type AuthStatus,
   type RoomyStatus,
-  statusMachine,
   roomyStateTrackable as roomyStateTrackable,
   authStateTrackable,
-  type StatusMachine,
-  stateMachine,
-  type StateMachine,
 } from "./types";
 import type {
   Savepoint,
@@ -41,6 +37,10 @@ import {
   type EncodedStreamEvent,
   type EventCallback,
   type Profile,
+  statusMachine,
+  type StatusMachine,
+  stateMachine,
+  type StateMachine,
 } from "@roomy/sdk";
 import {
   AsyncChannel,
