@@ -31,7 +31,6 @@ import type {
 } from "../sqlite/types";
 import {
   ConnectedSpace,
-  Deferred,
   Did,
   ensureEntity,
   modules,
@@ -282,10 +281,10 @@ export class Peer {
         };
       },
       checkSpaceExists: async (spaceId) =>
-        // TODO: this isn't the best way to check whether a space exists, but right now we actually
-        // don't have a way check for stream existence in the API so it's a close enough
-        // approximation.
-        !!(await this.client.getSpaceInfo(spaceId))?.name,
+        // TODO: right now we actually don't have a way check for stream existence in the API. This
+        // should make sure things mostly work for now, but should be fixed later. The only impact
+        // should be that we can't show proper 404 errors for missing spaces.
+        true,
       setProfileSpace: async (spaceId) => {
         await this.client.setProfileSpace(spaceId);
       },
