@@ -22,7 +22,7 @@ import {
   createSyncOrchestratorForTest,
 } from "../helpers/setup.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
-import { registeredBridges } from "../../../src/db.js";
+import { registeredBridges } from "../../../src/repositories/db.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
 
 // Run tests sequentially to avoid database conflicts

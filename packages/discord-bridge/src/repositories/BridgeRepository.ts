@@ -15,7 +15,7 @@ import type {
   LatestMessages,
   RoomyUserProfile,
   SyncedEdit,
-} from "../db.js";
+} from "./db.js";
 
 /**
  * Roomy user profile information
@@ -225,7 +225,7 @@ export class LevelDBBridgeRepository implements BridgeRepository {
       syncedRoomLinks: SyncedRoomLinks;
       syncedEdits: SyncedEdits;
       discordWebhookTokens: ReturnType<
-        typeof import("../db.js").discordWebhookTokensForBridge
+        typeof import("./db.js").discordWebhookTokensForBridge
       >;
       discordMessageHashes: DiscordMessageHashes;
       discordLatestMessage: LatestMessages;

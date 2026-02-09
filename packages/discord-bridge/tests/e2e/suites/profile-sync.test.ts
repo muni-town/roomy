@@ -16,9 +16,10 @@ import {
   createSyncOrchestratorForTest,
 } from "../helpers/setup.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
-import { registeredBridges } from "../../../src/db.js";
+import { registeredBridges } from "../../../src/repositories/db.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
 import type { DiscordUser } from "../../../src/services/ProfileSyncService.js";
+import { StreamIndex } from "@roomy/sdk";
 
 describe("E2E: Discord Profile Sync (D→R)", () => {
   beforeAll(async () => {
@@ -34,7 +35,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
     // await registeredBridges.clear();// DISABLED: Database cleanup causing issues between test files
     // NOTE: Database cleanup disabled due to LevelDB state issues between test files
     // Each test creates its own space, so cleanup isn't strictly necessary
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
   afterEach(async () => {
@@ -72,19 +73,23 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       await orchestrator.handleDiscordUserProfile(discordUser);
 
       // Wait for profile event to be materialized
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Verify: updateProfile event exists
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const updateProfileEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.user.updateProfile.v0"
+        (e: any) => e.$type === "space.roomy.user.updateProfile.v0",
       );
 
       expect(updateProfileEvents.length).toBeGreaterThan(0);
 
       // Verify: Profile event has correct DID
       const expectedDid = `did:discord:${botUser.id}`;
-      const profileEvent = updateProfileEvents.find((e: any) => e.did === expectedDid);
+      const profileEvent = updateProfileEvents.find(
+        (e: any) => e.did === expectedDid,
+      );
       expect(profileEvent).toBeDefined();
 
       // Verify: Profile has correct name (globalName or username)
@@ -97,11 +102,16 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       expect(profileEvent?.avatar).toMatch(/discord(app)?\.com/);
 
       // Verify: discordUserOrigin extension with correct snowflake
-      const origin = profileEvent?.extensions?.["space.roomy.extension.discordUserOrigin.v0"];
+      const origin =
+        profileEvent?.extensions?.[
+          "space.roomy.extension.discordUserOrigin.v0"
+        ];
       expect(origin).toBeDefined();
       expect(origin?.snowflake).toBe(botUser.id.toString());
       expect(origin?.guildId).toBe(result.guildId.toString());
-      expect(origin?.handle).toBe(`${discordUser.username}#${discordUser.discriminator}`);
+      expect(origin?.handle).toBe(
+        `${discordUser.username}#${discordUser.discriminator}`,
+      );
 
       // Verify: Profile hash is present in extension
       expect(origin?.profileHash).toBeDefined();
@@ -137,35 +147,45 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
 
       // First profile sync
       await orchestrator.handleDiscordUserProfile(discordUser);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      let events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      let events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       let profileEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.user.updateProfile.v0"
+        (e: any) => e.$type === "space.roomy.user.updateProfile.v0",
       );
 
       const expectedDid = `did:discord:${botUser.id}`;
-      const firstProfileEvent = profileEvents.find((e: any) => e.did === expectedDid);
+      const firstProfileEvent = profileEvents.find(
+        (e: any) => e.did === expectedDid,
+      );
 
       expect(firstProfileEvent).toBeDefined();
 
       // Second profile sync with same data (should be skipped due to hash check)
       await orchestrator.handleDiscordUserProfile(discordUser);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       profileEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.user.updateProfile.v0"
+        (e: any) => e.$type === "space.roomy.user.updateProfile.v0",
       );
 
       // Count events for this user
-      const userProfileEvents = profileEvents.filter((e: any) => e.did === expectedDid);
+      const userProfileEvents = profileEvents.filter(
+        (e: any) => e.did === expectedDid,
+      );
 
       // Should still have only 1 profile event for this user (idempotent)
       expect(userProfileEvents.length).toBe(1);
 
       // The profile event should be the same as the first one
-      const secondProfileEvent = userProfileEvents.find((e: any) => e.did === expectedDid);
+      const secondProfileEvent = userProfileEvents.find(
+        (e: any) => e.did === expectedDid,
+      );
       expect(secondProfileEvent?.id).toBe(firstProfileEvent?.id);
     }, 30000);
   });
@@ -199,11 +219,13 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
 
       // First profile sync
       await orchestrator.handleDiscordUserProfile(discordUser);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      let events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      let events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       let profileEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.user.updateProfile.v0"
+        (e: any) => e.$type === "space.roomy.user.updateProfile.v0",
       );
 
       const expectedDid = `did:discord:${botUser.id}`;
@@ -217,15 +239,19 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
 
       // Sync the modified profile
       await orchestrator.handleDiscordUserProfile(modifiedUser);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       profileEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.user.updateProfile.v0"
+        (e: any) => e.$type === "space.roomy.user.updateProfile.v0",
       );
 
       // Should have 2 profile events for this user (original + update)
-      const userProfileEvents = profileEvents.filter((e: any) => e.did === expectedDid);
+      const userProfileEvents = profileEvents.filter(
+        (e: any) => e.did === expectedDid,
+      );
       expect(userProfileEvents.length).toBe(2);
 
       // Verify: The latest profile has the updated name
@@ -234,8 +260,13 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
 
       // Verify: Profile hash is different
       const firstEvent = userProfileEvents[0];
-      const firstHash = firstEvent?.extensions?.["space.roomy.extension.discordUserOrigin.v0"]?.profileHash;
-      const latestHash = latestProfile?.extensions?.["space.roomy.extension.discordUserOrigin.v0"]?.profileHash;
+      const firstHash =
+        firstEvent?.extensions?.["space.roomy.extension.discordUserOrigin.v0"]
+          ?.profileHash;
+      const latestHash =
+        latestProfile?.extensions?.[
+          "space.roomy.extension.discordUserOrigin.v0"
+        ]?.profileHash;
 
       expect(firstHash).toBeDefined();
       expect(latestHash).toBeDefined();
@@ -270,7 +301,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
 
       // First profile sync
       await orchestrator.handleDiscordUserProfile(discordUser);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Modify the avatar hash (simulating an avatar change)
       const modifiedUser: DiscordUser = {
@@ -280,15 +311,19 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
 
       // Sync the modified profile
       await orchestrator.handleDiscordUserProfile(modifiedUser);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const profileEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.user.updateProfile.v0"
+        (e: any) => e.$type === "space.roomy.user.updateProfile.v0",
       );
 
       const expectedDid = `did:discord:${botUser.id}`;
-      const userProfileEvents = profileEvents.filter((e: any) => e.did === expectedDid);
+      const userProfileEvents = profileEvents.filter(
+        (e: any) => e.did === expectedDid,
+      );
 
       // Should have 2 profile events (original + avatar update)
       expect(userProfileEvents.length).toBe(2);
@@ -296,8 +331,12 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       // Verify: Profile hashes are different
       const firstEvent = userProfileEvents[0];
       const latestEvent = userProfileEvents[1];
-      const firstHash = firstEvent?.extensions?.["space.roomy.extension.discordUserOrigin.v0"]?.profileHash;
-      const latestHash = latestEvent?.extensions?.["space.roomy.extension.discordUserOrigin.v0"]?.profileHash;
+      const firstHash =
+        firstEvent?.extensions?.["space.roomy.extension.discordUserOrigin.v0"]
+          ?.profileHash;
+      const latestHash =
+        latestEvent?.extensions?.["space.roomy.extension.discordUserOrigin.v0"]
+          ?.profileHash;
 
       expect(firstHash).toBeDefined();
       expect(latestHash).toBeDefined();
@@ -331,15 +370,19 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
 
       // Sync the profile
       await orchestrator.handleDiscordUserProfile(discordUser);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const profileEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.user.updateProfile.v0"
+        (e: any) => e.$type === "space.roomy.user.updateProfile.v0",
       );
 
       const expectedDid = `did:discord:123456789`;
-      const profileEvent = profileEvents.find((e: any) => e.did === expectedDid);
+      const profileEvent = profileEvents.find(
+        (e: any) => e.did === expectedDid,
+      );
 
       expect(profileEvent).toBeDefined();
 
@@ -347,7 +390,10 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       expect(profileEvent?.name).toBe("Fancy Display Name");
 
       // Verify: Handle contains username#discriminator
-      const origin = profileEvent?.extensions?.["space.roomy.extension.discordUserOrigin.v0"];
+      const origin =
+        profileEvent?.extensions?.[
+          "space.roomy.extension.discordUserOrigin.v0"
+        ];
       expect(origin?.handle).toBe("plain_username#0001");
     }, 30000);
 
@@ -376,15 +422,19 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
 
       // Sync the profile
       await orchestrator.handleDiscordUserProfile(discordUser);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const profileEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.user.updateProfile.v0"
+        (e: any) => e.$type === "space.roomy.user.updateProfile.v0",
       );
 
       const expectedDid = `did:discord:987654321`;
-      const profileEvent = profileEvents.find((e: any) => e.did === expectedDid);
+      const profileEvent = profileEvents.find(
+        (e: any) => e.did === expectedDid,
+      );
 
       expect(profileEvent).toBeDefined();
 
@@ -392,7 +442,10 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       expect(profileEvent?.name).toBe("fallback_username");
 
       // Verify: Handle contains username#discriminator
-      const origin = profileEvent?.extensions?.["space.roomy.extension.discordUserOrigin.v0"];
+      const origin =
+        profileEvent?.extensions?.[
+          "space.roomy.extension.discordUserOrigin.v0"
+        ];
       expect(origin?.handle).toBe("fallback_username#4242");
     }, 30000);
 
@@ -421,15 +474,19 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
 
       // Sync the profile
       await orchestrator.handleDiscordUserProfile(discordUser);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const profileEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.user.updateProfile.v0"
+        (e: any) => e.$type === "space.roomy.user.updateProfile.v0",
       );
 
       const expectedDid = `did:discord:111222333`;
-      const profileEvent = profileEvents.find((e: any) => e.did === expectedDid);
+      const profileEvent = profileEvents.find(
+        (e: any) => e.did === expectedDid,
+      );
 
       expect(profileEvent).toBeDefined();
 

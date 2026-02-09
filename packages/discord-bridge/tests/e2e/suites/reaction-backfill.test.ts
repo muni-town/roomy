@@ -23,6 +23,7 @@ import {
 } from "../helpers/setup.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
 import { backfillDiscordReactions } from "../../../src/discord/backfill.js";
+import { StreamIndex } from "@roomy/sdk";
 
 describe("E2E: Reaction Backfill", () => {
   beforeAll(async () => {
@@ -31,7 +32,7 @@ describe("E2E: Reaction Backfill", () => {
   }, 60000);
 
   beforeEach(async () => {
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
   /**
@@ -61,7 +62,8 @@ describe("E2E: Reaction Backfill", () => {
     });
 
     const orchestrator = createSyncOrchestratorForTest(result, bot);
-    const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+    const roomyRoomId =
+      await orchestrator.handleDiscordChannelCreate(firstChannel);
     await orchestrator.handleDiscordMessageCreate(testMessage, roomyRoomId);
 
     // Simulate gateway sync (simulated user reactions, NOT from bot)
@@ -86,28 +88,34 @@ describe("E2E: Reaction Backfill", () => {
     expect(reactionId1).toBeDefined();
     expect(reactionId2).toBeDefined();
 
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
     // Get reaction count before backfill
-    const eventsBefore = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+    const eventsBefore = (
+      await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+    ).map((e: any) => e.event);
     const reactionEventsBefore = eventsBefore.filter(
-      (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0"
+      (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0",
     );
 
-    console.log(`Reaction events before backfill: ${reactionEventsBefore.length}`);
+    console.log(
+      `Reaction events before backfill: ${reactionEventsBefore.length}`,
+    );
 
     // Call backfill - even though it won't find the simulated reactions
     // via Discord API (they don't actually exist on Discord), it should
     // complete without errors
     await backfillDiscordReactions(bot, result.guildContext, firstChannel.id);
 
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
     // Verify: No new reaction events were created (backfill didn't find reactions
     // on Discord API because our simulated reactions don't actually exist there)
-    const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+    const events = (
+      await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+    ).map((e: any) => e.event);
     const reactionEvents = events.filter(
-      (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0"
+      (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0",
     );
 
     console.log(`Reaction events after backfill: ${reactionEvents.length}`);
@@ -118,12 +126,12 @@ describe("E2E: Reaction Backfill", () => {
 
     // Our original synced reactions should still exist
     const thumbsUpReaction = reactionEvents.find(
-      (e: any) => e.reaction === testEmoji1.name
+      (e: any) => e.reaction === testEmoji1.name,
     );
     expect(thumbsUpReaction).toBeDefined();
 
     const partyReaction = reactionEvents.find(
-      (e: any) => e.reaction === testEmoji2.name
+      (e: any) => e.reaction === testEmoji2.name,
     );
     expect(partyReaction).toBeDefined();
 
@@ -154,18 +162,21 @@ describe("E2E: Reaction Backfill", () => {
     });
 
     const orchestrator = createSyncOrchestratorForTest(result, bot);
-    const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+    const roomyRoomId =
+      await orchestrator.handleDiscordChannelCreate(firstChannel);
     await orchestrator.handleDiscordMessageCreate(testMessage, roomyRoomId);
 
     // Call backfill on channel with no reactions
     await backfillDiscordReactions(bot, result.guildContext, firstChannel.id);
 
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
     // Verify: No reaction events (should pass both before and after fix)
-    const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+    const events = (
+      await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+    ).map((e: any) => e.event);
     const reactionEvents = events.filter(
-      (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0"
+      (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0",
     );
 
     expect(reactionEvents.length).toBe(0);
@@ -207,7 +218,8 @@ describe("E2E: Reaction Backfill", () => {
     });
 
     const orchestrator = createSyncOrchestratorForTest(result, bot);
-    const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+    const roomyRoomId =
+      await orchestrator.handleDiscordChannelCreate(firstChannel);
 
     await orchestrator.handleDiscordMessageCreate(message1, roomyRoomId);
     await orchestrator.handleDiscordMessageCreate(message2, roomyRoomId);
@@ -218,28 +230,38 @@ describe("E2E: Reaction Backfill", () => {
     await bot.helpers.addReaction(firstChannel.id, message2.id, testEmoji);
 
     // Wait for reactions to be added on Discord
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     // Call backfill - it should process the messages and complete successfully
     // even though the bot's own reactions will be filtered out
     await expect(
-      backfillDiscordReactions(bot, result.guildContext, firstChannel.id)
+      backfillDiscordReactions(bot, result.guildContext, firstChannel.id),
     ).resolves.not.toThrow();
 
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
     // Verify: No reaction events from bot's own reactions (echo prevention)
-    const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+    const events = (
+      await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+    ).map((e: any) => e.event);
     const reactionEvents = events.filter(
-      (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0"
+      (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0",
     );
 
     // Bot's reactions are filtered out, so no events should be created
     expect(reactionEvents.length).toBe(0);
 
     // Cleanup
-    await bot.helpers.deleteOwnReaction(firstChannel.id, message1.id, testEmoji);
-    await bot.helpers.deleteOwnReaction(firstChannel.id, message2.id, testEmoji);
+    await bot.helpers.deleteOwnReaction(
+      firstChannel.id,
+      message1.id,
+      testEmoji,
+    );
+    await bot.helpers.deleteOwnReaction(
+      firstChannel.id,
+      message2.id,
+      testEmoji,
+    );
     await bot.helpers.deleteMessage(firstChannel.id, message1.id);
     await bot.helpers.deleteMessage(firstChannel.id, message2.id);
   }, 30000);
@@ -266,7 +288,7 @@ describe("E2E: Reaction Backfill", () => {
 
     // This should not throw - verifies all dependencies are in place
     await expect(
-      backfillDiscordReactions(bot, result.guildContext, firstChannel.id)
+      backfillDiscordReactions(bot, result.guildContext, firstChannel.id),
     ).resolves.not.toThrow();
   }, 30000);
 });

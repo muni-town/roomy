@@ -1,25 +1,24 @@
-import {
-  DiscordMessageHashes,
-  LatestMessages,
-  SyncedEdits,
-  SyncedIds,
-  SyncedProfiles,
-  SyncedReactions,
-  SyncedRoomLinks,
-  SyncedSidebarHash,
-} from "./db";
 import type { ConnectedSpace } from "@roomy/sdk";
+import type { LatestMessages } from "./repositories/db";
+import type { SyncOrchestrator } from "./services/SyncOrchestrator";
+import type { BridgeRepository } from "./repositories";
 
-export type GuildContext = {
-  guildId: bigint;
-  spaceId: string;
-  syncedIds: SyncedIds;
+/**
+ * Context for handling Discord events in a guild.
+ * Provides the orchestrator for sync operations, repository for queries,
+ * and cursor tracking for backfill.
+ */
+export type OrchestratorContext = {
+  /** Sync orchestrator for all Discord ↔ Roomy operations */
+  orchestrator: SyncOrchestrator;
+  /** Repository for ID mapping and data access */
+  repo: BridgeRepository;
+  /** Latest message tracking per channel (for backfill cursor) */
   latestMessagesInChannel: LatestMessages;
-  syncedProfiles: SyncedProfiles;
-  syncedReactions: SyncedReactions;
-  syncedSidebarHash: SyncedSidebarHash;
-  syncedRoomLinks: SyncedRoomLinks;
-  syncedEdits: SyncedEdits;
-  discordMessageHashes: DiscordMessageHashes;
+  /** Connected Roomy space */
   connectedSpace: ConnectedSpace;
+  /** Discord guild ID */
+  guildId: bigint;
+  /** Roomy space ID */
+  spaceId: string;
 };

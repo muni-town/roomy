@@ -13,6 +13,8 @@ The Discord Bridge is a standalone microservice that:
 
 ## Architecture
 
+The Discord Bridge uses a **modular, domain-driven architecture** with service layer separation:
+
 ### System Components
 
 ```
@@ -27,6 +29,18 @@ The Discord Bridge is a standalone microservice that:
 ┌─────────────────────────────────┐
 │     Discord Bridge Service      │
 │  ┌───────────────────────────┐  │
+│  │  Sync Orchestrator        │  │
+│  │  - Coordinates all sync   │  │
+│  │    operations             │  │
+│  └───────────────────────────┘  │
+│  ┌───────────────────────────┐  │
+│  │  Domain Sync Services     │  │
+│  │  - MessageSyncService     │  │
+│  │  - ReactionSyncService    │  │
+│  │  - ProfileSyncService     │  │
+│  │  - StructureSyncService   │  │
+│  └───────────────────────────┘  │
+│  ┌───────────────────────────┐  │
 │  │  Discord Bot (Discordeno) │  │
 │  │  - Event listeners        │  │
 │  │  - Webhook execution      │  │
@@ -39,10 +53,10 @@ The Discord Bridge is a standalone microservice that:
 │  │  - Profile fetching       │  │
 │  └───────────────────────────┘  │
 │  ┌───────────────────────────┐  │
-│  │  LevelDB State Store      │  │
-│  │  - Mappings (syncedIds)   │  │
-│  │  - Profiles (cached)       │  │
-│  │  - Cursors (resume state)  │  │
+│  │  BridgeRepository         │  │
+│  │  - LevelDB stores         │  │
+│  │  - Mappings, cursors      │  │
+│  │  - Profile cache          │  │
 │  └───────────────────────────┘  │
 │  ┌───────────────────────────┐  │
 │  │  HTTP API                 │  │
@@ -59,28 +73,67 @@ packages/discord-bridge/src/
 ├── index.ts              # Entry point, initializes all subsystems
 ├── api.ts                # Express REST API for bridge management
 ├── env.ts                # Environment variable configuration
-├── db.ts                 # LevelDB store factories and types
 ├── tracing.ts            # OpenTelemetry observability
 ├── otel.ts               # OTel exporter configuration
 ├── httpProxy.ts          # HTTP proxy for Leaf authentication
 │
+├── services/             # Domain sync services (NEW MODULAR ARCH)
+│   ├── SyncOrchestrator.ts   # Top-level coordinator
+│   ├── MessageSyncService.ts # Message sync logic
+│   ├── ReactionSyncService.ts # Reaction sync logic
+│   ├── ProfileSyncService.ts  # Profile sync logic
+│   ├── StructureSyncService.ts # Channel/room/category sync
+│   └── index.ts
+│
+├── repositories/         # Data access layer (NEW)
+│   ├── BridgeRepository.ts    # Main repository interface
+│   ├── MockBridgeRepository.ts # Test double
+│   └── index.ts
+│
 ├── discord/              # Discord-specific code
-│   ├── bot.ts            # Bot initialization, event handlers, backfill orchestration
-│   ├── types.ts          # TypeScript types, desired properties configuration
+│   ├── bot.ts            # Bot initialization, event handlers
+│   ├── types.ts          # TypeScript types, desired properties
 │   ├── webhooks.ts       # Webhook creation, execution, retry logic
 │   ├── slashCommands.ts  # Discord slash commands (/connect, etc.)
-│   └── backfill.ts       # Discord message hashing, reaction backfill
+│   ├── backfill.ts       # Discord message hashing, reaction backfill
+│   └── operations/       # Discord API operations
+│       └── message.ts    # Message-specific operations
 │
 ├── roomy/                # Roomy-specific code
 │   ├── client.ts         # RoomyClient initialization, space subscriptions
 │   ├── subscription.ts   # Leaf event handler, state updates, filter logic
-│   ├── to.ts             # Discord → Roomy sync (messages, reactions, profiles)
-│   ├── from.ts           # Roomy → Discord sync (webhook execution)
+│   ├── to.ts             # Discord → Roomy sync (legacy, moved to services)
+│   ├── from.ts           # Roomy → Discord sync (legacy, moved to services)
 │   ├── backfill.ts       # Roomy → Discord backfill
 │   └── batcher.ts        # Event batching for efficient Leaf operations
 │
 └── types.ts              # Shared GuildContext type
 ```
+
+### Architecture Principles
+
+**Service Layer (services/)**
+- Domain-driven separation: messages, reactions, profiles, structure
+- Each service owns its business logic and idempotency patterns
+- Services are stateless - state managed by BridgeRepository
+- Easy to test with mock repositories
+
+**Repository Layer (repositories/)**
+- Single source of truth for all persistent state
+- LevelDB-backed with typed interfaces
+- Sublevel databases for different data domains
+- Mock implementation for testing
+
+**Orchestration (SyncOrchestrator)**
+- Facade pattern for simple API
+- Delegates to appropriate service
+- Handles cross-service coordination
+- Used by Discord event handlers and Roomy subscription handlers
+
+**Legacy Modules (discord/roomy)**
+- Being refactored into services
+- Still contain platform-specific utilities
+- Will be gradually phased out
 
 ## Data Flow
 
@@ -98,12 +151,19 @@ Discord Message Event
          │
          ▼
 ┌───────────────────┐
-│ ensureRoomyMessage│
-│ forDiscordMessage │  (roomy/to.ts)
+│ SyncOrchestrator  │  (services/SyncOrchestrator.ts)
+│ .handleDiscord    │
+│ MessageCreate     │
+└────────┬──────────┘
+         │
+         ▼
+┌───────────────────┐
+│ MessageSyncService│  (services/MessageSyncService.ts)
+│ .syncDiscordToRoomy│
 └────────┬──────────┘
          │
          ├──► Check idempotency (syncedIds)
-         ├──► Ensure user profile synced
+         ├──► Ensure user profile synced (via ProfileSyncService)
          ├──► Filter system messages
          ├──► Build CreateMessage event
  │        │  with extensions:
@@ -159,8 +219,15 @@ Leaf Event Stream
          │
          ▼
 ┌───────────────────┐
-│ syncCreateMessage  │  (roomy/from.ts)
-│ ToDiscord         │
+│ SyncOrchestrator  │  (services/SyncOrchestrator.ts)
+│ .handleRoomy      │
+│ MessageCreate     │
+└────────┬──────────┘
+         │
+         ▼
+┌───────────────────┐
+│ MessageSyncService│  (services/MessageSyncService.ts)
+│ .syncRoomyToDiscord│
 └────────┬──────────┘
          │
          ├──► Get Discord channel ID (from syncedIds)
@@ -169,7 +236,7 @@ Leaf Event Stream
          ├──► Extract author profile:
          │    - authorOverride.did for Discord users
          │    - decodedEvent.user for Roomy users
-         │    - Fetch from ATProto if not cached
+         │    - Fetch from ATProto if not cached (via ProfileSyncService)
          │
          ▼
 ┌───────────────────┐
@@ -214,8 +281,16 @@ Discord reactionAdd Event
          │
          ▼
 ┌───────────────────┐
-│ syncDiscord       │  (roomy/to.ts)
-│ ReactionToRoomy   │
+│ SyncOrchestrator  │  (services/SyncOrchestrator.ts)
+│ .handleDiscord    │
+│ ReactionAdd       │
+└────────┬──────────┘
+         │
+         ▼
+┌───────────────────┐
+│ ReactionSync      │  (services/ReactionSyncService.ts)
+│ Service.syncAddTo │
+│ Roomy             │
 └────────┬──────────┘
          │
          ├──► Check idempotency (syncedReactions store)
@@ -241,8 +316,16 @@ Leaf Event Stream (addReaction/addBridgedReaction)
          │
          ▼
 ┌───────────────────┐
-│ syncAddReaction    │  (roomy/from.ts)
-│ ToDiscord         │
+│ SyncOrchestrator  │  (services/SyncOrchestrator.ts)
+│ .handleRoomy      │
+│ ReactionAdd       │
+└────────┬──────────┘
+         │
+         ▼
+┌───────────────────┐
+│ ReactionSync      │  (services/ReactionSyncService.ts)
+│ Service.syncAddTo │
+│ Discord           │
 └────────┬──────────┘
          │
          ├──► Get Discord message ID (from syncedIds)
@@ -258,8 +341,16 @@ Discord User (any message/reaction)
         │
         ▼
 ┌───────────────────┐
-│ ensureRoomyProfile│  (roomy/to.ts)
-│ forDiscordUser    │
+│ SyncOrchestrator  │  (services/SyncOrchestrator.ts)
+│ .handleDiscord    │
+│ UserProfile       │
+└────────┬──────────┘
+         │
+         ▼
+┌───────────────────┐
+│ ProfileSync       │  (services/ProfileSyncService.ts)
+│ Service.sync      │
+│ DiscordToRoomy    │
 └────────┬──────────┘
          │
          ├──► Compute profile hash (username + globalName + avatar)
@@ -278,8 +369,9 @@ Roomy Message Event
         │
         ▼
 ┌───────────────────┐
-│ syncCreateMessage  │  (roomy/from.ts)
-│ ToDiscord         │
+│ MessageSync       │  (services/MessageSyncService.ts)
+│ Service.sync      │
+│ RoomyToDiscord    │
 └────────┬──────────┘
          │
          ├──► Extract author DID:
@@ -288,15 +380,15 @@ Roomy Message Event
          │
          ▼
 ┌───────────────────┐
-│ Profile Lookup    │
-│ (with ATProto     │
-│  fallback)        │
+│ ProfileSync       │  (services/ProfileSyncService.ts)
+│ Service.get       │
+│ RoomyProfile      │
 └────────┬──────────┘
          │
          ├──► Check cache (roomyUserProfilesForBridge)
          ├──► If not cached: fetch from ATProto (getProfile)
          ├──► Cache for future use
-         └──► Use in webhook payload (username, avatarUrl)
+         └──► Return profile for webhook payload (username, avatarUrl)
 ```
 
 ## Idempotency and Sync Patterns
@@ -508,6 +600,47 @@ The bridge includes comprehensive logging and tracing via OpenTelemetry. Key log
 - `[Profile Capture]` - Profile caching from updateProfile events
 - `[Backfill Webhook]` - Roomy → Discord backfill operations
 - `[Webhook Registration]` - Message mapping registration
+
+**Testing with Mock Repositories:**
+
+The new modular architecture supports easy testing with `MockBridgeRepository`:
+
+```typescript
+import { MockBridgeRepository } from "./repositories/MockBridgeRepository.js";
+import { SyncOrchestrator } from "./services/SyncOrchestrator.js";
+
+// Create mock repository
+const mockRepo = new MockBridgeRepository();
+
+// Create orchestrator with mock repository
+const orchestrator = SyncOrchestrator.create({
+  repo: mockRepo,
+  // ... other dependencies
+});
+
+// Test sync operations without touching LevelDB
+await orchestrator.handleDiscordMessageCreate(message, roomId);
+
+// Assert on repository state
+const syncedIds = await mockRepo.syncedIds.list();
+expect(syncedIds).toHaveLength(1);
+```
+
+**Unit Testing Services:**
+
+Each service can be tested in isolation:
+
+```typescript
+import { MessageSyncService } from "./services/MessageSyncService.js";
+
+const mockRepo = new MockBridgeRepository();
+const mockBot = createMockBot();
+const service = new MessageSyncService(mockRepo, mockBot, roomyClient);
+
+// Test message sync logic
+await service.syncDiscordToRoomy(roomId, message);
+// Assert on mockRepo state and mockBot calls
+```
 
 ### Troubleshooting
 

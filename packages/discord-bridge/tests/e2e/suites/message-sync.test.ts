@@ -23,9 +23,9 @@ import {
   assertEventTypeExists,
   assertEventTypeCount,
 } from "../helpers/assertions.js";
-import { fromBytes } from "@roomy/sdk";
+import { fromBytes, StreamIndex } from "@roomy/sdk";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
-import { registeredBridges } from "../../../src/db.js";
+import { registeredBridges } from "../../../src/repositories/db.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
 
 describe("E2E: Discord Message Sync (D→R)", () => {
@@ -42,7 +42,7 @@ describe("E2E: Discord Message Sync (D→R)", () => {
     // await registeredBridges.clear();// DISABLED: Database cleanup causing issues between test files
     // NOTE: Database cleanup disabled due to LevelDB state issues between test files
     // Each test creates its own space, so cleanup isn't strictly necessary
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
   afterEach(async () => {
@@ -70,7 +70,8 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       // Sync the first channel
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create a test message in Discord
       const testContent = `Test message at ${Date.now()}`;
@@ -88,15 +89,19 @@ describe("E2E: Discord Message Sync (D→R)", () => {
       expect(roomyMessageId).toBeDefined();
 
       // Verify: createMessage event exists
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const createMessageEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.message.createMessage.v0"
+        (e: any) => e.$type === "space.roomy.message.createMessage.v0",
       );
 
       expect(createMessageEvents.length).toBeGreaterThan(0);
 
       // Verify: Message has correct content
-      const syncedMessage = createMessageEvents.find((e: any) => e.id === roomyMessageId);
+      const syncedMessage = createMessageEvents.find(
+        (e: any) => e.id === roomyMessageId,
+      );
       expect(syncedMessage).toBeDefined();
       // Message body structure: { mimeType: string, data: Bytes }
       const bodyData = fromBytes(syncedMessage!.body?.data);
@@ -105,12 +110,17 @@ describe("E2E: Discord Message Sync (D→R)", () => {
       expect(decodedContent).toBe(testContent);
 
       // Verify: discordOrigin extension with correct snowflake
-      const origin = syncedMessage?.extensions?.["space.roomy.extension.discordMessageOrigin.v0"];
+      const origin =
+        syncedMessage?.extensions?.[
+          "space.roomy.extension.discordMessageOrigin.v0"
+        ];
       expect(origin).toBeDefined();
       expect(origin?.snowflake).toBe(testMessage.id.toString());
 
       // Verify: Mapping exists in syncedIds
-      const mappedRoomyId = await result.guildContext.syncedIds.get_discordId(testMessage.id.toString());
+      const mappedRoomyId = await result.guildContext.syncedIds.get_discordId(
+        testMessage.id.toString(),
+      );
       expect(mappedRoomyId).toBe(roomyMessageId);
 
       // Clean up: Delete test message
@@ -131,7 +141,8 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create multiple test messages
       const messages: string[] = [];
@@ -140,16 +151,21 @@ describe("E2E: Discord Message Sync (D→R)", () => {
         messages.push(content);
         await bot.helpers.sendMessage(firstChannel.id, { content });
         // Small delay to ensure different timestamps
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
       // Fetch all messages from Discord
-      const discordMessages = await bot.rest.getMessages(firstChannel.id, { limit: 3 });
+      const discordMessages = await bot.rest.getMessages(firstChannel.id, {
+        limit: 3,
+      });
 
       // Sync all messages to Roomy
       const roomyMessageIds: (string | null)[] = [];
       for (const msg of discordMessages) {
-        const roomId = await orchestrator.handleDiscordMessageCreate(msg, roomyRoomId);
+        const roomId = await orchestrator.handleDiscordMessageCreate(
+          msg,
+          roomyRoomId,
+        );
         roomyMessageIds.push(roomId);
       }
 
@@ -157,9 +173,11 @@ describe("E2E: Discord Message Sync (D→R)", () => {
       expect(roomyMessageIds.filter(Boolean).length).toBe(3);
 
       // Verify: All messages have createMessage events
-      const events = (await result.connectedSpace.fetchEvents(1, 500)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 500)
+      ).map((e: any) => e.event);
       const createMessageEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.message.createMessage.v0"
+        (e: any) => e.$type === "space.roomy.message.createMessage.v0",
       );
 
       expect(createMessageEvents.length).toBeGreaterThanOrEqual(3);
@@ -186,7 +204,8 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create a test message
       const originalContent = `Original message at ${Date.now()}`;
@@ -202,30 +221,38 @@ describe("E2E: Discord Message Sync (D→R)", () => {
       expect(roomyMessageId).toBeDefined();
 
       // Wait for event materialization
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Edit the message
       const editedContent = `Edited message at ${Date.now()}`;
-      const editedMessage = await bot.helpers.editMessage(firstChannel.id, testMessage.id, {
-        content: editedContent,
-      });
+      const editedMessage = await bot.helpers.editMessage(
+        firstChannel.id,
+        testMessage.id,
+        {
+          content: editedContent,
+        },
+      );
 
       // Sync the edit to Roomy
       await orchestrator.handleDiscordMessageUpdate(editedMessage);
 
       // Wait for event materialization
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Verify: editMessage event exists
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const editMessageEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.message.editMessage.v0"
+        (e: any) => e.$type === "space.roomy.message.editMessage.v0",
       );
 
       expect(editMessageEvents.length).toBeGreaterThan(0);
 
       // Verify: Edit event has correct new content
-      const editEvent = editMessageEvents.find((e: any) => e.messageId === roomyMessageId);
+      const editEvent = editMessageEvents.find(
+        (e: any) => e.messageId === roomyMessageId,
+      );
       expect(editEvent).toBeDefined();
       // Edit event body structure: { mimeType: string, data: Bytes }
       const editBodyData = fromBytes(editEvent!.body?.data);
@@ -234,7 +261,10 @@ describe("E2E: Discord Message Sync (D→R)", () => {
       expect(decodedEdit).toBe(editedContent);
 
       // Verify: discordMessageOrigin extension has editedTimestamp
-      const origin = editEvent?.extensions?.["space.roomy.extension.discordMessageOrigin.v0"];
+      const origin =
+        editEvent?.extensions?.[
+          "space.roomy.extension.discordMessageOrigin.v0"
+        ];
       expect(origin).toBeDefined();
       expect(origin?.editedTimestamp).toBeDefined();
       expect(origin?.editedTimestamp).toBeGreaterThan(0);
@@ -257,7 +287,8 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create and sync a message
       const originalContent = `Idempotency test message at ${Date.now()}`;
@@ -268,26 +299,34 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       // Edit the message
       const editedContent = `Edited for idempotency at ${Date.now()}`;
-      const editedMessage = await bot.helpers.editMessage(firstChannel.id, testMessage.id, {
-        content: editedContent,
-      });
+      const editedMessage = await bot.helpers.editMessage(
+        firstChannel.id,
+        testMessage.id,
+        {
+          content: editedContent,
+        },
+      );
 
       // First edit sync
       await orchestrator.handleDiscordMessageUpdate(editedMessage);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const events1 = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events1 = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const editEvents1 = events1.filter(
-        (e: any) => e.$type === "space.roomy.message.editMessage.v0"
+        (e: any) => e.$type === "space.roomy.message.editMessage.v0",
       );
 
       // Second edit sync with same data (should be skipped due to hash check)
       await orchestrator.handleDiscordMessageUpdate(editedMessage);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const events2 = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events2 = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const editEvents2 = events2.filter(
-        (e: any) => e.$type === "space.roomy.message.editMessage.v0"
+        (e: any) => e.$type === "space.roomy.message.editMessage.v0",
       );
 
       // Should not have created a new edit event
@@ -313,7 +352,8 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create and sync a message
       const testContent = `Message to delete at ${Date.now()}`;
@@ -327,26 +367,33 @@ describe("E2E: Discord Message Sync (D→R)", () => {
       );
       expect(roomyMessageId).toBeDefined();
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Delete the message from Discord
       await bot.helpers.deleteMessage(firstChannel.id, testMessage.id);
 
       // Sync the deletion to Roomy
-      await orchestrator.handleDiscordMessageDelete(testMessage.id, firstChannel.id);
+      await orchestrator.handleDiscordMessageDelete(
+        testMessage.id,
+        firstChannel.id,
+      );
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Verify: deleteMessage event exists
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const deleteMessageEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.message.deleteMessage.v0"
+        (e: any) => e.$type === "space.roomy.message.deleteMessage.v0",
       );
 
       expect(deleteMessageEvents.length).toBeGreaterThan(0);
 
       // Verify: Delete event targets correct message
-      const deleteEvent = deleteMessageEvents.find((e: any) => e.messageId === roomyMessageId);
+      const deleteEvent = deleteMessageEvents.find(
+        (e: any) => e.messageId === roomyMessageId,
+      );
       expect(deleteEvent).toBeDefined();
     }, 30000);
   });
@@ -366,7 +413,8 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create a test message
       const testContent = `Idempotency test at ${Date.now()}`;
@@ -375,21 +423,31 @@ describe("E2E: Discord Message Sync (D→R)", () => {
       });
 
       // First sync
-      const roomId1 = await orchestrator.handleDiscordMessageCreate(testMessage, roomyRoomId);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const roomId1 = await orchestrator.handleDiscordMessageCreate(
+        testMessage,
+        roomyRoomId,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const events1 = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events1 = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const messageEvents1 = events1.filter(
-        (e: any) => e.$type === "space.roomy.message.createMessage.v0"
+        (e: any) => e.$type === "space.roomy.message.createMessage.v0",
       );
 
       // Second sync with same message
-      const roomId2 = await orchestrator.handleDiscordMessageCreate(testMessage, roomyRoomId);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      const roomId2 = await orchestrator.handleDiscordMessageCreate(
+        testMessage,
+        roomyRoomId,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const events2 = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events2 = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const messageEvents2 = events2.filter(
-        (e: any) => e.$type === "space.roomy.message.createMessage.v0"
+        (e: any) => e.$type === "space.roomy.message.createMessage.v0",
       );
 
       // Verify: Same room ID returned
@@ -418,7 +476,8 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create original message
       const originalContent = `Original message for reply at ${Date.now()}`;
@@ -427,7 +486,10 @@ describe("E2E: Discord Message Sync (D→R)", () => {
       });
 
       // Sync original message
-      await orchestrator.handleDiscordMessageCreate(originalMessage, roomyRoomId);
+      await orchestrator.handleDiscordMessageCreate(
+        originalMessage,
+        roomyRoomId,
+      );
 
       // Create reply message
       const replyContent = `Reply at ${Date.now()}`;
@@ -446,26 +508,29 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       expect(roomyReplyId).toBeDefined();
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Verify: Reply message has reply attachment
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const replyEvent = events.find((e: any) => e.id === roomyReplyId);
 
       expect(replyEvent).toBeDefined();
 
       // Check for reply attachment in extensions
-      const attachmentsExt = replyEvent?.extensions?.["space.roomy.extension.attachments.v0"];
+      const attachmentsExt =
+        replyEvent?.extensions?.["space.roomy.extension.attachments.v0"];
       expect(attachmentsExt).toBeDefined();
 
       const replyAttachment = attachmentsExt?.attachments?.find(
-        (a: any) => a.$type === "space.roomy.attachment.reply.v0"
+        (a: any) => a.$type === "space.roomy.attachment.reply.v0",
       );
       expect(replyAttachment).toBeDefined();
 
       // Verify the reply attachment targets the original message
       const originalRoomyId = await result.guildContext.syncedIds.get_discordId(
-        originalMessage.id.toString()
+        originalMessage.id.toString(),
       );
       expect(replyAttachment?.target).toBe(originalRoomyId);
 
@@ -490,11 +555,13 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create a message with an image attachment
       // Using a simple 1x1 red PNG (base64)
-      const imageData = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+      const imageData =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
       const imageBuffer = Buffer.from(imageData, "base64");
 
       const testMessage = await bot.helpers.sendMessage(firstChannel.id, {
@@ -515,19 +582,22 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       expect(roomyMessageId).toBeDefined();
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Verify: Message has image attachment
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const messageEvent = events.find((e: any) => e.id === roomyMessageId);
 
       expect(messageEvent).toBeDefined();
 
-      const attachmentsExt = messageEvent?.extensions?.["space.roomy.extension.attachments.v0"];
+      const attachmentsExt =
+        messageEvent?.extensions?.["space.roomy.extension.attachments.v0"];
       expect(attachmentsExt).toBeDefined();
 
       const imageAttachment = attachmentsExt?.attachments?.find(
-        (a: any) => a.$type === "space.roomy.attachment.image.v0"
+        (a: any) => a.$type === "space.roomy.attachment.image.v0",
       );
       expect(imageAttachment).toBeDefined();
       expect(imageAttachment?.mimeType).toContain("image/");
@@ -550,7 +620,8 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create a message with a text file attachment
       const fileContent = "Test file content";
@@ -574,19 +645,22 @@ describe("E2E: Discord Message Sync (D→R)", () => {
 
       expect(roomyMessageId).toBeDefined();
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Verify: Message has file attachment
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const messageEvent = events.find((e: any) => e.id === roomyMessageId);
 
       expect(messageEvent).toBeDefined();
 
-      const attachmentsExt = messageEvent?.extensions?.["space.roomy.extension.attachments.v0"];
+      const attachmentsExt =
+        messageEvent?.extensions?.["space.roomy.extension.attachments.v0"];
       expect(attachmentsExt).toBeDefined();
 
       const fileAttachment = attachmentsExt?.attachments?.find(
-        (a: any) => a.$type === "space.roomy.attachment.file.v0"
+        (a: any) => a.$type === "space.roomy.attachment.file.v0",
       );
       expect(fileAttachment).toBeDefined();
       expect(fileAttachment?.name).toBe("test.txt");

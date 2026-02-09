@@ -6,8 +6,8 @@
  * ┌─────────────────┬──────────────────────────────┬──────────────────────────────┐
  * │                 │ Discord Message              │ Roomy Message                │
  * ├─────────────────┼──────────────────────────────┼──────────────────────────────┤
- * │ Discord Reaction│ D-msg + D-react → Roomy       │ R-msg + D-react → Roomy       │
- * │ Roomy Reaction  │ D-msg + R-react → Discord     │ R-msg + R-react → Discord     │
+ * │ Discord Reaction│ D-msg + D-react → Roomy      │ R-msg + D-react → Roomy      │
+ * │ Roomy Reaction  │ D-msg + R-react → Discord    │ R-msg + R-react → Discord    │
  * └─────────────────┴──────────────────────────────┴──────────────────────────────┘
  *
  * Each test verifies:
@@ -29,7 +29,13 @@ import {
   validateRoomyReactions,
 } from "../helpers/setup.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
-import { createMessage, addReaction } from "@roomy/sdk";
+import {
+  createMessage,
+  addReaction,
+  StreamIndex,
+  Ulid,
+  UserDid,
+} from "@roomy/sdk";
 
 describe("E2E: Reaction Sync - Origin Matrix", () => {
   beforeAll(async () => {
@@ -38,7 +44,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
   }, 60000);
 
   beforeEach(async () => {
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
   /**
@@ -64,7 +70,8 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create Discord-origin message
       const testContent = `D-msg for D-react test at ${Date.now()}`;
@@ -77,7 +84,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         roomyRoomId,
       );
       expect(roomyMessageId).toBeDefined();
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Discord user reacts
       const testEmoji = { name: "👍" };
@@ -91,24 +98,34 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       // Verify: Reaction synced to Roomy
       expect(reactionEventId).toBeDefined();
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const addReactionEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0"
+        (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0",
       );
 
       expect(addReactionEvents.length).toBeGreaterThan(0);
-      const syncedReaction = addReactionEvents.find((e: any) => e.id === reactionEventId);
+      const syncedReaction = addReactionEvents.find(
+        (e: any) => e.id === reactionEventId,
+      );
       expect(syncedReaction?.reactionTo).toBe(roomyMessageId);
       expect(syncedReaction?.reaction).toBe("👍");
       expect(syncedReaction?.reactingUser).toBe(`did:discord:${testUserId}`);
 
       // Verify: No echo - only one reaction exists
-      expect(addReactionEvents.filter((e: any) => e.id === reactionEventId).length).toBe(1);
+      expect(
+        addReactionEvents.filter((e: any) => e.id === reactionEventId).length,
+      ).toBe(1);
 
       // Cleanup
-      await bot.helpers.deleteOwnReaction(firstChannel.id, testMessage.id, testEmoji.name);
+      await bot.helpers.deleteOwnReaction(
+        firstChannel.id,
+        testMessage.id,
+        testEmoji.name,
+      );
       await bot.helpers.deleteMessage(firstChannel.id, testMessage.id);
     }, 30000);
   });
@@ -136,7 +153,8 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create Discord-origin message
       const testContent = `D-msg for R-react test at ${Date.now()}`;
@@ -149,27 +167,29 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         roomyRoomId,
       );
       expect(roomyMessageId).toBeDefined();
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Count Roomy reactions before
-      let events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      let events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const reactionsBefore = events.filter(
-        (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0"
+        (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0",
       );
 
       // Simulate Roomy reaction event (user reacts on Roomy to a Discord message)
       const reaction = "😀";
       const testUserDid = "did:discord:987654321" as const;
       const reactionEvent = {
-        idx: 2n,
+        idx: 2 as StreamIndex,
         event: {
-          id: "01KGVFRTEST00000000000001",
+          id: "01KGVFRTEST00000000000001" as Ulid,
           $type: "space.roomy.reaction.addReaction.v0" as const,
-          room: roomyRoomId,
-          reactionTo: roomyMessageId,
+          room: roomyRoomId as Ulid,
+          reactionTo: roomyMessageId as Ulid,
           reaction,
         },
-        user: testUserDid,
+        user: testUserDid as UserDid,
       };
 
       // Sync Roomy reaction to Discord (bot adds the reaction)
@@ -184,7 +204,10 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         timeout: 10000,
       });
 
-      expect(reactingUsers, "Discord API did not confirm reaction was added within timeout").not.toBeNull();
+      expect(
+        reactingUsers,
+        "Discord API did not confirm reaction was added within timeout",
+      ).not.toBeNull();
       expect(reactingUsers!.length).toBeGreaterThan(0);
       expect(reactingUsers).toContain(bot.id);
 
@@ -201,9 +224,11 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       expect(echoReactionId).toBeNull();
 
       // Verify: No echo back to Roomy (no new addBridgedReaction events)
-      events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const reactionsAfter = events.filter(
-        (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0"
+        (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0",
       );
 
       expect(reactionsAfter.length).toBe(reactionsBefore.length);
@@ -237,7 +262,8 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create Roomy-origin message
       const testContent = `R-msg for D-react test at ${Date.now()}`;
@@ -254,31 +280,38 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       const roomyMessageId = messageResult.id;
 
       // Sync Roomy message to Discord via webhook
-      await orchestrator.handleRoomyCreateMessage({
-        idx: 1n,
-        event: {
-          id: roomyMessageId,
-          $type: "space.roomy.message.createMessage.v0" as const,
-          room: roomyRoomId,
-          body: {
-            mimeType: "text/plain",
-            data: { buf: new TextEncoder().encode(testContent) },
+      await orchestrator.handleRoomyCreateMessage(
+        {
+          idx: 1 as StreamIndex,
+          event: {
+            id: roomyMessageId,
+            $type: "space.roomy.message.createMessage.v0" as const,
+            room: roomyRoomId as Ulid,
+            body: {
+              mimeType: "text/plain",
+              data: { buf: new TextEncoder().encode(testContent) },
+            },
           },
+          user: testUserDid as UserDid,
         },
-        user: testUserDid,
-      }, bot);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+        bot,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Get the Discord message
-      const discordMessages = await bot.rest.getMessages(firstChannel.id, { limit: 50 });
-      const discordMessage = discordMessages.find(m => m.content === testContent);
+      const discordMessages = await bot.rest.getMessages(firstChannel.id, {
+        limit: 50,
+      });
+      const discordMessage = discordMessages.find(
+        (m) => m.content === testContent,
+      );
       expect(discordMessage).toBeDefined();
 
       // Discord user reacts
       const testEmoji = { name: "🎉" };
       const testUserId = 123456789n;
       const reactionEventId = await orchestrator.handleDiscordReactionAdd(
-        discordMessage!.id,
+        BigInt(discordMessage!.id),
         firstChannel.id,
         testUserId,
         testEmoji,
@@ -286,20 +319,26 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       // Verify: Reaction synced to Roomy
       expect(reactionEventId).toBeDefined();
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const addReactionEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0"
+        (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0",
       );
 
       expect(addReactionEvents.length).toBeGreaterThan(0);
-      const syncedReaction = addReactionEvents.find((e: any) => e.id === reactionEventId);
+      const syncedReaction = addReactionEvents.find(
+        (e: any) => e.id === reactionEventId,
+      );
       expect(syncedReaction?.reactionTo).toBe(roomyMessageId);
       expect(syncedReaction?.reaction).toBe("🎉");
 
       // Verify: No echo (only one reaction)
-      expect(addReactionEvents.filter((e: any) => e.id === reactionEventId).length).toBe(1);
+      expect(
+        addReactionEvents.filter((e: any) => e.id === reactionEventId).length,
+      ).toBe(1);
 
       // Cleanup
       await bot.helpers.deleteMessage(firstChannel.id, discordMessage!.id);
@@ -331,7 +370,8 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       // Create Roomy-origin message
       const testContent = `R-msg for R-react test at ${Date.now()}`;
@@ -348,38 +388,45 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       const roomyMessageId = messageResult.id;
 
       // Sync Roomy message to Discord
-      await orchestrator.handleRoomyCreateMessage({
-        idx: 1n,
-        event: {
-          id: roomyMessageId,
-          $type: "space.roomy.message.createMessage.v0" as const,
-          room: roomyRoomId,
-          body: {
-            mimeType: "text/plain",
-            data: { buf: new TextEncoder().encode(testContent) },
+      await orchestrator.handleRoomyCreateMessage(
+        {
+          idx: 1 as StreamIndex,
+          event: {
+            id: roomyMessageId,
+            $type: "space.roomy.message.createMessage.v0" as const,
+            room: roomyRoomId as Ulid,
+            body: {
+              mimeType: "text/plain",
+              data: { buf: new TextEncoder().encode(testContent) },
+            },
           },
+          user: testUserDid as UserDid,
         },
-        user: testUserDid,
-      }, bot);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+        bot,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Verify Discord message was created
-      const discordMessages = await bot.rest.getMessages(firstChannel.id, { limit: 50 });
-      const discordMessage = discordMessages.find(m => m.content === testContent);
+      const discordMessages = await bot.rest.getMessages(firstChannel.id, {
+        limit: 50,
+      });
+      const discordMessage = discordMessages.find(
+        (m) => m.content === testContent,
+      );
       expect(discordMessage).toBeDefined();
 
       // Simulate Roomy reaction event (user reacts on Roomy)
       const reaction = "😀";
       const reactionEvent = {
-        idx: 2n,
+        idx: 2 as StreamIndex,
         event: {
-          id: "01KGVFRTEST00000000000002",
+          id: "01KGVFRTEST00000000000002" as Ulid,
           $type: "space.roomy.reaction.addReaction.v0" as const,
-          room: roomyRoomId,
-          reactionTo: roomyMessageId,
+          room: roomyRoomId as Ulid,
+          reactionTo: roomyMessageId as Ulid,
           reaction,
         },
-        user: testUserDid,
+        user: testUserDid as UserDid,
       };
 
       // Sync Roomy reaction to Discord (bot adds the reaction)
@@ -388,13 +435,16 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       // Verify: Reaction was actually added to Discord
       const reactingUsers = await waitForBotReactionViaRest({
         bot,
-        messageId: discordMessage!.id,
+        messageId: BigInt(discordMessage!.id),
         channelId: firstChannel.id,
         emoji: reaction,
         timeout: 10000,
       });
 
-      expect(reactingUsers, "Discord API did not confirm reaction was added within timeout").not.toBeNull();
+      expect(
+        reactingUsers,
+        "Discord API did not confirm reaction was added within timeout",
+      ).not.toBeNull();
       expect(reactingUsers!.length).toBeGreaterThan(0);
       expect(reactingUsers).toContain(bot.id);
 
@@ -435,7 +485,8 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       const testContent = `Test message for reaction remove at ${Date.now()}`;
       const testMessage = await bot.helpers.sendMessage(firstChannel.id, {
@@ -443,7 +494,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       });
 
       await orchestrator.handleDiscordMessageCreate(testMessage, roomyRoomId);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       const testEmoji = { name: "😀" };
       const testUserId = 123456789n;
@@ -455,7 +506,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         testEmoji,
       );
       expect(reactionEventId).toBeDefined();
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Remove reaction
       await orchestrator.handleDiscordReactionRemove(
@@ -464,16 +515,20 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         testUserId,
         testEmoji,
       );
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Verify: removeBridgedReaction event exists
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const removeReactionEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.reaction.removeBridgedReaction.v0"
+        (e: any) => e.$type === "space.roomy.reaction.removeBridgedReaction.v0",
       );
 
       expect(removeReactionEvents.length).toBeGreaterThan(0);
-      const removeEvent = removeReactionEvents.find((e: any) => e.reactionId === reactionEventId);
+      const removeEvent = removeReactionEvents.find(
+        (e: any) => e.reactionId === reactionEventId,
+      );
       expect(removeEvent).toBeDefined();
 
       await bot.helpers.deleteMessage(firstChannel.id, testMessage.id);
@@ -491,7 +546,8 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId =
+        await orchestrator.handleDiscordChannelCreate(firstChannel);
 
       const testContent = `Test message for idempotency at ${Date.now()}`;
       const testMessage = await bot.helpers.sendMessage(firstChannel.id, {
@@ -499,7 +555,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       });
 
       await orchestrator.handleDiscordMessageCreate(testMessage, roomyRoomId);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       const testEmoji = { name: "🎉" };
       const testUserId = 123456789n;
@@ -511,7 +567,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         testEmoji,
       );
       expect(reactionId1).toBeDefined();
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Re-sync same reaction
       const reactionId2 = await orchestrator.handleDiscordReactionAdd(
@@ -520,20 +576,28 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         testUserId,
         testEmoji,
       );
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Verify: Same reaction ID (idempotent)
       expect(reactionId1).toBe(reactionId2);
 
-      const events = (await result.connectedSpace.fetchEvents(1, 200)).map((e: any) => e.event);
+      const events = (
+        await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
+      ).map((e: any) => e.event);
       const reactionEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0"
+        (e: any) => e.$type === "space.roomy.reaction.addBridgedReaction.v0",
       );
 
       // Verify: Only one reaction event created
-      expect(reactionEvents.filter((e: any) => e.id === reactionId1).length).toBe(1);
+      expect(
+        reactionEvents.filter((e: any) => e.id === reactionId1).length,
+      ).toBe(1);
 
-      await bot.helpers.deleteOwnReaction(firstChannel.id, testMessage.id, testEmoji.name);
+      await bot.helpers.deleteOwnReaction(
+        firstChannel.id,
+        testMessage.id,
+        testEmoji.name,
+      );
       await bot.helpers.deleteMessage(firstChannel.id, testMessage.id);
     }, 30000);
 

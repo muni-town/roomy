@@ -13,9 +13,16 @@
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
-import { connectGuildToNewSpace, initE2ERoomyClient, getRoomyClient, createQueryHelper, createTestBot, cleanupRoomySyncedChannels } from "../helpers/setup.js";
+import {
+  connectGuildToNewSpace,
+  initE2ERoomyClient,
+  getRoomyClient,
+  createQueryHelper,
+  createTestBot,
+  cleanupRoomySyncedChannels,
+} from "../helpers/setup.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
-import { registeredBridges } from "../../../src/db.js";
+import { registeredBridges } from "../../../src/repositories/db.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
 import {
   assertLobbyExists,
@@ -23,6 +30,7 @@ import {
   assertEventTypeExists,
   assertEventTypeCount,
 } from "../helpers/assertions.js";
+import { StreamIndex } from "@roomy/sdk";
 
 describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
   beforeAll(async () => {
@@ -33,14 +41,21 @@ describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
     // Clean up any channels with Roomy sync marker from previous test runs
     const bot = await createTestBot();
     const deletedCount = await cleanupRoomySyncedChannels(bot, TEST_GUILD_ID);
-    console.log(`Cleaned up ${deletedCount} Roomy-synced channels from previous test runs`);
+    console.log(
+      `Cleaned up ${deletedCount} Roomy-synced channels from previous test runs`,
+    );
 
     // Clear any stale registrations for the test guild
     const existingSpaceId = await registeredBridges.get_spaceId(TEST_GUILD_ID);
     if (existingSpaceId) {
-      console.log(`Clearing stale registration: ${TEST_GUILD_ID} -> ${existingSpaceId}`);
+      console.log(
+        `Clearing stale registration: ${TEST_GUILD_ID} -> ${existingSpaceId}`,
+      );
       try {
-        await registeredBridges.unregister({ guildId: TEST_GUILD_ID, spaceId: existingSpaceId });
+        await registeredBridges.unregister({
+          guildId: TEST_GUILD_ID,
+          spaceId: existingSpaceId,
+        });
       } catch (e) {
         // If unregister fails, clear directly
         await registeredBridges.sublevel.del(`guildId_${TEST_GUILD_ID}`);
@@ -79,8 +94,8 @@ describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
     const existingSpaceId = await registeredBridges.get_spaceId(TEST_GUILD_ID);
     if (existingSpaceId) {
       await registeredBridges.sublevel.batch([
-        { type: 'del', key: `guildId_${TEST_GUILD_ID}` },
-        { type: 'del', key: `spaceId_${existingSpaceId}` },
+        { type: "del", key: `guildId_${TEST_GUILD_ID}` },
+        { type: "del", key: `spaceId_${existingSpaceId}` },
       ]);
       connectedSpaces.delete(existingSpaceId);
     }
@@ -107,7 +122,9 @@ describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
     expect(result.guildContext.spaceId).toBe(result.spaceId);
     expect(result.guildContext.connectedSpace).toBe(result.connectedSpace);
 
-    console.log(`✓ Connected guild ${result.guildId} to space ${result.spaceId}`);
+    console.log(
+      `✓ Connected guild ${result.guildId} to space ${result.spaceId}`,
+    );
   });
 
   it("should have default space structure after connection", async () => {
@@ -122,7 +139,10 @@ describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
 
     // Query all events from the space using ConnectedSpace.fetchEvents
     // Returns { event, user } tuples, so extract just the events
-    const fetchedEvents = await result.connectedSpace.fetchEvents(1, 100);
+    const fetchedEvents = await result.connectedSpace.fetchEvents(
+      1 as StreamIndex,
+      100,
+    );
     const allEvents = fetchedEvents.map((e: any) => e.event);
 
     // Should have exactly 3 events for default structure:
@@ -141,9 +161,7 @@ describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
     expect(lobbyId).toBeDefined();
 
     // Verify sidebar has "general" category with lobby as child
-    assertSidebarStructure(allEvents, [
-      { name: "general", childCount: 1 },
-    ]);
+    assertSidebarStructure(allEvents, [{ name: "general", childCount: 1 }]);
 
     console.log(`✓ Space ${result.spaceId} has correct default structure`);
   });
@@ -163,12 +181,12 @@ describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
 
     // Explicit cleanup between the two calls to work around LevelDB caching
     await registeredBridges.sublevel.batch([
-      { type: 'del', key: `guildId_${TEST_GUILD_ID}` },
-      { type: 'del', key: `spaceId_${firstSpaceId}` },
+      { type: "del", key: `guildId_${TEST_GUILD_ID}` },
+      { type: "del", key: `spaceId_${firstSpaceId}` },
     ]);
     connectedSpaces.delete(firstSpaceId);
     // Small delay to ensure flush
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     // Second connection (should reset)
     const result2 = await connectGuildToNewSpace(
@@ -183,8 +201,12 @@ describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
     expect(firstSpaceId).not.toBe(secondSpaceId);
 
     // Query both spaces using ConnectedSpace.fetchEvents
-    const firstEvents = (await result1.connectedSpace.fetchEvents(1, 100)).map((e: any) => e.event);
-    const secondEvents = (await result2.connectedSpace.fetchEvents(1, 100)).map((e: any) => e.event);
+    const firstEvents = (
+      await result1.connectedSpace.fetchEvents(1 as StreamIndex, 100)
+    ).map((e: any) => e.event);
+    const secondEvents = (
+      await result2.connectedSpace.fetchEvents(1 as StreamIndex, 100)
+    ).map((e: any) => e.event);
 
     // Both should have default structure
     assertLobbyExists(firstEvents);
@@ -193,12 +215,14 @@ describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
     // Verify the guild context points to the NEW space
     expect(result2.guildContext.spaceId).toBe(secondSpaceId);
 
-    console.log(`✓ Reset worked: ${firstSpaceId.slice(0, 8)}... -> ${secondSpaceId.slice(0, 8)}...`);
+    console.log(
+      `✓ Reset worked: ${firstSpaceId.slice(0, 8)}... -> ${secondSpaceId.slice(0, 8)}...`,
+    );
 
     // Explicit cleanup for this test since it creates two spaces
     await registeredBridges.sublevel.batch([
-      { type: 'del', key: `guildId_${TEST_GUILD_ID}` },
-      { type: 'del', key: `spaceId_${secondSpaceId}` },
+      { type: "del", key: `guildId_${TEST_GUILD_ID}` },
+      { type: "del", key: `spaceId_${secondSpaceId}` },
     ]);
     connectedSpaces.delete(secondSpaceId);
   });
@@ -214,13 +238,17 @@ describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
     const spaceId = result1.spaceId;
 
     // Query the space - should still exist
-    const events = (await result1.connectedSpace.fetchEvents(1, 100)).map((e: any) => e.event);
+    const events = (
+      await result1.connectedSpace.fetchEvents(1 as StreamIndex, 100)
+    ).map((e: any) => e.event);
     expect(events.length).toBeGreaterThan(0);
 
     // Verify it still has default structure
     assertLobbyExists(events);
 
-    console.log(`✓ Guild mapping persisted: ${TEST_GUILD_ID} -> ${spaceId.slice(0, 8)}...`);
+    console.log(
+      `✓ Guild mapping persisted: ${TEST_GUILD_ID} -> ${spaceId.slice(0, 8)}...`,
+    );
   });
 
   it("should have correct event counts for default space", async () => {
@@ -233,7 +261,9 @@ describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
       `E2E Event Count Test - ${Date.now()}`,
     );
 
-    const events = (await result.connectedSpace.fetchEvents(1, 100)).map((e: any) => e.event);
+    const events = (
+      await result.connectedSpace.fetchEvents(1 as StreamIndex, 100)
+    ).map((e: any) => e.event);
 
     // Count events by type
     assertEventTypeCount(events, "space.roomy.space.updateSpaceInfo.v0", 1);

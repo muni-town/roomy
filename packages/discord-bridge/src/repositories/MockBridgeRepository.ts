@@ -4,7 +4,7 @@
  */
 
 import type { BridgeRepository } from "./BridgeRepository.js";
-import type { RoomyUserProfile, SyncedEdit } from "../db.js";
+import type { RoomyUserProfile, SyncedEdit } from "./db.js";
 
 /**
  * In-memory mock implementation of BridgeRepository.

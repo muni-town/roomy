@@ -5,12 +5,11 @@ import {
   discordMessageHashesForBridge,
   discordWebhookTokensForBridge,
   roomyUserProfilesForBridge,
-} from "../db.js";
-import { GuildContext } from "../types.js";
+} from "../repositories/db.js";
+import type { BridgeRepository } from "../repositories/index.js";
+import { OrchestratorContext } from "../types.js";
 import { tracer, setDiscordAttrs, recordError } from "../tracing.js";
-import { DISCORD_EXTENSION_KEYS } from "../roomy/subscription.js";
 import { fingerprint } from "../utils/hash.js";
-import { getRoomKey } from "../utils/room.js";
 import { ReactionSyncService } from "../services/ReactionSyncService.js";
 import { LevelDBBridgeRepository } from "../repositories/BridgeRepository.js";
 
@@ -51,145 +50,143 @@ export async function computeDiscordMessageHash(
  */
 export async function backfillDiscordMessages(
   bot: DiscordBot,
-  ctx: GuildContext,
+  ctx: OrchestratorContext,
   channels: bigint[],
 ): Promise<Map<string, Map<string, string>>> {
-  return tracer.startActiveSpan(
-    "backfill.discord_messages",
-    async (span) => {
-      try {
-        setDiscordAttrs(span, { guildId: ctx.guildId });
-        span.setAttribute("discord.channels.count", channels.length);
+  return tracer.startActiveSpan("backfill.discord_messages", async (span) => {
+    try {
+      setDiscordAttrs(span, { guildId: ctx.guildId });
+      span.setAttribute("discord.channels.count", channels.length);
 
-        const hashMap = new Map<string, Map<string, string>>();
-        const webhookTokens = discordWebhookTokensForBridge({
-          discordGuildId: ctx.guildId,
-          roomySpaceId: ctx.spaceId,
-        });
-        const messageHashes = discordMessageHashesForBridge({
-          discordGuildId: ctx.guildId,
-          roomySpaceId: ctx.spaceId,
-        });
+      const hashMap = new Map<string, Map<string, string>>();
+      const webhookTokens = discordWebhookTokensForBridge({
+        discordGuildId: ctx.guildId,
+        roomySpaceId: ctx.spaceId,
+      });
+      const messageHashes = discordMessageHashesForBridge({
+        discordGuildId: ctx.guildId,
+        roomySpaceId: ctx.spaceId,
+      });
 
-        // Get our webhook IDs for this guild's channels
-        const ourWebhookIds = new Set<string>();
-        for (const channelId of channels) {
-          try {
-            const cached = await webhookTokens.get(channelId.toString());
-            if (cached) {
-              const parts = cached.split(":");
-              const webhookId = parts[0];
-              if (webhookId) {
-                ourWebhookIds.add(webhookId);
-              }
+      // Get our webhook IDs for this guild's channels
+      const ourWebhookIds = new Set<string>();
+      for (const channelId of channels) {
+        try {
+          const cached = await webhookTokens.get(channelId.toString());
+          if (cached) {
+            const parts = cached.split(":");
+            const webhookId = parts[0];
+            if (webhookId) {
+              ourWebhookIds.add(webhookId);
             }
-          } catch {
-            // No webhook for this channel
           }
+        } catch {
+          // No webhook for this channel
         }
+      }
 
-        span.setAttribute("discord.webhooks.count", ourWebhookIds.size);
+      span.setAttribute("discord.webhooks.count", ourWebhookIds.size);
 
-        // Backfill messages for each channel
-        for (const channelId of channels) {
-          await tracer.startActiveSpan(
-            "backfill.channel_messages",
-            async (channelSpan) => {
-              try {
-                setDiscordAttrs(channelSpan, { channelId });
-                const channelHashes = new Map<string, string>();
-                let messageCount = 0;
-                let webhookNonceCount = 0;
-                let humanMessageCount = 0;
+      // Backfill messages for each channel
+      for (const channelId of channels) {
+        await tracer.startActiveSpan(
+          "backfill.channel_messages",
+          async (channelSpan) => {
+            try {
+              setDiscordAttrs(channelSpan, { channelId });
+              const channelHashes = new Map<string, string>();
+              let messageCount = 0;
+              let webhookNonceCount = 0;
+              let humanMessageCount = 0;
 
-                // Fetch messages with pagination (oldest first)
-                let before: bigint | undefined;
-                while (true) {
-                  const messages = await bot.helpers.getMessages(channelId, {
-                    before,
-                    limit: 100,
-                  });
+              // Fetch messages with pagination (oldest first)
+              let before: bigint | undefined;
+              while (true) {
+                const messages = await bot.helpers.getMessages(channelId, {
+                  before,
+                  limit: 100,
+                });
 
-                  if (messages.length === 0) break;
+                if (messages.length === 0) break;
 
-                  // Process oldest first (API returns newest first)
-                  const sortedMessages = [...messages].reverse();
-                  for (const message of sortedMessages) {
-                    const messageIdStr = message.id.toString();
+                // Process oldest first (API returns newest first)
+                const sortedMessages = [...messages].reverse();
+                for (const message of sortedMessages) {
+                  const messageIdStr = message.id.toString();
 
-                    // Check if message is from our webhook
+                  // Check if message is from our webhook
+                  if (
+                    message.webhookId &&
+                    ourWebhookIds.has(message.webhookId.toString())
+                  ) {
+                    // Webhook message - extract nonce (truncated ULID)
+                    // Nonce format: truncated Roomy event ULID (25 chars)
+                    const nonce = (message as any).nonce;
                     if (
-                      message.webhookId &&
-                      ourWebhookIds.has(message.webhookId.toString())
+                      nonce &&
+                      typeof nonce === "string" &&
+                      nonce.length <= 25
                     ) {
-                      // Webhook message - extract nonce (truncated ULID)
-                      // Nonce format: truncated Roomy event ULID (25 chars)
-                      const nonce = (message as any).nonce;
-                      if (nonce && typeof nonce === "string" && nonce.length <= 25) {
-                        // Store ULID → Discord ID mapping
-                        await ctx.syncedIds.register({
-                          discordId: nonce,
-                          roomyId: messageIdStr,
-                        });
-                        webhookNonceCount++;
+                      // Store ULID → Discord ID mapping
+                      await ctx.repo.registerMapping(nonce, messageIdStr);
+                      webhookNonceCount++;
 
-                        // Also compute hash with nonce prefix for deduplication
-                        const hash = await computeDiscordMessageHash(message);
-                        const key = `${nonce}:${hash}`;
-                        channelHashes.set(key, messageIdStr);
-                      }
-                    } else {
-                      // Human message - compute hash with empty prefix
+                      // Also compute hash with nonce prefix for deduplication
                       const hash = await computeDiscordMessageHash(message);
-                      const key = `:${hash}`; // Empty prefix for human messages
+                      const key = `${nonce}:${hash}`;
                       channelHashes.set(key, messageIdStr);
-                      humanMessageCount++;
                     }
-
-                    messageCount++;
-                    before = message.id;
+                  } else {
+                    // Human message - compute hash with empty prefix
+                    const hash = await computeDiscordMessageHash(message);
+                    const key = `:${hash}`; // Empty prefix for human messages
+                    channelHashes.set(key, messageIdStr);
+                    humanMessageCount++;
                   }
 
-                  channelSpan.setAttribute(
-                    "discord.messages.count",
-                    messageCount,
-                  );
+                  messageCount++;
+                  before = message.id;
                 }
 
-                // Store channel hashes in database
-                const allHashes: Record<string, string> = {};
-                for (const [key, messageId] of channelHashes) {
-                  allHashes[key] = messageId;
-                }
-                await messageHashes.put("hashes", allHashes);
-
-                hashMap.set(channelId.toString(), channelHashes);
-
-                console.log(
-                  `Backfilled ${messageCount} messages for channel ${channelId}: ` +
-                    `${webhookNonceCount} webhook nonces, ${humanMessageCount} human messages`,
+                channelSpan.setAttribute(
+                  "discord.messages.count",
+                  messageCount,
                 );
-                channelSpan.setAttribute("sync.result", "success");
-              } catch (error) {
-                recordError(channelSpan, error);
-                throw error;
-              } finally {
-                channelSpan.end();
               }
-            },
-          );
-        }
 
-        span.setAttribute("sync.result", "success");
-        return hashMap;
-      } catch (error) {
-        recordError(span, error);
-        throw error;
-      } finally {
-        span.end();
+              // Store channel hashes in database
+              const allHashes: Record<string, string> = {};
+              for (const [key, messageId] of channelHashes) {
+                allHashes[key] = messageId;
+              }
+              await messageHashes.put("hashes", allHashes);
+
+              hashMap.set(channelId.toString(), channelHashes);
+
+              console.log(
+                `Backfilled ${messageCount} messages for channel ${channelId}: ` +
+                  `${webhookNonceCount} webhook nonces, ${humanMessageCount} human messages`,
+              );
+              channelSpan.setAttribute("sync.result", "success");
+            } catch (error) {
+              recordError(channelSpan, error);
+              throw error;
+            } finally {
+              channelSpan.end();
+            }
+          },
+        );
       }
-    },
-  );
+
+      span.setAttribute("sync.result", "success");
+      return hashMap;
+    } catch (error) {
+      recordError(span, error);
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
 }
 
 /**
@@ -204,151 +201,136 @@ export async function backfillDiscordMessages(
  */
 export async function backfillDiscordReactions(
   bot: DiscordBot,
-  ctx: GuildContext,
+  ctx: OrchestratorContext,
   channelId: bigint,
 ): Promise<void> {
-  return tracer.startActiveSpan(
-    "backfill.discord_reactions",
-    async (span) => {
-      try {
-        setDiscordAttrs(span, { guildId: ctx.guildId, channelId });
+  return tracer.startActiveSpan("backfill.discord_reactions", async (span) => {
+    try {
+      setDiscordAttrs(span, { guildId: ctx.guildId, channelId });
 
-        let reactionCount = 0;
-        let messageCount = 0;
+      let reactionCount = 0;
+      let messageCount = 0;
 
-        // Create the additional stores needed by LevelDBBridgeRepository
-        const roomyUserProfiles = roomyUserProfilesForBridge({
-          discordGuildId: ctx.guildId,
-          roomySpaceId: ctx.spaceId,
+      // Use the repo from OrchestratorContext
+      const repo = ctx.repo;
+
+      // Create ReactionSyncService
+      const reactionSync = new ReactionSyncService(
+        repo,
+        ctx.connectedSpace,
+        ctx.guildId,
+        ctx.spaceId,
+        bot.id, // Pass bot ID for echo prevention
+      );
+
+      // Fetch messages with pagination to get their reactions
+      let before: bigint | undefined;
+      while (true) {
+        const messages = await bot.helpers.getMessages(channelId, {
+          before,
+          limit: 100,
         });
 
-        const discordWebhookTokens = discordWebhookTokensForBridge({
-          discordGuildId: ctx.guildId,
-          roomySpaceId: ctx.spaceId,
-        });
+        if (messages.length === 0) break;
 
-        // Create the repository wrapper
-        const repo = new LevelDBBridgeRepository({
-          syncedIds: ctx.syncedIds,
-          syncedProfiles: ctx.syncedProfiles,
-          roomyUserProfiles,
-          syncedReactions: ctx.syncedReactions,
-          syncedSidebarHash: ctx.syncedSidebarHash,
-          syncedRoomLinks: ctx.syncedRoomLinks,
-          syncedEdits: ctx.syncedEdits,
-          discordWebhookTokens,
-          discordMessageHashes: ctx.discordMessageHashes,
-          discordLatestMessage: ctx.latestMessagesInChannel,
-        });
+        messageCount += messages.length;
 
-        // Create ReactionSyncService
-        const reactionSync = new ReactionSyncService(
-          repo,
-          ctx.connectedSpace,
-          ctx.guildId,
-          ctx.spaceId,
-          bot.id, // Pass bot ID for echo prevention
-        );
-
-        // Fetch messages with pagination to get their reactions
-        let before: bigint | undefined;
-        while (true) {
-          const messages = await bot.helpers.getMessages(channelId, {
-            before,
-            limit: 100,
-          });
-
-          if (messages.length === 0) break;
-
-          messageCount += messages.length;
-
-          // Process each message's reactions
-          for (const message of messages) {
-            // REST API populates the reactions property
-            const reactions = (message as unknown as { reactions?: unknown[] }).reactions;
-            if (!reactions || reactions.length === 0) {
-              continue;
-            }
-
-            // For each reaction type, fetch the users who reacted
-            for (const reaction of reactions) {
-              if (!reaction || typeof reaction !== 'object') continue;
-
-              const emoji = (reaction as { emoji?: Partial<Emoji> }).emoji;
-              if (!emoji) continue;
-
-              const count = (reaction as { count?: number }).count || 1;
-
-              // Fetch all users who reacted with this emoji (with pagination)
-              let after: string | undefined;
-              let hasMore = true;
-
-              while (hasMore) {
-                // Build emoji string for API call
-                // Unicode emoji: just use the string
-                // Custom emoji: Discord uses format "name:id"
-                let emojiString = emoji.name || "";
-                if (emoji.id) {
-                  emojiString = `${emoji.name}:${emoji.id}`;
-                }
-
-                // Fetch users who reacted (max 100 per request)
-                const users = await bot.helpers.getReactions(
-                  channelId,
-                  message.id,
-                  emojiString,
-                  { after, limit: 100 },
-                );
-
-                if (users.length === 0) {
-                  hasMore = false;
-                  break;
-                }
-
-                // Sync each user's reaction to Roomy
-                for (const user of users) {
-                  const reactionEventId = await reactionSync.syncAddToRoomy(
-                    message.id,
-                    channelId,
-                    user.id,
-                    emoji,
-                  );
-
-                  if (reactionEventId) {
-                    reactionCount++;
-                  }
-                }
-
-                // Check if there are more users to fetch
-                if (users.length < 100) {
-                  hasMore = false;
-                } else {
-                  // Set cursor to last user's ID for next page
-                  after = users[users.length - 1]?.id.toString();
-                }
-              }
-            }
-
-            // Update cursor for message pagination
-            before = message.id;
+        // Process each message's reactions
+        for (const message of messages) {
+          // REST API populates the reactions property
+          const reactions = (message as unknown as { reactions?: unknown[] })
+            .reactions;
+          if (!reactions || reactions.length === 0) {
+            continue;
           }
 
-          // Check if we've fetched all messages
-          if (messages.length < 100) break;
+          // For each reaction type, fetch the users who reacted
+          for (const reaction of reactions) {
+            if (!reaction || typeof reaction !== "object") continue;
+
+            const emoji = (reaction as { emoji?: Partial<Emoji> }).emoji;
+            if (!emoji) continue;
+
+            const count = (reaction as { count?: number }).count || 1;
+
+            // Fetch all users who reacted with this emoji (with pagination)
+            let after: string | undefined;
+            let hasMore = true;
+
+            while (hasMore) {
+              // Build emoji string for API call
+              // Unicode emoji: just use the string
+              // Custom emoji: Discord uses format "name:id"
+              let emojiString = emoji.name || "";
+              if (emoji.id) {
+                emojiString = `${emoji.name}:${emoji.id}`;
+              }
+
+              // Fetch users who reacted (max 100 per request)
+              const options: { limit: number; after?: string } = { limit: 100 };
+              if (after) {
+                options.after = after;
+              }
+              const users = await bot.helpers.getReactions(
+                channelId,
+                message.id,
+                emojiString,
+                options as any,
+              );
+
+              if (users.length === 0) {
+                hasMore = false;
+                break;
+              }
+
+              // Sync each user's reaction to Roomy
+              for (const user of users) {
+                const reactionEventId = await reactionSync.syncAddToRoomy(
+                  message.id,
+                  channelId,
+                  user.id,
+                  emoji,
+                );
+
+                if (reactionEventId) {
+                  reactionCount++;
+                }
+              }
+
+              // Check if there are more users to fetch
+              if (users.length < 100) {
+                hasMore = false;
+              } else {
+                // Set cursor to last user's ID for next page
+                after = users[users.length - 1]?.id?.toString();
+              }
+            }
+          }
+
+          // Update cursor for message pagination
+          before = message.id;
         }
 
-        console.log(`Backfilled ${reactionCount} reactions from ${messageCount} messages on channel ${channelId}`);
-        span.setAttribute("sync.result", "success");
-        span.setAttribute("reaction.count", reactionCount);
-        span.setAttribute("message.count", messageCount);
-      } catch (error) {
-        recordError(span, error);
-        console.error(`Error backfilling reactions for channel ${channelId}:`, error);
-        // Don't throw - reactions are optional
-        span.setAttribute("sync.result", "partial");
-      } finally {
-        span.end();
+        // Check if we've fetched all messages
+        if (messages.length < 100) break;
       }
-    },
-  );
+
+      console.log(
+        `Backfilled ${reactionCount} reactions from ${messageCount} messages on channel ${channelId}`,
+      );
+      span.setAttribute("sync.result", "success");
+      span.setAttribute("reaction.count", reactionCount);
+      span.setAttribute("message.count", messageCount);
+    } catch (error) {
+      recordError(span, error);
+      console.error(
+        `Error backfilling reactions for channel ${channelId}:`,
+        error,
+      );
+      // Don't throw - reactions are optional
+      span.setAttribute("sync.result", "partial");
+    } finally {
+      span.end();
+    }
+  });
 }

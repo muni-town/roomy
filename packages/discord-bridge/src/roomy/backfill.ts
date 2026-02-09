@@ -6,11 +6,15 @@
 import type { DecodedStreamEvent, Event, Did } from "@roomy/sdk";
 import { StreamIndex, getProfile } from "@roomy/sdk";
 import type { DiscordBot } from "../discord/types.js";
-import { registeredBridges, roomyUserProfilesForBridge } from "../db.js";
-import { GuildContext } from "../types.js";
-import { tracer, setDiscordAttrs, setRoomyAttrs, recordError } from "../tracing.js";
+import { registeredBridges } from "../repositories/db.js";
+import { OrchestratorContext } from "../types.js";
+import {
+  tracer,
+  setDiscordAttrs,
+  setRoomyAttrs,
+  recordError,
+} from "../tracing.js";
 import { DISCORD_EXTENSION_KEYS } from "./subscription.js";
-import { getRoomKey } from "../utils/room.js";
 import { decodeMessageBody } from "../utils/message.js";
 import {
   backfillDiscordMessages,
@@ -33,70 +37,68 @@ import { getRoomyClient } from "./client.js";
  * @returns Array of Roomy-origin events
  */
 export async function fetchRoomyOriginEvents(
-  ctx: GuildContext,
+  ctx: OrchestratorContext,
   start: StreamIndex = 1 as StreamIndex,
   limit: number = 2500,
 ): Promise<DecodedStreamEvent[]> {
-  return tracer.startActiveSpan(
-    "fetch.roomy_origin_events",
-    async (span) => {
-      try {
-        setRoomyAttrs(span, { spaceId: ctx.spaceId });
-        span.setAttribute("stream.start", start);
-        span.setAttribute("stream.limit", limit);
+  return tracer.startActiveSpan("fetch.roomy_origin_events", async (span) => {
+    try {
+      setRoomyAttrs(span, { spaceId: ctx.spaceId });
+      span.setAttribute("stream.start", start);
+      span.setAttribute("stream.limit", limit);
 
-        // Fetch all events from the space
-        const events = await ctx.connectedSpace.fetchEvents(start, limit);
+      // Fetch all events from the space
+      const events = await ctx.connectedSpace.fetchEvents(start, limit);
 
-        // Filter out Discord-origin events
-        const roomyOriginEvents = events.filter(({ event }) => {
-          const extensions = (event as { extensions?: Record<string, unknown> }).extensions;
-          // Check for Discord message origin extension
-          if (extensions?.[DISCORD_EXTENSION_KEYS.MESSAGE_ORIGIN]) {
-            return false;
-          }
+      // Filter out Discord-origin events
+      const roomyOriginEvents = events.filter(({ event }) => {
+        const extensions = (event as { extensions?: Record<string, unknown> })
+          .extensions;
+        // Check for Discord message origin extension
+        if (extensions?.[DISCORD_EXTENSION_KEYS.MESSAGE_ORIGIN]) {
+          return false;
+        }
 
-          // Check for Discord room origin extension
-          if (extensions?.[DISCORD_EXTENSION_KEYS.ROOM_ORIGIN]) {
-            return false;
-          }
+        // Check for Discord room origin extension
+        if (extensions?.[DISCORD_EXTENSION_KEYS.ROOM_ORIGIN]) {
+          return false;
+        }
 
-          // Check for Discord user origin extension
-          if (extensions?.[DISCORD_EXTENSION_KEYS.USER_ORIGIN]) {
-            return false;
-          }
+        // Check for Discord user origin extension
+        if (extensions?.[DISCORD_EXTENSION_KEYS.USER_ORIGIN]) {
+          return false;
+        }
 
-          // Check for Discord sidebar origin extension
-          if (extensions?.[DISCORD_EXTENSION_KEYS.SIDEBAR_ORIGIN]) {
-            return false;
-          }
+        // Check for Discord sidebar origin extension
+        if (extensions?.[DISCORD_EXTENSION_KEYS.SIDEBAR_ORIGIN]) {
+          return false;
+        }
 
-          // Check for Discord room link origin extension
-          if (extensions?.[DISCORD_EXTENSION_KEYS.ROOM_LINK_ORIGIN]) {
-            return false;
-          }
+        // Check for Discord room link origin extension
+        if (extensions?.[DISCORD_EXTENSION_KEYS.ROOM_LINK_ORIGIN]) {
+          return false;
+        }
 
-          // Check for Discord reaction origin extension
-          if (extensions?.[DISCORD_EXTENSION_KEYS.REACTION_ORIGIN]) {
-            return false;
-          }
+        // Check for Discord reaction origin extension
+        if (extensions?.[DISCORD_EXTENSION_KEYS.REACTION_ORIGIN]) {
+          return false;
+        }
 
-          return true;
-        });
+        return true;
+      });
 
-        span.setAttribute("sync.result", "success");
-        span.setAttribute("events.total", events.length);
-        span.setAttribute("events.roomy_origin", roomyOriginEvents.length);
+      span.setAttribute("sync.result", "success");
+      span.setAttribute("events.total", events.length);
+      span.setAttribute("events.roomy_origin", roomyOriginEvents.length);
 
-        return roomyOriginEvents;
-      } catch (error) {
-        recordError(span, error);
-        throw error;
-      } finally {
-        span.end();
-      }
-    },
-  );
+      return roomyOriginEvents;
+    } catch (error) {
+      recordError(span, error);
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
 }
 
 /**
@@ -115,7 +117,7 @@ export async function fetchRoomyOriginEvents(
  * @param discordHashes - Discord message hashes for duplicate detection (channelId → {hash → messageId})
  */
 export async function syncRoomyToDiscord(
-  ctx: GuildContext,
+  ctx: OrchestratorContext,
   bot: DiscordBot,
   roomyEvents: DecodedStreamEvent[],
   discordHashes: Map<string, Map<string, string>>,
@@ -153,7 +155,7 @@ export async function syncRoomyToDiscord(
                   return;
                 }
 
-                const discordId = await ctx.syncedIds.get_roomyId(roomyRoomId);
+                const discordId = await ctx.repo.getRoomyId(roomyRoomId);
                 if (!discordId) {
                   eventSpan.setAttribute(
                     "sync.result",
@@ -173,19 +175,25 @@ export async function syncRoomyToDiscord(
                 const nonce = event.id.slice(0, 25);
 
                 // Phase 2: Check if already synced
-                const existingDiscordId = await ctx.syncedIds.get_roomyId(
-                  nonce,
-                );
+                const existingDiscordId =
+                  await ctx.repo.getRoomyId(nonce);
                 if (existingDiscordId) {
-                  eventSpan.setAttribute("sync.result", "skipped_already_synced");
+                  eventSpan.setAttribute(
+                    "sync.result",
+                    "skipped_already_synced",
+                  );
                   skippedCount++;
                   return;
                 }
 
                 // Phase 3: Compute hash for duplicate detection
                 const content = decodeMessageBody(event);
-                const extensions = (event as { extensions?: Record<string, unknown> }).extensions || {};
-                const attachmentsExt = extensions["space.roomy.extension.attachments.v0"] as { attachments?: unknown[] } | undefined;
+                const extensions =
+                  (event as { extensions?: Record<string, unknown> })
+                    .extensions || {};
+                const attachmentsExt = extensions[
+                  "space.roomy.extension.attachments.v0"
+                ] as { attachments?: unknown[] } | undefined;
                 const attachments = attachmentsExt?.attachments || [];
 
                 // Create a simple object for hash computation (type hack for computeDiscordMessageHash)
@@ -204,10 +212,7 @@ export async function syncRoomyToDiscord(
                   const existingMessageId = channelHashes.get(lookupKey);
                   if (existingMessageId) {
                     // Content already exists on Discord - register mapping and skip
-                    await ctx.syncedIds.register({
-                      discordId: nonce,
-                      roomyId: existingMessageId,
-                    });
+                    await ctx.repo.registerMapping(nonce, existingMessageId);
                     eventSpan.setAttribute("sync.result", "skipped_duplicate");
                     duplicateCount++;
                     return;
@@ -219,7 +224,13 @@ export async function syncRoomyToDiscord(
                   "webhook.get_or_create",
                   async (webhookSpan) => {
                     try {
-                      return await getOrCreateWebhook(bot, ctx.guildId, ctx.spaceId, channelId);
+                      return await getOrCreateWebhook(
+                        bot,
+                        ctx.guildId,
+                        ctx.spaceId,
+                        channelId,
+                        ctx.repo,
+                      );
                     } catch (error) {
                       recordError(webhookSpan, error);
                       throw error;
@@ -231,7 +242,9 @@ export async function syncRoomyToDiscord(
 
                 // Extract author info for puppeting
                 // For bridged messages, use authorOverride.did; for pure Roomy messages, use event.user
-                const authorOverride = extensions["space.roomy.extension.authorOverride.v0"] as { did?: string } | undefined;
+                const authorOverride = extensions[
+                  "space.roomy.extension.authorOverride.v0"
+                ] as { did?: string } | undefined;
                 const authorDid = authorOverride?.did || user;
 
                 // Get username/avatar from DID
@@ -245,18 +258,17 @@ export async function syncRoomyToDiscord(
                   // Could fetch user info from Discord API here for avatar
                 } else {
                   // It's a Roomy user - try to get their profile from cache first
-                  const roomyProfiles = roomyUserProfilesForBridge({
-                    discordGuildId: ctx.guildId,
-                    roomySpaceId: ctx.spaceId,
-                  });
                   try {
-                    let profile = await roomyProfiles.get(authorDid);
+                    let profile = await ctx.repo.getRoomyUserProfile(authorDid);
                     if (!profile) {
                       // Profile not in cache - fetch from ATProto
                       try {
                         const roomyClient = getRoomyClient();
                         // Cast authorDid to Did type (branded string)
-                        const atpProfile = await getProfile(roomyClient.agent, authorDid as Did);
+                        const atpProfile = await getProfile(
+                          roomyClient.agent,
+                          authorDid as Did,
+                        );
                         if (atpProfile) {
                           profile = {
                             name: atpProfile.displayName || atpProfile.handle,
@@ -264,7 +276,7 @@ export async function syncRoomyToDiscord(
                             handle: atpProfile.handle,
                           };
                           // Cache the profile
-                          await roomyProfiles.put(authorDid, profile);
+                          await ctx.repo.setRoomyUserProfile(authorDid, profile);
                         }
                       } catch {
                         // Profile not found - use defaults
@@ -311,12 +323,13 @@ export async function syncRoomyToDiscord(
                         error?.code === 404 ||
                         (error as any)?.metadata?.code === 404
                       ) {
-                        await clearWebhookCache(ctx.guildId, ctx.spaceId, channelId);
+                        await clearWebhookCache(channelId, ctx.repo);
                         const newWebhook = await getOrCreateWebhook(
                           bot,
                           ctx.guildId,
                           ctx.spaceId,
                           channelId,
+                          ctx.repo,
                         );
                         return await executeWebhookWithRetry(
                           bot,
@@ -334,24 +347,27 @@ export async function syncRoomyToDiscord(
 
                 if (result) {
                   // Register the Discord snowflake → Roomy ULID mapping (for reaction sync)
-                  await ctx.syncedIds.register({
-                    discordId: result.id.toString(),
-                    roomyId: event.id,
-                  });
+                  await ctx.repo.registerMapping(result.id.toString(), event.id);
 
                   // Also register the truncated nonce mapping (for idempotency check)
-                  await ctx.syncedIds.register({
-                    discordId: nonce,
-                    roomyId: result.id.toString(),
-                  });
+                  await ctx.repo.registerMapping(nonce, result.id.toString());
 
-                  console.log(`[Backfill Webhook] Synced Roomy message ${event.id} to Discord ${result.id}`);
-                  console.log(`[Backfill Webhook Registration] Registered mapping: discordId=${result.id} → roomyId=${event.id}`);
+                  console.log(
+                    `[Backfill Webhook] Synced Roomy message ${event.id} to Discord ${result.id}`,
+                  );
+                  console.log(
+                    `[Backfill Webhook Registration] Registered mapping: discordId=${result.id} → roomyId=${event.id}`,
+                  );
                   syncedCount++;
                   eventSpan.setAttribute("sync.result", "success");
-                  eventSpan.setAttribute("discord.message.id", result.id.toString());
+                  eventSpan.setAttribute(
+                    "discord.message.id",
+                    result.id.toString(),
+                  );
                 } else {
-                  console.error(`[Backfill Webhook] No result from webhook execution for event ${event.id}`);
+                  console.error(
+                    `[Backfill Webhook] No result from webhook execution for event ${event.id}`,
+                  );
                 }
               } catch (error) {
                 recordError(eventSpan, error);
@@ -393,7 +409,7 @@ export async function syncRoomyToDiscord(
  * @param bot - Discord bot instance
  */
 async function backfillRoomyStructureToDiscord(
-  ctx: GuildContext,
+  ctx: OrchestratorContext,
   bot: DiscordBot,
 ): Promise<void> {
   return tracer.startActiveSpan("backfill.roomy_structure", async (span) => {
@@ -404,11 +420,13 @@ async function backfillRoomyStructureToDiscord(
       // Get the current sidebar from Roomy
       const allEvents = await ctx.connectedSpace.fetchEvents(1 as any, 1000);
       const sidebarEvents = allEvents.filter(
-        ({ event }) => event.$type === "space.roomy.space.updateSidebar.v0"
+        ({ event }) => event.$type === "space.roomy.space.updateSidebar.v0",
       );
 
       if (sidebarEvents.length === 0) {
-        console.log("No sidebar events found, skipping Roomy structure backfill");
+        console.log(
+          "No sidebar events found, skipping Roomy structure backfill",
+        );
         span.setAttribute("sync.result", "skipped_no_sidebar");
         span.end();
         return;
@@ -417,7 +435,9 @@ async function backfillRoomyStructureToDiscord(
       // Get the latest sidebar
       const latestSidebarEvent = sidebarEvents[sidebarEvents.length - 1];
       if (!latestSidebarEvent) {
-        console.log("No valid sidebar event found, skipping Roomy structure backfill");
+        console.log(
+          "No valid sidebar event found, skipping Roomy structure backfill",
+        );
         span.setAttribute("sync.result", "skipped_no_valid_sidebar");
         span.end();
         return;
@@ -427,14 +447,12 @@ async function backfillRoomyStructureToDiscord(
         categories: Array<{ name: string; children: string[] }>;
       };
 
-      console.log(`Found sidebar with ${latestSidebar.categories.length} categories`);
-
-      // Get orchestrator to handle Roomy → Discord structure sync
-      const { createOrchestratorFromContext } = await import("../repositories/index.js");
-      const orchestrator = await createOrchestratorFromContext(ctx, bot);
+      console.log(
+        `Found sidebar with ${latestSidebar.categories.length} categories`,
+      );
 
       // Trigger sidebar sync (creates Discord channels for Roomy rooms)
-      await orchestrator.handleRoomyUpdateSidebar(
+      await ctx.orchestrator.handleRoomyUpdateSidebar(
         latestSidebarEvent as any,
         bot,
       );
@@ -496,62 +514,59 @@ export async function backfillRoomyToDiscord(bot: DiscordBot): Promise<void> {
         const guildId = BigInt(bridge.guildId);
         const spaceId = bridge.spaceId;
 
-        await tracer.startActiveSpan(
-          "backfill.bridge",
-          async (bridgeSpan) => {
-            try {
-              setDiscordAttrs(bridgeSpan, { guildId });
-              setRoomyAttrs(bridgeSpan, { spaceId });
+        await tracer.startActiveSpan("backfill.bridge", async (bridgeSpan) => {
+          try {
+            setDiscordAttrs(bridgeSpan, { guildId });
+            setRoomyAttrs(bridgeSpan, { spaceId });
 
-              // Get guild context
-              const { getGuildContext } = await import("../discord/bot.js");
-              const ctx = await getGuildContext(guildId);
-              if (!ctx) {
-                console.warn(`No context for guild ${guildId}, skipping`);
-                return;
-              }
-
-              // Phase 0: Backfill Roomy structure (rooms → Discord channels)
-              bridgeSpan.setAttribute("sync.phase", "0_backfill_structure");
-              await backfillRoomyStructureToDiscord(ctx, bot);
-
-              // Get all Discord channels for this guild
-              const channels = await bot.helpers.getChannels(guildId);
-              const textChannels = channels
-                .filter((c) => c.type === 0) // GuildText
-                .map((c) => c.id);
-
-              // Phase 1: Fetch Roomy-origin events
-              bridgeSpan.setAttribute("sync.phase", "1_fetch_roomy_events");
-              const roomyEvents = await fetchRoomyOriginEvents(ctx);
-              console.log(
-                `Fetched ${roomyEvents.length} Roomy-origin events for space ${spaceId}`,
-              );
-
-              // Phase 2: Backfill Discord messages for hash computation
-              bridgeSpan.setAttribute("sync.phase", "2_backfill_discord");
-              const discordHashes = await backfillDiscordMessages(
-                bot,
-                ctx,
-                textChannels,
-              );
-              console.log(
-                `Backfilled Discord messages for ${textChannels.length} channels`,
-              );
-
-              // Phase 3: Sync Roomy events to Discord
-              bridgeSpan.setAttribute("sync.phase", "3_sync_to_discord");
-              await syncRoomyToDiscord(ctx, bot, roomyEvents, discordHashes);
-
-              bridgeSpan.setAttribute("sync.result", "success");
-            } catch (error) {
-              recordError(bridgeSpan, error);
-              throw error;
-            } finally {
-              bridgeSpan.end();
+            // Get guild context
+            const { getGuildContext } = await import("../discord/bot.js");
+            const ctx = await getGuildContext(guildId);
+            if (!ctx) {
+              console.warn(`No context for guild ${guildId}, skipping`);
+              return;
             }
-          },
-        );
+
+            // Phase 0: Backfill Roomy structure (rooms → Discord channels)
+            bridgeSpan.setAttribute("sync.phase", "0_backfill_structure");
+            await backfillRoomyStructureToDiscord(ctx, bot);
+
+            // Get all Discord channels for this guild
+            const channels = await bot.helpers.getChannels(guildId);
+            const textChannels = channels
+              .filter((c) => c.type === 0) // GuildText
+              .map((c) => c.id);
+
+            // Phase 1: Fetch Roomy-origin events
+            bridgeSpan.setAttribute("sync.phase", "1_fetch_roomy_events");
+            const roomyEvents = await fetchRoomyOriginEvents(ctx);
+            console.log(
+              `Fetched ${roomyEvents.length} Roomy-origin events for space ${spaceId}`,
+            );
+
+            // Phase 2: Backfill Discord messages for hash computation
+            bridgeSpan.setAttribute("sync.phase", "2_backfill_discord");
+            const discordHashes = await backfillDiscordMessages(
+              bot,
+              ctx,
+              textChannels,
+            );
+            console.log(
+              `Backfilled Discord messages for ${textChannels.length} channels`,
+            );
+
+            // Phase 3: Sync Roomy events to Discord
+            bridgeSpan.setAttribute("sync.phase", "3_sync_to_discord");
+            await syncRoomyToDiscord(ctx, bot, roomyEvents, discordHashes);
+
+            bridgeSpan.setAttribute("sync.result", "success");
+          } catch (error) {
+            recordError(bridgeSpan, error);
+            throw error;
+          } finally {
+            bridgeSpan.end();
+          }
+        });
       }
 
       span.setAttribute("sync.result", "success");

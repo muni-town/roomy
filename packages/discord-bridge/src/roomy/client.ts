@@ -21,7 +21,7 @@ import {
   STREAM_HANDLE_NSID,
   STREAM_NSID,
 } from "../env.js";
-import { registeredBridges } from "../db.js";
+import { registeredBridges } from "../repositories/db.js";
 import {
   createSpaceSubscriptionHandler,
   getLastProcessedIdx,

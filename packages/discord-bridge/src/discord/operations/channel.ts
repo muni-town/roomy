@@ -1,6 +1,6 @@
 /**
  * Channel operations for Discord.
- * High-level functions for creating and managing channels and threads.
+ * High-level functions for creating and fetching channels.
  */
 
 import type { DiscordBot } from "../types.js";
@@ -95,72 +95,6 @@ export async function createChannel(
 }
 
 /**
- * Options for creating a thread.
- */
-export interface CreateThreadOptions {
-  /** Discord channel ID to create thread in */
-  channelId: bigint;
-  /** Thread name */
-  name: string;
-  /** Message ID to create thread from (optional) */
-  messageId?: bigint;
-}
-
-/**
- * Result of creating a thread.
- */
-export interface CreateThreadResult {
-  /** Discord thread snowflake */
-  id: bigint;
-}
-
-/**
- * Create a thread in a channel.
- *
- * @param bot - Discord bot instance
- * @param options - Thread creation options
- * @returns The created thread ID
- *
- * @example
- * ```ts
- * // Create a public thread from a message
- * const result = await createThread(bot, {
- *   channelId: 123456789n,
- *   name: "Thread name",
- *   messageId: 987654321n,
- * });
- * ```
- */
-export async function createThread(
-  bot: DiscordBot,
-  options: CreateThreadOptions,
-): Promise<CreateThreadResult> {
-  if (options.messageId) {
-    // Create thread from message
-    const thread = await bot.helpers.startThreadWithMessage(
-      options.channelId,
-      options.messageId,
-      {
-        name: options.name,
-        autoArchiveDuration: 1440, // 7 days in minutes
-      },
-    );
-    return { id: thread.id };
-  } else {
-    // Create thread without message
-    const thread = await bot.helpers.startThreadWithoutMessage(
-      options.channelId,
-      {
-        name: options.name,
-        autoArchiveDuration: 1440, // 7 days in minutes
-        type: 11, // PUBLIC_THREAD
-      },
-    );
-    return { id: thread.id };
-  }
-}
-
-/**
  * Options for fetching a channel.
  */
 export interface FetchChannelOptions {
@@ -210,61 +144,4 @@ export async function fetchChannel(
     lastMessageId: channel.lastMessageId || null,
     topic: channel.topic ?? null,
   };
-}
-
-/**
- * Options for deleting a channel.
- */
-export interface DeleteChannelOptions {
-  /** Discord channel ID */
-  channelId: bigint;
-}
-
-/**
- * Result of deleting a channel.
- */
-export interface DeleteChannelResult {
-  /** Whether the deletion was successful */
-  success: boolean;
-}
-
-/**
- * Delete a Discord channel.
- *
- * @param bot - Discord bot instance
- * @param options - Channel deletion options
- * @returns Success status
- *
- * @example
- * ```ts
- * const result = await deleteChannel(bot, {
- *   channelId: 123456789n,
- * });
- * ```
- */
-export async function deleteChannel(
-  bot: DiscordBot,
-  options: DeleteChannelOptions,
-): Promise<DeleteChannelResult> {
-  console.log('[deleteChannel] Deleting Discord channel:', {
-    channelId: options.channelId.toString(),
-  });
-
-  try {
-    await bot.helpers.deleteChannel(options.channelId);
-
-    console.log('[deleteChannel] Successfully deleted Discord channel:', {
-      channelId: options.channelId.toString(),
-    });
-
-    return { success: true };
-  } catch (error) {
-    console.error('[deleteChannel] Failed to delete Discord channel:', {
-      channelId: options.channelId.toString(),
-      error: error instanceof Error ? error.message : String(error),
-      errorStack: error instanceof Error ? error.stack : undefined,
-      fullError: error,
-    });
-    throw error;
-  }
 }

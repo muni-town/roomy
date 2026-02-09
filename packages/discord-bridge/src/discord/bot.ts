@@ -34,13 +34,15 @@ import {
   syncedSidebarHashForBridge,
   syncedEditsForBridge,
   discordMessageHashesForBridge,
-} from "../db.js";
-import { GuildContext } from "../types.js";
+  roomyUserProfilesForBridge,
+} from "../repositories/db.js";
+import { OrchestratorContext } from "../types.js";
 import { getConnectedSpace } from "../roomy/client.js";
 import { getRoomKey } from "../utils/room.js";
 import { EventBatcher } from "../roomy/batcher.js";
 import { backfillRoomyToDiscord } from "../roomy/backfill.js";
-import { createOrchestratorFromContext } from "../repositories/index.js";
+import { createSyncOrchestrator } from "../services/SyncOrchestrator.js";
+import { LevelDBBridgeRepository } from "../repositories/BridgeRepository.js";
 
 export const botState = {
   appId: undefined as undefined | string,
@@ -52,23 +54,14 @@ export async function hasBridge(guildId: bigint): Promise<boolean> {
 }
 
 /**
- * getGuildContext provides context for several Discord event handlers,
- * specifically 'ready' (in backfill), 'channelCreate', 'threadCreate'
- * and 'messageCreate'.
+ * getGuildContext provides context for Discord event handlers.
  *
- * For a given guildId, it provides the Roomy space ID, the corresponding user
- * IDs in Roomy for each Discord ID (maybe redundant), the list of users in each
- * space and their roles, and a handle to the persisted store of latest messages
- * for each channel.
- *
+ * Creates an orchestrator and provides cursor tracking for backfill.
  * Returns undefined if the guild is not bridged or the space is not connected.
- *
- * we may want to implement some caching since Jazz was handling that
- *
  */
 export async function getGuildContext(
   guildId: bigint,
-): Promise<GuildContext | undefined> {
+): Promise<OrchestratorContext | undefined> {
   const spaceId = await registeredBridges.get_guildId(guildId.toString());
   if (!spaceId) {
     console.warn(`Discord guild ${guildId} doesn't have Roomy space bridged`);
@@ -81,19 +74,8 @@ export async function getGuildContext(
     return undefined;
   }
 
+  // Create repository for this guild-space pair
   const syncedIds = syncedIdsForBridge({
-    discordGuildId: guildId,
-    roomySpaceId: spaceId,
-  });
-  const latestMessagesInChannel = discordLatestMessageInChannelForBridge({
-    roomySpaceId: spaceId,
-    discordGuildId: guildId,
-  });
-  const syncedReactions = syncedReactionsForBridge({
-    discordGuildId: guildId,
-    roomySpaceId: spaceId,
-  });
-  const syncedRoomLinks = syncedRoomLinksForBridge({
     discordGuildId: guildId,
     roomySpaceId: spaceId,
   });
@@ -101,7 +83,15 @@ export async function getGuildContext(
     discordGuildId: guildId,
     roomySpaceId: spaceId,
   });
+  const syncedReactions = syncedReactionsForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
   const syncedSidebarHash = syncedSidebarHashForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  const syncedRoomLinks = syncedRoomLinksForBridge({
     discordGuildId: guildId,
     roomySpaceId: spaceId,
   });
@@ -109,22 +99,52 @@ export async function getGuildContext(
     discordGuildId: guildId,
     roomySpaceId: spaceId,
   });
+  const discordWebhookTokens = discordWebhookTokensForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
   const discordMessageHashes = discordMessageHashesForBridge({
     discordGuildId: guildId,
     roomySpaceId: spaceId,
   });
-  return {
+  const roomyUserProfiles = roomyUserProfilesForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  const latestMessagesInChannel = discordLatestMessageInChannelForBridge({
+    roomySpaceId: spaceId,
+    discordGuildId: guildId,
+  });
+
+  const repo = new LevelDBBridgeRepository({
+    syncedIds,
+    syncedProfiles,
+    roomyUserProfiles,
+    syncedReactions,
+    syncedSidebarHash,
+    syncedRoomLinks,
+    syncedEdits,
+    discordWebhookTokens,
+    discordMessageHashes,
+    discordLatestMessage: latestMessagesInChannel,
+  });
+
+  // Create orchestrator
+  const orchestrator = createSyncOrchestrator({
+    repo,
+    connectedSpace,
     guildId,
     spaceId,
-    syncedIds,
+    bot: botState.bot,
+  });
+
+  return {
+    orchestrator,
+    repo,
     latestMessagesInChannel,
-    syncedReactions,
-    syncedRoomLinks,
-    syncedProfiles,
-    syncedSidebarHash,
-    syncedEdits,
-    discordMessageHashes,
     connectedSpace,
+    guildId,
+    spaceId,
   };
 }
 
@@ -212,8 +232,7 @@ export async function startBot() {
             console.error(`Thread ${channel.name} has no parent channel`);
             return;
           }
-          const orchestrator = createOrchestratorFromContext(ctx, bot);
-          await orchestrator.handleDiscordThreadCreate(channel, channel.parentId);
+          await ctx.orchestrator.handleDiscordThreadCreate(channel, channel.parentId);
           console.log(
             `Successfully created Roomy thread for Discord thread ${channel.name}`,
           );
@@ -244,7 +263,7 @@ export async function startBot() {
 
         const ctx = await getGuildContext(guildId);
         if (!ctx) return;
-        const roomyRoomId = await ctx.syncedIds.get_discordId(
+        const roomyRoomId = await ctx.repo.getDiscordId(
           getRoomKey(channelId),
         );
 
@@ -255,8 +274,7 @@ export async function startBot() {
           return;
         }
 
-        const orchestrator = createOrchestratorFromContext(ctx, bot);
-        await orchestrator.handleDiscordMessageCreate(message, roomyRoomId);
+        await ctx.orchestrator.handleDiscordMessageCreate(message, roomyRoomId);
         await ctx.latestMessagesInChannel.put(
           channelId.toString(),
           message.id.toString(),
@@ -271,9 +289,8 @@ export async function startBot() {
 
         const ctx = await getGuildContext(payload.guildId);
         if (!ctx) return;
-        const orchestrator = createOrchestratorFromContext(ctx, bot);
         console.log(`[Discord] Reaction add: msg=${payload.messageId} user=${payload.userId} emoji=${payload.emoji.name}`);
-        await orchestrator.handleDiscordReactionAdd(
+        await ctx.orchestrator.handleDiscordReactionAdd(
           payload.messageId,
           payload.channelId,
           payload.userId,
@@ -289,8 +306,7 @@ export async function startBot() {
 
         const ctx = await getGuildContext(payload.guildId);
         if (!ctx) return;
-        const orchestrator = createOrchestratorFromContext(ctx, bot);
-        await orchestrator.handleDiscordReactionRemove(
+        await ctx.orchestrator.handleDiscordReactionRemove(
           payload.messageId,
           payload.channelId,
           payload.userId,
@@ -312,9 +328,8 @@ export async function startBot() {
         const ctx = await getGuildContext(message.guildId);
         if (!ctx) return;
 
-        const orchestrator = createOrchestratorFromContext(ctx, bot);
         // syncEditToRoomy will skip messages not in syncedIds (including bot messages)
-        await orchestrator.handleDiscordMessageUpdate(message);
+        await ctx.orchestrator.handleDiscordMessageUpdate(message);
       },
     },
   });
@@ -327,10 +342,10 @@ export let doneBackfillingFromDiscord = false;
 
 async function backfillMessagesForChannel(
   bot: DiscordBot,
-  ctx: GuildContext,
+  ctx: OrchestratorContext,
   channel: DiscordChannel,
 ): Promise<void> {
-  const roomyRoomId = await ctx.syncedIds.get_discordId(getRoomKey(channel.id));
+  const roomyRoomId = await ctx.repo.getDiscordId(getRoomKey(channel.id));
   if (!roomyRoomId) {
     console.warn(`Channel ${channel.id} not synced, skipping message backfill`);
     return;
@@ -346,7 +361,6 @@ async function backfillMessagesForChannel(
 
   // Use event batcher to send events in batches of 100
   const batcher = new EventBatcher(ctx.connectedSpace);
-  const orchestrator = createOrchestratorFromContext(ctx, bot);
 
   while (true) {
     try {
@@ -364,7 +378,7 @@ async function backfillMessagesForChannel(
       // Process oldest first (messages come newest-first from API)
       const sortedMessages = [...messages].reverse();
       for (const message of sortedMessages) {
-        await orchestrator.handleDiscordMessageCreate(message, roomyRoomId, batcher);
+        await ctx.orchestrator.handleDiscordMessageCreate(message, roomyRoomId, batcher);
         after = message.id;
       }
 
@@ -463,17 +477,15 @@ export async function backfillGuild(bot: DiscordBot, guildId: bigint) {
         activeThreads.length + archivedThreads.length,
       );
 
-      const orchestrator = createOrchestratorFromContext(ctx, bot);
-
       // Build a set of channel IDs we're going to sync (GuildText only)
       const channelIdSet = new Set(textChannels.map((c) => c.id.toString()));
 
       for (const channel of textChannels) {
         try {
-          await orchestrator.handleDiscordChannelCreate(channel);
+          await ctx.orchestrator.handleDiscordChannelCreate(channel);
           // Verify the mapping was registered
           const roomKey = `room:${channel.id.toString()}`;
-          const roomyId = await ctx.syncedIds.get_discordId(roomKey);
+          const roomyId = await ctx.repo.getDiscordId(roomKey);
           if (roomyId) {
             console.log(`Channel ${channel.name || channel.id} synced successfully as ${roomyId}`);
           } else {
@@ -501,7 +513,7 @@ export async function backfillGuild(bot: DiscordBot, guildId: bigint) {
         }
 
         // Verify parent was actually successfully synced in repo
-        const parentRoomyId = await ctx.syncedIds.get_discordId(`room:${parentIdStr}`);
+        const parentRoomyId = await ctx.repo.getDiscordId(`room:${parentIdStr}`);
         if (!parentRoomyId) {
           console.warn(
             `Thread ${thread.name || thread.id} has parent ${parentIdStr} which wasn't successfully synced (check earlier errors), skipping`,
@@ -510,14 +522,14 @@ export async function backfillGuild(bot: DiscordBot, guildId: bigint) {
         }
 
         try {
-          await orchestrator.handleDiscordThreadCreate(thread, thread.parentId);
+          await ctx.orchestrator.handleDiscordThreadCreate(thread, thread.parentId);
         } catch (e) {
           console.error(`Failed to sync thread ${thread.name || thread.id}:`, e);
           // Continue with other threads
         }
       }
 
-      await orchestrator.handleDiscordSidebarUpdate(textChannels, categories);
+      await ctx.orchestrator.handleDiscordSidebarUpdate(textChannels, categories);
 
       // Backfill messages for all channels in parallel (with concurrency limit)
       const CONCURRENCY_LIMIT = 5;
