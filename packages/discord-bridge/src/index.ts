@@ -1,3 +1,5 @@
+// WebSocket polyfill MUST be imported first (before Discordeno)
+import "./discord/websocket-polyfill.js";
 import "./httpProxy.js";
 import "./otel.js";
 import "dotenv/config";

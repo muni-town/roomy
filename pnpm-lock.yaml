@@ -450,6 +450,9 @@ importers:
       vitest:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      ws:
+        specifier: ^8.19.0
+        version: 8.19.0
 
   packages/sdk:
     dependencies:
@@ -4991,8 +4994,8 @@ packages:
       utf-8-validate:
         optional: true
 
-  ws@8.18.3:
-    resolution: {integrity: sha512-PEIGCY5tSlUt50cqyMXfCzX+oOPqN0vuGqWzbcJ2xvnkzkq46oOpz7dQaTDBdfICb4N14+GARUDw2XV2N4tvzg==}
+  ws@8.19.0:
+    resolution: {integrity: sha512-blAT2mjOEIi0ZzruJfIhb3nps74PRWTCz1IjglWEEpQl5XS/UNama6u2/rjFkDDouqr4L67ry+1aGIALViWjDg==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -5383,7 +5386,7 @@ snapshots:
     dependencies:
       '@discordeno/types': 21.0.0
       '@discordeno/utils': 21.0.0
-      ws: 8.18.3
+      ws: 8.19.0
     optionalDependencies:
       fzstd: 0.1.1
     transitivePeerDependencies:
@@ -5426,7 +5429,7 @@ snapshots:
       effect: 3.16.13
       mime: 3.0.0
       undici: 6.21.3
-      ws: 8.18.3
+      ws: 8.19.0
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -7177,7 +7180,7 @@ snapshots:
       std-env: 3.9.0
       test-exclude: 7.0.1
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@24.8.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -7268,7 +7271,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 1.2.0
-      vitest: 2.1.9(@types/node@24.8.1)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
+      vitest: 2.1.9(@types/node@22.19.5)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
 
   '@vitest/utils@2.1.9':
     dependencies:
@@ -8205,7 +8208,7 @@ snapshots:
       cojson-transport-ws: 0.15.10
       effect: 3.16.13
       jazz-tools: 0.15.10(@tiptap/pm@2.26.1)(csstype@3.1.3)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.38.10)
-      ws: 8.18.3
+      ws: 8.19.0
     transitivePeerDependencies:
       - '@bam.tech/react-native-image-resizer'
       - '@effect/platform'
@@ -9712,7 +9715,7 @@ snapshots:
 
   ws@8.17.1: {}
 
-  ws@8.18.3: {}
+  ws@8.19.0: {}
 
   xmlhttprequest-ssl@2.1.2: {}
 
