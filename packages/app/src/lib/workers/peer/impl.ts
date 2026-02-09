@@ -17,12 +17,8 @@ import {
   type PeerClientInterface,
   type AuthStatus,
   type RoomyStatus,
-  statusMachine,
   roomyStateTrackable as roomyStateTrackable,
   authStateTrackable,
-  type StatusMachine,
-  stateMachine,
-  type StateMachine,
 } from "./types";
 import type {
   Savepoint,
@@ -31,7 +27,6 @@ import type {
 } from "../sqlite/types";
 import {
   ConnectedSpace,
-  Deferred,
   Did,
   ensureEntity,
   modules,
@@ -42,6 +37,10 @@ import {
   type EncodedStreamEvent,
   type EventCallback,
   type Profile,
+  statusMachine,
+  type StatusMachine,
+  stateMachine,
+  type StateMachine,
 } from "@roomy/sdk";
 import {
   AsyncChannel,
