@@ -1,4 +1,223 @@
+import { StreamDid } from "@roomy/sdk";
+import {
+  BridgeRepository,
+  RoomyUserProfile,
+  SyncedEdit,
+} from "./BridgeRepository.js";
 import { ClassicLevel } from "classic-level";
+
+/**
+ * Implementation of BridgeRepository using real LevelDB stores.
+ * This wraps the existing GuildContext stores in the repository interface.
+ */
+export class LevelDBBridgeRepository implements BridgeRepository {
+  constructor(
+    private readonly stores: {
+      syncedIds: BidirectionalSublevelMap<"discordId", "roomyId">;
+      syncedProfiles: SyncedProfiles;
+      roomyUserProfiles: RoomyUserProfiles;
+      syncedReactions: SyncedReactions;
+      syncedSidebarHash: SyncedSidebarHash;
+      syncedRoomLinks: SyncedRoomLinks;
+      syncedEdits: SyncedEdits;
+      discordWebhookTokens: WebhookTokens;
+      discordMessageHashes: DiscordMessageHashes;
+      discordLatestMessage: LatestMessages;
+    },
+  ) {}
+
+  // === ID Mapping ===
+
+  async getRoomyId(discordId: string): Promise<string | undefined> {
+    /** WARNING: this looks wrong but is actually correct.
+     * The naming is short for 'get the value with key prefixed by `discordId`.
+     */
+    return this.stores.syncedIds.get_discordId(discordId);
+  }
+
+  async getDiscordId(roomyId: string): Promise<string | undefined> {
+    /** WARNING: See above. */
+    return this.stores.syncedIds.get_roomyId(roomyId);
+  }
+
+  async registerMapping(discordId: string, roomyId: string): Promise<void> {
+    return this.stores.syncedIds.register({ discordId, roomyId });
+  }
+
+  async unregisterMapping(discordId: string, roomyId: string): Promise<void> {
+    return this.stores.syncedIds.unregister({ discordId, roomyId });
+  }
+
+  async listMappings(): Promise<Array<{ discordId: string; roomyId: string }>> {
+    return this.stores.syncedIds.list();
+  }
+
+  async clearMappings(): Promise<void> {
+    return this.stores.syncedIds.clear();
+  }
+
+  // === Profile Sync ===
+
+  async getProfileHash(userId: string): Promise<string | undefined> {
+    return this.stores.syncedProfiles.get(userId);
+  }
+
+  async setProfileHash(userId: string, hash: string): Promise<void> {
+    return this.stores.syncedProfiles.put(userId, hash);
+  }
+
+  async getRoomyUserProfile(
+    did: string,
+  ): Promise<RoomyUserProfile | undefined> {
+    return this.stores.roomyUserProfiles.get(did);
+  }
+
+  async setRoomyUserProfile(
+    did: string,
+    profile: RoomyUserProfile,
+  ): Promise<void> {
+    return this.stores.roomyUserProfiles.put(did, profile);
+  }
+
+  // === Reactions ===
+
+  async getReaction(key: string): Promise<string | undefined> {
+    return this.stores.syncedReactions.get(key);
+  }
+
+  async setReaction(key: string, reactionEventId: string): Promise<void> {
+    return this.stores.syncedReactions.put(key, reactionEventId);
+  }
+
+  async deleteReaction(key: string): Promise<void> {
+    return this.stores.syncedReactions.del(key);
+  }
+
+  // === Sidebar ===
+
+  async getSidebarHash(): Promise<string | undefined> {
+    return this.stores.syncedSidebarHash.get("sidebar");
+  }
+
+  async setSidebarHash(hash: string): Promise<void> {
+    return this.stores.syncedSidebarHash.put("sidebar", hash);
+  }
+
+  // === Room Links ===
+
+  async getRoomLink(key: string): Promise<string | undefined> {
+    return this.stores.syncedRoomLinks.get(key);
+  }
+
+  async setRoomLink(key: string, linkEventId: string): Promise<void> {
+    return this.stores.syncedRoomLinks.put(key, linkEventId);
+  }
+
+  // === Message Edits ===
+
+  async getEditInfo(messageId: string): Promise<SyncedEdit | undefined> {
+    return this.stores.syncedEdits.get(messageId);
+  }
+
+  async setEditInfo(messageId: string, editInfo: SyncedEdit): Promise<void> {
+    return this.stores.syncedEdits.put(messageId, editInfo);
+  }
+
+  // === Webhooks ===
+
+  async getWebhookToken(channelId: string): Promise<string | undefined> {
+    return this.stores.discordWebhookTokens.get(channelId);
+  }
+
+  async setWebhookToken(channelId: string, token: string): Promise<void> {
+    return this.stores.discordWebhookTokens.put(channelId, token);
+  }
+
+  async deleteWebhookToken(channelId: string): Promise<void> {
+    return this.stores.discordWebhookTokens.del(channelId);
+  }
+
+  // === Message Hashes ===
+
+  async getMessageHashes(): Promise<Record<string, string>> {
+    const hashes = await this.stores.discordMessageHashes.get("hashes");
+    return hashes || {};
+  }
+
+  async setMessageHashes(hashes: Record<string, string>): Promise<void> {
+    return this.stores.discordMessageHashes.put("hashes", hashes);
+  }
+
+  // === Latest Messages ===
+
+  async getLatestMessage(channelId: string): Promise<string | undefined> {
+    return this.stores.discordLatestMessage.get(channelId);
+  }
+
+  async setLatestMessage(channelId: string, messageId: string): Promise<void> {
+    return this.stores.discordLatestMessage.put(channelId, messageId);
+  }
+}
+
+export function getRepo(guildId: bigint, spaceId: StreamDid) {
+  // Create repository for this guild-space pair
+  const syncedIds = syncedIdsForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  const syncedProfiles = syncedProfilesForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  const syncedReactions = syncedReactionsForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  const syncedSidebarHash = syncedSidebarHashForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  const syncedRoomLinks = syncedRoomLinksForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  const syncedEdits = syncedEditsForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  const discordWebhookTokens = discordWebhookTokensForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  const discordMessageHashes = discordMessageHashesForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  const roomyUserProfiles = roomyUserProfilesForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
+  const latestMessagesInChannel = discordLatestMessageInChannelForBridge({
+    roomySpaceId: spaceId,
+    discordGuildId: guildId,
+  });
+
+  return {
+    repo: new LevelDBBridgeRepository({
+      syncedIds,
+      syncedProfiles,
+      roomyUserProfiles,
+      syncedReactions,
+      syncedSidebarHash,
+      syncedRoomLinks,
+      syncedEdits,
+      discordWebhookTokens,
+      discordMessageHashes,
+      discordLatestMessage: latestMessagesInChannel,
+    }),
+    latestMessagesInChannel,
+  };
+}
 
 const db = new ClassicLevel(process.env.DATA_DIR || "./data", {
   keyEncoding: "utf8",
@@ -208,6 +427,8 @@ export const discordWebhookTokensForBridge = ({
     `discordWebhookTokens:${discordGuildId.toString()}:${roomySpaceId}`,
   );
 
+export type WebhookTokens = ReturnType<typeof discordWebhookTokensForBridge>;
+
 export type SyncedIds = ReturnType<typeof syncedIdsForBridge>;
 
 /** 2-way Map of IDs between Discord and Roomy.
@@ -274,29 +495,18 @@ function createBridgeStoreFactory<TValue = string>(
  * Key: Discord user snowflake
  * Value: profile hash (for change detection)
  */
-export const syncedProfilesForBridge = createBridgeStoreFactory("syncedProfiles");
+export const syncedProfilesForBridge =
+  createBridgeStoreFactory("syncedProfiles");
 
 export type SyncedProfiles = ReturnType<typeof syncedProfilesForBridge>;
-
-/**
- * Roomy user profile data.
- * Stored when we see an updateProfile event from Roomy users.
- */
-export interface RoomyUserProfile {
-  name: string;
-  avatar: string | null;
-  handle?: string;
-}
 
 /**
  * Per-space Roomy user profile cache.
  * Key: Roomy user DID
  * Value: User profile data (name, avatar, handle)
  */
-export const roomyUserProfilesForBridge = createBridgeStoreFactory<RoomyUserProfile>(
-  "roomyUserProfiles",
-  "json"
-);
+export const roomyUserProfilesForBridge =
+  createBridgeStoreFactory<RoomyUserProfile>("roomyUserProfiles", "json");
 
 export type RoomyUserProfiles = ReturnType<typeof roomyUserProfilesForBridge>;
 
@@ -305,7 +515,8 @@ export type RoomyUserProfiles = ReturnType<typeof roomyUserProfilesForBridge>;
  * Key: `${discordMessageId}:${discordUserId}:${emojiKey}` where emojiKey is emoji name or id
  * Value: Roomy reaction event ID (used for removal)
  */
-export const syncedReactionsForBridge = createBridgeStoreFactory("syncedReactions");
+export const syncedReactionsForBridge =
+  createBridgeStoreFactory("syncedReactions");
 
 export type SyncedReactions = ReturnType<typeof syncedReactionsForBridge>;
 
@@ -324,18 +535,14 @@ export type SyncedSidebarHash = ReturnType<typeof syncedSidebarHashForBridge>;
  * Key: `${parentRoomyId}:${childRoomyId}` (parent→child link)
  * Value: Roomy link event ID
  */
-export const syncedRoomLinksForBridge = createBridgeStoreFactory("syncedRoomLinks");
+export const syncedRoomLinksForBridge =
+  createBridgeStoreFactory("syncedRoomLinks");
 
 export type SyncedRoomLinks = ReturnType<typeof syncedRoomLinksForBridge>;
 
-export type SyncedEdit = {
-  editedTimestamp: number;
-  contentHash: string;
-};
-
 export const syncedEditsForBridge = createBridgeStoreFactory<SyncedEdit>(
   "syncedEdits",
-  "json"
+  "json",
 );
 
 export type SyncedEdits = ReturnType<typeof syncedEditsForBridge>;
@@ -350,4 +557,6 @@ export const discordMessageHashesForBridge = createBridgeStoreFactory<
   Record<string, string>
 >("discordMessageHashes", "json");
 
-export type DiscordMessageHashes = ReturnType<typeof discordMessageHashesForBridge>;
+export type DiscordMessageHashes = ReturnType<
+  typeof discordMessageHashesForBridge
+>;

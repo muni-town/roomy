@@ -26,6 +26,7 @@ import {
   clearWebhookCache,
 } from "../discord/webhooks.js";
 import { getRoomyClient } from "./client.js";
+import { Bridge } from "../services/Bridge.js";
 
 /**
  * Fetch Roomy-origin events (skip Discord-origin events).
@@ -175,8 +176,7 @@ export async function syncRoomyToDiscord(
                 const nonce = event.id.slice(0, 25);
 
                 // Phase 2: Check if already synced
-                const existingDiscordId =
-                  await ctx.repo.getRoomyId(nonce);
+                const existingDiscordId = await ctx.repo.getRoomyId(nonce);
                 if (existingDiscordId) {
                   eventSpan.setAttribute(
                     "sync.result",
@@ -276,7 +276,10 @@ export async function syncRoomyToDiscord(
                             handle: atpProfile.handle,
                           };
                           // Cache the profile
-                          await ctx.repo.setRoomyUserProfile(authorDid, profile);
+                          await ctx.repo.setRoomyUserProfile(
+                            authorDid,
+                            profile,
+                          );
                         }
                       } catch {
                         // Profile not found - use defaults
@@ -347,7 +350,10 @@ export async function syncRoomyToDiscord(
 
                 if (result) {
                   // Register the Discord snowflake → Roomy ULID mapping (for reaction sync)
-                  await ctx.repo.registerMapping(result.id.toString(), event.id);
+                  await ctx.repo.registerMapping(
+                    result.id.toString(),
+                    event.id,
+                  );
 
                   // Also register the truncated nonce mapping (for idempotency check)
                   await ctx.repo.registerMapping(nonce, result.id.toString());
@@ -418,7 +424,10 @@ async function backfillRoomyStructureToDiscord(
       setRoomyAttrs(span, { spaceId: ctx.spaceId });
 
       // Get the current sidebar from Roomy
-      const allEvents = await ctx.connectedSpace.fetchEvents(1 as any, 1000);
+      const allEvents: Event[] = await ctx.connectedSpace.fetchEvents(
+        1 as any,
+        1000,
+      );
       const sidebarEvents = allEvents.filter(
         ({ event }) => event.$type === "space.roomy.space.updateSidebar.v0",
       );
@@ -481,13 +490,54 @@ async function backfillRoomyStructureToDiscord(
  * @param bot - Discord bot instance
  */
 export async function backfillRoomyToDiscordForGuild(
-  orchestrator: any,
+  ctx: OrchestratorContext,
   bot: DiscordBot,
 ): Promise<void> {
-  // For now, delegate to the global backfill which handles all registered bridges
-  // In the test environment, only the test bridge is registered
-  // TODO: Refactor to work with a specific guild context extracted from orchestrator
-  return backfillRoomyToDiscord(bot);
+  return await tracer.startActiveSpan("backfill.bridge", async (bridgeSpan) => {
+    try {
+      setDiscordAttrs(bridgeSpan, { guildId: ctx.guildId });
+      setRoomyAttrs(bridgeSpan, { spaceId: ctx.spaceId });
+
+      // Phase 0: Backfill Roomy structure (rooms → Discord channels)
+      bridgeSpan.setAttribute("sync.phase", "0_backfill_structure");
+      await backfillRoomyStructureToDiscord(ctx, bot);
+
+      // Get all Discord channels for this guild
+      const channels = await bot.helpers.getChannels(ctx.guildId);
+      const textChannels = channels
+        .filter((c) => c.type === 0) // GuildText
+        .map((c) => c.id);
+
+      // Phase 1: Fetch Roomy-origin events
+      bridgeSpan.setAttribute("sync.phase", "1_fetch_roomy_events");
+      const roomyEvents = await fetchRoomyOriginEvents(ctx);
+      console.log(
+        `Fetched ${roomyEvents.length} Roomy-origin events for space ${ctx.spaceId}`,
+      );
+
+      // Phase 2: Backfill Discord messages for hash computation
+      bridgeSpan.setAttribute("sync.phase", "2_backfill_discord");
+      const discordHashes = await backfillDiscordMessages(
+        bot,
+        ctx,
+        textChannels,
+      );
+      console.log(
+        `Backfilled Discord messages for ${textChannels.length} channels`,
+      );
+
+      // Phase 3: Sync Roomy events to Discord
+      bridgeSpan.setAttribute("sync.phase", "3_sync_to_discord");
+      await syncRoomyToDiscord(ctx, bot, roomyEvents, discordHashes);
+
+      bridgeSpan.setAttribute("sync.result", "success");
+    } catch (error) {
+      recordError(bridgeSpan, error);
+      throw error;
+    } finally {
+      bridgeSpan.end();
+    }
+  });
 }
 
 /**
@@ -514,59 +564,15 @@ export async function backfillRoomyToDiscord(bot: DiscordBot): Promise<void> {
         const guildId = BigInt(bridge.guildId);
         const spaceId = bridge.spaceId;
 
-        await tracer.startActiveSpan("backfill.bridge", async (bridgeSpan) => {
-          try {
-            setDiscordAttrs(bridgeSpan, { guildId });
-            setRoomyAttrs(bridgeSpan, { spaceId });
+        // Get guild context
+        const { getGuildContext } = await import("../discord/bot.js");
+        const ctx = await getGuildContext(guildId);
+        if (!ctx) {
+          console.warn(`No context for guild ${guildId}, skipping`);
+          return;
+        }
 
-            // Get guild context
-            const { getGuildContext } = await import("../discord/bot.js");
-            const ctx = await getGuildContext(guildId);
-            if (!ctx) {
-              console.warn(`No context for guild ${guildId}, skipping`);
-              return;
-            }
-
-            // Phase 0: Backfill Roomy structure (rooms → Discord channels)
-            bridgeSpan.setAttribute("sync.phase", "0_backfill_structure");
-            await backfillRoomyStructureToDiscord(ctx, bot);
-
-            // Get all Discord channels for this guild
-            const channels = await bot.helpers.getChannels(guildId);
-            const textChannels = channels
-              .filter((c) => c.type === 0) // GuildText
-              .map((c) => c.id);
-
-            // Phase 1: Fetch Roomy-origin events
-            bridgeSpan.setAttribute("sync.phase", "1_fetch_roomy_events");
-            const roomyEvents = await fetchRoomyOriginEvents(ctx);
-            console.log(
-              `Fetched ${roomyEvents.length} Roomy-origin events for space ${spaceId}`,
-            );
-
-            // Phase 2: Backfill Discord messages for hash computation
-            bridgeSpan.setAttribute("sync.phase", "2_backfill_discord");
-            const discordHashes = await backfillDiscordMessages(
-              bot,
-              ctx,
-              textChannels,
-            );
-            console.log(
-              `Backfilled Discord messages for ${textChannels.length} channels`,
-            );
-
-            // Phase 3: Sync Roomy events to Discord
-            bridgeSpan.setAttribute("sync.phase", "3_sync_to_discord");
-            await syncRoomyToDiscord(ctx, bot, roomyEvents, discordHashes);
-
-            bridgeSpan.setAttribute("sync.result", "success");
-          } catch (error) {
-            recordError(bridgeSpan, error);
-            throw error;
-          } finally {
-            bridgeSpan.end();
-          }
-        });
+        return await backfillRoomyToDiscordForGuild(ctx, bot);
       }
 
       span.setAttribute("sync.result", "success");

@@ -8,24 +8,82 @@
 import type { BridgeRepository } from "../repositories/index.js";
 import type { ConnectedSpace } from "@roomy/sdk";
 import type { DecodedStreamEvent, Ulid } from "@roomy/sdk";
-import type { DiscordBot, MessageProperties, ChannelProperties } from "../discord/types.js";
+import type {
+  DiscordBot,
+  MessageProperties,
+  ChannelProperties,
+} from "../discord/types.js";
 import type { Emoji } from "@discordeno/bot";
 import { MessageSyncService, type EventBatcher } from "./MessageSyncService.js";
 import { ReactionSyncService } from "./ReactionSyncService.js";
 import { ProfileSyncService, type DiscordUser } from "./ProfileSyncService.js";
 import { StructureSyncService } from "./StructureSyncService.js";
 
+type BridgeState =
+  | {
+      state: "backfillRoomy";
+    }
+  | {
+      state: "backfillDiscord";
+    }
+  | {
+      state: "listening";
+    };
+
 /**
- * Top-level coordinator for all sync operations.
+ * Coordinator for sync operations for a specific guild-space pair.
  * Delegates to domain-specific services.
+ * Manages backfill then can handle incoming Discord and Roomy events.
  */
-export class SyncOrchestrator {
-  constructor(
-    private readonly messageSync: MessageSyncService,
-    private readonly reactionSync: ReactionSyncService,
-    private readonly profileSync: ProfileSyncService,
-    private readonly structureSync: StructureSyncService,
-  ) {}
+export class Bridge {
+  state: BridgeState;
+  messageSync: MessageSyncService;
+  reactionSync: ReactionSyncService;
+  profileSync: ProfileSyncService;
+  structureSync: StructureSyncService;
+
+  constructor(options: {
+    repo: BridgeRepository;
+    connectedSpace: ConnectedSpace;
+    guildId: bigint;
+    spaceId: string;
+    bot?: DiscordBot;
+  }) {
+    const { repo, connectedSpace, guildId, spaceId, bot } = options;
+
+    // Create services (order matters for dependencies)
+    this.profileSync = new ProfileSyncService(
+      repo,
+      connectedSpace,
+      guildId,
+      spaceId,
+    );
+    const botId = bot?.id; // Extract bot ID for reaction echo prevention
+    this.reactionSync = new ReactionSyncService(
+      repo,
+      connectedSpace,
+      guildId,
+      spaceId,
+      botId,
+    );
+    this.structureSync = new StructureSyncService(
+      repo,
+      connectedSpace,
+      guildId,
+      spaceId,
+      bot,
+    );
+    this.messageSync = new MessageSyncService(
+      repo,
+      connectedSpace,
+      guildId,
+      spaceId,
+      this.profileSync,
+      bot,
+    );
+
+    this.state = { state: "backfillRoomy" };
+  }
 
   // ============================================================
   // DISCORD event handlers
@@ -40,7 +98,11 @@ export class SyncOrchestrator {
     roomyRoomId: string,
     batcher?: EventBatcher,
   ): Promise<string | null> {
-    return await this.messageSync.syncDiscordToRoomy(roomyRoomId, message, batcher);
+    return await this.messageSync.syncDiscordToRoomy(
+      roomyRoomId,
+      message,
+      batcher,
+    );
   }
 
   /**
@@ -56,7 +118,10 @@ export class SyncOrchestrator {
    * Handle Discord message deletion.
    * Delegates to MessageSyncService.
    */
-  async handleDiscordMessageDelete(messageId: bigint, channelId: bigint): Promise<void> {
+  async handleDiscordMessageDelete(
+    messageId: bigint,
+    channelId: bigint,
+  ): Promise<void> {
     await this.messageSync.syncDeleteToRoomy(messageId, channelId);
   }
 
@@ -70,7 +135,12 @@ export class SyncOrchestrator {
     userId: bigint,
     emoji: Partial<Emoji>,
   ): Promise<string | null> {
-    return await this.reactionSync.syncAddToRoomy(messageId, channelId, userId, emoji);
+    return await this.reactionSync.syncAddToRoomy(
+      messageId,
+      channelId,
+      userId,
+      emoji,
+    );
   }
 
   /**
@@ -83,7 +153,12 @@ export class SyncOrchestrator {
     userId: bigint,
     emoji: Partial<Emoji>,
   ): Promise<void> {
-    await this.reactionSync.syncRemoveToRoomy(messageId, channelId, userId, emoji);
+    await this.reactionSync.syncRemoveToRoomy(
+      messageId,
+      channelId,
+      userId,
+      emoji,
+    );
   }
 
   /**
@@ -92,7 +167,10 @@ export class SyncOrchestrator {
    * @param user - Discord user to sync
    * @param batcher - Optional event batcher for bulk operations
    */
-  async handleDiscordUserProfile(user: DiscordUser, batcher?: EventBatcher): Promise<void> {
+  async handleDiscordUserProfile(
+    user: DiscordUser,
+    batcher?: EventBatcher,
+  ): Promise<void> {
     await this.profileSync.syncDiscordToRoomy(user, batcher);
   }
 
@@ -100,7 +178,9 @@ export class SyncOrchestrator {
    * Handle Discord channel creation.
    * Delegates to StructureSyncService.
    */
-  async handleDiscordChannelCreate(channel: ChannelProperties): Promise<string> {
+  async handleDiscordChannelCreate(
+    channel: ChannelProperties,
+  ): Promise<string> {
     return await this.structureSync.handleDiscordChannelCreate(channel);
   }
 
@@ -112,7 +192,10 @@ export class SyncOrchestrator {
     thread: ChannelProperties,
     parentChannelId: bigint,
   ): Promise<string> {
-    return await this.structureSync.handleDiscordThreadCreate(thread, parentChannelId);
+    return await this.structureSync.handleDiscordThreadCreate(
+      thread,
+      parentChannelId,
+    );
   }
 
   /**
@@ -142,7 +225,9 @@ export class SyncOrchestrator {
     const e = event as any;
 
     if (!e.room || !e.body) {
-      console.warn("[SyncOrchestrator] Invalid Roomy create message event, missing room or body");
+      console.warn(
+        "[SyncOrchestrator] Invalid Roomy create message event, missing room or body",
+      );
       return;
     }
 
@@ -167,7 +252,9 @@ export class SyncOrchestrator {
     const e = event as any;
 
     if (!e.messageId || !e.room || !e.body) {
-      console.warn("[SyncOrchestrator] Invalid Roomy edit message event, missing messageId, room, or body");
+      console.warn(
+        "[SyncOrchestrator] Invalid Roomy edit message event, missing messageId, room, or body",
+      );
       return;
     }
 
@@ -191,7 +278,9 @@ export class SyncOrchestrator {
     const e = event as any;
 
     if (!e.messageId) {
-      console.warn("[SyncOrchestrator] Invalid Roomy delete message event, missing messageId");
+      console.warn(
+        "[SyncOrchestrator] Invalid Roomy delete message event, missing messageId",
+      );
       return;
     }
 
@@ -214,7 +303,9 @@ export class SyncOrchestrator {
     const e = event as any;
 
     if (!e.reactionTo || !e.reaction || !e.room) {
-      console.warn("[SyncOrchestrator] Invalid Roomy add reaction event, missing reactionTo, reaction, or room");
+      console.warn(
+        "[SyncOrchestrator] Invalid Roomy add reaction event, missing reactionTo, reaction, or room",
+      );
       return;
     }
 
@@ -239,7 +330,9 @@ export class SyncOrchestrator {
     const e = event as any;
 
     if (!e.reactionId || !e.room) {
-      console.warn("[SyncOrchestrator] Invalid Roomy remove reaction event, missing reactionId or room");
+      console.warn(
+        "[SyncOrchestrator] Invalid Roomy remove reaction event, missing reactionId or room",
+      );
       return;
     }
 
@@ -270,7 +363,9 @@ export class SyncOrchestrator {
     event: DecodedStreamEvent,
     bot: DiscordBot,
   ): Promise<void> {
-    return await this.structureSync.handleRoomySidebarUpdate(event.event as any);
+    return await this.structureSync.handleRoomySidebarUpdate(
+      event.event as any,
+    );
   }
 
   /**
@@ -284,14 +379,23 @@ export class SyncOrchestrator {
   /**
    * Handle Roomy room rename - update Discord channel name.
    */
-  async handleRoomyRoomRename(roomyRoomId: string, newName: string): Promise<void> {
-    return await this.structureSync.handleRoomyRoomRename(roomyRoomId as Ulid, newName);
+  async handleRoomyRoomRename(
+    roomyRoomId: string,
+    newName: string,
+  ): Promise<void> {
+    return await this.structureSync.handleRoomyRoomRename(
+      roomyRoomId as Ulid,
+      newName,
+    );
   }
 
   /**
    * Handle Roomy category rename - update Discord category.
    */
-  async handleRoomyCategoryRename(oldName: string, newName: string): Promise<void> {
+  async handleRoomyCategoryRename(
+    oldName: string,
+    newName: string,
+  ): Promise<void> {
     return await this.structureSync.handleRoomyCategoryRename(oldName, newName);
   }
 
@@ -320,7 +424,8 @@ export class SyncOrchestrator {
    */
   async backfillRoomyToDiscord(bot: DiscordBot): Promise<void> {
     // Delegates to the backfill module
-    const { backfillRoomyToDiscordForGuild } = await import("../roomy/backfill.js");
+    const { backfillRoomyToDiscordForGuild } =
+      await import("../roomy/backfill.js");
     await backfillRoomyToDiscordForGuild(this, bot);
   }
 }
@@ -346,26 +451,3 @@ export class SyncOrchestrator {
  * });
  * ```
  */
-export function createSyncOrchestrator(options: {
-  repo: BridgeRepository;
-  connectedSpace: ConnectedSpace;
-  guildId: bigint;
-  spaceId: string;
-  bot?: DiscordBot;
-}): SyncOrchestrator {
-  const { repo, connectedSpace, guildId, spaceId, bot } = options;
-
-  // Create services (order matters for dependencies)
-  const profileService = new ProfileSyncService(repo, connectedSpace, guildId, spaceId);
-  const botId = bot?.id; // Extract bot ID for reaction echo prevention
-  const reactionService = new ReactionSyncService(repo, connectedSpace, guildId, spaceId, botId);
-  const structureService = new StructureSyncService(repo, connectedSpace, guildId, spaceId, bot);
-  const messageService = new MessageSyncService(repo, connectedSpace, guildId, spaceId, profileService, bot);
-
-  return new SyncOrchestrator(
-    messageService,
-    reactionService,
-    profileService,
-    structureService,
-  );
-}

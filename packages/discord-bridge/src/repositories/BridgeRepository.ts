@@ -3,29 +3,23 @@
  * Abstracts database operations to enable testing with mock implementations.
  */
 
-import type {
-  BidirectionalSublevelMap,
-  SyncedProfiles,
-  RoomyUserProfiles,
-  SyncedReactions,
-  SyncedSidebarHash,
-  SyncedRoomLinks,
-  SyncedEdits,
-  DiscordMessageHashes,
-  LatestMessages,
-  RoomyUserProfile,
-  SyncedEdit,
-} from "./db.js";
-
 /**
- * Roomy user profile information
+ * Roomy user profile data.
+ * Stored when we see an updateProfile event from Roomy users.
  */
-export type { RoomyUserProfile };
+export interface RoomyUserProfile {
+  name: string;
+  avatar: string | null;
+  handle?: string;
+}
 
 /**
  * Message edit tracking information
  */
-export type { SyncedEdit };
+export type SyncedEdit = {
+  editedTimestamp: number;
+  contentHash: string;
+};
 
 /**
  * Roomy room link information
@@ -208,159 +202,4 @@ export interface BridgeRepository {
    * Set the latest message ID for a channel.
    */
   setLatestMessage(channelId: string, messageId: string): Promise<void>;
-}
-
-/**
- * Implementation of BridgeRepository using real LevelDB stores.
- * This wraps the existing GuildContext stores in the repository interface.
- */
-export class LevelDBBridgeRepository implements BridgeRepository {
-  constructor(
-    private readonly stores: {
-      syncedIds: BidirectionalSublevelMap<"discordId", "roomyId">;
-      syncedProfiles: SyncedProfiles;
-      roomyUserProfiles: RoomyUserProfiles;
-      syncedReactions: SyncedReactions;
-      syncedSidebarHash: SyncedSidebarHash;
-      syncedRoomLinks: SyncedRoomLinks;
-      syncedEdits: SyncedEdits;
-      discordWebhookTokens: ReturnType<
-        typeof import("./db.js").discordWebhookTokensForBridge
-      >;
-      discordMessageHashes: DiscordMessageHashes;
-      discordLatestMessage: LatestMessages;
-    },
-  ) {}
-
-  // === ID Mapping ===
-
-  async getRoomyId(discordId: string): Promise<string | undefined> {
-    /** WARNING: this looks wrong but is actually correct.
-     * The naming is short for 'get the value with key prefixed by `discordId`.
-     */
-    return this.stores.syncedIds.get_discordId(discordId);
-  }
-
-  async getDiscordId(roomyId: string): Promise<string | undefined> {
-    /** WARNING: See above. */
-    return this.stores.syncedIds.get_roomyId(roomyId);
-  }
-
-  async registerMapping(discordId: string, roomyId: string): Promise<void> {
-    return this.stores.syncedIds.register({ discordId, roomyId });
-  }
-
-  async unregisterMapping(discordId: string, roomyId: string): Promise<void> {
-    return this.stores.syncedIds.unregister({ discordId, roomyId });
-  }
-
-  async listMappings(): Promise<Array<{ discordId: string; roomyId: string }>> {
-    return this.stores.syncedIds.list();
-  }
-
-  async clearMappings(): Promise<void> {
-    return this.stores.syncedIds.clear();
-  }
-
-  // === Profile Sync ===
-
-  async getProfileHash(userId: string): Promise<string | undefined> {
-    return this.stores.syncedProfiles.get(userId);
-  }
-
-  async setProfileHash(userId: string, hash: string): Promise<void> {
-    return this.stores.syncedProfiles.put(userId, hash);
-  }
-
-  async getRoomyUserProfile(
-    did: string,
-  ): Promise<RoomyUserProfile | undefined> {
-    return this.stores.roomyUserProfiles.get(did);
-  }
-
-  async setRoomyUserProfile(
-    did: string,
-    profile: RoomyUserProfile,
-  ): Promise<void> {
-    return this.stores.roomyUserProfiles.put(did, profile);
-  }
-
-  // === Reactions ===
-
-  async getReaction(key: string): Promise<string | undefined> {
-    return this.stores.syncedReactions.get(key);
-  }
-
-  async setReaction(key: string, reactionEventId: string): Promise<void> {
-    return this.stores.syncedReactions.put(key, reactionEventId);
-  }
-
-  async deleteReaction(key: string): Promise<void> {
-    return this.stores.syncedReactions.del(key);
-  }
-
-  // === Sidebar ===
-
-  async getSidebarHash(): Promise<string | undefined> {
-    return this.stores.syncedSidebarHash.get("sidebar");
-  }
-
-  async setSidebarHash(hash: string): Promise<void> {
-    return this.stores.syncedSidebarHash.put("sidebar", hash);
-  }
-
-  // === Room Links ===
-
-  async getRoomLink(key: string): Promise<string | undefined> {
-    return this.stores.syncedRoomLinks.get(key);
-  }
-
-  async setRoomLink(key: string, linkEventId: string): Promise<void> {
-    return this.stores.syncedRoomLinks.put(key, linkEventId);
-  }
-
-  // === Message Edits ===
-
-  async getEditInfo(messageId: string): Promise<SyncedEdit | undefined> {
-    return this.stores.syncedEdits.get(messageId);
-  }
-
-  async setEditInfo(messageId: string, editInfo: SyncedEdit): Promise<void> {
-    return this.stores.syncedEdits.put(messageId, editInfo);
-  }
-
-  // === Webhooks ===
-
-  async getWebhookToken(channelId: string): Promise<string | undefined> {
-    return this.stores.discordWebhookTokens.get(channelId);
-  }
-
-  async setWebhookToken(channelId: string, token: string): Promise<void> {
-    return this.stores.discordWebhookTokens.put(channelId, token);
-  }
-
-  async deleteWebhookToken(channelId: string): Promise<void> {
-    return this.stores.discordWebhookTokens.del(channelId);
-  }
-
-  // === Message Hashes ===
-
-  async getMessageHashes(): Promise<Record<string, string>> {
-    const hashes = await this.stores.discordMessageHashes.get("hashes");
-    return hashes || {};
-  }
-
-  async setMessageHashes(hashes: Record<string, string>): Promise<void> {
-    return this.stores.discordMessageHashes.put("hashes", hashes);
-  }
-
-  // === Latest Messages ===
-
-  async getLatestMessage(channelId: string): Promise<string | undefined> {
-    return this.stores.discordLatestMessage.get(channelId);
-  }
-
-  async setLatestMessage(channelId: string, messageId: string): Promise<void> {
-    return this.stores.discordLatestMessage.put(channelId, messageId);
-  }
 }
