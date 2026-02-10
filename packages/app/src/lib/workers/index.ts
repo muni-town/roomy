@@ -2,7 +2,6 @@ import {
   messagePortInterface,
   reactiveChannelState,
 } from "./internalMessaging";
-import peerWorkerUrl from "./peer/worker.ts?worker&url";
 import type {
   PeerInterface,
   PeerStatus,
@@ -12,7 +11,8 @@ import type { SqliteStatus } from "./sqlite/types";
 import { CONFIG, flags } from "../config";
 import { context, trace } from "@opentelemetry/api";
 import { page } from "$app/state";
-import { peerStatusChannel } from "./peer/impl";
+import { Peer, peerStatusChannel } from "./peer/impl";
+import { newUlid } from "@roomy/sdk";
 
 // Force page reload when hot reloading this file to avoid confusion if the workers get mixed up.
 if (import.meta.hot && !(window as any).__playwright) {
@@ -21,8 +21,8 @@ if (import.meta.hot && !(window as any).__playwright) {
 
 /** Reactive status of the shared worker "peer". */
 export const peerStatus = reactiveChannelState<PeerStatus>(
-  // This is temporary. We will update the channel with a real one once we connect to the peer
-  // instance.
+  // Create message port placeholder. We will update the channel with a real one once we connect to
+  // the peer instance.
   {
     onmessage() {},
     postMessage() {},
@@ -42,7 +42,7 @@ export const sqliteStatus = reactiveChannelState<SqliteStatus>(
 (globalThis as any).sqliteStatus = sqliteStatus;
 
 // Initialize shared worker
-export const hasSharedWorker = "SharedWorker" in globalThis;
+const hasSharedWorker = "SharedWorker" in globalThis;
 const hasWorker = "Worker" in globalThis;
 
 const PeerWorkerConstructor =
@@ -59,15 +59,19 @@ export const peer = tracer.startActiveSpan(
   {},
   trace.setSpan(context.active(), globalInitSpan),
   (span) => {
-    const peerWorker = new PeerWorkerConstructor(peerWorkerUrl, {
-      name: "roomy-peer",
-      type: "module",
-    });
+    // Create a message channel for the peer communication
+    const channel = new MessageChannel();
 
+    // Create a peer implementation and connect it to the channel
+    const peerImpl = new Peer({ sessionId: newUlid() });
+    peerImpl.connectRpcClient(channel.port1);
+
+    // Connect to the peer RPC over the channel. This pattern allows us to possibly host the peer in
+    // a shared / dedicated web worker later without changing the way we communicate with it.
     const peer = messagePortInterface<PeerClientInterface, PeerInterface>({
       localName: "main",
       remoteName: "peer",
-      messagePort: "port" in peerWorker ? peerWorker.port : peerWorker,
+      messagePort: channel.port2,
       handlers: {
         async log(level, args) {
           const text = Array.isArray(args) ? args[0] : args;

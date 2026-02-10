@@ -8,6 +8,7 @@ import {
 } from "@atproto/oauth-client";
 import {
   atprotoLoopbackClientMetadata,
+  BrowserOAuthClient,
   buildLoopbackClientId,
 } from "@atproto/oauth-client-browser";
 import { Dexie, type EntityTable } from "dexie";
@@ -185,5 +186,15 @@ export async function createOauthClient(): Promise<OAuthClient> {
     clientMetadata = await resp.json();
   }
 
-  return workerOauthClient(clientMetadata);
+  // If we are in the main thread, then we can return the official browser oauth client
+  if (typeof window !== "undefined") {
+    return new BrowserOAuthClient({
+      clientMetadata,
+      handleResolver: "https://resolver.roomy.chat",
+      responseMode: "query",
+    });
+  } else {
+    // If we are not on the main thread, return our custom client that works inside of a web worker.
+    return workerOauthClient(clientMetadata);
+  }
 }
