@@ -26,21 +26,14 @@ import {
   createSyncOrchestratorForTest,
   cleanupRoomySyncedChannels,
 } from "../helpers/setup.js";
-import {
-  assertChannelSynced,
-  assertEventTypeExists,
-  assertEventTypeCount,
-  assertSidebarCategoryExists,
-  assertSidebarCategoriesMatch,
-  assertRoomInCategory,
-  getLatestSidebarEvent,
-} from "../helpers/assertions.js";
+import { getLatestSidebarEvent } from "../helpers/assertions.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
-import { registeredBridges } from "../../../src/repositories/db.js";
-import { connectedSpaces } from "../../../src/roomy/client.js";
+import { registeredBridges } from "../../../src/repositories/LevelDBBridgeRepository.js";
 import { createRoom } from "@roomy/sdk/package/operations/room";
 import { createMessage } from "@roomy/sdk/package/operations/message";
-import { StreamIndex } from "@roomy/sdk";
+import { ConnectedSpace, StreamIndex } from "@roomy/sdk";
+
+const connectedSpaces = new Map<string, ConnectedSpace>();
 
 describe("E2E: Discord Channel Sync", () => {
   beforeAll(async () => {
@@ -352,7 +345,7 @@ describe("E2E: Discord Channel Sync", () => {
         if (!channelsByCategory.has(categoryName)) {
           channelsByCategory.set(categoryName, []);
         }
-        channelsByCategory.get(categoryName)!.push(channel);
+        channelsByCategory.get(categoryName)!.push([channel]);
       }
 
       // Sync all channels

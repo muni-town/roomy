@@ -1,38 +1,30 @@
-import { RoomyClient } from "@roomy/sdk";
+import { RoomyClient, stateMachine, StateMachine, StreamDid } from "@roomy/sdk";
+import { backfill } from "../discord/bot";
+import { desiredProperties, DiscordBot } from "../discord/types.js";
+import { initRoomyClient } from "../roomy/client";
 import {
-  backfill,
-  doneBackfillingFromDiscord,
-  getGuildContext,
-  hasBridge,
-} from "../discord/bot";
-import {
-  desiredProperties,
-  DiscordBot,
-  DiscordChannel,
-} from "../discord/types.js";
-import { initRoomyClient, subscribeToConnectedSpaces } from "../roomy/client";
-import { createBot, Intents } from "@discordeno/bot";
+  createBot,
+  Intents,
+  InteractionTypes,
+  MessageFlags,
+} from "@discordeno/bot";
 import { DISCORD_TOKEN } from "../env";
 import { tracer, setDiscordAttrs, recordError } from "../tracing.js";
 import {
   handleSlashCommandInteraction,
+  safeDefer,
   slashCommands,
 } from "../discord/slashCommands";
-import { getRoomKey } from "../utils/room";
 import { Deferred } from "@roomy/sdk";
 import { registeredBridges } from "../repositories/LevelDBBridgeRepository";
+import { Bridge } from "./Bridge";
 
 type BridgeOrchestratorState =
   | {
       state: "initialising";
     }
   | {
-      state: "backfilling";
-      roomy: RoomyClient;
-      bot: DiscordBot;
-    }
-  | {
-      state: "listening";
+      state: "ready";
       roomy: RoomyClient;
       bot: DiscordBot;
       appId: string;
@@ -50,10 +42,19 @@ type BridgeOrchestratorState =
  * Once a Bridge is backfilled, then it can subscribe to incoming events from Discord and Roomy.
  */
 export class BridgeOrchestrator {
-  state: BridgeOrchestratorState = { state: "initialising" };
+  state: StateMachine<BridgeOrchestratorState> = stateMachine({
+    state: "initialising",
+  });
+  bridges = new Map<bigint, Bridge>();
 
-  private constructor(roomy: RoomyClient, bot: DiscordBot, appId: string) {
+  constructor() {
     this.start();
+  }
+
+  get appId() {
+    if (this.state.current.state !== "ready")
+      throw new Error("Bridge not ready");
+    return this.state.current.appId;
   }
 
   async start() {
@@ -74,28 +75,31 @@ export class BridgeOrchestrator {
       throw e;
     }
 
+    console.log("Connecting to Discord...");
+
+    const { bot, appId } = await this.startBot();
+    console.log("Discord bridge ready");
+
     console.log("Subscribing to connected spaces...");
     const bridges = await registeredBridges.list();
 
     console.log("bridges", bridges);
-    // try {
-    //   await subscribeToConnectedSpaces(roomy);
-    // } catch (e) {
-    //   console.error("Failed to subscribe to connected spaces:", e);
-    //   // Continue anyway - some spaces may have failed but we can still run the bot
-    // }
 
-    console.log("Connecting to Discord...");
-
-    // const { bot, appId } = await this.startBot();
-    // console.log("Discord bridge ready");
-
-    // this.state = {
-    //   state: "listening",
-    //   roomy,
-    //   bot,
-    //   appId,
-    // };
+    for (const { spaceId, guildId } of bridges) {
+      const bridge = await Bridge.connect({
+        spaceId: spaceId as StreamDid,
+        guildId: BigInt(guildId),
+        bot,
+        client: roomy,
+      });
+      this.bridges.set(BigInt(guildId), bridge);
+    }
+    this.state.current = {
+      state: "ready",
+      roomy,
+      bot,
+      appId,
+    };
   }
 
   /**
@@ -103,6 +107,7 @@ export class BridgeOrchestrator {
    * The event handlers route each event to Roomy spaces as defined in the persisted mapping.
    */
   async startBot() {
+    const orchestrator = this;
     let appIdPromise = new Deferred<string>();
     const bot = createBot({
       token: DISCORD_TOKEN,
@@ -130,7 +135,7 @@ export class BridgeOrchestrator {
             bot.helpers.upsertGlobalApplicationCommands(slashCommands);
 
             // Backfill messages sent while the bridge was offline
-            backfill(bot, ready.guilds);
+            // backfill(bot, ready.guilds);
 
             span.end();
           });
@@ -139,168 +144,167 @@ export class BridgeOrchestrator {
         // Handle slash commands
         async interactionCreate(interaction) {
           console.log("Interaction create event", interaction.data);
-          await handleSlashCommandInteraction(interaction);
+          const current = await orchestrator.state.transitionedTo("ready");
+
+          const guildId = interaction.guildId;
+          if (!guildId) {
+            console.error("Guild ID missing from interaction:", interaction);
+            interaction.respond({
+              flags: MessageFlags.Ephemeral,
+              content: "🛑 There was an error connecting your space. 😕",
+            });
+            return;
+          }
+
+          const bridge = orchestrator.bridges.get(guildId);
+
+          const spaceExists = async (did: StreamDid) => {
+            // Check if the bridge can access this space
+            return !!(await current.roomy.getSpaceInfo(did))?.name;
+          };
+
+          return handleSlashCommandInteraction(
+            interaction,
+            guildId,
+            spaceExists,
+            bridge,
+          );
         },
 
         async channelCreate(channel) {
-          if (!channel.guildId)
-            throw new Error(
-              "Discord guild ID missing from channel create event",
-            );
-          if (!(await hasBridge(channel.guildId!))) return;
-          const ctx = await getGuildContext(channel.guildId);
-          if (!ctx) return;
-          console.log("Channel create event", channel, ctx);
-          // await getRoomyThreadForChannel(ctx, channel);
-        },
-        async threadCreate(channel) {
-          // Skip during backfill to avoid race conditions
-          if (!doneBackfillingFromDiscord) {
-            console.log(
-              `Skipping threadCreate for ${channel.name} - backfill not complete`,
-            );
-            return;
-          }
-          if (!channel.guildId)
-            throw new Error(
-              "Discord guild ID missing from thread create event",
-            );
-          if (!(await hasBridge(channel.guildId!))) {
-            console.log(
-              `Skipping threadCreate for ${channel.name} - no bridge for guild`,
-            );
-            return;
-          }
-          const ctx = await getGuildContext(channel.guildId);
-          if (!ctx) {
-            console.log(
-              `Skipping threadCreate for ${channel.name} - no guild context`,
-            );
-            return;
-          }
-          console.log(
-            `Thread create event: ${channel.name} (id=${channel.id}, parentId=${channel.parentId})`,
+          await orchestrator.withGuildBridge(
+            "channelCreate",
+            channel,
+            { channelId: channel.id },
+            (bridge, channel) => bridge.handleDiscordChannelCreate(channel),
           );
-          try {
-            if (!channel.parentId) {
-              console.error(`Thread ${channel.name} has no parent channel`);
-              return;
-            }
-            await ctx.orchestrator.handleDiscordThreadCreate(
-              channel,
-              channel.parentId,
-            );
-            await ctx.orchestrator.handleDiscordThreadCreate(
-              channel,
-              channel.parentId,
-            );
-            console.log(
-              `Successfully created Roomy thread for Discord thread ${channel.name}`,
-            );
-          } catch (error) {
-            console.error(
-              `Failed to create Roomy thread for Discord thread ${channel.name}:`,
-              error,
-            );
-          }
+        },
+
+        async threadCreate(channel) {
+          await orchestrator.withGuildBridge(
+            "threadCreate",
+            channel,
+            { channelId: channel.id },
+            async (bridge, channel) => {
+              if (!channel.parentId) {
+                console.error(`Thread ${channel.name} has no parent channel`);
+                return;
+              }
+              await bridge.handleDiscordThreadCreate(channel, channel.parentId);
+            },
+          );
         },
 
         // Handle new messages
         async messageCreate(message) {
-          // Skip during backfill to avoid race conditions with cursor tracking
-          if (!doneBackfillingFromDiscord) return;
-          if (!(await hasBridge(message.guildId!))) return;
-
-          const guildId = message.guildId;
-          const channelId = message.channelId;
-          if (!guildId) {
-            console.error("Guild ID not present on Discord message event");
-            return;
-          }
-          if (!channelId) {
-            console.error("Channel ID not present on Discord message event");
-            return;
-          }
-
-          const ctx = await getGuildContext(guildId);
-          if (!ctx) return;
-          const roomyRoomId = await ctx.repo.getDiscordId(
-            getRoomKey(channelId),
-          );
-
-          if (!roomyRoomId) {
-            console.warn(
-              `Discord channel ${channelId} not synced to Roomy, skipping message`,
-            );
-            return;
-          }
-
-          await ctx.orchestrator.handleDiscordMessageCreate(
+          await orchestrator.withGuildBridge(
+            "messageCreate",
             message,
-            roomyRoomId,
-          );
-          await ctx.latestMessagesInChannel.put(
-            channelId.toString(),
-            message.id.toString(),
+            { messageId: message.id },
+            async (bridge, message) => {
+              await bridge.handleDiscordMessageCreate(message);
+            },
           );
         },
 
         // Handle reaction add
         async reactionAdd(payload) {
-          if (!doneBackfillingFromDiscord) return;
-          if (!payload.guildId) return;
-          if (!(await hasBridge(payload.guildId))) return;
-
-          const ctx = await getGuildContext(payload.guildId);
-          if (!ctx) return;
-          console.log(
-            `[Discord] Reaction add: msg=${payload.messageId} user=${payload.userId} emoji=${payload.emoji.name}`,
-          );
-          await ctx.orchestrator.handleDiscordReactionAdd(
-            payload.messageId,
-            payload.channelId,
-            payload.userId,
-            payload.emoji,
+          await orchestrator.withGuildBridge(
+            "reactionAdd",
+            payload,
+            {
+              messageId: payload.messageId,
+              channelId: payload.channelId,
+              userId: payload.userId,
+            },
+            (bridge, payload) =>
+              bridge.handleDiscordReactionAdd(
+                payload.messageId,
+                payload.channelId,
+                payload.userId,
+                payload.emoji,
+              ),
           );
         },
 
         // Handle reaction remove
         async reactionRemove(payload) {
-          if (!doneBackfillingFromDiscord) return;
-          if (!payload.guildId) return;
-          if (!(await hasBridge(payload.guildId))) return;
-
-          const ctx = await getGuildContext(payload.guildId);
-          if (!ctx) return;
-          await ctx.orchestrator.handleDiscordReactionRemove(
-            payload.messageId,
-            payload.channelId,
-            payload.userId,
-            payload.emoji,
+          await orchestrator.withGuildBridge(
+            "reactionRemove",
+            payload,
+            {
+              messageId: payload.messageId,
+              channelId: payload.channelId,
+              userId: payload.userId,
+            },
+            (bridge, payload) =>
+              bridge.handleDiscordReactionRemove(
+                payload.messageId,
+                payload.channelId,
+                payload.userId,
+                payload.emoji,
+              ),
           );
         },
 
         // Handle message edits
         async messageUpdate(message) {
-          // Skip during backfill
-          if (!doneBackfillingFromDiscord) return;
-
-          // Skip if not a user edit (embed resolution, pin change, etc.)
-          if (!message.editedTimestamp) return;
-
-          if (!message.guildId) return;
-          if (!(await hasBridge(message.guildId))) return;
-
-          const ctx = await getGuildContext(message.guildId);
-          if (!ctx) return;
-
-          // syncEditToRoomy will skip messages not in syncedIds (including bot messages)
-          await ctx.orchestrator.handleDiscordMessageUpdate(message);
+          await orchestrator.withGuildBridge(
+            "messageUpdate",
+            message,
+            { messageId: message.id },
+            (bridge, message) => bridge.handleDiscordMessageUpdate(message),
+          );
         },
       },
     });
     bot.start();
     const appId = await appIdPromise.promise;
     return { bot, appId };
+  }
+
+  /**
+   * Common handler wrapper with tracing and error handling.
+   */
+  private async withGuildBridge<T extends { guildId?: bigint }>(
+    eventName: string,
+    data: T,
+    attrs: Record<string, bigint | string>,
+    handler: (bridge: Bridge, data: T) => Promise<unknown>,
+  ): Promise<void> {
+    await this.state.transitionedTo("ready");
+    if (!data.guildId) {
+      console.warn(`Guild ID missing from ${eventName}`);
+      return;
+    }
+
+    const bridge = this.bridges.get(data.guildId);
+    if (!bridge) {
+      console.warn(
+        `No bridge found for guild ${data.guildId}, skipping ${eventName}`,
+      );
+      return;
+    }
+
+    await tracer.startActiveSpan(`bridge.${eventName}`, async (span) => {
+      setDiscordAttrs(span, { guildId: data.guildId!, ...attrs });
+      try {
+        await handler(bridge, data);
+      } catch (error) {
+        recordError(span, error);
+        // Don't throw - fail gracefully
+      } finally {
+        span.end();
+      }
+    });
+  }
+
+  /**
+   * Get the bridge's DID.
+   */
+  getBridgeDid(): string {
+    if (this.state.current.state !== "ready")
+      throw new Error("Bridge not ready");
+    return this.state.current.roomy.agent.assertDid;
   }
 }

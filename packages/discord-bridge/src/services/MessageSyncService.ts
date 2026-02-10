@@ -9,13 +9,29 @@
 import { avatarUrl } from "@discordeno/bot";
 import type { BridgeRepository } from "../repositories/index.js";
 import type { ConnectedSpace } from "@roomy/sdk";
-import { newUlid, toBytes, type Did, type Event, type Ulid, type Attachment, type Content } from "@roomy/sdk";
+import {
+  newUlid,
+  toBytes,
+  type Did,
+  type Event,
+  type Ulid,
+  type Attachment,
+  type Content,
+  type DecodedStreamEvent,
+} from "@roomy/sdk";
 import type { DiscordBot, MessageProperties } from "../discord/types.js";
 import { ProfileSyncService } from "./ProfileSyncService.js";
-import { DISCORD_EXTENSION_KEYS } from "../roomy/subscription.js";
+import {
+  DISCORD_EXTENSION_KEYS,
+  extractDiscordMessageOrigin,
+} from "../utils/event-extensions.js";
 import { DISCORD_MESSAGE_TYPES } from "../constants.js";
 import { computeEditHash } from "../utils/hash.js";
-import { getOrCreateWebhook, executeWebhookWithRetry } from "../discord/webhooks.js";
+import {
+  getOrCreateWebhook,
+  executeWebhookWithRetry,
+} from "../discord/webhooks.js";
+import { getRoomKey } from "../utils/room.js";
 
 /**
  * Result of a Discord → Roomy message sync operation.
@@ -39,9 +55,8 @@ export class MessageSyncService {
     private readonly repo: BridgeRepository,
     private readonly connectedSpace: ConnectedSpace,
     private readonly guildId: bigint,
-    private readonly spaceId: string,
     private readonly profileService: ProfileSyncService,
-    private readonly bot?: DiscordBot,
+    private readonly bot: DiscordBot,
   ) {}
 
   /**
@@ -61,10 +76,20 @@ export class MessageSyncService {
    * ```
    */
   async syncDiscordToRoomy(
-    roomyRoomId: string,
     message: MessageProperties,
     batcher?: EventBatcher,
   ): Promise<string | null> {
+    // Check that we know the corresponding Roomy room
+    const roomyRoomId = await this.repo.getDiscordId(
+      getRoomKey(message.channelId),
+    );
+    if (!roomyRoomId) {
+      console.warn(
+        `Discord channel ${message.channelId} not synced to Roomy, skipping message`,
+      );
+      return null;
+    }
+
     // Idempotency check
     const existingId = await this.repo.getRoomyId(message.id.toString());
     if (existingId) {
@@ -77,17 +102,24 @@ export class MessageSyncService {
     }
 
     // Ensure user profile is synced
-    await this.profileService.syncDiscordToRoomy({
-      id: message.author.id,
-      username: message.author.username,
-      discriminator: message.author.discriminator,
-      globalName: (message.author as any).globalName ?? null,
-      avatar: (message.author.avatar as unknown as string | null) ?? null,
-    }, batcher);
+    await this.profileService.syncDiscordToRoomy(
+      {
+        id: message.author.id,
+        username: message.author.username,
+        discriminator: message.author.discriminator,
+        globalName: (message.author as any).globalName ?? null,
+        avatar: (message.author.avatar as unknown as string | null) ?? null,
+      },
+      batcher,
+    );
 
     // Handle thread starter messages
     if (message.type === DISCORD_MESSAGE_TYPES.THREAD_STARTER_MESSAGE) {
-      return await this.handleThreadStarterMessage(roomyRoomId, message, batcher);
+      return await this.handleThreadStarterMessage(
+        roomyRoomId,
+        message,
+        batcher,
+      );
     }
 
     // Build attachments array
@@ -118,6 +150,9 @@ export class MessageSyncService {
    * ```
    */
   async syncEditToRoomy(message: MessageProperties): Promise<void> {
+    // Skip if not a user edit (embed resolution, pin change, etc.)
+    if (!message.editedTimestamp) return;
+
     const snowflake = message.id.toString();
 
     // Get the Roomy message ID from our mapping
@@ -127,16 +162,23 @@ export class MessageSyncService {
     }
 
     // Get the Roomy room ID from the Discord channel ID
-    const roomKey = `room:${message.channelId.toString()}`;
-    const roomyRoomId = await this.repo.getRoomyId(roomKey);
+    const roomyRoomId = await this.repo.getRoomyId(
+      getRoomKey(message.channelId),
+    );
     if (!roomyRoomId) {
+      console.warn(
+        `Discord channel ${message.channelId} not synced to Roomy, skipping message`,
+      );
       return; // Channel/room wasn't synced
     }
 
     const editedTimestamp = message.editedTimestamp
       ? new Date(message.editedTimestamp).getTime()
       : Date.now();
-    const contentHash = computeEditHash(message.content, message.attachments || []);
+    const contentHash = computeEditHash(
+      message.content,
+      message.attachments || [],
+    );
 
     // Get edit tracking info for idempotency
     const existingEdit = await this.repo.getEditInfo(snowflake);
@@ -263,7 +305,9 @@ export class MessageSyncService {
   /**
    * Determine if a message should be skipped.
    */
-  private async shouldSkipMessage(message: MessageProperties): Promise<boolean> {
+  private async shouldSkipMessage(
+    message: MessageProperties,
+  ): Promise<boolean> {
     // Skip system messages
     if (
       message.type === DISCORD_MESSAGE_TYPES.THREAD_CREATED ||
@@ -279,7 +323,10 @@ export class MessageSyncService {
     const channelWebhookId = channelWebhookToken?.split(":")[0];
 
     // Skip bot's own webhook messages (avoid echo)
-    if (channelWebhookId && message.webhookId?.toString() === channelWebhookId) {
+    if (
+      channelWebhookId &&
+      message.webhookId?.toString() === channelWebhookId
+    ) {
       return true;
     }
 
@@ -301,7 +348,10 @@ export class MessageSyncService {
     message: MessageProperties,
     batcher?: EventBatcher,
   ): Promise<string | null> {
-    if (!message.messageReference?.messageId) {
+    if (
+      !message.messageReference?.messageId ||
+      !message.messageReference.channelId
+    ) {
       return null;
     }
 
@@ -320,13 +370,7 @@ export class MessageSyncService {
           message.messageReference.messageId,
         );
 
-        const parentChannelKey = `room:${message.messageReference.channelId!.toString()}`;
-        const parentRoomyId = await this.repo.getRoomyId(parentChannelKey);
-        if (!parentRoomyId) {
-          return null;
-        }
-
-        const syncedId = await this.syncDiscordToRoomy(parentRoomyId, originalMsg, batcher);
+        const syncedId = await this.syncDiscordToRoomy(originalMsg, batcher);
         if (!syncedId) {
           return null;
         }
@@ -337,8 +381,9 @@ export class MessageSyncService {
     }
 
     // Get the parent channel's Roomy ID
-    const parentChannelKey = `room:${message.messageReference.channelId!.toString()}`;
-    const fromRoomyId = await this.repo.getRoomyId(parentChannelKey);
+    const fromRoomyId = await this.repo.getRoomyId(
+      getRoomKey(message.messageReference.channelId),
+    );
 
     if (!fromRoomyId) {
       return null;
@@ -353,7 +398,9 @@ export class MessageSyncService {
       fromRoomId: fromRoomyId as Ulid,
     };
 
-    const sendFn = batcher ? batcher.add.bind(batcher) : this.connectedSpace.sendEvent.bind(this.connectedSpace);
+    const sendFn = batcher
+      ? batcher.add.bind(batcher)
+      : this.connectedSpace.sendEvent.bind(this.connectedSpace);
     await sendFn(forwardEvent);
 
     await this.repo.registerMapping(message.id.toString(), forwardEvent.id);
@@ -364,7 +411,9 @@ export class MessageSyncService {
   /**
    * Build the attachments array for a message.
    */
-  private async buildAttachments(message: MessageProperties): Promise<Attachment[]> {
+  private async buildAttachments(
+    message: MessageProperties,
+  ): Promise<Attachment[]> {
     const attachments: Attachment[] = [];
 
     // Reply attachment
@@ -459,7 +508,9 @@ export class MessageSyncService {
       extensions,
     };
 
-    const sendFn = batcher ? batcher.add.bind(batcher) : this.connectedSpace.sendEvent.bind(this.connectedSpace);
+    const sendFn = batcher
+      ? batcher.add.bind(batcher)
+      : this.connectedSpace.sendEvent.bind(this.connectedSpace);
     await sendFn(event);
 
     return messageId;
@@ -495,7 +546,9 @@ export class MessageSyncService {
     // Get Discord channel ID for this Roomy room
     const discordId = await this.repo.getDiscordId(roomyRoomId);
     if (!discordId) {
-      console.warn(`[MessageSyncService] Room ${roomyRoomId} not synced to Discord, skipping message`);
+      console.warn(
+        `[MessageSyncService] Room ${roomyRoomId} not synced to Discord, skipping message`,
+      );
       return null;
     }
 
@@ -512,29 +565,47 @@ export class MessageSyncService {
 
     try {
       // Get or create webhook for this channel
-      const webhook = await getOrCreateWebhook(bot, this.guildId, this.spaceId, channelId, this.repo);
+      const webhook = await getOrCreateWebhook(
+        bot,
+        this.guildId,
+        this.connectedSpace.streamDid,
+        channelId,
+        this.repo,
+      );
 
       // Execute webhook to send message
       // wait: true ensures Discord returns the message object
-      const result = await executeWebhookWithRetry(bot, webhook.id, webhook.token, {
-        content: contentText,
-        username,
-        wait: true,
-      } as any);
+      const result = await executeWebhookWithRetry(
+        bot,
+        webhook.id,
+        webhook.token,
+        {
+          content: contentText,
+          username,
+          wait: true,
+        } as any,
+      );
 
       if (!result?.id) {
-        console.error(`[MessageSyncService] Webhook execute failed, no message ID returned`);
+        console.error(
+          `[MessageSyncService] Webhook execute failed, no message ID returned`,
+        );
         return null;
       }
 
       // Register mapping (no "room:" prefix for messages)
       await this.repo.registerMapping(result.id.toString(), roomyMessageId);
 
-      console.log(`[MessageSyncService] Synced Roomy message ${roomyMessageId} to Discord ${result.id}`);
+      console.log(
+        `[MessageSyncService] Synced Roomy message ${roomyMessageId} to Discord ${result.id}`,
+      );
 
       return result.id;
     } catch (error) {
-      console.error(`[MessageSyncService] Error syncing Roomy message to Discord:`, error);
+      console.error(
+        `[MessageSyncService] Error syncing Roomy message to Discord:`,
+        error,
+      );
       return null;
     }
   }
@@ -556,7 +627,9 @@ export class MessageSyncService {
     // Get Discord message ID
     const discordId = await this.repo.getDiscordId(roomyMessageId);
     if (!discordId) {
-      console.warn(`[MessageSyncService] Roomy message ${roomyMessageId} not synced to Discord, skipping edit`);
+      console.warn(
+        `[MessageSyncService] Roomy message ${roomyMessageId} not synced to Discord, skipping edit`,
+      );
       return;
     }
 
@@ -565,7 +638,9 @@ export class MessageSyncService {
     // Get Discord channel ID
     const discordChannelId = await this.repo.getDiscordId(roomyRoomId);
     if (!discordChannelId) {
-      console.warn(`[MessageSyncService] Room ${roomyRoomId} not synced to Discord, skipping edit`);
+      console.warn(
+        `[MessageSyncService] Room ${roomyRoomId} not synced to Discord, skipping edit`,
+      );
       return;
     }
 
@@ -578,7 +653,13 @@ export class MessageSyncService {
     try {
       // Messages created by webhooks must be edited by webhooks
       // Get the webhook for this channel
-      const webhook = await getOrCreateWebhook(bot, this.guildId, this.spaceId, channelId, this.repo);
+      const webhook = await getOrCreateWebhook(
+        bot,
+        this.guildId,
+        this.connectedSpace.streamDid,
+        channelId,
+        this.repo,
+      );
 
       // Use webhook to edit the message
       await bot.helpers.editWebhookMessage(
@@ -590,9 +671,14 @@ export class MessageSyncService {
         },
       );
 
-      console.log(`[MessageSyncService] Edited Discord message ${messageId} from Roomy ${roomyMessageId}`);
+      console.log(
+        `[MessageSyncService] Edited Discord message ${messageId} from Roomy ${roomyMessageId}`,
+      );
     } catch (error) {
-      console.error(`[MessageSyncService] Error editing Discord message:`, error);
+      console.error(
+        `[MessageSyncService] Error editing Discord message:`,
+        error,
+      );
     }
   }
 
@@ -611,7 +697,9 @@ export class MessageSyncService {
     // Get Discord message ID
     const discordId = await this.repo.getDiscordId(roomyMessageId);
     if (!discordId) {
-      console.warn(`[MessageSyncService] Roomy message ${roomyMessageId} not synced to Discord, skipping delete`);
+      console.warn(
+        `[MessageSyncService] Roomy message ${roomyMessageId} not synced to Discord, skipping delete`,
+      );
       return;
     }
 
@@ -620,7 +708,9 @@ export class MessageSyncService {
     // Get Discord channel ID from the Roomy room ID
     const discordChannelId = await this.repo.getDiscordId(roomyRoomId);
     if (!discordChannelId) {
-      console.warn(`[MessageSyncService] Room ${roomyRoomId} not synced to Discord, skipping delete`);
+      console.warn(
+        `[MessageSyncService] Room ${roomyRoomId} not synced to Discord, skipping delete`,
+      );
       return;
     }
 
@@ -629,7 +719,13 @@ export class MessageSyncService {
     try {
       // Messages created by webhooks must be deleted by webhooks
       // Get the webhook for this channel
-      const webhook = await getOrCreateWebhook(bot, this.guildId, this.spaceId, channelId, this.repo);
+      const webhook = await getOrCreateWebhook(
+        bot,
+        this.guildId,
+        this.connectedSpace.streamDid,
+        channelId,
+        this.repo,
+      );
 
       // Use webhook to delete the message
       await bot.helpers.deleteWebhookMessage(
@@ -638,9 +734,107 @@ export class MessageSyncService {
         BigInt(messageId),
       );
 
-      console.log(`[MessageSyncService] Deleted Discord message ${messageId} from Roomy ${roomyMessageId}`);
+      console.log(
+        `[MessageSyncService] Deleted Discord message ${messageId} from Roomy ${roomyMessageId}`,
+      );
     } catch (error) {
-      console.error(`[MessageSyncService] Error deleting Discord message:`, error);
+      console.error(
+        `[MessageSyncService] Error deleting Discord message:`,
+        error,
+      );
+    }
+  }
+
+  /**
+   * Handle a Roomy event from the subscription stream.
+   * Processes message-related events and syncs them to Discord if needed.
+   *
+   * @param decoded - The decoded Roomy event
+   * @returns true if the event was handled, false otherwise
+   */
+  async handleRoomyEvent(decoded: DecodedStreamEvent): Promise<boolean> {
+    try {
+      const { event } = decoded;
+
+      // Handle createMessage
+      if (event.$type === "space.roomy.message.createMessage.v0") {
+        // Check for Discord origin to prevent sync loops
+        const messageOrigin = extractDiscordMessageOrigin(event);
+
+        // Register Discord message mapping
+        if (messageOrigin) {
+          await this.repo.registerMapping(messageOrigin.snowflake, event.id);
+          return true; // Handled (Discord origin, no sync back)
+        }
+
+        // Sync Roomy message to Discord
+        const e = event as any;
+        if (!e.room || !e.body) return false;
+        await this.syncRoomyToDiscordCreate(
+          event.id,
+          e.room,
+          e.body,
+          decoded.user,
+          this.bot,
+        );
+        return true;
+      }
+
+      // Handle editMessage
+      if (event.$type === "space.roomy.message.editMessage.v0") {
+        // Check for Discord origin
+        const messageOrigin = extractDiscordMessageOrigin(event);
+
+        // Cache edit tracking info for Discord-origin messages
+        if (messageOrigin?.editedTimestamp && messageOrigin?.contentHash) {
+          await this.repo.setEditInfo(messageOrigin.snowflake, {
+            editedTimestamp: messageOrigin.editedTimestamp,
+            contentHash: messageOrigin.contentHash,
+          });
+        }
+
+        // Skip Discord-origin edits
+        if (messageOrigin) return true;
+
+        // Sync Roomy edit to Discord
+        const e = event as any;
+        if (!e.messageId || !e.room || !e.body) return false;
+        await this.syncRoomyToDiscordEdit(
+          e.messageId,
+          e.room,
+          e.body,
+          this.bot,
+        );
+        return true;
+      }
+
+      // Handle deleteMessage
+      if (event.$type === "space.roomy.message.deleteMessage.v0") {
+        // Unregister mapping
+        const discordId = await this.repo.getDiscordId(event.messageId);
+        if (discordId) {
+          await this.repo.unregisterMapping(discordId, event.messageId);
+        }
+
+        // Check for Discord origin
+        const messageOrigin = extractDiscordMessageOrigin(event);
+        if (messageOrigin) return true; // Handled (Discord origin, no sync back)
+
+        // Sync Roomy deletion to Discord
+        const e = event as any;
+        if (!e.messageId) return false;
+        await this.syncRoomyToDiscordDelete(
+          e.messageId,
+          e.room || "",
+          this.bot,
+        );
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error(`[MessageSyncService] Error handling Roomy event:`, error);
+      return false;
     }
   }
 }

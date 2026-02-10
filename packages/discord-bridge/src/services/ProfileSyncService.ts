@@ -8,9 +8,9 @@
 import { avatarUrl } from "@discordeno/bot";
 import type { BridgeRepository } from "../repositories/index.js";
 import type { ConnectedSpace } from "@roomy/sdk";
-import { newUlid, type Did, type Event } from "@roomy/sdk";
+import { newUlid, type Did, type Event, type DecodedStreamEvent } from "@roomy/sdk";
 import { computeProfileHash as fingerprint } from "../utils/hash.js";
-import { DISCORD_EXTENSION_KEYS } from "../roomy/subscription.js";
+import { DISCORD_EXTENSION_KEYS, extractDiscordUserOrigin } from "../utils/event-extensions.js";
 
 /**
  * Discord user profile data for syncing.
@@ -39,7 +39,6 @@ export class ProfileSyncService {
     private readonly repo: BridgeRepository,
     private readonly connectedSpace: ConnectedSpace,
     private readonly guildId: bigint,
-    private readonly spaceId: string,
   ) {}
 
   /**
@@ -137,5 +136,49 @@ export class ProfileSyncService {
       user.globalName ?? null,
       user.avatar ?? null,
     );
+  }
+
+  /**
+   * Handle a Roomy event from the subscription stream.
+   * Processes profile-related events and caches profile data.
+   *
+   * @param decoded - The decoded Roomy event
+   * @returns true if the event was handled, false otherwise
+   */
+  async handleRoomyEvent(decoded: DecodedStreamEvent): Promise<boolean> {
+    try {
+      const { event } = decoded;
+
+      // Handle updateProfile
+      if (event.$type === "space.roomy.user.updateProfile.v0") {
+        const e = event as any;
+
+        // Check for Discord user origin
+        const userOrigin = extractDiscordUserOrigin(event);
+
+        // Cache Discord user profile hash
+        if (userOrigin && userOrigin.guildId === this.guildId.toString()) {
+          await this.repo.setProfileHash(userOrigin.snowflake, userOrigin.profileHash);
+          return true; // Handled
+        }
+
+        // Cache Roomy user profile (non-Discord users)
+        if (e.did) {
+          await this.repo.setRoomyUserProfile(e.did, {
+            name: e.name || "Unknown",
+            avatar: e.avatar ?? null,
+          });
+          console.log(
+            `[Profile Capture] Cached Roomy user profile: did=${e.did}, name=${e.name || "Unknown"}`,
+          );
+        }
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error(`[ProfileSyncService] Error handling Roomy event:`, error);
+      return false;
+    }
   }
 }

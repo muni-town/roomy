@@ -1,15 +1,14 @@
 /**
  * Tests for MessageSyncService.
- * TDD approach: Write failing test first, then implement.
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { MockBridgeRepository } from "../../src/repositories/MockBridgeRepository.js";
 import { MessageSyncService } from "../../src/services/MessageSyncService.js";
-import type { ConnectedSpace } from "@roomy/sdk";
+import type { ConnectedSpace, StreamIndex } from "@roomy/sdk";
 import { newUlid, type Ulid } from "@roomy/sdk";
 import type { DiscordBot } from "../../src/discord/types.js";
-import type { MessageProperties, Attachment } from "../../src/discord/types.js";
+import type { MessageProperties } from "../../src/discord/types.js";
 import { ProfileSyncService } from "../../src/services/ProfileSyncService.js";
 import { DISCORD_MESSAGE_TYPES } from "../../src/constants.js";
 
@@ -19,14 +18,19 @@ const createMockConnectedSpace = () => ({
 });
 
 // Mock DiscordBot
-const createMockBot = (): DiscordBot => ({
-  helpers: {
-    getMessage: vi.fn(async () => null),
-    editMessage: vi.fn(async () => ({ id: 456n })),
-    deleteMessage: vi.fn(async () => ({ success: true })),
-    executeWebhook: vi.fn(async () => ({ id: 123n })),
-  },
-} as any);
+const createMockBot = (): DiscordBot =>
+  ({
+    helpers: {
+      getMessage: vi.fn(async () => null),
+      editMessage: vi.fn(async () => ({ id: 456n })),
+      deleteMessage: vi.fn(async () => ({ success: true })),
+      executeWebhook: vi.fn(async () => ({ id: 123n })),
+      getWebhook: vi.fn(async () => ({ id: 123n, token: "test-token" })),
+      deleteWebhookMessage: vi.fn(async () => ({})),
+      createWebhook: vi.fn(async () => ({ id: 123n, token: "test-token" })),
+      getChannel: vi.fn(async () => ({ id: 789n })),
+    },
+  }) as any;
 
 // Mock EventBatcher
 const createMockBatcher = () => ({
@@ -47,12 +51,11 @@ describe("MessageSyncService", () => {
     repo.reset();
     mockSpace = createMockConnectedSpace() as unknown as ConnectedSpace;
     mockBot = createMockBot();
-    profileService = new ProfileSyncService(repo, mockSpace, guildId, spaceId);
+    profileService = new ProfileSyncService(repo, mockSpace, guildId);
     service = new MessageSyncService(
       repo,
       mockSpace,
       guildId,
-      spaceId,
       profileService,
       mockBot,
     );
@@ -79,15 +82,20 @@ describe("MessageSyncService", () => {
       } as any;
 
       // Set up channel mapping
-      await repo.registerMapping(`room:${discordMessage.channelId.toString()}`, roomyRoomId);
+      await repo.registerMapping(
+        `room:${discordMessage.channelId.toString()}`,
+        roomyRoomId,
+      );
 
-      const result = await service.syncDiscordToRoomy(roomyRoomId, discordMessage);
+      const result = await service.syncDiscordToRoomy(discordMessage);
 
       // Verify events were sent (profile + message)
       expect(mockSpace.sendEvent).toHaveBeenCalled();
       const calls = (mockSpace.sendEvent as any).mock.calls;
       // Find the message event (second call, after profile event)
-      const messageCall = calls.find((call: any) => call[0].$type === "space.roomy.message.createMessage.v0");
+      const messageCall = calls.find(
+        (call: any) => call[0].$type === "space.roomy.message.createMessage.v0",
+      );
       expect(messageCall).toBeDefined();
       const sentEvent = messageCall[0];
       expect(sentEvent.$type).toBe("space.roomy.message.createMessage.v0");
@@ -116,16 +124,19 @@ describe("MessageSyncService", () => {
         webhookId: null,
       } as any;
 
-      await repo.registerMapping(`room:${discordMessage.channelId.toString()}`, roomyRoomId);
+      await repo.registerMapping(
+        `room:${discordMessage.channelId.toString()}`,
+        roomyRoomId,
+      );
 
       // First call
-      const result1 = await service.syncDiscordToRoomy(roomyRoomId, discordMessage);
+      const result1 = await service.syncDiscordToRoomy(discordMessage);
 
       // Reset mock
       (mockSpace.sendEvent as any).mockClear();
 
       // Second call should be idempotent
-      const result2 = await service.syncDiscordToRoomy(roomyRoomId, discordMessage);
+      const result2 = await service.syncDiscordToRoomy(discordMessage);
 
       expect(mockSpace.sendEvent).not.toHaveBeenCalled();
       expect(result1).toBe(result2);
@@ -138,18 +149,29 @@ describe("MessageSyncService", () => {
         id: 987654321n,
         content: "Echo message",
         channelId: 111222333n,
-        author: { id: 444555666n, username: "bot", discriminator: "0000", avatar: null },
+        author: {
+          id: 444555666n,
+          username: "bot",
+          discriminator: "0000",
+          avatar: null,
+        },
         timestamp: Date.now(),
         type: DISCORD_MESSAGE_TYPES.DEFAULT,
         attachments: [],
         webhookId: webhookId,
       } as any;
 
-      await repo.registerMapping(`room:${discordMessage.channelId.toString()}`, roomyRoomId);
+      await repo.registerMapping(
+        `room:${discordMessage.channelId.toString()}`,
+        roomyRoomId,
+      );
       // Set webhook token (webhookId:token format)
-      await repo.setWebhookToken(discordMessage.channelId.toString(), `${webhookId}:token123`);
+      await repo.setWebhookToken(
+        discordMessage.channelId.toString(),
+        `${webhookId}:token123`,
+      );
 
-      const result = await service.syncDiscordToRoomy(roomyRoomId, discordMessage);
+      const result = await service.syncDiscordToRoomy(discordMessage);
 
       // Should skip
       expect(mockSpace.sendEvent).not.toHaveBeenCalled();
@@ -162,16 +184,24 @@ describe("MessageSyncService", () => {
         id: 987654321n,
         content: "Thread created",
         channelId: 111222333n,
-        author: { id: 444555666n, username: "system", discriminator: "0000", avatar: null },
+        author: {
+          id: 444555666n,
+          username: "system",
+          discriminator: "0000",
+          avatar: null,
+        },
         timestamp: Date.now(),
         type: DISCORD_MESSAGE_TYPES.THREAD_CREATED,
         attachments: [],
         webhookId: null,
       } as any;
 
-      await repo.registerMapping(`room:${discordMessage.channelId.toString()}`, roomyRoomId);
+      await repo.registerMapping(
+        `room:${discordMessage.channelId.toString()}`,
+        roomyRoomId,
+      );
 
-      const result = await service.syncDiscordToRoomy(roomyRoomId, discordMessage);
+      const result = await service.syncDiscordToRoomy(discordMessage);
 
       expect(mockSpace.sendEvent).not.toHaveBeenCalled();
       expect(result).toBeNull();
@@ -196,12 +226,17 @@ describe("MessageSyncService", () => {
         webhookId: null,
       } as any;
 
-      await repo.registerMapping(`room:${discordMessage.channelId.toString()}`, roomyRoomId);
+      await repo.registerMapping(
+        `room:${discordMessage.channelId.toString()}`,
+        roomyRoomId,
+      );
 
-      await service.syncDiscordToRoomy(roomyRoomId, discordMessage);
+      await service.syncDiscordToRoomy(discordMessage);
 
       const calls = (mockSpace.sendEvent as any).mock.calls;
-      const messageCall = calls.find((call: any) => call[0].$type === "space.roomy.message.createMessage.v0");
+      const messageCall = calls.find(
+        (call: any) => call[0].$type === "space.roomy.message.createMessage.v0",
+      );
       const sentEvent = messageCall[0];
       expect(sentEvent.extensions).toBeDefined();
       expect(
@@ -235,14 +270,21 @@ describe("MessageSyncService", () => {
         webhookId: null,
       } as any;
 
-      await repo.registerMapping(`room:${discordMessage.channelId.toString()}`, roomyRoomId);
+      await repo.registerMapping(
+        `room:${discordMessage.channelId.toString()}`,
+        roomyRoomId,
+      );
 
-      await service.syncDiscordToRoomy(roomyRoomId, discordMessage);
+      await service.syncDiscordToRoomy(discordMessage);
 
       const calls = (mockSpace.sendEvent as any).mock.calls;
-      const messageCall = calls.find((call: any) => call[0].$type === "space.roomy.message.createMessage.v0");
+      const messageCall = calls.find(
+        (call: any) => call[0].$type === "space.roomy.message.createMessage.v0",
+      );
       const sentEvent = messageCall[0];
-      expect(sentEvent.extensions["space.roomy.extension.authorOverride.v0"]).toBeDefined();
+      expect(
+        sentEvent.extensions["space.roomy.extension.authorOverride.v0"],
+      ).toBeDefined();
       const authorOverride = sentEvent.extensions[
         "space.roomy.extension.authorOverride.v0"
       ] as any;
@@ -268,14 +310,21 @@ describe("MessageSyncService", () => {
         webhookId: null,
       } as any;
 
-      await repo.registerMapping(`room:${discordMessage.channelId.toString()}`, roomyRoomId);
+      await repo.registerMapping(
+        `room:${discordMessage.channelId.toString()}`,
+        roomyRoomId,
+      );
 
-      await service.syncDiscordToRoomy(roomyRoomId, discordMessage);
+      await service.syncDiscordToRoomy(discordMessage);
 
       const calls = (mockSpace.sendEvent as any).mock.calls;
-      const messageCall = calls.find((call: any) => call[0].$type === "space.roomy.message.createMessage.v0");
+      const messageCall = calls.find(
+        (call: any) => call[0].$type === "space.roomy.message.createMessage.v0",
+      );
       const sentEvent = messageCall[0];
-      expect(sentEvent.extensions["space.roomy.extension.timestampOverride.v0"]).toBeDefined();
+      expect(
+        sentEvent.extensions["space.roomy.extension.timestampOverride.v0"],
+      ).toBeDefined();
       const tsOverride = sentEvent.extensions[
         "space.roomy.extension.timestampOverride.v0"
       ] as any;
@@ -300,10 +349,13 @@ describe("MessageSyncService", () => {
         webhookId: null,
       } as any;
 
-      await repo.registerMapping(`room:${discordMessage.channelId.toString()}`, roomyRoomId);
+      await repo.registerMapping(
+        `room:${discordMessage.channelId.toString()}`,
+        roomyRoomId,
+      );
       const mockBatcher = createMockBatcher();
 
-      await service.syncDiscordToRoomy(roomyRoomId, discordMessage, mockBatcher);
+      await service.syncDiscordToRoomy(discordMessage, mockBatcher);
 
       expect(mockBatcher.add).toHaveBeenCalled();
       expect(mockSpace.sendEvent).not.toHaveBeenCalled();
@@ -350,7 +402,12 @@ describe("MessageSyncService", () => {
         id: 987654321n,
         content: "Edited content",
         channelId: 111222333n,
-        author: { id: 444555666n, username: "testuser", discriminator: "0001", avatar: null },
+        author: {
+          id: 444555666n,
+          username: "testuser",
+          discriminator: "0001",
+          avatar: null,
+        },
         timestamp: Date.now() - 10000,
         editedTimestamp: new Date(),
         type: DISCORD_MESSAGE_TYPES.DEFAULT,
@@ -367,16 +424,159 @@ describe("MessageSyncService", () => {
   describe("syncDeleteToRoomy", () => {
     it("should sync a message deletion to Roomy", async () => {
       const messageId = 987654321n;
+      const channelId = 987654322n;
       const roomyMessageId = "roomy-msg-456";
 
       await repo.registerMapping(messageId.toString(), roomyMessageId);
 
-      await service.syncDeleteToRoomy(messageId);
+      await service.syncDeleteToRoomy(messageId, channelId);
 
       expect(mockSpace.sendEvent).toHaveBeenCalled();
       const sentEvent = (mockSpace.sendEvent as any).mock.calls[0][0];
       expect(sentEvent.$type).toBe("space.roomy.message.deleteMessage.v0");
       expect(sentEvent.messageId).toBe(roomyMessageId);
+    });
+  });
+
+  describe("handleRoomyEvent", () => {
+    it("should register Discord message origin mapping and skip sync", async () => {
+      const messageId = "123";
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.message.createMessage.v0",
+          id: newUlid(),
+          room: "room-123",
+          body: "test",
+          extensions: {
+            "space.roomy.extension.discordMessageOrigin.v0": {
+              snowflake: messageId,
+              channelId: "456",
+              guildId: guildId.toString(),
+            },
+          },
+        },
+        user: "did:discord:123" as any,
+      } as any;
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(true);
+      expect(await repo.getRoomyId(messageId)).toBe(event.event.id);
+      expect(mockSpace.sendEvent).not.toHaveBeenCalled();
+    });
+
+    it("should sync Roomy message to Discord when no Discord origin", async () => {
+      const roomyRoomId = "room-123";
+      const discordChannelId = "room:456";
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.message.createMessage.v0",
+          id: newUlid(),
+          room: roomyRoomId,
+          body: {
+            data: { buf: new TextEncoder().encode("test message") },
+          },
+        },
+        user: "did:alice:123" as any,
+      } as any;
+
+      await repo.registerMapping(discordChannelId, roomyRoomId);
+      await repo.setWebhookToken("456", "123:test-token");
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(true);
+      expect(mockBot?.helpers.executeWebhook).toHaveBeenCalled();
+    });
+
+    it("should cache edit tracking info for Discord-origin edits", async () => {
+      const messageId = "123";
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.message.editMessage.v0",
+          id: newUlid(),
+          messageId: "msg-123",
+          room: "room-123",
+          body: "edited content",
+          extensions: {
+            "space.roomy.extension.discordMessageOrigin.v0": {
+              snowflake: messageId,
+              channelId: "456",
+              guildId: guildId.toString(),
+              editedTimestamp: 1234567890,
+              contentHash: "abc123",
+            },
+          },
+        },
+        user: "did:discord:123" as any,
+      } as any;
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(true);
+      const editInfo = await repo.getEditInfo(messageId);
+      expect(editInfo?.editedTimestamp).toBe(1234567890);
+      expect(editInfo?.contentHash).toBe("abc123");
+    });
+
+    it("should unregister mapping on message delete", async () => {
+      const messageId = "msg-123";
+      const discordId = "456";
+      await repo.registerMapping(discordId, messageId);
+
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.message.deleteMessage.v0",
+          id: newUlid(),
+          messageId,
+          room: "room-123",
+        },
+        user: "did:alice:123" as any,
+      } as any;
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(true);
+      expect(await repo.getDiscordId(messageId)).toBeUndefined();
+    });
+
+    it("should return false for unknown event types", async () => {
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.reaction.addReaction.v0",
+          id: newUlid(),
+        },
+        user: "did:alice:123" as any,
+      } as any;
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(false);
+    });
+
+    it("should handle errors gracefully and return false", async () => {
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.message.createMessage.v0",
+          id: newUlid(),
+          room: "room-123",
+          body: "test",
+        },
+        user: "did:alice:123" as any,
+      } as any;
+
+      // Mock an error by making getDiscordId throw
+      vi.spyOn(repo, "getDiscordId").mockRejectedValue(new Error("DB error"));
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(false);
     });
   });
 });

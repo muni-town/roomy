@@ -4,7 +4,7 @@
  */
 
 import type { BridgeRepository } from "./BridgeRepository.js";
-import type { RoomyUserProfile, SyncedEdit } from "./db.js";
+import type { RoomyUserProfile, SyncedEdit } from "./BridgeRepository.js";
 
 /**
  * In-memory mock implementation of BridgeRepository.
@@ -22,6 +22,9 @@ export class MockBridgeRepository implements BridgeRepository {
   private readonly webhookTokens = new Map<string, string>();
   private messageHashes: Record<string, string> = {};
   private readonly latestMessages = new Map<string, string>();
+  private readonly cursors = new Map<string, number>();
+  private readonly guildToSpace = new Map<string, string>();
+  private readonly spaceToGuild = new Map<string, string>();
 
   // Test helpers
   private readonly calls: Record<string, number> = {};
@@ -58,7 +61,15 @@ export class MockBridgeRepository implements BridgeRepository {
     this.webhookTokens.clear();
     this.messageHashes = {};
     this.latestMessages.clear();
+    this.cursors.clear();
+    this.guildToSpace.clear();
+    this.spaceToGuild.clear();
     this.resetCallCounts();
+  }
+
+  async delete(): Promise<void> {
+    this.trackCall("delete");
+    this.reset();
   }
 
   private trackCall(method: string): void {
@@ -225,5 +236,48 @@ export class MockBridgeRepository implements BridgeRepository {
   async setLatestMessage(channelId: string, messageId: string): Promise<void> {
     this.trackCall("setLatestMessage");
     this.latestMessages.set(channelId, messageId);
+  }
+
+  // === Leaf Cursors ===
+
+  async getCursor(spaceId: string): Promise<number | undefined> {
+    this.trackCall("getCursor");
+    return this.cursors.get(spaceId);
+  }
+
+  async setCursor(spaceId: string, idx: number): Promise<void> {
+    this.trackCall("setCursor");
+    this.cursors.set(spaceId, idx);
+  }
+
+  // === Registered Bridges ===
+
+  async getSpaceId(guildId: string): Promise<string | undefined> {
+    this.trackCall("getSpaceId");
+    return this.guildToSpace.get(guildId);
+  }
+
+  async getGuildId(spaceId: string): Promise<string | undefined> {
+    this.trackCall("getGuildId");
+    return this.spaceToGuild.get(spaceId);
+  }
+
+  /**
+   * Get the last processed index for a space, or 1 if not found.
+   * Leaf stream indices are 1-based, so new subscriptions should start at 1.
+   */
+  async getLastProcessedIdx(spaceId: string): Promise<number> {
+    this.trackCall("getLastProcessedIdx");
+    return this.cursors.get(spaceId) ?? 1;
+  }
+
+  // === Test helpers for registered bridges ===
+
+  /**
+   * Register a bridge mapping for testing.
+   */
+  setBridge(guildId: string, spaceId: string): void {
+    this.guildToSpace.set(guildId, spaceId);
+    this.spaceToGuild.set(spaceId, guildId);
   }
 }

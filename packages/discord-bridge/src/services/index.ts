@@ -25,7 +25,4 @@ export type {
   EventBatcher,
 } from "./MessageSyncService.js";
 
-export {
-  Bridge as SyncOrchestrator,
-  createSyncOrchestrator,
-} from "./SyncOrchestrator.js";
+export { Bridge } from "./Bridge.js";

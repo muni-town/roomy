@@ -5,7 +5,6 @@ import "./otel.js";
 import "dotenv/config";
 // import { startRoomyWatcher } from "./roomy/from.js";
 import { startApi } from "./api.js";
-import { initRoomyClient, subscribeToConnectedSpaces } from "./roomy/client.js";
 import { trace } from "@opentelemetry/api";
 import { BridgeOrchestrator } from "./services/BridgeOrchestrator.js";
 
@@ -21,14 +20,13 @@ function shutdown() {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-console.log("Starting HTTP API...");
-startApi();
-
-console.log("Connecting to Roomy...");
-let bridgeOrchestrator: Awaited<BridgeOrchestrator>;
+let bridgeOrchestrator;
 try {
-  bridgeOrchestrator = await BridgeOrchestrator.start();
+  bridgeOrchestrator = new BridgeOrchestrator();
 } catch (e) {
   console.error("Failed to initialize bridge:", e);
   process.exit(1);
 }
+
+console.log("Starting HTTP API...");
+startApi(bridgeOrchestrator);

@@ -44,6 +44,8 @@ export interface WebhookToken {
  * Provides a clean abstraction over LevelDB operations.
  */
 export interface BridgeRepository {
+  /** Disconnect Roomy space from Guild. Remove all data specific to the mapping. */
+  delete(): Promise<void>;
   // === ID Mapping (Bidirectional) ===
 
   /**
@@ -202,4 +204,35 @@ export interface BridgeRepository {
    * Set the latest message ID for a channel.
    */
   setLatestMessage(channelId: string, messageId: string): Promise<void>;
+
+  // === Leaf Cursors ===
+
+  /**
+   * Get the last processed event index for a space.
+   * Used to resume subscriptions from the correct position.
+   */
+  getCursor(spaceId: string): Promise<number | undefined>;
+
+  /**
+   * Set the last processed event index for a space.
+   */
+  setCursor(spaceId: string, idx: number): Promise<void>;
+
+  /**
+   * Get the last processed index for a space, or 1 if not found.
+   * Leaf stream indices are 1-based, so new subscriptions should start at 1.
+   */
+  getLastProcessedIdx(spaceId: string): Promise<number>;
+
+  // === Registered Bridges ===
+
+  /**
+   * Get the space ID for a guild ID.
+   */
+  getSpaceId(guildId: string): Promise<string | undefined>;
+
+  /**
+   * Get the guild ID for a space ID.
+   */
+  getGuildId(spaceId: string): Promise<string | undefined>;
 }
