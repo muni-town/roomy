@@ -1,10 +1,22 @@
+/**
+ * Legacy backfill functions - DEPRECATED
+ *
+ * This file contains legacy backfill implementations that have been
+ * migrated to service-based architecture.
+ *
+ * Use the following instead:
+ * - messageSync.backfillToRoomy() - for Discord → Roomy message backfill
+ * - reactionSync.backfillToRoomy() - for Discord → Roomy reaction backfill
+ * - structureSync.backfillToRoomy() - for Discord → Roomy channel/thread backfill
+ */
+
 import type { Message, Emoji } from "@discordeno/bot";
 import type { DiscordBot } from "./types";
 import type { MessageProperties } from "./types";
 import {
   discordMessageHashesForBridge,
   discordWebhookTokensForBridge,
-} from "../repositories/LevelDBBridgeRepository";
+} from "../repositories/LevelDBBridgeRepository.js";
 import type { BridgeRepository } from "../repositories/index.js";
 import { tracer, setDiscordAttrs, recordError } from "../tracing.js";
 import { fingerprint } from "../utils/hash.js";
@@ -35,7 +47,10 @@ export async function computeDiscordMessageHash(
 
 /**
  * Backfill all Discord messages for a guild's channels.
- * Builds content hash map for duplicate detection during Roomy → Discord sync.
+ * DEPRECATED: Use messageSync.backfillToRoomy() instead.
+ *
+ * This function builds content hash map for duplicate detection during
+ * Roomy → Discord sync.
  *
  * For each message:
  * - If from our webhook: Extract truncated ULID nonce and store ULID → Discord ID mapping
@@ -45,6 +60,8 @@ export async function computeDiscordMessageHash(
  * @param ctx - Guild context
  * @param channels - Discord channels to backfill
  * @returns Map of channelId → {hash → discordMessageId}
+ *
+ * @deprecated Use MessageSyncService.backfillToRoomy() instead
  */
 export async function backfillDiscordMessages(
   bot: DiscordBot,
@@ -55,6 +72,10 @@ export async function backfillDiscordMessages(
   },
   channels: bigint[],
 ): Promise<Map<string, Map<string, string>>> {
+  console.warn(
+    "[DEPRECATED] backfillDiscordMessages is deprecated. Use MessageSyncService.backfillToRoomy() instead.",
+  );
+
   return tracer.startActiveSpan("backfill.discord_messages", async (span) => {
     try {
       setDiscordAttrs(span, { guildId: ctx.guildId });
@@ -193,6 +214,7 @@ export async function backfillDiscordMessages(
 
 /**
  * Backfill all reactions for Discord messages.
+ * DEPRECATED: Use reactionSync.backfillToRoomy() instead.
  *
  * Fetches all messages in a channel, finds all reactions on each message,
  * and syncs each user's reaction to Roomy.
@@ -200,6 +222,8 @@ export async function backfillDiscordMessages(
  * @param bot - Discord bot instance
  * @param ctx - Guild context
  * @param channelId - Discord channel ID
+ *
+ * @deprecated Use ReactionSyncService.backfillToRoomy() instead
  */
 export async function backfillDiscordReactions(
   bot: DiscordBot,
@@ -210,6 +234,10 @@ export async function backfillDiscordReactions(
   },
   channelId: bigint,
 ): Promise<void> {
+  console.warn(
+    "[DEPRECATED] backfillDiscordReactions is deprecated. Use ReactionSyncService.backfillToRoomy() instead.",
+  );
+
   return tracer.startActiveSpan("backfill.discord_reactions", async (span) => {
     try {
       setDiscordAttrs(span, { guildId: ctx.guildId, channelId });
@@ -221,11 +249,14 @@ export async function backfillDiscordReactions(
       const repo = ctx.repo;
 
       // Create ReactionSyncService
+      // Note: This uses the old API signature - backfillToRoomy() is preferred
       const reactionSync = new ReactionSyncService(
         repo,
-        ctx.connectedSpace,
+        ctx.connectedSpace.streamDid,
+        // dispatcher is not available here, create a minimal one
+        null as any,
         ctx.guildId,
-        bot, // Pass bot ID for echo prevention
+        bot,
       );
 
       // Fetch messages with pagination to get their reactions

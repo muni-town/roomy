@@ -114,10 +114,6 @@ export class Bridge {
     this.backfillDiscordAndSyncToRoomy();
   }
 
-  // ============================================================
-  // DISCORD event handlers
-  // ============================================================
-
   /**
    * Handle Discord events using unified type-safe routing.
    * Delegates to appropriate service based on event type.
@@ -175,196 +171,6 @@ export class Bridge {
           `[Bridge] Unknown Discord event type: ${(discordEvent as any).event}`,
         );
     }
-  }
-
-  // ============================================================
-  // ROOMY event handlers (Roomy → Discord sync)
-  // ============================================================
-
-  /**
-   * Handle Roomy create message event.
-   * Syncs the message to Discord via webhook.
-   */
-  async handleRoomyCreateMessage(
-    decoded: DecodedStreamEvent,
-    bot: DiscordBot,
-  ): Promise<void> {
-    const { event, user } = decoded;
-    const e = event as any;
-
-    if (!e.room || !e.body) {
-      console.warn(
-        "[SyncOrchestrator] Invalid Roomy create message event, missing room or body",
-      );
-      return;
-    }
-
-    await this.messageSync.syncRoomyToDiscordCreate(
-      event.id,
-      e.room,
-      e.body,
-      user,
-      bot,
-    );
-  }
-
-  /**
-   * Handle Roomy edit message event.
-   * Edits the Discord message.
-   */
-  async handleRoomyEditMessage(
-    decoded: DecodedStreamEvent,
-    bot: DiscordBot,
-  ): Promise<void> {
-    const { event } = decoded;
-    const e = event as any;
-
-    if (!e.messageId || !e.room || !e.body) {
-      console.warn(
-        "[SyncOrchestrator] Invalid Roomy edit message event, missing messageId, room, or body",
-      );
-      return;
-    }
-
-    await this.messageSync.syncRoomyToDiscordEdit(
-      e.messageId,
-      e.room,
-      e.body,
-      bot,
-    );
-  }
-
-  /**
-   * Handle Roomy delete message event.
-   * Deletes the Discord message.
-   */
-  async handleRoomyDeleteMessage(
-    decoded: DecodedStreamEvent,
-    bot: DiscordBot,
-  ): Promise<void> {
-    const { event } = decoded;
-    const e = event as any;
-
-    if (!e.messageId) {
-      console.warn(
-        "[SyncOrchestrator] Invalid Roomy delete message event, missing messageId",
-      );
-      return;
-    }
-
-    await this.messageSync.syncRoomyToDiscordDelete(
-      e.messageId,
-      e.room || "",
-      bot,
-    );
-  }
-
-  /**
-   * Handle Roomy add reaction event.
-   * Adds reaction to Discord message.
-   */
-  async handleRoomyAddReaction(
-    decoded: DecodedStreamEvent,
-    bot: DiscordBot,
-  ): Promise<void> {
-    const { event, user } = decoded;
-    const e = event as any;
-
-    if (!e.reactionTo || !e.reaction || !e.room) {
-      console.warn(
-        "[SyncOrchestrator] Invalid Roomy add reaction event, missing reactionTo, reaction, or room",
-      );
-      return;
-    }
-
-    await this.reactionSync.syncRoomyToDiscordAdd(
-      e.reactionTo,
-      e.room,
-      e.reaction,
-      user,
-      bot,
-    );
-  }
-
-  /**
-   * Handle Roomy remove reaction event.
-   * Removes reaction from Discord message.
-   */
-  async handleRoomyRemoveReaction(
-    decoded: DecodedStreamEvent,
-    bot: DiscordBot,
-  ): Promise<void> {
-    const { event, user } = decoded;
-    const e = event as any;
-
-    if (!e.reactionId || !e.room) {
-      console.warn(
-        "[SyncOrchestrator] Invalid Roomy remove reaction event, missing reactionId or room",
-      );
-      return;
-    }
-
-    await this.reactionSync.syncRoomyToDiscordRemove(
-      e.reactionId,
-      e.room,
-      user,
-      bot,
-    );
-  }
-
-  /**
-   * Handle Roomy create room event.
-   * Creates a Discord channel if the room doesn't have Discord origin.
-   */
-  async handleRoomyCreateRoom(
-    event: DecodedStreamEvent,
-    bot: DiscordBot,
-  ): Promise<void> {
-    return await this.structureSync.handleRoomyRoomCreate(event.event as any);
-  }
-
-  /**
-   * Handle Roomy update sidebar event.
-   * Syncs Roomy sidebar structure to Discord channels.
-   */
-  async handleRoomyUpdateSidebar(
-    event: DecodedStreamEvent,
-    bot: DiscordBot,
-  ): Promise<void> {
-    return await this.structureSync.handleRoomySidebarUpdate(
-      event.event as any,
-    );
-  }
-
-  /**
-   * Recover Discord channel mappings from Discord topics.
-   * Called on bridge startup when local data may be lost.
-   */
-  async recoverMappings(): Promise<void> {
-    return await this.structureSync.recoverDiscordMappings();
-  }
-
-  /**
-   * Handle Roomy room rename - update Discord channel name.
-   */
-  async handleRoomyRoomRename(
-    roomyRoomId: string,
-    newName: string,
-  ): Promise<void> {
-    return await this.structureSync.handleRoomyRoomRename(
-      roomyRoomId as Ulid,
-      newName,
-    );
-  }
-
-  /**
-   * Handle Roomy category rename - update Discord category.
-   */
-  async handleRoomyCategoryRename(
-    oldName: string,
-    newName: string,
-  ): Promise<void> {
-    return await this.structureSync.handleRoomyCategoryRename(oldName, newName);
   }
 
   /**
@@ -435,7 +241,7 @@ export class Bridge {
           // Subscribe with the handler
           this.connectedSpace.subscribe(
             this.handleRoomyEvents.bind(this),
-            cursor as StreamIndex,
+            1 as StreamIndex, // TODO put back 'cursor'
           );
           // Wait for backfill to complete before returning
           console.log(
@@ -462,6 +268,7 @@ export class Bridge {
             `Backfill complete for space ${this.connectedSpace.streamDid}`,
           );
           console.log(`Subscribed to space ${this.connectedSpace.streamDid}`);
+          this.state.current = { state: "backfillDiscordAndSyncToRoomy" };
           span.setAttribute("subscription.status", "connected");
         } catch (e) {
           recordError(span, e);
@@ -475,7 +282,55 @@ export class Bridge {
 
   async backfillDiscordAndSyncToRoomy() {
     await this.state.transitionedTo("backfillDiscordAndSyncToRoomy");
-    console.log("Backfilling Discord");
+    console.log("Starting Discord backfill (Phase 2)");
+
+    try {
+      // Step 1: Backfill structure (channels and threads)
+      console.log(
+        "[Bridge] Backfilling Discord structure (channels/threads)...",
+      );
+      const structureCount = await this.structureSync.backfillToRoomy();
+      console.log(`[Bridge] Synced ${structureCount} channels/threads`);
+
+      // Get all text channel IDs for message/reaction backfill
+      const channels = await this.bot.rest.getChannels(this.guildId.toString());
+      const textChannelIds: bigint[] = [];
+
+      for (const channel of Object.values(channels)) {
+        // Only text channels (type 0), not threads (11, 12), voice (2), categories (4), etc.
+        if (channel.type === 0) {
+          textChannelIds.push(BigInt(channel.id));
+        }
+      }
+
+      console.log(
+        `[Bridge] Backfilling messages for ${textChannelIds.length} channels...`,
+      );
+
+      // Step 2: Backfill messages
+      const messageCount =
+        await this.messageSync.backfillToRoomy(textChannelIds);
+      console.log(`[Bridge] Synced ${messageCount} messages`);
+
+      // Step 3: Backfill reactions
+      console.log("[Bridge] Backfilling reactions...");
+      const reactionCount =
+        await this.reactionSync.backfillToRoomy(textChannelIds);
+      console.log(`[Bridge] Synced ${reactionCount} reactions`);
+
+      // Flush any remaining batched events
+      await this.dispatcher.flushRoomy();
+
+      console.log("[Bridge] Discord backfill complete");
+
+      // Transition to Phase 3
+      this.state.current = { state: "syncRoomyToDiscord" };
+      await this.syncRoomyToDiscord();
+      this.state.current = { state: "listening" };
+    } catch (error) {
+      console.error("[Bridge] Error during Discord backfill:", error);
+      throw error;
+    }
   }
 
   /**
@@ -488,6 +343,7 @@ export class Bridge {
    * @param events - Batch of decoded Roomy events
    */
   async handleRoomyEvents(events: DecodedStreamEvent[]): Promise<void> {
+    console.log("handling Roomy events", events);
     let maxIdx = 0;
 
     for (const decodedEvent of events) {
@@ -508,5 +364,22 @@ export class Bridge {
     if (maxIdx > 0) {
       await this.repo.setCursor(this.connectedSpace.streamDid, maxIdx);
     }
+  }
+
+  /**
+   * Phase 3: Sync Roomy-origin data to Discord.
+   * The dispatcher processes queued Roomy-origin events automatically.
+   */
+  async syncRoomyToDiscord(): Promise<void> {
+    await this.state.transitionedTo("syncRoomyToDiscord");
+    console.log("Starting Roomy → Discord sync (Phase 3)");
+
+    // The dispatcher's toDiscord channel consumer loop is already running
+    // and will process queued events. We just need to wait a bit for it to complete
+    // or implement a proper signal/ready mechanism.
+
+    // For now, transition to listening state
+    await this.state.transitionedTo("listening");
+    console.log("[Bridge] Transitioned to listening state");
   }
 }
