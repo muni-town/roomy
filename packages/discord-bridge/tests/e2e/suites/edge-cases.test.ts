@@ -15,10 +15,10 @@ import {
   connectGuildToNewSpace,
   initE2ERoomyClient,
   getTextChannels,
-  createSyncOrchestratorForTest,
+  createBridgeForTest,
 } from "../helpers/setup.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
-import { registeredBridges } from "../../../src/repositories/db.js";
+import { registeredBridges } from "../../../src/repositories/LevelDBBridgeRepository.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
 import { StreamIndex } from "@roomy/sdk";
 
@@ -57,7 +57,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -66,7 +66,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       // Sync the first channel
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a webhook for the channel (simulating Roomy → Discord sync)
       const webhook = await bot.rest.createWebhook(firstChannel.id, {
@@ -92,7 +92,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Sync the webhook message (no token stored yet, should sync)
-      const roomyMessageId1 = await orchestrator.handleDiscordMessageCreate(
+      const roomyMessageId1 = await bridge.handleDiscordMessageCreate(
         webhookMessage as any,
         roomyRoomId,
       );
@@ -132,7 +132,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -141,7 +141,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       // Sync the first channel
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a webhook for the channel (simulating Roomy → Discord sync setup)
       const webhook = await bot.rest.createWebhook(firstChannel.id, {
@@ -149,54 +149,11 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       });
 
       // Store webhook token to indicate reverse sync is active
-      // We need to access the repo directly - get it from the setup
-      const { createSyncOrchestrator } =
-        await import("../../../src/services/SyncOrchestrator.js");
-      const { LevelDBBridgeRepository } =
-        await import("../../../src/repositories/BridgeRepository.js");
-
-      // Create a new repo instance with the stores
-      const roomyUserProfiles = (
-        await import("../../../src/repositories/db.js")
-      ).roomyUserProfilesForBridge({
-        discordGuildId: result.guildId,
-        roomySpaceId: result.spaceId,
-      });
-
-      const discordWebhookTokens = (
-        await import("../../../src/repositories/db.js")
-      ).discordWebhookTokensForBridge({
-        discordGuildId: result.guildId,
-        roomySpaceId: result.spaceId,
-      });
-
-      const repo = new LevelDBBridgeRepository({
-        syncedIds: result.guildContext.syncedIds,
-        syncedProfiles: result.guildContext.syncedProfiles,
-        roomyUserProfiles,
-        syncedReactions: result.guildContext.syncedReactions,
-        syncedSidebarHash: result.guildContext.syncedSidebarHash,
-        syncedRoomLinks: result.guildContext.syncedRoomLinks,
-        syncedEdits: result.guildContext.syncedEdits,
-        discordWebhookTokens,
-        discordMessageHashes: result.guildContext.discordMessageHashes,
-        discordLatestMessage: result.guildContext.latestMessagesInChannel,
-      });
-
-      // Store webhook token
-      await repo.setWebhookToken(
+      // Access the repo directly from the bridge
+      await bridge.repo.setWebhookToken(
         firstChannel.id.toString(),
         `${webhook.id}:${webhook.token}`,
       );
-
-      // Create a new orchestrator with the updated repo
-      const newOrchestrator = createSyncOrchestrator({
-        repo,
-        connectedSpace: result.connectedSpace,
-        guildId: result.guildContext.guildId,
-        spaceId: result.guildContext.spaceId,
-        bot,
-      });
 
       // Create a regular message with the bot as the author
       // This simulates a Roomy → Discord message that was sent by the bot
@@ -205,9 +162,8 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       });
 
       // Try to sync the bot's own message back to Roomy
-      const roomyMessageId = await newOrchestrator.handleDiscordMessageCreate(
+      const roomyMessageId = await bridge.handleDiscordMessageCreate(
         botMessage,
-        roomyRoomId,
       );
 
       // Verify: Message was skipped (null returned) to prevent echo
@@ -242,7 +198,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -251,7 +207,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       // Sync the first channel
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // For this test, we'll create a message via the bot
       // but verify it doesn't get skipped when we DON'T match bot.id
@@ -281,7 +237,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -290,7 +246,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       // Sync the first channel
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a test message
       const testMessage = await bot.helpers.sendMessage(firstChannel.id, {
@@ -301,7 +257,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       await bot.helpers.deleteMessage(firstChannel.id, testMessage.id);
 
       // Try to sync the deleted message
-      const roomyMessageId = await orchestrator.handleDiscordMessageCreate(
+      const roomyMessageId = await bridge.handleDiscordMessageCreate(
         testMessage,
         roomyRoomId,
       );
@@ -335,7 +291,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -344,7 +300,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       // Sync the first channel
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a large message (Discord's limit is 2000 chars for user messages)
       // We'll test with 1500 chars to stay safely under the limit
@@ -355,7 +311,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       });
 
       // Sync the large message
-      const roomyMessageId = await orchestrator.handleDiscordMessageCreate(
+      const roomyMessageId = await bridge.handleDiscordMessageCreate(
         testMessage,
         roomyRoomId,
       );
@@ -400,7 +356,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -409,7 +365,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       // Sync the first channel
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a message with only an attachment (empty content)
       // Using a simple 1x1 red PNG (base64)
@@ -428,7 +384,7 @@ describe("E2E: Discord Bridge Edge Cases", () => {
       });
 
       // Sync the attachment-only message
-      const roomyMessageId = await orchestrator.handleDiscordMessageCreate(
+      const roomyMessageId = await bridge.handleDiscordMessageCreate(
         testMessage,
         roomyRoomId,
       );

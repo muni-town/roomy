@@ -3,7 +3,7 @@
  * Provides Discord bot and Roomy client creation for tests.
  */
 
-import { createBot, Intents } from "@discordeno/bot";
+import { createBot } from "@discordeno/bot";
 import {
   createDefaultSpaceEvents,
   type ConnectedSpace,
@@ -12,6 +12,8 @@ import {
   ConnectedSpace as SDKConnectedSpace,
   RoomyClient,
   StreamIndex,
+  UserDid,
+  Ulid,
 } from "@roomy/sdk";
 import {
   desiredProperties,
@@ -26,28 +28,14 @@ import {
   ATPROTO_BRIDGE_DID,
   ATPROTO_BRIDGE_APP_PASSWORD,
 } from "../../../src/env.js";
-import { registeredBridges } from "../../../src/repositories/db.js";
+import { registeredBridges } from "../../../src/repositories/LevelDBBridgeRepository.js";
 import {
   connectedSpaces,
   initRoomyClient,
   getRoomyClient as getBridgeRoomyClient,
 } from "../../../src/roomy/client.js";
 import type { GuildContext } from "../../../src/types.js";
-import {
-  syncedIdsForBridge,
-  syncedProfilesForBridge,
-  syncedReactionsForBridge,
-  syncedSidebarHashForBridge,
-  syncedRoomLinksForBridge,
-  syncedEditsForBridge,
-  discordMessageHashesForBridge,
-  discordLatestMessageInChannelForBridge,
-  roomyUserProfilesForBridge,
-  discordWebhookTokensForBridge,
-} from "../../../src/repositories/db.js";
-import { LevelDBBridgeRepository } from "../../../src/repositories/BridgeRepository.js";
-import { createSyncOrchestrator } from "../../../src/services/SyncOrchestrator.js";
-import type { SyncOrchestrator } from "../../../src/services/SyncOrchestrator.js";
+import { Bridge } from "../../../src/services/Bridge.js";
 
 /**
  * Environment variables for E2E tests.
@@ -158,7 +146,7 @@ export async function connectGuildToNewSpace(
       client: roomy,
       module: modules.space,
     },
-    ATPROTO_BRIDGE_DID as `did:${string}:${string}`,
+    ATPROTO_BRIDGE_DID as UserDid,
   );
 
   const spaceId = space.streamDid;
@@ -350,62 +338,35 @@ export function createQueryHelper(): RoomyQueryHelper {
 }
 
 /**
- * Create a SyncOrchestrator for E2E testing.
+ * Create a Bridge for E2E testing.
  *
- * Creates a LevelDBBridgeRepository from the GuildContext stores
- * and uses it to create a configured SyncOrchestrator.
+ * Uses Bridge.connect() to create a configured Bridge instance
+ * that can handle both Discord -> Roomy and Roomy -> Discord sync.
  *
  * @param connectionResult - Result from connectGuildToNewSpace()
- * @param bot - Optional Discord bot instance for reverse sync operations
- * @returns Configured SyncOrchestrator ready for sync operations
+ * @param bot - Discord bot instance (required for sync operations)
+ * @returns Configured Bridge ready for sync operations
  *
  * @example
  * ```ts
  * const result = await connectGuildToNewSpace(roomy, TEST_GUILD_ID, "test");
  * const bot = await createTestBot();
- * const orchestrator = await createSyncOrchestratorForTest(result, bot);
- * await orchestrator.handleDiscordChannelCreate(channel);
+ * const bridge = await createBridgeForTest(result, bot);
+ * await bridge.handleDiscordChannelCreate(channel);
  * ```
  */
-export function createSyncOrchestratorForTest(
+export async function createBridgeForTest(
   connectionResult: GuildConnectionResult,
-  bot?: DiscordBot,
-): SyncOrchestrator {
-  const { guildContext, guildId, spaceId } = connectionResult;
+  bot: DiscordBot,
+): Promise<Bridge> {
+  const { spaceId, guildId } = connectionResult;
+  const roomy = getRoomyClient();
 
-  // Create the additional stores needed by LevelDBBridgeRepository
-  // that aren't included in GuildContext
-  const roomyUserProfiles = roomyUserProfilesForBridge({
-    discordGuildId: guildId,
-    roomySpaceId: spaceId,
-  });
-
-  const discordWebhookTokens = discordWebhookTokensForBridge({
-    discordGuildId: guildId,
-    roomySpaceId: spaceId,
-  });
-
-  // Create the repository wrapper
-  const repo = new LevelDBBridgeRepository({
-    syncedIds: guildContext.syncedIds,
-    syncedProfiles: guildContext.syncedProfiles,
-    roomyUserProfiles,
-    syncedReactions: guildContext.syncedReactions,
-    syncedSidebarHash: guildContext.syncedSidebarHash,
-    syncedRoomLinks: guildContext.syncedRoomLinks,
-    syncedEdits: guildContext.syncedEdits,
-    discordWebhookTokens,
-    discordMessageHashes: guildContext.discordMessageHashes,
-    discordLatestMessage: guildContext.latestMessagesInChannel,
-  });
-
-  // Create and return the orchestrator
-  return createSyncOrchestrator({
-    repo,
-    connectedSpace: guildContext.connectedSpace,
-    guildId: guildContext.guildId,
-    spaceId: guildContext.spaceId,
+  return await Bridge.connect({
+    spaceId,
     bot,
+    guildId: BigInt(guildId),
+    client: roomy,
   });
 }
 
@@ -1096,7 +1057,7 @@ export async function createGatewayTestBot(): Promise<GatewayTestBot> {
   // Set the global tracker (will be used by event handlers)
   gatewayTestBotTracker = { reactionEvents };
 
-  const bot = await createBot({
+  const bot = createBot({
     token: env.discordToken,
     desiredProperties,
     // Gateway intents for reaction testing
@@ -1407,7 +1368,7 @@ export async function waitForBotReactionViaRest(
  */
 export interface RoomyReactionEvent {
   /** The event ULID */
-  id: string;
+  id: Ulid;
   /** The event type */
   $type: string;
   /** The message being reacted to */
@@ -1417,7 +1378,7 @@ export interface RoomyReactionEvent {
   /** The user who reacted */
   reactingUser: string;
   /** The event index */
-  idx: bigint;
+  idx: StreamIndex;
 }
 
 /**
@@ -1442,12 +1403,14 @@ export async function getRoomyReactionsForMessage(
     )
     .filter((e: any) => e.reactionTo === messageUlId)
     .map((e: any) => ({
-      id: e.id,
+      id: e.id as Ulid,
       $type: e.$type,
       reactionTo: e.reactionTo,
       reaction: e.reaction,
       reactingUser: e.reactingUser,
-      idx: events.find((ev: any) => ev.event.id === e.id)?.idx || 0n,
+      idx:
+        events.find((ev: any) => ev.event.id === e.id)?.idx ||
+        (1 as StreamIndex),
     }));
 
   return reactionEvents;

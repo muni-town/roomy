@@ -11,10 +11,10 @@ import {
   connectGuildToNewSpace,
   initE2ERoomyClient,
   getTextChannels,
-  createSyncOrchestratorForTest,
+  createBridgeForTest,
 } from "../helpers/setup.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
-import { registeredBridges } from "../../../src/repositories/db.js";
+import { registeredBridges } from "../../../src/repositories/LevelDBBridgeRepository.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
 import { StreamIndex } from "@roomy/sdk";
 
@@ -47,7 +47,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -56,7 +56,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       // Sync the first channel
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a test message in Discord
       const testContent = `Test message at ${Date.now()}`;
@@ -65,7 +65,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       });
 
       // Sync the message to Roomy (first time)
-      const roomyMessageId1 = await orchestrator.handleDiscordMessageCreate(
+      const roomyMessageId1 = await bridge.handleDiscordMessageCreate(
         testMessage,
         roomyRoomId,
       );
@@ -75,7 +75,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Sync the SAME message again (simulating gateway replay/duplicate delivery)
-      const roomyMessageId2 = await orchestrator.handleDiscordMessageCreate(
+      const roomyMessageId2 = await bridge.handleDiscordMessageCreate(
         testMessage,
         roomyRoomId,
       );
@@ -115,7 +115,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -124,7 +124,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       // Sync the first channel
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create and sync a message
       const originalContent = `Original message at ${Date.now()}`;
@@ -132,7 +132,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
         content: originalContent,
       });
 
-      await orchestrator.handleDiscordMessageCreate(testMessage, roomyRoomId);
+      await bridge.handleDiscordMessageCreate(testMessage);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Edit the message
@@ -146,7 +146,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       );
 
       // Sync the edit (first time)
-      await orchestrator.handleDiscordMessageUpdate(editedMessage);
+      await bridge.handleDiscordMessageUpdate(editedMessage);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       let events = (
@@ -159,7 +159,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       const firstEditCount = editEvents.length;
 
       // Sync the SAME edit again (simulating gateway replay)
-      await orchestrator.handleDiscordMessageUpdate(editedMessage);
+      await bridge.handleDiscordMessageUpdate(editedMessage);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       events = (
@@ -190,7 +190,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -199,7 +199,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       // Sync the first channel
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create and sync a message
       const originalContent = `Original message at ${Date.now()}`;
@@ -207,7 +207,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
         content: originalContent,
       });
 
-      await orchestrator.handleDiscordMessageCreate(testMessage, roomyRoomId);
+      await bridge.handleDiscordMessageCreate(testMessage);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // First edit
@@ -233,7 +233,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       );
 
       // Sync the SECOND edit first (newer edit arrives first)
-      await orchestrator.handleDiscordMessageUpdate(secondEdit);
+      await bridge.handleDiscordMessageUpdate(secondEdit);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       let events = (
@@ -246,7 +246,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       expect(editEvents.length).toBe(1);
 
       // Now sync the FIRST edit (older edit arrives later)
-      await orchestrator.handleDiscordMessageUpdate(firstEdit);
+      await bridge.handleDiscordMessageUpdate(firstEdit);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       events = (
@@ -284,7 +284,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -294,9 +294,9 @@ describe("E2E: Discord Bridge Idempotency", () => {
       const firstChannel = channels[0];
       const secondChannel = channels[1];
       const roomyRoomId1 =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
       const roomyRoomId2 =
-        await orchestrator.handleDiscordChannelCreate(secondChannel);
+        await bridge.handleDiscordChannelCreate(secondChannel);
 
       expect(roomyRoomId1).toBeDefined();
       expect(roomyRoomId2).toBeDefined();
@@ -313,7 +313,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       });
 
       // Sync only the FIRST channel (partial sync)
-      const syncedId1 = await orchestrator.handleDiscordMessageCreate(
+      const syncedId1 = await bridge.handleDiscordMessageCreate(
         message1,
         roomyRoomId1,
       );
@@ -334,7 +334,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       expect(createMessageEvents.length).toBe(1);
 
       // Now sync the SECOND channel
-      const syncedId2 = await orchestrator.handleDiscordMessageCreate(
+      const syncedId2 = await bridge.handleDiscordMessageCreate(
         message2,
         roomyRoomId2,
       );
@@ -371,7 +371,7 @@ describe("E2E: Discord Bridge Idempotency", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -381,16 +381,16 @@ describe("E2E: Discord Bridge Idempotency", () => {
       const firstChannel = channels[0];
       const secondChannel = channels[1];
       const roomyRoomId1 =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
       const roomyRoomId2 =
-        await orchestrator.handleDiscordChannelCreate(secondChannel);
+        await bridge.handleDiscordChannelCreate(secondChannel);
 
       // Create and sync message in channel 1
       const message1 = await bot.helpers.sendMessage(firstChannel.id, {
         content: `Message 1 at ${Date.now()}`,
       });
 
-      await orchestrator.handleDiscordMessageCreate(message1, roomyRoomId1);
+      await bridge.handleDiscordMessageCreate(message1);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Create and sync message in channel 2
@@ -398,11 +398,11 @@ describe("E2E: Discord Bridge Idempotency", () => {
         content: `Message 2 at ${Date.now()}`,
       });
 
-      await orchestrator.handleDiscordMessageCreate(message2, roomyRoomId2);
+      await bridge.handleDiscordMessageCreate(message2);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Re-sync channel 1 message (should not affect channel 2)
-      const resyncedId = await orchestrator.handleDiscordMessageCreate(
+      const resyncedId = await bridge.handleDiscordMessageCreate(
         message1,
         roomyRoomId1,
       );

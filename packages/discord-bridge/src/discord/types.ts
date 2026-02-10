@@ -38,7 +38,7 @@ export const desiredProperties = {
     messageReference: true,
     type: true,
     reactions: true,
-  },
+  } as const,
   guild: {
     id: true,
     channels: true,
