@@ -7,10 +7,19 @@
 
 import { avatarUrl } from "@discordeno/bot";
 import type { BridgeRepository } from "../repositories/index.js";
-import type { ConnectedSpace } from "@roomy/sdk";
-import { newUlid, type Did, type Event, type DecodedStreamEvent } from "@roomy/sdk";
+import type { ConnectedSpace, StreamDid } from "@roomy/sdk";
+import {
+  newUlid,
+  type Did,
+  type Event,
+  type DecodedStreamEvent,
+} from "@roomy/sdk";
 import { computeProfileHash as fingerprint } from "../utils/hash.js";
-import { DISCORD_EXTENSION_KEYS, extractDiscordUserOrigin } from "../utils/event-extensions.js";
+import {
+  DISCORD_EXTENSION_KEYS,
+  extractDiscordUserOrigin,
+} from "../utils/event-extensions.js";
+import type { EventDispatcher } from "../dispatcher.js";
 
 /**
  * Discord user profile data for syncing.
@@ -24,20 +33,14 @@ export interface DiscordUser {
 }
 
 /**
- * Optional batcher for bulk operations.
- */
-export interface EventBatcher {
-  add(event: Event): Promise<void>;
-}
-
-/**
  * Service for syncing Discord user profiles to Roomy.
  * Uses hash-based change detection for idempotency.
  */
 export class ProfileSyncService {
   constructor(
     private readonly repo: BridgeRepository,
-    private readonly connectedSpace: ConnectedSpace,
+    private readonly spaceId: StreamDid,
+    private readonly dispatcher: EventDispatcher,
     private readonly guildId: bigint,
   ) {}
 
@@ -46,7 +49,6 @@ export class ProfileSyncService {
    * Uses hash-based change detection to avoid redundant updates.
    *
    * @param discordUser - Discord user to sync
-   * @param batcher - Optional event batcher for bulk operations
    *
    * @example
    * ```ts
@@ -59,10 +61,7 @@ export class ProfileSyncService {
    * });
    * ```
    */
-  async syncDiscordToRoomy(
-    discordUser: DiscordUser,
-    batcher?: EventBatcher,
-  ): Promise<void> {
+  async syncDiscordToRoomy(discordUser: DiscordUser): Promise<void> {
     const userIdStr = discordUser.id.toString();
 
     // Compute profile hash for change detection
@@ -102,11 +101,7 @@ export class ProfileSyncService {
       },
     };
 
-    if (batcher) {
-      await batcher.add(event);
-    } else {
-      await this.connectedSpace.sendEvent(event);
-    }
+    this.dispatcher.toRoomy.push(event);
 
     // Update hash cache
     await this.repo.setProfileHash(userIdStr, hash);
@@ -158,7 +153,10 @@ export class ProfileSyncService {
 
         // Cache Discord user profile hash
         if (userOrigin && userOrigin.guildId === this.guildId.toString()) {
-          await this.repo.setProfileHash(userOrigin.snowflake, userOrigin.profileHash);
+          await this.repo.setProfileHash(
+            userOrigin.snowflake,
+            userOrigin.profileHash,
+          );
           return true; // Handled
         }
 

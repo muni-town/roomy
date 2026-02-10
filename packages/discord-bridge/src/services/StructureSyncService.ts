@@ -12,8 +12,13 @@
  */
 
 import type { BridgeRepository } from "../repositories/index.js";
-import type { ConnectedSpace } from "@roomy/sdk";
-import { newUlid, type Ulid, type Event, type DecodedStreamEvent } from "@roomy/sdk";
+import type { ConnectedSpace, StreamDid } from "@roomy/sdk";
+import {
+  newUlid,
+  type Ulid,
+  type Event,
+  type DecodedStreamEvent,
+} from "@roomy/sdk";
 import type { DiscordBot, ChannelProperties } from "../discord/types.js";
 import { computeSidebarHash } from "../utils/hash.js";
 import {
@@ -35,6 +40,7 @@ import {
   type DiscordChannelType,
 } from "../discord/operations/channel.js";
 import { getRoomKey } from "../utils/room.js";
+import type { EventDispatcher } from "../dispatcher.js";
 
 /**
  * Cached createRoom event data.
@@ -52,9 +58,11 @@ export class StructureSyncService {
 
   constructor(
     private readonly repo: BridgeRepository,
-    private readonly connectedSpace: ConnectedSpace,
+    private readonly spaceId: StreamDid,
+    private readonly dispatcher: EventDispatcher,
     private readonly guildId: bigint,
-    private readonly bot?: DiscordBot,
+    private readonly bot: DiscordBot,
+    private readonly connectedSpace: ConnectedSpace, // Keep for SDK operations
   ) {}
 
   /**
@@ -114,7 +122,7 @@ export class StructureSyncService {
   ): Promise<string> {
     // Idempotency check (use room: prefix for channels/threads)
     const channelIdStr = discordChannel.id.toString();
-    const roomKey = `room:${channelIdStr}`;
+    const roomKey = getRoomKey(channelIdStr);
     const existing = await this.repo.getRoomyId(roomKey);
     if (existing) return existing;
 
@@ -352,7 +360,7 @@ export class StructureSyncService {
       },
     } as Event;
 
-    await this.connectedSpace.sendEvent(event);
+    this.dispatcher.toRoomy.push(event);
 
     // Update hash
     await this.repo.setSidebarHash(newHash);
@@ -848,60 +856,7 @@ export class StructureSyncService {
     try {
       const { event } = decoded;
 
-      // Handle createRoom
-      if (event.$type === "space.roomy.room.createRoom.v0") {
-        // Check for Discord origin
-        const roomOrigin = extractDiscordOrigin(event);
-
-        // Register Discord room mapping
-        if (roomOrigin) {
-          await this.repo.registerMapping(
-            getRoomKey(roomOrigin.snowflake),
-            event.id,
-          );
-          return true; // Handled (Discord origin, no sync back)
-        }
-
-        // Roomy-native room: do NOT sync yet
-        // Wait for updateSidebar (channels) or createRoomLink with isCreationLink (threads)
-        return true; // Still handle to prevent other services from processing
-      }
-
-      // Handle updateSidebar
-      if (event.$type === "space.roomy.space.updateSidebar.v0") {
-        // Cache sidebar hash (Discord origin only)
-        const sidebarOrigin = extractDiscordSidebarOrigin(event);
-        if (sidebarOrigin && sidebarOrigin.guildId === this.guildId.toString()) {
-          await this.repo.setSidebarHash(sidebarOrigin.sidebarHash);
-        }
-
-        // Sync sidebar update to Discord
-        await this.handleRoomySidebarUpdate(event);
-        return true;
-      }
-
-      // Handle createRoomLink
-      if (event.$type === "space.roomy.link.createRoomLink.v0") {
-        const roomLinkData = extractDiscordRoomLinkOrigin(event);
-        if (roomLinkData && roomLinkData.origin.guildId === this.guildId.toString()) {
-          const parentRoomyId = (event as any).room;
-          if (parentRoomyId) {
-            const linkKey = `${parentRoomyId}:${roomLinkData.linkToRoom}`;
-            await this.repo.setRoomLink(linkKey, event.id);
-          }
-          return true; // Handled (Discord origin, no sync back)
-        }
-
-        // Roomy-native link: check if this is a creation link (thread)
-        const isCreationLink = (event as any).isCreationLink === true;
-        if (isCreationLink) {
-          // Sync Roomy thread to Discord
-          await this.handleRoomyThreadCreate(event);
-          return true;
-        }
-
-        return false;
-      }
+      const roomOrigin = extractDiscordOrigin(event);
 
       // Handle deleteRoom
       if (event.$type === "space.roomy.room.deleteRoom.v0") {
@@ -910,20 +865,73 @@ export class StructureSyncService {
         if (discordId) {
           await this.repo.unregisterMapping(discordId, event.roomId);
         }
-
-        // Check for Discord origin
-        const roomOrigin = extractDiscordOrigin(event);
         if (roomOrigin) return true; // Handled (Discord origin, no sync back)
-
-        // Sync Roomy room deletion to Discord
-        await this.handleRoomyRoomDelete(event.roomId);
-        return true;
       }
 
-      return false;
+      if (roomOrigin) {
+        await this.repo.registerMapping(
+          getRoomKey(roomOrigin.snowflake),
+          event.id,
+        );
+        return true; // Handled (Discord origin, no sync back)
+      }
+
+      const roomLinkData = extractDiscordRoomLinkOrigin(event);
+      if (
+        roomLinkData &&
+        roomLinkData.origin.guildId === this.guildId.toString()
+      ) {
+        const parentRoomyId = (event as any).room;
+        if (parentRoomyId) {
+          const linkKey = `${parentRoomyId}:${roomLinkData.linkToRoom}`;
+          await this.repo.setRoomLink(linkKey, event.id);
+        }
+        return true; // Handled (Discord origin, no sync back)
+      }
+
+      const sidebarOrigin = extractDiscordSidebarOrigin(event);
+      if (sidebarOrigin && sidebarOrigin.guildId === this.guildId.toString()) {
+        await this.repo.setSidebarHash(sidebarOrigin.sidebarHash);
+        // don't return, queue for Discord sync (even if Discord-origin, sidebar should be synced to Discord)
+      }
+
+      this.dispatcher.toDiscord.push(decoded);
+
+      return true;
     } catch (error) {
-      console.error(`[StructureSyncService] Error handling Roomy event:`, error);
+      console.error(
+        `[StructureSyncService] Error handling Roomy event:`,
+        error,
+      );
       return false;
     }
+  }
+
+  /**
+   * Sync Roomy-origin structure events to Discord.
+   * Called by dispatcher.syncRoomyToDiscord consumer loop.
+   */
+  async syncToDiscord(decoded: DecodedStreamEvent): Promise<void> {
+    const { event } = decoded;
+    const e = event as any;
+
+    // Handle updateSidebar
+    if (event.$type === "space.roomy.space.updateSidebar.v0") {
+      await this.handleRoomySidebarUpdate(event);
+    }
+    // Handle createRoomLink (thread creation)
+    else if (event.$type === "space.roomy.link.createRoomLink.v0") {
+      const isCreationLink = (event as any).isCreationLink === true;
+      if (isCreationLink) {
+        await this.handleRoomyThreadCreate(event);
+      }
+    }
+    // Handle deleteRoom
+    else if (event.$type === "space.roomy.room.deleteRoom.v0") {
+      await this.handleRoomyRoomDelete(event.roomId);
+    }
+
+    // For 'createRoom' events don't sync yet.
+    // Wait for updateSidebar (channels) or createRoomLink with isCreationLink (threads)
   }
 }

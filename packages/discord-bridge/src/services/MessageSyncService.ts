@@ -8,7 +8,7 @@
 
 import { avatarUrl } from "@discordeno/bot";
 import type { BridgeRepository } from "../repositories/index.js";
-import type { ConnectedSpace } from "@roomy/sdk";
+import type { ConnectedSpace, StreamDid, StateMachine } from "@roomy/sdk";
 import {
   newUlid,
   toBytes,
@@ -32,6 +32,7 @@ import {
   executeWebhookWithRetry,
 } from "../discord/webhooks.js";
 import { getRoomKey } from "../utils/room.js";
+import type { EventDispatcher } from "../dispatcher.js";
 
 /**
  * Result of a Discord → Roomy message sync operation.
@@ -41,19 +42,13 @@ export type DiscordToRoomyResult =
   | { success: false; reason: "already_synced" | "skipped" };
 
 /**
- * Optional batcher for bulk operations.
- */
-export interface EventBatcher {
-  add(event: Event): Promise<void>;
-}
-
-/**
  * Service for syncing messages between Discord and Roomy.
  */
 export class MessageSyncService {
   constructor(
     private readonly repo: BridgeRepository,
-    private readonly connectedSpace: ConnectedSpace,
+    private readonly spaceId: StreamDid,
+    private readonly dispatcher: EventDispatcher,
     private readonly guildId: bigint,
     private readonly profileService: ProfileSyncService,
     private readonly bot: DiscordBot,
@@ -62,23 +57,15 @@ export class MessageSyncService {
   /**
    * Sync a Discord message to Roomy.
    *
-   * @param roomyRoomId - Target Roomy room ID
    * @param message - Discord message to sync
-   * @param batcher - Optional event batcher for bulk operations
    * @returns The Roomy message ID, or null if skipped
    *
    * @example
    * ```ts
-   * const result = await service.syncDiscordToRoomy(
-   *   "roomy-room-123",
-   *   discordMessage
-   * );
+   * const result = await service.syncDiscordToRoomy(discordMessage);
    * ```
    */
-  async syncDiscordToRoomy(
-    message: MessageProperties,
-    batcher?: EventBatcher,
-  ): Promise<string | null> {
+  async syncDiscordToRoomy(message: MessageProperties): Promise<string | null> {
     // Check that we know the corresponding Roomy room
     const roomyRoomId = await this.repo.getDiscordId(
       getRoomKey(message.channelId),
@@ -102,24 +89,17 @@ export class MessageSyncService {
     }
 
     // Ensure user profile is synced
-    await this.profileService.syncDiscordToRoomy(
-      {
-        id: message.author.id,
-        username: message.author.username,
-        discriminator: message.author.discriminator,
-        globalName: (message.author as any).globalName ?? null,
-        avatar: (message.author.avatar as unknown as string | null) ?? null,
-      },
-      batcher,
-    );
+    await this.profileService.syncDiscordToRoomy({
+      id: message.author.id,
+      username: message.author.username,
+      discriminator: message.author.discriminator,
+      globalName: (message.author as any).globalName ?? null,
+      avatar: (message.author.avatar as unknown as string | null) ?? null,
+    });
 
     // Handle thread starter messages
     if (message.type === DISCORD_MESSAGE_TYPES.THREAD_STARTER_MESSAGE) {
-      return await this.handleThreadStarterMessage(
-        roomyRoomId,
-        message,
-        batcher,
-      );
+      return await this.handleThreadStarterMessage(roomyRoomId, message);
     }
 
     // Build attachments array
@@ -130,7 +110,6 @@ export class MessageSyncService {
       roomyRoomId,
       message,
       attachments,
-      batcher,
     );
 
     // Register the mapping
@@ -260,7 +239,7 @@ export class MessageSyncService {
       extensions,
     };
 
-    await this.connectedSpace.sendEvent(event);
+    this.dispatcher.toRoomy.push(event);
 
     // Update cache
     await this.repo.setEditInfo(snowflake, { editedTimestamp, contentHash });
@@ -299,7 +278,7 @@ export class MessageSyncService {
       messageId: roomyMessageId as Ulid,
     };
 
-    await this.connectedSpace.sendEvent(event);
+    this.dispatcher.toRoomy.push(event);
   }
 
   /**
@@ -346,7 +325,6 @@ export class MessageSyncService {
   private async handleThreadStarterMessage(
     roomyRoomId: string,
     message: MessageProperties,
-    batcher?: EventBatcher,
   ): Promise<string | null> {
     if (
       !message.messageReference?.messageId ||
@@ -370,7 +348,7 @@ export class MessageSyncService {
           message.messageReference.messageId,
         );
 
-        const syncedId = await this.syncDiscordToRoomy(originalMsg, batcher);
+        const syncedId = await this.syncDiscordToRoomy(originalMsg);
         if (!syncedId) {
           return null;
         }
@@ -398,10 +376,7 @@ export class MessageSyncService {
       fromRoomId: fromRoomyId as Ulid,
     };
 
-    const sendFn = batcher
-      ? batcher.add.bind(batcher)
-      : this.connectedSpace.sendEvent.bind(this.connectedSpace);
-    await sendFn(forwardEvent);
+    this.dispatcher.toRoomy.push(forwardEvent);
 
     await this.repo.registerMapping(message.id.toString(), forwardEvent.id);
 
@@ -469,7 +444,6 @@ export class MessageSyncService {
     roomyRoomId: string,
     message: MessageProperties,
     attachments: Attachment[],
-    batcher?: EventBatcher,
   ): Promise<string> {
     const messageId = newUlid();
 
@@ -508,10 +482,7 @@ export class MessageSyncService {
       extensions,
     };
 
-    const sendFn = batcher
-      ? batcher.add.bind(batcher)
-      : this.connectedSpace.sendEvent.bind(this.connectedSpace);
-    await sendFn(event);
+    this.dispatcher.toRoomy.push(event);
 
     return messageId;
   }
@@ -568,7 +539,7 @@ export class MessageSyncService {
       const webhook = await getOrCreateWebhook(
         bot,
         this.guildId,
-        this.connectedSpace.streamDid,
+        this.spaceId,
         channelId,
         this.repo,
       );
@@ -656,7 +627,7 @@ export class MessageSyncService {
       const webhook = await getOrCreateWebhook(
         bot,
         this.guildId,
-        this.connectedSpace.streamDid,
+        this.spaceId,
         channelId,
         this.repo,
       );
@@ -722,7 +693,7 @@ export class MessageSyncService {
       const webhook = await getOrCreateWebhook(
         bot,
         this.guildId,
-        this.connectedSpace.streamDid,
+        this.spaceId,
         channelId,
         this.repo,
       );
@@ -747,7 +718,8 @@ export class MessageSyncService {
 
   /**
    * Handle a Roomy event from the subscription stream.
-   * Processes message-related events and syncs them to Discord if needed.
+   * Routes Discord-origin events (register mappings, drop) and
+   * queues Roomy-origin events for Discord sync (via toDiscord channel).
    *
    * @param decoded - The decoded Roomy event
    * @returns true if the event was handled, false otherwise
@@ -758,31 +730,21 @@ export class MessageSyncService {
 
       // Handle createMessage
       if (event.$type === "space.roomy.message.createMessage.v0") {
-        // Check for Discord origin to prevent sync loops
         const messageOrigin = extractDiscordMessageOrigin(event);
 
-        // Register Discord message mapping
+        // Discord origin: register mapping and drop
         if (messageOrigin) {
           await this.repo.registerMapping(messageOrigin.snowflake, event.id);
           return true; // Handled (Discord origin, no sync back)
         }
 
-        // Sync Roomy message to Discord
-        const e = event as any;
-        if (!e.room || !e.body) return false;
-        await this.syncRoomyToDiscordCreate(
-          event.id,
-          e.room,
-          e.body,
-          decoded.user,
-          this.bot,
-        );
+        // Roomy origin: queue for Discord sync
+        this.dispatcher.toDiscord.push(decoded);
         return true;
       }
 
       // Handle editMessage
       if (event.$type === "space.roomy.message.editMessage.v0") {
-        // Check for Discord origin
         const messageOrigin = extractDiscordMessageOrigin(event);
 
         // Cache edit tracking info for Discord-origin messages
@@ -793,41 +755,29 @@ export class MessageSyncService {
           });
         }
 
-        // Skip Discord-origin edits
+        // Discord origin: drop (already handled)
         if (messageOrigin) return true;
 
-        // Sync Roomy edit to Discord
-        const e = event as any;
-        if (!e.messageId || !e.room || !e.body) return false;
-        await this.syncRoomyToDiscordEdit(
-          e.messageId,
-          e.room,
-          e.body,
-          this.bot,
-        );
+        // Roomy origin: queue for Discord sync
+        this.dispatcher.toDiscord.push(decoded);
         return true;
       }
 
       // Handle deleteMessage
       if (event.$type === "space.roomy.message.deleteMessage.v0") {
-        // Unregister mapping
+        // Unregister mapping (for both Discord and Roomy origin)
         const discordId = await this.repo.getDiscordId(event.messageId);
         if (discordId) {
           await this.repo.unregisterMapping(discordId, event.messageId);
         }
 
-        // Check for Discord origin
         const messageOrigin = extractDiscordMessageOrigin(event);
-        if (messageOrigin) return true; // Handled (Discord origin, no sync back)
 
-        // Sync Roomy deletion to Discord
-        const e = event as any;
-        if (!e.messageId) return false;
-        await this.syncRoomyToDiscordDelete(
-          e.messageId,
-          e.room || "",
-          this.bot,
-        );
+        // Discord origin: drop
+        if (messageOrigin) return true;
+
+        // Roomy origin: queue for Discord sync
+        this.dispatcher.toDiscord.push(decoded);
         return true;
       }
 
@@ -835,6 +785,48 @@ export class MessageSyncService {
     } catch (error) {
       console.error(`[MessageSyncService] Error handling Roomy event:`, error);
       return false;
+    }
+  }
+
+  /**
+   * Sync Roomy-origin message events to Discord.
+   * Called by dispatcher.syncRoomyToDiscord consumer loop.
+   */
+  async syncToDiscord(decoded: DecodedStreamEvent): Promise<void> {
+    const { event } = decoded;
+
+    // Handle createMessage
+    if (event.$type === "space.roomy.message.createMessage.v0") {
+      const e = event as any;
+      if (!e.room || !e.body) return;
+      await this.syncRoomyToDiscordCreate(
+        event.id,
+        e.room,
+        e.body,
+        decoded.user,
+        this.bot,
+      );
+    }
+    // Handle editMessage
+    else if (event.$type === "space.roomy.message.editMessage.v0") {
+      const e = event as any;
+      if (!e.messageId || !e.room || !e.body) return;
+      await this.syncRoomyToDiscordEdit(
+        e.messageId,
+        e.room,
+        e.body,
+        this.bot,
+      );
+    }
+    // Handle deleteMessage
+    else if (event.$type === "space.roomy.message.deleteMessage.v0") {
+      const e = event as any;
+      if (!e.messageId) return;
+      await this.syncRoomyToDiscordDelete(
+        e.messageId,
+        e.room || "",
+        this.bot,
+      );
     }
   }
 }

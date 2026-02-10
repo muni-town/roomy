@@ -6,7 +6,7 @@
  */
 
 import type { BridgeRepository } from "../repositories/index.js";
-import type { ConnectedSpace } from "@roomy/sdk";
+import type { StreamDid } from "@roomy/sdk";
 import {
   newUlid,
   UserDid,
@@ -24,6 +24,8 @@ import {
   DISCORD_EXTENSION_KEYS,
   extractDiscordReactionOrigin,
 } from "../utils/event-extensions.js";
+import type { EventDispatcher } from "../dispatcher.js";
+import { getRoomKey } from "../utils/room.js";
 
 /**
  * Service for syncing reactions between Discord and Roomy.
@@ -31,7 +33,8 @@ import {
 export class ReactionSyncService {
   constructor(
     private readonly repo: BridgeRepository,
-    private readonly connectedSpace: ConnectedSpace,
+    private readonly spaceId: StreamDid,
+    private readonly dispatcher: EventDispatcher,
     private readonly guildId: bigint,
     private readonly bot: DiscordBot,
   ) {}
@@ -124,7 +127,7 @@ export class ReactionSyncService {
       },
     } as Event;
 
-    await this.connectedSpace.sendEvent(event);
+    this.dispatcher.toRoomy.push(event);
 
     // Track the synced reaction
     await this.repo.setReaction(key, reactionId);
@@ -166,7 +169,7 @@ export class ReactionSyncService {
 
     // Get the Roomy room ID for this channel
     const channelIdStr = channelId.toString();
-    const roomKey = `room:${channelIdStr}`;
+    const roomKey = getRoomKey(channelIdStr);
     const roomyRoomId = await this.repo.getRoomyId(roomKey);
     if (!roomyRoomId) {
       return; // Channel not synced
@@ -194,7 +197,7 @@ export class ReactionSyncService {
       },
     } as Event;
 
-    await this.connectedSpace.sendEvent(event);
+    this.dispatcher.toRoomy.push(event);
 
     // Remove from tracking
     await this.repo.deleteReaction(key);
@@ -386,51 +389,53 @@ export class ReactionSyncService {
       const { event } = decoded;
       const e = event as any;
 
-      // Handle addReaction (both pure and bridged)
-      if (
-        event.$type === "space.roomy.reaction.addReaction.v0" ||
-        event.$type === "space.roomy.reaction.addBridgedReaction.v0"
-      ) {
-        // Check for Discord origin (sync loop prevention)
-        const reactionOrigin = extractDiscordReactionOrigin(event);
-        if (reactionOrigin) return true; // Handled (Discord origin, no sync back)
-
-        if (!e.reactionTo || !e.reaction || !e.room) return false;
-        if (!this.bot) return false;
-        await this.syncRoomyToDiscordAdd(
-          e.reactionTo,
-          e.reaction,
-          e.room,
-          decoded.user,
-          this.bot,
-        );
-        return true;
-      }
-
-      // Handle removeReaction
-      if (
-        event.$type === "space.roomy.reaction.removeReaction.v0" ||
-        event.$type === "space.roomy.reaction.removeBridgedReaction.v0"
-      ) {
-        // Check for Discord origin
-        const reactionOrigin = extractDiscordReactionOrigin(event);
-        if (reactionOrigin) return true; // Handled (Discord origin, no sync back)
-
-        if (!e.reactionTo || !e.room) return false;
-        if (!this.bot) return false;
-        await this.syncRoomyToDiscordRemove(
-          event.id,
-          e.room,
-          decoded.user,
-          this.bot,
-        );
-        return true;
-      }
-
-      return false;
+      // Check for Discord origin
+      const reactionOrigin = extractDiscordReactionOrigin(event);
+      if (reactionOrigin) return true; // Handled (Discord origin, no sync back)
+      this.dispatcher.toDiscord.push(e);
+      return true;
     } catch (error) {
       console.error(`[ReactionSyncService] Error handling Roomy event:`, error);
       return false;
+    }
+  }
+
+  /**
+   * Sync Roomy-origin reaction events to Discord.
+   * Called by dispatcher.syncRoomyToDiscord consumer loop.
+   */
+  async syncToDiscord(decoded: DecodedStreamEvent): Promise<void> {
+    const { event } = decoded;
+    const e = event as any;
+
+    // Handle addReaction
+    if (
+      event.$type === "space.roomy.reaction.addReaction.v0" ||
+      event.$type === "space.roomy.reaction.addBridgedReaction.v0"
+    ) {
+      if (!e.reactionTo || !e.reaction || !e.room) return;
+      if (!this.bot) return;
+      await this.syncRoomyToDiscordAdd(
+        e.reactionTo,
+        e.reaction,
+        e.room,
+        decoded.user,
+        this.bot,
+      );
+    }
+    // Handle removeReaction
+    else if (
+      event.$type === "space.roomy.reaction.removeReaction.v0" ||
+      event.$type === "space.roomy.reaction.removeBridgedReaction.v0"
+    ) {
+      if (!e.room) return;
+      if (!this.bot) return;
+      await this.syncRoomyToDiscordRemove(
+        event.id,
+        e.room,
+        decoded.user,
+        this.bot,
+      );
     }
   }
 }
