@@ -229,6 +229,125 @@ export class ReactionSyncService {
     return makeReactionKey(messageId, userId, emoji);
   }
 
+  /**
+   * Backfill Discord reactions to Roomy for specified channels.
+   * Fetches all messages and their reactions, syncing to Roomy.
+   *
+   * @param channelIds - Discord channel IDs to backfill reactions for
+   * @returns Number of reactions synced
+   *
+   * @example
+   * ```ts
+   * const count = await service.backfillToRoomy([123n, 456n]);
+   * ```
+   */
+  async backfillToRoomy(channelIds: bigint[]): Promise<number> {
+    let syncedCount = 0;
+
+    for (const channelId of channelIds) {
+      const channelKey = getRoomKey(channelId);
+      const roomyRoomId = await this.repo.getRoomyId(channelKey);
+
+      if (!roomyRoomId) {
+        console.warn(
+          `[ReactionSyncService] Channel ${channelId} not synced to Roomy, skipping reaction backfill`,
+        );
+        continue;
+      }
+
+      // Fetch messages with pagination to get their reactions
+      let before: bigint | undefined;
+      while (true) {
+        const messages = await this.bot.helpers.getMessages(channelId, {
+          before,
+          limit: 100,
+        });
+
+        if (messages.length === 0) break;
+
+        // Process each message's reactions
+        for (const message of messages) {
+          const reactions = (message as unknown as { reactions?: unknown[] })
+            .reactions;
+          if (!reactions || reactions.length === 0) {
+            continue;
+          }
+
+          // For each reaction type, fetch the users who reacted
+          for (const reaction of reactions) {
+            if (!reaction || typeof reaction !== "object") continue;
+
+            const emoji = (reaction as { emoji?: Partial<Emoji> }).emoji;
+            if (!emoji) continue;
+
+            const count = (reaction as { count?: number }).count || 1;
+
+            // Fetch all users who reacted with this emoji (with pagination)
+            let after: string | undefined;
+            let hasMore = true;
+
+            while (hasMore) {
+              // Build emoji string for API call
+              let emojiString = emoji.name || "";
+              if (emoji.id) {
+                emojiString = `${emoji.name}:${emoji.id}`;
+              }
+
+              const options: { limit: number; after?: string } = { limit: 100 };
+              if (after) {
+                options.after = after;
+              }
+
+              const users = await this.bot.helpers.getReactions(
+                channelId,
+                message.id,
+                emojiString,
+                options as any,
+              );
+
+              if (users.length === 0) {
+                hasMore = false;
+                break;
+              }
+
+              // Sync each user's reaction to Roomy
+              for (const user of users) {
+                const reactionEventId = await this.syncAddToRoomy(
+                  message.id,
+                  channelId,
+                  user.id,
+                  emoji,
+                );
+
+                if (reactionEventId) {
+                  syncedCount++;
+                }
+              }
+
+              // Check if there are more users to fetch
+              if (users.length < 100) {
+                hasMore = false;
+              } else {
+                after = users[users.length - 1]?.id?.toString();
+              }
+            }
+          }
+
+          // Update cursor for message pagination
+          before = message.id;
+        }
+
+        if (messages.length < 100) break;
+      }
+    }
+
+    console.log(
+      `[ReactionSyncService] Backfilled ${syncedCount} reactions to Roomy`,
+    );
+
+    return syncedCount;
+  }
+
   // ============================================================
   // ROOMY → DISCORD sync methods
   // ============================================================
@@ -392,7 +511,7 @@ export class ReactionSyncService {
       // Check for Discord origin
       const reactionOrigin = extractDiscordReactionOrigin(event);
       if (reactionOrigin) return true; // Handled (Discord origin, no sync back)
-      this.dispatcher.toDiscord.push(e);
+      this.dispatcher.toDiscord.push(decoded);
       return true;
     } catch (error) {
       console.error(`[ReactionSyncService] Error handling Roomy event:`, error);

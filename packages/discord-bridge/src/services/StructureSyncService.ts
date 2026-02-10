@@ -41,6 +41,7 @@ import {
 } from "../discord/operations/channel.js";
 import { getRoomKey } from "../utils/room.js";
 import type { EventDispatcher } from "../dispatcher.js";
+import { Camelize, ChannelTypes, DiscordChannel } from "@discordeno/bot";
 
 /**
  * Cached createRoom event data.
@@ -118,7 +119,7 @@ export class StructureSyncService {
    * ```
    */
   async handleDiscordChannelCreate(
-    discordChannel: ChannelProperties,
+    discordChannel: ChannelProperties | Camelize<DiscordChannel>,
   ): Promise<string> {
     // Idempotency check (use room: prefix for channels/threads)
     const channelIdStr = discordChannel.id.toString();
@@ -139,7 +140,7 @@ export class StructureSyncService {
       },
     });
 
-    // Register mapping (repository handles "room:" prefix internally)
+    // Register mapping
     await this.repo.registerMapping(roomKey, result.id);
 
     // Verify registration worked
@@ -170,18 +171,18 @@ export class StructureSyncService {
    * ```
    */
   async handleDiscordThreadCreate(
-    discordThread: ChannelProperties,
+    discordThread: ChannelProperties | Camelize<DiscordChannel>,
     parentDiscordChannelId: bigint,
   ): Promise<string> {
     const threadIdStr = discordThread.id.toString();
-    const threadRoomKey = `room:${threadIdStr}`;
+    const threadRoomKey = getRoomKey(threadIdStr);
 
     // Idempotency check for thread
     const existingThread = await this.repo.getRoomyId(threadRoomKey);
     if (existingThread) return existingThread;
 
     // Ensure parent exists
-    const parentRoomKey = `room:${parentDiscordChannelId.toString()}`;
+    const parentRoomKey = getRoomKey(parentDiscordChannelId);
     const parentRoomyId = await this.repo.getRoomyId(parentRoomKey);
     if (!parentRoomyId) {
       throw new Error(`Parent channel ${parentDiscordChannelId} not synced`);
@@ -231,8 +232,8 @@ export class StructureSyncService {
    * ```
    */
   async syncFullDiscordSidebar(
-    channels: ChannelProperties[],
-    categories: ChannelProperties[],
+    channels: Camelize<DiscordChannel>[],
+    categories: Camelize<DiscordChannel>[],
   ): Promise<void> {
     // STEP 1: Collect all Roomy room IDs that don't have discordOrigin (preserve these)
     // Fetch all createRoom events to find rooms without discordOrigin
@@ -266,7 +267,7 @@ export class StructureSyncService {
     const uncategorizedChannels: Ulid[] = [];
 
     for (const channel of channels) {
-      const roomKey = `room:${channel.id.toString()}`;
+      const roomKey = getRoomKey(channel.id);
       let roomyId = await this.repo.getRoomyId(roomKey);
 
       // If not found, retry a few times (LevelDB might have timing issues)
@@ -846,6 +847,71 @@ export class StructureSyncService {
   }
 
   /**
+   * Backfill Discord channels and threads to Roomy.
+   * Fetches all channels/threads from Discord guild and syncs them.
+   *
+   * @returns Number of channels/threads synced
+   *
+   * @example
+   * ```ts
+   * const count = await service.backfillToRoomy();
+   * ```
+   */
+  async backfillToRoomy(): Promise<number> {
+    if (!this.bot) {
+      console.warn(
+        "[StructureSyncService] Bot not available, skipping backfill",
+      );
+      return 0;
+    }
+
+    let syncedCount = 0;
+
+    try {
+      const channels = await this.bot.rest.getChannels(this.guildId.toString());
+
+      const categories = channels.filter(
+        (c) => c.type === ChannelTypes.GuildCategory,
+      );
+
+      const textChannels = channels.filter(
+        (c) => c.type === ChannelTypes.GuildText,
+      );
+
+      for (const channel of textChannels) {
+        await this.handleDiscordChannelCreate(channel);
+        syncedCount++;
+      }
+
+      await this.syncFullDiscordSidebar(textChannels, categories);
+
+      const threads = channels.filter(
+        (c) => c.type === ChannelTypes.PublicThread,
+      );
+
+      for (const thread of threads) {
+        if (!thread.parentId) {
+          console.warn("Found thread with no parent, skipping");
+          continue;
+        }
+        await this.handleDiscordThreadCreate(thread, BigInt(thread.parentId));
+        syncedCount++;
+      }
+
+      console.log(
+        `[StructureSyncService] Backfilled ${syncedCount} channels/threads to Roomy`,
+      );
+    } catch (error) {
+      console.error(
+        "[StructureSyncService] Error backfilling channels:",
+        error,
+      );
+    }
+
+    return syncedCount;
+  }
+
+  /**
    * Handle a Roomy event from the subscription stream.
    * Processes structure-related events and syncs them to Discord if needed.
    *
@@ -856,48 +922,62 @@ export class StructureSyncService {
     try {
       const { event } = decoded;
 
-      const roomOrigin = extractDiscordOrigin(event);
-
-      // Handle deleteRoom
-      if (event.$type === "space.roomy.room.deleteRoom.v0") {
-        // Unregister mapping
-        const discordId = await this.repo.getDiscordId(event.roomId);
-        if (discordId) {
-          await this.repo.unregisterMapping(discordId, event.roomId);
-        }
-        if (roomOrigin) return true; // Handled (Discord origin, no sync back)
-      }
-
-      if (roomOrigin) {
-        await this.repo.registerMapping(
-          getRoomKey(roomOrigin.snowflake),
-          event.id,
-        );
-        return true; // Handled (Discord origin, no sync back)
-      }
-
-      const roomLinkData = extractDiscordRoomLinkOrigin(event);
       if (
-        roomLinkData &&
-        roomLinkData.origin.guildId === this.guildId.toString()
+        [
+          "space.roomy.link.createRoomLink.v0",
+          "space.roomy.room.createRoom.v0",
+          "space.roomy.room.deleteRoomy.v0",
+          "space.roomy.room.updateSidebar.v0",
+        ].includes(event.$type)
       ) {
-        const parentRoomyId = (event as any).room;
-        if (parentRoomyId) {
-          const linkKey = `${parentRoomyId}:${roomLinkData.linkToRoom}`;
-          await this.repo.setRoomLink(linkKey, event.id);
+        const roomOrigin = extractDiscordOrigin(event);
+
+        // Handle deleteRoom
+        if (event.$type === "space.roomy.room.deleteRoom.v0") {
+          // Unregister mapping
+          const discordId = await this.repo.getDiscordId(event.roomId);
+          if (discordId) {
+            await this.repo.unregisterMapping(discordId, event.roomId);
+          }
+          if (roomOrigin) return true; // Handled (Discord origin, no sync back)
         }
-        return true; // Handled (Discord origin, no sync back)
+
+        if (roomOrigin) {
+          console.log("registering roomOrigin", roomOrigin, event.id);
+          await this.repo.registerMapping(
+            getRoomKey(roomOrigin.snowflake),
+            event.id,
+          );
+          return true; // Handled (Discord origin, no sync back)
+        }
+
+        const roomLinkData = extractDiscordRoomLinkOrigin(event);
+        if (
+          roomLinkData &&
+          roomLinkData.origin.guildId === this.guildId.toString()
+        ) {
+          const parentRoomyId = (event as any).room;
+          if (parentRoomyId) {
+            const linkKey = `${parentRoomyId}:${roomLinkData.linkToRoom}`;
+            await this.repo.setRoomLink(linkKey, event.id);
+          }
+          return true; // Handled (Discord origin, no sync back)
+        }
+
+        const sidebarOrigin = extractDiscordSidebarOrigin(event);
+        if (
+          sidebarOrigin &&
+          sidebarOrigin.guildId === this.guildId.toString()
+        ) {
+          await this.repo.setSidebarHash(sidebarOrigin.sidebarHash);
+          // don't return, queue for Discord sync (even if Discord-origin, sidebar should be synced to Discord)
+        }
+
+        this.dispatcher.toDiscord.push(decoded);
+
+        return true;
       }
-
-      const sidebarOrigin = extractDiscordSidebarOrigin(event);
-      if (sidebarOrigin && sidebarOrigin.guildId === this.guildId.toString()) {
-        await this.repo.setSidebarHash(sidebarOrigin.sidebarHash);
-        // don't return, queue for Discord sync (even if Discord-origin, sidebar should be synced to Discord)
-      }
-
-      this.dispatcher.toDiscord.push(decoded);
-
-      return true;
+      return false;
     } catch (error) {
       console.error(
         `[StructureSyncService] Error handling Roomy event:`,

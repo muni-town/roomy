@@ -33,7 +33,6 @@ export const desiredProperties = {
     channelId: true,
     author: true,
     webhookId: true,
-    timestamp: true,
     editedTimestamp: true,
     attachments: true,
     messageReference: true,

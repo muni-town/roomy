@@ -97,6 +97,7 @@ export class BridgeOrchestrator {
       bot,
       appId,
     };
+    console.log("ready");
   }
 
   /**
@@ -161,7 +162,7 @@ export class BridgeOrchestrator {
             interaction,
             guildId,
             spaceExists,
-            createBridge: orchestrator.createBridge,
+            createBridge: orchestrator.createBridge.bind(orchestrator),
             bridge,
           });
         },

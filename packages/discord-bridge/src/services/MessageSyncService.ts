@@ -67,7 +67,7 @@ export class MessageSyncService {
    */
   async syncDiscordToRoomy(message: MessageProperties): Promise<string | null> {
     // Check that we know the corresponding Roomy room
-    const roomyRoomId = await this.repo.getDiscordId(
+    const roomyRoomId = await this.repo.getRoomyId(
       getRoomKey(message.channelId),
     );
     if (!roomyRoomId) {
@@ -460,7 +460,9 @@ export class MessageSyncService {
       },
       "space.roomy.extension.timestampOverride.v0": {
         $type: "space.roomy.extension.timestampOverride.v0",
-        timestamp: new Date(message.timestamp).getTime(),
+        timestamp: message.timestamp
+          ? new Date(message.timestamp as unknown as string).getTime()
+          : Date.now(),
       },
     };
 
@@ -485,6 +487,74 @@ export class MessageSyncService {
     this.dispatcher.toRoomy.push(event);
 
     return messageId;
+  }
+
+  /**
+   * Backfill Discord messages to Roomy for specified channels.
+   * Fetches all messages and syncs them using dispatcher batching.
+   *
+   * @param channelIds - Discord channel IDs to backfill
+   * @returns Number of messages synced
+   *
+   * @example
+   * ```ts
+   * const count = await service.backfillToRoomy([123n, 456n]);
+   * ```
+   */
+  async backfillToRoomy(channelIds: bigint[]): Promise<number> {
+    let syncedCount = 0;
+    let skippedCount = 0;
+
+    for (const channelId of channelIds) {
+      const channelKey = getRoomKey(channelId);
+      const roomyRoomId = await this.repo.getRoomyId(channelKey);
+
+      if (!roomyRoomId) {
+        console.warn(
+          `[MessageSyncService] Channel ${channelId} not synced to Roomy, skipping backfill`,
+        );
+        continue;
+      }
+
+      // Fetch messages with pagination (oldest first)
+      let before: bigint | undefined;
+      while (true) {
+        const messages = await this.bot.helpers.getMessages(channelId, {
+          before,
+          limit: 100,
+        });
+
+        if (messages.length === 0) break;
+
+        // Process oldest first (API returns newest first)
+        const sortedMessages = [...messages].reverse();
+        for (const message of sortedMessages) {
+          const messageIdStr = message.id.toString();
+
+          // Idempotency check
+          const existingId = await this.repo.getRoomyId(messageIdStr);
+          if (existingId) {
+            skippedCount++;
+            continue;
+          }
+
+          // Sync the message
+          const result = await this.syncDiscordToRoomy(message);
+          if (result) {
+            syncedCount++;
+          }
+        }
+
+        // Update cursor
+        before = messages[0]?.id;
+      }
+    }
+
+    console.log(
+      `[MessageSyncService] Backfilled ${syncedCount} messages to Roomy, skipped ${skippedCount} already synced`,
+    );
+
+    return syncedCount;
   }
 
   // ============================================================
@@ -730,6 +800,7 @@ export class MessageSyncService {
 
       // Handle createMessage
       if (event.$type === "space.roomy.message.createMessage.v0") {
+        console.log("handling message", event);
         const messageOrigin = extractDiscordMessageOrigin(event);
 
         // Discord origin: register mapping and drop
@@ -740,6 +811,7 @@ export class MessageSyncService {
 
         // Roomy origin: queue for Discord sync
         this.dispatcher.toDiscord.push(decoded);
+        console.log("pushed message to queue");
         return true;
       }
 
@@ -811,22 +883,13 @@ export class MessageSyncService {
     else if (event.$type === "space.roomy.message.editMessage.v0") {
       const e = event as any;
       if (!e.messageId || !e.room || !e.body) return;
-      await this.syncRoomyToDiscordEdit(
-        e.messageId,
-        e.room,
-        e.body,
-        this.bot,
-      );
+      await this.syncRoomyToDiscordEdit(e.messageId, e.room, e.body, this.bot);
     }
     // Handle deleteMessage
     else if (event.$type === "space.roomy.message.deleteMessage.v0") {
       const e = event as any;
       if (!e.messageId) return;
-      await this.syncRoomyToDiscordDelete(
-        e.messageId,
-        e.room || "",
-        this.bot,
-      );
+      await this.syncRoomyToDiscordDelete(e.messageId, e.room || "", this.bot);
     }
   }
 }

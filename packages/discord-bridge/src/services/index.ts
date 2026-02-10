@@ -22,7 +22,6 @@ export { StructureSyncService } from "./StructureSyncService.js";
 export { MessageSyncService } from "./MessageSyncService.js";
 export type {
   DiscordToRoomyResult,
-  EventBatcher,
 } from "./MessageSyncService.js";
 
 export { Bridge } from "./Bridge.js";

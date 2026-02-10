@@ -147,6 +147,7 @@ export function createDispatcher(
 
     // Distribute events to services (first one to handle wins)
     for await (const decoded of toDiscord) {
+      console.log("handling Roomy event", decoded);
       for (const service of discordSyncServices) {
         try {
           await service.syncToDiscord(decoded);
