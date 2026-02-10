@@ -2,6 +2,11 @@
  * Service for syncing room structure between Discord and Roomy.
  * Bidirectional sync (stubs for Roomy → Discord).
  *
+ * **Roomy → Discord Sync Triggering**:
+ * - Channels: Synced when room appears in `updateSidebar` event
+ * - Threads: Synced when `createRoomLink` event has `isCreationLink: true`
+ * - Rooms: `createRoom` events do NOT trigger sync (only register Discord-origin mappings)
+ *
  * This service handles channels, threads, links, and sidebar syncing.
  * Uses SDK operations from @roomy/sdk/package/operations.
  */
@@ -27,6 +32,7 @@ import { createRoom, createThread } from "@roomy/sdk/package/operations";
 import {
   createChannel as discordCreateChannel,
   fetchChannel as discordFetchChannel,
+  type DiscordChannelType,
 } from "../discord/operations/channel.js";
 import { getRoomKey } from "../utils/room.js";
 
@@ -696,6 +702,114 @@ export class StructureSyncService {
   }
 
   /**
+   * Handle Roomy thread creation (via createRoomLink with isCreationLink: true).
+   * Creates a Discord thread if the parent channel is synced.
+   *
+   * @param event - Roomy createRoomLink event
+   */
+  async handleRoomyThreadCreate(event: Event): Promise<void> {
+    if (!this.bot) {
+      console.warn("Bot not available, skipping Roomy → Discord thread sync");
+      return;
+    }
+
+    const linkEvent = event as any;
+    const threadRoomyId = linkEvent.linkToRoom;
+    const parentRoomyId = linkEvent.room;
+
+    // Check if parent has Discord mapping
+    const parentDiscordId = await this.repo.getDiscordId(parentRoomyId);
+    if (!parentDiscordId) {
+      console.warn(
+        `[StructureSyncService] Parent room ${parentRoomyId} not synced to Discord, skipping thread sync`,
+      );
+      return;
+    }
+
+    // Check if already synced
+    const existingDiscordId = await this.repo.getDiscordId(threadRoomyId);
+    if (existingDiscordId) {
+      // Verify Discord thread still exists
+      try {
+        const thread = await discordFetchChannel(this.bot, {
+          channelId: BigInt(existingDiscordId.replace("room:", "")),
+        });
+        // Thread exists, return
+        console.log(
+          `[StructureSyncService] Thread ${threadRoomyId} already synced to Discord (thread ${thread.id})`,
+        );
+        return;
+      } catch {
+        // Thread doesn't exist, recreate below
+        console.log(
+          `[StructureSyncService] Discord thread for ${threadRoomyId} no longer exists, recreating`,
+        );
+      }
+    }
+
+    // Get thread name from existing cache
+    const roomNames = await this.fetchRoomNames([threadRoomyId]);
+    const threadName =
+      roomNames.get(threadRoomyId) || `roomy-${threadRoomyId.slice(0, 8)}`;
+
+    // Create Discord thread
+    await this.createDiscordThreadFromRoomy(
+      parentRoomyId,
+      threadRoomyId,
+      threadName,
+    );
+  }
+
+  /**
+   * Create a Discord thread from a Roomy thread room.
+   *
+   * @param parentRoomyId - Roomy parent room ULID
+   * @param threadRoomyId - Roomy thread room ULID
+   * @param threadName - Thread name
+   * @returns Discord thread ID (snowflake as string)
+   */
+  async createDiscordThreadFromRoomy(
+    parentRoomyId: Ulid,
+    threadRoomyId: Ulid,
+    threadName: string,
+  ): Promise<string> {
+    if (!this.bot) {
+      throw new Error("Bot required for Roomy → Discord sync");
+    }
+
+    const parentDiscordId = await this.repo.getDiscordId(parentRoomyId);
+    if (!parentDiscordId) {
+      throw new Error(`Parent room ${parentRoomyId} not synced to Discord`);
+    }
+
+    const parentId = BigInt(parentDiscordId.replace("room:", ""));
+
+    console.log(
+      `[StructureSyncService] Creating Discord thread ${threadName} under parent ${parentId}`,
+    );
+
+    // Create Discord thread using bot.helpers.createChannel with type 11 (PublicThread)
+    const threadType = 11 as DiscordChannelType; // GUILD_PUBLIC_THREAD
+    const result = await discordCreateChannel(this.bot, {
+      guildId: this.guildId,
+      name: threadName,
+      type: threadType,
+      parentId: parentId,
+    });
+
+    const discordThreadId = result.id.toString();
+
+    // Register mapping
+    await this.repo.registerMapping(`room:${discordThreadId}`, threadRoomyId);
+
+    console.log(
+      `[StructureSyncService] Created Discord thread ${threadName} (${discordThreadId}) for Roomy thread ${threadRoomyId}`,
+    );
+
+    return discordThreadId;
+  }
+
+  /**
    * Handle Roomy room deletion.
    * Deletes the corresponding Discord channel/thread.
    *
@@ -748,9 +862,9 @@ export class StructureSyncService {
           return true; // Handled (Discord origin, no sync back)
         }
 
-        // Sync Roomy room to Discord
-        await this.handleRoomyRoomCreate(event);
-        return true;
+        // Roomy-native room: do NOT sync yet
+        // Wait for updateSidebar (channels) or createRoomLink with isCreationLink (threads)
+        return true; // Still handle to prevent other services from processing
       }
 
       // Handle updateSidebar
@@ -775,8 +889,18 @@ export class StructureSyncService {
             const linkKey = `${parentRoomyId}:${roomLinkData.linkToRoom}`;
             await this.repo.setRoomLink(linkKey, event.id);
           }
+          return true; // Handled (Discord origin, no sync back)
         }
-        return true;
+
+        // Roomy-native link: check if this is a creation link (thread)
+        const isCreationLink = (event as any).isCreationLink === true;
+        if (isCreationLink) {
+          // Sync Roomy thread to Discord
+          await this.handleRoomyThreadCreate(event);
+          return true;
+        }
+
+        return false;
       }
 
       // Handle deleteRoom
