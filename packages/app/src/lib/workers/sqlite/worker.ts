@@ -41,7 +41,7 @@ import type {
   SqliteWorkerInterface,
   SqlStatement,
 } from "./types";
-import type { PeerInterface } from "../peer/types";
+import type { PeerClientInterface, PeerInterface } from "../peer/types";
 import { CONFIG } from "$lib/config";
 import { requestLock, queryLocks, locksEnabled } from "$lib/workers/locks";
 import { initializeFaro, trackUncaughtExceptions } from "$lib/otel";
@@ -112,11 +112,15 @@ class SqliteWorkerSupervisor {
 
     this.#status = reactiveChannelState<SqliteStatus>(params.statusPort, true);
 
-    this.#peer = messagePortInterface<{}, PeerInterface>({
+    this.#peer = messagePortInterface<PeerClientInterface, PeerInterface>({
       localName: "sqlite",
       remoteName: "peer",
       messagePort: params.peerPort,
-      handlers: {},
+      handlers: {
+        async initFinished() {},
+        async log() {},
+        async setSessionId() {},
+      },
     });
 
     this.#status.workerId = this.#workerId;
