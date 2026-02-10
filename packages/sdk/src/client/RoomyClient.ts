@@ -215,7 +215,6 @@ export class RoomyClient {
       this.#profileSpaceCache.set(userDid, spaceId);
       return spaceId;
     } catch (_e) {
-      console.warn("e", _e);
       // If we can't fetch the record, then there's no space to resolve to.
       return undefined;
     }
