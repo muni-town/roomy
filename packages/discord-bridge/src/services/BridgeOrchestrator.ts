@@ -1,17 +1,15 @@
 import { RoomyClient, stateMachine, StateMachine, StreamDid } from "@roomy/sdk";
-import { desiredProperties, DiscordBot } from "../discord/types.js";
-import { initRoomyClient } from "../roomy/client";
 import {
-  createBot,
-  Intents,
-  InteractionTypes,
-  MessageFlags,
-} from "@discordeno/bot";
+  desiredProperties,
+  DiscordBot,
+  DiscordEvent,
+} from "../discord/types.js";
+import { initRoomyClient } from "../roomy/client";
+import { createBot, Intents, MessageFlags } from "@discordeno/bot";
 import { DISCORD_TOKEN } from "../env";
 import { tracer, setDiscordAttrs, recordError } from "../tracing.js";
 import {
   handleSlashCommandInteraction,
-  safeDefer,
   slashCommands,
 } from "../discord/slashCommands";
 import { Deferred } from "@roomy/sdk";
@@ -169,89 +167,34 @@ export class BridgeOrchestrator {
         },
 
         async channelCreate(channel) {
-          await orchestrator.withGuildBridge(
-            "channelCreate",
-            channel,
-            { channelId: channel.id },
-            (bridge, channel) => bridge.handleDiscordChannelCreate(channel),
-          );
+          await orchestrator.handleDiscordEvent("CHANNEL_CREATE", channel);
         },
 
         async threadCreate(channel) {
-          await orchestrator.withGuildBridge(
-            "threadCreate",
-            channel,
-            { channelId: channel.id },
-            async (bridge, channel) => {
-              if (!channel.parentId) {
-                console.error(`Thread ${channel.name} has no parent channel`);
-                return;
-              }
-              await bridge.handleDiscordThreadCreate(channel, channel.parentId);
-            },
-          );
+          await orchestrator.handleDiscordEvent("THREAD_CREATE", {
+            ...channel,
+            parentId: channel.parentId!,
+          });
         },
 
         // Handle new messages
         async messageCreate(message) {
-          await orchestrator.withGuildBridge(
-            "messageCreate",
-            message,
-            { messageId: message.id },
-            async (bridge, message) => {
-              await bridge.handleDiscordMessageCreate(message);
-            },
-          );
+          await orchestrator.handleDiscordEvent("MESSAGE_CREATE", message);
         },
 
         // Handle reaction add
         async reactionAdd(payload) {
-          await orchestrator.withGuildBridge(
-            "reactionAdd",
-            payload,
-            {
-              messageId: payload.messageId,
-              channelId: payload.channelId,
-              userId: payload.userId,
-            },
-            (bridge, payload) =>
-              bridge.handleDiscordReactionAdd(
-                payload.messageId,
-                payload.channelId,
-                payload.userId,
-                payload.emoji,
-              ),
-          );
+          await orchestrator.handleDiscordEvent("REACTION_ADD", payload);
         },
 
         // Handle reaction remove
         async reactionRemove(payload) {
-          await orchestrator.withGuildBridge(
-            "reactionRemove",
-            payload,
-            {
-              messageId: payload.messageId,
-              channelId: payload.channelId,
-              userId: payload.userId,
-            },
-            (bridge, payload) =>
-              bridge.handleDiscordReactionRemove(
-                payload.messageId,
-                payload.channelId,
-                payload.userId,
-                payload.emoji,
-              ),
-          );
+          await orchestrator.handleDiscordEvent("REACTION_REMOVE", payload);
         },
 
         // Handle message edits
         async messageUpdate(message) {
-          await orchestrator.withGuildBridge(
-            "messageUpdate",
-            message,
-            { messageId: message.id },
-            (bridge, message) => bridge.handleDiscordMessageUpdate(message),
-          );
+          await orchestrator.handleDiscordEvent("MESSAGE_UPDATE", message);
         },
       },
     });
@@ -275,11 +218,11 @@ export class BridgeOrchestrator {
   /**
    * Common handler wrapper with tracing and error handling.
    */
-  private async withGuildBridge<T extends { guildId?: bigint }>(
-    eventName: string,
-    data: T,
-    attrs: Record<string, bigint | string>,
-    handler: (bridge: Bridge, data: T) => Promise<unknown>,
+  private async handleDiscordEvent<T extends DiscordEvent["event"]>(
+    eventName: T,
+    data: Omit<Extract<DiscordEvent, { event: T }>["payload"], "guildId"> & {
+      guildId?: bigint;
+    },
   ): Promise<void> {
     await this.state.transitionedTo("ready");
     if (!data.guildId) {
@@ -296,9 +239,12 @@ export class BridgeOrchestrator {
     }
 
     await tracer.startActiveSpan(`bridge.${eventName}`, async (span) => {
-      setDiscordAttrs(span, { guildId: data.guildId!, ...attrs });
+      setDiscordAttrs(span, { guildId: data.guildId! });
       try {
-        await handler(bridge, data);
+        await bridge.handleDiscordEvent({
+          event: eventName,
+          payload: data,
+        } as unknown as DiscordEvent);
       } catch (error) {
         recordError(span, error);
         // Don't throw - fail gracefully

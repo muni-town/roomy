@@ -15,31 +15,18 @@ import {
 } from "@roomy/sdk";
 import type {
   DecodedStreamEvent,
-  EventCallbackMeta,
   StateMachine,
   StreamIndex,
   Ulid,
 } from "@roomy/sdk";
-import type {
-  DiscordBot,
-  MessageProperties,
-  ChannelProperties,
-} from "../discord/types.js";
-import type { Emoji } from "@discordeno/bot";
-import { MessageSyncService, type EventBatcher } from "./MessageSyncService.js";
+import type { DiscordBot, DiscordEvent } from "../discord/types.js";
+import { MessageSyncService } from "./MessageSyncService.js";
 import { ReactionSyncService } from "./ReactionSyncService.js";
 import { ProfileSyncService, type DiscordUser } from "./ProfileSyncService.js";
 import { StructureSyncService } from "./StructureSyncService.js";
 import { getRepo } from "../repositories/LevelDBBridgeRepository.js";
 import { recordError, setRoomyAttrs, tracer } from "../tracing.js";
-import {
-  extractDiscordMessageOrigin,
-  extractDiscordOrigin,
-  extractDiscordUserOrigin,
-  extractDiscordSidebarOrigin,
-  extractDiscordRoomLinkOrigin,
-} from "../utils/event-extensions.js";
-import { getRoomKey } from "../utils/room.js";
+import { createDispatcher, EventDispatcher } from "../dispatcher.js";
 
 type BridgeState =
   | {
@@ -61,9 +48,10 @@ type BridgeState =
 export class Bridge {
   bot: DiscordBot;
   guildId: bigint;
-  connectedSpace: ConnectedSpace;
   state: StateMachine<BridgeState>;
   repo: BridgeRepository;
+  dispatcher: EventDispatcher;
+  connectedSpace: ConnectedSpace;
   messageSync: MessageSyncService;
   reactionSync: ReactionSyncService;
   profileSync: ProfileSyncService;
@@ -78,31 +66,50 @@ export class Bridge {
     const repo = getRepo(guildId, connectedSpace.streamDid);
     this.guildId = guildId;
     this.connectedSpace = connectedSpace;
+    this.state = stateMachine({ state: "backfillRoomy" });
     this.bot = bot;
+    this.repo = repo;
+
+    // Create dispatcher
+    this.dispatcher = createDispatcher(connectedSpace, this.state);
 
     // Create services (order matters for dependencies)
-    this.profileSync = new ProfileSyncService(repo, connectedSpace, guildId);
+    this.profileSync = new ProfileSyncService(
+      repo,
+      connectedSpace.streamDid,
+      this.dispatcher,
+      guildId,
+    );
     this.reactionSync = new ReactionSyncService(
       repo,
-      connectedSpace,
+      connectedSpace.streamDid,
+      this.dispatcher,
       guildId,
       bot,
     );
     this.structureSync = new StructureSyncService(
       repo,
-      connectedSpace,
+      connectedSpace.streamDid,
+      this.dispatcher,
       guildId,
       bot,
+      connectedSpace,
     );
     this.messageSync = new MessageSyncService(
       repo,
-      connectedSpace,
+      connectedSpace.streamDid,
+      this.dispatcher,
       guildId,
       this.profileSync,
       bot,
     );
-    this.repo = repo;
-    this.state = stateMachine({ state: "backfillRoomy" });
+
+    // Register services with dispatcher for Roomy → Discord sync
+    this.dispatcher.registerDiscordSyncService(this.reactionSync);
+    this.dispatcher.registerDiscordSyncService(this.structureSync);
+    this.dispatcher.registerDiscordSyncService(this.messageSync);
+    // We don't need ProfileSync to sync anything directly to Discord, it only populates db for other services to consume
+
     this.backfillRoomyAndSubscribe();
     this.backfillDiscordAndSyncToRoomy();
   }
@@ -112,118 +119,62 @@ export class Bridge {
   // ============================================================
 
   /**
-   * Handle Discord message creation.
-   * Delegates to MessageSyncService.
+   * Handle Discord events using unified type-safe routing.
+   * Delegates to appropriate service based on event type.
    */
-  async handleDiscordMessageCreate(
-    message: MessageProperties,
-    batcher?: EventBatcher,
-  ): Promise<string | null> {
-    return await this.messageSync.syncDiscordToRoomy(message, batcher);
-  }
+  async handleDiscordEvent(discordEvent: DiscordEvent): Promise<void> {
+    switch (discordEvent.event) {
+      case "MESSAGE_CREATE":
+        await this.messageSync.syncDiscordToRoomy(discordEvent.payload);
+        break;
 
-  /**
-   * Handle Discord message update.
-   * Delegates to MessageSyncService.
-   * Note: roomyRoomId is looked up internally by the service from the channel mapping.
-   */
-  async handleDiscordMessageUpdate(message: MessageProperties): Promise<void> {
-    await this.messageSync.syncEditToRoomy(message);
-  }
+      case "MESSAGE_UPDATE":
+        await this.messageSync.syncEditToRoomy(discordEvent.payload);
+        break;
 
-  /**
-   * Handle Discord message deletion.
-   * Delegates to MessageSyncService.
-   */
-  async handleDiscordMessageDelete(
-    messageId: bigint,
-    channelId: bigint,
-  ): Promise<void> {
-    await this.messageSync.syncDeleteToRoomy(messageId, channelId);
-  }
+      case "MESSAGE_DELETE":
+        await this.messageSync.syncDeleteToRoomy(
+          discordEvent.payload.messageId,
+          discordEvent.payload.channelId,
+        );
+        break;
 
-  /**
-   * Handle Discord reaction add.
-   * Delegates to ReactionSyncService.
-   */
-  async handleDiscordReactionAdd(
-    messageId: bigint,
-    channelId: bigint,
-    userId: bigint,
-    emoji: Partial<Emoji>,
-  ): Promise<string | null> {
-    return await this.reactionSync.syncAddToRoomy(
-      messageId,
-      channelId,
-      userId,
-      emoji,
-    );
-  }
+      case "REACTION_ADD":
+        await this.reactionSync.syncAddToRoomy(
+          discordEvent.payload.messageId,
+          discordEvent.payload.channelId,
+          discordEvent.payload.userId,
+          discordEvent.payload.emoji,
+        );
+        break;
 
-  /**
-   * Handle Discord reaction remove.
-   * Delegates to ReactionSyncService.
-   */
-  async handleDiscordReactionRemove(
-    messageId: bigint,
-    channelId: bigint,
-    userId: bigint,
-    emoji: Partial<Emoji>,
-  ): Promise<void> {
-    await this.reactionSync.syncRemoveToRoomy(
-      messageId,
-      channelId,
-      userId,
-      emoji,
-    );
-  }
+      case "REACTION_REMOVE":
+        await this.reactionSync.syncRemoveToRoomy(
+          discordEvent.payload.messageId,
+          discordEvent.payload.channelId,
+          discordEvent.payload.userId,
+          discordEvent.payload.emoji,
+        );
+        break;
 
-  /**
-   * Handle Discord user profile sync.
-   * Delegates to ProfileSyncService.
-   * @param user - Discord user to sync
-   * @param batcher - Optional event batcher for bulk operations
-   */
-  async handleDiscordUserProfile(
-    user: DiscordUser,
-    batcher?: EventBatcher,
-  ): Promise<void> {
-    await this.profileSync.syncDiscordToRoomy(user, batcher);
-  }
+      case "CHANNEL_CREATE":
+        await this.structureSync.handleDiscordChannelCreate(
+          discordEvent.payload,
+        );
+        break;
 
-  /**
-   * Handle Discord channel creation.
-   * Delegates to StructureSyncService.
-   */
-  async handleDiscordChannelCreate(
-    channel: ChannelProperties,
-  ): Promise<string> {
-    return await this.structureSync.handleDiscordChannelCreate(channel);
-  }
+      case "THREAD_CREATE":
+        await this.structureSync.handleDiscordThreadCreate(
+          discordEvent.payload,
+          discordEvent.payload.parentId,
+        );
+        break;
 
-  /**
-   * Handle Discord thread creation.
-   * Delegates to StructureSyncService.
-   */
-  async handleDiscordThreadCreate(
-    thread: ChannelProperties,
-    parentChannelId: bigint,
-  ): Promise<string> {
-    return await this.structureSync.handleDiscordThreadCreate(
-      thread,
-      parentChannelId,
-    );
-  }
-
-  /**
-   * Handle full Discord sidebar update.
-   * Delegates to StructureSyncService.
-   */
-  async handleDiscordSidebarUpdate(
-    channels: ChannelProperties[],
-    categories: ChannelProperties[],
-  ): Promise<void> {
-    await this.structureSync.syncFullDiscordSidebar(channels, categories);
+      default:
+        console.warn(
+          `[Bridge] Unknown Discord event type: ${(discordEvent as any).event}`,
+        );
+    }
   }
 
   // ============================================================
@@ -529,160 +480,33 @@ export class Bridge {
 
   /**
    * Handle a batch of Roomy events from the subscription stream.
-   * Routes events to appropriate services based on event type.
-   * Uses first-one-wins strategy - the first service to handle the event wins.
+   * No branching on backfill - single code path for all events.
+   *
+   * Phase 1: Populate mappings + queue Roomy-origin events
+   * Phase 3: Process queued Roomy-origin events
    *
    * @param events - Batch of decoded Roomy events
-   * @param meta - Event metadata (backfill status, etc.)
    */
-  async handleRoomyEvents(
-    events: DecodedStreamEvent[],
-    meta: EventCallbackMeta,
-  ): Promise<void> {
+  async handleRoomyEvents(events: DecodedStreamEvent[]): Promise<void> {
     let maxIdx = 0;
 
     for (const decodedEvent of events) {
       const { idx } = decodedEvent;
       maxIdx = Math.max(maxIdx, idx);
 
-      // During backfill, only do state management (no Discord sync)
-      if (meta.isBackfill) {
-        await this.handleRoomyEventForBackfill(decodedEvent);
-      } else {
-        // Route to services in order (first one to handle wins)
-        // Order matters: profile → structure → message → reaction
-        (await this.profileSync.handleRoomyEvent(decodedEvent)) ||
-          (await this.structureSync.handleRoomyEvent(decodedEvent)) ||
-          (await this.messageSync.handleRoomyEvent(decodedEvent)) ||
-          (await this.reactionSync.handleRoomyEvent(decodedEvent));
-      }
+      // Route to services (first one to handle wins)
+      // Order matters: profile → structure → message → reaction
+      // Services handle Discord-origin events (register mappings, drop) and
+      // queue Roomy-origin events (push to dispatcher.toDiscord for Phase 3)
+      (await this.profileSync.handleRoomyEvent(decodedEvent)) ||
+        (await this.structureSync.handleRoomyEvent(decodedEvent)) ||
+        (await this.messageSync.handleRoomyEvent(decodedEvent)) ||
+        (await this.reactionSync.handleRoomyEvent(decodedEvent));
     }
 
     // Update cursor to highest idx in batch
     if (maxIdx > 0) {
       await this.repo.setCursor(this.connectedSpace.streamDid, maxIdx);
-    }
-  }
-
-  /**
-   * Handle events during backfill (state management only, no Discord sync).
-   * This ensures we don't accidentally sync to Discord during backfill.
-   *
-   * @param decodedEvent - The decoded Roomy event
-   */
-  private async handleRoomyEventForBackfill(
-    decodedEvent: DecodedStreamEvent,
-  ): Promise<void> {
-    const { event } = decodedEvent;
-
-    // Register Discord message mappings
-    const messageOrigin = extractDiscordMessageOrigin(event);
-    if (messageOrigin) {
-      try {
-        await this.repo.registerMapping(messageOrigin.snowflake, event.id);
-      } catch (e) {
-        if (!(e instanceof Error && e.message.includes("already registered"))) {
-          console.error("Error registering synced ID:", e);
-        }
-      }
-    }
-
-    // Register Discord room mappings
-    const roomOrigin = extractDiscordOrigin(event);
-    if (roomOrigin) {
-      try {
-        await this.repo.registerMapping(
-          getRoomKey(roomOrigin.snowflake),
-          event.id,
-        );
-      } catch (e) {
-        if (!(e instanceof Error && e.message.includes("already registered"))) {
-          console.error("Error registering synced ID:", e);
-        }
-      }
-    }
-
-    // Cache Discord user profile hashes
-    const userOrigin = extractDiscordUserOrigin(event);
-    if (userOrigin && userOrigin.guildId === this.guildId.toString()) {
-      try {
-        await this.repo.setProfileHash(
-          userOrigin.snowflake,
-          userOrigin.profileHash,
-        );
-      } catch (e) {
-        console.error("Error caching profile hash:", e);
-      }
-    }
-
-    // Cache sidebar hashes
-    const sidebarOrigin = extractDiscordSidebarOrigin(event);
-    if (sidebarOrigin && sidebarOrigin.guildId === this.guildId.toString()) {
-      try {
-        await this.repo.setSidebarHash(sidebarOrigin.sidebarHash);
-      } catch (e) {
-        console.error("Error caching sidebar hash:", e);
-      }
-    }
-
-    // Cache room links
-    const roomLinkData = extractDiscordRoomLinkOrigin(event);
-    if (
-      roomLinkData &&
-      roomLinkData.origin.guildId === this.guildId.toString()
-    ) {
-      const parentRoomyId = (event as any).room;
-      if (parentRoomyId) {
-        const linkKey = `${parentRoomyId}:${roomLinkData.linkToRoom}`;
-        try {
-          await this.repo.setRoomLink(linkKey, event.id);
-        } catch (e) {
-          console.error("Error caching room link:", e);
-        }
-      }
-    }
-
-    // Cache edit tracking info
-    if (event.$type === "space.roomy.message.editMessage.v0") {
-      const origin = extractDiscordMessageOrigin(event);
-      if (origin?.editedTimestamp && origin?.contentHash) {
-        try {
-          await this.repo.setEditInfo(origin.snowflake, {
-            editedTimestamp: origin.editedTimestamp,
-            contentHash: origin.contentHash,
-          });
-        } catch (e) {
-          console.error("Error caching edit state:", e);
-        }
-      }
-    }
-
-    // Unregister deleted room mappings
-    if (event.$type === "space.roomy.room.deleteRoom.v0") {
-      try {
-        const discordId = await this.repo.getDiscordId(event.roomId);
-        if (discordId) {
-          await this.repo.unregisterMapping(discordId, event.roomId);
-        }
-      } catch (e) {
-        if (!(e instanceof Error && e.message.includes("isn't registered"))) {
-          console.error("Error unregistering room:", e);
-        }
-      }
-    }
-
-    // Unregister deleted message mappings
-    if (event.$type === "space.roomy.message.deleteMessage.v0") {
-      try {
-        const discordId = await this.repo.getDiscordId(event.messageId);
-        if (discordId) {
-          await this.repo.unregisterMapping(discordId, event.messageId);
-        }
-      } catch (e) {
-        if (!(e instanceof Error && e.message.includes("isn't registered"))) {
-          console.error("Error unregistering message:", e);
-        }
-      }
     }
   }
 }

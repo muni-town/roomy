@@ -7,6 +7,7 @@ import {
   RecursivePartial,
   SetupDesiredProps,
   TransformersDesiredProperties,
+  Emoji,
 } from "@discordeno/bot";
 
 export type MessageProperties = SetupDesiredProps<
@@ -108,3 +109,35 @@ export interface DiscordMessageOptions {
   username?: string;
   avatarUrl?: string;
 }
+
+/**
+ * Discord event types for unified event routing.
+ * Single-property objects provide type-safe discriminated union.
+ */
+export type DiscordEvent =
+  | { event: "MESSAGE_CREATE"; payload: MessageProperties }
+  | { event: "MESSAGE_UPDATE"; payload: MessageProperties }
+  | { event: "MESSAGE_DELETE"; payload: { messageId: bigint; channelId: bigint; guildId?: bigint } }
+  | {
+      event: "REACTION_ADD";
+      payload: {
+        messageId: bigint;
+        channelId: bigint;
+        userId: bigint;
+        emoji: Partial<Emoji>;
+        guildId: bigint;
+      };
+    }
+  | {
+      event: "REACTION_REMOVE";
+      payload: {
+        messageId: bigint;
+        channelId: bigint;
+        userId: bigint;
+        emoji: Partial<Emoji>;
+        guildId: bigint;
+      };
+    }
+  | { event: "CHANNEL_CREATE"; payload: ChannelProperties }
+  | { event: "THREAD_CREATE"; payload: ChannelProperties & { parentId: bigint } };
+
