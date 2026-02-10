@@ -3,7 +3,7 @@
  * Custom assertions for verifying Roomy event stream state.
  */
 
-import type { Event, StreamDid, Ulid } from "@roomy-sdk/sdk";
+import type { Event, StreamDid, Ulid } from "@roomy/sdk";
 import { describe, expect } from "vitest";
 
 /**
@@ -76,7 +76,9 @@ export function assertEventTypeExists(
   events: unknown[],
   eventType: string,
 ): Event[] {
-  const matching = (events as { $type: string }[]).filter((e) => e.$type === eventType);
+  const matching = (events as { $type: string }[]).filter(
+    (e) => e.$type === eventType,
+  );
   expect(matching.length).toBeGreaterThan(0);
   return matching as Event[];
 }
@@ -84,11 +86,10 @@ export function assertEventTypeExists(
 /**
  * Assert that a specific event type does NOT exist in the stream.
  */
-export function assertEventTypeNotExists(
-  events: unknown[],
-  eventType: string,
-) {
-  const matching = (events as { $type: string }[]).filter((e) => e.$type === eventType);
+export function assertEventTypeNotExists(events: unknown[], eventType: string) {
+  const matching = (events as { $type: string }[]).filter(
+    (e) => e.$type === eventType,
+  );
   expect(matching.length).toBe(0);
 }
 
@@ -100,7 +101,9 @@ export function assertEventTypeCount(
   eventType: string,
   expectedCount: number,
 ) {
-  const matching = (events as { $type: string }[]).filter((e) => e.$type === eventType);
+  const matching = (events as { $type: string }[]).filter(
+    (e) => e.$type === eventType,
+  );
   expect(matching.length).toBe(expectedCount);
 }
 
@@ -112,8 +115,10 @@ export function assertRoomExists(
   roomKind: string,
   roomName?: string,
 ): Ulid {
-  const createRoomEvents = (events as { $type: string; kind?: string; name?: string; id: Ulid }[]).filter(
-    (e) => e.$type === "space.roomy.room.createRoom.v0" && e.kind === roomKind
+  const createRoomEvents = (
+    events as { $type: string; kind?: string; name?: string; id: Ulid }[]
+  ).filter(
+    (e) => e.$type === "space.roomy.room.createRoom.v0" && e.kind === roomKind,
   );
 
   expect(createRoomEvents.length).toBeGreaterThan(0);
@@ -141,16 +146,19 @@ export function assertSidebarStructure(
   events: unknown[],
   expectedCategories: { name: string; childCount: number }[],
 ) {
-  const sidebarEvents = (events as { $type: string; categories?: unknown[] }[]).filter(
-    (e) => e.$type === "space.roomy.space.updateSidebar.v0"
-  );
+  const sidebarEvents = (
+    events as { $type: string; categories?: unknown[] }[]
+  ).filter((e) => e.$type === "space.roomy.space.updateSidebar.v0");
 
   expect(sidebarEvents.length).toBeGreaterThan(0);
 
   const latestSidebar = sidebarEvents[sidebarEvents.length - 1];
   expect(latestSidebar.categories).toBeDefined();
 
-  const categories = latestSidebar.categories as { name: string; children?: unknown[] }[];
+  const categories = latestSidebar.categories as {
+    name: string;
+    children?: unknown[];
+  }[];
   expect(categories.length).toBe(expectedCategories.length);
 
   for (let i = 0; i < expectedCategories.length; i++) {
@@ -171,8 +179,11 @@ export function assertMessageExists(
   roomId: Ulid,
   content?: string,
 ): Event[] {
-  const messageEvents = (events as { $type: string; room?: string; data?: unknown }[]).filter(
-    (e) => e.$type === "space.roomy.message.createMessage.v0" && e.room === roomId
+  const messageEvents = (
+    events as { $type: string; room?: string; data?: unknown }[]
+  ).filter(
+    (e) =>
+      e.$type === "space.roomy.message.createMessage.v0" && e.room === roomId,
   );
 
   expect(messageEvents.length).toBeGreaterThan(0);
@@ -194,7 +205,9 @@ export function assertMessageExists(
 /**
  * Helper to extract string data from message event data blob.
  */
-export function decodeMessageData(event: { data?: { data?: Uint8Array } }): string {
+export function decodeMessageData(event: {
+  data?: { data?: Uint8Array };
+}): string {
   if (!event.data?.data) return "";
   return new TextDecoder().decode(event.data.data);
 }
@@ -247,13 +260,15 @@ export function assertChannelSynced(
   const roomKey = `room:${discordChannelId}`;
 
   // Find the createRoom event for this channel
-  const createRoomEvents = (events as {
-    $type: string;
-    id: string;
-    kind?: string;
-    name?: string;
-    extensions?: Record<string, unknown>;
-  }[]).filter((e) => e.$type === "space.roomy.room.createRoom.v0");
+  const createRoomEvents = (
+    events as {
+      $type: string;
+      id: string;
+      kind?: string;
+      name?: string;
+      extensions?: Record<string, unknown>;
+    }[]
+  ).filter((e) => e.$type === "space.roomy.room.createRoom.v0");
 
   // Find the event with matching discordOrigin extension
   const matchedEvent = createRoomEvents.find((e) => {
@@ -336,11 +351,13 @@ export function getLatestSidebarEvent(events: unknown[]): {
   categories: SidebarCategory[];
   extensions?: Record<string, unknown>;
 } {
-  const sidebarEvents = (events as {
-    $type: string;
-    categories?: unknown[];
-    extensions?: Record<string, unknown>;
-  }[]).filter((e) => e.$type === "space.roomy.space.updateSidebar.v0");
+  const sidebarEvents = (
+    events as {
+      $type: string;
+      categories?: unknown[];
+      extensions?: Record<string, unknown>;
+    }[]
+  ).filter((e) => e.$type === "space.roomy.space.updateSidebar.v0");
 
   if (sidebarEvents.length === 0) {
     throw new Error("No sidebar update events found");

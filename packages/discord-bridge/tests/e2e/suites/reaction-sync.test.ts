@@ -23,7 +23,7 @@ import {
   connectGuildToNewSpace,
   initE2ERoomyClient,
   getTextChannels,
-  createSyncOrchestratorForTest,
+  createBridgeForTest,
   getDiscordReactions,
   waitForBotReactionViaRest,
   validateRoomyReactions,
@@ -66,12 +66,12 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         TEST_GUILD_ID,
         `E2E D-msg-D-react - ${Date.now()}`,
       );
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create Discord-origin message
       const testContent = `D-msg for D-react test at ${Date.now()}`;
@@ -79,7 +79,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         content: testContent,
       });
 
-      const roomyMessageId = await orchestrator.handleDiscordMessageCreate(
+      const roomyMessageId = await bridge.handleDiscordMessageCreate(
         testMessage,
         roomyRoomId,
       );
@@ -89,7 +89,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       // Discord user reacts
       const testEmoji = { name: "👍" };
       const testUserId = 123456789n;
-      const reactionEventId = await orchestrator.handleDiscordReactionAdd(
+      const reactionEventId = await bridge.handleDiscordReactionAdd(
         testMessage.id,
         firstChannel.id,
         testUserId,
@@ -149,12 +149,12 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         TEST_GUILD_ID,
         `E2E D-msg-R-react - ${Date.now()}`,
       );
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create Discord-origin message
       const testContent = `D-msg for R-react test at ${Date.now()}`;
@@ -162,7 +162,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         content: testContent,
       });
 
-      const roomyMessageId = await orchestrator.handleDiscordMessageCreate(
+      const roomyMessageId = await bridge.handleDiscordMessageCreate(
         testMessage,
         roomyRoomId,
       );
@@ -193,7 +193,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       };
 
       // Sync Roomy reaction to Discord (bot adds the reaction)
-      await orchestrator.handleRoomyAddReaction(reactionEvent, bot);
+      await bridge.handleRoomyAddReaction(reactionEvent, bot);
 
       // Verify: Reaction was actually added to Discord
       const reactingUsers = await waitForBotReactionViaRest({
@@ -213,7 +213,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
 
       // Simulate Discord echoing back (bot user reaction from gateway)
       // This tests that echo prevention works correctly
-      const echoReactionId = await orchestrator.handleDiscordReactionAdd(
+      const echoReactionId = await bridge.handleDiscordReactionAdd(
         testMessage.id,
         firstChannel.id,
         bot.id, // Bot user ID - this is the echo we need to prevent
@@ -258,12 +258,12 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         TEST_GUILD_ID,
         `E2E R-msg-D-react - ${Date.now()}`,
       );
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create Roomy-origin message
       const testContent = `R-msg for D-react test at ${Date.now()}`;
@@ -280,7 +280,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       const roomyMessageId = messageResult.id;
 
       // Sync Roomy message to Discord via webhook
-      await orchestrator.handleRoomyCreateMessage(
+      await bridge.handleRoomyCreateMessage(
         {
           idx: 1 as StreamIndex,
           event: {
@@ -310,7 +310,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       // Discord user reacts
       const testEmoji = { name: "🎉" };
       const testUserId = 123456789n;
-      const reactionEventId = await orchestrator.handleDiscordReactionAdd(
+      const reactionEventId = await bridge.handleDiscordReactionAdd(
         BigInt(discordMessage!.id),
         firstChannel.id,
         testUserId,
@@ -366,12 +366,12 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         TEST_GUILD_ID,
         `E2E R-msg-R-react - ${Date.now()}`,
       );
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create Roomy-origin message
       const testContent = `R-msg for R-react test at ${Date.now()}`;
@@ -388,7 +388,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       const roomyMessageId = messageResult.id;
 
       // Sync Roomy message to Discord
-      await orchestrator.handleRoomyCreateMessage(
+      await bridge.handleRoomyCreateMessage(
         {
           idx: 1 as StreamIndex,
           event: {
@@ -430,7 +430,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       };
 
       // Sync Roomy reaction to Discord (bot adds the reaction)
-      await orchestrator.handleRoomyAddReaction(reactionEvent, bot);
+      await bridge.handleRoomyAddReaction(reactionEvent, bot);
 
       // Verify: Reaction was actually added to Discord
       const reactingUsers = await waitForBotReactionViaRest({
@@ -451,7 +451,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       // Simulate Discord echoing back (bot user reaction from gateway)
       // This is what happens when the bot adds a reaction via webhook and Discord
       // sends back a reaction_add event via gateway
-      const echoReactionId = await orchestrator.handleDiscordReactionAdd(
+      const echoReactionId = await bridge.handleDiscordReactionAdd(
         discordMessage!.id,
         firstChannel.id,
         bot.id, // Bot user ID - echo prevention should skip this
@@ -481,25 +481,25 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         TEST_GUILD_ID,
         `E2E Reaction Remove - ${Date.now()}`,
       );
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       const testContent = `Test message for reaction remove at ${Date.now()}`;
       const testMessage = await bot.helpers.sendMessage(firstChannel.id, {
         content: testContent,
       });
 
-      await orchestrator.handleDiscordMessageCreate(testMessage, roomyRoomId);
+      await bridge.handleDiscordMessageCreate(testMessage);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const testEmoji = { name: "😀" };
       const testUserId = 123456789n;
 
-      const reactionEventId = await orchestrator.handleDiscordReactionAdd(
+      const reactionEventId = await bridge.handleDiscordReactionAdd(
         testMessage.id,
         firstChannel.id,
         testUserId,
@@ -509,7 +509,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Remove reaction
-      await orchestrator.handleDiscordReactionRemove(
+      await bridge.handleDiscordReactionRemove(
         testMessage.id,
         firstChannel.id,
         testUserId,
@@ -542,25 +542,25 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         TEST_GUILD_ID,
         `E2E Reaction Idempotency - ${Date.now()}`,
       );
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       const testContent = `Test message for idempotency at ${Date.now()}`;
       const testMessage = await bot.helpers.sendMessage(firstChannel.id, {
         content: testContent,
       });
 
-      await orchestrator.handleDiscordMessageCreate(testMessage, roomyRoomId);
+      await bridge.handleDiscordMessageCreate(testMessage);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const testEmoji = { name: "🎉" };
       const testUserId = 123456789n;
 
-      const reactionId1 = await orchestrator.handleDiscordReactionAdd(
+      const reactionId1 = await bridge.handleDiscordReactionAdd(
         testMessage.id,
         firstChannel.id,
         testUserId,
@@ -570,7 +570,7 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Re-sync same reaction
-      const reactionId2 = await orchestrator.handleDiscordReactionAdd(
+      const reactionId2 = await bridge.handleDiscordReactionAdd(
         testMessage.id,
         firstChannel.id,
         testUserId,
@@ -609,18 +609,18 @@ describe("E2E: Reaction Sync - Origin Matrix", () => {
         TEST_GUILD_ID,
         `E2E Unsynced Message - ${Date.now()}`,
       );
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      await orchestrator.handleDiscordChannelCreate(firstChannel);
+      await bridge.handleDiscordChannelCreate(firstChannel);
 
       const testMessage = await bot.helpers.sendMessage(firstChannel.id, {
         content: `Unsynced message at ${Date.now()}`,
       });
 
       const testEmoji = { name: "❌" };
-      const reactionEventId = await orchestrator.handleDiscordReactionAdd(
+      const reactionEventId = await bridge.handleDiscordReactionAdd(
         testMessage.id,
         firstChannel.id,
         bot.id,

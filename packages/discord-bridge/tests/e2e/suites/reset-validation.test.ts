@@ -22,7 +22,7 @@ import {
   cleanupRoomySyncedChannels,
 } from "../helpers/setup.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
-import { registeredBridges } from "../../../src/repositories/db.js";
+import { registeredBridges } from "../../../src/repositories/LevelDBBridgeRepository.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
 import {
   assertLobbyExists,

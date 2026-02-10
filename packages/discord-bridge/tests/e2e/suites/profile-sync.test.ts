@@ -13,10 +13,10 @@ import {
   connectGuildToNewSpace,
   initE2ERoomyClient,
   getTextChannels,
-  createSyncOrchestratorForTest,
+  createBridgeForTest,
 } from "../helpers/setup.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
-import { registeredBridges } from "../../../src/repositories/db.js";
+import { registeredBridges } from "../../../src/repositories/LevelDBBridgeRepository.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
 import type { DiscordUser } from "../../../src/services/ProfileSyncService.js";
 import { StreamIndex } from "@roomy/sdk";
@@ -55,7 +55,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch bot user info from Discord
       const botUser = await bot.rest.getUser(bot.id);
@@ -70,7 +70,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       };
 
       // Sync the profile
-      await orchestrator.handleDiscordUserProfile(discordUser);
+      await bridge.handleDiscordUserProfile(discordUser);
 
       // Wait for profile event to be materialized
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -131,7 +131,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch bot user info from Discord
       const botUser = await bot.rest.getUser(bot.id);
@@ -146,7 +146,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       };
 
       // First profile sync
-      await orchestrator.handleDiscordUserProfile(discordUser);
+      await bridge.handleDiscordUserProfile(discordUser);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       let events = (
@@ -164,7 +164,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       expect(firstProfileEvent).toBeDefined();
 
       // Second profile sync with same data (should be skipped due to hash check)
-      await orchestrator.handleDiscordUserProfile(discordUser);
+      await bridge.handleDiscordUserProfile(discordUser);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       events = (
@@ -203,7 +203,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch bot user info from Discord
       const botUser = await bot.rest.getUser(bot.id);
@@ -218,7 +218,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       };
 
       // First profile sync
-      await orchestrator.handleDiscordUserProfile(discordUser);
+      await bridge.handleDiscordUserProfile(discordUser);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       let events = (
@@ -238,7 +238,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       };
 
       // Sync the modified profile
-      await orchestrator.handleDiscordUserProfile(modifiedUser);
+      await bridge.handleDiscordUserProfile(modifiedUser);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       events = (
@@ -285,7 +285,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch bot user info from Discord
       const botUser = await bot.rest.getUser(bot.id);
@@ -300,7 +300,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       };
 
       // First profile sync
-      await orchestrator.handleDiscordUserProfile(discordUser);
+      await bridge.handleDiscordUserProfile(discordUser);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // Modify the avatar hash (simulating an avatar change)
@@ -310,7 +310,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       };
 
       // Sync the modified profile
-      await orchestrator.handleDiscordUserProfile(modifiedUser);
+      await bridge.handleDiscordUserProfile(modifiedUser);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const events = (
@@ -357,7 +357,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Create a user with both globalName and username
       const discordUser: DiscordUser = {
@@ -369,7 +369,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       };
 
       // Sync the profile
-      await orchestrator.handleDiscordUserProfile(discordUser);
+      await bridge.handleDiscordUserProfile(discordUser);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const events = (
@@ -409,7 +409,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Create a user without globalName
       const discordUser: DiscordUser = {
@@ -421,7 +421,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       };
 
       // Sync the profile
-      await orchestrator.handleDiscordUserProfile(discordUser);
+      await bridge.handleDiscordUserProfile(discordUser);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const events = (
@@ -461,7 +461,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       );
 
       // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Create a user without avatar
       const discordUser: DiscordUser = {
@@ -473,7 +473,7 @@ describe("E2E: Discord Profile Sync (D→R)", () => {
       };
 
       // Sync the profile
-      await orchestrator.handleDiscordUserProfile(discordUser);
+      await bridge.handleDiscordUserProfile(discordUser);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       const events = (

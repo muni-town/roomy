@@ -23,7 +23,7 @@ import {
   initE2ERoomyClient,
   getTextChannels,
   getCategories,
-  createSyncOrchestratorForTest,
+  createBridgeForTest,
   cleanupRoomySyncedChannels,
 } from "../helpers/setup.js";
 import { getLatestSidebarEvent } from "../helpers/assertions.js";
@@ -79,8 +79,8 @@ describe("E2E: Discord Channel Sync", () => {
         `E2E Single Channel Test - ${Date.now()}`,
       );
 
-      // Create orchestrator
-      const orchestrator = createSyncOrchestratorForTest(result);
+      // Create bridge
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -89,7 +89,7 @@ describe("E2E: Discord Channel Sync", () => {
       // Sync the first channel
       const firstChannel = channels[0];
       const roomyRoomId =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Verify: A createRoom event was created
       const events = (
@@ -131,7 +131,7 @@ describe("E2E: Discord Channel Sync", () => {
         `E2E Multiple Channels Test - ${Date.now()}`,
       );
 
-      const orchestrator = createSyncOrchestratorForTest(result);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -140,7 +140,7 @@ describe("E2E: Discord Channel Sync", () => {
       // Sync all channels
       const roomyIds: string[] = [];
       for (const channel of channels) {
-        const roomId = await orchestrator.handleDiscordChannelCreate(channel);
+        const roomId = await bridge.handleDiscordChannelCreate(channel);
         roomyIds.push(roomId);
       }
 
@@ -190,14 +190,14 @@ describe("E2E: Discord Channel Sync", () => {
         `E2E Idempotency Test - ${Date.now()}`,
       );
 
-      const orchestrator = createSyncOrchestratorForTest(result);
+      const bridge = await createBridgeForTest(result, bot);
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
 
       // First sync
       const roomId1 =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Get event count after first sync
       const events1 = (
@@ -211,7 +211,7 @@ describe("E2E: Discord Channel Sync", () => {
 
       // Second sync with same channel
       const roomId2 =
-        await orchestrator.handleDiscordChannelCreate(firstChannel);
+        await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Get event count after second sync
       const events2 = (
@@ -242,7 +242,7 @@ describe("E2E: Discord Channel Sync", () => {
         `E2E Sidebar Sync Test - ${Date.now()}`,
       );
 
-      const orchestrator = createSyncOrchestratorForTest(result);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels and categories from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -252,11 +252,11 @@ describe("E2E: Discord Channel Sync", () => {
 
       // First sync all individual channels
       for (const channel of channels) {
-        await orchestrator.handleDiscordChannelCreate(channel);
+        await bridge.handleDiscordChannelCreate(channel);
       }
 
       // Then sync the sidebar
-      await orchestrator.handleDiscordSidebarUpdate(channels, categories);
+      await bridge.handleDiscordSidebarUpdate(channels, categories);
 
       // Verify: sidebar update event exists
       const events = (
@@ -292,7 +292,7 @@ describe("E2E: Discord Channel Sync", () => {
         `E2E Category Sync Test - ${Date.now()}`,
       );
 
-      const orchestrator = createSyncOrchestratorForTest(result);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels and categories from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -300,11 +300,11 @@ describe("E2E: Discord Channel Sync", () => {
 
       // Sync all channels first
       for (const channel of channels) {
-        await orchestrator.handleDiscordChannelCreate(channel);
+        await bridge.handleDiscordChannelCreate(channel);
       }
 
       // Sync the sidebar
-      await orchestrator.handleDiscordSidebarUpdate(channels, categories);
+      await bridge.handleDiscordSidebarUpdate(channels, categories);
 
       // Verify: sidebar was created
       const events = (
@@ -330,7 +330,7 @@ describe("E2E: Discord Channel Sync", () => {
         `E2E Category Grouping Test - ${Date.now()}`,
       );
 
-      const orchestrator = createSyncOrchestratorForTest(result);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels and categories from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -354,12 +354,12 @@ describe("E2E: Discord Channel Sync", () => {
         string /* roomyId */
       >();
       for (const channel of channels) {
-        const roomId = await orchestrator.handleDiscordChannelCreate(channel);
+        const roomId = await bridge.handleDiscordChannelCreate(channel);
         channelMap.set(channel.id.toString(), roomId);
       }
 
       // Sync the sidebar
-      await orchestrator.handleDiscordSidebarUpdate(channels, categories);
+      await bridge.handleDiscordSidebarUpdate(channels, categories);
 
       // Verify: each Discord category exists in Roomy sidebar
       const events = (
@@ -408,7 +408,7 @@ describe("E2E: Discord Channel Sync", () => {
         `E2E Uncategorized Test - ${Date.now()}`,
       );
 
-      const orchestrator = createSyncOrchestratorForTest(result);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -419,11 +419,11 @@ describe("E2E: Discord Channel Sync", () => {
 
       // Sync all channels
       for (const channel of channels) {
-        await orchestrator.handleDiscordChannelCreate(channel);
+        await bridge.handleDiscordChannelCreate(channel);
       }
 
       // Sync the sidebar
-      await orchestrator.handleDiscordSidebarUpdate(channels, categories);
+      await bridge.handleDiscordSidebarUpdate(channels, categories);
 
       // Wait for events to be materialized
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -461,18 +461,18 @@ describe("E2E: Discord Channel Sync", () => {
         `E2E Sidebar Idempotency Test - ${Date.now()}`,
       );
 
-      const orchestrator = createSyncOrchestratorForTest(result);
+      const bridge = await createBridgeForTest(result, bot);
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const categories = await getCategories(bot, TEST_GUILD_ID);
 
       // Sync all channels
       for (const channel of channels) {
-        await orchestrator.handleDiscordChannelCreate(channel);
+        await bridge.handleDiscordChannelCreate(channel);
       }
 
       // First sidebar sync
-      await orchestrator.handleDiscordSidebarUpdate(channels, categories);
+      await bridge.handleDiscordSidebarUpdate(channels, categories);
 
       // Wait for events to be materialized
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -485,7 +485,7 @@ describe("E2E: Discord Channel Sync", () => {
       );
 
       // Second sidebar sync with same data should skip (hash check)
-      await orchestrator.handleDiscordSidebarUpdate(channels, categories);
+      await bridge.handleDiscordSidebarUpdate(channels, categories);
 
       const events2 = (
         await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
@@ -509,7 +509,7 @@ describe("E2E: Discord Channel Sync", () => {
         TEST_GUILD_ID,
         `E2E Reverse Sync Test - ${testId}`,
       );
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const orchestrator = createBridgeForTest(result, bot);
 
       const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
 
@@ -525,7 +525,7 @@ describe("E2E: Discord Channel Sync", () => {
       await result.connectedSpace.sendEvent(sidebarEvent);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      await orchestrator.handleRoomyUpdateSidebar(
+      await bridge.handleRoomyUpdateSidebar(
         { idx: 1, event: sidebarEvent, user: "did:plc:test" as any },
         bot,
       );
@@ -547,12 +547,12 @@ describe("E2E: Discord Channel Sync", () => {
         TEST_GUILD_ID,
         `E2E Reverse Skip Test - ${Date.now()}`,
       );
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const orchestrator = createBridgeForTest(result, bot);
 
       // First: sync a Discord channel to Roomy (adds discordOrigin)
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       expect(channels.length).toBeGreaterThan(0);
-      await orchestrator.handleDiscordChannelCreate(channels[0]);
+      await bridge.handleDiscordChannelCreate(channels[0]);
 
       // Get channel count before reverse sync
       const channelsBefore = await bot.rest.getChannels(TEST_GUILD_ID);
@@ -579,7 +579,7 @@ describe("E2E: Discord Channel Sync", () => {
       await result.connectedSpace.sendEvent(sidebarEvent);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      await orchestrator.handleRoomyUpdateSidebar(
+      await bridge.handleRoomyUpdateSidebar(
         {
           idx: 1 as StreamIndex,
           event: sidebarEvent,
@@ -609,7 +609,7 @@ describe("E2E: Discord Channel Sync", () => {
         TEST_GUILD_ID,
         `E2E Rename Test - ${testId}`,
       );
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const orchestrator = createBridgeForTest(result, bot);
 
       const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
 
@@ -626,7 +626,7 @@ describe("E2E: Discord Channel Sync", () => {
       await result.connectedSpace.sendEvent(sidebarEvent);
       await new Promise((resolve) => setTimeout(resolve, 500));
 
-      await orchestrator.handleRoomyUpdateSidebar(
+      await bridge.handleRoomyUpdateSidebar(
         { idx: 1, event: sidebarEvent, user: "did:plc:test" as any },
         bot,
       );
@@ -641,7 +641,7 @@ describe("E2E: Discord Channel Sync", () => {
       const channelId = synced!.id;
 
       // Directly test the rename functionality
-      await orchestrator.handleRoomyRoomRename(
+      await bridge.handleRoomyRoomRename(
         roomResult.id,
         `renamed-channel-${testId}`,
       );
@@ -668,7 +668,7 @@ describe("E2E: Discord Channel Sync", () => {
         TEST_GUILD_ID,
         `E2E Reverse Idempotency Test - ${Date.now()}`,
       );
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const orchestrator = createBridgeForTest(result, bot);
 
       const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
 
@@ -684,7 +684,7 @@ describe("E2E: Discord Channel Sync", () => {
       await new Promise((resolve) => setTimeout(resolve, 500));
 
       // First sync
-      await orchestrator.handleRoomyUpdateSidebar(
+      await bridge.handleRoomyUpdateSidebar(
         {
           idx: 1 as StreamIndex,
           event: sidebarEvent,
@@ -699,7 +699,7 @@ describe("E2E: Discord Channel Sync", () => {
       const count1 = channels1.size;
 
       // Second sync with same sidebar
-      await orchestrator.handleRoomyUpdateSidebar(
+      await bridge.handleRoomyUpdateSidebar(
         {
           idx: 2 as StreamIndex,
           event: sidebarEvent,
@@ -727,7 +727,7 @@ describe("E2E: Discord Channel Sync", () => {
         `E2E Topic Marker Test - ${testId}`,
       );
 
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const orchestrator = createBridgeForTest(result, bot);
 
       // 1. Create a Roomy room (without discordOrigin - simulating a room created in Roomy)
       const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
@@ -761,7 +761,7 @@ describe("E2E: Discord Channel Sync", () => {
         user: "did:plc:test" as any,
       };
 
-      await orchestrator.handleRoomyUpdateSidebar(decodedEvent, bot);
+      await bridge.handleRoomyUpdateSidebar(decodedEvent, bot);
 
       // Wait for Discord channel creation
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -791,7 +791,7 @@ describe("E2E: Discord Channel Sync", () => {
         `E2E Recovery Test - ${testId}`,
       );
 
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const orchestrator = createBridgeForTest(result, bot);
 
       // Phase 1: Create a Roomy room and sync to Discord
       const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
@@ -826,7 +826,7 @@ describe("E2E: Discord Channel Sync", () => {
         user: "did:plc:test" as any,
       };
 
-      await orchestrator.handleRoomyUpdateSidebar(decodedEvent, bot);
+      await bridge.handleRoomyUpdateSidebar(decodedEvent, bot);
 
       // Wait for Discord channel creation
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -855,7 +855,7 @@ describe("E2E: Discord Channel Sync", () => {
       expect(mappingAfterClear).toBeUndefined();
 
       // Call recovery function to rebuild mappings from Discord topics
-      await orchestrator.recoverMappings();
+      await bridge.recoverMappings();
 
       // Wait a bit for recovery to complete
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -883,7 +883,7 @@ describe("E2E: Discord Channel Sync", () => {
         TEST_GUILD_ID,
         `E2E Lobby Backfill Test - ${testId}`,
       );
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const orchestrator = createBridgeForTest(result, bot);
 
       // Wait for the default space structure to be created
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -916,7 +916,7 @@ describe("E2E: Discord Channel Sync", () => {
 
       // Trigger Roomy → Discord sync for the sidebar
       const latestSidebarEvent = sidebarEvents[sidebarEvents.length - 1];
-      await orchestrator.handleRoomyUpdateSidebar(
+      await bridge.handleRoomyUpdateSidebar(
         {
           idx: 1,
           event: latestSidebarEvent.event,
@@ -960,7 +960,7 @@ describe("E2E: Discord Channel Sync", () => {
         TEST_GUILD_ID,
         `E2E Full Backfill Test - ${testId}`,
       );
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const orchestrator = createBridgeForTest(result, bot);
 
       // Wait for default space initialization
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -1004,7 +1004,7 @@ describe("E2E: Discord Channel Sync", () => {
       console.log(`Created Roomy messages: ${message1Id.id}, ${message2Id.id}`);
 
       // Trigger Phase 0: Backfill sidebar to create the Discord channel
-      await orchestrator.backfillRoomyToDiscord(bot);
+      await bridge.backfillRoomyToDiscord(bot);
 
       // Wait for Phase 0 to complete (channel creation)
       await new Promise((resolve) => setTimeout(resolve, 2000));

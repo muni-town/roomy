@@ -19,10 +19,10 @@ import {
   connectGuildToNewSpace,
   initE2ERoomyClient,
   getTextChannels,
-  createSyncOrchestratorForTest,
+  createBridgeForTest,
 } from "../helpers/setup.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
-import { registeredBridges } from "../../../src/repositories/db.js";
+import { registeredBridges } from "../../../src/repositories/LevelDBBridgeRepository.js";
 import { connectedSpaces } from "../../../src/roomy/client.js";
 
 // Run tests sequentially to avoid database conflicts
@@ -75,7 +75,7 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
         `E2E R2D Message Create Test - ${uniqueSuffix}`,
       );
 
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       // Fetch channels from Discord
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
@@ -83,7 +83,7 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
 
       // Sync the first channel (Discord → Roomy direction to establish mapping)
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // Create a proper DecodedStreamEvent structure
       const testContent = `Test message from Roomy ${uniqueSuffix}`;
@@ -105,7 +105,7 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
       };
 
       // Sync Roomy message to Discord
-      await orchestrator.handleRoomyCreateMessage(decodedEvent, bot);
+      await bridge.handleRoomyCreateMessage(decodedEvent, bot);
 
       // Verify the Discord message was created
       // Get messages from the channel and check for our content
@@ -129,11 +129,11 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
         `E2E R2D Message Edit Test - ${uniqueSuffix}`,
       );
 
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // First, create a message
       const originalContent = `Original message ${uniqueSuffix}`;
@@ -154,7 +154,7 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
         user: testUserDid,
       };
 
-      await orchestrator.handleRoomyCreateMessage(createEvent, bot);
+      await bridge.handleRoomyCreateMessage(createEvent, bot);
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for webhook
 
       // Now edit the message
@@ -175,7 +175,7 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
       };
 
       // Sync Roomy edit to Discord
-      await orchestrator.handleRoomyEditMessage(editEvent, bot);
+      await bridge.handleRoomyEditMessage(editEvent, bot);
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for edit
 
       // Verify the Discord message was edited
@@ -197,11 +197,11 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
         `E2E R2D Message Delete Test - ${uniqueSuffix}`,
       );
 
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // First, create a message
       const originalContent = `Message to delete ${uniqueSuffix}`;
@@ -222,7 +222,7 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
         user: testUserDid,
       };
 
-      await orchestrator.handleRoomyCreateMessage(createEvent, bot);
+      await bridge.handleRoomyCreateMessage(createEvent, bot);
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for webhook
 
       // Verify message was created
@@ -243,7 +243,7 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
       };
 
       // Sync Roomy delete to Discord
-      await orchestrator.handleRoomyDeleteMessage(deleteEvent, bot);
+      await bridge.handleRoomyDeleteMessage(deleteEvent, bot);
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for delete
 
       // Verify the Discord message was deleted
@@ -266,11 +266,11 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
         `E2E R2D Reaction Add Test - ${uniqueSuffix}`,
       );
 
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // First, create a message to react to
       const originalContent = `Message for reaction ${uniqueSuffix}`;
@@ -291,7 +291,7 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
         user: testUserDid,
       };
 
-      await orchestrator.handleRoomyCreateMessage(createEvent, bot);
+      await bridge.handleRoomyCreateMessage(createEvent, bot);
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for webhook
 
       // Now add a reaction to the message
@@ -309,7 +309,7 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
       };
 
       // Sync Roomy reaction to Discord
-      await orchestrator.handleRoomyAddReaction(reactionEvent, bot);
+      await bridge.handleRoomyAddReaction(reactionEvent, bot);
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for reaction
 
       // Verify the Discord reaction was added
@@ -332,11 +332,11 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
         `E2E R2D Reaction Remove Test - ${uniqueSuffix}`,
       );
 
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // First, create a message and add a reaction
       const originalContent = `Message for reaction removal ${uniqueSuffix}`;
@@ -357,7 +357,7 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
         user: testUserDid,
       };
 
-      await orchestrator.handleRoomyCreateMessage(createEvent, bot);
+      await bridge.handleRoomyCreateMessage(createEvent, bot);
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Add a reaction
@@ -375,7 +375,7 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
         user: testUserDid,
       };
 
-      await orchestrator.handleRoomyAddReaction(addReactionEvent, bot);
+      await bridge.handleRoomyAddReaction(addReactionEvent, bot);
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Now remove the reaction
@@ -391,7 +391,7 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
       };
 
       // Sync Roomy reaction remove to Discord
-      await orchestrator.handleRoomyRemoveReaction(removeReactionEvent, bot);
+      await bridge.handleRoomyRemoveReaction(removeReactionEvent, bot);
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Verify - the remove should complete without errors
@@ -462,13 +462,13 @@ describe("E2E: Roomy → Discord Reverse Sync", { sequential: true }, () => {
         `E2E Room Mapping Test - ${Date.now()}`,
       );
 
-      const orchestrator = createSyncOrchestratorForTest(result, bot);
+      const bridge = await createBridgeForTest(result, bot);
 
       const channels = await getTextChannels(bot, TEST_GUILD_ID);
       const firstChannel = channels[0];
 
       // Sync channel (this should create the mapping)
-      const roomyRoomId = await orchestrator.handleDiscordChannelCreate(firstChannel);
+      const roomyRoomId = await bridge.handleDiscordChannelCreate(firstChannel);
 
       // TODO: When implemented, verify:
       // - syncedIds has mapping from roomyRoomId → firstChannel.id

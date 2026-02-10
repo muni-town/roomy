@@ -19,7 +19,7 @@ import {
   connectGuildToNewSpace,
   initE2ERoomyClient,
   getTextChannels,
-  createSyncOrchestratorForTest,
+  createBridgeForTest,
 } from "../helpers/setup.js";
 import { TEST_GUILD_ID } from "../fixtures/test-data.js";
 import { backfillDiscordReactions } from "../../../src/discord/backfill.js";
@@ -61,10 +61,10 @@ describe("E2E: Reaction Backfill", () => {
       content: `Test message for backfill idempotency at ${Date.now()}`,
     });
 
-    const orchestrator = createSyncOrchestratorForTest(result, bot);
+    const bridge = await createBridgeForTest(result, bot);
     const roomyRoomId =
-      await orchestrator.handleDiscordChannelCreate(firstChannel);
-    await orchestrator.handleDiscordMessageCreate(testMessage, roomyRoomId);
+      await bridge.handleDiscordChannelCreate(firstChannel);
+    await bridge.handleDiscordMessageCreate(testMessage);
 
     // Simulate gateway sync (simulated user reactions, NOT from bot)
     const testEmoji1 = { name: "👍" };
@@ -72,13 +72,13 @@ describe("E2E: Reaction Backfill", () => {
     const testUserId = 123456789n; // Different from bot.id
 
     // Sync reactions via simulated gateway events
-    const reactionId1 = await orchestrator.handleDiscordReactionAdd(
+    const reactionId1 = await bridge.handleDiscordReactionAdd(
       testMessage.id,
       firstChannel.id,
       testUserId,
       testEmoji1,
     );
-    const reactionId2 = await orchestrator.handleDiscordReactionAdd(
+    const reactionId2 = await bridge.handleDiscordReactionAdd(
       testMessage.id,
       firstChannel.id,
       testUserId,
@@ -161,10 +161,10 @@ describe("E2E: Reaction Backfill", () => {
       content: `Message with no reactions at ${Date.now()}`,
     });
 
-    const orchestrator = createSyncOrchestratorForTest(result, bot);
+    const bridge = await createBridgeForTest(result, bot);
     const roomyRoomId =
-      await orchestrator.handleDiscordChannelCreate(firstChannel);
-    await orchestrator.handleDiscordMessageCreate(testMessage, roomyRoomId);
+      await bridge.handleDiscordChannelCreate(firstChannel);
+    await bridge.handleDiscordMessageCreate(testMessage);
 
     // Call backfill on channel with no reactions
     await backfillDiscordReactions(bot, result.guildContext, firstChannel.id);
@@ -217,12 +217,12 @@ describe("E2E: Reaction Backfill", () => {
       content: `Test message 2 for backfill processing at ${Date.now()}`,
     });
 
-    const orchestrator = createSyncOrchestratorForTest(result, bot);
+    const bridge = await createBridgeForTest(result, bot);
     const roomyRoomId =
-      await orchestrator.handleDiscordChannelCreate(firstChannel);
+      await bridge.handleDiscordChannelCreate(firstChannel);
 
-    await orchestrator.handleDiscordMessageCreate(message1, roomyRoomId);
-    await orchestrator.handleDiscordMessageCreate(message2, roomyRoomId);
+    await bridge.handleDiscordMessageCreate(message1);
+    await bridge.handleDiscordMessageCreate(message2);
 
     // Add bot reactions to the messages
     const testEmoji = "👍";
