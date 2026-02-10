@@ -3,7 +3,6 @@ import {
   CreateApplicationCommand,
   DiscordApplicationIntegrationType,
   DiscordInteractionContextType,
-  Interaction,
   InteractionTypes,
   MessageFlags,
 } from "@discordeno/bot";
@@ -16,10 +15,9 @@ import {
 // } from "../repositories/db.js";
 // import { getRoomyClient, subscribeToSpace } from "../roomy/client.js";
 import { StreamDid } from "@roomy/sdk";
-import { backfillGuild } from "./bot.js";
 import { Bridge } from "../services/Bridge.js";
 import { registeredBridges } from "../repositories/LevelDBBridgeRepository.js";
-import { DesiredInteraction } from "./types.js";
+import { InteractionProperties } from "./types.js";
 
 export const slashCommands = [
   {
@@ -92,7 +90,7 @@ function isInteractionAlreadyHandled(error: any): boolean {
  * Returns true if successful, false if already handled by a previous bot instance.
  */
 export async function safeRespond(
-  interaction: DesiredInteraction,
+  interaction: InteractionProperties,
   content: string,
   ephemeral: boolean = true,
 ): Promise<boolean> {
@@ -135,7 +133,7 @@ export async function safeRespond(
  * Returns true if successful, false if already handled.
  */
 export async function safeDefer(
-  interaction: DesiredInteraction,
+  interaction: InteractionProperties,
   ephemeral: boolean,
 ): Promise<boolean> {
   const ageMs = getInteractionAgeMs(BigInt(interaction.id));
@@ -170,40 +168,41 @@ export async function safeDefer(
 
 /** Handle Discord slash command interactions */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function handleSlashCommandInteraction(
-  interaction: DesiredInteraction,
-  guildId: bigint,
-  spaceExists: (did: StreamDid) => Promise<boolean>,
-  bridge?: Bridge,
-) {
-  if (interaction.type == InteractionTypes.ApplicationCommand) {
-    if (interaction.data?.name == "roomy-status") {
+export async function handleSlashCommandInteraction(ctx: {
+  interaction: InteractionProperties;
+  guildId: bigint;
+  spaceExists: (did: StreamDid) => Promise<boolean>;
+  createBridge: (spaceId: StreamDid, guildId: bigint) => Promise<Bridge>;
+  bridge?: Bridge;
+}) {
+  if (ctx.interaction.type == InteractionTypes.ApplicationCommand) {
+    if (ctx.interaction.data?.name == "roomy-status") {
       // Defer immediately to avoid 3-second timeout
-      if (!(await safeDefer(interaction, true))) return;
+      if (!(await safeDefer(ctx.interaction, true))) return;
       try {
-        await interaction.edit({
-          content: bridge
-            ? `✅ This Discord server is actively bridged to a Roomy [space](https://roomy.space/${bridge.spaceId}).`
+        await ctx.interaction.edit({
+          content: ctx.bridge
+            ? `✅ This Discord server is actively bridged to a Roomy [space](https://roomy.space/${ctx.bridge.connectedSpace.streamDid}).`
             : "🔌 The Discord bridge is not connected to a Roomy space.",
         });
       } catch (e) {
         console.error("Error handling roomy-status command:", e);
         try {
-          await interaction.edit({
+          await ctx.interaction.edit({
             content: "🛑 An error occurred while checking status.",
           });
         } catch {
           // Interaction may have expired
         }
       }
-    } else if (interaction.data?.name == "connect-roomy-space") {
+    } else if (ctx.interaction.data?.name == "connect-roomy-space") {
       // Defer immediately since this command does async work that may take > 3 seconds
       // Discord interactions timeout after 3 seconds without acknowledgment
-      if (!(await safeDefer(interaction, true))) return;
+      if (!(await safeDefer(ctx.interaction, true))) return;
 
       try {
-        const spaceId = interaction.data.options?.find(
-          (x) => x.name == "space-id",
+        const spaceId = ctx.interaction.data.options?.find(
+          (x: any) => x.name == "space-id",
         )?.value;
 
         // Validate the space ID format
@@ -211,16 +210,16 @@ export async function handleSlashCommandInteraction(
         try {
           streamDid = StreamDid.assert(spaceId);
         } catch {
-          await interaction.edit({
+          await ctx.interaction.edit({
             content: "🛑 Invalid space ID. Please provide a valid stream DID.",
           });
           return;
         }
 
-        const exists = spaceExists(streamDid);
+        const exists = ctx.spaceExists(streamDid);
 
         if (!exists) {
-          await interaction.edit({
+          await ctx.interaction.edit({
             content:
               "🛑 Could not find a space with that ID, or the bridge doesn't have access. " +
               'Make sure you\'ve clicked "Grant Access" in the Discord bridge settings page first.',
@@ -228,22 +227,24 @@ export async function handleSlashCommandInteraction(
           return;
         }
 
-        if (bridge) {
-          await interaction.edit({
+        if (ctx.bridge) {
+          await ctx.interaction.edit({
             content:
-              `🛑 This Discord server is already bridged to another Roomy [space](https://roomy.space/${bridge.spaceId}). ` +
+              `🛑 This Discord server is already bridged to another Roomy [space](https://roomy.space/${ctx.bridge.connectedSpace.streamDid}). ` +
               "If you want to connect to a new space, first disconnect it using the `/disconnect-roomy-space` command.",
           });
           return;
         }
 
+        const newBridge = await ctx.createBridge(streamDid, ctx.guildId);
+
         await registeredBridges.register({
-          guildId: guildId.toString(),
+          guildId: ctx.guildId.toString(),
           spaceId: streamDid,
         });
 
         // Update the deferred response
-        await interaction.edit({
+        await ctx.interaction.edit({
           content: "Roomy space has been connected! Starting sync... 🥳",
         });
 
@@ -254,9 +255,9 @@ export async function handleSlashCommandInteraction(
           console.log(`Subscribed to space ${spaceId}`);
 
           // Trigger Discord backfill for this guild
-          console.log(`Starting Discord backfill for guild ${guildId}...`);
+          console.log(`Starting Discord backfill for guild ${ctx.guildId}...`);
           // await backfillGuild(botState.bot, guildId);
-          console.log(`Discord backfill complete for guild ${guildId}`);
+          console.log(`Discord backfill complete for guild ${ctx.guildId}`);
         } catch (e) {
           console.error(`Error during initial sync for space ${spaceId}:`, e);
         }
@@ -264,7 +265,7 @@ export async function handleSlashCommandInteraction(
         console.error("Error handling connect-roomy-space command:", e);
         // Try to update the deferred response with an error message
         try {
-          await interaction.edit({
+          await ctx.interaction.edit({
             content:
               "🛑 An error occurred while connecting the space. Please try again.",
           });
@@ -272,22 +273,22 @@ export async function handleSlashCommandInteraction(
           // Interaction may have expired, nothing we can do
         }
       }
-    } else if (interaction.data?.name == "disconnect-roomy-space") {
+    } else if (ctx.interaction.data?.name == "disconnect-roomy-space") {
       // Defer immediately to avoid 3-second timeout
-      if (!(await safeDefer(interaction, true))) return;
+      if (!(await safeDefer(ctx.interaction, true))) return;
       try {
-        if (bridge) {
+        if (ctx.bridge) {
           registeredBridges.unregister({
-            guildId: guildId.toString(),
-            spaceId: bridge.spaceId,
+            guildId: ctx.guildId.toString(),
+            spaceId: ctx.bridge.connectedSpace.streamDid,
           });
-          await bridge.disconnect();
+          await ctx.bridge.disconnect();
 
-          await interaction.edit({
+          await ctx.interaction.edit({
             content: "Successfully disconnected the Roomy space. 🔌",
           });
         } else {
-          await interaction.edit({
+          await ctx.interaction.edit({
             content:
               "There is no roomy space connected, so I didn't need to do anything. 🤷‍♀️",
           });
@@ -295,7 +296,7 @@ export async function handleSlashCommandInteraction(
       } catch (e) {
         console.error("Error handling disconnect-roomy-space command:", e);
         try {
-          await interaction.edit({
+          await ctx.interaction.edit({
             content: "🛑 An error occurred while disconnecting.",
           });
         } catch {

@@ -4,12 +4,12 @@ import type { MessageProperties } from "./types";
 import {
   discordMessageHashesForBridge,
   discordWebhookTokensForBridge,
-  LevelDBBridgeRepository,
 } from "../repositories/LevelDBBridgeRepository";
 import type { BridgeRepository } from "../repositories/index.js";
 import { tracer, setDiscordAttrs, recordError } from "../tracing.js";
 import { fingerprint } from "../utils/hash.js";
 import { ReactionSyncService } from "../services/ReactionSyncService.js";
+import { ConnectedSpace } from "@roomy/sdk";
 
 /**
  * Compute a SHA-256 hash of normalized Discord message content.
@@ -48,7 +48,11 @@ export async function computeDiscordMessageHash(
  */
 export async function backfillDiscordMessages(
   bot: DiscordBot,
-  ctx: OrchestratorContext,
+  ctx: {
+    guildId: bigint;
+    repo: BridgeRepository;
+    connectedSpace: ConnectedSpace;
+  },
   channels: bigint[],
 ): Promise<Map<string, Map<string, string>>> {
   return tracer.startActiveSpan("backfill.discord_messages", async (span) => {
@@ -59,11 +63,11 @@ export async function backfillDiscordMessages(
       const hashMap = new Map<string, Map<string, string>>();
       const webhookTokens = discordWebhookTokensForBridge({
         discordGuildId: ctx.guildId,
-        roomySpaceId: ctx.spaceId,
+        roomySpaceId: ctx.connectedSpace.streamDid,
       });
       const messageHashes = discordMessageHashesForBridge({
         discordGuildId: ctx.guildId,
-        roomySpaceId: ctx.spaceId,
+        roomySpaceId: ctx.connectedSpace.streamDid,
       });
 
       // Get our webhook IDs for this guild's channels
@@ -199,7 +203,11 @@ export async function backfillDiscordMessages(
  */
 export async function backfillDiscordReactions(
   bot: DiscordBot,
-  ctx: OrchestratorContext,
+  ctx: {
+    guildId: bigint;
+    repo: BridgeRepository;
+    connectedSpace: ConnectedSpace;
+  },
   channelId: bigint,
 ): Promise<void> {
   return tracer.startActiveSpan("backfill.discord_reactions", async (span) => {
@@ -217,8 +225,7 @@ export async function backfillDiscordReactions(
         repo,
         ctx.connectedSpace,
         ctx.guildId,
-        ctx.spaceId,
-        bot.id, // Pass bot ID for echo prevention
+        bot, // Pass bot ID for echo prevention
       );
 
       // Fetch messages with pagination to get their reactions

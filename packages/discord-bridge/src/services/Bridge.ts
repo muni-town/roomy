@@ -38,7 +38,6 @@ import {
   extractDiscordUserOrigin,
   extractDiscordSidebarOrigin,
   extractDiscordRoomLinkOrigin,
-  extractDiscordReactionOrigin,
 } from "../utils/event-extensions.js";
 import { getRoomKey } from "../utils/room.js";
 
@@ -47,8 +46,9 @@ type BridgeState =
       state: "backfillRoomy";
     }
   | {
-      state: "backfillDiscord";
+      state: "backfillDiscordAndSyncToRoomy";
     }
+  | { state: "syncRoomyToDiscord" }
   | {
       state: "listening";
     };
@@ -103,6 +103,8 @@ export class Bridge {
     );
     this.repo = repo;
     this.state = stateMachine({ state: "backfillRoomy" });
+    this.backfillRoomyAndSubscribe();
+    this.backfillDiscordAndSyncToRoomy();
   }
 
   // ============================================================
@@ -520,6 +522,11 @@ export class Bridge {
     );
   }
 
+  async backfillDiscordAndSyncToRoomy() {
+    await this.state.transitionedTo("backfillDiscordAndSyncToRoomy");
+    console.log("Backfilling Discord");
+  }
+
   /**
    * Handle a batch of Roomy events from the subscription stream.
    * Routes events to appropriate services based on event type.
@@ -544,10 +551,10 @@ export class Bridge {
       } else {
         // Route to services in order (first one to handle wins)
         // Order matters: profile → structure → message → reaction
-        await this.profileSync.handleRoomyEvent(decodedEvent) ||
-        await this.structureSync.handleRoomyEvent(decodedEvent) ||
-        await this.messageSync.handleRoomyEvent(decodedEvent) ||
-        await this.reactionSync.handleRoomyEvent(decodedEvent);
+        (await this.profileSync.handleRoomyEvent(decodedEvent)) ||
+          (await this.structureSync.handleRoomyEvent(decodedEvent)) ||
+          (await this.messageSync.handleRoomyEvent(decodedEvent)) ||
+          (await this.reactionSync.handleRoomyEvent(decodedEvent));
       }
     }
 
@@ -584,7 +591,10 @@ export class Bridge {
     const roomOrigin = extractDiscordOrigin(event);
     if (roomOrigin) {
       try {
-        await this.repo.registerMapping(getRoomKey(roomOrigin.snowflake), event.id);
+        await this.repo.registerMapping(
+          getRoomKey(roomOrigin.snowflake),
+          event.id,
+        );
       } catch (e) {
         if (!(e instanceof Error && e.message.includes("already registered"))) {
           console.error("Error registering synced ID:", e);
@@ -596,7 +606,10 @@ export class Bridge {
     const userOrigin = extractDiscordUserOrigin(event);
     if (userOrigin && userOrigin.guildId === this.guildId.toString()) {
       try {
-        await this.repo.setProfileHash(userOrigin.snowflake, userOrigin.profileHash);
+        await this.repo.setProfileHash(
+          userOrigin.snowflake,
+          userOrigin.profileHash,
+        );
       } catch (e) {
         console.error("Error caching profile hash:", e);
       }
@@ -614,7 +627,10 @@ export class Bridge {
 
     // Cache room links
     const roomLinkData = extractDiscordRoomLinkOrigin(event);
-    if (roomLinkData && roomLinkData.origin.guildId === this.guildId.toString()) {
+    if (
+      roomLinkData &&
+      roomLinkData.origin.guildId === this.guildId.toString()
+    ) {
       const parentRoomyId = (event as any).room;
       if (parentRoomyId) {
         const linkKey = `${parentRoomyId}:${roomLinkData.linkToRoom}`;

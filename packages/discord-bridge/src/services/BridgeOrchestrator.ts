@@ -1,5 +1,4 @@
 import { RoomyClient, stateMachine, StateMachine, StreamDid } from "@roomy/sdk";
-import { backfill } from "../discord/bot";
 import { desiredProperties, DiscordBot } from "../discord/types.js";
 import { initRoomyClient } from "../roomy/client";
 import {
@@ -134,9 +133,6 @@ export class BridgeOrchestrator {
             // Update discord slash commands.
             bot.helpers.upsertGlobalApplicationCommands(slashCommands);
 
-            // Backfill messages sent while the bridge was offline
-            // backfill(bot, ready.guilds);
-
             span.end();
           });
         },
@@ -163,12 +159,13 @@ export class BridgeOrchestrator {
             return !!(await current.roomy.getSpaceInfo(did))?.name;
           };
 
-          return handleSlashCommandInteraction(
+          return handleSlashCommandInteraction({
             interaction,
             guildId,
             spaceExists,
+            createBridge: orchestrator.createBridge,
             bridge,
-          );
+          });
         },
 
         async channelCreate(channel) {
@@ -261,6 +258,18 @@ export class BridgeOrchestrator {
     bot.start();
     const appId = await appIdPromise.promise;
     return { bot, appId };
+  }
+
+  async createBridge(spaceId: StreamDid, guildId: bigint) {
+    const current = await this.state.transitionedTo("ready");
+    const bridge = await Bridge.connect({
+      spaceId,
+      bot: current.bot,
+      guildId,
+      client: current.roomy,
+    });
+    this.bridges.set(guildId, bridge);
+    return bridge;
   }
 
   /**
