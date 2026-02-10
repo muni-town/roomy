@@ -12,13 +12,18 @@ export const trackableState = <State, Status>(
   mapper,
 });
 
-/** A state machien that allows subscribing to state transitions. */
+/** A state machine that allows subscribing to state transitions. */
 export type StateMachine<State extends { state: string }> = {
   /** Get the current state. */
   get current(): Readonly<State>;
 
   /** Set the current state. This will automatically update subscribers. */
   set current(state: State);
+
+  /** Check if the current state is at a given key */
+  is<S extends State["state"]>(
+    stateString: S,
+  ): this is StateMachine<Extract<State, { state: S }>>;
 
   /** Returns a promise that will resolve when the given state is transitioned to. */
   transitionedTo<S extends State["state"]>(
@@ -85,6 +90,11 @@ export function stateMachine<State extends { state: string }>(
         handler(previousState, state);
       }
     },
+    is<S extends State["state"]>(
+      key: S,
+    ): this is StateMachine<Extract<Readonly<State>, { state: S }>> {
+      return this.current.state === key;
+    },
     subscribe(handler) {
       subscribers.push(handler);
     },
@@ -141,6 +151,7 @@ export function statusMachine<State extends { state: string }, Status>(
     set current(value) {
       machine.current = value;
     },
+    is: machine.is,
     subscribe: machine.subscribe,
     transitionedTo: machine.transitionedTo,
     get status() {
