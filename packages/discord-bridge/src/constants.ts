@@ -40,3 +40,5 @@ export const DISCORD_MESSAGE_TYPES = {
  * ```
  */
 export const ROOM_KEY_PREFIX = "room:" as const;
+
+export const STREAM_SCHEMA_VERSION = "4";

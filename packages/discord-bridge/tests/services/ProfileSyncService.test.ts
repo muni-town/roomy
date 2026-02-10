@@ -3,7 +3,7 @@
  * TDD approach: Write failing test first, then implement.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { MockBridgeRepository } from "../../src/repositories/MockBridgeRepository.js";
 import { ProfileSyncService } from "../../src/services/ProfileSyncService.js";
 import type { ConnectedSpace } from "@roomy/sdk";
@@ -23,7 +23,7 @@ describe("ProfileSyncService", () => {
   beforeEach(() => {
     repo = new MockBridgeRepository();
     repo.reset();
-    service = new ProfileSyncService(repo, mockConnectedSpace, guildId, spaceId);
+    service = new ProfileSyncService(repo, mockConnectedSpace, guildId);
   });
 
   describe("syncDiscordToRoomy", () => {
@@ -69,7 +69,7 @@ describe("ProfileSyncService", () => {
       };
 
       // Set existing hash
-      const existingHash = await service.computeProfileHash(discordUser);
+      const existingHash = service.computeProfileHash(discordUser);
       await repo.setProfileHash("987654321", existingHash);
 
       let sendEventCalled = false;
@@ -233,10 +233,119 @@ describe("ProfileSyncService", () => {
         avatar: "abc123hash",
       };
 
-      const hash1 = await service.computeProfileHash(user1);
-      const hash2 = await service.computeProfileHash(user2);
+      const hash1 = service.computeProfileHash(user1);
+      const hash2 = service.computeProfileHash(user2);
 
       expect(hash1).not.toBe(hash2);
+    });
+  });
+
+  describe("handleRoomyEvent", () => {
+    it("should cache Discord user profile hash", async () => {
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.user.updateProfile.v0",
+          id: newUlid(),
+          did: "did:discord:123",
+          name: "Test User",
+          avatar: "https://example.com/avatar.png",
+          extensions: {
+            "space.roomy.extension.discordUserOrigin.v0": {
+              snowflake: "123",
+              guildId: guildId.toString(),
+              profileHash: "abc123",
+              handle: "user#0001",
+            },
+          },
+        },
+        user: "did:discord:123" as any,
+      } as any;
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(true);
+      const hash = await repo.getProfileHash("123");
+      expect(hash).toBe("abc123");
+    });
+
+    it("should cache Roomy user profile for non-Discord users", async () => {
+      const did = "did:alice:123";
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.user.updateProfile.v0",
+          id: newUlid(),
+          did,
+          name: "Alice",
+          avatar: "https://example.com/alice.png",
+        },
+        user: did as any,
+      } as any;
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(true);
+      const profile = await repo.getRoomyUserProfile(did);
+      expect(profile?.name).toBe("Alice");
+      expect(profile?.avatar).toBe("https://example.com/alice.png");
+    });
+
+    it("should use 'Unknown' as fallback name when name is missing", async () => {
+      const did = "did:alice:456";
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.user.updateProfile.v0",
+          id: newUlid(),
+          did,
+          avatar: null,
+        },
+        user: did as any,
+      } as any;
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(true);
+      const profile = await repo.getRoomyUserProfile(did);
+      expect(profile?.name).toBe("Unknown");
+      expect(profile?.avatar).toBeNull();
+    });
+
+    it("should return false for unknown event types", async () => {
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.message.createMessage.v0",
+          id: newUlid(),
+        },
+        user: "did:alice:123" as any,
+      } as any;
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(false);
+    });
+
+    it("should handle errors gracefully and return false", async () => {
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.user.updateProfile.v0",
+          id: newUlid(),
+          did: "did:alice:123",
+          name: "Alice",
+        },
+        user: "did:alice:123" as any,
+      } as any;
+
+      vi.spyOn(repo, "setRoomyUserProfile").mockRejectedValue(
+        new Error("DB error"),
+      );
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(false);
     });
   });
 });

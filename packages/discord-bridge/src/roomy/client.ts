@@ -21,25 +21,16 @@ import {
   STREAM_HANDLE_NSID,
   STREAM_NSID,
 } from "../env.js";
-import { registeredBridges } from "../repositories/db.js";
-import {
-  createSpaceSubscriptionHandler,
-  getLastProcessedIdx,
-} from "./subscription.js";
+import { registeredBridges } from "../repositories/LevelDBBridgeRepository.js";
 import { tracer, setRoomyAttrs, recordError } from "../tracing.js";
 import { SpanStatusCode } from "@opentelemetry/api";
-
-let roomyClient: RoomyClient | undefined;
+import { STREAM_SCHEMA_VERSION } from "../constants.js";
 
 /**
  * Initialize the Roomy client using app password authentication.
  * This should be called once at startup.
  */
 export async function initRoomyClient(): Promise<RoomyClient> {
-  if (roomyClient) {
-    return roomyClient;
-  }
-
   console.log("Authenticating with ATProto...");
   const atpAgent = new AtpAgent({ service: "https://bsky.social" });
 
@@ -55,7 +46,7 @@ export async function initRoomyClient(): Promise<RoomyClient> {
   console.log(`Authenticated as ${atpAgent.did}`);
   console.log("Connecting to Leaf server...");
 
-  roomyClient = await RoomyClient.create(
+  const roomyClient = await RoomyClient.create(
     {
       agent: atpAgent,
       leafUrl: LEAF_URL,
@@ -69,37 +60,14 @@ export async function initRoomyClient(): Promise<RoomyClient> {
     },
   );
 
-  // Connect to the bridge's personal stream
+  // Connect to the bridge's personal stream // what is it doing?
   console.log("Connecting to personal stream...");
-  await roomyClient.connectPersonalSpace("4");
+  await roomyClient.connectPersonalSpace(STREAM_SCHEMA_VERSION);
   console.log("Personal stream connected");
 
   console.log("Roomy client initialized successfully");
   return roomyClient;
 }
-
-/**
- * Get the initialized Roomy client.
- * Throws if client hasn't been initialized yet.
- */
-export function getRoomyClient(): RoomyClient {
-  if (!roomyClient) {
-    throw new Error(
-      "Roomy client not initialized - call initRoomyClient first",
-    );
-  }
-  return roomyClient;
-}
-
-/**
- * Get the bridge's DID.
- */
-export function getBridgeDid(): string {
-  return getRoomyClient().agent.assertDid;
-}
-
-/** Map of connected spaces by spaceId */
-export const connectedSpaces = new Map<string, ConnectedSpace>();
 
 /**
  * Subscribe to all registered spaces, resuming from stored cursors.
@@ -108,137 +76,44 @@ export const connectedSpaces = new Map<string, ConnectedSpace>();
  * If a space connection fails, logs an error to telemetry and continues
  * with other spaces rather than crashing.
  */
-export async function subscribeToConnectedSpaces(
-  client: RoomyClient,
-): Promise<void> {
-  return tracer.startActiveSpan("bridge.spaces.subscribe_all", async (span) => {
-    try {
-      const bridges = await registeredBridges.list();
+// export async function subscribeToConnectedSpaces(
+//   client: RoomyClient,
+// ): Promise<void> {
+//   return tracer.startActiveSpan("bridge.spaces.subscribe_all", async (span) => {
+//     try {
+//       const bridges = await registeredBridges.list();
 
-      console.log(`Subscribing to ${bridges.length} connected spaces...`);
-      span.setAttribute("space.count", bridges.length);
+//       console.log(`Subscribing to ${bridges.length} connected spaces...`);
+//       span.setAttribute("space.count", bridges.length);
 
-      let failureCount = 0;
-      for (const { spaceId } of bridges) {
-        try {
-          await subscribeToSpace(client, spaceId as StreamDid);
-        } catch (e) {
-          failureCount++;
-          console.error(`Failed to subscribe to space ${spaceId}:`, e);
-          // Record error on the span for telemetry
-          recordError(span, e);
-          span.addEvent("space.subscription_failed", {
-            "roomy.space.id": spaceId,
-          });
-        }
-      }
+//       let failureCount = 0;
+//       for (const { spaceId } of bridges) {
+//         try {
+//           await subscribeToSpace(client, spaceId as StreamDid);
+//         } catch (e) {
+//           failureCount++;
+//           console.error(`Failed to subscribe to space ${spaceId}:`, e);
+//           // Record error on the span for telemetry
+//           recordError(span, e);
+//           span.addEvent("space.subscription_failed", {
+//             "roomy.space.id": spaceId,
+//           });
+//         }
+//       }
 
-      console.log("All space subscriptions started");
-      span.setAttribute("space.failures", failureCount);
-      if (failureCount > 0) {
-        span.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: `${failureCount} space(s) failed to subscribe`,
-        });
-      }
-    } catch (e) {
-      recordError(span, e);
-      throw e;
-    } finally {
-      span.end();
-    }
-  });
-}
-
-/**
- * Subscribe to a single space, resuming from stored cursor.
- */
-export async function subscribeToSpace(
-  client: RoomyClient,
-  spaceId: StreamDid,
-): Promise<ConnectedSpace> {
-  return tracer.startActiveSpan(
-    "leaf.stream.subscribe",
-    { attributes: { "roomy.space.id": spaceId } },
-    async (span) => {
-      try {
-        // Check if already connected
-        const existing = connectedSpaces.get(spaceId);
-        if (existing) {
-          console.log(`Already subscribed to space ${spaceId}`);
-          span.setAttribute("subscription.status", "already_connected");
-          return existing;
-        }
-
-        console.log(`Connecting to space ${spaceId}...`);
-
-        // Connect to the space
-        const space = await tracer.startActiveSpan(
-          "leaf.stream.connect",
-          async (connectSpan) => {
-            try {
-              const s = await ConnectedSpace.connect({
-                client,
-                streamDid: spaceId,
-                module: modules.space,
-              });
-              connectSpan.setAttribute("connection.status", "success");
-              return s;
-            } catch (e) {
-              recordError(connectSpan, e);
-              throw e;
-            } finally {
-              connectSpan.end();
-            }
-          },
-        );
-
-        // Get the cursor to resume from
-        const cursor = await getLastProcessedIdx(spaceId);
-        console.log(`Resuming space ${spaceId} from idx ${cursor}`);
-        span.setAttribute("subscription.resume_cursor", cursor ?? "none");
-
-        // Subscribe with the handler
-        const handler = createSpaceSubscriptionHandler(spaceId);
-        space.subscribe(handler, cursor as StreamIndex);
-
-        // Wait for backfill to complete before returning
-        console.log(`Waiting for backfill of space ${spaceId}...`);
-        await tracer.startActiveSpan(
-          "leaf.stream.backfill",
-          async (backfillSpan) => {
-            try {
-              setRoomyAttrs(backfillSpan, { spaceId });
-              await space.doneBackfilling;
-              backfillSpan.setAttribute("backfill.status", "complete");
-            } catch (e) {
-              recordError(backfillSpan, e);
-              throw e;
-            } finally {
-              backfillSpan.end();
-            }
-          },
-        );
-        console.log(`Backfill complete for space ${spaceId}`);
-
-        connectedSpaces.set(spaceId, space);
-        console.log(`Subscribed to space ${spaceId}`);
-        span.setAttribute("subscription.status", "connected");
-
-        return space;
-      } catch (e) {
-        recordError(span, e);
-        throw e;
-      } finally {
-        span.end();
-      }
-    },
-  );
-}
-
-/**
- * Get a connected space by ID, if subscribed.
- */
-export function getConnectedSpace(spaceId: string): ConnectedSpace | undefined {
-  return connectedSpaces.get(spaceId);
-}
+//       console.log("All space subscriptions started");
+//       span.setAttribute("space.failures", failureCount);
+//       if (failureCount > 0) {
+//         span.setStatus({
+//           code: SpanStatusCode.ERROR,
+//           message: `${failureCount} space(s) failed to subscribe`,
+//         });
+//       }
+//     } catch (e) {
+//       recordError(span, e);
+//       throw e;
+//     } finally {
+//       span.end();
+//     }
+//   });
+// }

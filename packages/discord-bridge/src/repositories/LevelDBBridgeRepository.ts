@@ -23,8 +23,16 @@ export class LevelDBBridgeRepository implements BridgeRepository {
       discordWebhookTokens: WebhookTokens;
       discordMessageHashes: DiscordMessageHashes;
       discordLatestMessage: LatestMessages;
+      leafCursors: LeafCursors;
+      registeredBridges: BidirectionalSublevelMap<"guildId", "spaceId">;
     },
   ) {}
+
+  async delete() {
+    await this.stores.syncedIds.clear();
+    await this.stores.discordLatestMessage.clear();
+    await this.stores.discordWebhookTokens.clear();
+  }
 
   // === ID Mapping ===
 
@@ -157,6 +165,45 @@ export class LevelDBBridgeRepository implements BridgeRepository {
   async setLatestMessage(channelId: string, messageId: string): Promise<void> {
     return this.stores.discordLatestMessage.put(channelId, messageId);
   }
+
+  // === Leaf Cursors ===
+
+  async getCursor(spaceId: string): Promise<number | undefined> {
+    return this.stores.leafCursors.get(spaceId);
+  }
+
+  async setCursor(spaceId: string, idx: number): Promise<void> {
+    return this.stores.leafCursors.put(spaceId, idx);
+  }
+
+  // === Registered Bridges (convenience methods) ===
+
+  /**
+   * Get the space ID for a guild ID.
+   */
+  async getSpaceId(guildId: string): Promise<string | undefined> {
+    return this.stores.registeredBridges.get_guildId(guildId);
+  }
+
+  /**
+   * Get the guild ID for a space ID.
+   */
+  async getGuildId(spaceId: string): Promise<string | undefined> {
+    return this.stores.registeredBridges.get_spaceId(spaceId);
+  }
+
+  /**
+   * Get the last processed index for a space, or 1 if not found.
+   * Leaf stream indices are 1-based, so new subscriptions should start at 1.
+   */
+  async getLastProcessedIdx(spaceId: string): Promise<number> {
+    try {
+      const idx = await this.stores.leafCursors.get(spaceId);
+      return idx ?? 1;
+    } catch {
+      return 1;
+    }
+  }
 }
 
 export function getRepo(guildId: bigint, spaceId: StreamDid) {
@@ -202,21 +249,20 @@ export function getRepo(guildId: bigint, spaceId: StreamDid) {
     discordGuildId: guildId,
   });
 
-  return {
-    repo: new LevelDBBridgeRepository({
-      syncedIds,
-      syncedProfiles,
-      roomyUserProfiles,
-      syncedReactions,
-      syncedSidebarHash,
-      syncedRoomLinks,
-      syncedEdits,
-      discordWebhookTokens,
-      discordMessageHashes,
-      discordLatestMessage: latestMessagesInChannel,
-    }),
-    latestMessagesInChannel,
-  };
+  return new LevelDBBridgeRepository({
+    syncedIds,
+    syncedProfiles,
+    roomyUserProfiles,
+    syncedReactions,
+    syncedSidebarHash,
+    syncedRoomLinks,
+    syncedEdits,
+    discordWebhookTokens,
+    discordMessageHashes,
+    discordLatestMessage: latestMessagesInChannel,
+    leafCursors,
+    registeredBridges,
+  });
 }
 
 const db = new ClassicLevel(process.env.DATA_DIR || "./data", {

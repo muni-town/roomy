@@ -1,16 +1,15 @@
 import { AutoRouter, cors, error, json } from "itty-router";
-import { registeredBridges } from "./repositories/db.js";
+import { registeredBridges } from "./repositories/LevelDBBridgeRepository.js";
 import { createServerAdapter } from "@whatwg-node/server";
 import { createServer } from "http";
 import { PORT } from "./env.js";
-import { botState } from "./discord/bot.js";
 import { trace } from "@opentelemetry/api";
-import { getRoomyClient, getBridgeDid } from "./roomy/client.js";
 import { StreamDid, modules } from "@roomy/sdk";
+import { BridgeOrchestrator } from "./services/BridgeOrchestrator.js";
 
 const tracer = trace.getTracer("api");
 
-export function startApi() {
+export function startApi(bridgeOrchestrator: BridgeOrchestrator) {
   tracer.startActiveSpan("start", (span) => {
     // Create the API router
     const { preflight, corsify } = cors();
@@ -20,10 +19,10 @@ export function startApi() {
     });
 
     router.get("/info", () => {
-      if (botState.appId)
+      if (bridgeOrchestrator.appId)
         return json({
-          discordAppId: botState.appId,
-          bridgeDid: getBridgeDid(),
+          discordAppId: bridgeOrchestrator.appId,
+          bridgeDid: bridgeOrchestrator.getBridgeDid(),
         });
       return error(500, "Discord bot still starting");
     });
@@ -52,56 +51,56 @@ export function startApi() {
      * Body: { spaceId: string }
      * Returns: { bridgeDid: string, spaceId: string }
      */
-    router.post("/join-space", async (request) => {
-      return tracer.startActiveSpan("join-space", async (joinSpan) => {
-        try {
-          const body = await request.json();
-          const spaceId = body?.spaceId;
+    // router.post("/join-space", async (request) => {
+    //   return tracer.startActiveSpan("join-space", async (joinSpan) => {
+    //     try {
+    //       const body = await request.json();
+    //       const spaceId = body?.spaceId;
 
-          if (typeof spaceId !== "string") {
-            joinSpan.setStatus({ code: 2, message: "spaceId required" });
-            joinSpan.end();
-            return error(400, "spaceId required in request body");
-          }
+    //       if (typeof spaceId !== "string") {
+    //         joinSpan.setStatus({ code: 2, message: "spaceId required" });
+    //         joinSpan.end();
+    //         return error(400, "spaceId required in request body");
+    //       }
 
-          // Validate it looks like a stream DID
-          let streamDid: StreamDid;
-          try {
-            streamDid = StreamDid.assert(spaceId);
-          } catch {
-            joinSpan.setStatus({ code: 2, message: "invalid spaceId" });
-            joinSpan.end();
-            return error(400, "Invalid spaceId - must be a valid stream DID");
-          }
+    //       // Validate it looks like a stream DID
+    //       let streamDid: StreamDid;
+    //       try {
+    //         streamDid = StreamDid.assert(spaceId);
+    //       } catch {
+    //         joinSpan.setStatus({ code: 2, message: "invalid spaceId" });
+    //         joinSpan.end();
+    //         return error(400, "Invalid spaceId - must be a valid stream DID");
+    //       }
 
-          const client = getRoomyClient();
+    //       const client = getRoomyClient();
 
-          // Join the space
-          console.log(`Bridge joining space: ${spaceId}`);
-          await client.joinSpace(streamDid, modules.space);
-          console.log(`Bridge successfully joined space: ${spaceId}`);
+    //       // Join the space
+    //       console.log(`Bridge joining space: ${spaceId}`);
+    //       await client.joinSpace(streamDid, modules.space);
+    //       console.log(`Bridge successfully joined space: ${spaceId}`);
 
-          joinSpan.setStatus({ code: 1 });
-          joinSpan.end();
+    //       joinSpan.setStatus({ code: 1 });
+    //       joinSpan.end();
 
-          return json({
-            bridgeDid: getBridgeDid(),
-            spaceId,
-          });
-        } catch (e) {
-          console.error("Error joining space:", e);
-          joinSpan.setStatus({
-            code: 2,
-            message: e instanceof Error ? e.message : "Unknown error",
-          });
-          joinSpan.end();
-          return error(
-            500,
-            `Failed to join space: ${e instanceof Error ? e.message : "Unknown error"}`,
-          );
-        }
-      });
-    });
+    //       return json({
+    //         bridgeDid: getBridgeDid(),
+    //         spaceId,
+    //       });
+    //     } catch (e) {
+    //       console.error("Error joining space:", e);
+    //       joinSpan.setStatus({
+    //         code: 2,
+    //         message: e instanceof Error ? e.message : "Unknown error",
+    //       });
+    //       joinSpan.end();
+    //       return error(
+    //         500,
+    //         `Failed to join space: ${e instanceof Error ? e.message : "Unknown error"}`,
+    //       );
+    //     }
+    //   });
+    // });
 
     // Start the API server
     const ittyServer = createServerAdapter(router.fetch);

@@ -4,14 +4,12 @@ import type { MessageProperties } from "./types";
 import {
   discordMessageHashesForBridge,
   discordWebhookTokensForBridge,
-  roomyUserProfilesForBridge,
-} from "../repositories/db.js";
+  LevelDBBridgeRepository,
+} from "../repositories/LevelDBBridgeRepository";
 import type { BridgeRepository } from "../repositories/index.js";
-import { OrchestratorContext } from "../types.js";
 import { tracer, setDiscordAttrs, recordError } from "../tracing.js";
 import { fingerprint } from "../utils/hash.js";
 import { ReactionSyncService } from "../services/ReactionSyncService.js";
-import { LevelDBBridgeRepository } from "../repositories/BridgeRepository.js";
 
 /**
  * Compute a SHA-256 hash of normalized Discord message content.

@@ -7,11 +7,23 @@
 
 import type { BridgeRepository } from "../repositories/index.js";
 import type { ConnectedSpace } from "@roomy/sdk";
-import { newUlid, UserDid, type Event, type Did } from "@roomy/sdk";
+import {
+  newUlid,
+  UserDid,
+  type Event,
+  type Did,
+  type DecodedStreamEvent,
+} from "@roomy/sdk";
 import type { Emoji } from "@discordeno/bot";
 import type { DiscordBot } from "../discord/types.js";
-import { emojiToString, reactionKey as makeReactionKey } from "../utils/emoji.js";
-import { DISCORD_EXTENSION_KEYS } from "../roomy/subscription.js";
+import {
+  emojiToString,
+  reactionKey as makeReactionKey,
+} from "../utils/emoji.js";
+import {
+  DISCORD_EXTENSION_KEYS,
+  extractDiscordReactionOrigin,
+} from "../utils/event-extensions.js";
 
 /**
  * Service for syncing reactions between Discord and Roomy.
@@ -21,8 +33,7 @@ export class ReactionSyncService {
     private readonly repo: BridgeRepository,
     private readonly connectedSpace: ConnectedSpace,
     private readonly guildId: bigint,
-    private readonly spaceId: string,
-    private readonly botId?: bigint,
+    private readonly bot: DiscordBot,
   ) {}
 
   /**
@@ -53,8 +64,10 @@ export class ReactionSyncService {
     // Skip bot's own reactions to prevent reaction echo
     // When we sync a Roomy reaction to Discord via webhook, Discord sends us
     // a reaction_add event back. We must skip syncing this back to Roomy.
-    if (this.botId && userId === this.botId) {
-      console.log(`[ReactionSync] Skipping bot's own reaction (user ${userId} == bot ${this.botId})`);
+    if (userId === this.bot.id) {
+      console.log(
+        `[ReactionSync] Skipping bot's own reaction (user ${userId} == bot ${this.bot.id})`,
+      );
       return null;
     }
 
@@ -69,7 +82,9 @@ export class ReactionSyncService {
     // Get the Roomy message ID for this Discord message
     const roomyMessageId = await this.repo.getRoomyId(messageId.toString());
     if (!roomyMessageId) {
-      console.warn(`[ReactionSync] Message ${messageId} not synced, skipping reaction`);
+      console.warn(
+        `[ReactionSync] Message ${messageId} not synced, skipping reaction`,
+      );
       return null; // Message not synced
     }
 
@@ -78,7 +93,9 @@ export class ReactionSyncService {
     const roomKey = `room:${channelIdStr}`;
     const roomyRoomId = await this.repo.getRoomyId(roomKey);
     if (!roomyRoomId) {
-      console.warn(`[ReactionSync] Channel ${channelId} not synced, skipping reaction`);
+      console.warn(
+        `[ReactionSync] Channel ${channelId} not synced, skipping reaction`,
+      );
       return null; // Channel not synced
     }
 
@@ -201,7 +218,11 @@ export class ReactionSyncService {
    * // => "123:456:789"
    * ```
    */
-  getReactionKey(messageId: bigint, userId: bigint, emoji: Partial<Emoji>): string {
+  getReactionKey(
+    messageId: bigint,
+    userId: bigint,
+    emoji: Partial<Emoji>,
+  ): string {
     return makeReactionKey(messageId, userId, emoji);
   }
 
@@ -228,7 +249,9 @@ export class ReactionSyncService {
     // Get Discord message ID
     const discordId = await this.repo.getDiscordId(roomyMessageId);
     if (!discordId) {
-      console.warn(`[ReactionSyncService] Roomy message ${roomyMessageId} not synced to Discord, skipping reaction`);
+      console.warn(
+        `[ReactionSyncService] Roomy message ${roomyMessageId} not synced to Discord, skipping reaction`,
+      );
       return;
     }
 
@@ -237,7 +260,9 @@ export class ReactionSyncService {
     // Get Discord channel ID
     const discordChannelId = await this.repo.getDiscordId(roomyRoomId);
     if (!discordChannelId) {
-      console.warn(`[ReactionSyncService] Room ${roomyRoomId} not synced to Discord, skipping reaction`);
+      console.warn(
+        `[ReactionSyncService] Room ${roomyRoomId} not synced to Discord, skipping reaction`,
+      );
       return;
     }
 
@@ -247,7 +272,9 @@ export class ReactionSyncService {
     // Format: did:discord:123456789
     const userIdMatch = userDid.match(/^did:discord:(\d+)$/);
     if (!userIdMatch) {
-      console.warn(`[ReactionSyncService] Cannot map user DID ${userDid} to Discord user, skipping reaction`);
+      console.warn(
+        `[ReactionSyncService] Cannot map user DID ${userDid} to Discord user, skipping reaction`,
+      );
       return;
     }
 
@@ -278,9 +305,14 @@ export class ReactionSyncService {
       // Track the synced reaction
       await this.repo.setReaction(key, newUlid());
 
-      console.log(`[ReactionSyncService] Added reaction ${reaction} to Discord message ${messageId}`);
+      console.log(
+        `[ReactionSyncService] Added reaction ${reaction} to Discord message ${messageId}`,
+      );
     } catch (error) {
-      console.error(`[ReactionSyncService] Error adding reaction to Discord:`, error);
+      console.error(
+        `[ReactionSyncService] Error adding reaction to Discord:`,
+        error,
+      );
     }
   }
 
@@ -301,7 +333,9 @@ export class ReactionSyncService {
     // Parse user DID to get Discord user ID
     const userIdMatch = userDid.match(/^did:discord:(\d+)$/);
     if (!userIdMatch) {
-      console.warn(`[ReactionSyncService] Cannot map user DID ${userDid} to Discord user, skipping reaction removal`);
+      console.warn(
+        `[ReactionSyncService] Cannot map user DID ${userDid} to Discord user, skipping reaction removal`,
+      );
       return;
     }
 
@@ -310,7 +344,9 @@ export class ReactionSyncService {
     // Get Discord channel ID
     const discordChannelId = await this.repo.getDiscordId(roomyRoomId);
     if (!discordChannelId) {
-      console.warn(`[ReactionSyncService] Room ${roomyRoomId} not synced to Discord, skipping reaction removal`);
+      console.warn(
+        `[ReactionSyncService] Room ${roomyRoomId} not synced to Discord, skipping reaction removal`,
+      );
       return;
     }
 
@@ -326,7 +362,9 @@ export class ReactionSyncService {
     // we'd need a more sophisticated tracking mechanism.
     // For now, we'll just log a warning since we can't easily
     // map back from the Roomy reaction event ID to the Discord reaction
-    console.warn(`[ReactionSyncService] Cannot remove Discord reaction for Roomy event ${reactionEventId} - mapping not implemented`);
+    console.warn(
+      `[ReactionSyncService] Cannot remove Discord reaction for Roomy event ${reactionEventId} - mapping not implemented`,
+    );
 
     // TODO: Implement proper reverse lookup for reaction removal
     // We'd need to:
@@ -334,5 +372,65 @@ export class ReactionSyncService {
     // 2. Query that mapping here
     // 3. Parse the emoji and user from the key
     // 4. Call bot.helpers.deleteOwnReaction() or bot.helpers.deleteUserReaction()
+  }
+
+  /**
+   * Handle a Roomy event from the subscription stream.
+   * Processes reaction-related events and syncs them to Discord if needed.
+   *
+   * @param decoded - The decoded Roomy event
+   * @returns true if the event was handled, false otherwise
+   */
+  async handleRoomyEvent(decoded: DecodedStreamEvent): Promise<boolean> {
+    try {
+      const { event } = decoded;
+      const e = event as any;
+
+      // Handle addReaction (both pure and bridged)
+      if (
+        event.$type === "space.roomy.reaction.addReaction.v0" ||
+        event.$type === "space.roomy.reaction.addBridgedReaction.v0"
+      ) {
+        // Check for Discord origin (sync loop prevention)
+        const reactionOrigin = extractDiscordReactionOrigin(event);
+        if (reactionOrigin) return true; // Handled (Discord origin, no sync back)
+
+        if (!e.reactionTo || !e.reaction || !e.room) return false;
+        if (!this.bot) return false;
+        await this.syncRoomyToDiscordAdd(
+          e.reactionTo,
+          e.reaction,
+          e.room,
+          decoded.user,
+          this.bot,
+        );
+        return true;
+      }
+
+      // Handle removeReaction
+      if (
+        event.$type === "space.roomy.reaction.removeReaction.v0" ||
+        event.$type === "space.roomy.reaction.removeBridgedReaction.v0"
+      ) {
+        // Check for Discord origin
+        const reactionOrigin = extractDiscordReactionOrigin(event);
+        if (reactionOrigin) return true; // Handled (Discord origin, no sync back)
+
+        if (!e.reactionTo || !e.room) return false;
+        if (!this.bot) return false;
+        await this.syncRoomyToDiscordRemove(
+          event.id,
+          e.room,
+          decoded.user,
+          this.bot,
+        );
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error(`[ReactionSyncService] Error handling Roomy event:`, error);
+      return false;
+    }
   }
 }

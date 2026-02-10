@@ -2,57 +2,56 @@ import {
   Bot,
   Channel,
   CompleteDesiredProperties,
+  Interaction,
   Message,
   RecursivePartial,
   SetupDesiredProps,
   TransformersDesiredProperties,
 } from "@discordeno/bot";
-import { SyncOrchestrator } from "../services";
-import { BridgeRepository } from "../repositories";
-import { ConnectedSpace } from "@roomy/sdk";
-import { LatestMessages } from "../repositories/db";
-import { StreamDid } from "@roomy/sdk";
 
-const messageProperties = {
-  id: true,
-  guildId: true,
-  content: true,
-  channelId: true,
-  author: true,
-  webhookId: true,
-  timestamp: true,
-  editedTimestamp: true,
-  attachments: true,
-  messageReference: true,
-  type: true,
-  reactions: true,
-} as const;
 export type MessageProperties = SetupDesiredProps<
   Message,
   CompleteDesiredProperties<typeof desiredProperties>
 >;
 
-const channelProperties = {
-  id: true,
-  lastMessageId: true,
-  name: true,
-  type: true,
-  guildId: true,
-  parentId: true,
-  topic: true,
-} as const;
 export type ChannelProperties = SetupDesiredProps<
   Channel,
   CompleteDesiredProperties<typeof desiredProperties>
 >;
 
+export type InteractionProperties = SetupDesiredProps<
+  Interaction,
+  CompleteDesiredProperties<typeof desiredProperties>
+>;
+
 export const desiredProperties = {
-  message: messageProperties,
+  message: {
+    id: true,
+    guildId: true,
+    content: true,
+    channelId: true,
+    author: true,
+    webhookId: true,
+    timestamp: true,
+    editedTimestamp: true,
+    attachments: true,
+    messageReference: true,
+    type: true,
+    reactions: true,
+  },
   guild: {
     id: true,
     channels: true,
   },
-  channel: channelProperties,
+  channel: {
+    id: true,
+    lastMessageId: true,
+    name: true,
+    type: true,
+    guildId: true,
+    parentId: true,
+    topic: true,
+  },
   user: {
     username: true,
     avatar: true,
@@ -108,13 +107,4 @@ export interface DiscordMessageOptions {
   content?: string;
   username?: string;
   avatarUrl?: string;
-}
-
-export interface OrchestratorContext {
-  orchestrator: SyncOrchestrator;
-  repo: BridgeRepository;
-  latestMessagesInChannel: LatestMessages;
-  connectedSpace: ConnectedSpace;
-  guildId: bigint;
-  spaceId: StreamDid;
 }

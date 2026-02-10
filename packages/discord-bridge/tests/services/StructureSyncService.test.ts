@@ -9,8 +9,8 @@ import { StructureSyncService } from "../../src/services/StructureSyncService.js
 import type { ConnectedSpace } from "@roomy/sdk";
 import { newUlid, type Ulid } from "@roomy/sdk";
 import type { DiscordBot } from "../../src/discord/types.js";
-import type { ChannelProperties, CategoryProperties } from "../../src/discord/types.js";
-import { DISCORD_EXTENSION_KEYS } from "../../src/roomy/subscription.js";
+import type { ChannelProperties } from "../../src/discord/types.js";
+import { DISCORD_EXTENSION_KEYS } from "../../src/utils/event-extensions.js";
 
 // Mock ConnectedSpace
 const createMockConnectedSpace = () => ({
@@ -18,24 +18,27 @@ const createMockConnectedSpace = () => ({
 });
 
 // Mock DiscordBot
-const createMockBot = (): DiscordBot => ({
-  helpers: {
-    createChannel: vi.fn(async () => ({ id: 123n })),
-  },
-} as any);
+const createMockBot = (): DiscordBot =>
+  ({
+    helpers: {
+      createChannel: vi.fn(async () => ({ id: 123n })),
+    },
+  }) as any;
 
 describe("StructureSyncService", () => {
   let repo: MockBridgeRepository;
   let service: StructureSyncService;
   let mockSpace: ConnectedSpace;
+  let mockBot: DiscordBot;
   const guildId = 123456789n;
   const spaceId = "did:plc:test123";
 
   beforeEach(() => {
     repo = new MockBridgeRepository();
     repo.reset();
+    mockBot = createMockBot();
     mockSpace = createMockConnectedSpace() as unknown as ConnectedSpace;
-    service = new StructureSyncService(repo, mockSpace, guildId, spaceId);
+    service = new StructureSyncService(repo, mockSpace, guildId, mockBot);
   });
 
   describe("handleDiscordChannelCreate", () => {
@@ -118,7 +121,10 @@ describe("StructureSyncService", () => {
 
       // Set up parent channel mapping
       const parentRoomyId = "parent-room-123";
-      await repo.registerMapping(`room:${parentChannelId.toString()}`, parentRoomyId);
+      await repo.registerMapping(
+        `room:${parentChannelId.toString()}`,
+        parentRoomyId,
+      );
 
       const threadId = await service.handleDiscordThreadCreate(
         discordThread,
@@ -173,7 +179,10 @@ describe("StructureSyncService", () => {
 
       const parentChannelId = 987654321n;
       const parentRoomyId = "parent-room-123";
-      await repo.registerMapping(`room:${parentChannelId.toString()}`, parentRoomyId);
+      await repo.registerMapping(
+        `room:${parentChannelId.toString()}`,
+        parentRoomyId,
+      );
 
       // First call
       const threadId1 = await service.handleDiscordThreadCreate(
@@ -301,7 +310,6 @@ describe("StructureSyncService", () => {
         repo,
         mockSpace as unknown as ConnectedSpace,
         guildId,
-        spaceId,
         bot,
       );
 
@@ -331,7 +339,6 @@ describe("StructureSyncService", () => {
         repo,
         mockSpace as unknown as ConnectedSpace,
         guildId,
-        spaceId,
         bot,
       );
 
@@ -358,7 +365,6 @@ describe("StructureSyncService", () => {
         repo,
         mockSpace as unknown as ConnectedSpace,
         guildId,
-        spaceId,
         bot,
       );
 
@@ -384,7 +390,6 @@ describe("StructureSyncService", () => {
         repo,
         mockSpace as unknown as ConnectedSpace,
         guildId,
-        spaceId,
         bot,
       );
 
@@ -426,7 +431,6 @@ describe("StructureSyncService", () => {
         repo,
         mockSpace as unknown as ConnectedSpace,
         guildId,
-        spaceId,
         bot,
       );
 
@@ -462,7 +466,6 @@ describe("StructureSyncService", () => {
         repo,
         mockSpace as unknown as ConnectedSpace,
         guildId,
-        spaceId,
         bot,
       );
 
@@ -476,6 +479,168 @@ describe("StructureSyncService", () => {
 
       // Should not have created any channel
       expect(bot.helpers.createChannel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("handleRoomyEvent", () => {
+    it("should register Discord room origin mapping and skip sync", async () => {
+      const discordChannelId = "123";
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.room.createRoom.v0",
+          id: newUlid(),
+          name: "general",
+          extensions: {
+            "space.roomy.extension.discordOrigin.v0": {
+              snowflake: discordChannelId,
+              guildId: guildId.toString(),
+            },
+          },
+        },
+        user: "did:discord:123" as any,
+      } as any;
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(true);
+      expect(await repo.getRoomyId(discordChannelId)).toBe(
+        event.event.id,
+      );
+      expect(mockBot?.helpers.createChannel).not.toHaveBeenCalled();
+    });
+
+    it("should cache sidebar hash for Discord-origin sidebars", async () => {
+      const sidebarHash = "hash123";
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.space.updateSidebar.v0",
+          id: newUlid(),
+          categories: [],
+          extensions: {
+            "space.roomy.extension.discordSidebarOrigin.v0": {
+              guildId: guildId.toString(),
+              sidebarHash,
+            },
+          },
+        },
+        user: "did:discord:123" as any,
+      } as any;
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(true);
+      const cachedHash = await repo.getSidebarHash();
+      expect(cachedHash).toBe(sidebarHash);
+    });
+
+    it("should cache room link mappings", async () => {
+      const parentRoomyId = "room-123";
+      const childRoomyId = "room-456";
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.link.createRoomLink.v0",
+          id: newUlid(),
+          room: parentRoomyId,
+          linkToRoom: childRoomyId,
+          extensions: {
+            "space.roomy.extension.discordRoomLinkOrigin.v0": {
+              parentSnowflake: "123",
+              childSnowflake: "456",
+              guildId: guildId.toString(),
+            },
+          },
+        },
+        user: "did:discord:123" as any,
+      } as any;
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(true);
+      const linkKey = `${parentRoomyId}:${childRoomyId}`;
+      expect(await repo.getRoomLink(linkKey)).toBe(event.event.id);
+    });
+
+    it("should unregister room mapping on delete", async () => {
+      const roomId = "room-123";
+      const discordId = "room:456";
+      await repo.registerMapping(discordId, roomId);
+
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.room.deleteRoom.v0",
+          id: newUlid(),
+          roomId,
+        },
+        user: "did:alice:123" as any,
+      } as any;
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(true);
+      expect(await repo.getDiscordId(roomId)).toBeUndefined();
+    });
+
+    it("should log warning for Roomy room deletion (not yet implemented)", async () => {
+      const roomId = "room-123";
+      const discordId = "room:456";
+      await repo.registerMapping(discordId, roomId);
+
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.room.deleteRoom.v0",
+          id: newUlid(),
+          roomId,
+        },
+        user: "did:alice:123" as any,
+      } as any;
+
+      const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(true);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining("not yet implemented"),
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it("should return false for unknown event types", async () => {
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.message.createMessage.v0",
+          id: newUlid(),
+        },
+        user: "did:alice:123" as any,
+      } as any;
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(false);
+    });
+
+    it("should handle errors gracefully and return false", async () => {
+      const event = {
+        idx: 1,
+        event: {
+          $type: "space.roomy.room.deleteRoom.v0",
+          id: newUlid(),
+          roomId: "room-123",
+        },
+        user: "did:alice:123" as any,
+      } as any;
+
+      vi.spyOn(repo, "getDiscordId").mockRejectedValue(new Error("DB error"));
+
+      const result = await service.handleRoomyEvent(event);
+
+      expect(result).toBe(false);
     });
   });
 });

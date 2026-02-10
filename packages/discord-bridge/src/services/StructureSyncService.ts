@@ -8,15 +8,27 @@
 
 import type { BridgeRepository } from "../repositories/index.js";
 import type { ConnectedSpace } from "@roomy/sdk";
-import { newUlid, type Ulid, type Event } from "@roomy/sdk";
+import { newUlid, type Ulid, type Event, type DecodedStreamEvent } from "@roomy/sdk";
 import type { DiscordBot, ChannelProperties } from "../discord/types.js";
 import { computeSidebarHash } from "../utils/hash.js";
-import { DISCORD_EXTENSION_KEYS } from "../roomy/subscription.js";
-import { addRoomySyncMarker, extractRoomyRoomId } from "../utils/discord-topic.js";
+import {
+  DISCORD_EXTENSION_KEYS,
+  extractDiscordOrigin,
+  extractDiscordSidebarOrigin,
+  extractDiscordRoomLinkOrigin,
+} from "../utils/event-extensions.js";
+import {
+  addRoomySyncMarker,
+  extractRoomyRoomId,
+} from "../utils/discord-topic.js";
 
 // Import SDK operations from @roomy/sdk/package/operations
 import { createRoom, createThread } from "@roomy/sdk/package/operations";
-import { createChannel as discordCreateChannel, fetchChannel as discordFetchChannel } from "../discord/operations/channel.js";
+import {
+  createChannel as discordCreateChannel,
+  fetchChannel as discordFetchChannel,
+} from "../discord/operations/channel.js";
+import { getRoomKey } from "../utils/room.js";
 
 /**
  * Cached createRoom event data.
@@ -36,7 +48,6 @@ export class StructureSyncService {
     private readonly repo: BridgeRepository,
     private readonly connectedSpace: ConnectedSpace,
     private readonly guildId: bigint,
-    private readonly spaceId: string,
     private readonly bot?: DiscordBot,
   ) {}
 
@@ -64,7 +75,8 @@ export class StructureSyncService {
     for (const { event } of allEvents) {
       if (event.$type === "space.roomy.room.createRoom.v0") {
         const e = event as any;
-        const hasOrigin = DISCORD_EXTENSION_KEYS.ROOM_ORIGIN in (e.extensions || {});
+        const hasOrigin =
+          DISCORD_EXTENSION_KEYS.ROOM_ORIGIN in (e.extensions || {});
         this.createRoomCache.set(e.id, {
           name: e.name || `roomy-${e.id.slice(0, 8)}`,
           hasDiscordOrigin: hasOrigin,
@@ -91,7 +103,9 @@ export class StructureSyncService {
    * });
    * ```
    */
-  async handleDiscordChannelCreate(discordChannel: ChannelProperties): Promise<string> {
+  async handleDiscordChannelCreate(
+    discordChannel: ChannelProperties,
+  ): Promise<string> {
     // Idempotency check (use room: prefix for channels/threads)
     const channelIdStr = discordChannel.id.toString();
     const roomKey = `room:${channelIdStr}`;
@@ -117,7 +131,9 @@ export class StructureSyncService {
     // Verify registration worked
     const verify = await this.repo.getRoomyId(roomKey);
     if (!verify) {
-      console.error(`Failed to register mapping for ${roomKey} -> ${result.id}`);
+      console.error(
+        `Failed to register mapping for ${roomKey} -> ${result.id}`,
+      );
     }
 
     return result.id;
@@ -213,7 +229,8 @@ export class StructureSyncService {
     for (const { event } of allEvents) {
       if (event.$type === "space.roomy.room.createRoom.v0") {
         const e = event as any;
-        const hasOrigin = DISCORD_EXTENSION_KEYS.ROOM_ORIGIN in (e.extensions || {});
+        const hasOrigin =
+          DISCORD_EXTENSION_KEYS.ROOM_ORIGIN in (e.extensions || {});
         const isChannel = e.kind === "space.roomy.channel";
 
         if (isChannel && !hasOrigin) {
@@ -226,7 +243,9 @@ export class StructureSyncService {
       }
     }
 
-    console.log(`Found ${preservedRoomIds.size} Roomy-native rooms to preserve (e.g., 'lobby'), ${discordSyncedRoomIds.size} Discord-synced rooms`);
+    console.log(
+      `Found ${preservedRoomIds.size} Roomy-native rooms to preserve (e.g., 'lobby'), ${discordSyncedRoomIds.size} Discord-synced rooms`,
+    );
 
     // STEP 2: Build Discord channel map
     const categoryChildren = new Map<string, Ulid[]>();
@@ -239,17 +258,21 @@ export class StructureSyncService {
       // If not found, retry a few times (LevelDB might have timing issues)
       if (!roomyId) {
         for (let i = 0; i < 3; i++) {
-          await new Promise(resolve => setTimeout(resolve, 10));
+          await new Promise((resolve) => setTimeout(resolve, 10));
           roomyId = await this.repo.getRoomyId(roomKey);
           if (roomyId) {
-            console.log(`Channel ${channel.name} found in repo after retry ${i + 1}`);
+            console.log(
+              `Channel ${channel.name} found in repo after retry ${i + 1}`,
+            );
             break;
           }
         }
       }
 
       if (!roomyId) {
-        console.warn(`Channel ${channel.name} (${channel.id}) not found in repo after retries, skipping in sidebar`);
+        console.warn(
+          `Channel ${channel.name} (${channel.id}) not found in repo after retries, skipping in sidebar`,
+        );
         continue;
       }
 
@@ -273,7 +296,9 @@ export class StructureSyncService {
         name: "Roomy",
         children: Array.from(preservedRoomIds),
       });
-      console.log(`Added ${preservedRoomIds.size} preserved Roomy rooms to sidebar`);
+      console.log(
+        `Added ${preservedRoomIds.size} preserved Roomy rooms to sidebar`,
+      );
     }
 
     // Add uncategorized Discord channels to "general" category
@@ -303,7 +328,9 @@ export class StructureSyncService {
       return; // No change
     }
 
-    console.log(`Updating sidebar with ${sidebarCategories.length} categories (${preservedRoomIds.size} Roomy, ${uncategorizedChannels.length} uncategorized Discord, ${categoryChildren.size} Discord categories)`);
+    console.log(
+      `Updating sidebar with ${sidebarCategories.length} categories (${preservedRoomIds.size} Roomy, ${uncategorizedChannels.length} uncategorized Discord, ${categoryChildren.size} Discord categories)`,
+    );
 
     // Send sidebar update event
     const event = {
@@ -364,7 +391,9 @@ export class StructureSyncService {
     if (existingDiscordId) {
       // Verify Discord channel still exists
       try {
-        const channel = await discordFetchChannel(this.bot, { channelId: BigInt(existingDiscordId.replace("room:", "")) });
+        const channel = await discordFetchChannel(this.bot, {
+          channelId: BigInt(existingDiscordId.replace("room:", "")),
+        });
         // Channel exists, check if it has our marker
         if (!extractRoomyRoomId(channel.topic ?? null)) {
           // Channel exists but no marker - add it
@@ -401,13 +430,16 @@ export class StructureSyncService {
     // Build topic with sync marker
     const topic = addRoomySyncMarker(null, roomyRoomId);
 
-    console.log(`[StructureSyncService] Creating Discord channel for Roomy room`, {
-      roomyRoomId,
-      roomName,
-      guildId: this.guildId.toString(),
-      topic,
-      botAvailable: !!this.bot,
-    });
+    console.log(
+      `[StructureSyncService] Creating Discord channel for Roomy room`,
+      {
+        roomyRoomId,
+        roomName,
+        guildId: this.guildId.toString(),
+        topic,
+        botAvailable: !!this.bot,
+      },
+    );
 
     // Create Discord channel
     const result = await discordCreateChannel(this.bot, {
@@ -422,7 +454,9 @@ export class StructureSyncService {
     // Register mapping with "room:" prefix
     await this.repo.registerMapping(`room:${discordId}`, roomyRoomId);
 
-    console.log(`[StructureSyncService] Created Discord channel ${roomName} (${discordId}) for Roomy room ${roomyRoomId}`);
+    console.log(
+      `[StructureSyncService] Created Discord channel ${roomName} (${discordId}) for Roomy room ${roomyRoomId}`,
+    );
 
     return discordId;
   }
@@ -475,7 +509,8 @@ export class StructureSyncService {
       }
 
       const existingDiscordId = await this.repo.getDiscordId(roomyRoomId);
-      const roomName = roomNames.get(roomyRoomId) || `roomy-${roomyRoomId.slice(0, 8)}`;
+      const roomName =
+        roomNames.get(roomyRoomId) || `roomy-${roomyRoomId.slice(0, 8)}`;
 
       if (existingDiscordId) {
         await this.verifyOrCreateChannelWithName(roomyRoomId, roomName);
@@ -486,7 +521,7 @@ export class StructureSyncService {
     }
 
     console.log(
-      `[Roomy → Discord Sync] Created ${createdCount} channels, skipped ${skippedCount} (from Discord)`
+      `[Roomy → Discord Sync] Created ${createdCount} channels, skipped ${skippedCount} (from Discord)`,
     );
   }
 
@@ -505,7 +540,7 @@ export class StructureSyncService {
    */
   private async verifyOrCreateChannelWithName(
     roomyRoomId: Ulid,
-    roomName: string
+    roomName: string,
   ): Promise<void> {
     if (!this.bot) {
       throw new Error("Bot required for Roomy → Discord sync");
@@ -520,7 +555,9 @@ export class StructureSyncService {
     const channelId = existingDiscordId.replace("room:", "");
 
     try {
-      const channel = await discordFetchChannel(this.bot, { channelId: BigInt(channelId) });
+      const channel = await discordFetchChannel(this.bot, {
+        channelId: BigInt(channelId),
+      });
 
       // Check for rename
       if (channel.name !== roomName) {
@@ -583,7 +620,10 @@ export class StructureSyncService {
   /**
    * Handle Roomy room rename - update Discord channel name.
    */
-  async handleRoomyRoomRename(roomyRoomId: Ulid, newName: string): Promise<void> {
+  async handleRoomyRoomRename(
+    roomyRoomId: Ulid,
+    newName: string,
+  ): Promise<void> {
     if (!this.bot) {
       console.warn("Bot not available, skipping Roomy → Discord rename sync");
       return;
@@ -595,7 +635,9 @@ export class StructureSyncService {
     const channelId = discordId.replace("room:", "");
 
     try {
-      const channel = await discordFetchChannel(this.bot, { channelId: BigInt(channelId) });
+      const channel = await discordFetchChannel(this.bot, {
+        channelId: BigInt(channelId),
+      });
 
       if (channel.name !== newName) {
         await this.bot.helpers.editChannel(channel.id, {
@@ -613,9 +655,14 @@ export class StructureSyncService {
    * Note: Discord doesn't support renaming categories directly.
    * This is a placeholder for future implementation.
    */
-  async handleRoomyCategoryRename(oldName: string, newName: string): Promise<void> {
+  async handleRoomyCategoryRename(
+    oldName: string,
+    newName: string,
+  ): Promise<void> {
     if (!this.bot) {
-      console.warn("Bot not available, skipping Roomy → Discord category rename sync");
+      console.warn(
+        "Bot not available, skipping Roomy → Discord category rename sync",
+      );
       return;
     }
 
@@ -646,5 +693,113 @@ export class StructureSyncService {
     }
 
     return nameMap;
+  }
+
+  /**
+   * Handle Roomy room deletion.
+   * Deletes the corresponding Discord channel/thread.
+   *
+   * @param roomyRoomId - Roomy room ID to delete
+   */
+  async handleRoomyRoomDelete(roomyRoomId: string): Promise<void> {
+    // Get Discord channel ID from the Roomy room ID
+    const discordId = await this.repo.getDiscordId(roomyRoomId);
+    if (!discordId) {
+      console.warn(
+        `[StructureSyncService] Room ${roomyRoomId} not synced to Discord, skipping delete`,
+      );
+      return;
+    }
+
+    const channelId = BigInt(discordId.replace("room:", ""));
+
+    // TODO: Implement Discord channel deletion
+    // Need to:
+    // 1. Check if it's a channel or thread
+    // 2. Call bot.helpers.deleteChannel() or bot.helpers.deleteThread()
+    // 3. Handle permissions and rate limits
+    console.warn(
+      `[StructureSyncService] Roomy → Discord room deletion not yet implemented for ${roomyRoomId} (Discord: ${channelId})`,
+    );
+  }
+
+  /**
+   * Handle a Roomy event from the subscription stream.
+   * Processes structure-related events and syncs them to Discord if needed.
+   *
+   * @param decoded - The decoded Roomy event
+   * @returns true if the event was handled, false otherwise
+   */
+  async handleRoomyEvent(decoded: DecodedStreamEvent): Promise<boolean> {
+    try {
+      const { event } = decoded;
+
+      // Handle createRoom
+      if (event.$type === "space.roomy.room.createRoom.v0") {
+        // Check for Discord origin
+        const roomOrigin = extractDiscordOrigin(event);
+
+        // Register Discord room mapping
+        if (roomOrigin) {
+          await this.repo.registerMapping(
+            getRoomKey(roomOrigin.snowflake),
+            event.id,
+          );
+          return true; // Handled (Discord origin, no sync back)
+        }
+
+        // Sync Roomy room to Discord
+        await this.handleRoomyRoomCreate(event);
+        return true;
+      }
+
+      // Handle updateSidebar
+      if (event.$type === "space.roomy.space.updateSidebar.v0") {
+        // Cache sidebar hash (Discord origin only)
+        const sidebarOrigin = extractDiscordSidebarOrigin(event);
+        if (sidebarOrigin && sidebarOrigin.guildId === this.guildId.toString()) {
+          await this.repo.setSidebarHash(sidebarOrigin.sidebarHash);
+        }
+
+        // Sync sidebar update to Discord
+        await this.handleRoomySidebarUpdate(event);
+        return true;
+      }
+
+      // Handle createRoomLink
+      if (event.$type === "space.roomy.link.createRoomLink.v0") {
+        const roomLinkData = extractDiscordRoomLinkOrigin(event);
+        if (roomLinkData && roomLinkData.origin.guildId === this.guildId.toString()) {
+          const parentRoomyId = (event as any).room;
+          if (parentRoomyId) {
+            const linkKey = `${parentRoomyId}:${roomLinkData.linkToRoom}`;
+            await this.repo.setRoomLink(linkKey, event.id);
+          }
+        }
+        return true;
+      }
+
+      // Handle deleteRoom
+      if (event.$type === "space.roomy.room.deleteRoom.v0") {
+        // Unregister mapping
+        const discordId = await this.repo.getDiscordId(event.roomId);
+        if (discordId) {
+          await this.repo.unregisterMapping(discordId, event.roomId);
+        }
+
+        // Check for Discord origin
+        const roomOrigin = extractDiscordOrigin(event);
+        if (roomOrigin) return true; // Handled (Discord origin, no sync back)
+
+        // Sync Roomy room deletion to Discord
+        await this.handleRoomyRoomDelete(event.roomId);
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error(`[StructureSyncService] Error handling Roomy event:`, error);
+      return false;
+    }
   }
 }

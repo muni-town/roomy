@@ -6,8 +6,20 @@
  */
 
 import type { BridgeRepository } from "../repositories/index.js";
-import type { ConnectedSpace } from "@roomy/sdk";
-import type { DecodedStreamEvent, Ulid } from "@roomy/sdk";
+import {
+  modules,
+  ConnectedSpace,
+  type RoomyClient,
+  type StreamDid,
+  stateMachine,
+} from "@roomy/sdk";
+import type {
+  DecodedStreamEvent,
+  EventCallbackMeta,
+  StateMachine,
+  StreamIndex,
+  Ulid,
+} from "@roomy/sdk";
 import type {
   DiscordBot,
   MessageProperties,
@@ -18,6 +30,17 @@ import { MessageSyncService, type EventBatcher } from "./MessageSyncService.js";
 import { ReactionSyncService } from "./ReactionSyncService.js";
 import { ProfileSyncService, type DiscordUser } from "./ProfileSyncService.js";
 import { StructureSyncService } from "./StructureSyncService.js";
+import { getRepo } from "../repositories/LevelDBBridgeRepository.js";
+import { recordError, setRoomyAttrs, tracer } from "../tracing.js";
+import {
+  extractDiscordMessageOrigin,
+  extractDiscordOrigin,
+  extractDiscordUserOrigin,
+  extractDiscordSidebarOrigin,
+  extractDiscordRoomLinkOrigin,
+  extractDiscordReactionOrigin,
+} from "../utils/event-extensions.js";
+import { getRoomKey } from "../utils/room.js";
 
 type BridgeState =
   | {
@@ -36,53 +59,50 @@ type BridgeState =
  * Manages backfill then can handle incoming Discord and Roomy events.
  */
 export class Bridge {
-  state: BridgeState;
+  bot: DiscordBot;
+  guildId: bigint;
+  connectedSpace: ConnectedSpace;
+  state: StateMachine<BridgeState>;
+  repo: BridgeRepository;
   messageSync: MessageSyncService;
   reactionSync: ReactionSyncService;
   profileSync: ProfileSyncService;
   structureSync: StructureSyncService;
 
   constructor(options: {
-    repo: BridgeRepository;
     connectedSpace: ConnectedSpace;
     guildId: bigint;
-    spaceId: string;
-    bot?: DiscordBot;
+    bot: DiscordBot;
   }) {
-    const { repo, connectedSpace, guildId, spaceId, bot } = options;
+    const { connectedSpace, guildId, bot } = options;
+    const repo = getRepo(guildId, connectedSpace.streamDid);
+    this.guildId = guildId;
+    this.connectedSpace = connectedSpace;
+    this.bot = bot;
 
     // Create services (order matters for dependencies)
-    this.profileSync = new ProfileSyncService(
-      repo,
-      connectedSpace,
-      guildId,
-      spaceId,
-    );
-    const botId = bot?.id; // Extract bot ID for reaction echo prevention
+    this.profileSync = new ProfileSyncService(repo, connectedSpace, guildId);
     this.reactionSync = new ReactionSyncService(
       repo,
       connectedSpace,
       guildId,
-      spaceId,
-      botId,
+      bot,
     );
     this.structureSync = new StructureSyncService(
       repo,
       connectedSpace,
       guildId,
-      spaceId,
       bot,
     );
     this.messageSync = new MessageSyncService(
       repo,
       connectedSpace,
       guildId,
-      spaceId,
       this.profileSync,
       bot,
     );
-
-    this.state = { state: "backfillRoomy" };
+    this.repo = repo;
+    this.state = stateMachine({ state: "backfillRoomy" });
   }
 
   // ============================================================
@@ -95,14 +115,9 @@ export class Bridge {
    */
   async handleDiscordMessageCreate(
     message: MessageProperties,
-    roomyRoomId: string,
     batcher?: EventBatcher,
   ): Promise<string | null> {
-    return await this.messageSync.syncDiscordToRoomy(
-      roomyRoomId,
-      message,
-      batcher,
-    );
+    return await this.messageSync.syncDiscordToRoomy(message, batcher);
   }
 
   /**
@@ -407,47 +422,251 @@ export class Bridge {
     this.structureSync.clearCache();
   }
 
-  // ============================================================
-  // BACKFILL operations
-  // ============================================================
+  /**
+   * Connect to a single space
+   */
+  static async connect(options: {
+    spaceId: StreamDid;
+    bot: DiscordBot;
+    guildId: bigint;
+    client: RoomyClient;
+  }): Promise<Bridge> {
+    const { spaceId, bot, guildId, client } = options;
+
+    console.log(`Connecting to space ${spaceId}...`);
+
+    // Connect to the space
+    const connectedSpace = await tracer.startActiveSpan(
+      "leaf.stream.connect",
+      async (connectSpan) => {
+        try {
+          const s = await ConnectedSpace.connect({
+            client,
+            streamDid: spaceId,
+            module: modules.space,
+          });
+
+          connectSpan.setAttribute("connection.status", "success");
+          return s;
+        } catch (e) {
+          recordError(connectSpan, e);
+          throw e;
+        } finally {
+          connectSpan.end();
+        }
+      },
+    );
+
+    return new Bridge({ connectedSpace, ...options });
+  }
+
+  async disconnect() {
+    await this.repo.delete();
+  }
+
+  /** Subscribe  resuming from stored cursor. */
+  backfillRoomyAndSubscribe() {
+    return tracer.startActiveSpan(
+      "leaf.stream.subscribe",
+      { attributes: { "roomy.space.id": this.connectedSpace.streamDid } },
+      async (span) => {
+        try {
+          // Get the cursor to resume from
+          const cursor = await this.repo.getLastProcessedIdx(
+            this.connectedSpace.streamDid,
+          );
+          console.log(
+            `Resuming space ${this.connectedSpace.streamDid} from idx ${cursor}`,
+          );
+          span.setAttribute("subscription.resume_cursor", cursor ?? "none");
+          // Subscribe with the handler
+          this.connectedSpace.subscribe(
+            this.handleRoomyEvents.bind(this),
+            cursor as StreamIndex,
+          );
+          // Wait for backfill to complete before returning
+          console.log(
+            `Waiting for backfill of space ${this.connectedSpace.streamDid}...`,
+          );
+          await tracer.startActiveSpan(
+            "leaf.stream.backfill",
+            async (backfillSpan) => {
+              try {
+                setRoomyAttrs(backfillSpan, {
+                  spaceId: this.connectedSpace.streamDid,
+                });
+                await this.connectedSpace.doneBackfilling;
+                backfillSpan.setAttribute("backfill.status", "complete");
+              } catch (e) {
+                recordError(backfillSpan, e);
+                throw e;
+              } finally {
+                backfillSpan.end();
+              }
+            },
+          );
+          console.log(
+            `Backfill complete for space ${this.connectedSpace.streamDid}`,
+          );
+          console.log(`Subscribed to space ${this.connectedSpace.streamDid}`);
+          span.setAttribute("subscription.status", "connected");
+        } catch (e) {
+          recordError(span, e);
+          throw e;
+        } finally {
+          span.end();
+        }
+      },
+    );
+  }
 
   /**
-   * Backfill Roomy → Discord for this specific guild/space.
-   * Orchestrates the four-phase backfill process.
+   * Handle a batch of Roomy events from the subscription stream.
+   * Routes events to appropriate services based on event type.
+   * Uses first-one-wins strategy - the first service to handle the event wins.
    *
-   * Phase 0: Backfill Roomy structure (rooms → Discord channels)
-   * Phase 1: Fetch Roomy-origin events
-   * Phase 2: Backfill Discord messages for hash computation
-   * Phase 3: Sync Roomy events to Discord with duplicate detection
-   *
-   * @param bot - Discord bot instance
+   * @param events - Batch of decoded Roomy events
+   * @param meta - Event metadata (backfill status, etc.)
    */
-  async backfillRoomyToDiscord(bot: DiscordBot): Promise<void> {
-    // Delegates to the backfill module
-    const { backfillRoomyToDiscordForGuild } =
-      await import("../roomy/backfill.js");
-    await backfillRoomyToDiscordForGuild(this, bot);
+  async handleRoomyEvents(
+    events: DecodedStreamEvent[],
+    meta: EventCallbackMeta,
+  ): Promise<void> {
+    let maxIdx = 0;
+
+    for (const decodedEvent of events) {
+      const { idx } = decodedEvent;
+      maxIdx = Math.max(maxIdx, idx);
+
+      // During backfill, only do state management (no Discord sync)
+      if (meta.isBackfill) {
+        await this.handleRoomyEventForBackfill(decodedEvent);
+      } else {
+        // Route to services in order (first one to handle wins)
+        // Order matters: profile → structure → message → reaction
+        await this.profileSync.handleRoomyEvent(decodedEvent) ||
+        await this.structureSync.handleRoomyEvent(decodedEvent) ||
+        await this.messageSync.handleRoomyEvent(decodedEvent) ||
+        await this.reactionSync.handleRoomyEvent(decodedEvent);
+      }
+    }
+
+    // Update cursor to highest idx in batch
+    if (maxIdx > 0) {
+      await this.repo.setCursor(this.connectedSpace.streamDid, maxIdx);
+    }
+  }
+
+  /**
+   * Handle events during backfill (state management only, no Discord sync).
+   * This ensures we don't accidentally sync to Discord during backfill.
+   *
+   * @param decodedEvent - The decoded Roomy event
+   */
+  private async handleRoomyEventForBackfill(
+    decodedEvent: DecodedStreamEvent,
+  ): Promise<void> {
+    const { event } = decodedEvent;
+
+    // Register Discord message mappings
+    const messageOrigin = extractDiscordMessageOrigin(event);
+    if (messageOrigin) {
+      try {
+        await this.repo.registerMapping(messageOrigin.snowflake, event.id);
+      } catch (e) {
+        if (!(e instanceof Error && e.message.includes("already registered"))) {
+          console.error("Error registering synced ID:", e);
+        }
+      }
+    }
+
+    // Register Discord room mappings
+    const roomOrigin = extractDiscordOrigin(event);
+    if (roomOrigin) {
+      try {
+        await this.repo.registerMapping(getRoomKey(roomOrigin.snowflake), event.id);
+      } catch (e) {
+        if (!(e instanceof Error && e.message.includes("already registered"))) {
+          console.error("Error registering synced ID:", e);
+        }
+      }
+    }
+
+    // Cache Discord user profile hashes
+    const userOrigin = extractDiscordUserOrigin(event);
+    if (userOrigin && userOrigin.guildId === this.guildId.toString()) {
+      try {
+        await this.repo.setProfileHash(userOrigin.snowflake, userOrigin.profileHash);
+      } catch (e) {
+        console.error("Error caching profile hash:", e);
+      }
+    }
+
+    // Cache sidebar hashes
+    const sidebarOrigin = extractDiscordSidebarOrigin(event);
+    if (sidebarOrigin && sidebarOrigin.guildId === this.guildId.toString()) {
+      try {
+        await this.repo.setSidebarHash(sidebarOrigin.sidebarHash);
+      } catch (e) {
+        console.error("Error caching sidebar hash:", e);
+      }
+    }
+
+    // Cache room links
+    const roomLinkData = extractDiscordRoomLinkOrigin(event);
+    if (roomLinkData && roomLinkData.origin.guildId === this.guildId.toString()) {
+      const parentRoomyId = (event as any).room;
+      if (parentRoomyId) {
+        const linkKey = `${parentRoomyId}:${roomLinkData.linkToRoom}`;
+        try {
+          await this.repo.setRoomLink(linkKey, event.id);
+        } catch (e) {
+          console.error("Error caching room link:", e);
+        }
+      }
+    }
+
+    // Cache edit tracking info
+    if (event.$type === "space.roomy.message.editMessage.v0") {
+      const origin = extractDiscordMessageOrigin(event);
+      if (origin?.editedTimestamp && origin?.contentHash) {
+        try {
+          await this.repo.setEditInfo(origin.snowflake, {
+            editedTimestamp: origin.editedTimestamp,
+            contentHash: origin.contentHash,
+          });
+        } catch (e) {
+          console.error("Error caching edit state:", e);
+        }
+      }
+    }
+
+    // Unregister deleted room mappings
+    if (event.$type === "space.roomy.room.deleteRoom.v0") {
+      try {
+        const discordId = await this.repo.getDiscordId(event.roomId);
+        if (discordId) {
+          await this.repo.unregisterMapping(discordId, event.roomId);
+        }
+      } catch (e) {
+        if (!(e instanceof Error && e.message.includes("isn't registered"))) {
+          console.error("Error unregistering room:", e);
+        }
+      }
+    }
+
+    // Unregister deleted message mappings
+    if (event.$type === "space.roomy.message.deleteMessage.v0") {
+      try {
+        const discordId = await this.repo.getDiscordId(event.messageId);
+        if (discordId) {
+          await this.repo.unregisterMapping(discordId, event.messageId);
+        }
+      } catch (e) {
+        if (!(e instanceof Error && e.message.includes("isn't registered"))) {
+          console.error("Error unregistering message:", e);
+        }
+      }
+    }
   }
 }
-
-/**
- * Factory function to create a SyncOrchestrator with all its dependencies.
- *
- * @param repo - Bridge repository
- * @param connectedSpace - Connected Roomy space
- * @param guildId - Discord guild ID
- * @param spaceId - Roomy space ID
- * @param bot - Optional Discord bot instance
- * @returns Configured SyncOrchestrator
- *
- * @example
- * ```ts
- * const orchestrator = createSyncOrchestrator({
- *   repo,
- *   connectedSpace,
- *   guildId: 123n,
- *   spaceId: "did:plc:abc",
- *   bot: discordBot,
- * });
- * ```
- */
