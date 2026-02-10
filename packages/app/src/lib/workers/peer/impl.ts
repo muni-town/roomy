@@ -6,7 +6,7 @@ import {
 } from "../internalMessaging";
 import { sql } from "$lib/utils/sqlTemplate";
 import { CONFIG } from "$lib/config";
-import { db, prevStream } from "../idb";
+import { db } from "../idb";
 import type { QueryResult } from "../sqlite/setup";
 import {
   type AuthState,
@@ -26,7 +26,7 @@ import {
 } from "./types";
 import type {
   Savepoint,
-  SqliteWorkerInterface,
+  SqliteWorkerInterface as SqliteInterface,
   SqlStatement,
 } from "../sqlite/types";
 import {
@@ -182,34 +182,29 @@ export class Peer {
         return this.client.getProfile(did);
       },
       runQuery: async (statement) => {
-        return this.sqlite.runQuery(statement);
+        return this.#sqlite.runQuery(statement);
       },
       createLiveQuery: async (lockId, port, statement) => {
-        await this.sqlite.untilReady;
-
-        const channel = this.sqlite.createLiveQueryChannel(port);
-
         // Try to obtain a lock on the query. This will stall until the frontend is done with the
         // query.
         navigator.locks.request(lockId, async () => {
           // Once we have a lock on the query, we know the frontend has stopped using it, so we can
           // delete it.
-          await this.sqlite.deleteLiveQuery(lockId);
+          await this.#sqlite.deleteLiveQuery(lockId);
         });
-        return this.sqlite.createLiveQuery(lockId, channel.port2, statement);
+        return this.#sqlite.createLiveQuery(lockId, port, statement);
       },
       deleteLiveQuery: async (id) => {
-        await this.sqlite.untilReady;
-        await this.sqlite.deleteLiveQuery(id);
+        await this.#sqlite.deleteLiveQuery(id);
       },
       dangerousCompletelyDestroyDatabase: async ({ yesIAmSure }) => {
         if (!yesIAmSure) throw "You need to be sure";
-        return await this.sqlite.sqliteWorker.resetLocalDatabase();
+        return await this.#sqlite.sqliteWorker.resetLocalDatabase();
       },
       setActiveSqliteWorker: async (messagePort) => {
         // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-        await this.sqlite.setReady(
-          messagePortInterface<{}, SqliteWorkerInterface>({
+        await this.#sqlite.setSqliteInterface(
+          messagePortInterface<{}, SqliteInterface>({
             localName: "peer",
             remoteName: "sqlite",
             messagePort,
@@ -255,7 +250,6 @@ export class Peer {
       fetchEvents: async (streamId, offset, limit) =>
         this.fetchEvents(streamId, offset, limit),
       lazyLoadRoom: async (streamId, roomId, end) => {
-        await this.sqlite.untilReady;
         return await this.lazyLoadRoom(streamId, roomId, end);
       },
       fetchLinks: async (streamId, start, limit, room) =>
@@ -280,7 +274,7 @@ export class Peer {
           handle: resp.handle,
         };
       },
-      checkSpaceExists: async (spaceId) =>
+      checkSpaceExists: async (_spaceId) =>
         // TODO: right now we actually don't have a way check for stream existence in the API. This
         // should make sure things mostly work for now, but should be fixed later. The only impact
         // should be that we can't show proper 404 errors for missing spaces.
@@ -298,7 +292,7 @@ export class Peer {
       deleteStreamRecord: async () => this.deleteStreamRecord(),
       ensurePersonalStream: async () => this.ensurePersonalStream(),
       connectPendingSpaces: async () => {
-        await this.sqlite.sqliteWorker.connectPendingSpaces();
+        await this.#sqlite.sqliteWorker.connectPendingSpaces();
       },
       getMembers: async (spaceDid) => {
         const { client } = await this.#roomy.transitionedTo("connected");
@@ -566,19 +560,19 @@ export class Peer {
       eventChannel,
       personalSpace.streamDid,
       // After each personal stream batch is materialized, connect to any new spaces
-      async () => this.sqlite.sqliteWorker.connectPendingSpaces(),
+      async () => this.#sqlite.sqliteWorker.connectPendingSpaces(),
     );
 
     // backfill entire personal space by subscribing to all of its events.
     await personalSpace.subscribe(callback);
 
     // Ensure personal stream space entity exists
-    await this.sqlite.runQuery(
+    await this.#sqlite.runQuery(
       ensureEntity(personalSpace.streamDid, personalSpace.streamDid),
     );
 
     // Mark personal stream space as hidden
-    await this.sqlite.runQuery(sql`
+    await this.#sqlite.runQuery(sql`
       insert into comp_space (entity, hidden)
       values (${personalSpace.streamDid}, 1) 
       on conflict (entity) do nothing
@@ -624,7 +618,7 @@ export class Peer {
     );
 
     // get streams from SQLite
-    const streamsResult = await this.sqlite.runQuery<{
+    const streamsResult = await this.#sqlite.runQuery<{
       id: StreamDid;
       backfilled_to: StreamIndex;
     }>(sql`-- peer space list
@@ -650,7 +644,7 @@ export class Peer {
       {},
       ctx,
       async (span) => {
-        await this.sqlite.sqliteWorker.connectPendingSpaces();
+        await this.#sqlite.sqliteWorker.connectPendingSpaces();
         span.end();
       },
     );
@@ -712,7 +706,7 @@ export class Peer {
     for await (const batch of eventChannel) {
       // personal stream backfill is always high priority, other streams can be in background
       if (batch.streamId === personalSpace.streamDid) {
-        const result = await this.sqlite.materializeBatch(batch, "priority");
+        const result = await this.#sqlite.materializeBatch(batch, "priority");
 
         // If there is a resolver waiting on this batch, resolve it with the result
         const resolver = this.#batchResolvers.get(batch.batchId);
@@ -726,7 +720,7 @@ export class Peer {
 
         logMaterializationResult(batch.streamId, result, "personal");
       } else {
-        const result = await this.sqlite.materializeBatch(
+        const result = await this.#sqlite.materializeBatch(
           batch,
           batch.priority,
         );
@@ -1003,10 +997,6 @@ export class Peer {
     return this.#roomy.current.client;
   }
 
-  private get sqlite() {
-    return this.#sqlite;
-  }
-
   private get spaces() {
     if (
       this.#roomy.current.state !== "connected" &&
@@ -1092,10 +1082,6 @@ class SqliteSupervisor {
     this.liveQueries = new Map();
   }
 
-  get untilReady() {
-    return this.#state.transitionedTo("ready");
-  }
-
   get ready() {
     return this.#state.current.state === "ready";
   }
@@ -1106,44 +1092,16 @@ class SqliteSupervisor {
     return this.#state.current.sqliteWorker;
   }
 
-  async setReady(workerInterface: SqliteWorkerInterface) {
-    if (this.#state.current.state === "pending") {
-      const previousSchemaVersion = await prevStream.getSchemaVersion();
-      console.debug("(init.2) SQLite Supervisor ready.", {
-        previousSchemaVersion,
-        current: CONFIG.streamSchemaVersion,
-      });
-      if (
-        previousSchemaVersion &&
-        previousSchemaVersion != CONFIG.streamSchemaVersion
-      ) {
-        // Reset the local database cache when the stream schema version changes.
-        // Asynchronous, but has to wait until readyPromise is resolved, so we can't await it here.
-        this.sqliteWorker.resetLocalDatabase().catch(console.error);
-      }
-
-      await prevStream.setSchemaVersion(CONFIG.streamSchemaVersion);
-
-      // Reset the local database cache when the database schema version changes
-      (async () => {
-        const result = await this.runQuery<{ version: string }>(
-          sql`select version from roomy_schema_version`,
-        );
-        if (result.rows?.[0]?.version !== CONFIG.databaseSchemaVersion) {
-          await this.sqliteWorker.resetLocalDatabase();
-        }
-      })();
-
-      // When a new SQLite worker is created we need to make sure that we re-create all of the
-      // live queries that were active on the old worker.
-      for (const [id, { port, statement }] of this.liveQueries.entries()) {
-        const channel = this.createLiveQueryChannel(port);
-        this.createLiveQuery(id, channel.port2, statement);
-      }
+  async setSqliteInterface(sqliteInterface: SqliteInterface) {
+    // When a new SQLite interface is connected we need to make sure that we re-create all of the
+    // live queries that were active on the old worker.
+    for (const [id, { port, statement }] of this.liveQueries.entries()) {
+      this.createLiveQuery(id, port, statement);
     }
+
     this.#state.current = {
       state: "ready",
-      sqliteWorker: workerInterface,
+      sqliteWorker: sqliteInterface,
     };
   }
 
@@ -1161,14 +1119,6 @@ class SqliteSupervisor {
   async runSavepoint(savepoint: Savepoint) {
     const { sqliteWorker } = await this.#state.transitionedTo("ready");
     return sqliteWorker.runSavepoint(savepoint);
-  }
-
-  createLiveQueryChannel(port: MessagePort) {
-    const channel = new MessageChannel();
-    channel.port1.onmessage = (ev) => {
-      port.postMessage(ev.data);
-    };
-    return channel;
   }
 
   async createLiveQuery(
