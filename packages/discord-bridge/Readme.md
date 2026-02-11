@@ -13,7 +13,7 @@ The Discord Bridge is a standalone microservice that:
 
 ## Architecture
 
-The Discord Bridge uses a **modular, domain-driven architecture** with service layer separation:
+The Discord Bridge uses a **singleton orchestrator + per-guild bridge** architecture with domain-driven service separation:
 
 ### System Components
 
@@ -27,30 +27,33 @@ The Discord Bridge uses a **modular, domain-driven architecture** with service l
          │    │
          ▼    ▼
 ┌─────────────────────────────────┐
-│     Discord Bridge Service      │
+│     BridgeOrchestrator          │
+│  (Singleton - manages all       │
+│   guilds, Discord bot lifecycle)│
 │  ┌───────────────────────────┐  │
-│  │  Sync Orchestrator        │  │
-│  │  - Coordinates all sync   │  │
-│  │    operations             │  │
-│  └───────────────────────────┘  │
-│  ┌───────────────────────────┐  │
-│  │  Domain Sync Services     │  │
-│  │  - MessageSyncService     │  │
-│  │  - ReactionSyncService    │  │
-│  │  - ProfileSyncService     │  │
-│  │  - StructureSyncService   │  │
+│  │  Bridge (per guild-space) │  │
+│  │  ┌─────────────────────┐  │  │
+│  │  │ EventDispatcher     │  │  │
+│  │  │ - toRoomy channel   │  │  │
+│  │  │ - toDiscord channel │  │  │
+│  │  └─────────────────────┘  │  │
+│  │  ┌─────────────────────┐  │  │
+│  │  │ Domain Services     │  │  │
+│  │  │ - MessageSync       │  │  │
+│  │  │ - ReactionSync      │  │  │
+│  │  │ - ProfileSync       │  │  │
+│  │  │ - StructureSync     │  │  │
+│  │  └─────────────────────┘  │  │
 │  └───────────────────────────┘  │
 │  ┌───────────────────────────┐  │
 │  │  Discord Bot (Discordeno) │  │
 │  │  - Event listeners        │  │
 │  │  - Webhook execution      │  │
-│  │  - Backfill engine        │  │
 │  └───────────────────────────┘  │
 │  ┌───────────────────────────┐  │
-│  │  Roomy Client (ATProto)    │  │
+│  │  Roomy Client (ATProto)   │  │
 │  │  - Leaf subscriptions     │  │
 │  │  - Event streaming        │  │
-│  │  - Profile fetching       │  │
 │  └───────────────────────────┘  │
 │  ┌───────────────────────────┐  │
 │  │  BridgeRepository         │  │
@@ -59,9 +62,9 @@ The Discord Bridge uses a **modular, domain-driven architecture** with service l
 │  │  - Profile cache          │  │
 │  └───────────────────────────┘  │
 │  ┌───────────────────────────┐  │
-│  │  HTTP API                 │  │
-│  │  - Health checks           │  │
-│  │  - Bridge management       │  │
+│  │  HTTP API (itty-router)   │  │
+│  │  - Bridge info            │  │
+│  │  - Guild/space lookup     │  │
 │  └───────────────────────────┘  │
 └─────────────────────────────────┘
 ```
@@ -70,53 +73,71 @@ The Discord Bridge uses a **modular, domain-driven architecture** with service l
 
 ```
 packages/discord-bridge/src/
-├── index.ts              # Entry point, initializes all subsystems
-├── api.ts                # Express REST API for bridge management
+├── index.ts              # Entry point, creates BridgeOrchestrator + HTTP API
+├── BridgeOrchestrator.ts # Singleton: bot lifecycle, event routing to bridges
+├── Bridge.ts             # Per-guild coordinator: backfill phases, event handling
+├── dispatcher.ts         # EventDispatcher: async channels for bidirectional sync
+├── constants.ts          # Shared constants (message types, key prefixes)
+├── api.ts                # itty-router REST API
 ├── env.ts                # Environment variable configuration
 ├── tracing.ts            # OpenTelemetry observability
 ├── otel.ts               # OTel exporter configuration
 ├── httpProxy.ts          # HTTP proxy for Leaf authentication
 │
-├── services/             # Domain sync services (NEW MODULAR ARCH)
-│   ├── SyncOrchestrator.ts   # Top-level coordinator
-│   ├── MessageSyncService.ts # Message sync logic
-│   ├── ReactionSyncService.ts # Reaction sync logic
-│   ├── ProfileSyncService.ts  # Profile sync logic
-│   ├── StructureSyncService.ts # Channel/room/category sync
+├── services/             # Domain sync services
+│   ├── MessageSyncService.ts  # Message sync logic (bidirectional)
+│   ├── ReactionSyncService.ts # Reaction sync logic (bidirectional)
+│   ├── ProfileSyncService.ts  # Profile sync logic (Discord → Roomy)
+│   ├── StructureSyncService.ts # Channel/room/thread/sidebar sync
 │   └── index.ts
 │
-├── repositories/         # Data access layer (NEW)
-│   ├── BridgeRepository.ts    # Main repository interface
-│   ├── MockBridgeRepository.ts # Test double
+├── repositories/         # Data access layer
+│   ├── BridgeRepository.ts        # Repository interface
+│   ├── LevelDBBridgeRepository.ts # LevelDB implementation
+│   ├── MockBridgeRepository.ts    # Test double
 │   └── index.ts
 │
 ├── discord/              # Discord-specific code
-│   ├── bot.ts            # Bot initialization, event handlers
-│   ├── types.ts          # TypeScript types, desired properties
+│   ├── types.ts          # TypeScript types, DiscordEvent union, desired properties
 │   ├── webhooks.ts       # Webhook creation, execution, retry logic
-│   ├── slashCommands.ts  # Discord slash commands (/connect, etc.)
+│   ├── slashCommands.ts  # Discord slash commands (/connect-roomy-space, etc.)
 │   ├── backfill.ts       # Discord message hashing, reaction backfill
+│   ├── websocket-polyfill.ts # WebSocket polyfill for Discordeno
 │   └── operations/       # Discord API operations
-│       └── message.ts    # Message-specific operations
+│       └── channel.ts    # Channel-specific operations
 │
 ├── roomy/                # Roomy-specific code
-│   ├── client.ts         # RoomyClient initialization, space subscriptions
-│   ├── subscription.ts   # Leaf event handler, state updates, filter logic
-│   ├── to.ts             # Discord → Roomy sync (legacy, moved to services)
-│   ├── from.ts           # Roomy → Discord sync (legacy, moved to services)
-│   ├── backfill.ts       # Roomy → Discord backfill
+│   ├── client.ts         # RoomyClient initialization (ATProto auth)
 │   └── batcher.ts        # Event batching for efficient Leaf operations
 │
-└── types.ts              # Shared GuildContext type
+└── utils/                # Shared utilities
+    ├── event-extensions.ts # Extension extraction for idempotency/loop prevention
+    ├── hash.ts            # SHA-256 fingerprinting
+    ├── emoji.ts           # Emoji parsing (unicode/custom)
+    ├── message.ts         # Message content utilities
+    ├── room.ts            # Room key helpers
+    └── discord-topic.ts   # Discord topic sync
 ```
 
 ### Architecture Principles
 
+**BridgeOrchestrator (singleton)**
+- Manages the Discord bot lifecycle and event routing
+- Routes Discord events to the correct Bridge by guild ID
+- Handles slash command interactions
+- Creates/destroys Bridge instances on connect/disconnect
+
+**Bridge (per guild-space pair)**
+- Coordinates sync for a single Discord guild ↔ Roomy space
+- Runs a four-phase backfill process on connection (see below)
+- Uses an EventDispatcher for decoupled async event routing
+- Delegates to four domain services
+
 **Service Layer (services/)**
 - Domain-driven separation: messages, reactions, profiles, structure
-- Each service owns its business logic and idempotency patterns
-- Services are stateless - state managed by BridgeRepository
-- Easy to test with mock repositories
+- Each service handles both directions (Roomy events + Discord events)
+- Services receive events via `handleRoomyEvent()` and direct calls from Bridge
+- Services push outbound events to the dispatcher's async channels
 
 **Repository Layer (repositories/)**
 - Single source of truth for all persistent state
@@ -124,36 +145,59 @@ packages/discord-bridge/src/
 - Sublevel databases for different data domains
 - Mock implementation for testing
 
-**Orchestration (SyncOrchestrator)**
-- Facade pattern for simple API
-- Delegates to appropriate service
-- Handles cross-service coordination
-- Used by Discord event handlers and Roomy subscription handlers
-
-**Legacy Modules (discord/roomy)**
-- Being refactored into services
-- Still contain platform-specific utilities
-- Will be gradually phased out
+**EventDispatcher**
+- Two async channels: `toRoomy` (Discord → Roomy) and `toDiscord` (Roomy → Discord)
+- Batches events during backfill, sends immediately when listening
+- Enables decoupled communication between phases
 
 ## Data Flow
 
+### Four-Phase Backfill Process
+
+When a Bridge connects to a guild-space pair, it runs four phases sequentially:
+
+```
+Phase 1: backfillRoomyAndSubscribe
+  - Subscribe to Roomy Leaf event stream (resuming from cursor)
+  - Process all existing Roomy events through services
+  - Each service registers Discord-origin mappings (snowflake ↔ ULID)
+  - Roomy-origin events are queued to dispatcher.toDiscord
+  - Completes when ConnectedSpace.doneBackfilling resolves
+
+Phase 2: backfillDiscordAndSyncToRoomy
+  - Backfill Discord structure (channels, threads) via StructureSyncService
+  - Backfill messages for all text channels via MessageSyncService
+  - Backfill reactions via ReactionSyncService
+  - Events batched to dispatcher.toRoomy, flushed at batch size or phase end
+
+Phase 3: syncRoomyToDiscord
+  - Consume queued Roomy-origin events from dispatcher.toDiscord
+  - Distribute to services: ReactionSync, StructureSync, MessageSync
+  - Each service syncs Roomy-origin data to Discord via webhooks
+  - Transitions to "listening" when last batch event is processed
+
+Phase 4: listening (steady-state)
+  - New Discord events → Bridge.handleDiscordEvent() → service → dispatcher.toRoomy → Roomy
+  - New Roomy events → Bridge.handleRoomyEvents() → services → dispatcher.toDiscord → Discord
+  - Events sent immediately (no batching)
+```
+
 ### Discord → Roomy Sync
 
-**Real-time flow:**
+**Real-time flow (Phase 4):**
 ```
-Discord Message Event
+Discord Event (message, reaction, channel, etc.)
         │
         ▼
 ┌───────────────────┐
-│  messageCreate    │  (discord/bot.ts)
-│  handler          │
+│ BridgeOrchestrator│  (BridgeOrchestrator.ts)
+│ .handleDiscordEvent│  Routes by guildId
 └────────┬──────────┘
          │
          ▼
 ┌───────────────────┐
-│ SyncOrchestrator  │  (services/SyncOrchestrator.ts)
-│ .handleDiscord    │
-│ MessageCreate     │
+│ Bridge            │  (Bridge.ts)
+│ .handleDiscordEvent│  Type-safe switch on event type
 └────────┬──────────┘
          │
          ▼
@@ -164,79 +208,58 @@ Discord Message Event
          │
          ├──► Check idempotency (syncedIds)
          ├──► Ensure user profile synced (via ProfileSyncService)
-         ├──► Filter system messages
-         ├──► Build CreateMessage event
- │        │  with extensions:
- │        │  - discordMessageOrigin (snowflake, guildId)
- │        │  - authorOverride (DID)
- │        │  - timestampOverride
- │        └──► Send via ConnectedSpace
-│
-┌───────────────────┐
-│ subscription       │  (roomy/subscription.ts)
-│ handler           │
-└────────┬──────────┘
-         │
-         ├──► Extract discordMessageOrigin extension
-         ├──► Register mapping: snowflake ↔ Roomy ULID
-         └──► Update cursor (resume position)
+         ├──► Filter system messages (constants.ts)
+         ├──► Build CreateMessage event with extensions:
+         │    - discordMessageOrigin (snowflake, guildId)
+         │    - authorOverride (DID)
+         │    - timestampOverride
+         └──► Push to dispatcher.toRoomy → ConnectedSpace
 ```
 
-**Backfill flow:**
+**Backfill flow (Phase 2):**
 ```
 Discord API (getMessages)
         │
         ▼
 ┌───────────────────┐
-│ backfillMessages   │  (discord/bot.ts)
-│ ForChannel        │
+│ MessageSyncService│  (services/MessageSyncService.ts)
+│ .backfillToRoomy  │
 └────────┬──────────┘
          │
-         ├──► Fetch messages (pagination, 100 at a time)
+         ├──► Fetch messages per channel (pagination, 100 at a time)
          ├──► For each message:
-         │    ├──► ensureRoomyChannelForDiscordChannel
-         │    ├──► ensureRoomyMessageForDiscordMessage
-         │    └──► Store latest message cursor
-         └──► After messages: backfillDiscordReactions
+         │    ├──► Check idempotency
+         │    ├──► Build event with extensions
+         │    └──► Push to dispatcher.toRoomy (batched)
+         └──► Batch flushed to Roomy at batch size or phase end
 ```
 
 ### Roomy → Discord Sync
 
-**Real-time flow:**
+**Real-time flow (Phase 4):**
 ```
 Leaf Event Stream
         │
         ▼
 ┌───────────────────┐
-│ subscription       │  (roomy/subscription.ts)
-│ handler           │
+│ Bridge            │  (Bridge.ts)
+│ .handleRoomyEvents│  Routes to services in priority order
 └────────┬──────────┘
          │
-         ├──► Filter Discord-origin events (prevent loop-back)
-         │    - Check for discordMessageOrigin extension
-         │    - Check for discordOrigin extension
-         │    - Check for discordUserOrigin extension
-         │
-         ▼
+         ├──► ProfileSync.handleRoomyEvent  (register Discord-origin profiles)
+         ├──► StructureSync.handleRoomyEvent (register rooms, queue Roomy-origin)
+         ├──► MessageSync.handleRoomyEvent   (register messages, queue Roomy-origin)
+         └──► ReactionSync.handleRoomyEvent  (register reactions, queue Roomy-origin)
+                    │
+                    ▼  (Roomy-origin events pushed to dispatcher.toDiscord)
 ┌───────────────────┐
-│ SyncOrchestrator  │  (services/SyncOrchestrator.ts)
-│ .handleRoomy      │
-│ MessageCreate     │
-└────────┬──────────┘
-         │
-         ▼
-┌───────────────────┐
-│ MessageSyncService│  (services/MessageSyncService.ts)
-│ .syncRoomyToDiscord│
+│ Service           │
+│ .syncToDiscord    │  Distributes queued events
 └────────┬──────────┘
          │
          ├──► Get Discord channel ID (from syncedIds)
-         ├──► Check idempotency (nonce check)
          ├──► Get webhook for channel
-         ├──► Extract author profile:
-         │    - authorOverride.did for Discord users
-         │    - decodedEvent.user for Roomy users
-         │    - Fetch from ATProto if not cached (via ProfileSyncService)
+         ├──► Extract author profile (via ProfileSyncService)
          │
          ▼
 ┌───────────────────┐
@@ -249,24 +272,6 @@ Leaf Event Stream
          └──► Handle webhook deleted (404) - recreate and retry
 ```
 
-**Backfill flow:**
-```
-Leaf Event Stream (fetchRoomyOriginEvents)
-        │
-        ▼
-┌───────────────────┐
-│ backfillRoomyTo   │  (roomy/backfill.ts)
-│ Discord           │
-└────────┬──────────┘
-         │
-         ├──► Fetch Roomy events (batched, 2500 at a time)
-         ├──► Filter Discord-origin events
-         ├──► Compute content hash (deduplication)
-         ├──► Check for duplicates on Discord (hash lookup)
-         ├──► Send via webhook
-         └──► Register mappings
-```
-
 ### Reaction Sync
 
 **Discord → Roomy:**
@@ -275,22 +280,14 @@ Discord reactionAdd Event
         │
         ▼
 ┌───────────────────┐
-│ reactionAdd       │  (discord/bot.ts)
-│ handler           │
-└────────┬──────────┘
-         │
-         ▼
-┌───────────────────┐
-│ SyncOrchestrator  │  (services/SyncOrchestrator.ts)
-│ .handleDiscord    │
-│ ReactionAdd       │
+│ Bridge            │  (Bridge.ts)
+│ .handleDiscordEvent│  case "REACTION_ADD"
 └────────┬──────────┘
          │
          ▼
 ┌───────────────────┐
 │ ReactionSync      │  (services/ReactionSyncService.ts)
-│ Service.syncAddTo │
-│ Roomy             │
+│ .syncAddToRoomy   │
 └────────┬──────────┘
          │
          ├──► Check idempotency (syncedReactions store)
@@ -298,7 +295,7 @@ Discord reactionAdd Event
          ├──► Build addBridgedReaction event
          │    - reactingUser: did:discord:{userId}
          │    - discordReactionOrigin extension (prevent loop-back)
-         └──► Send via ConnectedSpace
+         └──► Push to dispatcher.toRoomy
 ```
 
 **Roomy → Discord:**
@@ -307,29 +304,19 @@ Leaf Event Stream (addReaction/addBridgedReaction)
         │
         ▼
 ┌───────────────────┐
-│ subscription       │  (roomy/subscription.ts)
-│ handler           │
+│ ReactionSync      │  (services/ReactionSyncService.ts)
+│ .handleRoomyEvent │  (registers Discord-origin, queues Roomy-origin)
 └────────┬──────────┘
-         │
-         ├──► Filter: Allow reactions bidirectionally
-         │    - Block if discordReactionOrigin present (loop prevention)
-         │
-         ▼
-┌───────────────────┐
-│ SyncOrchestrator  │  (services/SyncOrchestrator.ts)
-│ .handleRoomy      │
-│ ReactionAdd       │
-└────────┬──────────┘
-         │
+         │ (queued to dispatcher.toDiscord)
          ▼
 ┌───────────────────┐
 │ ReactionSync      │  (services/ReactionSyncService.ts)
-│ Service.syncAddTo │
-│ Discord           │
+│ .syncToDiscord    │
 └────────┬──────────┘
          │
+         ├──► Filter: Block if discordReactionOrigin present (loop prevention)
          ├──► Get Discord message ID (from syncedIds)
-         ├──► Parse emoji (unicode or custom)
+         ├──► Parse emoji (unicode or custom via utils/emoji.ts)
          └──► Call bot.helpers.addReaction()
 ```
 
@@ -341,16 +328,9 @@ Discord User (any message/reaction)
         │
         ▼
 ┌───────────────────┐
-│ SyncOrchestrator  │  (services/SyncOrchestrator.ts)
-│ .handleDiscord    │
-│ UserProfile       │
-└────────┬──────────┘
-         │
-         ▼
-┌───────────────────┐
 │ ProfileSync       │  (services/ProfileSyncService.ts)
-│ Service.sync      │
-│ DiscordToRoomy    │
+│ .syncDiscord      │
+│ ToRoomy           │
 └────────┬──────────┘
          │
          ├──► Compute profile hash (username + globalName + avatar)
@@ -360,7 +340,7 @@ Discord User (any message/reaction)
          │    - name: globalName || username
          │    - avatar: avatar URL (Discord CDN)
          │    - discordUserOrigin extension
-         └──► Send via ConnectedSpace
+         └──► Push to dispatcher.toRoomy
 ```
 
 **Roomy → Discord (Puppeting):**
@@ -370,8 +350,7 @@ Roomy Message Event
         ▼
 ┌───────────────────┐
 │ MessageSync       │  (services/MessageSyncService.ts)
-│ Service.sync      │
-│ RoomyToDiscord    │
+│ .syncToDiscord    │
 └────────┬──────────┘
          │
          ├──► Extract author DID:
@@ -381,11 +360,10 @@ Roomy Message Event
          ▼
 ┌───────────────────┐
 │ ProfileSync       │  (services/ProfileSyncService.ts)
-│ Service.get       │
-│ RoomyProfile      │
+│ .getRoomyProfile  │
 └────────┬──────────┘
          │
-         ├──► Check cache (roomyUserProfilesForBridge)
+         ├──► Check cache (roomyUserProfiles)
          ├──► If not cached: fetch from ATProto (getProfile)
          ├──► Cache for future use
          └──► Return profile for webhook payload (username, avatarUrl)
@@ -415,18 +393,19 @@ All events originating from Discord include an extension to mark their origin:
 Discord → Roomy → Discord → Roomy → ...
 ```
 
-**Solution:** Filter events in subscription handler:
+**Solution:** Each service's `handleRoomyEvent()` uses `utils/event-extensions.ts` to extract origin markers:
 ```typescript
-// Don't sync events back that originated from Discord
-if (!messageOrigin && !roomOrigin && !userOrigin && !reactionOrigin) {
-  // Sync to Discord
-}
+import { extractDiscordMessageOrigin } from "../utils/event-extensions.js";
 
-// Exception: Reactions sync bidirectionally (Roomy ↔ Discord)
-// But filter out reactions with discordReactionOrigin (loop prevention)
-if (isReactionEvent && !reactionOrigin) {
-  // Sync reactions
+// In handleRoomyEvent():
+const origin = extractDiscordMessageOrigin(decodedEvent);
+if (origin) {
+  // Discord-origin: register mapping (snowflake ↔ ULID), don't sync back
+  await repo.syncedIds.register({ discordId: origin.snowflake, roomyId: event.id });
+  return true; // handled
 }
+// Roomy-origin: queue to dispatcher.toDiscord for Phase 3
+dispatcher.toDiscord.push({ decoded: decodedEvent, batchId, isLastEvent });
 ```
 
 ### Message Idempotency
@@ -596,50 +575,40 @@ pnpm dev:discord-bridge
 
 The bridge includes comprehensive logging and tracing via OpenTelemetry. Key log prefixes to watch:
 
+- `[Bridge]` - Phase transitions and backfill progress
+- `[Dispatcher]` - Event batching and flushing
 - `[Profile Puppeting]` - Profile fetching and webhook puppeting
-- `[Profile Capture]` - Profile caching from updateProfile events
-- `[Backfill Webhook]` - Roomy → Discord backfill operations
 - `[Webhook Registration]` - Message mapping registration
 
 **Testing with Mock Repositories:**
 
-The new modular architecture supports easy testing with `MockBridgeRepository`:
+The modular architecture supports testing with `MockBridgeRepository`:
 
 ```typescript
 import { MockBridgeRepository } from "./repositories/MockBridgeRepository.js";
-import { SyncOrchestrator } from "./services/SyncOrchestrator.js";
+import { MessageSyncService } from "./services/MessageSyncService.js";
+import { createDispatcher } from "./dispatcher.js";
 
-// Create mock repository
+// Create mock repository and dispatcher
 const mockRepo = new MockBridgeRepository();
+const dispatcher = createDispatcher();
 
-// Create orchestrator with mock repository
-const orchestrator = SyncOrchestrator.create({
-  repo: mockRepo,
-  // ... other dependencies
-});
+// Create service with mock dependencies
+const service = new MessageSyncService(
+  mockRepo,
+  streamDid,
+  dispatcher,
+  guildId,
+  profileSync,
+  mockBot,
+);
 
 // Test sync operations without touching LevelDB
-await orchestrator.handleDiscordMessageCreate(message, roomId);
+await service.syncDiscordToRoomy(message);
 
 // Assert on repository state
-const syncedIds = await mockRepo.syncedIds.list();
-expect(syncedIds).toHaveLength(1);
-```
-
-**Unit Testing Services:**
-
-Each service can be tested in isolation:
-
-```typescript
-import { MessageSyncService } from "./services/MessageSyncService.js";
-
-const mockRepo = new MockBridgeRepository();
-const mockBot = createMockBot();
-const service = new MessageSyncService(mockRepo, mockBot, roomyClient);
-
-// Test message sync logic
-await service.syncDiscordToRoomy(roomId, message);
-// Assert on mockRepo state and mockBot calls
+const mapping = await mockRepo.syncedIds.get_discordId(snowflake);
+expect(mapping).toBeDefined();
 ```
 
 ### Troubleshooting
@@ -666,7 +635,7 @@ await service.syncDiscordToRoomy(roomId, message);
 
 **Hash-based change detection:**
 ```typescript
-// Compute hash for profile/sidebar/edit change detection
+// Compute hash for profile/sidebar/edit change detection (utils/hash.ts)
 function fingerprint(data: string): string {
   return createHash("sha256").update(data).digest("hex").slice(0, 32);
 }
@@ -684,16 +653,51 @@ await syncedIds.get_discordId(ulid)    // → snowflake
 await syncedIds.get_roomyId(snowflake) // → ulid
 ```
 
-**Extension extraction pattern:**
+**Extension extraction (utils/event-extensions.ts):**
 ```typescript
-function extractExtension<T>(
-  event: Event,
-  extensionKey: string,
-  eventType?: string
-): T | undefined {
-  if (eventType && event.$type !== eventType) return undefined;
-  const extensions = event.extensions || {};
-  return extensions[extensionKey] as T | undefined;
+import {
+  extractDiscordMessageOrigin,
+  extractDiscordOrigin,
+  extractDiscordUserOrigin,
+  extractDiscordReactionOrigin,
+} from "./utils/event-extensions.js";
+
+// Type-safe extraction with typed return values
+const msgOrigin = extractDiscordMessageOrigin(decodedEvent);
+// → { snowflake, channelId, guildId, editedTimestamp?, contentHash? } | undefined
+
+const roomOrigin = extractDiscordOrigin(decodedEvent);
+// → { snowflake, guildId } | undefined
+```
+
+**Event dispatcher pattern:**
+```typescript
+// Services push events to async channels
+dispatcher.toRoomy.push(event);       // Discord → Roomy
+dispatcher.toDiscord.push({ decoded, batchId, isLastEvent }); // Roomy → Discord
+
+// Bridge consumes from channels
+for await (const event of dispatcher.toRoomy) {
+  await connectedSpace.sendEvent(event);
+}
+```
+
+**Type-safe Discord event routing:**
+```typescript
+// DiscordEvent is a discriminated union (discord/types.ts)
+type DiscordEvent =
+  | { event: "MESSAGE_CREATE"; payload: { guildId: bigint; ... } }
+  | { event: "REACTION_ADD"; payload: { guildId: bigint; ... } }
+  | ...;
+
+// Bridge switches on event type with exhaustive checking
+async handleDiscordEvent(discordEvent: DiscordEvent) {
+  switch (discordEvent.event) {
+    case "MESSAGE_CREATE":
+      await this.messageSync.syncDiscordToRoomy(discordEvent.payload);
+      break;
+    // ...
+  }
 }
 ```
 
