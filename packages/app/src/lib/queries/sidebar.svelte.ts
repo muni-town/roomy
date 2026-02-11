@@ -55,10 +55,12 @@ $effect.root(() => {
     // console.debug("categories", $state.snapshot(categoriesQuery.result));
     if (categoriesQuery.result) {
       sidebar.result = categoriesQuery.result.map(
-        (x) =>
+        (x, i) =>
           ({
             type: "space.roomy.category",
-            id: x.name,
+            // Add an index to the ID to prevent Svelte key errors when there are two categories
+            // with the same name.
+            id: x.name + '-' + i, 
             name: x.name,
             lastRead: 0,
             latestEntity: 0,
