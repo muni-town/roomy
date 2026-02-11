@@ -794,23 +794,30 @@ export class MessageSyncService {
    * @param decoded - The decoded Roomy event
    * @returns true if the event was handled, false otherwise
    */
-  async handleRoomyEvent(decoded: DecodedStreamEvent): Promise<boolean> {
+  async handleRoomyEvent(
+    decoded: DecodedStreamEvent,
+    batchId: Ulid,
+    isLastEvent: boolean,
+  ): Promise<boolean> {
     try {
       const { event } = decoded;
 
       // Handle createMessage
       if (event.$type === "space.roomy.message.createMessage.v0") {
-        console.log("handling message", event);
+        // console.log("handling message", event.id, event.$type);
         const messageOrigin = extractDiscordMessageOrigin(event);
 
         // Discord origin: register mapping and drop
         if (messageOrigin) {
           await this.repo.registerMapping(messageOrigin.snowflake, event.id);
+
+          if (isLastEvent)
+            this.dispatcher.toDiscord.push({ batchId, isLastEvent });
           return true; // Handled (Discord origin, no sync back)
         }
 
         // Roomy origin: queue for Discord sync
-        this.dispatcher.toDiscord.push(decoded);
+        this.dispatcher.toDiscord.push({ decoded, batchId, isLastEvent });
         console.log("pushed message to queue");
         return true;
       }
@@ -828,10 +835,14 @@ export class MessageSyncService {
         }
 
         // Discord origin: drop (already handled)
-        if (messageOrigin) return true;
+        if (messageOrigin) {
+          if (isLastEvent)
+            this.dispatcher.toDiscord.push({ batchId, isLastEvent });
+          return true;
+        }
 
         // Roomy origin: queue for Discord sync
-        this.dispatcher.toDiscord.push(decoded);
+        this.dispatcher.toDiscord.push({ decoded, batchId, isLastEvent });
         return true;
       }
 
@@ -846,10 +857,14 @@ export class MessageSyncService {
         const messageOrigin = extractDiscordMessageOrigin(event);
 
         // Discord origin: drop
-        if (messageOrigin) return true;
+        if (messageOrigin) {
+          if (isLastEvent)
+            this.dispatcher.toDiscord.push({ batchId, isLastEvent });
+          return true;
+        }
 
         // Roomy origin: queue for Discord sync
-        this.dispatcher.toDiscord.push(decoded);
+        this.dispatcher.toDiscord.push({ decoded, batchId, isLastEvent });
         return true;
       }
 

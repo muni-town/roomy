@@ -918,7 +918,11 @@ export class StructureSyncService {
    * @param decoded - The decoded Roomy event
    * @returns true if the event was handled, false otherwise
    */
-  async handleRoomyEvent(decoded: DecodedStreamEvent): Promise<boolean> {
+  async handleRoomyEvent(
+    decoded: DecodedStreamEvent,
+    batchId: Ulid,
+    isLastEvent: boolean,
+  ): Promise<boolean> {
     try {
       const { event } = decoded;
 
@@ -926,11 +930,13 @@ export class StructureSyncService {
         [
           "space.roomy.link.createRoomLink.v0",
           "space.roomy.room.createRoom.v0",
-          "space.roomy.room.deleteRoomy.v0",
-          "space.roomy.room.updateSidebar.v0",
+          "space.roomy.room.deleteRoom.v0",
+          "space.roomy.space.updateSidebar.v0",
         ].includes(event.$type)
       ) {
         const roomOrigin = extractDiscordOrigin(event);
+
+        // console.log("handling structure event", event);
 
         // Handle deleteRoom
         if (event.$type === "space.roomy.room.deleteRoom.v0") {
@@ -939,15 +945,23 @@ export class StructureSyncService {
           if (discordId) {
             await this.repo.unregisterMapping(discordId, event.roomId);
           }
+          if (isLastEvent)
+            this.dispatcher.toDiscord.push({ batchId, isLastEvent });
           if (roomOrigin) return true; // Handled (Discord origin, no sync back)
         }
 
         if (roomOrigin) {
-          console.log("registering roomOrigin", roomOrigin, event.id);
+          // console.log(
+          //   "registering roomOrigin room:",
+          //   roomOrigin.snowflake,
+          //   event.id,
+          // );
           await this.repo.registerMapping(
             getRoomKey(roomOrigin.snowflake),
             event.id,
           );
+          if (isLastEvent)
+            this.dispatcher.toDiscord.push({ batchId, isLastEvent });
           return true; // Handled (Discord origin, no sync back)
         }
 
@@ -961,6 +975,8 @@ export class StructureSyncService {
             const linkKey = `${parentRoomyId}:${roomLinkData.linkToRoom}`;
             await this.repo.setRoomLink(linkKey, event.id);
           }
+          if (isLastEvent)
+            this.dispatcher.toDiscord.push({ batchId, isLastEvent });
           return true; // Handled (Discord origin, no sync back)
         }
 
@@ -973,7 +989,8 @@ export class StructureSyncService {
           // don't return, queue for Discord sync (even if Discord-origin, sidebar should be synced to Discord)
         }
 
-        this.dispatcher.toDiscord.push(decoded);
+        console.log("pushing to Discord", event.id);
+        this.dispatcher.toDiscord.push({ decoded, batchId, isLastEvent });
 
         return true;
       }

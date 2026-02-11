@@ -6,7 +6,7 @@
  */
 
 import type { BridgeRepository } from "../repositories/index.js";
-import type { StreamDid } from "@roomy/sdk";
+import type { StreamDid, Ulid } from "@roomy/sdk";
 import {
   newUlid,
   UserDid,
@@ -503,15 +503,23 @@ export class ReactionSyncService {
    * @param decoded - The decoded Roomy event
    * @returns true if the event was handled, false otherwise
    */
-  async handleRoomyEvent(decoded: DecodedStreamEvent): Promise<boolean> {
+  async handleRoomyEvent(
+    decoded: DecodedStreamEvent,
+    batchId: Ulid,
+    isLastEvent: boolean,
+  ): Promise<boolean> {
     try {
       const { event } = decoded;
       const e = event as any;
 
       // Check for Discord origin
       const reactionOrigin = extractDiscordReactionOrigin(event);
-      if (reactionOrigin) return true; // Handled (Discord origin, no sync back)
-      this.dispatcher.toDiscord.push(decoded);
+      if (reactionOrigin) {
+        if (isLastEvent)
+          this.dispatcher.toDiscord.push({ batchId, isLastEvent });
+        return true;
+      } // Handled (Discord origin, no sync back)
+      this.dispatcher.toDiscord.push({ decoded, batchId, isLastEvent });
       return true;
     } catch (error) {
       console.error(`[ReactionSyncService] Error handling Roomy event:`, error);

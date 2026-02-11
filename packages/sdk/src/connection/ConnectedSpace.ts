@@ -449,7 +449,7 @@ export class ConnectedSpace {
   }
 
   /**
-   * Promise that resolves when backfill completes.
+   * Promise that resolves when backfill completes. Returns a unique batch ID for the final batch of backfilled events.
    */
   get doneBackfilling(): Promise<Ulid> {
     return this.#doneBackfilling.promise;

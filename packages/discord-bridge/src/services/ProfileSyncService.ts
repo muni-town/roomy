@@ -7,7 +7,7 @@
 
 import { avatarUrl } from "@discordeno/bot";
 import type { BridgeRepository } from "../repositories/index.js";
-import type { ConnectedSpace, StreamDid } from "@roomy/sdk";
+import type { ConnectedSpace, StreamDid, Ulid } from "@roomy/sdk";
 import {
   newUlid,
   type Did,
@@ -140,7 +140,11 @@ export class ProfileSyncService {
    * @param decoded - The decoded Roomy event
    * @returns true if the event was handled, false otherwise
    */
-  async handleRoomyEvent(decoded: DecodedStreamEvent): Promise<boolean> {
+  async handleRoomyEvent(
+    decoded: DecodedStreamEvent,
+    batchId: Ulid,
+    isLastEvent: boolean,
+  ): Promise<boolean> {
     try {
       const { event } = decoded;
 

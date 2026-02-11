@@ -3,17 +3,17 @@ import {
   desiredProperties,
   DiscordBot,
   DiscordEvent,
-} from "../discord/types.js";
-import { initRoomyClient } from "../roomy/client";
+} from "./discord/types.js";
+import { initRoomyClient } from "./roomy/client.js";
 import { createBot, Intents, MessageFlags } from "@discordeno/bot";
-import { DISCORD_TOKEN } from "../env";
-import { tracer, setDiscordAttrs, recordError } from "../tracing.js";
+import { DISCORD_TOKEN } from "./env.js";
+import { tracer, setDiscordAttrs, recordError } from "./tracing.js";
 import {
   handleSlashCommandInteraction,
   slashCommands,
-} from "../discord/slashCommands";
+} from "./discord/slashCommands.js";
 import { Deferred } from "@roomy/sdk";
-import { registeredBridges } from "../repositories/LevelDBBridgeRepository";
+import { registeredBridges } from "./repositories/LevelDBBridgeRepository.js";
 import { Bridge } from "./Bridge";
 
 type BridgeOrchestratorState =
@@ -238,6 +238,8 @@ export class BridgeOrchestrator {
       );
       return;
     }
+
+    console.log("handling Discord event", eventName, data);
 
     await tracer.startActiveSpan(`bridge.${eventName}`, async (span) => {
       setDiscordAttrs(span, { guildId: data.guildId! });

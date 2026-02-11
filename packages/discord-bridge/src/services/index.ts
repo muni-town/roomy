@@ -20,8 +20,4 @@ export { ReactionSyncService } from "./ReactionSyncService.js";
 export { StructureSyncService } from "./StructureSyncService.js";
 
 export { MessageSyncService } from "./MessageSyncService.js";
-export type {
-  DiscordToRoomyResult,
-} from "./MessageSyncService.js";
-
-export { Bridge } from "./Bridge.js";
+export type { DiscordToRoomyResult } from "./MessageSyncService.js";

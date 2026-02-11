@@ -5,7 +5,7 @@ import { createServer } from "http";
 import { PORT } from "./env.js";
 import { trace } from "@opentelemetry/api";
 import { StreamDid, modules } from "@roomy/sdk";
-import { BridgeOrchestrator } from "./services/BridgeOrchestrator.js";
+import { BridgeOrchestrator } from "./BridgeOrchestrator.js";
 
 const tracer = trace.getTracer("api");
 

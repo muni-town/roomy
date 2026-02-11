@@ -34,8 +34,7 @@ import {
   initRoomyClient,
   getRoomyClient as getBridgeRoomyClient,
 } from "../../../src/roomy/client.js";
-import type { GuildContext } from "../../../src/types.js";
-import { Bridge } from "../../../src/services/Bridge.js";
+import { Bridge } from "../../../src/Bridge.js";
 
 /**
  * Environment variables for E2E tests.

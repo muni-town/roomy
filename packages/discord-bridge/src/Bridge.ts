@@ -5,7 +5,7 @@
  * delegating to the appropriate domain service.
  */
 
-import type { BridgeRepository } from "../repositories/index.js";
+import type { BridgeRepository } from "./repositories/index.js";
 import {
   modules,
   ConnectedSpace,
@@ -19,14 +19,20 @@ import type {
   StreamIndex,
   Ulid,
 } from "@roomy/sdk";
-import type { DiscordBot, DiscordEvent } from "../discord/types.js";
-import { MessageSyncService } from "./MessageSyncService.js";
-import { ReactionSyncService } from "./ReactionSyncService.js";
-import { ProfileSyncService, type DiscordUser } from "./ProfileSyncService.js";
-import { StructureSyncService } from "./StructureSyncService.js";
-import { getRepo } from "../repositories/LevelDBBridgeRepository.js";
-import { recordError, setRoomyAttrs, tracer } from "../tracing.js";
-import { createDispatcher, EventDispatcher } from "../dispatcher.js";
+import type { DiscordBot, DiscordEvent } from "./discord/types.js";
+import { MessageSyncService } from "./services/MessageSyncService.js";
+import { ReactionSyncService } from "./services/ReactionSyncService.js";
+import {
+  ProfileSyncService,
+  type DiscordUser,
+} from "./services/ProfileSyncService.js";
+import { StructureSyncService } from "./services/StructureSyncService.js";
+import { getRepo } from "./repositories/LevelDBBridgeRepository.js";
+import { recordError, setRoomyAttrs, tracer } from "./tracing.js";
+import { createDispatcher, EventDispatcher } from "./dispatcher.js";
+import { EventCallbackMeta } from "@roomy/sdk";
+import { Deferred } from "@roomy/sdk";
+import { Event } from "@roomy/sdk";
 
 type BridgeState =
   | {
@@ -34,8 +40,9 @@ type BridgeState =
     }
   | {
       state: "backfillDiscordAndSyncToRoomy";
+      lastBatchId: Ulid;
     }
-  | { state: "syncRoomyToDiscord" }
+  | { state: "syncRoomyToDiscord"; lastBatchId: Ulid }
   | {
       state: "listening";
     };
@@ -71,7 +78,7 @@ export class Bridge {
     this.repo = repo;
 
     // Create dispatcher
-    this.dispatcher = createDispatcher(connectedSpace, this.state);
+    this.dispatcher = createDispatcher();
 
     // Create services (order matters for dependencies)
     this.profileSync = new ProfileSyncService(
@@ -104,14 +111,9 @@ export class Bridge {
       bot,
     );
 
-    // Register services with dispatcher for Roomy → Discord sync
-    this.dispatcher.registerDiscordSyncService(this.reactionSync);
-    this.dispatcher.registerDiscordSyncService(this.structureSync);
-    this.dispatcher.registerDiscordSyncService(this.messageSync);
-    // We don't need ProfileSync to sync anything directly to Discord, it only populates db for other services to consume
-
     this.backfillRoomyAndSubscribe();
     this.backfillDiscordAndSyncToRoomy();
+    this.syncRoomyToDiscord();
   }
 
   /**
@@ -190,7 +192,7 @@ export class Bridge {
     guildId: bigint;
     client: RoomyClient;
   }): Promise<Bridge> {
-    const { spaceId, bot, guildId, client } = options;
+    const { spaceId, client } = options;
 
     console.log(`Connecting to space ${spaceId}...`);
 
@@ -223,7 +225,7 @@ export class Bridge {
     await this.repo.delete();
   }
 
-  /** Subscribe  resuming from stored cursor. */
+  /** Subscribe resuming from stored cursor. */
   backfillRoomyAndSubscribe() {
     return tracer.startActiveSpan(
       "leaf.stream.subscribe",
@@ -254,7 +256,14 @@ export class Bridge {
                 setRoomyAttrs(backfillSpan, {
                   spaceId: this.connectedSpace.streamDid,
                 });
-                await this.connectedSpace.doneBackfilling;
+
+                const lastBatchId = await this.connectedSpace.doneBackfilling;
+
+                this.state.current = {
+                  state: "backfillDiscordAndSyncToRoomy",
+                  lastBatchId,
+                };
+
                 backfillSpan.setAttribute("backfill.status", "complete");
               } catch (e) {
                 recordError(backfillSpan, e);
@@ -268,7 +277,7 @@ export class Bridge {
             `Backfill complete for space ${this.connectedSpace.streamDid}`,
           );
           console.log(`Subscribed to space ${this.connectedSpace.streamDid}`);
-          this.state.current = { state: "backfillDiscordAndSyncToRoomy" };
+
           span.setAttribute("subscription.status", "connected");
         } catch (e) {
           recordError(span, e);
@@ -280,8 +289,67 @@ export class Bridge {
     );
   }
 
+  /**
+   * Handle a batch of Roomy events from the subscription stream.
+   * No branching on backfill - single code path for all events.
+   *
+   * Phase 1: Populate mappings + queue Roomy-origin events
+   * Phase 3: Process queued Roomy-origin events
+   *
+   * @param events - Batch of decoded Roomy events
+   */
+  async handleRoomyEvents(
+    events: DecodedStreamEvent[],
+    meta: EventCallbackMeta,
+  ): Promise<void> {
+    // console.log("handling Roomy events", events);
+    let maxIdx = 0;
+
+    events.forEach(async (decodedEvent, i) => {
+      const { idx } = decodedEvent;
+      const { batchId } = meta;
+      maxIdx = Math.max(maxIdx, idx);
+
+      const isLastEvent = i + 1 === events.length;
+
+      // transition to 'listening' when last batch from Roomy is processed
+
+      // Route to services (first one to handle wins)
+      // Order matters: profile → structure → message → reaction
+      // Services handle Discord-origin events (register mappings, drop) and
+      // queue Roomy-origin events (push to dispatcher.toDiscord for Phase 3)
+      (await this.profileSync.handleRoomyEvent(
+        decodedEvent,
+        batchId,
+        isLastEvent,
+      )) ||
+        (await this.structureSync.handleRoomyEvent(
+          decodedEvent,
+          batchId,
+          isLastEvent,
+        )) ||
+        (await this.messageSync.handleRoomyEvent(
+          decodedEvent,
+          batchId,
+          isLastEvent,
+        )) ||
+        (await this.reactionSync.handleRoomyEvent(
+          decodedEvent,
+          batchId,
+          isLastEvent,
+        ));
+    });
+
+    // Update cursor to highest idx in batch
+    if (maxIdx > 0) {
+      await this.repo.setCursor(this.connectedSpace.streamDid, maxIdx);
+    }
+  }
+
   async backfillDiscordAndSyncToRoomy() {
-    await this.state.transitionedTo("backfillDiscordAndSyncToRoomy");
+    const current = await this.state.transitionedTo(
+      "backfillDiscordAndSyncToRoomy",
+    );
     console.log("Starting Discord backfill (Phase 2)");
 
     try {
@@ -318,68 +386,106 @@ export class Bridge {
         await this.reactionSync.backfillToRoomy(textChannelIds);
       console.log(`[Bridge] Synced ${reactionCount} reactions`);
 
-      // Flush any remaining batched events
-      await this.dispatcher.flushRoomy();
-
       console.log("[Bridge] Discord backfill complete");
 
       // Transition to Phase 3
-      this.state.current = { state: "syncRoomyToDiscord" };
-      await this.syncRoomyToDiscord();
-      this.state.current = { state: "listening" };
+      this.state.current = {
+        state: "syncRoomyToDiscord",
+        lastBatchId: current.lastBatchId,
+      };
     } catch (error) {
       console.error("[Bridge] Error during Discord backfill:", error);
       throw error;
     }
   }
 
-  /**
-   * Handle a batch of Roomy events from the subscription stream.
-   * No branching on backfill - single code path for all events.
-   *
-   * Phase 1: Populate mappings + queue Roomy-origin events
-   * Phase 3: Process queued Roomy-origin events
-   *
-   * @param events - Batch of decoded Roomy events
-   */
-  async handleRoomyEvents(events: DecodedStreamEvent[]): Promise<void> {
-    console.log("handling Roomy events", events);
-    let maxIdx = 0;
+  syncDiscordToRoomy() {
+    const batchSize = 100;
 
-    for (const decodedEvent of events) {
-      const { idx } = decodedEvent;
-      maxIdx = Math.max(maxIdx, idx);
+    // Internal batch queue for Discord → Roomy events
+    const batchQueue: Event[] = [];
 
-      // Route to services (first one to handle wins)
-      // Order matters: profile → structure → message → reaction
-      // Services handle Discord-origin events (register mappings, drop) and
-      // queue Roomy-origin events (push to dispatcher.toDiscord for Phase 3)
-      (await this.profileSync.handleRoomyEvent(decodedEvent)) ||
-        (await this.structureSync.handleRoomyEvent(decodedEvent)) ||
-        (await this.messageSync.handleRoomyEvent(decodedEvent)) ||
-        (await this.reactionSync.handleRoomyEvent(decodedEvent));
-    }
+    /**
+     * Flush the batch queue to Roomy.
+     */
+    const flushBatch = async (): Promise<void> => {
+      if (batchQueue.length === 0) return;
 
-    // Update cursor to highest idx in batch
-    if (maxIdx > 0) {
-      await this.repo.setCursor(this.connectedSpace.streamDid, maxIdx);
-    }
+      const events = batchQueue.splice(0, batchQueue.length);
+      await this.connectedSpace.sendEvents(events);
+      console.log(
+        `[Dispatcher] Flushed batch of ${events.length} events to Roomy`,
+      );
+    };
+
+    /**
+     * Consumer loop for Discord → Roomy events.
+     * Batches during backfill, sends immediately during listening.
+     */
+    (async () => {
+      for await (const event of this.dispatcher.toRoomy) {
+        const currentState = this.state.current.state;
+
+        // During Discord backfill: batch events
+        if (currentState === "backfillDiscordAndSyncToRoomy") {
+          batchQueue.push(event);
+
+          // Auto-flush when batch size reached
+          if (batchQueue.length >= batchSize) {
+            await flushBatch();
+          }
+        }
+        // During listening: send immediately
+        else if (currentState === "listening") {
+          await this.connectedSpace.sendEvent(event);
+        }
+        // Other states: shouldn't be sending to Roomy
+        else {
+          console.warn(
+            `[Dispatcher] Unexpected state for toRoomy: ${currentState}, discarding event`,
+          );
+        }
+      }
+    })();
+
+    this.state.transitionedTo("syncRoomyToDiscord").then(() => {
+      flushBatch();
+    });
   }
 
   /**
    * Phase 3: Sync Roomy-origin data to Discord.
    * The dispatcher processes queued Roomy-origin events automatically.
    */
-  async syncRoomyToDiscord(): Promise<void> {
-    await this.state.transitionedTo("syncRoomyToDiscord");
-    console.log("Starting Roomy → Discord sync (Phase 3)");
+  syncRoomyToDiscord() {
+    /**
+     * Consumer loop for Roomy → Discord events.
+     * Waits for Phase 3, then distributes events to registered services.
+     */
+    (async () => {
+      const current = await this.state.transitionedTo("syncRoomyToDiscord");
+      console.log("Starting Roomy → Discord sync (Phase 3)");
+      for await (const { decoded, batchId, isLastEvent } of this.dispatcher
+        .toDiscord) {
+        console.log("handling Roomy event", decoded, batchId, isLastEvent);
+        try {
+          if (decoded) {
+            // Distribute events to services
+            await this.reactionSync.syncToDiscord(decoded);
+            await this.structureSync.syncToDiscord(decoded);
+            await this.messageSync.syncToDiscord(decoded);
+            // We don't need ProfileSync to sync anything directly to Discord, it only populates db for other services to consume
+            console.log("handled", decoded.event.id);
+          }
 
-    // The dispatcher's toDiscord channel consumer loop is already running
-    // and will process queued events. We just need to wait a bit for it to complete
-    // or implement a proper signal/ready mechanism.
-
-    // For now, transition to listening state
-    await this.state.transitionedTo("listening");
-    console.log("[Bridge] Transitioned to listening state");
+          if (current.lastBatchId === batchId && isLastEvent) {
+            console.log("Finished reconciliation, listening to new events");
+            this.state.current = { state: "listening" };
+          }
+        } catch (error) {
+          console.error(`[Dispatcher] Error in service.syncToDiscord:`, error);
+        }
+      }
+    })();
   }
 }

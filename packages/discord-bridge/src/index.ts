@@ -6,7 +6,7 @@ import "dotenv/config";
 // import { startRoomyWatcher } from "./roomy/from.js";
 import { startApi } from "./api.js";
 import { trace } from "@opentelemetry/api";
-import { BridgeOrchestrator } from "./services/BridgeOrchestrator.js";
+import { BridgeOrchestrator } from "./BridgeOrchestrator.js";
 
 const tracer = trace.getTracer("index");
 

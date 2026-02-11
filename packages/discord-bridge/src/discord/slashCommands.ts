@@ -15,7 +15,7 @@ import {
 // } from "../repositories/db.js";
 // import { getRoomyClient, subscribeToSpace } from "../roomy/client.js";
 import { StreamDid } from "@roomy/sdk";
-import { Bridge } from "../services/Bridge.js";
+import { Bridge } from "../Bridge.js";
 import { registeredBridges } from "../repositories/LevelDBBridgeRepository.js";
 import { InteractionProperties } from "./types.js";
 
