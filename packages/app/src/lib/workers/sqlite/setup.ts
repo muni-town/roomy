@@ -1,3 +1,11 @@
+// Demote sqlite warning messages to debug level to avoid unhelpful warning about headers and SQLive
+// OPFS VFS install failure polluting the logs & telemetry.
+(globalThis as any).sqlite3ApiConfig = {
+  warn: (...args: any[]) => {
+    console.debug("[sqliteWarning]", ...args);
+  },
+};
+
 import initSqlite3, {
   type Database,
   type OpfsSAHPoolDatabase,
@@ -7,6 +15,14 @@ import initSqlite3, {
 import type { SqlStatement } from "./types";
 import { udfs } from "./udf";
 import { trace } from "@opentelemetry/api";
+
+// Demote sqlite warning messages to debug level to avoid unhelpful warning about headers and SQLive
+// OPFS VFS install failure polluting the logs & telemetry.
+(globalThis as any).sqlite3ApiConfig = {
+  warn: (...args: any[]) => {
+    console.debug("[sqliteWarning]", ...args);
+  },
+};
 
 let sqlite3: Sqlite3Static | null = null;
 let db: OpfsSAHPoolDatabase | Database | null = null;

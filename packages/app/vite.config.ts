@@ -23,10 +23,11 @@ export default defineConfig({
       // workers, which is used by the SQLite VFS.
       name: "cross-origin-isolation-headers",
       configureServer(server) {
-        server.middlewares.use((_req, res, next) => {
-          res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
-          res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
-          res.setHeader("Permissions-Policy", "cross-origin-isolated=*");
+        server.middlewares.use((_req, _res, next) => {
+          // Disable these headers for now because we don't expect to have them in production.
+          // res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
+          // res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+          // res.setHeader("Permissions-Policy", "cross-origin-isolated=*");
           next();
         });
       },
