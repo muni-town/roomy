@@ -136,7 +136,7 @@ export function logMaterializationResult(
 
   // Log warnings for issues
   if (warnings.stashedEvents?.length) {
-    console.warn(`[BW] Stashed events waiting for dependencies:`, {
+    console.debug(`[BW] Stashed events waiting for dependencies:`, {
       streamId,
       count: warnings.stashedEvents.length,
       events: warnings.stashedEvents.map((e) => ({
