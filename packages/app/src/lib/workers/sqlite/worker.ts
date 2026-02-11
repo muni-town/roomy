@@ -630,7 +630,7 @@ class SqliteWorkerSupervisor {
         warnings.failedEvents?.length ||
         warnings.failedStatements?.length
       ) {
-        console.warn("[SqW] Materialization issues detected:", {
+        console.debug("[SqW] materialization info:", {
           batchId: batch.batchId,
           streamId: batch.streamId,
           summary,
