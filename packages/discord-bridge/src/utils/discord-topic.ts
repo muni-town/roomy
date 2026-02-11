@@ -5,6 +5,8 @@
  * to survive bridge restarts and prevent duplicate channel creation.
  */
 
+import { Ulid } from "@roomy/sdk";
+
 /**
  * Topic marker prefix for Roomy-synced channels.
  * Format: [Synced from Roomy: <room-ulid>]
@@ -22,7 +24,7 @@ const ULID_PATTERN = /[0-9A-HJKMNP-TV-Z]{26}/;
  * Full sync marker regex for extraction.
  */
 const SYNC_MARKER_REGEX = new RegExp(
-  `\\${ROOMY_SYNC_MARKER_PREFIX}(${ULID_PATTERN.source})\\${ROOMY_SYNC_MARKER_SUFFIX}`
+  `\\${ROOMY_SYNC_MARKER_PREFIX}(${ULID_PATTERN.source})\\${ROOMY_SYNC_MARKER_SUFFIX}`,
 );
 
 /**
@@ -45,10 +47,13 @@ const SYNC_MARKER_REGEX = new RegExp(
  */
 export function extractRoomyRoomId(
   topic: string | null | undefined,
-): string | null {
+): Ulid | null {
   if (!topic) return null;
   const match = topic.match(SYNC_MARKER_REGEX);
-  return match ? (match[1] ?? null) : null;
+
+  return match && match[1] && Ulid.allows(match[1])
+    ? Ulid.assert(match[1])
+    : null;
 }
 
 /**
