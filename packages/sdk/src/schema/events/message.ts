@@ -11,6 +11,7 @@ import { defineEvent, ensureEntity } from "./utils";
 import { sql } from "../../utils";
 import { decodeTime } from "ulidx";
 import { fromBytes } from "@atcute/cbor";
+import { DiagConsoleLogger } from "@opentelemetry/api";
 
 const CreateMessageSchema = type({
   $type: "'space.roomy.message.createMessage.v0'",
@@ -196,13 +197,15 @@ export const EditMessage = defineEvent(
       return [];
     }
 
+    // TODO: fix the issue wehre we have to manually cast event.body.data
+
     const statements = [
       ensureEntity(streamId, event.id, event.room),
       event.body.mimeType == "text/x-dmp-patch"
         ? sql`
           update comp_content
           set
-            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode(fromBytes(event.body.data))}) as blob),
+            data = cast(apply_dmp_patch(cast(data as text), ${new TextDecoder().decode((event.body.data as { buf: Uint8Array }).buf)}) as blob),
             last_edit = ${event.id}
           where
             entity = ${event.messageId}
