@@ -63,13 +63,19 @@ async function setupTestSpace(): Promise<ConnectedSpace> {
 
 // Helper: Create a test room
 async function setupTestRoom(): Promise<string> {
-  const result = await createRoom(testSpace, {
+  const events = createRoom({
     kind: "space.roomy.channel",
     name: `test-channel-${Date.now()}`,
   });
 
-  console.log("Created test room:", result.id);
-  return result.id;
+  // Send the events to the space
+  for (const event of events) {
+    await testSpace.sendEvent(event);
+  }
+
+  const roomId = events[0].id;
+  console.log("Created test room:", roomId);
+  return roomId;
 }
 
 beforeAll(async () => {

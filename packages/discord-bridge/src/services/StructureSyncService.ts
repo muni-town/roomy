@@ -52,10 +52,22 @@ interface CreateRoomInfo {
 }
 
 /**
+ * Cached updateSidebar event data
+ */
+interface UpdateSidebarInfo {
+  categories: {
+    name: string;
+    children: Ulid[];
+  }[];
+}
+
+/**
  * Service for syncing room structure between Discord and Roomy.
  */
 export class StructureSyncService {
-  private createRoomCache: Map<Ulid, CreateRoomInfo> | null = null;
+  private createRoomCache = new Map<Ulid, CreateRoomInfo>();
+  private updateSidebarCache: UpdateSidebarInfo | null = null;
+  private discordCategoryNames = new Map<string, string>(); // <snowflakeString, name>
 
   constructor(
     private readonly repo: BridgeRepository,
@@ -71,35 +83,7 @@ export class StructureSyncService {
    * Call this between tests to ensure fresh state.
    */
   clearCache(): void {
-    this.createRoomCache = null;
-  }
-
-  /**
-   * Build cache of all createRoom events.
-   * Fetches from event stream once, then caches for reuse.
-   */
-  private async buildCreateRoomCache(): Promise<Map<Ulid, CreateRoomInfo>> {
-    if (this.createRoomCache) {
-      return this.createRoomCache;
-    }
-
     this.createRoomCache = new Map();
-    // Fetch smaller batch for E2E tests (most test spaces have <50 events)
-    const allEvents = await this.connectedSpace.fetchEvents(1 as any, 1000);
-
-    for (const { event } of allEvents) {
-      if (event.$type === "space.roomy.room.createRoom.v0") {
-        const e = event as any;
-        const hasOrigin =
-          DISCORD_EXTENSION_KEYS.ROOM_ORIGIN in (e.extensions || {});
-        this.createRoomCache.set(e.id, {
-          name: e.name || `roomy-${e.id.slice(0, 8)}`,
-          hasDiscordOrigin: hasOrigin,
-        });
-      }
-    }
-
-    return this.createRoomCache;
   }
 
   /**
@@ -121,37 +105,84 @@ export class StructureSyncService {
   async handleDiscordChannelCreate(
     discordChannel: ChannelProperties | Camelize<DiscordChannel>,
   ): Promise<string> {
+    console.log("handle discord channel create", discordChannel.id);
     // Idempotency check (use room: prefix for channels/threads)
     const channelIdStr = discordChannel.id.toString();
     const roomKey = getRoomKey(channelIdStr);
-    const existing = await this.repo.getRoomyId(roomKey);
-    if (existing) return existing;
+    let roomUlid = await this.repo.getRoomyId(roomKey);
+
+    const inSidebar = this.updateSidebarCache?.categories.reduce(
+      (prev, current) => current.children.includes(roomUlid as Ulid),
+      false,
+    );
+
+    if (roomUlid && inSidebar) return roomUlid;
 
     // Call SDK operation (pure function from @roomy/sdk)
-    const result = await createRoom(this.connectedSpace, {
-      kind: "space.roomy.channel",
-      name: discordChannel.name,
-      extensions: {
-        [DISCORD_EXTENSION_KEYS.ROOM_ORIGIN]: {
-          $type: DISCORD_EXTENSION_KEYS.ROOM_ORIGIN,
-          snowflake: channelIdStr,
-          guildId: this.guildId.toString(),
+    if (!roomUlid) {
+      console.log("creating room", discordChannel.id);
+      const createRoomEvent = createRoom({
+        kind: "space.roomy.channel",
+        name: discordChannel.name,
+        extensions: {
+          [DISCORD_EXTENSION_KEYS.ROOM_ORIGIN]: {
+            $type: DISCORD_EXTENSION_KEYS.ROOM_ORIGIN,
+            snowflake: channelIdStr,
+            guildId: this.guildId.toString(),
+          },
         },
-      },
-    });
+      });
+      roomUlid = createRoomEvent[0]!.id;
+      createRoomEvent.forEach((e) => this.dispatcher.toRoomy.push(e));
+      // Register mapping
+      await this.repo.registerMapping(roomKey, roomUlid);
 
-    // Register mapping
-    await this.repo.registerMapping(roomKey, result.id);
-
-    // Verify registration worked
-    const verify = await this.repo.getRoomyId(roomKey);
-    if (!verify) {
-      console.error(
-        `Failed to register mapping for ${roomKey} -> ${result.id}`,
-      );
+      // Verify registration worked
+      const verify = await this.repo.getRoomyId(roomKey);
+      if (!verify) {
+        console.error(
+          `Failed to register mapping for ${roomKey} -> ${roomUlid}`,
+        );
+      }
     }
 
-    return result.id;
+    // construct new Roomy sidebar, from cache if existing
+    const newSidebarCategories = this.updateSidebarCache
+      ? [...this.updateSidebarCache.categories]
+      : [];
+
+    // if Discord channel has category, get name from cache
+    const categoryName =
+      (discordChannel.parentId &&
+        this.discordCategoryNames.get(discordChannel.id.toString())) ||
+      "general";
+
+    // check if category exists on sidebar already
+    const existingCategory = newSidebarCategories.find(
+      (c) => c.name === categoryName,
+    );
+
+    // add the room (and category if needed) to the categories array
+    existingCategory
+      ? existingCategory.children.push(roomUlid as Ulid)
+      : newSidebarCategories.push({
+          name: categoryName,
+          children: [roomUlid as Ulid],
+        });
+
+    const oldHash = await this.repo.getSidebarHash();
+    const newHash = computeSidebarHash(newSidebarCategories);
+
+    if (newHash !== oldHash) {
+      // push the sidebar update
+      this.dispatcher.toRoomy.push({
+        id: newUlid(),
+        $type: "space.roomy.space.updateSidebar.v0",
+        categories: newSidebarCategories,
+      });
+    }
+
+    return roomUlid;
   }
 
   /**
@@ -189,7 +220,7 @@ export class StructureSyncService {
     }
 
     // Call SDK operation to create thread (handles both room + link creation)
-    const result = await createThread(this.connectedSpace, {
+    const createThreadEvents = createThread({
       linkToRoom: parentRoomyId as Ulid,
       name: discordThread.name,
       extensions: {
@@ -201,21 +232,25 @@ export class StructureSyncService {
       },
     });
 
+    createThreadEvents.forEach((e) => this.dispatcher.toRoomy.push(e));
+
+    const threadId = createThreadEvents[0]!.id;
+
     // Get the link event ID (it's the second event sent by createThread)
     // createThread sends: createRoom event, then createRoomLink event
     // The createThread SDK operation returns only the thread ID, so we need to infer the link
     // We'll register the link mapping using a key pattern
 
     // Register link mapping
-    const linkKey = `${parentRoomyId}:${result.id}`;
+    const linkKey = `${parentRoomyId}:${threadId}`;
     // The link event ID would be returned by SDK in a real implementation
     // For now, we use the thread ID as a placeholder (this will be tracked by subscription handler)
-    await this.repo.setRoomLink(linkKey, result.id);
+    await this.repo.setRoomLink(linkKey, threadId);
 
     // Register thread mapping
-    await this.repo.registerMapping(threadRoomKey, result.id);
+    await this.repo.registerMapping(threadRoomKey, threadId);
 
-    return result.id;
+    return threadId;
   }
 
   /**
@@ -235,34 +270,6 @@ export class StructureSyncService {
     channels: Camelize<DiscordChannel>[],
     categories: Camelize<DiscordChannel>[],
   ): Promise<void> {
-    // STEP 1: Collect all Roomy room IDs that don't have discordOrigin (preserve these)
-    // Fetch all createRoom events to find rooms without discordOrigin
-    const allEvents = await this.connectedSpace.fetchEvents(1 as any, 1000);
-    const preservedRoomIds = new Set<Ulid>();
-    const discordSyncedRoomIds = new Set<Ulid>();
-
-    for (const { event } of allEvents) {
-      if (event.$type === "space.roomy.room.createRoom.v0") {
-        const e = event as any;
-        const hasOrigin =
-          DISCORD_EXTENSION_KEYS.ROOM_ORIGIN in (e.extensions || {});
-        const isChannel = e.kind === "space.roomy.channel";
-
-        if (isChannel && !hasOrigin) {
-          // This is a Roomy-native channel (like 'lobby'), preserve it
-          preservedRoomIds.add(e.id);
-        } else if (isChannel && hasOrigin) {
-          // This was synced from Discord, track it
-          discordSyncedRoomIds.add(e.id);
-        }
-      }
-    }
-
-    console.log(
-      `Found ${preservedRoomIds.size} Roomy-native rooms to preserve (e.g., 'lobby'), ${discordSyncedRoomIds.size} Discord-synced rooms`,
-    );
-
-    // STEP 2: Build Discord channel map
     const categoryChildren = new Map<string, Ulid[]>();
     const uncategorizedChannels: Ulid[] = [];
 
@@ -302,19 +309,10 @@ export class StructureSyncService {
       }
     }
 
+    console.log("category children", categoryChildren);
+
     // STEP 3: Build categories array for UpdateSidebar event
     const sidebarCategories: { name: string; children: Ulid[] }[] = [];
-
-    // Add preserved Roomy rooms first (in a "Roomy" category)
-    if (preservedRoomIds.size > 0) {
-      sidebarCategories.push({
-        name: "Roomy",
-        children: Array.from(preservedRoomIds),
-      });
-      console.log(
-        `Added ${preservedRoomIds.size} preserved Roomy rooms to sidebar`,
-      );
-    }
 
     // Add uncategorized Discord channels to "general" category
     if (uncategorizedChannels.length > 0) {
@@ -326,6 +324,11 @@ export class StructureSyncService {
 
     // Add each Discord category (skip empty ones)
     for (const category of categories) {
+      const categoryName = category.name || "Unnamed Category";
+
+      // store name in cache
+      this.discordCategoryNames.set(category.id, categoryName);
+
       const children = categoryChildren.get(category.id.toString()) || [];
       if (children.length > 0) {
         sidebarCategories.push({
@@ -344,7 +347,7 @@ export class StructureSyncService {
     }
 
     console.log(
-      `Updating sidebar with ${sidebarCategories.length} categories (${preservedRoomIds.size} Roomy, ${uncategorizedChannels.length} uncategorized Discord, ${categoryChildren.size} Discord categories)`,
+      `Updating sidebar with ${sidebarCategories.length} categories, ${uncategorizedChannels.length} uncategorized Discord, ${categoryChildren.size} Discord categories)`,
     );
 
     // Send sidebar update event
@@ -487,21 +490,16 @@ export class StructureSyncService {
    * await service.handleRoomySidebarUpdate(roomyEvent);
    * ```
    */
-  async handleRoomySidebarUpdate(event: Event): Promise<void> {
-    if (!this.bot) {
-      console.warn("Bot not available, skipping Roomy → Discord sidebar sync");
-      return;
-    }
-
-    const sidebar = event as {
-      categories: Array<{ name: string; children: Ulid[] }>;
-    };
-
+  async handleRoomySidebarUpdate(
+    sidebar: Event<"space.roomy.space.updateSidebar.v0">,
+  ): Promise<void> {
     // Collect all room IDs from sidebar
     const allRoomIds: Ulid[] = [];
     for (const category of sidebar.categories) {
       allRoomIds.push(...category.children);
     }
+
+    this.updateSidebarCache = { categories: sidebar.categories };
 
     if (allRoomIds.length === 0) {
       console.log("No rooms in sidebar, skipping sync");
@@ -509,7 +507,7 @@ export class StructureSyncService {
     }
 
     // Fetch room names from event stream
-    const roomNames = await this.fetchRoomNames(allRoomIds);
+    const roomNames = this.createRoomCache;
 
     // Process each room
     let createdCount = 0;
@@ -525,7 +523,7 @@ export class StructureSyncService {
 
       const existingDiscordId = await this.repo.getDiscordId(roomyRoomId);
       const roomName =
-        roomNames.get(roomyRoomId) || `roomy-${roomyRoomId.slice(0, 8)}`;
+        roomNames.get(roomyRoomId)?.name || `roomy-${roomyRoomId.slice(0, 8)}`;
 
       if (existingDiscordId) {
         await this.verifyOrCreateChannelWithName(roomyRoomId, roomName);
@@ -545,8 +543,7 @@ export class StructureSyncService {
    * Uses cached event data for performance.
    */
   private async hasDiscordOrigin(roomyRoomId: Ulid): Promise<boolean> {
-    const cache = await this.buildCreateRoomCache();
-    return cache.get(roomyRoomId)?.hasDiscordOrigin ?? false;
+    return this.createRoomCache.get(roomyRoomId)?.hasDiscordOrigin ?? false;
   }
 
   /**
@@ -573,6 +570,15 @@ export class StructureSyncService {
       const channel = await discordFetchChannel(this.bot, {
         channelId: BigInt(channelId),
       });
+
+      if (roomName.includes("roomy-")) {
+        console.warn(
+          "Attempted rename aborted: no name found in cache",
+          roomName,
+          roomyRoomId,
+        );
+        return;
+      }
 
       // Check for rename
       if (channel.name !== roomName) {
@@ -639,11 +645,6 @@ export class StructureSyncService {
     roomyRoomId: Ulid,
     newName: string,
   ): Promise<void> {
-    if (!this.bot) {
-      console.warn("Bot not available, skipping Roomy → Discord rename sync");
-      return;
-    }
-
     const discordId = await this.repo.getDiscordId(roomyRoomId);
     if (!discordId) return; // Not synced to Discord
 
@@ -688,26 +689,6 @@ export class StructureSyncService {
     // 3. Delete old category
     // For now, this is a no-op placeholder
     console.log(`Category rename not implemented: ${oldName} -> ${newName}`);
-  }
-
-  /**
-   * Fetch room names from event stream for given room IDs.
-   * Uses cached event data for performance.
-   */
-  private async fetchRoomNames(roomIds: Ulid[]): Promise<Map<Ulid, string>> {
-    if (roomIds.length === 0) return new Map();
-
-    const cache = await this.buildCreateRoomCache();
-    const nameMap = new Map<Ulid, string>();
-
-    for (const roomId of roomIds) {
-      const info = cache.get(roomId);
-      if (info) {
-        nameMap.set(roomId, info.name);
-      }
-    }
-
-    return nameMap;
   }
 
   /**
@@ -757,9 +738,10 @@ export class StructureSyncService {
     }
 
     // Get thread name from existing cache
-    const roomNames = await this.fetchRoomNames([threadRoomyId]);
+    const roomNames = this.createRoomCache;
     const threadName =
-      roomNames.get(threadRoomyId) || `roomy-${threadRoomyId.slice(0, 8)}`;
+      roomNames.get(threadRoomyId)?.name ||
+      `roomy-${threadRoomyId.slice(0, 8)}`;
 
     // Create Discord thread
     await this.createDiscordThreadFromRoomy(
@@ -857,15 +839,12 @@ export class StructureSyncService {
    * const count = await service.backfillToRoomy();
    * ```
    */
-  async backfillToRoomy(): Promise<number> {
-    if (!this.bot) {
-      console.warn(
-        "[StructureSyncService] Bot not available, skipping backfill",
-      );
-      return 0;
-    }
-
+  async backfillToRoomy(): Promise<{
+    textChannels: Camelize<DiscordChannel[]>;
+    syncedCount: number;
+  }> {
     let syncedCount = 0;
+    let textChannels: Camelize<DiscordChannel[]> = [];
 
     try {
       const channels = await this.bot.rest.getChannels(this.guildId.toString());
@@ -874,9 +853,7 @@ export class StructureSyncService {
         (c) => c.type === ChannelTypes.GuildCategory,
       );
 
-      const textChannels = channels.filter(
-        (c) => c.type === ChannelTypes.GuildText,
-      );
+      textChannels = channels.filter((c) => c.type === ChannelTypes.GuildText);
 
       for (const channel of textChannels) {
         await this.handleDiscordChannelCreate(channel);
@@ -908,7 +885,7 @@ export class StructureSyncService {
       );
     }
 
-    return syncedCount;
+    return { syncedCount, textChannels };
   }
 
   /**
@@ -926,29 +903,31 @@ export class StructureSyncService {
     try {
       const { event } = decoded;
 
-      if (
-        [
-          "space.roomy.link.createRoomLink.v0",
-          "space.roomy.room.createRoom.v0",
-          "space.roomy.room.deleteRoom.v0",
-          "space.roomy.space.updateSidebar.v0",
-        ].includes(event.$type)
-      ) {
-        const roomOrigin = extractDiscordOrigin(event);
+      const roomOrigin = extractDiscordOrigin(event);
 
-        // console.log("handling structure event", event);
-
-        // Handle deleteRoom
-        if (event.$type === "space.roomy.room.deleteRoom.v0") {
-          // Unregister mapping
-          const discordId = await this.repo.getDiscordId(event.roomId);
-          if (discordId) {
-            await this.repo.unregisterMapping(discordId, event.roomId);
-          }
-          if (isLastEvent)
-            this.dispatcher.toDiscord.push({ batchId, isLastEvent });
-          if (roomOrigin) return true; // Handled (Discord origin, no sync back)
+      // Handle deleteRoom
+      if (event.$type === "space.roomy.room.deleteRoom.v0") {
+        // Unregister mapping
+        const discordId = await this.repo.getDiscordId(event.roomId);
+        if (discordId) {
+          await this.repo.unregisterMapping(discordId, event.roomId);
         }
+        if (isLastEvent && roomOrigin)
+          this.dispatcher.toDiscord.push({ batchId, isLastEvent });
+        if (roomOrigin) return true; // Handled (Discord origin, no sync back)
+
+        console.log("pushing to Discord", event.id);
+        this.dispatcher.toDiscord.push({ decoded, batchId, isLastEvent });
+
+        return true;
+      }
+
+      if (event.$type === "space.roomy.room.createRoom.v0") {
+        // add name to cache
+        this.createRoomCache.set(event.id, {
+          name: event.name || `roomy-${event.id.slice(0, 8)}`,
+          hasDiscordOrigin: !!roomOrigin,
+        });
 
         if (roomOrigin) {
           // console.log(
@@ -964,7 +943,9 @@ export class StructureSyncService {
             this.dispatcher.toDiscord.push({ batchId, isLastEvent });
           return true; // Handled (Discord origin, no sync back)
         }
+      }
 
+      if (event.$type === "space.roomy.link.createRoomLink.v0") {
         const roomLinkData = extractDiscordRoomLinkOrigin(event);
         if (
           roomLinkData &&
@@ -979,7 +960,9 @@ export class StructureSyncService {
             this.dispatcher.toDiscord.push({ batchId, isLastEvent });
           return true; // Handled (Discord origin, no sync back)
         }
+      }
 
+      if (event.$type === "space.roomy.space.updateSidebar.v0") {
         const sidebarOrigin = extractDiscordSidebarOrigin(event);
         if (
           sidebarOrigin &&
@@ -989,11 +972,14 @@ export class StructureSyncService {
           // don't return, queue for Discord sync (even if Discord-origin, sidebar should be synced to Discord)
         }
 
+        this.updateSidebarCache = { categories: event.categories };
+
         console.log("pushing to Discord", event.id);
         this.dispatcher.toDiscord.push({ decoded, batchId, isLastEvent });
 
         return true;
       }
+
       return false;
     } catch (error) {
       console.error(

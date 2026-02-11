@@ -514,10 +514,16 @@ describe("E2E: Discord Channel Sync", () => {
       const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
 
       const uniqueName = `test-roomy-channel-${testId}`;
-      const roomResult = await createRoom(result.connectedSpace, {
+      const roomEvents = createRoom({
         kind: "space.roomy.channel",
         name: uniqueName,
       });
+
+      for (const event of roomEvents) {
+        await result.connectedSpace.sendEvent(event);
+      }
+
+      const roomResult = { id: roomEvents[0].id };
 
       const sidebarEvent = updateSidebarEvents([
         { name: "Test", children: [roomResult.id] },
@@ -615,10 +621,16 @@ describe("E2E: Discord Channel Sync", () => {
 
       // Create initial room
       const uniqueName = `original-name-${testId}`;
-      const roomResult = await createRoom(result.connectedSpace, {
+      const roomEvents = createRoom({
         kind: "space.roomy.channel",
         name: uniqueName,
       });
+
+      for (const event of roomEvents) {
+        await result.connectedSpace.sendEvent(event);
+      }
+
+      const roomResult = { id: roomEvents[0].id };
 
       const sidebarEvent = updateSidebarEvents([
         { name: "Test", children: [roomResult.id] },
@@ -672,10 +684,16 @@ describe("E2E: Discord Channel Sync", () => {
 
       const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
 
-      const roomResult = await createRoom(result.connectedSpace, {
+      const roomEvents = createRoom({
         kind: "space.roomy.channel",
         name: "test-idempotent-channel",
       });
+
+      for (const event of roomEvents) {
+        await result.connectedSpace.sendEvent(event);
+      }
+
+      const roomResult = { id: roomEvents[0].id };
 
       const sidebarEvent = updateSidebarEvents([
         { name: "Test", children: [roomResult.id] },
@@ -732,11 +750,17 @@ describe("E2E: Discord Channel Sync", () => {
       // 1. Create a Roomy room (without discordOrigin - simulating a room created in Roomy)
       const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
 
-      const roomResult = await createRoom(result.connectedSpace, {
+      const roomEvents = createRoom({
         kind: "space.roomy.channel",
         name: `test-topic-marker-${testId}`,
         description: "A test channel created in Roomy",
       });
+
+      for (const event of roomEvents) {
+        await result.connectedSpace.sendEvent(event);
+      }
+
+      const roomResult = { id: roomEvents[0].id };
 
       const roomyRoomId = roomResult.id;
 
@@ -797,13 +821,17 @@ describe("E2E: Discord Channel Sync", () => {
       const { createRoom, updateSidebarEvents } = await import("@roomy/sdk");
 
       const uniqueName = `test-recovery-channel-${testId}`;
-      const roomResult = await createRoom(result.connectedSpace, {
+      const roomEvents = createRoom({
         kind: "space.roomy.channel",
         name: uniqueName,
         description: "A test channel for recovery testing",
       });
 
-      const roomyRoomId = roomResult.id;
+      for (const event of roomEvents) {
+        await result.connectedSpace.sendEvent(event);
+      }
+
+      const roomyRoomId = roomEvents[0].id;
 
       // Update sidebar to include the new room
       const sidebarEvent = updateSidebarEvents([
@@ -970,11 +998,17 @@ describe("E2E: Discord Channel Sync", () => {
 
       // Create a Roomy-native room using the Roomy SDK
       const testRoomName = `Backfill Test Room ${testId}`;
-      const testRoomId = await createRoom(result.connectedSpace, {
+      const roomEvents = createRoom({
         kind: "space.roomy.channel",
         name: testRoomName,
         description: "Roomy-native room for backfill testing",
       });
+
+      for (const event of roomEvents) {
+        await result.connectedSpace.sendEvent(event);
+      }
+
+      const testRoomId = { id: roomEvents[0].id };
 
       console.log(
         `Created Roomy-native room: ${testRoomName} (${testRoomId.id})`,

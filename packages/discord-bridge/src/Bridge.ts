@@ -114,6 +114,7 @@ export class Bridge {
     this.backfillRoomyAndSubscribe();
     this.backfillDiscordAndSyncToRoomy();
     this.syncRoomyToDiscord();
+    this.syncDiscordToRoomy();
   }
 
   /**
@@ -357,22 +358,14 @@ export class Bridge {
       console.log(
         "[Bridge] Backfilling Discord structure (channels/threads)...",
       );
-      const structureCount = await this.structureSync.backfillToRoomy();
+      const { syncedCount: structureCount, textChannels } =
+        await this.structureSync.backfillToRoomy();
       console.log(`[Bridge] Synced ${structureCount} channels/threads`);
 
-      // Get all text channel IDs for message/reaction backfill
-      const channels = await this.bot.rest.getChannels(this.guildId.toString());
-      const textChannelIds: bigint[] = [];
-
-      for (const channel of Object.values(channels)) {
-        // Only text channels (type 0), not threads (11, 12), voice (2), categories (4), etc.
-        if (channel.type === 0) {
-          textChannelIds.push(BigInt(channel.id));
-        }
-      }
+      const textChannelIds = textChannels.map((tc) => BigInt(tc.id));
 
       console.log(
-        `[Bridge] Backfilling messages for ${textChannelIds.length} channels...`,
+        `[Bridge] Backfilling messages for ${textChannels.length} channels...`,
       );
 
       // Step 2: Backfill messages
@@ -413,17 +406,24 @@ export class Bridge {
 
       const events = batchQueue.splice(0, batchQueue.length);
       await this.connectedSpace.sendEvents(events);
+      console.log("sent events", events);
       console.log(
         `[Dispatcher] Flushed batch of ${events.length} events to Roomy`,
       );
     };
 
+    this.state.transitionedTo("syncRoomyToDiscord").then(() => {
+      flushBatch();
+    });
+
     /**
      * Consumer loop for Discord → Roomy events.
      * Batches during backfill, sends immediately during listening.
      */
+    console.log("starting consumer");
     (async () => {
       for await (const event of this.dispatcher.toRoomy) {
+        console.log("sending event to roomy", event);
         const currentState = this.state.current.state;
 
         // During Discord backfill: batch events
@@ -434,23 +434,13 @@ export class Bridge {
           if (batchQueue.length >= batchSize) {
             await flushBatch();
           }
+          continue;
         }
-        // During listening: send immediately
-        else if (currentState === "listening") {
-          await this.connectedSpace.sendEvent(event);
-        }
-        // Other states: shouldn't be sending to Roomy
-        else {
-          console.warn(
-            `[Dispatcher] Unexpected state for toRoomy: ${currentState}, discarding event`,
-          );
-        }
+
+        await this.connectedSpace.sendEvent(event);
+        console.log("sent to roomy", event);
       }
     })();
-
-    this.state.transitionedTo("syncRoomyToDiscord").then(() => {
-      flushBatch();
-    });
   }
 
   /**

@@ -6,7 +6,6 @@
 import { newUlid, toBytes, type Ulid } from "../schema";
 import type { RoomKind } from "../schema/events/room";
 import type { Event } from "../schema";
-import type { ConnectedSpace } from "../connection";
 
 /**
  * Basic information for a room.
@@ -41,24 +40,20 @@ export interface CreateRoomResult {
 /**
  * Create a room.
  *
- * @param space - The connected space to send the event to
  * @param options - Room creation options
- * @returns The ID of the created room
+ * @returns Array containing the createRoom event
  *
  * @example
  * ```ts
- * const result = await createRoom(space, {
+ * const events = createRoom({
  *   kind: "space.roomy.channel",
  *   name: "general",
  *   description: "General discussion"
  * });
- * console.log("Created room:", result.id);
+ * // events[0].id is the room ID
  * ```
  */
-export async function createRoom(
-  space: ConnectedSpace,
-  options: CreateRoomOptions,
-): Promise<CreateRoomResult> {
+export function createRoom(options: CreateRoomOptions): Event[] {
   const roomId = newUlid();
 
   const event: Event = {
@@ -71,9 +66,7 @@ export async function createRoom(
     ...(options.extensions && { extensions: options.extensions }),
   };
 
-  await space.sendEvent(event);
-
-  return { id: roomId };
+  return [event];
 }
 
 /**
@@ -103,23 +96,19 @@ export interface UpdateRoomResult {
 /**
  * Update a room.
  *
- * @param space - The connected space to send the event to
  * @param options - Room update options
- * @returns The ID of the update event
+ * @returns Array containing the updateRoom event
  *
  * @example
  * ```ts
- * const result = await updateRoom(space, {
+ * const events = updateRoom({
  *   roomId: "01H...",
  *   name: "new-name",
  *   kind: "space.roomy.thread"
  * });
  * ```
  */
-export async function updateRoom(
-  space: ConnectedSpace,
-  options: UpdateRoomOptions,
-): Promise<UpdateRoomResult> {
+export function updateRoom(options: UpdateRoomOptions): Event[] {
   const updateId = newUlid();
 
   const event: Event = {
@@ -128,13 +117,13 @@ export async function updateRoom(
     roomId: options.roomId,
     ...(options.kind !== undefined && { kind: options.kind }),
     ...(options.name !== undefined && { name: options.name }),
-    ...(options.description !== undefined && { description: options.description }),
+    ...(options.description !== undefined && {
+      description: options.description,
+    }),
     ...(options.avatar !== undefined && { avatar: options.avatar }),
   };
 
-  await space.sendEvent(event);
-
-  return { id: updateId };
+  return [event];
 }
 
 /**
@@ -156,21 +145,17 @@ export interface DeleteRoomResult {
 /**
  * Delete a room.
  *
- * @param space - The connected space to send the event to
  * @param options - Room delete options
- * @returns The ID of the delete event
+ * @returns Array containing the deleteRoom event
  *
  * @example
  * ```ts
- * const result = await deleteRoom(space, {
+ * const events = deleteRoom({
  *   roomId: "01H..."
  * });
  * ```
  */
-export async function deleteRoom(
-  space: ConnectedSpace,
-  options: DeleteRoomOptions,
-): Promise<DeleteRoomResult> {
+export function deleteRoom(options: DeleteRoomOptions): Event[] {
   const deleteId = newUlid();
 
   const event: Event = {
@@ -179,9 +164,7 @@ export async function deleteRoom(
     roomId: options.roomId,
   };
 
-  await space.sendEvent(event);
-
-  return { id: deleteId };
+  return [event];
 }
 
 /**
@@ -205,30 +188,29 @@ export interface CreateThreadResult {
 /**
  * Create a thread room linked to a parent room.
  *
- * @param space - The connected space to send the event to
  * @param options - Thread creation options
- * @returns The ID of the created thread
+ * @returns Array containing the createRoom and createRoomLink events
  *
  * @example
  * ```ts
- * const result = await createThread(space, {
+ * const events = createThread({
  *   linkToRoom: "01H...",
  *   name: "Thread name"
  * });
+ * // events[0].id is the thread room ID
  * ```
  */
-export async function createThread(
-  space: ConnectedSpace,
-  options: CreateThreadOptions,
-): Promise<CreateThreadResult> {
+export function createThread(options: CreateThreadOptions): Event[] {
   // First create the thread room
-  const { id: threadId } = await createRoom(space, {
+  const roomEvents = createRoom({
     kind: "space.roomy.thread",
     name: options.name,
     description: options.description,
     avatar: options.avatar,
     extensions: options.extensions,
   });
+
+  const threadId = roomEvents[0]!.id;
 
   // Then link it to the parent room
   const linkId = newUlid();
@@ -239,9 +221,7 @@ export async function createThread(
     linkToRoom: threadId,
   };
 
-  await space.sendEvent(linkEvent);
-
-  return { id: threadId };
+  return [...roomEvents, linkEvent];
 }
 
 /**
@@ -265,28 +245,28 @@ export interface CreatePageResult {
 /**
  * Create a page room with optional initial content.
  *
- * @param space - The connected space to send the event to
  * @param options - Page creation options
- * @returns The ID of the created page
+ * @returns Array containing the createRoom event and optionally an editPage event
  *
  * @example
  * ```ts
- * const result = await createPage(space, {
+ * const events = createPage({
  *   parentRoomId: "01H...",
  *   name: "My Page",
  *   content: "# Page content\n\n..."
  * });
+ * // events[0].id is the page room ID
  * ```
  */
-export async function createPage(
-  space: ConnectedSpace,
-  options: CreatePageOptions,
-): Promise<CreatePageResult> {
+export function createPage(options: CreatePageOptions): Event[] {
   // First create the page room
-  const { id: pageId } = await createRoom(space, {
+  const roomEvents = createRoom({
     kind: "space.roomy.page",
     ...options,
   });
+
+  const pageId = roomEvents[0]!.id;
+  const events = [...roomEvents];
 
   // If content is provided, create an initial edit event
   if (options.content !== undefined) {
@@ -301,10 +281,10 @@ export async function createPage(
       },
     };
 
-    await space.sendEvent(editEvent);
+    events.push(editEvent);
   }
 
-  return { id: pageId };
+  return events;
 }
 
 /**
@@ -332,22 +312,18 @@ export interface EditPageResult {
 /**
  * Edit a page.
  *
- * @param space - The connected space to send the event to
  * @param options - Page edit options
- * @returns The ID of the edit event
+ * @returns Array containing the editPage event
  *
  * @example
  * ```ts
- * const result = await editPage(space, {
+ * const events = editPage({
  *   roomId: "01H...",
  *   body: "# Updated content\n\n..."
  * });
  * ```
  */
-export async function editPage(
-  space: ConnectedSpace,
-  options: EditPageOptions,
-): Promise<EditPageResult> {
+export function editPage(options: EditPageOptions): Event[] {
   const editId = newUlid();
 
   const event: Event = {
@@ -361,9 +337,7 @@ export async function editPage(
     ...(options.previous && { previous: options.previous }),
   };
 
-  await space.sendEvent(event);
-
-  return { id: editId };
+  return [event];
 }
 
 /**
@@ -387,22 +361,18 @@ export interface CreateRoomLinkResult {
 /**
  * Create a link from one room to another.
  *
- * @param space - The connected space to send the event to
  * @param options - Room link options
- * @returns The ID of the link event
+ * @returns Array containing the createRoomLink event
  *
  * @example
  * ```ts
- * const result = await createRoomLink(space, {
+ * const events = createRoomLink({
  *   roomId: "01H...",
  *   linkToRoom: "01J..."
  * });
  * ```
  */
-export async function createRoomLink(
-  space: ConnectedSpace,
-  options: CreateRoomLinkOptions,
-): Promise<CreateRoomLinkResult> {
+export function createRoomLink(options: CreateRoomLinkOptions): Event[] {
   const linkId = newUlid();
 
   const event: Event = {
@@ -412,9 +382,7 @@ export async function createRoomLink(
     linkToRoom: options.linkToRoom,
   };
 
-  await space.sendEvent(event);
-
-  return { id: linkId };
+  return [event];
 }
 
 /**
@@ -438,22 +406,18 @@ export interface RemoveRoomLinkResult {
 /**
  * Remove a room link.
  *
- * @param space - The connected space to send the event to
  * @param options - Room link remove options
- * @returns The ID of the remove link event
+ * @returns Array containing the removeRoomLink event
  *
  * @example
  * ```ts
- * const result = await removeRoomLink(space, {
+ * const events = removeRoomLink({
  *   roomId: "01H...",
  *   linkToRoom: "01J..."
  * });
  * ```
  */
-export async function removeRoomLink(
-  space: ConnectedSpace,
-  options: RemoveRoomLinkOptions,
-): Promise<RemoveRoomLinkResult> {
+export function removeRoomLink(options: RemoveRoomLinkOptions): Event[] {
   const removeId = newUlid();
 
   const event: Event = {
@@ -463,7 +427,5 @@ export async function removeRoomLink(
     linkToRoom: options.linkToRoom,
   };
 
-  await space.sendEvent(event);
-
-  return { id: removeId };
+  return [event];
 }
