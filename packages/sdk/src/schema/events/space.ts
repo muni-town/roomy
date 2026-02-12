@@ -3,6 +3,7 @@
  */
 
 import { sql } from "../../utils";
+import { SidebarExtensionsMap } from "../extensions/space";
 import {
   BasicInfoUpdate,
   Did,
@@ -230,6 +231,7 @@ const UpdateSidebarSchema = type({
       "An ordered array of 'category objects', \
       each with an ID, name and a list of children expected to be Room IDs",
     ),
+  "extensions?": SidebarExtensionsMap,
 }).describe(
   "Overwrite the sidebar categories and their children for a space. \
     Must be updated if new channels are to be added to the sidebar. \
