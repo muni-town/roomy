@@ -38,6 +38,7 @@ export {
   PersonalJoinSpace,
   PersonalLeaveSpace,
   UpdateSpaceInfo,
+  UpdateSidebarV0,
   UpdateSidebar,
   AddAdmin,
   RemoveAdmin,

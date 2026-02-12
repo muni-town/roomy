@@ -16,6 +16,7 @@
 
   let categories = $derived(
     categoriesQuery.result?.map((x) => ({
+      id: x.id,
       name: x.name,
       children: x.children.map((x) => Ulid.assert(x.id)),
     })),
@@ -40,16 +41,20 @@
 
     const newUlid = ulidFactory();
 
-    const newCategories = deepClone(categories);
+    // Ensure all categories have ULIDs (v0 data may have null ids)
+    const newCategories = deepClone(categories).map((c) => ({
+      ...c,
+      id: c.id ?? newUlid(),
+    }));
 
     // Create a new room
     const id = newUlid();
     if (type == "Category") {
-      newCategories.push({ name, children: [] });
+      newCategories.push({ id: newUlid(), name, children: [] });
 
       await peer.sendEvent(spaceId, {
         id,
-        $type: "space.roomy.space.updateSidebar.v0",
+        $type: "space.roomy.space.updateSidebar.v1",
         categories: newCategories,
       });
     } else {
@@ -67,7 +72,7 @@
         },
         {
           id: newUlid(),
-          $type: "space.roomy.space.updateSidebar.v0",
+          $type: "space.roomy.space.updateSidebar.v1",
           categories: newCategories,
         },
       ]);

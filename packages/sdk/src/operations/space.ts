@@ -4,7 +4,7 @@
  */
 
 import { newUlid, type Ulid } from "../schema";
-import type { Event, StreamDid } from "../schema";
+import type { Event } from "../schema";
 
 /**
  * Options for creating a default space.
@@ -22,6 +22,8 @@ export interface CreateDefaultSpaceOptions {
  * Sidebar category configuration.
  */
 export interface SidebarCategory {
+  /** Category ULID */
+  id: Ulid;
   /** Category name */
   name: string;
   /** Child room IDs */
@@ -67,6 +69,7 @@ export function createDefaultSpaceEvents(
   const infoEventId = newUlid();
   const lobbyRoomId = newUlid();
   const sidebarEventId = newUlid();
+  const generalCategoryId = newUlid();
 
   const events: Event[] = [
     // Update space info
@@ -87,9 +90,10 @@ export function createDefaultSpaceEvents(
     // Create sidebar with general category containing lobby
     {
       id: sidebarEventId,
-      $type: "space.roomy.space.updateSidebar.v0",
+      $type: "space.roomy.space.updateSidebar.v1",
       categories: [
         {
+          id: generalCategoryId,
           name: "general",
           children: [lobbyRoomId],
         },
@@ -185,7 +189,7 @@ export function updateSidebarEvents(categories: SidebarCategory[]): Event {
 
   return {
     id: sidebarEventId,
-    $type: "space.roomy.space.updateSidebar.v0",
+    $type: "space.roomy.space.updateSidebar.v1",
     categories,
   };
 }

@@ -4,6 +4,7 @@ import { sql } from "$lib/utils/sqlTemplate";
 import type { SidebarCategory } from "./types";
 
 export let categoriesQuery: LiveQuery<{
+  id: string | null;
   name: string;
   children: { id: string; name: string }[];
 }>;
@@ -21,8 +22,9 @@ $effect.root(() => {
       const spaceId = current.joinedSpace?.id;
       return sql`
         select json_object(
+          'id', categories.value -> 'id',
           'name', categories.value -> 'name',
-          'children', case when count(children.value) > 0 
+          'children', case when count(children.value) > 0
             then json_group_array(
               json_object(
                 'name', child_info.name,
@@ -54,29 +56,36 @@ $effect.root(() => {
       return;
     // console.debug("categories", $state.snapshot(categoriesQuery.result));
     if (categoriesQuery.result) {
-      sidebar.result = categoriesQuery.result.map(
-        (x, i) =>
-          ({
-            type: "space.roomy.category",
-            // Add an index to the ID to prevent Svelte key errors when there are two categories
-            // with the same name.
-            id: x.name + '-' + i, 
+      sidebar.result = categoriesQuery.result.map((x, i) => {
+        // Deduplicate children by id (data may have duplicates from bridge sync)
+        const seen = new Set<string>();
+        const uniqueChildren = x.children.filter((c) => {
+          if (seen.has(c.id)) return false;
+          seen.add(c.id);
+          return true;
+        });
+
+        return {
+          type: "space.roomy.category",
+          // If no ulid (old schema) add an index to the ID to prevent Svelte key errors when
+          // there are two categories with the same name.
+          id: x.id ?? x.name + "-" + i,
+          name: x.name,
+          lastRead: 0,
+          latestEntity: 0,
+          sortIdx: "",
+          unreadCount: 0,
+          children: uniqueChildren.map((x) => ({
+            type: "space.roomy.channel",
+            id: x.id,
             name: x.name,
             lastRead: 0,
             latestEntity: 0,
             sortIdx: "",
             unreadCount: 0,
-            children: x.children.map((x) => ({
-              type: "space.roomy.channel",
-              id: x.id,
-              name: x.name,
-              lastRead: 0,
-              latestEntity: 0,
-              sortIdx: "",
-              unreadCount: 0,
-            })),
-          }) satisfies SidebarCategory,
-      );
+          })),
+        } satisfies SidebarCategory;
+      });
     } else {
       sidebar.result = undefined;
     }

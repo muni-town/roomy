@@ -60,14 +60,16 @@
   async function saveChanges() {
     if (draftOrder && current.joinedSpace) {
       // TODO: persist draftCategories to peer
+      // Generate ULIDs for v0 categories that used name as id
       const newSidebar = draftOrder.map((c) => ({
+        id: Ulid.allows(c.id) ? c.id : newUlid(),
         name: categoryMap.get(c.id)?.name ?? "",
         children: c.childIds as Ulid[],
       }));
       console.log("newSidebar", $state.snapshot(newSidebar));
       await peer.sendEvent(current.joinedSpace.id, {
         id: newUlid(),
-        $type: "space.roomy.space.updateSidebar.v0",
+        $type: "space.roomy.space.updateSidebar.v1",
         categories: $state.snapshot(newSidebar),
       });
     }

@@ -171,7 +171,10 @@ export const UpdateSpaceInfo = defineEvent(
   },
 );
 
-const UpdateSidebarSchema = type({
+/** @deprecated for updateSidebar.v1
+ * This version has issues due to categories not having a stable ID
+ */
+const UpdateSidebarSchemaV0 = type({
   $type: "'space.roomy.space.updateSidebar.v0'",
   categories: type({
     name: "string",
@@ -188,10 +191,57 @@ const UpdateSidebarSchema = type({
     The order of elements in the array must be overwritten to be changed.",
 );
 
+/** @deprecated for updateSidebar.v1 */
+export const UpdateSidebarV0 = defineEvent(
+  UpdateSidebarSchemaV0,
+  ({ streamId, event }) => {
+    const configJson = { categories: event.categories };
+    const config = JSON.stringify(configJson);
+    return [
+      sql`
+      update comp_space
+      set sidebar_config = ${config}
+      where entity = ${streamId}
+    `,
+    ];
+  },
+);
+
+const UpdateSidebarSchema = type({
+  $type: "'space.roomy.space.updateSidebar.v1'",
+  categories: type({
+    id: Ulid,
+    name: "string",
+    children: Ulid.array(),
+  })
+    .array()
+    .narrow((cats, ctx) => {
+      // require all category Ulids to be unique
+      const catUlids = cats.map((c) => c.id);
+      const unique = new Set(catUlids);
+      if (unique.size === cats.length) return true;
+      return ctx.reject({
+        expected: "to be unique",
+        actual: catUlids.join(","),
+        path: ["id"],
+      });
+    })
+    .describe(
+      "An ordered array of 'category objects', \
+      each with an ID, name and a list of children expected to be Room IDs",
+    ),
+}).describe(
+  "Overwrite the sidebar categories and their children for a space. \
+    Must be updated if new channels are to be added to the sidebar. \
+    The order of elements in the array must be overwritten to be changed.",
+);
+
 export const UpdateSidebar = defineEvent(
   UpdateSidebarSchema,
   ({ streamId, event }) => {
-    const configJson = { categories: event.categories };
+    const configJson = {
+      categories: event.categories,
+    };
     const config = JSON.stringify(configJson);
     return [
       sql`
@@ -275,5 +325,6 @@ export const SpaceEventVariant = type.or(
   RemoveAdminSchema,
   SetHandleProviderSchema,
   UpdateSpaceInfoSchema,
+  UpdateSidebarSchemaV0,
   UpdateSidebarSchema,
 );
