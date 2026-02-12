@@ -107,6 +107,20 @@ export interface BridgeRepository {
    */
   setRoomyUserProfile(did: string, profile: RoomyUserProfile): Promise<void>;
 
+  /**
+   * Get the timestamp of the last Bluesky profile fetch attempt for a DID.
+   * Used to avoid excessive API calls to Bluesky.
+   * @returns Unix timestamp in milliseconds, or undefined if never fetched
+   */
+  getBlueskyFetchAttempt(did: string): Promise<number | undefined>;
+
+  /**
+   * Record a Bluesky profile fetch attempt for a DID.
+   * @param did - User DID to record fetch attempt for
+   * @param timestamp - Unix timestamp in milliseconds of the fetch attempt
+   */
+  setBlueskyFetchAttempt(did: string, timestamp: number): Promise<void>;
+
   // === Reactions ===
 
   /**

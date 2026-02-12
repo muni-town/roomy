@@ -19,6 +19,7 @@ import {
   type Content,
   type DecodedStreamEvent,
 } from "@roomy/sdk";
+import type { Agent } from "@atproto/api";
 import type { DiscordBot, MessageProperties } from "../discord/types.js";
 import { ProfileSyncService } from "./ProfileSyncService.js";
 import {
@@ -52,6 +53,7 @@ export class MessageSyncService {
     private readonly guildId: bigint,
     private readonly profileService: ProfileSyncService,
     private readonly bot: DiscordBot,
+    private readonly agent: Agent,
   ) {}
 
   /**
@@ -599,10 +601,30 @@ export class MessageSyncService {
     const contentBytes = content.data as { buf: Uint8Array };
     const contentText = new TextDecoder().decode(contentBytes.buf);
 
-    // Parse author DID to get Discord user ID
+    // Parse author DID to determine username and avatar
     // Format: did:discord:123456789
     const userIdMatch = authorDid.match(/^did:discord:(\d+)$/);
-    const username = userIdMatch ? `User ${userIdMatch[1]}` : "Roomy User";
+
+    let username: string;
+    let avatarUrl: string | undefined;
+
+    if (userIdMatch) {
+      // Discord user - use generic username
+      username = `User ${userIdMatch[1]}`;
+    } else {
+      // Roomy user - try to get profile
+      const profile = await this.profileService.getProfileOrFetch(
+        authorDid,
+        this.agent,
+      );
+
+      if (profile) {
+        username = profile.name;
+        avatarUrl = profile.avatar ?? undefined;
+      } else {
+        username = "Roomy User";
+      }
+    }
 
     try {
       // Get or create webhook for this channel
@@ -623,6 +645,7 @@ export class MessageSyncService {
         {
           content: contentText,
           username,
+          avatarUrl,
           wait: true,
         } as any,
       );

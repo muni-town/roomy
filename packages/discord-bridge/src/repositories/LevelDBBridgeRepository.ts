@@ -25,6 +25,7 @@ export class LevelDBBridgeRepository implements BridgeRepository {
       discordLatestMessage: LatestMessages;
       leafCursors: LeafCursors;
       registeredBridges: BidirectionalSublevelMap<"guildId", "spaceId">;
+      blueskyFetchAttempts: BlueskyFetchAttempts;
     },
   ) {}
 
@@ -85,6 +86,19 @@ export class LevelDBBridgeRepository implements BridgeRepository {
     profile: RoomyUserProfile,
   ): Promise<void> {
     return this.stores.roomyUserProfiles.put(did, profile);
+  }
+
+  async getBlueskyFetchAttempt(
+    did: string,
+  ): Promise<number | undefined> {
+    return this.stores.blueskyFetchAttempts.get(did);
+  }
+
+  async setBlueskyFetchAttempt(
+    did: string,
+    timestamp: number,
+  ): Promise<void> {
+    return this.stores.blueskyFetchAttempts.put(did, timestamp);
   }
 
   // === Reactions ===
@@ -244,6 +258,10 @@ export function getRepo(guildId: bigint, spaceId: StreamDid) {
     discordGuildId: guildId,
     roomySpaceId: spaceId,
   });
+  const blueskyFetchAttempts = blueskyFetchAttemptsForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
   const latestMessagesInChannel = discordLatestMessageInChannelForBridge({
     roomySpaceId: spaceId,
     discordGuildId: guildId,
@@ -253,6 +271,7 @@ export function getRepo(guildId: bigint, spaceId: StreamDid) {
     syncedIds,
     syncedProfiles,
     roomyUserProfiles,
+    blueskyFetchAttempts,
     syncedReactions,
     syncedSidebarHash,
     syncedRoomLinks,
@@ -553,6 +572,19 @@ export type SyncedProfiles = ReturnType<typeof syncedProfilesForBridge>;
  */
 export const roomyUserProfilesForBridge =
   createBridgeStoreFactory<RoomyUserProfile>("roomyUserProfiles", "json");
+
+/**
+ * Per-space Bluesky fetch attempt tracking.
+ * Key: Roomy user DID
+ * Value: Unix timestamp in milliseconds of last fetch attempt
+ * Used to avoid excessive API calls to Bluesky for profiles that don't exist
+ */
+export const blueskyFetchAttemptsForBridge =
+  createBridgeStoreFactory<number>("blueskyFetchAttempts", "json");
+
+export type BlueskyFetchAttempts = ReturnType<
+  typeof blueskyFetchAttemptsForBridge
+>;
 
 export type RoomyUserProfiles = ReturnType<typeof roomyUserProfilesForBridge>;
 

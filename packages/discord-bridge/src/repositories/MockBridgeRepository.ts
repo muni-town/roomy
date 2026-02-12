@@ -15,6 +15,7 @@ export class MockBridgeRepository implements BridgeRepository {
   private readonly discordIds = new Map<string, string>();
   private readonly profileHashes = new Map<string, string>();
   private readonly roomyUserProfiles = new Map<string, RoomyUserProfile>();
+  private readonly blueskyFetchAttempts = new Map<string, number>();
   private readonly reactions = new Map<string, string>();
   private sidebarHash: string | undefined;
   private readonly roomLinks = new Map<string, string>();
@@ -54,6 +55,7 @@ export class MockBridgeRepository implements BridgeRepository {
     this.discordIds.clear();
     this.profileHashes.clear();
     this.roomyUserProfiles.clear();
+    this.blueskyFetchAttempts.clear();
     this.reactions.clear();
     this.sidebarHash = undefined;
     this.roomLinks.clear();
@@ -142,6 +144,16 @@ export class MockBridgeRepository implements BridgeRepository {
   async setRoomyUserProfile(did: string, profile: RoomyUserProfile): Promise<void> {
     this.trackCall("setRoomyUserProfile");
     this.roomyUserProfiles.set(did, profile);
+  }
+
+  async getBlueskyFetchAttempt(did: string): Promise<number | undefined> {
+    this.trackCall("getBlueskyFetchAttempt");
+    return this.blueskyFetchAttempts.get(did);
+  }
+
+  async setBlueskyFetchAttempt(did: string, timestamp: number): Promise<void> {
+    this.trackCall("setBlueskyFetchAttempt");
+    this.blueskyFetchAttempts.set(did, timestamp);
   }
 
   // === Reactions ===

@@ -58,6 +58,7 @@ export class Bridge {
   repo: BridgeRepository;
   dispatcher: EventDispatcher;
   connectedSpace: ConnectedSpace;
+  client: RoomyClient;
   messageSync: MessageSyncService;
   reactionSync: ReactionSyncService;
   profileSync: ProfileSyncService;
@@ -67,24 +68,29 @@ export class Bridge {
     connectedSpace: ConnectedSpace;
     guildId: bigint;
     bot: DiscordBot;
+    client: RoomyClient;
   }) {
-    const { connectedSpace, guildId, bot } = options;
+    const { connectedSpace, guildId, bot, client } = options;
     const repo = getRepo(guildId, connectedSpace.streamDid);
     this.guildId = guildId;
     this.connectedSpace = connectedSpace;
     this.state = stateMachine({ state: "backfillRoomy" });
     this.bot = bot;
     this.repo = repo;
+    this.client = client;
 
     // Create dispatcher
     this.dispatcher = createDispatcher();
 
     // Create services (order matters for dependencies)
+    // ProfileSyncService gets 50-entry in-memory LRU cache for Roomy user profiles
+    // This reduces LevelDB IO significantly for active users
     this.profileSync = new ProfileSyncService(
       repo,
       connectedSpace.streamDid,
       this.dispatcher,
       guildId,
+      50, // cacheSize: keep ~50 most recent Roomy user profiles in memory
     );
     this.reactionSync = new ReactionSyncService(
       repo,
@@ -108,6 +114,7 @@ export class Bridge {
       guildId,
       this.profileSync,
       bot,
+      client.agent,
     );
 
     this.backfillRoomyAndSubscribe();
