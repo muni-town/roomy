@@ -147,10 +147,15 @@ export function extractDiscordUserOrigin(
 export function extractDiscordSidebarOrigin(
   event: DecodedStreamEvent["event"],
 ): DiscordSidebarOrigin | undefined {
+  if (
+    event.$type !== "space.roomy.space.updateSidebar.v0" &&
+    event.$type !== "space.roomy.space.updateSidebar.v1"
+  )
+    return undefined;
+
   return extractExtension<DiscordSidebarOrigin>(
     event,
     DISCORD_EXTENSION_KEYS.SIDEBAR_ORIGIN,
-    "space.roomy.space.updateSidebar.v0",
   );
 }
 

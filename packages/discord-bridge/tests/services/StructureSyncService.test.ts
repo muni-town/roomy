@@ -227,7 +227,7 @@ describe("StructureSyncService", () => {
       // Verify sidebar update event was sent
       expect(mockSpace.sendEvent).toHaveBeenCalled();
       const sentEvent = (mockSpace.sendEvent as any).mock.calls[0][0];
-      expect(sentEvent.$type).toBe("space.roomy.space.updateSidebar.v0");
+      expect(sentEvent.$type).toBe("space.roomy.space.updateSidebar.v1");
 
       // Verify hash was stored
       const storedHash = await repo.getSidebarHash();

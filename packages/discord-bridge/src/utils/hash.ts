@@ -62,11 +62,12 @@ export function computeProfileHash(
  * ```
  */
 export function computeSidebarHash(
-  categories: { name: string; children: Ulid[] }[],
+  categories: { id?: Ulid; name: string; children: Ulid[] }[],
 ): string {
   // Sort categories by name and children by value for consistent hashing
   const normalized = categories
     .map((c) => ({
+      ...(c.id && { id: c.id }),
       name: c.name,
       children: [...c.children].sort(),
     }))

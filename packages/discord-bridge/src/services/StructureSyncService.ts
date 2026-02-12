@@ -56,6 +56,7 @@ interface CreateRoomInfo {
  */
 interface UpdateSidebarInfo {
   categories: {
+    id: Ulid;
     name: string;
     children: Ulid[];
   }[];
@@ -106,17 +107,26 @@ export class StructureSyncService {
     discordChannel: ChannelProperties | Camelize<DiscordChannel>,
   ): Promise<string> {
     console.log("handle discord channel create", discordChannel.id);
-    // Idempotency check (use room: prefix for channels/threads)
-    const channelIdStr = discordChannel.id.toString();
-    const roomKey = getRoomKey(channelIdStr);
+
+    // Idempotency check (Discord origin or reprocessing R-origin = LevelsDB)
+    const roomKey = getRoomKey(discordChannel.id);
     let roomUlid = await this.repo.getRoomyId(roomKey);
 
-    const inSidebar = this.updateSidebarCache?.categories.reduce(
-      (prev, current) => current.children.includes(roomUlid as Ulid),
-      false,
-    );
+    if (!roomUlid) {
+      // Idempotency check (if it's Roomy origin && first time processing, ULID in topic)
+      roomUlid = extractRoomyRoomId(discordChannel.topic ?? null) || roomUlid;
+      // if we did extract it, set the mapping
+      if (roomUlid) await this.repo.registerMapping(roomKey, roomUlid);
+    }
 
-    if (roomUlid && inSidebar) return roomUlid;
+    // if at this point we don't have roomUlid, it's Discord-origin and first time handling
+    // i.e. we need to create room
+    // but if we DO have roomUlid, it could be either R-origin, or D-origin and just already synced
+
+    // D-origin with existing corresponding room, no op
+    if (roomUlid) return roomUlid;
+
+    console.log("roomUlid", roomUlid);
 
     // Call SDK operation (pure function from @roomy/sdk)
     if (!roomUlid) {
@@ -127,7 +137,7 @@ export class StructureSyncService {
         extensions: {
           [DISCORD_EXTENSION_KEYS.ROOM_ORIGIN]: {
             $type: DISCORD_EXTENSION_KEYS.ROOM_ORIGIN,
-            snowflake: channelIdStr,
+            snowflake: discordChannel.id.toString(),
             guildId: this.guildId.toString(),
           },
         },
@@ -135,51 +145,15 @@ export class StructureSyncService {
       roomUlid = createRoomEvent[0]!.id;
       createRoomEvent.forEach((e) => this.dispatcher.toRoomy.push(e));
       // Register mapping
-      await this.repo.registerMapping(roomKey, roomUlid);
+      await this.repo.registerMapping(getRoomKey(discordChannel.id), roomUlid);
 
       // Verify registration worked
-      const verify = await this.repo.getRoomyId(roomKey);
+      const verify = await this.repo.getRoomyId(getRoomKey(discordChannel.id));
       if (!verify) {
         console.error(
-          `Failed to register mapping for ${roomKey} -> ${roomUlid}`,
+          `Failed to register mapping for ${getRoomKey(discordChannel.id)} -> ${roomUlid}`,
         );
       }
-    }
-
-    // construct new Roomy sidebar, from cache if existing
-    const newSidebarCategories = this.updateSidebarCache
-      ? [...this.updateSidebarCache.categories]
-      : [];
-
-    // if Discord channel has category, get name from cache
-    const categoryName =
-      (discordChannel.parentId &&
-        this.discordCategoryNames.get(discordChannel.id.toString())) ||
-      "general";
-
-    // check if category exists on sidebar already
-    const existingCategory = newSidebarCategories.find(
-      (c) => c.name === categoryName,
-    );
-
-    // add the room (and category if needed) to the categories array
-    existingCategory
-      ? existingCategory.children.push(roomUlid as Ulid)
-      : newSidebarCategories.push({
-          name: categoryName,
-          children: [roomUlid as Ulid],
-        });
-
-    const oldHash = await this.repo.getSidebarHash();
-    const newHash = computeSidebarHash(newSidebarCategories);
-
-    if (newHash !== oldHash) {
-      // push the sidebar update
-      this.dispatcher.toRoomy.push({
-        id: newUlid(),
-        $type: "space.roomy.space.updateSidebar.v0",
-        categories: newSidebarCategories,
-      });
     }
 
     return roomUlid;
@@ -254,7 +228,7 @@ export class StructureSyncService {
   }
 
   /**
-   * Handle full Discord sidebar sync.
+   * Handle full Discord sidebar sync in backfillToRoomy (phase 2).
    * Syncs all channels, categories, threads, and their relationships.
    * Preserves existing Roomy rooms (without discordOrigin) that aren't from Discord.
    *
@@ -270,7 +244,14 @@ export class StructureSyncService {
     channels: Camelize<DiscordChannel>[],
     categories: Camelize<DiscordChannel>[],
   ): Promise<void> {
+    if (!this.updateSidebarCache) {
+      console.warn("[SSS.sFDS]: Warning: No Roomy sidebar in cache");
+    }
+
+    /** For each Discord category, array of Roomy ULIDs corresponding to Discord children */
     const categoryChildren = new Map<string, Ulid[]>();
+
+    /** Discord channels not in a category */
     const uncategorizedChannels: Ulid[] = [];
 
     for (const channel of channels) {
@@ -311,15 +292,24 @@ export class StructureSyncService {
 
     console.log("category children", categoryChildren);
 
-    // STEP 3: Build categories array for UpdateSidebar event
-    const sidebarCategories: { name: string; children: Ulid[] }[] = [];
+    /** New categories array for UpdateSidebar event */
+    const sidebarCategories: { id: Ulid; name: string; children: Ulid[] }[] =
+      this.updateSidebarCache?.categories || [];
 
     // Add uncategorized Discord channels to "general" category
+    const generalCategory = sidebarCategories.find(
+      (c) => c.name === "general",
+    ) || {
+      id: newUlid() as Ulid,
+      name: "general",
+      children: [],
+    };
+
     if (uncategorizedChannels.length > 0) {
-      sidebarCategories.push({
-        name: "general",
-        children: uncategorizedChannels,
-      });
+      const newChildren = generalCategory.children.concat(
+        uncategorizedChannels,
+      );
+      generalCategory.children = newChildren;
     }
 
     // Add each Discord category (skip empty ones)
@@ -331,10 +321,20 @@ export class StructureSyncService {
 
       const children = categoryChildren.get(category.id.toString()) || [];
       if (children.length > 0) {
-        sidebarCategories.push({
-          name: category.name || "Unnamed Category",
-          children,
-        });
+        // if a category with this name exists, add children to that one
+        const existingCategory = sidebarCategories.find(
+          (c) => c.name === category.name,
+        );
+        if (existingCategory)
+          existingCategory.children =
+            existingCategory.children.concat(children);
+        // otherwise create a new category
+        else
+          sidebarCategories.push({
+            id: newUlid() as Ulid,
+            name: category.name || "Unnamed Category",
+            children,
+          });
       }
     }
 
@@ -353,16 +353,15 @@ export class StructureSyncService {
     // Send sidebar update event
     const event = {
       id: newUlid(),
-      $type: "space.roomy.space.updateSidebar.v0",
+      $type: "space.roomy.space.updateSidebar.v1",
       categories: sidebarCategories,
       extensions: {
         [DISCORD_EXTENSION_KEYS.SIDEBAR_ORIGIN]: {
-          $type: DISCORD_EXTENSION_KEYS.SIDEBAR_ORIGIN,
           guildId: this.guildId.toString(),
           sidebarHash: newHash,
         },
       },
-    } as Event;
+    } satisfies Event<"space.roomy.space.updateSidebar.v1">;
 
     this.dispatcher.toRoomy.push(event);
 
@@ -491,7 +490,9 @@ export class StructureSyncService {
    * ```
    */
   async handleRoomySidebarUpdate(
-    sidebar: Event<"space.roomy.space.updateSidebar.v0">,
+    sidebar:
+      | Event<"space.roomy.space.updateSidebar.v0">
+      | Event<"space.roomy.space.updateSidebar.v1">,
   ): Promise<void> {
     // Collect all room IDs from sidebar
     const allRoomIds: Ulid[] = [];
@@ -499,7 +500,19 @@ export class StructureSyncService {
       allRoomIds.push(...category.children);
     }
 
-    this.updateSidebarCache = { categories: sidebar.categories };
+    const ensureIds = sidebar.categories.map((c) => ({
+      id: "id" in c ? c.id : newUlid(),
+      name: c.name,
+      children: c.children,
+    }));
+
+    console.log("categories", sidebar.categories, ensureIds);
+
+    this.updateSidebarCache = {
+      categories: ensureIds,
+    };
+
+    console.log("cache", this.updateSidebarCache);
 
     if (allRoomIds.length === 0) {
       console.log("No rooms in sidebar, skipping sync");
@@ -524,6 +537,15 @@ export class StructureSyncService {
       const existingDiscordId = await this.repo.getDiscordId(roomyRoomId);
       const roomName =
         roomNames.get(roomyRoomId)?.name || `roomy-${roomyRoomId.slice(0, 8)}`;
+
+      console.log(
+        "[R SB update]: room U:",
+        roomyRoomId,
+        ", name:",
+        roomName,
+        ", discordId:",
+        existingDiscordId,
+      );
 
       if (existingDiscordId) {
         await this.verifyOrCreateChannelWithName(roomyRoomId, roomName);
@@ -829,7 +851,7 @@ export class StructureSyncService {
   }
 
   /**
-   * Backfill Discord channels and threads to Roomy.
+   * Backfill Discord channels and threads to Roomy. (phase 2)
    * Fetches all channels/threads from Discord guild and syncs them.
    *
    * @returns Number of channels/threads synced
@@ -962,7 +984,11 @@ export class StructureSyncService {
         }
       }
 
-      if (event.$type === "space.roomy.space.updateSidebar.v0") {
+      if (
+        event.$type === "space.roomy.space.updateSidebar.v0" ||
+        event.$type === "space.roomy.space.updateSidebar.v1"
+      ) {
+        // set immediately for reference
         const sidebarOrigin = extractDiscordSidebarOrigin(event);
         if (
           sidebarOrigin &&
@@ -972,7 +998,16 @@ export class StructureSyncService {
           // don't return, queue for Discord sync (even if Discord-origin, sidebar should be synced to Discord)
         }
 
-        this.updateSidebarCache = { categories: event.categories };
+        // if the incoming sidebar is D-origin
+        if (!sidebarOrigin) {
+          this.updateSidebarCache = {
+            categories: event.categories.map((c) => ({
+              id: "id" in c ? c.id : (newUlid() as Ulid),
+              name: c.name,
+              children: c.children,
+            })),
+          };
+        }
 
         console.log("pushing to Discord", event.id);
         this.dispatcher.toDiscord.push({ decoded, batchId, isLastEvent });
@@ -998,8 +1033,11 @@ export class StructureSyncService {
     const { event } = decoded;
     const e = event as any;
 
-    // Handle updateSidebar
-    if (event.$type === "space.roomy.space.updateSidebar.v0") {
+    // Handle updateSidebar (both v0 and v1)
+    if (
+      event.$type === "space.roomy.space.updateSidebar.v0" ||
+      event.$type === "space.roomy.space.updateSidebar.v1"
+    ) {
       await this.handleRoomySidebarUpdate(event);
     }
     // Handle createRoomLink (thread creation)

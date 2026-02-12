@@ -148,7 +148,8 @@ export function assertSidebarStructure(
 ) {
   const sidebarEvents = (
     events as { $type: string; categories?: unknown[] }[]
-  ).filter((e) => e.$type === "space.roomy.space.updateSidebar.v0");
+  ).filter((e) => e.$type === "space.roomy.space.updateSidebar.v0" ||
+      e.$type === "space.roomy.space.updateSidebar.v1");
 
   expect(sidebarEvents.length).toBeGreaterThan(0);
 
@@ -357,7 +358,8 @@ export function getLatestSidebarEvent(events: unknown[]): {
       categories?: unknown[];
       extensions?: Record<string, unknown>;
     }[]
-  ).filter((e) => e.$type === "space.roomy.space.updateSidebar.v0");
+  ).filter((e) => e.$type === "space.roomy.space.updateSidebar.v0" ||
+      e.$type === "space.roomy.space.updateSidebar.v1");
 
   if (sidebarEvents.length === 0) {
     throw new Error("No sidebar update events found");

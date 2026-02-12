@@ -263,7 +263,8 @@ describe("E2E: Discord Channel Sync", () => {
         await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
       ).map((e: any) => e.event);
       const sidebarEvents = events.filter(
-        (e: any) => e.$type === "space.roomy.space.updateSidebar.v0",
+        (e: any) => e.$type === "space.roomy.space.updateSidebar.v0" ||
+          e.$type === "space.roomy.space.updateSidebar.v1",
       );
 
       expect(sidebarEvents.length).toBeGreaterThan(0);
@@ -481,7 +482,8 @@ describe("E2E: Discord Channel Sync", () => {
         await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
       ).map((e: any) => e.event);
       const sidebarEvents1 = events1.filter(
-        (e: any) => e.$type === "space.roomy.space.updateSidebar.v0",
+        (e: any) => e.$type === "space.roomy.space.updateSidebar.v0" ||
+          e.$type === "space.roomy.space.updateSidebar.v1",
       );
 
       // Second sidebar sync with same data should skip (hash check)
@@ -491,7 +493,8 @@ describe("E2E: Discord Channel Sync", () => {
         await result.connectedSpace.fetchEvents(1 as StreamIndex, 200)
       ).map((e: any) => e.event);
       const sidebarEvents2 = events2.filter(
-        (e: any) => e.$type === "space.roomy.space.updateSidebar.v0",
+        (e: any) => e.$type === "space.roomy.space.updateSidebar.v0" ||
+          e.$type === "space.roomy.space.updateSidebar.v1",
       );
 
       // Should not have created a new sidebar event
@@ -937,7 +940,8 @@ describe("E2E: Discord Channel Sync", () => {
 
       // Get the current sidebar (it should include the lobby room)
       const sidebarEvents = allEvents.filter(
-        (e: any) => e.event.$type === "space.roomy.space.updateSidebar.v0",
+        (e: any) => e.event.$type === "space.roomy.space.updateSidebar.v0" ||
+          e.event.$type === "space.roomy.space.updateSidebar.v1",
       );
 
       expect(sidebarEvents.length).toBeGreaterThan(0);

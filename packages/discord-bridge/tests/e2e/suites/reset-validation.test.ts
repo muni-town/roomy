@@ -154,7 +154,11 @@ describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
     // Verify each event type exists
     assertEventTypeExists(allEvents, "space.roomy.space.updateSpaceInfo.v0");
     assertEventTypeExists(allEvents, "space.roomy.room.createRoom.v0");
-    assertEventTypeExists(allEvents, "space.roomy.space.updateSidebar.v0");
+    const hasSidebarEvent = allEvents.some(
+      (e: any) => e.$type === "space.roomy.space.updateSidebar.v0" ||
+        e.$type === "space.roomy.space.updateSidebar.v1",
+    );
+    expect(hasSidebarEvent).toBe(true);
 
     // Verify lobby channel exists
     const lobbyId = assertLobbyExists(allEvents);
@@ -268,7 +272,11 @@ describe("E2E: Guild Connection/Reset (TEMPORARY)", () => {
     // Count events by type
     assertEventTypeCount(events, "space.roomy.space.updateSpaceInfo.v0", 1);
     assertEventTypeCount(events, "space.roomy.room.createRoom.v0", 1);
-    assertEventTypeCount(events, "space.roomy.space.updateSidebar.v0", 1);
+    const sidebarEventCount = events.filter(
+      (e: any) => e.$type === "space.roomy.space.updateSidebar.v0" ||
+        e.$type === "space.roomy.space.updateSidebar.v1",
+    ).length;
+    expect(sidebarEventCount).toBe(1);
 
     console.log(`✓ Event counts verified for ${result.spaceId.slice(0, 8)}...`);
   });
