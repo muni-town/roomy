@@ -14,7 +14,7 @@ import {
 } from "./discord/slashCommands.js";
 import { Deferred } from "@roomy/sdk";
 import { registeredBridges } from "./repositories/LevelDBBridgeRepository.js";
-import { Bridge } from "./Bridge";
+import { Bridge } from "./Bridge.js";
 
 type BridgeOrchestratorState =
   | {
