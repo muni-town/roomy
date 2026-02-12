@@ -6,13 +6,7 @@
  */
 
 import { AtpAgent } from "@atproto/api";
-import {
-  RoomyClient,
-  ConnectedSpace,
-  modules,
-  type StreamDid,
-  type StreamIndex,
-} from "@roomy/sdk";
+import { RoomyClient } from "@roomy/sdk";
 import {
   ATPROTO_BRIDGE_DID,
   ATPROTO_BRIDGE_APP_PASSWORD,
@@ -21,9 +15,6 @@ import {
   STREAM_HANDLE_NSID,
   STREAM_NSID,
 } from "../env.js";
-import { registeredBridges } from "../repositories/LevelDBBridgeRepository.js";
-import { tracer, setRoomyAttrs, recordError } from "../tracing.js";
-import { SpanStatusCode } from "@opentelemetry/api";
 import { STREAM_SCHEMA_VERSION } from "../constants.js";
 
 /**
@@ -68,52 +59,3 @@ export async function initRoomyClient(): Promise<RoomyClient> {
   console.log("Roomy client initialized successfully");
   return roomyClient;
 }
-
-/**
- * Subscribe to all registered spaces, resuming from stored cursors.
- * This should be called once at startup after initRoomyClient().
- *
- * If a space connection fails, logs an error to telemetry and continues
- * with other spaces rather than crashing.
- */
-// export async function subscribeToConnectedSpaces(
-//   client: RoomyClient,
-// ): Promise<void> {
-//   return tracer.startActiveSpan("bridge.spaces.subscribe_all", async (span) => {
-//     try {
-//       const bridges = await registeredBridges.list();
-
-//       console.log(`Subscribing to ${bridges.length} connected spaces...`);
-//       span.setAttribute("space.count", bridges.length);
-
-//       let failureCount = 0;
-//       for (const { spaceId } of bridges) {
-//         try {
-//           await subscribeToSpace(client, spaceId as StreamDid);
-//         } catch (e) {
-//           failureCount++;
-//           console.error(`Failed to subscribe to space ${spaceId}:`, e);
-//           // Record error on the span for telemetry
-//           recordError(span, e);
-//           span.addEvent("space.subscription_failed", {
-//             "roomy.space.id": spaceId,
-//           });
-//         }
-//       }
-
-//       console.log("All space subscriptions started");
-//       span.setAttribute("space.failures", failureCount);
-//       if (failureCount > 0) {
-//         span.setStatus({
-//           code: SpanStatusCode.ERROR,
-//           message: `${failureCount} space(s) failed to subscribe`,
-//         });
-//       }
-//     } catch (e) {
-//       recordError(span, e);
-//       throw e;
-//     } finally {
-//       span.end();
-//     }
-//   });
-// }

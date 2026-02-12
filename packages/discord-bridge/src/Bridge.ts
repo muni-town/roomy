@@ -31,7 +31,6 @@ import { getRepo } from "./repositories/LevelDBBridgeRepository.js";
 import { recordError, setRoomyAttrs, tracer } from "./tracing.js";
 import { createDispatcher, EventDispatcher } from "./dispatcher.js";
 import { EventCallbackMeta } from "@roomy/sdk";
-import { Deferred } from "@roomy/sdk";
 import { Event } from "@roomy/sdk";
 
 type BridgeState =
@@ -113,8 +112,8 @@ export class Bridge {
 
     this.backfillRoomyAndSubscribe();
     this.backfillDiscordAndSyncToRoomy();
-    this.syncRoomyToDiscord();
     this.syncDiscordToRoomy();
+    this.syncRoomyToDiscord();
   }
 
   /**
@@ -292,9 +291,8 @@ export class Bridge {
 
   /**
    * Handle a batch of Roomy events from the subscription stream.
-   * No branching on backfill - single code path for all events.
    *
-   * Phase 1: Populate mappings + queue Roomy-origin events
+   * Phase 1: Populate mappings + queue Roomy-origin events. Suspend Discord actions until:
    * Phase 3: Process queued Roomy-origin events
    *
    * @param events - Batch of decoded Roomy events

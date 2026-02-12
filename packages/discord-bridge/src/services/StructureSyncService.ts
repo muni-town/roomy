@@ -305,12 +305,10 @@ export class StructureSyncService {
       children: [],
     };
 
-    if (uncategorizedChannels.length > 0) {
-      const newChildren = generalCategory.children.concat(
-        uncategorizedChannels,
-      );
-      generalCategory.children = newChildren;
-    }
+    uncategorizedChannels.forEach((ch) => {
+      if (!generalCategory.children.includes(ch))
+        generalCategory.children.push(ch);
+    });
 
     // Add each Discord category (skip empty ones)
     for (const category of categories) {
@@ -325,9 +323,13 @@ export class StructureSyncService {
         const existingCategory = sidebarCategories.find(
           (c) => c.name === category.name,
         );
+
+        // only add if children are not already added
         if (existingCategory)
-          existingCategory.children =
-            existingCategory.children.concat(children);
+          children.forEach((ch) => {
+            if (!existingCategory.children.includes(ch))
+              existingCategory.children.push(ch);
+          });
         // otherwise create a new category
         else
           sidebarCategories.push({

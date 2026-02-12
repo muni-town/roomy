@@ -359,14 +359,12 @@ export class ReactionSyncService {
    * @param roomyRoomId - Roomy room ULID
    * @param reaction - Emoji string (unicode or custom)
    * @param userDid - User DID who reacted
-   * @param bot - Discord bot instance
    */
   async syncRoomyToDiscordAdd(
-    roomyMessageId: string,
-    roomyRoomId: string,
+    roomyMessageId: Ulid,
+    roomyRoomId: Ulid,
     reaction: string,
     userDid: Did,
-    bot: DiscordBot,
   ): Promise<void> {
     // Get Discord message ID
     const discordId = await this.repo.getDiscordId(roomyMessageId);
@@ -422,7 +420,7 @@ export class ReactionSyncService {
         emojiString = `${emojiMatch[2]}:${emojiMatch[3]!}`;
       }
 
-      await bot.helpers.addReaction(channelId, messageId, emojiString);
+      await this.bot.helpers.addReaction(channelId, messageId, emojiString);
 
       // Track the synced reaction
       await this.repo.setReaction(key, newUlid());
@@ -450,7 +448,6 @@ export class ReactionSyncService {
     reactionEventId: string,
     roomyRoomId: string,
     userDid: Did,
-    bot: DiscordBot,
   ): Promise<void> {
     // Parse user DID to get Discord user ID
     const userIdMatch = userDid.match(/^did:discord:(\d+)$/);
@@ -532,37 +529,28 @@ export class ReactionSyncService {
    * Called by dispatcher.syncRoomyToDiscord consumer loop.
    */
   async syncToDiscord(decoded: DecodedStreamEvent): Promise<void> {
-    const { event } = decoded;
-    const e = event as any;
+    const { event: e } = decoded;
 
     // Handle addReaction
     if (
-      event.$type === "space.roomy.reaction.addReaction.v0" ||
-      event.$type === "space.roomy.reaction.addBridgedReaction.v0"
+      e.$type === "space.roomy.reaction.addReaction.v0" ||
+      e.$type === "space.roomy.reaction.addBridgedReaction.v0"
     ) {
-      if (!e.reactionTo || !e.reaction || !e.room) return;
-      if (!this.bot) return;
       await this.syncRoomyToDiscordAdd(
         e.reactionTo,
-        e.reaction,
         e.room,
+        e.reaction,
         decoded.user,
-        this.bot,
       );
     }
     // Handle removeReaction
     else if (
-      event.$type === "space.roomy.reaction.removeReaction.v0" ||
-      event.$type === "space.roomy.reaction.removeBridgedReaction.v0"
+      e.$type === "space.roomy.reaction.removeReaction.v0" ||
+      e.$type === "space.roomy.reaction.removeBridgedReaction.v0"
     ) {
       if (!e.room) return;
       if (!this.bot) return;
-      await this.syncRoomyToDiscordRemove(
-        event.id,
-        e.room,
-        decoded.user,
-        this.bot,
-      );
+      await this.syncRoomyToDiscordRemove(e.id, e.room, decoded.user);
     }
   }
 }

@@ -255,9 +255,6 @@ export async function handleSlashCommandInteraction(ctx: {
           console.log(`Subscribed to space ${spaceId}`);
 
           // Trigger Discord backfill for this guild
-          console.log(`Starting Discord backfill for guild ${ctx.guildId}...`);
-          // await backfillGuild(botState.bot, guildId);
-          console.log(`Discord backfill complete for guild ${ctx.guildId}`);
         } catch (e) {
           console.error(`Error during initial sync for space ${spaceId}:`, e);
         }
