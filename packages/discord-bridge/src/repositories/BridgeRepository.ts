@@ -139,6 +139,27 @@ export interface BridgeRepository {
    */
   deleteReaction(key: string): Promise<void>;
 
+  /**
+   * Get all users who have reacted with a specific emoji on a message.
+   * @param key - `${roomyMessageId}:${emoji}`
+   * @returns Set of user DIDs, or undefined if no reactions
+   */
+  getReactionUsers(key: string): Promise<Set<string> | undefined>;
+
+  /**
+   * Add a user to the reaction set for a message/emoji.
+   * @param key - `${roomyMessageId}:${emoji}`
+   * @param userDid - User DID to add
+   */
+  addReactionUser(key: string, userDid: string): Promise<void>;
+
+  /**
+   * Remove a user from the reaction set for a message/emoji.
+   * @param key - `${roomyMessageId}:${emoji}`
+   * @param userDid - User DID to remove
+   */
+  removeReactionUser(key: string, userDid: string): Promise<void>;
+
   // === Sidebar ===
 
   /**

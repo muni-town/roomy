@@ -17,6 +17,7 @@ export class LevelDBBridgeRepository implements BridgeRepository {
       syncedProfiles: SyncedProfiles;
       roomyUserProfiles: RoomyUserProfiles;
       syncedReactions: SyncedReactions;
+      reactionUsers: ReactionUsers;
       syncedSidebarHash: SyncedSidebarHash;
       syncedRoomLinks: SyncedRoomLinks;
       syncedEdits: SyncedEdits;
@@ -113,6 +114,33 @@ export class LevelDBBridgeRepository implements BridgeRepository {
 
   async deleteReaction(key: string): Promise<void> {
     return this.stores.syncedReactions.del(key);
+  }
+
+  async getReactionUsers(key: string): Promise<Set<string> | undefined> {
+    const data = await this.stores.reactionUsers.get(key);
+    if (!data) return undefined;
+    return new Set(JSON.parse(data));
+  }
+
+  async addReactionUser(key: string, userDid: string): Promise<void> {
+    const current = await this.stores.reactionUsers.get(key);
+    const users = current ? JSON.parse(current) : [];
+    if (!users.includes(userDid)) {
+      users.push(userDid);
+      await this.stores.reactionUsers.put(key, JSON.stringify(users));
+    }
+  }
+
+  async removeReactionUser(key: string, userDid: string): Promise<void> {
+    const current = await this.stores.reactionUsers.get(key);
+    if (!current) return;
+    const users = JSON.parse(current);
+    const filtered = users.filter((u: string) => u !== userDid);
+    if (filtered.length > 0) {
+      await this.stores.reactionUsers.put(key, JSON.stringify(filtered));
+    } else {
+      await this.stores.reactionUsers.del(key);
+    }
   }
 
   // === Sidebar ===
@@ -234,6 +262,10 @@ export function getRepo(guildId: bigint, spaceId: StreamDid) {
     discordGuildId: guildId,
     roomySpaceId: spaceId,
   });
+  const reactionUsers = reactionUsersForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
   const syncedSidebarHash = syncedSidebarHashForBridge({
     discordGuildId: guildId,
     roomySpaceId: spaceId,
@@ -273,6 +305,7 @@ export function getRepo(guildId: bigint, spaceId: StreamDid) {
     roomyUserProfiles,
     blueskyFetchAttempts,
     syncedReactions,
+    reactionUsers,
     syncedSidebarHash,
     syncedRoomLinks,
     syncedEdits,
@@ -596,7 +629,18 @@ export type RoomyUserProfiles = ReturnType<typeof roomyUserProfilesForBridge>;
 export const syncedReactionsForBridge =
   createBridgeStoreFactory("syncedReactions");
 
+/**
+ * Per-space aggregate reaction tracking for Roomy → Discord sync.
+ * Key: `${roomyMessageId}:${emoji}`
+ * Value: JSON array of user DIDs who have reacted
+ * Used to determine if bot should add/remove reaction based on whether any Roomy users have reacted
+ */
+export const reactionUsersForBridge =
+  createBridgeStoreFactory("reactionUsers");
+
 export type SyncedReactions = ReturnType<typeof syncedReactionsForBridge>;
+
+export type ReactionUsers = ReturnType<typeof reactionUsersForBridge>;
 
 /**
  * Per-space sidebar hash tracking.

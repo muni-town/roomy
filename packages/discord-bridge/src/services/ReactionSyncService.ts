@@ -388,78 +388,54 @@ export class ReactionSyncService {
 
     const channelId = BigInt(discordChannelId.replace("room:", ""));
 
-    // Parse user DID to get Discord user ID
-    // Format: did:discord:123456789
-    const userIdMatch = userDid.match(/^did:discord:(\d+)$/);
-    if (!userIdMatch) {
-      console.warn(
-        `[ReactionSyncService] Cannot map user DID ${userDid} to Discord user, skipping reaction`,
-      );
-      return;
-    }
+    // Track reaction user in aggregate state
+    const reactionKey = `${roomyMessageId}:${reaction}`;
+    await this.repo.addReactionUser(reactionKey, userDid);
 
-    const userId = BigInt(userIdMatch[1]!);
+    // Check if this is the first reaction (bot needs to add it)
+    const users = await this.repo.getReactionUsers(reactionKey);
+    if (users && users.size === 1) {
+      try {
+        // Parse reaction string to Discord emoji format
+        // Unicode emoji: just use the string
+        // Custom emoji: Discord uses format "name:id" (not the <:name:id> format)
+        let emojiString = reaction;
 
-    // Idempotency check - use our own key format
-    const key = `${roomyMessageId}:${userId}:${reaction}`;
-    const existing = await this.repo.getReaction(key);
-    if (existing) {
-      return; // Already synced
-    }
+        // Check if it's a custom emoji in format <:name:id> or <a:name:id>
+        const emojiMatch = reaction.match(/^<?(a)?:([^:]+):(\d+)>?$/);
+        if (emojiMatch) {
+          // Convert to Discord API format: "name:id"
+          emojiString = `${emojiMatch[2]}:${emojiMatch[3]!}`;
+        }
 
-    try {
-      // Parse reaction string to Discord emoji format
-      // Unicode emoji: just use the string
-      // Custom emoji: Discord uses format "name:id" (not the <:name:id> format)
-      let emojiString = reaction;
+        await this.bot.helpers.addReaction(channelId, messageId, emojiString);
 
-      // Check if it's a custom emoji in format <:name:id> or <a:name:id>
-      const emojiMatch = reaction.match(/^<?(a)?:([^:]+):(\d+)>?$/);
-      if (emojiMatch) {
-        // Convert to Discord API format: "name:id"
-        emojiString = `${emojiMatch[2]}:${emojiMatch[3]!}`;
+        console.log(
+          `[ReactionSyncService] Bot added reaction ${reaction} to Discord message ${messageId}`,
+        );
+      } catch (error) {
+        console.error(
+          `[ReactionSyncService] Error adding reaction to Discord:`,
+          error,
+        );
       }
-
-      await this.bot.helpers.addReaction(channelId, messageId, emojiString);
-
-      // Track the synced reaction
-      await this.repo.setReaction(key, newUlid());
-
-      console.log(
-        `[ReactionSyncService] Added reaction ${reaction} to Discord message ${messageId}`,
-      );
-    } catch (error) {
-      console.error(
-        `[ReactionSyncService] Error adding reaction to Discord:`,
-        error,
-      );
     }
   }
 
   /**
    * Sync a Roomy reaction remove to Discord.
    *
-   * @param reactionEventId - Roomy reaction event ULID to remove
+   * @param reactionTo - Roomy message ULID the reaction was on
    * @param roomyRoomId - Roomy room ULID
+   * @param reaction - Emoji string being removed
    * @param userDid - User DID who removed the reaction
-   * @param bot - Discord bot instance
    */
   async syncRoomyToDiscordRemove(
-    reactionEventId: string,
+    reactionTo: string,
     roomyRoomId: string,
+    reaction: string,
     userDid: Did,
   ): Promise<void> {
-    // Parse user DID to get Discord user ID
-    const userIdMatch = userDid.match(/^did:discord:(\d+)$/);
-    if (!userIdMatch) {
-      console.warn(
-        `[ReactionSyncService] Cannot map user DID ${userDid} to Discord user, skipping reaction removal`,
-      );
-      return;
-    }
-
-    const userId = BigInt(userIdMatch[1]!);
-
     // Get Discord channel ID
     const discordChannelId = await this.repo.getDiscordId(roomyRoomId);
     if (!discordChannelId) {
@@ -471,26 +447,44 @@ export class ReactionSyncService {
 
     const channelId = BigInt(discordChannelId.replace("room:", ""));
 
-    // Find the reaction to remove by looking up our tracking
-    // We need to iterate through tracked reactions to find the one matching this event
-    // This is a limitation of our current tracking - we track by Discord key, not Roomy event ID
-    // For now, we'll use a simple approach: find by prefix matching
-    // A better approach would be to store bidirectional mapping
+    // Get Discord message ID
+    const discordId = await this.repo.getDiscordId(reactionTo);
+    if (!discordId) {
+      console.warn(
+        `[ReactionSyncService] Roomy message ${reactionTo} not synced to Discord, skipping reaction removal`,
+      );
+      return;
+    }
 
-    // Note: This is a simplified approach. In a production system,
-    // we'd need a more sophisticated tracking mechanism.
-    // For now, we'll just log a warning since we can't easily
-    // map back from the Roomy reaction event ID to the Discord reaction
-    console.warn(
-      `[ReactionSyncService] Cannot remove Discord reaction for Roomy event ${reactionEventId} - mapping not implemented`,
-    );
+    const messageId = BigInt(discordId.replace("room:", ""));
 
-    // TODO: Implement proper reverse lookup for reaction removal
-    // We'd need to:
-    // 1. Store Roomy reaction event ID -> Discord reaction key mapping
-    // 2. Query that mapping here
-    // 3. Parse the emoji and user from the key
-    // 4. Call bot.helpers.deleteOwnReaction() or bot.helpers.deleteUserReaction()
+    // Remove user from aggregate state
+    const reactionKey = `${reactionTo}:${reaction}`;
+    await this.repo.removeReactionUser(reactionKey, userDid);
+
+    // Check if this was the last reaction (bot needs to remove it)
+    const users = await this.repo.getReactionUsers(reactionKey);
+    if (!users || users.size === 0) {
+      try {
+        // Parse reaction string to Discord emoji format
+        let emojiString = reaction;
+
+        // Check if it's a custom emoji in format <:name:id> or <a:name:id>
+        const emojiMatch = reaction.match(/^<?(a)?:([^:]+):(\d+)>?$/);
+        if (emojiMatch) {
+          // Convert to Discord API format: "name:id"
+          emojiString = `${emojiMatch[2]}:${emojiMatch[3]!}`;
+        }
+
+        await this.bot.helpers.deleteOwnReaction(channelId, messageId, emojiString);
+
+        console.log(
+          `[ReactionSyncService] Bot removed reaction ${reaction} from Discord message ${messageId}`,
+        );
+      } catch (error) {
+        console.error(`[ReactionSyncService] Error removing reaction from Discord:`, error);
+      }
+    }
   }
 
   /**
@@ -516,6 +510,15 @@ export class ReactionSyncService {
           this.dispatcher.toDiscord.push({ batchId, isLastEvent });
         return true;
       } // Handled (Discord origin, no sync back)
+
+      // Skip Discord-bridged users to prevent echo
+      // (Bridged users have DIDs like did:discord:123456789)
+      if (decoded.user.startsWith("did:discord:")) {
+        if (isLastEvent)
+          this.dispatcher.toDiscord.push({ batchId, isLastEvent });
+        return true;
+      }
+
       this.dispatcher.toDiscord.push({ decoded, batchId, isLastEvent });
       return true;
     } catch (error) {
@@ -550,7 +553,17 @@ export class ReactionSyncService {
     ) {
       if (!e.room) return;
       if (!this.bot) return;
-      await this.syncRoomyToDiscordRemove(e.id, e.room, decoded.user);
+      // For removeReaction events, we need reactionTo and reaction which aren't directly in the event
+      // We track this when adding reactions using event ID -> {reactionTo, reaction} mapping
+      const removeData = await this.repo.getReaction(e.id);
+      if (!removeData) {
+        console.warn(`[ReactionSyncService] Unknown reaction event ${e.id}, skipping removal`);
+        return;
+      }
+      const { reactionTo, reaction } = JSON.parse(removeData);
+      // Also clean up the reaction metadata mapping
+      await this.repo.deleteReaction(e.id);
+      await this.syncRoomyToDiscordRemove(reactionTo, e.room, reaction, decoded.user);
     }
   }
 }

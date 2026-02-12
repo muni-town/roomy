@@ -17,6 +17,7 @@ export class MockBridgeRepository implements BridgeRepository {
   private readonly roomyUserProfiles = new Map<string, RoomyUserProfile>();
   private readonly blueskyFetchAttempts = new Map<string, number>();
   private readonly reactions = new Map<string, string>();
+  private readonly reactionUsers = new Map<string, Set<string>>();
   private sidebarHash: string | undefined;
   private readonly roomLinks = new Map<string, string>();
   private readonly editInfos = new Map<string, SyncedEdit>();
@@ -57,6 +58,7 @@ export class MockBridgeRepository implements BridgeRepository {
     this.roomyUserProfiles.clear();
     this.blueskyFetchAttempts.clear();
     this.reactions.clear();
+    this.reactionUsers.clear();
     this.sidebarHash = undefined;
     this.roomLinks.clear();
     this.editInfos.clear();
@@ -171,6 +173,31 @@ export class MockBridgeRepository implements BridgeRepository {
   async deleteReaction(key: string): Promise<void> {
     this.trackCall("deleteReaction");
     this.reactions.delete(key);
+  }
+
+  async getReactionUsers(key: string): Promise<Set<string> | undefined> {
+    this.trackCall("getReactionUsers");
+    return this.reactionUsers.get(key);
+  }
+
+  async addReactionUser(key: string, userDid: string): Promise<void> {
+    this.trackCall("addReactionUser");
+    let users = this.reactionUsers.get(key);
+    if (!users) {
+      users = new Set();
+      this.reactionUsers.set(key, users);
+    }
+    users.add(userDid);
+  }
+
+  async removeReactionUser(key: string, userDid: string): Promise<void> {
+    this.trackCall("removeReactionUser");
+    const users = this.reactionUsers.get(key);
+    if (!users) return;
+    users.delete(userDid);
+    if (users.size === 0) {
+      this.reactionUsers.delete(key);
+    }
   }
 
   // === Sidebar ===
