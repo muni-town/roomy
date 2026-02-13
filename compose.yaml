@@ -3,7 +3,7 @@
 
 services:
   leaf-server:
-    image: ghcr.io/muni-town/leaf:sha-bcae9f8
+    image: ghcr.io/muni-town/leaf:sha-9e5c9ec
     platform: linux/amd64 # no arm64 build available
     # Uncomment if you are also dev-ing the leaf server
     # scale: 0
@@ -45,27 +45,6 @@ services:
       POSTGRES_PASSWORD: password
     volumes:
       - plc-db-data:/var/lib/postgresql
-    networks:
-      - roomy-dev
-
-  pds:
-    image: node:20-alpine
-    working_dir: /pds
-    command: sh -c "npm install && npm start"
-    volumes:
-      - ./pds:/pds
-      - pds-data:/data
-    ports:
-      - "2583:2583"
-    environment:
-      NODE_ENV: development
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:2583/xrpc/_health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     networks:
       - roomy-dev
 
