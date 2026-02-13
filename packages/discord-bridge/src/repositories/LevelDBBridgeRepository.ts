@@ -34,6 +34,15 @@ export class LevelDBBridgeRepository implements BridgeRepository {
     await this.stores.syncedIds.clear();
     await this.stores.discordLatestMessage.clear();
     await this.stores.discordWebhookTokens.clear();
+    await this.stores.syncedProfiles.clear();
+    await this.stores.roomyUserProfiles.clear();
+    await this.stores.blueskyFetchAttempts.clear();
+    await this.stores.syncedReactions.clear();
+    await this.stores.reactionUsers.clear();
+    await this.stores.syncedSidebarHash.clear();
+    await this.stores.syncedRoomLinks.clear();
+    await this.stores.syncedEdits.clear();
+    await this.stores.discordMessageHashes.clear();
   }
 
   // === ID Mapping ===

@@ -173,6 +173,7 @@ export async function handleSlashCommandInteraction(ctx: {
   guildId: bigint;
   spaceExists: (did: StreamDid) => Promise<boolean>;
   createBridge: (spaceId: StreamDid, guildId: bigint) => Promise<Bridge>;
+  deleteBridge?: (guildId: bigint) => void;
   bridge?: Bridge;
 }) {
   if (ctx.interaction.type == InteractionTypes.ApplicationCommand) {
@@ -280,6 +281,7 @@ export async function handleSlashCommandInteraction(ctx: {
             spaceId: ctx.bridge.connectedSpace.streamDid,
           });
           await ctx.bridge.disconnect();
+          ctx.deleteBridge?.(ctx.guildId);
 
           await ctx.interaction.edit({
             content: "Successfully disconnected the Roomy space. 🔌",

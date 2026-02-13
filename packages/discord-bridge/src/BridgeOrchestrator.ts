@@ -163,6 +163,9 @@ export class BridgeOrchestrator {
             guildId,
             spaceExists,
             createBridge: orchestrator.createBridge.bind(orchestrator),
+            deleteBridge: (guildId: bigint) => {
+              orchestrator.bridges.delete(guildId);
+            },
             bridge,
           });
         },

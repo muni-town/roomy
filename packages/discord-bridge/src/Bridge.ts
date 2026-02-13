@@ -229,6 +229,14 @@ export class Bridge {
   }
 
   async disconnect() {
+    // Stop dispatcher channels to signal consumer loops to exit
+    this.dispatcher.toRoomy.finish();
+    this.dispatcher.toDiscord.finish();
+
+    // Unsubscribe from Roomy events
+    await this.connectedSpace.unsubscribe();
+
+    // Clear all database stores
     await this.repo.delete();
   }
 
@@ -250,7 +258,7 @@ export class Bridge {
           // Subscribe with the handler
           this.connectedSpace.subscribe(
             this.handleRoomyEvents.bind(this),
-            1 as StreamIndex, // TODO put back 'cursor'
+            cursor as StreamIndex,
           );
           // Wait for backfill to complete before returning
           console.log(
