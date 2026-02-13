@@ -679,11 +679,16 @@ export class Peer {
 
   /** Get a URL for redirecting to the ATProto PDS for login */
   async login(handle: string) {
-    const oauth = await createOauthClient();
-    const url = await oauth.authorize(handle, {
-      scope: CONFIG.atprotoOauthScope,
-    });
-    return url.href;
+    try {
+      const oauth = await createOauthClient();
+      const url = await oauth.authorize(handle, {
+        scope: CONFIG.atprotoOauthScope,
+      });
+      return url.href;
+    } catch (e) {
+      console.error("Error getting oauth redirect", e);
+      throw e;
+    }
   }
 
   /** Logout of the current session. */
