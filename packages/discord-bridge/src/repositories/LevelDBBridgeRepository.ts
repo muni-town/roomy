@@ -354,7 +354,12 @@ async function retryWithBackoff<T>(
       lastError = error;
 
       // Don't retry if this isn't a lock error
-      if (error.code !== "LEVEL_LOCKED") {
+      // Note: abstract-level wraps LEVEL_LOCKED in LEVEL_DATABASE_NOT_OPEN
+      const isLockError =
+        error.code === "LEVEL_LOCKED" ||
+        error.cause?.code === "LEVEL_LOCKED";
+
+      if (!isLockError) {
         throw error;
       }
 
