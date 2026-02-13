@@ -4,6 +4,7 @@
   import { Badge, Button, toast } from "@fuxui/base";
   import { onMount } from "svelte";
   import InlineMono from "$lib/components/primitives/InlineMono.svelte";
+  import { IconCopy } from "@roomy/design/icons";
 
   let space = $derived(page.params.space);
   let bridgeStatus:
@@ -64,6 +65,16 @@
     // await revokeSpaceAdmin(bridgeStatus.bridgeJazzAccount, space.current);
     updateBridgeStatus();
     toast.success("Revoked granted bot permissions.");
+  }
+
+  async function copyToClipboard(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      console.log("Text copied to clipboard");
+      toast.success("Copied to clipboard", { position: "bottom-right" });
+    } catch (err) {
+      console.error("Failed to copy text: ", err);
+    }
   }
 
   // Reload app when this module changes to prevent stacking the setIntervals
@@ -236,6 +247,12 @@
           <div class="flex gap-2 items-center mt-4 ml-4">
             <strong>space-id:</strong>
             <InlineMono>{page.params.space}</InlineMono>
+            <Button
+              size="icon"
+              onclick={() =>
+                copyToClipboard(
+                  "/connect-roomy-space " + page.params.space || "",
+                )}><IconCopy /></Button
             >
           </div>
         </div>
