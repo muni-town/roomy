@@ -519,10 +519,10 @@ export class MessageSyncService {
       }
 
       // Fetch messages with pagination (oldest first)
-      let before: bigint | undefined;
+      let after: bigint = channelId;
       while (true) {
         const messages = await this.bot.helpers.getMessages(channelId, {
-          before,
+          after,
           limit: 100,
         });
 
@@ -548,7 +548,7 @@ export class MessageSyncService {
         }
 
         // Update cursor
-        before = messages[0]?.id;
+        after = sortedMessages[sortedMessages.length - 1]!.id;
       }
     }
 
