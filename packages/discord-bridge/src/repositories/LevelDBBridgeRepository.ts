@@ -98,16 +98,11 @@ export class LevelDBBridgeRepository implements BridgeRepository {
     return this.stores.roomyUserProfiles.put(did, profile);
   }
 
-  async getBlueskyFetchAttempt(
-    did: string,
-  ): Promise<number | undefined> {
+  async getBlueskyFetchAttempt(did: string): Promise<number | undefined> {
     return this.stores.blueskyFetchAttempts.get(did);
   }
 
-  async setBlueskyFetchAttempt(
-    did: string,
-    timestamp: number,
-  ): Promise<void> {
+  async setBlueskyFetchAttempt(did: string, timestamp: number): Promise<void> {
     return this.stores.blueskyFetchAttempts.put(did, timestamp);
   }
 
@@ -331,6 +326,139 @@ const db = new ClassicLevel(process.env.DATA_DIR || "./data", {
   valueEncoding: "json",
 });
 
+let openPromise: Promise<void> | undefined;
+
+/**
+ * Retry helper with exponential backoff for operations that may fail temporarily.
+ * @param operation - Async operation to retry
+ * @param context - Description for error messages
+ * @param maxRetries - Number of retry attempts (default: 5)
+ * @param initialDelay - Initial delay in ms (default: 100)
+ * @param maxDelay - Maximum delay in ms (default: 2000)
+ * @returns Promise that resolves with operation result or throws after all retries exhausted
+ */
+async function retryWithBackoff<T>(
+  operation: () => Promise<T>,
+  context: string,
+  maxRetries = 5,
+  initialDelay = 100,
+  maxDelay = 2000,
+): Promise<T> {
+  let lastError: any;
+  let delay = initialDelay;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      lastError = error;
+
+      // Don't retry if this isn't a lock error
+      if (error.code !== "LEVEL_LOCKED") {
+        throw error;
+      }
+
+      // Don't retry on last attempt
+      if (attempt === maxRetries) {
+        break;
+      }
+
+      // Log retry attempt
+      console.warn(
+        `⚠️  ${context} failed (attempt ${attempt + 1}/${maxRetries + 1}), ` +
+          `retrying in ${delay}ms...`,
+      );
+
+      // Wait before retry with exponential backoff
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay = Math.min(delay * 2, maxDelay);
+    }
+  }
+
+  // All retries exhausted
+  throw lastError;
+}
+
+/**
+ * Ensure the database is open before any operations.
+ * This is called automatically by methods that access the database.
+ * Uses a promise guard to prevent race conditions when multiple methods
+ * call this concurrently during startup.
+ *
+ * Retry logic handles LEVEL_LOCKED errors which can occur during:
+ * - tsx watch restarts (previous process hasn't fully released lock yet)
+ * - Rapid process restarts during development
+ */
+async function ensureDbOpen() {
+  if (!db.status || db.status === "closed" || db.status === "closing") {
+    if (!openPromise) {
+      openPromise = retryWithBackoff(
+        () => db.open(),
+        "Database open",
+        5,  // maxRetries
+        100, // initialDelay (ms)
+        2000, // maxDelay (ms)
+      )
+        .then(() => {
+          console.log("✅ Database opened successfully");
+        })
+        .catch((error: any) => {
+          if (error.code === "LEVEL_LOCKED") {
+            console.error(
+              "\n❌ Failed to open database after multiple retries.\n" +
+                "The database lock could not be acquired.\n\n" +
+                "Possible causes:\n" +
+                "  - Another instance of the bridge is running\n" +
+                "  - A previous process crashed without closing the database\n" +
+                "  - tsx watch restarted too quickly\n\n" +
+                "Troubleshooting:\n" +
+                "  - Check for running processes: pkill -f 'discord-bridge.*src/index'\n" +
+                "  - Check lock file owner: lsof ./data/LOCK\n" +
+                "  - Remove stale lock: rm ./data/LOCK (ONLY if no other process is running!)\n",
+            );
+          }
+          throw error;
+        })
+        .finally(() => {
+          openPromise = undefined;
+        });
+
+      await openPromise;
+    }
+  }
+}
+
+/**
+ * Initialize the database by opening it. Can be called explicitly before any database operations.
+ * This is idempotent - safe to call multiple times.
+ * Note: Database methods will automatically call this on first use.
+ */
+export async function initDB() {
+  await ensureDbOpen();
+  return db;
+}
+
+/**
+ * Close the database gracefully. Should be called before process exit to ensure
+ * proper cleanup and avoid lock issues on restart.
+ *
+ * This is safe to call multiple times - if database is already closed, it's a no-op.
+ */
+export async function closeDB() {
+  if (!db.status || db.status === "closed") {
+    return; // Already closed
+  }
+
+  console.log("Closing database...");
+  try {
+    await db.close();
+    console.log("✅ Database closed successfully");
+  } catch (error: any) {
+    console.error("⚠️  Error closing database:", error.message);
+    // Don't throw - we want to continue shutdown even if close fails
+  }
+}
+
 export type Event<A extends string, B extends string> =
   | ({ type: "register" } & { [K in A | B]: string })
   | ({ type: "unregister" } & { [K in A | B]: string })
@@ -378,6 +506,7 @@ function createBidirectionalSublevelMap<A extends string, B extends string>(
       return await sublevel.get(bname + "_" + value);
     },
     async unregister(entry: { [K in A | B]: string }) {
+      await ensureDbOpen();
       const registeredA: string | undefined = await (
         this[`get_${aname}`] as any
       )(entry[bname]);
@@ -385,9 +514,10 @@ function createBidirectionalSublevelMap<A extends string, B extends string>(
         this[`get_${bname}`] as any
       )(entry[aname]);
       if (registeredA != entry[aname] || registeredB != entry[bname]) {
-        throw Error(
+        console.warn(
           `Cannot deregister ${aname}/${bname}: the provided pair isn't registered.`,
         );
+        return;
       }
       await sublevel.batch([
         {
@@ -409,6 +539,7 @@ function createBidirectionalSublevelMap<A extends string, B extends string>(
       }
     },
     async list() {
+      await ensureDbOpen();
       const opts = anameLtBname
         ? {
             gt: aname + "_",
@@ -431,6 +562,7 @@ function createBidirectionalSublevelMap<A extends string, B extends string>(
       subscribers.push(onEvent);
     },
     async clear() {
+      await ensureDbOpen();
       try {
         await sublevel.clear();
         for (const sub of subscribers) {
@@ -442,6 +574,7 @@ function createBidirectionalSublevelMap<A extends string, B extends string>(
       }
     },
     async register(entry: { [K in A | B]: string }) {
+      await ensureDbOpen();
       const akey = aname + "_" + entry[aname];
       const bkey = bname + "_" + entry[bname];
 
@@ -621,8 +754,10 @@ export const roomyUserProfilesForBridge =
  * Value: Unix timestamp in milliseconds of last fetch attempt
  * Used to avoid excessive API calls to Bluesky for profiles that don't exist
  */
-export const blueskyFetchAttemptsForBridge =
-  createBridgeStoreFactory<number>("blueskyFetchAttempts", "json");
+export const blueskyFetchAttemptsForBridge = createBridgeStoreFactory<number>(
+  "blueskyFetchAttempts",
+  "json",
+);
 
 export type BlueskyFetchAttempts = ReturnType<
   typeof blueskyFetchAttemptsForBridge
@@ -644,8 +779,7 @@ export const syncedReactionsForBridge =
  * Value: JSON array of user DIDs who have reacted
  * Used to determine if bot should add/remove reaction based on whether any Roomy users have reacted
  */
-export const reactionUsersForBridge =
-  createBridgeStoreFactory("reactionUsers");
+export const reactionUsersForBridge = createBridgeStoreFactory("reactionUsers");
 
 export type SyncedReactions = ReturnType<typeof syncedReactionsForBridge>;
 

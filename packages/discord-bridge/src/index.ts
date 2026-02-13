@@ -7,18 +7,31 @@ import "dotenv/config";
 import { startApi } from "./api.js";
 import { trace } from "@opentelemetry/api";
 import { BridgeOrchestrator } from "./BridgeOrchestrator.js";
+import { closeDB } from "./repositories/LevelDBBridgeRepository.js";
 
 const tracer = trace.getTracer("index");
 
 // Graceful shutdown
-function shutdown() {
-  tracer.startActiveSpan("shutdown", (span) => {
+async function shutdown() {
+  console.log("\n🛑 Shutting down gracefully...");
+  await tracer.startActiveSpan("shutdown", async (span) => {
+    // Close database first to avoid lock issues on restart
+    await closeDB();
     span.end();
-    process.exit(0);
   });
+  process.exit(0);
 }
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+
+// Convert signal events to async shutdown
+const handleShutdown = () => {
+  shutdown().catch((error) => {
+    console.error("Error during shutdown:", error);
+    process.exit(1);
+  });
+};
+
+process.on("SIGINT", handleShutdown);
+process.on("SIGTERM", handleShutdown);
 
 let bridgeOrchestrator;
 try {
