@@ -128,9 +128,11 @@
       >
 
       {#if lastLogin?.handle}
-        <Label for="atproto-handle" class="mt-4 text-sm">Recent login:</Label>
+        <Label for="atproto-handle" class="mt-4 text-sm w-full"
+          >Recent login:</Label
+        >
         <Button
-          class="max-w-xs overflow-x-hidden justify-start truncate"
+          class="overflow-x-hidden justify-start truncate self-stretch w-full"
           variant="primary"
           onclick={(evt) => {
             handle = lastLogin?.handle ?? "";
