@@ -7,13 +7,6 @@ import {
   MessageFlags,
 } from "@discordeno/bot";
 
-// import {
-//   discordLatestMessageInChannelForBridge,
-//   discordWebhookTokensForBridge,
-//   registeredBridges,
-//   syncedIdsForBridge,
-// } from "../repositories/db.js";
-// import { getRoomyClient, subscribeToSpace } from "../roomy/client.js";
 import { StreamDid } from "@roomy/sdk";
 import { Bridge } from "../Bridge.js";
 import { registeredBridges } from "../repositories/LevelDBBridgeRepository.js";
@@ -173,7 +166,7 @@ export async function handleSlashCommandInteraction(ctx: {
   guildId: bigint;
   spaceExists: (did: StreamDid) => Promise<boolean>;
   createBridge: (spaceId: StreamDid, guildId: bigint) => Promise<Bridge>;
-  deleteBridge?: (guildId: bigint) => void;
+  deleteBridge?: () => void;
   bridge?: Bridge;
 }) {
   if (ctx.interaction.type == InteractionTypes.ApplicationCommand) {
@@ -275,13 +268,13 @@ export async function handleSlashCommandInteraction(ctx: {
       // Defer immediately to avoid 3-second timeout
       if (!(await safeDefer(ctx.interaction, true))) return;
       try {
-        if (ctx.bridge) {
-          registeredBridges.unregister({
+        if (ctx.bridge && ctx.deleteBridge) {
+          await ctx.bridge.disconnect();
+          await registeredBridges.unregister({
             guildId: ctx.guildId.toString(),
             spaceId: ctx.bridge.connectedSpace.streamDid,
           });
-          await ctx.bridge.disconnect();
-          ctx.deleteBridge?.(ctx.guildId);
+          ctx.deleteBridge();
 
           await ctx.interaction.edit({
             content: "Successfully disconnected the Roomy space. 🔌",
