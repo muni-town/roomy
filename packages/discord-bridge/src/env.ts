@@ -18,7 +18,8 @@ if (!ATPROTO_BRIDGE_DID || !ATPROTO_BRIDGE_APP_PASSWORD) {
 
 // Leaf server configuration (defaults to dev environment)
 export const LEAF_URL = process.env.LEAF_URL || "https://leaf-dev.muni.town";
-export const LEAF_SERVER_DID = process.env.LEAF_SERVER_DID || `did:web:${new URL(LEAF_URL).hostname}`;
+export const LEAF_SERVER_DID =
+  process.env.LEAF_SERVER_DID || `did:web:${new URL(LEAF_URL).hostname}`;
 
 // ATProto record collections (defaults to dev environment)
 export const STREAM_NSID =

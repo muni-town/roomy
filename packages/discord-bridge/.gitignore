@@ -1,2 +1,5 @@
 data
 .env
+
+# Session cache (development only)
+session.json
