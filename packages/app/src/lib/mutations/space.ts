@@ -51,15 +51,6 @@ export async function createSpace(opts: {
 
   console.log("created space", spaceDid);
 
-  // Join the space
-  await peer.sendEvent(opts.creator.personalStreamId, {
-    id: newUlid(),
-    $type: "space.roomy.space.personal.joinSpace.v0",
-    spaceDid: spaceDid,
-  });
-
-  console.log("sent join space event to personal stream");
-
   // Upload avatar if provided
   const avatarUpload =
     opts.avatarFile &&
@@ -74,8 +65,15 @@ export async function createSpace(opts: {
   });
 
   await peer.sendEventBatch(spaceDid, defaultSpaceEvents);
-
   console.log("sent default space events", defaultSpaceEvents);
+
+  // Join the space
+  await peer.sendEvent(opts.creator.personalStreamId, {
+    id: newUlid(),
+    $type: "space.roomy.space.personal.joinSpace.v0",
+    spaceDid: spaceDid,
+  });
+  console.log("sent join space event to personal stream");
 
   return { spaceDid };
 }
