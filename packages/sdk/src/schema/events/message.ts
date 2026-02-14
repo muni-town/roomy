@@ -11,7 +11,6 @@ import { defineEvent, ensureEntity } from "./utils";
 import { sql } from "../../utils";
 import { decodeTime } from "ulidx";
 import { fromBytes } from "@atcute/cbor";
-import { DiagConsoleLogger } from "@opentelemetry/api";
 
 const CreateMessageSchema = type({
   $type: "'space.roomy.message.createMessage.v0'",

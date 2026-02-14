@@ -200,6 +200,7 @@ const spaceModuleDef: BasicModule = {
       'space.roomy.user.setHandleProvider.v0',
       'space.roomy.space.updateSpaceInfo.v0',
       'space.roomy.space.updateSidebar.v0',
+      'space.roomy.space.updateSidebar.v1',
       'space.roomy.room.createRoom.v0',
       'space.roomy.room.deleteRoom.v0',
       'space.roomy.room.updateRoom.v0',
