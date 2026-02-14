@@ -14,8 +14,8 @@
     renameCategory,
   }: {
     open: boolean;
-    id: { room: Ulid } | { category: string } | null;
-    renameCategory: (id: string, newName: string) => void;
+    id: { room: Ulid } | { categoryId: Ulid; categoryName: string } | null;
+    renameCategory: (id: Ulid, newName: string) => void;
   } = $props();
 
   async function save() {
@@ -30,9 +30,9 @@
         roomId: id.room,
         newName: name,
       });
-    } else if ("category" in id) {
+    } else if ("categoryId" in id) {
       console.log("Todo: save category name");
-      renameCategory(id.category, name);
+      renameCategory(id.categoryId, name);
     }
     open = false;
   }
@@ -54,7 +54,7 @@
   );
   const room = $derived(roomQuery.result?.[0]);
   let name = $derived(
-    room?.name ?? (id && "category" in id && id.category) ?? "",
+    room?.name ?? (id && "categoryName" in id && id.categoryName) ?? "",
   );
   let kind = $derived.by(() => {
     if (!room) return "Category";
@@ -69,7 +69,7 @@
   });
 </script>
 
-{#if id && (("room" in id && room) || "category" in id)}
+{#if id && (("room" in id && room) || "categoryId" in id)}
   <Modal bind:open>
     <div class="max-h-[80vh] overflow-y-auto">
       <form id="createSpace" class="flex flex-col gap-4" onsubmit={save}>
@@ -104,12 +104,6 @@
         >
           Danger zone
         </h3>
-        <div class="mt-1">
-          <p class="text-sm text-base-500 dark:text-base-400">
-            This will also delete all children of this {kind.toLowerCase()} and cannot
-            be undone
-          </p>
-        </div>
         <div class="flex justify-start">
           <Button
             onclick={async () => {
@@ -125,7 +119,7 @@
             variant="red"
           >
             <IconTrash class="size-4" />
-            Delete room
+            Delete {kind}
           </Button>
         </div>
       </form>

@@ -30,9 +30,13 @@
   // under channels there can be threads or pages
 
   let isEditing = $state(false);
-  let editingId = $state<{ room: Ulid } | { category: string } | null>(null);
+  let editingId = $state<
+    { room: Ulid } | { categoryId: Ulid; categoryName: string } | null
+  >(null);
 
-  function editSidebarItem(id: { room: Ulid } | { category: string }) {
+  function editSidebarItem(
+    id: { room: Ulid } | { categoryId: Ulid; categoryName: string },
+  ) {
     console.debug("Edit sidebar item");
     openEditRoomModal = true;
     editingId = id;
@@ -51,7 +55,7 @@
 
   let openEditRoomModal = $state(false);
 
-  function renameCategory(id: string, newName: string) {
+  function renameCategory(id: Ulid, newName: string) {
     // keep the 'id' (old name) the same in the categoryMap
     // but change the name in state
     console.debug("Rename category", { id, newName });
@@ -89,8 +93,8 @@
   let categories = $derived(sidebar.categories ?? []);
 
   type DraftOrder = {
-    id: string;
-    childIds: string[];
+    id: Ulid;
+    childIds: Ulid[];
     [SHADOW_ITEM_MARKER_PROPERTY_NAME]?: boolean;
   }[];
 
@@ -198,7 +202,7 @@
       <hr class="my-2 border-base-800/10 dark:border-base-100/5" />
     {/if}
 
-    {#if page.params.object && !roomsInSidebar.has(page.params.object) && !parentContext}
+    {#if page.params.object && !roomsInSidebar.has(page.params.object as Ulid) && !parentContext}
       <Button
         variant="ghost"
         class="w-full justify-start min-w-0 my-4"

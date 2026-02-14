@@ -1,4 +1,4 @@
-import type { Handle, StreamDid } from "@roomy/sdk";
+import type { Handle, StreamDid, Ulid } from "@roomy/sdk";
 
 export type SpaceMeta = {
   id: StreamDid;
@@ -17,7 +17,7 @@ export type SidebarCategory = Extract<
 >;
 
 export type SidebarItem = {
-  id: string;
+  id: Ulid;
   name: string;
   parent?: string;
   lastRead: number;

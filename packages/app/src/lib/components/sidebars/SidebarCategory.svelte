@@ -2,7 +2,12 @@
   import { Button } from "@fuxui/base";
   import type { SidebarCategory } from "$lib/queries";
   import { dragHandleZone, dragHandle } from "svelte-dnd-action";
-  import { IconPencil, IconChevronDown, IconChevronUp, IconGripVertical } from "@roomy/design/icons";
+  import {
+    IconPencil,
+    IconChevronDown,
+    IconChevronUp,
+    IconGripVertical,
+  } from "@roomy/design/icons";
   import { page } from "$app/state";
   import SidebarItem from "./SidebarItem.svelte";
   import type { Ulid } from "@roomy/sdk";
@@ -15,7 +20,9 @@
   }: {
     category: SidebarCategory;
     isEditing: boolean;
-    editSidebarItem: (id: { room: Ulid } | { category: string }) => void;
+    editSidebarItem: (
+      id: { room: Ulid } | { categoryId: Ulid; categoryName: string },
+    ) => void;
     onRoomMove?: (newChildren: SidebarCategory["children"]) => void;
   } = $props();
 
@@ -31,7 +38,11 @@
     <Button
       variant="ghost"
       size="icon"
-      onclick={() => editSidebarItem({ category: category.id })}
+      onclick={() =>
+        editSidebarItem({
+          categoryId: category.id,
+          categoryName: category.name,
+        })}
       class="group-hover:opacity-100 opacity-20"
     >
       <IconPencil class="size-4" />

@@ -5,7 +5,12 @@
   // import { atprotoFeedService } from "$lib/services/atprotoFeedService";
   import type { SidebarItem } from "$lib/queries";
 
-  import { IconPencil, IconHashtag, IconCornerDownRight, IconDocument } from "@roomy/design/icons";
+  import {
+    IconPencil,
+    IconHashtag,
+    IconCornerDownRight,
+    IconDocument,
+  } from "@roomy/design/icons";
   import LinkedRoomsList from "./LinkedRoomsList.svelte";
   import { Ulid } from "@roomy/sdk";
 
@@ -17,7 +22,9 @@
     item: SidebarItem;
     isEditing: boolean;
     index?: number;
-    editSidebarItem: (id: { room: Ulid } | { category: string }) => void;
+    editSidebarItem: (
+      id: { room: Ulid } | { categoryId: Ulid; categoryName: string },
+    ) => void;
   } = $props();
 
   // let showEditModal = $state(false);
