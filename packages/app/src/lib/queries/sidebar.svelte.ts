@@ -2,16 +2,21 @@ import { LiveQuery } from "$lib/utils/liveQuery.svelte";
 import { current } from "./current.svelte";
 import { sql } from "$lib/utils/sqlTemplate";
 import type { SidebarCategory } from "./types";
+import type { Ulid } from "@roomy/sdk";
 
 export let categoriesQuery: LiveQuery<{
   id: string | null;
   name: string;
-  children: { id: string; name: string }[];
+  children: { id: Ulid; name: string }[];
 }>;
 
 /** The sidebar tree for the currently selected space. */
-export const sidebar = $state<{ result?: SidebarCategory[] }>({
-  result: undefined,
+export const sidebar = $state<{
+  categories?: SidebarCategory[];
+  orphanChannels?: { id: Ulid; name: string }[];
+}>({
+  categories: undefined,
+  orphanChannels: undefined,
 });
 (globalThis as any).sidebar = sidebar;
 
@@ -50,16 +55,34 @@ $effect.root(() => {
     (row) => JSON.parse(row.json),
   );
 
+  // A query for all channels, used to calculate the orphaned channels list.
+  const allChannelsQuery = new LiveQuery<{ id: Ulid; name: string }>(
+    () => sql`
+    select id, name from entities e
+    join comp_room r on e.id = r.entity
+    join comp_info i on e.id = i.entity
+    where
+      label = 'space.roomy.channel'
+        and
+      e.stream_id = ${current.space.status == "joined" ? current.space.space.id : null};
+  `,
+  );
+
   // Convert categories query to expected sidebar items structure
   $effect(() => {
     if (!current.joinedSpace || categoriesQuery.current.status === "loading")
       return;
     // console.debug("categories", $state.snapshot(categoriesQuery.result));
     if (categoriesQuery.result) {
-      sidebar.result = categoriesQuery.result.map((x, i) => {
+      let allChannelIds = new Set(
+        allChannelsQuery.result?.map((x) => x.id) || [],
+      );
+      let pinnedChannelIds = new Set();
+      sidebar.categories = categoriesQuery.result.map((x, i) => {
         // Deduplicate children by id (data may have duplicates from bridge sync)
         const seen = new Set<string>();
         const uniqueChildren = x.children.filter((c) => {
+          pinnedChannelIds.add(c.id);
           if (seen.has(c.id)) return false;
           seen.add(c.id);
           return true;
@@ -86,8 +109,14 @@ $effect.root(() => {
           })),
         } satisfies SidebarCategory;
       });
+
+      let orphanChannels = allChannelIds.difference(pinnedChannelIds);
+      sidebar.orphanChannels = [...orphanChannels]
+        .map((id) => allChannelsQuery.result?.find((x) => x.id == id))
+        .filter((x) => !!x);
     } else {
-      sidebar.result = undefined;
+      sidebar.categories = undefined;
+      sidebar.orphanChannels = undefined;
     }
   });
 });

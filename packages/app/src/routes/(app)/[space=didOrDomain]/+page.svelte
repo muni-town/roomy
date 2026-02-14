@@ -31,7 +31,7 @@
       current.joinedSpace.id !== page.params.space
     )
       return;
-    const firstCategory = sidebarQuery.result?.[0];
+    const firstCategory = sidebarQuery.categories?.[0];
     if (firstCategory?.type === "space.roomy.category") {
       const firstChild = firstCategory.children?.[0]?.id;
       if (firstChild)

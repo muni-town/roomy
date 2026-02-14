@@ -6,7 +6,12 @@
   import EditRoomModal from "../modals/EditRoomModal.svelte";
   import { Button } from "@fuxui/base";
 
-  import { IconCheck, IconHome, IconHashtag, IconGripVertical } from "@roomy/design/icons";
+  import {
+    IconCheck,
+    IconHome,
+    IconHashtag,
+    IconGripVertical,
+  } from "@roomy/design/icons";
   import SidebarCategory from "./SidebarCategory.svelte";
   import { type SidebarCategory as SidebarCategoryType } from "$lib/queries";
   import EntityName from "../primitives/EntityName.svelte";
@@ -18,6 +23,7 @@
     SHADOW_ITEM_MARKER_PROPERTY_NAME,
   } from "svelte-dnd-action";
   import { peer } from "$lib/workers";
+  import SidebarItem from "./SidebarItem.svelte";
 
   // at the top level there can be categories, channels or pages
   // under categories there can be channels or pages
@@ -33,9 +39,12 @@
   }
 
   const roomsInSidebar = $derived(
-    new Set(
-      sidebar.result?.flatMap((cat) => cat.children.map((child) => child.id)),
-    ),
+    new Set([
+      ...(sidebar.categories?.flatMap((cat) =>
+        cat.children.map((child) => child.id),
+      ) || []),
+      ...(sidebar.orphanChannels?.map((x) => x.id) || []),
+    ]),
   );
 
   const parentContext = $derived(page.url.searchParams.get("parent"));
@@ -77,7 +86,7 @@
     isEditing = false;
   }
 
-  let categories = $derived(sidebar.result ?? []);
+  let categories = $derived(sidebar.categories ?? []);
 
   type DraftOrder = {
     id: string;
@@ -89,11 +98,12 @@
 
   // Build lookup maps from the latest sidebar data
   let categoryMap = $derived(
-    new Map(sidebar.result?.map((c) => [c.id, c]) ?? []),
+    new Map(sidebar.categories?.map((c) => [c.id, c]) ?? []),
   );
   const roomMap = $derived(
     new Map(
-      sidebar.result?.flatMap((c) => c.children.map((r) => [r.id, r])) ?? [],
+      sidebar.categories?.flatMap((c) => c.children.map((r) => [r.id, r])) ??
+        [],
     ),
   );
 
@@ -247,9 +257,29 @@
       </div>
     {:else}
       <div class="flex flex-col w-full min-h-4">
-        {#each sidebar.result as category (category.id)}
+        {#each sidebar.categories as category (category.id)}
           <div class="flex items-start w-full" id={category.id}>
             <SidebarCategory bind:isEditing {editSidebarItem} {category} />
+          </div>
+        {/each}
+
+        {#each sidebar.orphanChannels as { id, name }, index}
+          <div {id} class="flex items-start w-full relative">
+            <SidebarItem
+              bind:isEditing
+              {editSidebarItem}
+              {index}
+              item={{
+                id: id,
+                lastRead: 0,
+                latestEntity: 0,
+                name,
+                unreadCount: 0,
+                sortIdx: "",
+                type: "space.roomy.channel",
+                children: [],
+              }}
+            />
           </div>
         {/each}
       </div>
