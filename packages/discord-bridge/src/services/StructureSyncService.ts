@@ -179,6 +179,7 @@ export class StructureSyncService {
     discordThread: ChannelProperties | Camelize<DiscordChannel>,
     parentDiscordChannelId: bigint,
   ): Promise<string> {
+    console.log("syncing thread D>R", discordThread);
     const threadIdStr = discordThread.id.toString();
     const threadRoomKey = getRoomKey(threadIdStr);
 
@@ -865,10 +866,12 @@ export class StructureSyncService {
    */
   async backfillToRoomy(): Promise<{
     textChannels: Camelize<DiscordChannel[]>;
+    publicThreads: Camelize<DiscordChannel[]>;
     syncedCount: number;
   }> {
     let syncedCount = 0;
     let textChannels: Camelize<DiscordChannel[]> = [];
+    let publicThreads: Camelize<DiscordChannel[]> = [];
 
     try {
       const channels = await this.bot.rest.getChannels(this.guildId.toString());
@@ -886,16 +889,63 @@ export class StructureSyncService {
 
       await this.syncFullDiscordSidebar(textChannels, categories);
 
-      const threads = channels.filter(
-        (c) => c.type === ChannelTypes.PublicThread,
-      );
+      const activeThreads = (
+        await this.bot.helpers.getActiveThreads(this.guildId)
+      ).threads;
+      const archivedThreads = (
+        await Promise.all(
+          textChannels.map(async (x) => {
+            let before;
+            let threads: Camelize<DiscordChannel>[] = [];
+            while (true) {
+              try {
+                const resp = await this.bot.helpers.getPublicArchivedThreads(
+                  x.id,
+                  {
+                    before,
+                  },
+                );
+                threads = [...threads, ...(resp.threads as any)];
 
-      for (const thread of threads) {
+                if (resp.hasMore) {
+                  before = parseInt(
+                    resp.threads[resp.threads.length - 1]?.threadMetadata
+                      ?.archiveTimestamp || "0",
+                  );
+                } else {
+                  break;
+                }
+              } catch (e) {
+                console.warn(
+                  `Error fetching threads for channel ( this might be normal if the bot does not have access to the channel ): ${e}`,
+                );
+                break;
+              }
+            }
+
+            return threads;
+          }),
+        )
+      ).flat();
+
+      publicThreads = [
+        ...activeThreads,
+        ...archivedThreads,
+      ] as unknown as Camelize<DiscordChannel[]>; // TODO: fix typing here...
+      // static DiscordChannel has different id type, etc from DesiredProperties DiscordChannel
+
+      console.log("found threads", publicThreads);
+
+      for (const thread of publicThreads) {
         if (!thread.parentId) {
           console.warn("Found thread with no parent, skipping");
           continue;
         }
-        await this.handleDiscordThreadCreate(thread, BigInt(thread.parentId));
+        try {
+          await this.handleDiscordThreadCreate(thread, BigInt(thread.parentId));
+        } catch (e) {
+          console.warn("Error syncing thread", thread, e);
+        }
         syncedCount++;
       }
 
@@ -909,7 +959,7 @@ export class StructureSyncService {
       );
     }
 
-    return { syncedCount, textChannels };
+    return { syncedCount, textChannels, publicThreads };
   }
 
   /**
