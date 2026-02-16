@@ -297,19 +297,22 @@ export class StructureSyncService {
     const sidebarCategories: { id: Ulid; name: string; children: Ulid[] }[] =
       this.updateSidebarCache?.categories || [];
 
-    // Add uncategorized Discord channels to "general" category
-    const generalCategory = sidebarCategories.find(
-      (c) => c.name === "general",
-    ) || {
-      id: newUlid() as Ulid,
-      name: "general",
-      children: [],
-    };
+    console.log("sidebar categories:", sidebarCategories);
 
-    uncategorizedChannels.forEach((ch) => {
-      if (!generalCategory.children.includes(ch))
-        generalCategory.children.push(ch);
-    });
+    /** Note: Removed to see if they just show up in the derived 'category'. Can delete if it works */
+    // // Add uncategorized Discord channels to "general" category
+    // const generalCategory = sidebarCategories.find(
+    //   (c) => c.name === "general",
+    // ) || {
+    //   id: newUlid() as Ulid,
+    //   name: "general",
+    //   children: [],
+    // };
+
+    // uncategorizedChannels.forEach((ch) => {
+    //   if (!generalCategory.children.includes(ch))
+    //     generalCategory.children.push(ch);
+    // });
 
     // Add each Discord category (skip empty ones)
     for (const category of categories) {
@@ -866,7 +869,6 @@ export class StructureSyncService {
    */
   async backfillToRoomy(): Promise<{
     textChannels: Camelize<DiscordChannel[]>;
-    publicThreads: Camelize<DiscordChannel[]>;
     syncedCount: number;
   }> {
     let syncedCount = 0;
@@ -959,7 +961,8 @@ export class StructureSyncService {
       );
     }
 
-    return { syncedCount, textChannels, publicThreads };
+    // merge text channels and public threads, since the only purpose is to ensure messages and reactions are synced
+    return { syncedCount, textChannels: [...textChannels, ...publicThreads] };
   }
 
   /**
@@ -1050,16 +1053,13 @@ export class StructureSyncService {
           // don't return, queue for Discord sync (even if Discord-origin, sidebar should be synced to Discord)
         }
 
-        // if the incoming sidebar is D-origin
-        if (!sidebarOrigin) {
-          this.updateSidebarCache = {
-            categories: event.categories.map((c) => ({
-              id: "id" in c ? c.id : (newUlid() as Ulid),
-              name: c.name,
-              children: c.children,
-            })),
-          };
-        }
+        this.updateSidebarCache = {
+          categories: event.categories.map((c) => ({
+            id: "id" in c ? c.id : (newUlid() as Ulid),
+            name: c.name,
+            children: c.children,
+          })),
+        };
 
         console.log("pushing to Discord", event.id);
         this.dispatcher.toDiscord.push({ decoded, batchId, isLastEvent });
