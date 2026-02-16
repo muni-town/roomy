@@ -7,9 +7,17 @@ A bidirectional synchronization service that connects Discord servers with Roomy
 The Discord Bridge is a standalone microservice that:
 - Syncs messages from Discord channels to Roomy rooms (and vice versa)
 - Maintains reaction parity across platforms
-- Preserves user profiles with "puppeting" for webhook messages
+- Double puppeting (profiles sync across platforms)
 - Supports both real-time sync and historical backfill
-- Uses idempotent event patterns to prevent duplicates and handle restarts
+- Exactly-once delivery
+
+## Limitations
+
+Some features are currently not feasible or otherwise out of scope:
+- Due to Discord API limitations, only one reaction per emoji can be sent from Roomy to Discord, with no profile puppeting
+- Categories are not currently synced
+- During bridge downtime, Discord message deletions may be missed (auto-cleanup not yet implemented)
+- Channels originally created on Roomy can be synced, however they must retain a tag in the topic with the Roomy room ID
 
 ## Architecture
 
