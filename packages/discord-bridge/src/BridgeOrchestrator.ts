@@ -15,6 +15,7 @@ import {
 import { Deferred } from "@roomy/sdk";
 import { registeredBridges } from "./repositories/LevelDBBridgeRepository.js";
 import { Bridge } from "./Bridge.js";
+import { getProxyCacheBot } from "./discord/cache.js";
 
 type BridgeOrchestratorState =
   | {
@@ -107,108 +108,110 @@ export class BridgeOrchestrator {
   async startBot() {
     const orchestrator = this;
     let appIdPromise = new Deferred<string>();
-    const bot = createBot({
-      token: DISCORD_TOKEN,
-      intents:
-        Intents.MessageContent |
-        Intents.Guilds |
-        Intents.GuildMessages |
-        Intents.GuildMessageReactions,
-      desiredProperties,
-      events: {
-        ready(ready) {
-          console.log("Discord bot connected", ready);
-          tracer.startActiveSpan("discord.bot.ready", (span) => {
-            span.setAttribute(
-              "discord.application.id",
-              ready.applicationId.toString(),
-            );
-            span.setAttribute("discord.shard.id", ready.shardId);
-            span.setAttribute("discord.guilds.count", ready.guilds.length);
+    const bot = getProxyCacheBot(
+      createBot({
+        token: DISCORD_TOKEN,
+        intents:
+          Intents.MessageContent |
+          Intents.Guilds |
+          Intents.GuildMessages |
+          Intents.GuildMessageReactions,
+        desiredProperties,
+        events: {
+          ready(ready) {
+            console.log("Discord bot connected", ready);
+            tracer.startActiveSpan("discord.bot.ready", (span) => {
+              span.setAttribute(
+                "discord.application.id",
+                ready.applicationId.toString(),
+              );
+              span.setAttribute("discord.shard.id", ready.shardId);
+              span.setAttribute("discord.guilds.count", ready.guilds.length);
 
-            // Set Discord app ID used in `/info` API endpoint.
-            appIdPromise.resolve(ready.applicationId.toString());
+              // Set Discord app ID used in `/info` API endpoint.
+              appIdPromise.resolve(ready.applicationId.toString());
 
-            // Update discord slash commands.
-            bot.helpers.upsertGlobalApplicationCommands(slashCommands);
+              // Update discord slash commands.
+              bot.helpers.upsertGlobalApplicationCommands(slashCommands);
 
-            span.end();
-          });
-        },
-
-        // Handle slash commands
-        async interactionCreate(interaction) {
-          console.log("Interaction create event", interaction.data);
-          const current = await orchestrator.state.transitionedTo("ready");
-
-          const guildId = interaction.guildId;
-          if (!guildId) {
-            console.error("Guild ID missing from interaction:", interaction);
-            interaction.respond({
-              flags: MessageFlags.Ephemeral,
-              content: "🛑 There was an error connecting your space. 😕",
+              span.end();
             });
-            return;
-          }
+          },
 
-          const bridge = orchestrator.bridges.get(guildId);
+          // Handle slash commands
+          async interactionCreate(interaction) {
+            console.log("Interaction create event", interaction.data);
+            const current = await orchestrator.state.transitionedTo("ready");
 
-          const spaceExists = async (did: StreamDid) => {
-            // Check if the bridge can access this space
-            return !!(await current.roomy.getSpaceInfo(did))?.name;
-          };
+            const guildId = interaction.guildId;
+            if (!guildId) {
+              console.error("Guild ID missing from interaction:", interaction);
+              interaction.respond({
+                flags: MessageFlags.Ephemeral,
+                content: "🛑 There was an error connecting your space. 😕",
+              });
+              return;
+            }
 
-          return handleSlashCommandInteraction({
-            interaction,
-            guildId,
-            spaceExists,
-            createBridge: orchestrator.createBridge.bind(orchestrator),
-            deleteBridge: guildId
-              ? () => {
-                  orchestrator.bridges.delete(guildId);
-                }
-              : undefined,
-            bridge,
-          });
+            const bridge = orchestrator.bridges.get(guildId);
+
+            const spaceExists = async (did: StreamDid) => {
+              // Check if the bridge can access this space
+              return !!(await current.roomy.getSpaceInfo(did))?.name;
+            };
+
+            return handleSlashCommandInteraction({
+              interaction,
+              guildId,
+              spaceExists,
+              createBridge: orchestrator.createBridge.bind(orchestrator),
+              deleteBridge: guildId
+                ? () => {
+                    orchestrator.bridges.delete(guildId);
+                  }
+                : undefined,
+              bridge,
+            });
+          },
+
+          async channelCreate(channel) {
+            await orchestrator.handleDiscordEvent("CHANNEL_CREATE", channel);
+          },
+
+          async threadCreate(channel) {
+            await orchestrator.handleDiscordEvent("THREAD_CREATE", {
+              ...channel,
+              parentId: channel.parentId!,
+            });
+          },
+
+          // Handle new messages
+          async messageCreate(message) {
+            await orchestrator.handleDiscordEvent("MESSAGE_CREATE", message);
+          },
+
+          // Handle reaction add
+          async reactionAdd(payload) {
+            await orchestrator.handleDiscordEvent("REACTION_ADD", payload);
+          },
+
+          // Handle reaction remove
+          async reactionRemove(payload) {
+            await orchestrator.handleDiscordEvent("REACTION_REMOVE", payload);
+          },
+
+          // Handle message edits
+          async messageUpdate(message) {
+            await orchestrator.handleDiscordEvent("MESSAGE_UPDATE", message);
+          },
+
+          // Handle message deletes
+          async messageDelete(messageCtx) {
+            await orchestrator.handleDiscordEvent("MESSAGE_DELETE", messageCtx);
+          },
         },
-
-        async channelCreate(channel) {
-          await orchestrator.handleDiscordEvent("CHANNEL_CREATE", channel);
-        },
-
-        async threadCreate(channel) {
-          await orchestrator.handleDiscordEvent("THREAD_CREATE", {
-            ...channel,
-            parentId: channel.parentId!,
-          });
-        },
-
-        // Handle new messages
-        async messageCreate(message) {
-          await orchestrator.handleDiscordEvent("MESSAGE_CREATE", message);
-        },
-
-        // Handle reaction add
-        async reactionAdd(payload) {
-          await orchestrator.handleDiscordEvent("REACTION_ADD", payload);
-        },
-
-        // Handle reaction remove
-        async reactionRemove(payload) {
-          await orchestrator.handleDiscordEvent("REACTION_REMOVE", payload);
-        },
-
-        // Handle message edits
-        async messageUpdate(message) {
-          await orchestrator.handleDiscordEvent("MESSAGE_UPDATE", message);
-        },
-
-        // Handle message deletes
-        async messageDelete(messageCtx) {
-          await orchestrator.handleDiscordEvent("MESSAGE_DELETE", messageCtx);
-        },
-      },
-    });
+      }),
+    );
     bot.start();
     const appId = await appIdPromise.promise;
     return { bot, appId };

@@ -33,6 +33,7 @@
     "@types/turndown": "^5.0.5",
     "@whatwg-node/server": "^0.10.11",
     "classic-level": "^3.0.0",
+    "dd-cache-proxy": "^2.7.0",
     "dotenv": "^17.2.1",
     "itty-router": "^5.0.20",
     "jazz-tools": "0.15",

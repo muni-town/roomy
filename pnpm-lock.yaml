@@ -404,6 +404,9 @@ importers:
       classic-level:
         specifier: ^3.0.0
         version: 3.0.0
+      dd-cache-proxy:
+        specifier: ^2.7.0
+        version: 2.7.0(@discordeno/bot@21.0.0)
       dotenv:
         specifier: ^17.2.1
         version: 17.2.3
@@ -3043,6 +3046,11 @@ packages:
 
   date-fns@4.1.0:
     resolution: {integrity: sha512-Ukq0owbQXxa/U3EGtsdVBkR1w7KOQ5gIBqdH2hkvknzZPYvBxb/aa6E8L7tmjFtkwZBu3UXBbjIgPo/Ez4xaNg==}
+
+  dd-cache-proxy@2.7.0:
+    resolution: {integrity: sha512-wS+rm8QhD/Ak2FfCtr8FzFkz26tapogqhaux+AjHHpleMXEBZznzAzbZCLKBlAf0i3MkaKb8tMyvDqklNIlt4A==}
+    peerDependencies:
+      '@discordeno/bot': ^22.0.1-next.5867d11
 
   debug@4.3.7:
     resolution: {integrity: sha512-Er2nc/H7RrMXZBFCEim6TCmMk02Z8vLC2Rbi1KEBggpo0fS6l0S1nnapwmIi3yW/+GOJap1Krg4w0Hg80oCqgQ==}
@@ -7666,6 +7674,10 @@ snapshots:
       d3-array: 3.2.4
 
   date-fns@4.1.0: {}
+
+  dd-cache-proxy@2.7.0(@discordeno/bot@21.0.0):
+    dependencies:
+      '@discordeno/bot': 21.0.0
 
   debug@4.3.7:
     dependencies:

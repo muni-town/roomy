@@ -431,7 +431,6 @@ export class Bridge {
 
       const events = batchQueue.splice(0, batchQueue.length);
       await this.connectedSpace.sendEvents(events);
-      console.log("sent events", events);
       console.log(
         `[Dispatcher] Flushed batch of ${events.length} events to Roomy`,
       );
@@ -448,7 +447,7 @@ export class Bridge {
     console.log("starting consumer");
     (async () => {
       for await (const event of this.dispatcher.toRoomy) {
-        console.log("sending event to roomy", event);
+        console.log("sending event to roomy", event.id, event.$type);
         const currentState = this.state.current.state;
 
         // During Discord backfill: batch events

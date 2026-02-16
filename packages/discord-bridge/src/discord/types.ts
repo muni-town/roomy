@@ -8,6 +8,7 @@ import {
   SetupDesiredProps,
   TransformersDesiredProperties,
   Emoji,
+  createDesiredPropertiesObject,
 } from "@discordeno/bot";
 
 export type MessageProperties = SetupDesiredProps<
@@ -25,7 +26,7 @@ export type InteractionProperties = SetupDesiredProps<
   CompleteDesiredProperties<typeof desiredProperties>
 >;
 
-export const desiredProperties = {
+export const desiredProperties = createDesiredPropertiesObject({
   message: {
     id: true,
     guildId: true,
@@ -89,7 +90,7 @@ export const desiredProperties = {
     channelId: true,
     guildId: true,
   },
-} satisfies RecursivePartial<TransformersDesiredProperties>;
+} satisfies RecursivePartial<TransformersDesiredProperties>);
 
 export type DiscordBot = Bot<
   CompleteDesiredProperties<typeof desiredProperties>
