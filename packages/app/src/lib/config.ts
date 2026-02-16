@@ -29,6 +29,7 @@ const CONFIG = {
     discordImport: false,
     discordBridge: false,
     sharedWorker: false,
+    calendar: false,
   },
 
   // placeholders overridden below
