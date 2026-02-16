@@ -202,6 +202,11 @@ export class BridgeOrchestrator {
         async messageUpdate(message) {
           await orchestrator.handleDiscordEvent("MESSAGE_UPDATE", message);
         },
+
+        // Handle message deletes
+        async messageDelete(messageCtx) {
+          await orchestrator.handleDiscordEvent("MESSAGE_DELETE", messageCtx);
+        },
       },
     });
     bot.start();

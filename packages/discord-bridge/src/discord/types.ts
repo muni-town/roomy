@@ -116,7 +116,14 @@ export interface DiscordMessageOptions {
 export type DiscordEvent =
   | { event: "MESSAGE_CREATE"; payload: MessageProperties }
   | { event: "MESSAGE_UPDATE"; payload: MessageProperties }
-  | { event: "MESSAGE_DELETE"; payload: { messageId: bigint; channelId: bigint; guildId?: bigint } }
+  | {
+      event: "MESSAGE_DELETE";
+      payload: {
+        id: bigint;
+        channelId: bigint;
+        guildId?: bigint | undefined;
+      };
+    }
   | {
       event: "REACTION_ADD";
       payload: {
@@ -138,5 +145,7 @@ export type DiscordEvent =
       };
     }
   | { event: "CHANNEL_CREATE"; payload: ChannelProperties }
-  | { event: "THREAD_CREATE"; payload: ChannelProperties & { parentId: bigint } };
-
+  | {
+      event: "THREAD_CREATE";
+      payload: ChannelProperties & { parentId: bigint };
+    };

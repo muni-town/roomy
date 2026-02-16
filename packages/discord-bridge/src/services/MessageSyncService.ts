@@ -262,6 +262,9 @@ export class MessageSyncService {
     // Get the Roomy message ID
     const roomyMessageId = await this.repo.getRoomyId(messageId.toString());
     if (!roomyMessageId) {
+      console.warn(
+        "Cannot handle delete, mapping wasn't registered. Message may not have been synced",
+      );
       return; // Message wasn't synced
     }
 

@@ -139,7 +139,7 @@ export class Bridge {
 
       case "MESSAGE_DELETE":
         await this.messageSync.syncDeleteToRoomy(
-          discordEvent.payload.messageId,
+          discordEvent.payload.id,
           discordEvent.payload.channelId,
         );
         break;
