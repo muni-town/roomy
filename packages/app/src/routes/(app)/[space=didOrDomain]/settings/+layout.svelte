@@ -30,6 +30,12 @@
       slug: "discord-bridge",
     });
   }
+  if (flags.calendar) {
+    sidebarLinks.push({
+      label: "Calendar",
+      slug: "calendar",
+    });
+  }
 
   let { children } = $props();
 </script>
