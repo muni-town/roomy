@@ -251,12 +251,24 @@ export class Bridge {
           const cursor = await this.repo.getLastProcessedIdx(
             this.connectedSpace.streamDid,
           );
+          span.setAttribute("subscription.resume_cursor", cursor ?? "none");
+
+          if (cursor > 1) {
+            // if there is a persisted cursor, backfill metadata only to ensure we have up to date in-memory cache
+            const latest = await this.connectedSpace.subscribeMetadata(
+              this.handleRoomyEvents.bind(this),
+              1 as StreamIndex,
+            );
+            console.log("Finished metadata backfill", latest);
+            // close the metadata subscription after backfill, as it will be redundant with the full subscription
+            await this.connectedSpace.unsubscribe();
+          }
+
           console.log(
             `Resuming space ${this.connectedSpace.streamDid} from idx ${cursor}`,
           );
-          span.setAttribute("subscription.resume_cursor", cursor ?? "none");
           // Subscribe with the handler
-          this.connectedSpace.subscribe(
+          const lastBatchIdPromise = this.connectedSpace.subscribe(
             this.handleRoomyEvents.bind(this),
             cursor as StreamIndex,
           );
@@ -272,7 +284,7 @@ export class Bridge {
                   spaceId: this.connectedSpace.streamDid,
                 });
 
-                const lastBatchId = await this.connectedSpace.doneBackfilling;
+                const lastBatchId = await lastBatchIdPromise;
 
                 this.state.current = {
                   state: "backfillDiscordAndSyncToRoomy",
@@ -316,7 +328,7 @@ export class Bridge {
     events: DecodedStreamEvent[],
     meta: EventCallbackMeta,
   ): Promise<void> {
-    // console.log("handling Roomy events", events);
+    // console.log("handling Roomy events batch", meta.batchId);
     let maxIdx = 0;
 
     events.forEach(async (decodedEvent, i) => {

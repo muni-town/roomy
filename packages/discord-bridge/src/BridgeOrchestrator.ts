@@ -252,7 +252,7 @@ export class BridgeOrchestrator {
         await bridge.handleDiscordEvent({
           event: eventName,
           payload: data,
-        } as unknown as DiscordEvent);
+        } as unknown as DiscordEvent); // TODO: fix typing in Bridge and services
       } catch (error) {
         recordError(span, error);
         // Don't throw - fail gracefully
