@@ -205,4 +205,26 @@ create table if not exists comp_reaction (
 ) strict;
 
 create index if not exists idx_comp_last_read_timestamp on comp_last_read(timestamp);
-  
+
+-- OpenMeet calendar integration
+create table if not exists comp_calendar_link (
+  entity text primary key,
+  group_slug text not null,
+  tenant_id text not null,
+  api_url text not null default 'https://api.openmeet.net'
+) strict;
+
+create table if not exists comp_calendar_event (
+  entity text primary key,
+  slug text not null,
+  name text not null,
+  start_date text not null,
+  end_date text,
+  location text,
+  location_online text,
+  status text not null default 'Published',
+  synced_at integer not null
+) strict;
+
+create index if not exists idx_calendar_event_start
+  on comp_calendar_event(start_date);
