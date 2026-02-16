@@ -399,10 +399,12 @@ export class Bridge {
       console.log(`[Bridge] Synced ${messageCount} messages`);
 
       // Step 3: Backfill reactions
-      console.log("[Bridge] Backfilling reactions...");
-      const reactionCount =
-        await this.reactionSync.backfillToRoomy(textChannelIds);
-      console.log(`[Bridge] Synced ${reactionCount} reactions`);
+      console.log(
+        "[Bridge] SKIPPING Backfilling reactions for now (need to address efficiency/rate limit issues)...",
+      );
+      // const reactionCount =
+      //   await this.reactionSync.backfillToRoomy(textChannelIds);
+      // console.log(`[Bridge] Synced ${reactionCount} reactions`);
 
       console.log("[Bridge] Discord backfill complete");
 
