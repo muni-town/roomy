@@ -95,6 +95,8 @@ const metadataQueryEvents: Event["$type"][] = [
   "space.roomy.user.updateProfile.v0",
 ];
 
+const metadataQueryEventsString = "'" + metadataQueryEvents.join("', '") + "'";
+
 const spaceModuleDef: BasicModule = {
   $type: "muni.town.leaf.module.basic.v0" as const,
 
@@ -172,7 +174,7 @@ const spaceModuleDef: BasicModule = {
       and not exists (select 1 from admins where user_id = (select author from event_info));
   `.sql,
 
-  materializer: sql`
+  materializer: `
     -- Add admin
     insert or ignore into admins (user_id)
     select drisl_extract(payload, '.userDid') from event
@@ -212,7 +214,7 @@ const spaceModuleDef: BasicModule = {
     insert into metadata_events (idx)
     select idx from event
     where drisl_extract(payload, '.$type') in (
-      ${"'" + metadataQueryEvents.join("', '") + "'"}
+      ${metadataQueryEventsString}
     );
 
     -- Track room membership for events
@@ -227,7 +229,7 @@ const spaceModuleDef: BasicModule = {
       'space.roomy.link.createRoomLink.v0',
       'space.roomy.link.removeRoomLink.v0'
     );
-  `.sql,
+  `,
 
   queries: [
     {
