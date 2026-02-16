@@ -14,6 +14,7 @@ import {
   SpaceEventVariant,
   RoomEventVariant,
   UserEventVariant,
+  CalendarEventVariant,
 } from "./events";
 
 /** Any event variant that is sent in a room */
@@ -30,6 +31,7 @@ export const SpaceEventVariantUnion = type.or(
   SpaceEventVariant,
   RoomEventVariant,
   UserEventVariant,
+  CalendarEventVariant,
 );
 
 /** Any event that is sent in a Roomy room.  */
