@@ -31,6 +31,7 @@ import {
 } from "./space";
 import { DefinedEvent, MaterializeFn } from "./types";
 import { SetUserProfile, SetLastRead } from "./user";
+import { SetCalendarLink } from "./calendar";
 
 /** Registry of all defined events by their $type */
 export const eventRegistry = {
@@ -62,6 +63,7 @@ export const eventRegistry = {
   "space.roomy.space.personal.setLastRead.v0": SetLastRead,
   "space.roomy.link.createRoomLink.v0": CreateRoomLink,
   "space.roomy.link.removeRoomLink.v0": RemoveRoomLink,
+  "space.roomy.openmeet.configure.v0": SetCalendarLink,
 } as const satisfies Record<EventType, DefinedEvent<any, boolean>>;
 
 /** Get the causal dependencies for an event */
