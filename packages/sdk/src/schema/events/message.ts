@@ -4,6 +4,7 @@
 
 import { type, Ulid, Content } from "../primitives";
 import {
+  MessageExtensionDeleteMap,
   MessageExtensionMap,
   MessageExtensionUpdateMap,
 } from "../extensions/message";
@@ -345,6 +346,7 @@ const DeleteMessageSchema = type({
   $type: "'space.roomy.message.deleteMessage.v0'",
   messageId: Ulid.describe("The ID of the message being deleted."),
   "reason?": "string",
+  "extensions?": MessageExtensionDeleteMap,
 }).describe("Delete a message.");
 
 export const DeleteMessage = defineEvent(

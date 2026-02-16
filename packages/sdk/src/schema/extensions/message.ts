@@ -77,7 +77,9 @@ export const DiscordMessageOrigin = type({
   $type: "'space.roomy.extension.discordMessageOrigin.v0'",
   snowflake: DiscordSnowflake.describe("The Discord message snowflake ID."),
   channelId: DiscordSnowflake.describe("The Discord channel snowflake ID."),
-  guildId: DiscordSnowflake.describe("The Discord guild (server) snowflake ID."),
+  guildId: DiscordSnowflake.describe(
+    "The Discord guild (server) snowflake ID.",
+  ),
 }).describe(
   "Origin metadata for messages bridged from Discord. \
 Used for idempotency checks and linking back to Discord.",
@@ -119,4 +121,9 @@ export const MessageExtensionUpdateMap = unionToMap(messageExtension, {
 Setting an extension to `null` will remove it. \
 Any extension not specified will be left as-is.",
 );
-export type MessageExtensionUpdateMap = typeof MessageExtensionMap.infer;
+export type MessageExtensionUpdateMap = typeof MessageExtensionUpdateMap.infer;
+
+export const MessageExtensionDeleteMap = unionToMap(
+  type.or(DiscordMessageOrigin), // only the discord origin is relevant
+);
+export type MessageExtensionDeleteMap = typeof MessageExtensionDeleteMap.infer;

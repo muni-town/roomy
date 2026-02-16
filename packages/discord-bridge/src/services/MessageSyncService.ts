@@ -281,6 +281,13 @@ export class MessageSyncService {
       room: roomyRoomId as Ulid,
       $type: "space.roomy.message.deleteMessage.v0",
       messageId: roomyMessageId as Ulid,
+      extensions: {
+        "space.roomy.extension.discordMessageOrigin.v0": {
+          snowflake: messageId.toString(),
+          channelId: channelId.toString(),
+          guildId: this.guildId.toString(),
+        },
+      },
     };
 
     this.dispatcher.toRoomy.push(event);
