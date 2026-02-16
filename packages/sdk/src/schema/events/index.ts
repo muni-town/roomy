@@ -15,6 +15,7 @@ export { SpaceEventVariant } from "./space";
 export { PageEventVariant } from "./page";
 export { UserEventVariant } from "./user";
 export { LinkEventVariant } from "./link";
+export { CalendarEventVariant } from "./calendar";
 
 // Export defined events with their materializers
 export {
@@ -47,6 +48,7 @@ export {
 export { EditPage } from "./page";
 export { SetUserProfile, SetLastRead } from "./user";
 export { CreateRoomLink, RemoveRoomLink } from "./link";
+export { SetCalendarLink } from "./calendar";
 
 export {
   type MaterializeContext,
