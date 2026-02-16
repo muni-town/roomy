@@ -1,3 +1,4 @@
+import { Event } from "../schema";
 import { sql } from "../utils/sqlTemplate";
 import { LeafClient, type BasicModule } from "@muni-town/leaf-client";
 
@@ -75,6 +76,24 @@ const personal: ModuleWithCid = {
   def: personalModuleDef,
   cid: personalModuleCid,
 };
+
+const metadataQueryEvents: Event["$type"][] = [
+  "space.roomy.space.personal.joinSpace.v0",
+  "space.roomy.space.personal.leaveSpace.v0",
+  "space.roomy.space.addAdmin.v0",
+  "space.roomy.space.removeAdmin.v0",
+  "space.roomy.space.setHandleProvider.v0",
+  "space.roomy.space.updateSpaceInfo.v0",
+  "space.roomy.space.updateSidebar.v0",
+  "space.roomy.space.updateSidebar.v1",
+  "space.roomy.room.createRoom.v0",
+  "space.roomy.room.deleteRoom.v0",
+  "space.roomy.room.updateRoom.v0",
+  "space.roomy.link.createRoomLink.v0",
+  // 'space.roomy.room.addMember.v0',
+  // 'space.roomy.room.removeMember.v0',
+  "space.roomy.user.updateProfile.v0",
+];
 
 const spaceModuleDef: BasicModule = {
   $type: "muni.town.leaf.module.basic.v0" as const,
@@ -193,21 +212,7 @@ const spaceModuleDef: BasicModule = {
     insert into metadata_events (idx)
     select idx from event
     where drisl_extract(payload, '.$type') in (
-      'space.roomy.space.personal.joinSpace.v0',
-      'space.roomy.space.personal.leaveSpace.v0',
-      'space.roomy.space.addAdmin.v0',
-      'space.roomy.space.removeAdmin.v0',
-      'space.roomy.user.setHandleProvider.v0',
-      'space.roomy.space.updateSpaceInfo.v0',
-      'space.roomy.space.updateSidebar.v0',
-      'space.roomy.space.updateSidebar.v1',
-      'space.roomy.room.createRoom.v0',
-      'space.roomy.room.deleteRoom.v0',
-      'space.roomy.room.updateRoom.v0',
-      'space.roomy.link.createRoomLink.v0',
-      'space.roomy.room.addMember.v0',
-      'space.roomy.room.removeMember.v0',
-      'space.roomy.user.updateProfile.v0'
+      ${"'" + metadataQueryEvents.join("', '") + "'"}
     );
 
     -- Track room membership for events
