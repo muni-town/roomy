@@ -207,7 +207,7 @@ const spaceModuleDef: BasicModule = {
       'space.roomy.link.createRoomLink.v0',
       'space.roomy.room.addMember.v0',
       'space.roomy.room.removeMember.v0',
-      'space.roomy.user.updateUserProfile.v0'
+      'space.roomy.user.updateProfile.v0'
     );
 
     -- Track room membership for events
