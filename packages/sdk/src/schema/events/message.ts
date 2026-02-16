@@ -215,7 +215,7 @@ export const EditMessage = defineEvent(
           update comp_content
           set
             mime_type = ${event.body.mimeType},
-            data = ${fromBytes(event.body.data)},
+            data = ${(event.body.data as { buf: Uint8Array }).buf},
             last_edit = ${event.id}
           where
             entity = ${event.messageId}

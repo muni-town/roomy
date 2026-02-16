@@ -17,7 +17,7 @@
   import type { MessagingState } from "../TimelineView.svelte";
   import { messagingState as importedMessagingState } from "../TimelineView.svelte";
   import MediaEmbed from "./embeds/MediaEmbed.svelte";
-  import { newUlid, toBytes, Ulid } from "@roomy/sdk";
+  import { Event, newUlid, toBytes, Ulid } from "@roomy/sdk";
   import { page } from "$app/state";
   import { cdnImageUrl } from "$lib/utils.svelte";
 
@@ -114,19 +114,16 @@
       return;
     }
 
-    let contentPatch = patchToText(patchMake(message.content, newContent));
-
     await peer.sendEvent(spaceId, {
       id: newUlid(),
       room: Ulid.assert(page.params.object),
       $type: "space.roomy.message.editMessage.v0",
       messageId: message.id,
       body: {
-        mimeType: "text/x-dmp-patch",
-        data: toBytes(new TextEncoder().encode(contentPatch)),
+        mimeType: "text/markdown",
+        data: toBytes(new TextEncoder().encode(newContent)),
       },
-      previous: message.lastEdit,
-    });
+    } satisfies Event<"space.roomy.message.editMessage.v0">);
   }
 
   function cancelEditing() {
@@ -151,7 +148,7 @@
             replyTo: { id: Ulid.assert(message.replyTo[0]) },
           }}
         />
-      {:else if message.comment.version}
+      {:else if message.comment?.version}
         <MessageContext
           context={{
             kind: "commenting",
