@@ -185,7 +185,14 @@ export class StructureSyncService {
 
     // Idempotency check for thread
     const existingThread = await this.repo.getRoomyId(threadRoomKey);
-    if (existingThread) return existingThread;
+    if (existingThread) {
+      // Ensure thread→parent mapping exists (backfill for threads synced before this was added)
+      const existingParent = await this.repo.getThreadParent(threadIdStr);
+      if (!existingParent) {
+        await this.repo.setThreadParent(threadIdStr, parentDiscordChannelId.toString());
+      }
+      return existingThread;
+    }
 
     // Ensure parent exists
     const parentRoomKey = getRoomKey(parentDiscordChannelId);
@@ -224,6 +231,9 @@ export class StructureSyncService {
 
     // Register thread mapping
     await this.repo.registerMapping(threadRoomKey, threadId);
+
+    // Store thread→parent relationship for webhook routing
+    await this.repo.setThreadParent(threadIdStr, parentDiscordChannelId.toString());
 
     return threadId;
   }

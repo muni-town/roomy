@@ -1,7 +1,4 @@
-import {
-  DiscordBot,
-  DiscordMessageOptions,
-} from "./types.js";
+import { DiscordBot, DiscordMessageOptions } from "./types.js";
 import type { BridgeRepository } from "../repositories/index.js";
 import { tracer, recordError } from "../tracing.js";
 
@@ -46,12 +43,12 @@ export async function getOrCreateWebhook(
 
     // Look for an existing "Roomy Bridge" webhook to reuse
     const roomyWebhook = existingWebhooks.find(
-      (w) => w.name === "Roomy Bridge" && w.token
+      (w) => w.name === "Roomy Bridge" && w.token,
     );
 
     if (roomyWebhook && roomyWebhook.token) {
       console.log(
-        `[Webhook] Reusing existing Roomy Bridge webhook ${roomyWebhook.id} in channel ${channelId}`
+        `[Webhook] Reusing existing Roomy Bridge webhook ${roomyWebhook.id} in channel ${channelId}`,
       );
       // Cache the existing webhook for future use
       await repo.setWebhookToken(
@@ -64,13 +61,13 @@ export async function getOrCreateWebhook(
     // Step 3: No suitable webhook found - clean up old Roomy webhooks and create new one
     // If we have other Roomy Bridge webhooks without tokens (corrupted), delete them
     const corruptedWebhooks = existingWebhooks.filter(
-      (w) => w.name === "Roomy Bridge" && !w.token
+      (w) => w.name === "Roomy Bridge" && !w.token,
     );
     for (const corrupted of corruptedWebhooks) {
       try {
         await bot.helpers.deleteWebhook(BigInt(corrupted.id));
         console.log(
-          `[Webhook] Deleted corrupted Roomy Bridge webhook ${corrupted.id}`
+          `[Webhook] Deleted corrupted Roomy Bridge webhook ${corrupted.id}`,
         );
       } catch (e) {
         // Ignore deletion errors
@@ -80,18 +77,17 @@ export async function getOrCreateWebhook(
     // Check if we're at the 15 webhook limit
     if (existingWebhooks.length >= 15) {
       // Try to clean up the oldest non-Roomy webhook
-      const nonRoomyWebhooks = existingWebhooks.filter((w) => w.name !== "Roomy Bridge");
+      const nonRoomyWebhooks = existingWebhooks.filter(
+        (w) => w.name !== "Roomy Bridge",
+      );
       if (nonRoomyWebhooks.length > 0) {
         try {
           await bot.helpers.deleteWebhook(BigInt(nonRoomyWebhooks[0]!.id));
           console.log(
-            `[Webhook] Deleted oldest non-Roomy webhook ${nonRoomyWebhooks[0]!.id} to make room`
+            `[Webhook] Deleted oldest non-Roomy webhook ${nonRoomyWebhooks[0]!.id} to make room`,
           );
         } catch (e) {
-          console.warn(
-            `[Webhook] Failed to delete webhook to make room:`,
-            e
-          );
+          console.warn(`[Webhook] Failed to delete webhook to make room:`, e);
         }
       }
     }
@@ -99,7 +95,7 @@ export async function getOrCreateWebhook(
     // If fetching webhooks fails (e.g., permission error), log and continue to create
     console.warn(
       `[Webhook] Failed to fetch existing webhooks for channel ${channelId}:`,
-      error
+      error,
     );
   }
 
@@ -116,7 +112,7 @@ export async function getOrCreateWebhook(
   }
 
   console.log(
-    `[Webhook] Created new Roomy Bridge webhook ${webhook.id} in channel ${channelId}`
+    `[Webhook] Created new Roomy Bridge webhook ${webhook.id} in channel ${channelId}`,
   );
 
   // Cache webhook token for future use
@@ -155,11 +151,19 @@ export async function executeWebhookWithRetry(
   const BASE_DELAY = 1000; // 1 second
 
   try {
-    return await bot.helpers.executeWebhook(
-      BigInt(webhookId),
-      webhookToken,
-      options,
-    );
+    // Work around two discordeno bugs in executeWebhook:
+    // 1. It sends query-only params (wait, thread_id) in the JSON body,
+    //    which Discord rejects with 400 "Invalid Form Body".
+    // 2. The route helper has no "&" separator between query params,
+    //    producing "?wait=truethread_id=..." instead of "?wait=true&thread_id=...".
+    // Fix: build the URL and body ourselves.
+    const { threadId, ...bodyOptions } = options;
+    let url = `/webhooks/${webhookId}/${webhookToken}?wait=true`;
+    if (threadId) url += `&thread_id=${threadId}`;
+    return await bot.rest.post(url, {
+      body: bodyOptions,
+      unauthorized: true,
+    }) as Awaited<ReturnType<typeof bot.helpers.executeWebhook>>;
   } catch (error: any) {
     await tracer.startActiveSpan("discord.webhook.execute", async (s) => {
       s.setAttribute("webhook.id", webhookId);
@@ -170,11 +174,15 @@ export async function executeWebhookWithRetry(
     if (error?.metadata?.code === 429 || error?.code === 429) {
       const retryAfter = error?.metadata?.retryAfter || error?.retryAfter || 1;
       const delayMs = retryAfter * 1000;
-      console.warn(
-        `Webhook rate limited, waiting ${retryAfter}s before retry`,
-      );
+      console.warn(`Webhook rate limited, waiting ${retryAfter}s before retry`);
       await new Promise((resolve) => setTimeout(resolve, delayMs));
-      return executeWebhookWithRetry(bot, webhookId, webhookToken, options, retries + 1);
+      return executeWebhookWithRetry(
+        bot,
+        webhookId,
+        webhookToken,
+        options,
+        retries + 1,
+      );
     }
 
     // Webhook deleted (404)

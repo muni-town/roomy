@@ -308,9 +308,18 @@ export class MessageSyncService {
     }
 
     // Check if this channel has webhook setup (indicates Roomy → Discord sync is active)
-    const channelWebhookToken = await this.repo.getWebhookToken(
+    // For threads, the webhook is cached under the parent channel ID, so fall back to that.
+    let channelWebhookToken = await this.repo.getWebhookToken(
       message.channelId.toString(),
     );
+    if (!channelWebhookToken) {
+      const parentId = await this.repo.getThreadParent(
+        message.channelId.toString(),
+      );
+      if (parentId) {
+        channelWebhookToken = await this.repo.getWebhookToken(parentId);
+      }
+    }
     const channelWebhookId = channelWebhookToken?.split(":")[0];
 
     // Skip bot's own webhook messages (avoid echo)
@@ -605,7 +614,15 @@ export class MessageSyncService {
       return null;
     }
 
-    const channelId = BigInt(discordId.replace("room:", ""));
+    const discordSnowflake = discordId.replace("room:", "");
+
+    // Check if this is a thread — if so, use the parent channel for the webhook
+    // and pass the thread ID when executing
+    const parentDiscordId = await this.repo.getThreadParent(discordSnowflake);
+    const channelId = parentDiscordId
+      ? BigInt(parentDiscordId)
+      : BigInt(discordSnowflake);
+    const threadId = parentDiscordId ? BigInt(discordSnowflake) : undefined;
 
     // Decode content
     const contentBytes = content.data as { buf: Uint8Array };
@@ -648,6 +665,7 @@ export class MessageSyncService {
 
       // Execute webhook to send message
       // wait: true ensures Discord returns the message object
+      // threadId routes the message to a thread (if this room is a thread)
       const result = await executeWebhookWithRetry(
         bot,
         webhook.id,
@@ -656,8 +674,8 @@ export class MessageSyncService {
           content: contentText,
           username,
           avatarUrl,
-          wait: true,
-        } as any,
+          threadId,
+        },
       );
 
       if (!result?.id) {

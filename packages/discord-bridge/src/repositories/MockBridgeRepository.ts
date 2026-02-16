@@ -20,6 +20,7 @@ export class MockBridgeRepository implements BridgeRepository {
   private readonly reactionUsers = new Map<string, Set<string>>();
   private sidebarHash: string | undefined;
   private readonly roomLinks = new Map<string, string>();
+  private readonly threadParents = new Map<string, string>();
   private readonly editInfos = new Map<string, SyncedEdit>();
   private readonly webhookTokens = new Map<string, string>();
   private messageHashes: Record<string, string> = {};
@@ -61,6 +62,7 @@ export class MockBridgeRepository implements BridgeRepository {
     this.reactionUsers.clear();
     this.sidebarHash = undefined;
     this.roomLinks.clear();
+    this.threadParents.clear();
     this.editInfos.clear();
     this.webhookTokens.clear();
     this.messageHashes = {};
@@ -222,6 +224,18 @@ export class MockBridgeRepository implements BridgeRepository {
   async setRoomLink(key: string, linkEventId: string): Promise<void> {
     this.trackCall("setRoomLink");
     this.roomLinks.set(key, linkEventId);
+  }
+
+  // === Thread Parents ===
+
+  async getThreadParent(threadDiscordId: string): Promise<string | undefined> {
+    this.trackCall("getThreadParent");
+    return this.threadParents.get(threadDiscordId);
+  }
+
+  async setThreadParent(threadDiscordId: string, parentDiscordId: string): Promise<void> {
+    this.trackCall("setThreadParent");
+    this.threadParents.set(threadDiscordId, parentDiscordId);
   }
 
   // === Message Edits ===

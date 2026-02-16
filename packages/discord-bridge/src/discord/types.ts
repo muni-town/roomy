@@ -108,6 +108,7 @@ export interface DiscordMessageOptions {
   content?: string;
   username?: string;
   avatarUrl?: string;
+  threadId?: bigint;
 }
 
 /**

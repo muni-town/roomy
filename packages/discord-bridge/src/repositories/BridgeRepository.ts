@@ -185,6 +185,24 @@ export interface BridgeRepository {
    */
   setRoomLink(key: string, linkEventId: string): Promise<void>;
 
+  // === Thread Parents ===
+
+  /**
+   * Get the parent Discord channel ID for a Discord thread.
+   * Used to resolve the correct channel for webhook creation,
+   * since Discord requires webhooks to be created on the parent channel.
+   * @param threadDiscordId - Discord thread snowflake (without "room:" prefix)
+   * @returns Parent Discord channel snowflake (without "room:" prefix), or undefined
+   */
+  getThreadParent(threadDiscordId: string): Promise<string | undefined>;
+
+  /**
+   * Store the parent Discord channel ID for a Discord thread.
+   * @param threadDiscordId - Discord thread snowflake (without "room:" prefix)
+   * @param parentDiscordId - Parent Discord channel snowflake (without "room:" prefix)
+   */
+  setThreadParent(threadDiscordId: string, parentDiscordId: string): Promise<void>;
+
   // === Message Edits ===
 
   /**

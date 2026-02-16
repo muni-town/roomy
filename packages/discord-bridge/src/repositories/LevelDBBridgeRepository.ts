@@ -20,6 +20,7 @@ export class LevelDBBridgeRepository implements BridgeRepository {
       reactionUsers: ReactionUsers;
       syncedSidebarHash: SyncedSidebarHash;
       syncedRoomLinks: SyncedRoomLinks;
+      threadParents: ThreadParents;
       syncedEdits: SyncedEdits;
       discordWebhookTokens: WebhookTokens;
       discordMessageHashes: DiscordMessageHashes;
@@ -41,6 +42,7 @@ export class LevelDBBridgeRepository implements BridgeRepository {
     await this.stores.reactionUsers.clear();
     await this.stores.syncedSidebarHash.clear();
     await this.stores.syncedRoomLinks.clear();
+    await this.stores.threadParents.clear();
     await this.stores.syncedEdits.clear();
     await this.stores.discordMessageHashes.clear();
   }
@@ -167,6 +169,16 @@ export class LevelDBBridgeRepository implements BridgeRepository {
     return this.stores.syncedRoomLinks.put(key, linkEventId);
   }
 
+  // === Thread Parents ===
+
+  async getThreadParent(threadDiscordId: string): Promise<string | undefined> {
+    return this.stores.threadParents.get(threadDiscordId);
+  }
+
+  async setThreadParent(threadDiscordId: string, parentDiscordId: string): Promise<void> {
+    return this.stores.threadParents.put(threadDiscordId, parentDiscordId);
+  }
+
   // === Message Edits ===
 
   async getEditInfo(messageId: string): Promise<SyncedEdit | undefined> {
@@ -278,6 +290,10 @@ export function getRepo(guildId: bigint, spaceId: StreamDid) {
     discordGuildId: guildId,
     roomySpaceId: spaceId,
   });
+  const threadParents = threadParentsForBridge({
+    discordGuildId: guildId,
+    roomySpaceId: spaceId,
+  });
   const syncedEdits = syncedEditsForBridge({
     discordGuildId: guildId,
     roomySpaceId: spaceId,
@@ -312,6 +328,7 @@ export function getRepo(guildId: bigint, spaceId: StreamDid) {
     reactionUsers,
     syncedSidebarHash,
     syncedRoomLinks,
+    threadParents,
     syncedEdits,
     discordWebhookTokens,
     discordMessageHashes,
@@ -809,6 +826,17 @@ export const syncedRoomLinksForBridge =
   createBridgeStoreFactory("syncedRoomLinks");
 
 export type SyncedRoomLinks = ReturnType<typeof syncedRoomLinksForBridge>;
+
+/**
+ * Per-space thread parent tracking.
+ * Key: Discord thread snowflake (without "room:" prefix)
+ * Value: Parent Discord channel snowflake (without "room:" prefix)
+ * Used to resolve the correct channel for webhook creation in threads.
+ */
+export const threadParentsForBridge =
+  createBridgeStoreFactory("threadParents");
+
+export type ThreadParents = ReturnType<typeof threadParentsForBridge>;
 
 export const syncedEditsForBridge = createBridgeStoreFactory<SyncedEdit>(
   "syncedEdits",
