@@ -219,6 +219,7 @@ export function createThread(options: CreateThreadOptions): Event[] {
     room: options.linkToRoom,
     $type: "space.roomy.link.createRoomLink.v0",
     linkToRoom: threadId,
+    isCreationLink: true,
   };
 
   return [...roomEvents, linkEvent];
