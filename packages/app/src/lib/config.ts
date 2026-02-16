@@ -17,7 +17,7 @@ const CONFIG = {
   profileSpaceNsid:
     import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.profileSpace.dev",
   streamSchemaVersion: "4" as const,
-  databaseSchemaVersion: "3" as const,
+  databaseSchemaVersion: "4" as const,
 
   // testing credentials for auto-authentication in e2e tests
   testingHandle: import.meta.env.VITE_TESTING_HANDLE,
@@ -29,6 +29,7 @@ const CONFIG = {
     discordImport: false,
     discordBridge: false,
     sharedWorker: false,
+    calendar: false,
   },
 
   // placeholders overridden below
