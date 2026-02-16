@@ -613,10 +613,10 @@ class SqliteWorkerSupervisor {
       }
 
       await executeQuery(
-        sql`update comp_space set backfilled_to = ${batch.latestEvent} where entity = ${batch.streamId}`,
+        sql`update comp_space set backfilled_to = ${batch.latestEvent} where entity = ${batch.streamId} and (backfilled_to is null or backfilled_to < ${batch.latestEvent})`,
       );
 
-      console.debug("Updated backfilled_to to", batch.latestEvent);
+      console.debug("Updated backfilled_to, if greater, to", batch.latestEvent);
 
       await executeQuery({ sql: `release batch${batch.batchId}` });
 
