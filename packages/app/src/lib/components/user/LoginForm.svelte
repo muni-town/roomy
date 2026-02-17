@@ -19,7 +19,16 @@
   const tabs = ["Login", "Register"] as const;
   let tab = $state(tabs[0]) as (typeof tabs)[number];
 
-  let handle = $state("");
+  let _handle = $state("");
+  let handle = $derived({
+    get value() {
+      return _handle;
+    },
+    set value(handle: string) {
+      _handle = handle.trim().replace("@", "").toLowerCase();
+    },
+  });
+
   let error: string | null = $state(null);
   let loading = $state(false);
 
@@ -35,10 +44,8 @@
     loading = true;
     error = null;
 
-    let cleanHandle = handle.trim().replace("@", "");
-
     try {
-      const redirect = await peer.login(Handle.assert(cleanHandle));
+      const redirect = await peer.login(Handle.assert(handle.value));
 
       console.log("redirect", redirect);
 
@@ -99,7 +106,7 @@
       console.log("Created account", did);
       toast.success(`Created account, you may now login.`);
       tab = "Login";
-      handle = `${handle}${env.PUBLIC_PDS_HANDLE_SUFFIX}`;
+      handle.value = `${handle}${env.PUBLIC_PDS_HANDLE_SUFFIX}`;
     } catch (e) {
       console.error(e);
       toast.error(`Error creating account: ${e}`);
@@ -135,7 +142,7 @@
           class="overflow-x-hidden justify-start truncate self-stretch w-full"
           variant="primary"
           onclick={(evt) => {
-            handle = lastLogin?.handle ?? "";
+            handle.value = lastLogin?.handle ?? "";
             login(evt);
           }}
           disabled={loading}
@@ -223,7 +230,7 @@
             id="atproto-handle"
             placeholder="yourname.bsky.social"
             class="w-full"
-            bind:value={handle}
+            bind:value={handle.value}
           />
         </div>
       </div>
