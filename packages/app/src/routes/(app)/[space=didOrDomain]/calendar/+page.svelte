@@ -8,14 +8,8 @@
   import { current } from "$lib/queries";
   import { peer } from "$lib/workers";
   import { sql } from "$lib/utils/sqlTemplate";
-  import {
-    fetchGroupEvents,
-    getOpenMeetToken,
-    handleOAuthCallback,
-    initiateOpenMeetAuth,
-    OpenMeetAuthError,
-  } from "$lib/services/openmeet";
-  import { onMount } from "svelte";
+  import { fetchGroupEvents } from "$lib/services/openmeet";
+
   let spaceId = $derived(current.joinedSpace?.id);
   let linkQuery = $derived(spaceId ? calendarLinkQuery(spaceId) : undefined);
   let link = $derived(
@@ -28,34 +22,19 @@
     eventsQuery?.current.status === "success" ? eventsQuery.current.data : [],
   );
 
-  type AuthState =
-    | "checking"
-    | "needs_connect"
-    | "syncing"
-    | "connected"
-    | "error";
-  let authState = $state<AuthState>("checking");
+  type SyncState = "idle" | "syncing" | "done" | "error";
+  let syncState = $state<SyncState>("idle");
   let errorMessage = $state("");
 
-  onMount(() => {
-    handleOAuthCallback();
-  });
-
   $effect(() => {
-    if (!link) {
-      authState = "checking";
-      return;
+    if (link && spaceId) {
+      syncEvents();
     }
-    if (!getOpenMeetToken()) {
-      authState = "needs_connect";
-      return;
-    }
-    syncEvents();
   });
 
   async function syncEvents() {
     if (!link || !spaceId) return;
-    authState = "syncing";
+    syncState = "syncing";
     try {
       const apiEvents = await fetchGroupEvents(link);
 
@@ -77,14 +56,10 @@
         `);
       }
 
-      authState = "connected";
+      syncState = "done";
     } catch (e) {
-      if (e instanceof OpenMeetAuthError) {
-        authState = "needs_connect";
-      } else {
-        authState = "error";
-        errorMessage = (e as Error).message;
-      }
+      syncState = "error";
+      errorMessage = (e as Error).message;
     }
   }
 
@@ -120,27 +95,13 @@
         </Button>
       {/if}
     </div>
-  {:else if authState === "checking" || authState === "syncing"}
+  {:else if syncState === "idle" || syncState === "syncing"}
     <div class="py-12 text-center">
       <p class="text-sm text-base-600 dark:text-base-400">
         Loading events...
       </p>
     </div>
-  {:else if authState === "needs_connect"}
-    <div class="text-center py-12">
-      <h2
-        class="text-lg font-semibold text-base-900 dark:text-base-100 mb-2"
-      >
-        Connect your OpenMeet account
-      </h2>
-      <p class="text-sm text-base-600 dark:text-base-400 mb-4">
-        Sign in with your AT Protocol identity to see events.
-      </p>
-      <Button onclick={() => link && initiateOpenMeetAuth(link)}>
-        Connect OpenMeet
-      </Button>
-    </div>
-  {:else if authState === "connected"}
+  {:else if syncState === "done"}
     <h2
       class="text-lg font-semibold text-base-900 dark:text-base-100 mb-4"
     >
@@ -190,7 +151,7 @@
         {/each}
       </div>
     {/if}
-  {:else if authState === "error"}
+  {:else if syncState === "error"}
     <div class="text-center py-12">
       <p class="text-sm text-red-500 mb-4">{errorMessage}</p>
       <Button onclick={syncEvents}>Retry</Button>
