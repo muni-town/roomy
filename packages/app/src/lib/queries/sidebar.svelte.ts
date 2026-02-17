@@ -2,7 +2,7 @@ import { LiveQuery } from "$lib/utils/liveQuery.svelte";
 import { current } from "./current.svelte";
 import { sql } from "$lib/utils/sqlTemplate";
 import type { SidebarCategory } from "./types";
-import type { Ulid } from "@roomy/sdk";
+import { newUlid, type Ulid } from "@roomy/sdk";
 
 export let categoriesQuery: LiveQuery<{
   id: string | null;
@@ -13,6 +13,7 @@ export let categoriesQuery: LiveQuery<{
 /** The sidebar tree for the currently selected space. */
 export const sidebar = $state<{
   categories?: SidebarCategory[];
+  // TODO: not using this anymore. Orphans are added to first category.
   orphanChannels?: { id: Ulid; name: string }[];
 }>({
   categories: undefined,
@@ -78,7 +79,7 @@ $effect.root(() => {
         allChannelsQuery.result?.map((x) => x.id) || [],
       );
       let pinnedChannelIds = new Set();
-      sidebar.categories = categoriesQuery.result.map((x, i) => {
+      sidebar.categories = categoriesQuery.result.map((x) => {
         // Deduplicate children by id (data may have duplicates from bridge sync)
         const seen = new Set<string>();
         const uniqueChildren = x.children.filter((c) => {
@@ -90,9 +91,8 @@ $effect.root(() => {
 
         return {
           type: "space.roomy.category",
-          // If no ulid (old schema) add an index to the ID to prevent Svelte key errors when
-          // there are two categories with the same name.
-          id: x.id ?? x.name + "-" + i,
+          // If no ulid (old schema) just create one.
+          id: (x.id as Ulid) ?? newUlid(),
           name: x.name,
           lastRead: 0,
           latestEntity: 0,
@@ -111,9 +111,51 @@ $effect.root(() => {
       });
 
       let orphanChannels = allChannelIds.difference(pinnedChannelIds);
-      sidebar.orphanChannels = [...orphanChannels]
+
+      // Make sure we have a default category if there are none.
+      if (!sidebar.categories?.length) {
+        sidebar.categories = [
+          {
+            id: newUlid(),
+            type: "space.roomy.category",
+            name: "general",
+            lastRead: 0,
+            latestEntity: 0,
+            sortIdx: "",
+            unreadCount: 0,
+            children: [],
+          },
+        ];
+      }
+
+      // Format the orphans as sidebar items.
+      const orphans = [...orphanChannels]
         .map((id) => allChannelsQuery.result?.find((x) => x.id == id))
-        .filter((x) => !!x);
+        .filter((x) => !!x)
+        .map(({ id, name }) => {
+          let item: SidebarCategory["children"][number] = {
+            id,
+            name,
+            type: "space.roomy.channel",
+            lastRead: 0,
+            latestEntity: 0,
+            sortIdx: "",
+            unreadCount: 0,
+          };
+          return item;
+        });
+
+      // Add the orphans, if any, to the first category
+      if (orphans.length > 0) {
+        sidebar.categories = sidebar.categories.map((category, i) => ({
+          ...category,
+          children:
+            i == 0 ? [...category.children, ...orphans] : category.children,
+        }));
+      }
+
+      // TODO: remove orphanChannels since we are not using it anymore.
+      sidebar.orphanChannels = undefined;
     } else {
       sidebar.categories = undefined;
       sidebar.orphanChannels = undefined;
