@@ -39,7 +39,11 @@ import {
   fetchChannel as discordFetchChannel,
   type DiscordChannelType,
 } from "../discord/operations/channel.js";
-import { getRoomKey } from "../utils/room.js";
+import {
+  getRoomKey,
+  isChannelBridgeApproved,
+  BRIDGE_ROLE_NAME,
+} from "../utils/room.js";
 import type { EventDispatcher } from "../dispatcher.js";
 import { Camelize, ChannelTypes, DiscordChannel } from "@discordeno/bot";
 
@@ -69,6 +73,8 @@ export class StructureSyncService {
   private createRoomCache = new Map<Ulid, CreateRoomInfo>();
   private updateSidebarCache: UpdateSidebarInfo | null = null;
   private discordCategoryNames = new Map<string, string>(); // <snowflakeString, name>
+  private bridgeRoleId: bigint | null = null;
+  private bridgeRoleResolved = false;
 
   constructor(
     private readonly repo: BridgeRepository,
@@ -78,6 +84,38 @@ export class StructureSyncService {
     private readonly bot: DiscordBot,
     private readonly connectedSpace: ConnectedSpace, // Keep for SDK operations
   ) {}
+
+  /**
+   * Look up the "Roomy Bridge" role in the guild.
+   * If it exists, the bridge uses opt-in mode (only bridge channels where
+   * this role has VIEW_CHANNEL: Allow). Otherwise, falls back to bridging
+   * all public channels.
+   *
+   * Called once at the start of backfill; cached for the lifetime of the service.
+   */
+  async resolveBridgeRole(): Promise<void> {
+    if (this.bridgeRoleResolved) return;
+    try {
+      const roles = await this.bot.rest.getRoles(this.guildId.toString());
+      const bridgeRole = roles.find((r) => r.name === BRIDGE_ROLE_NAME);
+      if (bridgeRole) {
+        this.bridgeRoleId = BigInt(bridgeRole.id);
+        console.log(
+          `[StructureSyncService] Found "${BRIDGE_ROLE_NAME}" role (${this.bridgeRoleId}), using opt-in channel bridging`,
+        );
+      } else {
+        console.log(
+          `[StructureSyncService] No "${BRIDGE_ROLE_NAME}" role found, bridging all public channels`,
+        );
+      }
+    } catch (error) {
+      console.warn(
+        `[StructureSyncService] Failed to fetch roles, falling back to public channel mode:`,
+        error,
+      );
+    }
+    this.bridgeRoleResolved = true;
+  }
 
   /**
    * Clear internal caches.
@@ -105,7 +143,24 @@ export class StructureSyncService {
    */
   async handleDiscordChannelCreate(
     discordChannel: ChannelProperties | Camelize<DiscordChannel>,
-  ): Promise<string> {
+  ): Promise<string | null> {
+    // Ensure bridge role is resolved (no-op if already done during backfill)
+    await this.resolveBridgeRole();
+
+    // Skip channels not approved for bridging
+    if (
+      !isChannelBridgeApproved(
+        (discordChannel as any).permissionOverwrites,
+        this.guildId,
+        this.bridgeRoleId,
+      )
+    ) {
+      console.log(
+        `Skipping channel ${discordChannel.name} (${discordChannel.id}) — not approved for bridging`,
+      );
+      return null;
+    }
+
     console.log("handle discord channel create", discordChannel.id);
 
     // Idempotency check (Discord origin or reprocessing R-origin = LevelsDB)
@@ -886,13 +941,28 @@ export class StructureSyncService {
     let publicThreads: Camelize<DiscordChannel[]> = [];
 
     try {
+      // Resolve the bridge role once before filtering channels
+      await this.resolveBridgeRole();
+
       const channels = await this.bot.rest.getChannels(this.guildId.toString());
 
       const categories = channels.filter(
         (c) => c.type === ChannelTypes.GuildCategory,
       );
 
-      textChannels = channels.filter((c) => c.type === ChannelTypes.GuildText);
+      textChannels = channels.filter(
+        (c) =>
+          c.type === ChannelTypes.GuildText &&
+          isChannelBridgeApproved(
+            c.permissionOverwrites,
+            this.guildId,
+            this.bridgeRoleId,
+          ),
+      );
+
+      console.log(
+        `[StructureSyncService] Filtered to ${textChannels.length} public text channels (from ${channels.filter((c) => c.type === ChannelTypes.GuildText).length} total)`,
+      );
 
       for (const channel of textChannels) {
         await this.handleDiscordChannelCreate(channel);
