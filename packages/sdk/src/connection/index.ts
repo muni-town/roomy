@@ -22,6 +22,7 @@
  */
 
 export { ConnectedSpace } from "./ConnectedSpace";
+export type { ConnectionState } from "./ConnectedSpace";
 export type {
   ConnectedSpaceConfig,
   DecodedStreamEvent,

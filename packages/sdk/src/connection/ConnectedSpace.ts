@@ -10,6 +10,8 @@ import {
   LeafClient,
   type LeafQuery,
   type SqlRows,
+  type Result,
+  type SubscribeEventsResp,
 } from "@muni-town/leaf-client";
 import { decode, encode } from "@atcute/cbor";
 
@@ -25,6 +27,7 @@ import {
 } from "../schema";
 
 import { Deferred } from "../utils/Deferred";
+import { stateMachine, type StateMachine } from "../utils/TrackableState";
 import type {
   ConnectedSpaceConfig,
   DecodedStreamEvent,
@@ -33,7 +36,12 @@ import type {
   EventCallbackMeta,
   BackfillStatus,
 } from "./types";
+
 import { withTimeoutWarning } from "../utils/timeout";
+
+export type ConnectionState =
+  | { state: "connected" }
+  | { state: "disconnected" };
 
 /**
  * Manages a connection to a Roomy space stream.
@@ -57,6 +65,7 @@ import { withTimeoutWarning } from "../utils/timeout";
  */
 export class ConnectedSpace {
   readonly streamDid: StreamDid;
+  readonly connection: StateMachine<ConnectionState>;
 
   #leaf: LeafClient;
   #agent: Agent;
@@ -66,7 +75,11 @@ export class ConnectedSpace {
   #metadataSubscription: (() => Promise<void>) | null = null;
   #backfillStatus: BackfillStatus = { status: "pending" };
   #callback: EventCallback | null = null;
+  #metadataCallback: EventCallback | null = null;
   #doneBackfilling = new Deferred<Ulid>();
+
+  #lastEventIdx: StreamIndex | null = null;
+  #lastMetadataIdx: StreamIndex | null = null;
 
   /** Tracks lazy loading cursors per room */
   #roomCursors: Map<string, StreamIndex> = new Map();
@@ -76,6 +89,10 @@ export class ConnectedSpace {
     this.#config = config;
     this.#agent = config.client.agent;
     this.#leaf = config.client.leaf;
+    this.connection = stateMachine<ConnectionState>({ state: "connected" });
+
+    this.#leaf.on("connect", () => this.#onConnect());
+    this.#leaf.on("disconnect", () => this.#onDisconnect());
   }
 
   /**
@@ -203,29 +220,7 @@ export class ConnectedSpace {
         start,
         limit: 2500,
       },
-      async (result) => {
-        if ("Ok" in result) {
-          const events = this.#decodeAndParseEvents(parseRows(result.Ok.rows));
-          const batchId = newUlid();
-
-          if (events.length > 0 && this.#callback) {
-            const meta: EventCallbackMeta = {
-              isBackfill: this.#backfillStatus.status !== "finished",
-              streamDid: this.streamDid,
-              batchId,
-            };
-            this.#callback(events, meta);
-          }
-
-          if (!result.Ok.has_more) {
-            this.#backfillStatus = { status: "finished" };
-            this.#doneBackfilling.resolve(batchId);
-          }
-        } else {
-          console.error("Subscribe query error:", result.Err);
-          this.#backfillStatus = { status: "errored", error: result.Err };
-        }
-      },
+      (result) => this.#handleEventResult(result),
     );
 
     this.#backfillStatus = { status: "started" };
@@ -243,8 +238,8 @@ export class ConnectedSpace {
     callback: EventCallback,
     start: number = 0,
   ): Promise<StreamIndex> {
+    this.#metadataCallback = callback;
     const doneBackfilling = new Deferred<StreamIndex>();
-    let latest = 0 as StreamIndex;
 
     this.#metadataSubscription = await this.#leaf.subscribeEvents(
       this.streamDid,
@@ -254,38 +249,8 @@ export class ConnectedSpace {
         start,
         limit: 2500,
       },
-      async (result) => {
-        if ("Ok" in result) {
-          const events = this.#decodeAndParseEvents(parseRows(result.Ok.rows));
-
-          if (events.length > 0) {
-            const meta: EventCallbackMeta = {
-              isBackfill: true,
-              streamDid: this.streamDid,
-              batchId: newUlid(),
-            };
-            callback(events, meta);
-
-            const latestEvent = events
-              .map((x) => x.idx)
-              .reduce(
-                (x, y) => Math.max(x, y) as StreamIndex,
-                0 as StreamIndex,
-              );
-            latest = latestEvent || latest;
-          }
-
-          if (!result.Ok.has_more) {
-            console.debug("Done backfilling metadata", {
-              streamDid: this.streamDid,
-              latest,
-            });
-            doneBackfilling.resolve(latest);
-          }
-        } else {
-          console.error("Metadata subscribe error:", result.Err);
-        }
-      },
+      (result) =>
+        this.#handleMetadataResult(result, doneBackfilling),
     );
 
     return withTimeoutWarning(
@@ -298,6 +263,11 @@ export class ConnectedSpace {
    * Unsubscribe from event updates.
    */
   async unsubscribe(): Promise<void> {
+    this.#callback = null;
+    this.#metadataCallback = null;
+    this.#lastEventIdx = null;
+    this.#lastMetadataIdx = null;
+
     if (this.#eventSubscription) {
       await this.#eventSubscription();
       this.#eventSubscription = null;
@@ -453,6 +423,126 @@ export class ConnectedSpace {
    */
   get doneBackfilling(): Promise<Ulid> {
     return this.#doneBackfilling.promise;
+  }
+
+  #handleEventResult(result: Result<SubscribeEventsResp>): void {
+    if ("Ok" in result) {
+      const events = this.#decodeAndParseEvents(parseRows(result.Ok.rows));
+      const batchId = newUlid();
+
+      if (events.length > 0) {
+        const maxIdx = events.reduce(
+          (max, e) => Math.max(max, e.idx) as StreamIndex,
+          0 as StreamIndex,
+        );
+        this.#lastEventIdx = maxIdx;
+
+        if (this.#callback) {
+          const meta: EventCallbackMeta = {
+            isBackfill: this.#backfillStatus.status !== "finished",
+            streamDid: this.streamDid,
+            batchId,
+          };
+          this.#callback(events, meta);
+        }
+      }
+
+      if (!result.Ok.has_more) {
+        this.#backfillStatus = { status: "finished" };
+        this.#doneBackfilling.resolve(batchId);
+      }
+    } else {
+      console.error("Subscribe query error:", result.Err);
+      this.#backfillStatus = { status: "errored", error: result.Err };
+    }
+  }
+
+  #handleMetadataResult(
+    result: Result<SubscribeEventsResp>,
+    doneBackfilling?: Deferred<StreamIndex>,
+  ): void {
+    if ("Ok" in result) {
+      const events = this.#decodeAndParseEvents(parseRows(result.Ok.rows));
+
+      if (events.length > 0) {
+        const maxIdx = events.reduce(
+          (max, e) => Math.max(max, e.idx) as StreamIndex,
+          0 as StreamIndex,
+        );
+        this.#lastMetadataIdx = maxIdx;
+
+        if (this.#metadataCallback) {
+          const meta: EventCallbackMeta = {
+            isBackfill: true,
+            streamDid: this.streamDid,
+            batchId: newUlid(),
+          };
+          this.#metadataCallback(events, meta);
+        }
+      }
+
+      if (!result.Ok.has_more) {
+        console.debug("Done backfilling metadata", {
+          streamDid: this.streamDid,
+          latest: this.#lastMetadataIdx,
+        });
+        doneBackfilling?.resolve(this.#lastMetadataIdx ?? (0 as StreamIndex));
+      }
+    } else {
+      console.error("Metadata subscribe error:", result.Err);
+    }
+  }
+
+  #onConnect(): void {
+    console.info("ConnectedSpace: reconnected", { streamDid: this.streamDid });
+    this.connection.current = { state: "connected" };
+    this.#resubscribe();
+  }
+
+  #onDisconnect(): void {
+    console.info("ConnectedSpace: disconnected", { streamDid: this.streamDid });
+    this.connection.current = { state: "disconnected" };
+    // Server-side subscriptions are already dead; null out without calling unsubscribe
+    this.#eventSubscription = null;
+    this.#metadataSubscription = null;
+  }
+
+  async #resubscribe(): Promise<void> {
+    if (this.#callback && !this.#eventSubscription) {
+      const start = ((this.#lastEventIdx ?? 0) + 1) as StreamIndex;
+      console.info("ConnectedSpace: resubscribing to events", {
+        streamDid: this.streamDid,
+        start,
+      });
+      this.#eventSubscription = await this.#leaf.subscribeEvents(
+        this.streamDid,
+        {
+          name: "events",
+          params: {},
+          start,
+          limit: 2500,
+        },
+        (result) => this.#handleEventResult(result),
+      );
+    }
+
+    if (this.#metadataCallback && !this.#metadataSubscription) {
+      const start = ((this.#lastMetadataIdx ?? 0) + 1) as StreamIndex;
+      console.info("ConnectedSpace: resubscribing to metadata", {
+        streamDid: this.streamDid,
+        start,
+      });
+      this.#metadataSubscription = await this.#leaf.subscribeEvents(
+        this.streamDid,
+        {
+          name: "metadata",
+          params: {},
+          start,
+          limit: 2500,
+        },
+        (result) => this.#handleMetadataResult(result),
+      );
+    }
   }
 
   /**
