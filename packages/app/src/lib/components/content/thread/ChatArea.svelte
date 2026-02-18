@@ -101,7 +101,7 @@
             'reactionId', rc.reaction_id
           ))
           from comp_reaction rc
-          join comp_info i on i.entity = rc.user
+          left join comp_info i on i.entity = rc.user
           where rc.entity = e.id
         ),
         'media', (

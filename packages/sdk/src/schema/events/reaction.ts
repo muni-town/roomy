@@ -4,7 +4,7 @@
 
 import { sql } from "../../utils";
 import { UserDid, type, Ulid } from "../primitives";
-import { defineEvent } from "./utils";
+import { defineEvent, ensureEntity } from "./utils";
 
 const AddReactionSchema = type({
   $type: "'space.roomy.reaction.addReaction.v0'",
@@ -69,13 +69,14 @@ This is used for bridging reactions from other platforms.",
 
 export const AddBridgedReaction = defineEvent(
   AddBridgedReactionSchema,
-  ({ event, user }) => {
+  ({ streamId, event }) => {
     return [
+      ensureEntity(streamId, event.reactingUser),
       sql`
         insert or replace into comp_reaction (entity, user, reaction, reaction_id)
         values (
           ${event.reactionTo},
-          ${user},
+          ${event.reactingUser},
           ${event.reaction},
           ${event.id}
         )
