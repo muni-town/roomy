@@ -583,11 +583,53 @@ export class MessageSyncService {
   // ============================================================
 
   /**
+   * Build a Discord reply context prefix for a message that is replying to another.
+   * Format: -# ↪ https://discord.com/channels/{guild}/{channel}/{message} quoted text...
+   *
+   * Uses -# for small/grey text, ↪ as reply indicator, raw URL (Discord renders as button).
+   * Falls back gracefully: no prefix if the target message can't be resolved.
+   */
+  private async buildReplyPrefix(
+    replyTargetUlid: string,
+    messageChannelId: bigint,
+    bot: DiscordBot,
+  ): Promise<string | null> {
+    const QUOTE_MAX_LENGTH = 50;
+
+    // Look up the Discord snowflake for the reply target
+    const targetDiscordId = await this.repo.getDiscordId(replyTargetUlid);
+    if (!targetDiscordId) return null;
+
+    const targetSnowflake = BigInt(targetDiscordId.replace("room:", ""));
+    const messageLink = `https://discord.com/channels/${this.guildId}/${messageChannelId}/${targetSnowflake}`;
+
+    // Try to fetch the original message content for a quote snippet
+    let snippet = "";
+    try {
+      const originalMsg = await bot.helpers.getMessage(
+        messageChannelId,
+        targetSnowflake,
+      );
+      if (originalMsg?.content) {
+        snippet =
+          originalMsg.content.length > QUOTE_MAX_LENGTH
+            ? ` ${originalMsg.content.slice(0, QUOTE_MAX_LENGTH)}...`
+            : ` ${originalMsg.content}`;
+      }
+    } catch {
+      // Message may have been deleted or inaccessible - link alone is fine
+    }
+
+    return `-# ↪ ${messageLink}${snippet}`;
+  }
+
+  /**
    * Sync a Roomy message create to Discord.
    *
    * @param roomyMessageId - Roomy message ULID
    * @param roomyRoomId - Roomy room ULID
    * @param content - Message content (mimeType + data)
+   * @param attachments - Message attachments (may include reply)
    * @param authorDid - Author DID (for username lookup)
    * @param bot - Discord bot instance
    * @returns Discord message ID, or null if skipped
@@ -596,6 +638,7 @@ export class MessageSyncService {
     roomyMessageId: string,
     roomyRoomId: string,
     content: { mimeType: string; data: { buf: Uint8Array } },
+    attachments: Attachment[],
     authorDid: Did,
     bot: DiscordBot,
   ): Promise<bigint | null> {
@@ -626,7 +669,22 @@ export class MessageSyncService {
 
     // Decode content
     const contentBytes = content.data as { buf: Uint8Array };
-    const contentText = new TextDecoder().decode(contentBytes.buf);
+    let contentText = new TextDecoder().decode(contentBytes.buf);
+
+    // Build reply context prefix if this message is a reply
+    const replyAttachment = attachments.find(
+      (a) => a.$type === "space.roomy.attachment.reply.v0",
+    );
+    if (replyAttachment && "target" in replyAttachment) {
+      const replyPrefix = await this.buildReplyPrefix(
+        replyAttachment.target,
+        threadId ?? BigInt(discordSnowflake),
+        bot,
+      );
+      if (replyPrefix) {
+        contentText = `${replyPrefix}\n${contentText}`;
+      }
+    }
 
     // Parse author DID to determine username and avatar
     // Format: did:discord:123456789
@@ -937,10 +995,14 @@ export class MessageSyncService {
     if (event.$type === "space.roomy.message.createMessage.v0") {
       const e = event as any;
       if (!e.room || !e.body) return;
+      const attachments: Attachment[] =
+        e.extensions?.["space.roomy.extension.attachments.v0"]?.attachments ||
+        [];
       await this.syncRoomyToDiscordCreate(
         event.id,
         e.room,
         e.body,
+        attachments,
         decoded.user,
         this.bot,
       );
