@@ -259,7 +259,7 @@
         <Input
           class="shrink grow min-w-0 flex justify-between absolute inset-0"
           type="username"
-          bind:value={handle}
+          bind:value={handle.value}
           id="atproto-reg-handle"
           placeholder="yourname"
         ></Input>
