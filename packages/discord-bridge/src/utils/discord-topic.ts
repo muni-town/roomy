@@ -147,3 +147,38 @@ export function removeRoomySyncMarker(topic: string | null): string | null {
     "",
   );
 }
+
+/**
+ * Roomy URL pattern for thread sync markers.
+ * Format: https://roomy.space/{space-did}/{room-ulid}
+ */
+const ROOMY_URL_REGEX = new RegExp(
+  `https://roomy\\.space/[^/]+/(${ULID_PATTERN.source})`,
+);
+
+/**
+ * Build a Roomy room URL for use in thread sync marker messages.
+ */
+export function buildRoomyRoomUrl(
+  spaceDid: string,
+  roomyRoomId: string,
+): string {
+  return `https://roomy.space/${spaceDid}/${roomyRoomId}`;
+}
+
+/**
+ * Extract Roomy room ULID from a message containing a Roomy URL.
+ * Used for thread sync recovery (threads can't have topics).
+ *
+ * @param content - Message content that may contain a Roomy URL
+ * @returns Roomy room ULID or null
+ */
+export function extractRoomyRoomIdFromUrl(
+  content: string | null | undefined,
+): Ulid | null {
+  if (!content) return null;
+  const match = content.match(ROOMY_URL_REGEX);
+  return match && match[1] && Ulid.allows(match[1])
+    ? Ulid.assert(match[1])
+    : null;
+}

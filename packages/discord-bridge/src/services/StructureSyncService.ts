@@ -29,7 +29,9 @@ import {
 } from "../utils/event-extensions.js";
 import {
   addRoomySyncMarker,
+  buildRoomyRoomUrl,
   extractRoomyRoomId,
+  extractRoomyRoomIdFromUrl,
 } from "../utils/discord-topic.js";
 
 // Import SDK operations from @roomy/sdk/package/operations
@@ -37,7 +39,6 @@ import { createRoom, createThread } from "@roomy/sdk/package/operations";
 import {
   createChannel as discordCreateChannel,
   fetchChannel as discordFetchChannel,
-  type DiscordChannelType,
 } from "../discord/operations/channel.js";
 import {
   getRoomKey,
@@ -237,6 +238,50 @@ export class StructureSyncService {
     console.log("syncing thread D>R", discordThread);
     const threadIdStr = discordThread.id.toString();
     const threadRoomKey = getRoomKey(threadIdStr);
+
+    // Check if this thread was created by the bridge (Roomy→Discord).
+    // startThreadWithMessage creates the thread from the marker message in the parent channel.
+    // Inside the thread, the first message is type 21 (ThreadStarterMessage) with empty content
+    // and a messageReference pointing to the actual marker message. We need to follow that reference.
+    try {
+      const messages = await this.bot.helpers.getMessages(discordThread.id, { after: "0", limit: 1 });
+      const firstMessage = messages[0];
+      if (firstMessage) {
+        // Try direct content first (threads created with startThreadWithoutMessage + sendMessage)
+        let roomyId = extractRoomyRoomIdFromUrl(firstMessage.content);
+
+        // If empty content with messageReference (type 21 ThreadStarterMessage from startThreadWithMessage),
+        // fetch the referenced message from the parent channel to get the actual marker content.
+        if (!roomyId && firstMessage.messageReference?.messageId) {
+          const refChannelId = firstMessage.messageReference.channelId ?? parentDiscordChannelId;
+          const refMessages = await this.bot.helpers.getMessages(refChannelId, {
+            around: firstMessage.messageReference.messageId.toString(),
+            limit: 1,
+          });
+          const refMessage = refMessages[0];
+          if (refMessage) {
+            roomyId = extractRoomyRoomIdFromUrl(refMessage.content);
+          }
+        }
+
+        if (roomyId) {
+          console.log(
+            `[StructureSyncService] Thread ${threadIdStr} has Roomy URL marker (${roomyId}), skipping D>R sync`,
+          );
+          // Ensure mapping exists
+          const existing = await this.repo.getRoomyId(threadRoomKey);
+          if (!existing) {
+            await this.repo.registerMapping(threadRoomKey, roomyId);
+          }
+          return roomyId;
+        }
+      }
+    } catch (error) {
+      console.warn(
+        `[StructureSyncService] Could not fetch first message for thread ${threadIdStr}, proceeding with sync:`,
+        error,
+      );
+    }
 
     // Idempotency check for thread
     const existingThread = await this.repo.getRoomyId(threadRoomKey);
@@ -693,7 +738,9 @@ export class StructureSyncService {
   }
 
   /**
-   * Recover Discord channel mappings from Discord topics.
+   * Recover Discord channel and thread mappings.
+   * Channels: recovered from topic markers.
+   * Threads: recovered from first message containing Roomy URL.
    * Called on bridge startup when local data may be lost.
    */
   async recoverDiscordMappings(): Promise<void> {
@@ -718,9 +765,30 @@ export class StructureSyncService {
           if (!existing || existing !== roomyRoomId) {
             // Register or update the mapping
             await this.repo.registerMapping(`room:${discordId}`, roomyRoomId);
-            console.log(`Recovered mapping: ${roomyRoomId} <-> ${discordId}`);
+            console.log(`Recovered channel mapping: ${roomyRoomId} <-> ${discordId}`);
             recoveredCount++;
           }
+        }
+      }
+
+      // Recover thread mappings from first message containing Roomy URL
+      const { threads } = await this.bot.helpers.getActiveThreads(this.guildId);
+      for (const thread of threads) {
+        const threadId = thread.id.toString();
+        const existing = await this.repo.getRoomyId(`room:${threadId}`);
+        if (existing) continue;
+
+        // Fetch the oldest message in the thread (sync marker is always first).
+        // Discord returns newest-first by default, so use after:0 to get oldest.
+        const messages = await this.bot.helpers.getMessages(thread.id, { after: "0", limit: 1 });
+        const firstMessage = messages[0];
+        if (!firstMessage) continue;
+
+        const roomyRoomId = extractRoomyRoomIdFromUrl(firstMessage.content);
+        if (roomyRoomId) {
+          await this.repo.registerMapping(`room:${threadId}`, roomyRoomId);
+          console.log(`Recovered thread mapping: ${roomyRoomId} <-> ${threadId}`);
+          recoveredCount++;
         }
       }
 
@@ -800,6 +868,16 @@ export class StructureSyncService {
     const threadRoomyId = linkEvent.linkToRoom;
     const parentRoomyId = linkEvent.room;
 
+    // Skip if thread originated from Discord (defense-in-depth;
+    // subscription handler should already filter these via discordRoomLinkOrigin)
+    const cached = this.createRoomCache.get(threadRoomyId);
+    if (cached?.hasDiscordOrigin) {
+      console.log(
+        `[StructureSyncService] Thread ${threadRoomyId} has Discord origin, skipping R>D sync`,
+      );
+      return;
+    }
+
     // Check if parent has Discord mapping
     const parentDiscordId = await this.repo.getDiscordId(parentRoomyId);
     if (!parentDiscordId) {
@@ -872,14 +950,22 @@ export class StructureSyncService {
       `[StructureSyncService] Creating Discord thread ${threadName} under parent ${parentId}`,
     );
 
-    // Create Discord thread using bot.helpers.createChannel with type 11 (PublicThread)
-    const threadType = 11 as DiscordChannelType; // GUILD_PUBLIC_THREAD
-    const result = await discordCreateChannel(this.bot, {
-      guildId: this.guildId,
-      name: threadName,
-      type: threadType,
-      parentId: parentId,
+    // Send marker message to parent channel FIRST, then create thread from it.
+    // startThreadWithMessage is atomic: the marker message exists before
+    // THREAD_CREATE fires, so handleDiscordThreadCreate can check it immediately.
+    const roomUrl = buildRoomyRoomUrl(this.spaceId, threadRoomyId);
+    const markerMessage = await this.bot.helpers.sendMessage(parentId, {
+      content: `[Thread bridged from Roomy](${roomUrl})`,
     });
+
+    const result = await this.bot.helpers.startThreadWithMessage(
+      parentId,
+      markerMessage.id,
+      {
+        name: threadName,
+        autoArchiveDuration: 10080, // 7 days (max)
+      },
+    );
 
     const discordThreadId = result.id.toString();
 
