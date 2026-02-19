@@ -41,10 +41,12 @@ function discordTagEdges(
   const text = new TextDecoder().decode(buf);
 
   const userSnowflakes = new Set<string>();
-  for (const m of text.matchAll(/<@!?(\d+)>/g)) if (m[1]) userSnowflakes.add(m[1]);
+  for (const m of text.matchAll(/<@!?(\d+)>/g))
+    if (m[1]) userSnowflakes.add(m[1]);
 
   const channelSnowflakes = new Set<string>();
-  for (const m of text.matchAll(/<#(\d+)>/g)) if (m[1]) channelSnowflakes.add(m[1]);
+  for (const m of text.matchAll(/<#(\d+)>/g))
+    if (m[1]) channelSnowflakes.add(m[1]);
 
   return [
     ...[...userSnowflakes].flatMap((snowflake) => {
@@ -241,6 +243,21 @@ export const CreateMessage = defineEvent(
       }
     }
 
+    /** Note: the purpose of this is because we don't have an explicit signal in the
+     * stream that a channel on Discord has been created to bridge from a Roomy room.
+     * Therefore we don't have a canonical way to get the snowflake for the channel.
+     * This makes it hard to process Discord room tags which look like <#123456789>
+     * However we can infer the bridged snowflake if we see Discord-origin messages
+     * in the bridged room.
+     *
+     * This is a bit hacky and there is a known issue with this
+     * approach which is that if the room has been synced to Discord but nobody on
+     * Discord has sent a message in it, but somebody on Discord tags that channel in
+     * a different channel, we won't know how to resolve the tag.
+     *
+     * Ultimately we may need to accept that more of the bridging data is stored in
+     * the Roomy stream - at least for important bits like rooms.
+     */
     if (hasDiscordOrigin) {
       const discordOriginExt =
         event.extensions["space.roomy.extension.discordMessageOrigin.v0"];
@@ -253,7 +270,13 @@ export const CreateMessage = defineEvent(
         `);
       }
       statements.push(
-        ...discordTagEdges(streamId, event.id, bodyData, event.body.mimeType, guildId),
+        ...discordTagEdges(
+          streamId,
+          event.id,
+          bodyData,
+          event.body.mimeType,
+          guildId,
+        ),
       );
     }
 
