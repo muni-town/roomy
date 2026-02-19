@@ -107,22 +107,22 @@ importers:
         version: 0.3.39
       '@fuxui/base':
         specifier: ^0.2.4
-        version: 0.2.4(svelte@5.38.10)(tailwindcss@4.1.13)
+        version: 0.2.4(svelte@5.38.10)(tailwindcss@4.2.0)
       '@fuxui/colors':
         specifier: ^0.2.5
-        version: 0.2.5(svelte@5.38.10)(tailwindcss@4.1.13)
+        version: 0.2.5(svelte@5.38.10)(tailwindcss@4.2.0)
       '@fuxui/social':
         specifier: ^0.2.5
-        version: 0.2.5(svelte@5.38.10)(tailwindcss@4.1.13)
+        version: 0.2.5(svelte@5.38.10)(tailwindcss@4.2.0)
       '@fuxui/text':
         specifier: ^0.2.6
-        version: 0.2.6(@tiptap/extension-code-block@2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extension-floating-menu@2.24.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(highlight.js@11.11.1)(svelte@5.38.10)(tailwindcss@4.1.13)
+        version: 0.2.6(@tiptap/extension-code-block@2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extension-floating-menu@2.24.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(highlight.js@11.11.1)(svelte@5.38.10)(tailwindcss@4.2.0)
       '@fuxui/time':
         specifier: ^0.2.4
-        version: 0.2.4(svelte@5.38.10)(tailwindcss@4.1.13)
+        version: 0.2.4(svelte@5.38.10)(tailwindcss@4.2.0)
       '@fuxui/visual':
         specifier: ^0.2.5
-        version: 0.2.5(svelte@5.38.10)(tailwindcss@4.1.13)
+        version: 0.2.5(svelte@5.38.10)(tailwindcss@4.2.0)
       '@grafana/faro-core':
         specifier: ^2.0.2
         version: 2.0.2(patch_hash=0c2fbb3354b915b96fed1726148702fafe6ede67ec42f61d54eaa52421dce4b6)
@@ -137,13 +137,13 @@ importers:
         version: 1.2.3
       '@iconify-json/lucide':
         specifier: ^1.2.68
-        version: 1.2.68
+        version: 1.2.92
       '@iconify-json/mdi':
         specifier: ^1.2.3
         version: 1.2.3
       '@iconify-json/tabler':
         specifier: ^1.2.23
-        version: 1.2.23
+        version: 1.2.26
       '@muni-town/leaf-client':
         specifier: 0.1.0-alpha.15
         version: 0.1.0-alpha.15
@@ -174,9 +174,6 @@ importers:
       '@roomy/sdk':
         specifier: workspace:*
         version: link:../sdk
-      '@scure/base':
-        specifier: ^2.0.0
-        version: 2.0.0
       '@sqlite.org/sqlite-wasm':
         specifier: 3.50.4-build1
         version: 3.50.4-build1
@@ -194,10 +191,10 @@ importers:
         version: 5.1.1(svelte@5.38.10)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1))
       '@tailwindcss/forms':
         specifier: ^0.5.10
-        version: 0.5.10(tailwindcss@4.1.13)
+        version: 0.5.10(tailwindcss@4.2.0)
       '@tailwindcss/typography':
         specifier: ^0.5.16
-        version: 0.5.16(tailwindcss@4.1.13)
+        version: 0.5.16(tailwindcss@4.2.0)
       '@tailwindcss/vite':
         specifier: ^4.1.13
         version: 4.1.13(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1))
@@ -267,12 +264,6 @@ importers:
       arktype:
         specifier: ^2.1.29
         version: 2.1.29
-      base32-decode:
-        specifier: ^1.0.0
-        version: 1.0.0
-      base32-encode:
-        specifier: ^2.0.0
-        version: 2.0.0
       bits-ui:
         specifier: ^1.8.0
         version: 1.8.0(svelte@5.38.10)
@@ -288,9 +279,6 @@ importers:
       diff-match-patch-es:
         specifier: ^1.0.1
         version: 1.0.1
-      fractional-indexing-jittered:
-        specifier: ^1.0.0
-        version: 1.0.0
       layercake:
         specifier: ^10.0.2
         version: 10.0.2(svelte@5.38.10)(typescript@5.9.2)
@@ -328,8 +316,8 @@ importers:
         specifier: ^2.2.0
         version: 2.2.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/extension-bubble-menu@3.9.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extension-floating-menu@2.24.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)(svelte@5.38.10)
       tailwindcss:
-        specifier: ^4.1.13
-        version: 4.1.13
+        specifier: ^4.2.0
+        version: 4.2.0
       tiptap-markdown:
         specifier: ^0.8.10
         version: 0.8.10(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))
@@ -1306,14 +1294,14 @@ packages:
   '@iconify-json/heroicons@1.2.3':
     resolution: {integrity: sha512-n+vmCEgTesRsOpp5AB5ILB6srsgsYK+bieoQBNlafvoEhjVXLq8nIGN4B0v/s4DUfa0dOrjwE/cKJgIKdJXOEg==}
 
-  '@iconify-json/lucide@1.2.68':
-    resolution: {integrity: sha512-lR5xNJdn2CT0iR7lM25G4SewBO4G2hbr3fTWOc3AE9BspflEcneh02E3l9TBaCU/JOHozTJevWLrxBGypD7Tng==}
+  '@iconify-json/lucide@1.2.92':
+    resolution: {integrity: sha512-+ghJelYoO/cfR6Kl/SKRJJZ+lONUUanC7w94Lh8gOZaSK92RBmLE+mojYrcVrLqjLnJO5KkryQxRcg3dLFPZww==}
 
   '@iconify-json/mdi@1.2.3':
     resolution: {integrity: sha512-O3cLwbDOK7NNDf2ihaQOH5F9JglnulNDFV7WprU2dSoZu3h3cWH//h74uQAB87brHmvFVxIOkuBX2sZSzYhScg==}
 
-  '@iconify-json/tabler@1.2.23':
-    resolution: {integrity: sha512-Knb8ykgMwB5uSoqrDv1xIdJYM03OP06OXjN6QvGXaTNtdHkW9ciKA+aftz6lwM2jwJA+bsUWeDzLBlPt2uJm4w==}
+  '@iconify-json/tabler@1.2.26':
+    resolution: {integrity: sha512-92G+ZD70AZgeJf07JfQzH+isnai6DwPcMBuF/qL1F+xAxdXCJzGd3w2RmsRvOmB+w1ImmWEEDms50QivQIjd6g==}
 
   '@iconify/types@2.0.0':
     resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
@@ -2003,9 +1991,6 @@ packages:
 
   '@scure/base@1.2.6':
     resolution: {integrity: sha512-g/nm5FgUa//MCj1gV09zTJTaM6KBAHqLN907YVQqf7zC49+DcO4B1so4ZX07Ef10Twr6nuqYEH9GEggFXA4Fmg==}
-
-  '@scure/base@2.0.0':
-    resolution: {integrity: sha512-3E1kpuZginKkek01ovG8krQ0Z44E3DHPjc5S2rjJw9lZn3KSQOs8S7wqikF/AH7iRanHypj85uGyxk0XAyC37w==}
 
   '@scure/bip39@1.6.0':
     resolution: {integrity: sha512-+lF0BbLiJNwVlev4eKelw1WWLaiKXw7sSl8T6FvBlWkdX+94aGJ4o8XjUdlyhTCjd8c+B3KT3JfS8P0bLRNU6A==}
@@ -2799,13 +2784,6 @@ packages:
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
 
-  base32-decode@1.0.0:
-    resolution: {integrity: sha512-KNWUX/R7wKenwE/G/qFMzGScOgVntOmbE27vvc6GrniDGYb6a5+qWcuoXl8WIOQL7q0TpK7nZDm1Y04Yi3Yn5g==}
-
-  base32-encode@2.0.0:
-    resolution: {integrity: sha512-mlmkfc2WqdDtMl/id4qm3A7RjW6jxcbAoMjdRmsPiwQP0ufD4oXItYMnPgVHe80lnAIy+1xwzhHE1s4FoIceSw==}
-    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
-
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
 
@@ -3308,9 +3286,6 @@ packages:
   foreground-child@3.3.1:
     resolution: {integrity: sha512-gIXjKqtFuWEgzFRJA9WCQeSJLZDjgJUOMCMzxtvFq/37KojM1BFGufqsCy0r4qSQmYLsZYMeyRqzIWOMup03sw==}
     engines: {node: '>=14'}
-
-  fractional-indexing-jittered@1.0.0:
-    resolution: {integrity: sha512-0tLU0FOedVY7lrvN4LK0DVj6FTuYM0pWDpN97/8UTZE2lx1+OwX8+2uL7IOWc2PmktYTHQjMT6FvZZ3SGCdZdg==}
 
   fs-constants@1.0.0:
     resolution: {integrity: sha512-y6OAwoSIf7FyjMIv94u+b5rdheZEjzR63GTyZJm5qh4Bi+2YgwLCcI/fPFZkL5PSixOt6ZNKm+w+Hfp/Bciwow==}
@@ -4549,6 +4524,9 @@ packages:
   tailwindcss@4.1.13:
     resolution: {integrity: sha512-i+zidfmTqtwquj4hMEwdjshYYgMbOrPzb9a0M3ZgNa0JMoZeFC6bxZvO8yr8ozS6ix2SDz0+mvryPeBs2TFE+w==}
 
+  tailwindcss@4.2.0:
+    resolution: {integrity: sha512-yYzTZ4++b7fNYxFfpnberEEKu43w44aqDMNM9MHMmcKuCH7lL8jJ4yJ7LGHv7rSwiqM0nkiobF9I6cLlpS2P7Q==}
+
   tapable@2.2.3:
     resolution: {integrity: sha512-ZL6DDuAlRlLGghwcfmSn9sK3Hr6ArtyudlSAiCqQ6IfE+b+HHbydbYDIG15IfS5do+7XQQBdBiubF/cV2dnDzg==}
     engines: {node: '>=6'}
@@ -4613,10 +4591,6 @@ packages:
   tlds@1.260.0:
     resolution: {integrity: sha512-78+28EWBhCEE7qlyaHA9OR3IPvbCLiDh3Ckla593TksfFc9vfTsgvH7eS+dr3o9qr31gwGbogcI16yN91PoRjQ==}
     hasBin: true
-
-  to-data-view@2.0.0:
-    resolution: {integrity: sha512-RGEM5KqlPHr+WVTPmGNAXNeFEmsBnlkxXaIfEpUYV0AST2Z5W1EGq9L/MENFrMMmL2WQr1wjkmZy/M92eKhjYA==}
-    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
   to-regex-range@5.0.1:
     resolution: {integrity: sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==}
@@ -5718,7 +5692,7 @@ snapshots:
 
   '@floating-ui/utils@0.2.10': {}
 
-  '@fuxui/base@0.2.4(svelte@5.38.10)(tailwindcss@4.1.13)':
+  '@fuxui/base@0.2.4(svelte@5.38.10)(tailwindcss@4.2.0)':
     dependencies:
       '@number-flow/svelte': 0.3.9(svelte@5.38.10)
       bits-ui: 1.8.0(svelte@5.38.10)
@@ -5726,23 +5700,23 @@ snapshots:
       svelte: 5.38.10
       svelte-sonner: 0.3.28(svelte@5.38.10)
       tailwind-merge: 3.3.1
-      tailwind-variants: 1.0.0(tailwindcss@4.1.13)
-      tailwindcss: 4.1.13
+      tailwind-variants: 1.0.0(tailwindcss@4.2.0)
+      tailwindcss: 4.2.0
 
-  '@fuxui/colors@0.2.5(svelte@5.38.10)(tailwindcss@4.1.13)':
+  '@fuxui/colors@0.2.5(svelte@5.38.10)(tailwindcss@4.2.0)':
     dependencies:
-      '@fuxui/base': 0.2.4(svelte@5.38.10)(tailwindcss@4.1.13)
+      '@fuxui/base': 0.2.4(svelte@5.38.10)(tailwindcss@4.2.0)
       '@texel/color': 1.1.10
       '@use-gesture/vanilla': 10.3.1
       bits-ui: 1.8.0(svelte@5.38.10)
       svelte: 5.38.10
-      tailwindcss: 4.1.13
+      tailwindcss: 4.2.0
 
-  '@fuxui/social@0.2.5(svelte@5.38.10)(tailwindcss@4.1.13)':
+  '@fuxui/social@0.2.5(svelte@5.38.10)(tailwindcss@4.2.0)':
     dependencies:
       '@atproto/api': 0.15.27
-      '@fuxui/base': 0.2.4(svelte@5.38.10)(tailwindcss@4.1.13)
-      '@fuxui/time': 0.2.4(svelte@5.38.10)(tailwindcss@4.1.13)
+      '@fuxui/base': 0.2.4(svelte@5.38.10)(tailwindcss@4.2.0)
+      '@fuxui/time': 0.2.4(svelte@5.38.10)(tailwindcss@4.2.0)
       '@use-gesture/vanilla': 10.3.1
       bits-ui: 1.8.0(svelte@5.38.10)
       emoji-picker-element: 1.27.0
@@ -5750,11 +5724,11 @@ snapshots:
       is-emoji-supported: 0.0.5
       plyr: 3.8.3
       svelte: 5.38.10
-      tailwindcss: 4.1.13
+      tailwindcss: 4.2.0
 
-  '@fuxui/text@0.2.6(@tiptap/extension-code-block@2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extension-floating-menu@2.24.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(highlight.js@11.11.1)(svelte@5.38.10)(tailwindcss@4.1.13)':
+  '@fuxui/text@0.2.6(@tiptap/extension-code-block@2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extension-floating-menu@2.24.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(highlight.js@11.11.1)(svelte@5.38.10)(tailwindcss@4.2.0)':
     dependencies:
-      '@fuxui/base': 0.2.4(svelte@5.38.10)(tailwindcss@4.1.13)
+      '@fuxui/base': 0.2.4(svelte@5.38.10)(tailwindcss@4.2.0)
       '@tiptap/core': 2.26.1(@tiptap/pm@2.26.1)
       '@tiptap/extension-bubble-menu': 2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
       '@tiptap/extension-code-block-lowlight': 2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/extension-code-block@2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)(highlight.js@11.11.1)(lowlight@3.3.0)
@@ -5777,30 +5751,30 @@ snapshots:
       state: link:@tiptap/pm/state
       svelte: 5.38.10
       svelte-tiptap: 2.2.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/extension-bubble-menu@2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extension-floating-menu@2.24.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)(svelte@5.38.10)
-      tailwindcss: 4.1.13
+      tailwindcss: 4.2.0
       tippy.js: 6.3.7
     transitivePeerDependencies:
       - '@tiptap/extension-code-block'
       - '@tiptap/extension-floating-menu'
       - highlight.js
 
-  '@fuxui/time@0.2.4(svelte@5.38.10)(tailwindcss@4.1.13)':
+  '@fuxui/time@0.2.4(svelte@5.38.10)(tailwindcss@4.2.0)':
     dependencies:
-      '@fuxui/base': 0.2.4(svelte@5.38.10)(tailwindcss@4.1.13)
+      '@fuxui/base': 0.2.4(svelte@5.38.10)(tailwindcss@4.2.0)
       '@number-flow/svelte': 0.3.9(svelte@5.38.10)
       bits-ui: 1.8.0(svelte@5.38.10)
       svelte: 5.38.10
-      tailwindcss: 4.1.13
+      tailwindcss: 4.2.0
 
-  '@fuxui/visual@0.2.5(svelte@5.38.10)(tailwindcss@4.1.13)':
+  '@fuxui/visual@0.2.5(svelte@5.38.10)(tailwindcss@4.2.0)':
     dependencies:
-      '@fuxui/base': 0.2.4(svelte@5.38.10)(tailwindcss@4.1.13)
-      '@fuxui/colors': 0.2.5(svelte@5.38.10)(tailwindcss@4.1.13)
+      '@fuxui/base': 0.2.4(svelte@5.38.10)(tailwindcss@4.2.0)
+      '@fuxui/colors': 0.2.5(svelte@5.38.10)(tailwindcss@4.2.0)
       bits-ui: 1.8.0(svelte@5.38.10)
       canvas-confetti: 1.9.3
       cheerio: 1.1.2
       svelte: 5.38.10
-      tailwindcss: 4.1.13
+      tailwindcss: 4.2.0
 
   '@grafana/faro-core@2.0.2(patch_hash=0c2fbb3354b915b96fed1726148702fafe6ede67ec42f61d54eaa52421dce4b6)':
     dependencies:
@@ -5847,7 +5821,7 @@ snapshots:
     dependencies:
       '@iconify/types': 2.0.0
 
-  '@iconify-json/lucide@1.2.68':
+  '@iconify-json/lucide@1.2.92':
     dependencies:
       '@iconify/types': 2.0.0
 
@@ -5855,7 +5829,7 @@ snapshots:
     dependencies:
       '@iconify/types': 2.0.0
 
-  '@iconify-json/tabler@1.2.23':
+  '@iconify-json/tabler@1.2.26':
     dependencies:
       '@iconify/types': 2.0.0
 
@@ -6593,8 +6567,6 @@ snapshots:
 
   '@scure/base@1.2.6': {}
 
-  '@scure/base@2.0.0': {}
-
   '@scure/bip39@1.6.0':
     dependencies:
       '@noble/hashes': 1.8.0
@@ -6724,10 +6696,10 @@ snapshots:
 
   '@swc/wasm@1.13.5': {}
 
-  '@tailwindcss/forms@0.5.10(tailwindcss@4.1.13)':
+  '@tailwindcss/forms@0.5.10(tailwindcss@4.2.0)':
     dependencies:
       mini-svg-data-uri: 1.4.4
-      tailwindcss: 4.1.13
+      tailwindcss: 4.2.0
 
   '@tailwindcss/node@4.1.13':
     dependencies:
@@ -6793,13 +6765,13 @@ snapshots:
       '@tailwindcss/oxide-win32-arm64-msvc': 4.1.13
       '@tailwindcss/oxide-win32-x64-msvc': 4.1.13
 
-  '@tailwindcss/typography@0.5.16(tailwindcss@4.1.13)':
+  '@tailwindcss/typography@0.5.16(tailwindcss@4.2.0)':
     dependencies:
       lodash.castarray: 4.4.0
       lodash.isplainobject: 4.0.6
       lodash.merge: 4.6.2
       postcss-selector-parser: 6.0.10
-      tailwindcss: 4.1.13
+      tailwindcss: 4.2.0
 
   '@tailwindcss/vite@4.1.13(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1))':
     dependencies:
@@ -7389,12 +7361,6 @@ snapshots:
 
   balanced-match@1.0.2: {}
 
-  base32-decode@1.0.0: {}
-
-  base32-encode@2.0.0:
-    dependencies:
-      to-data-view: 2.0.0
-
   base64-js@1.5.1: {}
 
   beachball@2.54.0(typescript@5.9.2):
@@ -7980,8 +7946,6 @@ snapshots:
     dependencies:
       cross-spawn: 7.0.6
       signal-exit: 4.1.0
-
-  fractional-indexing-jittered@1.0.0: {}
 
   fs-constants@1.0.0: {}
 
@@ -9252,12 +9216,14 @@ snapshots:
 
   tailwind-merge@3.3.1: {}
 
-  tailwind-variants@1.0.0(tailwindcss@4.1.13):
+  tailwind-variants@1.0.0(tailwindcss@4.2.0):
     dependencies:
       tailwind-merge: 3.0.2
-      tailwindcss: 4.1.13
+      tailwindcss: 4.2.0
 
   tailwindcss@4.1.13: {}
+
+  tailwindcss@4.2.0: {}
 
   tapable@2.2.3: {}
 
@@ -9325,8 +9291,6 @@ snapshots:
       prosemirror-markdown: 1.13.2
 
   tlds@1.260.0: {}
-
-  to-data-view@2.0.0: {}
 
   to-regex-range@5.0.1:
     dependencies:

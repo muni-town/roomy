@@ -1,5 +1,4 @@
 import type { DidDocument } from "@atproto/oauth-client-browser";
-import { decodeBase32 } from "./utils/base32";
 import { goto } from "$app/navigation";
 import type { JSONContent } from "@tiptap/core";
 import { writable } from "svelte/store";
@@ -65,17 +64,6 @@ export async function resolveDid(
   } catch (_e) {
     // Ignore error
   }
-}
-
-const keyCache: { [did: string]: Uint8Array } = {};
-export async function resolvePublicKey(did: string): Promise<Uint8Array> {
-  if (keyCache[did]) return keyCache[did];
-  const resp = await fetch(
-    `https://keyserver.roomy.chat/xrpc/chat.roomy.v0.key.public?did=${encodeURIComponent(did)}`,
-  );
-  const json = await resp.json();
-  keyCache[did] = decodeBase32(json.publicKey);
-  return keyCache[did];
 }
 
 export async function resolveLeafId(
