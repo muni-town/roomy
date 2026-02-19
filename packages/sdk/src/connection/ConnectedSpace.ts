@@ -100,8 +100,6 @@ export class ConnectedSpace {
    * Validates the stream exists and updates the module if needed.
    */
   static async connect(config: ConnectedSpaceConfig): Promise<ConnectedSpace> {
-    console.debug("Connecting to stream", config.streamDid);
-
     let previousModuleCid: undefined | string;
     try {
       const { moduleCid: cid } = await config.client.leaf.streamInfo(
@@ -146,7 +144,7 @@ export class ConnectedSpace {
           // If we couldn't get a previous module, and we couldn't update it, then something is
           // wrong with the stream, or it doesn't exist.
           throw new Error(
-            `Stream does not exist on this Leaf server. Stream ID: ${config.streamDid}\n \
+            `Stream may not exist on this Leaf server. Stream ID: ${config.streamDid}\n \
             Tried to update module bug got error: ${e}`,
           );
         }
@@ -249,8 +247,7 @@ export class ConnectedSpace {
         start,
         limit: 2500,
       },
-      (result) =>
-        this.#handleMetadataResult(result, doneBackfilling),
+      (result) => this.#handleMetadataResult(result, doneBackfilling),
     );
 
     return withTimeoutWarning(

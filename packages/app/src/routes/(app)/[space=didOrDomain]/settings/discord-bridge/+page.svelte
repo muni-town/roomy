@@ -248,13 +248,12 @@
           </p>
           <div class="flex gap-2 items-center mt-4 ml-4">
             <strong>space-id:</strong>
-            <InlineMono>{page.params.space}</InlineMono>
+            <InlineMono>{space}</InlineMono>
             <Button
               size="icon"
               onclick={() =>
-                copyToClipboard(
-                  "/connect-roomy-space " + page.params.space || "",
-                )}><IconCopy /></Button
+                copyToClipboard("/connect-roomy-space " + space || "")}
+              ><IconCopy /></Button
             >
           </div>
         </div>
