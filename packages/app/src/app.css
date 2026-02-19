@@ -16,6 +16,141 @@ div {
   @apply text-base-800 dark:text-base-300;
 }
 
+/* Google Sans Flex — 9pt (body/UI) */
+@font-face {
+  font-family: "Google Sans Flex 9pt";
+  src: url("/fonts/GoogleSansFlex_9pt-Thin.woff2") format("truetype");
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 9pt";
+  src: url("/fonts/GoogleSansFlex_9pt-ExtraLight.woff2") format("truetype");
+  font-weight: 200;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 9pt";
+  src: url("/fonts/GoogleSansFlex_9pt-Light.woff2") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 9pt";
+  src: url("/fonts/GoogleSansFlex_9pt-Regular.woff2") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 9pt";
+  src: url("/fonts/GoogleSansFlex_9pt-Medium.woff2") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 9pt";
+  src: url("/fonts/GoogleSansFlex_9pt-SemiBold.woff2") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 9pt";
+  src: url("/fonts/GoogleSansFlex_9pt-Bold.woff2") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 9pt";
+  src: url("/fonts/GoogleSansFlex_9pt-ExtraBold.woff2") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 9pt";
+  src: url("/fonts/GoogleSansFlex_9pt-Black.woff2") format("truetype");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Google Sans Flex — 36pt (display/headings) */
+@font-face {
+  font-family: "Google Sans Flex 36pt";
+  src: url("/fonts/GoogleSansFlex_36pt-Thin.woff2") format("truetype");
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 36pt";
+  src: url("/fonts/GoogleSansFlex_36pt-ExtraLight.woff2") format("truetype");
+  font-weight: 200;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 36pt";
+  src: url("/fonts/GoogleSansFlex_36pt-Light.woff2") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 36pt";
+  src: url("/fonts/GoogleSansFlex_36pt-Regular.woff2") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 36pt";
+  src: url("/fonts/GoogleSansFlex_36pt-Medium.woff2") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 36pt";
+  src: url("/fonts/GoogleSansFlex_36pt-SemiBold.woff2") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 36pt";
+  src: url("/fonts/GoogleSansFlex_36pt-Bold.woff2") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 36pt";
+  src: url("/fonts/GoogleSansFlex_36pt-ExtraBold.woff2") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Google Sans Flex 36pt";
+  src: url("/fonts/GoogleSansFlex_36pt-Black.woff2") format("truetype");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: "Google Sans Flex 9pt", system-ui, sans-serif;
+  --font-display: "Google Sans Flex 36pt", system-ui, sans-serif;
+}
+
 @theme inline {
   --color-base-50: var(--base-50);
   --color-base-100: var(--base-100);
@@ -67,6 +202,15 @@ div {
     --base-800: var(--color-stone-800);
     --base-900: var(--color-stone-900);
     --base-950: var(--color-stone-950);
+  }
+
+  body {
+    @apply font-sans;
+  }
+
+  h1,
+  h2 {
+    @apply font-display;
   }
 
   .red {

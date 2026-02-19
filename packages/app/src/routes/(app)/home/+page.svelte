@@ -11,7 +11,7 @@
 <MainLayout>
   {#snippet navbar()}
     <div class="flex w-full items-center gap-3">
-      <span class="flex-grow"></span>
+      <span class="grow"></span>
       <Button href="https://a.roomy.space" target="_blank">About Roomy</Button>
     </div>
   {/snippet}
