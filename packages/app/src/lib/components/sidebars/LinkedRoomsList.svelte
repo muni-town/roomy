@@ -57,7 +57,7 @@
             "?parent=" +
             (page.url.searchParams.get("parent") || page.params.object)}
           variant="ghost"
-          class="w-full justify-start min-w-0 px-1 rounded-sm py-1 text-base-600"
+          class="justify-start min-w-0 w-full rounded-full p-1 pl-2 text-base-600 hover:bg-transparent"
           data-current={room.id === page.params.object}
         >
           <!-- {#if isSubthread}<IconTablerCornerDownRight />{:else}

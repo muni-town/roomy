@@ -60,7 +60,7 @@
 {/snippet}
 
 {#if item.type == "space.roomy.channel"}
-  <div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink">
+  <div class="inline-flex min-w-0 flex-col w-full max-w-full shrink">
     <div
       class="inline-flex items-center justify-between gap-2 w-full min-w-0 group"
     >
