@@ -13,6 +13,14 @@ import { sql } from "../../utils";
 import { decodeTime } from "ulidx";
 import { fromBytes } from "@atcute/cbor";
 
+/** Strip Discord custom emoji syntax (<:name:id> and <a:name:id>) from text body bytes. */
+function stripDiscordCustomEmojis(buf: Uint8Array, mimeType: string): Uint8Array {
+  if (!mimeType.startsWith("text/")) return buf;
+  const text = new TextDecoder().decode(buf);
+  const stripped = text.replace(/<a?:\w+:\d+>/g, "");
+  return new TextEncoder().encode(stripped);
+}
+
 const CreateMessageSchema = type({
   $type: "'space.roomy.message.createMessage.v0'",
   body: Content.describe(
@@ -25,6 +33,14 @@ export const CreateMessage = defineEvent(
   CreateMessageSchema,
   ({ streamId, user, event }) => {
     if (!event.room) throw new Error("No room for message");
+    const hasDiscordOrigin =
+      "space.roomy.extension.discordMessageOrigin.v0" in event.extensions;
+    const bodyData = hasDiscordOrigin
+      ? stripDiscordCustomEmojis(
+          (event.body.data as { buf: Uint8Array }).buf,
+          event.body.mimeType,
+        )
+      : (event.body.data as { buf: Uint8Array }).buf;
     const statements = [
       ensureEntity(streamId, event.id, event.room),
       sql`
@@ -32,7 +48,7 @@ export const CreateMessage = defineEvent(
         values (
           ${event.id},
           ${event.body.mimeType},
-          ${(event.body.data as { buf: Uint8Array }).buf},
+          ${bodyData},
           ${event.id}
         )`,
       sql`
@@ -199,6 +215,16 @@ export const EditMessage = defineEvent(
 
     // TODO: fix the issue wehre we have to manually cast event.body.data
 
+    const hasDiscordOrigin =
+      !!event.extensions &&
+      "space.roomy.extension.discordMessageOrigin.v0" in event.extensions;
+    const editBodyData =
+      hasDiscordOrigin && event.body.mimeType !== "text/x-dmp-patch"
+        ? stripDiscordCustomEmojis(
+            (event.body.data as { buf: Uint8Array }).buf,
+            event.body.mimeType,
+          )
+        : (event.body.data as { buf: Uint8Array }).buf;
     const statements = [
       ensureEntity(streamId, event.id, event.room),
       event.body.mimeType == "text/x-dmp-patch"
@@ -216,7 +242,7 @@ export const EditMessage = defineEvent(
           update comp_content
           set
             mime_type = ${event.body.mimeType},
-            data = ${(event.body.data as { buf: Uint8Array }).buf},
+            data = ${editBodyData},
             last_edit = ${event.id}
           where
             entity = ${event.messageId}
