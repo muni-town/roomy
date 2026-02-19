@@ -107,6 +107,11 @@ export class MessageSyncService {
     // Build attachments array
     const attachments = await this.buildAttachments(message);
 
+    // Skip messages with no content and no attachments (e.g. Lottie-only stickers)
+    if (!message.content && attachments.length === 0) {
+      return null;
+    }
+
     // Create and send the message event
     const messageId = await this.createAndSendMessage(
       roomyRoomId,
@@ -463,6 +468,26 @@ export class MessageSyncService {
           size: att.size,
         });
       }
+    }
+
+    // Sticker attachments
+    // Discord sticker format types: 1=PNG, 2=APNG, 3=Lottie, 4=GIF
+    for (const sticker of message.stickerItems || []) {
+      const id = sticker.id.toString();
+      if (sticker.formatType === 4) {
+        attachments.push({
+          $type: "space.roomy.attachment.image.v0",
+          uri: `https://cdn.discordapp.com/stickers/${id}.gif`,
+          mimeType: "image/gif",
+        });
+      } else if (sticker.formatType === 1 || sticker.formatType === 2) {
+        attachments.push({
+          $type: "space.roomy.attachment.image.v0",
+          uri: `https://cdn.discordapp.com/stickers/${id}.png`,
+          mimeType: "image/png",
+        });
+      }
+      // Lottie (3) is skipped — vector animation, not renderable as a static image
     }
 
     return attachments;

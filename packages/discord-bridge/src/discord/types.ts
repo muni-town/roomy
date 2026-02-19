@@ -39,6 +39,7 @@ export const desiredProperties = createDesiredPropertiesObject({
     messageReference: true,
     type: true,
     reactions: true,
+    stickerItems: true,
   } as const,
   guild: {
     id: true,
