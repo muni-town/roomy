@@ -67,7 +67,7 @@ export class MessageSyncService {
    * const result = await service.syncDiscordToRoomy(discordMessage);
    * ```
    */
-  async syncDiscordToRoomy(message: MessageProperties): Promise<string | null> {
+  async syncDiscordToRoomy(message: MessageProperties, backfill = false): Promise<string | null> {
     // Check that we know the corresponding Roomy room
     const roomyRoomId = await this.repo.getRoomyId(
       getRoomKey(message.channelId),
@@ -101,7 +101,7 @@ export class MessageSyncService {
 
     // Handle thread starter messages
     if (message.type === DISCORD_MESSAGE_TYPES.THREAD_STARTER_MESSAGE) {
-      return await this.handleThreadStarterMessage(roomyRoomId, message);
+      return await this.handleThreadStarterMessage(roomyRoomId, message, backfill);
     }
 
     // Build attachments array
@@ -116,6 +116,15 @@ export class MessageSyncService {
 
     // Register the mapping
     await this.repo.registerMapping(message.id.toString(), messageId);
+
+    // Advance the cursor so future restarts start from here (skipped during backfill
+    // since backfillToRoomy manages the cursor per-page)
+    if (!backfill) {
+      await this.repo.setLatestMessage(
+        message.channelId.toString(),
+        message.id.toString(),
+      );
+    }
 
     return messageId;
   }
@@ -346,6 +355,7 @@ export class MessageSyncService {
   private async handleThreadStarterMessage(
     roomyRoomId: string,
     message: MessageProperties,
+    backfill = false,
   ): Promise<string | null> {
     if (
       !message.messageReference?.messageId ||
@@ -369,7 +379,7 @@ export class MessageSyncService {
           message.messageReference.messageId,
         );
 
-        const syncedId = await this.syncDiscordToRoomy(originalMsg);
+        const syncedId = await this.syncDiscordToRoomy(originalMsg, backfill);
         if (!syncedId) {
           return null;
         }
@@ -537,8 +547,9 @@ export class MessageSyncService {
         continue;
       }
 
-      // Fetch messages with pagination (oldest first)
-      let after: bigint = channelId;
+      // Fetch messages with pagination (oldest first), resuming from last known cursor
+      const storedLatest = await this.repo.getLatestMessage(channelId.toString());
+      let after: bigint = storedLatest ? BigInt(storedLatest) : channelId;
       while (true) {
         const messages = await this.bot.helpers.getMessages(channelId, {
           after,
@@ -560,14 +571,15 @@ export class MessageSyncService {
           }
 
           // Sync the message
-          const result = await this.syncDiscordToRoomy(message);
+          const result = await this.syncDiscordToRoomy(message, true);
           if (result) {
             syncedCount++;
           }
         }
 
-        // Update cursor
+        // Update pagination cursor and persist latest message ID for next startup
         after = sortedMessages[sortedMessages.length - 1]!.id;
+        await this.repo.setLatestMessage(channelId.toString(), after.toString());
       }
     }
 
