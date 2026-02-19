@@ -7,7 +7,7 @@
   import { IconCopy } from "@roomy/design/icons";
   import { current } from "$lib/queries";
 
-  const space = current.joinedSpace?.id;
+  const space = $derived(current.joinedSpace?.id);
 
   let bridgeStatus:
     | { type: "checking" }
@@ -34,7 +34,7 @@
         return;
       }
       const gResp = await fetch(
-        `${env.PUBLIC_DISCORD_BRIDGE}/get-guild-id?spaceId=${page.params.space}`,
+        `${env.PUBLIC_DISCORD_BRIDGE}/get-guild-id?spaceId=${space}`,
       );
       // 404 means no guild is connected yet - that's expected for unconnected spaces
       let guildId: string | undefined;
