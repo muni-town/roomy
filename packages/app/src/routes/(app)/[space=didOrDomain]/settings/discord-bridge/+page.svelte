@@ -5,8 +5,10 @@
   import { onMount } from "svelte";
   import InlineMono from "$lib/components/primitives/InlineMono.svelte";
   import { IconCopy } from "@roomy/design/icons";
+  import { current } from "$lib/queries";
 
-  let space = $derived(page.params.space);
+  const space = current.joinedSpace?.id;
+
   let bridgeStatus:
     | { type: "checking" }
     | {
