@@ -311,6 +311,14 @@ export class StructureSyncService {
           if (!existing) {
             await this.repo.registerMapping(threadRoomKey, roomyId);
           }
+          // Ensure thread→parent mapping exists (backfill for Roomy-originated threads)
+          const existingParent = await this.repo.getThreadParent(threadIdStr);
+          if (!existingParent) {
+            await this.repo.setThreadParent(
+              threadIdStr,
+              parentDiscordChannelId.toString(),
+            );
+          }
           return roomyId;
         }
       }
@@ -1045,6 +1053,9 @@ export class StructureSyncService {
 
     // Register mapping
     await this.repo.registerMapping(`room:${discordThreadId}`, threadRoomyId);
+
+    // Store thread→parent relationship so webhook routing uses the parent channel
+    await this.repo.setThreadParent(discordThreadId, parentId.toString());
 
     console.log(
       `[StructureSyncService] Created Discord thread ${threadName} (${discordThreadId}) for Roomy thread ${threadRoomyId}`,
