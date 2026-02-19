@@ -50,18 +50,31 @@ const CreateRoomSchema = type({
 
 export const CreateRoom = defineEvent(
   CreateRoomSchema,
-  ({ streamId, event }) => [
-    ensureEntity(streamId, event.id),
-    sql`
-      insert into comp_info ( entity, name, avatar, description)
-      values ( ${event.id}, ${event.name || null}, ${event.avatar || null}, ${event.description || null})
-      on conflict do nothing
-    `,
-    sql`
-      insert into comp_room ( entity, label )
-      values ( ${event.id}, ${event.kind} ) on conflict do nothing
-    `,
-  ],
+  ({ streamId, event }) => {
+    const statements = [
+      ensureEntity(streamId, event.id),
+      sql`
+        insert into comp_info ( entity, name, avatar, description)
+        values ( ${event.id}, ${event.name || null}, ${event.avatar || null}, ${event.description || null})
+        on conflict do nothing
+      `,
+      sql`
+        insert into comp_room ( entity, label )
+        values ( ${event.id}, ${event.kind} ) on conflict do nothing
+      `,
+    ];
+
+    const discordOrigin =
+      event.extensions?.["space.roomy.extension.discordOrigin.v0"];
+    if (discordOrigin) {
+      statements.push(sql`
+        insert or ignore into comp_discord_origin (entity, snowflake, guild_id)
+        values (${event.id}, ${discordOrigin.snowflake}, ${discordOrigin.guildId})
+      `);
+    }
+
+    return statements;
+  },
 );
 
 const UpdateRoomSchema = type({

@@ -78,6 +78,13 @@ create table if not exists comp_room (
 
 create index if not exists idx_comp_room_label on comp_room(label);
 
+create table if not exists comp_discord_origin (
+  entity text primary key references entities(id) on delete cascade,
+  snowflake text not null,
+  guild_id text not null
+) strict;
+create index if not exists idx_comp_discord_origin on comp_discord_origin(snowflake, guild_id);
+
 create table if not exists comp_user (
   -- The DID is the entity ID for users, but it is encoded into the our ID encoding, not just a
   -- normal string.

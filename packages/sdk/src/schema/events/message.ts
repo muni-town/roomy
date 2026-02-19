@@ -25,26 +25,51 @@ function stripDiscordCustomEmojis(
 }
 
 /**
- * Extract Discord user mention snowflakes (<@id> / <@!id>) from body text
- * and return SQL statements creating 'tag' edges from messageId to each user entity.
+ * Extract Discord user mention snowflakes (<@id> / <@!id>) and channel mention
+ * snowflakes (<#id>) from body text, and return SQL statements creating 'tag' edges.
+ * User mentions point to did:discord:<snowflake> entities.
+ * Channel mentions point to the Roomy room ULID via a subquery on comp_discord_origin.
  */
 function discordTagEdges(
   streamId: string,
   messageId: string,
   buf: Uint8Array,
   mimeType: string,
+  guildId?: string,
 ) {
   if (!mimeType.startsWith("text/")) return [];
   const text = new TextDecoder().decode(buf);
-  const snowflakes = new Set<string>();
-  for (const m of text.matchAll(/<@!?(\d+)>/g)) if (m[1]) snowflakes.add(m[1]);
-  return [...snowflakes].flatMap((snowflake) => {
-    const did = `did:discord:${snowflake}`;
-    return [
-      ensureEntity(streamId, did),
-      sql`insert or ignore into edges (head, tail, label) values (${messageId}, ${did}, 'tag')`,
-    ];
-  });
+
+  const userSnowflakes = new Set<string>();
+  for (const m of text.matchAll(/<@!?(\d+)>/g)) if (m[1]) userSnowflakes.add(m[1]);
+
+  const channelSnowflakes = new Set<string>();
+  for (const m of text.matchAll(/<#(\d+)>/g)) if (m[1]) channelSnowflakes.add(m[1]);
+
+  return [
+    ...[...userSnowflakes].flatMap((snowflake) => {
+      const did = `did:discord:${snowflake}`;
+      return [
+        ensureEntity(streamId, did),
+        sql`insert or ignore into edges (head, tail, label) values (${messageId}, ${did}, 'tag')`,
+      ];
+    }),
+    ...[...channelSnowflakes].map((snowflake) =>
+      guildId
+        ? sql`
+            insert or ignore into edges (head, tail, label)
+            select ${messageId}, entity, 'tag'
+            from comp_discord_origin
+            where snowflake = ${snowflake} and guild_id = ${guildId}
+          `
+        : sql`
+            insert or ignore into edges (head, tail, label)
+            select ${messageId}, entity, 'tag'
+            from comp_discord_origin
+            where snowflake = ${snowflake}
+          `,
+    ),
+  ];
 }
 
 const CreateMessageSchema = type({
@@ -217,7 +242,19 @@ export const CreateMessage = defineEvent(
     }
 
     if (hasDiscordOrigin) {
-      statements.push(...discordTagEdges(streamId, event.id, bodyData, event.body.mimeType));
+      const discordOriginExt =
+        event.extensions["space.roomy.extension.discordMessageOrigin.v0"];
+      const guildId = discordOriginExt?.guildId;
+      const channelId = discordOriginExt?.channelId;
+      if (channelId && guildId) {
+        statements.push(sql`
+          insert or ignore into comp_discord_origin (entity, snowflake, guild_id)
+          values (${event.room}, ${channelId}, ${guildId})
+        `);
+      }
+      statements.push(
+        ...discordTagEdges(streamId, event.id, bodyData, event.body.mimeType, guildId),
+      );
     }
 
     return statements;
@@ -394,9 +431,18 @@ export const EditMessage = defineEvent(
     }
 
     if (hasDiscordOrigin && event.body.mimeType !== "text/x-dmp-patch") {
+      const guildId =
+        event.extensions?.["space.roomy.extension.discordMessageOrigin.v0"]
+          ?.guildId;
       statements.push(
         sql`delete from edges where head = ${event.messageId} and label = 'tag'`,
-        ...discordTagEdges(streamId, event.messageId, editBodyData, event.body.mimeType),
+        ...discordTagEdges(
+          streamId,
+          event.messageId,
+          editBodyData,
+          event.body.mimeType,
+          guildId,
+        ),
       );
     }
 
