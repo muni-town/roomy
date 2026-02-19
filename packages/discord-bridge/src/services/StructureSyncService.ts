@@ -76,6 +76,8 @@ export class StructureSyncService {
   private discordCategoryNames = new Map<string, string>(); // <snowflakeString, name>
   private bridgeRoleId: bigint | null = null;
   private bridgeRoleResolved = false;
+  /** Whether the bot has MANAGE_CHANNELS permission in this guild. Gates channel create/rename ops. */
+  private canManageChannels = false;
 
   constructor(
     private readonly repo: BridgeRepository,
@@ -97,8 +99,15 @@ export class StructureSyncService {
   async resolveBridgeRole(): Promise<void> {
     if (this.bridgeRoleResolved) return;
     try {
-      const roles = await this.bot.rest.getRoles(this.guildId.toString());
-      const bridgeRole = roles.find((r) => r.name === BRIDGE_ROLE_NAME);
+      const [roles, member] = await Promise.all([
+        this.bot.rest.getRoles(this.guildId.toString()),
+        // Cast: member desired properties aren't declared, but `roles` is always returned
+        this.bot.helpers.getMember(this.guildId, this.bot.id) as unknown as {
+          roles?: bigint[];
+        },
+      ]);
+
+      const bridgeRole = roles.find((r: any) => r.name === BRIDGE_ROLE_NAME);
       if (bridgeRole) {
         this.bridgeRoleId = BigInt(bridgeRole.id);
         console.log(
@@ -109,9 +118,34 @@ export class StructureSyncService {
           `[StructureSyncService] No "${BRIDGE_ROLE_NAME}" role found, bridging all public channels`,
         );
       }
+
+      // Compute effective MANAGE_CHANNELS permission.
+      // Include @everyone (same ID as guild) plus all explicitly assigned roles.
+      const ADMINISTRATOR = 0x8n;
+      const MANAGE_CHANNELS = 0x10n;
+      const memberRoleIds = new Set([
+        this.guildId.toString(),
+        ...(member.roles ?? []).map((id: bigint) => id.toString()),
+      ]);
+      this.canManageChannels = (roles as any[]).some((role: any) => {
+        if (!memberRoleIds.has(role.id.toString())) return false;
+        const perms = BigInt(role.permissions);
+        return (
+          (perms & ADMINISTRATOR) !== 0n || (perms & MANAGE_CHANNELS) !== 0n
+        );
+      });
+      if (this.canManageChannels) {
+        console.log(
+          `[StructureSyncService] Bot has MANAGE_CHANNELS - Roomy → Discord channel sync enabled`,
+        );
+      } else {
+        console.warn(
+          `[StructureSyncService] Bot lacks MANAGE_CHANNELS - channel creation and renaming will be skipped`,
+        );
+      }
     } catch (error) {
       console.warn(
-        `[StructureSyncService] Failed to fetch roles, falling back to public channel mode:`,
+        `[StructureSyncService] Failed to fetch roles/permissions, falling back to public channel mode:`,
         error,
       );
     }
@@ -234,7 +268,7 @@ export class StructureSyncService {
   async handleDiscordThreadCreate(
     discordThread: ChannelProperties | Camelize<DiscordChannel>,
     parentDiscordChannelId: bigint,
-  ): Promise<string> {
+  ): Promise<string | null> {
     console.log("syncing thread D>R", discordThread);
     const threadIdStr = discordThread.id.toString();
     const threadRoomKey = getRoomKey(threadIdStr);
@@ -244,7 +278,10 @@ export class StructureSyncService {
     // Inside the thread, the first message is type 21 (ThreadStarterMessage) with empty content
     // and a messageReference pointing to the actual marker message. We need to follow that reference.
     try {
-      const messages = await this.bot.helpers.getMessages(discordThread.id, { after: "0", limit: 1 });
+      const messages = await this.bot.helpers.getMessages(discordThread.id, {
+        after: "0",
+        limit: 1,
+      });
       const firstMessage = messages[0];
       if (firstMessage) {
         // Try direct content first (threads created with startThreadWithoutMessage + sendMessage)
@@ -253,7 +290,8 @@ export class StructureSyncService {
         // If empty content with messageReference (type 21 ThreadStarterMessage from startThreadWithMessage),
         // fetch the referenced message from the parent channel to get the actual marker content.
         if (!roomyId && firstMessage.messageReference?.messageId) {
-          const refChannelId = firstMessage.messageReference.channelId ?? parentDiscordChannelId;
+          const refChannelId =
+            firstMessage.messageReference.channelId ?? parentDiscordChannelId;
           const refMessages = await this.bot.helpers.getMessages(refChannelId, {
             around: firstMessage.messageReference.messageId.toString(),
             limit: 1,
@@ -289,7 +327,10 @@ export class StructureSyncService {
       // Ensure thread→parent mapping exists (backfill for threads synced before this was added)
       const existingParent = await this.repo.getThreadParent(threadIdStr);
       if (!existingParent) {
-        await this.repo.setThreadParent(threadIdStr, parentDiscordChannelId.toString());
+        await this.repo.setThreadParent(
+          threadIdStr,
+          parentDiscordChannelId.toString(),
+        );
       }
       return existingThread;
     }
@@ -298,7 +339,10 @@ export class StructureSyncService {
     const parentRoomKey = getRoomKey(parentDiscordChannelId);
     const parentRoomyId = await this.repo.getRoomyId(parentRoomKey);
     if (!parentRoomyId) {
-      throw new Error(`Parent channel ${parentDiscordChannelId} not synced`);
+      console.warn(
+        `Could not handle Discord thread create: parent channel ${parentDiscordChannelId} not synced`,
+      );
+      return null;
     }
 
     // Call SDK operation to create thread (handles both room + link creation)
@@ -333,7 +377,10 @@ export class StructureSyncService {
     await this.repo.registerMapping(threadRoomKey, threadId);
 
     // Store thread→parent relationship for webhook routing
-    await this.repo.setThreadParent(threadIdStr, parentDiscordChannelId.toString());
+    await this.repo.setThreadParent(
+      threadIdStr,
+      parentDiscordChannelId.toString(),
+    );
 
     return threadId;
   }
@@ -528,7 +575,10 @@ export class StructureSyncService {
           channelId: BigInt(existingDiscordId.replace("room:", "")),
         });
         // Channel exists, check if it has our marker
-        if (!extractRoomyRoomId(channel.topic ?? null)) {
+        if (
+          !extractRoomyRoomId(channel.topic ?? null) &&
+          this.canManageChannels
+        ) {
           // Channel exists but no marker - add it
           await this.bot.helpers.editChannel(channel.id, {
             topic: addRoomySyncMarker(channel.topic ?? null, roomyRoomId),
@@ -555,9 +605,16 @@ export class StructureSyncService {
   async createDiscordChannelFromRoomy(
     roomyRoomId: Ulid,
     roomName: string,
-  ): Promise<string> {
+  ): Promise<string | null> {
     if (!this.bot) {
       throw new Error("Bot required for Roomy → Discord sync");
+    }
+
+    if (!this.canManageChannels) {
+      console.warn(
+        `[StructureSyncService] Skipping channel creation for Roomy room ${roomyRoomId} - bot lacks MANAGE_CHANNELS`,
+      );
+      return null;
     }
 
     // Build topic with sync marker
@@ -725,7 +782,10 @@ export class StructureSyncService {
       }
 
       // Verify topic marker
-      if (!extractRoomyRoomId(channel.topic ?? null)) {
+      if (
+        !extractRoomyRoomId(channel.topic ?? null) &&
+        this.canManageChannels
+      ) {
         await this.bot.helpers.editChannel(channel.id, {
           topic: addRoomySyncMarker(channel.topic ?? null, roomyRoomId),
         });
@@ -765,7 +825,9 @@ export class StructureSyncService {
           if (!existing || existing !== roomyRoomId) {
             // Register or update the mapping
             await this.repo.registerMapping(`room:${discordId}`, roomyRoomId);
-            console.log(`Recovered channel mapping: ${roomyRoomId} <-> ${discordId}`);
+            console.log(
+              `Recovered channel mapping: ${roomyRoomId} <-> ${discordId}`,
+            );
             recoveredCount++;
           }
         }
@@ -780,14 +842,19 @@ export class StructureSyncService {
 
         // Fetch the oldest message in the thread (sync marker is always first).
         // Discord returns newest-first by default, so use after:0 to get oldest.
-        const messages = await this.bot.helpers.getMessages(thread.id, { after: "0", limit: 1 });
+        const messages = await this.bot.helpers.getMessages(thread.id, {
+          after: "0",
+          limit: 1,
+        });
         const firstMessage = messages[0];
         if (!firstMessage) continue;
 
         const roomyRoomId = extractRoomyRoomIdFromUrl(firstMessage.content);
         if (roomyRoomId) {
           await this.repo.registerMapping(`room:${threadId}`, roomyRoomId);
-          console.log(`Recovered thread mapping: ${roomyRoomId} <-> ${threadId}`);
+          console.log(
+            `Recovered thread mapping: ${roomyRoomId} <-> ${threadId}`,
+          );
           recoveredCount++;
         }
       }
@@ -806,6 +873,13 @@ export class StructureSyncService {
     roomyRoomId: Ulid,
     newName: string,
   ): Promise<void> {
+    if (!this.canManageChannels) {
+      console.warn(
+        `[StructureSyncService] Skipping channel rename for Roomy room ${roomyRoomId} - bot lacks MANAGE_CHANNELS`,
+      );
+      return;
+    }
+
     const discordId = await this.repo.getDiscordId(roomyRoomId);
     if (!discordId) return; // Not synced to Discord
 
