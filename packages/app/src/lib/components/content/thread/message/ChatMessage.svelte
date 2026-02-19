@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { patchMake, patchToText } from "diff-match-patch-es";
   import { Avatar, Checkbox } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { format, isToday } from "date-fns";
@@ -9,6 +8,21 @@
   import ChatInput from "../ChatInput.svelte";
   import { goto } from "$app/navigation";
   import { renderMarkdownSanitized } from "$lib/utils/markdown";
+
+  function resolveDiscordMentions(
+    content: string,
+    tags: { snowflake: string; name: string | null; handle: string | null }[],
+  ): string {
+    if (!tags.length) return content;
+    const map = new Map(
+      tags.map((t) => [t.snowflake, t.name || t.handle || t.snowflake]),
+    );
+    return content.replace(/<@!?(\d+)>/g, (_, snowflake) => {
+      const name = map.get(snowflake) ?? snowflake;
+      const escaped = name.replace(/[_*~`[\]\\]/g, "\\$&");
+      return `[@${escaped}]()`;
+    });
+  }
   import type { Message } from "../ChatArea.svelte";
   import { peer, peerStatus } from "$lib/workers";
   import { decodeTime } from "ulidx";
@@ -243,7 +257,9 @@
               </div>
             </div>
           {:else}
-            {@html renderMarkdownSanitized(message.content)}
+            {@html renderMarkdownSanitized(
+              resolveDiscordMentions(message.content, message.tags),
+            )}
 
             <!-- {#if isMessageEdited && userAccessTimes.current?.updatedAt}
               <div class="text-xs text-base-700 dark:text-base-400">

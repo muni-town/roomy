@@ -14,11 +14,37 @@ import { decodeTime } from "ulidx";
 import { fromBytes } from "@atcute/cbor";
 
 /** Strip Discord custom emoji syntax (<:name:id> and <a:name:id>) from text body bytes. */
-function stripDiscordCustomEmojis(buf: Uint8Array, mimeType: string): Uint8Array {
+function stripDiscordCustomEmojis(
+  buf: Uint8Array,
+  mimeType: string,
+): Uint8Array {
   if (!mimeType.startsWith("text/")) return buf;
   const text = new TextDecoder().decode(buf);
   const stripped = text.replace(/<a?:\w+:\d+>/g, "");
   return new TextEncoder().encode(stripped);
+}
+
+/**
+ * Extract Discord user mention snowflakes (<@id> / <@!id>) from body text
+ * and return SQL statements creating 'tag' edges from messageId to each user entity.
+ */
+function discordTagEdges(
+  streamId: string,
+  messageId: string,
+  buf: Uint8Array,
+  mimeType: string,
+) {
+  if (!mimeType.startsWith("text/")) return [];
+  const text = new TextDecoder().decode(buf);
+  const snowflakes = new Set<string>();
+  for (const m of text.matchAll(/<@!?(\d+)>/g)) if (m[1]) snowflakes.add(m[1]);
+  return [...snowflakes].flatMap((snowflake) => {
+    const did = `did:discord:${snowflake}`;
+    return [
+      ensureEntity(streamId, did),
+      sql`insert or ignore into edges (head, tail, label) values (${messageId}, ${did}, 'tag')`,
+    ];
+  });
 }
 
 const CreateMessageSchema = type({
@@ -188,6 +214,10 @@ export const CreateMessage = defineEvent(
         `,
         );
       }
+    }
+
+    if (hasDiscordOrigin) {
+      statements.push(...discordTagEdges(streamId, event.id, bodyData, event.body.mimeType));
     }
 
     return statements;
@@ -361,6 +391,13 @@ export const EditMessage = defineEvent(
           }
         }
       }
+    }
+
+    if (hasDiscordOrigin && event.body.mimeType !== "text/x-dmp-patch") {
+      statements.push(
+        sql`delete from edges where head = ${event.messageId} and label = 'tag'`,
+        ...discordTagEdges(streamId, event.messageId, editBodyData, event.body.mimeType),
+      );
     }
 
     return statements;

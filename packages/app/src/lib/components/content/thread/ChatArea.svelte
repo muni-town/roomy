@@ -138,7 +138,18 @@
             'to', cc.idx_to
           )
         ),
-        'forwardedFrom', null
+        'forwardedFrom', null,
+        'tags', (
+          select json_group_array(json_object(
+            'snowflake', substr(te.tail, 13),
+            'name', ti.name,
+            'handle', tu.handle
+          ))
+          from edges te
+          left join comp_info ti on ti.entity = te.tail
+          left join comp_user tu on tu.did = te.tail
+          where te.head = e.id and te.label = 'tag'
+        )
       ) as json, e.sort_idx as sort_idx, e.id as msg_id, author_edge.*
       from entities e -- message
         join comp_content c on c.entity = e.id -- message content
@@ -222,7 +233,18 @@
             from comp_comment cc
             where cc.entity = orig.id
           ),
-          'forwardedFrom', orig.id
+          'forwardedFrom', orig.id,
+          'tags', (
+            select json_group_array(json_object(
+              'snowflake', substr(te.tail, 13),
+              'name', ti.name,
+              'handle', tu.handle
+            ))
+            from edges te
+            left join comp_info ti on ti.entity = te.tail
+            left join comp_user tu on tu.did = te.tail
+            where te.head = orig.id and te.label = 'tag'
+          )
         ) as json, fwd.sort_idx as sort_idx, fwd.id as msg_id, author_edge.*
         from entities fwd -- forward reference entity
           join edges fwd_edge on fwd_edge.head = fwd.id and fwd_edge.label = 'forward' -- forward edge
