@@ -70,6 +70,10 @@ This is used for bridging reactions from other platforms.",
 export const AddBridgedReaction = defineEvent(
   AddBridgedReactionSchema,
   ({ streamId, event }) => {
+    // Ignore Discord custom emoji reactions (<:name:id> or <a:name:id>)
+    if (/^<a?:\w+:\d+>$/.test(event.reaction)) {
+      return [];
+    }
     return [
       ensureEntity(streamId, event.reactingUser),
       sql`
