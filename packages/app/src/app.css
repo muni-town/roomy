@@ -205,12 +205,12 @@ div {
   }
 
   body {
-    @apply font-sans tracking-tight;
+    @apply font-sans tracking-normal;
   }
 
   h1,
   h2 {
-    @apply font-display tracking-[-0.0125em];
+    @apply font-display tracking-tight;
   }
 
   .red {
