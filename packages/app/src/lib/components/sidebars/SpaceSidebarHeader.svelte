@@ -4,7 +4,6 @@
   import { page } from "$app/state";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { getAppState } from "$lib/queries";
-  const app = getAppState();
   import { peer, peerStatus } from "$lib/workers";
   import { newUlid } from "@roomy/sdk";
 
@@ -16,6 +15,8 @@
     IconSettings,
     IconLogOut,
   } from "@roomy/design/icons";
+
+  const app = getAppState();
 
   let {
     isEditing = $bindable(false),
@@ -60,7 +61,7 @@
     {#snippet child({ props })}
       <button
         {...props}
-        class="flex justify-between items-center mt-2 border border-base-800/10 dark:border-base-100/5 hover:bg-base-300/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl bg-base-200 dark:bg-base-900/50 p-2 w-full text-left"
+        class="flex justify-between items-center mt-2 hover:bg-accent-200/70 dark:hover:bg-base-900/70 cursor-pointer rounded-2xl p-2 w-full text-left transition-colors"
       >
         <div class="flex items-center gap-4 max-w-full">
           <SpaceAvatar
@@ -69,7 +70,7 @@
           />
 
           <h1
-            class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full flex-grow"
+            class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full grow"
           >
             {app.joinedSpace?.name ?? ""}
           </h1>

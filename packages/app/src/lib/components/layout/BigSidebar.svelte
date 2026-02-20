@@ -13,7 +13,7 @@
 
 <div
   class={cn(
-    "overflow-y-hidden bg-base-100/80 dark:bg-base-950 flex flex-col justify-between h-full w-64 border-r border-base-800/10 dark:border-base-300/10",
+    "overflow-y-hidden flex flex-col justify-between h-full w-64",
     className,
   )}
   {...restProps}
