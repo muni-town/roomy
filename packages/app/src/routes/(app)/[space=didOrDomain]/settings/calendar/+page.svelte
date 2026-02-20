@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Button, toast } from "@fuxui/base";
   import { calendarLinkQuery } from "$lib/queries/calendar.svelte";
+  import { CONFIG } from "$lib/config";
   import { current } from "$lib/queries";
   import { peer } from "$lib/workers";
   import { newUlid, type StreamDid } from "@roomy/sdk";
@@ -15,7 +16,7 @@
 
   let groupSlug = $state("");
   let tenantId = $state("");
-  let apiUrl = $state("https://api.openmeet.net");
+  let apiUrl = $state("");
   let saving = $state(false);
 
   $effect(() => {
@@ -27,15 +28,15 @@
   });
 
   async function save() {
-    if (!spaceId || !groupSlug.trim() || !tenantId.trim()) return;
+    if (!spaceId || !groupSlug.trim()) return;
     saving = true;
     try {
       await peer.sendEvent(spaceId as StreamDid, {
         id: newUlid(),
         $type: "space.roomy.openmeet.configure.v0",
         groupSlug: groupSlug.trim(),
-        tenantId: tenantId.trim(),
-        apiUrl: apiUrl.trim() || "https://api.openmeet.net",
+        tenantId: tenantId.trim() || CONFIG.openmeetTenantId,
+        apiUrl: apiUrl.trim() || CONFIG.openmeetApiUrl,
       });
       toast.success("Calendar link saved");
     } catch (e) {
@@ -89,17 +90,17 @@
           class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
         >
           Tenant ID
+          <span class="font-normal text-base-400">(optional)</span>
         </label>
         <p class="mt-1 text-sm text-base-600 dark:text-base-400">
-          The OpenMeet tenant identifier (e.g., "openmeet").
+          Leave blank for the default OpenMeet instance.
         </p>
         <input
           id="tenantId"
           type="text"
           bind:value={tenantId}
-          placeholder="openmeet"
+          placeholder={CONFIG.openmeetTenantId}
           class="mt-2 block w-full rounded-md border border-base-300 dark:border-base-700 bg-base-50 dark:bg-base-900 px-3 py-2 text-sm"
-          required
         />
       </div>
 
@@ -109,15 +110,16 @@
           class="block text-sm/6 font-medium text-base-900 dark:text-base-100"
         >
           API URL
+          <span class="font-normal text-base-400">(optional)</span>
         </label>
         <p class="mt-1 text-sm text-base-600 dark:text-base-400">
-          OpenMeet API endpoint. Leave default unless using a custom deployment.
+          Leave blank for the default OpenMeet instance.
         </p>
         <input
           id="apiUrl"
           type="url"
           bind:value={apiUrl}
-          placeholder="https://api.openmeet.net"
+          placeholder={CONFIG.openmeetApiUrl}
           class="mt-2 block w-full rounded-md border border-base-300 dark:border-base-700 bg-base-50 dark:bg-base-900 px-3 py-2 text-sm"
         />
       </div>
@@ -125,7 +127,7 @@
 
     <Button
       type="submit"
-      disabled={saving || !groupSlug.trim() || !tenantId.trim()}
+      disabled={saving || !groupSlug.trim()}
     >
       {saving ? "Saving..." : existingLink ? "Update" : "Connect"}
     </Button>

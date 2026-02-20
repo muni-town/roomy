@@ -32,6 +32,12 @@ const CONFIG = {
     calendar: false,
   },
 
+  // OpenMeet integration defaults
+  openmeetApiUrl: (import.meta.env.VITE_OPENMEET_API_URL ||
+    "https://api.openmeet.net") as string,
+  openmeetTenantId: (import.meta.env.VITE_OPENMEET_TENANT_ID ||
+    "lsdfaopkljdfs") as string,
+
   // placeholders overridden below
   leafServerDid: "",
   atprotoOauthScope: "",
