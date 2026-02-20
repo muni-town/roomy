@@ -68,8 +68,8 @@
       end: "dayGridMonth,timeGridDay,listMonth",
     },
     dateClick: (info: { date: Date; view: { type: string } }) => {
-      selectedDate = info.date;
       if (info.view.type === "dayGridMonth") {
+        selectedDate = info.date;
         calRef?.setOption("view", "timeGridDay");
       }
     },
@@ -193,36 +193,33 @@
     {:else}
       <!-- Auth banner -->
       {#if !connected}
-        <div
-          class="mb-4 p-3 rounded-lg border border-accent-200 dark:border-accent-800 bg-accent-50 dark:bg-accent-950 flex items-center justify-between gap-3"
-        >
-          <p class="text-sm text-base-700 dark:text-base-300">
-            Connect to OpenMeet to see private events and RSVP
+        <div class="mb-4 p-2 rounded-lg flex items-center justify-end">
+          <p class="text-sm text-base-400 dark:text-base-500">
+            {#if connecting}
+              Connecting...
+            {:else}
+              <button
+                class="underline hover:text-base-600 dark:hover:text-base-300 transition-colors"
+                onclick={connectToOpenMeet}
+              >Connect</button> to OpenMeet to see private events
+            {/if}
           </p>
-          <Button variant="ghost" onclick={connectToOpenMeet} disabled={connecting}>
-            {connecting ? "Connecting..." : "Connect"}
-          </Button>
         </div>
       {:else if profile}
-        <div
-          class="mb-4 p-2 rounded-lg flex items-center justify-between gap-3"
-        >
-          <div class="flex items-center gap-2 text-sm text-base-500 dark:text-base-400">
+        <div class="mb-4 p-2 rounded-lg flex items-center justify-end">
+          <p class="text-sm text-base-400 dark:text-base-500">
             {#if profile.avatar}
               <img
                 src={profile.avatar}
                 alt=""
-                class="w-5 h-5 rounded-full"
+                class="w-5 h-5 rounded-full inline align-text-bottom"
               />
             {/if}
-            <span>Connected as {profile.displayName || profile.handle}</span>
-          </div>
-          <button
-            class="text-xs text-base-400 hover:text-base-600 dark:hover:text-base-300 transition-colors"
-            onclick={disconnect}
-          >
-            Disconnect
-          </button>
+            Connected as {profile.displayName || profile.handle} · <button
+              class="underline hover:text-base-600 dark:hover:text-base-300 transition-colors"
+              onclick={disconnect}
+            >Disconnect</button>
+          </p>
         </div>
       {/if}
 
@@ -265,6 +262,25 @@
     --ec-button-active-bg-color: var(--color-accent-100);
     --ec-button-active-border-color: var(--color-accent-300);
     --ec-button-active-text-color: var(--color-accent-700);
+  }
+
+  /* Pointer cursor on events (clickable in all views) */
+  .ec-wrapper :global(.ec-event) {
+    cursor: pointer;
+  }
+
+  /* Pointer cursor on day cells only in month view (drill into day) */
+  .ec-wrapper :global(.ec-day-grid .ec-day) {
+    cursor: pointer;
+  }
+
+  /* Show event title next to time in day view (default is column, which hides title on short events) */
+  .ec-wrapper :global(.ec-time-grid .ec-event-body) {
+    flex-direction: row;
+  }
+
+  .ec-wrapper :global(.ec-time-grid .ec-event-time) {
+    margin: 0 3px 0 0;
   }
 
   :global(.dark) .ec-wrapper :global(.ec) {
