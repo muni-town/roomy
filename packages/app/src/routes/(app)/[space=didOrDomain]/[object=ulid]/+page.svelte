@@ -388,7 +388,7 @@
     <JoinSpaceModal />
   </MainLayout>
 {:else}
-  <MainLayout {sidebar} {navbar}>
+  <MainLayout {sidebar} {navbar} chatArea>
     {#if app.space.status === "loading"}
       <!-- TODO loading spinner -->
       <div class="h-full w-full flex">

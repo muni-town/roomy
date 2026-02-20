@@ -13,12 +13,12 @@
   }: { thread: ThreadInfo; activityCountMax?: number; parent?: Ulid } =
     $props();
 
-  $effect(() => {
-    console.log("boardviewitem", {
-      parent,
-      thread: $state.snapshot(thread),
-    });
-  });
+  // $effect(() => {
+  //   console.log("boardviewitem", {
+  //     parent,
+  //     thread: $state.snapshot(thread),
+  //   });
+  // });
 
   let lastMessageTimestamp = $derived(thread.activity.latestTimestamp);
 
@@ -53,7 +53,7 @@
 <a
   href={`/${page.params.space}/${thread.id}${parent ? "?parent=" + parent : thread.canonicalParent ? "?parent=" + thread.canonicalParent : ""}`}
 >
-  <Box class="flex items-center p-3">
+  <Box class="flex items-center p-3 bg-white dark:bg-base-900">
     <div
       class="flex items-center relative -bottom-1 justify-between gap-2 mr-2"
     >

@@ -172,7 +172,7 @@
   import type { Ulid } from "@roomy/sdk";
 </script>
 
-<div class="flex flex-col flex-1 h-full min-h-0 justify-stretch">
+<div class="relative flex flex-col flex-1 h-full min-h-0 justify-stretch">
   <ChatArea messagingState={messagingState.current} />
 
   <div class="shrink-0 mt-auto">

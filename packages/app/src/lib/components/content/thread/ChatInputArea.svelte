@@ -315,9 +315,7 @@
     }
     return null;
   })()}
-  <div
-    class="flex-none pt-2 pb-2 pr-2 border-t border-base-100 dark:border-base-900"
-  >
+  <div class="flex-none pt-2 pb-2 pr-2">
     <!-- Message context: reply, threading, or comment -->
     {#if messageContext}
       <div

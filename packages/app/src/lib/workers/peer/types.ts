@@ -1,7 +1,6 @@
 import type { QueryResult } from "../sqlite/setup";
 import type { Batch, StreamIndex } from "../types";
 import type { BlobRef } from "@atproto/lexicon";
-import { Deferred } from "$lib/utils/deferred";
 import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
 import { AsyncChannel, trackableState } from "@roomy/sdk";
 import {

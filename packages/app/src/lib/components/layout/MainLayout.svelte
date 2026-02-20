@@ -3,29 +3,27 @@
 </script>
 
 <script lang="ts">
-  import Navbar from "./Navbar.svelte";
-  // import BigSidebar from "./BigSidebar.svelte";
-  // import SmallSidebar from "./SmallSidebar.svelte";
   import { type Snippet } from "svelte";
-  import ToggleNavigation from "../helper/ToggleNavigation.svelte";
-  import { cn } from "@fuxui/base";
-  // import ServerBar from "../sidebars/ServerBar.svelte";
   import { onNavigate } from "$app/navigation";
-  import * as rawEnv from "$env/static/public";
+
   import SmallSidebar from "./SmallSidebar.svelte";
   import ServerBar from "../sidebars/ThinSidebar.svelte";
   import BigSidebar from "./BigSidebar.svelte";
+  import MainPanel from "./MainPanel.svelte";
+  import * as rawEnv from "$env/static/public";
 
   let {
     serverBar,
     sidebar,
     navbar,
     children,
+    chatArea = false,
   }: {
     serverBar?: Snippet;
     sidebar?: Snippet;
     navbar?: Snippet;
     children: Snippet;
+    chatArea?: boolean;
   } = $props();
 
   onNavigate(() => {
@@ -36,34 +34,7 @@
   const hideSmallSidebar = rawEnv.PUBLIC_HIDE_SMALL_SIDEBAR;
 </script>
 
-<div
-  class={cn(
-    "h-[100dvh] flex flex-col overflow-hidden",
-    hideSmallSidebar
-      ? sidebar
-        ? "sm:ml-64"
-        : "sm:ml-0"
-      : sidebar
-        ? "sm:ml-82"
-        : "sm:ml-18",
-  )}
->
-  {#if navbar}
-    <Navbar>
-      {#if !hideSmallSidebar || sidebar}
-        <div class="flex gap-4 items-center ml-4 sm:hidden">
-          <ToggleNavigation bind:isSidebarVisible={isSidebarVisible.value} />
-        </div>
-      {/if}
-
-      {@render navbar?.()}
-    </Navbar>
-  {/if}
-
-  <div class="flex flex-col h-full max-h-full overflow-y-hidden">
-    {@render children?.()}
-  </div>
-</div>
+<MainPanel {children} {navbar} {sidebar} {chatArea} />
 
 <!-- Overlay -->
 {#if isSidebarVisible.value}

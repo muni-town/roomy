@@ -15,7 +15,7 @@ const CONFIG = {
   streamNsid:
     import.meta.env.VITE_STREAM_NSID || "space.roomy.space.personal.dev",
   profileSpaceNsid:
-    import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.profileSpace.dev",
+    import.meta.env.VITE_STREAM_HANDLE_NSID || "space.roomy.space.handle.dev",
   streamSchemaVersion: "4" as const,
   databaseSchemaVersion: "4" as const,
 
