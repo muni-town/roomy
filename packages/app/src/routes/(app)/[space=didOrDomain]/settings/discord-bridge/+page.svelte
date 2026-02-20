@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { page } from "$app/state";
   import { env } from "$env/dynamic/public";
   import { Badge, Button, toast } from "@fuxui/base";
   import { onMount } from "svelte";
@@ -249,10 +248,7 @@
           <div class="flex gap-2 items-center mt-4 ml-4">
             <strong>space-id:</strong>
             <InlineMono>{space}</InlineMono>
-            <Button
-              size="icon"
-              onclick={() =>
-                copyToClipboard("/connect-roomy-space " + space || "")}
+            <Button size="icon" onclick={() => copyToClipboard(space || "")}
               ><IconCopy /></Button
             >
           </div>
