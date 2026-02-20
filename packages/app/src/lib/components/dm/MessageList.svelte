@@ -8,7 +8,12 @@
   import "bluesky-post-embed/style.css";
   import "bluesky-post-embed/themes/light.css";
 
-  import { IconAlertCircle, IconMessageCirclePlus, IconMessageCircle, IconSend } from "@roomy/design/icons";
+  import {
+    IconAlertCircle,
+    IconMessageCirclePlus,
+    IconMessageCircle,
+    IconSend,
+  } from "@roomy/design/icons";
 
   const { conversationId }: { conversationId: string } = $props();
 

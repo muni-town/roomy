@@ -1,9 +1,9 @@
 <script lang="ts">
   import { fade } from "svelte/transition";
 
-  import { current, getSidebar } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
 
-  const sidebarQuery = getSidebar();
+  const app = getAppState();
   import { peer, peerStatus } from "$lib/workers";
 
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
@@ -24,21 +24,21 @@
   import { page } from "$app/state";
   import type { StreamIndex } from "@roomy/sdk";
 
-  const spaceId = $derived(current.joinedSpace?.id);
+  const spaceId = $derived(app.joinedSpace?.id);
 
   $effect(() => {
     if (
       flags.threadsList ||
-      !current.joinedSpace ||
-      current.joinedSpace.id !== page.params.space
+      !app.joinedSpace ||
+      app.joinedSpace.id !== page.params.space
     )
       return;
-    const firstCategory = sidebarQuery.categories?.[0];
+    const firstCategory = app.categories?.[0];
     if (firstCategory?.type === "space.roomy.category") {
       const firstChild = firstCategory.children?.[0]?.id;
       if (firstChild)
         navigate({
-          space: current.joinedSpace.id,
+          space: app.joinedSpace.id,
           channel: firstChild,
         });
     }
@@ -146,11 +146,11 @@
     (row) => JSON.parse(row.json),
   );
 
-  const spaceActive = $derived(current.space.status === "joined");
-  const spaceLoading = $derived(current.space.status === "loading");
+  const spaceActive = $derived(app.space.status === "joined");
+  const spaceLoading = $derived(app.space.status === "loading");
 
   $effect(() => {
-    if (!spaceId || current.space.status !== "joined") return;
+    if (!spaceId || app.space.status !== "joined") return;
     // Fetch all link events in space
     peer.fetchLinks(spaceId, 1 as StreamIndex, 1000);
   });
@@ -170,7 +170,7 @@
           {#if spaceActive}Index{/if}
         </div>
 
-        {#if current.joinedSpace?.id && peerStatus.authState?.state === "loading"}
+        {#if app.joinedSpace?.id && peerStatus.authState?.state === "loading"}
           <div class="dark:!text-base-400 !text-base-600">
             Downloading Entire Space...
           </div>
@@ -178,17 +178,17 @@
       </h2>
     </div>
 
-    {#if current.joinedSpace?.id && peerStatus.authState?.state === "loading"}
+    {#if app.joinedSpace?.id && peerStatus.authState?.state === "loading"}
       <LoadingLine />
     {/if}
   </div>
 {/snippet}
 
-{#if current.space.status === "error"}
+{#if app.space.status === "error"}
   <MainLayout {navbar}>
-    <Error message={current.space.message} />
+    <Error message={app.space.message} />
   </MainLayout>
-{:else if current.space.status === "invited"}
+{:else if app.space.status === "invited"}
   <MainLayout {navbar}>
     <JoinSpaceModal />
   </MainLayout>

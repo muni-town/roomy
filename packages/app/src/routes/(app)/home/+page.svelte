@@ -3,7 +3,9 @@
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SpaceButton from "$lib/components/spaces/SpaceButton.svelte";
   import EarlyAlphaWarning from "$lib/components/helper/EarlyAlphaWarning.svelte";
-  import { joinedSpaces } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+
+  const app = getAppState();
 
   import { IconPlus } from "@roomy/design/icons";
 </script>
@@ -49,18 +51,18 @@
         Create Space
       </Button>
 
-      {#if joinedSpaces.list.length || 0 > 0}
+      {#if app.spaces.length || 0 > 0}
         <h2 class="text-3xl font-bold text-base-900 dark:text-base-100">
           Your Spaces
         </h2>
         <section
           class="flex flex-row gap-8 mx-8 justify-center flex-wrap max-w-5xl"
         >
-          {#each joinedSpaces.list as space}
+          {#each app.spaces as space}
             <SpaceButton {space} />
           {/each}
         </section>
-      {:else if joinedSpaces.list.length || 0 == 0}
+      {:else if app.spaces.length || 0 == 0}
         <p class="text-lg font-medium text-center">
           You don't have any spaces yet. Create one to get started!
         </p>

@@ -42,5 +42,10 @@ export type Message = {
     from: number | null;
     to: number | null;
   } | null;
-  tags: { snowflake: string; name: string | null; handle: string | null; roomId: string | null }[];
+  tags: {
+    snowflake: string;
+    name: string | null;
+    handle: string | null;
+    roomId: string | null;
+  }[];
 };

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
   import { peer } from "$lib/workers";
   import { sql } from "$lib/utils/sqlTemplate";
 
@@ -12,7 +13,7 @@
   let { emptyMessage }: { objectType?: string; emptyMessage?: string } =
     $props();
 
-  const spaceId = current.joinedSpace?.id;
+  const spaceId = app.joinedSpace?.id;
 
   const threadsList = new LiveQuery<ThreadInfo>(
     () =>

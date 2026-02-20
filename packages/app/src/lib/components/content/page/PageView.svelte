@@ -2,7 +2,8 @@
   import { page } from "$app/state";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { renderMarkdownSanitized } from "$lib/utils/markdown";
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
   import { sql } from "$lib/utils/sqlTemplate";
   import { peer } from "$lib/workers";
   import { Button, Prose } from "@fuxui/base";
@@ -21,7 +22,7 @@
   import { ensureShowPageChat } from "../../../../routes/(app)/[space=didOrDomain]/[object=ulid]/+page.svelte";
 
   let isEditing = $state(false);
-  const spaceId = $derived(current.joinedSpace?.id);
+  const spaceId = $derived(app.joinedSpace?.id);
 
   let { showPageChat = $bindable(false) } = $props();
 

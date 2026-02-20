@@ -2,7 +2,8 @@
   import { page } from "$app/state";
   import InlineMono from "$lib/components/primitives/InlineMono.svelte";
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
   import { peer, peerStatus } from "$lib/workers";
   import {
     Alert,
@@ -17,7 +18,7 @@
 
   import { IconLoading } from "@roomy/design/icons";
 
-  let currentSpace = $derived(current.joinedSpace);
+  let currentSpace = $derived(app.joinedSpace);
   let spaceId = $derived(currentSpace?.id);
   let spaceName = $derived(currentSpace?.name ?? "");
   let avatarUrl = $derived(currentSpace?.avatar ?? "");
@@ -72,17 +73,16 @@
   }
 
   let spaceHandle = $state(
-    current.space.status == "joined" ? current.space.space.handle : "",
+    app.space.status == "joined" ? app.space.space.handle : "",
   );
   $effect(() => {
-    if (current.space.status == "joined")
-      spaceHandle = current.space.space.handle;
+    if (app.space.status == "joined") spaceHandle = app.space.space.handle;
   });
   let exampleSpaceHandle = $derived(
     spaceHandle || peerStatus.profile?.handle || "example.com",
   );
   let currentSpaceHandle = $derived(
-    current.space.status == "joined" && current.space.space.handle,
+    app.space.status == "joined" && app.space.space.handle,
   );
   let currentProfileSpace = $derived(peer.getProfileSpace());
 
@@ -96,9 +96,7 @@
     handleResolvesToSpace = peer
       .resolveSpaceId(Handle.assert(handle))
       .then(({ spaceId }) => {
-        return (
-          current.space.status == "joined" && current.space.space.id == spaceId
-        );
+        return app.space.status == "joined" && app.space.space.id == spaceId;
       })
       .catch(() => false);
   });
@@ -121,17 +119,17 @@
 
   async function setSpaceHandleUsingProfile() {
     if (
-      current.space.status != "joined" ||
+      app.space.status != "joined" ||
       peerStatus.authState?.state != "authenticated"
     )
       return;
 
     try {
       // Set this space as the user's profile space
-      await peer.setProfileSpace(current.space.space.id);
+      await peer.setProfileSpace(app.space.space.id);
 
       // Set the current user as the handle provider for the space
-      await peer.sendEvent(current.space.space.id, {
+      await peer.sendEvent(app.space.space.id, {
         $type: "space.roomy.space.setHandleProvider.v0",
         id: newUlid(),
         did: peerStatus.authState.did,
@@ -149,8 +147,8 @@
     const currentProfileSpaceId = await currentProfileSpace;
     if (
       !currentProfileSpaceId ||
-      current.space.status != "joined" ||
-      current.space.space.id != currentProfileSpaceId ||
+      app.space.status != "joined" ||
+      app.space.space.id != currentProfileSpaceId ||
       peerStatus.authState?.state != "authenticated" ||
       !peerStatus.profile
     ) {
@@ -161,7 +159,7 @@
       // If the current space handle matches our user's handle, then we need to clear the handle
       // provider for the space.
       if (currentSpaceHandle == peerStatus.profile.handle) {
-        await peer.sendEvent(current.space.space.id, {
+        await peer.sendEvent(app.space.space.id, {
           $type: "space.roomy.space.setHandleProvider.v0",
           id: newUlid(),
           did: null,
@@ -179,8 +177,8 @@
   }
 
   function setHandleUsingDns() {
-    if (current.space.status != "joined") return;
-    const spaceId = current.space.space.id;
+    if (app.space.status != "joined") return;
+    const spaceId = app.space.space.id;
     peer
       .setSpaceHandle(spaceId, spaceHandle || null)
       .then(async () => {
@@ -311,7 +309,7 @@
       </div>
     {:then profileSpace}
       <form class="items-start">
-        {#if current.space.status == "joined" && current.space.space.id == profileSpace}
+        {#if app.space.status == "joined" && app.space.space.id == profileSpace}
           <strong
             >Your ATProto handle <code>{peerStatus.profile?.handle}</code> is being
             used for this space.
@@ -349,7 +347,7 @@
           {/if}
 
           <!-- If space is currently using the user's handle. -->
-          {#if current.space.status == "joined" && current.space.space.id == profileSpace}
+          {#if app.space.status == "joined" && app.space.space.id == profileSpace}
             <Button onclick={removeProfileSpaceRecord}
               >Remove Your Handle From This Space</Button
             >
@@ -386,8 +384,8 @@
           ".",
         ).length >= 3
           ? "."
-          : ""}{exampleSpaceHandle.split(".").slice(0, -2)}    "did={current
-          .space.status == "joined" && current.space.space.id}"</pre>
+          : ""}{exampleSpaceHandle.split(".").slice(0, -2)}    "did={app.space
+          .status == "joined" && app.space.space.id}"</pre>
 
       <Input
         bind:value={spaceHandle}

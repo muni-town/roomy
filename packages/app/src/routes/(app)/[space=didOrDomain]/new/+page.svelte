@@ -1,9 +1,7 @@
 <script lang="ts">
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
-  import { getSidebar, current } from "$lib/queries";
-
-  const { categoriesQuery } = getSidebar();
+  import { getAppState } from "$lib/queries";
   import { navigate } from "$lib/utils.svelte";
   import { peer } from "$lib/workers";
   import { Button, Input, ScrollArea, Select } from "@fuxui/base";
@@ -14,10 +12,12 @@
   let type = $state("Channel") as (typeof types)[number];
   let name = $state("");
 
-  const spaceId = current.joinedSpace?.id;
+  const app = getAppState();
+
+  const spaceId = app.joinedSpace?.id;
 
   let categories = $derived(
-    categoriesQuery.result?.map((x) => ({
+    app.categories?.map((x) => ({
       id: x.id,
       name: x.name,
       children: x.children.map((x) => Ulid.assert(x.id)),
@@ -31,9 +31,9 @@
 
   // redirect to space home if not joined
   $effect(() => {
-    if (current.space.status === "invited") {
+    if (app.space.status === "invited") {
       navigate({
-        space: current.space.spaceId,
+        space: app.space.spaceId,
       });
     }
   });

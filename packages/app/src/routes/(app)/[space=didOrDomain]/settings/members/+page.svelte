@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
   import { peer, peerStatus } from "$lib/workers";
   import { Button } from "@fuxui/base";
   import { Avatar } from "bits-ui";
@@ -8,11 +9,11 @@
 
   import { IconLoading } from "@roomy/design/icons";
 
-  const spaceId = $derived(current.joinedSpace?.id);
+  const spaceId = $derived(app.joinedSpace?.id);
 
   const members = $derived(
-    current.space.status == "joined"
-      ? peer.getMembers(current.space.space.id)
+    app.space.status == "joined"
+      ? peer.getMembers(app.space.space.id)
       : undefined,
   );
 
@@ -59,7 +60,7 @@
               {member.name}
               {member.handle ? "@" + member.handle : ""}</a
             >
-            {#if current.space.status == "joined" && !current.space.space.permissions.find(([user, perm]) => user == member.did && perm == "admin")}
+            {#if app.space.status == "joined" && !app.space.space.permissions.find(([user, perm]) => user == member.did && perm == "admin")}
               <Button onclick={() => addAdmin(member.did)}>Make Admin</Button>
             {:else if peerStatus.authState?.state === "authenticated" && member.did != peerStatus.authState.did}
               <Button onclick={() => removeAdmin(member.did)}

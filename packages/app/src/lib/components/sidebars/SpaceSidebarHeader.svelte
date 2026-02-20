@@ -3,11 +3,19 @@
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
   import { peer, peerStatus } from "$lib/workers";
   import { newUlid } from "@roomy/sdk";
 
-  import { IconChevronDown, IconShare, IconPlus, IconPencil, IconSettings, IconLogOut } from "@roomy/design/icons";
+  import {
+    IconChevronDown,
+    IconShare,
+    IconPlus,
+    IconPencil,
+    IconSettings,
+    IconLogOut,
+  } from "@roomy/design/icons";
 
   let {
     isEditing = $bindable(false),
@@ -16,7 +24,7 @@
   } = $props();
 
   async function leaveSpace() {
-    const spaceDid = current.joinedSpace?.id;
+    const spaceDid = app.joinedSpace?.id;
     if (peerStatus.roomyState?.state !== "connected") return;
     if (!spaceDid || !peerStatus.roomyState.personalSpace) return;
 
@@ -56,14 +64,14 @@
       >
         <div class="flex items-center gap-4 max-w-full">
           <SpaceAvatar
-            imageUrl={current.joinedSpace?.avatar}
-            id={current.joinedSpace?.id}
+            imageUrl={app.joinedSpace?.avatar}
+            id={app.joinedSpace?.id}
           />
 
           <h1
             class="text-md font-semibold text-base-900 dark:text-base-100 truncate max-w-full flex-grow"
           >
-            {current.joinedSpace?.name ?? ""}
+            {app.joinedSpace?.name ?? ""}
           </h1>
         </div>
         <IconChevronDown
@@ -87,10 +95,10 @@
         <IconShare class="size-4" /> Invite
       </Button>
 
-      {#if current.isSpaceAdmin}
+      {#if app.isSpaceAdmin}
         <Button
           class="w-full"
-          href={`/${current.joinedSpace?.id}/new`}
+          href={`/${app.joinedSpace?.id}/new`}
           variant="secondary"
         >
           <IconPlus class="size-4" /> New

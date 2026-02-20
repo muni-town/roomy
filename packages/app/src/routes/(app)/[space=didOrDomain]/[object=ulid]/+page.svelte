@@ -14,7 +14,8 @@
   import { fade } from "svelte/transition";
 
   import { page } from "$app/state";
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
   import { peer, peerStatus } from "$lib/workers";
 
   import {
@@ -38,7 +39,11 @@
   import PageHistory from "$lib/components/content/page/PageHistory.svelte";
   import JoinSpaceModal from "$lib/components/modals/JoinSpaceModal.svelte";
 
-  import { IconHashtag, IconDocument, IconChatBubble } from "@roomy/design/icons";
+  import {
+    IconHashtag,
+    IconDocument,
+    IconChatBubble,
+  } from "@roomy/design/icons";
 
   import Error from "$lib/components/modals/Error.svelte";
 
@@ -79,13 +84,13 @@
       join comp_info i on i.entity = e.id
       join comp_room r on r.entity = e.id
       left join comp_last_read l on l.entity = e.id
-    where e.id = ${current.roomId}
+    where e.id = ${app.roomId}
   `,
     (row) => JSON.parse(row.json),
   );
   const room = $derived(roomQuery.result?.[0]);
   const ref = $derived($scrollContainerRef);
-  const spaceId = $derived(current.joinedSpace?.id);
+  const spaceId = $derived(app.joinedSpace?.id);
 
   const setPageRead = () => {
     if (
@@ -143,10 +148,7 @@
   $effect(() => {
     if (!room) return;
     // If the room's spaceId doesn't match the URL, navigate to space root
-    if (
-      current.space.status == "joined" &&
-      current.space.space.id !== room.spaceId
-    ) {
+    if (app.space.status == "joined" && app.space.space.id !== room.spaceId) {
       navigate({
         space: page.params.space,
       });
@@ -377,17 +379,17 @@
   {/if}
 {/snippet}
 
-{#if current.space.status === "error"}
+{#if app.space.status === "error"}
   <MainLayout>
-    <Error message={current.space.message} goHome />
+    <Error message={app.space.message} goHome />
   </MainLayout>
-{:else if current.space.status === "invited"}
+{:else if app.space.status === "invited"}
   <MainLayout>
     <JoinSpaceModal />
   </MainLayout>
 {:else}
   <MainLayout {sidebar} {navbar}>
-    {#if current.space.status === "loading"}
+    {#if app.space.status === "loading"}
       <!-- TODO loading spinner -->
       <div class="h-full w-full flex">
         <div class="m-auto">Loading...</div>

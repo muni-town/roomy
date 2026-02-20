@@ -33,7 +33,8 @@
   } from "@roomy/sdk";
   import StateSuspense from "$lib/components/primitives/StateSuspense.svelte";
   import { peer } from "$lib/workers";
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
 
   // Lazy loading state (AsyncStateWithIdle pattern)
   let lazyLoadState = $state<AsyncStateWithIdle<{ hasMore: boolean }>>({
@@ -48,14 +49,11 @@
     if (lazyLoadState.status === "loading") return;
     if (lazyLoadState.status === "success" && !lazyLoadState.data.hasMore)
       return;
-    if (!current.joinedSpace?.id || !current.roomId) return;
+    if (!app.joinedSpace?.id || !app.roomId) return;
 
     lazyLoadState = { status: "loading" };
     try {
-      const result = await peer.lazyLoadRoom(
-        current.joinedSpace.id,
-        current.roomId,
-      );
+      const result = await peer.lazyLoadRoom(app.joinedSpace.id, app.roomId);
       lazyLoadState = { status: "success", data: result };
     } catch (e) {
       lazyLoadState = {
@@ -459,8 +457,8 @@
 
   // Initial lazy load on room change
   $effect(() => {
-    const spaceId = current.joinedSpace?.id;
-    const roomId = current.roomId;
+    const spaceId = app.joinedSpace?.id;
+    const roomId = app.roomId;
 
     if (!spaceId || !roomId) return;
 

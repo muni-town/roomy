@@ -4,12 +4,14 @@
   import { page } from "$app/state";
   import { Button, ScrollArea } from "@fuxui/base";
   import UserProfileButton from "../user/UserProfileButton.svelte";
-  import { current, joinedSpaces } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+
+  const app = getAppState();
   import { dev } from "$app/environment";
 
   import { IconSquaresPlus, IconSqlQuery } from "@roomy/design/icons";
 
-  let openSpace = $derived(current.joinedSpace?.id);
+  let openSpace = $derived(app.joinedSpace?.id);
   let isOpenSpaceJoined = $derived(true);
 </script>
 
@@ -24,7 +26,7 @@
     <IconSquaresPlus font-size="1.75em" />
   </Button>
 
-  {#if current.did}
+  {#if app.did}
     <!-- Messages Button -->
     <!-- <Button
         href="/messages"
@@ -55,7 +57,7 @@
 
   <ScrollArea class="h-full overflow-y-auto overflow-x-hidden">
     <div class="flex flex-col px-0 items-center gap-2 py-4">
-      {#each joinedSpaces.list as space (space.id)}
+      {#each app.spaces as space (space.id)}
         <SidebarSpace {...space} />
       {/each}
     </div>

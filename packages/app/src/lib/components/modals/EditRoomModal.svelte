@@ -1,6 +1,7 @@
 <script lang="ts">
   import { deleteRoom, renameRoom } from "$lib/mutations/room";
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import { Modal, Input, Button } from "@fuxui/base";
@@ -19,14 +20,14 @@
   } = $props();
 
   async function save() {
-    if (!current.joinedSpace || !id)
+    if (!app.joinedSpace || !id)
       throw new Error("Could not find current room ID");
     if (!name) return;
 
     if ("room" in id) {
       console.log("Saving Room", name);
       await renameRoom({
-        spaceId: current.joinedSpace.id,
+        spaceId: app.joinedSpace.id,
         roomId: id.room,
         newName: name,
       });
@@ -107,11 +108,11 @@
         <div class="flex justify-start">
           <Button
             onclick={async () => {
-              if (!current.joinedSpace || !current.roomId)
+              if (!app.joinedSpace || !app.roomId)
                 throw new Error("Could not find current room ID");
               await deleteRoom({
-                spaceId: current.joinedSpace.id,
-                roomId: current.roomId,
+                spaceId: app.joinedSpace.id,
+                roomId: app.roomId,
               });
               open = false;
             }}

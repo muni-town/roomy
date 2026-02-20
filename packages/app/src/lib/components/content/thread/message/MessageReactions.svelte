@@ -2,7 +2,8 @@
   import { PopoverEmojiPicker } from "@fuxui/social";
   import { Button, Toggle, Tooltip } from "@fuxui/base";
   import { IconSmilePlus } from "@roomy/design/icons";
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
   import type { Message } from "../ChatArea.svelte";
   import { addReaction, removeReaction } from "$lib/mutations/reaction";
 
@@ -12,7 +13,7 @@
     message: Message;
   } = $props();
 
-  let spaceId = $derived(current.joinedSpace?.id);
+  let spaceId = $derived(app.joinedSpace?.id);
 
   let sortedReactions = $derived(
     message.reactions.reduce(
@@ -28,35 +29,35 @@
   );
 
   function onEmojiPick(emoji: string) {
-    if (!spaceId || !current.roomId) return;
+    if (!spaceId || !app.roomId) return;
 
     const reaction = message.reactions.find(
-      (x) => x.userId == current.did && x.reaction == emoji,
+      (x) => x.userId == app.did && x.reaction == emoji,
     );
 
     // If we haven't already made this reaction to this post.
     if (!reaction) {
-      addReaction(spaceId, current.roomId, message.id, emoji);
+      addReaction(spaceId, app.roomId, message.id, emoji);
     } else {
       // If we want to remove our reaction on this post
-      removeReaction(spaceId, current.roomId, reaction.reactionId);
+      removeReaction(spaceId, app.roomId, reaction.reactionId);
     }
     isEmojiRowPickerOpen = false;
   }
 
   function onEmojiButtonClick(emoji: string) {
-    if (!spaceId || !current.roomId) return;
+    if (!spaceId || !app.roomId) return;
 
     const reaction = message.reactions.find(
-      (x) => x.userId == current.did && x.reaction == emoji,
+      (x) => x.userId == app.did && x.reaction == emoji,
     );
 
     // If we haven't already made this reaction to this post.
     if (!reaction) {
-      addReaction(spaceId, current.roomId, message.id, emoji);
+      addReaction(spaceId, app.roomId, message.id, emoji);
     } else {
       // If we want to remove our reaction on this post
-      removeReaction(spaceId, current.roomId, reaction.reactionId);
+      removeReaction(spaceId, app.roomId, reaction.reactionId);
     }
   }
 
@@ -70,7 +71,7 @@
         {#snippet child({ props })}
           <Toggle
             {...props}
-            pressed={current.did! in users}
+            pressed={app.did! in users}
             onclick={() => onEmojiButtonClick(emoji)}
             class="px-2 h-7 data-[state=on]:bg-accent-400/20 dark:data-[state=on]:bg-accent-500/15"
           >

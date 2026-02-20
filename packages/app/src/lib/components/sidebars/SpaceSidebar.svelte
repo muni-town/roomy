@@ -1,9 +1,9 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { flags } from "$lib/config";
-  import { current, getSidebar } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
 
-  const sidebar = getSidebar();
+  const app = getAppState();
   import SpaceSidebarHeader from "./SpaceSidebarHeader.svelte";
   import EditRoomModal from "../modals/EditRoomModal.svelte";
   import { Button } from "@fuxui/base";
@@ -25,8 +25,6 @@
     SHADOW_ITEM_MARKER_PROPERTY_NAME,
   } from "svelte-dnd-action";
   import { peer } from "$lib/workers";
-  import SidebarItem from "./SidebarItem.svelte";
-
   // at the top level there can be categories, channels or pages
   // under categories there can be channels or pages
   // under channels there can be threads or pages
@@ -46,10 +44,9 @@
 
   const roomsInSidebar = $derived(
     new Set([
-      ...(sidebar.categories?.flatMap((cat) =>
+      ...(app.categories?.flatMap((cat) =>
         cat.children.map((child) => child.id),
       ) || []),
-      ...(sidebar.orphanChannels?.map((x) => x.id) || []),
     ]),
   );
 
@@ -73,7 +70,7 @@
   }
 
   async function saveChanges() {
-    if (draftOrder && current.joinedSpace) {
+    if (draftOrder && app.joinedSpace) {
       // TODO: persist draftCategories to peer
       // Generate ULIDs for v0 categories that used name as id
       const newSidebar = draftOrder.map((c) => ({
@@ -82,7 +79,7 @@
         children: c.childIds as Ulid[],
       }));
       console.log("newSidebar", $state.snapshot(newSidebar));
-      await peer.sendEvent(current.joinedSpace.id, {
+      await peer.sendEvent(app.joinedSpace.id, {
         id: newUlid(),
         $type: "space.roomy.space.updateSidebar.v1",
         categories: $state.snapshot(newSidebar),
@@ -92,7 +89,7 @@
     isEditing = false;
   }
 
-  let categories = $derived(sidebar.categories ?? []);
+  let categories = $derived(app.categories ?? []);
 
   type DraftOrder = {
     id: Ulid;
@@ -104,12 +101,11 @@
 
   // Build lookup maps from the latest sidebar data
   let categoryMap = $derived(
-    new Map(sidebar.categories?.map((c) => [c.id, c]) ?? []),
+    new Map(app.categories?.map((c) => [c.id, c]) ?? []),
   );
   const roomMap = $derived(
     new Map(
-      sidebar.categories?.flatMap((c) => c.children.map((r) => [r.id, r])) ??
-        [],
+      app.categories?.flatMap((c) => c.children.map((r) => [r.id, r])) ?? [],
     ),
   );
 
@@ -176,7 +172,7 @@
 <!-- Header -->
 <SpaceSidebarHeader bind:isEditing />
 
-{#if current.space.status === "loading"}
+{#if app.space.status === "loading"}
   <div class="px-4 mt-2">
     <div class="h-4 bg-base-200 rounded animate-pulse w-3/4 mb-2"></div>
     <div class="h-3 bg-base-200 rounded animate-pulse w-1/2"></div>
@@ -263,29 +259,9 @@
       </div>
     {:else}
       <div class="flex flex-col w-full min-h-4">
-        {#each sidebar.categories as category (category.id)}
+        {#each app.categories as category (category.id)}
           <div class="flex items-start w-full" id={category.id}>
             <SidebarCategory bind:isEditing {editSidebarItem} {category} />
-          </div>
-        {/each}
-
-        {#each sidebar.orphanChannels as { id, name }, index}
-          <div {id} class="flex items-start w-full relative">
-            <SidebarItem
-              bind:isEditing
-              {editSidebarItem}
-              {index}
-              item={{
-                id: id,
-                lastRead: 0,
-                latestEntity: 0,
-                name,
-                unreadCount: 0,
-                sortIdx: "",
-                type: "space.roomy.channel",
-                children: [],
-              }}
-            />
           </div>
         {/each}
       </div>

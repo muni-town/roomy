@@ -48,7 +48,8 @@
   import type { Message } from "../ChatArea.svelte";
   import { peer, peerStatus } from "$lib/workers";
   import { decodeTime } from "ulidx";
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
   import { Badge, toast } from "@fuxui/base";
   import type { MessagingState } from "../TimelineView.svelte";
   import { messagingState as importedMessagingState } from "../TimelineView.svelte";
@@ -142,7 +143,7 @@
 
   async function saveEditedMessage(newContent: string) {
     onCancelEdit();
-    const spaceId = current.joinedSpace?.id;
+    const spaceId = app.joinedSpace?.id;
     if (!spaceId) return;
 
     // If the content is the same, don't save
@@ -247,8 +248,8 @@
                 </Badge>
               {/if}
             </span>
-            <div class="opacity-70"
-              >{@render timestamp(metadata.timestamp)}
+            <div class="opacity-70">
+              {@render timestamp(metadata.timestamp)}
             </div>
           </div>
         {/if}
@@ -342,7 +343,7 @@
     bind:checked={
       () => isSelected,
       (value) => {
-        if (value && !messageByMe && !current.isSpaceAdmin) {
+        if (value && !messageByMe && !app.isSpaceAdmin) {
           toast.error("You cannot move someone else's message");
           return;
         }
@@ -367,8 +368,16 @@
 {/if}
 
 {#snippet timestamp(date: Date)}
-  {@const formattedDate = isTomorrow(date) ? "Tomorrow at " : isToday(date) ? "Today at " : isYesterday(date) ? "Yesterday at " : format(date, "P") + ", "}
-  <time class="text-[11px] align-middle font-medium text-base-700 dark:text-base-400">
+  {@const formattedDate = isTomorrow(date)
+    ? "Tomorrow at "
+    : isToday(date)
+      ? "Today at "
+      : isYesterday(date)
+        ? "Yesterday at "
+        : format(date, "P") + ", "}
+  <time
+    class="text-[11px] align-middle font-medium text-base-700 dark:text-base-400"
+  >
     {formattedDate}{format(date, "p")}
   </time>
 {/snippet}

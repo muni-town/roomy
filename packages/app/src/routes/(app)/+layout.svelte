@@ -11,10 +11,10 @@
 
   import { IconLoading } from "@roomy/design/icons";
   import Error from "$lib/components/modals/Error.svelte";
-  import { setSidebar, SidebarState } from "$lib/queries";
+  import { AppState, setAppState } from "$lib/queries";
 
-  const sidebarState = new SidebarState();
-  setSidebar(sidebarState);
+  const app = new AppState();
+  setAppState(app);
 
   // Cache the current profile for use in the LoginForm to preview the last login.
   $effect(() => {

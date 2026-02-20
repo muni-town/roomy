@@ -5,9 +5,17 @@
   } from "./message/MessageContext.svelte";
   import FullscreenImageDropper from "$lib/components/helper/FullscreenImageDropper.svelte";
 
-  import { IconCloseCircle, IconNeedleThread, IconX, IconSend, IconImage, IconPlus } from "@roomy/design/icons";
+  import {
+    IconCloseCircle,
+    IconNeedleThread,
+    IconX,
+    IconSend,
+    IconImage,
+    IconPlus,
+  } from "@roomy/design/icons";
   import { peer } from "$lib/workers";
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
   import { page } from "$app/state";
   import { navigateSync } from "$lib/utils.svelte";
   import {
@@ -23,7 +31,7 @@
   import { createThread } from "$lib/mutations/room";
   import { goto } from "$app/navigation";
 
-  let spaceId = $derived(current.joinedSpace?.id);
+  let spaceId = $derived(app.joinedSpace?.id);
   let isSendingMessage = $state(false);
   let previewImages: string[] = $state([]);
   let fileInput: HTMLInputElement | undefined = $state();
@@ -120,7 +128,7 @@
    * see https://svelte.dev/docs/svelte/$state#Classes
    */
   async function handleCreateThread() {
-    if (!spaceId || !current.roomId) return;
+    if (!spaceId || !app.roomId) return;
     const state = messagingState.current;
     if (state.kind !== "threading") return;
     if ((state as Threading).selectedMessages.length == 0) return;
@@ -129,7 +137,7 @@
 
     const threadId = await createThread({
       spaceId,
-      linkToRoom: current.roomId,
+      linkToRoom: app.roomId,
       threadName,
     });
 
@@ -143,7 +151,7 @@
     // link thread to current room
     events.push({
       id: newUlid(),
-      room: current.roomId,
+      room: app.roomId,
       $type: "space.roomy.link.createRoomLink.v0",
       linkToRoom: threadId,
       isCreationLink: true,
@@ -153,7 +161,7 @@
     for (const msg of state.selectedMessages) {
       events.push({
         id: newUlid(),
-        room: current.roomId,
+        room: app.roomId,
         $type: "space.roomy.message.moveMessages.v0",
         messageIds: [msg.id], // We must only have one message in array until we have TVFs on peer
         toRoomId: threadId,
@@ -172,7 +180,7 @@
     const threadUrl =
       navigateSync({ space: page.params.space, object: threadId }) +
       "?parent=" +
-      current.roomId;
+      app.roomId;
 
     console.log("threadUrl", threadUrl); // not working
 
@@ -423,9 +431,7 @@
                 class="grow ml-2 disabled:opacity-50"
               />
 
-              <Button type="submit"
-                ><IconNeedleThread />Create Thread</Button
-              >
+              <Button type="submit"><IconNeedleThread />Create Thread</Button>
             </form>
           {:else}
             {#if isSendingMessage}

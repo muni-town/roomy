@@ -4,9 +4,10 @@
   import { onMount } from "svelte";
   import InlineMono from "$lib/components/primitives/InlineMono.svelte";
   import { IconCopy } from "@roomy/design/icons";
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
 
-  const space = $derived(current.joinedSpace?.id);
+  const space = $derived(app.joinedSpace?.id);
 
   let bridgeStatus:
     | { type: "checking" }

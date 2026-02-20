@@ -6,9 +6,16 @@
   import { messagingState } from "../TimelineView.svelte";
   import type { Message } from "../ChatArea.svelte";
 
-  import { IconSmilePlus, IconReply, IconNeedleThread, IconEdit, IconTrash } from "@roomy/design/icons";
+  import {
+    IconSmilePlus,
+    IconReply,
+    IconNeedleThread,
+    IconEdit,
+    IconTrash,
+  } from "@roomy/design/icons";
   import { peerStatus } from "$lib/workers";
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
   import { addReaction, removeReaction } from "$lib/mutations/reaction";
   import { deleteMessage } from "$lib/mutations/message";
 
@@ -34,30 +41,30 @@
   let canEditAndDelete = $derived(
     peerStatus.authState &&
       peerStatus.authState.state === "authenticated" &&
-      (current.isSpaceAdmin || message.authorDid == peerStatus.authState.did),
+      (app.isSpaceAdmin || message.authorDid == peerStatus.authState.did),
   );
 
   async function deleteCurrentMessage() {
-    const spaceId = current.joinedSpace?.id;
-    if (!spaceId || !current.roomId) return;
+    const spaceId = app.joinedSpace?.id;
+    if (!spaceId || !app.roomId) return;
     if (!canEditAndDelete) return;
-    await deleteMessage(spaceId, current.roomId, message.id);
+    await deleteMessage(spaceId, app.roomId, message.id);
   }
 
   function onEmojiPick(emoji: string) {
-    const spaceId = current.joinedSpace?.id;
-    if (!spaceId || !current.roomId) return;
+    const spaceId = app.joinedSpace?.id;
+    if (!spaceId || !app.roomId) return;
 
     const reaction = message.reactions.find(
-      (x) => x.userId == current.did && x.reaction == emoji,
+      (x) => x.userId == app.did && x.reaction == emoji,
     );
 
     // If we haven't already made this reaction to this post.
     if (!reaction) {
-      addReaction(spaceId, current.roomId, message.id, emoji);
+      addReaction(spaceId, app.roomId, message.id, emoji);
     } else {
       // If we want to remove our reaction on this post
-      removeReaction(spaceId, current.roomId, reaction.reactionId);
+      removeReaction(spaceId, app.roomId, reaction.reactionId);
     }
     isEmojiToolbarPickerOpen = false;
   }

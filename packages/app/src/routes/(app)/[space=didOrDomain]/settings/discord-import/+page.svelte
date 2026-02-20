@@ -7,7 +7,8 @@
 
   import * as zip from "@zip-js/zip-js";
   import { peer } from "$lib/workers";
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
   import { sql } from "$lib/utils/sqlTemplate";
   import { formatDate } from "date-fns";
   import {
@@ -18,7 +19,7 @@
     toBytes,
   } from "@roomy/sdk";
 
-  const currentSpaceId = $derived(current.joinedSpace?.id);
+  const currentSpaceId = $derived(app.joinedSpace?.id);
 
   let cutoffDateInput = $state("");
   let cutoffDate = $derived.by(() => {

@@ -123,8 +123,7 @@
             class="hover:bg-blue-400/30 hover:text-black p-1.5"
             type="button"
             variant="ghost"
-            onclick={() => (form.dismissAlert = true)}
-            ><IconXMark /></Button
+            onclick={() => (form.dismissAlert = true)}><IconXMark /></Button
           >
         </div>
       </Alert>

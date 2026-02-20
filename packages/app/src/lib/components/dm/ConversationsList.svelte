@@ -85,9 +85,7 @@
   </div>
 {:else if conversations.length === 0}
   <div class="text-center py-8">
-    <IconMessageCircleOff
-      class="h-8 w-8 mx-auto text-base-content/40 mb-2"
-    />
+    <IconMessageCircleOff class="h-8 w-8 mx-auto text-base-content/40 mb-2" />
     <p class="text-base-content/60">No conversations yet</p>
     <button
       onclick={() => {
