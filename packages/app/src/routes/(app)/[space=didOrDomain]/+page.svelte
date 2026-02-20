@@ -1,7 +1,9 @@
 <script lang="ts">
   import { fade } from "svelte/transition";
 
-  import { current, sidebar as sidebarQuery } from "$lib/queries";
+  import { current, getSidebar } from "$lib/queries";
+
+  const sidebarQuery = getSidebar();
   import { peer, peerStatus } from "$lib/workers";
 
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";

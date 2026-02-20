@@ -1,7 +1,9 @@
 <script lang="ts">
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
-  import { categoriesQuery, current } from "$lib/queries";
+  import { getSidebar, current } from "$lib/queries";
+
+  const { categoriesQuery } = getSidebar();
   import { navigate } from "$lib/utils.svelte";
   import { peer } from "$lib/workers";
   import { Button, Input, ScrollArea, Select } from "@fuxui/base";

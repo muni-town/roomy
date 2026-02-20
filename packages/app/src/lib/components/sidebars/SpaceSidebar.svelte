@@ -1,7 +1,9 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { flags } from "$lib/config";
-  import { current, sidebar } from "$lib/queries";
+  import { current, getSidebar } from "$lib/queries";
+
+  const sidebar = getSidebar();
   import SpaceSidebarHeader from "./SpaceSidebarHeader.svelte";
   import EditRoomModal from "../modals/EditRoomModal.svelte";
   import { Button } from "@fuxui/base";
