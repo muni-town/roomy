@@ -290,9 +290,13 @@ async function updateLiveQuery(id: string) {
 
   if (status.kind == "unprepared") {
     try {
-      const { prepared: prepared, actions } = await prepareSql(
-        status.statement,
-      );
+      // Each LiveQuery needs its own PreparedStatement — skip the cache to avoid
+      // sharing a single object across queries with the same SQL but different params.
+      // A shared PreparedStatement means the last bind() wins for all queries.
+      const { prepared: prepared, actions } = await prepareSql({
+        ...status.statement,
+        cache: false,
+      });
       liveQueries.set(id, {
         port,
         status: {
