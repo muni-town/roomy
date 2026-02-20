@@ -6,12 +6,17 @@
   import { sql } from "$lib/utils/sqlTemplate";
   import { Button } from "@fuxui/base";
   import { IconThread } from "@roomy/design/icons";
+  import { getAppState } from "$lib/queries";
+
+  const app = getAppState();
 
   let {
     roomId = $bindable(),
   }: {
     roomId: Ulid;
   } = $props();
+
+  const spaceDid = $derived(app.joinedSpace?.id);
 
   let query = new LiveQuery<{ name: string; id: Ulid }>(
     () => sql`
@@ -21,7 +26,7 @@
         join edges link on link.head = parent_e.id and link.label = 'link'
         join comp_room room on link.tail = room.entity 
         join comp_info ci on ci.entity = room.entity
-        where parent_e.stream_id = ${page.params.space}
+        where parent_e.stream_id = ${spaceDid}
         and parent_e.id = ${roomId}
         limit 5
     `,
