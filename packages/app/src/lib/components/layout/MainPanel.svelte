@@ -32,7 +32,7 @@
       : sidebar
         ? "sm:ml-82"
         : "sm:ml-18",
-    chatArea ? "bg-white dark:bg-base-800" : "",
+    chatArea ? "bg-white dark:bg-base-950" : "",
   )}
 >
   {#if navbar}
