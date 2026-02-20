@@ -218,7 +218,7 @@ create table if not exists comp_calendar_link (
   entity text primary key,
   group_slug text not null,
   tenant_id text not null,
-  api_url text not null default 'https://api.openmeet.net'
+  api_url text not null
 ) strict;
 
 create table if not exists comp_calendar_event (
