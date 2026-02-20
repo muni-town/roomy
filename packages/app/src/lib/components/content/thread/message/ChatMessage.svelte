@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Avatar, Checkbox } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import { format, isToday } from "date-fns";
+  import { format, isToday, isTomorrow, isYesterday } from "date-fns";
   import MessageToolbar from "./MessageToolbar.svelte";
   import MessageContext from "./MessageContext.svelte";
   import MessageReactions from "./MessageReactions.svelte";
@@ -226,32 +226,34 @@
         <div class="w-8 shrink-0 sm:w-10"></div>
       {/if}
 
-      <div class="flex flex-col gap-1 w-full">
+      <div class="flex flex-col w-full">
         <!-- Username, timestamp -->
         {#if !message.mergeWithPrevious}
           <div class="flex items-center gap-2 text-sm w-full">
-            <span class="font-bold text-accent-700 dark:text-accent-400"
-              >{metadata.name}</span
-            >
-            {#if metadata.handle && !message.masqueradeAuthor}<span
-                class="opacity-70">@{metadata.handle}</span
-              >{/if}
-            {#if isFromDiscord}
-              <Badge
-                variant="secondary"
-                title="This message was bridged from Discord"
-                class="text-xs">Discord</Badge
+            <span class="gap-2">
+              <span class="font-semibold text-accent-700 dark:text-accent-400"
+                >{metadata.name}</span
               >
-            {/if}
-            <span class="ml-auto opacity-70"
-              >{@render timestamp(metadata.timestamp)}</span
-            >
+              {#if metadata.handle && !message.masqueradeAuthor}<span
+                  class="opacity-75 font-normal">@{metadata.handle}</span
+                >{/if}
+              {#if isFromDiscord}
+                <Badge
+                  variant="secondary"
+                  title="This message was bridged from Discord"
+                  class="text-xs">Discord</Badge
+                >
+              {/if}
+            </span>
+            <div class="opacity-70"
+              >{@render timestamp(metadata.timestamp)}
+            </div>
           </div>
         {/if}
 
         <!-- Message text -->
         <div
-          class="prose text-left prose-a:text-accent-600 dark:prose-a:text-accent-400 dark:prose-invert prose-a:no-underline max-w-full"
+          class="text-sm font-normal prose text-left prose-a:text-accent-600 dark:prose-a:text-accent-400 dark:prose-invert prose-a:no-underline max-w-full"
         >
           {#if isEditing}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -363,8 +365,8 @@
 {/if}
 
 {#snippet timestamp(date: Date)}
-  {@const formattedDate = isToday(date) ? "" : format(date, "P") + ", "}
-  <time class="text-xs text-base-700 dark:text-base-400">
+  {@const formattedDate = isTomorrow(date) ? "Tomorrow at " : isToday(date) ? "Today at " : isYesterday(date) ? "Yesterday at " : format(date, "P") + ", "}
+  <time class="text-[11px] align-middle font-medium text-base-700 dark:text-base-400">
     {formattedDate}{format(date, "p")}
   </time>
 {/snippet}
