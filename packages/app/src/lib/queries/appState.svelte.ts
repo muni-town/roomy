@@ -229,12 +229,23 @@ export class AppState {
           : undefined;
     });
 
-    // ─── Lazy sidebar query creation ───────────────────────────────────────
-    // When the current space changes, ensure a sidebar query exists for it.
-    // Queries are created in $effect.root so they outlive this effect's re-runs.
+    // ─── Sidebar query creation ────────────────────────────────────────────
+    // Ensure current space has a sidebar query immediately.
     $effect(() => {
       const spaceId = this.joinedSpace?.id;
       if (spaceId) this.#ensureSidebarQuery(spaceId);
+    });
+
+    // Prewarm sidebar queries for all other joined spaces once the current
+    // space's sidebar is ready, so we don't compete with it on the worker.
+    $effect(() => {
+      const currentId = this.joinedSpace?.id;
+      if (!currentId || !this.categories) return;
+      for (const space of this.spaces) {
+        if (space.id !== currentId) {
+          this.#ensureSidebarQuery(space.id);
+        }
+      }
     });
 
     // ─── Sidebar processing ────────────────────────────────────────────────

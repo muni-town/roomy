@@ -13,12 +13,12 @@
   }: { thread: ThreadInfo; activityCountMax?: number; parent?: Ulid } =
     $props();
 
-  $effect(() => {
-    console.log("boardviewitem", {
-      parent,
-      thread: $state.snapshot(thread),
-    });
-  });
+  // $effect(() => {
+  //   console.log("boardviewitem", {
+  //     parent,
+  //     thread: $state.snapshot(thread),
+  //   });
+  // });
 
   let lastMessageTimestamp = $derived(thread.activity.latestTimestamp);
 
