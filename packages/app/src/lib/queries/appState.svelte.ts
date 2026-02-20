@@ -59,21 +59,21 @@ export class AppState {
       (s) => s.id === spaceUrlSegment || s.handle === spaceUrlSegment,
     );
     if (directMatch) {
-      console.log(APP_LOG, "#currentSpace fast-path:", {
-        urlSegment: spaceUrlSegment,
-        spaceId: directMatch.id.slice(0, 12) + "…",
-        matchedBy: directMatch.id === spaceUrlSegment ? "id" : "handle",
-        hasName: !!directMatch.name,
-        backfill: directMatch.backfill_status,
-      });
+      // console.debug(APP_LOG, "#currentSpace fast-path:", {
+      //   urlSegment: spaceUrlSegment,
+      //   spaceId: directMatch.id.slice(0, 12) + "…",
+      //   matchedBy: directMatch.id === spaceUrlSegment ? "id" : "handle",
+      //   hasName: !!directMatch.name,
+      //   backfill: directMatch.backfill_status,
+      // });
       return { matchingSpace: directMatch, spaceId: directMatch.id };
     }
 
     // Slow path: async resolution for spaces we haven't joined
-    console.log(APP_LOG, "#currentSpace slow-path:", {
-      urlSegment: spaceUrlSegment,
-      hasResolved: this.#resolvedSpaceIds.has(spaceUrlSegment),
-    });
+    // console.debug(APP_LOG, "#currentSpace slow-path:", {
+    //   urlSegment: spaceUrlSegment,
+    //   hasResolved: this.#resolvedSpaceIds.has(spaceUrlSegment),
+    // });
     if (!this.#resolvedSpaceIds.has(spaceUrlSegment)) {
       peer
         .resolveSpaceId(spaceUrlSegment as SpaceIdOrHandle)
@@ -97,12 +97,12 @@ export class AppState {
 
     // Find matching space in joined list
     const matchingSpace = this.spaces.find((x) => x.id == resp.spaceId);
-    console.log(APP_LOG, "#currentSpace slow-path resolved:", {
-      spaceId: resp.spaceId.slice(0, 12) + "…",
-      isJoined: !!matchingSpace,
-      matchingSpaceName: matchingSpace?.name,
-      spacesCount: this.spaces.length,
-    });
+    // console.debug(APP_LOG, "#currentSpace slow-path resolved:", {
+    //   spaceId: resp.spaceId.slice(0, 12) + "…",
+    //   isJoined: !!matchingSpace,
+    //   matchingSpaceName: matchingSpace?.name,
+    //   spacesCount: this.spaces.length,
+    // });
     return { matchingSpace, spaceId: resp.spaceId };
   });
 
@@ -192,18 +192,10 @@ export class AppState {
         !this.#currentSpace
       )
         return;
-      
-      const nextSpaceId = this.#currentSpace.spaceId
 
-      const spaceState = this.#getOrCreateSpaceState(
-        nextSpaceId,
-      );
+      const nextSpaceId = this.#currentSpace.spaceId;
 
-      console.log("spaceState", {
-        spaceState,
-        nextSpaceId,
-        spaces: $state.snapshot(this.spaces),
-      });
+      const spaceState = this.#getOrCreateSpaceState(nextSpaceId);
 
       if (this.#currentSpace.matchingSpace) {
         // Push external reactive values into SpaceState
@@ -215,23 +207,25 @@ export class AppState {
 
         this.#currentSpaceState = spaceState;
         const meta = spaceState.meta;
-        console.log(APP_LOG, "current space → joined:", {
-          spaceId: this.#currentSpace.spaceId.slice(0, 12) + "…",
-          handle: this.#currentSpace.matchingSpace.handle?.toString(),
-          backfill: this.#currentSpace.matchingSpace.backfill_status,
-          metaName: meta.name,
-          hasCategories: !!spaceState.categories,
-          categoriesCount: spaceState.categories?.length,
-        });
+
+        // console.debug(APP_LOG, "current space → joined:", {
+        //   spaceId: this.#currentSpace.spaceId.slice(0, 12) + "…",
+        //   handle: this.#currentSpace.matchingSpace.handle?.toString(),
+        //   backfill: this.#currentSpace.matchingSpace.backfill_status,
+        //   metaName: meta.name,
+        //   hasCategories: !!spaceState.categories,
+        //   categoriesCount: spaceState.categories?.length,
+        // });
+
         this.space = {
           status: "joined",
           space: meta,
           isSpaceAdmin: spaceState.isSpaceAdmin,
         };
       } else {
-        console.log(APP_LOG, "current space → invited:", {
-          spaceId: this.#currentSpace.spaceId.slice(0, 12) + "…",
-        });
+        // console.debug(APP_LOG, "current space → invited:", {
+        //   spaceId: this.#currentSpace.spaceId.slice(0, 12) + "…",
+        // });
         this.#currentSpaceState = undefined;
         this.space = {
           status: "invited",
@@ -278,15 +272,15 @@ export class AppState {
     });
 
     // ─── Prewarm SpaceStates for all joined spaces ─────────────────────────
-    // $effect(() => {
-    //   for (const space of this.spaces) {
-    //     const ss = this.#getOrCreateSpaceState(space.id as StreamDid);
-    //     ss.did = this.did;
-    //     ss.backfillStatus = space.backfill_status;
-    //     ss.handle = space.handle;
-    //     ss.permissions = space.permissions;
-    //   }
-    // });
+    $effect(() => {
+      for (const space of this.spaces) {
+        const ss = this.#getOrCreateSpaceState(space.id as StreamDid);
+        ss.did = this.did;
+        ss.backfillStatus = space.backfill_status;
+        ss.handle = space.handle;
+        ss.permissions = space.permissions;
+      }
+    });
 
     // ─── Cleanup stale SpaceStates ─────────────────────────────────────────
     $effect(() => {
@@ -309,7 +303,6 @@ export class AppState {
       // owned by whichever $effect triggered creation. Without this, the
       // calling effect re-running tears down the LiveQuery subscriptions
       // while the cached SpaceState lives on with dead queries.
-      console.log("creating new space state with", spaceId);
       const rootCleanup = $effect.root(() => {
         ss = new SpaceState(spaceId);
       });

@@ -11,7 +11,11 @@ import type { SpaceMeta, SidebarCategory } from "./types";
 
 // ─── Query row types ──────────────────────────────────────────────────────────
 
-type MetadataRow = { name: string | null; avatar: string | null; description: string | null };
+type MetadataRow = {
+  name: string | null;
+  avatar: string | null;
+  description: string | null;
+};
 
 type SidebarQueryRow = {
   id: string | null;
@@ -43,16 +47,20 @@ export class SpaceState {
   #allChannelsQuery: LiveQuery<ChannelQueryRow>;
 
   // === Derived public state ===
-  get name() { return this.#metadataQuery.result?.[0]?.name ?? undefined; }
-  get avatar() { return this.#metadataQuery.result?.[0]?.avatar ?? undefined; }
-  get description() { return this.#metadataQuery.result?.[0]?.description ?? undefined; }
+  get name() {
+    return this.#metadataQuery.result?.[0]?.name ?? undefined;
+  }
+  get avatar() {
+    return this.#metadataQuery.result?.[0]?.avatar ?? undefined;
+  }
+  get description() {
+    return this.#metadataQuery.result?.[0]?.description ?? undefined;
+  }
 
   get isSpaceAdmin() {
     const did = this.did;
     if (!did) return false;
-    return this.permissions.some(
-      (p) => p[0] === did && p[1] === "admin",
-    );
+    return this.permissions.some((p) => p[0] === did && p[1] === "admin");
   }
 
   categories = $state<SidebarCategory[] | undefined>(undefined);
@@ -64,7 +72,7 @@ export class SpaceState {
   #cleanup: () => void;
 
   constructor(public readonly spaceId: StreamDid) {
-    log(spaceId, "created");
+    // log(spaceId, "created");
 
     // Metadata query
     this.#metadataQuery = new LiveQuery(
@@ -120,55 +128,59 @@ export class SpaceState {
     // Processing effects in $effect.root so they survive independent of caller
     this.#cleanup = $effect.root(() => {
       // Log query status transitions
-      $effect(() => {
-        const metaStatus = this.#metadataQuery.current.status;
-        const metaResult = this.#metadataQuery.result;
-        log(spaceId, "metadata query:", metaStatus,
-          metaStatus === "success" ? { rows: metaResult?.length, name: metaResult?.[0]?.name } : "");
-      });
-      $effect(() => {
-        const sidebarStatus = this.#sidebarQuery.current.status;
-        const sidebarResult = this.#sidebarQuery.result;
-        log(spaceId, "sidebar query:", sidebarStatus,
-          sidebarStatus === "success" ? { rows: sidebarResult?.length } : "",
-          sidebarStatus === "error" ? this.#sidebarQuery.error : "");
-      });
-      $effect(() => {
-        const channelsStatus = this.#allChannelsQuery.current.status;
-        const channelsResult = this.#allChannelsQuery.result;
-        log(spaceId, "channels query:", channelsStatus,
-          channelsStatus === "success" ? { rows: channelsResult?.length } : "",
-          channelsStatus === "error" ? this.#allChannelsQuery.error : "");
-      });
+      // $effect(() => {
+      //   const metaStatus = this.#metadataQuery.current.status;
+      //   const metaResult = this.#metadataQuery.result;
+      //   log(spaceId, "metadata query:", metaStatus,
+      //     metaStatus === "success" ? { rows: metaResult?.length, name: metaResult?.[0]?.name } : "");
+      // });
+      // $effect(() => {
+      //   const sidebarStatus = this.#sidebarQuery.current.status;
+      //   const sidebarResult = this.#sidebarQuery.result;
+      //   log(spaceId, "sidebar query:", sidebarStatus,
+      //     sidebarStatus === "success" ? { rows: sidebarResult?.length } : "",
+      //     sidebarStatus === "error" ? this.#sidebarQuery.error : "");
+      // });
+      // $effect(() => {
+      //   const channelsStatus = this.#allChannelsQuery.current.status;
+      //   const channelsResult = this.#allChannelsQuery.result;
+      //   log(spaceId, "channels query:", channelsStatus,
+      //     channelsStatus === "success" ? { rows: channelsResult?.length } : "",
+      //     channelsStatus === "error" ? this.#allChannelsQuery.error : "");
+      // });
 
       // Log input changes
-      $effect(() => {
-        log(spaceId, "inputs updated:", {
-          did: this.did?.slice(0, 20),
-          backfillStatus: this.backfillStatus,
-          handle: this.handle?.toString(),
-          permissionsCount: this.permissions.length,
-        });
-      });
+      // $effect(() => {
+      //   log(spaceId, "inputs updated:", {
+      //     did: this.did?.slice(0, 20),
+      //     backfillStatus: this.backfillStatus,
+      //     handle: this.handle?.toString(),
+      //     permissionsCount: this.permissions.length,
+      //   });
+      // });
 
       $effect(() => {
         const sidebarQuery = this.#sidebarQuery;
         const channelsQuery = this.#allChannelsQuery;
-        if (
-          sidebarQuery.current.status === "loading" ||
-          !channelsQuery
-        ) {
-          log(spaceId, "sidebar processing: waiting (sidebar:", sidebarQuery.current.status, ")");
+        if (sidebarQuery.current.status === "loading" || !channelsQuery) {
+          // log(
+          //   spaceId,
+          //   "sidebar processing: waiting (sidebar:",
+          //   sidebarQuery.current.status,
+          //   ")",
+          // );
           return;
         }
 
         if (!sidebarQuery.result) {
-          log(spaceId, "sidebar processing: no result, clearing categories");
+          // log(spaceId, "sidebar processing: no result, clearing categories");
           this.categories = undefined;
           return;
         }
 
-        let allChannelIds = new Set(channelsQuery.result?.map((x) => x.id) || []);
+        let allChannelIds = new Set(
+          channelsQuery.result?.map((x) => x.id) || [],
+        );
         let pinnedChannelIds = new Set<string>();
 
         let cats = sidebarQuery.result.map((x) => {
@@ -238,11 +250,11 @@ export class SpaceState {
           }));
         }
 
-        log(spaceId, "sidebar processing: done", {
-          categories: cats.length,
-          totalChannels: cats.reduce((n, c) => n + c.children.length, 0),
-          orphans: orphans.length,
-        });
+        // log(spaceId, "sidebar processing: done", {
+        //   categories: cats.length,
+        //   totalChannels: cats.reduce((n, c) => n + c.children.length, 0),
+        //   orphans: orphans.length,
+        // });
         this.categories = cats;
       });
     });
