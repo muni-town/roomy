@@ -99,14 +99,14 @@
         body: {
           email,
           inviteCode: env.PUBLIC_PDS_INVITE_CODE,
-          handle: `${handle}${env.PUBLIC_PDS_HANDLE_SUFFIX}`,
+          handle: `${handle.value}${env.PUBLIC_PDS_HANDLE_SUFFIX}`,
           password,
         },
       });
       console.log("Created account", did);
       toast.success(`Created account, you may now login.`);
       tab = "Login";
-      handle.value = `${handle}${env.PUBLIC_PDS_HANDLE_SUFFIX}`;
+      handle.value = `${handle.value}${env.PUBLIC_PDS_HANDLE_SUFFIX}`;
     } catch (e) {
       console.error(e);
       toast.error(`Error creating account: ${e}`);
