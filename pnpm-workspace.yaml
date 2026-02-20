@@ -5,15 +5,9 @@ packages:
   - packages/discord-bridge
   - packages/tsconfig
 
-onlyBuiltDependencies:
-  - "@swc/core"
-  - "@tailwindcss/oxide"
-  - cbor-extract
-  - core-js
-  - esbuild
-  - node
+onlyBuiltDependencies: '@parcel/watcher'
 
 patchedDependencies:
-  "@grafana/faro-core": patches/@grafana__faro-core.patch
-  "@grafana/faro-web-sdk": patches/@grafana__faro-web-sdk.patch
-  "@discordeno/gateway": patches/@discordeno__gateway.patch
+  '@discordeno/gateway': patches/@discordeno__gateway.patch
+  '@grafana/faro-core': patches/@grafana__faro-core.patch
+  '@grafana/faro-web-sdk': patches/@grafana__faro-web-sdk.patch

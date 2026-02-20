@@ -7,6 +7,7 @@
   import { Button } from "@fuxui/base";
 
   import {
+    IconCalendar,
     IconCheck,
     IconHome,
     IconHashtag,
@@ -206,6 +207,7 @@
           href={`/${page.params.space}/calendar`}
           data-current={page.url.pathname.endsWith("/calendar")}
         >
+          <IconCalendar class="shrink-0" />
           Events
         </Button>
       {/if}
