@@ -127,20 +127,19 @@
   </div>
 
   {#if tab == "Login"}
-    <form onsubmit={login} class="flex flex-col gap-2 items-center">
+    <form onsubmit={login} class="flex flex-col items-center">
       <Subheading
-        class="mb-1 items-center gap-2 text-xl font-bold text-center max-w-80"
+        class="items-center gap-2 text-xl font-semibold text-center max-w-80"
       >
-        Login with your Atmosphere account</Subheading
+        Sign into your account.</Subheading
       >
-
       {#if lastLogin?.handle}
         <Label for="atproto-handle" class="mt-4 text-sm w-full"
-          >Recent login:</Label
+          >Previously signed in as</Label
         >
         <Button
-          class="overflow-x-hidden justify-start truncate self-stretch w-full"
-          variant="primary"
+          class="overflow-x-hidden justify-start truncate self-stretch w-full rounded-3xl mt-1"
+          variant="secondary"
           onclick={(evt) => {
             handle.value = lastLogin?.handle ?? "";
             login(evt);
@@ -156,10 +155,8 @@
           </div>
         </Button>
       {/if}
-
-      <div class="mt-4 w-full">
-        <Label for="atproto-handle" class="text-sm flex justify-between"
-          ><span>Your handle</span>
+        <Label for="atproto-handle" class="text-sm flex justify-between w-full mt-4"
+          ><span><div>What's your handle?</div><div class="text-xs opacity-75">Login via <span class="">Bluesky</span> or the <a href="https://atproto.com/" class="text-accent-600 dark:text-accent-400">ATmosphere</a></div></span>
           <div class="inline-flex gap-1">
             <svg
               version="1.1"
@@ -222,26 +219,25 @@
             </svg>
           </div></Label
         >
-        <div class="mt-2">
+        <div class="my-2 w-full pb-2">
           <Input
             bind:ref={input}
             type="text"
             name="atproto-handle"
             id="atproto-handle"
-            placeholder="yourname.bsky.social"
-            class="w-full"
+            placeholder="name.bsky.social"
+            class="w-full text-sm py-2 px-3 rounded-lg"
             bind:value={handle.value}
           />
         </div>
-      </div>
 
       {#if error}
-        <p class="text-accent-500 mt-2 text-sm font-medium">{error}</p>
+        <p class="text-accent-500 mt-2 text-sm font-medium w-full">{error}</p>
       {/if}
 
       <Button
         type="submit"
-        class="mt-2 ml-auto w-full md:w-auto"
+        class="mt-2 ml-auto w-full md:w-auto py-2 rounded-3xl"
         disabled={loading}>{loading ? "Loading..." : "Login"}</Button
       >
     </form>
