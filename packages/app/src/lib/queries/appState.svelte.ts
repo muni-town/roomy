@@ -1,19 +1,13 @@
 import { createContext } from "svelte";
 import { page } from "$app/state";
-import {
-  Handle,
-  type StreamDid,
-  Ulid,
-  type UserDid,
-  newUlid,
-} from "@roomy/sdk";
+import { Handle, type StreamDid, Ulid, type UserDid } from "@roomy/sdk";
 import { LiveQuery } from "$lib/utils/liveQuery.svelte";
 import { sql } from "$lib/utils/sqlTemplate";
 import { peer, peerStatus, getPersonalSpaceId } from "$lib/workers";
-import type { AuthStatus } from "$lib/workers/peer/types";
 import type { SpaceIdOrHandle } from "$lib/workers/types";
 import type { SpaceMeta, SidebarCategory } from "./types";
 import { SvelteMap } from "svelte/reactivity";
+import { SpaceState } from "./spaceState.svelte";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -24,15 +18,7 @@ type SpaceStatus =
   | { status: "joined"; space: SpaceMeta; isSpaceAdmin: boolean }
   | { status: "error"; message: string };
 
-// ─── Sidebar query row types ─────────────────────────────────────────────────
-
-type SidebarQueryRow = {
-  id: string | null;
-  name: string;
-  children: { id: Ulid; name: string }[];
-};
-
-type ChannelQueryRow = { id: Ulid; name: string };
+const APP_LOG = "[AppState]";
 
 // ─── AppState ────────────────────────────────────────────────────────────────
 
@@ -67,7 +53,27 @@ export class AppState {
     const spaceUrlSegment = page.params.space;
     if (!spaceUrlSegment) return undefined;
 
-    // Resolve handle/DID → spaceId
+    // Fast path: if the URL segment matches a joined space by ID or handle,
+    // resolve synchronously without async lookups.
+    const directMatch = this.spaces.find(
+      (s) => s.id === spaceUrlSegment || s.handle === spaceUrlSegment,
+    );
+    if (directMatch) {
+      console.log(APP_LOG, "#currentSpace fast-path:", {
+        urlSegment: spaceUrlSegment,
+        spaceId: directMatch.id.slice(0, 12) + "…",
+        matchedBy: directMatch.id === spaceUrlSegment ? "id" : "handle",
+        hasName: !!directMatch.name,
+        backfill: directMatch.backfill_status,
+      });
+      return { matchingSpace: directMatch, spaceId: directMatch.id };
+    }
+
+    // Slow path: async resolution for spaces we haven't joined
+    console.log(APP_LOG, "#currentSpace slow-path:", {
+      urlSegment: spaceUrlSegment,
+      hasResolved: this.#resolvedSpaceIds.has(spaceUrlSegment),
+    });
     if (!this.#resolvedSpaceIds.has(spaceUrlSegment)) {
       peer
         .resolveSpaceId(spaceUrlSegment as SpaceIdOrHandle)
@@ -91,27 +97,24 @@ export class AppState {
 
     // Find matching space in joined list
     const matchingSpace = this.spaces.find((x) => x.id == resp.spaceId);
-    if (!matchingSpace) {
-      return { matchingSpace, spaceId: resp.spaceId, isSpaceAdmin: false };
-    }
-
-    const isSpaceAdmin =
-      matchingSpace.permissions?.some(
-        (permission) =>
-          permission[0] ===
-            (
-              peerStatus.authState as Extract<
-                AuthStatus,
-                { state: "authenticated" }
-              >
-            ).did && permission[1] === "admin",
-      ) || false;
-    return { matchingSpace, spaceId: resp.spaceId, isSpaceAdmin };
+    console.log(APP_LOG, "#currentSpace slow-path resolved:", {
+      spaceId: resp.spaceId.slice(0, 12) + "…",
+      isJoined: !!matchingSpace,
+      matchingSpaceName: matchingSpace?.name,
+      spacesCount: this.spaces.length,
+    });
+    return { matchingSpace, spaceId: resp.spaceId };
   });
 
-  // ═══════════ Private: Per-space sidebar cache ═══════════
-  #sidebarQueries = new SvelteMap<StreamDid, LiveQuery<SidebarQueryRow>>();
-  #allChannelsQueries = new SvelteMap<StreamDid, LiveQuery<ChannelQueryRow>>();
+  // ═══════════ Private: Per-space state (plain Map — no reactive cross-talk) ═══════════
+  #spaceStates = new Map<StreamDid, SpaceState>();
+
+  // ═══════════ Current SpaceState ═══════════
+  #currentSpaceState = $state<SpaceState | undefined>(undefined);
+
+  get currentSpaceState(): SpaceState | undefined {
+    return this.#currentSpaceState;
+  }
 
   constructor() {
     // ─── Spaces query ──────────────────────────────────────────────────────
@@ -189,24 +192,56 @@ export class AppState {
         !this.#currentSpace
       )
         return;
+      
+      const nextSpaceId = this.#currentSpace.spaceId
 
-      this.space = this.#currentSpace.matchingSpace
-        ? {
-            status: "joined",
-            space: this.#currentSpace.matchingSpace,
-            isSpaceAdmin: this.#currentSpace.isSpaceAdmin,
-          }
-        : {
-            status: "invited",
-            spaceId: this.#currentSpace.spaceId,
-          };
-      this.joinedSpace = this.#currentSpace.matchingSpace;
-      this.isSpaceAdmin = this.#currentSpace.isSpaceAdmin;
+      const spaceState = this.#getOrCreateSpaceState(
+        nextSpaceId,
+      );
+
+      console.log("spaceState", {
+        spaceState,
+        nextSpaceId,
+        spaces: $state.snapshot(this.spaces),
+      });
+
+      if (this.#currentSpace.matchingSpace) {
+        // Push external reactive values into SpaceState
+        spaceState.did = this.did;
+        spaceState.backfillStatus =
+          this.#currentSpace.matchingSpace.backfill_status;
+        spaceState.handle = this.#currentSpace.matchingSpace.handle;
+        spaceState.permissions = this.#currentSpace.matchingSpace.permissions;
+
+        this.#currentSpaceState = spaceState;
+        const meta = spaceState.meta;
+        console.log(APP_LOG, "current space → joined:", {
+          spaceId: this.#currentSpace.spaceId.slice(0, 12) + "…",
+          handle: this.#currentSpace.matchingSpace.handle?.toString(),
+          backfill: this.#currentSpace.matchingSpace.backfill_status,
+          metaName: meta.name,
+          hasCategories: !!spaceState.categories,
+          categoriesCount: spaceState.categories?.length,
+        });
+        this.space = {
+          status: "joined",
+          space: meta,
+          isSpaceAdmin: spaceState.isSpaceAdmin,
+        };
+      } else {
+        console.log(APP_LOG, "current space → invited:", {
+          spaceId: this.#currentSpace.spaceId.slice(0, 12) + "…",
+        });
+        this.#currentSpaceState = undefined;
+        this.space = {
+          status: "invited",
+          spaceId: this.#currentSpace.spaceId,
+        };
+      }
 
       return () => {
         this.space = { status: "no-current-space" };
-        this.joinedSpace = undefined;
-        this.isSpaceAdmin = false;
+        this.#currentSpaceState = undefined;
       };
     });
 
@@ -229,181 +264,59 @@ export class AppState {
           : undefined;
     });
 
-    // ─── Sidebar query creation ────────────────────────────────────────────
-    // Ensure current space has a sidebar query immediately.
+    // ─── Sync public state from current SpaceState ─────────────────────────
+    // These keep the $state fields reactive for consumers that read
+    // app.joinedSpace, app.categories, app.isSpaceAdmin.
     $effect(() => {
-      const spaceId = this.joinedSpace?.id;
-      if (spaceId) this.#ensureSidebarQuery(spaceId);
+      this.joinedSpace = this.#currentSpaceState?.meta;
+    });
+    $effect(() => {
+      this.categories = this.#currentSpaceState?.categories;
+    });
+    $effect(() => {
+      this.isSpaceAdmin = this.#currentSpaceState?.isSpaceAdmin ?? false;
     });
 
-    // Prewarm sidebar queries for all other joined spaces once the current
-    // space's sidebar is ready, so we don't compete with it on the worker.
+    // ─── Prewarm SpaceStates for all joined spaces ─────────────────────────
+    // $effect(() => {
+    //   for (const space of this.spaces) {
+    //     const ss = this.#getOrCreateSpaceState(space.id as StreamDid);
+    //     ss.did = this.did;
+    //     ss.backfillStatus = space.backfill_status;
+    //     ss.handle = space.handle;
+    //     ss.permissions = space.permissions;
+    //   }
+    // });
+
+    // ─── Cleanup stale SpaceStates ─────────────────────────────────────────
     $effect(() => {
-      const currentId = this.joinedSpace?.id;
-      if (!currentId || !this.categories) return;
-      for (const space of this.spaces) {
-        if (space.id !== currentId) {
-          this.#ensureSidebarQuery(space.id);
+      const currentIds = new Set(this.spaces.map((s) => s.id));
+      for (const [id, ss] of this.#spaceStates) {
+        if (!currentIds.has(id)) {
+          ss.destroy();
+          this.#spaceStates.delete(id);
         }
       }
-    });
-
-    // ─── Sidebar processing ────────────────────────────────────────────────
-    // Reads from the current space's cached query, processes into categories.
-    // Instant on space switch if query already has results.
-    $effect(() => {
-      const spaceId = this.joinedSpace?.id;
-      if (!spaceId) {
-        this.categories = undefined;
-        return;
-      }
-
-      const sidebarQuery = this.#sidebarQueries.get(spaceId);
-      const channelsQuery = this.#allChannelsQueries.get(spaceId);
-      if (
-        !sidebarQuery ||
-        sidebarQuery.current.status === "loading" ||
-        !channelsQuery
-      )
-        return;
-
-      if (!sidebarQuery.result) {
-        this.categories = undefined;
-        return;
-      }
-
-      // Use local variables to avoid read-write cycle on this.categories
-      let allChannelIds = new Set(channelsQuery.result?.map((x) => x.id) || []);
-      let pinnedChannelIds = new Set<string>();
-
-      let cats = sidebarQuery.result.map((x) => {
-        const seen = new Set<string>();
-        const uniqueChildren = x.children.filter((c) => {
-          pinnedChannelIds.add(c.id);
-          if (seen.has(c.id)) return false;
-          seen.add(c.id);
-          return true;
-        });
-
-        return {
-          type: "space.roomy.category",
-          id: (x.id as Ulid) ?? newUlid(),
-          name: x.name,
-          lastRead: 0,
-          latestEntity: 0,
-          sortIdx: "",
-          unreadCount: 0,
-          children: uniqueChildren.map((c) => ({
-            type: "space.roomy.channel",
-            id: c.id,
-            name: c.name,
-            lastRead: 0,
-            latestEntity: 0,
-            sortIdx: "",
-            unreadCount: 0,
-          })),
-        } satisfies SidebarCategory;
-      });
-
-      let orphanChannels = allChannelIds.difference(pinnedChannelIds);
-
-      if (!cats.length) {
-        cats = [
-          {
-            id: newUlid(),
-            type: "space.roomy.category",
-            name: "general",
-            lastRead: 0,
-            latestEntity: 0,
-            sortIdx: "",
-            unreadCount: 0,
-            children: [],
-          },
-        ];
-      }
-
-      const orphans = [...orphanChannels]
-        .map((id) => channelsQuery.result?.find((x) => x.id == id))
-        .filter((x) => !!x)
-        .map(({ id, name }) => ({
-          id,
-          name,
-          type: "space.roomy.channel" as const,
-          lastRead: 0,
-          latestEntity: 0,
-          sortIdx: "",
-          unreadCount: 0,
-        }));
-
-      if (orphans.length > 0) {
-        cats = cats.map((category, i) => ({
-          ...category,
-          children:
-            i == 0 ? [...category.children, ...orphans] : category.children,
-        }));
-      }
-
-      // Single write
-      this.categories = cats;
     });
   }
 
   // ─── Private helpers ───────────────────────────────────────────────────────
 
-  /** Create sidebar + channels queries for a space. Uses $effect.root so queries
-   *  persist across navigation — switching back to a visited space is instant. */
-  #ensureSidebarQuery(spaceId: StreamDid) {
-    if (this.#sidebarQueries.has(spaceId)) return;
-
-    $effect.root(() => {
-      this.#sidebarQueries.set(
-        spaceId,
-        new LiveQuery(
-          () => sql`
-            select json_object(
-              'id', categories.value -> 'id',
-              'name', categories.value -> 'name',
-              'children', case when count(children.value) > 0
-                then json_group_array(
-                  json_object(
-                    'name', child_info.name,
-                    'id', child_info.entity
-                  )
-                  ORDER BY children.key
-                )
-                else json('[]')
-                end
-            ) as json
-            from
-              comp_space space,
-              json_each(space.sidebar_config -> 'categories') as categories
-            left join json_each(categories.value -> 'children') as children
-            left join comp_info child_info on child_info.entity = children.value
-            left join comp_room child_room on child_room.entity = children.value
-            where space.entity = ${spaceId}
-              and (child_room.entity is null or child_room.deleted != 1)
-            group by categories.key, categories.value -> 'name'
-            order by categories.key
-          `,
-          (row) => JSON.parse(row.json),
-        ),
-      );
-
-      this.#allChannelsQueries.set(
-        spaceId,
-        new LiveQuery(
-          () => sql`
-            select id, name from entities e
-            join comp_room r on e.id = r.entity
-            join comp_info i on e.id = i.entity
-            where
-              label = 'space.roomy.channel'
-                and
-              e.stream_id = ${spaceId}
-          `,
-        ),
-      );
-    });
+  #getOrCreateSpaceState(spaceId: StreamDid): SpaceState {
+    let ss = this.#spaceStates.get(spaceId);
+    if (!ss) {
+      // Wrap in $effect.root so the SpaceState's LiveQuery effects aren't
+      // owned by whichever $effect triggered creation. Without this, the
+      // calling effect re-running tears down the LiveQuery subscriptions
+      // while the cached SpaceState lives on with dead queries.
+      console.log("creating new space state with", spaceId);
+      const rootCleanup = $effect.root(() => {
+        ss = new SpaceState(spaceId);
+      });
+      ss!._rootCleanup = rootCleanup;
+      this.#spaceStates.set(spaceId, ss!);
+    }
+    return ss!;
   }
 }
 
