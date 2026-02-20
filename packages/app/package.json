@@ -39,6 +39,7 @@
   "dependencies": {
     "@ark/util": "^0.56.0",
     "@atcute/cid": "^2.2.6",
+    "@event-calendar/core": "^5.4.0",
     "@foxui/colors": "^0.5.0",
     "@foxui/core": "^0.5.0",
     "@foxui/social": "^0.5.0",

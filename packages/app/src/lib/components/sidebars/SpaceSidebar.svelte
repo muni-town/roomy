@@ -9,6 +9,7 @@
   import Button from "$lib/components/ui/button/Button.svelte";
 
   import {
+    IconCalendar,
     IconCheck,
     IconHome,
     IconHashtag,
@@ -204,6 +205,7 @@
           href={`/${page.params.space}/calendar`}
           data-current={page.url.pathname.endsWith("/calendar")}
         >
+          <IconCalendar class="shrink-0" />
           Events
         </Button>
       {/if}
