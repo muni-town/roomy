@@ -40,7 +40,7 @@
 
 <div class="space-y-12 pt-4 overflow-y-auto">
   <div class="space-y-6">
-    <h2 class="text-base/7 font-semibold text-base-900 dark:text-base-100">
+    <h2 class="text-xl/7 font-bold text-base-900 dark:text-base-100">
       Members
     </h2>
 
