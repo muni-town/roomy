@@ -11,8 +11,7 @@
   import {
     fetchGroupEvents,
     isAuthenticated,
-    buildAuthorizeUrl,
-    setReturnUrl,
+    connectViaServiceAuth,
     getStoredProfile,
     clearTokens,
   } from "$lib/services/openmeet";
@@ -124,22 +123,24 @@
     }
   }
 
-  let connecting = $state(false);
-
   async function connectToOpenMeet() {
-    if (!link || !current.did) return;
-    connecting = true;
+    if (!link) return;
     try {
-      const userProfile = await peer.getProfile(current.did);
-      const handle = userProfile?.handle || current.did;
-      setReturnUrl(window.location.pathname);
-      const authorizeApiUrl = buildAuthorizeUrl(link, handle);
-      const res = await fetch(authorizeApiUrl);
-      if (!res.ok) throw new Error(`OpenMeet returned ${res.status}`);
-      const oauthUrl = await res.text();
-      window.location.href = oauthUrl;
+      await connectViaServiceAuth(link, peer);
+      connected = true;
+      profile = getStoredProfile();
+
+      // Fall back to Bluesky avatar if OpenMeet profile has none
+      if (profile && !profile.avatar && current.did) {
+        const bskyProfile = await peer.getProfile(current.did);
+        if (bskyProfile?.avatar) {
+          profile = { ...profile, avatar: bskyProfile.avatar };
+          localStorage.setItem("openmeet:profile", JSON.stringify(profile));
+        }
+      }
+
+      await syncEvents();
     } catch (e) {
-      connecting = false;
       errorMessage = (e as Error).message;
       syncState = "error";
     }
@@ -195,14 +196,10 @@
       {#if !connected}
         <div class="mb-4 p-2 rounded-lg flex items-center justify-end">
           <p class="text-sm text-base-400 dark:text-base-500">
-            {#if connecting}
-              Connecting...
-            {:else}
-              <button
-                class="underline hover:text-base-600 dark:hover:text-base-300 transition-colors"
-                onclick={connectToOpenMeet}
-              >Connect</button> to OpenMeet to see private events
-            {/if}
+            <button
+              class="underline hover:text-base-600 dark:hover:text-base-300 transition-colors"
+              onclick={connectToOpenMeet}
+            >Connect</button> to OpenMeet to see private events
           </p>
         </div>
       {:else if profile}

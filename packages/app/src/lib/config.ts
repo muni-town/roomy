@@ -40,10 +40,12 @@ const CONFIG = {
 
   // placeholders overridden below
   leafServerDid: "",
+  openmeetServiceDid: "",
   atprotoOauthScope: "",
 };
 
 CONFIG.leafServerDid = `did:web:${new URL(CONFIG.leafUrl).hostname}`;
+CONFIG.openmeetServiceDid = `did:web:${new URL(CONFIG.openmeetApiUrl).hostname}`;
 CONFIG.atprotoOauthScope = [
   `atproto`, // Required just to login to atproto
 
@@ -84,6 +86,8 @@ CONFIG.atprotoOauthScope = [
   // TODO: For some reason I can't get this to work with a non-wildcard audience. In the future we
   // should be able to set the audience to the `leafServerDid`.
   `rpc:town.muni.leaf.authenticate?aud=*`, // Access to authenticate to the leaf server
+
+  `rpc:net.openmeet.auth?aud=*`, // Access to authenticate to OpenMeet via PDS service auth
 ].join(" ");
 
 /** Default feature flags, can be overridden per environment with

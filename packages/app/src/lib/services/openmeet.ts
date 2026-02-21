@@ -1,4 +1,6 @@
 import type { CalendarLink } from "$lib/queries/calendar.svelte";
+import type { PeerInterface } from "$lib/workers/peer/types";
+import { CONFIG } from "$lib/config";
 
 // localStorage keys for OpenMeet auth tokens
 const KEYS = {
@@ -6,7 +8,6 @@ const KEYS = {
   refreshToken: "openmeet:refreshToken",
   tokenExpires: "openmeet:tokenExpires",
   profile: "openmeet:profile",
-  returnUrl: "openmeet:returnUrl",
 } as const;
 
 export interface OpenMeetProfile {
@@ -66,28 +67,57 @@ export function isAuthenticated(): boolean {
   return getStoredTokens() !== null;
 }
 
-export function setReturnUrl(url: string) {
-  localStorage.setItem(KEYS.returnUrl, url);
-}
-
-export function getAndClearReturnUrl(): string | null {
-  const url = localStorage.getItem(KEYS.returnUrl);
-  localStorage.removeItem(KEYS.returnUrl);
-  return url;
-}
-
-export function buildAuthorizeUrl(
+/** Exchange a PDS service auth token for OpenMeet access/refresh tokens. */
+export async function connectViaServiceAuth(
   link: CalendarLink,
-  userDid: string,
-): string {
-  // Normalize 127.0.0.1 → localhost so it matches ALLOWED_REDIRECT_DOMAINS
-  const origin = window.location.origin.replace("://127.0.0.1", "://localhost");
-  const params = new URLSearchParams({
-    handle: userDid,
-    tenantId: link.tenantId,
-    redirect_uri: `${origin}/openmeet/callback`,
+  peer: PeerInterface,
+): Promise<void> {
+  const token = await peer.getServiceAuthToken(
+    CONFIG.openmeetServiceDid,
+    "net.openmeet.auth",
+  );
+
+  const res = await fetch(`${link.apiUrl}/api/v1/auth/atproto/service-auth`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-tenant-id": link.tenantId,
+    },
+    body: JSON.stringify({ token }),
   });
-  return `${link.apiUrl}/api/v1/auth/bluesky/authorize?${params.toString()}`;
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OpenMeet service auth failed (${res.status}): ${text}`);
+  }
+
+  const data = (await res.json()) as {
+    token: string;
+    refreshToken: string;
+    tokenExpires: number;
+    user?: {
+      socialId?: string;
+      firstName?: string;
+      lastName?: string;
+      photo?: { path?: string } | null;
+    };
+  };
+
+  localStorage.setItem(KEYS.accessToken, data.token);
+  localStorage.setItem(KEYS.refreshToken, data.refreshToken);
+  localStorage.setItem(KEYS.tokenExpires, String(data.tokenExpires));
+
+  if (data.user) {
+    const profile: OpenMeetProfile = {
+      did: data.user.socialId || "",
+      handle: data.user.socialId || "",
+      displayName: [data.user.firstName, data.user.lastName]
+        .filter(Boolean)
+        .join(" ") || undefined,
+      avatar: data.user.photo?.path || undefined,
+    };
+    localStorage.setItem(KEYS.profile, JSON.stringify(profile));
+  }
 }
 
 async function refreshAccessToken(apiUrl: string, tenantId: string): Promise<boolean> {
