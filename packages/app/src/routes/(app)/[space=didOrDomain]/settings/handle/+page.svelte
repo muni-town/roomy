@@ -58,8 +58,15 @@
         did: peerStatus.authState.did,
       });
 
-      // And reload the page
-      window.location.reload();
+      // Wait a moment for the event to process
+      // TODO: If we're expecting an event to mutate a reactive state,
+      // we should instead await the result
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Navigate to this page using the new space handle
+      window.location.href = `/${spaceHandle}/settings/handle`;
+
+      toast.success("Updated space handle");
     } catch (e) {
       console.error(e);
       toast.error("Error setting handle for space.");
@@ -91,8 +98,11 @@
 
       // Then we need remove the profile space record from the user's PDS.
       await peer.setProfileSpace(null);
-      // And reload the page
-      window.location.reload();
+
+      // Navigate to this page using the space id
+      window.location.href = `/${app.space.space.id}/settings/handle`;
+
+      toast.success("Updated space handle");
     } catch (e) {
       console.error(e);
       toast.error("Error unsetting handle for space.");
