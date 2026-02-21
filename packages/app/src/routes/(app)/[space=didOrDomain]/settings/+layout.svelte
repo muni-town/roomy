@@ -17,6 +17,10 @@
       label: "Members",
       slug: "members",
     },
+    {
+      label: "Handle",
+      slug: "handle",
+    },
   ];
   if (flags.discordImport) {
     sidebarLinks.push({
