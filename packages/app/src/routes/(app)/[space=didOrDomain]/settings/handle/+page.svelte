@@ -128,7 +128,7 @@
   }
 </script>
 
-<div class="pt-8 mt-8 border-t border-base-200 dark:border-base-800">
+<div class="pt-4">
   <h2
     class="text-xl/7 font-bold text-base-900 dark:text-base-100 mb-4 flex gap-3 items-center"
   >

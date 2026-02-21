@@ -287,7 +287,7 @@
 
 <form class="pt-4">
   <div class="space-y-12">
-    <h2 class="text-xl/7 font-semibold text-base-900 dark:text-base-100">
+    <h2 class="text-xl/7 font-bold text-base-900 dark:text-base-100">
       Discord Import
     </h2>
 
