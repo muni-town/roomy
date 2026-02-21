@@ -36,4 +36,6 @@ echo "{
   \"dpop_bound_access_tokens\": true
 }" > packages/app/dist/oauth-client-metadata.json
 
+# Clean stale publish dir — Netlify caches it between builds, causing mv to fail
+rm -rf ./dist
 mv packages/app/dist .
