@@ -269,6 +269,10 @@ export class Peer {
       uploadToPds: async (bytes, opts) => {
         return this.client.uploadBlob(bytes, opts);
       },
+      getServiceAuthToken: async (aud, lxm) => {
+        const resp = await this.client.agent.com.atproto.server.getServiceAuth({ aud, lxm });
+        return resp.data.token;
+      },
       connectRpcClient: async (port) => this.connectRpcClient(port),
       pauseSubscription: async (_streamId) => {
         // await this.openSpacesMaterializer?.pauseSubscription(streamId);

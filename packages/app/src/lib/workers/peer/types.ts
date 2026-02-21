@@ -106,6 +106,8 @@ export type PeerInterface = {
     blob: ReturnType<BlobRef["toJSON"]>;
     uri: string;
   }>;
+  /** Get a PDS-signed service auth token for the given audience and lexicon method. */
+  getServiceAuthToken(aud: string, lxm: string): Promise<string>;
   /**
    * Connect an RPC client to the peer over the provided message port.
    *
