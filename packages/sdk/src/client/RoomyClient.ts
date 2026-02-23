@@ -463,12 +463,18 @@ export class RoomyClient {
               space.streamDid,
               recordConfig,
             );
-          } catch (saveError) {
-            errors.push(
-              new Error("Could not create PDS record for personal stream", {
-                cause: saveError,
-              }),
+            console.debug(
+              "Saved stream record to PDS with NSID:",
+              recordConfig.collection,
             );
+          } catch (saveError) {
+            // I'm not sure if this should throw. I was having an issue where it was failing silently...
+            throw new Error("Could not create PDS record for personal stream");
+            // errors.push(
+            //   new Error("Could not create PDS record for personal stream", {
+            //     cause: saveError,
+            //   }),
+            // );
           }
         } else if ((e as Error).message?.includes("Stream does not exist")) {
           // Stream record exists on PDS but stream doesn't exist on Leaf server.

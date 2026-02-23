@@ -11,7 +11,7 @@
  * Uses SDK operations from @roomy/sdk/package/operations.
  */
 
-import type { BridgeRepository } from "../repositories/index.js";
+import type { BridgeRepository, BridgeConfig } from "../repositories/index.js";
 import type { ConnectedSpace, StreamDid } from "@roomy/sdk";
 import {
   newUlid,
@@ -86,26 +86,47 @@ export class StructureSyncService {
     private readonly guildId: bigint,
     private readonly bot: DiscordBot,
     private readonly connectedSpace: ConnectedSpace, // Keep for SDK operations
+    private readonly bridgeConfig?: BridgeConfig,
   ) {}
 
   /**
-   * Look up the "Roomy Bridge" role in the guild.
-   * If it exists, the bridge uses opt-in mode (only bridge channels where
-   * this role has VIEW_CHANNEL: Allow). Otherwise, falls back to bridging
-   * all public channels.
+   * Check if a channel is in scope for this bridge's config.
+   * Full mode: defers to existing role/public-channel logic.
+   * Subset mode: only channels in the config's channel list.
+   */
+  private isChannelInBridgeScope(channelId: string | bigint): boolean {
+    if (!this.bridgeConfig || this.bridgeConfig.mode === "full") return true;
+    return (
+      this.bridgeConfig.channels?.includes(channelId.toString()) ?? false
+    );
+  }
+
+  /**
+   * Look up the bridge role in the guild.
+   *
+   * - Subset mode with roleId in config: use that role directly.
+   * - Full mode: look for "Roomy Bridge" role for opt-in mode, else bridge all public channels.
    *
    * Called once at the start of backfill; cached for the lifetime of the service.
    */
   async resolveBridgeRole(): Promise<void> {
     if (this.bridgeRoleResolved) return;
+
+    // Subset mode with bot-managed role — use it directly
+    if (this.bridgeConfig?.mode === "subset" && this.bridgeConfig.roleId) {
+      this.bridgeRoleId = BigInt(this.bridgeConfig.roleId);
+      console.log(
+        `[StructureSyncService] Using subset bridge role (${this.bridgeRoleId})`,
+      );
+      this.bridgeRoleResolved = true;
+      // Still need to compute canManageChannels
+      await this.resolveManageChannelsPermission();
+      return;
+    }
+
+    // Full mode: look for manual "Roomy Bridge" role
     try {
-      const [roles, member] = await Promise.all([
-        this.bot.rest.getRoles(this.guildId.toString()),
-        // Cast: member desired properties aren't declared, but `roles` is always returned
-        this.bot.helpers.getMember(this.guildId, this.bot.id) as unknown as {
-          roles?: bigint[];
-        },
-      ]);
+      const roles = await this.bot.rest.getRoles(this.guildId.toString());
 
       const bridgeRole = roles.find((r: any) => r.name === BRIDGE_ROLE_NAME);
       if (bridgeRole) {
@@ -119,8 +140,28 @@ export class StructureSyncService {
         );
       }
 
-      // Compute effective MANAGE_CHANNELS permission.
-      // Include @everyone (same ID as guild) plus all explicitly assigned roles.
+      await this.resolveManageChannelsPermission();
+    } catch (error) {
+      console.warn(
+        `[StructureSyncService] Failed to fetch roles/permissions, falling back to public channel mode:`,
+        error,
+      );
+    }
+    this.bridgeRoleResolved = true;
+  }
+
+  /**
+   * Compute whether the bot has MANAGE_CHANNELS permission in this guild.
+   */
+  private async resolveManageChannelsPermission(): Promise<void> {
+    try {
+      const [roles, member] = await Promise.all([
+        this.bot.rest.getRoles(this.guildId.toString()),
+        this.bot.helpers.getMember(this.guildId, this.bot.id) as unknown as {
+          roles?: bigint[];
+        },
+      ]);
+
       const ADMINISTRATOR = 0x8n;
       const MANAGE_CHANNELS = 0x10n;
       const memberRoleIds = new Set([
@@ -145,11 +186,10 @@ export class StructureSyncService {
       }
     } catch (error) {
       console.warn(
-        `[StructureSyncService] Failed to fetch roles/permissions, falling back to public channel mode:`,
+        `[StructureSyncService] Failed to resolve MANAGE_CHANNELS permission:`,
         error,
       );
     }
-    this.bridgeRoleResolved = true;
   }
 
   /**
@@ -1124,6 +1164,7 @@ export class StructureSyncService {
       textChannels = channels.filter(
         (c) =>
           c.type === ChannelTypes.GuildText &&
+          this.isChannelInBridgeScope(c.id) &&
           isChannelBridgeApproved(
             c.permissionOverwrites,
             this.guildId,

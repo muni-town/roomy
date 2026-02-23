@@ -5,7 +5,7 @@
  * delegating to the appropriate domain service.
  */
 
-import type { BridgeRepository } from "./repositories/index.js";
+import type { BridgeRepository, BridgeConfig } from "./repositories/index.js";
 import {
   modules,
   ConnectedSpace,
@@ -54,6 +54,7 @@ type BridgeState =
 export class Bridge {
   bot: DiscordBot;
   guildId: bigint;
+  config: BridgeConfig;
   state: StateMachine<BridgeState>;
   repo: BridgeRepository;
   dispatcher: EventDispatcher;
@@ -69,10 +70,12 @@ export class Bridge {
     guildId: bigint;
     bot: DiscordBot;
     client: RoomyClient;
+    config: BridgeConfig;
   }) {
-    const { connectedSpace, guildId, bot, client } = options;
+    const { connectedSpace, guildId, bot, client, config } = options;
     const repo = getRepo(guildId, connectedSpace.streamDid);
     this.guildId = guildId;
+    this.config = config;
     this.connectedSpace = connectedSpace;
     this.state = stateMachine({ state: "backfillRoomy" });
     this.bot = bot;
@@ -106,6 +109,7 @@ export class Bridge {
       guildId,
       bot,
       connectedSpace,
+      config,
     );
     this.messageSync = new MessageSyncService(
       repo,
@@ -124,10 +128,39 @@ export class Bridge {
   }
 
   /**
+   * Check if a Discord channel is within this bridge's scope.
+   * Full mode: always in scope (defers to existing role/public-channel logic).
+   * Subset mode: only channels in the config's channel list.
+   */
+  isChannelInScope(channelId: string | bigint): boolean {
+    if (this.config.mode === "full") return true;
+    return this.config.channels.includes(channelId.toString());
+  }
+
+  /**
+   * Extract the channel ID from a Discord event payload.
+   */
+  private getChannelIdFromEvent(discordEvent: DiscordEvent): string | null {
+    const payload = discordEvent.payload as any;
+    if (payload.channelId) return payload.channelId.toString();
+    if (payload.id) return payload.id.toString(); // CHANNEL_CREATE, THREAD_CREATE
+    return null;
+  }
+
+  /**
    * Handle Discord events using unified type-safe routing.
    * Delegates to appropriate service based on event type.
+   * Filters by channel scope for subset bridges.
    */
   async handleDiscordEvent(discordEvent: DiscordEvent): Promise<void> {
+    // Channel scope filtering for subset bridges
+    if (this.config.mode === "subset") {
+      const channelId = this.getChannelIdFromEvent(discordEvent);
+      if (channelId && !this.isChannelInScope(channelId)) {
+        return; // Silent no-op — channel not in this bridge's scope
+      }
+    }
+
     switch (discordEvent.event) {
       case "MESSAGE_CREATE":
         await this.messageSync.syncDiscordToRoomy(discordEvent.payload);
@@ -198,6 +231,7 @@ export class Bridge {
     bot: DiscordBot;
     guildId: bigint;
     client: RoomyClient;
+    config: BridgeConfig;
   }): Promise<Bridge> {
     const { spaceId, client } = options;
 
@@ -225,7 +259,13 @@ export class Bridge {
       },
     );
 
-    return new Bridge({ connectedSpace, ...options });
+    return new Bridge({
+      connectedSpace,
+      guildId: options.guildId,
+      bot: options.bot,
+      client: options.client,
+      config: options.config,
+    });
   }
 
   async disconnect() {

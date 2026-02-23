@@ -5,15 +5,20 @@ import {
   DiscordEvent,
 } from "./discord/types.js";
 import { initRoomyClient } from "./roomy/client.js";
-import { createBot, Intents, MessageFlags } from "@discordeno/bot";
+import { createBot, Intents, InteractionTypes, MessageFlags } from "@discordeno/bot";
 import { DISCORD_TOKEN } from "./env.js";
 import { tracer, setDiscordAttrs, recordError } from "./tracing.js";
 import {
   handleSlashCommandInteraction,
+  handleComponentInteraction,
   slashCommands,
 } from "./discord/slashCommands.js";
 import { Deferred } from "@roomy/sdk";
-import { registeredBridges } from "./repositories/LevelDBBridgeRepository.js";
+import {
+  bridgeConfigs,
+  migrateBridgeConfigs,
+} from "./repositories/LevelDBBridgeRepository.js";
+import type { BridgeConfig } from "./repositories/BridgeRepository.js";
 import { Bridge } from "./Bridge.js";
 import { getProxyCacheBot } from "./discord/cache.js";
 
@@ -43,7 +48,13 @@ export class BridgeOrchestrator {
   state: StateMachine<BridgeOrchestratorState> = stateMachine({
     state: "initialising",
   });
-  bridges = new Map<bigint, Bridge>();
+  /** Key: `${guildId}:${spaceId}` → Bridge instance */
+  bridges = new Map<string, Bridge>();
+  /** Pending interactive connection flows, keyed by `${guildId}:${spaceId}` */
+  pendingConnections = new Map<
+    string,
+    { spaceId: StreamDid; timeout: NodeJS.Timeout }
+  >();
 
   constructor() {
     this.start();
@@ -53,6 +64,21 @@ export class BridgeOrchestrator {
     if (this.state.current.state !== "ready")
       throw new Error("Bridge not ready");
     return this.state.current.appId;
+  }
+
+  /** Get all bridges for a given guild */
+  getBridgesForGuild(guildId: bigint): Bridge[] {
+    const prefix = `${guildId}:`;
+    const result: Bridge[] = [];
+    for (const [key, bridge] of this.bridges) {
+      if (key.startsWith(prefix)) result.push(bridge);
+    }
+    return result;
+  }
+
+  /** Composite key for the bridges map */
+  private bridgeKey(guildId: bigint | string, spaceId: string): string {
+    return `${guildId}:${spaceId}`;
   }
 
   async start() {
@@ -78,19 +104,26 @@ export class BridgeOrchestrator {
     const { bot, appId } = await this.startBot();
     console.log("Discord bridge ready");
 
+    // Run migration from old 1:1 store to new 1:N store
+    await migrateBridgeConfigs();
+
     console.log("Subscribing to connected spaces...");
-    const bridges = await registeredBridges.list();
+    const configs = await bridgeConfigs.list();
 
-    console.log("bridges", bridges);
+    console.log("bridge configs", configs);
 
-    for (const { spaceId, guildId } of bridges) {
+    for (const config of configs) {
       const bridge = await Bridge.connect({
-        spaceId: spaceId as StreamDid,
-        guildId: BigInt(guildId),
+        spaceId: config.spaceId as StreamDid,
+        guildId: BigInt(config.guildId),
         bot,
         client: roomy,
+        config,
       });
-      this.bridges.set(BigInt(guildId), bridge);
+      this.bridges.set(
+        this.bridgeKey(config.guildId, config.spaceId),
+        bridge,
+      );
     }
     this.state.current = {
       state: "ready",
@@ -138,7 +171,7 @@ export class BridgeOrchestrator {
             });
           },
 
-          // Handle slash commands
+          // Handle slash commands and component interactions
           async interactionCreate(interaction) {
             console.log("Interaction create event", interaction.data);
             const current = await orchestrator.state.transitionedTo("ready");
@@ -153,10 +186,20 @@ export class BridgeOrchestrator {
               return;
             }
 
-            const bridge = orchestrator.bridges.get(guildId);
+            // Route component interactions (buttons, selects) to component handler
+            if (
+              interaction.type === InteractionTypes.MessageComponent
+            ) {
+              return handleComponentInteraction({
+                interaction,
+                guildId,
+                orchestrator,
+              });
+            }
+
+            const guildBridges = orchestrator.getBridgesForGuild(guildId);
 
             const spaceExists = async (did: StreamDid) => {
-              // Check if the bridge can access this space
               return !!(await current.roomy.getSpaceInfo(did))?.name;
             };
 
@@ -165,12 +208,12 @@ export class BridgeOrchestrator {
               guildId,
               spaceExists,
               createBridge: orchestrator.createBridge.bind(orchestrator),
-              deleteBridge: guildId
-                ? () => {
-                    orchestrator.bridges.delete(guildId);
-                  }
-                : undefined,
-              bridge,
+              deleteBridge: (spaceId: string) => {
+                orchestrator.bridges.delete(
+                  orchestrator.bridgeKey(guildId, spaceId),
+                );
+              },
+              bridges: guildBridges,
             });
           },
 
@@ -217,20 +260,26 @@ export class BridgeOrchestrator {
     return { bot, appId };
   }
 
-  async createBridge(spaceId: StreamDid, guildId: bigint) {
+  async createBridge(
+    spaceId: StreamDid,
+    guildId: bigint,
+    config: BridgeConfig,
+  ) {
     const current = await this.state.transitionedTo("ready");
     const bridge = await Bridge.connect({
       spaceId,
       bot: current.bot,
       guildId,
       client: current.roomy,
+      config,
     });
-    this.bridges.set(guildId, bridge);
+    this.bridges.set(this.bridgeKey(guildId, spaceId), bridge);
     return bridge;
   }
 
   /**
    * Common handler wrapper with tracing and error handling.
+   * Fans out Discord events to ALL bridges for the guild via Promise.all().
    */
   private async handleDiscordEvent<T extends DiscordEvent["event"]>(
     eventName: T,
@@ -244,30 +293,36 @@ export class BridgeOrchestrator {
       return;
     }
 
-    const bridge = this.bridges.get(data.guildId);
-    if (!bridge) {
+    const guildBridges = this.getBridgesForGuild(data.guildId);
+    if (guildBridges.length === 0) {
       console.warn(
         `No bridge found for guild ${data.guildId}, skipping ${eventName}`,
       );
       return;
     }
 
-    console.log("handling Discord event", eventName, data);
+    console.log(
+      `handling Discord event ${eventName} for ${guildBridges.length} bridge(s)`,
+    );
 
-    await tracer.startActiveSpan(`bridge.${eventName}`, async (span) => {
-      setDiscordAttrs(span, { guildId: data.guildId! });
-      try {
-        await bridge.handleDiscordEvent({
-          event: eventName,
-          payload: data,
-        } as unknown as DiscordEvent); // TODO: fix typing in Bridge and services
-      } catch (error) {
-        recordError(span, error);
-        // Don't throw - fail gracefully
-      } finally {
-        span.end();
-      }
-    });
+    await Promise.all(
+      guildBridges.map((bridge) =>
+        tracer.startActiveSpan(`bridge.${eventName}`, async (span) => {
+          setDiscordAttrs(span, { guildId: data.guildId! });
+          try {
+            await bridge.handleDiscordEvent({
+              event: eventName,
+              payload: data,
+            } as unknown as DiscordEvent);
+          } catch (error) {
+            recordError(span, error);
+            // Don't throw - fail gracefully
+          } finally {
+            span.end();
+          }
+        }),
+      ),
+    );
   }
 
   /**
