@@ -2,7 +2,7 @@
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { Button } from "@fuxui/base";
+  import Button from "$lib/components/ui/button/Button.svelte";
 
   onMount(() => {
     console.error(page.status, page.error, page.error?.message);

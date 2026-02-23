@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { Box, Button } from "@fuxui/base";
+  import { Box } from "@foxui/core";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { joinSpace } from "$lib/mutations/space";
   import { type SpaceIdOrHandle } from "$lib/workers/types";

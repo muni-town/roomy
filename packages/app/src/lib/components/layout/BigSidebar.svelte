@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { WithElementRef } from "bits-ui";
   import type { HTMLAttributes } from "svelte/elements";
-  import { cn, ScrollArea } from "@fuxui/base";
+  import { cn, ScrollArea } from "@foxui/core";
   import * as rawEnv from "$env/static/public";
 
   const {

@@ -18,7 +18,7 @@
   import { initUserMention, initSpaceContextMention } from "$lib/tiptap/editor";
   import { type Item, initKeyboardShortcutHandler } from "$lib/tiptap/editor";
   import { RichTextLink } from "$lib/tiptap/RichTextLink";
-  import { cn, inputVariants } from "@fuxui/base";
+  import { cn, inputVariants } from "@foxui/core";
   import { Markdown } from "tiptap-markdown";
 
   type Props = {

@@ -4,7 +4,7 @@
    * https://github.com/flo-bit/ui-kit/tree/main/packages/text/src/lib/components/rich-text-editor
    */
 
-  import { Toggle } from "@fuxui/base";
+  import { Toggle } from "@foxui/core";
   import type { Editor } from "@tiptap/core";
   import Select from "./Select.svelte";
   import type { RichTextTypes } from ".";

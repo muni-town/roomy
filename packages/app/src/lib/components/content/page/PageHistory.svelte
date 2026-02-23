@@ -2,7 +2,8 @@
   import { page } from "$app/state";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { Button, ScrollArea } from "@fuxui/base";
+  import { ScrollArea } from "@foxui/core";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import { decodeTime } from "ulidx";
   import {
     patchApply,

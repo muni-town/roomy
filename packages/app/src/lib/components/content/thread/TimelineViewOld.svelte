@@ -2,7 +2,8 @@
   import toast from "svelte-french-toast";
   import ChatArea from "$lib/components/content/thread/ChatArea.svelte";
   import ChatInput from "$lib/components/content/thread/ChatInput.svelte";
-  import { Button, Input } from "@fuxui/base";
+  import Button from "$lib/components/ui/button/Button.svelte";
+  import Input from "$lib/components/ui/input/Input.svelte";
   import { setInputFocus } from "./ChatInput.svelte";
   import { replyTo } from "./message/ChatMessage.svelte";
   import MessageRepliedTo from "./message/MessageRepliedTo.svelte";
@@ -10,7 +11,7 @@
   import FullscreenImageDropper from "$lib/components/helper/FullscreenImageDropper.svelte";
   import UploadFileButton from "$lib/components/helper/UploadFileButton.svelte";
   import { afterNavigate } from "$app/navigation";
-  import { blueskyLoginModalState } from "@fuxui/social";
+  import { blueskyLoginModalState } from "@foxui/social";
   import FullscreenImage from "$lib/components/helper/FullscreenImage.svelte";
   import WaitingForJoinModal from "$lib/components/modals/WaitingForJoinModal.svelte";
 

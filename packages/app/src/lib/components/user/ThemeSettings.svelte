@@ -7,7 +7,7 @@
     AccordionTrigger,
     AccordionContent,
     ThemeToggle,
-  } from "@fuxui/base";
+  } from "@foxui/core";
   import { onMount } from "svelte";
 
   const accentColors = [

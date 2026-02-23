@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Badge, NumberInput } from "@fuxui/base";
+  import { NumberInput } from "@foxui/core";
+  import Badge from "$lib/components/ui/badge/Badge.svelte";
 
   import SpaceButton from "./SpaceButton.svelte";
   import type { LoadedSpace } from "./type";

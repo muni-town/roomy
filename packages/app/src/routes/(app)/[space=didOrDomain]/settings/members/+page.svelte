@@ -2,7 +2,7 @@
   import { getAppState } from "$lib/queries";
   const app = getAppState();
   import { peer, peerStatus } from "$lib/workers";
-  import { Button } from "@fuxui/base";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
   import { newUlid, UserDid } from "@roomy/sdk";

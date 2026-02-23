@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { toast, Avatar, Badge, Button, Popover } from "@fuxui/base";
+  import { toast, Avatar } from "@foxui/core";
+  import Badge from "$lib/components/ui/badge/Badge.svelte";
+  import Button from "$lib/components/ui/button/Button.svelte";
+  import Popover from "$lib/components/ui/popover/Popover.svelte";
 
   let {
     accountId,

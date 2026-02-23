@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { Badge, Box } from "@fuxui/base";
+  import { Box } from "@foxui/core";
+  import Badge from "$lib/components/ui/badge/Badge.svelte";
   import { formatDistanceToNowStrict, type Locale } from "date-fns";
   import type { ThreadInfo } from "./types";
   import { IconDocument, IconHashtag } from "@roomy/design/icons";

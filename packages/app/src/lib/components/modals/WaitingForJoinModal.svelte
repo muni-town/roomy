@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Modal, Heading } from "@fuxui/base";
+  import { Modal, Heading } from "@foxui/core";
   import Icon from "@iconify/svelte";
 
   let {

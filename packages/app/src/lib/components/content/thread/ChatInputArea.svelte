@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { Button, Input, Popover, toast } from "@fuxui/base";
+  import { toast } from "@foxui/core";
+  import Button from "$lib/components/ui/button/Button.svelte";
+  import Input from "$lib/components/ui/input/Input.svelte";
+  import Popover from "$lib/components/ui/popover/Popover.svelte";
   import MessageContext, {
     type MessageContext as MessageContextType,
   } from "./message/MessageContext.svelte";

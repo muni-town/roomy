@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Alert } from "@fuxui/base";
+  import { Alert } from "@foxui/core";
   // import { onMount } from "svelte";
 
   let showAlphaWarning = $state(true);

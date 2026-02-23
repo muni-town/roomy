@@ -4,7 +4,7 @@
   import { navigateSync } from "$lib/utils.svelte";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { Button } from "@fuxui/base";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import { IconThread } from "@roomy/design/icons";
   import { getAppState } from "$lib/queries";
 

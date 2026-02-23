@@ -6,7 +6,7 @@
   } from "$lib/components/layout/MainLayout.svelte";
   import ConversationsList from "$lib/components/dm/ConversationsList.svelte";
   import MessageList from "$lib/components/dm/MessageList.svelte";
-  import { Button } from "@fuxui/base";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import NewMessageModal from "$lib/components/modals/NewMessageModal.svelte";
   import { onMount } from "svelte";
   import ConversationNavbar from "$lib/components/dm/ConversationNavbar.svelte";

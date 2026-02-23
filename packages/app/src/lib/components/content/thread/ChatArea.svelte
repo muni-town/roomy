@@ -16,7 +16,8 @@
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { setContext } from "svelte";
   import { page } from "$app/state";
-  import { Button, toast } from "@fuxui/base";
+  import { toast } from "@foxui/core";
+  import Button from "$lib/components/ui/button/Button.svelte";
 
   import { IconArrowDown, IconLoading } from "@roomy/design/icons";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";

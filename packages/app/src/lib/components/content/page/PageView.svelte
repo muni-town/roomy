@@ -6,7 +6,8 @@
   const app = getAppState();
   import { sql } from "$lib/utils/sqlTemplate";
   import { peer } from "$lib/workers";
-  import { Button, Prose } from "@fuxui/base";
+  import { Prose } from "@foxui/core";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import ScrollArea from "$lib/components/layout/ScrollArea.svelte";
   import { RichTextEditor } from "$lib/components/richtext";
   import { patchMake, patchToText } from "diff-match-patch-es";

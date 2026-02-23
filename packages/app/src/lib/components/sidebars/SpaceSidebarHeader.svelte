@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { Button, cn, Popover, toast } from "@fuxui/base";
+  import { cn, toast } from "@foxui/core";
+  import Button from "$lib/components/ui/button/Button.svelte";
+  import Popover from "$lib/components/ui/popover/Popover.svelte";
   import { navigate } from "$lib/utils.svelte";
   import { page } from "$app/state";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";

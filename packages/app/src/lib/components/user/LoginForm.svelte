@@ -12,7 +12,7 @@
     Box,
     Tabs,
     toast,
-  } from "@fuxui/base";
+  } from "@foxui/core";
   import { Handle } from "@roomy/sdk";
   import { onMount } from "svelte";
 

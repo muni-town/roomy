@@ -2,7 +2,8 @@
   import { navigate } from "$lib/utils.svelte";
   import SidebarSpace from "./ThinSidebarSpace.svelte";
   import { page } from "$app/state";
-  import { Button, ScrollArea } from "@fuxui/base";
+  import { ScrollArea } from "@foxui/core";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import UserProfileButton from "../user/UserProfileButton.svelte";
   import { getAppState } from "$lib/queries";
 

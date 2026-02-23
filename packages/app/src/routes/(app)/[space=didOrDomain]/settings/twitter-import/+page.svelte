@@ -361,7 +361,8 @@
 
 <script lang="ts">
   import { page } from "$app/state";
-  import { Alert, Button } from "@fuxui/base";
+  import { Alert } from "@foxui/core";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import { writable } from "svelte/store";
 
   function mapStore<T>(initial: Map<string, T>) {

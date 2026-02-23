@@ -1,6 +1,6 @@
 import { peer, peerStatus } from "$lib/workers";
 import type { StreamDid, Did } from "@roomy/sdk";
-import { toast } from "@fuxui/base";
+import { toast } from "@foxui/core";
 import { newUlid, createDefaultSpaceEvents } from "@roomy/sdk";
 
 /**

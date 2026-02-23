@@ -3,7 +3,7 @@
   import ToggleNavigation from "../helper/ToggleNavigation.svelte";
   import Navbar from "./Navbar.svelte";
   import { isSidebarVisible } from "./MainLayout.svelte";
-  import { cn } from "@fuxui/base";
+  import { cn } from "@foxui/core";
   import * as rawEnv from "$env/static/public";
 
   let {

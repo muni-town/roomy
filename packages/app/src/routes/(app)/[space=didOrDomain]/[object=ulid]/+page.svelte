@@ -28,7 +28,9 @@
   import { sql } from "$lib/utils/sqlTemplate";
   import { navigate, scrollContainerRef } from "$lib/utils.svelte";
 
-  import { Input, Modal, Button, toast } from "@fuxui/base";
+  import { Modal, toast } from "@foxui/core";
+  import Input from "$lib/components/ui/input/Input.svelte";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import TimelineView from "$lib/components/content/thread/TimelineView.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";

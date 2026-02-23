@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Button, ScrollArea } from "@fuxui/base";
+  import { ScrollArea } from "@foxui/core";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import { page } from "$app/state";
 

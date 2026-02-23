@@ -50,7 +50,8 @@
   import { decodeTime } from "ulidx";
   import { getAppState } from "$lib/queries";
   const app = getAppState();
-  import { Badge, toast } from "@fuxui/base";
+  import { toast } from "@foxui/core";
+  import Badge from "$lib/components/ui/badge/Badge.svelte";
   import type { MessagingState } from "../TimelineView.svelte";
   import { messagingState as importedMessagingState } from "../TimelineView.svelte";
   import MediaEmbed from "./embeds/MediaEmbed.svelte";

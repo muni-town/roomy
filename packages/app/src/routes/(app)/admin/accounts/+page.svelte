@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Badge, toast } from "@fuxui/base";
+  import Badge from "$lib/components/ui/badge/Badge.svelte";
+  import { toast } from "@foxui/core";
   import SettingsUser from "$lib/components/settings/SettingsUser.svelte";
 
   // load all spaces and accounts

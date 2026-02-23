@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { dmClient, type Message } from "$lib/dm.svelte";
-  import { Button, ChatBubble, cn, Input } from "@fuxui/base";
+  import { ChatBubble, cn } from "@foxui/core";
+  import Button from "$lib/components/ui/button/Button.svelte";
+  import Input from "$lib/components/ui/input/Input.svelte";
   import { afterNavigate } from "$app/navigation";
 
   import "bluesky-post-embed";

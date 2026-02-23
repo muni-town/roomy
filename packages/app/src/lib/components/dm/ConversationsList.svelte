@@ -5,7 +5,8 @@
     type Conversation,
     type Participant,
   } from "$lib/dm.svelte";
-  import { Avatar, Badge, cn } from "@fuxui/base";
+  import { Avatar, cn } from "@foxui/core";
+  import Badge from "$lib/components/ui/badge/Badge.svelte";
   import { fade } from "svelte/transition";
 
   import { IconAlertCircle, IconMessageCircleOff } from "@roomy/design/icons";

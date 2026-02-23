@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Alert, Button } from "@fuxui/base";
+  import { Alert } from "@foxui/core";
+  import Button from "$lib/components/ui/button/Button.svelte";
 
   let {
     message,
