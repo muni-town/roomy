@@ -316,19 +316,26 @@ export class ConnectedSpace {
     end?: StreamIndex,
   ): Promise<DecodedStreamEvent[]> {
     const lazyEndIdx = this.#roomCursors.get(roomId);
-    const alreadyFetched =
-      (!end && lazyEndIdx) || (end && lazyEndIdx && end >= lazyEndIdx);
-
-    if (alreadyFetched) {
+    // If end is provided and we've already fetched past it, return empty
+    if (end && lazyEndIdx && end >= lazyEndIdx) {
+      console.log(
+        "[ConnectedSpace.lazyLoadRoom] already fetched past end, returning []",
+      );
       return [];
     }
 
+    // Use provided end, or use cursor if we have one
     const oldestEnd = end || lazyEndIdx;
     if (oldestEnd) {
       this.#roomCursors.set(roomId, oldestEnd);
     }
 
-    const events = await this.fetchRoom(roomId, limit, end);
+    // console.log("[ConnectedSpace.lazyLoadRoom] calling fetchRoom with", {
+    //   roomId,
+    //   limit,
+    //   end: oldestEnd,
+    // });
+    const events = await this.fetchRoom(roomId, limit, oldestEnd);
 
     if (!end && events.length > 0) {
       // Set cursor to the oldest event for initial load
