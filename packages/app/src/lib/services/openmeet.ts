@@ -72,8 +72,9 @@ export async function connectViaServiceAuth(
   link: CalendarLink,
   peer: PeerInterface,
 ): Promise<void> {
+  const serviceDid = `did:web:${new URL(link.apiUrl).hostname}`;
   const token = await peer.getServiceAuthToken(
-    CONFIG.openmeetServiceDid,
+    serviceDid,
     "net.openmeet.auth",
   );
 
