@@ -851,25 +851,32 @@ class SqliteWorkerSupervisor {
         });
       }
 
-      // If this event has a timestampOverride extension, use it to set sort_idx
-      // This ensures bridged messages (e.g., from Discord) appear in timestamp order
-      // rather than in stream arrival order during backfill.
-      if (
-        eventMeta.event.$type == "space.roomy.message.createMessage.v0" &&
-        eventMeta.event.extensions &&
-        "space.roomy.extension.timestampOverride.v0" in
-          eventMeta.event.extensions
-      ) {
-        const overrideTimestamp =
-          eventMeta.event.extensions?.[
-            "space.roomy.extension.timestampOverride.v0"
-          ]?.timestamp;
-        if (overrideTimestamp) {
-          await this.materializeEntitySortPositionByTimestamp({
-            ulid: eventMeta.event.id,
-            timestamp: Number(overrideTimestamp),
-          });
+      // Set sort_idx for all messages to ensure consistent timestamp ordering.
+      // For bridged messages (e.g., Discord), use timestampOverride.
+      // For regular Roomy messages, use the message's own creation time (ULID timestamp).
+      if (eventMeta.event.$type == "space.roomy.message.createMessage.v0") {
+        let sortTimestamp: number;
+
+        if (
+          eventMeta.event.extensions &&
+          "space.roomy.extension.timestampOverride.v0" in
+            eventMeta.event.extensions
+        ) {
+          // Use Discord timestamp for bridged messages
+          sortTimestamp = Number(
+            eventMeta.event.extensions?.[
+              "space.roomy.extension.timestampOverride.v0"
+            ]?.timestamp
+          );
+        } else {
+          // Use message's own creation time (encoded in ULID)
+          sortTimestamp = decodeTime(eventMeta.event.id);
         }
+
+        await this.materializeEntitySortPositionByTimestamp({
+          ulid: eventMeta.event.id,
+          timestamp: sortTimestamp,
+        });
       }
     }
 
