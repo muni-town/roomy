@@ -250,7 +250,8 @@ export class Peer {
       fetchEvents: async (streamId, offset, limit) =>
         this.fetchEvents(streamId, offset, limit),
       lazyLoadRoom: async (streamId, roomId, end) => {
-        return await this.lazyLoadRoom(streamId, roomId, end);
+        const result = await this.lazyLoadRoom(streamId, roomId, end);
+        return result;
       },
       fetchLinks: async (streamId, start, limit, room) =>
         this.fetchLinks(streamId, start, limit, room),

@@ -297,7 +297,7 @@ export class ConnectedSpace {
     });
 
     const events = this.#decodeAndParseEvents(parseRows(resp));
-    events.reverse();
+    events.reverse(); // events return with most recent first; putting them first>last should make materialisation more performant
     return events;
   }
 

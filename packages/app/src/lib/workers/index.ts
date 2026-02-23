@@ -72,6 +72,23 @@ export const peer = tracer.startActiveSpan(
       localName: "main",
       remoteName: "peer",
       messagePort: channel.port2,
+      timeout: {
+        ms: 5000,
+        onTimeout: (method, reqId) => {
+          if (method !== "log")
+            console.warn(
+              `RPC Timeout [peer <- main]`,
+              {
+                method,
+                reqId,
+              },
+            );
+        },
+        // Lazy loading may take longer due to materialization
+        methodTimeouts: {
+          lazyLoadRoom: 60000, // 60 seconds
+        },
+      },
       handlers: {
         async log(level, args) {
           const text = Array.isArray(args) ? args[0] : args;
