@@ -4,6 +4,9 @@ import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 
 const config = {
   preprocess: vitePreprocess(),
+  vitePlugin: {
+    inspector: true
+  },
   kit: {
     serviceWorker: {
       register: process.env.MODE !== "tauri",
