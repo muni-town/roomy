@@ -17,7 +17,7 @@
     pending?: Snippet;
     error?: Snippet<[ErrorInfo]>;
     idle?: Snippet;
-    children?: Snippet<[T]>;
+    children?: Snippet<[T, { stale?: boolean }]>;
     /** Called when a child component throws - useful for logging */
     onChildError?: (error: unknown) => void;
     /** Delay in ms before showing loading state (prevents flicker for fast queries). Default: 0 */
@@ -77,7 +77,7 @@
   {/if}
 {:else if asyncState.status === "success" && children}
   <svelte:boundary onerror={(e) => onChildError?.(e)}>
-    {@render children(asyncState.data)}
+    {@render children(asyncState.data, { stale: asyncState.stale })}
 
     {#snippet failed(e, reset)}
       {#if error}

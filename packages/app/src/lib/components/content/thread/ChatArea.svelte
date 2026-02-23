@@ -274,6 +274,7 @@
     (row) => {
       return JSON.parse(row.json);
     },
+    { cache: false },
   );
 
   let showLastN = $state(50);

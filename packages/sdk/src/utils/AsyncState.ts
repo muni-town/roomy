@@ -10,6 +10,7 @@ interface ErrorState {
 interface SuccessState<T> {
   status: "success";
   data: T;
+  stale?: boolean;
 }
 
 interface IdleState {
@@ -24,7 +25,7 @@ export function mapAsyncState<T, U>(
   fn: (data: T) => U,
 ): AsyncState<U> {
   if (state.status === "success") {
-    return { status: "success", data: fn(state.data) };
+    return { status: "success", data: fn(state.data), stale: state.stale };
   }
   return state;
 }
@@ -35,7 +36,7 @@ export function mapAsyncStateWithIdle<T, U>(
   fn: (data: T) => U,
 ): AsyncStateWithIdle<U> {
   if (state.status === "success") {
-    return { status: "success", data: fn(state.data) };
+    return { status: "success", data: fn(state.data), stale: state.stale };
   }
   return state;
 }
@@ -63,7 +64,10 @@ export function combineAsyncState<
   const data = Object.fromEntries(
     entries.map(([k, s]) => [k, (s as SuccessState<unknown>).data]),
   );
-  return { status: "success", data } as any;
+  const stale = entries.some(
+    ([_, s]) => (s as SuccessState<unknown>).stale,
+  );
+  return { status: "success", data, stale: stale || undefined } as any;
 }
 
 // FlatMap for chained async operations
