@@ -3,15 +3,81 @@ import type { LiveQueryMessage } from "$lib/workers/sqlite/setup";
 import type { SqlStatement } from "$lib/workers/sqlite/types";
 import type { AsyncState } from "@roomy/sdk";
 
+/** Simple LRU cache using Map insertion order. */
+class LRUCache<K, V> {
+  #map = new Map<K, V>();
+  #maxSize: number;
+
+  constructor(maxSize: number) {
+    this.#maxSize = maxSize;
+  }
+
+  get(key: K): V | undefined {
+    const value = this.#map.get(key);
+    if (value !== undefined) {
+      // Move to end (most recently used)
+      this.#map.delete(key);
+      this.#map.set(key, value);
+    }
+    return value;
+  }
+
+  set(key: K, value: V): void {
+    this.#map.delete(key);
+    this.#map.set(key, value);
+    if (this.#map.size > this.#maxSize) {
+      // Delete oldest (first) entry
+      const firstKey = this.#map.keys().next().value!;
+      this.#map.delete(firstKey);
+    }
+  }
+}
+
+/** Module-level cache shared across all LiveQuery instances. */
+const queryCache = new LRUCache<string, unknown[]>(200);
+
+function cacheKey(stmt: SqlStatement): string {
+  return JSON.stringify({ sql: stmt.sql, params: stmt.params });
+}
+
+export interface LiveQueryOptions {
+  /** Whether to use SWR cache. Default: true */
+  cache?: boolean;
+}
+
 export class LiveQuery<Row extends { [key: string]: unknown }> {
   current: AsyncState<Row[]> = $state.raw({ status: "loading" });
   #statement: SqlStatement = { sql: "" };
 
-  constructor(statement: () => SqlStatement, mapper?: (row: any) => Row) {
+  constructor(
+    statement: () => SqlStatement,
+    mapper?: (row: any) => Row,
+    options?: LiveQueryOptions,
+  ) {
+    const useCache = options?.cache !== false;
+    const mapRow = mapper || ((x: any) => x);
+
     $effect(() => {
       // Compute the statement. Since we are in an effect this will be re-computed if any
       // dependencies of `statement()` change.
       this.#statement = statement();
+
+      const key = cacheKey(this.#statement);
+
+      // Serve cached data immediately as stale
+      if (useCache) {
+        const cached = queryCache.get(key);
+        if (cached) {
+          console.log("cache hit", key);
+          this.current = {
+            status: "success",
+            data: cached as Row[],
+            stale: true,
+          };
+        } else {
+          console.log("cache miss", key);
+        }
+      }
 
       // Create a unique lock ID to use for this query
       const lockId = `live-query-${crypto.randomUUID()}`;
@@ -38,10 +104,11 @@ export class LiveQuery<Row extends { [key: string]: unknown }> {
               `Sqlite error in live query (${this.#statement.sql}): ${data.error}`,
             );
           } else if ("rows" in data) {
-            this.current = {
-              status: "success",
-              data: (data as { rows: Row[] }).rows.map(mapper || ((x) => x)),
-            };
+            const rows = (data as { rows: Row[] }).rows.map(mapRow);
+            if (useCache) {
+              queryCache.set(key, rows);
+            }
+            this.current = { status: "success", data: rows };
           }
         };
 
