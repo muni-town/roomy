@@ -1,12 +1,14 @@
 <script lang="ts">
-  import { Button, toast } from "@fuxui/base";
+  import Button from "$lib/components/ui/button/Button.svelte";
+  import { toast } from "@foxui/core";
   import { calendarLinkQuery } from "$lib/queries/calendar.svelte";
   import { CONFIG } from "$lib/config";
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
   import { peer } from "$lib/workers";
   import { newUlid, type StreamDid } from "@roomy/sdk";
 
-  let spaceId = $derived(current.joinedSpace?.id);
+  let spaceId = $derived(app.joinedSpace?.id);
   let linkQuery = $derived(spaceId ? calendarLinkQuery(spaceId) : undefined);
   let existingLink = $derived(
     linkQuery?.current.status === "success"

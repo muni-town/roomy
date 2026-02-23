@@ -1,11 +1,12 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { Button } from "@fuxui/base";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import {
     calendarLinkQuery,
     calendarEventsQuery,
   } from "$lib/queries/calendar.svelte";
-  import { current } from "$lib/queries";
+  import { getAppState } from "$lib/queries";
+  const app = getAppState();
   import { peer } from "$lib/workers";
   import { sql } from "$lib/utils/sqlTemplate";
   import {
@@ -20,7 +21,7 @@
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
   import { Calendar, DayGrid, TimeGrid, List, Interaction } from "@event-calendar/core";
 
-  let spaceId = $derived(current.joinedSpace?.id);
+  let spaceId = $derived(app.joinedSpace?.id);
   let linkQuery = $derived(spaceId ? calendarLinkQuery(spaceId) : undefined);
   let link = $derived(
     linkQuery?.current.status === "success"
@@ -131,8 +132,8 @@
       profile = getStoredProfile();
 
       // Fall back to Bluesky avatar if OpenMeet profile has none
-      if (profile && !profile.avatar && current.did) {
-        const bskyProfile = await peer.getProfile(current.did);
+      if (profile && !profile.avatar && app.did) {
+        const bskyProfile = await peer.getProfile(app.did);
         if (bskyProfile?.avatar) {
           profile = { ...profile, avatar: bskyProfile.avatar };
           localStorage.setItem("openmeet:profile", JSON.stringify(profile));
@@ -185,41 +186,13 @@
         <p class="text-sm text-base-600 dark:text-base-400 mb-4">
           A space admin can connect an OpenMeet group in settings.
         </p>
-        {#if current.isSpaceAdmin}
+        {#if app.isSpaceAdmin}
           <Button href={`/${page.params.space}/settings/calendar`}>
             Configure Calendar
           </Button>
         {/if}
       </div>
     {:else}
-      <!-- Auth banner -->
-      {#if !connected}
-        <div class="mb-4 p-2 rounded-lg flex items-center justify-end">
-          <p class="text-sm text-base-400 dark:text-base-500">
-            <button
-              class="underline hover:text-base-600 dark:hover:text-base-300 transition-colors"
-              onclick={connectToOpenMeet}
-            >Connect</button> to OpenMeet to see private events
-          </p>
-        </div>
-      {:else if profile}
-        <div class="mb-4 p-2 rounded-lg flex items-center justify-end">
-          <p class="text-sm text-base-400 dark:text-base-500">
-            {#if profile.avatar}
-              <img
-                src={profile.avatar}
-                alt=""
-                class="w-5 h-5 rounded-full inline align-text-bottom"
-              />
-            {/if}
-            Connected as {profile.displayName || profile.handle} · <button
-              class="underline hover:text-base-600 dark:hover:text-base-300 transition-colors"
-              onclick={disconnect}
-            >Disconnect</button>
-          </p>
-        </div>
-      {/if}
-
       {#if syncState === "idle" || syncState === "syncing"}
         <div class="py-12 text-center">
           <p class="text-sm text-base-600 dark:text-base-400">
@@ -234,6 +207,34 @@
         <div class="text-center py-12">
           <p class="text-sm text-red-500 mb-4">{errorMessage}</p>
           <Button onclick={syncEvents}>Retry</Button>
+        </div>
+      {/if}
+
+      <!-- Auth status -->
+      {#if !connected}
+        <div class="mt-2 p-2 rounded-lg flex items-center justify-end">
+          <p class="text-sm text-base-400 dark:text-base-500">
+            <button
+              class="underline hover:text-base-600 dark:hover:text-base-300 transition-colors"
+              onclick={connectToOpenMeet}
+            >Connect</button> to OpenMeet to see private events
+          </p>
+        </div>
+      {:else if profile}
+        <div class="mt-2 p-2 rounded-lg flex items-center justify-end">
+          <p class="text-sm text-base-400 dark:text-base-500">
+            {#if profile.avatar}
+              <img
+                src={profile.avatar}
+                alt=""
+                class="w-5 h-5 rounded-full inline align-text-bottom"
+              />
+            {/if}
+            Connected as {profile.displayName || profile.handle} · <button
+              class="underline hover:text-base-600 dark:hover:text-base-300 transition-colors"
+              onclick={disconnect}
+            >Disconnect</button>
+          </p>
         </div>
       {/if}
     {/if}

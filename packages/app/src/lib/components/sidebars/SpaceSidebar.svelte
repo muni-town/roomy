@@ -192,7 +192,7 @@
         class="w-full justify-start mb-2"
         variant="ghost"
         href={`/${page.params.space}`}
-        data-current={!page.params.object}
+        data-current={!page.params.object && !page.url.pathname.endsWith("/calendar")}
       >
         <IconHome class="shrink-0" />
         Index
