@@ -850,6 +850,27 @@ class SqliteWorkerSupervisor {
           update: true,
         });
       }
+
+      // If this event has a timestampOverride extension, use it to set sort_idx
+      // This ensures bridged messages (e.g., from Discord) appear in timestamp order
+      // rather than in stream arrival order during backfill.
+      if (
+        eventMeta.event.$type == "space.roomy.message.createMessage.v0" &&
+        eventMeta.event.extensions &&
+        "space.roomy.extension.timestampOverride.v0" in
+          eventMeta.event.extensions
+      ) {
+        const overrideTimestamp =
+          eventMeta.event.extensions?.[
+            "space.roomy.extension.timestampOverride.v0"
+          ]?.timestamp;
+        if (overrideTimestamp) {
+          await this.materializeEntitySortPositionByTimestamp({
+            ulid: eventMeta.event.id,
+            timestamp: Number(overrideTimestamp),
+          });
+        }
+      }
     }
 
     await executeQuery({ sql: `release bundle${bundleId}` });
@@ -940,6 +961,38 @@ class SqliteWorkerSupervisor {
       );
       return;
     }
+  }
+
+  /** Sets sort_idx for a message based on its timestampOverride extension.
+   * This ensures bridged messages (e.g., from Discord backfill) appear in
+   * timestamp order rather than stream arrival order.
+   *
+   * Creates a ULID directly from the Discord timestamp, which preserves
+   * the exact timestamp ordering.
+   */
+  private async materializeEntitySortPositionByTimestamp({
+    ulid: messageId,
+    timestamp,
+  }: {
+    ulid: Ulid;
+    timestamp: number;
+  }): Promise<void> {
+    // Check if entity exists and already has a sort_idx
+    const existingEntity = (
+      await executeQuery<{
+        sort_idx: string | null;
+      }>(sql`select sort_idx from entities where id = ${messageId}`)
+    ).rows?.[0];
+
+    if (!existingEntity) return;
+    if (existingEntity.sort_idx) return; // Already set
+
+    // Create a ULID directly from the Discord timestamp
+    const sortIdx = ulid(timestamp);
+
+    await executeQuery(
+      sql`update entities set sort_idx = ${sortIdx} where id = ${messageId}`,
+    );
   }
 
   private async runSavepoint(savepoint: Savepoint, depth = 0) {
