@@ -212,7 +212,7 @@
               viewBox="-40 -40 680 620"
               version="1.1"
               class={[
-                "text-base-500 dark:text-base-500 hover:text-[rgb(0,106,255)] size-4",
+                "text-base-500 dark:text-base-500 hover:text-[rgb(0,106,255)] dark:hover:text-[rgb(0,106,255)] size-4",
               ]}
               aria-hidden="true"
             >
