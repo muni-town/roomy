@@ -29,7 +29,7 @@ const CONFIG = {
     discordImport: false,
     discordBridge: false,
     sharedWorker: false,
-    calendar: false,
+    calendar: true,
   },
 
   // OpenMeet integration defaults
