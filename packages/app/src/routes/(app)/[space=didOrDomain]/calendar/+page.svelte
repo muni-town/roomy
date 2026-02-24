@@ -13,6 +13,7 @@
     fetchGroupEvents,
     isAuthenticated,
     connectViaServiceAuth,
+    createLoginLink,
     getStoredProfile,
     clearTokens,
   } from "$lib/services/openmeet";
@@ -76,7 +77,21 @@
     eventClick: (info: { event: { extendedProps: { slug: string } } }) => {
       if (!link) return;
       const platformUrl = link.apiUrl.replace("//api", "//platform");
-      window.open(`${platformUrl}/events/${info.event.extendedProps.slug}`, "_blank");
+      const slug = info.event.extendedProps.slug;
+      const fallbackUrl = `${platformUrl}/events/${slug}`;
+
+      if (!connected) {
+        window.open(fallbackUrl, "_blank");
+        return;
+      }
+
+      // Open tab immediately to preserve user gesture (avoids popup blocker)
+      const w = window.open("about:blank", "_blank");
+      if (!w) return;
+
+      createLoginLink(link, `/events/${slug}`).then((url) => {
+        w.location.href = url || fallbackUrl;
+      });
     },
   });
 
