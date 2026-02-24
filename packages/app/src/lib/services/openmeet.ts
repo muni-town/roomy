@@ -183,6 +183,33 @@ async function openmeetFetch(
   return res.json();
 }
 
+/** Create a one-time login link URL for opening OpenMeet in a new tab. */
+export async function createLoginLink(
+  link: CalendarLink,
+  redirectPath: string,
+): Promise<string | null> {
+  const token = await getValidToken(link.apiUrl, link.tenantId);
+  if (!token) return null;
+
+  try {
+    const res = await fetch(`${link.apiUrl}/api/v1/auth/create-login-link`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "x-tenant-id": link.tenantId,
+      },
+      body: JSON.stringify({ redirectPath }),
+    });
+
+    if (!res.ok) return null;
+    const { url } = (await res.json()) as { url: string };
+    return url;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchGroupEvents(
   link: CalendarLink,
 ): Promise<Record<string, unknown>[]> {
