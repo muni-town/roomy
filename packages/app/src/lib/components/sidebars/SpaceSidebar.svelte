@@ -26,6 +26,7 @@
     SHADOW_ITEM_MARKER_PROPERTY_NAME,
   } from "svelte-dnd-action";
   import { peer } from "$lib/workers";
+  import { calendarLinkQuery } from "$lib/queries/calendar.svelte";
   // at the top level there can be categories, channels or pages
   // under categories there can be channels or pages
   // under channels there can be threads or pages
@@ -135,6 +136,16 @@
       .filter((c): c is NonNullable<typeof c> => c != null);
   });
 
+  let spaceId = $derived(app.joinedSpace?.id);
+  let calendarLink = $derived(
+    flags.calendar && spaceId && calendarLinkQuery(spaceId),
+  );
+  // Check whether a calendar has been connected to this space
+  let hasCalendar = $derived(
+    (calendarLink && calendarLink.result && calendarLink.result.length) ||
+      0 > 0,
+  );
+
   // Update the effect that initializes draft state
   $effect(() => {
     if (isEditing && !draftOrder) {
@@ -198,7 +209,8 @@
         Index
       </Button>
 
-      {#if flags.calendar}
+      <!-- Show the events link if we have a calendar configured. -->
+      {#if hasCalendar}
         <Button
           class="w-full justify-start mb-2"
           variant="ghost"
