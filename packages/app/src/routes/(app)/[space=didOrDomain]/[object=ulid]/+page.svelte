@@ -89,6 +89,10 @@
     where e.id = ${app.roomId}
   `,
     (row) => JSON.parse(row.json),
+    {
+      description: "Room: name, kind, spaceId and lastRead",
+      origin: "routes/(app)/space/object/+page.svelte",
+    },
   );
   const room = $derived(roomQuery.result?.[0]);
   const ref = $derived($scrollContainerRef);

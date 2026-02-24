@@ -33,6 +33,8 @@
     where
       comp_page_edits.entity = ${page.params.object}
   `,
+    undefined,
+    { description: "all edits for a page", origin: "PageHistory.svelte" },
   );
 
   type PointInTime = {

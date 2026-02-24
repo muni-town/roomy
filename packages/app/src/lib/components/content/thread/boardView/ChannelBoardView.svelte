@@ -75,6 +75,11 @@
         order by activity ->> 'latestTimestamp' desc
       `,
     (row) => JSON.parse(row.json),
+    {
+      description:
+        "List of threads in a channel with parent, latest activity, other metadata",
+      origin: "ChannelBoardView.svelte",
+    },
   );
 
   $effect(() => {

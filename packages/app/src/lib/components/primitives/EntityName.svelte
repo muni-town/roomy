@@ -17,6 +17,11 @@
         where ci.entity = ${id}
         limit 1
     `,
+    undefined,
+    {
+      description: "name",
+      origin: "EntityName.svelte",
+    },
   );
 
   let name = $derived.by(() => {
