@@ -41,18 +41,7 @@ export async function requestLock<T>(
     typeof optionsOrCallback === "function"
       ? optionsOrCallback
       : maybeCallback!;
-  const options =
-    typeof optionsOrCallback === "function" ? undefined : optionsOrCallback;
 
-  // If SharedWorker is disabled, skip locking entirely
-  if (!flags.sharedWorker) {
-    return callback(null);
-  }
-
-  // Use real Web Locks when SharedWorker is enabled
-  if (options) {
-    return navigator.locks.request(name, options, callback) as Promise<T>;
-  }
   return navigator.locks.request(name, callback) as Promise<T>;
 }
 
