@@ -54,6 +54,10 @@
     where ci.entity = ${(id && "room" in id && id.room) ?? ""}
   `,
     (row) => JSON.parse(row.json),
+    {
+      description: "name and kind for room",
+      origin: "EditRoomModal.svelte",
+    },
   );
   const room = $derived(roomQuery.result?.[0]);
   let name = $derived(

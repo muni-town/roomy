@@ -41,6 +41,10 @@ function cacheKey(stmt: SqlStatement): string {
 }
 
 export interface LiveQueryOptions {
+  /** Short semantic description of what the query is for */
+  description?: string;
+  /** File where the query lives, to help find it */
+  origin?: string;
   /** Whether to use SWR cache. Default: true */
   cache?: boolean;
 }
@@ -64,19 +68,33 @@ export class LiveQuery<Row extends { [key: string]: unknown }> {
 
       const key = cacheKey(this.#statement);
 
-      // Serve cached data immediately as stale
+      // Serve cached data immediately as stale, otherwise reset to loading
       if (useCache) {
         const cached = queryCache.get(key);
         if (cached) {
-          console.log("cache hit", key);
+          // console.debug("[LiveQuery] cache hit", {
+          //   ...options,
+          //   params: this.#statement.params,
+          //   key,
+          // });
           this.current = {
             status: "success",
             data: cached as Row[],
             stale: true,
           };
         } else {
-          console.log("cache miss", key);
+          // console.debug("[LiveQuery] cache miss", {
+          //   ...options,
+          //   params: this.#statement.params,
+          //   key,
+          // });
+          // Reset to loading state when cache misses - this prevents showing stale data
+          // from the previous query while waiting for new results
+          this.current = { status: "loading" };
         }
+      } else {
+        // When caching is disabled, always start from loading state
+        this.current = { status: "loading" };
       }
 
       // Create a unique lock ID to use for this query
@@ -142,6 +160,7 @@ export class LiveQuery<Row extends { [key: string]: unknown }> {
     if (this.current.status === "error") {
       return this.current.message;
     }
+
     return undefined;
   }
 }

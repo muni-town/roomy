@@ -42,6 +42,11 @@
     where
       entity = ${page.params.object}
     `,
+    undefined,
+    {
+      description: "content and latestEditId for a page",
+      origin: "PageView.svelte",
+    },
   );
   let pageMarkdown = $derived(pageQuery.result?.[0]?.content);
   let latestEditId = $derived(pageQuery.result?.[0]?.latestEditId);
