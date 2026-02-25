@@ -52,15 +52,19 @@ services:
     image: grafana/pyroscope:latest
     ports:
       - "4040:4040"
+    networks:
+      - roomy-dev
 
   tempo:
-    image: grafana/tempo:latest
+    image: grafana/tempo:2.9.1
     command: ["-config.file=/etc/tempo.yaml"]
     configs:
       - source: tempo-config
         target: /etc/tempo.yaml
     ports:
       - "3200:3200"
+    networks:
+      - roomy-dev
 
   loki:
     image: grafana/loki:latest
@@ -70,6 +74,8 @@ services:
     configs:
       - source: loki-config
         target: /etc/loki/local-config.yaml
+    networks:
+      - roomy-dev
 
   mimir:
     image: grafana/mimir:latest
@@ -79,6 +85,8 @@ services:
       - source: mimir-config
         target: /etc/mimir/demo.yaml
     command: --config.file=/etc/mimir/demo.yaml
+    networks:
+      - roomy-dev
 
   alloy:
     image: grafana/alloy:latest
@@ -90,6 +98,8 @@ services:
     configs:
       - source: alloy-config
         target: /etc/alloy/config.alloy
+    networks:
+      - roomy-dev
 
   grafana:
     image: grafana/grafana:12.3.0
@@ -114,6 +124,8 @@ services:
       - update-ca-certificates && exec bash /run.sh
     ports:
       - "3000:3000"
+    networks:
+      - roomy-dev
 
 volumes:
   leaf-data:
@@ -346,11 +358,11 @@ configs:
           duration_slo: 5s
 
       distributor:
-       receivers:
-         otlp:
-           protocols:
-             grpc:
-               endpoint: "tempo:4317"
+        receivers:
+          otlp:
+            protocols:
+              grpc:
+                endpoint: "tempo:4317"
 
       ingester:
         max_block_duration: 5m # cut the headblock when this much time passes. this is being set for demo purposes and should probably be left alone normally
