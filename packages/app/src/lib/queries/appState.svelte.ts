@@ -18,7 +18,7 @@ type SpaceStatus =
   | { status: "joined"; space: SpaceMeta; isSpaceAdmin: boolean }
   | { status: "error"; message: string };
 
-const APP_LOG = "[AppState]";
+// const APP_LOG = "[AppState]";
 
 // ─── AppState ────────────────────────────────────────────────────────────────
 

@@ -850,6 +850,34 @@ class SqliteWorkerSupervisor {
           update: true,
         });
       }
+
+      // Set sort_idx for all messages to ensure consistent timestamp ordering.
+      // For bridged messages (e.g., Discord), use timestampOverride.
+      // For regular Roomy messages, use the message's own creation time (ULID timestamp).
+      if (eventMeta.event.$type == "space.roomy.message.createMessage.v0") {
+        let sortTimestamp: number;
+
+        if (
+          eventMeta.event.extensions &&
+          "space.roomy.extension.timestampOverride.v0" in
+            eventMeta.event.extensions
+        ) {
+          // Use Discord timestamp for bridged messages
+          sortTimestamp = Number(
+            eventMeta.event.extensions?.[
+              "space.roomy.extension.timestampOverride.v0"
+            ]?.timestamp
+          );
+        } else {
+          // Use message's own creation time (encoded in ULID)
+          sortTimestamp = decodeTime(eventMeta.event.id);
+        }
+
+        await this.materializeEntitySortPositionByTimestamp({
+          ulid: eventMeta.event.id,
+          timestamp: sortTimestamp,
+        });
+      }
     }
 
     await executeQuery({ sql: `release bundle${bundleId}` });
@@ -940,6 +968,38 @@ class SqliteWorkerSupervisor {
       );
       return;
     }
+  }
+
+  /** Sets sort_idx for a message based on its timestampOverride extension.
+   * This ensures bridged messages (e.g., from Discord backfill) appear in
+   * timestamp order rather than stream arrival order.
+   *
+   * Creates a ULID directly from the Discord timestamp, which preserves
+   * the exact timestamp ordering.
+   */
+  private async materializeEntitySortPositionByTimestamp({
+    ulid: messageId,
+    timestamp,
+  }: {
+    ulid: Ulid;
+    timestamp: number;
+  }): Promise<void> {
+    // Check if entity exists and already has a sort_idx
+    const existingEntity = (
+      await executeQuery<{
+        sort_idx: string | null;
+      }>(sql`select sort_idx from entities where id = ${messageId}`)
+    ).rows?.[0];
+
+    if (!existingEntity) return;
+    if (existingEntity.sort_idx) return; // Already set
+
+    // Create a ULID directly from the Discord timestamp
+    const sortIdx = ulid(timestamp);
+
+    await executeQuery(
+      sql`update entities set sort_idx = ${sortIdx} where id = ${messageId}`,
+    );
   }
 
   private async runSavepoint(savepoint: Savepoint, depth = 0) {

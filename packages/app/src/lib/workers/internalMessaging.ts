@@ -34,6 +34,7 @@ export type MessagePortInterfaceConfig<Local extends HalfInterface> = {
   timeout?: {
     ms: number;
     onTimeout: (method: string, requestId: string) => void;
+    methodTimeouts?: { [method: string]: number };
   };
   onError?: (error: unknown, method: string, args: unknown[]) => void;
 };
@@ -140,12 +141,13 @@ export function messagePortInterface<
             };
 
             if (timeout) {
+              // Use method-specific timeout if configured, otherwise use default
+              const timeoutMs = timeout.methodTimeouts?.[method] ?? timeout.ms;
               pending.timerId = setTimeout(() => {
                 if (pendingResponseResolvers[reqId]) {
                   timeout.onTimeout(method, reqId);
-                  delete pendingResponseResolvers[reqId];
                 }
-              }, timeout.ms);
+              }, timeoutMs);
             }
 
             pendingResponseResolvers[reqId] = pending;

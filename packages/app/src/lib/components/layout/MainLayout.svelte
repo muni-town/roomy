@@ -49,7 +49,7 @@
 
 <div
   class={[
-    "isolate fixed top-0 bottom-0 left-0 bg-base-100/50 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none",
+    "isolate fixed top-0 bottom-0 left-0 bg-base-100/50 dark:bg-base-950 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none",
     isSidebarVisible.value ? "block" : "hidden sm:block",
   ]}
 >

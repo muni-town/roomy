@@ -1,6 +1,6 @@
 <script lang="ts">
   import BoardViewItem from "./BoardViewItem.svelte";
-  import { ScrollArea } from "@fuxui/base";
+  import { ScrollArea } from "@foxui/core";
   import type { ThreadInfo } from "./types";
   import type { Ulid } from "@roomy/sdk";
 

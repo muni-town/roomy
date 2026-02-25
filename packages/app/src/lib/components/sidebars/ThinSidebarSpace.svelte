@@ -1,6 +1,6 @@
 <script lang="ts">
   import { navigate, navigateSync } from "$lib/utils.svelte";
-  import { Tooltip } from "@fuxui/base";
+  import { Tooltip } from "@foxui/core";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { getAppState, type SpaceMeta } from "$lib/queries";
   const app = getAppState();

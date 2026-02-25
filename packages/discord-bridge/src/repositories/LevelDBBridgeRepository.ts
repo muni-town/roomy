@@ -1,5 +1,6 @@
 import { StreamDid } from "@roomy/sdk";
 import {
+  BridgeConfig,
   BridgeRepository,
   RoomyUserProfile,
   SyncedEdit,
@@ -858,3 +859,119 @@ export const discordMessageHashesForBridge = createBridgeStoreFactory<
 export type DiscordMessageHashes = ReturnType<
   typeof discordMessageHashesForBridge
 >;
+
+// === Bridge Config Store (1:N guild-space mapping) ===
+
+/**
+ * Bridge configuration store.
+ * Key: `${guildId}:${spaceId}`
+ * Value: JSON BridgeConfig
+ * Replaces the old 1:1 registeredBridges bidirectional map.
+ */
+const bridgeConfigsSublevel = db.sublevel<string, BridgeConfig>(
+  "bridgeConfigs",
+  {
+    keyEncoding: "utf8",
+    valueEncoding: "json",
+  },
+);
+
+/** Migration sentinel to prevent re-running migration */
+const migrationSublevel = db.sublevel<string, string>("migrations", {
+  keyEncoding: "utf8",
+  valueEncoding: "utf8",
+});
+
+const BRIDGE_CONFIG_MIGRATION_KEY = "registeredBridges_to_bridgeConfigs";
+
+/**
+ * Bridge config store — manages 1:N guild-to-space bridge configurations.
+ */
+export const bridgeConfigs = {
+  /**
+   * Register a new bridge config.
+   */
+  async register(config: BridgeConfig): Promise<void> {
+    await ensureDbOpen();
+    const key = `${config.guildId}:${config.spaceId}`;
+    await bridgeConfigsSublevel.put(key, config);
+  },
+
+  /**
+   * Unregister a bridge config.
+   */
+  async unregister(guildId: string, spaceId: string): Promise<void> {
+    await ensureDbOpen();
+    const key = `${guildId}:${spaceId}`;
+    await bridgeConfigsSublevel.del(key);
+  },
+
+  /**
+   * Get a specific bridge config.
+   */
+  async getBridge(
+    guildId: string,
+    spaceId: string,
+  ): Promise<BridgeConfig | undefined> {
+    await ensureDbOpen();
+    const key = `${guildId}:${spaceId}`;
+    return bridgeConfigsSublevel.get(key);
+  },
+
+  /**
+   * Get all bridge configs for a guild.
+   */
+  async getBridgesForGuild(guildId: string): Promise<BridgeConfig[]> {
+    await ensureDbOpen();
+    const configs: BridgeConfig[] = [];
+    for await (const [, value] of bridgeConfigsSublevel.iterator({
+      gt: `${guildId}:`,
+      lt: `${guildId}:\xff`,
+    })) {
+      configs.push(value);
+    }
+    return configs;
+  },
+
+  /**
+   * List all bridge configs across all guilds.
+   */
+  async list(): Promise<BridgeConfig[]> {
+    await ensureDbOpen();
+    const configs: BridgeConfig[] = [];
+    for await (const [, value] of bridgeConfigsSublevel.iterator()) {
+      configs.push(value);
+    }
+    return configs;
+  },
+};
+
+/**
+ * Migrate old registeredBridges (1:1 map) to bridgeConfigs (1:N store).
+ * Safe to call multiple times — uses a migration sentinel.
+ */
+export async function migrateBridgeConfigs(): Promise<void> {
+  await ensureDbOpen();
+
+  // Check if migration already ran
+  const done = await migrationSublevel.get(BRIDGE_CONFIG_MIGRATION_KEY);
+  if (done) return;
+
+  console.log("Migrating registeredBridges to bridgeConfigs...");
+
+  const oldBridges = await registeredBridges.list();
+  let count = 0;
+  for (const { guildId, spaceId } of oldBridges) {
+    const config: BridgeConfig = {
+      guildId,
+      spaceId,
+      mode: "full",
+    };
+    await bridgeConfigs.register(config);
+    count++;
+  }
+
+  // Set migration sentinel
+  await migrationSublevel.put(BRIDGE_CONFIG_MIGRATION_KEY, "done");
+  console.log(`Migrated ${count} bridge(s) to bridgeConfigs store`);
+}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { peer } from "$lib/workers";
-  import { Modal, Button, Heading } from "@fuxui/base";
+  import { Modal, Heading } from "@foxui/core";
+  import Button from "$lib/components/ui/button/Button.svelte";
 
   let {
     open = $bindable(false),

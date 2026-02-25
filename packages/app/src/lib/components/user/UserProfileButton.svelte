@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { Avatar, Popover, Button } from "@fuxui/base";
+  import { Avatar } from "@foxui/core";
+  import Popover from "$lib/components/ui/popover/Popover.svelte";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import ThemeSettings from "./ThemeSettings.svelte";
   import { peer, peerStatus } from "$lib/workers";
 

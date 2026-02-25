@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { Modal, Input, Button, Heading } from "@fuxui/base";
+  import { Modal, Heading } from "@foxui/core";
+  import Input from "$lib/components/ui/input/Input.svelte";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import { dmClient } from "$lib/dm.svelte";
   import { goto } from "$app/navigation";
 

@@ -5,7 +5,7 @@
    */
 
   import { type WithElementRef } from "bits-ui";
-  import { cn } from "@fuxui/base";
+  import { cn } from "@foxui/core";
   import type { HTMLAttributes } from "svelte/elements";
 
   type Props = WithElementRef<HTMLAttributes<HTMLDivElement>> & {

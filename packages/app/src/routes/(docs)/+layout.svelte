@@ -2,7 +2,8 @@
   import "../../app.css";
   import { dev } from "$app/environment";
   import Navbar from "$lib/components/layout/Navbar.svelte";
-  import { Button, Prose, ScrollArea } from "@fuxui/base";
+  import Button from "$lib/components/ui/button/Button.svelte";
+  import { Prose, ScrollArea } from "@foxui/core";
 
   let { children } = $props();
 </script>

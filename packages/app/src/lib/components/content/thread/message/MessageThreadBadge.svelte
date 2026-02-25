@@ -1,7 +1,7 @@
 <script lang="ts">
   import { RoomyEntity } from "@roomy-chat/sdk";
   import { navigateSync } from "$lib/utils.svelte";
-  import { Button } from "@fuxui/base";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import { CoState } from "jazz-tools/svelte";
   import Icon from "@iconify/svelte";
 

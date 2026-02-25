@@ -12,7 +12,7 @@
     Box,
     Tabs,
     toast,
-  } from "@fuxui/base";
+  } from "@foxui/core";
   import { Handle } from "@roomy/sdk";
   import { onMount } from "svelte";
 
@@ -99,14 +99,14 @@
         body: {
           email,
           inviteCode: env.PUBLIC_PDS_INVITE_CODE,
-          handle: `${handle}${env.PUBLIC_PDS_HANDLE_SUFFIX}`,
+          handle: `${handle.value}${env.PUBLIC_PDS_HANDLE_SUFFIX}`,
           password,
         },
       });
       console.log("Created account", did);
       toast.success(`Created account, you may now login.`);
       tab = "Login";
-      handle.value = `${handle}${env.PUBLIC_PDS_HANDLE_SUFFIX}`;
+      handle.value = `${handle.value}${env.PUBLIC_PDS_HANDLE_SUFFIX}`;
     } catch (e) {
       console.error(e);
       toast.error(`Error creating account: ${e}`);
@@ -209,7 +209,7 @@
               viewBox="-40 -40 680 620"
               version="1.1"
               class={[
-                "text-base-500 dark:text-base-500 hover:text-[rgb(0,106,255)] size-4",
+                "text-base-500 dark:text-base-500 hover:text-[rgb(0,106,255)] dark:hover:text-[rgb(0,106,255)] size-4",
               ]}
               aria-hidden="true"
             >

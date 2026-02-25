@@ -4,7 +4,7 @@
   import { navigateSync } from "$lib/utils.svelte";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { Button } from "@fuxui/base";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import { IconThread } from "@roomy/design/icons";
   import { getAppState } from "$lib/queries";
 
@@ -20,15 +20,17 @@
 
   let query = new LiveQuery<{ name: string; id: Ulid }>(
     () => sql`
-      select
-        ci.name, room.entity as id
-        from entities parent_e
-        join edges link on link.head = parent_e.id and link.label = 'link'
-        join comp_room room on link.tail = room.entity 
-        join comp_info ci on ci.entity = room.entity
-        where parent_e.stream_id = ${spaceDid}
-        and parent_e.id = ${roomId}
-        limit 5
+      SELECT ci.name, room.entity as id, MAX(m.id) as last_message_id
+      FROM entities parent_e
+      JOIN edges link ON link.head = parent_e.id AND link.label = 'link'
+      JOIN comp_room room ON link.tail = room.entity
+      JOIN comp_info ci ON ci.entity = room.entity
+      LEFT JOIN entities m ON m.room = room.entity
+      WHERE parent_e.stream_id = ${spaceDid}
+        AND parent_e.id = ${roomId}
+      GROUP BY room.entity, ci.name
+      ORDER BY last_message_id DESC
+      LIMIT 5
     `,
   );
 

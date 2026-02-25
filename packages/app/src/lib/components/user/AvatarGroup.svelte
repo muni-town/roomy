@@ -6,7 +6,7 @@
 
   import { Avatar, type WithElementRef } from "bits-ui";
   import type { HTMLAttributes } from "svelte/elements";
-  import { cn } from "@fuxui/base";
+  import { cn } from "@foxui/core";
   import { AvatarBeam } from "svelte-boring-avatars";
 
   let {

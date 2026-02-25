@@ -1,8 +1,9 @@
 <script lang="ts">
   import { Toolbar, Tooltip as BitsTooltip } from "bits-ui";
   import Tooltip from "$lib/components/helper/Tooltip.svelte";
-  import { Button, buttonVariants } from "@fuxui/base";
-  import { PopoverEmojiPicker } from "@fuxui/social";
+  import { buttonVariants } from "$lib/components/ui/button/Button.svelte";
+  import Button from "$lib/components/ui/button/Button.svelte";
+  import { PopoverEmojiPicker } from "@foxui/social";
   import { messagingState } from "../TimelineView.svelte";
   import type { Message } from "../ChatArea.svelte";
 

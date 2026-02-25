@@ -4,6 +4,28 @@
  */
 
 /**
+ * Configuration for a single Discord guild ↔ Roomy space bridge.
+ * A guild can have one "full" bridge or multiple "subset" bridges.
+ */
+export type BridgeConfig = BridgeConfigFull | BridgeConfigSubset;
+
+interface BridgeConfigFull {
+  guildId: string;
+  spaceId: string;
+  mode: "full";
+}
+
+interface BridgeConfigSubset {
+  guildId: string;
+  spaceId: string;
+  mode: "subset";
+  /** Discord channel snowflakes (subset mode only) */
+  channels: string[];
+  /** Bot-managed role snowflake (subset mode only) */
+  roleId: string;
+}
+
+/**
  * Roomy user profile data.
  * Stored when we see an updateProfile event from Roomy users.
  */
@@ -201,7 +223,10 @@ export interface BridgeRepository {
    * @param threadDiscordId - Discord thread snowflake (without "room:" prefix)
    * @param parentDiscordId - Parent Discord channel snowflake (without "room:" prefix)
    */
-  setThreadParent(threadDiscordId: string, parentDiscordId: string): Promise<void>;
+  setThreadParent(
+    threadDiscordId: string,
+    parentDiscordId: string,
+  ): Promise<void>;
 
   // === Message Edits ===
 

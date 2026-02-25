@@ -1,6 +1,8 @@
 <script lang="ts">
   import { env } from "$env/dynamic/public";
-  import { Badge, Button, toast } from "@fuxui/base";
+  import { toast } from "@foxui/core";
+  import Badge from "$lib/components/ui/badge/Badge.svelte";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import { onMount } from "svelte";
   import InlineMono from "$lib/components/primitives/InlineMono.svelte";
   import { IconCopy } from "@roomy/design/icons";

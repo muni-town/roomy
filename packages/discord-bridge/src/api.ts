@@ -1,10 +1,9 @@
 import { AutoRouter, cors, error, json } from "itty-router";
-import { registeredBridges } from "./repositories/LevelDBBridgeRepository.js";
+import { bridgeConfigs } from "./repositories/LevelDBBridgeRepository.js";
 import { createServerAdapter } from "@whatwg-node/server";
 import { createServer } from "http";
 import { PORT } from "./env.js";
 import { trace } from "@opentelemetry/api";
-import { StreamDid, modules } from "@roomy/sdk";
 import { BridgeOrchestrator } from "./BridgeOrchestrator.js";
 
 const tracer = trace.getTracer("api");
@@ -31,8 +30,9 @@ export function startApi(bridgeOrchestrator: BridgeOrchestrator) {
       const spaceId = query.spaceId;
       if (typeof spaceId !== "string")
         return error(400, "spaceId query parameter required");
-      const guildId = await registeredBridges.get_spaceId(spaceId);
-      if (guildId) return json({ guildId });
+      const configs = await bridgeConfigs.list();
+      const match = configs.find((c) => c.spaceId === spaceId);
+      if (match) return json({ guildId: match.guildId });
       return error(404, "Guild not found for provided space");
     });
 
@@ -40,67 +40,22 @@ export function startApi(bridgeOrchestrator: BridgeOrchestrator) {
       const guildId = query.guildId;
       if (typeof guildId !== "string")
         return error(400, "guildId query parameter required");
-      const spaceId = await registeredBridges.get_guildId(guildId);
-      if (spaceId) return json({ spaceId });
+      const configs = await bridgeConfigs.getBridgesForGuild(guildId);
+      if (configs.length > 0)
+        return json({ spaceIds: configs.map((c) => c.spaceId) });
       return error(404, "Space not found for provided guild");
     });
 
-    /**
-     * Join a space as the bridge user.
-     * POST /join-space
-     * Body: { spaceId: string }
-     * Returns: { bridgeDid: string, spaceId: string }
-     */
-    // router.post("/join-space", async (request) => {
-    //   return tracer.startActiveSpan("join-space", async (joinSpan) => {
-    //     try {
-    //       const body = await request.json();
-    //       const spaceId = body?.spaceId;
-
-    //       if (typeof spaceId !== "string") {
-    //         joinSpan.setStatus({ code: 2, message: "spaceId required" });
-    //         joinSpan.end();
-    //         return error(400, "spaceId required in request body");
-    //       }
-
-    //       // Validate it looks like a stream DID
-    //       let streamDid: StreamDid;
-    //       try {
-    //         streamDid = StreamDid.assert(spaceId);
-    //       } catch {
-    //         joinSpan.setStatus({ code: 2, message: "invalid spaceId" });
-    //         joinSpan.end();
-    //         return error(400, "Invalid spaceId - must be a valid stream DID");
-    //       }
-
-    //       const client = getRoomyClient();
-
-    //       // Join the space
-    //       console.log(`Bridge joining space: ${spaceId}`);
-    //       await client.joinSpace(streamDid, modules.space);
-    //       console.log(`Bridge successfully joined space: ${spaceId}`);
-
-    //       joinSpan.setStatus({ code: 1 });
-    //       joinSpan.end();
-
-    //       return json({
-    //         bridgeDid: getBridgeDid(),
-    //         spaceId,
-    //       });
-    //     } catch (e) {
-    //       console.error("Error joining space:", e);
-    //       joinSpan.setStatus({
-    //         code: 2,
-    //         message: e instanceof Error ? e.message : "Unknown error",
-    //       });
-    //       joinSpan.end();
-    //       return error(
-    //         500,
-    //         `Failed to join space: ${e instanceof Error ? e.message : "Unknown error"}`,
-    //       );
-    //     }
-    //   });
-    // });
+    router.get("/bridges", async ({ query }) => {
+      const guildId = query.guildId;
+      if (typeof guildId === "string") {
+        const configs = await bridgeConfigs.getBridgesForGuild(guildId);
+        return json({ bridges: configs });
+      }
+      // No guildId filter — return all
+      const configs = await bridgeConfigs.list();
+      return json({ bridges: configs });
+    });
 
     // Start the API server
     const ittyServer = createServerAdapter(router.fetch);

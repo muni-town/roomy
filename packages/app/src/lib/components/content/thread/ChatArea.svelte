@@ -16,7 +16,8 @@
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { setContext } from "svelte";
   import { page } from "$app/state";
-  import { Button, toast } from "@fuxui/base";
+  import { toast } from "@foxui/core";
+  import Button from "$lib/components/ui/button/Button.svelte";
 
   import { IconArrowDown, IconLoading } from "@roomy/design/icons";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
@@ -273,6 +274,8 @@
     (row) => {
       return JSON.parse(row.json);
     },
+    // caching causes some kind of very intermittent failure. need to measure performance.
+    { cache: false, description: "Messages query", origin: "ChatArea.svelte" },
   );
 
   let showLastN = $state(50);
@@ -332,19 +335,19 @@
   // Track initial load for auto-scroll
   let hasInitiallyScrolled = $state(false);
   // // Handle new messages - only auto-scroll if user is at bottom
-  let lastTimelineLength: AsyncState<number> = $derived.by(() => {
-    return mapAsyncState(timeline, (t) => {
-      if (
-        isAtBottom &&
-        virtualizer &&
-        lastTimelineLength.status === "success" &&
-        lastTimelineLength.data > 0
-      ) {
-        setTimeout(() => scrollToBottom(), 50);
-      }
-      return t.length;
-    });
-  });
+  // let lastTimelineLength: AsyncState<number> = $derived.by(() => {
+  //   return mapAsyncState(timeline, (t) => {
+  //     if (
+  //       isAtBottom &&
+  //       virtualizer &&
+  //       lastTimelineLength.status === "success" &&
+  //       lastTimelineLength.data > 0
+  //     ) {
+  //       setTimeout(() => scrollToBottom(), 50);
+  //     }
+  //     return t.length;
+  //   });
+  // });
 
   // Lifted state for editing messages
   let editingMessageId = $state("");
@@ -520,7 +523,21 @@
                 {/snippet}
               </StateSuspense>
               {#if timeline.length > 0}
-                {#key viewport}
+                <!--
+                  This use of `key` needs explaining. `key` causes the components below
+                  it to be deleted and re-created when the expression passed to it is changed.
+                  This means that every time the `viewport` binding is updated, the virtualizer
+                  will be re-created. This is important because the virtualizer only actually sets
+                  up the scrollRef when is mounted. And `viewport` is technically only assigned after
+                  _this_ parent component is mounted. Leading to a chicken-egg problem.
+      
+                  Once the `viewport` is assigned, the virtualizer has already been mounted with scrollRef
+                  set to `undefined`, and it won't be re-calculated.
+      
+                  By using `key` we make sure that the virtualizer is re-mounted after the `viewport` is
+                  assigned, so that its scroll integration works properly.
+                -->
+                {#key `${viewport}-${page.params.object}`}
                   {#if timeline.length > 0}
                     <Virtualizer
                       bind:this={virtualizer}
@@ -529,7 +546,7 @@
                       overscan={5}
                       shift={isShifting}
                       getKey={(x) => {
-                        return x?.id;
+                        return x.id;
                       }}
                       onscroll={(o) => {
                         if (o < 100 && !isLazyLoading && hasMoreHistory) {

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { WithElementRef } from "bits-ui";
   import type { HTMLAttributes } from "svelte/elements";
-  import { cn, ScrollArea } from "@fuxui/base";
+  import { cn, ScrollArea } from "@foxui/core";
   import * as rawEnv from "$env/static/public";
 
   const {
@@ -13,7 +13,7 @@
 
 <div
   class={cn(
-    "overflow-y-hidden flex flex-col justify-between h-full w-64",
+    "overflow-y-hidden flex flex-col justify-between h-full w-64 dark:border-r dark:border-base-300/10",
     className,
   )}
   {...restProps}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Portal } from "bits-ui";
-  import { ScrollArea } from "@fuxui/base";
+  import { ScrollArea } from "@foxui/core";
   import { cdnImageUrl } from "$lib/utils.svelte";
 
   let {

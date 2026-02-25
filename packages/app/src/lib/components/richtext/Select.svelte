@@ -4,7 +4,7 @@
    * https://github.com/flo-bit/ui-kit/tree/main/packages/text/src/lib/components/rich-text-editor
    */
 
-  import { cn, toggleVariants } from "@fuxui/base";
+  import { cn, toggleVariants } from "@foxui/core";
   import { Select, type WithoutChildren } from "bits-ui";
   import Icon from "./Icon.svelte";
 

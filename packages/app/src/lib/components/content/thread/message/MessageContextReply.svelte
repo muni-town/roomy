@@ -36,6 +36,11 @@
         e.id = ${replyToId}
         limit 1
     `,
+    undefined,
+    {
+      description: "Reply context for a message",
+      origin: "MessageContextReply.svelte",
+    },
   );
 
   let contextMessage = $derived.by(() => {

@@ -2,6 +2,12 @@ import type { DidDocument } from "@atproto/oauth-client-browser";
 import { goto } from "$app/navigation";
 import type { JSONContent } from "@tiptap/core";
 import { writable } from "svelte/store";
+import { clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: unknown[]) {
+	return twMerge(clsx(inputs));
+}
 
 /** Cleans a handle string by removing any characters not valid for a domain. */
 export function cleanHandle(handle: string): string {

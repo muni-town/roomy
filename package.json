@@ -19,9 +19,12 @@
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",
     "beachball": "^2.54.0",
+    "clsx": "^2.1.1",
     "flexsearch": "^0.8.205",
     "husky": "^9.1.7",
     "pkgroll": "^2.13.1",
+    "tailwind-merge": "^3.5.0",
+    "tailwind-variants": "^3.2.2",
     "turbo": "^2.5.4",
     "typescript": "^5.8.3"
   },

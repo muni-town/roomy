@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { Button, Input, toast } from "@fuxui/base";
-  import { Slider } from "@fuxui/base";
-  import { Stopwatch, StopwatchState } from "@fuxui/time";
-  import { launchConfetti } from "@fuxui/visual";
+  import { toast } from "@foxui/core";
+  import Button from "$lib/components/ui/button/Button.svelte";
+  import Input from "$lib/components/ui/input/Input.svelte";
+  import { Slider } from "@foxui/core";
+  import { Stopwatch, StopwatchState } from "@foxui/time";
+  import { launchConfetti } from "@foxui/visual";
   import * as types from "./types";
 
   import * as zip from "@zip-js/zip-js";

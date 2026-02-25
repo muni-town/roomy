@@ -13,7 +13,7 @@
     Tabs,
     Textarea,
     toast,
-  } from "@fuxui/base";
+  } from "@foxui/core";
   import { Handle, newUlid } from "@roomy/sdk";
 
   import { IconLoading } from "@roomy/design/icons";

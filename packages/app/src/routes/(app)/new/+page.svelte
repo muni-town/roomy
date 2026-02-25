@@ -13,7 +13,7 @@
     // Label,
     Textarea,
     toast,
-  } from "@fuxui/base";
+  } from "@foxui/core";
 
   type SpaceCreationState = AsyncStateWithIdle<{ spaceDid: StreamDid }>;
 

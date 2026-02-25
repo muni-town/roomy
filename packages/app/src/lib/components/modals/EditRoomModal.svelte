@@ -4,7 +4,9 @@
   const app = getAppState();
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { Modal, Input, Button } from "@fuxui/base";
+  import { Modal } from "@foxui/core";
+  import Input from "$lib/components/ui/input/Input.svelte";
+  import Button from "$lib/components/ui/button/Button.svelte";
   import type { Ulid } from "@roomy/sdk";
   // import FeedConfiguration from "../content/bluesky-feed/FeedConfiguration.svelte";
   import { IconSave, IconTrash } from "@roomy/design/icons";
@@ -52,6 +54,10 @@
     where ci.entity = ${(id && "room" in id && id.room) ?? ""}
   `,
     (row) => JSON.parse(row.json),
+    {
+      description: "name and kind for room",
+      origin: "EditRoomModal.svelte",
+    },
   );
   const room = $derived(roomQuery.result?.[0]);
   let name = $derived(

@@ -1,6 +1,6 @@
 <script lang="ts">
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
-  import { ScrollArea } from "@fuxui/base";
+  import { ScrollArea } from "@foxui/core";
 
   let { children } = $props();
 </script>

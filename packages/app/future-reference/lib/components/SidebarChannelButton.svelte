@@ -9,7 +9,7 @@
   } from "@roomy-chat/sdk";
   import { navigate, navigateSync } from "$lib/utils.svelte";
   import Icon from "@iconify/svelte";
-  import { Button } from "@fuxui/base";
+  import { Button } from "$lib/components/ui";
   import { co, z } from "jazz-tools";
 
   let {

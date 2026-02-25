@@ -3,11 +3,11 @@
   import { dev } from "$app/environment";
   import { peerStatus } from "$lib/workers";
   import { onMount } from "svelte";
-  import { Toaster as FxUIToaster } from "@fuxui/base";
+  import { Toaster as FxUIToaster } from "@foxui/core";
 
   import { fade } from "svelte/transition";
   import LoginForm from "$lib/components/user/LoginForm.svelte";
-  import { TooltipProvider } from "@fuxui/base";
+  import { TooltipProvider } from "@foxui/core";
 
   import { IconLoading } from "@roomy/design/icons";
   import Error from "$lib/components/modals/Error.svelte";
@@ -66,7 +66,7 @@
   <div
     class="flex h-screen w-full items-center justify-center bg-base-950/75 bg fixed left-0 top-0 z-10"
   >
-    <LoginForm class="w-[23em] bg-base-300" />
+    <LoginForm class="w-[23em] bg-base-300 dark:bg-base-900" />
   </div>
 {/if}
 

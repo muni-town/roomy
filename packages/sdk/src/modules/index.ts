@@ -102,6 +102,7 @@ const spaceModuleDef: BasicModule = {
 
   initSql: sql`
     create table if not exists stream_info (
+
       type text not null default 'space.roomy.space.space',
       schema_version text not null default '3'
     ) strict;
@@ -177,6 +178,7 @@ const spaceModuleDef: BasicModule = {
   materializer: `
     -- Add admin
     insert or ignore into admins (user_id)
+
     select drisl_extract(payload, '.userDid') from event
     where drisl_extract(payload, '.$type') = 'space.roomy.space.addAdmin.v0';
 

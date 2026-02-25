@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import { dmClient } from "$lib/dm.svelte";
   import type { ConvoView } from "@atproto/api/dist/client/types/chat/bsky/convo/defs";
-  import { Avatar } from "@fuxui/base";
+  import { Avatar } from "@foxui/core";
 
   let conversationDetails: ConvoView | null = $state(null);
 
