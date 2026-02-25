@@ -19,13 +19,11 @@ function getPropagation() {
 function captureTraceContext(): Record<string, string> | null {
   const propagation = getPropagation();
   if (!propagation) {
-    console.debug("[RPC trace] Propagation API not available");
     return null;
   }
 
   const activeSpan = trace.getActiveSpan();
   if (!activeSpan) {
-    console.debug("[RPC trace] No active span to capture");
     return null;
   }
 
@@ -33,7 +31,6 @@ function captureTraceContext(): Record<string, string> | null {
   const carrier: Record<string, string> = {};
   propagation.inject(context.active(), carrier);
 
-  console.debug("[RPC trace] Captured trace context", carrier);
   return carrier;
 }
 
@@ -42,29 +39,18 @@ function captureTraceContext(): Record<string, string> | null {
  * Uses W3C traceparent format via the propagation API.
  * Returns the context with the parent span properly set.
  */
-function restoreTraceContext(
-  carrier: Record<string, string> | null,
-) {
+function restoreTraceContext(carrier: Record<string, string> | null) {
   const propagation = getPropagation();
   if (!propagation) {
-    console.debug("[RPC trace] Propagation API not available");
     return context.active();
   }
 
   if (!carrier) {
-    console.debug("[RPC trace] No trace context to restore");
     return context.active();
   }
 
-  console.debug("[RPC trace] Restoring trace context", carrier);
-
   // Use the propagation API to extract the context from the carrier
   const ctx = propagation.extract(context.active(), carrier);
-
-  console.debug(
-    "[RPC trace] Context restored, active span:",
-    trace.getActiveSpan()?.spanContext(),
-  );
   return ctx;
 }
 
