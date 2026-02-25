@@ -8,7 +8,12 @@ import {
 } from "@grafana/faro-web-sdk";
 import { TracingInstrumentation } from "@grafana/faro-web-tracing";
 import { ZoneContextManager } from "@opentelemetry/context-zone";
-import { context, SpanStatusCode, trace } from "@opentelemetry/api";
+import {
+  context,
+  SpanStatusCode,
+  propagation,
+  trace,
+} from "@opentelemetry/api";
 import { CONFIG } from "./config";
 
 const MAX_FAILURES = 1;
@@ -188,9 +193,10 @@ export function initializeFaro(opts: WorkerInfo) {
 
   faro.api.setSession({ attributes: { isSampled: "true" } });
 
-  (globalThis as any).tracer = faro.api
-    .getOTEL()
-    ?.trace.getTracer("roomy", __APP_VERSION__);
+  const otel = faro.api.getOTEL();
+  (globalThis as any).tracer = otel?.trace.getTracer("roomy", __APP_VERSION__);
+
+  (globalThis as any).propagation = propagation;
 }
 
 class CustomFetchTransport extends FetchTransport {

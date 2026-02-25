@@ -922,33 +922,68 @@ export class Peer {
     roomId: Ulid,
     end?: StreamIndex,
   ): Promise<{ hasMore: boolean }> {
-    const { spaces, eventChannel } =
-      await this.#roomy.transitionedTo("connected");
+    return await tracer.startActiveSpan(
+      "Lazy Load Room",
+      {
+        attributes: {
+          "space.id": spaceId,
+          "room.id": roomId,
+        },
+      },
+      async (span) => {
+        // Track how long we're blocked waiting for connected state
+        const { spaces, eventChannel } = await tracer.startActiveSpan(
+          "Wait for Connected State",
+          { attributes: { "space.id": spaceId } },
+          async (innerSpan) => {
+            const result = await this.#roomy.transitionedTo("connected");
+            innerSpan.end();
+            return result;
+          },
+        );
 
-    const space = spaces.get(spaceId);
-    if (!space) throw new Error("Could not find space in connected streams");
+        const space = spaces.get(spaceId);
+        if (!space)
+          throw new Error("Could not find space in connected streams");
 
-    const ROOM_FETCH_BATCH_SIZE = 100;
-    const events = await space.lazyLoadRoom(roomId, ROOM_FETCH_BATCH_SIZE, end);
+        const ROOM_FETCH_BATCH_SIZE = 100;
+        const events = await tracer.startActiveSpan(
+          "Fetch Room Events",
+          { attributes: { "space.id": spaceId, "room.id": roomId } },
+          async (innerSpan) => {
+            const fetchedEvents = await space.lazyLoadRoom(
+              roomId,
+              ROOM_FETCH_BATCH_SIZE,
+              end,
+            );
+            innerSpan.setAttribute("event.count", fetchedEvents.length);
+            innerSpan.end();
+            return fetchedEvents;
+          },
+        );
 
-    if (events.length > 0) {
-      const batchId = newUlid();
-      const materialized = new Promise<void>((resolve) => {
-        this.#batchResolvers.set(batchId, () => resolve());
-      });
+        if (events.length > 0) {
+          const batchId = newUlid();
+          const materialized = new Promise<void>((resolve) => {
+            this.#batchResolvers.set(batchId, () => resolve());
+          });
 
-      eventChannel.push({
-        status: "events",
-        batchId,
-        streamId: spaceId,
-        events,
-        priority: "priority",
-      });
+          eventChannel.push({
+            status: "events",
+            batchId,
+            streamId: spaceId,
+            events,
+            priority: "priority",
+          });
 
-      await materialized;
-    }
+          await materialized;
+        }
 
-    return { hasMore: events.length >= ROOM_FETCH_BATCH_SIZE };
+        span.setAttribute("has.more", events.length >= ROOM_FETCH_BATCH_SIZE);
+        span.end();
+        return { hasMore: events.length >= ROOM_FETCH_BATCH_SIZE };
+      },
+    );
   }
 
   async fetchLinks(

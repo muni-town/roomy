@@ -1,6 +1,72 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { createSubscriber } from "svelte/reactivity";
+import { trace, context } from "@opentelemetry/api";
+
+/**
+ * Get the global propagation API from Grafana Faro.
+ * Returns undefined if telemetry is not initialized.
+ */
+function getPropagation() {
+  return (globalThis as any).propagation;
+}
+
+/**
+ * Serialize the current trace context into a carrier object for RPC transmission.
+ * Uses W3C traceparent format via the propagation API.
+ * Returns null if there's no active span or propagation is not available.
+ */
+function captureTraceContext(): Record<string, string> | null {
+  const propagation = getPropagation();
+  if (!propagation) {
+    console.debug("[RPC trace] Propagation API not available");
+    return null;
+  }
+
+  const activeSpan = trace.getActiveSpan();
+  if (!activeSpan) {
+    console.debug("[RPC trace] No active span to capture");
+    return null;
+  }
+
+  // Use the propagation API to inject the current context into a carrier
+  const carrier: Record<string, string> = {};
+  propagation.inject(context.active(), carrier);
+
+  console.debug("[RPC trace] Captured trace context", carrier);
+  return carrier;
+}
+
+/**
+ * Restore trace context from a carrier object.
+ * Uses W3C traceparent format via the propagation API.
+ * Returns the context with the parent span properly set.
+ */
+function restoreTraceContext(
+  carrier: Record<string, string> | null,
+) {
+  const propagation = getPropagation();
+  if (!propagation) {
+    console.debug("[RPC trace] Propagation API not available");
+    return context.active();
+  }
+
+  if (!carrier) {
+    console.debug("[RPC trace] No trace context to restore");
+    return context.active();
+  }
+
+  console.debug("[RPC trace] Restoring trace context", carrier);
+
+  // Use the propagation API to extract the context from the carrier
+  const ctx = propagation.extract(context.active(), carrier);
+
+  console.debug(
+    "[RPC trace] Context restored, active span:",
+    trace.getActiveSpan()?.spanContext(),
+  );
+  return ctx;
+}
 
 export type MessagePortApi = {
   onmessage: ((ev: MessageEvent) => void) | null;
@@ -13,9 +79,12 @@ export type MessagePortApi = {
 type HalfInterface = {
   [key: string]: (...args: any[]) => Promise<unknown>;
 };
+
+type TraceContext = Record<string, string> | null;
+
 type IncomingMessage<In extends HalfInterface, Out extends HalfInterface> =
   | {
-      [K in keyof In]: ["call", K, string, ...Parameters<In[K]>];
+      [K in keyof In]: ["call", K, string, ...Parameters<In[K]>, TraceContext];
     }[keyof In]
   | {
       [K in keyof Out]: [
@@ -94,11 +163,32 @@ export function messagePortInterface<
   ) => {
     const type = ev.data[0];
     if (type == "call") {
-      const [, name, requestId, ...parameters] = ev.data;
+      const [, name, requestId, ...rest] = ev.data;
+      // Last element is the trace context
+      const [parameters, traceContext] = [
+        rest.slice(0, -1) as Parameters<Local[string]>,
+        rest[rest.length - 1] as TraceContext,
+      ];
+
       for (const [event, handler] of Object.entries(handlers)) {
         if (event == name) {
+          // Restore trace context and execute handler within it
+          const ctx = restoreTraceContext(traceContext);
+          console.debug(
+            "[RPC trace] Executing handler",
+            name,
+            "with trace context",
+          );
           try {
-            const resp = await handler(...parameters);
+            const resp = await context.with(ctx, async () => {
+              const ctx = trace.getActiveSpan()?.spanContext();
+              if (ctx)
+                console.debug(
+                  "[RPC trace] Inside context.with, active span:",
+                  ctx,
+                );
+              return await handler(...parameters);
+            });
             messagePort.postMessage(["response", requestId, "resolve", resp]);
           } catch (e) {
             onError?.(e, String(name), parameters);
@@ -159,7 +249,19 @@ export function messagePortInterface<
               transferList.push(arg);
             }
           }
-          messagePort.postMessage(["call", n, reqId, ...args], transferList);
+
+          // Capture current trace context for propagation
+          const traceContext = captureTraceContext();
+          if (traceContext)
+            console.debug("[RPC trace] Sending RPC call", {
+              method,
+              traceContext,
+            });
+
+          messagePort.postMessage(
+            ["call", n, reqId, ...args, traceContext],
+            transferList,
+          );
           return respPromise as any;
         };
       },

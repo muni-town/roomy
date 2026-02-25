@@ -54,7 +54,24 @@
 
     lazyLoadState = { status: "loading" };
     try {
-      const result = await peer.lazyLoadRoom(app.joinedSpace.id, app.roomId);
+      const result = await tracer.startActiveSpan(
+        "Load More Messages (UI)",
+        {
+          attributes: {
+            "space.id": app.joinedSpace.id,
+            "room.id": app.roomId,
+          },
+        },
+        async (span) => {
+          const result = await peer.lazyLoadRoom(
+            app.joinedSpace.id,
+            app.roomId,
+          );
+          span.setAttribute("has.more", result.hasMore);
+          span.end();
+          return result;
+        },
+      );
       lazyLoadState = { status: "success", data: result };
     } catch (e) {
       lazyLoadState = {
