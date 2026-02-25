@@ -156,7 +156,7 @@
         </Button>
       {/if}
         <Label for="atproto-handle" class="text-sm flex justify-between w-full mt-4"
-          ><span><div>What's your handle?</div><div class="text-xs opacity-75">Login via <span class="">Bluesky</span> or the <a href="https://atproto.com/" class="text-accent-600 dark:text-accent-400">ATmosphere</a></div></span>
+          ><span><div>What's your handle?</div><div class="text-xs opacity-75">Login using a <span class="">Bluesky</span> or <a href="https://atproto.com/" class="text-accent-600 dark:text-accent-400">Atmosphere</a> account.</div></span>
           <div class="inline-flex gap-1">
             <svg
               version="1.1"
