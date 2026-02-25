@@ -160,19 +160,8 @@ export function messagePortInterface<
         if (event == name) {
           // Restore trace context and execute handler within it
           const ctx = restoreTraceContext(traceContext);
-          console.debug(
-            "[RPC trace] Executing handler",
-            name,
-            "with trace context",
-          );
           try {
             const resp = await context.with(ctx, async () => {
-              const ctx = trace.getActiveSpan()?.spanContext();
-              if (ctx)
-                console.debug(
-                  "[RPC trace] Inside context.with, active span:",
-                  ctx,
-                );
               return await handler(...parameters);
             });
             messagePort.postMessage(["response", requestId, "resolve", resp]);
@@ -238,11 +227,6 @@ export function messagePortInterface<
 
           // Capture current trace context for propagation
           const traceContext = captureTraceContext();
-          if (traceContext)
-            console.debug("[RPC trace] Sending RPC call", {
-              method,
-              traceContext,
-            });
 
           messagePort.postMessage(
             ["call", n, reqId, ...args, traceContext],
