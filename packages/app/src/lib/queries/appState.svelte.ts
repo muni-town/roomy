@@ -75,13 +75,30 @@ export class AppState {
     //   hasResolved: this.#resolvedSpaceIds.has(spaceUrlSegment),
     // });
     if (!this.#resolvedSpaceIds.has(spaceUrlSegment)) {
-      peer
-        .resolveSpaceId(spaceUrlSegment as SpaceIdOrHandle)
-        .then((resp) => this.#resolvedSpaceIds.set(spaceUrlSegment, resp));
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Space resolution timed out")),
+          10000,
+        ),
+      );
+      Promise.race([
+        peer.resolveSpaceId(spaceUrlSegment as SpaceIdOrHandle),
+        timeout,
+      ])
+        .then((resp) => {
+          this.#resolvedSpaceIds.set(spaceUrlSegment, resp);
+        })
+        .catch((e) => {
+          this.#resolvedSpaceIds.set(spaceUrlSegment, {
+            error: e?.message || String(e) || "Could not resolve space",
+          });
+        });
       return undefined;
     }
     const resp = this.#resolvedSpaceIds.get(spaceUrlSegment);
-    if (!resp || !("spaceId" in resp)) return undefined;
+    if (!resp) return undefined;
+    if ("error" in resp) return { error: resp.error };
+    if (!("spaceId" in resp)) return undefined;
 
     // Check space exists
     if (!this.#resolvedSpaceExists.has(resp.spaceId)) {
@@ -192,6 +209,17 @@ export class AppState {
         !this.#currentSpace
       )
         return;
+
+      // Handle resolution errors
+      if ("error" in this.#currentSpace) {
+        this.space = {
+          status: "error",
+          message:
+            (this.#currentSpace as { error: string }).error ||
+            "Could not resolve space",
+        };
+        return;
+      }
 
       const nextSpaceId = this.#currentSpace.spaceId;
 
