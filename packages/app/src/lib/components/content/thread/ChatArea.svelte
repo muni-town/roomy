@@ -289,7 +289,7 @@
       return JSON.parse(row.json);
     },
     // caching causes some kind of very intermittent failure. need to measure performance.
-    { cache: false, description: "Messages query", origin: "ChatArea.svelte" },
+    { cache: true, description: "Messages query", origin: "ChatArea.svelte" },
   );
 
   let showLastN = $state(50);
@@ -435,35 +435,6 @@
     prevTimelineLength = len;
   });
 
-  let isShiftingFromShowLastN = $state(false);
-  let isShiftingFromLazyLoad = $state(false);
-  let lastShowLastN = $state(0);
-
-  $effect(() => {
-    if (showLastN > lastShowLastN) {
-      lastShowLastN = showLastN;
-      isShiftingFromShowLastN = true;
-      setTimeout(() => (isShiftingFromShowLastN = false), 1000);
-    }
-  });
-
-  // Keep shift mode enabled during lazy load AND briefly after it completes
-  // (new messages need time to render before we can disable shift)
-  $effect(() => {
-    if (isLazyLoading) {
-      isShiftingFromLazyLoad = true;
-    } else if (isShiftingFromLazyLoad) {
-      // Delay disabling shift to allow messages to render
-      setTimeout(() => (isShiftingFromLazyLoad = false), 500);
-    }
-  });
-
-  // Enable shift mode when lazy loading OR when showLastN increases
-  // This preserves scroll position when messages are prepended at the top
-  const isShifting = $derived(
-    isShiftingFromLazyLoad || isShiftingFromShowLastN,
-  );
-
   // Track which room we've loaded for to prevent re-triggering
   let lastLoadedRoomId: string | undefined;
 
@@ -577,16 +548,12 @@
                       data={timeline}
                       scrollRef={viewport}
                       overscan={5}
-                      shift={isShifting}
+                      shift={true}
                       getKey={(x) => {
                         return x.id;
                       }}
                       onscroll={(o) => {
-                        if (
-                          o < 100 &&
-                          timeline.length >= showLastN &&
-                          !isShifting
-                        ) {
+                        if (o < 100 && timeline.length >= showLastN) {
                           showLastN += 50;
                         }
                       }}
