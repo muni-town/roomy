@@ -11,7 +11,7 @@
       const firstChild = firstCategory.children?.[0]?.id;
       if (firstChild)
         navigate({
-          space: app.joinedSpace.id,
+          space: app.joinedSpace.handle || app.joinedSpace.id,
           channel: firstChild,
         });
     }

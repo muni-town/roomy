@@ -26,24 +26,6 @@
 
   const spaceId = $derived(app.joinedSpace?.id);
 
-  $effect(() => {
-    if (
-      flags.threadsList ||
-      !app.joinedSpace ||
-      app.joinedSpace.id !== page.params.space
-    )
-      return;
-    const firstCategory = app.categories?.[0];
-    if (firstCategory?.type === "space.roomy.category") {
-      const firstChild = firstCategory.children?.[0]?.id;
-      if (firstChild)
-        navigate({
-          space: app.joinedSpace.id,
-          channel: firstChild,
-        });
-    }
-  });
-
   let threadsQuery = new LiveQuery<ThreadInfo>(
     () => sql`
         select json_object(
