@@ -2,28 +2,42 @@
   import { Tooltip } from "bits-ui";
   import type { Snippet } from "svelte";
 
-  type Props = {
+  type Props = Tooltip.RootProps & {
     tip: string | Snippet;
-    children: Snippet;
+    children?: Snippet;
+    trigger?: Snippet<[Record<string, unknown>]>;
+    contentProps?: Tooltip.ContentProps;
   };
 
-  let { tip, children }: Props = $props();
+  let { tip, children, trigger, contentProps = {}, ...restProps }: Props = $props();
 </script>
 
-<Tooltip.Root delayDuration={200}>
+<Tooltip.Root delayDuration={200} {...restProps}>
   <Tooltip.Trigger>
-    {@render children()}
+    {#snippet child({ props })}
+      {#if trigger}
+        {@render trigger(props)}
+      {:else}
+        {@render children?.()}
+      {/if}
+    {/snippet}
   </Tooltip.Trigger>
 
-  <Tooltip.Content sideOffset={12}>
-    <span
-      class="rounded-lg border-base-200 dark:border-base-800 shadow-xs bg-base-100/50 dark:bg-base-900/50 text-base-800/75 dark:text-base-200/75 outline-hidden z-0 flex items-center justify-center border p-1 px-2 text-sm"
+  <Tooltip.Portal>
+    <Tooltip.Content
+      sideOffset={contentProps.sideOffset ?? 6}
+      side={contentProps.side ?? "top"}
+      class={contentProps.class}
     >
-      {#if typeof tip === "string"}
-        {tip}
-      {:else}
-        {@render tip()}
-      {/if}
-    </span>
-  </Tooltip.Content>
+      <span
+        class="rounded-lg border-base-200 dark:border-base-800 shadow-xs bg-base-100/80 dark:bg-base-900/80 text-base-800/75 dark:text-base-200/75 outline-hidden z-0 flex items-center justify-center border p-1 px-2 text-sm"
+      >
+        {#if typeof tip === "string"}
+          {tip}
+        {:else}
+          {@render tip()}
+        {/if}
+      </span>
+    </Tooltip.Content>
+  </Tooltip.Portal>
 </Tooltip.Root>

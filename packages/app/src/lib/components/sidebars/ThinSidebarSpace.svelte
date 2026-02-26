@@ -1,6 +1,6 @@
 <script lang="ts">
   import { navigate, navigateSync } from "$lib/utils.svelte";
-  import { Tooltip } from "@foxui/core";
+  import Tooltip from "$lib/components/helper/Tooltip.svelte";
   import SpaceAvatar from "../spaces/SpaceAvatar.svelte";
   import { getAppState, type SpaceMeta } from "$lib/queries";
   const app = getAppState();
@@ -10,21 +10,15 @@
   let isActive = $derived(app.joinedSpace?.id == space.id);
 </script>
 
-<Tooltip
-  text={space.name}
-  delayDuration={0}
-  contentProps={{ side: "right", sideOffset: 5 }}
->
-  {#snippet child({ props })}
+<Tooltip tip={space.name || ""} contentProps={{ side: "right", sideOffset: 5 }}>
+  {#snippet trigger(props)}
     <a
       {...props}
       href={navigateSync({ space: space.handle || space.id })}
       class={[
-        "size-10 rounded-full relative group",
-        isActive
-          ? "outline-4 outline-accent-500 cursor-default"
-          : "cursor-pointer",
-        "transition-all duration-200 bg-base-300",
+        "size-10 rounded-full relative group outline-accent-500",
+        isActive ? "outline-2  cursor-default" : "cursor-pointer",
+        "transition-all duration-200 bg-base-300 hover:outline-3",
       ]}
       onmousedown={() => {
         if (isActive) return;

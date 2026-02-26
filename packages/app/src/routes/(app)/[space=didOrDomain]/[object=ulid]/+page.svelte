@@ -229,7 +229,7 @@
       </h2>
 
       {#if spaceId && peerStatus.authState?.state === "loading"}
-        <div class="dark:!text-base-400 !text-base-600 mx-3">
+        <div class="dark:text-base-400 text-base-600 mx-3">
           Downloading Entire Space...
         </div>
       {:else if room?.kind == "space.roomy.thread"}
@@ -414,11 +414,6 @@
       {:else}
         <PageHistory />
       {/if}
-    {:else}
-      <Error
-        message="Oh no! We had an issue getting the data for this room 😬"
-        goHome
-      />
     {/if}
   </MainLayout>
 {/if}

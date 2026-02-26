@@ -15,7 +15,7 @@
   export interface Props<T> {
     state: AsyncStateWithIdle<T>;
     pending?: Snippet;
-    error?: Snippet<[ErrorInfo]>;
+    error: Snippet<[ErrorInfo]>;
     idle?: Snippet;
     children?: Snippet<[T, { stale?: boolean }]>;
     /** Called when a child component throws - useful for logging */

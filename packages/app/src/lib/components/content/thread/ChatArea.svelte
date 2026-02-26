@@ -27,14 +27,12 @@
   import type { MessagingState } from "./TimelineView.svelte";
   import { messagingState } from "./TimelineView.svelte";
   import type { Message } from "./types";
-  import {
-    mapAsyncState,
-    type AsyncState,
-    type AsyncStateWithIdle,
-  } from "@roomy/sdk";
+  import { mapAsyncState, type AsyncStateWithIdle } from "@roomy/sdk";
   import StateSuspense from "$lib/components/primitives/StateSuspense.svelte";
   import { peer } from "$lib/workers";
   import { getAppState } from "$lib/queries";
+  import ErrorModal from "$lib/components/modals/Error.svelte";
+  import ChatMessageSkeleton from "./message/ChatMessageSkeleton.svelte";
   const app = getAppState();
 
   // Lazy loading state (AsyncStateWithIdle pattern)
@@ -50,7 +48,9 @@
     if (lazyLoadState.status === "loading") return;
     if (lazyLoadState.status === "success" && !lazyLoadState.data.hasMore)
       return;
-    if (!app.joinedSpace?.id || !app.roomId) return;
+    const spaceId = app.joinedSpace?.id;
+    const roomId = app.roomId;
+    if (!spaceId || !roomId) return;
 
     lazyLoadState = { status: "loading" };
     try {
@@ -58,15 +58,12 @@
         "Load More Messages (UI)",
         {
           attributes: {
-            "space.id": app.joinedSpace.id,
-            "room.id": app.roomId,
+            "space.id": spaceId,
+            "room.id": roomId,
           },
         },
         async (span) => {
-          const result = await peer.lazyLoadRoom(
-            app.joinedSpace.id,
-            app.roomId,
-          );
+          const result = await peer.lazyLoadRoom(spaceId, roomId);
           span.setAttribute("has.more", result.hasMore);
           span.end();
           return result;
@@ -502,6 +499,16 @@
     {/if}
   </div>
 
+  {#snippet messagesSkeleton()}
+    <div class="flex flex-col justify-end w-full h-full bg-transparent">
+      <ChatMessageSkeleton />
+      <ChatMessageSkeleton lines={3} />
+      <ChatMessageSkeleton lines={1} />
+      <ChatMessageSkeleton />
+      <ChatMessageSkeleton mergeWithPrevious />
+    </div>
+  {/snippet}
+
   <ScrollArea.Root type="auto" class="h-full overflow-hidden">
     <ScrollArea.Viewport
       bind:ref={viewport}
@@ -509,10 +516,10 @@
       onscroll={handleScroll}
     >
       <div class="flex flex-col w-full h-full pb-16 pt-2">
-        <StateSuspense state={timeline}>
+        <StateSuspense state={timeline} pending={messagesSkeleton}>
           {#snippet children(timeline)}
-            <ol class="flex flex-col gap-2 max-w-full">
-              <StateSuspense state={lazyLoadState}>
+            <ol class="flex flex-col gap-2 max-w-full h-full">
+              <StateSuspense state={lazyLoadState} pending={messagesSkeleton}>
                 {#snippet children()}
                   {#if timeline.length === 0}
                     <p class="opacity-80 p-4 text-center text-sm">
@@ -521,11 +528,11 @@
                     </p>
                   {/if}
                 {/snippet}
-                {#snippet pending()}
+                <!-- {#snippet pending()}
                   <div class="flex justify-center py-2">
                     <IconLoading class="animate-spin text-base-500" />
                   </div>
-                {/snippet}
+                {/snippet} -->
                 {#snippet error({ message })}
                   <div
                     class="flex justify-center items-center gap-2 py-2 text-sm text-red-500"
@@ -539,6 +546,7 @@
                   </div>
                 {/snippet}
               </StateSuspense>
+
               {#if timeline.length > 0}
                 <!--
                   This use of `key` needs explaining. `key` causes the components below
@@ -590,15 +598,11 @@
               {/if}
             </ol>
           {/snippet}
-          {#snippet pending()}
-            <div
-              class="grid items-center justify-center h-full w-full min-h-32 bg-transparent"
-            >
-              <IconLoading
-                font-size="2em"
-                class="animate-spin text-base-600 dark:text-base-400"
-              />
-            </div>
+          {#snippet error(e)}
+            <ErrorModal
+              message={"Failed to get chat messages: " + e.message}
+              goHome
+            />
           {/snippet}
         </StateSuspense>
       </div>

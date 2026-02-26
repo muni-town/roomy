@@ -7,7 +7,7 @@
 
   import { fade } from "svelte/transition";
   import LoginForm from "$lib/components/user/LoginForm.svelte";
-  // import { TooltipProvider } from "@foxui/core";
+  import { Tooltip } from "bits-ui";
 
   import { IconLoading } from "@roomy/design/icons";
   import Error from "$lib/components/modals/Error.svelte";
@@ -86,9 +86,9 @@
 
 {#if peerStatus.authState?.state === "authenticated"}
   <!-- Page Content -->
-  <!-- <TooltipProvider> -->
-  {@render children?.()}
-  <!-- </TooltipProvider> -->
+  <Tooltip.Provider>
+    {@render children?.()}
+  </Tooltip.Provider>
 {/if}
 
 {#if peerStatus.authState?.state === "error"}

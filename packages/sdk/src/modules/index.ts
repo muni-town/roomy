@@ -224,7 +224,7 @@ const spaceModuleDef: BasicModule = {
     select idx, drisl_extract(payload, '.room') from event
     where drisl_extract(payload, '.room') is not null;
 
-    -- Mark link events
+    -- Track link events
     insert into link_events (idx)
     select idx from event
     where drisl_extract(payload, '.$type') in (
