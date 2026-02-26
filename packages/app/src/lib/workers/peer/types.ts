@@ -1,5 +1,5 @@
 import type { QueryResult } from "../sqlite/setup";
-import type { Batch, StreamIndex } from "../types";
+import type { Batch, SpaceIdOrHandle, StreamIndex } from "../types";
 import type { BlobRef } from "@atproto/lexicon";
 import type { SqliteWorkerInterface, SqlStatement } from "../sqlite/types";
 import { AsyncChannel, trackableState } from "@roomy/sdk";
@@ -118,6 +118,8 @@ export type PeerInterface = {
    * Call this after sending a joinSpace event to connect to the newly joined space. */
   connectPendingSpaces(): Promise<void>;
   setSpaceHandle(spaceDid: StreamDid, handle: string | null): Promise<void>;
+  /** Set the current space ID from page.params.space for initialization prioritization */
+  setCurrentSpace(spaceId: SpaceIdOrHandle | undefined): Promise<void>;
 };
 
 export const consoleLogLevels = [

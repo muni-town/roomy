@@ -62,6 +62,8 @@ export const peer = tracer.startActiveSpan(
     // Create a message channel for the peer communication
     const channel = new MessageChannel();
 
+    console.log("page.params.space", page.params.space);
+
     // Create a peer implementation and connect it to the channel
     const peerImpl = new Peer({ sessionId: newUlid() });
     peerImpl.connectRpcClient(channel.port1);
@@ -76,13 +78,10 @@ export const peer = tracer.startActiveSpan(
         ms: 5000,
         onTimeout: (method, reqId) => {
           if (method !== "log")
-            console.warn(
-              `RPC Timeout [peer <- main]`,
-              {
-                method,
-                reqId,
-              },
-            );
+            console.warn(`RPC Timeout [peer <- main]`, {
+              method,
+              reqId,
+            });
         },
         // Lazy loading may take longer due to materialization
         methodTimeouts: {

@@ -1,4 +1,9 @@
-import { type Batch, type StreamIndex, type TaskPriority } from "../types";
+import {
+  type Batch,
+  type SpaceIdOrHandle,
+  type StreamIndex,
+  type TaskPriority,
+} from "../types";
 import {
   messagePortInterface,
   reactiveChannelState,
@@ -41,6 +46,7 @@ import {
   type StatusMachine,
   stateMachine,
   type StateMachine,
+  Deferred,
 } from "@roomy/sdk";
 import {
   AsyncChannel,
@@ -110,6 +116,9 @@ export class Peer {
     (value: Batch.Statement | Batch.ApplyResult) => void
   > = new Map();
 
+  /** The current space ID from page.params.space, if available */
+  #currentSpace = new Deferred<StreamDid | undefined>();
+
   /** Construct a new peer with the provided sesion ID. */
   constructor(opts: { sessionId: string }) {
     // Store the session
@@ -173,6 +182,7 @@ export class Peer {
           throw new Error("Not connected");
         return this.#roomy.current.client.setHandle(spaceDid, handle);
       },
+      setCurrentSpace: (spaceId) => this.setCurrentSpace(spaceId),
       getSpaceInfo: (streamDid) => {
         if (this.#roomy.current.state !== "connected")
           throw new Error("Not connected");
@@ -560,8 +570,11 @@ export class Peer {
     const callback = this.#createEventCallback(
       eventChannel,
       personalSpace.streamDid,
+      true,
       // After each personal stream batch is materialized, connect to any new spaces
-      async () => this.#sqlite.sqliteWorker.connectPendingSpaces(),
+      async () => {
+        return this.#sqlite.sqliteWorker.connectPendingSpaces();
+      },
     );
 
     // backfill entire personal space by subscribing to all of its events.
@@ -658,20 +671,55 @@ export class Peer {
       personalSpace: this.#roomy.current.personalSpace,
     };
 
+    // Wait for the current space (if set) to finish materializing metadata
+    const currentSpaceId = await this.#currentSpace.promise;
+
     await tracer.startActiveSpan(
-      "Wait for Joined Streams Backfilled",
-      {},
+      "Wait for Current Space Metadata",
+      { attributes: { "space.id": currentSpaceId || "none" } },
       ctx,
       async (span) => {
-        for (const space of this.spaces.values()) {
-          (async () => {
-            await space.doneBackfilling;
-            this.#spaceStatuses.set(space.streamDid, "idle");
-          })();
+        if (currentSpaceId) {
+          // Find the connected space that matches the current space ID
+          const currentSpace = this.spaces.get(currentSpaceId);
+
+          if (currentSpace) {
+            console.debug(
+              "[Peer] Waiting for current space metadata:",
+              currentSpaceId,
+            );
+            // Wait for this space's backfill to complete and get the batch ID
+            const lastBatchId = await currentSpace.doneBackfilling;
+            // Wait for the metadata batch to be materialized
+            const metadataMaterialized = new Promise<void>((resolve) => {
+              this.#batchResolvers.set(lastBatchId, () => resolve());
+            });
+            await metadataMaterialized;
+            this.#spaceStatuses.set(currentSpace.streamDid, "idle");
+            console.debug(
+              "[Peer] Current space metadata materialized:",
+              currentSpaceId,
+            );
+          } else {
+            console.warn(
+              "[Peer] Current space not found in connected spaces:",
+              currentSpaceId,
+            );
+          }
+        } else {
+          console.debug("[Peer] No current space set, skipping metadata wait");
         }
         span.end();
       },
     );
+
+    // Fire-and-forget: let other spaces finish backfilling in the background
+    for (const space of this.spaces.values()) {
+      (async () => {
+        await space.doneBackfilling;
+        this.#spaceStatuses.set(space.streamDid, "idle");
+      })();
+    }
 
     console.info("Peer initialised!");
 
@@ -778,7 +826,14 @@ export class Peer {
       { attributes: { "stream.id": streamId } },
       async (span) => {
         try {
-          const connectionPromise = this.#connectSpaceStreamInner(streamId);
+          const currentSpaceId = await this.#currentSpace.promise;
+
+          const isPriority = streamId === currentSpaceId;
+
+          const connectionPromise = this.#connectSpaceStreamInner(
+            streamId,
+            isPriority,
+          );
 
           // Hard timeout that rejects - prevents one slow space from blocking everything
           let timedOut = false;
@@ -820,7 +875,7 @@ export class Peer {
     );
   }
 
-  async #connectSpaceStreamInner(streamId: StreamDid) {
+  async #connectSpaceStreamInner(streamId: StreamDid, isPriority?: boolean) {
     if (
       this.#roomy.current.state !== "connected" &&
       this.#roomy.current.state !== "materializingPersonalSpace"
@@ -836,6 +891,7 @@ export class Peer {
     const callback = this.#createEventCallback(
       this.#roomy.current.eventChannel,
       streamId,
+      isPriority || false,
     );
 
     // First get metadata to find latest index, then subscribe from there
@@ -872,6 +928,7 @@ export class Peer {
     const callback = this.#createEventCallback(
       this.#roomy.current.eventChannel,
       newSpace.streamDid,
+      true,
     );
     await newSpace.subscribe(callback);
 
@@ -1005,6 +1062,7 @@ export class Peer {
   #createEventCallback(
     eventChannel: AsyncChannel<Batch.Events>,
     streamId: StreamDid,
+    priority: boolean,
     onBatch?: (result: Batch.Statement | Batch.ApplyResult) => void,
   ): EventCallback {
     return (events: DecodedStreamEvent[], { isBackfill, batchId }) => {
@@ -1018,7 +1076,7 @@ export class Peer {
         batchId,
         streamId,
         events,
-        priority: isBackfill ? "background" : "priority",
+        priority: isBackfill && !priority ? "background" : "priority",
       });
     };
   }
@@ -1045,6 +1103,51 @@ export class Peer {
     )
       throw new Error("Not connected to RoomyClient");
     return this.#roomy.current.spaces;
+  }
+
+  /**
+   * Set the current space ID from page.params.space.
+   * This can be used during initialization to prioritize materialization.
+   * Resolves the space ID (which may be a handle or DID) to a stream DID.
+   */
+  async setCurrentSpace(
+    spaceIdOrHandle: SpaceIdOrHandle | undefined,
+  ): Promise<void> {
+    await tracer.startActiveSpan(
+      "Resolve Current Space Did",
+      {},
+      async (span) => {
+        if (!spaceIdOrHandle) {
+          this.#currentSpace.resolve(undefined);
+          console.debug("[Peer] No current space");
+          return;
+        }
+
+        try {
+          // Wait for the client to be connected before we can resolve the space ID
+          await this.#roomy.transitionedTo("connected");
+
+          // Resolve the space ID/handle to a stream DID
+          const resolved =
+            await this.client.resolveSpaceIdFromDidOrHandle(spaceIdOrHandle);
+          console.debug("[Peer] Current space resolved:", {
+            spaceIdOrHandle,
+            did: resolved.spaceDid,
+          });
+          this.#currentSpace.resolve(resolved.spaceDid);
+        } catch (error) {
+          console.error(
+            "[Peer] Failed to resolve current space:",
+            spaceIdOrHandle,
+            error,
+          );
+          // Still resolve so we don't hang, but with undefined
+          this.#currentSpace.resolve(undefined);
+        } finally {
+          span.end();
+        }
+      },
+    );
   }
 
   /**
