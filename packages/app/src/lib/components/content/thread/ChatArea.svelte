@@ -485,7 +485,20 @@
 
     // Reset state for new room
     lazyLoadState = { status: "idle" };
-    loadMoreMessages();
+  });
+
+  // Trigger lazy load when materialized data can't fill the current window.
+  // When the query returns fewer rows than showLastN, we've exhausted what's
+  // in SQLite and need the backend to materialize more events from the stream.
+  $effect(() => {
+    if (
+      timeline.status === "success" &&
+      timeline.data.length < showLastN &&
+      hasMoreHistory &&
+      !isLazyLoading
+    ) {
+      loadMoreMessages();
+    }
   });
 </script>
 
@@ -574,9 +587,6 @@
                         return x.id;
                       }}
                       onscroll={(o) => {
-                        if (o < 100 && !isLazyLoading && hasMoreHistory) {
-                          loadMoreMessages();
-                        }
                         if (
                           o < 100 &&
                           timeline.length >= showLastN &&
