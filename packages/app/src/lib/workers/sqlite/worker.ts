@@ -527,7 +527,7 @@ class SqliteWorkerSupervisor {
       runSavepoint: async (savepoint) => {
         return this.runSavepoint(savepoint);
       },
-      connectPendingSpaces: async () => {
+      connectPendingSpaces: async (currentSpaceId) => {
         const spacesToConnect = [...this.#pendingSpacesToConnect];
         this.#pendingSpacesToConnect.clear();
 
@@ -536,9 +536,20 @@ class SqliteWorkerSupervisor {
           spacesToConnect,
         );
 
+        if (spacesToConnect.includes(currentSpaceId)) {
+          // give the active space a 1sec headstart
+          await Promise.race([
+            this.connectSpaceStream(currentSpaceId),
+            new Promise((r) => setTimeout(r, 1000)),
+          ]);
+        }
+
         // Connect spaces in parallel - one failing/slow space shouldn't block others
         const results = await Promise.allSettled(
-          spacesToConnect.map((spaceId) => this.connectSpaceStream(spaceId)),
+          spacesToConnect.map(
+            (spaceId) =>
+              spaceId !== currentSpaceId && this.connectSpaceStream(spaceId),
+          ),
         );
 
         // Log any failures for observability
@@ -866,7 +877,7 @@ class SqliteWorkerSupervisor {
           sortTimestamp = Number(
             eventMeta.event.extensions?.[
               "space.roomy.extension.timestampOverride.v0"
-            ]?.timestamp
+            ]?.timestamp,
           );
         } else {
           // Use message's own creation time (encoded in ULID)
