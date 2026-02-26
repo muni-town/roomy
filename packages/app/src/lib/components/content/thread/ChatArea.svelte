@@ -519,7 +519,7 @@
         <StateSuspense state={timeline} pending={messagesSkeleton}>
           {#snippet children(timeline)}
             <ol class="flex flex-col gap-2 max-w-full h-full">
-              <StateSuspense state={lazyLoadState} pending={messagesSkeleton}>
+              <StateSuspense state={lazyLoadState}>
                 {#snippet children()}
                   {#if timeline.length === 0}
                     <p class="opacity-80 p-4 text-center text-sm">
@@ -528,11 +528,11 @@
                     </p>
                   {/if}
                 {/snippet}
-                <!-- {#snippet pending()}
+                {#snippet pending()}
                   <div class="flex justify-center py-2">
                     <IconLoading class="animate-spin text-base-500" />
                   </div>
-                {/snippet} -->
+                {/snippet}
                 {#snippet error({ message })}
                   <div
                     class="flex justify-center items-center gap-2 py-2 text-sm text-red-500"
@@ -577,7 +577,13 @@
                         if (o < 100 && !isLazyLoading && hasMoreHistory) {
                           loadMoreMessages();
                         }
-                        if (o < 100) showLastN += 50;
+                        if (
+                          o < 100 &&
+                          timeline.length >= showLastN &&
+                          !isShifting
+                        ) {
+                          showLastN += 50;
+                        }
                       }}
                     >
                       {#snippet children(message?: Message)}
