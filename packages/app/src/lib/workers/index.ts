@@ -104,6 +104,7 @@ export const peer = tracer.startActiveSpan(
             id,
             attributes: { isSampled: "true" },
           });
+          console.log("[Peer Status] updating channel with session", id);
           peerStatus.updateChannel(peerStatusChannel(id));
         },
         async initFinished({ userDid }) {

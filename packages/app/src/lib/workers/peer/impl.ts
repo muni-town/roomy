@@ -163,6 +163,7 @@ export class Peer {
 
     // Subscribe to roomy client state changes and update reactive status
     this.#roomy.subscribeStatus((status) => {
+      console.log("[Peer Status] Updating status", { status });
       reactiveStatus.roomyState = status;
     });
   }
@@ -302,8 +303,8 @@ export class Peer {
       getStreamRecord: async () => this.getStreamRecord(),
       deleteStreamRecord: async () => this.deleteStreamRecord(),
       ensurePersonalStream: async () => this.ensurePersonalStream(),
-      connectPendingSpaces: async () => {
-        await this.#sqlite.sqliteWorker.connectPendingSpaces();
+      connectPendingSpaces: async (spaceId?: StreamDid) => {
+        await this.#sqlite.sqliteWorker.connectPendingSpaces(spaceId);
       },
       getMembers: async (spaceDid) => {
         const { client } = await this.#roomy.transitionedTo("connected");
@@ -537,8 +538,8 @@ export class Peer {
         plcDirectory: CONFIG.plcDirectory,
       },
       {
-        onConnect: () => console.debug("Peer: connected"),
-        onDisconnect: () => console.debug("Peer: disconnected"),
+        onConnect: () => console.debug("Peer: Leaf connected"),
+        onDisconnect: () => console.debug("Peer: Leaf disconnected"),
       },
     );
 
@@ -572,9 +573,7 @@ export class Peer {
       personalSpace.streamDid,
       true,
       // After each personal stream batch is materialized, connect to any new spaces
-      async () => {
-        return this.#sqlite.sqliteWorker.connectPendingSpaces();
-      },
+      async () => {},
     );
 
     // backfill entire personal space by subscribing to all of its events.
@@ -631,6 +630,8 @@ export class Peer {
       },
     );
 
+    console.log("[Peer] Init: Personal stream materialised");
+
     // get streams from SQLite
     const streamsResult = await this.#sqlite.runQuery<{
       id: StreamDid;
@@ -679,6 +680,10 @@ export class Peer {
       },
     );
 
+    console.log("[Peer] Connected to spaces...", {
+      spaces: spacesToConnect.keys(),
+    });
+
     this.#roomy.current = {
       state: "connected",
       eventChannel,
@@ -686,6 +691,8 @@ export class Peer {
       client: this.#roomy.current.client,
       personalSpace: this.#roomy.current.personalSpace,
     };
+
+    console.log("[Peer] Init: Connected");
 
     // Wait for the current space (if set) to finish materializing metadata
     await tracer.startActiveSpan(
@@ -728,22 +735,6 @@ export class Peer {
         span.end();
       },
     );
-
-    // Fire-and-forget: let other spaces finish backfilling in the background
-    for (const space of this.spaces.values()) {
-      (async () => {
-        await tracer.startActiveSpan(
-          "Materialise Space Metadata",
-          { attributes: { "space.id": space.streamDid } },
-          ctx,
-          async (span) => {
-            await space.doneBackfilling;
-            this.#spaceStatuses.set(space.streamDid, "idle");
-            span.end();
-          },
-        );
-      })();
-    }
 
     console.info("Peer initialised!");
 
@@ -850,6 +841,7 @@ export class Peer {
       { attributes: { "stream.id": streamId } },
       async (span) => {
         try {
+          console.log("[Peer] Connecting space stream");
           const currentSpaceIdOrHandle = await this.#currentSpace.promise;
 
           const currentSpaceId = currentSpaceIdOrHandle
@@ -872,7 +864,7 @@ export class Peer {
             () => {
               timedOut = true;
               console.error(
-                `Space connection timed out after ${Peer.SPACE_CONNECTION_TIMEOUT_MS}ms`,
+                `[Peer] Space connection timed out after ${Peer.SPACE_CONNECTION_TIMEOUT_MS}ms`,
                 {
                   streamId,
                 },
@@ -889,6 +881,8 @@ export class Peer {
             // Mark as error since it timed out (even if it eventually completes)
             this.#spaceStatuses.set(streamId, "error");
           }
+
+          console.log("[Peer] Connected to space!", { streamId });
 
           span.end();
           return result;
@@ -930,6 +924,7 @@ export class Peer {
       () => console.warn(`Waiting for space metadata backfill`, { streamId }),
       5000,
     );
+
     await space.unsubscribe();
 
     await withTimeoutCallback(

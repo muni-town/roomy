@@ -63,11 +63,13 @@ export class AsyncChannel<T> {
   async #next(): Promise<T | typeof END> {
     const inPriorityQueue = this.#priorityQueue.shift();
     if (inPriorityQueue) {
+      console.log("[PRIORITY]", inPriorityQueue);
       return inPriorityQueue;
     }
 
     const inBackgroundQueue = this.#backgroundQueue.shift();
     if (inBackgroundQueue) {
+      console.log("[BACKGROUND]", inBackgroundQueue);
       return inBackgroundQueue;
     }
 

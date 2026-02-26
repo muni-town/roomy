@@ -532,11 +532,11 @@ class SqliteWorkerSupervisor {
         this.#pendingSpacesToConnect.clear();
 
         console.debug(
-          `Connecting ${spacesToConnect.length} pending space(s):`,
+          `[SqW] Connecting ${spacesToConnect.length} pending space(s):`,
           spacesToConnect,
         );
 
-        if (spacesToConnect.includes(currentSpaceId)) {
+        if (currentSpaceId && spacesToConnect.includes(currentSpaceId)) {
           // give the active space a 1sec headstart
           await Promise.race([
             this.connectSpaceStream(currentSpaceId),
@@ -545,32 +545,35 @@ class SqliteWorkerSupervisor {
         }
 
         // Connect spaces in parallel - one failing/slow space shouldn't block others
-        const results = await Promise.allSettled(
-          spacesToConnect.map(
-            (spaceId) =>
-              spaceId !== currentSpaceId && this.connectSpaceStream(spaceId),
-          ),
-        );
-
-        // Log any failures for observability
-        results.forEach((result, idx) => {
-          if (result.status === "rejected") {
-            console.error(`Failed to connect space`, {
-              streamId: spacesToConnect[idx],
-              error: result.reason,
-            });
-          }
-        });
-
-        const succeeded = results.filter(
-          (r) => r.status === "fulfilled",
-        ).length;
-        const failed = results.filter((r) => r.status === "rejected").length;
-        if (failed > 0) {
-          console.warn(
-            `Space connection summary: ${succeeded} succeeded, ${failed} failed`,
+        (async () => {
+          const results = await Promise.allSettled(
+            spacesToConnect
+              .filter((s) => s !== currentSpaceId)
+              .map((spaceId) => this.connectSpaceStream(spaceId)),
           );
-        }
+
+          // Log any failures for observability
+          results.forEach((result, idx) => {
+            if (result.status === "rejected") {
+              console.error(`[SqW] Failed to connect space`, {
+                streamId: spacesToConnect[idx],
+                error: result.reason,
+              });
+            }
+          });
+
+          console.log("[SqW] Spaces all connected");
+
+          const succeeded = results.filter(
+            (r) => r.status === "fulfilled",
+          ).length;
+          const failed = results.filter((r) => r.status === "rejected").length;
+          if (failed > 0) {
+            console.warn(
+              `Space connection summary: ${succeeded} succeeded, ${failed} failed`,
+            );
+          }
+        })();
       },
     };
   }

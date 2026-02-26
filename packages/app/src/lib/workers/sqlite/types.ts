@@ -29,7 +29,7 @@ export type SqliteWorkerInterface = {
   /** Connect to all spaces accumulated during personal stream backfill.
    * This should be called after the personal stream is fully materialized
    * to ensure we don't connect to spaces the user has left. */
-  connectPendingSpaces(currentSpaceId: StreamDid): Promise<void>;
+  connectPendingSpaces(currentSpaceId: StreamDid | undefined): Promise<void>;
 };
 
 export interface SqlStatement {
