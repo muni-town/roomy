@@ -518,7 +518,7 @@
       <div class="flex flex-col w-full h-full pb-16 pt-2">
         <StateSuspense state={timeline} pending={messagesSkeleton}>
           {#snippet children(timeline)}
-            <ol class="flex flex-col gap-2 max-w-full h-full">
+            <ol class="flex flex-col justify-end gap-2 max-w-full h-full">
               <StateSuspense state={lazyLoadState}>
                 {#snippet children()}
                   {#if timeline.length === 0}
