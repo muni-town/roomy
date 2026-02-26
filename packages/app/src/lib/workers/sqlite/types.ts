@@ -1,6 +1,7 @@
 import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
 import type { Batch, TaskPriority } from "../types";
 import type { QueryResult } from "./setup";
+import type { StreamDid } from "@roomy/sdk";
 
 export interface SqliteStatus {
   isActiveWorker: boolean;
@@ -28,7 +29,7 @@ export type SqliteWorkerInterface = {
   /** Connect to all spaces accumulated during personal stream backfill.
    * This should be called after the personal stream is fully materialized
    * to ensure we don't connect to spaces the user has left. */
-  connectPendingSpaces(): Promise<void>;
+  connectPendingSpaces(currentSpaceId: StreamDid): Promise<void>;
 };
 
 export interface SqlStatement {

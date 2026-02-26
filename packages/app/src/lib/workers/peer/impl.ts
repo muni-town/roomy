@@ -652,25 +652,6 @@ export class Peer {
       [...spacesToConnect.keys()].map((id) => [id, "loading"]),
     );
 
-    // Connect to spaces the user has joined (but not left) after full personal stream backfill
-    await tracer.startActiveSpan(
-      "Connect Pending Spaces",
-      {},
-      ctx,
-      async (span) => {
-        await this.#sqlite.sqliteWorker.connectPendingSpaces();
-        span.end();
-      },
-    );
-
-    this.#roomy.current = {
-      state: "connected",
-      eventChannel,
-      spaces: new Map([...this.#roomy.current.spaces.entries()]),
-      client: this.#roomy.current.client,
-      personalSpace: this.#roomy.current.personalSpace,
-    };
-
     const currentSpaceIdOrHandle = await this.#currentSpace.promise;
     const currentSpaceId: StreamDid | undefined = await tracer.startActiveSpan(
       "Resolve Space DID from DID or Handle",
@@ -686,6 +667,25 @@ export class Peer {
         return resolved?.spaceDid;
       },
     );
+
+    // Connect to spaces the user has joined (but not left) after full personal stream backfill
+    await tracer.startActiveSpan(
+      "Connect Pending Spaces",
+      {},
+      ctx,
+      async (span) => {
+        await this.#sqlite.sqliteWorker.connectPendingSpaces(currentSpaceId);
+        span.end();
+      },
+    );
+
+    this.#roomy.current = {
+      state: "connected",
+      eventChannel,
+      spaces: new Map([...this.#roomy.current.spaces.entries()]),
+      client: this.#roomy.current.client,
+      personalSpace: this.#roomy.current.personalSpace,
+    };
 
     // Wait for the current space (if set) to finish materializing metadata
     await tracer.startActiveSpan(
