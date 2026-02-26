@@ -283,12 +283,10 @@
           fwd.room = ${page.params.object}
 
       order by sort_idx desc, msg_id desc
-      limit ${showLastN}
     `,
     (row) => {
       return JSON.parse(row.json);
     },
-    // caching causes some kind of very intermittent failure. need to measure performance.
     { cache: true, description: "Messages query", origin: "ChatArea.svelte" },
   );
 
@@ -375,8 +373,8 @@
   }
 
   function scrollToBottom() {
-    if (!virtualizer || timeline.status !== "success") return;
-    virtualizer.scrollToIndex(timeline.data.length - 1, { align: "start" });
+    if (!virtualizer || slicedTimeline.status !== "success") return;
+    virtualizer.scrollToIndex(slicedTimeline.data.length - 1, { align: "start" });
     isAtBottom = true;
   }
 
@@ -409,12 +407,12 @@
     hasInitiallyScrolled = false; // Reset for new route
   });
 
-  // // Simple initial scroll to bottom when timeline first loads
+  // Simple initial scroll to bottom when timeline first loads
   $effect(() => {
     if (
       !hasInitiallyScrolled &&
-      timeline.status === "success" &&
-      timeline.data.length > 0 &&
+      slicedTimeline.status === "success" &&
+      slicedTimeline.data.length > 0 &&
       virtualizer
     ) {
       setTimeout(() => {
@@ -427,8 +425,8 @@
 
   // Auto-scroll to bottom when new messages arrive and user is already at bottom
   $effect(() => {
-    if (timeline.status !== "success") return;
-    const len = timeline.data.length;
+    if (slicedTimeline.status !== "success") return;
+    const len = slicedTimeline.data.length;
     if (len > prevTimelineLength && prevTimelineLength > 0 && isAtBottom) {
       scrollToBottom();
     }
@@ -496,11 +494,12 @@
     >
       <div class="flex flex-col w-full h-full pb-16 pt-2">
         <StateSuspense state={timeline} pending={messagesSkeleton}>
-          {#snippet children(timeline)}
+          {#snippet children(allMessages)}
+            {@const messages = allMessages.slice(-showLastN)}
             <ol class="flex flex-col justify-end gap-2 max-w-full h-full">
               <StateSuspense state={lazyLoadState}>
                 {#snippet children()}
-                  {#if timeline.length === 0}
+                  {#if messages.length === 0}
                     <p class="opacity-80 p-4 text-center text-sm">
                       No messages here yet. This is the beginning of something
                       beautiful.
@@ -526,7 +525,7 @@
                 {/snippet}
               </StateSuspense>
 
-              {#if timeline.length > 0}
+              {#if messages.length > 0}
                 <!--
                   This use of `key` needs explaining. `key` causes the components below
                   it to be deleted and re-created when the expression passed to it is changed.
@@ -534,18 +533,18 @@
                   will be re-created. This is important because the virtualizer only actually sets
                   up the scrollRef when is mounted. And `viewport` is technically only assigned after
                   _this_ parent component is mounted. Leading to a chicken-egg problem.
-      
+
                   Once the `viewport` is assigned, the virtualizer has already been mounted with scrollRef
                   set to `undefined`, and it won't be re-calculated.
-      
+
                   By using `key` we make sure that the virtualizer is re-mounted after the `viewport` is
                   assigned, so that its scroll integration works properly.
                 -->
                 {#key `${viewport}-${page.params.object}`}
-                  {#if timeline.length > 0}
+                  {#if messages.length > 0}
                     <Virtualizer
                       bind:this={virtualizer}
-                      data={timeline}
+                      data={messages}
                       scrollRef={viewport}
                       overscan={5}
                       shift={true}
@@ -553,7 +552,7 @@
                         return x.id;
                       }}
                       onscroll={(o) => {
-                        if (o < 100 && timeline.length >= showLastN) {
+                        if (o < 100 && messages.length >= showLastN) {
                           showLastN += 50;
                         }
                       }}
