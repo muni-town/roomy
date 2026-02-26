@@ -341,27 +341,12 @@
   let slicedTimeline = $derived(
     mapAsyncState(timeline, (t) => t.slice(-showLastN)),
   );
-  // let isShowingFirstMessage = $derived(
-  //   mapAsyncState(timeline, (t) => !t.length),
-  // );
   let viewport: HTMLDivElement = $state(null!);
 
   // Track initial load for auto-scroll
   let hasInitiallyScrolled = $state(false);
-  // // Handle new messages - only auto-scroll if user is at bottom
-  // let lastTimelineLength: AsyncState<number> = $derived.by(() => {
-  //   return mapAsyncState(timeline, (t) => {
-  //     if (
-  //       isAtBottom &&
-  //       virtualizer &&
-  //       lastTimelineLength.status === "success" &&
-  //       lastTimelineLength.data > 0
-  //     ) {
-  //       setTimeout(() => scrollToBottom(), 50);
-  //     }
-  //     return t.length;
-  //   });
-  // });
+  // Track timeline length to detect new messages
+  let prevTimelineLength = $state(0);
 
   // Lifted state for editing messages
   let editingMessageId = $state("");
@@ -438,6 +423,16 @@
       }, 200);
     }
     chatArea.scrollToMessage = scrollToMessage;
+  });
+
+  // Auto-scroll to bottom when new messages arrive and user is already at bottom
+  $effect(() => {
+    if (timeline.status !== "success") return;
+    const len = timeline.data.length;
+    if (len > prevTimelineLength && prevTimelineLength > 0 && isAtBottom) {
+      scrollToBottom();
+    }
+    prevTimelineLength = len;
   });
 
   let isShiftingFromShowLastN = $state(false);
