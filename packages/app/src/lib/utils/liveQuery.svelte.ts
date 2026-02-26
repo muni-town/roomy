@@ -58,7 +58,8 @@ export class LiveQuery<Row extends { [key: string]: unknown }> {
     mapper?: (row: any) => Row,
     options?: LiveQueryOptions,
   ) {
-    const useCache = options?.cache !== false;
+    // const useCache = options?.cache !== false;
+    const useCache = false; // Temporarily disable caching to see if it fixes production issues.
     const mapRow = mapper || ((x: any) => x);
 
     $effect(() => {
