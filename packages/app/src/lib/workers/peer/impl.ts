@@ -659,13 +659,23 @@ export class Peer {
       { attributes: { "space.id": currentSpaceIdOrHandle || "none" } },
       ctx,
       async (span) => {
-        const resolved = currentSpaceIdOrHandle
-          ? await this.client.resolveSpaceIdFromDidOrHandle(
-              currentSpaceIdOrHandle,
-            )
-          : undefined;
-        span.end();
-        return resolved?.spaceDid;
+        try {
+          const resolved = currentSpaceIdOrHandle
+            ? await this.client.resolveSpaceIdFromDidOrHandle(
+                currentSpaceIdOrHandle,
+              )
+            : undefined;
+          return resolved?.spaceDid;
+        } catch (e) {
+          console.warn(
+            "[Peer] Could not resolve current space:",
+            currentSpaceIdOrHandle,
+            e,
+          );
+          return undefined;
+        } finally {
+          span.end();
+        }
       },
     );
 
