@@ -139,7 +139,7 @@
         >
         <Button
           class="overflow-x-hidden justify-start truncate self-stretch w-full rounded-3xl mt-1"
-          variant="secondary"
+          variant="blue"
           onclick={(evt) => {
             handle.value = lastLogin?.handle ?? "";
             login(evt);
@@ -156,7 +156,7 @@
         </Button>
       {/if}
         <Label for="atproto-handle" class="text-sm flex justify-between w-full mt-4"
-          ><span><div>What's your handle?</div><div class="text-xs opacity-75">Login using a <span class="">Bluesky</span> or <a href="https://atproto.com/" class="text-accent-600 dark:text-accent-400">Atmosphere</a> account.</div></span>
+          ><span><div>What's your handle?</div><div class="text-xs"><span class="text-stone-400">Login via <a href="https://bsky.app/" class="hover:text-[#0886FE] dark:hover:text-[#0886FE]">Bluesky</a> or the <a href="https://atproto.com/" class="text-accent-600 dark:text-accent-400">Atmosphere</a>.</span></div></span>
           <div class="inline-flex gap-1">
             <svg
               version="1.1"
@@ -209,7 +209,7 @@
               viewBox="-40 -40 680 620"
               version="1.1"
               class={[
-                "text-base-500 dark:text-base-500 hover:text-[rgb(0,106,255)] dark:hover:text-[rgb(0,106,255)] size-4",
+                "text-base-500 dark:text-base-500 hover:text-[#0886FE] dark:hover:text-[#0886FE] size-4",
               ]}
               aria-hidden="true"
             >
@@ -229,15 +229,14 @@
             class="w-full text-sm py-2 px-3 rounded-lg"
             bind:value={handle.value}
           />
+          {#if error}
+            <p class="text-red-600 dark:text-red-400 text-xs font-medium w-full pt-2">{error}</p>
+          {/if}
         </div>
-
-      {#if error}
-        <p class="text-accent-500 mt-2 text-sm font-medium w-full">{error}</p>
-      {/if}
 
       <Button
         type="submit"
-        class="mt-2 ml-auto w-full md:w-auto py-2 rounded-3xl"
+        class="mt-0 ml-auto w-full md:w-auto py-2 rounded-3xl"
         disabled={loading}>{loading ? "Loading..." : "Login"}</Button
       >
     </form>
