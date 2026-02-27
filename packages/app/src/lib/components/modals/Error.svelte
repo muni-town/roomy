@@ -1,13 +1,16 @@
 <script lang="ts">
   import { Alert } from "@foxui/core";
   import Button from "$lib/components/ui/button/Button.svelte";
+  import type { Snippet } from "svelte";
 
   let {
     message,
+    children,
     goHome,
     tellUs = true,
   } = $props<{
-    message: string;
+    message?: string;
+    children?: Snippet;
     goHome?: boolean;
     tellUs?: boolean;
   }>();
@@ -17,9 +20,13 @@
   <Alert
     title="Error"
     type="error"
-    class="max-w-sm text-ellipsis overflow-x-clip"
+    class="max-w-sm"
   >
-    <h6 class="mb-2 max-w-full text-ellipsis overflow-hidden">{message}</h6>
+    {#if children}
+      {@render children()}
+    {:else if message}
+      <h6 class="mb-2 max-w-full text-ellipsis overflow-hidden">{message}</h6>
+    {/if}
     {#if tellUs}
       <span
         >You can let us know on <a
