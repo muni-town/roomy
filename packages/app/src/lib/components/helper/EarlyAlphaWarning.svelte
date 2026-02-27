@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Alert } from "@foxui/core";
+  import { Alert } from "$lib/components/ui/alert";
   // import { onMount } from "svelte";
 
   let showAlphaWarning = $state(true);
