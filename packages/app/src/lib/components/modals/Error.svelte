@@ -17,7 +17,7 @@
 </script>
 
 <div class="w-full h-screen flex items-center justify-center">
-  <Alert title="Something went wrong :(" class="max-w-sm">
+  <Alert title="Something went wrong :(" class="max-w-sm" type="error">
     {#if children}
       {@render children()}
     {:else if message}
