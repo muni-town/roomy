@@ -66,7 +66,9 @@
   <div
     class="flex h-screen w-full items-center justify-center bg-base-950/75 bg fixed left-0 top-0 z-10"
   >
-    <LoginForm class="w-[23em] bg-base-300 dark:bg-base-950 border-base-900 pt-6" />
+    <LoginForm
+      class="w-[23em] bg-base-300 dark:bg-base-950 dark:border-base-900 pt-6"
+    />
   </div>
 {/if}
 
