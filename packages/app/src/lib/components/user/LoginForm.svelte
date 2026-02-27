@@ -3,18 +3,11 @@
   import { env } from "$env/dynamic/public";
   import { peer } from "$lib/workers";
 
-  import {
-    Button,
-    Subheading,
-    Label,
-    Input,
-    Avatar,
-    Box,
-    Tabs,
-    toast,
-  } from "@foxui/core";
+  import { Subheading, Label, Avatar, Box, Tabs, toast } from "@foxui/core";
   import { Handle } from "@roomy/sdk";
   import { onMount } from "svelte";
+  import Button from "../ui/button/Button.svelte";
+  import Input from "../ui/input/Input.svelte";
 
   const tabs = ["Login", "Register"] as const;
   let tab = $state(tabs[0]) as (typeof tabs)[number];
@@ -262,7 +255,7 @@
         {@render tabsUi()}
         <Button
           type="submit"
-          class="mt-0 ml-auto w-full md:w-auto py-2 rounded-3xl"
+          class="mt-0 ml-auto w-auto py-2 rounded-3xl"
           disabled={loading}>{loading ? "Loading..." : "Login"}</Button
         >
       </div>
@@ -314,7 +307,7 @@
         {@render tabsUi()}
         <Button
           type="submit"
-          class="mt-0 ml-auto w-full md:w-auto py-2 rounded-3xl"
+          class="mt-0 ml-auto w-auto py-2 rounded-3xl"
           disabled={loading}>{loading ? "Loading..." : "Register"}</Button
         >
       </div>
