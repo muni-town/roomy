@@ -6,66 +6,78 @@
   import { joinSpace } from "$lib/mutations/space";
   import { type SpaceIdOrHandle } from "$lib/workers/types";
   import { peer } from "$lib/workers";
-  import { Handle, StreamDid } from "@roomy/sdk";
+  import { StreamDid, type AsyncStateWithIdle } from "@roomy/sdk";
 
   let spaceName = $state() as string | undefined;
   let spaceAvatar = $state() as string | undefined;
 
-  $effect(() => {
-    if (!page.params.space) return;
-    peer.resolveSpaceId(page.params.space as StreamDid | Handle).then((did) =>
-      peer.getSpaceInfo(StreamDid.assert(did.spaceId)).then((info) => {
-        spaceName = info?.name;
-        spaceAvatar = info?.avatar;
-      }),
-    );
+  // State for resolving the space
+  let resolveState: AsyncStateWithIdle<{ spaceId: StreamDid }> = $state({
+    status: "loading",
   });
 
-  type JoinStatus =
-    | { status: "loading" }
-    | { status: "ready"; spaceId: StreamDid }
-    | { status: "joining" }
-    | { status: "success" }
-    | {
-        status: "error";
-        message: string;
-      };
-  let joinStatus: JoinStatus = $state({ status: "loading" });
-
-  function error(message: string) {
-    console.error(message);
-    joinStatus = { status: "error", message };
-  }
+  // State for joining the space
+  let joinState: AsyncStateWithIdle<void> = $state({ status: "idle" });
 
   $effect(() => {
     (async () => {
       if (!page.params.space) {
-        error("No space ID or handle provided");
+        resolveState = {
+          status: "error",
+          message: "No space ID or handle provided",
+        };
         return;
       }
       const resolvedSpace = await peer.resolveSpaceId(
         page.params.space as SpaceIdOrHandle,
       );
       if (resolvedSpace) {
-        joinStatus = { status: "ready", spaceId: resolvedSpace.spaceId };
+        resolveState = {
+          status: "success",
+          data: { spaceId: resolvedSpace.spaceId },
+        };
       } else {
-        error("This space doesn't exist or has been deleted...");
+        resolveState = {
+          status: "error",
+          message: "This space doesn't exist or has been deleted...",
+        };
       }
     })();
   });
+
+  $effect(() => {
+    if (resolveState.status === "success") {
+      peer.getSpaceInfo(resolveState.data.spaceId).then((info) => {
+        spaceName = info?.name;
+        spaceAvatar = info?.avatar;
+      });
+    }
+  });
+
+  async function handleJoin() {
+    if (resolveState.status !== "success") return;
+    joinState = { status: "loading" };
+    try {
+      await joinSpace(resolveState.data.spaceId);
+      joinState = { status: "success", data: undefined };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Failed to join space";
+      joinState = { status: "error", message };
+    }
+  }
 </script>
 
 <div class="flex items-center justify-center h-full">
   <Box class="w-[20em] flex flex-col">
-    {#if joinStatus.status === "loading"}
+    {#if resolveState.status === "loading"}
       <p class="text-sm text-center">Loading space...</p>
     {/if}
-    {#if joinStatus.status === "error"}<p
-        class="text-sm text-red-700 dark:text-red-400 text-center"
-      >
-        {joinStatus.message}
-      </p>{/if}
-    {#if joinStatus.status === "ready" || joinStatus.status === "joining"}
+    {#if resolveState.status === "error"}
+      <p class="text-sm text-red-700 dark:text-red-400 text-center">
+        {resolveState.message}
+      </p>
+    {/if}
+    {#if resolveState.status === "success"}
       <div class="mb-5 flex justify-center items-center gap-3">
         <SpaceAvatar
           imageUrl={spaceAvatar ?? ""}
@@ -77,14 +89,9 @@
           <h1 class="font-bold text-xl">{spaceName}</h1>
         {/if}
       </div>
-      <Button
-        size="lg"
-        disabled={joinStatus.status !== "ready"}
-        onclick={() =>
-          joinStatus.status === "ready"
-            ? joinSpace(joinStatus.spaceId)
-            : error("No space ID provided")}>Join Space</Button
-      >
+      <Button size="lg" asyncState={joinState} onclick={handleJoin}>
+        Join Space
+      </Button>
     {/if}
   </Box>
 </div>
