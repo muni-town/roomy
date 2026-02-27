@@ -6,7 +6,7 @@ import { describe, it, expect } from "vitest";
 import { SetCalendarLink } from "../../src/schema/events/calendar";
 
 describe("SetCalendarLink", () => {
-  it("produces insert-or-replace SQL with correct field mapping", () => {
+  it("produces insert-or-replace SQL when groupSlug is non-null", () => {
     const streamId = "did:web:test.roomy.chat";
     const event = {
       $type: "space.roomy.openmeet.configure.v0" as const,
@@ -28,7 +28,6 @@ describe("SetCalendarLink", () => {
     expect(stmt.sql).toContain("group_slug");
     expect(stmt.sql).toContain("tenant_id");
     expect(stmt.sql).toContain("api_url");
-    // Params: streamId, groupSlug, tenantId, apiUrl
     expect(stmt.params).toEqual([
       streamId,
       "my-group",
@@ -50,7 +49,6 @@ describe("SetCalendarLink", () => {
     });
 
     const stmt = statements[0];
-    // The sql template replaces params with ?, so 4 placeholders expected
     const placeholders = stmt.sql.match(/\?/g);
     expect(placeholders).toHaveLength(4);
     expect(stmt.params).toEqual([
@@ -59,5 +57,27 @@ describe("SetCalendarLink", () => {
       "tenant/special",
       "http://localhost:3000",
     ]);
+  });
+
+  it("produces DELETE SQL when groupSlug is null (disconnect)", () => {
+    const streamId = "did:web:test.roomy.chat";
+    const event = {
+      $type: "space.roomy.openmeet.configure.v0" as const,
+      groupSlug: null,
+      tenantId: null,
+      apiUrl: null,
+    };
+
+    const statements = SetCalendarLink.materialize({
+      streamId,
+      user: "did:plc:admin",
+      event,
+    });
+
+    expect(statements).toHaveLength(1);
+    const stmt = statements[0];
+    expect(stmt.sql).toContain("delete from comp_calendar_link");
+    expect(stmt.sql).toContain("entity");
+    expect(stmt.params).toEqual([streamId]);
   });
 });
