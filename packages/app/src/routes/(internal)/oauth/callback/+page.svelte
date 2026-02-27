@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { peer } from "$lib/workers";
-  import { Alert } from "@foxui/core";
+  import { Alert } from "$lib/components/ui/alert";
   import Button from "$lib/components/ui/button/Button.svelte";
   import { trace, context, SpanStatusCode } from "@opentelemetry/api";
   import { onMount } from "svelte";

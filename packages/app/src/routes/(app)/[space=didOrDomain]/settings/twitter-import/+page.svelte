@@ -361,7 +361,7 @@
 
 <script lang="ts">
   import { page } from "$app/state";
-  import { Alert } from "@foxui/core";
+  import { Alert } from "$lib/components/ui/alert";
   import Button from "$lib/components/ui/button/Button.svelte";
   import { writable } from "svelte/store";
 
