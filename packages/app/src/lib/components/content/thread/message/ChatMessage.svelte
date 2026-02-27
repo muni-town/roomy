@@ -94,10 +94,15 @@
     timestamp: Date;
     profileUrl?: string;
   } = $derived.by(() => {
+    // Strip Discord discriminator from handle (e.g., "username#0" -> "username")
+    const handle = message.authorHandle
+      ? message.authorHandle.replace(/#\d+$/, "")
+      : undefined;
+
     return {
       id: message.authorDid,
       name: message.authorName || undefined,
-      handle: message.authorHandle || undefined,
+      handle,
       avatarUrl: message.authorAvatar || undefined,
       timestamp: new Date(message.timestamp),
       profileUrl: `/user/${message.authorDid}`,
