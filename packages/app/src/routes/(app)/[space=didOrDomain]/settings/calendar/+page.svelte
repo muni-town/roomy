@@ -20,6 +20,7 @@
   let tenantId = $state("");
   let apiUrl = $state("");
   let saving = $state(false);
+  let disconnecting = $state(false);
 
   $effect(() => {
     if (existingLink) {
@@ -45,6 +46,28 @@
       toast.error("Failed to save: " + (e as Error).message);
     } finally {
       saving = false;
+    }
+  }
+
+  async function disconnect() {
+    if (!spaceId) return;
+    disconnecting = true;
+    try {
+      await peer.sendEvent(spaceId as StreamDid, {
+        id: newUlid(),
+        $type: "space.roomy.openmeet.configure.v0",
+        groupSlug: null,
+        tenantId: null,
+        apiUrl: null,
+      });
+      groupSlug = "";
+      tenantId = "";
+      apiUrl = "";
+      toast.success("Calendar disconnected");
+    } catch (e) {
+      toast.error("Failed to disconnect: " + (e as Error).message);
+    } finally {
+      disconnecting = false;
     }
   }
 </script>
@@ -127,11 +150,23 @@
       </div>
     </div>
 
-    <Button
-      type="submit"
-      disabled={saving || !groupSlug.trim()}
-    >
-      {saving ? "Saving..." : existingLink ? "Update" : "Connect"}
-    </Button>
+    <div class="flex gap-3">
+      <Button
+        type="submit"
+        disabled={saving || !groupSlug.trim()}
+      >
+        {saving ? "Saving..." : existingLink ? "Update" : "Connect"}
+      </Button>
+
+      {#if existingLink}
+        <Button
+          variant="ghost"
+          disabled={disconnecting}
+          onclick={(e: MouseEvent) => { e.preventDefault(); disconnect(); }}
+        >
+          {disconnecting ? "Disconnecting..." : "Disconnect"}
+        </Button>
+      {/if}
+    </div>
   </div>
 </form>
