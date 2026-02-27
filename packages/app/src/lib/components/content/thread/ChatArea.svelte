@@ -539,51 +539,40 @@
 
               {#if messages.length > 0}
                 <!--
-                  This use of `key` needs explaining. `key` causes the components below
-                  it to be deleted and re-created when the expression passed to it is changed.
-                  This means that every time the `viewport` binding is updated, the virtualizer
-                  will be re-created. This is important because the virtualizer only actually sets
-                  up the scrollRef when is mounted. And `viewport` is technically only assigned after
-                  _this_ parent component is mounted. Leading to a chicken-egg problem.
-
-                  Once the `viewport` is assigned, the virtualizer has already been mounted with scrollRef
-                  set to `undefined`, and it won't be re-calculated.
-
-                  By using `key` we make sure that the virtualizer is re-mounted after the `viewport` is
-                  assigned, so that its scroll integration works properly.
+                  The Virtualizer needs a stable scrollRef to function correctly.
+                  We guard its creation until viewport is available to prevent virtua from
+                  trying to access parentElement on a null containerRef.
                 -->
-                {#key `${viewport}-${page.params.object}`}
-                  {#if messages.length > 0}
-                    <Virtualizer
-                      bind:this={virtualizer}
-                      data={messages}
-                      scrollRef={viewport}
-                      overscan={5}
-                      shift={true}
-                      getKey={(x) => {
-                        return x.id;
-                      }}
-                      onscroll={(o) => {
-                        if (o < 100 && messages.length >= showLastN) {
-                          showLastN += 50;
-                        }
-                      }}
-                    >
-                      {#snippet children(message?: Message)}
-                        {#if message}
-                          <ChatMessage
-                            {message}
-                            messagingState={messagingStateProp}
-                            onOpenMobileMenu={openMobileMenu}
-                            {editingMessageId}
-                            onStartEdit={(id) => (editingMessageId = id)}
-                            onCancelEdit={() => (editingMessageId = "")}
-                          />
-                        {/if}
-                      {/snippet}
-                    </Virtualizer>
-                  {/if}
-                {/key}
+                {#if viewport}
+                  <Virtualizer
+                    bind:this={virtualizer}
+                    data={messages}
+                    scrollRef={viewport}
+                    overscan={5}
+                    shift={true}
+                    getKey={(x) => {
+                      return x.id;
+                    }}
+                    onscroll={(o) => {
+                      if (o < 100 && messages.length >= showLastN) {
+                        showLastN += 50;
+                      }
+                    }}
+                  >
+                    {#snippet children(message?: Message)}
+                      {#if message}
+                        <ChatMessage
+                          {message}
+                          messagingState={messagingStateProp}
+                          onOpenMobileMenu={openMobileMenu}
+                          {editingMessageId}
+                          onStartEdit={(id) => (editingMessageId = id)}
+                          onCancelEdit={() => (editingMessageId = "")}
+                        />
+                      {/if}
+                    {/snippet}
+                  </Virtualizer>
+                {/if}
               {/if}
             </ol>
           {/snippet}
