@@ -84,9 +84,7 @@
   let hovered = $state(false);
   let keepToolbarOpen = $state(false);
 
-  // TODO: move this author can masquerade logic into the materializer so we don't have to
-  // re-hash this in the UI.
-  let authorCanMasquerade = $derived(true);
+  // Metadata is now canonical (resolved at query level)
   let metadata: {
     id: string | null;
     name?: string;
@@ -96,30 +94,14 @@
     timestamp: Date;
     profileUrl?: string;
   } = $derived.by(() => {
-    const defaultInfo = {
+    return {
       id: message.authorDid,
       name: message.authorName || undefined,
       handle: message.authorHandle || undefined,
       avatarUrl: message.authorAvatar || undefined,
-      timestamp: new Date(decodeTime(message.id)),
+      timestamp: new Date(message.timestamp),
       profileUrl: `/user/${message.authorDid}`,
     };
-    if (!authorCanMasquerade) return defaultInfo;
-    if (!message.masqueradeAuthor) return defaultInfo;
-
-    try {
-      return {
-        id: message.masqueradeAuthor,
-        handle: message.masqueradeAuthorHandle || undefined,
-        name: message.masqueradeAuthorName || undefined,
-        avatarUrl: message.masqueradeAuthorAvatar || undefined,
-        timestamp: message.masqueradeTimestamp
-          ? new Date(message.masqueradeTimestamp)
-          : new Date(decodeTime(message.id)),
-      };
-    } catch (_) {}
-
-    return defaultInfo;
   });
 
   let messageByMe = $derived(
@@ -134,9 +116,7 @@
 
   let isEditing = $derived(editingMessageId === message.id);
 
-  let isFromDiscord = $derived(
-    message.masqueradeAuthor?.startsWith("did:discord:") ?? false,
-  );
+  let isFromDiscord = $derived(message.isBridged);
 
   function editMessage() {
     onStartEdit(message.id);
@@ -236,7 +216,7 @@
               <span class="font-medium text-accent-700 dark:text-accent-400"
                 >{metadata.name}</span
               >
-              {#if metadata.handle && !message.masqueradeAuthor}<span
+              {#if metadata.handle}<span
                   class="opacity-75 font-normal">@{metadata.handle}</span
                 >{/if}
               {#if isFromDiscord}

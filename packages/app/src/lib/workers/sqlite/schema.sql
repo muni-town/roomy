@@ -98,7 +98,8 @@ create table if not exists comp_content (
   entity text primary key references entities(id) on delete cascade,
   mime_type text,
   data blob,
-  last_edit text not null, -- ID of most recent edit event 
+  last_edit text not null, -- ID of most recent edit event
+  timestamp integer, -- Canonical message timestamp (milliseconds since epoch), resolves override if present
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;
@@ -112,14 +113,6 @@ create table if not exists comp_info (
   name text,
   avatar text,
   description text,
-  created_at integer not null default (unixepoch() * 1000),
-  updated_at integer not null default (unixepoch() * 1000)
-) strict;
-
-create table if not exists comp_override_meta (
-  entity text primary key references entities(id) on delete cascade,
-  author text references entities(id), -- did
-  timestamp integer,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
 ) strict;

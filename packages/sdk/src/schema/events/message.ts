@@ -94,34 +94,41 @@ export const CreateMessage = defineEvent(
           event.body.mimeType,
         )
       : (event.body.data as { buf: Uint8Array }).buf;
-    const statements = [
-      ensureEntity(streamId, event.id, event.room),
-      sql`
-        insert or replace into comp_content (entity, mime_type, data, last_edit)
-        values (
-          ${event.id},
-          ${event.body.mimeType},
-          ${bodyData},
-          ${event.id}
-        )`,
-      sql`
-        insert into comp_last_read (entity, timestamp, unread_count)
-          values (${event.room}, 1, 1)
-          on conflict(entity) do update set
-            unread_count = case
-              when ${decodeTime(event.id)} > comp_last_read.timestamp
-              then comp_last_read.unread_count + 1
-              else comp_last_read.unread_count
-            end,
-            updated_at = (unixepoch() * 1000)
-      `,
-    ];
 
     // Handle overrideAuthorDid, overrideTimestamp extensions
     const overrideAuthorExt =
       event.extensions["space.roomy.extension.authorOverride.v0"]?.did;
     const overrideTimestampExt =
       event.extensions["space.roomy.extension.timestampOverride.v0"]?.timestamp;
+
+    // Canonical timestamp: use override if present, otherwise decode from ULID
+    const canonicalTimestamp = overrideTimestampExt
+      ? Number(overrideTimestampExt)
+      : decodeTime(event.id);
+
+    const statements = [
+      ensureEntity(streamId, event.id, event.room),
+      sql`
+        insert or replace into comp_content (entity, mime_type, data, last_edit, timestamp)
+        values (
+          ${event.id},
+          ${event.body.mimeType},
+          ${bodyData},
+          ${event.id},
+          ${canonicalTimestamp}
+        )`,
+      sql`
+        insert into comp_last_read (entity, timestamp, unread_count)
+          values (${event.room}, 1, 1)
+          on conflict(entity) do update set
+            unread_count = case
+              when ${canonicalTimestamp} > comp_last_read.timestamp
+              then comp_last_read.unread_count + 1
+              else comp_last_read.unread_count
+            end,
+            updated_at = (unixepoch() * 1000)
+      `,
+    ];
 
     if (!overrideAuthorExt) {
       // normal messages - create 'author' edge
@@ -141,17 +148,6 @@ export const CreateMessage = defineEvent(
           ${event.id},
           ${overrideAuthorExt},
           'author'
-      `);
-    }
-
-    if (overrideAuthorExt || overrideTimestampExt) {
-      statements.push(sql`
-        insert or replace into comp_override_meta (entity, author, timestamp)
-        values (
-          ${event.id},
-          ${overrideAuthorExt ? overrideAuthorExt : null},
-          ${overrideTimestampExt ? Number(overrideTimestampExt) : null}
-        )
       `);
     }
 

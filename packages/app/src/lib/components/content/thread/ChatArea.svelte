@@ -22,7 +22,6 @@
   import { IconArrowDown, IconLoading } from "@roomy/design/icons";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
-  import { decodeTime } from "ulidx";
   import { onNavigate } from "$app/navigation";
   import type { MessagingState } from "./TimelineView.svelte";
   import { messagingState } from "./TimelineView.svelte";
@@ -92,29 +91,29 @@
         'id', e.id,
         'content', cast(c.data as text),
         'lastEdit', c.last_edit,
-        'authorDid', u.did,
+        -- Canonical author (resolved by materializer - author edge points to override if present)
+        'authorDid', author_edge.tail,
         'authorName', i.name,
         'authorAvatar', i.avatar,
         'authorHandle', u.handle,
-        'masqueradeAuthor', o.author,
-        'masqueradeTimestamp', o.timestamp,
+        -- Canonical timestamp from comp_content (already resolved by materializer)
+        'timestamp', c.timestamp,
+        -- Simple bridged flag (check if author DID is from Discord)
+        'isBridged', author_edge.tail like 'did:discord:%',
         'replyTo', coalesce((
           select json_group_array(ed.tail)
           from edges ed
           where ed.head = e.id and ed.label = 'reply'
         ), json_array()),
-        'masqueradeAuthorName', oai.name,
-        'masqueradeAuthorAvatar', oai.avatar,
-        'masqueradeAuthorHandle', oau.handle,
         'reactions', (
           select json_group_array(json_object(
             'reaction', rc.reaction,
             'userId', rc.user,
-            'userName', i.name,
+            'userName', ri.name,
             'reactionId', rc.reaction_id
           ))
           from comp_reaction rc
-          left join comp_info i on i.entity = rc.user
+          left join comp_info ri on ri.entity = rc.user
           where rc.entity = e.id
         ),
         'media', (
@@ -168,51 +167,50 @@
           left join comp_discord_origin cdo on cdo.entity = te.tail
           where te.head = e.id and te.label = 'tag'
         )
-      ) as json, e.sort_idx as sort_idx, e.id as msg_id, author_edge.*
+      ) as json, c.timestamp as canonical_timestamp, e.id as msg_id
       from entities e -- message
         join comp_content c on c.entity = e.id -- message content
-        join edges author_edge on author_edge.head = e.id and author_edge.label = 'author' -- message author relation
+        join edges author_edge on author_edge.head = e.id and author_edge.label = 'author' -- message author relation (already resolved by materializer)
         left join comp_user u on u.did = author_edge.tail -- author user
         left join comp_info i on i.entity = author_edge.tail -- author info
-        left join comp_override_meta o on o.entity = e.id -- overridden author/timestamp
-        left join comp_info oai on oai.entity = o.author -- overridden author info
-        left join comp_user oau on oau.did = o.author -- overridden author user
         left join comp_comment cc on cc.entity = e.id -- comment
       where
         e.room = ${page.params.object}
           and
         c.data is not null
+          and
+        c.timestamp is not null -- Filter out messages without timestamps (e.g., system messages)
 
         union all
-  
+
         -- Forwarded messages: follow forward edge to get original message content
         select json_object(
           'id', fwd.id,
           'content', cast(c.data as text),
           'lastEdit', c.last_edit,
-          'authorDid', u.did,
+          -- Canonical author (resolved by materializer - author edge points to override if present)
+          'authorDid', author_edge.tail,
           'authorName', i.name,
           'authorAvatar', i.avatar,
           'authorHandle', u.handle,
-          'masqueradeAuthor', o.author,
-          'masqueradeTimestamp', o.timestamp,
+          -- Canonical timestamp from comp_content (already resolved by materializer)
+          'timestamp', c.timestamp,
+          -- Simple bridged flag (check if author DID is from Discord)
+          'isBridged', author_edge.tail like 'did:discord:%',
           'replyTo', coalesce((
             select json_group_array(ed.tail)
             from edges ed
             where ed.head = orig.id and ed.label = 'reply'
           ), json_array()),
-          'masqueradeAuthorName', oai.name,
-          'masqueradeAuthorAvatar', oai.avatar,
-          'masqueradeAuthorHandle', oau.handle,
           'reactions', (
             select json_group_array(json_object(
               'reaction', rc.reaction,
               'userId', rc.user,
-              'userName', i.name,
+              'userName', ri.name,
               'reactionId', rc.reaction_id
             ))
             from comp_reaction rc
-            join comp_info i on i.entity = rc.user
+            join comp_info ri on ri.entity = rc.user
             where rc.entity = orig.id
           ),
           'media', (
@@ -268,21 +266,20 @@
             left join comp_discord_origin cdo on cdo.entity = te.tail
             where te.head = orig.id and te.label = 'tag'
           )
-        ) as json, fwd.sort_idx as sort_idx, fwd.id as msg_id, author_edge.*
+        ) as json, c.timestamp as canonical_timestamp, fwd.id as msg_id
         from entities fwd -- forward reference entity
           join edges fwd_edge on fwd_edge.head = fwd.id and fwd_edge.label = 'forward' -- forward edge
           join entities orig on orig.id = fwd_edge.tail -- original message
           join comp_content c on c.entity = orig.id -- original message content
-          join edges author_edge on author_edge.head = orig.id and author_edge.label = 'author' -- original author
+          join edges author_edge on author_edge.head = orig.id and author_edge.label = 'author' -- original author (already resolved by materializer)
           left join comp_user u on u.did = author_edge.tail
           left join comp_info i on i.entity = author_edge.tail
-          left join comp_override_meta o on o.entity = orig.id
-          left join comp_info oai on oai.entity = o.author
-          left join comp_user oau on oau.did = o.author
         where
           fwd.room = ${page.params.object}
+          and
+          c.timestamp is not null -- Filter out messages without timestamps
 
-      order by sort_idx desc, msg_id desc
+      order by canonical_timestamp desc, msg_id desc
     `,
     (row) => {
       return JSON.parse(row.json);
@@ -301,40 +298,54 @@
     mapAsyncState(query.current, (results) => {
       if (!results) return [];
 
-      // Reverse to get chronological order (oldest first)
-      // Use toReversed() to avoid mutating the original array
+      // Results come in descending order (newest first), reverse to get chronological
       const reversed = results.toReversed();
+
+      console.log(
+        `[mergeDebug] === Processing ${reversed.length} messages ===`,
+      );
 
       const mapped = reversed.map((message, index) => {
         // Get the previous message from the reversed array (if it exists)
         const prevMessage = index > 0 ? reversed[index - 1] : null;
 
-        // Normalize messages for calculating whether or not to merge them
-        const prevMessageNorm = prevMessage
-          ? {
-              author: prevMessage.masqueradeAuthor || prevMessage.authorDid,
-              timestamp:
-                parseInt(prevMessage.masqueradeTimestamp || "0") ||
-                decodeTime(prevMessage.id),
-            }
-          : undefined;
-        const messageNorm = {
-          author: message.masqueradeAuthor || message.authorDid,
-          timestamp:
-            parseInt(message.masqueradeTimestamp || "0") ||
-            decodeTime(message.id),
-        };
-
         // Calculate mergeWithPrevious
-        // Only merge if same author AND within 5 minutes AND both authors exist
+        // Merge if same author AND within 5 minutes AND both authors exist
         let mergeWithPrevious: boolean | null = false;
         if (
-          prevMessageNorm &&
-          messageNorm.author &&
-          prevMessageNorm.author === messageNorm.author &&
-          messageNorm.timestamp - prevMessageNorm.timestamp < 1000 * 60 * 5
+          prevMessage &&
+          message.authorDid &&
+          prevMessage.authorDid === message.authorDid &&
+          message.timestamp - prevMessage.timestamp < 1000 * 60 * 5
         ) {
           mergeWithPrevious = true;
+        }
+
+        // Debug logging
+        const timeDiff = message.timestamp - (prevMessage?.timestamp || 0);
+        const authorMatch = prevMessage?.authorDid === message.authorDid;
+
+        // Only log first few, last few, and suspicious ones
+        if (
+          index < 5 ||
+          index >= reversed.length - 2 ||
+          timeDiff < 0 ||
+          timeDiff > 1000 * 60 * 10
+        ) {
+          console.log(
+            `[mergeDebug] ${index.toString().padStart(2, " ")}: ${message.id.substring(0, 8)}... author=${(message.authorDid || "null").substring(0, 15)}... merge=${mergeWithPrevious} | prevMatch=${authorMatch} timeDiff=${timeDiff}ms (${(timeDiff / 1000 / 60).toFixed(1)}min)`,
+            {
+              message,
+              prevMessage: prevMessage
+                ? {
+                    id: prevMessage.id,
+                    authorDid: prevMessage.authorDid,
+                    timestamp: prevMessage.timestamp,
+                    isBridged: prevMessage.isBridged,
+                  }
+                : null,
+            },
+          );
         }
 
         return {
@@ -346,9 +357,14 @@
       return mapped;
     }),
   );
-  let slicedTimeline = $derived(
+
+  // Messages to display - ensures the Virtualizer gets proper reactivity when data changes
+  // This is computed as a derived state rather than a {@const} in the template to ensure
+  // the Virtualizer is properly notified of data changes
+  let displayMessages = $derived(
     mapAsyncState(timeline, (t) => t.slice(-showLastN)),
   );
+
   let viewport: HTMLDivElement = $state(null!);
 
   // Track initial load for auto-scroll
@@ -383,8 +399,8 @@
   }
 
   function scrollToBottom() {
-    if (!virtualizer || slicedTimeline.status !== "success") return;
-    virtualizer.scrollToIndex(slicedTimeline.data.length - 1, {
+    if (!virtualizer || displayMessages.status !== "success") return;
+    virtualizer.scrollToIndex(displayMessages.data.length - 1, {
       align: "start",
     });
     isAtBottom = true;
@@ -398,13 +414,13 @@
   }
 
   function scrollToMessage(id: string) {
-    if (slicedTimeline.status !== "success") return;
-    const message = slicedTimeline.data.find((msg) => id === msg.id);
+    if (displayMessages.status !== "success") return;
+    const message = displayMessages.data.find((msg) => id === msg.id);
     if (!message) {
       toast.error("Message not found");
       return;
     }
-    const idx = slicedTimeline.data.indexOf(message);
+    const idx = displayMessages.data.indexOf(message);
     if (idx >= 0) virtualizer?.scrollToIndex(idx);
     else {
       toast.error("Message not found");
@@ -423,8 +439,8 @@
   $effect(() => {
     if (
       !hasInitiallyScrolled &&
-      slicedTimeline.status === "success" &&
-      slicedTimeline.data.length > 0 &&
+      displayMessages.status === "success" &&
+      displayMessages.data.length > 0 &&
       virtualizer
     ) {
       setTimeout(() => {
@@ -437,8 +453,8 @@
 
   // Auto-scroll to bottom when new messages arrive and user is already at bottom
   $effect(() => {
-    if (slicedTimeline.status !== "success") return;
-    const len = slicedTimeline.data.length;
+    if (displayMessages.status !== "success") return;
+    const len = displayMessages.data.length;
     if (len > prevTimelineLength && prevTimelineLength > 0 && isAtBottom) {
       scrollToBottom();
     }
@@ -505,9 +521,8 @@
       onscroll={handleScroll}
     >
       <div class="flex flex-col w-full h-full pb-16 pt-2">
-        <StateSuspense state={timeline} pending={messagesSkeleton}>
-          {#snippet children(allMessages)}
-            {@const messages = allMessages.slice(-showLastN)}
+        <StateSuspense state={displayMessages} pending={messagesSkeleton}>
+          {#snippet children(messages)}
             <ol class="flex flex-col justify-end gap-2 max-w-full h-full">
               <StateSuspense state={lazyLoadState}>
                 {#snippet children()}

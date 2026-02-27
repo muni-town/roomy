@@ -4,15 +4,15 @@ export type Message = {
   id: Ulid;
   content: string;
   lastEdit: Ulid;
+  // Canonical author (already resolved from override if present)
   authorDid: UserDid | null;
   authorName: string | null;
   authorHandle: string | null;
   authorAvatar: string | null;
-  masqueradeAuthor: string | null;
-  masqueradeAuthorHandle: string | null;
-  masqueradeTimestamp: string | null;
-  masqueradeAuthorName: string | null;
-  masqueradeAuthorAvatar: string | null;
+  // Canonical timestamp (milliseconds since epoch, resolved by materializer)
+  timestamp: number;
+  // Simple flag indicating if this is a bridged message
+  isBridged: boolean;
   mergeWithPrevious: boolean | null;
   replyTo: Ulid[];
   forwardedFrom: Ulid | null;
