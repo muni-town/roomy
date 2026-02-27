@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Alert } from "@foxui/core";
+  import { Alert } from "$lib/components/ui/alert";
   import Button from "$lib/components/ui/button/Button.svelte";
   import type { Snippet } from "svelte";
 
@@ -17,11 +17,7 @@
 </script>
 
 <div class="w-full h-screen flex items-center justify-center">
-  <Alert
-    title="Error"
-    type="error"
-    class="max-w-sm"
-  >
+  <Alert title="Something went wrong :(" class="max-w-sm">
     {#if children}
       {@render children()}
     {:else if message}

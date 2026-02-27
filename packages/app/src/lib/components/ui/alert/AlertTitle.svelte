@@ -42,7 +42,7 @@ SOFTWARE.
   aria-level={level}
   bind:this={ref}
   class={cn(
-    "mb-2 py-2 text-lg leading-none font-medium last:mb-0 text-center",
+    "mb-4 py-2 text-lg leading-none font-medium last:mb-0 text-center",
     className,
   )}
   {...restProps}
