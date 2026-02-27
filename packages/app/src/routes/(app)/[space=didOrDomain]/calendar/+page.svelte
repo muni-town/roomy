@@ -13,6 +13,7 @@
     fetchGroupEvents,
     isAuthenticated,
     connectViaServiceAuth,
+    createLoginLink,
     getStoredProfile,
     clearTokens,
   } from "$lib/services/openmeet";
@@ -76,12 +77,27 @@
     eventClick: (info: { event: { extendedProps: { slug: string } } }) => {
       if (!link) return;
       const platformUrl = link.apiUrl.replace("//api", "//platform");
-      window.open(`${platformUrl}/events/${info.event.extendedProps.slug}`, "_blank");
+      const slug = info.event.extendedProps.slug;
+      const fallbackUrl = `${platformUrl}/events/${slug}`;
+
+      if (!connected) {
+        window.open(fallbackUrl, "_blank");
+        return;
+      }
+
+      // Open tab immediately to preserve user gesture (avoids popup blocker)
+      const w = window.open("about:blank", "_blank");
+      if (!w) return;
+
+      createLoginLink(link, `/events/${slug}`).then((url) => {
+        w.location.href = url || fallbackUrl;
+      });
     },
   });
 
   let connected = $state(isAuthenticated());
   let profile = $state(getStoredProfile());
+  let openmeetOptOut = $state(localStorage.getItem("openmeet:optOut") === "true");
 
   type SyncState = "idle" | "syncing" | "done" | "error";
   let syncState = $state<SyncState>("idle");
@@ -89,7 +105,11 @@
 
   $effect(() => {
     if (link && spaceId) {
-      syncEvents();
+      if (!connected && app.did && !openmeetOptOut) {
+        connectToOpenMeet();
+      } else {
+        syncEvents();
+      }
     }
   });
 
@@ -129,6 +149,8 @@
     try {
       await connectViaServiceAuth(link, peer);
       connected = true;
+      openmeetOptOut = false;
+      localStorage.removeItem("openmeet:optOut");
       profile = getStoredProfile();
 
       // Fall back to Bluesky avatar if OpenMeet profile has none
@@ -151,6 +173,8 @@
     clearTokens();
     connected = false;
     profile = null;
+    openmeetOptOut = true;
+    localStorage.setItem("openmeet:optOut", "true");
   }
 
 
