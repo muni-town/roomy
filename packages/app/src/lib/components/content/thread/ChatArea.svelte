@@ -301,9 +301,13 @@
     mapAsyncState(query.current, (results) => {
       if (!results) return [];
 
-      const mapped = results.reverse().map((message, index) => {
-        // Get the previous message (if it exists)
-        const prevMessage = index > 0 ? query.result![index - 1] : null;
+      // Reverse to get chronological order (oldest first)
+      // Use toReversed() to avoid mutating the original array
+      const reversed = results.toReversed();
+
+      const mapped = reversed.map((message, index) => {
+        // Get the previous message from the reversed array (if it exists)
+        const prevMessage = index > 0 ? reversed[index - 1] : null;
 
         // Normalize messages for calculating whether or not to merge them
         const prevMessageNorm = prevMessage
@@ -322,10 +326,16 @@
         };
 
         // Calculate mergeWithPrevious
-        let mergeWithPrevious =
-          prevMessageNorm?.author == messageNorm.author &&
-          messageNorm.timestamp - (prevMessageNorm?.timestamp || 0) <
-            1000 * 60 * 5;
+        // Only merge if same author AND within 5 minutes AND both authors exist
+        let mergeWithPrevious: boolean | null = false;
+        if (
+          prevMessageNorm &&
+          messageNorm.author &&
+          prevMessageNorm.author === messageNorm.author &&
+          messageNorm.timestamp - prevMessageNorm.timestamp < 1000 * 60 * 5
+        ) {
+          mergeWithPrevious = true;
+        }
 
         return {
           ...message,
@@ -374,7 +384,9 @@
 
   function scrollToBottom() {
     if (!virtualizer || slicedTimeline.status !== "success") return;
-    virtualizer.scrollToIndex(slicedTimeline.data.length - 1, { align: "start" });
+    virtualizer.scrollToIndex(slicedTimeline.data.length - 1, {
+      align: "start",
+    });
     isAtBottom = true;
   }
 
