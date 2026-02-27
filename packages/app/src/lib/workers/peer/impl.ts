@@ -854,11 +854,23 @@ export class Peer {
           console.log("[Peer] Connecting space stream");
           const currentSpaceIdOrHandle = await this.#currentSpace.promise;
 
-          const currentSpaceId = currentSpaceIdOrHandle
-            ? await this.client.resolveSpaceIdFromDidOrHandle(
-                currentSpaceIdOrHandle,
-              )
-            : undefined;
+          let currentSpaceId:
+            | { spaceDid: StreamDid; handle?: string }
+            | undefined;
+          try {
+            currentSpaceId = currentSpaceIdOrHandle
+              ? await this.client.resolveSpaceIdFromDidOrHandle(
+                  currentSpaceIdOrHandle,
+                )
+              : undefined;
+          } catch (e) {
+            console.warn(
+              "[Peer] Could not resolve current space for priority check:",
+              currentSpaceIdOrHandle,
+              e,
+            );
+            currentSpaceId = undefined;
+          }
 
           const isPriority = streamId === currentSpaceId?.spaceDid;
 
