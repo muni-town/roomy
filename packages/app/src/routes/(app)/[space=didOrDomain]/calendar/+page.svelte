@@ -103,6 +103,7 @@
 
   let connected = $state(isAuthenticated());
   let profile = $state(getStoredProfile());
+  let openmeetOptOut = $state(localStorage.getItem("openmeet:optOut") === "true");
 
   type SyncState = "idle" | "syncing" | "done" | "error";
   let syncState = $state<SyncState>("idle");
@@ -110,7 +111,11 @@
 
   $effect(() => {
     if (link && spaceId) {
-      syncEvents();
+      if (!connected && app.did && !openmeetOptOut) {
+        connectToOpenMeet();
+      } else {
+        syncEvents();
+      }
     }
   });
 
@@ -150,6 +155,8 @@
     try {
       await connectViaServiceAuth(link, peer);
       connected = true;
+      openmeetOptOut = false;
+      localStorage.removeItem("openmeet:optOut");
       profile = getStoredProfile();
 
       // Fall back to Bluesky avatar if OpenMeet profile has none
@@ -172,6 +179,8 @@
     clearTokens();
     connected = false;
     profile = null;
+    openmeetOptOut = true;
+    localStorage.setItem("openmeet:optOut", "true");
   }
 
 
