@@ -485,10 +485,10 @@ Verify Welcome Message Exists
     ...    SELECT
     ...    e.id as message_id,
     ...    c.data,
-    ...    om.author as author
+    ...    author_edge.tail as author
     ...    FROM entities e
     ...    JOIN comp_content c ON c.entity = e.id
-    ...    LEFT JOIN comp_override_meta om ON om.entity = e.id
+    ...    JOIN edges author_edge ON author_edge.head = e.id AND author_edge.label = 'author'
     ...    WHERE e.room = '${thread_id}'
     ...    ORDER BY e.id
     ...    LIMIT 1

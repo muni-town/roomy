@@ -179,10 +179,10 @@ Wait For Message In Database
         ...        c.entity as message_id,
         ...        c.data,
         ...        e.room,
-        ...        om.author
+        ...        author_edge.tail as author
         ...        FROM comp_content c
         ...        JOIN entities e ON e.id = c.entity
-        ...        LEFT JOIN comp_override_meta om ON om.entity = e.id
+        ...        JOIN edges author_edge ON author_edge.head = e.id AND author_edge.label = 'author'
         ...        WHERE c.entity = '${messageId}'
 
         ${result}=    Execute SQL Query    ${sql}
@@ -222,11 +222,11 @@ Get Message From Database
         ...    c.entity as message_id,
         ...    cast(c.data as text) as data,
         ...    e.room,
-        ...    om.author,
+        ...    author_edge.tail as author,
         ...    e.created_at
         ...    FROM comp_content c
         ...    JOIN entities e ON e.id = c.entity
-        ...    LEFT JOIN comp_override_meta om ON om.entity = e.id
+        ...    JOIN edges author_edge ON author_edge.head = e.id AND author_edge.label = 'author'
         ...    WHERE c.entity = '${messageId}'
 
     ${result}=    Execute SQL Query    ${sql}
@@ -439,10 +439,10 @@ Get Message Reactions
         ...    r.entity as reaction_id,
         ...    r.reaction,
         ...    r.created_at,
-        ...    om.author
+        ...    author_edge.tail as author
         ...    FROM comp_reaction r
         ...    JOIN entities e ON e.id = r.entity
-        ...    LEFT JOIN comp_override_meta om ON om.entity = e.id
+        ...    JOIN edges author_edge ON author_edge.head = e.id AND author_edge.label = 'author'
         ...    WHERE e.room = '${roomId}'
         ...    AND r.entity = '${messageId}'
 
@@ -601,11 +601,11 @@ Get Latest Message In Room
         ...    c.entity as message_id,
         ...    c.data,
         ...    e.room,
-        ...    om.author,
+        ...    author_edge.tail as author,
         ...    e.created_at
         ...    FROM comp_content c
         ...    JOIN entities e ON e.id = c.entity
-        ...    LEFT JOIN comp_override_meta om ON om.entity = e.id
+        ...    JOIN edges author_edge ON author_edge.head = e.id AND author_edge.label = 'author'
         ...    WHERE e.room = '${roomId}'
         ...    ORDER BY c.entity DESC
         ...    LIMIT 1

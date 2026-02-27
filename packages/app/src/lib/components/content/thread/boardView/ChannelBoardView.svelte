@@ -44,9 +44,9 @@
                 'latestTimestamp', max(timestamp)
               ) from (
                 select
-                  case when override.entity is not null then null else coalesce(author_override_info.avatar, author_info.avatar) end as avatar,
-                  coalesce(author_override_info.name, author_info.name) as author,
-                  coalesce(override.timestamp, ulid_timestamp(me.id)) as timestamp,
+                  author_info.avatar as avatar,
+                  author_info.name as author,
+                  mc.timestamp as timestamp,
                   row_number() over (
                     partition by author_edge.tail
                     order by me.id desc
@@ -55,8 +55,6 @@
                   join entities me on me.id = mc.entity
                   join edges author_edge on author_edge.head = me.id and author_edge.label = 'author'
                   join comp_info author_info on author_info.entity = author_edge.tail
-                  left join comp_override_meta override on override.entity = me.id
-                  left join comp_info author_override_info on author_override_info.entity = override.author
                 where me.room = e.id
               ) where row_num = 1 limit 3
             ) as activity
