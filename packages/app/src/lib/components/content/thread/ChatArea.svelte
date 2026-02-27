@@ -51,6 +51,7 @@
     const roomId = app.roomId;
     if (!spaceId || !roomId) return;
 
+    isShifting = true; // Enable shift during lazy load (prepends messages)
     lazyLoadState = { status: "loading" };
     try {
       const result = await tracer.startActiveSpan(
@@ -69,11 +70,17 @@
         },
       );
       lazyLoadState = { status: "success", data: result };
+
+      // Keep shift enabled briefly after load completes to allow rendering
+      setTimeout(() => {
+        isShifting = false;
+      }, 500);
     } catch (e) {
       lazyLoadState = {
         status: "error",
         message: e instanceof Error ? e.message : "Failed to load messages",
       };
+      isShifting = false;
     }
   }
 
@@ -301,10 +308,6 @@
       // Results come in descending order (newest first), reverse to get chronological
       const reversed = results.toReversed();
 
-      console.log(
-        `[mergeDebug] === Processing ${reversed.length} messages ===`,
-      );
-
       const mapped = reversed.map((message, index) => {
         // Get the previous message from the reversed array (if it exists)
         const prevMessage = index > 0 ? reversed[index - 1] : null;
@@ -319,33 +322,6 @@
           message.timestamp - prevMessage.timestamp < 1000 * 60 * 5
         ) {
           mergeWithPrevious = true;
-        }
-
-        // Debug logging
-        const timeDiff = message.timestamp - (prevMessage?.timestamp || 0);
-        const authorMatch = prevMessage?.authorDid === message.authorDid;
-
-        // Only log first few, last few, and suspicious ones
-        if (
-          index < 5 ||
-          index >= reversed.length - 2 ||
-          timeDiff < 0 ||
-          timeDiff > 1000 * 60 * 10
-        ) {
-          console.log(
-            `[mergeDebug] ${index.toString().padStart(2, " ")}: ${message.id.substring(0, 8)}... author=${(message.authorDid || "null").substring(0, 15)}... merge=${mergeWithPrevious} | prevMatch=${authorMatch} timeDiff=${timeDiff}ms (${(timeDiff / 1000 / 60).toFixed(1)}min)`,
-            {
-              message,
-              prevMessage: prevMessage
-                ? {
-                    id: prevMessage.id,
-                    authorDid: prevMessage.authorDid,
-                    timestamp: prevMessage.timestamp,
-                    isBridged: prevMessage.isBridged,
-                  }
-                : null,
-            },
-          );
         }
 
         return {
@@ -364,6 +340,8 @@
   let displayMessages = $derived(
     mapAsyncState(timeline, (t) => t.slice(-showLastN)),
   );
+
+
 
   let viewport: HTMLDivElement = $state(null!);
 
@@ -460,6 +438,10 @@
     }
     prevTimelineLength = len;
   });
+
+  // Track shifting state for prepend operations (lazy load)
+  // We only want shift=true when messages are prepended at the top, not when new messages arrive at bottom
+  let isShifting = $state(false);
 
   // Track which room we've loaded for to prevent re-triggering
   let lastLoadedRoomId: string | undefined;
@@ -564,7 +546,7 @@
                     data={messages}
                     scrollRef={viewport}
                     overscan={5}
-                    shift={true}
+                    shift={isShifting}
                     getKey={(x) => {
                       return x.id;
                     }}
