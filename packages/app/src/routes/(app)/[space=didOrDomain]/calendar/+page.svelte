@@ -17,6 +17,7 @@
     clearTokens,
   } from "$lib/services/openmeet";
 
+  import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
   import { Calendar, DayGrid, TimeGrid, List, Interaction } from "@event-calendar/core";
@@ -28,6 +29,11 @@
       ? linkQuery.current.data[0]
       : undefined,
   );
+  let linkResolved = $derived(
+    linkQuery ? linkQuery.current.status !== "loading" : !spaceId
+  );
+  let noLink = $derived(linkResolved && !link);
+
   let eventsQuery = $derived(spaceId ? calendarEventsQuery(spaceId) : undefined);
   let events = $derived(
     eventsQuery?.current.status === "success" ? eventsQuery.current.data : [],
@@ -176,7 +182,7 @@
 
 <MainLayout {sidebar} {navbar}>
   <div class="p-4 h-full flex flex-col">
-    {#if !link}
+    {#if noLink}
       <div class="text-center py-12">
         <h2
           class="text-lg font-semibold text-base-900 dark:text-base-100 mb-2"
@@ -193,49 +199,47 @@
         {/if}
       </div>
     {:else}
-      {#if syncState === "idle" || syncState === "syncing"}
-        <div class="py-12 text-center">
-          <p class="text-sm text-base-600 dark:text-base-400">
-            Loading events...
-          </p>
-        </div>
-      {:else if syncState === "done"}
-        <div class="ec-wrapper flex-1 min-h-0 h-full">
-          <Calendar bind:this={calRef} plugins={[DayGrid, TimeGrid, List, Interaction]} options={calendarOptions} />
-        </div>
-      {:else if syncState === "error"}
-        <div class="text-center py-12">
-          <p class="text-sm text-red-500 mb-4">{errorMessage}</p>
+      {#if syncState === "syncing"}
+        <LoadingLine />
+      {/if}
+      {#if syncState === "error"}
+        <div class="flex items-center gap-2 p-2 mb-2 rounded-lg bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 text-sm">
+          <span class="flex-1">{errorMessage}</span>
           <Button onclick={syncEvents}>Retry</Button>
         </div>
       {/if}
+      <div class="ec-wrapper flex-1 min-h-0 h-full">
+        <Calendar bind:this={calRef} plugins={[DayGrid, TimeGrid, List, Interaction]} options={calendarOptions} />
+      </div>
 
-      <!-- Auth status -->
-      {#if !connected}
-        <div class="mt-2 p-2 rounded-lg flex items-center justify-end">
-          <p class="text-sm text-base-400 dark:text-base-500">
-            <button
-              class="underline hover:text-base-600 dark:hover:text-base-300 transition-colors"
-              onclick={connectToOpenMeet}
-            >Connect</button> to OpenMeet to see private events
-          </p>
-        </div>
-      {:else if profile}
-        <div class="mt-2 p-2 rounded-lg flex items-center justify-end">
-          <p class="text-sm text-base-400 dark:text-base-500">
-            {#if profile.avatar}
-              <img
-                src={profile.avatar}
-                alt=""
-                class="w-5 h-5 rounded-full inline align-text-bottom"
-              />
-            {/if}
-            Connected as {profile.displayName || profile.handle} · <button
-              class="underline hover:text-base-600 dark:hover:text-base-300 transition-colors"
-              onclick={disconnect}
-            >Disconnect</button>
-          </p>
-        </div>
+      <!-- Auth status (only shown once link is confirmed) -->
+      {#if link}
+        {#if !connected}
+          <div class="mt-2 p-2 rounded-lg flex items-center justify-end">
+            <p class="text-sm text-base-400 dark:text-base-500">
+              <button
+                class="underline hover:text-base-600 dark:hover:text-base-300 transition-colors"
+                onclick={connectToOpenMeet}
+              >Connect</button> to OpenMeet to see private events
+            </p>
+          </div>
+        {:else if profile}
+          <div class="mt-2 p-2 rounded-lg flex items-center justify-end">
+            <p class="text-sm text-base-400 dark:text-base-500">
+              {#if profile.avatar}
+                <img
+                  src={profile.avatar}
+                  alt=""
+                  class="w-5 h-5 rounded-full inline align-text-bottom"
+                />
+              {/if}
+              Connected as {profile.displayName || profile.handle} · <button
+                class="underline hover:text-base-600 dark:hover:text-base-300 transition-colors"
+                onclick={disconnect}
+              >Disconnect</button>
+            </p>
+          </div>
+        {/if}
       {/if}
     {/if}
   </div>
