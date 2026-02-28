@@ -3,7 +3,7 @@
 @plugin "@tailwindcss/typography";
 @plugin '@tailwindcss/forms';
 
-@source "../node_modules/@fuxui";
+@source "../node_modules/@foxui";
 
 @custom-variant dark (&:is(.dark *));
 
