@@ -17,7 +17,7 @@
   } from "@roomy/design/icons";
   import SidebarCategory from "./SidebarCategory.svelte";
   import { type SidebarCategory as SidebarCategoryType } from "$lib/queries";
-  import EntityName from "../primitives/EntityName.svelte";
+  import EntityName from "$lib/components/helper/EntityName.svelte";
   import { newUlid, Ulid } from "@roomy/sdk";
 
   import {
