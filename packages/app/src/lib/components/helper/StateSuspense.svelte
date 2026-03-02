@@ -40,7 +40,7 @@
   }: Props<T> = $props();
 
   // Delay showing loading to prevent flicker for fast queries
-  let showLoading = $state(loadingDelay === 0);
+  let showLoading = $state(false);
   let loadingTimer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {

@@ -91,20 +91,20 @@ SOFTWARE.
     type?: "info" | "warning" | "success" | "error";
   } = $props();
 
-  if (type === "warning" && variant === undefined) {
-    variant = "amber";
-  } else if (type === "error" && variant === undefined) {
-    variant = "red";
-  } else if (type === "success" && variant === undefined) {
-    variant = "green";
-  } else if (type === "info" && variant === undefined) {
-    variant = "sky";
-  }
+  // Compute variant based on type prop
+  const computedVariant = $derived(() => {
+    if (variant !== undefined) return variant;
+    if (type === "warning") return "amber";
+    if (type === "error") return "red";
+    if (type === "success") return "green";
+    if (type === "info") return "sky";
+    return "default";
+  });
 </script>
 
 <div
   bind:this={ref}
-  class={cn(alertVariants({ variant: variant ?? "default" }), className)}
+  class={cn(alertVariants({ variant: computedVariant() }), className)}
   {...restProps}
   role="alert"
 >
