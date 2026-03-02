@@ -4,7 +4,7 @@
   import { getAppState } from "$lib/queries";
   const app = getAppState();
   import { peer, peerStatus } from "$lib/workers";
-  import { Alert, Badge, Button, Input, Tabs, toast } from "@fuxui/base";
+  import { Alert, Badge, Button, Input, Tabs, toast } from "@foxui/core";
   import { Handle, newUlid } from "@roomy/sdk";
   import { IconLoading } from "@roomy/design/icons";
 
