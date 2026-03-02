@@ -27,7 +27,7 @@
   import { messagingState } from "./TimelineView.svelte";
   import type { Message } from "./types";
   import { mapAsyncState, type AsyncStateWithIdle } from "@roomy/sdk";
-  import StateSuspense from "$lib/components/primitives/StateSuspense.svelte";
+  import StateSuspense from "$lib/components/helper/StateSuspense.svelte";
   import { peer } from "$lib/workers";
   import { getAppState } from "$lib/queries";
   import ErrorModal from "$lib/components/modals/Error.svelte";
@@ -340,8 +340,6 @@
   let displayMessages = $derived(
     mapAsyncState(timeline, (t) => t.slice(-showLastN)),
   );
-
-
 
   let viewport: HTMLDivElement = $state(null!);
 

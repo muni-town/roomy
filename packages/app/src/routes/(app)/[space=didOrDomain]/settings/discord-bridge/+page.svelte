@@ -4,7 +4,7 @@
   import Badge from "$lib/components/ui/badge/Badge.svelte";
   import Button from "$lib/components/ui/button/Button.svelte";
   import { onMount } from "svelte";
-  import InlineMono from "$lib/components/primitives/InlineMono.svelte";
+  import InlineMono from "$lib/components/helper/InlineMono.svelte";
   import { IconCopy } from "@roomy/design/icons";
   import { getAppState } from "$lib/queries";
   const app = getAppState();

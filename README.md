@@ -23,3 +23,14 @@ Roomy is a spiritual sibling of [Commune](https://github.com/commune-sh). The sa
 * [Beyond Discord](https://blog.commune.sh/beyond-discord/)
 * [Federated Webrings](https://blog.commune.sh/federated-webrings/)
 * [Chatty Community Gardens](https://blog.muni.town/chatty-community-gardens/)
+
+## Contributing
+
+This repo is split into 5 main `packages`, in order of importance: 
+- `app` the Roomy frontend
+- `sdk` which wraps the Leaf typescript client and ATProto SDK into a unified Roomy client, holds shared schemas for events and defines how they are materialised.
+- `discord-bridge` a Node.js server process for bidirectional sync between Discord guilds and Roomy spaces
+- `design` some shared UI and branding resources
+- `roomy-cli` an experimental CLI tool for interacting with Roomy, and for use in E2E tests
+
+Most of these packages have their own README.md files for further information.

@@ -2,7 +2,17 @@
 import Hls from "hls.js";
 import type { Fragment } from "hls.js";
 import { writable, get } from "svelte/store";
-import { BandwidthEstimate } from "../utils/bandwidthEstimate";
+
+let current: number | undefined;
+
+export const BandwidthEstimate = {
+  get(): number | undefined {
+    return current;
+  },
+  set(value: number) {
+    current = value;
+  },
+};
 
 export class HLSUnsupportedError extends Error {
   constructor() {

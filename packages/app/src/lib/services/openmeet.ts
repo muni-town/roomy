@@ -1,6 +1,5 @@
 import type { CalendarLink } from "$lib/queries/calendar.svelte";
 import type { PeerInterface } from "$lib/workers/peer/types";
-import { CONFIG } from "$lib/config";
 
 // localStorage keys for OpenMeet auth tokens
 const KEYS = {
@@ -73,10 +72,7 @@ export async function connectViaServiceAuth(
   peer: PeerInterface,
 ): Promise<void> {
   const serviceDid = `did:web:${new URL(link.apiUrl).hostname}`;
-  const token = await peer.getServiceAuthToken(
-    serviceDid,
-    "net.openmeet.auth",
-  );
+  const token = await peer.getServiceAuthToken(serviceDid, "net.openmeet.auth");
 
   const res = await fetch(`${link.apiUrl}/api/v1/auth/atproto/service-auth`, {
     method: "POST",
@@ -112,16 +108,19 @@ export async function connectViaServiceAuth(
     const profile: OpenMeetProfile = {
       did: data.user.socialId || "",
       handle: data.user.socialId || "",
-      displayName: [data.user.firstName, data.user.lastName]
-        .filter(Boolean)
-        .join(" ") || undefined,
+      displayName:
+        [data.user.firstName, data.user.lastName].filter(Boolean).join(" ") ||
+        undefined,
       avatar: data.user.photo?.path || undefined,
     };
     localStorage.setItem(KEYS.profile, JSON.stringify(profile));
   }
 }
 
-async function refreshAccessToken(apiUrl: string, tenantId: string): Promise<boolean> {
+async function refreshAccessToken(
+  apiUrl: string,
+  tenantId: string,
+): Promise<boolean> {
   const tokens = getStoredTokens();
   if (!tokens) return false;
 
@@ -129,7 +128,7 @@ async function refreshAccessToken(apiUrl: string, tenantId: string): Promise<boo
     const res = await fetch(`${apiUrl}/api/v1/auth/refresh`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${tokens.refreshToken}`,
+        Authorization: `Bearer ${tokens.refreshToken}`,
         "x-tenant-id": tenantId,
       },
     });
@@ -139,7 +138,7 @@ async function refreshAccessToken(apiUrl: string, tenantId: string): Promise<boo
       return false;
     }
 
-    const data = await res.json() as {
+    const data = (await res.json()) as {
       token: string;
       refreshToken: string;
       tokenExpires: number;
@@ -155,7 +154,10 @@ async function refreshAccessToken(apiUrl: string, tenantId: string): Promise<boo
   }
 }
 
-async function getValidToken(apiUrl: string, tenantId: string): Promise<string | null> {
+async function getValidToken(
+  apiUrl: string,
+  tenantId: string,
+): Promise<string | null> {
   const tokens = getStoredTokens();
   if (!tokens) return null;
 
@@ -195,7 +197,7 @@ export async function createLoginLink(
     const res = await fetch(`${link.apiUrl}/api/v1/auth/create-login-link`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         "x-tenant-id": link.tenantId,
       },
@@ -219,6 +221,8 @@ export async function fetchGroupEvents(
   )) as Record<string, unknown> | Record<string, unknown>[];
   return Array.isArray(response)
     ? response
-    : ((response as Record<string, unknown>).data as
-        Record<string, unknown>[]) || [];
+    : ((response as Record<string, unknown>).data as Record<
+        string,
+        unknown
+      >[]) || [];
 }

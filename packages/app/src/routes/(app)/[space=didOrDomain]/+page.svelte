@@ -8,7 +8,7 @@
 
   const app = getAppState();
   import { navigate } from "$lib/utils.svelte";
-  import InlineMono from "$lib/components/primitives/InlineMono.svelte";
+  import InlineMono from "$lib/components/helper/InlineMono.svelte";
 
   $effect(() => {
     if (!app.joinedSpace) return;

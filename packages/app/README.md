@@ -4,7 +4,20 @@
 
 Roomy is built with Vite and Sveltekit, wrapped with Tauri for cross platform support. User accounts are based on ATProto, using the PDS as an authentication and identity layer. Other app data is synced via an event-sourcing architecture, with our 'Leaf' server providing access to event streams and materialized views. A [November 2025 blog post](https://leaflet.pub/ab35bdd7-ceda-4f7f-bc9f-0222e1e58ed6) explains the Leaf architecture in more detail.
 
-The app splits computation across three contexts: the tab (UI thread), a Shared Worker (shared between tabs) and a Dedicated Worker (one is spawned per tab, but only one is active at a time). This design is inspired by an [architecture used in Notion](https://www.notion.com/blog/how-we-sped-up-notion-in-the-browser-with-wasm-sqlite). The UI thread is designed to be fairly lightweight, while a Shared Worker coordinates and manages background tasks like syncing data. The Shared Worker acts as a router to a Dedicated Worker, which runs a SQLite database and handles more intensive tasks like materialising synced events into views, which can then be consumed by the UI thread.
+The app splits computation across three contexts: the tab (UI thread), a Dedicated Worker which manages a SQLite instance, and `Peer`, which is designed for operating in a Shared Worker, but as of March 2026 runs on the main thread - however the interface is the same. The shared worker design is inspired by an [architecture used in Notion](https://www.notion.com/blog/how-we-sped-up-notion-in-the-browser-with-wasm-sqlite). 
+
+The UI thread is designed to be fairly lightweight, while a Shared Worker coordinates and manages background tasks like syncing data. Peer acts as a router to a Dedicated Worker, which runs a SQLite database and handles more intensive tasks like materialising synced events into views, which can then be consumed by the UI thread.
+
+## Dev Environment
+
+Create a `.env` file based on `.env.example` to get started.
+
+We operate a dev instance of Leaf server for testing, but the monorepo root also contains a compose.yml file which can be used to spin up a complete dev environment (with the only exception being the ATProto PDS for now). It runs:
+- Leaf server (stores data in `/data`)
+- PLC directory with postgres (each space created has a DID, so this avoids spamming the production registry)
+- A full Grafana telemetry stack. The Grafana dashboard will be available at `localhost:3000`
+
+You can also optionally add in the handle and an app password for an ATProto testing account. When these are configured in `.env`, the app will auto-authenticate to that account. This is required to run any E2E tests that require authentication, with the rationale that app password is simpler for automated authentication.
 
 ## Authentication
 

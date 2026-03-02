@@ -14,14 +14,11 @@
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import JoinSpaceModal from "$lib/components/modals/JoinSpaceModal.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
-  import StateSuspense from "$lib/components/primitives/StateSuspense.svelte";
+  import StateSuspense from "$lib/components/helper/StateSuspense.svelte";
 
   import type { ThreadInfo } from "$lib/components/content/thread/boardView/types";
   import Error from "$lib/components/modals/Error.svelte";
   import { IconLoading } from "@roomy/design/icons";
-  import { flags } from "$lib/config";
-  import { navigate } from "$lib/utils.svelte";
-  import { page } from "$app/state";
   import type { StreamIndex } from "@roomy/sdk";
 
   const spaceId = $derived(app.joinedSpace?.id);
@@ -151,7 +148,7 @@
         </div>
 
         {#if app.joinedSpace?.id && peerStatus.authState?.state === "loading"}
-          <div class="dark:!text-base-400 !text-base-600">
+          <div class="dark:text-base-400! text-base-600!">
             Downloading Entire Space...
           </div>
         {/if}

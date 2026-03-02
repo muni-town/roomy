@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import InlineMono from "$lib/components/primitives/InlineMono.svelte";
+  import InlineMono from "$lib/components/helper/InlineMono.svelte";
   import { getAppState } from "$lib/queries";
   const app = getAppState();
   import { peer, peerStatus } from "$lib/workers";
