@@ -2,11 +2,9 @@
   import SpaceAvatar from "$lib/components/spaces/SpaceAvatar.svelte";
   import { getAppState } from "$lib/queries";
   const app = getAppState();
-  import { peer, peerStatus } from "$lib/workers";
+  import { peer } from "$lib/workers";
   import { Button, Input, Textarea, toast } from "@foxui/core";
-  import { Handle, newUlid } from "@roomy/sdk";
-
-  import { IconLoading } from "@roomy/design/icons";
+  import { newUlid } from "@roomy/sdk";
 
   let currentSpace = $derived(app.joinedSpace);
   let spaceId = $derived(currentSpace?.id);
