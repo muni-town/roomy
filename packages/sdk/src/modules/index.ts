@@ -78,8 +78,8 @@ const personal: ModuleWithCid = {
 };
 
 const metadataQueryEvents: Event["$type"][] = [
-  "space.roomy.space.personal.joinSpace.v0",
-  "space.roomy.space.personal.leaveSpace.v0",
+  "space.roomy.space.joinSpace.v0",
+  "space.roomy.space.leaveSpace.v0",
   "space.roomy.space.addAdmin.v0",
   "space.roomy.space.removeAdmin.v0",
   "space.roomy.space.setHandleProvider.v0",
