@@ -3,7 +3,7 @@
 
 services:
   leaf-server:
-    image: ghcr.io/muni-town/leaf:sha-9e5c9ec
+    image: ghcr.io/muni-town/leaf:sha-7a3e136
     platform: linux/amd64 # no arm64 build available
     # Uncomment if you are also dev-ing the leaf server
     # scale: 0
