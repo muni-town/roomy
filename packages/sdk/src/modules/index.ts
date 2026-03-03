@@ -114,10 +114,34 @@ const spaceModuleDef: BasicModule = {
     create table if not exists space_info (
       name text,
       avatar text,
+      description text,
       handle_provider text
     ) strict;
     delete from space_info;
-    insert into space_info (name, avatar, handle_provider) values (null, null, null);
+    insert into space_info (name, avatar, description, handle_provider) values (null, null, null, null);
+
+    create table if not exists sidebar_config (
+      config text not null default '{"categories": []}'
+    ) strict;
+    delete from sidebar_config;
+    insert into sidebar_config (config) values ('{"categories": []}');
+
+    create table if not exists rooms (
+      id text primary key, -- ulid
+      kind text not null, -- 'space.roomy.channel', 'space.roomy.category', 'space.roomy.thread', 'space.roomy.page'
+      name text,
+      description text,
+      avatar text,
+      deleted integer not null default 0 check(deleted in (0, 1))
+    ) strict;
+    create index if not exists rooms_kind_idx on rooms(kind);
+
+    create table if not exists openmeet_config (
+      group_slug text,
+      tenant_id text,
+      api_url text
+    ) strict;
+    delete from openmeet_config;
 
     create table if not exists admins (
       user_id text primary key -- did
@@ -217,8 +241,55 @@ const spaceModuleDef: BasicModule = {
       name = case (select drisl_exists(payload, '.name') from event)
         when 1 then (select drisl_extract(payload, '.name') from event) else name end,
       avatar = case (select drisl_exists(payload, '.avatar') from event)
-        when 1 then (select drisl_extract(payload, '.avatar') from event) else avatar end
+        when 1 then (select drisl_extract(payload, '.avatar') from event) else avatar end,
+      description = case (select drisl_exists(payload, '.description') from event)
+        when 1 then (select drisl_extract(payload, '.description') from event) else description end
     where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.updateSpaceInfo.v0';
+
+    -- Update sidebar config
+    update sidebar_config
+    set config = (select drisl_extract(payload, '.categories') from event)
+    where (select drisl_extract(payload, '.$type') from event) in ('space.roomy.space.updateSidebar.v0', 'space.roomy.space.updateSidebar.v1');
+
+    -- Create room
+    insert or ignore into rooms (id, kind, name, description, avatar, deleted)
+    select
+      drisl_extract(payload, '.id') as id,
+      drisl_extract(payload, '.kind') as kind,
+      drisl_extract(payload, '.name') as name,
+      drisl_extract(payload, '.description') as description,
+      drisl_extract(payload, '.avatar') as avatar,
+      0 as deleted
+    from event
+    where drisl_extract(payload, '.$type') = 'space.roomy.room.createRoom.v0';
+
+    -- Update room
+    update rooms
+    set
+      kind = case (select drisl_exists(payload, '.kind') from event)
+        when 1 then (select drisl_extract(payload, '.kind') from event) else kind end,
+      name = case (select drisl_exists(payload, '.name') from event)
+        when 1 then (select drisl_extract(payload, '.name') from event) else name end,
+      description = case (select drisl_exists(payload, '.description') from event)
+        when 1 then (select drisl_extract(payload, '.description') from event) else description end,
+      avatar = case (select drisl_exists(payload, '.avatar') from event)
+        when 1 then (select drisl_extract(payload, '.avatar') from event) else avatar end
+    where id = (select drisl_extract(payload, '.roomId') from event)
+      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.room.updateRoom.v0';
+
+    -- Delete room (soft delete)
+    update rooms
+    set deleted = 1
+    where id = (select drisl_extract(payload, '.roomId') from event)
+      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.room.deleteRoom.v0';
+
+    -- Update OpenMeet configuration
+    update openmeet_config
+    set
+      group_slug = (select drisl_extract(payload, '.groupSlug') from event),
+      tenant_id = (select drisl_extract(payload, '.tenantId') from event),
+      api_url = (select drisl_extract(payload, '.apiUrl') from event)
+    where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.openmeet.configure.v0';
 
     -- Set handle provider
     update space_info
@@ -259,12 +330,69 @@ const spaceModuleDef: BasicModule = {
     },
     {
       name: "space_info",
-      sql: `select name, avatar, handle_provider from space_info;`,
+      sql: `select name, avatar, description, handle_provider from space_info;`,
       params: [],
     },
     {
       name: "admins",
       sql: `select * from admins;`,
+      params: [],
+    },
+    {
+      name: "space_meta",
+      sql: `
+        select
+          'info' as key,
+          json_object(
+            'name', name,
+            'avatar', avatar,
+            'description', description,
+            'handleProvider', handle_provider
+          ) as value
+        from space_info
+
+        union all
+
+        select
+          'sidebar' as key,
+          json_object('categories', config) as value
+        from sidebar_config
+
+        union all
+
+        select
+          'channels' as key,
+          json_group_array(
+            json_object(
+              'id', id,
+              'name', name,
+              'description', description,
+              'avatar', avatar
+            )
+          ) as value
+        from rooms
+        where deleted = 0
+        and kind = "space.roomy.channel"
+
+        union all
+
+        select
+          'admins' as key,
+          json_group_array(user_id) as value
+        from admins
+
+        union all
+
+        select
+          'openmeet_config' as key,
+          json_object(
+            'groupSlug', group_slug,
+            'tenantId', tenant_id,
+            'apiUrl', api_url
+          ) as value
+        from openmeet_config
+      ;
+      `,
       params: [],
     },
     {
