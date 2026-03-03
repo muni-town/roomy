@@ -29,6 +29,7 @@ import {
   RemoveAdmin,
   SetHandleProvider,
 } from "./space";
+import { MarkRead } from "./state";
 import { DefinedEvent, MaterializeFn } from "./types";
 import { SetUserProfile, SetLastRead } from "./user";
 import { SetCalendarLink } from "./calendar";
@@ -64,6 +65,7 @@ export const eventRegistry = {
   "space.roomy.link.createRoomLink.v0": CreateRoomLink,
   "space.roomy.link.removeRoomLink.v0": RemoveRoomLink,
   "space.roomy.openmeet.configure.v0": SetCalendarLink,
+  "space.roomy.state.markRead.v0": MarkRead,
 } as const satisfies Record<EventType, DefinedEvent<any, boolean>>;
 
 /** Get the causal dependencies for an event */
