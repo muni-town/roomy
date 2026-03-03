@@ -26,6 +26,7 @@ export const getLinkEmbedData = (url: string) => {
         // Embed server has no data for the given url.
         // Unlikely to be any data in the future
         cache.set(url, null);
+        return null
       }
     })
     .catch((err) => {
@@ -33,8 +34,8 @@ export const getLinkEmbedData = (url: string) => {
         console.error(`${err.message} caused by '${err.cause}'`);
         // Avoid retrying urls with Network Errors until next refresh
         // Might have data later.
-        cache.set(url, null);
-      } else throw new Error(err as unknown as string);
-      return null;
+      }
+      console.error(err)
+      return undefined
     });
 };
