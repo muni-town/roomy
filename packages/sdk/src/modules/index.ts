@@ -182,7 +182,14 @@ const spaceModuleDef: BasicModule = {
     create index if not exists room_links_child_idx on room_links(child_room, is_canonical desc);
   `.sql,
 
-  stateInitSql: "",
+  stateInitSql: sql`
+    create table if not exists state.reads (
+      user_did text not null,
+      room_id text not null,
+      last_read integer not null default 0,
+      primary key (user_did, room_id)
+    ) strict;
+  `.sql,
 
   authorizer: sql`
     -- No admins yet - only allow admin.add (bootstrap)
@@ -375,7 +382,18 @@ const spaceModuleDef: BasicModule = {
       and (select drisl_exists(payload, '.extensions.space.roomy.extension.discordUserOrigin.v0.handle') from event) = 1;
   `,
 
-  stateMaterializer: "",
+  stateMaterializer: `
+    -- Update read receipts (state events)
+    insert into state.reads (user_did, room_id, last_read)
+    values (
+    (select user from event),
+    (select drisl_extract(payload, '.room') from event),
+    (select message_count from rooms where id = (select drisl_extract(payload, '.room') from event))
+    )
+    on conflict(user_did, room_id) do update set
+    last_read = excluded.last_read
+    where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.state.markRead.v0';
+  `,
 
   queries: [
     {
