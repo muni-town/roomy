@@ -18,6 +18,7 @@ const personalModuleDef: BasicModule = {
 
     insert into stream_info (admin) select null where not exists (select 1 from stream_info);
   `.sql,
+  stateInitSql: "",
   authorizer: sql`
     -- Get event type once
     with event_info as (
@@ -50,6 +51,7 @@ const personalModuleDef: BasicModule = {
     set admin = (select drisl_extract(payload, '.userDid') from event)
     where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.addAdmin.v0';
   `.sql,
+  stateMaterializer: "",
   queries: [
     {
       name: "stream_info",
@@ -132,7 +134,8 @@ const spaceModuleDef: BasicModule = {
       name text,
       description text,
       avatar text,
-      deleted integer not null default 0 check(deleted in (0, 1))
+      deleted integer not null default 0 check(deleted in (0, 1)),
+      message_count integer not null default 0
     ) strict;
     create index if not exists rooms_kind_idx on rooms(kind);
 
@@ -175,6 +178,8 @@ const spaceModuleDef: BasicModule = {
     create index if not exists room_links_parent_idx on room_links(parent_room);
     create index if not exists room_links_child_idx on room_links(child_room, is_canonical desc);
   `.sql,
+
+  stateInitSql: "",
 
   authorizer: sql`
     -- Case 1: No admins yet - only allow admin.add (bootstrap)
@@ -322,6 +327,8 @@ const spaceModuleDef: BasicModule = {
       'space.roomy.link.removeRoomLink.v0'
     );
   `,
+
+  stateMaterializer: "",
 
   queries: [
     {
