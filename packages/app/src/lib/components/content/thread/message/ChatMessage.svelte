@@ -57,6 +57,9 @@
   import { Event, newUlid, toBytes, Ulid } from "@roomy/sdk";
   import { page } from "$app/state";
   import { cdnImageUrl } from "$lib/utils.svelte";
+  import { getLinkEmbedData, type Embed } from "$lib/utils/getLinkEmbedData";
+  import IconLucideX from "~icons/lucide/x";
+  import LinkCard from "./LinkCard.svelte";
 
   let {
     message,
@@ -151,6 +154,45 @@
   function cancelEditing() {
     onCancelEdit();
   }
+  const UrlRegex =
+    /<?(https?:\/\/)*[a-z0-9][-a-z0-9]*\.[a-z]{2,}[^\s]*[a-zA-Z0-9\/]>?/gi;
+
+  const hasUrl = (str: string): boolean => {
+    const http = str.indexOf("http");
+    if (
+      http === -1 &&
+      (str[http + 4] === ":" ||
+        (str[http + 4] === "s" && str[http + 5] === ":"))
+    ) {
+      return true;
+    }
+    // all remaining potential urls are partials
+    if (str.indexOf(".") === -1) return false;
+
+    const res =  UrlRegex.test(str);
+    return res
+  };
+
+  const links: {url: string, data: Embed}[] | null = $state(hasUrl(message.content) ? [] : null);
+  $inspect(links)
+
+  function getEmbeds() {
+    return Promise.all(
+      (message.content.match(UrlRegex) ?? []).map(async (_url) => {
+        if (_url.startsWith("<") && _url.endsWith(">")) return;
+
+        let url =
+          _url.startsWith("http://") || _url.startsWith("https://")
+            ? _url
+            : "https://" + _url;
+        const data = await getLinkEmbedData(url);
+        if (data) links?.push({url, data})
+      }),
+    );
+  }
+  $effect(() => {
+    if (links) getEmbeds();
+  });
 </script>
 
 {#snippet messageBox()}
@@ -289,6 +331,21 @@
                 Edited {@render timestamp(userAccessTimes.current?.updatedAt)}
               </div>
             {/if} -->
+          {/if}
+          {#if links && links.length > 0}
+            <div class="pr-2 flex gap-1 items-start">
+              <div class="">
+                {#each links as { url, data }}
+                  <div class="py-1">
+                    <LinkCard embed={data} {url} />
+                  </div>
+                {/each}
+              </div>
+              <button
+                class="opacity-0 hover:opacity-100 cursor-pointer transition-opacity ease-in-out duration-75"
+                ><IconLucideX /></button
+              >
+            </div>
           {/if}
         </div>
 
