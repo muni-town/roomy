@@ -107,7 +107,7 @@ const spaceModuleDef: BasicModule = {
     create table if not exists stream_info (
 
       type text not null default 'space.roomy.space.space',
-      schema_version text not null default '3'
+      schema_version text not null default '4'
     ) strict;
 
     insert into stream_info (type) select 'space.roomy.space.space'
@@ -151,7 +151,10 @@ const spaceModuleDef: BasicModule = {
     ) strict;
 
     create table if not exists members (
-      user_id text primary key
+      user_id text primary key,
+      name text,
+      avatar text,
+      handle text
     ) strict;
 
     create table if not exists metadata_events (
@@ -182,7 +185,7 @@ const spaceModuleDef: BasicModule = {
   stateInitSql: "",
 
   authorizer: sql`
-    -- Case 1: No admins yet - only allow admin.add (bootstrap)
+    -- No admins yet - only allow admin.add (bootstrap)
     with event_info as (
       select
         drisl_extract(payload, '.$type') as event_type
@@ -192,7 +195,7 @@ const spaceModuleDef: BasicModule = {
     where not exists (select 1 from admins)
       and (select event_type from event_info) is not 'space.roomy.space.addAdmin.v0';
 
-    -- Case 2: Admins exist - author must be an admin for admin management
+    -- Admins exist - author must be an admin for admin management
     with event_info as (
       select
         drisl_extract(payload, '.$type') as event_type,
@@ -204,7 +207,7 @@ const spaceModuleDef: BasicModule = {
       and (select event_type from event_info) in ('space.roomy.space.addAdmin.v0', 'space.roomy.space.removeAdmin.v0')
       and not exists (select 1 from admins where user_id = (select author from event_info));
 
-    -- Case 3: Only admins can configure OpenMeet calendar link
+    -- Only admins can configure OpenMeet calendar link
     with event_info as (
       select
         drisl_extract(payload, '.$type') as event_type,
@@ -215,6 +218,22 @@ const spaceModuleDef: BasicModule = {
     where exists (select 1 from admins)
       and (select event_type from event_info) = 'space.roomy.openmeet.configure.v0'
       and not exists (select 1 from admins where user_id = (select author from event_info));
+      
+    -- Users can update their own profile, admins can update any profile
+    with event_info as (
+      select
+        drisl_extract(payload, '.$type') as event_type,
+        user as author,
+        drisl_extract(payload, '.did') as target_did
+      from event
+    )
+    select unauthorized('can only update your own profile unless you are an admin')
+    where (select event_type from event_info) = 'space.roomy.user.updateProfile.v0'
+      and (select author from event_info) != (select target_did from event_info)
+      and not exists (
+        select 1 from admins
+        where user_id = (select author from event_info)
+      );
   `.sql,
 
   materializer: `
@@ -326,6 +345,34 @@ const spaceModuleDef: BasicModule = {
       'space.roomy.link.createRoomLink.v0',
       'space.roomy.link.removeRoomLink.v0'
     );
+    
+    -- Update member profiles
+    -- First ensure the member exists
+    insert or ignore into members (user_id)
+    select drisl_extract(payload, '.did')
+    from event
+    where drisl_extract(payload, '.$type') = 'space.roomy.user.updateProfile.v0';
+
+    -- Update name if provided
+    update members
+    set name = (select drisl_extract(payload, '.name') from event)
+    where user_id = (select drisl_extract(payload, '.did') from event)
+      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.user.updateProfile.v0'
+      and (select drisl_exists(payload, '.name') from event) = 1;
+
+    -- Update avatar if provided
+    update members
+    set avatar = (select drisl_extract(payload, '.avatar') from event)
+    where user_id = (select drisl_extract(payload, '.did') from event)
+      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.user.updateProfile.v0'
+      and (select drisl_exists(payload, '.avatar') from event) = 1;
+
+    -- Update handle from Discord extension if provided
+    update members
+    set handle = (select drisl_extract(payload, '.extensions.space.roomy.extension.discordUserOrigin.v0.handle') from event)
+    where user_id = (select drisl_extract(payload, '.did') from event)
+      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.user.updateProfile.v0'
+      and (select drisl_exists(payload, '.extensions.space.roomy.extension.discordUserOrigin.v0.handle') from event) = 1;
   `,
 
   stateMaterializer: "",
@@ -338,7 +385,7 @@ const spaceModuleDef: BasicModule = {
     },
     {
       name: "members",
-      sql: `select user_id from members`,
+      sql: `select user_id, name, avatar, handle from members`,
       params: [],
     },
     {
@@ -455,6 +502,21 @@ const spaceModuleDef: BasicModule = {
         limit $limit;
       `,
       params: [{ kind: "text", name: "room", optional: true }],
+    },
+    {
+      name: "profiles",
+      sql: `
+        select
+          json_object(
+            'did', m.user_id,
+            'name', m.name,
+            'avatar', m.avatar,
+            'handle', m.handle
+          ) as profile
+        from json_each($user_dids) as j
+        left join members m on j.value = m.user_id;
+      `,
+      params: [{ kind: "text", name: "user_dids", optional: false }],
     },
   ],
 };
