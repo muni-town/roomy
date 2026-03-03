@@ -1,3 +1,4 @@
+import { dev } from "$app/environment";
 import type { Embed } from "$lib/types/embed-sdk";
 
 export const cache = new Map<string, Embed | null>();
@@ -6,7 +7,7 @@ export const getLinkEmbedData = (url: string) => {
   let data = cache.get(url);
   if (data !== undefined) return data;
 
-  return fetch("https://embed.internal.weird.one?lang=en", {
+  return fetch(dev ? "/api/og" : "https://embed.internal.weird.one?lang=en", {
     method: "POST",
     headers: {
       "Content-Type": "text/plain",
