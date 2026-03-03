@@ -43,13 +43,13 @@
       isSidebarVisible.value = !isSidebarVisible.value;
     }}
     aria-label="toggle navigation"
-    class="absolute inset-0 cursor-pointer sm:hidden bg-base-100/50 dark:bg-base-950/50"
+    class="fixed inset-0 z-30 cursor-pointer sm:hidden bg-base-100/50 dark:bg-base-950/50"
   ></button>
 {/if}
 
 <div
   class={[
-    "isolate fixed top-0 bottom-0 left-0 bg-base-100/50 dark:bg-base-950 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none",
+    "isolate fixed top-0 bottom-0 left-0 z-40 bg-base-100/50 dark:bg-base-950 sm:bg-transparent backdrop-blur-sm sm:backdrop-blur-none",
     isSidebarVisible.value ? "block" : "hidden sm:block",
   ]}
 >
