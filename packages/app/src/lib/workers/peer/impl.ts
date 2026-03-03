@@ -295,6 +295,10 @@ export class Peer {
         // should make sure things mostly work for now, but should be fixed later. The only impact
         // should be that we can't show proper 404 errors for missing spaces.
         true,
+      isSpaceReady: async (spaceId) => {
+        const { spaces } = await this.#roomy.transitionedTo("connected");
+        return spaces.has(spaceId);
+      },
       setProfileSpace: async (spaceId) => {
         await this.client.setProfileSpace(spaceId);
       },
@@ -1051,8 +1055,16 @@ export class Peer {
         );
 
         const space = spaces.get(spaceId);
-        if (!space)
-          throw new Error("Could not find space in connected streams");
+        if (!space) {
+          const availableSpaces = Array.from(spaces.keys()).join(", ");
+          throw new Error(
+            `Space ${spaceId} is not ready for operations. ` +
+              `It may not be fully subscribed or backfilled yet. ` +
+              `Available spaces: [${availableSpaces || "none"}]. ` +
+              `This can happen if you navigate to a space before it finishes loading. ` +
+              `Try waiting a moment and then navigating to the space again.`
+          );
+        }
 
         const ROOM_FETCH_BATCH_SIZE = 100;
         const events = await tracer.startActiveSpan(

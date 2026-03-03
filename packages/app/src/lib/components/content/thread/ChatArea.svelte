@@ -51,6 +51,16 @@
     const roomId = app.roomId;
     if (!spaceId || !roomId) return;
 
+    // Check if space is ready before attempting lazy load
+    const isReady = await peer.isSpaceReady(spaceId);
+    if (!isReady) {
+      lazyLoadState = {
+        status: "error",
+        message: `Space ${spaceId} is not ready yet. It may still be loading. Please wait a moment and try again.`,
+      };
+      return;
+    }
+
     isShifting = true; // Enable shift during lazy load (prepends messages)
     lazyLoadState = { status: "loading" };
     try {
@@ -467,7 +477,8 @@
       timeline.status === "success" &&
       timeline.data.length < showLastN &&
       hasMoreHistory &&
-      !isLazyLoading
+      !isLazyLoading &&
+      lazyLoadState.status !== "error" // Don't retry on error to prevent infinite loops
     ) {
       loadMoreMessages();
     }

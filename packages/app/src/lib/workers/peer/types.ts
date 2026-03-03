@@ -89,6 +89,7 @@ export type PeerInterface = {
     handle?: Handle;
   }>;
   checkSpaceExists(spaceId: StreamDid): Promise<boolean>;
+  isSpaceReady(spaceId: StreamDid): Promise<boolean>;
   setProfileSpace(spaceId: StreamDid | null): Promise<void>;
   getProfileSpace(): Promise<StreamDid | undefined>;
   connectSpaceStream(spaceId: StreamDid, idx: StreamIndex): Promise<void>;
