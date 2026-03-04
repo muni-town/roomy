@@ -49,11 +49,13 @@ export {
   fromBytes,
   getDependsOn,
   getMaterializer,
+  getSyntheticMaterializer,
   type MaterializeContext,
   type MaterializeFn,
   type DependsOnFn,
   type DefinedEvent,
   type SqlStatement,
+  type SyntheticEvent,
 } from "./events";
 
 export * from "./extensions/message";

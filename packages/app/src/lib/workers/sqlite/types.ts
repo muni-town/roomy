@@ -14,6 +14,9 @@ export type SqliteWorkerInterface = {
     events: Batch.Events,
     priority: TaskPriority,
   ): Promise<Batch.Statement | Batch.ApplyResult>;
+  materializeSyntheticEvent(
+    event: Batch.SyntheticEvent,
+  ): Promise<Batch.ApplyResult>;
   runQuery<Row>(statement: SqlStatement): Promise<QueryResult<Row>>;
   resetLocalDatabase(): Promise<
     { done: true } | { done: false; error: string }

@@ -6,6 +6,8 @@ import {
   type Bundle,
   type StreamIndex,
   type TaskPriority,
+  type MaterializationSummary,
+  type MaterializationWarnings,
 } from "../types";
 import {
   initializeDatabase,
@@ -33,6 +35,7 @@ import {
   newUlid,
   type Event,
   type EventType,
+  getSyntheticMaterializer,
 } from "@roomy/sdk";
 import { materialize } from "./materializer";
 import type {
@@ -574,6 +577,109 @@ class SqliteWorkerSupervisor {
             );
           }
         })();
+      },
+      materializeSyntheticEvent: async (batch) => {
+        const kind = batch.event.$type;
+        console.log(`[SqW] Materializing synthetic event: ${kind}`);
+
+        try {
+          const handler = getSyntheticMaterializer(kind);
+          if (!handler) {
+            throw new Error(
+              `No materializer found for synthetic event type: ${kind}`,
+            );
+          }
+
+          // Get the materializer function
+          const materializer = handler.materialize;
+
+          // Create a mock context for the materializer
+          // Synthetic events don't have user in the same way, so we use placeholder values
+          const ctx = {
+            streamId: batch.streamId,
+            user: "" as UserDid, // Not used for synthetic events
+            event: batch.event as any,
+          };
+
+          const statements = materializer(ctx);
+
+          // Execute as a single transaction
+          await executeQuery({ sql: "begin" });
+          try {
+            for (const statement of statements) {
+              await executeQuery(statement);
+            }
+            await executeQuery({ sql: "commit" });
+          } catch (e) {
+            await executeQuery({ sql: "rollback" });
+            throw e;
+          }
+
+          console.log(
+            `[SqW] Successfully materialized synthetic event: ${kind}`,
+          );
+
+          const summary: MaterializationSummary = {
+            totalEvents: 0, // Synthetic events don't count as events
+            appliedEvents: 0,
+            stashedEvents: 0,
+            errorEvents: 0,
+            totalStatements: statements.length,
+            successfulStatements: statements.length,
+            failedStatements: 0,
+            durationMs: 0, // TODO: track timing
+          };
+
+          const warnings: MaterializationWarnings = {};
+
+          return {
+            status: "applied",
+            batchId: batch.batchId,
+            results: [],
+            priority: batch.priority,
+            summary,
+            warnings,
+          } as Batch.ApplyResult;
+        } catch (error) {
+          console.error(
+            `[SqW] Error materializing synthetic event ${kind}:`,
+            error,
+          );
+
+          const summary: MaterializationSummary = {
+            totalEvents: 0,
+            appliedEvents: 0,
+            stashedEvents: 0,
+            errorEvents: 0,
+            totalStatements: 0,
+            successfulStatements: 0,
+            failedStatements: 1,
+            durationMs: 0,
+          };
+
+          const warnings: MaterializationWarnings = {};
+
+          // Return error as a failed result in the batch
+          return {
+            status: "applied",
+            batchId: batch.batchId,
+            results: [
+              {
+                eventId: batch.batchId,
+                result: "error",
+                error:
+                  typeof error === "string"
+                    ? error
+                    : error instanceof Error
+                      ? error.message
+                      : String(error),
+              },
+            ],
+            priority: batch.priority,
+            summary,
+            warnings,
+          } as Batch.ApplyResult;
+        }
       },
     };
   }

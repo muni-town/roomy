@@ -270,7 +270,10 @@ export class Peer {
         return this.client.uploadBlob(bytes, opts);
       },
       getServiceAuthToken: async (aud, lxm) => {
-        const resp = await this.client.agent.com.atproto.server.getServiceAuth({ aud, lxm });
+        const resp = await this.client.agent.com.atproto.server.getServiceAuth({
+          aud,
+          lxm,
+        });
         return resp.data.token;
       },
       connectRpcClient: async (port) => this.connectRpcClient(port),
@@ -661,7 +664,12 @@ export class Peer {
       [...spacesToConnect.keys()].map((id) => [id, "loading"]),
     );
 
-    const currentSpaceIdOrHandle = await this.#currentSpace.promise;
+    // Wait for current space to be set, but don't block forever
+    // If no current space is set within 1 second, proceed with undefined
+    const currentSpaceIdOrHandle = await Promise.race([
+      this.#currentSpace.promise,
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 1000)),
+    ]);
     const currentSpaceId: StreamDid | undefined = await tracer.startActiveSpan(
       "Resolve Space DID from DID or Handle",
       { attributes: { "space.id": currentSpaceIdOrHandle || "none" } },
@@ -860,7 +868,11 @@ export class Peer {
       async (span) => {
         try {
           console.log("[Peer] Connecting space stream");
-          const currentSpaceIdOrHandle = await this.#currentSpace.promise;
+          // Wait for current space to be set, but don't block forever
+          const currentSpaceIdOrHandle = await Promise.race([
+            this.#currentSpace.promise,
+            new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 1000)),
+          ]);
 
           let currentSpaceId:
             | { spaceDid: StreamDid; handle?: string }
@@ -948,20 +960,55 @@ export class Peer {
       isPriority || false,
     );
 
-    // First get metadata to find latest index, then subscribe from there
-    const latest = await withTimeoutCallback(
-      space.subscribeMetadata(callback, 0),
-      () => console.warn(`Waiting for space metadata backfill`, { streamId }),
-      5000,
-    );
+    // Try synthetic space_meta query first for faster initialization
+    console.log(`[Peer] Attempting to fetch space_meta for ${streamId}`);
+    const syntheticEvent = await space.fetchSpaceMeta();
 
-    await space.unsubscribe();
+    if (syntheticEvent) {
+      console.log(`[Peer] Using synthetic space_meta query for ${streamId}`);
+      // Create a synthetic event batch for materialization
+      const syntheticBatch: Batch.SyntheticEvent = {
+        status: "synthetic",
+        batchId: newUlid(),
+        streamId,
+        event: syntheticEvent,
+        priority: isPriority ? "priority" : "background",
+      };
+      // Materialize the synthetic event
+      await this.#sqlite.sqliteWorker.materializeSyntheticEvent(syntheticBatch);
 
-    await withTimeoutCallback(
-      space.subscribe(callback, latest),
-      () => console.warn(`Waiting for space events backfill`, { streamId }),
-      5000,
-    );
+      // Still need to get latest event index from metadata query
+      // (we can skip this if space_meta also returns the latest idx, but for now we'll keep it)
+      const latest = await withTimeoutCallback(
+        space.subscribeMetadata(callback, 0),
+        () => console.warn(`Waiting for space metadata backfill`, { streamId }),
+        5000,
+      );
+      await space.unsubscribe();
+
+      // Subscribe to regular events from after metadata
+      await withTimeoutCallback(
+        space.subscribe(callback, latest),
+        () => console.warn(`Waiting for space events backfill`, { streamId }),
+        5000,
+      );
+    } else {
+      console.log(
+        `[Peer] Falling back to metadata events for ${streamId} (space may not support space_meta query yet)`,
+      );
+      // Original flow: fetch all metadata events
+      const latest = await withTimeoutCallback(
+        space.subscribeMetadata(callback, 0),
+        () => console.warn(`Waiting for space metadata backfill`, { streamId }),
+        5000,
+      );
+      await space.unsubscribe();
+      await withTimeoutCallback(
+        space.subscribe(callback, latest),
+        () => console.warn(`Waiting for space events backfill`, { streamId }),
+        5000,
+      );
+    }
 
     this.#roomy.current.spaces.set(streamId, space);
     this.#spaceStatuses.set(streamId, "idle");
@@ -1062,7 +1109,7 @@ export class Peer {
               `It may not be fully subscribed or backfilled yet. ` +
               `Available spaces: [${availableSpaces || "none"}]. ` +
               `This can happen if you navigate to a space before it finishes loading. ` +
-              `Try waiting a moment and then navigating to the space again.`
+              `Try waiting a moment and then navigating to the space again.`,
           );
         }
 

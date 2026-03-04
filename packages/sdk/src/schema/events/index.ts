@@ -18,6 +18,14 @@ export { LinkEventVariant } from "./link";
 export { CalendarEventVariant } from "./calendar";
 export { StateEventVariant } from "./state";
 
+// Export synthetic events
+export {
+  syntheticEventRegistry,
+  getSyntheticMaterializer,
+  type SyntheticEvent,
+  type SyntheticEventType,
+} from "./synthetic";
+
 // Export defined events with their materializers
 export {
   CreateMessage,

@@ -38,6 +38,7 @@ import type {
 } from "./types";
 
 import { withTimeoutWarning } from "../utils/timeout";
+import { SpaceMetaSynthetic } from "../schema/events/synthetic";
 
 export type ConnectionState =
   | { state: "connected" }
@@ -587,6 +588,91 @@ export class ConnectedSpace {
         }
       })
       .filter((e): e is NonNullable<typeof e> => e !== null);
+  }
+
+  /**
+   * Fetch space metadata as a synthetic event.
+   * Returns null if the query fails (e.g., space doesn't support it).
+   */
+  async fetchSpaceMeta(): Promise<
+    typeof SpaceMetaSynthetic.schema.infer | null
+  > {
+    try {
+      const resp = await this.#leaf.query(this.streamDid, {
+        name: "space_meta",
+        params: {},
+      });
+
+      if (!resp || resp.length === 0) {
+        console.warn("[ConnectedSpace] space_meta query returned no results");
+        return null;
+      }
+
+      // The query returns a single row with a payload field
+      const row = resp[0];
+      if (!row) {
+        console.warn("[ConnectedSpace] space_meta query returned empty row");
+        return null;
+      }
+      const payloadValue = row.payload;
+
+      // Handle different payload formats from Leaf
+      let eventData: unknown;
+
+      if (typeof payloadValue === "string") {
+        // JSON string - parse it
+        eventData = JSON.parse(payloadValue);
+      } else if (payloadValue instanceof Uint8Array) {
+        // CBOR bytes - decode them
+        eventData = decode(payloadValue);
+      } else if (
+        payloadValue &&
+        typeof payloadValue === "object" &&
+        "$type" in payloadValue
+      ) {
+        // SQLite value wrapper - extract the actual value
+        if ("value" in payloadValue) {
+          const wrappedValue = (payloadValue as { value: unknown }).value;
+
+          if (typeof wrappedValue === "string") {
+            eventData = JSON.parse(wrappedValue);
+          } else if (wrappedValue instanceof Uint8Array) {
+            eventData = decode(wrappedValue);
+          } else {
+            eventData = wrappedValue;
+          }
+        } else {
+          // Already a decoded object (no value wrapper)
+          eventData = payloadValue;
+        }
+      } else {
+        console.error(
+          "[ConnectedSpace] Unexpected payload type from space_meta:",
+          typeof payloadValue,
+          payloadValue,
+        );
+        return null;
+      }
+
+      // Validate using the synthetic event schema
+      const result = SpaceMetaSynthetic.schema(eventData);
+
+      if (result instanceof type.errors) {
+        console.error(
+          "[ConnectedSpace] Failed to validate space_meta event:",
+          result.summary,
+        );
+        return null;
+      }
+
+      return result;
+    } catch (e) {
+      console.warn(
+        "[ConnectedSpace] Failed to fetch space_meta, space may not support it yet:",
+        e,
+      );
+      return null;
+    }
   }
 }
 

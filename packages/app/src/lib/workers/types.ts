@@ -7,6 +7,7 @@ import type {
   Event,
   UserDid,
   DecodedStreamEvent,
+  SyntheticEvent as SyntheticEventType,
 } from "@roomy/sdk";
 import type { SqlStatement } from "./sqlite/types";
 import type { BindingSpec } from "@sqlite.org/sqlite-wasm";
@@ -74,6 +75,14 @@ export namespace Batch {
     batchId: Ulid;
     streamId: StreamDid;
     events: DecodedStreamEvent[];
+    priority: TaskPriority;
+  }
+
+  export interface SyntheticEvent {
+    status: "synthetic";
+    batchId: Ulid;
+    streamId: StreamDid;
+    event: SyntheticEventType;
     priority: TaskPriority;
   }
 
@@ -210,6 +219,6 @@ export namespace Bundle {
   export interface ApplyError {
     result: "error";
     eventId: Ulid;
-    error: ApplyErrorType;
+    error: ApplyErrorType | string;
   }
 }

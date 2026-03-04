@@ -420,55 +420,42 @@ const spaceModuleDef: BasicModule = {
       name: "space_meta",
       sql: `
         select
-          'info' as key,
           json_object(
-            'name', name,
-            'avatar', avatar,
-            'description', description,
-            'handleProvider', handle_provider
-          ) as value
-        from space_info
-
-        union all
-
-        select
-          'sidebar' as key,
-          json_object('categories', config) as value
-        from sidebar_config
-
-        union all
-
-        select
-          'channels' as key,
-          json_group_array(
-            json_object(
-              'id', id,
-              'name', name,
-              'description', description,
-              'avatar', avatar
+            '$type', 'space.roomy.query.spaceMeta.v0',
+            'info', json_object(
+              'name', (select name from space_info),
+              'avatar', (select avatar from space_info),
+              'description', (select description from space_info),
+              'handleProvider', (select handle_provider from space_info)
+            ),
+            'sidebar', json_object(
+              'categories', (select config from sidebar_config)
+            ),
+            'channels', (
+              select json_group_array(
+                json_object(
+                  'id', id,
+                  'name', name,
+                  'description', description,
+                  'avatar', avatar
+                )
+              )
+              from rooms
+              where deleted = 0
+              and kind = "space.roomy.channel"
+            ),
+            'admins', (
+              select json_group_array(user_id)
+              from admins
+            ),
+            'openmeetConfig', json_object(
+              'groupSlug', (select group_slug from openmeet_config),
+              'tenantId', (select tenant_id from openmeet_config),
+              'apiUrl', (select api_url from openmeet_config)
             )
-          ) as value
-        from rooms
-        where deleted = 0
-        and kind = "space.roomy.channel"
-
-        union all
-
-        select
-          'admins' as key,
-          json_group_array(user_id) as value
-        from admins
-
-        union all
-
-        select
-          'openmeet_config' as key,
-          json_object(
-            'groupSlug', group_slug,
-            'tenantId', tenant_id,
-            'apiUrl', api_url
-          ) as value
-        from openmeet_config
+          ) as payload
+        from space_info
+        limit 1
       ;
       `,
       params: [],
