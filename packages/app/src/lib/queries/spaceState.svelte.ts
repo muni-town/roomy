@@ -200,15 +200,17 @@ export class SpaceState {
             latestEntity: 0,
             sortIdx: "",
             unreadCount: 0,
-            children: uniqueChildren.map((c) => ({
-              type: "space.roomy.channel",
-              id: c.id,
-              name: c.name,
-              lastRead: 0,
-              latestEntity: 0,
-              sortIdx: "",
-              unreadCount: 0,
-            })),
+            children: uniqueChildren
+              .filter((c) => !!c.name) // don't include children without names
+              .map((c) => ({
+                type: "space.roomy.channel",
+                id: c.id,
+                name: c.name,
+                lastRead: 0,
+                latestEntity: 0,
+                sortIdx: "",
+                unreadCount: 0,
+              })),
           } satisfies SidebarCategory;
         });
 

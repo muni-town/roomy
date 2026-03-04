@@ -68,9 +68,9 @@
       >
       {#if !isEditing}
         {#if showGroupChildren}
-          <IconChevronDown class="shrink-0 !size-2" />
+          <IconChevronDown class="shrink-0 size-2!" />
         {:else}
-          <IconChevronUp class="shrink-0 !size-2" />
+          <IconChevronUp class="shrink-0 size-2!" />
         {/if}
       {/if}
     </Button>
@@ -99,7 +99,7 @@
       {#each displayChildren as room, index (room.id)}
         <div id={room.id} class="flex items-start w-full relative">
           <div
-            class="mt-[10px]"
+            class="mt-2.5"
             use:dragHandle
             aria-label="drag handle for {room.name}"
           >
