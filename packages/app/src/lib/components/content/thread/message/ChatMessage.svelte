@@ -169,12 +169,14 @@
     // all remaining potential urls are partials
     if (str.indexOf(".") === -1) return false;
 
-    const res =  UrlRegex.test(str);
-    return res
+    const res = UrlRegex.test(str);
+    return res;
   };
 
-  const links: {url: string, data: Embed}[] | null = $state(hasUrl(message.content) ? [] : null);
-  $inspect(links)
+  const links: { url: string; data: Embed }[] | null = $state(
+    hasUrl(message.content) ? [] : null,
+  );
+  $inspect(links);
 
   function getEmbeds() {
     return Promise.all(
@@ -186,7 +188,7 @@
             ? _url
             : "https://" + _url;
         const data = await getLinkEmbedData(url);
-        if (data) links?.push({url, data})
+        if (data) links?.push({ url, data });
       }),
     );
   }
