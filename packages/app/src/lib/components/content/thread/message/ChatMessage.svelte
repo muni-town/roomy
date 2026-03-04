@@ -160,9 +160,9 @@
   const hasUrl = (str: string): boolean => {
     const http = str.indexOf("http");
     if (
-      http === -1 &&
-      (str[http + 4] === ":" ||
-        (str[http + 4] === "s" && str[http + 5] === ":"))
+      http !== -1 &&
+      (str.substring(http + 4, http + 7) === "://" ||
+        str.substring(http + 4, http + 8) === "s://")
     ) {
       return true;
     }
