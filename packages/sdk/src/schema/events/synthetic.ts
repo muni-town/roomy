@@ -161,13 +161,14 @@ export const SpaceMetaSynthetic = defineEvent(
     }
 
     // Admins (member edges with admin permission)
+    // Edge: head=space, tail=user, label='member', payload={can: "admin"}
     if (data.admins !== null) {
       for (const adminDid of data.admins) {
         statements.push(sql`
           insert into edges (head, tail, label, payload, created_at, updated_at)
           values (
-            ${adminDid},
             ${streamId},
+            ${adminDid},
             'member',
             ${JSON.stringify({ can: "admin" })},
             ${timestamp},
