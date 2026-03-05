@@ -330,24 +330,34 @@ class SqliteWorkerSupervisor {
   listenStatements() {
     (async () => {
       for await (const batch of this.#statementChannel) {
-        // apply statements
+        let result: Batch.ApplyResult;
         try {
-          const result = await this.runStatementBatch(batch);
-
-          // resolve promise
-          try {
-            const resolver = this.#pendingBatches.get(batch.batchId);
-            if (resolver) {
-              resolver(result);
-              this.#pendingBatches.delete(batch.batchId);
-            } else {
-              throw new Error("Lost the resolver 😬");
-            }
-          } catch (error) {
-            console.error("Error running statement batch", batch, error);
-          }
+          result = await this.runStatementBatch(batch);
         } catch (error) {
           console.error("Error running statement batch", batch, error);
+          // Create an error result so the batch promise still resolves
+          result = {
+            status: "applied",
+            batchId: batch.batchId,
+            results: [
+              {
+                eventId: batch.batchId as Ulid,
+                result: "error",
+                error:
+                  error instanceof Error ? error.message : String(error),
+              },
+            ],
+            priority: batch.priority,
+          };
+        }
+
+        // Always resolve the pending batch promise
+        const resolver = this.#pendingBatches.get(batch.batchId);
+        if (resolver) {
+          resolver(result);
+          this.#pendingBatches.delete(batch.batchId);
+        } else {
+          console.error("Lost the resolver for batch", batch.batchId);
         }
       }
     })();
@@ -541,25 +551,20 @@ class SqliteWorkerSupervisor {
         const spacesToConnect = [...this.#pendingSpacesToConnect];
         this.#pendingSpacesToConnect.clear();
 
+        // Current space is connected directly by the peer worker before this
+        // is called, so we only connect the remaining spaces here.
+        const remaining = spacesToConnect.filter((s) => s !== currentSpaceId);
+
         console.debug(
-          `[SqW] Connecting ${spacesToConnect.length} pending space(s):`,
-          spacesToConnect,
+          `[SqW] Connecting ${remaining.length} remaining space(s) (${spacesToConnect.length} total, current space handled by peer):`,
+          remaining,
         );
 
-        if (currentSpaceId && spacesToConnect.includes(currentSpaceId)) {
-          // give the active space a 1sec headstart
-          await Promise.race([
-            this.connectSpaceStream(currentSpaceId),
-            new Promise((r) => setTimeout(r, 1000)),
-          ]);
-        }
-
-        // Connect spaces in parallel - one failing/slow space shouldn't block others
+        // Connect spaces in parallel in the background - one failing/slow
+        // space shouldn't block others or the init flow
         (async () => {
           const results = await Promise.allSettled(
-            spacesToConnect
-              .filter((s) => s !== currentSpaceId)
-              .map((spaceId) => this.connectSpaceStream(spaceId)),
+            remaining.map((spaceId) => this.connectSpaceStream(spaceId)),
           );
 
           // Log any failures for observability

@@ -693,7 +693,63 @@ export class Peer {
       },
     );
 
-    // Connect to spaces the user has joined (but not left) after full personal stream backfill
+    // Connect to the current space FIRST, directly on the peer worker.
+    // This ensures the current space's metadata is available before we
+    // set state to "connected" (which triggers the UI to render).
+    if (currentSpaceId && spacesToConnect.has(currentSpaceId)) {
+      await tracer.startActiveSpan(
+        "Connect Current Space",
+        { attributes: { "space.id": currentSpaceId } },
+        ctx,
+        async (span) => {
+          try {
+            console.debug(
+              "[Peer] Connecting current space first:",
+              currentSpaceId,
+            );
+            const connectionResult = await Promise.race([
+              this.#connectSpaceStreamInner(currentSpaceId, true).then(
+                () => "connected" as const,
+              ),
+              new Promise<"timeout">((resolve) =>
+                setTimeout(
+                  () => resolve("timeout"),
+                  Peer.SPACE_CONNECTION_TIMEOUT_MS,
+                ),
+              ),
+            ]);
+
+            if (connectionResult === "timeout") {
+              console.warn(
+                "[Peer] Current space connection timed out:",
+                currentSpaceId,
+              );
+              this.#spaceStatuses.set(currentSpaceId, "error");
+            } else {
+              console.debug(
+                "[Peer] Current space connected:",
+                currentSpaceId,
+              );
+            }
+          } catch (e) {
+            console.warn(
+              "[Peer] Failed to connect current space:",
+              currentSpaceId,
+              e,
+            );
+            this.#spaceStatuses.set(currentSpaceId, "error");
+          }
+          span.end();
+        },
+      );
+    } else if (currentSpaceId) {
+      console.debug(
+        "[Peer] Current space not in joined spaces, skipping direct connect:",
+        currentSpaceId,
+      );
+    }
+
+    // Connect remaining spaces in the background via the SQLite worker
     await tracer.startActiveSpan(
       "Connect Pending Spaces",
       {},
@@ -717,48 +773,6 @@ export class Peer {
     };
 
     console.log("[Peer] Init: Connected");
-
-    // Wait for the current space (if set) to finish materializing metadata
-    await tracer.startActiveSpan(
-      "Wait for Current Space Metadata",
-      { attributes: { "space.id": currentSpaceIdOrHandle || "none" } },
-      ctx,
-      async (span) => {
-        if (currentSpaceIdOrHandle) {
-          // Find the connected space that matches the current space ID
-          const currentSpace = currentSpaceId
-            ? this.spaces.get(currentSpaceId)
-            : undefined;
-
-          if (currentSpace) {
-            console.debug(
-              "[Peer] Waiting for current space metadata:",
-              currentSpaceId,
-            );
-            // Wait for this space's backfill to complete and get the batch ID
-            const lastBatchId = await currentSpace.doneBackfilling;
-            // Wait for the metadata batch to be materialized
-            const metadataMaterialized = new Promise<void>((resolve) => {
-              this.#batchResolvers.set(lastBatchId, () => resolve());
-            });
-            await metadataMaterialized;
-            this.#spaceStatuses.set(currentSpace.streamDid, "idle");
-            console.debug(
-              "[Peer] Current space metadata materialized:",
-              currentSpaceId,
-            );
-          } else {
-            console.warn(
-              "[Peer] Current space not found in connected spaces:",
-              currentSpaceId,
-            );
-          }
-        } else {
-          console.debug("[Peer] No current space set, skipping metadata wait");
-        }
-        span.end();
-      },
-    );
 
     console.info("Peer initialised!");
 
@@ -976,16 +990,30 @@ export class Peer {
         console.log(
           `[Peer] Schema version ${schemaVersion ?? "unknown"} < 5 for ${streamId}, falling back to metadata events`,
         );
-        // Original flow: fetch all metadata events
+        // Use tracked callback so we can wait for metadata materialization
+        const { callback: metaCallback, waitForMaterialization } =
+          this.#createTrackedEventCallback(
+            this.#roomy.current.eventChannel,
+            streamId,
+            true,
+          );
         const latest = await withTimeoutCallback(
-          space.subscribeMetadata(callback, 0),
+          space.subscribeMetadata(metaCallback, 0),
           () =>
             console.warn(`Waiting for space metadata backfill`, { streamId }),
           5000,
         );
+        // Wait for metadata to be materialized into SQLite before continuing
+        await waitForMaterialization();
         await space.unsubscribe();
+        // Regular events use a plain callback - no need to block on materialization
+        const regularCallback = this.#createEventCallback(
+          this.#roomy.current.eventChannel,
+          streamId,
+          isPriority || false,
+        );
         await withTimeoutCallback(
-          space.subscribe(callback, latest),
+          space.subscribe(regularCallback, latest),
           () =>
             console.warn(`Waiting for space events backfill`, { streamId }),
           5000,
@@ -1002,7 +1030,7 @@ export class Peer {
           event: syntheticEvent,
           priority: isPriority ? "priority" : "background",
         };
-        // Materialize the synthetic event
+        // Materialize the synthetic event (metadata goes directly to SQLite)
         await this.#sqlite.sqliteWorker.materializeSyntheticEvent(
           syntheticBatch,
         );
@@ -1030,15 +1058,29 @@ export class Peer {
       console.log(
         `[Peer] Falling back to metadata events for ${streamId} (space may not support space_meta query yet)`,
       );
-      // Original flow: fetch all metadata events
+      // Use tracked callback so we can wait for metadata materialization
+      const { callback: metaCallback, waitForMaterialization } =
+        this.#createTrackedEventCallback(
+          this.#roomy.current.eventChannel,
+          streamId,
+          true,
+        );
       const latest = await withTimeoutCallback(
-        space.subscribeMetadata(callback, 0),
+        space.subscribeMetadata(metaCallback, 0),
         () => console.warn(`Waiting for space metadata backfill`, { streamId }),
         5000,
       );
+      // Wait for metadata to be materialized into SQLite before continuing
+      await waitForMaterialization();
       await space.unsubscribe();
+      // Regular events use a plain callback - no need to block on materialization
+      const regularCallback = this.#createEventCallback(
+        this.#roomy.current.eventChannel,
+        streamId,
+        isPriority || false,
+      );
       await withTimeoutCallback(
-        space.subscribe(callback, latest),
+        space.subscribe(regularCallback, latest),
         () => console.warn(`Waiting for space events backfill`, { streamId }),
         5000,
       );
@@ -1247,6 +1289,47 @@ export class Peer {
         finalPriority,
       );
     };
+  }
+
+  /** Create an event callback that tracks batch materialization.
+   * Returns the callback and a waitForMaterialization() function that resolves
+   * when all pushed batches have been materialized into SQLite. */
+  #createTrackedEventCallback(
+    eventChannel: AsyncChannel<Batch.Events>,
+    streamId: StreamDid,
+    priority: boolean,
+  ): { callback: EventCallback; waitForMaterialization: () => Promise<void> } {
+    let pushedCount = 0;
+    let materializedCount = 0;
+    let doneResolve: (() => void) | undefined;
+
+    const innerCallback = this.#createEventCallback(
+      eventChannel,
+      streamId,
+      priority,
+      () => {
+        materializedCount++;
+        if (doneResolve && materializedCount >= pushedCount) {
+          doneResolve();
+        }
+      },
+    );
+
+    const callback: EventCallback = (events, meta) => {
+      if (events.length > 0) {
+        pushedCount++;
+      }
+      innerCallback(events, meta);
+    };
+
+    const waitForMaterialization = async () => {
+      if (pushedCount === 0 || materializedCount >= pushedCount) return;
+      await new Promise<void>((r) => {
+        doneResolve = r;
+      });
+    };
+
+    return { callback, waitForMaterialization };
   }
 
   /**
