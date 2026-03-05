@@ -134,9 +134,7 @@
     if (!spaceId || !app.roomId) return;
     const state = messagingState.current;
     if (state.kind !== "threading") return;
-    if ((state as Threading).selectedMessages.length == 0) return;
-    const threadName =
-      state.name || state.selectedMessages[0]?.content.slice(0, 50) + "...";
+    const threadName = state.name;
 
     const threadId = await createThread({
       spaceId,
