@@ -666,6 +666,39 @@ export class ConnectedSpace {
         return null;
       }
 
+      // Parse sidebar field if it's a string (stored as JSON in database)
+      if (
+        eventData &&
+        typeof eventData === "object" &&
+        "sidebar" in eventData &&
+        typeof eventData.sidebar === "string"
+      ) {
+        const sidebarStr = eventData.sidebar;
+        // Handle empty or whitespace-only strings
+        if (!sidebarStr || sidebarStr.trim() === "") {
+          eventData.sidebar = { categories: [] };
+        } else {
+          try {
+            const parsed = JSON.parse(sidebarStr);
+            // Ensure the parsed sidebar has a categories field
+            if (
+              parsed &&
+              typeof parsed === "object" &&
+              "categories" in parsed
+            ) {
+              eventData.sidebar = parsed;
+            } else {
+              // If sidebar doesn't have categories, set to default structure
+              eventData.sidebar = { categories: [] };
+            }
+          } catch (e) {
+            console.warn("[ConnectedSpace] Failed to parse sidebar JSON:", e);
+            // Set to default structure on parse error
+            eventData.sidebar = { categories: [] };
+          }
+        }
+      }
+
       // Validate using the synthetic event schema
       const result = SpaceMetaSynthetic.schema(eventData);
 
