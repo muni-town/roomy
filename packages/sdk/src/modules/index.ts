@@ -107,7 +107,7 @@ const spaceModuleDef: BasicModule = {
     create table if not exists stream_info (
 
       type text not null default 'space.roomy.space.space',
-      schema_version text not null default '4'
+      schema_version text not null default '5'
     ) strict;
 
     insert into stream_info (type) select 'space.roomy.space.space'
@@ -163,7 +163,8 @@ const spaceModuleDef: BasicModule = {
 
     create table if not exists room_events (
       idx integer primary key,
-      room text not null
+      room text not null,
+      discord_origin text -- did:discord:<snowflake> if event has Discord extension
     ) strict;
     create index if not exists room_events_room_idx on room_events(room);
 
@@ -227,20 +228,20 @@ const spaceModuleDef: BasicModule = {
       and not exists (select 1 from admins where user_id = (select author from event_info));
       
     -- Users can update their own profile, admins can update any profile
-    with event_info as (
-      select
-        drisl_extract(payload, '.$type') as event_type,
-        user as author,
-        drisl_extract(payload, '.did') as target_did
-      from event
-    )
-    select unauthorized('can only update your own profile unless you are an admin')
-    where (select event_type from event_info) = 'space.roomy.user.updateProfile.v0'
-      and (select author from event_info) != (select target_did from event_info)
-      and not exists (
-        select 1 from admins
-        where user_id = (select author from event_info)
-      );
+    -- with event_info as (
+    --   select
+    --     drisl_extract(payload, '.$type') as event_type,
+    --     user as author,
+    --     drisl_extract(payload, '.did') as target_did
+    --   from event
+    -- )
+    -- select unauthorized('can only update your own profile unless you are an admin')
+    -- where (select event_type from event_info) = 'space.roomy.user.updateProfile.v0'
+    --   and (select author from event_info) != (select target_did from event_info)
+    --   and not exists (
+    --     select 1 from admins
+    --     where user_id = (select author from event_info)
+    --   );
   `.sql,
 
   materializer: `
@@ -335,8 +336,27 @@ const spaceModuleDef: BasicModule = {
     );
 
     -- Track room membership for events
-    insert or ignore into room_events (idx, room)
-    select idx, drisl_extract(payload, '.room') from event
+    -- Also store Discord origin if present (for bridged messages/reactions)
+    insert or ignore into room_events (idx, room, discord_origin)
+    select
+      idx,
+      drisl_extract(payload, '.room'),
+      -- For bridged messages: check authorOverride extension
+      coalesce(
+        -- Message events with authorOverride extension
+        drisl_extract(payload, '."extensions"."space.roomy.extension.authorOverride.v0".did'),
+        -- Bridged reaction events: check reactingUser field
+        case
+          when drisl_extract(payload, '.$type') in (
+            'space.roomy.reaction.addBridgedReaction.v0',
+            'space.roomy.reaction.removeBridgedReaction.v0'
+          )
+          and drisl_extract(payload, '.reactingUser') like 'did:discord:%'
+          then drisl_extract(payload, '.reactingUser')
+          else null
+        end
+      )
+    from event
     where drisl_extract(payload, '.room') is not null;
 
     -- Increment message count for createMessage events
@@ -422,6 +442,7 @@ const spaceModuleDef: BasicModule = {
         select
           json_object(
             '$type', 'space.roomy.query.spaceMeta.v0',
+            'latestIdx', (select idx from events.events order by idx desc limit 1),
             'info', json_object(
               'name', (select name from space_info),
               'avatar', (select avatar from space_info),
@@ -482,9 +503,20 @@ const spaceModuleDef: BasicModule = {
     {
       name: "room",
       sql: `
-        select e.idx, e.user, e.payload
+        select
+          e.idx,
+          e.user,
+          e.payload,
+          -- Include profile JSON if available (for Discord bridged users)
+          json_object(
+            'did', coalesce(r.discord_origin, e.user),
+            'name', m.name,
+            'avatar', m.avatar,
+            'handle', m.handle
+          ) as profile
         from events.events e
         inner join room_events r on e.idx = r.idx
+        left join members m on coalesce(r.discord_origin, e.user) = m.user_id
         where r.room = $room and ($end is null or e.idx < $end)
         order by e.idx desc
         limit $limit;

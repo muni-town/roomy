@@ -1,7 +1,6 @@
 import {
   type Batch,
   type SpaceIdOrHandle,
-  type StreamIndex,
   type TaskPriority,
 } from "../types";
 import {
@@ -56,6 +55,7 @@ import {
   type Event,
   newUlid,
   Ulid,
+  StreamIndex,
 } from "@roomy/sdk";
 import { decode, encode } from "@atcute/cbor";
 import { context, SpanStatusCode } from "@opentelemetry/api";
@@ -977,14 +977,12 @@ export class Peer {
       // Materialize the synthetic event
       await this.#sqlite.sqliteWorker.materializeSyntheticEvent(syntheticBatch);
 
-      // Still need to get latest event index from metadata query
-      // (we can skip this if space_meta also returns the latest idx, but for now we'll keep it)
-      const latest = await withTimeoutCallback(
-        space.subscribeMetadata(callback, 0),
-        () => console.warn(`Waiting for space metadata backfill`, { streamId }),
-        5000,
-      );
-      await space.unsubscribe();
+      // Use latestIdx from the synthetic event to subscribe to regular events
+      // This avoids the extra subscribeMetadata round-trip
+      const latest = syntheticEvent.latestIdx !== undefined && syntheticEvent.latestIdx !== null
+        ? StreamIndex.assert(syntheticEvent.latestIdx)
+        : undefined;
+      console.log(`[Peer] Subscribing to events from idx ${latest ?? 0} for ${streamId}`);
 
       // Subscribe to regular events from after metadata
       await withTimeoutCallback(

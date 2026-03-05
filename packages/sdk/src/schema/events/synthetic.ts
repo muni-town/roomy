@@ -10,7 +10,7 @@
 
 import { SqlStatement } from "../../types";
 import { sql } from "../../utils";
-import { type } from "../primitives";
+import { StreamIndex, type } from "../primitives";
 import { defineEvent } from "./utils";
 
 /**
@@ -49,6 +49,7 @@ const OpenMeetConfigType = type({
 
 const SpaceMetaSyntheticSchema = type({
   $type: "'space.roomy.query.spaceMeta.v0'",
+  latestIdx: type.or(StreamIndex, "null"),
   info: type.or(SpaceInfoType, "null"),
   sidebar: type.or(SidebarType, "null"),
   channels: type.or(ChannelType.array(), "null"),
@@ -63,7 +64,7 @@ export const SpaceMetaSynthetic = defineEvent(
   ({ streamId, event }) => {
     // Get the inferred type with proper typing
     // Use unknown to bypass the type mismatch since this is a synthetic event
-    const data = (event as unknown) as typeof SpaceMetaSyntheticSchema.infer;
+    const data = event as unknown as typeof SpaceMetaSyntheticSchema.infer;
     const statements: SqlStatement[] = [];
     const timestamp = Date.now();
 
@@ -74,6 +75,17 @@ export const SpaceMetaSynthetic = defineEvent(
       on conflict(id) do update set
         updated_at = excluded.updated_at
     `);
+
+    // Update backfilled_to if latestIdx is provided
+    if (data.latestIdx !== null && data.latestIdx !== undefined) {
+      statements.push(sql`
+        insert into comp_space (entity, backfilled_to, created_at, updated_at)
+        values (${streamId}, ${data.latestIdx}, ${timestamp}, ${timestamp})
+        on conflict(entity) do update set
+          backfilled_to = excluded.backfilled_to,
+          updated_at = excluded.updated_at
+      `);
+    }
 
     // Space info (comp_info table)
     if (data.info !== null) {
@@ -168,7 +180,10 @@ export const SpaceMetaSynthetic = defineEvent(
     }
 
     // OpenMeet calendar config
-    if (data.openmeetConfig !== null && data.openmeetConfig.groupSlug !== null) {
+    if (
+      data.openmeetConfig !== null &&
+      data.openmeetConfig.groupSlug !== null
+    ) {
       statements.push(sql`
         insert or replace into comp_calendar_link (entity, group_slug, tenant_id, api_url)
         values (
