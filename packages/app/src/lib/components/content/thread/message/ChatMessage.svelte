@@ -47,7 +47,6 @@
   }
   import type { Message } from "../ChatArea.svelte";
   import { peer, peerStatus } from "$lib/workers";
-  import { decodeTime } from "ulidx";
   import { getAppState } from "$lib/queries";
   const app = getAppState();
   import { toast } from "@foxui/core";
@@ -221,14 +220,14 @@
               <span class="font-medium text-accent-700 dark:text-accent-400"
                 >{metadata.name}</span
               >
-              {#if metadata.handle}<span
-                  class="opacity-75 font-normal">@{metadata.handle}</span
+              {#if metadata.handle}<span class="opacity-75 font-normal"
+                  >@{metadata.handle}</span
                 >{/if}
               {#if isFromDiscord}
                 <Badge
                   variant="secondary"
                   title="This message was bridged from Discord."
-                  class="text-[10px] my-[-2px] px-1.5 font-bold opacity-75"
+                  class="text-[10px] -my-0.5 px-1.5 font-bold opacity-75"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
