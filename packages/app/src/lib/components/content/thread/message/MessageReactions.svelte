@@ -67,17 +67,18 @@
 </script>
 
 {#if message.reactions.length > 0}
-  <div class="flex gap-2 flex-wrap pl-14 z-10">
+  <div class="flex gap-2 items-center flex-wrap pl-12 z-10">
     {#each Object.entries(sortedReactions) as [emoji, users]}
       <Tooltip tip={emoji + " " + Object.values(users).join(", ")}>
         {#snippet children()}
+          {@const count = Object.keys(users).length}
           <Toggle
             pressed={app.did! in users}
             onclick={() => onEmojiButtonClick(emoji)}
-            class="px-2 h-7 data-[state=on]:bg-accent-400/20 dark:data-[state=on]:bg-accent-500/15"
+            class={`h-7 data-[state=on]:bg-accent-400/20 dark:data-[state=on]:bg-accent-500/15 min-w-4 p-1.5 ${count > 1 ? "px-2" : ""}`}
           >
-            {emoji}
-            {#if Object.keys(users).length > 1}
+            <span class={count === 1 ? "pl-0.75" : ""}>{emoji}</span>
+            {#if count > 1}
               <span
                 class="text-xs font-semibold text-base-900 dark:text-base-100"
               >
@@ -94,7 +95,7 @@
       onpicked={(emoji) => onEmojiPick(emoji.unicode)}
     >
       {#snippet child({ props })}
-        <Button size="icon" variant="ghost" {...props}>
+        <Button size="icon" variant="ghost" {...props} class="p-1.5">
           <IconSmilePlus class="text-primary" />
         </Button>
       {/snippet}
