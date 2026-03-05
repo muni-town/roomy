@@ -35,17 +35,17 @@
     chatArea ? "bg-white dark:bg-base-950" : "",
   )}
 >
-  {#if navbar}
-    <Navbar>
-      {#if !hideSmallSidebar || sidebar}
-        <div class="flex gap-4 items-center ml-4 sm:hidden">
-          <ToggleNavigation bind:isSidebarVisible={isSidebarVisible.value} />
-        </div>
-      {/if}
+  <Navbar>
+    {#if !hideSmallSidebar || sidebar}
+      <div class="flex gap-4 items-center ml-4 sm:hidden">
+        <ToggleNavigation bind:isSidebarVisible={isSidebarVisible.value} />
+      </div>
+    {/if}
 
+    {#if navbar}
       {@render navbar?.()}
-    </Navbar>
-  {/if}
+    {/if}
+  </Navbar>
 
   <div class="flex flex-col h-full max-h-full overflow-y-hidden">
     {@render children?.()}

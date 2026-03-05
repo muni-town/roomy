@@ -7,12 +7,19 @@
   import { type SpaceIdOrHandle } from "$lib/workers/types";
   import { peer } from "$lib/workers";
   import { StreamDid, type AsyncStateWithIdle } from "@roomy/sdk";
+  import ErrorModal from "./Error.svelte";
+
+  let spaceDid = $state<StreamDid>();
 
   let spaceName = $state() as string | undefined;
   let spaceAvatar = $state() as string | undefined;
 
   // State for resolving the space
-  let resolveState: AsyncStateWithIdle<{ spaceId: StreamDid }> = $state({
+  let resolveState: AsyncStateWithIdle<{
+    spaceId: StreamDid;
+    name: string;
+    avatar?: string;
+  }> = $state({
     status: "loading",
   });
 
@@ -32,10 +39,7 @@
         page.params.space as SpaceIdOrHandle,
       );
       if (resolvedSpace) {
-        resolveState = {
-          status: "success",
-          data: { spaceId: resolvedSpace.spaceId },
-        };
+        spaceDid = resolvedSpace.spaceId;
       } else {
         resolveState = {
           status: "error",
@@ -46,10 +50,23 @@
   });
 
   $effect(() => {
-    if (resolveState.status === "success") {
-      peer.getSpaceInfo(resolveState.data.spaceId).then((info) => {
-        spaceName = info?.name;
-        spaceAvatar = info?.avatar;
+    const spaceId = spaceDid;
+    if (spaceId) {
+      peer.getSpaceInfo(spaceId).then((info) => {
+        if (info && info.name)
+          resolveState = {
+            status: "success",
+            data: {
+              spaceId,
+              name: info.name,
+              avatar: info?.avatar,
+            },
+          };
+        else
+          resolveState = {
+            status: "error",
+            message: "This space doesn't exist or has been deleted...",
+          };
       });
     }
   });
@@ -68,30 +85,29 @@
 </script>
 
 <div class="flex items-center justify-center h-full">
-  <Box class="w-[20em] flex flex-col">
-    {#if resolveState.status === "loading"}
-      <p class="text-sm text-center">Loading space...</p>
-    {/if}
-    {#if resolveState.status === "error"}
-      <p class="text-sm text-red-700 dark:text-red-400 text-center">
-        {resolveState.message}
-      </p>
-    {/if}
-    {#if resolveState.status === "success"}
-      <div class="mb-5 flex justify-center items-center gap-3">
-        <SpaceAvatar
-          imageUrl={spaceAvatar ?? ""}
-          id={page.params.space}
-          name={spaceName ?? ""}
-          size={50}
-        />
-        {#if spaceName}
+  {#if resolveState.status === "error"}
+    <ErrorModal message={resolveState.message} goHome />
+  {:else}
+    <Box class="w-[20em] flex flex-col">
+      {#if resolveState.status === "loading"}
+        <p class="text-sm text-center">Loading space...</p>
+      {/if}
+
+      {#if resolveState.status === "success"}
+        <div class="mb-5 flex justify-center items-center gap-3">
+          <SpaceAvatar
+            imageUrl={spaceAvatar ?? ""}
+            id={page.params.space}
+            name={spaceName ?? ""}
+            size={50}
+          />
+
           <h1 class="font-bold text-xl">{spaceName}</h1>
-        {/if}
-      </div>
-      <Button size="lg" asyncState={joinState} onclick={handleJoin}>
-        Join Space
-      </Button>
-    {/if}
-  </Box>
+        </div>
+        <Button size="lg" asyncState={joinState} onclick={handleJoin}>
+          Join Space
+        </Button>
+      {/if}
+    </Box>
+  {/if}
 </div>
