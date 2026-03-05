@@ -199,15 +199,78 @@ export const SpaceMetaSynthetic = defineEvent(
   },
 );
 
+/**
+ * Synthetic event: user profile
+ *
+ * This is returned by the `room` query to provide profile information
+ * for bridged users (e.g., Discord users) alongside their events.
+ * Materialized into comp_user and comp_info tables.
+ */
+
+const ProfileSyntheticSchema = type({
+  $type: "'space.roomy.query.profile.v0'",
+  did: "string",
+  name: "string | null",
+  avatar: "string | null",
+  handle: "string | null",
+}).describe(
+  "Synthetic event containing a user profile from the room query",
+);
+
+export const ProfileSynthetic = defineEvent(
+  ProfileSyntheticSchema,
+  ({ streamId, event }) => {
+    const data = event as unknown as typeof ProfileSyntheticSchema.infer;
+    const statements: SqlStatement[] = [];
+    const timestamp = Date.now();
+
+    // Ensure user entity exists
+    statements.push(sql`
+      insert into entities (id, stream_id, created_at, updated_at)
+      values (${data.did}, ${data.did}, ${timestamp}, ${timestamp})
+      on conflict(id) do update set
+        updated_at = excluded.updated_at
+    `);
+
+    // User component (handle)
+    if (data.handle) {
+      statements.push(sql`
+        insert into comp_user (did, handle, created_at, updated_at)
+        values (${data.did}, ${data.handle}, ${timestamp}, ${timestamp})
+        on conflict(did) do update set
+          handle = coalesce(excluded.handle, comp_user.handle),
+          updated_at = excluded.updated_at
+      `);
+    }
+
+    // Info component (name, avatar)
+    if (data.name || data.avatar) {
+      statements.push(sql`
+        insert into comp_info (entity, name, avatar, created_at, updated_at)
+        values (${data.did}, ${data.name}, ${data.avatar}, ${timestamp}, ${timestamp})
+        on conflict(entity) do update set
+          name = coalesce(excluded.name, comp_info.name),
+          avatar = coalesce(excluded.avatar, comp_info.avatar),
+          updated_at = excluded.updated_at
+      `);
+    }
+
+    return statements;
+  },
+);
+
 // Synthetic event registry
 export const syntheticEventRegistry = {
   "space.roomy.query.spaceMeta.v0": SpaceMetaSynthetic,
+  "space.roomy.query.profile.v0": ProfileSynthetic,
 } as const;
 
 export type SyntheticEventType = keyof typeof syntheticEventRegistry;
 
 // Union type of all synthetic events
-export type SyntheticEvent = typeof SpaceMetaSyntheticSchema.infer;
+export type SyntheticEvent =
+  | typeof SpaceMetaSyntheticSchema.infer
+  | typeof ProfileSyntheticSchema.infer;
 
 /**
  * Get the materializer for a synthetic event type
