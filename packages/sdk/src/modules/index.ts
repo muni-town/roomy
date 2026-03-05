@@ -326,7 +326,7 @@ const spaceModuleDef: BasicModule = {
     -- Set handle provider
     update space_info
     set handle_provider = (select drisl_extract(payload, '.did') from event)
-    where (select drisl_extract(payload,  '.$type') from event) = 'space.roomy.space.setHandleProvider.v0';
+    where (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.setHandleProvider.v0';
       
     -- Mark metadata events
     insert into metadata_events (idx)
@@ -344,7 +344,7 @@ const spaceModuleDef: BasicModule = {
       -- For bridged messages: check authorOverride extension
       coalesce(
         -- Message events with authorOverride extension
-        drisl_extract(payload, '."extensions"."space.roomy.extension.authorOverride.v0".did'),
+        drisl_extract(payload, '.extensions.space\.roomy\.extension\.authorOverride\.v0.did'),
         -- Bridged reaction events: check reactingUser field
         case
           when drisl_extract(payload, '.$type') in (
@@ -394,12 +394,13 @@ const spaceModuleDef: BasicModule = {
       and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.user.updateProfile.v0'
       and (select drisl_exists(payload, '.avatar') from event) = 1;
 
+    
     -- Update handle from Discord extension if provided
     update members
-    set handle = (select drisl_extract(payload, '.extensions.space.roomy.extension.discordUserOrigin.v0.handle') from event)
+    set handle = (select drisl_extract(payload, '.extensions.space\.roomy\.extension\.discordUserOrigin\.v0.handle') from event)
     where user_id = (select drisl_extract(payload, '.did') from event)
       and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.user.updateProfile.v0'
-      and (select drisl_exists(payload, '.extensions.space.roomy.extension.discordUserOrigin.v0.handle') from event) = 1;
+      and (select drisl_exists(payload, '.extensions.space\.roomy\.extension\.discordUserOrigin\.v0.handle') from event) = 1;
   `,
 
   stateMaterializer: `
@@ -450,7 +451,7 @@ const spaceModuleDef: BasicModule = {
               'description', (select description from space_info),
               'handleProvider', (select handle_provider from space_info)
             ),
-            'sidebar', (select config from sidebar_config)
+            'sidebar', (select config from sidebar_config),
             -- sidebar_config.config is already {"categories": [...]}, which is exactly the format we need
             'channels', (
               select json_group_array(
