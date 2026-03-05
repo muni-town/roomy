@@ -628,17 +628,24 @@ class SqliteWorkerSupervisor {
 
           const statements = materializer(ctx);
 
-          // Execute as a single transaction
-          await executeQuery({ sql: "begin" });
-          try {
-            for (const statement of statements) {
-              await executeQuery(statement);
+          // Execute as a savepoint within the QUERY_LOCK to prevent
+          // interleaving with runStatementBatch transactions
+          const savepointName = `synth_${batch.batchId.replace(/[^a-zA-Z0-9]/g, "")}`;
+          await requestLock(QUERY_LOCK, async () => {
+            await executeQuery({ sql: `savepoint ${savepointName}` });
+            try {
+              for (const statement of statements) {
+                await executeQuery(statement);
+              }
+              await executeQuery({ sql: `release ${savepointName}` });
+            } catch (e) {
+              await executeQuery({
+                sql: `rollback to ${savepointName}`,
+              });
+              await executeQuery({ sql: `release ${savepointName}` });
+              throw e;
             }
-            await executeQuery({ sql: "commit" });
-          } catch (e) {
-            await executeQuery({ sql: "rollback" });
-            throw e;
-          }
+          });
 
           // Mark as materialized for deduplication
           if (kind === "space.roomy.query.profile.v0") {
@@ -769,15 +776,19 @@ class SqliteWorkerSupervisor {
       } as const;
     };
 
-    disableLiveQueries();
-
     // This lock makes sure that the JS tasks don't interleave some other query executions in while we
     // are trying to compose a bulk transaction. Only needed with SharedWorker.
-    const result: Batch.ApplyResult = await requestLock(QUERY_LOCK, exec);
-
-    await enableLiveQueries();
-
-    return result;
+    // disableLiveQueries is called INSIDE the lock to avoid suppressing live query
+    // updates from concurrent executeQuery calls (e.g. materializeSyntheticEvent).
+    try {
+      const result: Batch.ApplyResult = await requestLock(QUERY_LOCK, async () => {
+        disableLiveQueries();
+        return exec();
+      });
+      return result;
+    } finally {
+      await enableLiveQueries();
+    }
   }
 
   private async runStatementProfileBundle(
@@ -1162,14 +1173,19 @@ class SqliteWorkerSupervisor {
     };
 
     if (depth == 0) {
-      disableLiveQueries();
-
       // This lock makes sure that the JS tasks don't interleave some other query executions in while we
       // are trying to compose a bulk transaction. Only needed with SharedWorker.
-      const result = await requestLock(QUERY_LOCK, exec);
-
-      await enableLiveQueries();
-      return result;
+      // disableLiveQueries is called INSIDE the lock to avoid suppressing live query
+      // updates from concurrent executeQuery calls (e.g. materializeSyntheticEvent).
+      try {
+        const result = await requestLock(QUERY_LOCK, async () => {
+          disableLiveQueries();
+          return exec();
+        });
+        return result;
+      } finally {
+        await enableLiveQueries();
+      }
     } else {
       return exec();
     }
