@@ -87,6 +87,13 @@ class SqliteWorkerSupervisor {
   #eventChannel: AsyncChannel<Batch.Events | Batch.Unstash>;
   #statementChannel = new AsyncChannel<Batch.Statement>();
   #pendingBatches = new Map<string, (result: Batch.ApplyResult) => void>();
+
+  /**
+   * Set of synthetic event keys that have been materialized this session.
+   * Used to avoid re-materializing the same synthetic event (e.g., profiles).
+   * Key format: "{eventType}:{key}" (e.g., "space.roomy.query.profile.v0:did:plc:...")
+   */
+  #materializedSyntheticEvents = new Set<string>();
   /** Spaces to connect after personal stream backfill completes.
    * We accumulate joinSpace events and remove leaveSpace events to ensure
    * we only connect to spaces the user is currently a member of. */
@@ -582,6 +589,24 @@ class SqliteWorkerSupervisor {
         const kind = batch.event.$type;
         console.log(`[SqW] Materializing synthetic event: ${kind}`);
 
+        // Check deduplication for profile events
+        if (kind === "space.roomy.query.profile.v0") {
+          const profile = batch.event as { did: string };
+          const isMaterialized = this.isSyntheticEventMaterialized(
+            kind,
+            profile.did,
+          );
+          if (isMaterialized) {
+            // Return a valid Batch.ApplyResult indicating no work was done
+            return {
+              status: "applied",
+              batchId: batch.batchId,
+              results: [],
+              priority: batch.priority,
+            } as Batch.ApplyResult;
+          }
+        }
+
         try {
           const handler = getSyntheticMaterializer(kind);
           if (!handler) {
@@ -615,49 +640,27 @@ class SqliteWorkerSupervisor {
             throw e;
           }
 
+          // Mark as materialized for deduplication
+          if (kind === "space.roomy.query.profile.v0") {
+            const profile = batch.event as { did: string };
+            this.markSyntheticEventMaterialized(kind, profile.did);
+          }
+
           console.log(
             `[SqW] Successfully materialized synthetic event: ${kind}`,
           );
-
-          const summary: MaterializationSummary = {
-            totalEvents: 0, // Synthetic events don't count as events
-            appliedEvents: 0,
-            stashedEvents: 0,
-            errorEvents: 0,
-            totalStatements: statements.length,
-            successfulStatements: statements.length,
-            failedStatements: 0,
-            durationMs: 0, // TODO: track timing
-          };
-
-          const warnings: MaterializationWarnings = {};
 
           return {
             status: "applied",
             batchId: batch.batchId,
             results: [],
             priority: batch.priority,
-            summary,
-            warnings,
           } as Batch.ApplyResult;
         } catch (error) {
           console.error(
             `[SqW] Error materializing synthetic event ${kind}:`,
             error,
           );
-
-          const summary: MaterializationSummary = {
-            totalEvents: 0,
-            appliedEvents: 0,
-            stashedEvents: 0,
-            errorEvents: 0,
-            totalStatements: 0,
-            successfulStatements: 0,
-            failedStatements: 1,
-            durationMs: 0,
-          };
-
-          const warnings: MaterializationWarnings = {};
 
           // Return error as a failed result in the batch
           return {
@@ -676,8 +679,6 @@ class SqliteWorkerSupervisor {
               },
             ],
             priority: batch.priority,
-            summary,
-            warnings,
           } as Batch.ApplyResult;
         }
       },
@@ -1300,6 +1301,26 @@ class SqliteWorkerSupervisor {
     });
     this.#eventChannel.push(eventsBatch, priority);
     return resultPromise;
+  }
+
+  /**
+   * Check if a synthetic event has already been materialized.
+   * @param eventType - The $type of the synthetic event
+   * @param key - Unique key for deduplication (e.g., DID for profiles)
+   */
+  isSyntheticEventMaterialized(eventType: string, key: string): boolean {
+    const dedupeKey = `${eventType}:${key}`;
+    return this.#materializedSyntheticEvents.has(dedupeKey);
+  }
+
+  /**
+   * Mark a synthetic event as materialized.
+   * @param eventType - The $type of the synthetic event
+   * @param key - Unique key for deduplication (e.g., DID for profiles)
+   */
+  markSyntheticEventMaterialized(eventType: string, key: string): void {
+    const dedupeKey = `${eventType}:${key}`;
+    this.#materializedSyntheticEvents.add(dedupeKey);
   }
 }
 

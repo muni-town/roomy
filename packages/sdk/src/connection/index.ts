@@ -31,3 +31,11 @@ export type {
   BackfillStatus,
   EncodedStreamEvent,
 } from "./types";
+
+// SQL parsing utilities
+export {
+  unwrapSqlValue,
+  unwrapSqlRow,
+  unwrapSqlRows,
+} from "./sqlParsing";
+export type { SqlValueToPrimitive } from "./sqlParsing";

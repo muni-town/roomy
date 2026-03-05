@@ -113,8 +113,8 @@ export namespace Batch {
       | Bundle.ApplyStashed
     )[];
     priority: TaskPriority;
-    summary: MaterializationSummary;
-    warnings: MaterializationWarnings;
+    summary?: MaterializationSummary;
+    warnings?: MaterializationWarnings;
   }
 }
 

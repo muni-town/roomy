@@ -22,8 +22,8 @@ import {
   Ulid,
   newUlid,
   parseEvent,
-  type Event,
   type,
+  Event,
 } from "../schema";
 
 import { Deferred } from "../utils/Deferred";
@@ -38,7 +38,11 @@ import type {
 } from "./types";
 
 import { withTimeoutWarning } from "../utils/timeout";
-import { SpaceMetaSynthetic } from "../schema/events/synthetic";
+import {
+  SpaceMetaSynthetic,
+  ProfileSynthetic,
+} from "../schema/events/synthetic";
+import { unwrapSqlRows } from "./sqlParsing";
 
 export type ConnectionState =
   | { state: "connected" }
@@ -283,7 +287,10 @@ export class ConnectedSpace {
     roomId: Ulid,
     limit: number,
     end?: StreamIndex,
-  ): Promise<DecodedStreamEvent[]> {
+  ): Promise<{
+    events: DecodedStreamEvent[];
+    profiles: Array<typeof ProfileSynthetic.schema.infer>;
+  }> {
     const params: LeafQuery["params"] = {
       room: { $type: "muni.town.sqliteValue.text", value: roomId },
     };
@@ -297,9 +304,11 @@ export class ConnectedSpace {
       limit,
     });
 
-    const events = this.#decodeAndParseEvents(parseRows(resp));
+    const { events: encodedEvents, profiles } = parseRoomRows(resp);
+    const events = this.#decodeAndParseEvents(encodedEvents);
     events.reverse(); // events return with most recent first; putting them first>last should make materialisation more performant
-    return events;
+
+    return { events, profiles };
   }
 
   /**
@@ -315,14 +324,17 @@ export class ConnectedSpace {
     roomId: Ulid,
     limit: number,
     end?: StreamIndex,
-  ): Promise<DecodedStreamEvent[]> {
+  ): Promise<{
+    events: DecodedStreamEvent[];
+    profiles: Array<typeof ProfileSynthetic.schema.infer>;
+  }> {
     const lazyEndIdx = this.#roomCursors.get(roomId);
     // If end is provided and we've already fetched past it, return empty
     if (end && lazyEndIdx && end >= lazyEndIdx) {
       console.log(
         "[ConnectedSpace.lazyLoadRoom] already fetched past end, returning []",
       );
-      return [];
+      return { events: [], profiles: [] };
     }
 
     // Use provided end, or use cursor if we have one
@@ -336,7 +348,7 @@ export class ConnectedSpace {
     //   limit,
     //   end: oldestEnd,
     // });
-    const events = await this.fetchRoom(roomId, limit, oldestEnd);
+    const { events, profiles } = await this.fetchRoom(roomId, limit, oldestEnd);
 
     if (!end && events.length > 0) {
       // Set cursor to the oldest event for initial load
@@ -351,7 +363,7 @@ export class ConnectedSpace {
       }
     }
 
-    return events;
+    return { events, profiles };
   }
 
   /**
@@ -696,28 +708,84 @@ function createLeafClient(config: {
 /**
  * Parse SQL rows into encoded stream events.
  */
-const encodedStreamEventType = type({
-  idx: { $type: "'muni.town.sqliteValue.integer'", value: StreamIndex },
-  user: { $type: "'muni.town.sqliteValue.text'", value: "string" },
-  payload: {
-    $type: "'muni.town.sqliteValue.blob'",
-    value: type.instanceOf(Uint8Array),
-  },
+
+// Arktype schema for unwrapped event row values
+const unwrappedEventSchema = type({
+  idx: "number",
+  user: "string",
+  payload: type.instanceOf(Uint8Array),
 });
 
-function parseRows(rows: SqlRows): EncodedStreamEvent[] {
-  return rows.map((row) => {
-    const result = encodedStreamEventType(row);
+/**
+ * Parse unwrapped SQL row values into an encoded stream event.
+ */
+function parseEventRow(unwrapped: unknown): EncodedStreamEvent {
+  const result = unwrappedEventSchema(unwrapped);
+  if (result instanceof type.errors) {
+    console.error("Could not parse event row", result);
+    throw new Error("Invalid event row structure");
+  }
 
+  return {
+    idx: result.idx as StreamIndex,
+    user: UserDid.assert(result.user),
+    payload: result.payload,
+  };
+}
+
+function parseRows(rows: SqlRows): EncodedStreamEvent[] {
+  const unwrapped = unwrapSqlRows(rows);
+  return unwrapped.map(parseEventRow);
+}
+
+// Arktype schema for unwrapped room row values
+const unwrappedRoomRowSchema = type({
+  idx: "number",
+  user: "string",
+  payload: type.instanceOf(Uint8Array),
+  profile: "string", // JSON string containing synthetic event
+});
+
+/**
+ * Parse room query result, extracting both events and profile synthetic events.
+ */
+function parseRoomRows(rows: SqlRows): {
+  events: EncodedStreamEvent[];
+  profiles: Array<typeof ProfileSynthetic.schema.infer>;
+} {
+  const events: EncodedStreamEvent[] = [];
+  const profiles: Array<typeof ProfileSynthetic.schema.infer> = [];
+
+  const unwrapped = unwrapSqlRows(rows);
+
+  for (const row of unwrapped) {
+    const result = unwrappedRoomRowSchema(row);
     if (result instanceof type.errors) {
-      console.error("Could not parse event row", result);
-      throw new Error("Invalid column names for events response");
+      console.error("Could not parse room row", result);
+      throw new Error("Invalid room row structure");
     }
 
-    return {
-      idx: Number(result.idx.value) as StreamIndex,
-      user: UserDid.assert(result.user!.value),
-      payload: result.payload?.value,
-    };
-  });
+    // Parse event columns (idx, user, payload)
+    events.push({
+      idx: result.idx as StreamIndex,
+      user: UserDid.assert(result.user),
+      payload: result.payload,
+    });
+
+    // Parse profile synthetic event
+    try {
+      const profile = JSON.parse(result.profile);
+      // Validate with Arktype
+      const validated = ProfileSynthetic.schema(profile);
+      if (validated instanceof type.errors) {
+        console.warn("Invalid profile structure", validated);
+        continue;
+      }
+      profiles.push(validated);
+    } catch (e) {
+      console.warn("Failed to parse profile JSON", result.profile, e);
+    }
+  }
+
+  return { events, profiles };
 }

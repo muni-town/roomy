@@ -1,8 +1,4 @@
-import {
-  type Batch,
-  type SpaceIdOrHandle,
-  type TaskPriority,
-} from "../types";
+import { type Batch, type SpaceIdOrHandle, type TaskPriority } from "../types";
 import {
   messagePortInterface,
   reactiveChannelState,
@@ -668,7 +664,9 @@ export class Peer {
     // If no current space is set within 1 second, proceed with undefined
     const currentSpaceIdOrHandle = await Promise.race([
       this.#currentSpace.promise,
-      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 1000)),
+      new Promise<undefined>((resolve) =>
+        setTimeout(() => resolve(undefined), 1000),
+      ),
     ]);
     const currentSpaceId: StreamDid | undefined = await tracer.startActiveSpan(
       "Resolve Space DID from DID or Handle",
@@ -871,7 +869,9 @@ export class Peer {
           // Wait for current space to be set, but don't block forever
           const currentSpaceIdOrHandle = await Promise.race([
             this.#currentSpace.promise,
-            new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 1000)),
+            new Promise<undefined>((resolve) =>
+              setTimeout(() => resolve(undefined), 1000),
+            ),
           ]);
 
           let currentSpaceId:
@@ -979,10 +979,14 @@ export class Peer {
 
       // Use latestIdx from the synthetic event to subscribe to regular events
       // This avoids the extra subscribeMetadata round-trip
-      const latest = syntheticEvent.latestIdx !== undefined && syntheticEvent.latestIdx !== null
-        ? StreamIndex.assert(syntheticEvent.latestIdx)
-        : undefined;
-      console.log(`[Peer] Subscribing to events from idx ${latest ?? 0} for ${streamId}`);
+      const latest =
+        syntheticEvent.latestIdx !== undefined &&
+        syntheticEvent.latestIdx !== null
+          ? StreamIndex.assert(syntheticEvent.latestIdx)
+          : undefined;
+      console.log(
+        `[Peer] Subscribing to events from idx ${latest ?? 0} for ${streamId}`,
+      );
 
       // Subscribe to regular events from after metadata
       await withTimeoutCallback(
@@ -1116,14 +1120,34 @@ export class Peer {
           "Fetch Room Events",
           { attributes: { "space.id": spaceId, "room.id": roomId } },
           async (innerSpan) => {
-            const fetchedEvents = await space.lazyLoadRoom(
+            const result = await space.lazyLoadRoom(
               roomId,
               ROOM_FETCH_BATCH_SIZE,
               end,
             );
-            innerSpan.setAttribute("event.count", fetchedEvents.length);
+            innerSpan.setAttribute("event.count", result.events.length);
             innerSpan.end();
-            return fetchedEvents;
+
+            // Send profile synthetic events to SQLite worker for materialization
+            // The worker handles deduplication internally
+            if (result.profiles.length > 0) {
+              for (const profile of result.profiles) {
+                try {
+                  const syntheticBatch: Batch.SyntheticEvent = {
+                    status: "synthetic",
+                    batchId: newUlid(),
+                    streamId: spaceId,
+                    event: profile,
+                    priority: "background",
+                  };
+                  await this.#sqlite.sqliteWorker.materializeSyntheticEvent(syntheticBatch);
+                } catch (e) {
+                  console.error("Failed to materialize profile", profile, e);
+                }
+              }
+            }
+
+            return result.events;
           },
         );
 
