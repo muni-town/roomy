@@ -30,6 +30,7 @@ const CONFIG = {
     discordBridge: false,
     sharedWorker: false,
     calendar: true,
+    spaceMetaFastPath: false, // Use synthetic space_meta query for faster space initialization
   },
 
   // OpenMeet integration defaults

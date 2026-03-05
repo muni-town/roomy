@@ -5,7 +5,7 @@ import {
   type MessagePortApi,
 } from "../internalMessaging";
 import { sql } from "$lib/utils/sqlTemplate";
-import { CONFIG } from "$lib/config";
+import { CONFIG, flags } from "$lib/config";
 import { db } from "../idb";
 import type { QueryResult } from "../sqlite/setup";
 import {
@@ -974,91 +974,64 @@ export class Peer {
       isPriority || false,
     );
 
-    // Try synthetic space_meta query first for faster initialization
-    console.log(`[Peer] Attempting to fetch space_meta for ${streamId}`);
-    const syntheticEvent = await space.fetchSpaceMeta();
+    let usedFastPath = false;
 
-    if (syntheticEvent) {
-      // Check schema version to determine if we need full metadata backfill
-      const schemaVersion = syntheticEvent.schemaVersion;
-      const needsFullBackfill =
-        !schemaVersion ||
-        (typeof schemaVersion === "string" &&
-          parseInt(schemaVersion, 10) < 5);
+    if (flags.spaceMetaFastPath) {
+      // Fast path: synthetic space_meta query for faster initialization
+      console.log(`[Peer] Attempting to fetch space_meta for ${streamId}`);
+      const syntheticEvent = await space.fetchSpaceMeta();
 
-      if (needsFullBackfill) {
-        console.log(
-          `[Peer] Schema version ${schemaVersion ?? "unknown"} < 5 for ${streamId}, falling back to metadata events`,
-        );
-        // Use tracked callback so we can wait for metadata materialization
-        const { callback: metaCallback, waitForMaterialization } =
-          this.#createTrackedEventCallback(
-            this.#roomy.current.eventChannel,
-            streamId,
-            true,
+      if (syntheticEvent) {
+        const schemaVersion = syntheticEvent.schemaVersion;
+        const needsFullBackfill =
+          !schemaVersion ||
+          (typeof schemaVersion === "string" &&
+            parseInt(schemaVersion, 10) < 5);
+
+        if (!needsFullBackfill) {
+          usedFastPath = true;
+          console.log(
+            `[Peer] Using synthetic space_meta query for ${streamId} (schema version ${schemaVersion})`,
           );
-        const latest = await withTimeoutCallback(
-          space.subscribeMetadata(metaCallback, 0),
-          () =>
-            console.warn(`Waiting for space metadata backfill`, { streamId }),
-          5000,
-        );
-        // Wait for metadata to be materialized into SQLite before continuing
-        await waitForMaterialization();
-        await space.unsubscribe();
-        // Regular events use a plain callback - no need to block on materialization
-        const regularCallback = this.#createEventCallback(
-          this.#roomy.current.eventChannel,
-          streamId,
-          isPriority || false,
-        );
-        await withTimeoutCallback(
-          space.subscribe(regularCallback, latest),
-          () =>
-            console.warn(`Waiting for space events backfill`, { streamId }),
-          5000,
-        );
-      } else {
-        console.log(
-          `[Peer] Using synthetic space_meta query for ${streamId} (schema version ${schemaVersion})`,
-        );
-        // Create a synthetic event batch for materialization
-        const syntheticBatch: Batch.SyntheticEvent = {
-          status: "synthetic",
-          batchId: newUlid(),
-          streamId,
-          event: syntheticEvent,
-          priority: isPriority ? "priority" : "background",
-        };
-        // Materialize the synthetic event (metadata goes directly to SQLite)
-        await this.#sqlite.sqliteWorker.materializeSyntheticEvent(
-          syntheticBatch,
-        );
+          const syntheticBatch: Batch.SyntheticEvent = {
+            status: "synthetic",
+            batchId: newUlid(),
+            streamId,
+            event: syntheticEvent,
+            priority: isPriority ? "priority" : "background",
+          };
+          await this.#sqlite.sqliteWorker.materializeSyntheticEvent(
+            syntheticBatch,
+          );
 
-        // Use latestIdx from the synthetic event to subscribe to regular events
-        // This avoids the extra subscribeMetadata round-trip
-        const latest =
-          syntheticEvent.latestIdx !== undefined &&
-          syntheticEvent.latestIdx !== null
-            ? StreamIndex.assert(syntheticEvent.latestIdx)
-            : undefined;
-        console.log(
-          `[Peer] Subscribing to events from idx ${latest ?? 0} for ${streamId}`,
-        );
+          const latest =
+            syntheticEvent.latestIdx !== undefined &&
+            syntheticEvent.latestIdx !== null
+              ? StreamIndex.assert(syntheticEvent.latestIdx)
+              : undefined;
+          console.log(
+            `[Peer] Subscribing to events from idx ${latest ?? 0} for ${streamId}`,
+          );
 
-        // Subscribe to regular events from after metadata
-        await withTimeoutCallback(
-          space.subscribe(callback, latest),
-          () =>
-            console.warn(`Waiting for space events backfill`, { streamId }),
-          5000,
-        );
+          await withTimeoutCallback(
+            space.subscribe(callback, latest),
+            () =>
+              console.warn(`Waiting for space events backfill`, { streamId }),
+            5000,
+          );
+        } else {
+          console.log(
+            `[Peer] Schema version ${schemaVersion ?? "unknown"} < 5 for ${streamId}, falling back to metadata events`,
+          );
+        }
       }
-    } else {
+    }
+
+    if (!usedFastPath) {
+      // Legacy path: full metadata backfill via subscribeMetadata
       console.log(
-        `[Peer] Falling back to metadata events for ${streamId} (space may not support space_meta query yet)`,
+        `[Peer] Using legacy metadata backfill for ${streamId}`,
       );
-      // Use tracked callback so we can wait for metadata materialization
       const { callback: metaCallback, waitForMaterialization } =
         this.#createTrackedEventCallback(
           this.#roomy.current.eventChannel,
@@ -1067,13 +1040,12 @@ export class Peer {
         );
       const latest = await withTimeoutCallback(
         space.subscribeMetadata(metaCallback, 0),
-        () => console.warn(`Waiting for space metadata backfill`, { streamId }),
+        () =>
+          console.warn(`Waiting for space metadata backfill`, { streamId }),
         5000,
       );
-      // Wait for metadata to be materialized into SQLite before continuing
       await waitForMaterialization();
       await space.unsubscribe();
-      // Regular events use a plain callback - no need to block on materialization
       const regularCallback = this.#createEventCallback(
         this.#roomy.current.eventChannel,
         streamId,
@@ -1081,7 +1053,8 @@ export class Peer {
       );
       await withTimeoutCallback(
         space.subscribe(regularCallback, latest),
-        () => console.warn(`Waiting for space events backfill`, { streamId }),
+        () =>
+          console.warn(`Waiting for space events backfill`, { streamId }),
         5000,
       );
     }
