@@ -965,35 +965,67 @@ export class Peer {
     const syntheticEvent = await space.fetchSpaceMeta();
 
     if (syntheticEvent) {
-      console.log(`[Peer] Using synthetic space_meta query for ${streamId}`);
-      // Create a synthetic event batch for materialization
-      const syntheticBatch: Batch.SyntheticEvent = {
-        status: "synthetic",
-        batchId: newUlid(),
-        streamId,
-        event: syntheticEvent,
-        priority: isPriority ? "priority" : "background",
-      };
-      // Materialize the synthetic event
-      await this.#sqlite.sqliteWorker.materializeSyntheticEvent(syntheticBatch);
+      // Check schema version to determine if we need full metadata backfill
+      const schemaVersion = syntheticEvent.schemaVersion;
+      const needsFullBackfill =
+        !schemaVersion ||
+        (typeof schemaVersion === "string" &&
+          parseInt(schemaVersion, 10) < 5);
 
-      // Use latestIdx from the synthetic event to subscribe to regular events
-      // This avoids the extra subscribeMetadata round-trip
-      const latest =
-        syntheticEvent.latestIdx !== undefined &&
-        syntheticEvent.latestIdx !== null
-          ? StreamIndex.assert(syntheticEvent.latestIdx)
-          : undefined;
-      console.log(
-        `[Peer] Subscribing to events from idx ${latest ?? 0} for ${streamId}`,
-      );
+      if (needsFullBackfill) {
+        console.log(
+          `[Peer] Schema version ${schemaVersion ?? "unknown"} < 5 for ${streamId}, falling back to metadata events`,
+        );
+        // Original flow: fetch all metadata events
+        const latest = await withTimeoutCallback(
+          space.subscribeMetadata(callback, 0),
+          () =>
+            console.warn(`Waiting for space metadata backfill`, { streamId }),
+          5000,
+        );
+        await space.unsubscribe();
+        await withTimeoutCallback(
+          space.subscribe(callback, latest),
+          () =>
+            console.warn(`Waiting for space events backfill`, { streamId }),
+          5000,
+        );
+      } else {
+        console.log(
+          `[Peer] Using synthetic space_meta query for ${streamId} (schema version ${schemaVersion})`,
+        );
+        // Create a synthetic event batch for materialization
+        const syntheticBatch: Batch.SyntheticEvent = {
+          status: "synthetic",
+          batchId: newUlid(),
+          streamId,
+          event: syntheticEvent,
+          priority: isPriority ? "priority" : "background",
+        };
+        // Materialize the synthetic event
+        await this.#sqlite.sqliteWorker.materializeSyntheticEvent(
+          syntheticBatch,
+        );
 
-      // Subscribe to regular events from after metadata
-      await withTimeoutCallback(
-        space.subscribe(callback, latest),
-        () => console.warn(`Waiting for space events backfill`, { streamId }),
-        5000,
-      );
+        // Use latestIdx from the synthetic event to subscribe to regular events
+        // This avoids the extra subscribeMetadata round-trip
+        const latest =
+          syntheticEvent.latestIdx !== undefined &&
+          syntheticEvent.latestIdx !== null
+            ? StreamIndex.assert(syntheticEvent.latestIdx)
+            : undefined;
+        console.log(
+          `[Peer] Subscribing to events from idx ${latest ?? 0} for ${streamId}`,
+        );
+
+        // Subscribe to regular events from after metadata
+        await withTimeoutCallback(
+          space.subscribe(callback, latest),
+          () =>
+            console.warn(`Waiting for space events backfill`, { streamId }),
+          5000,
+        );
+      }
     } else {
       console.log(
         `[Peer] Falling back to metadata events for ${streamId} (space may not support space_meta query yet)`,

@@ -50,6 +50,7 @@ const OpenMeetConfigType = type({
 const SpaceMetaSyntheticSchema = type({
   $type: "'space.roomy.query.spaceMeta.v0'",
   latestIdx: type.or(StreamIndex, "null"),
+  "schemaVersion?": type.or("string", "null"), // Module schema version from stream_info (optional for backwards compatibility)
   info: type.or(SpaceInfoType, "null"),
   sidebar: type.or(SidebarType, "null"),
   channels: type.or(ChannelType.array(), "null"),

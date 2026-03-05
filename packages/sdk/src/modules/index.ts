@@ -443,15 +443,15 @@ const spaceModuleDef: BasicModule = {
           json_object(
             '$type', 'space.roomy.query.spaceMeta.v0',
             'latestIdx', (select idx from events.events order by idx desc limit 1),
+            'schemaVersion', (select schema_version from stream_info),
             'info', json_object(
               'name', (select name from space_info),
               'avatar', (select avatar from space_info),
               'description', (select description from space_info),
               'handleProvider', (select handle_provider from space_info)
             ),
-            'sidebar', json_object(
-              'categories', (select config from sidebar_config)
-            ),
+            'sidebar', (select config from sidebar_config)
+            -- sidebar_config.config is already {"categories": [...]}, which is exactly the format we need
             'channels', (
               select json_group_array(
                 json_object(

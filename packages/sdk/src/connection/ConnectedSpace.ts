@@ -739,17 +739,19 @@ function parseRows(rows: SqlRows): EncodedStreamEvent[] {
 }
 
 // Arktype schema for unwrapped room row values
+// Note: 'profile' field is optional for backwards compatibility with older space modules
 const unwrappedRoomRowSchema = type({
   idx: "number",
   user: "string",
   payload: type.instanceOf(Uint8Array),
-  profile: "string", // JSON string containing synthetic event
+  "profile?": "string | null", // Optional JSON string containing synthetic event
 });
 
 /**
  * Parse room query result, extracting both events and profile synthetic events.
+ * @internal Exported for testing only
  */
-function parseRoomRows(rows: SqlRows): {
+export function parseRoomRows(rows: SqlRows): {
   events: EncodedStreamEvent[];
   profiles: Array<typeof ProfileSynthetic.schema.infer>;
 } {
@@ -772,18 +774,20 @@ function parseRoomRows(rows: SqlRows): {
       payload: result.payload,
     });
 
-    // Parse profile synthetic event
-    try {
-      const profile = JSON.parse(result.profile);
-      // Validate with Arktype
-      const validated = ProfileSynthetic.schema(profile);
-      if (validated instanceof type.errors) {
-        console.warn("Invalid profile structure", validated);
-        continue;
+    // Parse profile synthetic event (if present)
+    if (result.profile) {
+      try {
+        const profile = JSON.parse(result.profile);
+        // Validate with Arktype
+        const validated = ProfileSynthetic.schema(profile);
+        if (validated instanceof type.errors) {
+          console.warn("Invalid profile structure", validated);
+          continue;
+        }
+        profiles.push(validated);
+      } catch (e) {
+        console.warn("Failed to parse profile JSON", result.profile, e);
       }
-      profiles.push(validated);
-    } catch (e) {
-      console.warn("Failed to parse profile JSON", result.profile, e);
     }
   }
 
