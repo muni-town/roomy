@@ -509,6 +509,7 @@ const spaceModuleDef: BasicModule = {
           e.payload,
           -- Include profile JSON if available (for Discord bridged users)
           json_object(
+            '$type', 'space.roomy.query.profile.v0',
             'did', coalesce(r.discord_origin, e.user),
             'name', m.name,
             'avatar', m.avatar,
