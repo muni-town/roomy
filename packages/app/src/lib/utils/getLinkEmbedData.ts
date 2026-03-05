@@ -1,12 +1,14 @@
-import { dev } from "$app/environment";
+import { CONFIG } from "$lib/config";
 
 export const cache = new Map<string, Embed | null>();
+
+const getLocale = () => navigator.languages?.[0] || navigator.language || "en";
 
 export const getLinkEmbedData = (url: string) => {
   let data = cache.get(url);
   if (data !== undefined) return data;
 
-  return fetch(dev ? "/api/og" : "https://embed.internal.weird.one?lang=en", {
+  return fetch(`${CONFIG.embedServer}?lang=${getLocale()}`, {
     method: "POST",
     headers: {
       "Content-Type": "text/plain",
@@ -25,7 +27,7 @@ export const getLinkEmbedData = (url: string) => {
         // Embed server has no data for the given url.
         // Unlikely to be any data in the future
         cache.set(url, null);
-        return null
+        return null;
       }
     })
     .catch((err) => {
@@ -34,8 +36,8 @@ export const getLinkEmbedData = (url: string) => {
         // Avoid retrying urls with Network Errors until next refresh
         // Might have data later.
       }
-      console.error(err)
-      return undefined
+      console.error(err);
+      return undefined;
     });
 };
 

@@ -42,6 +42,7 @@ const CONFIG = {
   leafServerDid: "",
   openmeetServiceDid: "",
   atprotoOauthScope: "",
+  embedServer: import.meta.env.VITE_EMBED_SERVER || "https://embed.internal.weird.one"
 };
 
 CONFIG.leafServerDid = `did:web:${new URL(CONFIG.leafUrl).hostname}`;
