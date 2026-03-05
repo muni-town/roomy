@@ -34,11 +34,18 @@ const SidebarType = type({
   categories: "unknown", // JSON array
 });
 
+const ThreadType = type({
+  id: "string",
+  name: "string | null",
+  messageCount: "number",
+});
+
 const ChannelType = type({
   id: "string",
   name: "string | null",
   description: "string | null",
   avatar: "string | null",
+  threads: type.or(ThreadType.array(), "null"),
 });
 
 const OpenMeetConfigType = type({
@@ -156,6 +163,47 @@ export const SpaceMetaSynthetic = defineEvent(
               description = coalesce(excluded.description, comp_info.description),
               updated_at = excluded.updated_at
           `);
+        }
+
+        // Threads within this channel
+        if (channel.threads !== null) {
+          for (const thread of channel.threads) {
+            // Ensure thread entity exists
+            statements.push(sql`
+              insert into entities (id, stream_id, room, created_at, updated_at)
+              values (${thread.id}, ${streamId}, ${channel.id}, ${timestamp}, ${timestamp})
+              on conflict(id) do update set
+                room = coalesce(excluded.room, entities.room),
+                updated_at = excluded.updated_at
+            `);
+
+            // Room label
+            statements.push(sql`
+              insert into comp_room (entity, label, created_at, updated_at)
+              values (${thread.id}, 'space.roomy.thread', ${timestamp}, ${timestamp})
+              on conflict(entity) do update set
+                label = excluded.label,
+                updated_at = excluded.updated_at
+            `);
+
+            // Thread info
+            if (thread.name) {
+              statements.push(sql`
+                insert into comp_info (entity, name, created_at, updated_at)
+                values (${thread.id}, ${thread.name}, ${timestamp}, ${timestamp})
+                on conflict(entity) do update set
+                  name = coalesce(excluded.name, comp_info.name),
+                  updated_at = excluded.updated_at
+              `);
+            }
+
+            // Link edge: channel -> thread
+            statements.push(sql`
+              insert into edges (head, tail, label, created_at, updated_at)
+              values (${channel.id}, ${thread.id}, 'link', ${timestamp}, ${timestamp})
+              on conflict(head, tail, label) do nothing
+            `);
+          }
         }
       }
     }

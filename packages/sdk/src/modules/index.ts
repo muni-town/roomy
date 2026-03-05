@@ -130,14 +130,16 @@ const spaceModuleDef: BasicModule = {
 
     create table if not exists rooms (
       id text primary key, -- ulid
-      kind text not null, -- 'space.roomy.channel', 'space.roomy.category', 'space.roomy.thread', 'space.roomy.page'
+      kind text not null, -- 'space.roomy.channel', 'space.roomy.thread', 'space.roomy.page'
       name text,
       description text,
       avatar text,
       deleted integer not null default 0 check(deleted in (0, 1)),
-      message_count integer not null default 0
+      message_count integer not null default 0,
+      parent text -- canonical parent room id (set from first createRoomLink)
     ) strict;
     create index if not exists rooms_kind_idx on rooms(kind);
+    create index if not exists rooms_parent_idx on rooms(parent);
 
     create table if not exists openmeet_config (
       group_slug text,
@@ -372,6 +374,13 @@ const spaceModuleDef: BasicModule = {
       'space.roomy.link.createRoomLink.v0',
       'space.roomy.link.removeRoomLink.v0'
     );
+
+    -- Set canonical parent for linked room (only on first link)
+    update rooms
+    set parent = (select drisl_extract(payload, '.room') from event)
+    where id = (select drisl_extract(payload, '.linkToRoom') from event)
+      and parent is null
+      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.link.createRoomLink.v0';
     
     -- Update member profiles
     -- First ensure the member exists
@@ -456,15 +465,35 @@ const spaceModuleDef: BasicModule = {
             'channels', (
               select json_group_array(
                 json_object(
-                  'id', id,
-                  'name', name,
-                  'description', description,
-                  'avatar', avatar
+                  'id', r.id,
+                  'name', r.name,
+                  'description', r.description,
+                  'avatar', r.avatar,
+                  'threads', (
+                    select json_group_array(
+                      json_object(
+                        'id', t.id,
+                        'name', t.name,
+                        'messageCount', t.message_count
+                      )
+                    )
+                    from (
+                      select t.id, t.name, t.message_count
+                      from rooms t
+                      left join room_events re on re.room = t.id
+                      where t.kind = 'space.roomy.thread'
+                        and t.parent = r.id
+                        and t.deleted = 0
+                      group by t.id, t.name, t.message_count
+                      order by max(re.idx) desc nulls last
+                      limit 5
+                    ) t
+                  )
                 )
               )
-              from rooms
-              where deleted = 0
-              and kind = "space.roomy.channel"
+              from rooms r
+              where r.deleted = 0
+              and r.kind = 'space.roomy.channel'
             ),
             'admins', (
               select json_group_array(user_id)
@@ -538,7 +567,21 @@ const spaceModuleDef: BasicModule = {
           and ($room is null or e.idx in (
             select r.idx from room_events r where r.room = $room
           ))
-        limit $limit;
+
+        union all
+
+        select * from (
+          select e.idx, e.user, e.payload
+          from events.events e
+          inner join room_events re on e.idx = re.idx
+          where $room is not null
+            and re.room in (
+              select id from rooms
+              where parent = $room and kind = 'space.roomy.thread' and deleted = 0
+            )
+          order by e.idx desc
+          limit 20
+        );
       `,
       params: [{ kind: "text", name: "room", optional: true }],
     },
