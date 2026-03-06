@@ -212,6 +212,37 @@ export async function createLoginLink(
   }
 }
 
+/** Build a platform URL from an API link, e.g. api.openmeet.net → platform.openmeet.net */
+export function platformUrl(link: CalendarLink): string {
+  return link.apiUrl.replace("//api", "//platform");
+}
+
+/** Open an OpenMeet page in a new tab, with auto-login if connected. */
+export function openOnOpenMeet(
+  link: CalendarLink,
+  path: string,
+  connected: boolean,
+): void {
+  const fallbackUrl = `${platformUrl(link)}${path}`;
+
+  if (!connected) {
+    window.open(fallbackUrl, "_blank");
+    return;
+  }
+
+  // Open tab immediately to preserve user gesture (avoids popup blocker)
+  const w = window.open("about:blank", "_blank");
+  if (!w) return;
+
+  createLoginLink(link, path)
+    .then((url) => {
+      w.location.href = url || fallbackUrl;
+    })
+    .catch(() => {
+      w.location.href = fallbackUrl;
+    });
+}
+
 export async function fetchGroupEvents(
   link: CalendarLink,
 ): Promise<Record<string, unknown>[]> {
