@@ -1175,10 +1175,13 @@ export class Peer {
             innerSpan.setAttribute("event.count", result.events.length);
             innerSpan.end();
 
-            // Send profile synthetic events to SQLite worker for materialization
-            // The worker handles deduplication internally
+            // Send profile synthetic events to SQLite worker for materialization.
+            // Only send profiles that have actual data (name, avatar, or handle).
+            // Empty profiles would just create bare entity rows that block
+            // ensureProfiles from fetching the real data from Bluesky.
             if (result.profiles.length > 0) {
               for (const profile of result.profiles) {
+                if (!profile.name && !profile.avatar && !profile.handle) continue;
                 try {
                   const syntheticBatch: Batch.SyntheticEvent = {
                     status: "synthetic",

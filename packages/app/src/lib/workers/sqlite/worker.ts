@@ -343,8 +343,7 @@ class SqliteWorkerSupervisor {
               {
                 eventId: batch.batchId as Ulid,
                 result: "error",
-                error:
-                  error instanceof Error ? error.message : String(error),
+                error: error instanceof Error ? error.message : String(error),
               },
             ],
             priority: batch.priority,
@@ -786,10 +785,13 @@ class SqliteWorkerSupervisor {
     // disableLiveQueries is called INSIDE the lock to avoid suppressing live query
     // updates from concurrent executeQuery calls (e.g. materializeSyntheticEvent).
     try {
-      const result: Batch.ApplyResult = await requestLock(QUERY_LOCK, async () => {
-        disableLiveQueries();
-        return exec();
-      });
+      const result: Batch.ApplyResult = await requestLock(
+        QUERY_LOCK,
+        async () => {
+          disableLiveQueries();
+          return exec();
+        },
+      );
       return result;
     } finally {
       await enableLiveQueries();
@@ -1263,6 +1265,7 @@ class SqliteWorkerSupervisor {
         this.#ensuredProfiles.add(did);
 
         const profile = await this.#peer?.getProfile(did);
+        console.log("Attempt to get profile", { did, profile });
         if (!profile) continue;
 
         statements.push(
