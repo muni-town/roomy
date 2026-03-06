@@ -146,10 +146,9 @@ export const peer = tracer.startActiveSpan(
       [sqliteWorkerChannel.port2, workerStatusChannel.port2],
     );
 
-    // Use window.location instead of page.route.id because SvelteKit's
-    // page state isn't resolved yet at module init time, causing the guard
-    // to fail and triggering scope-check redirects on the callback page.
-    if (!window.location.pathname.includes("/oauth/callback")) {
+    // window.location instead of page.route.id — at module init time the
+    // router may not have resolved yet, so page.route.id can be stale.
+    if (!window.location.pathname.startsWith("/oauth/callback")) {
       // Skip scope check if user just completed login (prevents infinite redirect loop).
       // The flag is set by the OAuth callback page and cleared by +layout.svelte
       // after caching the user's profile. TTL prevents a stale flag from permanently

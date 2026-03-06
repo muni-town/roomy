@@ -411,6 +411,7 @@ export class Peer {
       // Only OAuthSession has token info; CredentialSession (app passwords) does not.
       if (!opts?.skipScopeCheck && session instanceof OAuthSession) {
         try {
+          // false = don't refresh the token before reading scope info
           const tokenInfo = await session.getTokenInfo(false);
           const missing = checkScopeMismatch(
             tokenInfo.scope,
