@@ -60,6 +60,7 @@ import { createOauthClient, oauthDb } from "./oauth";
 import { Agent, CredentialSession } from "@atproto/api";
 import { lexicons } from "$lib/lexicons";
 import { checkScopeMismatch } from "$lib/utils/scopeCheck";
+import { OAuthSession } from "@atproto/oauth-client";
 import type { SessionManager } from "@atproto/api/dist/session-manager";
 
 /** Helper type that is a session manager where the DID is asserted to be defined. */
@@ -407,35 +408,30 @@ export class Peer {
 
       // Check for stale OAuth scopes and redirect for re-authorization if needed.
       // Skipped right after login to prevent infinite redirect loops.
-      if (!opts?.skipScopeCheck) {
-        const hasGetTokenInfo =
-          "getTokenInfo" in session &&
-          typeof session.getTokenInfo === "function";
+      // Only OAuthSession has token info; CredentialSession (app passwords) does not.
+      if (!opts?.skipScopeCheck && session instanceof OAuthSession) {
+        try {
+          const tokenInfo = await session.getTokenInfo(false);
+          const missing = checkScopeMismatch(
+            tokenInfo.scope,
+            CONFIG.atprotoOauthScope,
+          );
 
-        if (hasGetTokenInfo) {
-          try {
-            const tokenInfo = await (session as any).getTokenInfo(false);
-            const missing = checkScopeMismatch(
-              tokenInfo.scope,
-              CONFIG.atprotoOauthScope,
-            );
-
-            if (missing) {
-              console.info("Scope mismatch detected, re-authorizing", {
-                missing,
-              });
-              const oauth = await createOauthClient();
-              const redirectUrl = await oauth.authorize(session.did, {
-                scope: CONFIG.atprotoOauthScope,
-              });
-              return { redirectUrl: redirectUrl.href };
-            }
-          } catch (e) {
-            console.warn(
-              "Scope check failed, proceeding with existing session",
-              e,
-            );
+          if (missing) {
+            console.info("Scope mismatch detected, re-authorizing", {
+              missing,
+            });
+            const oauth = await createOauthClient();
+            const redirectUrl = await oauth.authorize(session.did, {
+              scope: CONFIG.atprotoOauthScope,
+            });
+            return { redirectUrl: redirectUrl.href };
           }
+        } catch (e) {
+          console.warn(
+            "Scope check failed, proceeding with existing session",
+            e,
+          );
         }
       }
 

@@ -170,6 +170,9 @@ export const peer = tracer.startActiveSpan(
             );
             window.location.href = result.redirectUrl;
           }
+        })
+        .catch((e) => {
+          console.error("Peer initialization failed", e);
         });
     }
 
