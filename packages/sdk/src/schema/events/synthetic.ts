@@ -120,8 +120,16 @@ export const SpaceMetaSynthetic = defineEvent(
     }
 
     // Sidebar config (comp_space table)
+    // The space_meta query returns sidebar as already-parsed JSON.
+    // It may be either {"categories": [...]} (the full object) or just the raw
+    // categories array, depending on whether updateSidebar events have been applied.
+    // The client expects comp_space.sidebar_config to be {"categories": [...]}.
     if (data.sidebar !== null) {
-      const sidebarJson = JSON.stringify(data.sidebar);
+      const sidebar = data.sidebar as Record<string, unknown>;
+      const sidebarJson = JSON.stringify(
+        Array.isArray(sidebar) ? { categories: sidebar } : sidebar,
+      );
+      console.log("Materialising synthetic sidebar", { sidebar, sidebarJson });
       statements.push(sql`
         insert into comp_space (entity, sidebar_config, updated_at)
         values (${streamId}, ${sidebarJson}, ${timestamp})
@@ -263,9 +271,7 @@ const ProfileSyntheticSchema = type({
   name: "string | null",
   avatar: "string | null",
   handle: "string | null",
-}).describe(
-  "Synthetic event containing a user profile from the room query",
-);
+}).describe("Synthetic event containing a user profile from the room query");
 
 export const ProfileSynthetic = defineEvent(
   ProfileSyntheticSchema,

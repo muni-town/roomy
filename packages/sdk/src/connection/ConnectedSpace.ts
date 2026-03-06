@@ -680,15 +680,17 @@ export class ConnectedSpace {
         } else {
           try {
             const parsed = JSON.parse(sidebarStr);
-            // Ensure the parsed sidebar has a categories field
-            if (
+            // The module stores sidebar as the raw categories array after
+            // updateSidebar events, but the client expects {categories: [...]}.
+            if (Array.isArray(parsed)) {
+              eventData.sidebar = { categories: parsed };
+            } else if (
               parsed &&
               typeof parsed === "object" &&
               "categories" in parsed
             ) {
               eventData.sidebar = parsed;
             } else {
-              // If sidebar doesn't have categories, set to default structure
               eventData.sidebar = { categories: [] };
             }
           } catch (e) {
