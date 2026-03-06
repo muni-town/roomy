@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { peer } from "$lib/workers";
+  import { JUST_LOGGED_IN_KEY, REDIRECT_AFTER_LOGIN_KEY } from "$lib/utils/storageKeys";
   import { Alert } from "$lib/components/ui/alert";
   import Button from "$lib/components/ui/button/Button.svelte";
   import { trace, context, SpanStatusCode } from "@opentelemetry/api";
@@ -24,8 +25,8 @@
             span.setStatus({ code: SpanStatusCode.OK });
             span.end();
 
-            localStorage.setItem("just-logged-in", "1");
-            goto(localStorage.getItem("redirect-after-login") || "/home");
+            localStorage.setItem(JUST_LOGGED_IN_KEY, Date.now().toString());
+            goto(localStorage.getItem(REDIRECT_AFTER_LOGIN_KEY) || "/home");
           })
           .catch((e) => {
             error = e.toString();
