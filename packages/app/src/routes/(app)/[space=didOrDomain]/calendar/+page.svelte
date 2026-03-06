@@ -13,7 +13,7 @@
     fetchGroupEvents,
     isAuthenticated,
     connectViaServiceAuth,
-    createLoginLink,
+    openOnOpenMeet,
     getStoredProfile,
     clearTokens,
   } from "$lib/services/openmeet";
@@ -40,20 +40,33 @@
     eventsQuery?.current.status === "success" ? eventsQuery.current.data : [],
   );
 
+  // Normalize status to a CSS class: "cancelled" → "ec-status-cancelled"
+  // Works with both API values (published, cancelled) and lexicon tokens
+  // (community.lexicon.calendar.event#cancelled → cancelled)
+  function statusClass(status: string | undefined): string {
+    if (!status) return "ec-status-scheduled";
+    const normalized = status.includes("#") ? status.split("#").pop()! : status;
+    return `ec-status-${normalized.toLowerCase()}`;
+  }
+
   // Map SQLite events to @event-calendar format
   let calendarEvents = $derived(
-    events.map((e) => ({
-      id: e.slug,
-      title: e.name,
-      start: new Date(e.startDate),
-      end: new Date(e.endDate || e.startDate),
-      extendedProps: {
-        slug: e.slug,
-        location: e.location,
-        locationOnline: e.locationOnline,
-        status: e.status,
-      },
-    })),
+    events.map((e) => {
+      const cancelled = e.status?.toLowerCase() === "cancelled";
+      return {
+        id: e.slug,
+        title: cancelled ? `(Cancelled) ${e.name}` : e.name,
+        start: new Date(e.startDate),
+        end: new Date(e.endDate || e.startDate),
+        className: statusClass(e.status),
+        extendedProps: {
+          slug: e.slug,
+          location: e.location,
+          locationOnline: e.locationOnline,
+          status: e.status,
+        },
+      };
+    }),
   );
 
   let selectedDate = $state(new Date());
@@ -82,22 +95,7 @@
     },
     eventClick: (info: { event: { extendedProps: { slug: string } } }) => {
       if (!link) return;
-      const platformUrl = link.apiUrl.replace("//api", "//platform");
-      const slug = info.event.extendedProps.slug;
-      const fallbackUrl = `${platformUrl}/events/${slug}`;
-
-      if (!connected) {
-        window.open(fallbackUrl, "_blank");
-        return;
-      }
-
-      // Open tab immediately to preserve user gesture (avoids popup blocker)
-      const w = window.open("about:blank", "_blank");
-      if (!w) return;
-
-      createLoginLink(link, `/events/${slug}`).then((url) => {
-        w.location.href = url || fallbackUrl;
-      });
+      openOnOpenMeet(link, `/events/${info.event.extendedProps.slug}`, connected);
     },
   });
 
@@ -183,7 +181,6 @@
     localStorage.setItem("openmeet:optOut", "true");
   }
 
-
 </script>
 
 {#snippet sidebar()}
@@ -236,34 +233,33 @@
         <Calendar bind:this={calRef} plugins={[DayGrid, TimeGrid, List, Interaction]} options={calendarOptions} />
       </div>
 
-      <!-- Auth status (only shown once link is confirmed) -->
+      <!-- Footer: OpenMeet link + auth status -->
       {#if link}
-        {#if !connected}
-          <div class="mt-2 p-2 rounded-lg flex items-center justify-end">
-            <p class="text-sm text-base-400 dark:text-base-500">
-              <button
-                class="underline hover:text-base-600 dark:hover:text-base-300 transition-colors"
-                onclick={connectToOpenMeet}
-              >Connect</button> to OpenMeet to see private events
-            </p>
-          </div>
-        {:else if profile}
-          <div class="mt-2 p-2 rounded-lg flex items-center justify-end">
-            <p class="text-sm text-base-400 dark:text-base-500">
+        <div class="mt-2 p-2 rounded-lg flex items-center justify-between text-sm text-base-400 dark:text-base-500">
+          <button class="ec-footer-link" onclick={() => link && openOnOpenMeet(link, `/groups/${link.groupSlug}`, connected)}>
+            Manage events on OpenMeet ↗
+          </button>
+
+          {#if !connected}
+            <span>
+              <button class="ec-footer-link" onclick={connectToOpenMeet}>Connect</button> to see private events
+            </span>
+          {:else if profile}
+            <span class="flex items-center gap-1">
               {#if profile.avatar}
                 <img
                   src={profile.avatar}
                   alt=""
-                  class="w-5 h-5 rounded-full inline align-text-bottom"
+                  class="w-5 h-5 rounded-full"
                 />
               {/if}
-              Connected as {profile.displayName || profile.handle} · <button
-                class="underline hover:text-base-600 dark:hover:text-base-300 transition-colors"
+              {profile.displayName || profile.handle} · <button
+                class="ec-footer-link"
                 onclick={disconnect}
               >Disconnect</button>
-            </p>
-          </div>
-        {/if}
+            </span>
+          {/if}
+        </div>
       {/if}
     {/if}
   </div>
@@ -307,6 +303,39 @@
 
   .ec-wrapper :global(.ec-time-grid .ec-event-time) {
     margin: 0 3px 0 0;
+  }
+
+  /* Footer action links — visible as interactive elements */
+  .ec-footer-link {
+    color: var(--color-accent-600);
+    text-decoration: underline;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .ec-footer-link:hover {
+    color: var(--color-accent-800);
+  }
+  :global(.dark) .ec-footer-link {
+    color: var(--color-accent-400);
+  }
+  :global(.dark) .ec-footer-link:hover {
+    color: var(--color-accent-200);
+  }
+
+  /* Event status styles — class names from community.lexicon.calendar.event */
+  .ec-wrapper :global(.ec-status-scheduled),
+  .ec-wrapper :global(.ec-status-published) {
+    background-color: var(--color-accent-500) !important;
+    color: white !important;
+  }
+  .ec-wrapper :global(.ec-status-cancelled) {
+    opacity: 0.6;
+    text-decoration: line-through;
+    background-color: var(--color-base-400) !important;
+  }
+  .ec-wrapper :global(.ec-status-postponed) {
+    opacity: 0.7;
+    border-left: 3px solid var(--color-warning-500, #f59e0b) !important;
   }
 
   :global(.dark) .ec-wrapper :global(.ec) {
