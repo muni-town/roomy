@@ -30,7 +30,7 @@ const CONFIG = {
     discordBridge: false,
     sharedWorker: false,
     calendar: true,
-    spaceMetaFastPath: true, // Use synthetic space_meta query for faster space initialization
+    spaceMetaFastPath: false, // Use synthetic space_meta query for faster space initialization
   },
 
   // OpenMeet integration defaults
@@ -43,8 +43,7 @@ const CONFIG = {
   leafServerDid: "",
   openmeetServiceDid: "",
   atprotoOauthScope: "",
-  embedServer:
-    import.meta.env.VITE_EMBED_SERVER || "https://embed.internal.weird.one",
+  embedServer: import.meta.env.VITE_EMBED_SERVER || "https://embed.internal.weird.one"
 };
 
 CONFIG.leafServerDid = `did:web:${new URL(CONFIG.leafUrl).hostname}`;
