@@ -245,11 +245,18 @@ export function openOnOpenMeet(
 
 export async function fetchGroupEvents(
   link: CalendarLink,
+  startDate?: string,
+  endDate?: string,
 ): Promise<Record<string, unknown>[]> {
-  const response = (await openmeetFetch(
-    link,
-    `/api/groups/${link.groupSlug}/events`,
-  )) as Record<string, unknown> | Record<string, unknown>[];
+  const params = new URLSearchParams();
+  if (startDate) params.set("startDate", startDate);
+  if (endDate) params.set("endDate", endDate);
+  const qs = params.toString();
+  const path = `/api/groups/${link.groupSlug}/events${qs ? `?${qs}` : ""}`;
+
+  const response = (await openmeetFetch(link, path)) as
+    | Record<string, unknown>
+    | Record<string, unknown>[];
   return Array.isArray(response)
     ? response
     : ((response as Record<string, unknown>).data as Record<
