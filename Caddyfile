@@ -1,0 +1,8 @@
+
+:80 {
+  handle {
+    root * /usr/share/caddy
+    file_server
+    try_files {path} /
+  }
+}
