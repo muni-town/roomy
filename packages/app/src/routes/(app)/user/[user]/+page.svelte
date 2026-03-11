@@ -3,12 +3,15 @@
   import UserProfile from "$lib/components/user/UserProfile.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import { peer } from "$lib/workers";
-  import type { Profile, UserDid } from "@roomy/sdk";
+  import type { UserDid } from "@roomy/sdk";
+  import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 
-  let profile = $state(undefined) as Profile | undefined;
+  let profile = $state(undefined) as ProfileViewDetailed | undefined;
   $effect(() => {
     if (page.params.user) {
-      peer.getProfile(page.params.user as UserDid).then((p) => (profile = p));
+      peer
+        .getProfiles([page.params.user as UserDid])
+        .then((p) => (profile = p[0]));
     }
   });
 </script>
