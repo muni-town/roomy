@@ -19,6 +19,7 @@ export { default as IconSettings } from "~icons/lucide/settings"
 export { default as IconShare } from "~icons/lucide/share"
 export { default as IconSmilePlus } from "~icons/lucide/smile-plus"
 export { default as IconTrash } from "~icons/lucide/trash"
+export { default as IconArrowUturnLeft } from "~icons/heroicons/arrow-uturn-left"
 export { default as IconCopy } from "~icons/heroicons/clipboard-document"
 
 // Close / Remove

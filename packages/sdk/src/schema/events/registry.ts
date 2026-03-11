@@ -16,7 +16,7 @@ import {
   AddBridgedReaction,
   RemoveBridgedReaction,
 } from "./reaction";
-import { CreateRoom, UpdateRoom, DeleteRoom } from "./room";
+import { CreateRoom, UpdateRoom, DeleteRoom, RestoreRoom } from "./room";
 import {
   JoinSpace,
   LeaveSpace,
@@ -45,6 +45,7 @@ export const eventRegistry = {
   "space.roomy.room.createRoom.v0": CreateRoom,
   "space.roomy.room.updateRoom.v0": UpdateRoom,
   "space.roomy.room.deleteRoom.v0": DeleteRoom,
+  "space.roomy.room.restoreRoom.v0": RestoreRoom,
   "space.roomy.reaction.addReaction.v0": AddReaction,
   "space.roomy.reaction.removeReaction.v0": RemoveReaction,
   "space.roomy.reaction.addBridgedReaction.v0": AddBridgedReaction,

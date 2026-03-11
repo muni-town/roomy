@@ -6,6 +6,7 @@
   const app = getAppState();
   import SpaceSidebarHeader from "./SpaceSidebarHeader.svelte";
   import EditRoomModal from "../modals/EditRoomModal.svelte";
+  import RestoreRoomModal from "../modals/RestoreRoomModal.svelte";
   import Button from "$lib/components/ui/button/Button.svelte";
 
   import {
@@ -14,12 +15,14 @@
     IconHome,
     IconHashtag,
     IconGripVertical,
+    IconTrash,
   } from "@roomy/design/icons";
   import SidebarCategory from "./SidebarCategory.svelte";
   import { type SidebarCategory as SidebarCategoryType } from "$lib/queries";
   import EntityName from "$lib/components/helper/EntityName.svelte";
   import { newUlid, Ulid } from "@roomy/sdk";
 
+  import { untrack } from "svelte";
   import {
     dragHandleZone,
     dragHandle,
@@ -55,6 +58,7 @@
   const parentContext = $derived(page.url.searchParams.get("parent"));
 
   let openEditRoomModal = $state(false);
+  let openRestoreRoomModal = $state(false);
 
   function renameCategory(id: Ulid, newName: string) {
     // keep the 'id' (old name) the same in the categoryMap
@@ -157,6 +161,30 @@
     if (!isEditing && draftOrder) {
       draftOrder = null;
     }
+  });
+
+  // Merge rooms that become available during editing (e.g. after restore) into draftOrder
+  $effect(() => {
+    if (!app.categories) return;
+    const currentDraft = untrack(() => draftOrder);
+    if (!currentDraft) return;
+
+    const draftRoomIds = new Set(currentDraft.flatMap((c) => c.childIds));
+    const newRooms = app.categories
+      .flatMap((c) => c.children)
+      .filter((r) => !draftRoomIds.has(r.id));
+
+    if (newRooms.length === 0) return;
+
+    draftOrder = currentDraft.map((cat, i) =>
+      i === 0
+        ? { ...cat, childIds: [...cat.childIds, ...newRooms.map((r) => r.id)] }
+        : cat,
+    );
+  });
+
+  $effect(() => {
+    console.log("SIDEBAR", { cats: $state.snapshot(categories) });
   });
 
   // Update handlers to work with the new structure
@@ -292,6 +320,18 @@
       </div>
     {/if}
   </div>
+
+  {#if isEditing}
+    <Button
+      class="mt-auto justify-start mb-4 mx-2 self-stretch"
+      variant="ghost"
+      onclick={() => (openRestoreRoomModal = true)}
+    >
+      <IconTrash class="size-4" />
+      Archive
+    </Button>
+  {/if}
 {/if}
 
 <EditRoomModal bind:open={openEditRoomModal} id={editingId} {renameCategory} />
+<RestoreRoomModal bind:open={openRestoreRoomModal} />

@@ -90,6 +90,7 @@ const metadataQueryEvents: Event["$type"][] = [
   "space.roomy.space.updateSidebar.v1",
   "space.roomy.room.createRoom.v0",
   "space.roomy.room.deleteRoom.v0",
+  "space.roomy.room.restoreRoom.v0",
   "space.roomy.room.updateRoom.v0",
   "space.roomy.link.createRoomLink.v0",
   // 'space.roomy.room.addMember.v0',
@@ -316,6 +317,12 @@ const spaceModuleDef: BasicModule = {
     set deleted = 1
     where id = (select drisl_extract(payload, '.roomId') from event)
       and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.room.deleteRoom.v0';
+
+    -- Restore room
+    update rooms
+    set deleted = 0
+    where id = (select drisl_extract(payload, '.roomId') from event)
+      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.room.restoreRoom.v0';
 
     -- Update OpenMeet configuration
     update openmeet_config
@@ -584,6 +591,16 @@ const spaceModuleDef: BasicModule = {
         );
       `,
       params: [{ kind: "text", name: "room", optional: true }],
+    },
+    {
+      name: "rooms",
+      sql: `
+        select id, name, kind, deleted, parent
+        from rooms
+        where ($kind is null or kind = $kind)
+        order by name
+      `,
+      params: [{ kind: "text", name: "kind", optional: true }],
     },
     {
       name: "profiles",

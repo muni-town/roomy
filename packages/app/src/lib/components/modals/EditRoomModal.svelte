@@ -10,6 +10,7 @@
   import type { Ulid } from "@roomy/sdk";
   // import FeedConfiguration from "../content/bluesky-feed/FeedConfiguration.svelte";
   import { IconSave, IconTrash } from "@roomy/design/icons";
+  import { flags } from "$lib/config";
 
   let {
     open = $bindable(false),
@@ -99,36 +100,37 @@
           </Button>
         </div>
 
-        <!-- 
+        <!--
       {#if entity?.components?.feedConfig}
         <div class="mt-8 pt-8 border-t border-base-300 dark:border-base-700">
           <FeedConfiguration objectId={entity.id} />
         </div>
       {/if} -->
 
-        <!-- <h3
-          class="text-base font-semibold text-base-900 dark:text-base-100 mt-8"
-        >
-          Danger zone
-        </h3>
-        <div class="flex justify-start">
-          <Button
-            onclick={async () => {
-              if (!app.joinedSpace || !app.roomId)
-                throw new Error("Could not find current room ID");
-              await deleteRoom({
-                spaceId: app.joinedSpace.id,
-                roomId: app.roomId,
-              });
-              open = false;
-            }}
-            class="justify-start"
-            variant="red"
+        {#if flags.roomDeletion && id && "room" in id}
+          <h3
+            class="text-base font-semibold text-base-900 dark:text-base-100 mt-8"
           >
-            <IconTrash class="size-4" />
-            Delete {kind}
-          </Button>
-        </div> -->
+            Danger zone
+          </h3>
+          <div class="flex justify-start">
+            <Button
+              onclick={async () => {
+                if (!app.joinedSpace) throw new Error("No space found");
+                await deleteRoom({
+                  spaceId: app.joinedSpace.id,
+                  roomId: id.room,
+                });
+                open = false;
+              }}
+              class="justify-start"
+              variant="red"
+            >
+              <IconTrash class="size-4" />
+              Delete {kind}
+            </Button>
+          </div>
+        {/if}
       </form>
     </div>
   </Modal>

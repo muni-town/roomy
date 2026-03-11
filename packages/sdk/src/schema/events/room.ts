@@ -136,9 +136,25 @@ export const DeleteRoom = defineEvent(DeleteRoomSchema, ({ event }) => {
   ];
 });
 
+const RestoreRoomSchema = type({
+  $type: "'space.roomy.room.restoreRoom.v0'",
+  roomId: Ulid.describe("The room to restore"),
+}).describe("Restore a soft-deleted room.");
+
+export const RestoreRoom = defineEvent(RestoreRoomSchema, ({ event }) => {
+  return [
+    sql`
+        update comp_room
+        set deleted = 0
+        where entity = ${event.roomId}
+      `,
+  ];
+});
+
 // All room events
 export const RoomEventVariant = type.or(
   CreateRoomSchema,
   DeleteRoomSchema,
   UpdateRoomSchema,
+  RestoreRoomSchema,
 );

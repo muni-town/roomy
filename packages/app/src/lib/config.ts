@@ -31,6 +31,7 @@ const CONFIG = {
     sharedWorker: false,
     calendar: true,
     spaceMetaFastPath: false, // Use synthetic space_meta query for faster space initialization
+    roomDeletion: false, // Allow deleting channels from the edit modal
   },
 
   // OpenMeet integration defaults

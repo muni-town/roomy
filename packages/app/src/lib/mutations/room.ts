@@ -102,6 +102,14 @@ export async function deleteRoom(opts: { spaceId: StreamDid; roomId: Ulid }) {
   // TODO: remove room from sidebar if in sidebar
 }
 
+export async function restoreRoom(opts: { spaceId: StreamDid; roomId: Ulid }) {
+  await peer.sendEvent(opts.spaceId, {
+    id: newUlid(),
+    $type: "space.roomy.room.restoreRoom.v0",
+    roomId: opts.roomId,
+  });
+}
+
 export async function addRoomToSidebar(opts: {
   spaceId: StreamDid;
   category: string;

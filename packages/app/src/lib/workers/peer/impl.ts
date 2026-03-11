@@ -52,6 +52,7 @@ import {
   newUlid,
   Ulid,
   StreamIndex,
+  type RoomMetadata,
 } from "@roomy/sdk";
 import { decode, encode } from "@atcute/cbor";
 import { context, SpanStatusCode } from "@opentelemetry/api";
@@ -262,6 +263,7 @@ export class Peer {
       },
       fetchLinks: async (streamId, start, limit, room) =>
         this.fetchLinks(streamId, start, limit, room),
+      fetchRooms: async (streamId, kind) => this.fetchRooms(streamId, kind),
       uploadToPds: async (bytes, opts) => {
         return this.client.uploadBlob(bytes, opts);
       },
@@ -1237,6 +1239,15 @@ export class Peer {
     if (!space) throw new Error("Could not find space in connected streams");
 
     return await space.fetchLinks(start, limit, room);
+  }
+
+  async fetchRooms(spaceId: StreamDid, kind?: string): Promise<RoomMetadata[]> {
+    const { spaces } = await this.#roomy.transitionedTo("connected");
+
+    const space = spaces.get(spaceId);
+    if (!space) throw new Error("Could not find space in connected streams");
+
+    return await space.fetchRooms(kind);
   }
 
   /** Create an event callback that pushes to the eventChannel.

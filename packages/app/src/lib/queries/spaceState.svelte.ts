@@ -99,6 +99,7 @@ export class SpaceState {
         left join comp_info child_info on child_info.entity = children.value
         left join comp_room child_room on child_room.entity = children.value
         where space.entity = ${spaceId}
+          and coalesce(child_room.deleted, 0) = 0
         group by categories.key, categories.value -> 'name'
         order by categories.key
       `,
@@ -115,6 +116,8 @@ export class SpaceState {
           label = 'space.roomy.channel'
             and
           e.stream_id = ${spaceId}
+            and
+          coalesce(r.deleted, 0) = 0
       `,
     );
 
@@ -176,37 +179,39 @@ export class SpaceState {
         );
         let pinnedChannelIds = new Set<string>();
 
-        let cats = sidebarQuery.result.map((x) => {
-          const seen = new Set<string>();
-          const uniqueChildren = x.children.filter((c) => {
-            if (!c) return false;
-            pinnedChannelIds.add(c.id);
-            if (seen.has(c.id)) return false;
-            seen.add(c.id);
-            return true;
-          });
+        let cats = sidebarQuery.result
+          .filter((x) => !!x.name?.trim())
+          .map((x) => {
+            const seen = new Set<string>();
+            const uniqueChildren = x.children.filter((c) => {
+              if (!c) return false;
+              pinnedChannelIds.add(c.id);
+              if (seen.has(c.id)) return false;
+              seen.add(c.id);
+              return true;
+            });
 
-          return {
-            type: "space.roomy.category",
-            id: (x.id as Ulid) ?? newUlid(),
-            name: x.name,
-            lastRead: 0,
-            latestEntity: 0,
-            sortIdx: "",
-            unreadCount: 0,
-            children: uniqueChildren
-              .filter((c) => !!c.name) // don't include children without names
-              .map((c) => ({
-                type: "space.roomy.channel",
-                id: c.id,
-                name: c.name,
-                lastRead: 0,
-                latestEntity: 0,
-                sortIdx: "",
-                unreadCount: 0,
-              })),
-          } satisfies SidebarCategory;
-        });
+            return {
+              type: "space.roomy.category",
+              id: (x.id as Ulid) ?? newUlid(),
+              name: x.name,
+              lastRead: 0,
+              latestEntity: 0,
+              sortIdx: "",
+              unreadCount: 0,
+              children: uniqueChildren
+                .filter((c) => !!c.name) // don't include children without names
+                .map((c) => ({
+                  type: "space.roomy.channel",
+                  id: c.id,
+                  name: c.name,
+                  lastRead: 0,
+                  latestEntity: 0,
+                  sortIdx: "",
+                  unreadCount: 0,
+                })),
+            } satisfies SidebarCategory;
+          });
 
         let orphanChannels = allChannelIds.difference(pinnedChannelIds);
 

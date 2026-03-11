@@ -35,7 +35,7 @@ export {
   ReorderMessage,
   ForwardMessages,
 } from "./message";
-export { CreateRoom, UpdateRoom, DeleteRoom } from "./room";
+export { CreateRoom, UpdateRoom, DeleteRoom, RestoreRoom } from "./room";
 export {
   AddReaction,
   RemoveReaction,

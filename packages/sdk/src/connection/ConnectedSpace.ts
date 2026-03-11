@@ -48,6 +48,14 @@ export type ConnectionState =
   | { state: "connected" }
   | { state: "disconnected" };
 
+export type RoomMetadata = {
+  id: string;
+  name: string | null;
+  kind: string;
+  deleted: boolean;
+  parent: string | null;
+};
+
 /**
  * Manages a connection to a Roomy space stream.
  *
@@ -407,6 +415,33 @@ export class ConnectedSpace {
       start,
     });
     return this.#decodeAndParseEvents(parseRows(resp));
+  }
+
+  /**
+   * Fetch room metadata from this space.
+   * Returns all rooms, optionally filtered by kind.
+   *
+   * @param kind - Optional room kind filter (e.g. 'space.roomy.channel')
+   */
+  async fetchRooms(kind?: string): Promise<RoomMetadata[]> {
+    const params: LeafQuery["params"] = {};
+    if (kind !== undefined) {
+      params["kind"] = { $type: "muni.town.sqliteValue.text", value: kind };
+    }
+
+    const resp = await this.#leaf.query(this.streamDid, {
+      name: "rooms",
+      params,
+    });
+
+    const unwrapped = unwrapSqlRows(resp);
+    return unwrapped.map((row) => ({
+      id: String(row["id"] ?? ""),
+      name: row["name"] != null ? String(row["name"]) : null,
+      kind: String(row["kind"] ?? ""),
+      deleted: Number(row["deleted"] ?? 0) === 1,
+      parent: row["parent"] != null ? String(row["parent"]) : null,
+    }));
   }
 
   /**

@@ -157,6 +157,7 @@ export const SpaceMetaSynthetic = defineEvent(
           values (${channel.id}, 'space.roomy.channel', ${timestamp}, ${timestamp})
           on conflict(entity) do update set
             label = excluded.label,
+            deleted = 0,
             updated_at = excluded.updated_at
         `);
 

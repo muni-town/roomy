@@ -14,6 +14,7 @@ import {
   type RoomyClient,
   type DecodedStreamEvent,
   type EncodedStreamEvent,
+  type RoomMetadata,
 } from "@roomy/sdk";
 import type { SessionManager } from "@atproto/api/dist/session-manager";
 import type { messagePortInterface } from "../internalMessaging";
@@ -80,6 +81,7 @@ export type PeerInterface = {
     limit: number,
     room?: Ulid,
   ): Promise<DecodedStreamEvent[]>;
+  fetchRooms(streamId: StreamDid, kind?: string): Promise<RoomMetadata[]>;
   setActiveSqliteWorker(port: MessagePort): Promise<void>;
   pauseSubscription(streamId: StreamDid): Promise<void>;
   unpauseSubscription(streamId: StreamDid): Promise<void>;
