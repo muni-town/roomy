@@ -158,7 +158,7 @@
     /<?(https?:\/\/)*[a-z0-9][-a-z0-9]*\.[a-z]{2,}[^\s]*[a-zA-Z0-9\/]>?/gi;
 
   const linkUrls = $derived([
-    ...message.content.matchAll(UrlRegex).map((x) => x[0]),
+    ...(message?.content?.matchAll(UrlRegex)?.map((x) => x[0]) || []),
   ]);
   const linkEmbeds = $derived(
     Promise.all(
