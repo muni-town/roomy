@@ -87,16 +87,10 @@ export class SpaceState {
         select json_object(
           'id', categories.value -> 'id',
           'name', categories.value -> 'name',
-          'children', case when count(children.value) > 0
-            then json_group_array(
-              json_object(
-                'name', child_info.name,
-                'id', child_info.entity
-              )
-              ORDER BY children.key
-            )
-            else json('[]')
-            end
+          'children', json_group_array(
+            json_object('name', child_info.name, 'id', child_info.entity, 'deleted', child_room.deleted)
+            ORDER BY children.key
+          )
         ) as json
         from
           comp_space space,
@@ -105,7 +99,6 @@ export class SpaceState {
         left join comp_info child_info on child_info.entity = children.value
         left join comp_room child_room on child_room.entity = children.value
         where space.entity = ${spaceId}
-          and (child_room.entity is null or child_room.deleted != 1)
         group by categories.key, categories.value -> 'name'
         order by categories.key
       `,
@@ -186,6 +179,7 @@ export class SpaceState {
         let cats = sidebarQuery.result.map((x) => {
           const seen = new Set<string>();
           const uniqueChildren = x.children.filter((c) => {
+            if (!c) return false;
             pinnedChannelIds.add(c.id);
             if (seen.has(c.id)) return false;
             seen.add(c.id);

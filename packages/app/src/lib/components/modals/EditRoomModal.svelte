@@ -106,7 +106,7 @@
         </div>
       {/if} -->
 
-        <h3
+        <!-- <h3
           class="text-base font-semibold text-base-900 dark:text-base-100 mt-8"
         >
           Danger zone
@@ -128,7 +128,7 @@
             <IconTrash class="size-4" />
             Delete {kind}
           </Button>
-        </div>
+        </div> -->
       </form>
     </div>
   </Modal>
