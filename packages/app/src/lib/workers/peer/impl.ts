@@ -61,6 +61,7 @@ import { createOauthClient, oauthDb } from "./oauth";
 import { Agent, CredentialSession } from "@atproto/api";
 import { lexicons } from "$lib/lexicons";
 import type { SessionManager } from "@atproto/api/dist/session-manager";
+import { arrayChunks } from "$lib/jsUtils";
 
 /** Helper type that is a session manager where the DID is asserted to be defined. */
 type SessionManagerWithDid = Omit<SessionManager, "did"> & { did: string };
@@ -188,7 +189,7 @@ export class Peer {
       },
       getProfiles: async (dids) => {
         const resp = await this.client.agent.getProfiles({ actors: dids });
-        return resp.data.profiles
+        return resp.data.profiles;
       },
       runQuery: async (statement) => {
         return this.#sqlite.runQuery(statement);
@@ -324,24 +325,41 @@ export class Peer {
           params: {},
         });
 
-        return Promise.all(
-          resp
-            .flatMap((x) => {
-              if (x.user_id?.$type == "muni.town.sqliteValue.text") {
-                return [Did.assert(x.user_id.value)];
-              }
-              return [];
-            })
-            .map(async (did) => {
-              const profile = await this.client.getProfile(did);
-              return {
-                did,
-                avatar: profile?.avatar,
-                name: profile?.displayName,
-                handle: profile?.handle,
-              };
+        const memberDids = resp.flatMap((x) => {
+          if (
+            x.user_id?.$type == "muni.town.sqliteValue.text" &&
+            (x.user_id.value.startsWith("did:plc") ||
+              x.user_id.value.startsWith("did:web"))
+          ) {
+            return [Did.assert(x.user_id.value)];
+          }
+          return [];
+        });
+
+        const memberDidChunks = arrayChunks(memberDids, 25);
+
+        const profiles = (
+          await Promise.all(
+            memberDidChunks.map(async (dids) => {
+              const resp = await this.client.agent.getProfiles({
+                actors: dids,
+              });
+              return resp.data.profiles;
             }),
-        );
+          )
+        )
+          .filter((x) => !!x)
+          .flat();
+
+        return profiles.map((p) => {
+          let { did, avatar, displayName, handle } = p;
+          return {
+            did,
+            avatar,
+            name: displayName,
+            handle,
+          };
+        });
       },
     };
   }

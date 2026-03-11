@@ -21,7 +21,13 @@
   import LoadingLine from "$lib/components/helper/LoadingLine.svelte";
   import MainLayout from "$lib/components/layout/MainLayout.svelte";
   import SidebarMain from "$lib/components/sidebars/SpaceSidebar.svelte";
-  import { Calendar, DayGrid, TimeGrid, List, Interaction } from "@event-calendar/core";
+  import {
+    Calendar,
+    DayGrid,
+    TimeGrid,
+    List,
+    Interaction,
+  } from "@event-calendar/core";
 
   let spaceId = $derived(app.joinedSpace?.id);
   let linkQuery = $derived(spaceId ? calendarLinkQuery(spaceId) : undefined);
@@ -31,11 +37,13 @@
       : undefined,
   );
   let linkResolved = $derived(
-    linkQuery ? linkQuery.current.status !== "loading" : !spaceId
+    linkQuery ? linkQuery.current.status !== "loading" : !spaceId,
   );
   let noLink = $derived(linkResolved && !link);
 
-  let eventsQuery = $derived(spaceId ? calendarEventsQuery(spaceId) : undefined);
+  let eventsQuery = $derived(
+    spaceId ? calendarEventsQuery(spaceId) : undefined,
+  );
   let events = $derived(
     eventsQuery?.current.status === "success" ? eventsQuery.current.data : [],
   );
@@ -71,7 +79,12 @@
 
   let selectedDate = $state(new Date());
 
-  let calRef: { getOption: (key: string) => unknown; setOption: (key: string, value: unknown) => void } | undefined = $state();
+  let calRef:
+    | {
+        getOption: (key: string) => unknown;
+        setOption: (key: string, value: unknown) => void;
+      }
+    | undefined = $state();
 
   let calendarOptions = $derived({
     view: "dayGridMonth",
@@ -95,13 +108,19 @@
     },
     eventClick: (info: { event: { extendedProps: { slug: string } } }) => {
       if (!link) return;
-      openOnOpenMeet(link, `/events/${info.event.extendedProps.slug}`, connected);
+      openOnOpenMeet(
+        link,
+        `/events/${info.event.extendedProps.slug}`,
+        connected,
+      );
     },
   });
 
   let connected = $state(isAuthenticated());
   let profile = $state(getStoredProfile());
-  let openmeetOptOut = $state(localStorage.getItem("openmeet:optOut") === "true");
+  let openmeetOptOut = $state(
+    localStorage.getItem("openmeet:optOut") === "true",
+  );
 
   type SyncState = "idle" | "syncing" | "done" | "error";
   let syncState = $state<SyncState>("idle");
@@ -159,9 +178,10 @@
 
       // Fall back to Bluesky avatar if OpenMeet profile has none
       if (profile && !profile.avatar && app.did) {
-        const bskyProfile = await peer.getProfile(app.did);
-        if (bskyProfile?.avatar) {
-          profile = { ...profile, avatar: bskyProfile.avatar };
+        const resp = await peer.getProfiles([app.did]);
+        const p = resp?.[0];
+        if (p?.avatar) {
+          profile = { ...profile, avatar: p.avatar };
           localStorage.setItem("openmeet:profile", JSON.stringify(profile));
         }
       }
@@ -180,7 +200,6 @@
     openmeetOptOut = true;
     localStorage.setItem("openmeet:optOut", "true");
   }
-
 </script>
 
 {#snippet sidebar()}
@@ -193,9 +212,7 @@
       <h2
         class="w-full py-4 text-base-900 dark:text-base-100 flex items-center gap-2"
       >
-        <div class="ml-2 font-bold grow text-center text-lg">
-          Events
-        </div>
+        <div class="ml-2 font-bold grow text-center text-lg">Events</div>
       </h2>
     </div>
   </div>
@@ -205,9 +222,7 @@
   <div class="p-4 h-full flex flex-col">
     {#if noLink}
       <div class="text-center py-12">
-        <h2
-          class="text-lg font-semibold text-base-900 dark:text-base-100 mb-2"
-        >
+        <h2 class="text-lg font-semibold text-base-900 dark:text-base-100 mb-2">
           No calendar connected
         </h2>
         <p class="text-sm text-base-600 dark:text-base-400 mb-4">
@@ -224,39 +239,50 @@
         <LoadingLine />
       {/if}
       {#if syncState === "error"}
-        <div class="flex items-center gap-2 p-2 mb-2 rounded-lg bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 text-sm">
+        <div
+          class="flex items-center gap-2 p-2 mb-2 rounded-lg bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 text-sm"
+        >
           <span class="flex-1">{errorMessage}</span>
           <Button onclick={syncEvents}>Retry</Button>
         </div>
       {/if}
       <div class="ec-wrapper flex-1 min-h-0 h-full">
-        <Calendar bind:this={calRef} plugins={[DayGrid, TimeGrid, List, Interaction]} options={calendarOptions} />
+        <Calendar
+          bind:this={calRef}
+          plugins={[DayGrid, TimeGrid, List, Interaction]}
+          options={calendarOptions}
+        />
       </div>
 
       <!-- Footer: OpenMeet link + auth status -->
       {#if link}
-        <div class="mt-2 p-2 rounded-lg flex items-center justify-between text-sm text-base-400 dark:text-base-500">
-          <button class="ec-footer-link" onclick={() => link && openOnOpenMeet(link, `/groups/${link.groupSlug}`, connected)}>
+        <div
+          class="mt-2 p-2 rounded-lg flex items-center justify-between text-sm text-base-400 dark:text-base-500"
+        >
+          <button
+            class="ec-footer-link"
+            onclick={() =>
+              link &&
+              openOnOpenMeet(link, `/groups/${link.groupSlug}`, connected)}
+          >
             Manage events on OpenMeet ↗
           </button>
 
           {#if !connected}
             <span>
-              <button class="ec-footer-link" onclick={connectToOpenMeet}>Connect</button> to see private events
+              <button class="ec-footer-link" onclick={connectToOpenMeet}
+                >Connect</button
+              > to see private events
             </span>
           {:else if profile}
             <span class="flex items-center gap-1">
               {#if profile.avatar}
-                <img
-                  src={profile.avatar}
-                  alt=""
-                  class="w-5 h-5 rounded-full"
-                />
+                <img src={profile.avatar} alt="" class="w-5 h-5 rounded-full" />
               {/if}
-              {profile.displayName || profile.handle} · <button
-                class="ec-footer-link"
-                onclick={disconnect}
-              >Disconnect</button>
+              {profile.displayName || profile.handle} ·
+              <button class="ec-footer-link" onclick={disconnect}
+                >Disconnect</button
+              >
             </span>
           {/if}
         </div>

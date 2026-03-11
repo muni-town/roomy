@@ -54,6 +54,7 @@ import {
   computeMaterializationSummary,
   computeMaterializationWarnings,
 } from "../materializationLogging";
+import { arrayChunks } from "$lib/jsUtils";
 
 initializeFaro({ worker: "sqlite" });
 
@@ -1262,7 +1263,7 @@ class SqliteWorkerSupervisor {
       const statements: SqlStatement[] = [];
 
       // We can only bulk fetch 25 profiles at a time so split the dids into chunks.
-      let missingDidChunks = chunkArray(missingDids, 25);
+      let missingDidChunks = arrayChunks(missingDids, 25);
 
       const profiles = (
         await Promise.all(
@@ -1387,10 +1388,4 @@ function midpointUlid(earlier: Ulid, later?: Ulid) {
 
   const midTimeDiff = (laterTime - earlierTime) / 2;
   return ulid(earlierTime + midTimeDiff);
-}
-
-function chunkArray<T>(arr: T[], size: number) {
-  return Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
-    arr.slice(i * size, i * size + size),
-  );
 }
