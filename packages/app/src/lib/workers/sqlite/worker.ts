@@ -1259,42 +1259,46 @@ class SqliteWorkerSupervisor {
           statements: [],
         };
 
-      const statements = [];
+      const statements: SqlStatement[] = [];
 
-      for (const did of missingDids) {
-        this.#ensuredProfiles.add(did);
+      await Promise.all(
+        missingDids.map((did) =>
+          (async () => {
+            this.#ensuredProfiles.add(did);
 
-        const profile = await this.#peer?.getProfile(did);
-        console.log("Attempt to get profile", { did, profile });
-        if (!profile) continue;
+            const profile = await this.#peer?.getProfile(did);
+            console.log("Attempt to get profile", { did, profile });
+            if (!profile) return;
 
-        statements.push(
-          ...[
-            sql`
-            insert into entities (id, stream_id)
-            values (${did}, ${streamId})
-            on conflict(id) do nothing
-          `,
-            sql`
-            insert into comp_user (did, handle)
-            values (
-              ${did},
-              ${profile.handle}
-            )
-            on conflict(did) do nothing
-          `,
-            sql`
-            insert into comp_info (entity, name, avatar)
-            values (
-              ${did},
-              ${profile.displayName || profile.handle},
-              ${profile.avatar}
-            )
-            on conflict(entity) do nothing
-          `,
-          ],
-        );
-      }
+            statements.push(
+              ...[
+                sql`
+                  insert into entities (id, stream_id)
+                  values (${did}, ${streamId})
+                  on conflict(id) do nothing
+                `,
+                sql`
+                  insert into comp_user (did, handle)
+                  values (
+                    ${did},
+                    ${profile.handle}
+                  )
+                  on conflict(did) do nothing
+                `,
+                sql`
+                  insert into comp_info (entity, name, avatar)
+                  values (
+                    ${did},
+                    ${profile.displayName || profile.handle},
+                    ${profile.avatar}
+                  )
+                  on conflict(entity) do nothing
+                `,
+              ],
+            );
+          })(),
+        ),
+      );
 
       const bundle = {
         status: "profiles",
