@@ -31,7 +31,7 @@ const CONFIG = {
     sharedWorker: false,
     calendar: true,
     spaceMetaFastPath: false, // Use synthetic space_meta query for faster space initialization
-    roomDeletion: false, // Allow deleting channels from the edit modal
+    roomDeletion: true, // Allow deleting channels from the edit modal
   },
 
   // OpenMeet integration defaults
@@ -44,7 +44,8 @@ const CONFIG = {
   leafServerDid: "",
   openmeetServiceDid: "",
   atprotoOauthScope: "",
-  embedServer: import.meta.env.VITE_EMBED_SERVER || "https://embed.internal.weird.one"
+  embedServer:
+    import.meta.env.VITE_EMBED_SERVER || "https://embed.internal.weird.one",
 };
 
 CONFIG.leafServerDid = `did:web:${new URL(CONFIG.leafUrl).hostname}`;
