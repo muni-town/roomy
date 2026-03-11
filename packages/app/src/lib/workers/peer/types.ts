@@ -18,6 +18,7 @@ import {
 } from "@roomy/sdk";
 import type { SessionManager } from "@atproto/api/dist/session-manager";
 import type { messagePortInterface } from "../internalMessaging";
+import type { ProfileViewDetailed } from "@atproto/api/dist/client/types/app/bsky/actor/defs";
 
 export interface PeerStatus {
   authState: AuthStatus;
@@ -52,7 +53,7 @@ export type PeerInterface = {
     streamDid: StreamDid,
   ): Promise<{ name?: string; avatar?: string } | undefined>;
   runQuery<T>(statement: SqlStatement): Promise<QueryResult<T>>;
-  getProfile(did: UserDid): Promise<Profile | undefined>;
+  getProfiles(dids: UserDid[]): Promise<ProfileViewDetailed[]>;
   dangerousCompletelyDestroyDatabase(opts: {
     yesIAmSure: true;
   }): Promise<{ done: true } | { done: false; error: string }>;

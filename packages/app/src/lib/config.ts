@@ -53,7 +53,8 @@ CONFIG.openmeetServiceDid = `did:web:${new URL(CONFIG.openmeetApiUrl).hostname}`
 CONFIG.atprotoOauthScope = [
   `atproto`, // Required just to login to atproto
 
-  `rpc:app.bsky.actor.getProfile?aud=did:web:api.bsky.app%23bsky_appview`, // Access to query the Bluesky profile
+  // Access to query the Bluesky profile
+  `rpc:app.bsky.actor.getProfiles?aud=did:web:api.bsky.app%23bsky_appview rpc:app.bsky.actor.getProfile?aud=did:web:api.bsky.app%23bsky_appview`,
 
   // These are the scopes needed for accessing Bluesky DMs, but since we don't have the UI for that
   // yet, lets not ask for permission to it.

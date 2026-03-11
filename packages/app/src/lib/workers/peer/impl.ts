@@ -186,8 +186,9 @@ export class Peer {
           throw new Error("Not connected");
         return this.#roomy.current.client.getSpaceInfo(streamDid);
       },
-      getProfile: async (did) => {
-        return this.client.getProfile(did);
+      getProfiles: async (dids) => {
+        const resp = await this.client.agent.getProfiles({ actors: dids });
+        return resp.data.profiles
       },
       runQuery: async (statement) => {
         return this.#sqlite.runQuery(statement);
@@ -728,10 +729,7 @@ export class Peer {
               );
               this.#spaceStatuses.set(currentSpaceId, "error");
             } else {
-              console.debug(
-                "[Peer] Current space connected:",
-                currentSpaceId,
-              );
+              console.debug("[Peer] Current space connected:", currentSpaceId);
             }
           } catch (e) {
             console.warn(
@@ -1031,9 +1029,7 @@ export class Peer {
 
     if (!usedFastPath) {
       // Legacy path: full metadata backfill via subscribeMetadata
-      console.log(
-        `[Peer] Using legacy metadata backfill for ${streamId}`,
-      );
+      console.log(`[Peer] Using legacy metadata backfill for ${streamId}`);
       const { callback: metaCallback, waitForMaterialization } =
         this.#createTrackedEventCallback(
           this.#roomy.current.eventChannel,
@@ -1042,8 +1038,7 @@ export class Peer {
         );
       const latest = await withTimeoutCallback(
         space.subscribeMetadata(metaCallback, 0),
-        () =>
-          console.warn(`Waiting for space metadata backfill`, { streamId }),
+        () => console.warn(`Waiting for space metadata backfill`, { streamId }),
         5000,
       );
       await waitForMaterialization();
@@ -1055,8 +1050,7 @@ export class Peer {
       );
       await withTimeoutCallback(
         space.subscribe(regularCallback, latest),
-        () =>
-          console.warn(`Waiting for space events backfill`, { streamId }),
+        () => console.warn(`Waiting for space events backfill`, { streamId }),
         5000,
       );
     }
@@ -1183,7 +1177,8 @@ export class Peer {
             // ensureProfiles from fetching the real data from Bluesky.
             if (result.profiles.length > 0) {
               for (const profile of result.profiles) {
-                if (!profile.name && !profile.avatar && !profile.handle) continue;
+                if (!profile.name && !profile.avatar && !profile.handle)
+                  continue;
                 try {
                   const syntheticBatch: Batch.SyntheticEvent = {
                     status: "synthetic",
@@ -1192,7 +1187,9 @@ export class Peer {
                     event: profile,
                     priority: "background",
                   };
-                  await this.#sqlite.sqliteWorker.materializeSyntheticEvent(syntheticBatch);
+                  await this.#sqlite.sqliteWorker.materializeSyntheticEvent(
+                    syntheticBatch,
+                  );
                 } catch (e) {
                   console.error("Failed to materialize profile", profile, e);
                 }

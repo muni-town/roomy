@@ -1250,7 +1250,7 @@ class SqliteWorkerSupervisor {
         `,
         params: dids,
       })) as QueryResult<{ did: string }>; // i think
-      const missingDids =
+      const missingDids: UserDid[] =
         missingProfilesResp.rows?.map((x: any) => x.did) || [];
       if (missingDids.length == 0)
         return {
@@ -1261,44 +1261,48 @@ class SqliteWorkerSupervisor {
 
       const statements: SqlStatement[] = [];
 
-      await Promise.all(
-        missingDids.map((did) =>
-          (async () => {
-            this.#ensuredProfiles.add(did);
+      // We can only bulk fetch 25 profiles at a time so split the dids into chunks.
+      let missingDidChunks = chunkArray(missingDids, 25);
 
-            const profile = await this.#peer?.getProfile(did);
-            console.log("Attempt to get profile", { did, profile });
-            if (!profile) return;
+      const profiles = (
+        await Promise.all(
+          missingDidChunks.map((dids) => this.#peer?.getProfiles(dids)),
+        )
+      )
+        .filter((x) => !!x)
+        .flat();
 
-            statements.push(
-              ...[
-                sql`
-                  insert into entities (id, stream_id)
-                  values (${did}, ${streamId})
-                  on conflict(id) do nothing
-                `,
-                sql`
-                  insert into comp_user (did, handle)
-                  values (
-                    ${did},
-                    ${profile.handle}
-                  )
-                  on conflict(did) do nothing
-                `,
-                sql`
-                  insert into comp_info (entity, name, avatar)
-                  values (
-                    ${did},
-                    ${profile.displayName || profile.handle},
-                    ${profile.avatar}
-                  )
-                  on conflict(entity) do nothing
-                `,
-              ],
-            );
-          })(),
-        ),
-      );
+      profiles.forEach((profile) => {
+        const { did, handle, displayName, avatar } = profile;
+        this.#ensuredProfiles.add(did);
+
+        statements.push(
+          ...[
+            sql`
+              insert into entities (id, stream_id)
+              values (${did}, ${streamId})
+              on conflict(id) do nothing
+            `,
+            sql`
+              insert into comp_user (did, handle)
+              values (
+                ${did},
+                ${handle}
+              )
+              on conflict(did) do nothing
+            `,
+            sql`
+              insert into comp_info (entity, name, avatar)
+              values (
+                ${did},
+                ${displayName || handle},
+                ${avatar}
+              )
+              on conflict(entity) do nothing
+            `,
+          ],
+        );
+      });
 
       const bundle = {
         status: "profiles",
@@ -1383,4 +1387,10 @@ function midpointUlid(earlier: Ulid, later?: Ulid) {
 
   const midTimeDiff = (laterTime - earlierTime) / 2;
   return ulid(earlierTime + midTimeDiff);
+}
+
+function chunkArray<T>(arr: T[], size: number) {
+  return Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
+    arr.slice(i * size, i * size + size),
+  );
 }
