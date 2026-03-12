@@ -188,7 +188,7 @@ create table if not exists comp_embed_link (
 
 create table if not exists comp_last_read (
   entity text primary key references entities(id) on delete cascade,
-  timestamp integer not null,
+  last_read integer not null,
   unread_count integer,
   created_at integer not null default (unixepoch() * 1000),
   updated_at integer not null default (unixepoch() * 1000)
@@ -204,7 +204,7 @@ create table if not exists comp_reaction (
   primary key (entity, user, reaction)
 ) strict;
 
-create index if not exists idx_comp_last_read_timestamp on comp_last_read(timestamp);
+create index if not exists idx_comp_last_read_last_read on comp_last_read(last_read);
 
 -- OpenMeet calendar integration
 create table if not exists comp_calendar_link (

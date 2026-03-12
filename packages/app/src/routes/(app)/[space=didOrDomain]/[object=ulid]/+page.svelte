@@ -80,7 +80,7 @@
       'name', name,
       'kind', r.label,
       'spaceId', e.stream_id,
-      'lastRead', coalesce(l.timestamp, 1)
+      'lastRead', coalesce(l.last_read, 0)
     ) as json
     from entities e
       join comp_info i on i.entity = e.id
@@ -108,7 +108,6 @@
       return;
     sentLastReadMarker = true;
     setPageReadMarker({
-      personalStreamId: peerStatus.roomyState?.personalSpace,
       streamId: spaceId,
       roomId: Ulid.assert(page.params.object),
     });
@@ -177,15 +176,13 @@
       peerStatus.authState.state !== "authenticated" ||
       !page.params.space ||
       !page.params.object ||
-      !room?.lastRead
+      room?.lastRead == null
     )
       return;
     peer.runQuery(
       sql`update comp_last_read set unread_count = 0 where entity = ${page.params.object}`,
     );
-    const elapsed = Date.now() - room.lastRead;
-    if (elapsed < 1000 * 60 * 5) return;
-    setTimeout(setPageRead, 1000);
+    setPageRead();
   });
 </script>
 

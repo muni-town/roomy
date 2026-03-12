@@ -66,6 +66,7 @@ export type PeerInterface = {
   deleteLiveQuery(id: string): Promise<void>;
   sendEvent(streamId: StreamDid, event: Event): Promise<void>;
   sendEventBatch(streamId: StreamDid, events: Event[]): Promise<void>;
+  sendStateEvent(streamId: StreamDid, event: Event): Promise<void>;
   fetchEvents(
     streamId: StreamDid,
     offset: number,

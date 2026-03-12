@@ -464,6 +464,14 @@ export class ConnectedSpace {
   }
 
   /**
+   * Send a state event to this space.
+   * State events are not persisted to the stream — they only update the state database.
+   */
+  async sendStateEvent(event: Event): Promise<void> {
+    await this.#leaf.sendStateEvents(this.streamDid, [encode(event)]);
+  }
+
+  /**
    * Current backfill status.
    */
   get backfillStatus(): BackfillStatus {

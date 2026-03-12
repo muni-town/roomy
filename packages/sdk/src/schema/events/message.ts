@@ -118,14 +118,10 @@ export const CreateMessage = defineEvent(
           ${canonicalTimestamp}
         )`,
       sql`
-        insert into comp_last_read (entity, timestamp, unread_count)
-          values (${event.room}, 1, 1)
+        insert into comp_last_read (entity, last_read, unread_count)
+          values (${event.room}, 0, 1)
           on conflict(entity) do update set
-            unread_count = case
-              when ${canonicalTimestamp} > comp_last_read.timestamp
-              then comp_last_read.unread_count + 1
-              else comp_last_read.unread_count
-            end,
+            unread_count = comp_last_read.unread_count + 1,
             updated_at = (unixepoch() * 1000)
       `,
     ];

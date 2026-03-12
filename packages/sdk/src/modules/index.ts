@@ -479,12 +479,23 @@ const spaceModuleDef: BasicModule = {
                   'name', r.name,
                   'description', r.description,
                   'avatar', r.avatar,
+                  'messageCount', r.message_count,
+                  'lastRead', coalesce(
+                    (select last_read from state.reads
+                     where user_did = $requesting_user and room_id = r.id),
+                    0
+                  ),
                   'threads', (
                     select json_group_array(
                       json_object(
                         'id', t.id,
                         'name', t.name,
-                        'messageCount', t.message_count
+                        'messageCount', t.message_count,
+                        'lastRead', coalesce(
+                          (select last_read from state.reads
+                           where user_did = $requesting_user and room_id = t.id),
+                          0
+                        )
                       )
                     )
                     from (

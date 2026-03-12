@@ -68,38 +68,5 @@ export const SetUserProfile = defineEvent(
   },
 );
 
-const SetLastReadSchema = type({
-  $type: "'space.roomy.space.personal.setLastRead.v0'",
-  streamDid: StreamDid.describe("The stream containing the room"),
-  roomId: Ulid.describe("The room being marked as read"),
-}).describe(
-  "Mark a room as read. \
-Sent to the user's personal stream to track when they last visited a room. \
-The event's ULID timestamp encodes when the room was read.",
-);
-
-export const SetLastRead = defineEvent(SetLastReadSchema, ({ event }) => {
-  // Extract timestamp from the event's ULID
-  const timestamp = decodeTime(event.id);
-
-  return [
-    // Ensure the room entity exists in the target stream
-    // Note: we use event.streamDid here, not the wrapper's streamId
-    ensureEntity(event.streamDid, event.roomId),
-    // Insert or update the last read timestamp
-    sql`
-        insert into comp_last_read (entity, timestamp, unread_count)
-        values (${event.roomId}, ${timestamp}, 0)
-        on conflict(entity) do update set
-          timestamp = excluded.timestamp,
-          updated_at = excluded.timestamp,
-          unread_count = excluded.unread_count
-      `,
-  ];
-});
-
 // All user events
-export const UserEventVariant = type.or(
-  SetUserProfileSchema,
-  SetLastReadSchema,
-);
+export const UserEventVariant = type.or(SetUserProfileSchema);

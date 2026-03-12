@@ -55,7 +55,7 @@ export {
   SetHandleProvider as SetHandle,
 } from "./space";
 export { EditPage } from "./page";
-export { SetUserProfile, SetLastRead } from "./user";
+export { SetUserProfile } from "./user";
 export { CreateRoomLink, RemoveRoomLink } from "./link";
 export { SetCalendarLink } from "./calendar";
 export { MarkRead } from "./state";

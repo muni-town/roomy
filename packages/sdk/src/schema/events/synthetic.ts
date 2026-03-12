@@ -38,6 +38,7 @@ const ThreadType = type({
   id: "string",
   name: "string | null",
   messageCount: "number",
+  lastRead: "number",
 });
 
 const ChannelType = type({
@@ -45,6 +46,8 @@ const ChannelType = type({
   name: "string | null",
   description: "string | null",
   avatar: "string | null",
+  messageCount: "number",
+  lastRead: "number",
   threads: type.or(ThreadType.array(), "null"),
 });
 
@@ -158,6 +161,17 @@ export const SpaceMetaSynthetic = defineEvent(
           on conflict(entity) do update set
             label = excluded.label,
             deleted = 0,
+            updated_at = excluded.updated_at
+        `);
+
+        // Unread tracking
+        const unreadCount = channel.messageCount - channel.lastRead;
+        statements.push(sql`
+          insert into comp_last_read (entity, last_read, unread_count, created_at, updated_at)
+          values (${channel.id}, ${channel.lastRead}, ${unreadCount}, ${timestamp}, ${timestamp})
+          on conflict(entity) do update set
+            last_read = excluded.last_read,
+            unread_count = excluded.unread_count,
             updated_at = excluded.updated_at
         `);
 

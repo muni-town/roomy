@@ -31,7 +31,7 @@ import {
 } from "./space";
 import { MarkRead } from "./state";
 import { DefinedEvent, MaterializeFn } from "./types";
-import { SetUserProfile, SetLastRead } from "./user";
+import { SetUserProfile } from "./user";
 import { SetCalendarLink } from "./calendar";
 
 /** Registry of all defined events by their $type */
@@ -62,7 +62,6 @@ export const eventRegistry = {
   "space.roomy.space.setHandleProvider.v0": SetHandleProvider,
   "space.roomy.page.editPage.v0": EditPage,
   "space.roomy.user.updateProfile.v0": SetUserProfile,
-  "space.roomy.space.personal.setLastRead.v0": SetLastRead,
   "space.roomy.link.createRoomLink.v0": CreateRoomLink,
   "space.roomy.link.removeRoomLink.v0": RemoveRoomLink,
   "space.roomy.openmeet.configure.v0": SetCalendarLink,

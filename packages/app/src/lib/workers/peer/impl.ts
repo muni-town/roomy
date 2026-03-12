@@ -245,6 +245,9 @@ export class Peer {
         await this.client.leaf.sendEvent(streamId, encode(event));
         await materialized;
       },
+      sendStateEvent: async (streamId: string, event: Event) => {
+        await this.client.leaf.sendStateEvents(streamId, [encode(event)]);
+      },
       sendEventBatch: async (streamId, payloads) => {
         // Create promises for each event that resolve when materialized
         const materializedPromises = payloads.map(
