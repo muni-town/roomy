@@ -22,10 +22,7 @@ import type {
 import type { DiscordBot, DiscordEvent } from "./discord/types.js";
 import { MessageSyncService } from "./services/MessageSyncService.js";
 import { ReactionSyncService } from "./services/ReactionSyncService.js";
-import {
-  ProfileSyncService,
-  type DiscordUser,
-} from "./services/ProfileSyncService.js";
+import { ProfileSyncService } from "./services/ProfileSyncService.js";
 import { StructureSyncService } from "./services/StructureSyncService.js";
 import { getRepo } from "./repositories/LevelDBBridgeRepository.js";
 import { recordError, setRoomyAttrs, tracer } from "./tracing.js";
@@ -464,6 +461,8 @@ export class Bridge {
 
     // Internal batch queue for Discord → Roomy events
     const batchQueue: Event[] = [];
+    // Flag to prevent consumer loop from sending events during flush
+    let flushing = false;
 
     /**
      * Flush the batch queue to Roomy.
@@ -471,15 +470,30 @@ export class Bridge {
     const flushBatch = async (): Promise<void> => {
       if (batchQueue.length === 0) return;
 
-      const events = batchQueue.splice(0, batchQueue.length);
-      await this.connectedSpace.sendEvents(events);
-      console.log(
-        `[Dispatcher] Flushed batch of ${events.length} events to Roomy`,
-      );
+      flushing = true;
+      try {
+        const events = batchQueue.splice(0, batchQueue.length);
+        await this.connectedSpace.sendEvents(events);
+        console.log(
+          `[Dispatcher] Flushed batch of ${events.length} events to Roomy`,
+        );
+      } catch (error) {
+        console.error(`[Dispatcher] Error flushing batch to Roomy:`, error);
+        throw error;
+      } finally {
+        flushing = false;
+      }
     };
 
-    this.state.transitionedTo("syncRoomyToDiscord").then(() => {
-      flushBatch();
+    this.state.transitionedTo("syncRoomyToDiscord").then(async () => {
+      try {
+        await flushBatch();
+      } catch (error) {
+        console.error(
+          `[Dispatcher] Failed to flush batch during state transition:`,
+          error,
+        );
+      }
     });
 
     /**
@@ -489,6 +503,14 @@ export class Bridge {
     console.log("starting consumer");
     (async () => {
       for await (const event of this.dispatcher.toRoomy) {
+        // Wait if a flush is in progress to prevent event loss/duplication
+        if (flushing) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          // Re-queue the event by pushing it back to the channel
+          this.dispatcher.toRoomy.push(event);
+          continue;
+        }
+
         console.log("sending event to roomy", event.id, event.$type);
         const currentState = this.state.current.state;
 
