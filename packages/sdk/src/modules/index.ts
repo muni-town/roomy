@@ -346,14 +346,14 @@ const spaceModuleDef: BasicModule = {
 
     -- Track room membership for events
     -- Also store Discord origin if present (for bridged messages/reactions)
-    insert or ignore into room_events (idx, room, discord_origin)
+    insert into room_events (idx, room, discord_origin)
     select
       idx,
       drisl_extract(payload, '.room'),
       -- For bridged messages: check authorOverride extension
       coalesce(
         -- Message events with authorOverride extension
-        drisl_extract(payload, '.extensions.space\.roomy\.extension\.authorOverride\.v0.did'),
+        drisl_extract(payload, '.extensions."space.roomy.extension.authorOverride.v0".did'),
         -- Bridged reaction events: check reactingUser field
         case
           when drisl_extract(payload, '.$type') in (
@@ -366,7 +366,10 @@ const spaceModuleDef: BasicModule = {
         end
       )
     from event
-    where drisl_extract(payload, '.room') is not null;
+    where drisl_extract(payload, '.room') is not null
+    on conflict(idx) do update set
+      discord_origin = excluded.discord_origin
+      where room_events.discord_origin is null and excluded.discord_origin is not null;
 
     -- Increment message count for createMessage events
     update rooms
@@ -413,10 +416,10 @@ const spaceModuleDef: BasicModule = {
     
     -- Update handle from Discord extension if provided
     update members
-    set handle = (select drisl_extract(payload, '.extensions.space\.roomy\.extension\.discordUserOrigin\.v0.handle') from event)
+    set handle = (select drisl_extract(payload, '.extensions."space.roomy.extension.discordUserOrigin.v0".handle') from event)
     where user_id = (select drisl_extract(payload, '.did') from event)
       and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.user.updateProfile.v0'
-      and (select drisl_exists(payload, '.extensions.space\.roomy\.extension\.discordUserOrigin\.v0.handle') from event) = 1;
+      and (select drisl_exists(payload, '.extensions."space.roomy.extension.discordUserOrigin.v0".handle') from event) = 1;
   `,
 
   stateMaterializer: `

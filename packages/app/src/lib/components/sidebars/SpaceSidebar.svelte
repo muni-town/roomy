@@ -183,10 +183,6 @@
     );
   });
 
-  $effect(() => {
-    console.log("SIDEBAR", { cats: $state.snapshot(categories) });
-  });
-
   // Update handlers to work with the new structure
   function handleCategoryReorder(newCategories: SidebarCategoryType[]) {
     draftOrder = newCategories.map((c) => ({
