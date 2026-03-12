@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Avatar } from "bits-ui";
   import { AvatarBeam } from "svelte-boring-avatars";
-  import { IconReply } from "@roomy/design/icons";
+  import { IconReplyLine } from "@roomy/design/icons";
   import { LiveQuery } from "$lib/utils/liveQuery.svelte";
   import { sql } from "$lib/utils/sqlTemplate";
   import type { Message } from "../ChatArea.svelte";
@@ -44,31 +44,31 @@
   });
 </script>
 
-<div class="flex md:basis-auto gap-2 items-center shrink-0">
-  <IconReply width="12px" height="12px" />
-  {#if contextMessage && (contextMessage.authorAvatar || contextMessage.authorDid)}
-    <Avatar.Root class="w-4 h-4">
-      <Avatar.Image
-        src={contextMessage?.authorAvatar}
-        class="rounded-full"
-      />
-      <Avatar.Fallback>
-        <AvatarBeam
-          size={16}
-          name={contextMessage?.authorDid || ""}
-        />
-      </Avatar.Fallback>
-    </Avatar.Root>
-  {/if}
-  {#if contextMessage && contextMessage.authorName}
-    <span
-      class="font-medium text-ellipsis text-accent-800 dark:text-accent-300"
-      aria-label="Replying to"
-    >
-      {contextMessage?.authorName || ""}
-    </span>
-  {/if}
-</div>
-<div class="line-clamp-1 md:basis-auto overflow-hidden italic">
-  {@html renderMarkdownPlaintext(contextMessage?.content ?? "")}
-</div>
+{#if contextMessage}
+  <div class="flex md:basis-auto gap-1 items-center shrink-0">
+    <IconReplyLine
+      width="28px"
+      height="12px"
+      class="relative -bottom-1 ml-2 mr-1 left-0.75 stroke-black/25 dark:stroke-white/50 dark:stroke-1"
+    />
+    {#if contextMessage.authorAvatar || contextMessage.authorDid}
+      <Avatar.Root class="w-4 h-4">
+        <Avatar.Image src={contextMessage?.authorAvatar} class="rounded-full" />
+        <Avatar.Fallback>
+          <AvatarBeam size={16} name={contextMessage?.authorDid || ""} />
+        </Avatar.Fallback>
+      </Avatar.Root>
+    {/if}
+    {#if contextMessage.authorName}
+      <span
+        class="font-medium text-ellipsis text-accent-700 dark:text-accent-300"
+        aria-label="Replying to"
+      >
+        {contextMessage?.authorName || ""}
+      </span>
+    {/if}
+  </div>
+  <div class="line-clamp-1 md:basis-auto overflow-hidden italic">
+    {@html renderMarkdownPlaintext(contextMessage?.content ?? "")}
+  </div>
+{/if}

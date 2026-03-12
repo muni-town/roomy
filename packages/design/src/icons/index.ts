@@ -54,3 +54,4 @@ export { default as IconSquaresPlus } from "~icons/heroicons/squares-plus"
 // Special
 export { default as IconSqlQuery } from "~icons/mdi/sql-query"
 export { default as IconThread } from "~icons/custom/thread"
+export { default as IconReplyLine } from "~icons/custom/reply-line"

@@ -50,7 +50,7 @@
   {/if}
 {/snippet}
 
-<div class="inline-flex min-w-0 flex-col gap-1 w-full max-w-full shrink pb-4">
+<div class="inline-flex min-w-0 flex-col w-full max-w-full shrink pb-4">
   <div
     class="inline-flex items-start justify-between gap-2 w-full shrink group"
   >
@@ -63,7 +63,7 @@
       }}
     >
       <span
-        class="truncate font-regular text-base-600 dark:text-base-400 text-xs tracking-wide whitespace-nowrap overflow-hidden min-w-0"
+        class="truncate font-regular text-base-600 dark:text-base-400 text-sm tracking-wide whitespace-nowrap overflow-hidden min-w-0"
         >{category.name}</span
       >
       {#if !isEditing}

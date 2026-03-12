@@ -329,6 +329,7 @@
           prevMessage &&
           message.authorDid &&
           prevMessage.authorDid === message.authorDid &&
+          !message.replyTo.length &&
           message.timestamp - prevMessage.timestamp < 1000 * 60 * 5
         ) {
           mergeWithPrevious = true;

@@ -59,7 +59,7 @@
         scrollToMessage(context.replyTo.id);
       }
     }}
-    class="cursor-pointer flex gap-2 text-sm text-start items-center pl-2 pr-4 py-1 bg-base-300/20 dark:bg-base-400/5 w-full rounded-xl"
+    class="cursor-pointer flex gap-2 text-sm text-start items-center pl-2 pr-4 py-1 w-full"
   >
     {#if context.kind === "replying"}
       <MessageContextReply replyToId={context.replyTo.id} />
