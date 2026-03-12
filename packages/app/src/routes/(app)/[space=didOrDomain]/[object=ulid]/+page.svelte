@@ -179,10 +179,12 @@
       room?.lastRead == null
     )
       return;
+    // Clear unread count locally for immediate UI update.
+    // The server-side markRead is sent on navigate-away to avoid
+    // racing with lazyLoadRoom on the same stream.
     peer.runQuery(
       sql`update comp_last_read set unread_count = 0 where entity = ${page.params.object}`,
     );
-    setPageRead();
   });
 </script>
 

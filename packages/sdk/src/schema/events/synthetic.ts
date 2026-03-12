@@ -38,7 +38,7 @@ const ThreadType = type({
   id: "string",
   name: "string | null",
   messageCount: "number",
-  lastRead: "number",
+  "lastRead?": "number",
 });
 
 const ChannelType = type({
@@ -46,8 +46,8 @@ const ChannelType = type({
   name: "string | null",
   description: "string | null",
   avatar: "string | null",
-  messageCount: "number",
-  lastRead: "number",
+  "messageCount?": "number",
+  "lastRead?": "number",
   threads: type.or(ThreadType.array(), "null"),
 });
 
@@ -164,16 +164,18 @@ export const SpaceMetaSynthetic = defineEvent(
             updated_at = excluded.updated_at
         `);
 
-        // Unread tracking
-        const unreadCount = channel.messageCount - channel.lastRead;
-        statements.push(sql`
-          insert into comp_last_read (entity, last_read, unread_count, created_at, updated_at)
-          values (${channel.id}, ${channel.lastRead}, ${unreadCount}, ${timestamp}, ${timestamp})
-          on conflict(entity) do update set
-            last_read = excluded.last_read,
-            unread_count = excluded.unread_count,
-            updated_at = excluded.updated_at
-        `);
+        // Unread tracking (only if server provides the data)
+        if (channel.messageCount != null && channel.lastRead != null) {
+          const unreadCount = channel.messageCount! - channel.lastRead!;
+          statements.push(sql`
+            insert into comp_last_read (entity, last_read, unread_count, created_at, updated_at)
+            values (${channel.id}, ${channel.lastRead}, ${unreadCount}, ${timestamp}, ${timestamp})
+            on conflict(entity) do update set
+              last_read = excluded.last_read,
+              unread_count = excluded.unread_count,
+              updated_at = excluded.updated_at
+          `);
+        }
 
         // Channel info (optional)
         if (channel.name || channel.avatar || channel.description) {
@@ -208,6 +210,19 @@ export const SpaceMetaSynthetic = defineEvent(
                 label = excluded.label,
                 updated_at = excluded.updated_at
             `);
+
+            // Thread unread tracking
+            if (thread.messageCount != null && thread.lastRead != null) {
+              const threadUnread = thread.messageCount - thread.lastRead;
+              statements.push(sql`
+                insert into comp_last_read (entity, last_read, unread_count, created_at, updated_at)
+                values (${thread.id}, ${thread.lastRead}, ${threadUnread}, ${timestamp}, ${timestamp})
+                on conflict(entity) do update set
+                  last_read = excluded.last_read,
+                  unread_count = excluded.unread_count,
+                  updated_at = excluded.updated_at
+              `);
+            }
 
             // Thread info
             if (thread.name) {

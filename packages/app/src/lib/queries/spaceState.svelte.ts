@@ -20,10 +20,15 @@ type MetadataRow = {
 type SidebarQueryRow = {
   id: string | null;
   name: string;
-  children: { id: Ulid; name: string }[];
+  children: { id: Ulid; name: string; unreadCount: number; lastRead: number }[];
 };
 
-type ChannelQueryRow = { id: Ulid; name: string };
+type ChannelQueryRow = {
+  id: Ulid;
+  name: string;
+  unreadCount: number;
+  lastRead: number;
+};
 
 // ─── Logging ──────────────────────────────────────────────────────────────────
 
@@ -88,7 +93,13 @@ export class SpaceState {
           'id', categories.value -> 'id',
           'name', categories.value -> 'name',
           'children', json_group_array(
-            json_object('name', child_info.name, 'id', child_info.entity, 'deleted', child_room.deleted)
+            json_object(
+              'name', child_info.name,
+              'id', child_info.entity,
+              'deleted', child_room.deleted,
+              'unreadCount', coalesce(child_read.unread_count, 0),
+              'lastRead', coalesce(child_read.last_read, 0)
+            )
             ORDER BY children.key
           )
         ) as json
@@ -98,6 +109,7 @@ export class SpaceState {
         left join json_each(categories.value -> 'children') as children
         left join comp_info child_info on child_info.entity = children.value
         left join comp_room child_room on child_room.entity = children.value
+        left join comp_last_read child_read on child_read.entity = children.value
         where space.entity = ${spaceId}
           and coalesce(child_room.deleted, 0) = 0
         group by categories.key, categories.value -> 'name'
@@ -109,9 +121,15 @@ export class SpaceState {
     // All channels query
     this.#allChannelsQuery = new LiveQuery(
       () => sql`
-        select id, name from entities e
+        select
+          e.id,
+          i.name,
+          coalesce(lr.unread_count, 0) as unreadCount,
+          coalesce(lr.last_read, 0) as lastRead
+        from entities e
         join comp_room r on e.id = r.entity
         join comp_info i on e.id = i.entity
+        left join comp_last_read lr on e.id = lr.entity
         where
           label = 'space.roomy.channel'
             and
@@ -205,10 +223,10 @@ export class SpaceState {
                   type: "space.roomy.channel",
                   id: c.id,
                   name: c.name,
-                  lastRead: 0,
+                  lastRead: c.lastRead ?? 0,
                   latestEntity: 0,
                   sortIdx: "",
-                  unreadCount: 0,
+                  unreadCount: c.unreadCount ?? 0,
                 })),
             } satisfies SidebarCategory;
           });
@@ -233,14 +251,14 @@ export class SpaceState {
         const orphans = [...orphanChannels]
           .map((id) => channelsQuery.result?.find((x) => x.id == id))
           .filter((x) => !!x)
-          .map(({ id, name }) => ({
+          .map(({ id, name, unreadCount, lastRead }) => ({
             id,
             name,
             type: "space.roomy.channel" as const,
-            lastRead: 0,
+            lastRead,
             latestEntity: 0,
             sortIdx: "",
-            unreadCount: 0,
+            unreadCount,
           }));
 
         if (orphans.length > 0) {

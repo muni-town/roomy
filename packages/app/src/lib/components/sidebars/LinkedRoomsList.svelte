@@ -7,6 +7,7 @@
   import Button from "$lib/components/ui/button/Button.svelte";
   import { IconThread } from "@roomy/design/icons";
   import { getAppState } from "$lib/queries";
+  import { flags } from "$lib/config";
 
   const app = getAppState();
 
@@ -18,14 +19,16 @@
 
   const spaceDid = $derived(app.joinedSpace?.id);
 
-  let query = new LiveQuery<{ name: string; id: Ulid }>(
+  let query = new LiveQuery<{ name: string; id: Ulid; unreadCount: number }>(
     () => sql`
-      SELECT ci.name, room.entity as id, MAX(m.id) as last_message_id
+      SELECT ci.name, room.entity as id, MAX(m.id) as last_message_id,
+        coalesce(lr.unread_count, 0) as unreadCount
       FROM entities parent_e
       JOIN edges link ON link.head = parent_e.id AND link.label = 'link'
       JOIN comp_room room ON link.tail = room.entity
       JOIN comp_info ci ON ci.entity = room.entity
       LEFT JOIN entities m ON m.room = room.entity
+      LEFT JOIN comp_last_read lr ON lr.entity = room.entity
       WHERE parent_e.stream_id = ${spaceDid}
         AND parent_e.id = ${roomId}
       GROUP BY room.entity, ci.name
@@ -43,6 +46,10 @@
     // if (activeRoom) rooms.unshift(activeRoom);
     // return rooms;
   });
+
+  $effect(() => {
+    console.log("threads", $state.snapshot(linkedRooms));
+  });
 </script>
 
 {#if linkedRooms && linkedRooms.length}
@@ -50,10 +57,14 @@
     class="flex flex-col items-start justify-between w-full min-w-0 group pl-3"
   >
     {#each linkedRooms as room}
+      {@const hasUnreads =
+        flags.unreadNotifications &&
+        room.unreadCount > 0 &&
+        room.id !== page.params.object}
       <div class="inline-flex w-full items-start justify-between min-w-0">
         <div class="max-h-4 overflow-visible">
           <IconThread
-            class="shrink-0 stroke-[0.6] stroke-base-500 h-[1.85rem] -mt-2 ml-[2px] -mr-[2px]"
+            class="shrink-0 stroke-[0.6] stroke-base-500 h-[1.85rem] -mt-2 ml-0.5 -mr-0.5"
           />
         </div>
         <Button
@@ -67,16 +78,17 @@
           class="justify-start min-w-0 w-full rounded-full p-1 pl-2 text-base-600 hover:bg-transparent"
           data-current={room.id === page.params.object}
         >
-          <!-- {#if isSubthread}<IconTablerCornerDownRight />{:else}
-        <IconHeroiconsHashtag class="shrink-0" />{/if} -->
-
           <span
-            class="truncate whitespace-nowrap overflow-hidden min-w-0 font-normal"
+            class={`truncate whitespace-nowrap overflow-hidden min-w-0 ${hasUnreads ? "font-medium" : "font-normal"}`}
             >{room.name}</span
           >
-          <!-- {#if item.type === "space.roomy.page"}<div class="ml-auto">
-          <IconHeroiconsDocument class="opacity-60 shrink" />
-        </div>{/if} -->
+          {#if hasUnreads}
+            <span
+              aria-label="Unread message count"
+              class="font-light opacity-60 ml-auto text-xs"
+              >{room.unreadCount}</span
+            >
+          {/if}
         </Button>
       </div>
     {/each}

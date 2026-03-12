@@ -5,6 +5,7 @@
   import Button from "$lib/components/ui/button/Button.svelte";
   // import { atprotoFeedService } from "$lib/services/atprotoFeedService";
   import type { SidebarItem } from "$lib/queries";
+  import { flags } from "$lib/config";
 
   import {
     IconPencil,
@@ -30,9 +31,7 @@
 
   // let showEditModal = $state(false);
   // let editName = $state(item.name);
-  // TODO: actually handle unreads & subthreads
-  let hasUnread = $state(false);
-  let isSubthread = $state(false);
+  let hasUnread = $derived(flags.unreadNotifications && item.unreadCount > 0);
   // let notificationCount = 0;
 
   const itemActive = $derived(
@@ -51,13 +50,7 @@
     >
       <IconPencil class="size-4" />
     </Button>
-  {:else if item.type === "space.roomy.category"}{:else if !itemActive && item.unreadCount > 0}
-    <Badge>
-      {item.unreadCount}
-    </Badge>
-  {:else if !itemActive && item.lastRead === 1 && item.unreadCount > 0}
-    <Badge>🌟</Badge>
-  {/if}
+  {:else if item.type === "space.roomy.category"}{/if}
 {/snippet}
 
 {#if item.type == "space.roomy.channel"}
@@ -74,18 +67,25 @@
         class="w-full justify-start min-w-0"
         data-current={item.id === page.params.object && !isEditing}
       >
+        <IconHashtag class="shrink-0" />
         {#if hasUnread && !isEditing}
           <div
-            class="size-1.5 rounded-full bg-accent-500 absolute left-1.5 top-1.5"
+            aria-label="Has unread messages"
+            class="size-1.25 rounded-full bg-accent-500 absolute left-2.5 top-1.5"
           ></div>
         {/if}
-        {#if isSubthread}<IconCornerDownRight />{:else}
-          <IconHashtag class="shrink-0" />{/if}
         <span
           class={[
             "truncate whitespace-nowrap overflow-hidden min-w-0 font-semibold",
           ]}>{item.name}</span
         >
+        {#if flags.unreadNotifications && !itemActive && item.unreadCount > 0}
+          <span
+            aria-label="Unread message count"
+            class="font-light opacity-60 ml-auto text-xs"
+            >{item.unreadCount}</span
+          >
+        {/if}
       </Button>
       {@render editButton?.()}
     </div>
