@@ -7,9 +7,14 @@
   import InlineMono from "$lib/components/helper/InlineMono.svelte";
   import { IconCopy } from "@roomy/design/icons";
   import { getAppState } from "$lib/queries";
+  import { peer } from "$lib/workers";
+  import { newUlid, type Event } from "@roomy/sdk";
   const app = getAppState();
 
   const space = $derived(app.joinedSpace?.id);
+
+  // Discord bridge bot DID that needs admin access
+  const BRIDGE_BOT_DID = "did:plc:vjztjtisourrydgksg44u7fe";
 
   let bridgeStatus:
     | { type: "checking" }
@@ -44,12 +49,18 @@
         const data: { guildId?: string } = await gResp.json();
         guildId = data.guildId;
       }
-      // TODO: Check if bridge has write permissions to the space
+
+      // Check if the bridge bot has admin permissions
+      const currentSpaceState = app.currentSpaceState;
+      const hasAdminAccess = currentSpaceState?.permissions.some(
+        ([did, permission]) => did === BRIDGE_BOT_DID && permission === "admin",
+      ) ?? false;
+
       bridgeStatus = {
         type: "loaded",
         appId: info.discordAppId,
         guildId,
-        hasFullWritePermissions: false,
+        hasFullWritePermissions: hasAdminAccess,
       };
     } catch (e) {
       bridgeStatus = {
@@ -59,16 +70,61 @@
   }
 
   async function grantBotPermissions() {
-    // if (bridgeStatus.type != "loaded" || !space.current) return;
-    // await makeSpaceAdmin(bridgeStatus.bridgeJazzAccount, space.current);
-    updateBridgeStatus();
-    toast.success("Successfully granted bot permissions.");
+    if (!space) {
+      toast.error("No space selected");
+      return;
+    }
+
+    try {
+      // Send addAdmin event to make the bridge bot an admin
+      const event: Event = {
+        id: newUlid(),
+        $type: "space.roomy.space.addAdmin.v0",
+        userDid: BRIDGE_BOT_DID,
+      };
+
+      await peer.sendEvent(space, event);
+
+      // Update status to reflect the change
+      bridgeStatus =
+        bridgeStatus.type === "loaded"
+          ? { ...bridgeStatus, hasFullWritePermissions: true }
+          : bridgeStatus;
+
+      toast.success("Successfully granted bot permissions.");
+    } catch (error) {
+      console.error("Failed to grant bot permissions:", error);
+      toast.error("Failed to grant bot permissions. Please try again.");
+    }
   }
+
   async function revokeBotPermissions() {
-    // if (bridgeStatus.type != "loaded" || !space.current) return;
-    // await revokeSpaceAdmin(bridgeStatus.bridgeJazzAccount, space.current);
-    updateBridgeStatus();
-    toast.success("Revoked granted bot permissions.");
+    if (!space) {
+      toast.error("No space selected");
+      return;
+    }
+
+    try {
+      // Send removeAdmin event to revoke bridge bot admin access
+      const event: Event = {
+        id: newUlid(),
+        $type: "space.roomy.space.removeAdmin.v0",
+        userDid: BRIDGE_BOT_DID,
+      };
+
+      await peer.sendEvent(space, event);
+
+      // Update status to reflect the change
+      bridgeStatus =
+        bridgeStatus.type === "loaded"
+          ? { ...bridgeStatus, hasFullWritePermissions: false }
+          : bridgeStatus;
+
+      toast.success("Revoked granted bot permissions.");
+    } catch (error) {
+      console.error("Failed to revoke bot permissions:", error);
+      toast.error("Failed to revoke bot permissions. Please try again.");
+    }
   }
 
   async function copyToClipboard(text: string) {
