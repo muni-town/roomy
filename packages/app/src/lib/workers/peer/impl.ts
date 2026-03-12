@@ -42,6 +42,7 @@ import {
   stateMachine,
   type StateMachine,
   Deferred,
+  Handle,
 } from "@roomy/sdk";
 import {
   AsyncChannel,
@@ -296,6 +297,10 @@ export class Peer {
           handle: resp.handle,
         };
       },
+      resolveUserDidFromHandle: async (handle) => {
+        const { client } = await this.#roomy.transitionedTo("connected");
+        return await client.resolveUserDidFromHandle(handle as Handle);
+      },
       checkSpaceExists: async (_spaceId) =>
         // TODO: right now we actually don't have a way check for stream existence in the API. This
         // should make sure things mostly work for now, but should be fixed later. The only impact
@@ -335,6 +340,50 @@ export class Peer {
               x.user_id.value.startsWith("did:web"))
           ) {
             return [Did.assert(x.user_id.value)];
+          }
+          return [];
+        });
+
+        const memberDidChunks = arrayChunks(memberDids, 25);
+
+        const profiles = (
+          await Promise.all(
+            memberDidChunks.map(async (dids) => {
+              const resp = await this.client.agent.getProfiles({
+                actors: dids,
+              });
+              return resp.data.profiles;
+            }),
+          )
+        )
+          .filter((x) => !!x)
+          .flat();
+
+        return profiles.map((p) => {
+          let { did, avatar, displayName, handle } = p;
+          return {
+            did,
+            avatar,
+            name: displayName,
+            handle,
+          };
+        });
+      },
+      getBans: async (spaceDid) => {
+        const { client } = await this.#roomy.transitionedTo("connected");
+        // TODO: we should move this logic to the SDK
+        const resp = await client.leaf.query(spaceDid, {
+          name: "bans",
+          params: {},
+        });
+
+        const memberDids = resp.flatMap((x) => {
+          if (
+            x.user_did?.$type == "muni.town.sqliteValue.text" &&
+            (x.user_did.value.startsWith("did:plc") ||
+              x.user_did.value.startsWith("did:web"))
+          ) {
+            return [Did.assert(x.user_did.value)];
           }
           return [];
         });

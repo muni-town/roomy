@@ -255,6 +255,36 @@ export const UpdateSidebar = defineEvent(
   },
 );
 
+const BanAccountSchema = type({
+  $type: "'space.roomy.space.banAccount.v0'",
+  userDid: UserDid.describe("The user to ban."),
+}).describe("Ban an account so they may not send events in this stream.");
+
+export const BanAccount = defineEvent(BanAccountSchema, ({streamId, event: { userDid }}) => {
+  return [
+    sql`
+      insert into comp_bans (entity, user_did)
+      values (${streamId}, ${userDid})
+    `,
+  ];
+});
+
+const UnbanAccountSchema = type({
+  $type: "'space.roomy.space.unbanAccount.v0'",
+  userDid: UserDid.describe("The user to unban."),
+}).describe(
+  "Unban a previously banned account so that they may send events in this stream again.",
+);
+
+export const UnbanAccount = defineEvent(UnbanAccountSchema, ({streamId, event: { userDid }}) => {
+  return [
+    sql`
+      delete from comp_bans
+      where entity = ${streamId} and user_did = ${userDid}
+    `,
+  ];
+});
+
 const AddAdminSchema = type({
   $type: "'space.roomy.space.addAdmin.v0'",
   userDid: UserDid.describe("The user to add as an admin."),
@@ -329,4 +359,6 @@ export const SpaceEventVariant = type.or(
   UpdateSpaceInfoSchema,
   UpdateSidebarSchemaV0,
   UpdateSidebarSchema,
+  BanAccountSchema,
+  UnbanAccountSchema,
 );

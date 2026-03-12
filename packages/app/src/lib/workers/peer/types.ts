@@ -49,6 +49,11 @@ export type PeerInterface = {
   ): Promise<
     { did: string; handle?: string; name?: string; avatar?: string }[]
   >;
+  getBans(
+    spaceDid: StreamDid,
+  ): Promise<
+    { did: string; handle?: string; name?: string; avatar?: string }[]
+  >;
   getSpaceInfo(
     streamDid: StreamDid,
   ): Promise<{ name?: string; avatar?: string } | undefined>;
@@ -92,6 +97,7 @@ export type PeerInterface = {
     spaceId: StreamDid;
     handle?: Handle;
   }>;
+  resolveUserDidFromHandle(handle: string): Promise<UserDid | undefined>;
   checkSpaceExists(spaceId: StreamDid): Promise<boolean>;
   isSpaceReady(spaceId: StreamDid): Promise<boolean>;
   setProfileSpace(spaceId: StreamDid | null): Promise<void>;

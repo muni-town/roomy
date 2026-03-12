@@ -21,6 +21,10 @@
       label: "Handle",
       slug: "handle",
     },
+    {
+      label: "Bans",
+      slug: "bans",
+    },
   ];
   if (flags.discordImport) {
     sidebarLinks.push({

@@ -114,6 +114,10 @@ const spaceModuleDef: BasicModule = {
     insert into stream_info (type) select 'space.roomy.space.space'
       where not exists (select 1 from stream_info);
 
+    create table if not exists bans (
+      user_did text not null primary key
+    ) strict;
+
     create table if not exists space_info (
       name text,
       avatar text,
@@ -196,6 +200,9 @@ const spaceModuleDef: BasicModule = {
   `.sql,
 
   authorizer: sql`
+    -- Banned users cannot do anything
+    select unauthorized('Your account has been banned from this space.')
+    where exists (select 1 from bans where user_did = (select user from event));
     -- No admins yet - only allow admin.add (bootstrap)
     with event_info as (
       select
@@ -424,7 +431,20 @@ const spaceModuleDef: BasicModule = {
       and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.user.updateProfile.v0'
       and (select drisl_exists(payload, '.avatar') from event) = 1;
 
-    
+
+    -- Ban a user
+    insert or ignore into bans (user_did)
+    select drisl_extract(payload, '.userDid') from event
+    where
+      (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.banAccount.v0';
+
+    -- Unban a user
+    delete from bans
+    where
+      (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.unbanAccount.v0'
+        and
+      user_did = (select drisl_extract(payload, '.userDid') from event);
+
     -- Update handle from Discord extension if provided
     update members
     set handle = (select drisl_extract(payload, '.extensions."space.roomy.extension.discordUserOrigin.v0".handle') from event)
@@ -465,6 +485,11 @@ const spaceModuleDef: BasicModule = {
     {
       name: "admins",
       sql: `select * from admins;`,
+      params: [],
+    },
+    {
+      name: "bans",
+      sql: `select * from bans`,
       params: [],
     },
     {
