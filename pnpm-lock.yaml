@@ -69,23 +69,23 @@ importers:
         specifier: ^5.4.0
         version: 5.4.0
       '@foxui/colors':
-        specifier: ^0.5.0
-        version: 0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)
+        specifier: ^0.6.0
+        version: 0.6.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       '@foxui/core':
-        specifier: ^0.5.0
-        version: 0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)
+        specifier: ^0.6.0
+        version: 0.6.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       '@foxui/social':
-        specifier: ^0.5.0
-        version: 0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)
+        specifier: ^0.6.0
+        version: 0.6.3(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(@tiptap/extension-code-block@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extensions@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(highlight.js@11.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       '@foxui/text':
-        specifier: ^0.5.0
-        version: 0.5.0(@floating-ui/dom@1.7.4)(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(@tiptap/extension-code-block@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extension-floating-menu@3.20.0(@floating-ui/dom@1.7.4)(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extensions@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(highlight.js@11.11.1)(svelte@5.53.0)(tailwindcss@4.2.1)
+        specifier: ^0.6.0
+        version: 0.6.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(@tiptap/extension-code-block@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extensions@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(highlight.js@11.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       '@foxui/time':
-        specifier: ^0.5.0
-        version: 0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)
+        specifier: ^0.6.0
+        version: 0.6.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       '@foxui/visual':
-        specifier: ^0.5.0
-        version: 0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)
+        specifier: ^0.6.0
+        version: 0.6.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       '@tiptap/extension-bubble-menu':
         specifier: ^3.9.0
         version: 3.9.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
@@ -544,16 +544,25 @@ packages:
   '@ark/util@0.56.0':
     resolution: {integrity: sha512-BghfRC8b9pNs3vBoDJhcta0/c1J1rsoS1+HgVUreMFPdhz/CRAKReAu57YEllNaSy98rWAdY1gE+gFup7OXpgA==}
 
+  '@atcute/atproto@3.1.10':
+    resolution: {integrity: sha512-+GKZpOc0PJcdWMQEkTfg/rSNDAAHxmAUGBl60g2az15etqJn5WaUPNGFE2sB7hKpwi5Ue2h/L0OacINcE/JDDQ==}
+
   '@atcute/bluesky-richtext-segmenter@1.0.5':
     resolution: {integrity: sha512-D0FfmJVwppky9naL1OGKcQjtgO0lDLhkG4iCQHpShuHhEZ9FUdf3eUb/eQpVRNJGaJ4ShjEOHA6FlAizcjMkGQ==}
     peerDependencies:
       '@atcute/bluesky': ^1.0.0
       '@atcute/client': ^1.0.0 || ^2.0.0
 
+  '@atcute/bluesky-richtext-segmenter@3.0.0':
+    resolution: {integrity: sha512-NhZTUKtFpeBBbILwAcxj5u4RobIoHOmGw3CAaaEFNebKYSvmTecrXJ7XufHw5DFOUdr8SiKXQVRQxGAxulMNWg==}
+
   '@atcute/bluesky@1.0.15':
     resolution: {integrity: sha512-+EFiybmKQ97aBAgtaD+cKRJER5AMn3cZMkEwEg/pDdWyzxYJ9m1UgemmLdTgI8VrxPufKqdXS2nl7uO7TY6BPA==}
     peerDependencies:
       '@atcute/client': ^1.0.0 || ^2.0.0
+
+  '@atcute/bluesky@3.3.0':
+    resolution: {integrity: sha512-TrLnlxuD6F/D2ZYzJ3aCiRD0yiFuhmVsd6oULNzzr8V9Xzlufg0yxkRiGmbMiF2iI508y/MFi6vzo625301c5A==}
 
   '@atcute/cbor@2.2.8':
     resolution: {integrity: sha512-UzOAN9BuN6JCXgn0ryV8qZuRJUDrNqrbLd6EFM8jc6RYssjRyGRxNy6RZ1NU/07Hd8Tq/0pz8+nQiMu5Zai5uw==}
@@ -573,11 +582,20 @@ packages:
   '@atcute/lexicons@1.2.5':
     resolution: {integrity: sha512-9yO9WdgxW8jZ7SbzUycH710z+JmsQ9W9n5S6i6eghYju32kkluFmgBeS47r8e8p2+Dv4DemS7o/3SUGsX9FR5Q==}
 
+  '@atcute/lexicons@1.2.9':
+    resolution: {integrity: sha512-/RRHm2Cw9o8Mcsrq0eo8fjS9okKYLGfuFwrQ0YoP/6sdSDsXshaTLJsvLlcUcaDaSJ1YFOuHIo3zr2Om2F/16g==}
+
   '@atcute/multibase@1.1.6':
     resolution: {integrity: sha512-HBxuCgYLKPPxETV0Rot4VP9e24vKl8JdzGCZOVsDaOXJgbRZoRIF67Lp0H/OgnJeH/Xpva8Z5ReoTNJE5dn3kg==}
 
   '@atcute/uint8array@1.0.6':
     resolution: {integrity: sha512-ucfRBQc7BFT8n9eCyGOzDHEMKF/nZwhS2pPao4Xtab1ML3HdFYcX2DM1tadCzas85QTGxHe5urnUAAcNKGRi9A==}
+
+  '@atcute/uint8array@1.1.1':
+    resolution: {integrity: sha512-3LsC8XB8TKe9q/5hOA5sFuzGaIFdJZJNewC5OKa3o/eU6+K7JR6see9Zy2JbQERNVnRl11EzbNov1efgLMAs4g==}
+
+  '@atcute/util-text@1.1.1':
+    resolution: {integrity: sha512-JH0SxzUQJAmbOBTYyhxQbkkI6M33YpjlVLEcbP5GYt43xgFArzV0FJVmEpvIj0kjsmphHB45b6IitdvxPdec9w==}
 
   '@atproto-labs/did-resolver@0.2.1':
     resolution: {integrity: sha512-zSoHyqwwRYUtMNLW+RrWsImt1U5S47nJv5FfmAXTmon6wVKjxKD/PFrD1pg/4G6THqJmQHTs1Hj+54XVupYnvQ==}
@@ -612,14 +630,8 @@ packages:
   '@atproto/api@0.14.22':
     resolution: {integrity: sha512-ziXPau+sUdFovObSnsoN7JbOmUw1C5e5L28/yXf3P8vbEnSS3HVVGD1jYcscBYY34xQqi4bVDpwMYx/4yRsTuQ==}
 
-  '@atproto/api@0.18.21':
-    resolution: {integrity: sha512-s35MIJerGT/pKe2xJtKKswqlIr/ola2r2iURBKBL0Mk1OKe6jP4YvTMh1N2d2PEANFzNNTbKoDaLfJPo2Uvc/w==}
-
   '@atproto/common-web@0.4.12':
     resolution: {integrity: sha512-3aCJemqM/fkHQrVPbTCHCdiVstKFI+2LkFLvUhO6XZP0EqUZa/rg/CIZBKTFUWu9I5iYiaEiXL9VwcDRpEevSw==}
-
-  '@atproto/common-web@0.4.17':
-    resolution: {integrity: sha512-sfxD8NGxyoxhxmM9EUshEFbWcJ3+JHEOZF4Quk6HsCh1UxpHBmLabT/vEsAkDWl+C/8U0ine0+c/gHyE/OZiQQ==}
 
   '@atproto/common-web@0.4.3':
     resolution: {integrity: sha512-nRDINmSe4VycJzPo6fP/hEltBcULFxt9Kw7fQk6405FyAWZiTluYHlXOnU7GkQfeUK44OENG1qFTBcmCJ7e8pg==}
@@ -645,14 +657,8 @@ packages:
   '@atproto/jwk@0.6.0':
     resolution: {integrity: sha512-bDoJPvt7TrQVi/rBfBrSSpGykhtIriKxeYCYQTiPRKFfyRhbgpElF0wPXADjIswnbzZdOwbY63az4E/CFVT3Tw==}
 
-  '@atproto/lex-data@0.0.12':
-    resolution: {integrity: sha512-aekJudcK1p6sbTqUv2bJMJBAGZaOJS0mgDclpK3U6VuBREK/au4B6ffunBFWgrDfg0Vwj2JGyEA7E51WZkJcRw==}
-
   '@atproto/lex-data@0.0.8':
     resolution: {integrity: sha512-1Y5tz7BkS7380QuLNXaE8GW8Xba+mRWugt8BKM4BUFYjjUZdmirU8lr72iM4XlEBrzRu8Cfvj+MbsbYaZv+IgA==}
-
-  '@atproto/lex-json@0.0.12':
-    resolution: {integrity: sha512-XlEpnWWZdDJ5BIgG25GyH+6iBfyrFL18BI5JSE6rUfMObbFMrQRaCuRLQfryRXNysVz3L3U+Qb9y8KcXbE8AcA==}
 
   '@atproto/lex-json@0.0.8':
     resolution: {integrity: sha512-w1Qmkae1QhmNz+i1Zm3xr3jp0UPPRENmdlpU0qIrdxWDo9W4Mzkeyc3eSoa+Zs+zN8xkRSQw7RLZte/B7Ipdwg==}
@@ -665,9 +671,6 @@ packages:
 
   '@atproto/lexicon@0.6.0':
     resolution: {integrity: sha512-5veb8aD+J5M0qszLJ+73KSFsFrJBgAY/nM1TSAJvGY7fNc9ZAT+PSUlmIyrdye9YznAZ07yktalls/TwNV7cHQ==}
-
-  '@atproto/lexicon@0.6.1':
-    resolution: {integrity: sha512-/vI1kVlY50Si+5MXpvOucelnYwb0UJ6Qto5mCp+7Q5C+Jtp+SoSykAPVvjVtTnQUH2vrKOFOwpb3C375vSKzXw==}
 
   '@atproto/oauth-client-browser@0.3.39':
     resolution: {integrity: sha512-71TWoPzshfAo7qFdwjE8yYQwUyvVoSFFcyFKChz1wM623GdOW0CSELmQ8JJLQrcCT74GWQUImt9gSmU/bjQ1YA==}
@@ -689,9 +692,6 @@ packages:
 
   '@atproto/syntax@0.4.2':
     resolution: {integrity: sha512-X9XSRPinBy/0VQ677j8VXlBsYSsUXaiqxWVpGGxJYsAhugdQRb0jqaVKJFtm6RskeNkV6y9xclSUi9UYG/COrA==}
-
-  '@atproto/syntax@0.4.3':
-    resolution: {integrity: sha512-YoZUz40YAJr5nPwvCDWgodEOlt5IftZqPJvA0JDWjuZKD8yXddTwSzXSaKQAzGOpuM+/A3uXRtPzJJqlScc+iA==}
 
   '@atproto/xrpc@0.6.12':
     resolution: {integrity: sha512-Ut3iISNLujlmY9Gu8sNU+SPDJDvqlVzWddU8qUr0Yae5oD4SguaUFjjhireMGhQ3M5E0KljQgDbTmnBo1kIZ3w==}
@@ -1264,38 +1264,38 @@ packages:
   '@floating-ui/utils@0.2.10':
     resolution: {integrity: sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==}
 
-  '@foxui/colors@0.5.0':
-    resolution: {integrity: sha512-d5j/gefodi2egZ/yQMqwHIb76AZyy1hQPvgOOflnhqKdXzwkI8b9xeASMCB/KaHUzHwPn9F/Ke6oFlV4hNDkBg==}
+  '@foxui/colors@0.6.0':
+    resolution: {integrity: sha512-GcJXJkLExY+zkQ9AwK1Dz0cIK6gu2w/pj27XtcwNfEsKxTGFm644JcK+vfrhQkDICSMVdFgCVgwau8Rxl6cdkw==}
     peerDependencies:
       svelte: '>=5'
       tailwindcss: '>=3'
 
-  '@foxui/core@0.5.0':
-    resolution: {integrity: sha512-iXOsAjcEmdI6ZUI1+cdy+hvN5ggggOvs5tm8YD+sSr+ADtmV/RPwFiNA8eyom4T/jzTWEPL3pbxcd1nnflzY0w==}
+  '@foxui/core@0.6.2':
+    resolution: {integrity: sha512-h3BQN+QUev9NumQsg3VlyaTRuddnBLo20JEQOIoWXpnL0kwr96WZyKwruL7XWea+k63c+wadd5eKuc+A6+DMmA==}
     peerDependencies:
       svelte: '>=5'
       tailwindcss: '>=3'
 
-  '@foxui/social@0.5.0':
-    resolution: {integrity: sha512-TdYCywt8GOb7Ii9pZLMesEk+8uVFqWXgNIFpifkox7ix3o188UEpBMjd+y5FlJeH4gz7Juqu1Vm4k9tQaqqubQ==}
+  '@foxui/social@0.6.3':
+    resolution: {integrity: sha512-UY1AuRXopsVNYzokqg9N2/Qx1lalrZWmWIu24UK2vWkxF8Fy0trlWKBLj0TZGlFhxVFiOQ6ZOvCSUDy/hjAmFw==}
     peerDependencies:
       svelte: '>=5'
       tailwindcss: '>=3'
 
-  '@foxui/text@0.5.0':
-    resolution: {integrity: sha512-Gg2OND4Xdb/Pc2yk5nSdBRxG1AdZojXIjwGc23UJlkdcGu7FBKXr399O/nf/lnTX8H6dFqELzz1GF5iwCVb9JQ==}
+  '@foxui/text@0.6.0':
+    resolution: {integrity: sha512-b5k1VPUgV5RPjFLmrQa80SUDac6ZpUCJTNMItfqp3WuyWebvFsMD6vgcmgGXU7kSTombvvAPEoxqBq2a7pxSsQ==}
     peerDependencies:
       svelte: '>=5'
       tailwindcss: '>=3'
 
-  '@foxui/time@0.5.0':
-    resolution: {integrity: sha512-1LBqJNbvFIJ3Olj7H3kapZBgnJG/lYwYoa6pve2gQQIS4tXkSlFgFMZvPlqDN/wL3u+qVnlfWy/MStbqtRKDAg==}
+  '@foxui/time@0.6.0':
+    resolution: {integrity: sha512-gzsgV3jzfLgp6fA/yAOPWOAnQlMcieoqqKyep71nsb70tV1fivmfkQlz7WrwpTXVphfWdZ4FlvGJlJLRGJCKtg==}
     peerDependencies:
       svelte: '>=5'
       tailwindcss: '>=3'
 
-  '@foxui/visual@0.5.0':
-    resolution: {integrity: sha512-0zvx2t5wR3W2fHecr5ZkvYosRLAgGfLl6fkLB/ZizRst2RlXcDK9nkCi/AH2i5YxBnP92fLu4KWyFu0o3QC07w==}
+  '@foxui/visual@0.6.0':
+    resolution: {integrity: sha512-jpWMl5v4EFXAQPxiylHfDahdJnVt7a6k3GGi2ekOD0Pt3sVjThmuzDjcdmpUewAYm1fOXInIEvEgdMzTeJxN3w==}
     peerDependencies:
       svelte: '>=5'
       tailwindcss: '>=3'
@@ -2031,6 +2031,9 @@ packages:
   '@standard-schema/spec@1.0.0':
     resolution: {integrity: sha512-m2bOd0f2RT9k8QJx1JN85cZYyH1RqFBdlwtkSlf4tBDYLCiiZnv1fIIwacK6cqwXavOydf0NPToMQgpKq+dVlA==}
 
+  '@standard-schema/spec@1.1.0':
+    resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
   '@sveltejs/acorn-typescript@1.0.5':
     resolution: {integrity: sha512-IwQk4yfwLdibDlrXVE04jTZYlLnwsTT2PIOQQGNLWfjavGifnk1JD1LcZjZaBTRcxZu2FfPfNLOE04DSu9lqtQ==}
     peerDependencies:
@@ -2659,6 +2662,12 @@ packages:
     peerDependencies:
       '@tiptap/core': ^2.7.0
       '@tiptap/pm': ^2.7.0
+
+  '@tiptap/markdown@3.20.1':
+    resolution: {integrity: sha512-dNrtP7kmabDomgjv9G/6+JSFL6WraPaFbmKh1eHSYKdDGvIwBfJnVPTV2VS3bP1OuYJEDJN/2ydtiCHyOTrQsQ==}
+    peerDependencies:
+      '@tiptap/core': ^3.20.1
+      '@tiptap/pm': ^3.20.1
 
   '@tiptap/pm@2.26.1':
     resolution: {integrity: sha512-8aF+mY/vSHbGFqyG663ds84b+vca5Lge3tHdTMTKazxCnhXR9dn2oQJMnZ78YZvdRbkPkMJJHti9h3K7u2UQvw==}
@@ -3292,6 +3301,9 @@ packages:
 
   dompurify@3.3.0:
     resolution: {integrity: sha512-r+f6MYR1gGN1eJv0TVQbhA7if/U7P87cdPl3HN5rikqaBSBxLiCb/b9O+2eG0cxz0ghyU+mU1QkbsOwERMYlWQ==}
+
+  dompurify@3.3.3:
+    resolution: {integrity: sha512-Oj6pzI2+RqBfFG+qOaOLbFXLQ90ARpcGG6UePL82bJLtdsa6CYJD7nmiU8MW9nQNOtCHV3lZ/Bzq1X0QYbBZCA==}
 
   domutils@3.2.2:
     resolution: {integrity: sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==}
@@ -3993,6 +4005,11 @@ packages:
   marked@15.0.12:
     resolution: {integrity: sha512-8dD6FusOQSrpv9Z1rdNMdlSgQOIP880DHqnohobOmYLElGEqAL/JvxvuxZO16r4HtjTlfPRDC1hbvxC9dPN2nA==}
     engines: {node: '>= 18'}
+    hasBin: true
+
+  marked@17.0.4:
+    resolution: {integrity: sha512-NOmVMM+KAokHMvjWmC5N/ZOvgmSWuqJB8FoYI019j4ogb/PeRMKoKIjReZ2w3376kkA8dSJIP8uD993Kxc0iRQ==}
+    engines: {node: '>= 20'}
     hasBin: true
 
   maybe-combine-errors@1.0.0:
@@ -5160,6 +5177,23 @@ packages:
   w3c-keyname@2.2.8:
     resolution: {integrity: sha512-dpojBhNsCNN7T82Tm7k26A6G9ML3NkhDsnw9n/eoxSRlVBB4CEtIQ/KTCLI2Fwf3ataSXRhYFkQi3SlnFwPvPQ==}
 
+  web-haptics@0.0.6:
+    resolution: {integrity: sha512-eCzcf1LDi20+Fr0x9V3OkX92k0gxEQXaHajmhXHitsnk6SxPeshv8TBtBRqxyst8HI1uf2FyFVE7QS3jo1gkrw==}
+    peerDependencies:
+      react: '>=18'
+      react-dom: '>=18'
+      svelte: '>=4'
+      vue: '>=3'
+    peerDependenciesMeta:
+      react:
+        optional: true
+      react-dom:
+        optional: true
+      svelte:
+        optional: true
+      vue:
+        optional: true
+
   web-vitals@5.1.0:
     resolution: {integrity: sha512-ArI3kx5jI0atlTtmV0fWU3fjpLmq/nD3Zr1iFFlJLaqa5wLBkUSzINwBPySCX/8jRyjlmy1Volw1kz1g9XE4Jg==}
 
@@ -5295,14 +5329,25 @@ snapshots:
 
   '@ark/util@0.56.0': {}
 
+  '@atcute/atproto@3.1.10':
+    dependencies:
+      '@atcute/lexicons': 1.2.9
+
   '@atcute/bluesky-richtext-segmenter@1.0.5(@atcute/bluesky@1.0.15(@atcute/client@2.0.9))(@atcute/client@2.0.9)':
     dependencies:
       '@atcute/bluesky': 1.0.15(@atcute/client@2.0.9)
       '@atcute/client': 2.0.9
 
+  '@atcute/bluesky-richtext-segmenter@3.0.0': {}
+
   '@atcute/bluesky@1.0.15(@atcute/client@2.0.9)':
     dependencies:
       '@atcute/client': 2.0.9
+
+  '@atcute/bluesky@3.3.0':
+    dependencies:
+      '@atcute/atproto': 3.1.10
+      '@atcute/lexicons': 1.2.9
 
   '@atcute/cbor@2.2.8':
     dependencies:
@@ -5333,11 +5378,24 @@ snapshots:
       '@standard-schema/spec': 1.0.0
       esm-env: 1.2.2
 
+  '@atcute/lexicons@1.2.9':
+    dependencies:
+      '@atcute/uint8array': 1.1.1
+      '@atcute/util-text': 1.1.1
+      '@standard-schema/spec': 1.1.0
+      esm-env: 1.2.2
+
   '@atcute/multibase@1.1.6':
     dependencies:
       '@atcute/uint8array': 1.0.6
 
   '@atcute/uint8array@1.0.6': {}
+
+  '@atcute/uint8array@1.1.1': {}
+
+  '@atcute/util-text@1.1.1':
+    dependencies:
+      unicode-segmenter: 0.14.5
 
   '@atproto-labs/did-resolver@0.2.1':
     dependencies:
@@ -5405,28 +5463,10 @@ snapshots:
       tlds: 1.260.0
       zod: 3.25.76
 
-  '@atproto/api@0.18.21':
-    dependencies:
-      '@atproto/common-web': 0.4.17
-      '@atproto/lexicon': 0.6.1
-      '@atproto/syntax': 0.4.3
-      '@atproto/xrpc': 0.7.7
-      await-lock: 2.2.2
-      multiformats: 9.9.0
-      tlds: 1.260.0
-      zod: 3.25.76
-
   '@atproto/common-web@0.4.12':
     dependencies:
       '@atproto/lex-data': 0.0.8
       '@atproto/lex-json': 0.0.8
-      zod: 3.25.76
-
-  '@atproto/common-web@0.4.17':
-    dependencies:
-      '@atproto/lex-data': 0.0.12
-      '@atproto/lex-json': 0.0.12
-      '@atproto/syntax': 0.4.3
       zod: 3.25.76
 
   '@atproto/common-web@0.4.3':
@@ -5470,13 +5510,6 @@ snapshots:
       multiformats: 9.9.0
       zod: 3.25.76
 
-  '@atproto/lex-data@0.0.12':
-    dependencies:
-      multiformats: 9.9.0
-      tslib: 2.8.1
-      uint8arrays: 3.0.0
-      unicode-segmenter: 0.14.5
-
   '@atproto/lex-data@0.0.8':
     dependencies:
       '@atproto/syntax': 0.4.2
@@ -5484,11 +5517,6 @@ snapshots:
       tslib: 2.8.1
       uint8arrays: 3.0.0
       unicode-segmenter: 0.14.5
-
-  '@atproto/lex-json@0.0.12':
-    dependencies:
-      '@atproto/lex-data': 0.0.12
-      tslib: 2.8.1
 
   '@atproto/lex-json@0.0.8':
     dependencies:
@@ -5515,14 +5543,6 @@ snapshots:
     dependencies:
       '@atproto/common-web': 0.4.12
       '@atproto/syntax': 0.4.2
-      iso-datestring-validator: 2.2.2
-      multiformats: 9.9.0
-      zod: 3.25.76
-
-  '@atproto/lexicon@0.6.1':
-    dependencies:
-      '@atproto/common-web': 0.4.17
-      '@atproto/syntax': 0.4.3
       iso-datestring-validator: 2.2.2
       multiformats: 9.9.0
       zod: 3.25.76
@@ -5584,10 +5604,6 @@ snapshots:
   '@atproto/syntax@0.4.1': {}
 
   '@atproto/syntax@0.4.2': {}
-
-  '@atproto/syntax@0.4.3':
-    dependencies:
-      tslib: 2.8.1
 
   '@atproto/xrpc@0.6.12':
     dependencies:
@@ -5963,9 +5979,9 @@ snapshots:
 
   '@floating-ui/utils@0.2.10': {}
 
-  '@foxui/colors@0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)':
+  '@foxui/colors@0.6.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)':
     dependencies:
-      '@foxui/core': 0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)
+      '@foxui/core': 0.6.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       '@texel/color': 1.1.11
       '@use-gesture/vanilla': 10.3.1
       bits-ui: 2.16.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
@@ -5974,27 +5990,37 @@ snapshots:
     transitivePeerDependencies:
       - '@internationalized/date'
       - '@sveltejs/kit'
+      - react
+      - react-dom
+      - vue
 
-  '@foxui/core@0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)':
+  '@foxui/core@0.6.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)':
     dependencies:
       '@number-flow/svelte': 0.3.13(svelte@5.53.0)
       bits-ui: 2.16.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
       clsx: 2.1.1
+      dompurify: 3.3.3
       mode-watcher: 1.1.0(svelte@5.53.0)
       svelte: 5.53.0
       svelte-sonner: 1.0.7(svelte@5.53.0)
       tailwind-merge: 3.5.0
       tailwind-variants: 3.2.2(tailwind-merge@3.5.0)(tailwindcss@4.2.1)
       tailwindcss: 4.2.1
+      web-haptics: 0.0.6(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)
     transitivePeerDependencies:
       - '@internationalized/date'
       - '@sveltejs/kit'
+      - react
+      - react-dom
+      - vue
 
-  '@foxui/social@0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)':
+  '@foxui/social@0.6.3(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(@tiptap/extension-code-block@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extensions@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(highlight.js@11.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)':
     dependencies:
-      '@atproto/api': 0.18.21
-      '@foxui/core': 0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)
-      '@foxui/time': 0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)
+      '@atcute/bluesky': 3.3.0
+      '@atcute/bluesky-richtext-segmenter': 3.0.0
+      '@foxui/core': 0.6.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
+      '@foxui/text': 0.6.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(@tiptap/extension-code-block@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extensions@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(highlight.js@11.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
+      '@foxui/time': 0.6.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       '@use-gesture/vanilla': 10.3.1
       bits-ui: 2.16.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
       emoji-picker-element: 1.29.0
@@ -6006,15 +6032,23 @@ snapshots:
     transitivePeerDependencies:
       - '@internationalized/date'
       - '@sveltejs/kit'
+      - '@tiptap/extension-code-block'
+      - '@tiptap/extensions'
+      - highlight.js
+      - react
+      - react-dom
+      - vue
 
-  '@foxui/text@0.5.0(@floating-ui/dom@1.7.4)(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(@tiptap/extension-code-block@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extension-floating-menu@3.20.0(@floating-ui/dom@1.7.4)(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extensions@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(highlight.js@11.11.1)(svelte@5.53.0)(tailwindcss@4.2.1)':
+  '@foxui/text@0.6.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(@tiptap/extension-code-block@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/extensions@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(highlight.js@11.11.1)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)':
     dependencies:
-      '@foxui/core': 0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)
+      '@floating-ui/dom': 1.7.4
+      '@foxui/core': 0.6.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       '@tiptap/core': 3.20.0(@tiptap/pm@3.20.0)
       '@tiptap/extension-bubble-menu': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)
       '@tiptap/extension-code-block-lowlight': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/extension-code-block@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/pm@3.20.0)(highlight.js@11.11.1)(lowlight@3.3.0)
       '@tiptap/extension-document': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))
       '@tiptap/extension-dropcursor': 3.20.0(@tiptap/extensions@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))
+      '@tiptap/extension-floating-menu': 3.20.0(@floating-ui/dom@1.7.4)(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)
       '@tiptap/extension-history': 3.20.0(@tiptap/extensions@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))
       '@tiptap/extension-image': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))
       '@tiptap/extension-link': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)
@@ -6024,6 +6058,7 @@ snapshots:
       '@tiptap/extension-text': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))
       '@tiptap/extension-typography': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))
       '@tiptap/extension-underline': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))
+      '@tiptap/markdown': 3.20.1(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)
       '@tiptap/pm': 3.20.0
       '@tiptap/starter-kit': 3.20.0
       '@tiptap/suggestion': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)
@@ -6033,19 +6068,19 @@ snapshots:
       svelte: 5.53.0
       svelte-tiptap: 3.0.1(@floating-ui/dom@1.7.4)(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/extension-bubble-menu@3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0))(@tiptap/extension-floating-menu@3.20.0(@floating-ui/dom@1.7.4)(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))(@tiptap/pm@3.20.0)(svelte@5.53.0)
       tailwindcss: 4.2.1
-      tippy.js: 6.3.7
     transitivePeerDependencies:
-      - '@floating-ui/dom'
       - '@internationalized/date'
       - '@sveltejs/kit'
       - '@tiptap/extension-code-block'
-      - '@tiptap/extension-floating-menu'
       - '@tiptap/extensions'
       - highlight.js
+      - react
+      - react-dom
+      - vue
 
-  '@foxui/time@0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)':
+  '@foxui/time@0.6.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)':
     dependencies:
-      '@foxui/core': 0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)
+      '@foxui/core': 0.6.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       '@number-flow/svelte': 0.3.13(svelte@5.53.0)
       bits-ui: 2.16.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
       svelte: 5.53.0
@@ -6053,11 +6088,14 @@ snapshots:
     transitivePeerDependencies:
       - '@internationalized/date'
       - '@sveltejs/kit'
+      - react
+      - react-dom
+      - vue
 
-  '@foxui/visual@0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)':
+  '@foxui/visual@0.6.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)':
     dependencies:
-      '@foxui/colors': 0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)
-      '@foxui/core': 0.5.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(tailwindcss@4.2.1)
+      '@foxui/colors': 0.6.0(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
+      '@foxui/core': 0.6.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0)(tailwindcss@4.2.1)
       bits-ui: 2.16.2(@internationalized/date@3.9.0)(@sveltejs/kit@2.49.3(@opentelemetry/api@1.9.0)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.53.0)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)(typescript@5.9.2)(vite@6.3.6(@types/node@24.8.1)(jiti@2.5.1)(lightningcss@1.30.1)(tsx@4.20.3)(yaml@2.8.1)))(svelte@5.53.0)
       canvas-confetti: 1.9.4
       cheerio: 1.2.0
@@ -6066,6 +6104,9 @@ snapshots:
     transitivePeerDependencies:
       - '@internationalized/date'
       - '@sveltejs/kit'
+      - react
+      - react-dom
+      - vue
 
   '@grafana/faro-core@2.0.2(patch_hash=0c2fbb3354b915b96fed1726148702fafe6ede67ec42f61d54eaa52421dce4b6)':
     dependencies:
@@ -6858,6 +6899,8 @@ snapshots:
 
   '@standard-schema/spec@1.0.0': {}
 
+  '@standard-schema/spec@1.1.0': {}
+
   '@sveltejs/acorn-typescript@1.0.5(acorn@8.15.0)':
     dependencies:
       acorn: 8.15.0
@@ -7171,7 +7214,7 @@ snapshots:
     dependencies:
       '@tiptap/core': 2.26.1(@tiptap/pm@2.26.1)
 
-  '@tiptap/extension-bullet-list@3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0))':
+  '@tiptap/extension-bullet-list@3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))':
     dependencies:
       '@tiptap/extension-list': 3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
 
@@ -7228,6 +7271,12 @@ snapshots:
       '@floating-ui/dom': 1.7.4
       '@tiptap/core': 2.26.1(@tiptap/pm@2.26.1)
       '@tiptap/pm': 2.26.1
+
+  '@tiptap/extension-floating-menu@3.20.0(@floating-ui/dom@1.7.4)(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)':
+    dependencies:
+      '@floating-ui/dom': 1.7.4
+      '@tiptap/core': 3.20.0(@tiptap/pm@3.20.0)
+      '@tiptap/pm': 3.20.0
 
   '@tiptap/extension-gapcursor@2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)':
     dependencies:
@@ -7305,11 +7354,11 @@ snapshots:
     dependencies:
       '@tiptap/core': 2.26.1(@tiptap/pm@2.26.1)
 
-  '@tiptap/extension-list-item@3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0))':
+  '@tiptap/extension-list-item@3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))':
     dependencies:
       '@tiptap/extension-list': 3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
 
-  '@tiptap/extension-list-keymap@3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0))':
+  '@tiptap/extension-list-keymap@3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))':
     dependencies:
       '@tiptap/extension-list': 3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
 
@@ -7317,6 +7366,11 @@ snapshots:
     dependencies:
       '@tiptap/core': 2.26.1(@tiptap/pm@2.26.1)
       '@tiptap/pm': 2.26.1
+
+  '@tiptap/extension-list@3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)':
+    dependencies:
+      '@tiptap/core': 3.20.0(@tiptap/pm@3.20.0)
+      '@tiptap/pm': 3.20.0
 
   '@tiptap/extension-mention@2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)(@tiptap/suggestion@2.26.1(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))':
     dependencies:
@@ -7328,7 +7382,7 @@ snapshots:
     dependencies:
       '@tiptap/core': 2.26.1(@tiptap/pm@2.26.1)
 
-  '@tiptap/extension-ordered-list@3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0))':
+  '@tiptap/extension-ordered-list@3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))':
     dependencies:
       '@tiptap/extension-list': 3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
 
@@ -7401,6 +7455,12 @@ snapshots:
       '@tiptap/pm': 2.26.1
       zeed-dom: 0.15.1
 
+  '@tiptap/markdown@3.20.1(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)':
+    dependencies:
+      '@tiptap/core': 3.20.0(@tiptap/pm@3.20.0)
+      '@tiptap/pm': 3.20.0
+      marked: 17.0.4
+
   '@tiptap/pm@2.26.1':
     dependencies:
       prosemirror-changeset: 2.3.1
@@ -7472,7 +7532,7 @@ snapshots:
       '@tiptap/core': 3.20.0(@tiptap/pm@3.20.0)
       '@tiptap/extension-blockquote': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))
       '@tiptap/extension-bold': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))
-      '@tiptap/extension-bullet-list': 3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0))
+      '@tiptap/extension-bullet-list': 3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))
       '@tiptap/extension-code': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))
       '@tiptap/extension-code-block': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)
       '@tiptap/extension-document': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))
@@ -7483,10 +7543,10 @@ snapshots:
       '@tiptap/extension-horizontal-rule': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)
       '@tiptap/extension-italic': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))
       '@tiptap/extension-link': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)
-      '@tiptap/extension-list': 3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1)
-      '@tiptap/extension-list-item': 3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0))
-      '@tiptap/extension-list-keymap': 3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0))
-      '@tiptap/extension-ordered-list': 3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0))
+      '@tiptap/extension-list': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))(@tiptap/pm@3.20.0)
+      '@tiptap/extension-list-item': 3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))
+      '@tiptap/extension-list-keymap': 3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))
+      '@tiptap/extension-ordered-list': 3.20.0(@tiptap/extension-list@3.20.0(@tiptap/core@2.26.1(@tiptap/pm@2.26.1))(@tiptap/pm@2.26.1))
       '@tiptap/extension-paragraph': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))
       '@tiptap/extension-strike': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))
       '@tiptap/extension-text': 3.20.0(@tiptap/core@3.20.0(@tiptap/pm@3.20.0))
@@ -8167,6 +8227,10 @@ snapshots:
       domelementtype: 2.3.0
 
   dompurify@3.3.0:
+    optionalDependencies:
+      '@types/trusted-types': 2.0.7
+
+  dompurify@3.3.3:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -8912,6 +8976,8 @@ snapshots:
       uc.micro: 2.1.0
 
   marked@15.0.12: {}
+
+  marked@17.0.4: {}
 
   maybe-combine-errors@1.0.0: {}
 
@@ -10159,6 +10225,12 @@ snapshots:
       - yaml
 
   w3c-keyname@2.2.8: {}
+
+  web-haptics@0.0.6(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(svelte@5.53.0):
+    optionalDependencies:
+      react: 19.0.0
+      react-dom: 19.0.0(react@19.0.0)
+      svelte: 5.53.0
 
   web-vitals@5.1.0: {}
 
