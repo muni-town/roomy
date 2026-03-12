@@ -1,15 +1,14 @@
 #!/bin/bash
 # subset-fonts.sh
-# Usage: ./subset-fonts.sh
+# Usage: ./subset-fonts.sh [hanken|sans-flex|all]
 # Requires: pip install fonttools brotli
-# 
-# This is what was used to reduce filesize for Google Sans Flex fonts. Need to revisit for i18n
-# Requires putting the input files in a 'static' subdirectory
+#
+# Subsets and converts fonts to woff2.
+# Run from: packages/app/static/fonts/
+#
+# Note: For i18n, revisit the UNICODES range.
 
 set -e
-
-INPUT_DIR="./static"
-OUTPUT_DIR="./subset"
 
 # Latin + Latin Extended + common symbols/punctuation
 # Mirrors what Google Fonts ships for latin + latin-ext
@@ -28,15 +27,15 @@ U+FEFF,U+FFFD"
 
 LAYOUT_FEATURES="kern,liga,clig,calt,ccmp,locl,mark,mkmk"
 
-mkdir -p "$OUTPUT_DIR"
-
-for ttf in "$INPUT_DIR"/GoogleSansFlex_9pt-*.ttf "$INPUT_DIR"/GoogleSansFlex_36pt-*.ttf; do
-  filename=$(basename "$ttf" .ttf)
-  output="$OUTPUT_DIR/${filename}.woff2"
+subset_font() {
+  local input="$1"
+  local output="$2"
+  local filename
+  filename=$(basename "$input")
 
   echo "Subsetting $filename..."
 
-  pyftsubset "$ttf" \
+  uvx --from fonttools --with brotli pyftsubset "$input" \
     --output-file="$output" \
     --flavor=woff2 \
     --unicodes="$UNICODES" \
@@ -44,10 +43,42 @@ for ttf in "$INPUT_DIR"/GoogleSansFlex_9pt-*.ttf "$INPUT_DIR"/GoogleSansFlex_36p
     --no-hinting \
     --desubroutinize
 
-  original=$(wc -c < "$ttf")
+  local original subsetted savings
+  original=$(wc -c < "$input")
   subsetted=$(wc -c < "$output")
   savings=$(( (original - subsetted) * 100 / original ))
   echo "  $original → $subsetted bytes ($savings% smaller)"
-done
+}
 
-echo "Done. Subsetted fonts in $OUTPUT_DIR"
+subset_hanken() {
+  echo "--- Hanken Grotesk ---"
+  local dir="./hanken-grotesk"
+  for ttf in "$dir"/HankenGrotesk-*.ttf; do
+    local filename
+    filename=$(basename "$ttf" .ttf)
+    subset_font "$ttf" "$dir/${filename}.woff2"
+  done
+}
+
+subset_sans_flex() {
+  echo "--- Google Sans Flex ---"
+  local input_dir="./sans-flex/static"
+  local output_dir="./sans-flex"
+  mkdir -p "$output_dir"
+  for ttf in "$input_dir"/GoogleSansFlex_9pt-*.ttf "$input_dir"/GoogleSansFlex_36pt-*.ttf; do
+    local filename
+    filename=$(basename "$ttf" .ttf)
+    subset_font "$ttf" "$output_dir/${filename}.woff2"
+  done
+}
+
+TARGET="${1:-all}"
+
+case "$TARGET" in
+  hanken)   subset_hanken ;;
+  sans-flex) subset_sans_flex ;;
+  all)      subset_hanken; subset_sans_flex ;;
+  *)        echo "Usage: $0 [hanken|sans-flex|all]"; exit 1 ;;
+esac
+
+echo "Done."
