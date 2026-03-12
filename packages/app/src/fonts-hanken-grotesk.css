@@ -130,3 +130,25 @@
   --font-sans: "Hanken Grotesk", system-ui, sans-serif;
   --font-display: "Hanken Grotesk", system-ui, sans-serif;
 }
+
+@layer utilities {
+  /* Ligatures */
+  .ligatures-common    { font-variant-ligatures: common-ligatures; }
+  .ligatures-none      { font-variant-ligatures: no-common-ligatures; }
+  .ligatures-contextual { font-variant-ligatures: contextual; }
+  .ligatures-all       { font-variant-ligatures: common-ligatures contextual; }
+
+  /* Contextual alternates (calt) — letterform adjustments based on neighbors */
+  .calt-on  { font-feature-settings: "calt" 1; }
+  .calt-off { font-feature-settings: "calt" 0; }
+
+  /* Numeric figures */
+  .nums-oldstyle   { font-variant-numeric: oldstyle-nums; }
+  .nums-lining     { font-variant-numeric: lining-nums; }
+  .nums-tabular    { font-variant-numeric: tabular-nums; }
+  .nums-proportional { font-variant-numeric: proportional-nums; }
+
+  /* Small caps */
+  .smallcaps       { font-variant-caps: small-caps; }
+  .all-smallcaps   { font-variant-caps: all-small-caps; }
+}

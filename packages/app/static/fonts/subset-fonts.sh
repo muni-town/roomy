@@ -1,6 +1,6 @@
 #!/bin/bash
 # subset-fonts.sh
-# Usage: ./subset-fonts.sh [hanken|sans-flex|all]
+# Usage: ./subset-fonts.sh [hanken|hanken-full|sans-flex|all]
 # Requires: pip install fonttools brotli
 #
 # Subsets and converts fonts to woff2.
@@ -27,6 +27,27 @@ U+FEFF,U+FFFD"
 
 LAYOUT_FEATURES="kern,liga,clig,calt,ccmp,locl,mark,mkmk"
 
+convert_font() {
+  local input="$1"
+  local output="$2"
+  local filename
+  filename=$(basename "$input")
+
+  echo "Converting $filename..."
+
+  uvx --from fonttools --with brotli pyftsubset "$input" \
+    --output-file="$output" \
+    --flavor=woff2 \
+    --unicodes="*" \
+    --layout-features="*"
+
+  local original converted savings
+  original=$(wc -c < "$input")
+  converted=$(wc -c < "$output")
+  savings=$(( (original - converted) * 100 / original ))
+  echo "  $original → $converted bytes ($savings% smaller)"
+}
+
 subset_font() {
   local input="$1"
   local output="$2"
@@ -50,8 +71,18 @@ subset_font() {
   echo "  $original → $subsetted bytes ($savings% smaller)"
 }
 
+convert_hanken() {
+  echo "--- Hanken Grotesk (full convert) ---"
+  local dir="./hanken-grotesk"
+  for ttf in "$dir"/HankenGrotesk-*.ttf; do
+    local filename
+    filename=$(basename "$ttf" .ttf)
+    convert_font "$ttf" "$dir/${filename}.woff2"
+  done
+}
+
 subset_hanken() {
-  echo "--- Hanken Grotesk ---"
+  echo "--- Hanken Grotesk (subsetted) ---"
   local dir="./hanken-grotesk"
   for ttf in "$dir"/HankenGrotesk-*.ttf; do
     local filename
@@ -75,10 +106,11 @@ subset_sans_flex() {
 TARGET="${1:-all}"
 
 case "$TARGET" in
-  hanken)   subset_hanken ;;
-  sans-flex) subset_sans_flex ;;
-  all)      subset_hanken; subset_sans_flex ;;
-  *)        echo "Usage: $0 [hanken|sans-flex|all]"; exit 1 ;;
+  hanken)         subset_hanken ;;
+  hanken-full)    convert_hanken ;;
+  sans-flex)      subset_sans_flex ;;
+  all)            subset_hanken; subset_sans_flex ;;
+  *)              echo "Usage: $0 [hanken|hanken-full|sans-flex|all]"; exit 1 ;;
 esac
 
 echo "Done."
