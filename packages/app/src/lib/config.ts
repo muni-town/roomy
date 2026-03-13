@@ -30,7 +30,7 @@ const CONFIG = {
     discordBridge: false,
     sharedWorker: false,
     calendar: true,
-    spaceMetaFastPath: false, // Use synthetic space_meta query for faster space initialization
+    spaceMetaFastPath: true, // Use synthetic space_meta query for faster space initialization
     roomDeletion: true, // Allow deleting channels from the edit modal
     unreadNotifications: true, // Show unread message counts in sidebar
   },

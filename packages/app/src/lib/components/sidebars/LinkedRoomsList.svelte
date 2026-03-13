@@ -52,10 +52,6 @@
     // if (activeRoom) rooms.unshift(activeRoom);
     // return rooms;
   });
-
-  $effect(() => {
-    console.log("threads", $state.snapshot(linkedRooms));
-  });
 </script>
 
 {#if linkedRooms && linkedRooms.length}
