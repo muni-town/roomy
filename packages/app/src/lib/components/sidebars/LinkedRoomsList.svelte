@@ -78,7 +78,7 @@
             "?parent=" +
             (page.url.searchParams.get("parent") || page.params.object)}
           variant="ghost"
-          class="justify-start min-w-0 w-full rounded-full p-1 pl-2 text-base-600 hover:bg-transparent"
+          class="justify-start min-w-0 w-full rounded-full p-0.75 pt-0.5 pl-2 text-base-600 hover:bg-transparent"
           data-current={room.id === page.params.object}
         >
           <span
@@ -88,7 +88,7 @@
           {#if hasUnreads}
             <span
               aria-label="Unread message count"
-              class="font-light opacity-60 ml-auto text-xs"
+              class="font-light opacity-60 ml-auto text-xs pr-2"
               >{room.unreadCount}</span
             >
           {/if}

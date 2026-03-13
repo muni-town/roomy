@@ -414,7 +414,7 @@
         ? "Yesterday at "
         : format(date, "P") + ", "}
   <time
-    class="text-[11px] nums-oldstyle align-middle font-medium text-base-700 dark:text-base-400"
+    class="text-[13px] align-middle font-medium text-base-700 dark:text-base-400"
   >
     {formattedDate}{format(date, "p")}
   </time>

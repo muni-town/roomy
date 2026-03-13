@@ -63,7 +63,7 @@
       }}
     >
       <span
-        class="truncate font-regular text-base-600 dark:text-base-400 text-sm tracking-wide whitespace-nowrap overflow-hidden min-w-0"
+        class="truncate font-regular text-base-600 dark:text-base-400 text-xs tracking-wide whitespace-nowrap overflow-hidden min-w-0"
         >{category.name}</span
       >
       {#if !isEditing}

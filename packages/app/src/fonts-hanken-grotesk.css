@@ -8,21 +8,24 @@
 }
 @font-face {
   font-family: "Hanken Grotesk";
-  src: url("/fonts/hanken-grotesk/HankenGrotesk-ThinItalic.woff2") format("woff2");
+  src: url("/fonts/hanken-grotesk/HankenGrotesk-ThinItalic.woff2")
+    format("woff2");
   font-weight: 100;
   font-style: italic;
   font-display: swap;
 }
 @font-face {
   font-family: "Hanken Grotesk";
-  src: url("/fonts/hanken-grotesk/HankenGrotesk-ExtraLight.woff2") format("woff2");
+  src: url("/fonts/hanken-grotesk/HankenGrotesk-ExtraLight.woff2")
+    format("woff2");
   font-weight: 200;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "Hanken Grotesk";
-  src: url("/fonts/hanken-grotesk/HankenGrotesk-ExtraLightItalic.woff2") format("woff2");
+  src: url("/fonts/hanken-grotesk/HankenGrotesk-ExtraLightItalic.woff2")
+    format("woff2");
   font-weight: 200;
   font-style: italic;
   font-display: swap;
@@ -36,7 +39,8 @@
 }
 @font-face {
   font-family: "Hanken Grotesk";
-  src: url("/fonts/hanken-grotesk/HankenGrotesk-LightItalic.woff2") format("woff2");
+  src: url("/fonts/hanken-grotesk/HankenGrotesk-LightItalic.woff2")
+    format("woff2");
   font-weight: 300;
   font-style: italic;
   font-display: swap;
@@ -64,7 +68,8 @@
 }
 @font-face {
   font-family: "Hanken Grotesk";
-  src: url("/fonts/hanken-grotesk/HankenGrotesk-MediumItalic.woff2") format("woff2");
+  src: url("/fonts/hanken-grotesk/HankenGrotesk-MediumItalic.woff2")
+    format("woff2");
   font-weight: 500;
   font-style: italic;
   font-display: swap;
@@ -78,7 +83,8 @@
 }
 @font-face {
   font-family: "Hanken Grotesk";
-  src: url("/fonts/hanken-grotesk/HankenGrotesk-SemiBoldItalic.woff2") format("woff2");
+  src: url("/fonts/hanken-grotesk/HankenGrotesk-SemiBoldItalic.woff2")
+    format("woff2");
   font-weight: 600;
   font-style: italic;
   font-display: swap;
@@ -92,21 +98,24 @@
 }
 @font-face {
   font-family: "Hanken Grotesk";
-  src: url("/fonts/hanken-grotesk/HankenGrotesk-BoldItalic.woff2") format("woff2");
+  src: url("/fonts/hanken-grotesk/HankenGrotesk-BoldItalic.woff2")
+    format("woff2");
   font-weight: 700;
   font-style: italic;
   font-display: swap;
 }
 @font-face {
   font-family: "Hanken Grotesk";
-  src: url("/fonts/hanken-grotesk/HankenGrotesk-ExtraBold.woff2") format("woff2");
+  src: url("/fonts/hanken-grotesk/HankenGrotesk-ExtraBold.woff2")
+    format("woff2");
   font-weight: 800;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
   font-family: "Hanken Grotesk";
-  src: url("/fonts/hanken-grotesk/HankenGrotesk-ExtraBoldItalic.woff2") format("woff2");
+  src: url("/fonts/hanken-grotesk/HankenGrotesk-ExtraBoldItalic.woff2")
+    format("woff2");
   font-weight: 800;
   font-style: italic;
   font-display: swap;
@@ -120,7 +129,8 @@
 }
 @font-face {
   font-family: "Hanken Grotesk";
-  src: url("/fonts/hanken-grotesk/HankenGrotesk-BlackItalic.woff2") format("woff2");
+  src: url("/fonts/hanken-grotesk/HankenGrotesk-BlackItalic.woff2")
+    format("woff2");
   font-weight: 900;
   font-style: italic;
   font-display: swap;
@@ -129,26 +139,76 @@
 @theme {
   --font-sans: "Hanken Grotesk", system-ui, sans-serif;
   --font-display: "Hanken Grotesk", system-ui, sans-serif;
+
+  /* rem reference (base 16px):
+   *   10px = 0.625rem    11px = 0.6875rem   12px = 0.75rem    13px = 0.8125rem
+   *   14px = 0.875rem    15px = 0.9375rem   16px = 1rem       17px = 1.0625rem
+   *   18px = 1.125rem    19px = 1.1875rem   20px = 1.25rem    21px = 1.3125rem
+   *   22px = 1.375rem    24px = 1.5rem      26px = 1.625rem   28px = 1.75rem
+   *   30px = 1.875rem    32px = 2rem        36px = 2.25rem    40px = 2.5rem
+   *   48px = 3rem        60px = 3.75rem     72px = 4.5rem     96px = 6rem
+   */
+
+  /* Hanken Grotesk reads slightly smaller than its metrics suggest.
+     Adjust these to taste; remove or reset when switching typefaces. */
+  --text-xs: 0.875rem; /* →  14px  (default 12px / 0.75rem)   */
+  --text-sm: 1rem; /* →  16px  (default 14px / 0.875rem)  */
+  --text-base: 1.0625rem; /* →  17px  (default 16px / 1rem)      */
+  --text-md: 1.0625rem; /* →  17px  (default 16px / 1rem)      */
+  --text-lg: 1.125rem; /* →  18px  (default 18px / 1.125rem)  */
+  --text-xl: 1.3125rem; /* →  21px  (default 20px / 1.25rem)   */
+  --text-2xl: 1.5rem; /* →  24px  (default 24px / 1.5rem)    */
+  --text-3xl: 1.875rem; /* →  30px  (default 30px / 1.875rem)  */
+  --text-4xl: 2.25rem; /* →  36px  (default 36px / 2.25rem)   */
+  --text-5xl: 3rem; /* →  48px  (default 48px / 3rem)      */
+  --text-6xl: 3.75rem; /* →  60px  (default 60px / 3.75rem)   */
+  --text-7xl: 4.5rem; /* →  72px  (default 72px / 4.5rem)    */
+  --text-8xl: 6rem; /* →  96px  (default 96px / 6rem)      */
+  --text-9xl: 8rem; /* → 128px  (default 128px / 8rem)     */
 }
 
 @layer utilities {
   /* Ligatures */
-  .ligatures-common    { font-variant-ligatures: common-ligatures; }
-  .ligatures-none      { font-variant-ligatures: no-common-ligatures; }
-  .ligatures-contextual { font-variant-ligatures: contextual; }
-  .ligatures-all       { font-variant-ligatures: common-ligatures contextual; }
+  .ligatures-common {
+    font-variant-ligatures: common-ligatures;
+  }
+  .ligatures-none {
+    font-variant-ligatures: no-common-ligatures;
+  }
+  .ligatures-contextual {
+    font-variant-ligatures: contextual;
+  }
+  .ligatures-all {
+    font-variant-ligatures: common-ligatures contextual;
+  }
 
   /* Contextual alternates (calt) — letterform adjustments based on neighbors */
-  .calt-on  { font-feature-settings: "calt" 1; }
-  .calt-off { font-feature-settings: "calt" 0; }
+  .calt-on {
+    font-feature-settings: "calt" 1;
+  }
+  .calt-off {
+    font-feature-settings: "calt" 0;
+  }
 
   /* Numeric figures */
-  .nums-oldstyle   { font-variant-numeric: oldstyle-nums; }
-  .nums-lining     { font-variant-numeric: lining-nums; }
-  .nums-tabular    { font-variant-numeric: tabular-nums; }
-  .nums-proportional { font-variant-numeric: proportional-nums; }
+  .nums-oldstyle {
+    font-variant-numeric: oldstyle-nums;
+  }
+  .nums-lining {
+    font-variant-numeric: lining-nums;
+  }
+  .nums-tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .nums-proportional {
+    font-variant-numeric: proportional-nums;
+  }
 
   /* Small caps */
-  .smallcaps       { font-variant-caps: small-caps; }
-  .all-smallcaps   { font-variant-caps: all-small-caps; }
+  .smallcaps {
+    font-variant-caps: small-caps;
+  }
+  .all-smallcaps {
+    font-variant-caps: all-small-caps;
+  }
 }
