@@ -5,6 +5,7 @@ FROM node:24 AS build
 # ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 
 COPY . /project
+COPY .git /project/.git
 WORKDIR /project
 RUN npm i -g pnpm
 RUN pnpm i
