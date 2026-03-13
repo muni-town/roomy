@@ -1,8 +1,7 @@
 FROM node:24 AS build
 
-# Extract the first 8 characters of the git commit from railway as the build ID if present
-ARG RAILWAY_GIT_COMMIT_SHA
-ENV BUILD_ID=${RAILWAY_GIT_COMMIT_SHA%"${RAILWAY_GIT_COMMIT_SHA#??*??????}"}
+ARG RAILWAY_DEPLOYMENT_ID
+ENV BUILD_ID=$RAILWAY_DEPLOYMENT_ID
 
 ARG VITE_LEAF_URL
 ENV VITE_LEAF_URL=$VITE_LEAF_URL
