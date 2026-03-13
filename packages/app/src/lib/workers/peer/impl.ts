@@ -60,6 +60,8 @@ import { logMaterializationResult } from "../materializationLogging";
 import { createOauthClient, oauthDb } from "./oauth";
 import { Agent, CredentialSession } from "@atproto/api";
 import { lexicons } from "$lib/lexicons";
+import { checkScopeMismatch } from "$lib/utils/scopeCheck";
+import { OAuthSession } from "@atproto/oauth-client";
 import type { SessionManager } from "@atproto/api/dist/session-manager";
 import { arrayChunks } from "$lib/jsUtils";
 
@@ -172,8 +174,8 @@ export class Peer {
    * */
   getPeerInterface(this: Peer): PeerInterface {
     return {
-      initializePeer: (oauthCallbackSearchParams) =>
-        this.initializePeer(oauthCallbackSearchParams),
+      initializePeer: (oauthCallbackSearchParams, opts) =>
+        this.initializePeer(oauthCallbackSearchParams, opts),
       login: async (handle) => this.login(handle),
       logout: async () => await this.logout(),
       setSpaceHandle: (spaceDid, handle) => {
@@ -408,7 +410,8 @@ export class Peer {
    * */
   private async initializePeer(
     oauthCallbackParams?: string,
-  ): Promise<{ did?: string }> {
+    opts?: { skipScopeCheck?: boolean },
+  ): Promise<{ did?: string; redirectUrl?: string }> {
     let [initSpan, ctx] = tracer.startActiveSpan(
       "Initialize Peer",
       (span) => [span, context.active()] as const,
@@ -419,14 +422,42 @@ export class Peer {
     });
 
     return context.with(ctx, async () => {
-      // attempt to authenticate using a previous session or the oauth callback
       const session = await this.authenticate(oauthCallbackParams);
 
-      // If we did not recieve a session, then set our state to unauthenticated
       if (!session) {
         console.info("Not authenticated");
         this.#auth.current = { state: "unauthenticated" };
         return {};
+      }
+
+      // Check for stale OAuth scopes and redirect for re-authorization if needed.
+      // Skipped right after login to prevent infinite redirect loops.
+      // Only OAuthSession has token info; CredentialSession (app passwords) does not.
+      if (!opts?.skipScopeCheck && session instanceof OAuthSession) {
+        try {
+          // false = don't refresh the token before reading scope info
+          const tokenInfo = await session.getTokenInfo(false);
+          const missing = checkScopeMismatch(
+            tokenInfo.scope,
+            CONFIG.atprotoOauthScope,
+          );
+
+          if (missing) {
+            console.info("Scope mismatch detected, re-authorizing", {
+              missing,
+            });
+            const oauth = await createOauthClient();
+            const redirectUrl = await oauth.authorize(session.did, {
+              scope: CONFIG.atprotoOauthScope,
+            });
+            return { redirectUrl: redirectUrl.href };
+          }
+        } catch (e) {
+          console.warn(
+            "Scope check failed, proceeding with existing session",
+            e,
+          );
+        }
       }
 
       // If we have a session, update our state to authenticated

@@ -2,6 +2,7 @@
 <script lang="ts">
   import { env } from "$env/dynamic/public";
   import { peer } from "$lib/workers";
+  import { REDIRECT_AFTER_LOGIN_KEY } from "$lib/utils/storageKeys";
 
   import { Subheading, Label, Avatar, Box, Tabs, toast } from "@foxui/core";
   import { Handle } from "@roomy/sdk";
@@ -32,7 +33,7 @@
 
     if (loading) return;
 
-    localStorage.setItem("redirect-after-login", window.location.href);
+    localStorage.setItem(REDIRECT_AFTER_LOGIN_KEY, window.location.href);
 
     loading = true;
     error = null;
