@@ -17,12 +17,7 @@
   }
 </script>
 
-<Popover
-  bind:open={popoverOpen}
-  side="right"
-  sideOffset={12}
-  class="my-4 w-80"
->
+<Popover bind:open={popoverOpen} side="right" sideOffset={12} class="my-4 w-80">
   {#snippet child({ props })}
     <button
       {...props}
@@ -45,7 +40,9 @@
 
   <div class="flex flex-col">
     {#if connected}
-      <div class="border-b border-base-300 dark:border-base-700 pb-4 mb-2 flex items-center gap-2">
+      <div
+        class="border-b border-base-300 dark:border-base-700 pb-4 mb-2 flex items-center gap-2"
+      >
         <Avatar
           src={peerStatus.profile?.avatar}
           fallback={peerStatus.profile?.displayName}
@@ -61,5 +58,13 @@
     {/if}
 
     <ThemeSettings />
+
+    <div
+      class="border-t border-base-300 dark:border-base-700 pt-2 mt-2 flex items-center gap-2"
+    >
+      <span class="opacity-50 text-xs"
+        >Roomy {__APP_VERSION__} ( {__GIT_COMMIT__} )</span
+      >
+    </div>
   </div>
 </Popover>

@@ -6,12 +6,14 @@ import topLevelAwait from "vite-plugin-top-level-await";
 import Icons from "unplugin-icons/vite";
 import { FileSystemIconLoader } from "unplugin-icons/loaders";
 import packageJson from "./package.json";
+import { execSync } from "child_process";
 
-// import { visualizer } from "rollup-plugin-visualizer";
+const commitHash = execSync("git rev-parse --short HEAD").toString().trim();
 
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
+    __GIT_COMMIT__: JSON.stringify(commitHash),
   },
   plugins: [
     sveltekit(),

@@ -7,6 +7,7 @@ import "unplugin-icons/types/svelte";
 declare global {
   // Defined in our vite config
   declare const __APP_VERSION__: string;
+  declare const __GIT_COMMIT__: string;
 
   interface Window {
     faro: Faro;
