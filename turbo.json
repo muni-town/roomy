@@ -5,7 +5,8 @@
     "https_proxy",
     "no_proxy",
     "NODE_EXTRA_CA_CERTS",
-    "NETLIFY"
+    "NETLIFY",
+    "BUILD_ID"
   ],
   "tasks": {
     "build-api-docs": {
