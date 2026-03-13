@@ -1,14 +1,8 @@
 FROM node:24 AS build
 
-# Uncomment if building on network with a custom certificate
-# COPY ./gitignore/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-# ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
-
-COPY . /project
-COPY .git /project/.git
-WORKDIR /project
-RUN npm i -g pnpm
-RUN pnpm i
+# Extract the first 8 characters of the git commit from railway as the build ID if present
+ARG RAILWAY_GIT_COMMIT_SHA
+ENV BUILD_ID=${RAILWAY_GIT_COMMIT_SHA%"${RAILWAY_GIT_COMMIT_SHA#??*??????}"}
 
 ARG VITE_LEAF_URL
 ENV VITE_LEAF_URL=$VITE_LEAF_URL
@@ -36,6 +30,15 @@ ENV OAUTH_HOST=$OAUTH_HOST
 
 ARG PUBLIC_DISCORD_BRIDGE
 ENV PUBLIC_DISCORD_BRIDGE=$PUBLIC_DISCORD_BRIDGE
+
+# Uncomment if building on network with a custom certificate
+# COPY ./gitignore/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+# ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
+
+COPY . /project
+WORKDIR /project
+RUN npm i -g pnpm
+RUN pnpm i
 
 RUN npx turbo build-web-app-prod
 

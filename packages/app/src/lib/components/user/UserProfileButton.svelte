@@ -63,7 +63,8 @@
       class="border-t border-base-300 dark:border-base-700 pt-2 mt-2 flex items-center gap-2"
     >
       <span class="opacity-50 text-xs"
-        >Roomy {__APP_VERSION__} ( {__GIT_COMMIT__} )</span
+        >Roomy {__APP_VERSION__}
+        {__BUILD_ID__ ? `( ${__BUILD_ID__} )` : ""}</span
       >
     </div>
   </div>
