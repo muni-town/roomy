@@ -154,12 +154,14 @@
   function cancelEditing() {
     onCancelEdit();
   }
-  const UrlRegex =
-    /<?(https?:\/\/)*[a-z0-9][-a-z0-9]*\.[a-z]{2,}[^\s]*[a-zA-Z0-9\/]>?/gi;
+  // const UrlRegex =
+  //   /<?(https?:\/\/)*[a-z0-9][-a-z0-9]*\.[a-z]{2,}[^\s]*[a-zA-Z0-9\/]>?/gi;
 
   const linkUrls = $derived([
-    ...(message?.content?.matchAll(UrlRegex)?.map((x) => x[0]) || []),
-  ]);
+    // Unfortunately link previews seems to cause problems for iOS somehow.
+    //
+    // ...(message?.content?.matchAll(UrlRegex)?.map((x) => x[0]) || []),
+  ] as string[]);
   const linkEmbeds = $derived(
     Promise.all(
       linkUrls.map(async (_url) => {
