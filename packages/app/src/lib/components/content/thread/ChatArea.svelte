@@ -532,7 +532,7 @@
                 {/snippet}
                 {#snippet error({ message })}
                   <div
-                    class="flex justify-center items-center gap-2 py-2 text-sm text-red-500"
+                    class="flex justify-center items-center gap-2 mx-4 py-2 text-sm"
                   >
                     <span>Failed to load older messages: {message}</span>
                     <Button

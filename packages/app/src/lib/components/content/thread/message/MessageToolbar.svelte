@@ -73,14 +73,14 @@
 
 <BitsTooltip.Provider>
   <Toolbar.Root
-    class={`${isEmojiToolbarPickerOpen ? "flex" : "hidden"} group-hover:flex shadow-lg border border-base-800/5 dark:border-base-300/10 backdrop-blur-sm absolute -top-4 right-2 bg-base-100/80 dark:bg-base-800/70 p-1 rounded-xl items-center`}
+    class={`${isEmojiToolbarPickerOpen ? "flex" : "hidden"} group-hover:flex shadow-lg border border-base-800/5 dark:border-base-300/10 backdrop-blur-sm absolute -top-4 right-2 bg-base-100/80 dark:bg-base-800/70 p-px rounded-xl items-center`}
     onclick={(e) => e.stopPropagation()}
   >
     <Toolbar.Button
       onclick={() => onEmojiPick("👍")}
       class={[
         buttonVariants({ variant: "ghost", size: "iconSm" }),
-        "backdrop-blur-none",
+        "backdrop-blur-none text-lg",
       ]}
     >
       👍
@@ -89,7 +89,7 @@
       onclick={() => onEmojiPick("😂")}
       class={[
         buttonVariants({ variant: "ghost", size: "iconSm" }),
-        "backdrop-blur-none",
+        "backdrop-blur-none text-lg",
       ]}
     >
       😂
@@ -103,12 +103,12 @@
         {#snippet child({ props })}
           <Button
             {...props}
-            size="iconSm"
+            size="icon"
             variant="ghost"
             class="backdrop-blur-none"
             aria-label="Pick an emoji"
           >
-            <IconSmilePlus class="text-primary" />
+            <IconSmilePlus class="text-primary  text-lg" />
           </Button>
         {/snippet}
       </PopoverEmojiPicker>
@@ -119,7 +119,7 @@
         <Toolbar.Button
           onclick={editMessage}
           class={[
-            buttonVariants({ variant: "ghost", size: "iconSm" }),
+            buttonVariants({ variant: "ghost", size: "icon" }),
             "backdrop-blur-none",
           ]}
           aria-label="Edit Message"
@@ -134,7 +134,7 @@
         <Toolbar.Button
           onclick={deleteCurrentMessage}
           class={[
-            buttonVariants({ variant: "ghost", size: "iconSm" }),
+            buttonVariants({ variant: "ghost", size: "icon" }),
             "backdrop-blur-none",
           ]}
           aria-label="Delete Message"
@@ -148,7 +148,7 @@
       <Toolbar.Button
         onclick={startThreading}
         class={[
-          buttonVariants({ variant: "ghost", size: "iconSm" }),
+          buttonVariants({ variant: "ghost", size: "icon" }),
           "backdrop-blur-none",
         ]}
         aria-label="Create Thread"
@@ -161,7 +161,7 @@
       <Toolbar.Button
         onclick={() => messagingState.setReplyTo(message)}
         class={[
-          buttonVariants({ variant: "ghost", size: "iconSm" }),
+          buttonVariants({ variant: "ghost", size: "icon" }),
           "backdrop-blur-none",
         ]}
         aria-label="Reply"

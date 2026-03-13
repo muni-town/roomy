@@ -77,7 +77,7 @@
             onclick={() => onEmojiButtonClick(emoji)}
             class={`h-7 data-[state=on]:bg-accent-400/20 dark:data-[state=on]:bg-accent-500/15 min-w-4 p-1.5 ${count > 1 ? "px-2" : ""}`}
           >
-            <span class={count === 1 ? "pl-0.75" : ""}>{emoji}</span>
+            <span class={count === 1 ? "" : ""}>{emoji}</span>
             {#if count > 1}
               <span
                 class="text-xs font-semibold text-base-900 dark:text-base-100"

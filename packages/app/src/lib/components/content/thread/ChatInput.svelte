@@ -18,7 +18,7 @@
   import { initUserMention, initSpaceContextMention } from "$lib/tiptap/editor";
   import { type Item, initKeyboardShortcutHandler } from "$lib/tiptap/editor";
   import { RichTextLink } from "$lib/tiptap/RichTextLink";
-  import { cn, inputVariants } from "@foxui/core";
+  import { cn } from "@foxui/core";
   import { Markdown } from "tiptap-markdown";
 
   type Props = {
@@ -30,6 +30,7 @@
     onEnter: (content: string) => Promise<void>;
     placeholder?: string;
     setFocus?: boolean;
+    disabled?: boolean;
     processImageFile?: (file: File) => void;
   };
 
@@ -40,6 +41,7 @@
     onEnter,
     placeholder = "Write something ...",
     setFocus = false,
+    disabled = false,
     processImageFile,
   }: Props = $props();
   let element: HTMLDivElement | undefined = $state();
@@ -79,6 +81,7 @@
       element,
       extensions,
       content,
+      editable: !disabled,
       editorProps: {
         attributes: {
           class: cn(
@@ -101,6 +104,11 @@
         to: content.length,
       });
     }
+  });
+
+  $effect(() => {
+    tiptap?.setEditable(!disabled);
+    if (!disabled) setInputFocus();
   });
 
   onDestroy(() => {

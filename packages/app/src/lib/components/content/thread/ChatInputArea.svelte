@@ -15,17 +15,14 @@
     IconSend,
     IconImage,
     IconPlus,
+    IconLoading,
   } from "@roomy/design/icons";
   import { peer } from "$lib/workers";
   import { getAppState } from "$lib/queries";
   const app = getAppState();
   import { page } from "$app/state";
   import { navigateSync } from "$lib/utils.svelte";
-  import {
-    messagingState,
-    type Commenting,
-    type Threading,
-  } from "./TimelineView.svelte";
+  import { messagingState, type Commenting } from "./TimelineView.svelte";
   import { markCommentForRemoval } from "$lib/components/richtext/RichTextEditor.svelte";
   import { getImagePreloadData } from "$lib/utils/media";
   import { newUlid, toBytes, Ulid, type Event as RoomyEvent } from "@roomy/sdk";
@@ -434,8 +431,8 @@
             </form>
           {:else}
             {#if isSendingMessage}
-              <div class="flex items-center justify-center py-2">
-                Sending...
+              <div class="flex items-center justify-center p-3 ml-2">
+                <IconLoading class="animate-spin text-base-500" />
               </div>
             {:else}
               <Popover
@@ -492,6 +489,7 @@
               users={undefined}
               context={undefined}
               onEnter={sendMessage}
+              disabled={isSendingMessage}
               {processImageFile}
             />
             <!-- Send button - visible on mobile, useful for testing -->

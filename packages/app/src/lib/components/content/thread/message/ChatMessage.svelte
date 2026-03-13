@@ -238,7 +238,7 @@
       <div class="flex flex-col w-full">
         <!-- Username, timestamp -->
         {#if !message.mergeWithPrevious}
-          <div class="text-sm w-full">
+          <div class="text-sm w-full text-start">
             <span class="gap-2">
               <span class="font-medium text-accent-700 dark:text-accent-400"
                 >{metadata.name}</span
