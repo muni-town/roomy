@@ -19,10 +19,16 @@
 
   const spaceDid = $derived(app.joinedSpace?.id);
 
-  let query = new LiveQuery<{ name: string; id: Ulid; unreadCount: number }>(
+  let query = new LiveQuery<{
+    name: string;
+    id: Ulid;
+    unreadCount: number;
+    lastRead: number;
+  }>(
     () => sql`
       SELECT ci.name, room.entity as id, MAX(m.id) as last_message_id,
-        coalesce(lr.unread_count, 0) as unreadCount
+        coalesce(lr.unread_count, 0) as unreadCount,
+        coalesce(lr.last_read, 0) as lastRead
       FROM entities parent_e
       JOIN edges link ON link.head = parent_e.id AND link.label = 'link'
       JOIN comp_room room ON link.tail = room.entity
@@ -59,6 +65,7 @@
     {#each linkedRooms as room}
       {@const hasUnreads =
         flags.unreadNotifications &&
+        room.lastRead > 0 &&
         room.unreadCount > 0 &&
         room.id !== page.params.object}
       <div class="inline-flex w-full items-start justify-between min-w-0">
@@ -79,7 +86,7 @@
           data-current={room.id === page.params.object}
         >
           <span
-            class={`truncate whitespace-nowrap overflow-hidden min-w-0 ${hasUnreads ? "font-medium" : "font-normal"}`}
+            class={`truncate whitespace-nowrap overflow-hidden min-w-0 ${hasUnreads ? "font-semibold" : "font-normal"}`}
             >{room.name}</span
           >
           {#if hasUnreads}

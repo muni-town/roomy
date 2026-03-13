@@ -1233,6 +1233,7 @@ export class Peer {
             streamId: spaceId,
             events,
             priority: "priority",
+            isBackfill: true,
           });
 
           await materialized;
@@ -1290,6 +1291,7 @@ export class Peer {
           streamId,
           events,
           priority: finalPriority,
+          isBackfill,
         },
         finalPriority,
       );

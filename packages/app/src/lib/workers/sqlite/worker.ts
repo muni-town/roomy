@@ -292,6 +292,26 @@ class SqliteWorkerSupervisor {
               incoming.idx,
             );
 
+            // For live (non-backfill) createMessage events, append the unread count
+            // increment here in the worker rather than in the SDK materializer, so
+            // the materializer stays free of backfill awareness.
+            if (
+              !batch.isBackfill &&
+              event.$type === "space.roomy.message.createMessage.v0" &&
+              bundle.status === "success" &&
+              event.room
+            ) {
+              bundle.statements.push(
+                sql`
+                  insert into comp_last_read (entity, last_read, unread_count)
+                    values (${event.room}, 0, 1)
+                    on conflict(entity) do update set
+                      unread_count = comp_last_read.unread_count + 1,
+                      updated_at = (unixepoch() * 1000)
+                `,
+              );
+            }
+
             bundles.push(bundle);
 
             if (bundle.status === "success") {

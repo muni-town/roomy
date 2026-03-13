@@ -1,18 +1,12 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { navigateSync } from "$lib/utils.svelte";
-  import Badge from "$lib/components/ui/badge/Badge.svelte";
   import Button from "$lib/components/ui/button/Button.svelte";
   // import { atprotoFeedService } from "$lib/services/atprotoFeedService";
   import type { SidebarItem } from "$lib/queries";
   import { flags } from "$lib/config";
 
-  import {
-    IconPencil,
-    IconHashtag,
-    IconCornerDownRight,
-    IconDocument,
-  } from "@roomy/design/icons";
+  import { IconPencil, IconHashtag, IconDocument } from "@roomy/design/icons";
   import LinkedRoomsList from "./LinkedRoomsList.svelte";
   import { Ulid } from "@roomy/sdk";
 
@@ -31,7 +25,9 @@
 
   // let showEditModal = $state(false);
   // let editName = $state(item.name);
-  let hasUnread = $derived(flags.unreadNotifications && item.unreadCount > 0);
+  let hasUnread = $derived(
+    flags.unreadNotifications && item.lastRead > 0 && item.unreadCount > 0,
+  );
   // let notificationCount = 0;
 
   const itemActive = $derived(
@@ -68,7 +64,7 @@
         data-current={item.id === page.params.object && !isEditing}
       >
         <IconHashtag class="shrink-0" />
-        {#if hasUnread && !isEditing}
+        {#if hasUnread && !isEditing && item.id !== page.params.object}
           <div
             aria-label="Has unread messages"
             class="size-1.25 rounded-full bg-accent-500 absolute left-2.5 top-1.5"
@@ -79,7 +75,7 @@
             "truncate whitespace-nowrap overflow-hidden min-w-0 font-semibold",
           ]}>{item.name}</span
         >
-        {#if flags.unreadNotifications && !itemActive && item.unreadCount > 0}
+        {#if flags.unreadNotifications && item.lastRead > 0 && !itemActive && item.unreadCount > 0}
           <span
             aria-label="Unread message count"
             class="font-light opacity-60 ml-auto text-xs"

@@ -265,6 +265,17 @@ const spaceModuleDef: BasicModule = {
     from event
     where drisl_extract(payload, '.$type') = 'space.roomy.space.joinSpace.v0';
 
+    -- Pre-mark all existing channels as read for newly joined user
+    insert or ignore into state.reads (user_did, room_id, last_read)
+    select
+      (select user from event),
+      r.id,
+      r.message_count
+    from rooms r
+    where r.kind = 'space.roomy.channel'
+      and r.deleted = 0
+      and (select drisl_extract(payload, '.$type') from event) = 'space.roomy.space.joinSpace.v0';
+
     -- Remove member
     delete from members
     where user_id = (select user from event)

@@ -117,13 +117,6 @@ export const CreateMessage = defineEvent(
           ${event.id},
           ${canonicalTimestamp}
         )`,
-      sql`
-        insert into comp_last_read (entity, last_read, unread_count)
-          values (${event.room}, 0, 1)
-          on conflict(entity) do update set
-            unread_count = comp_last_read.unread_count + 1,
-            updated_at = (unixepoch() * 1000)
-      `,
     ];
 
     if (!overrideAuthorExt) {

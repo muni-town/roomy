@@ -74,13 +74,15 @@
     kind: string;
     spaceId: string;
     lastRead: number;
+    unreadCount: number;
   }>(
     () => sql`
     select json_object(
       'name', name,
       'kind', r.label,
       'spaceId', e.stream_id,
-      'lastRead', coalesce(l.last_read, 0)
+      'lastRead', coalesce(l.last_read, 0),
+      'unreadCount', coalesce(l.unread_count, 0)
     ) as json
     from entities e
       join comp_info i on i.entity = e.id
@@ -90,7 +92,7 @@
   `,
     (row) => JSON.parse(row.json),
     {
-      description: "Room: name, kind, spaceId and lastRead",
+      description: "Room: name, kind, spaceId, lastRead and unreadCount",
       origin: "routes/(app)/space/object/+page.svelte",
     },
   );
@@ -176,12 +178,13 @@
       peerStatus.authState.state !== "authenticated" ||
       !page.params.space ||
       !page.params.object ||
-      room?.lastRead == null
+      room == null ||
+      room.unreadCount === 0
     )
       return;
-    // Clear unread count locally for immediate UI update.
-    // The server-side markRead is sent on navigate-away to avoid
-    // racing with lazyLoadRoom on the same stream.
+    // Clear unread count locally. Tracks unreadCount as a reactive dependency
+    // so this re-fires after lazyLoadRoom materializes historical messages and
+    // re-increments the count. The server-side markRead is sent on navigate-away.
     peer.runQuery(
       sql`update comp_last_read set unread_count = 0 where entity = ${page.params.object}`,
     );

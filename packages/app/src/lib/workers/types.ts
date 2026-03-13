@@ -76,6 +76,8 @@ export namespace Batch {
     streamId: StreamDid;
     events: DecodedStreamEvent[];
     priority: TaskPriority;
+    /** True for backfill/lazy-load events — unread counts should not be incremented */
+    isBackfill?: boolean;
   }
 
   export interface SyntheticEvent {
