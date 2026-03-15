@@ -87,7 +87,7 @@
     | undefined = $state();
 
   let calendarOptions = $derived({
-    view: "dayGridMonth",
+    view: "listMonth",
     date: selectedDate,
     height: "100%",
     editable: false,
@@ -98,7 +98,7 @@
     headerToolbar: {
       start: "prev,next today",
       center: "title",
-      end: "dayGridMonth,timeGridDay,listMonth",
+      end: "listMonth,timeGridDay,dayGridMonth",
     },
     dateClick: (info: { date: Date; view: { type: string } }) => {
       if (info.view.type === "dayGridMonth") {
