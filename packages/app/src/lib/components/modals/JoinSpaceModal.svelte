@@ -11,9 +11,6 @@
 
   let spaceDid = $state<StreamDid>();
 
-  let spaceName = $state() as string | undefined;
-  let spaceAvatar = $state() as string | undefined;
-
   // State for resolving the space
   let resolveState: AsyncStateWithIdle<{
     spaceId: StreamDid;
@@ -96,13 +93,13 @@
       {#if resolveState.status === "success"}
         <div class="mb-5 flex justify-center items-center gap-3">
           <SpaceAvatar
-            imageUrl={spaceAvatar ?? ""}
+            imageUrl={resolveState.data.avatar ?? ""}
             id={page.params.space}
-            name={spaceName ?? ""}
+            name={resolveState.data.name ?? ""}
             size={50}
           />
 
-          <h1 class="font-bold text-xl">{spaceName}</h1>
+          <h1 class="font-bold text-xl">{resolveState.data.name}</h1>
         </div>
         <Button size="lg" asyncState={joinState} onclick={handleJoin}>
           Join Space
